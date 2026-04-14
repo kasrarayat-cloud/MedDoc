@@ -559,10 +559,11 @@ export default function PatientDetailClient({
                         layout
                         className="rounded-lg bg-slate-900/40 border border-white/5 hover:border-white/15 transition-all overflow-hidden"
                       >
+                        <div className="flex items-stretch">
                         <button
                           type="button"
                           onClick={() => setExpandedNoteId(isExpanded ? null : proc.id)}
-                          className="w-full flex items-start gap-3 p-3 text-left cursor-pointer hover:bg-slate-900/60 transition-colors"
+                          className="flex-1 flex items-start gap-3 p-3 text-left cursor-pointer hover:bg-slate-900/60 transition-colors min-w-0"
                         >
                           <div className="shrink-0 p-2 rounded-md bg-blue-500/10 border border-blue-500/20">
                             <FileText className="w-4 h-4 text-blue-300" />
@@ -594,6 +595,22 @@ export default function PatientDetailClient({
                             }`}
                           />
                         </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleDeleteDocument(proc.id, { kind: 'custom procedure' })
+                          }
+                          disabled={deletingId === proc.id}
+                          className="shrink-0 px-3 flex items-center justify-center text-red-300 hover:text-red-200 hover:bg-red-500/10 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed border-l border-white/5"
+                          aria-label="Delete custom procedure"
+                        >
+                          {deletingId === proc.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-4 h-4" />
+                          )}
+                        </button>
+                        </div>
 
                         <AnimatePresence>
                           {isExpanded && (
@@ -784,10 +801,11 @@ export default function PatientDetailClient({
                         layout
                         className="rounded-lg bg-slate-900/40 border border-white/5 hover:border-white/15 transition-all overflow-hidden"
                       >
+                        <div className="flex items-stretch">
                         <button
                           type="button"
                           onClick={() => setExpandedNoteId(isExpanded ? null : note.id)}
-                          className="w-full flex items-start gap-3 p-3 text-left cursor-pointer hover:bg-slate-900/60 transition-colors"
+                          className="flex-1 flex items-start gap-3 p-3 text-left cursor-pointer hover:bg-slate-900/60 transition-colors min-w-0"
                         >
                           <div className="shrink-0 p-2 rounded-md bg-violet-500/10 border border-violet-500/20">
                             <FileText className="w-4 h-4 text-violet-300" />
@@ -833,6 +851,22 @@ export default function PatientDetailClient({
                             }`}
                           />
                         </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleDeleteDocument(note.id, { kind: 'clinical note' })
+                          }
+                          disabled={deletingId === note.id}
+                          className="shrink-0 px-3 flex items-center justify-center text-red-300 hover:text-red-200 hover:bg-red-500/10 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed border-l border-white/5"
+                          aria-label="Delete clinical note"
+                        >
+                          {deletingId === note.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-4 h-4" />
+                          )}
+                        </button>
+                        </div>
 
                         <AnimatePresence>
                           {isExpanded && (
@@ -1016,12 +1050,13 @@ export default function PatientDetailClient({
                         layout
                         className="rounded-lg bg-slate-900/40 border border-white/5 hover:border-white/15 transition-all overflow-hidden"
                       >
+                        <div className="flex items-stretch">
                         <button
                           type="button"
                           onClick={() =>
                             setExpandedReportId(isExpanded ? null : report.id)
                           }
-                          className="w-full flex items-start gap-3 p-3 text-left cursor-pointer hover:bg-slate-900/60 transition-colors"
+                          className="flex-1 flex items-start gap-3 p-3 text-left cursor-pointer hover:bg-slate-900/60 transition-colors min-w-0"
                         >
                           <div className="shrink-0 p-2 rounded-md bg-rose-500/10 border border-rose-500/20">
                             <FileBadge className="w-4 h-4 text-rose-300" />
@@ -1061,6 +1096,26 @@ export default function PatientDetailClient({
                             }`}
                           />
                         </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleDeleteDocument(report.id, {
+                              kind: 'final report',
+                              onSuccess: () =>
+                                setReports((prev) => prev.filter((r) => r.id !== report.id)),
+                            })
+                          }
+                          disabled={deletingId === report.id}
+                          className="shrink-0 px-3 flex items-center justify-center text-red-300 hover:text-red-200 hover:bg-red-500/10 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed border-l border-white/5"
+                          aria-label="Delete final report"
+                        >
+                          {deletingId === report.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-4 h-4" />
+                          )}
+                        </button>
+                        </div>
 
                         <AnimatePresence>
                           {isExpanded && (
