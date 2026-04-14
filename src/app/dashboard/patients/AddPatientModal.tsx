@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useTransition, useCallback } from 'react';
+import { useState, useEffect, useTransition, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -43,6 +43,7 @@ interface ExtractedFields {
   postalCode: string | null;
   pharmacyName: string | null;
   pharmacyPhone: string | null;
+  assignedDoctorName: string | null;
   tags: string[] | null;
   briefHistory: string[] | null;
 }
@@ -131,6 +132,11 @@ function AddPatientModalContent({ onClose }: { onClose: () => void }) {
    *  Assigned Provider dropdown. Empty while loading or on error —
    *  the select degrades to a disabled "No doctors available" option. */
   const [doctors, setDoctors] = useState<DoctorOption[]>([]);
+  // Ref on the scrollable form body so a voice-fill result can snap the
+  // user to the top — otherwise, on a long form that was scrolled down,
+  // the result banner lives above the viewport and feels like "nothing
+  // happened" or "the form disappeared".
+  const formBodyRef = useRef<HTMLFormElement | null>(null);
 
   // Voice-fill state — separate from createPatient flow so a voice pass
   // in flight doesn't block the Cancel button and vice versa. `voiceNote`
@@ -195,6 +201,23 @@ function AddPatientModalContent({ onClose }: { onClose: () => void }) {
         next.initialHistory = existing ? `${existing}\n${joined}` : joined;
         filled++;
       }
+      // Resolve assignedDoctorName → a doctor.id by matching against the
+      // loaded list. Case-insensitive, strip common honorifics so "Dr.
+      // Jane Smith" matches "Jane Smith" if that's what the list stored.
+      if (fields.assignedDoctorName) {
+        const wanted = fields.assignedDoctorName
+          .replace(/^(dr\.?|doctor)\s+/i, '')
+          .trim()
+          .toLowerCase();
+        const match = doctors.find((d) => {
+          const n = (d.name ?? '').replace(/^(dr\.?|doctor)\s+/i, '').trim().toLowerCase();
+          return n === wanted;
+        });
+        if (match) {
+          next.assignedDoctorId = match.id;
+          filled++;
+        }
+      }
       return next;
     });
     // Clear any stale field errors on fields we just filled — they'll be
@@ -207,7 +230,7 @@ function AddPatientModalContent({ onClose }: { onClose: () => void }) {
       return next;
     });
     return filled;
-  }, []);
+  }, [doctors]);
 
   // When VAD auto-stops the recorder, post the blob to the extractor.
   // Reads the latest form state via the setter-closure pattern so the
@@ -261,6 +284,13 @@ function AddPatientModalContent({ onClose }: { onClose: () => void }) {
         const fd = new FormData();
         fd.append('audio', blob, 'intake.webm');
         fd.append('currentFields', JSON.stringify(currentFields));
+        // Send doctor display names so the extractor can emit a valid
+        // one verbatim. We resolve name → id on the client after the
+        // response comes back.
+        fd.append(
+          'doctors',
+          JSON.stringify(doctors.map((d) => d.name || d.email).filter(Boolean))
+        );
         const res = await fetch('/api/patients/extract-from-voice', {
           method: 'POST',
           body: fd,
@@ -285,6 +315,12 @@ function AddPatientModalContent({ onClose }: { onClose: () => void }) {
           filledCount: filled,
           previousForm: snapshot,
         });
+        // Scroll the form back to the top so the fill banner is on-screen.
+        // Without this, a long form scrolled down shows no visible change
+        // after a voice pass and it feels like the modal bugged out.
+        requestAnimationFrame(() => {
+          formBodyRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+        });
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Voice extraction failed.';
         setVoiceError(message);
@@ -292,7 +328,7 @@ function AddPatientModalContent({ onClose }: { onClose: () => void }) {
         setVoiceBusy(false);
       }
     },
-    [applyExtractedFields]
+    [applyExtractedFields, doctors]
   );
 
   const voice = useVoiceRecorder({
@@ -538,7 +574,7 @@ function AddPatientModalContent({ onClose }: { onClose: () => void }) {
               </div>
 
               {/* Body / Form */}
-              <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
+              <form ref={formBodyRef} onSubmit={handleSubmit} className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
                 {/* Error banner */}
                 {error && !success && (
                   <div className="flex items-start gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/30">

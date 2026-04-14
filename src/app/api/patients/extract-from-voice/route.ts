@@ -57,6 +57,10 @@ export interface ExtractedPatientFields {
   postalCode: string | null;
   pharmacyName: string | null;
   pharmacyPhone: string | null;
+  /** Model picks one of the provided doctor names verbatim (or null).
+   *  The client resolves the name back to a user ID before submit so
+   *  the model never has to emit opaque cuids. */
+  assignedDoctorName: string | null;
   tags: string[] | null;
   briefHistory: string[] | null;
 }
@@ -99,7 +103,8 @@ Rules:
 - email: lowercase. If the speaker gives a PARTIAL edit ("change the domain to foo.com", "it ends in .org"), apply it to the current email and return the full corrected address. Null if ambiguous.
 - insuranceVerified: true only on explicit verification statements.
 - tags: slugs ("chronic-pain"). Null if none mentioned.
-- sex: MALE / FEMALE / OTHER if clearly stated ("male patient", "she", "they"). Pronouns are a weak signal — only infer when unambiguous. Null otherwise; never guess.
+- sex: MALE / FEMALE / OTHER when stated directly — "male", "female", "she's a woman", "he's a man", "non-binary", "choose female", "set sex to male", "mark as male". Extract whenever the speaker's intent is clear, even in short phrases. Do NOT infer from surname or isolated pronouns used only in passing. If the speaker didn't mention sex at all, return null.
+- assignedDoctorName: exact string match against the AVAILABLE DOCTORS list below. If the speaker says "assign to Dr. Smith" or "Dr. Smith will see them" and "Dr. Smith" is in the list, return that name verbatim as listed (with the "Dr." prefix, full name). Fuzzy match is OK on first/last name ("assign to Smith" → "Dr. Jane Smith" if only one Smith). Null if no close match.
 - addressLine1 / addressLine2 / city / state / postalCode: US-style address parsing. State as 2-char code ("California" → "CA"). Postal code as digits. Split "123 Main Street Apt 4B, San Francisco, CA 94103" into the five fields correctly.
 - pharmacyName: the pharmacy/drug store the patient uses (e.g., "CVS on Market Street", "Walgreens #4421"). Null if not mentioned.
 - pharmacyPhone: same format rules as cellPhone. Null if not mentioned.
@@ -131,6 +136,7 @@ const EXTRACTION_JSON_SCHEMA = {
       'postalCode',
       'pharmacyName',
       'pharmacyPhone',
+      'assignedDoctorName',
       'tags',
       'briefHistory',
     ],
@@ -157,6 +163,7 @@ const EXTRACTION_JSON_SCHEMA = {
       postalCode: { type: ['string', 'null'] },
       pharmacyName: { type: ['string', 'null'] },
       pharmacyPhone: { type: ['string', 'null'] },
+      assignedDoctorName: { type: ['string', 'null'] },
       tags: {
         anyOf: [
           { type: 'null' },
@@ -201,6 +208,7 @@ export async function POST(request: NextRequest) {
 
   let audioFile: File | null;
   let currentFields: Partial<ExtractedPatientFields> = {};
+  let availableDoctors: string[] = [];
   try {
     const form = await request.formData();
     audioFile = form.get('audio') as File | null;
@@ -216,6 +224,21 @@ export async function POST(request: NextRequest) {
         }
       } catch {
         // Malformed — ignore, proceed with empty current state.
+      }
+    }
+    // Optional multipart field "doctors" = JSON string array of display
+    // names ("Dr. Jane Smith", "Dr. Raj Patel"). Fed to the extractor so
+    // "assign to Dr. Smith" can resolve to a name the client then maps
+    // back to a user ID at submit time.
+    const docs = form.get('doctors');
+    if (typeof docs === 'string' && docs.trim()) {
+      try {
+        const parsed = JSON.parse(docs) as unknown;
+        if (Array.isArray(parsed)) {
+          availableDoctors = parsed.filter((s): s is string => typeof s === 'string');
+        }
+      } catch {
+        // Ignore — no matching means model returns null assignedDoctorName.
       }
     }
   } catch {
@@ -299,10 +322,17 @@ export async function POST(request: NextRequest) {
   let fields: ExtractedPatientFields;
   let extractionTokens: number | null = null;
   try {
-    // Build the user message: current form state (so edits land on the
-    // right value) + the transcript itself.
+    // Build the user message: current form state, available doctor names,
+    // then the transcript. Doctor names let the model pick a valid option
+    // rather than hallucinating.
     const currentFieldsJson = JSON.stringify(currentFields);
-    const userContent = `CURRENT FORM STATE:\n${currentFieldsJson}\n\nUTTERANCE:\n${transcript}`;
+    const doctorsBlock = availableDoctors.length
+      ? availableDoctors.map((d) => `  - ${d}`).join('\n')
+      : '  (none)';
+    const userContent =
+      `CURRENT FORM STATE:\n${currentFieldsJson}\n\n` +
+      `AVAILABLE DOCTORS:\n${doctorsBlock}\n\n` +
+      `UTTERANCE:\n${transcript}`;
 
     const completion = await client.chat.completions.create({
       model: 'gpt-4o-mini',
@@ -361,6 +391,7 @@ function emptyFields(): ExtractedPatientFields {
     postalCode: null,
     pharmacyName: null,
     pharmacyPhone: null,
+    assignedDoctorName: null,
     tags: null,
     briefHistory: null,
   };
@@ -424,6 +455,7 @@ function parseFields(raw: string): ExtractedPatientFields {
     postalCode: str(p.postalCode),
     pharmacyName: str(p.pharmacyName),
     pharmacyPhone: str(p.pharmacyPhone),
+    assignedDoctorName: str(p.assignedDoctorName),
     tags: strArr(p.tags),
     briefHistory: strArr(p.briefHistory),
   };
