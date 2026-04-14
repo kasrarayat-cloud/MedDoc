@@ -309,11 +309,15 @@ export async function getNoteById(
 ): Promise<ClinicalNoteView | null> {
   if (await isDatabaseHealthy()) {
     try {
+      // No content-null filter here — PATIENT_FILE rows have null content
+      // by design (metadata only), and callers like deleteClinicalNote
+      // need to be able to find them. The category system (via
+      // procedureType sentinels) distinguishes row kinds; content presence
+      // is no longer a useful gate.
       const row = await prisma.document.findFirst({
         where: {
           id,
           deletedAt: null,
-          NOT: { content: null },
           patient: patientAccessWhere(session),
         },
         include: {

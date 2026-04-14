@@ -1247,13 +1247,13 @@ export default function PatientDetailClient({
                           })
                         }
                         disabled={deletingId === file.id}
-                        className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium text-red-300 hover:text-red-200 bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="shrink-0 px-3 flex items-center justify-center text-red-300 hover:text-red-200 hover:bg-red-500/10 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed border-l border-white/5 -my-3 -mr-3"
                         aria-label="Delete attached file"
                       >
                         {deletingId === file.id ? (
-                          <Loader2 className="w-3 h-3 animate-spin" />
+                          <Loader2 className="w-4 h-4 animate-spin" />
                         ) : (
-                          <Trash2 className="w-3 h-3" />
+                          <Trash2 className="w-4 h-4" />
                         )}
                       </button>
                     </li>
