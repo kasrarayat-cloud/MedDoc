@@ -30,6 +30,7 @@ import {
   AudioLines,
   Paperclip,
   FileBadge,
+  Trash2,
 } from 'lucide-react';
 import { formatLastVisit, formatRelativeDate } from '@/lib/mock-patients';
 import type { PatientView } from '@/lib/data/patients';
@@ -41,6 +42,7 @@ import {
   updateNoteManuallyAction,
   uploadCustomProcedureAction,
   generateFinalReportAction,
+  deleteDocumentAction,
 } from '@/app/dashboard/patients/actions';
 import EditPatientModal from './EditPatientModal';
 import DocumentGeneratorModal from './DocumentGeneratorModal';
@@ -130,6 +132,45 @@ export default function PatientDetailClient({
 
   const handleFileUploaded = (file: ClinicalNoteView) => {
     setFiles((prev) => [file, ...prev]);
+  };
+
+  /** id currently mid-delete. Drives per-row disabled + spinner, and
+   *  prevents accidental double-clicks across any of the four lists. */
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  /** Shared delete handler. `onSuccess` is how each card tells us to
+   *  update its local state (files/reports have state mirrors; notes
+   *  and custom procedures come from props and rely on router.refresh). */
+  const handleDeleteDocument = async (
+    docId: string,
+    opts: {
+      kind: 'clinical note' | 'custom procedure' | 'final report' | 'attached file';
+      onSuccess?: () => void;
+    }
+  ) => {
+    if (deletingId) return;
+    const confirmed = window.confirm(
+      `Delete this ${opts.kind}? This action is logged to the audit trail and cannot be undone from the UI.`
+    );
+    if (!confirmed) return;
+    setDeletingId(docId);
+    try {
+      const result = await deleteDocumentAction(docId, patient.id);
+      if (!result.ok) {
+        window.alert(`Delete failed: ${result.error}`);
+        return;
+      }
+      if (opts.onSuccess) opts.onSuccess();
+      // Pull fresh data for the lists that come from server props (notes,
+      // customProcedures). Harmless for the state-backed lists — they've
+      // already been updated optimistically.
+      router.refresh();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Delete failed';
+      window.alert(`Delete failed: ${message}`);
+    } finally {
+      setDeletingId(null);
+    }
   };
   /** Centered Cmd+K-style assistant. Opened by the prominent header
    *  button or by the global Cmd/Ctrl+K shortcut. */
@@ -612,6 +653,23 @@ export default function PatientDetailClient({
                                       >
                                         <Pencil className="w-3 h-3" /> Edit Text
                                       </button>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleDeleteDocument(proc.id, {
+                                            kind: 'custom procedure',
+                                          })
+                                        }
+                                        disabled={deletingId === proc.id}
+                                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-red-300 hover:text-red-200 bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ml-auto"
+                                      >
+                                        {deletingId === proc.id ? (
+                                          <Loader2 className="w-3 h-3 animate-spin" />
+                                        ) : (
+                                          <Trash2 className="w-3 h-3" />
+                                        )}
+                                        Delete
+                                      </button>
                                     </div>
                                   </>
                                 )}
@@ -839,6 +897,23 @@ export default function PatientDetailClient({
                                         <Pencil className="w-3 h-3" />
                                         Edit Text
                                       </button>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleDeleteDocument(note.id, {
+                                            kind: 'clinical note',
+                                          })
+                                        }
+                                        disabled={deletingId === note.id}
+                                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-red-300 hover:text-red-200 bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ml-auto"
+                                      >
+                                        {deletingId === note.id ? (
+                                          <Loader2 className="w-3 h-3 animate-spin" />
+                                        ) : (
+                                          <Trash2 className="w-3 h-3" />
+                                        )}
+                                        Delete
+                                      </button>
                                     </div>
                                   </>
                                 )}
@@ -1000,6 +1075,29 @@ export default function PatientDetailClient({
                                 <pre className="mt-3 text-xs text-slate-200 leading-relaxed whitespace-pre-wrap font-sans bg-slate-950/60 rounded-lg p-4 border border-white/5">
                                   {report.content}
                                 </pre>
+                                <div className="mt-2 flex items-center gap-2 justify-end">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleDeleteDocument(report.id, {
+                                        kind: 'final report',
+                                        onSuccess: () =>
+                                          setReports((prev) =>
+                                            prev.filter((r) => r.id !== report.id)
+                                          ),
+                                      })
+                                    }
+                                    disabled={deletingId === report.id}
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-red-300 hover:text-red-200 bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                  >
+                                    {deletingId === report.id ? (
+                                      <Loader2 className="w-3 h-3 animate-spin" />
+                                    ) : (
+                                      <Trash2 className="w-3 h-3" />
+                                    )}
+                                    Delete
+                                  </button>
+                                </div>
                               </div>
                             </motion.div>
                           )}
@@ -1084,6 +1182,25 @@ export default function PatientDetailClient({
                           )}
                         </div>
                       </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleDeleteDocument(file.id, {
+                            kind: 'attached file',
+                            onSuccess: () =>
+                              setFiles((prev) => prev.filter((f) => f.id !== file.id)),
+                          })
+                        }
+                        disabled={deletingId === file.id}
+                        className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium text-red-300 hover:text-red-200 bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                        aria-label="Delete attached file"
+                      >
+                        {deletingId === file.id ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-3 h-3" />
+                        )}
+                      </button>
                     </li>
                   ))}
                 </ul>

@@ -35,6 +35,7 @@ import {
   getNoteById as dataGetNoteById,
   listNotesByPatient as dataListNotesByPatient,
   updateClinicalNote as dataUpdateClinicalNote,
+  deleteClinicalNote as dataDeleteClinicalNote,
   createPatientFile as dataCreatePatientFile,
   createFinalReport as dataCreateFinalReport,
   type ClinicalNoteView,
@@ -119,8 +120,9 @@ const createPatientSchema = z.object({
     .or(z.literal('')),
   tags: z.array(z.string()).optional(),
   briefHistory: z.array(z.string().min(1).max(500)).optional(),
-  // Must match a doctor in the creator's practice; enforced at handler level.
-  assignedDoctorId: z.string().cuid().optional().nullable().or(z.literal('')),
+  // Must match a doctor in the creator's practice; enforced at handler
+  // level. Loose format here — the cross-practice check is the real gate.
+  assignedDoctorId: z.string().min(1).max(50).optional().nullable().or(z.literal('')),
 });
 
 const updatePatientSchema = createPatientSchema.partial().extend({
@@ -2266,7 +2268,11 @@ function humanize(field: string): string {
 // ----------------------------------------------------------------------------
 
 const uploadPatientFileSchema = z.object({
-  patientId: z.string().cuid(),
+  // Loose ID format — the real authz is the getPatientById tenant guard
+  // below. z.string().cuid() was rejecting valid Prisma IDs in some
+  // environments and surfacing as a confusing "metadata error" to the
+  // doctor.
+  patientId: z.string().min(1).max(50),
   fileName: z.string().min(1).max(255),
   mimeType: z.string().min(1).max(100),
   sizeBytes: z.number().int().min(1).max(25 * 1024 * 1024), // 25 MB cap
@@ -2290,9 +2296,13 @@ export async function uploadPatientFileAction(
 
   const parsed = uploadPatientFileSchema.safeParse(rawInput);
   if (!parsed.success) {
+    // Surface the first real Zod issue so "Invalid file metadata" doesn't
+    // hide what actually failed validation.
+    const first = parsed.error.issues[0];
+    const detail = first ? `${first.path.join('.')}: ${first.message}` : 'Unknown';
     return {
       ok: false,
-      error: 'Invalid file metadata',
+      error: `Invalid file metadata — ${detail}`,
       fieldErrors: parsed.error.flatten().fieldErrors,
     };
   }
@@ -2501,6 +2511,56 @@ ${proceduresBlock}`;
     const message = err instanceof Error ? err.message : 'Save failed';
     return { ok: false, error: message };
   }
+}
+
+// ============================================================================
+// DELETE DOCUMENT (clinical note / custom procedure / final report / file)
+// ============================================================================
+// All four chart categories live in the Document table, so one action
+// covers every card's delete button. Tenant isolation + soft-delete live
+// inside dataDeleteClinicalNote; this wrapper adds auth + audit + path
+// revalidation.
+// ----------------------------------------------------------------------------
+
+export async function deleteDocumentAction(
+  documentId: string,
+  patientId: string
+): Promise<ActionResult<{ deleted: true }>> {
+  let session;
+  try {
+    session = await requireRole(['DOCTOR', 'ADMIN']);
+  } catch (err) {
+    await logAudit({
+      action: 'DELETED_DOCUMENT',
+      targetId: documentId,
+      targetType: 'Document',
+      success: false,
+      errorCode: 'FORBIDDEN',
+    });
+    return authErrorResult(err);
+  }
+
+  if (!documentId || typeof documentId !== 'string') {
+    return { ok: false, error: 'Invalid document ID' };
+  }
+
+  const ok = await dataDeleteClinicalNote(documentId, session);
+  if (!ok) {
+    // Either the document doesn't exist or the session can't see it —
+    // same "collapsed" response as elsewhere so cross-tenant probes
+    // can't distinguish the two.
+    return { ok: false, error: 'Document not found or not accessible.' };
+  }
+
+  await logAudit({
+    action: 'DELETED_DOCUMENT',
+    targetId: documentId,
+    targetType: 'Document',
+    metadata: { patientId, via: 'manual' },
+  });
+
+  revalidatePath(`/dashboard/patients/${patientId}`);
+  return { ok: true, data: { deleted: true } };
 }
 
 // Thin dispatcher wrapper for the Realtime assistant `generate_final_report`
