@@ -19,6 +19,7 @@ import { z } from 'zod';
 import OpenAI from 'openai';
 
 import { requireRole, AuthError } from '@/lib/auth';
+import prisma, { isDatabaseHealthy } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
 import { logApiUsage } from '@/lib/usage';
 import {
@@ -87,7 +88,37 @@ const createPatientSchema = z.object({
     .nullable()
     .or(z.literal('')),
   insuranceVerified: z.boolean().optional().nullable(),
+  sex: z.enum(['UNKNOWN', 'MALE', 'FEMALE', 'OTHER']).optional().nullable(),
+  addressLine1: z.string().max(200).optional().nullable().or(z.literal('')),
+  addressLine2: z.string().max(200).optional().nullable().or(z.literal('')),
+  city: z.string().max(100).optional().nullable().or(z.literal('')),
+  // US 2-char state code. Loose — upper/lower OK; normalized on save.
+  state: z
+    .string()
+    .max(2)
+    .regex(/^[A-Za-z]{0,2}$/, 'State must be a 2-letter code')
+    .optional()
+    .nullable()
+    .or(z.literal('')),
+  postalCode: z
+    .string()
+    .max(10)
+    .regex(/^[A-Za-z0-9 \-]*$/, 'Postal code contains invalid characters')
+    .optional()
+    .nullable()
+    .or(z.literal('')),
+  pharmacyName: z.string().max(150).optional().nullable().or(z.literal('')),
+  pharmacyPhone: z
+    .string()
+    .max(32)
+    .regex(/^[0-9 ()+\-.]*$/, 'Pharmacy phone contains invalid characters')
+    .optional()
+    .nullable()
+    .or(z.literal('')),
   tags: z.array(z.string()).optional(),
+  briefHistory: z.array(z.string().min(1).max(500)).optional(),
+  // Must match a doctor in the creator's practice; enforced at handler level.
+  assignedDoctorId: z.string().cuid().optional().nullable().or(z.literal('')),
 });
 
 const updatePatientSchema = createPatientSchema.partial().extend({
@@ -156,7 +187,37 @@ export async function createPatientAction(
     homePhone: data.homePhone || null,
     birthYear: data.birthYear ?? null,
     insuranceVerified: data.insuranceVerified ?? null,
+    sex: data.sex ?? null,
+    addressLine1: data.addressLine1 || null,
+    addressLine2: data.addressLine2 || null,
+    city: data.city || null,
+    state: data.state ? data.state.toUpperCase() : null,
+    postalCode: data.postalCode || null,
+    pharmacyName: data.pharmacyName || null,
+    pharmacyPhone: data.pharmacyPhone || null,
+    assignedDoctorId: data.assignedDoctorId || null,
+    briefHistory: data.briefHistory ?? [],
   };
+
+  // Tenant guard for assignedDoctorId — must be a DOCTOR in the creator's
+  // practice. Prevents the client from passing an arbitrary user ID.
+  if (cleanData.assignedDoctorId) {
+    const doctor = await prisma.user.findFirst({
+      where: {
+        id: cleanData.assignedDoctorId,
+        practiceId: session.user.practiceId,
+        role: 'DOCTOR',
+      },
+      select: { id: true },
+    });
+    if (!doctor) {
+      return {
+        ok: false,
+        error: 'Selected doctor is not valid for this practice.',
+        fieldErrors: { assignedDoctorId: ['Invalid doctor'] },
+      };
+    }
+  }
 
   // 3. Create via data layer — patient is tagged with the creator's
   //    practice so it's visible only within that tenant.
@@ -274,6 +335,48 @@ export async function getNextChartIdAction(): Promise<ActionResult<{ chartId: st
   }
   const chartId = await getNextChartId(session.user.practiceId);
   return { ok: true, data: { chartId } };
+}
+
+// ---------------------------------------------------------------------------
+// LIST DOCTORS (for assignment dropdown)
+// ---------------------------------------------------------------------------
+// Returns active DOCTOR users in the caller's practice. Used by the Add /
+// Edit Patient modals to pick an assigned provider. Tenant-scoped; no
+// SUPER_ADMIN cross-practice listing here — that's not a workflow need.
+// Gracefully returns an empty list if the DB is unhealthy so the modal
+// still opens with a "no doctors available" state.
+
+export interface DoctorOption {
+  id: string;
+  name: string | null;
+  email: string;
+}
+
+export async function listPracticeDoctorsAction(): Promise<ActionResult<DoctorOption[]>> {
+  let session;
+  try {
+    session = await requireRole(['DOCTOR', 'ADMIN']);
+  } catch (err) {
+    return authErrorResult(err);
+  }
+  if (!(await isDatabaseHealthy())) {
+    return { ok: true, data: [] };
+  }
+  try {
+    const rows = await prisma.user.findMany({
+      where: {
+        practiceId: session.user.practiceId,
+        role: 'DOCTOR',
+        isActive: true,
+      },
+      select: { id: true, name: true, email: true },
+      orderBy: [{ name: 'asc' }, { email: 'asc' }],
+    });
+    return { ok: true, data: rows };
+  } catch (err) {
+    console.warn('[patients/actions] listPracticeDoctors failed:', err);
+    return { ok: true, data: [] };
+  }
 }
 
 // ---------------------------------------------------------------------------

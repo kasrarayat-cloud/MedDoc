@@ -101,6 +101,17 @@ enum PatientStatus {
   ARCHIVED
 }
 
+/// Biological sex for clinical context (dosing, procedures). Non-PHI under
+/// HIPAA Safe Harbor. Kept intentionally minimal — UNKNOWN covers "not
+/// asked yet" and OTHER is a catch-all so we don't rev the enum for edge
+/// cases. Gender identity is a separate concern and not captured here.
+enum PatientSex {
+  UNKNOWN
+  MALE
+  FEMALE
+  OTHER
+}
+
 /// Visit type for appointments
 enum VisitType {
   CONSULTATION
@@ -324,6 +335,28 @@ model Patient {
   // Demographics — year only (de-identified per HIPAA Safe Harbor §164.514)
   // Full DOB is fetched on-demand from DrChrono, never cached here.
   birthYear Int?
+  /// Biological sex — clinically relevant for medication dosing and certain
+  /// procedures. Nullable so legacy rows don't force a value.
+  sex       PatientSex @default(UNKNOWN)
+
+  // === Address (mailing / insurance filings) ===
+  // Captured locally because practices routinely use it for mailing labels,
+  // insurance verification, and appointment reminders. Full street address
+  // is NOT de-identified under Safe Harbor — this field is PHI and lives
+  // under the same tenant isolation and audit trail as names/phones.
+  addressLine1 String?
+  addressLine2 String?
+  city         String?
+  /// US 2-char state code (e.g., "CA"). Loose storage so the data layer
+  /// doesn't have to enforce a closed list — forms normalize, DB trusts.
+  state        String?
+  postalCode   String?
+
+  // === Preferred pharmacy ===
+  // Relevant in pain management for controlled-substance e-prescribing.
+  // Free-text name + phone; a full address is overkill for our workflow.
+  pharmacyName  String?
+  pharmacyPhone String?
 
   // CRM workflow
   status           PatientStatus @default(ACTIVE)

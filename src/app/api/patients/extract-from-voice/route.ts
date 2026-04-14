@@ -49,7 +49,16 @@ export interface ExtractedPatientFields {
   cellPhone: string | null;
   homePhone: string | null;
   insuranceVerified: boolean | null;
+  sex: 'UNKNOWN' | 'MALE' | 'FEMALE' | 'OTHER' | null;
+  addressLine1: string | null;
+  addressLine2: string | null;
+  city: string | null;
+  state: string | null;
+  postalCode: string | null;
+  pharmacyName: string | null;
+  pharmacyPhone: string | null;
   tags: string[] | null;
+  briefHistory: string[] | null;
 }
 
 interface SuccessResponse {
@@ -90,6 +99,11 @@ Rules:
 - email: lowercase. If the speaker gives a PARTIAL edit ("change the domain to foo.com", "it ends in .org"), apply it to the current email and return the full corrected address. Null if ambiguous.
 - insuranceVerified: true only on explicit verification statements.
 - tags: slugs ("chronic-pain"). Null if none mentioned.
+- sex: MALE / FEMALE / OTHER if clearly stated ("male patient", "she", "they"). Pronouns are a weak signal — only infer when unambiguous. Null otherwise; never guess.
+- addressLine1 / addressLine2 / city / state / postalCode: US-style address parsing. State as 2-char code ("California" → "CA"). Postal code as digits. Split "123 Main Street Apt 4B, San Francisco, CA 94103" into the five fields correctly.
+- pharmacyName: the pharmacy/drug store the patient uses (e.g., "CVS on Market Street", "Walgreens #4421"). Null if not mentioned.
+- pharmacyPhone: same format rules as cellPhone. Null if not mentioned.
+- briefHistory: one array entry per distinct clinical fact or intake note the speaker mentioned ("chronic low back pain since 2023", "referred by Dr. Chen", "failed PT 2024"). Short prose lines, not bullet points. Null if none.
 
 If the utterance is just noise or clearly unrelated to patient intake (e.g., random speech, nothing actionable), return all-null. Pure corrections like "it's Hagopian not Hagorian" are NOT noise — they are field edits.`;
 
@@ -109,7 +123,16 @@ const EXTRACTION_JSON_SCHEMA = {
       'cellPhone',
       'homePhone',
       'insuranceVerified',
+      'sex',
+      'addressLine1',
+      'addressLine2',
+      'city',
+      'state',
+      'postalCode',
+      'pharmacyName',
+      'pharmacyPhone',
       'tags',
+      'briefHistory',
     ],
     properties: {
       firstName: { type: ['string', 'null'] },
@@ -121,7 +144,26 @@ const EXTRACTION_JSON_SCHEMA = {
       cellPhone: { type: ['string', 'null'] },
       homePhone: { type: ['string', 'null'] },
       insuranceVerified: { type: ['boolean', 'null'] },
+      sex: {
+        anyOf: [
+          { type: 'null' },
+          { type: 'string', enum: ['UNKNOWN', 'MALE', 'FEMALE', 'OTHER'] },
+        ],
+      },
+      addressLine1: { type: ['string', 'null'] },
+      addressLine2: { type: ['string', 'null'] },
+      city: { type: ['string', 'null'] },
+      state: { type: ['string', 'null'] },
+      postalCode: { type: ['string', 'null'] },
+      pharmacyName: { type: ['string', 'null'] },
+      pharmacyPhone: { type: ['string', 'null'] },
       tags: {
+        anyOf: [
+          { type: 'null' },
+          { type: 'array', items: { type: 'string' } },
+        ],
+      },
+      briefHistory: {
         anyOf: [
           { type: 'null' },
           { type: 'array', items: { type: 'string' } },
@@ -311,7 +353,16 @@ function emptyFields(): ExtractedPatientFields {
     cellPhone: null,
     homePhone: null,
     insuranceVerified: null,
+    sex: null,
+    addressLine1: null,
+    addressLine2: null,
+    city: null,
+    state: null,
+    postalCode: null,
+    pharmacyName: null,
+    pharmacyPhone: null,
     tags: null,
+    briefHistory: null,
   };
 }
 
@@ -343,6 +394,18 @@ function parseFields(raw: string): ExtractedPatientFields {
   const currentYear = new Date().getFullYear();
   const validYear = year !== null && year >= 1900 && year <= currentYear ? year : null;
 
+  // Sex enum — anything outside the closed set becomes null rather than
+  // leaking into the UI as a stringified unknown value.
+  const sexRaw = str(p.sex);
+  const sex: ExtractedPatientFields['sex'] =
+    sexRaw === 'MALE' || sexRaw === 'FEMALE' || sexRaw === 'OTHER' || sexRaw === 'UNKNOWN'
+      ? sexRaw
+      : null;
+
+  const stateRaw = str(p.state);
+  const stateNormalized =
+    stateRaw && /^[A-Za-z]{2}$/.test(stateRaw) ? stateRaw.toUpperCase() : null;
+
   return {
     firstName: str(p.firstName),
     lastName: str(p.lastName),
@@ -353,6 +416,15 @@ function parseFields(raw: string): ExtractedPatientFields {
     cellPhone: str(p.cellPhone),
     homePhone: str(p.homePhone),
     insuranceVerified: bool(p.insuranceVerified),
+    sex,
+    addressLine1: str(p.addressLine1),
+    addressLine2: str(p.addressLine2),
+    city: str(p.city),
+    state: stateNormalized,
+    postalCode: str(p.postalCode),
+    pharmacyName: str(p.pharmacyName),
+    pharmacyPhone: str(p.pharmacyPhone),
     tags: strArr(p.tags),
+    briefHistory: strArr(p.briefHistory),
   };
 }

@@ -49,6 +49,20 @@ export interface MockPatient {
   homePhone?: string;
   /** Insurance-on-file state. undefined = unknown / not yet checked. */
   insuranceVerified?: boolean;
+  /** Biological sex — clinically relevant (dosing, procedures). Non-PHI
+   *  under HIPAA Safe Harbor. Matches the PatientSex Prisma enum. */
+  sex?: 'UNKNOWN' | 'MALE' | 'FEMALE' | 'OTHER';
+  /** Mailing / insurance address. Full street address is PHI — treat
+   *  with the same tenant isolation + audit rules as phones. */
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  /** US 2-char state code, e.g. "CA". Loose storage. */
+  state?: string;
+  postalCode?: string;
+  /** Preferred pharmacy for e-prescribing (esp. controlled substances). */
+  pharmacyName?: string;
+  pharmacyPhone?: string;
   status: PatientStatus;
   tags: string[];
   assignedDoctor: string;

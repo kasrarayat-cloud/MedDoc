@@ -80,6 +80,8 @@ function generateId(): string {
 // Public API
 // ---------------------------------------------------------------------------
 
+export type PatientSex = 'UNKNOWN' | 'MALE' | 'FEMALE' | 'OTHER';
+
 export interface CreatePatientInput {
   firstName: string;
   lastName: string;
@@ -94,8 +96,21 @@ export interface CreatePatientInput {
   cellPhone?: string | null;
   homePhone?: string | null;
   insuranceVerified?: boolean | null;
+  sex?: PatientSex | null;
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postalCode?: string | null;
+  pharmacyName?: string | null;
+  pharmacyPhone?: string | null;
   tags?: string[];
-  assignedDoctor?: string;
+  /** Initial brief-history entries (usually empty; UI captures a single
+   *  intake-note textarea that becomes one element). */
+  briefHistory?: string[];
+  /** Optional doctor to assign at create time. Must be a user in the
+   *  same practice; enforced at the data layer. */
+  assignedDoctorId?: string | null;
 }
 
 export interface UpdatePatientInput {
@@ -109,12 +124,21 @@ export interface UpdatePatientInput {
   cellPhone?: string | null;
   homePhone?: string | null;
   insuranceVerified?: boolean | null;
+  sex?: PatientSex | null;
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postalCode?: string | null;
+  pharmacyName?: string | null;
+  pharmacyPhone?: string | null;
   status?: PatientStatus;
   tags?: string[];
   /** Replace-semantics — caller sends the full updated list including any
    *  existing entries to keep. The AI assistant tool gets the current list
    *  in its system prompt so it can preserve history when adding lines. */
   briefHistory?: string[];
+  assignedDoctorId?: string | null;
 }
 
 /**
@@ -252,7 +276,19 @@ export async function createPatient(
             cellPhone: input.cellPhone ?? null,
             homePhone: input.homePhone ?? null,
             insuranceVerified: input.insuranceVerified ?? null,
+            // Scalar default on the column is UNKNOWN, but be explicit so
+            // inserts are readable in DB logs.
+            sex: input.sex ?? 'UNKNOWN',
+            addressLine1: input.addressLine1 ?? null,
+            addressLine2: input.addressLine2 ?? null,
+            city: input.city ?? null,
+            state: input.state ?? null,
+            postalCode: input.postalCode ?? null,
+            pharmacyName: input.pharmacyName ?? null,
+            pharmacyPhone: input.pharmacyPhone ?? null,
             tags: input.tags ?? [],
+            briefHistory: input.briefHistory ?? [],
+            assignedDoctorId: input.assignedDoctorId ?? null,
             status: 'ACTIVE',
             createdById,
             practiceId,
@@ -324,12 +360,20 @@ export async function createPatient(
     cellPhone: input.cellPhone ?? undefined,
     homePhone: input.homePhone ?? undefined,
     insuranceVerified: input.insuranceVerified ?? undefined,
+    sex: input.sex ?? 'UNKNOWN',
+    addressLine1: input.addressLine1 ?? undefined,
+    addressLine2: input.addressLine2 ?? undefined,
+    city: input.city ?? undefined,
+    state: input.state ?? undefined,
+    postalCode: input.postalCode ?? undefined,
+    pharmacyName: input.pharmacyName ?? undefined,
+    pharmacyPhone: input.pharmacyPhone ?? undefined,
     status: 'ACTIVE',
     tags: input.tags ?? [],
-    assignedDoctor: input.assignedDoctor ?? 'Dr. Moussazadeh',
+    assignedDoctor: 'Dr. Moussazadeh',
     lastVisit: new Date().toISOString(),
     createdAt: new Date().toISOString(),
-    briefHistory: [],
+    briefHistory: input.briefHistory ?? [],
     recentNotes: [],
     files: [],
   };
@@ -394,6 +438,14 @@ export async function updatePatient(
     mrn: input.mrn ?? existing.mrn,
     birthYear: input.birthYear ?? existing.birthYear,
     tags: input.tags ?? existing.tags,
+    sex: input.sex === null ? 'UNKNOWN' : input.sex ?? existing.sex,
+    addressLine1: nullableToUndef(input.addressLine1, existing.addressLine1),
+    addressLine2: nullableToUndef(input.addressLine2, existing.addressLine2),
+    city: nullableToUndef(input.city, existing.city),
+    state: nullableToUndef(input.state, existing.state),
+    postalCode: nullableToUndef(input.postalCode, existing.postalCode),
+    pharmacyName: nullableToUndef(input.pharmacyName, existing.pharmacyName),
+    pharmacyPhone: nullableToUndef(input.pharmacyPhone, existing.pharmacyPhone),
   };
   memoryStore.set(id, updated);
   return { patient: updated, changedFields };
@@ -462,6 +514,14 @@ function prismaToView(row: any): PatientView {
     cellPhone: row.cellPhone ?? undefined,
     homePhone: row.homePhone ?? undefined,
     insuranceVerified: row.insuranceVerified ?? undefined,
+    sex: row.sex ?? 'UNKNOWN',
+    addressLine1: row.addressLine1 ?? undefined,
+    addressLine2: row.addressLine2 ?? undefined,
+    city: row.city ?? undefined,
+    state: row.state ?? undefined,
+    postalCode: row.postalCode ?? undefined,
+    pharmacyName: row.pharmacyName ?? undefined,
+    pharmacyPhone: row.pharmacyPhone ?? undefined,
     status: row.status as PatientStatus,
     tags: row.tags ?? [],
     assignedDoctor: 'Dr. Moussazadeh', // joined separately in real app

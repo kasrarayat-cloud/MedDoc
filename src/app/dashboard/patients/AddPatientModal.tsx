@@ -13,11 +13,18 @@ import {
   MicOff,
   Sparkles,
 } from 'lucide-react';
-import { createPatientAction, getNextChartIdAction } from './actions';
+import {
+  createPatientAction,
+  getNextChartIdAction,
+  listPracticeDoctorsAction,
+  type DoctorOption,
+} from './actions';
 import { useVoiceRecorder } from '@/lib/hooks/useVoiceRecorder';
 
 // Response shape from /api/patients/extract-from-voice. Every field
 // nullable — null means "doctor didn't mention it", leave the form alone.
+type PatientSex = 'UNKNOWN' | 'MALE' | 'FEMALE' | 'OTHER';
+
 interface ExtractedFields {
   firstName: string | null;
   lastName: string | null;
@@ -28,7 +35,16 @@ interface ExtractedFields {
   cellPhone: string | null;
   homePhone: string | null;
   insuranceVerified: boolean | null;
+  sex: PatientSex | null;
+  addressLine1: string | null;
+  addressLine2: string | null;
+  city: string | null;
+  state: string | null;
+  postalCode: string | null;
+  pharmacyName: string | null;
+  pharmacyPhone: string | null;
   tags: string[] | null;
+  briefHistory: string[] | null;
 }
 
 interface AddPatientModalProps {
@@ -47,6 +63,18 @@ interface FormState {
   cellPhone: string;
   homePhone: string;
   insuranceVerified: boolean;
+  sex: PatientSex;
+  addressLine1: string;
+  addressLine2: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  pharmacyName: string;
+  pharmacyPhone: string;
+  assignedDoctorId: string;
+  /** Free-text intake note; split on newlines and filtered at submit to
+   *  become the first briefHistory[] entries. One line per item. */
+  initialHistory: string;
   tags: string;
 }
 
@@ -61,6 +89,16 @@ const initialState: FormState = {
   cellPhone: '',
   homePhone: '',
   insuranceVerified: false,
+  sex: 'UNKNOWN',
+  addressLine1: '',
+  addressLine2: '',
+  city: '',
+  state: '',
+  postalCode: '',
+  pharmacyName: '',
+  pharmacyPhone: '',
+  assignedDoctorId: '',
+  initialHistory: '',
   tags: '',
 };
 
@@ -89,6 +127,10 @@ function AddPatientModalContent({ onClose }: { onClose: () => void }) {
    *  at submit, the server regenerates (source of truth) so this value
    *  is advisory only. */
   const [suggestedChartId, setSuggestedChartId] = useState('');
+  /** Doctors in the caller's practice, loaded once on mount for the
+   *  Assigned Provider dropdown. Empty while loading or on error —
+   *  the select degrades to a disabled "No doctors available" option. */
+  const [doctors, setDoctors] = useState<DoctorOption[]>([]);
 
   // Voice-fill state — separate from createPatient flow so a voice pass
   // in flight doesn't block the Cancel button and vice versa. `voiceNote`
@@ -132,6 +174,25 @@ function AddPatientModalContent({ onClose }: { onClose: () => void }) {
       }
       if (fields.tags && fields.tags.length > 0) {
         next.tags = fields.tags.join(', ');
+        filled++;
+      }
+      if (fields.sex && fields.sex !== 'UNKNOWN') {
+        next.sex = fields.sex;
+        filled++;
+      }
+      if (fields.addressLine1) { next.addressLine1 = fields.addressLine1; filled++; }
+      if (fields.addressLine2) { next.addressLine2 = fields.addressLine2; filled++; }
+      if (fields.city) { next.city = fields.city; filled++; }
+      if (fields.state) { next.state = fields.state.toUpperCase().slice(0, 2); filled++; }
+      if (fields.postalCode) { next.postalCode = fields.postalCode; filled++; }
+      if (fields.pharmacyName) { next.pharmacyName = fields.pharmacyName; filled++; }
+      if (fields.pharmacyPhone) { next.pharmacyPhone = fields.pharmacyPhone; filled++; }
+      if (fields.briefHistory && fields.briefHistory.length > 0) {
+        // Append to whatever the user typed so a second voice pass adds rather
+        // than replaces. One entry per line.
+        const existing = next.initialHistory.trim();
+        const joined = fields.briefHistory.filter((s) => s.trim()).join('\n');
+        next.initialHistory = existing ? `${existing}\n${joined}` : joined;
         filled++;
       }
       return next;
@@ -179,8 +240,19 @@ function AddPatientModalContent({ onClose }: { onClose: () => void }) {
         cellPhone: snapshot.cellPhone || null,
         homePhone: snapshot.homePhone || null,
         insuranceVerified: snapshot.insuranceVerified,
+        sex: snapshot.sex === 'UNKNOWN' ? null : snapshot.sex,
+        addressLine1: snapshot.addressLine1 || null,
+        addressLine2: snapshot.addressLine2 || null,
+        city: snapshot.city || null,
+        state: snapshot.state || null,
+        postalCode: snapshot.postalCode || null,
+        pharmacyName: snapshot.pharmacyName || null,
+        pharmacyPhone: snapshot.pharmacyPhone || null,
         tags: snapshot.tags
           ? snapshot.tags.split(',').map((t) => t.trim()).filter(Boolean)
+          : null,
+        briefHistory: snapshot.initialHistory
+          ? snapshot.initialHistory.split('\n').map((s) => s.trim()).filter(Boolean)
           : null,
       };
       setVoiceBusy(true);
@@ -254,6 +326,20 @@ function AddPatientModalContent({ onClose }: { onClose: () => void }) {
     return () => { cancelled = true; };
   }, []);
 
+  // Fetch doctors for the assigned-provider dropdown. Same non-blocking
+  // contract as chart-ID — if it fails the field is just empty.
+  useEffect(() => {
+    let cancelled = false;
+    listPracticeDoctorsAction()
+      .then((r) => {
+        if (!cancelled && r.ok) setDoctors(r.data);
+      })
+      .catch((err) => {
+        console.warn('[AddPatientModal] listPracticeDoctors failed:', err);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
   // Close on ESC
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -314,6 +400,22 @@ function AddPatientModalContent({ onClose }: { onClose: () => void }) {
       cellPhone: form.cellPhone.trim() || null,
       homePhone: form.homePhone.trim() || null,
       insuranceVerified: form.insuranceVerified,
+      // Store UNKNOWN as null in the payload — the server normalizes null
+      // back to the UNKNOWN default. Avoids the column getting peppered
+      // with explicit UNKNOWN values when the user simply didn't pick.
+      sex: form.sex === 'UNKNOWN' ? null : form.sex,
+      addressLine1: form.addressLine1.trim() || null,
+      addressLine2: form.addressLine2.trim() || null,
+      city: form.city.trim() || null,
+      state: form.state.trim().toUpperCase() || null,
+      postalCode: form.postalCode.trim() || null,
+      pharmacyName: form.pharmacyName.trim() || null,
+      pharmacyPhone: form.pharmacyPhone.trim() || null,
+      assignedDoctorId: form.assignedDoctorId || null,
+      briefHistory: form.initialHistory
+        .split('\n')
+        .map((s) => s.trim())
+        .filter(Boolean),
       tags: form.tags
         .split(',')
         .map((t) => t.trim())
@@ -641,6 +743,150 @@ function AddPatientModalContent({ onClose }: { onClose: () => void }) {
                     disabled={isPending}
                     placeholder="patient@example.com"
                     className="input-styled"
+                  />
+                </Field>
+
+                {/* Sex + Assigned provider — paired clinical context row. */}
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Sex" hint="Clinical context only">
+                    <select
+                      value={form.sex}
+                      onChange={(e) => update('sex', e.target.value as PatientSex)}
+                      disabled={isPending}
+                      className="input-styled"
+                    >
+                      <option value="UNKNOWN">Not specified</option>
+                      <option value="FEMALE">Female</option>
+                      <option value="MALE">Male</option>
+                      <option value="OTHER">Other</option>
+                    </select>
+                  </Field>
+                  <Field
+                    label="Assigned Provider"
+                    error={fieldErrors.assignedDoctorId?.[0]}
+                    hint={doctors.length === 0 ? 'No doctors available' : 'Optional'}
+                  >
+                    <select
+                      value={form.assignedDoctorId}
+                      onChange={(e) => update('assignedDoctorId', e.target.value)}
+                      disabled={isPending || doctors.length === 0}
+                      className="input-styled"
+                    >
+                      <option value="">Unassigned</option>
+                      {doctors.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name || d.email}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                </div>
+
+                {/* Address. Two lines + city/state/zip on one row. Free-text
+                    state (US 2-char); loose regex on the server normalizes. */}
+                <Field label="Address Line 1" error={fieldErrors.addressLine1?.[0]}>
+                  <input
+                    type="text"
+                    value={form.addressLine1}
+                    onChange={(e) => update('addressLine1', e.target.value)}
+                    disabled={isPending}
+                    placeholder="123 Main St"
+                    className="input-styled"
+                  />
+                </Field>
+                <Field
+                  label="Address Line 2"
+                  error={fieldErrors.addressLine2?.[0]}
+                  hint="Apt / suite (optional)"
+                >
+                  <input
+                    type="text"
+                    value={form.addressLine2}
+                    onChange={(e) => update('addressLine2', e.target.value)}
+                    disabled={isPending}
+                    placeholder="Apt 4B"
+                    className="input-styled"
+                  />
+                </Field>
+                <div className="grid grid-cols-[1fr_80px_110px] gap-3">
+                  <Field label="City" error={fieldErrors.city?.[0]}>
+                    <input
+                      type="text"
+                      value={form.city}
+                      onChange={(e) => update('city', e.target.value)}
+                      disabled={isPending}
+                      placeholder="San Francisco"
+                      className="input-styled"
+                    />
+                  </Field>
+                  <Field label="State" error={fieldErrors.state?.[0]}>
+                    <input
+                      type="text"
+                      value={form.state}
+                      onChange={(e) =>
+                        update('state', e.target.value.replace(/[^A-Za-z]/g, '').slice(0, 2))
+                      }
+                      disabled={isPending}
+                      placeholder="CA"
+                      maxLength={2}
+                      className="input-styled font-mono uppercase"
+                    />
+                  </Field>
+                  <Field label="Postal Code" error={fieldErrors.postalCode?.[0]}>
+                    <input
+                      type="text"
+                      value={form.postalCode}
+                      onChange={(e) => update('postalCode', e.target.value)}
+                      disabled={isPending}
+                      placeholder="94103"
+                      maxLength={10}
+                      className="input-styled font-mono"
+                    />
+                  </Field>
+                </div>
+
+                {/* Preferred pharmacy — relevant for controlled-substance Rx. */}
+                <div className="grid grid-cols-[1fr_180px] gap-3">
+                  <Field
+                    label="Preferred Pharmacy"
+                    error={fieldErrors.pharmacyName?.[0]}
+                    hint="For e-prescribing"
+                  >
+                    <input
+                      type="text"
+                      value={form.pharmacyName}
+                      onChange={(e) => update('pharmacyName', e.target.value)}
+                      disabled={isPending}
+                      placeholder="CVS on Market St"
+                      className="input-styled"
+                    />
+                  </Field>
+                  <Field label="Pharmacy Phone" error={fieldErrors.pharmacyPhone?.[0]}>
+                    <input
+                      type="tel"
+                      value={form.pharmacyPhone}
+                      onChange={(e) => update('pharmacyPhone', e.target.value)}
+                      disabled={isPending}
+                      placeholder="(555) 123-0000"
+                      maxLength={32}
+                      className="input-styled font-mono"
+                    />
+                  </Field>
+                </div>
+
+                {/* Intake note → first briefHistory[] entries. One line per
+                    item at submit time (split + trim + filter empty). */}
+                <Field
+                  label="Intake Note / Brief History"
+                  hint="One line per entry. Chief complaint, referral source, relevant history."
+                >
+                  <textarea
+                    value={form.initialHistory}
+                    onChange={(e) => update('initialHistory', e.target.value)}
+                    disabled={isPending}
+                    placeholder="Referred by Dr. Chen for chronic low back pain&#10;Prior LESI series 2024, partial relief"
+                    rows={3}
+                    className="input-styled resize-y min-h-[70px]"
                   />
                 </Field>
 
