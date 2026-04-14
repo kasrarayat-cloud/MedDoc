@@ -1,10 +1,35 @@
 'use client';
 
-import { useState, useEffect, useTransition } from 'react';
+import { useState, useEffect, useTransition, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Loader2, AlertCircle, CheckCircle2, UserPlus } from 'lucide-react';
+import {
+  X,
+  Loader2,
+  AlertCircle,
+  CheckCircle2,
+  UserPlus,
+  Mic,
+  MicOff,
+  Sparkles,
+} from 'lucide-react';
 import { createPatientAction, getNextChartIdAction } from './actions';
+import { useVoiceRecorder } from '@/lib/hooks/useVoiceRecorder';
+
+// Response shape from /api/patients/extract-from-voice. Every field
+// nullable — null means "doctor didn't mention it", leave the form alone.
+interface ExtractedFields {
+  firstName: string | null;
+  lastName: string | null;
+  mrn: string | null;
+  chartId: string | null;
+  birthYear: number | null;
+  email: string | null;
+  cellPhone: string | null;
+  homePhone: string | null;
+  insuranceVerified: boolean | null;
+  tags: string[] | null;
+}
 
 interface AddPatientModalProps {
   open: boolean;
@@ -64,6 +89,158 @@ function AddPatientModalContent({ onClose }: { onClose: () => void }) {
    *  at submit, the server regenerates (source of truth) so this value
    *  is advisory only. */
   const [suggestedChartId, setSuggestedChartId] = useState('');
+
+  // Voice-fill state — separate from createPatient flow so a voice pass
+  // in flight doesn't block the Cancel button and vice versa. `voiceNote`
+  // shows the transcript as a subtle banner after fill; it clears on
+  // close/success.
+  const [voiceBusy, setVoiceBusy] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [voiceNote, setVoiceNote] = useState<{
+    transcript: string;
+    filledCount: number;
+    /** Form state snapshot from just BEFORE the voice fill applied. The
+     *  Undo button restores this so a misheard utterance is one click to
+     *  revert. Null after dismiss/submit. */
+    previousForm: FormState;
+  } | null>(null);
+
+  // Merge helper: only overwrite form fields the model actually extracted
+  // (non-null). That way a second voice pass can additively fill blanks
+  // without wiping what the first pass got right. Also derives phoneLast4
+  // from cellPhone when the model returned one.
+  const applyExtractedFields = useCallback((fields: ExtractedFields): number => {
+    let filled = 0;
+    setForm((prev) => {
+      const next = { ...prev };
+      if (fields.firstName) { next.firstName = fields.firstName; filled++; }
+      if (fields.lastName) { next.lastName = fields.lastName; filled++; }
+      if (fields.mrn) { next.mrn = fields.mrn; filled++; }
+      if (fields.chartId) { next.chartId = fields.chartId; filled++; }
+      if (fields.birthYear) { next.birthYear = String(fields.birthYear); filled++; }
+      if (fields.email) { next.email = fields.email; filled++; }
+      if (fields.cellPhone) {
+        next.cellPhone = fields.cellPhone;
+        const last4 = fields.cellPhone.replace(/\D/g, '').slice(-4);
+        if (last4) next.phoneLast4 = last4;
+        filled++;
+      }
+      if (fields.homePhone) { next.homePhone = fields.homePhone; filled++; }
+      if (fields.insuranceVerified !== null) {
+        next.insuranceVerified = fields.insuranceVerified;
+        filled++;
+      }
+      if (fields.tags && fields.tags.length > 0) {
+        next.tags = fields.tags.join(', ');
+        filled++;
+      }
+      return next;
+    });
+    // Clear any stale field errors on fields we just filled — they'll be
+    // re-validated at submit. Batched as one setState to avoid flash.
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      for (const key of Object.keys(fields) as (keyof ExtractedFields)[]) {
+        if (fields[key] !== null) delete next[key];
+      }
+      return next;
+    });
+    return filled;
+  }, []);
+
+  // When VAD auto-stops the recorder, post the blob to the extractor.
+  // Reads the latest form state via the setter-closure pattern so the
+  // snapshot sent to the server is current at the moment of the POST
+  // (not whatever was there when the handler was created).
+  const handleAudioBlob = useCallback(
+    async (blob: Blob | null) => {
+      if (!blob || blob.size < 100) {
+        setVoiceError('Didn\u2019t catch that. Try again.');
+        setVoiceBusy(false);
+        return;
+      }
+      // Snapshot the current form state so the model can compute edits
+      // ("change the email to X") against real values. Uses the setter-
+      // closure trick to read state without re-declaring the callback
+      // every render.
+      const snapshot = await new Promise<FormState>((resolve) => {
+        setForm((prev) => {
+          resolve(prev);
+          return prev;
+        });
+      });
+      const currentFields = {
+        firstName: snapshot.firstName || null,
+        lastName: snapshot.lastName || null,
+        mrn: snapshot.mrn || null,
+        chartId: snapshot.chartId || null,
+        birthYear: snapshot.birthYear ? parseInt(snapshot.birthYear, 10) : null,
+        email: snapshot.email || null,
+        cellPhone: snapshot.cellPhone || null,
+        homePhone: snapshot.homePhone || null,
+        insuranceVerified: snapshot.insuranceVerified,
+        tags: snapshot.tags
+          ? snapshot.tags.split(',').map((t) => t.trim()).filter(Boolean)
+          : null,
+      };
+      setVoiceBusy(true);
+      setVoiceError(null);
+      try {
+        const fd = new FormData();
+        fd.append('audio', blob, 'intake.webm');
+        fd.append('currentFields', JSON.stringify(currentFields));
+        const res = await fetch('/api/patients/extract-from-voice', {
+          method: 'POST',
+          body: fd,
+        });
+        const data = (await res.json()) as
+          | { ok: true; transcript: string; fields: ExtractedFields }
+          | { ok: false; error: string };
+        if (!data.ok) {
+          setVoiceError(data.error || 'Voice extraction failed.');
+          return;
+        }
+        const filled = applyExtractedFields(data.fields);
+        if (!data.transcript) {
+          setVoiceError('Didn\u2019t catch that. Try again.');
+          return;
+        }
+        // `snapshot` was captured above — stash it so Undo can restore
+        // exactly the pre-fill state. Always keep the newest transcript
+        // even when filled === 0 so the user sees what the mic heard.
+        setVoiceNote({
+          transcript: data.transcript,
+          filledCount: filled,
+          previousForm: snapshot,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Voice extraction failed.';
+        setVoiceError(message);
+      } finally {
+        setVoiceBusy(false);
+      }
+    },
+    [applyExtractedFields]
+  );
+
+  const voice = useVoiceRecorder({
+    silenceTimeoutMs: 1800,
+    maxDurationMs: 45_000,
+    onAutoStop: handleAudioBlob,
+  });
+
+  const handleMicClick = useCallback(async () => {
+    if (voiceBusy) return;
+    setVoiceError(null);
+    if (voice.isRecording) {
+      // Manual stop — resolve the blob inline since onAutoStop only fires
+      // on VAD, not on explicit stop().
+      const blob = await voice.stop();
+      void handleAudioBlob(blob);
+    } else {
+      await voice.start();
+    }
+  }, [voice, voiceBusy, handleAudioBlob]);
 
   // Fetch the next chart ID for the placeholder on mount. Non-blocking —
   // if it fails the modal still works; server will auto-generate.
@@ -203,6 +380,52 @@ function AddPatientModalContent({ onClose }: { onClose: () => void }) {
                     </p>
                   </div>
                 </div>
+                {/* Voice-fill mic. Docked next to the close button so the
+                    user always finds it in the same spot. Label switches
+                    by state so screen readers and tooltips tell the story. */}
+                <button
+                  type="button"
+                  onClick={handleMicClick}
+                  disabled={voiceBusy || isPending}
+                  className={`absolute top-3 right-12 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                    voice.isRecording
+                      ? 'bg-red-500/20 text-red-300 border border-red-500/40 animate-pulse'
+                      : voiceBusy
+                        ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
+                        : 'bg-white/5 text-slate-300 border border-white/10 hover:bg-white/10 hover:text-white'
+                  }`}
+                  aria-label={
+                    voice.isRecording
+                      ? 'Stop recording'
+                      : voiceBusy
+                        ? 'Extracting fields from voice'
+                        : 'Dictate patient details'
+                  }
+                  title={
+                    voice.isRecording
+                      ? 'Tap to stop'
+                      : voiceBusy
+                        ? 'Transcribing…'
+                        : 'Fill by voice'
+                  }
+                >
+                  {voiceBusy ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Transcribing…</span>
+                    </>
+                  ) : voice.isRecording ? (
+                    <>
+                      <MicOff className="w-3.5 h-3.5" />
+                      <span>Stop</span>
+                    </>
+                  ) : (
+                    <>
+                      <Mic className="w-3.5 h-3.5" />
+                      <span>Voice</span>
+                    </>
+                  )}
+                </button>
                 <button
                   onClick={onClose}
                   className="absolute top-3 right-3 p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
@@ -229,6 +452,56 @@ function AddPatientModalContent({ onClose }: { onClose: () => void }) {
                     <p className="text-xs text-emerald-300">
                       Patient created successfully!
                     </p>
+                  </div>
+                )}
+
+                {/* Voice status banners. Error and fill-note are mutually
+                    exclusive — a successful fill clears the error, a new
+                    recording clears the old fill note. */}
+                {voiceError && !success && (
+                  <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                    <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    <p className="text-xs text-amber-200">{voiceError}</p>
+                  </div>
+                )}
+                {voiceNote && !voiceError && !success && (
+                  <div className="flex items-start gap-2 p-3 rounded-lg bg-blue-500/10 border border-blue-500/30">
+                    <Sparkles className="w-4 h-4 text-blue-300 shrink-0 mt-0.5" />
+                    <div className="text-xs text-blue-200 min-w-0 flex-1">
+                      <p className="font-semibold">
+                        {voiceNote.filledCount > 0
+                          ? `Voice filled ${voiceNote.filledCount} ${
+                              voiceNote.filledCount === 1 ? 'field' : 'fields'
+                            } — review below.`
+                          : 'Voice: nothing matched — try again.'}
+                      </p>
+                      <p className="mt-1 text-[11px] text-blue-300/80 italic truncate">
+                        “{voiceNote.transcript}”
+                      </p>
+                    </div>
+                    {voiceNote.filledCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (voiceNote.previousForm) {
+                            setForm(voiceNote.previousForm);
+                          }
+                          setVoiceNote(null);
+                        }}
+                        className="text-[11px] font-semibold text-blue-200 hover:text-white bg-blue-500/20 border border-blue-500/40 hover:bg-blue-500/30 px-2 py-0.5 rounded transition-colors"
+                        aria-label="Undo voice fill"
+                      >
+                        Undo
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setVoiceNote(null)}
+                      className="text-blue-300 hover:text-white p-0.5"
+                      aria-label="Dismiss"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 )}
 
