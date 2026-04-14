@@ -1,0 +1,67 @@
+# ============================================================================
+# MedDoc Pro — Caddy Reverse Proxy
+# ----------------------------------------------------------------------------
+# Terminates inbound traffic and forwards to the Next.js `app` service on the
+# internal Docker network. Sets X-Forwarded-For / X-Real-IP / X-Forwarded-Proto
+# so the Node runtime reads the real client IP and scheme via
+# getRequestContext() in src/lib/auth.ts.
+#
+# TWO MODES BELOW — the IP block is active by default. When you have DNS:
+#   1. Point an A record for your domain (e.g. meddoc.example.com) at this VPS
+#   2. Uncomment the domain block below
+#   3. Comment out or delete the :80 block
+#   4. Update AUTH_URL in docker-compose.yml to https://your-domain
+#   5. `docker compose up -d --force-recreate caddy app`
+#
+# Caddy auto-provisions a Let's Encrypt cert on first request to the domain
+# (persisted in the `caddy_data` volume). HTTP→HTTPS redirect is automatic
+# when a hostname is configured.
+# ============================================================================
+
+# ─── MODE A: IP-based, no TLS (current) ───────────────────────────────────
+# Active until you set up DNS. Plaintext — do NOT ship real patient data
+# to this until the domain block is turned on.
+
+:80 {
+    log {
+        output stdout
+        format console
+    }
+
+    reverse_proxy app:3000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+}
+
+# ─── MODE B: Domain-based, auto-TLS (uncomment when DNS is ready) ─────────
+# Replace `meddoc.example.com` with your actual domain. Caddy will obtain
+# and auto-renew a Let's Encrypt cert, and serve HTTPS with HSTS.
+#
+# meddoc.example.com {
+#     log {
+#         output stdout
+#         format console
+#     }
+#
+#     # HSTS: require HTTPS for all subsequent requests for 1 year.
+#     # Only turn on after you've confirmed the cert works — an HSTS
+#     # mistake with a bad cert will lock clients out of the site.
+#     header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+#
+#     # Sensible security headers for a clinical SaaS. Adjust CSP once you
+#     # know the exact list of external resources your UI loads.
+#     header X-Content-Type-Options "nosniff"
+#     header X-Frame-Options "DENY"
+#     header Referrer-Policy "strict-origin-when-cross-origin"
+#     header Permissions-Policy "microphone=(self), camera=(), geolocation=()"
+#
+#     reverse_proxy app:3000 {
+#         header_up Host {host}
+#         header_up X-Real-IP {remote_host}
+#         header_up X-Forwarded-For {remote_host}
+#         header_up X-Forwarded-Proto {scheme}
+#     }
+# }

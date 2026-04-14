@@ -1,0 +1,80 @@
+# ============================================================================
+# MedDoc Pro — Docker Compose (App + Postgres + Caddy)
+# ============================================================================
+# Usage:
+#   docker compose up -d --build    (first deploy or after code changes)
+#   docker compose logs -f app      (view app logs)
+#   docker compose logs -f caddy    (view proxy/access logs)
+#   docker compose down              (stop everything)
+#
+# Public entry:     Caddy on :80 (add :443 + domain later for auto-TLS)
+# Dev direct entry: http://127.0.0.1:3001 → app (bypasses the proxy, so
+#                   requests from localhost will NOT carry X-Forwarded-For
+#                   and the admin UI will show "--" for the IP. Expected.)
+
+services:
+  # ── PostgreSQL Database ──
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: meddoc
+      POSTGRES_USER: meddoc
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme_in_production}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"   # only accessible from localhost
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U meddoc"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── Next.js App ──
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://meddoc:${DB_PASSWORD:-changeme_in_production}@postgres:5432/meddoc?schema=public
+      # Canonical external URL NextAuth uses to build callbacks. Override
+      # via PUBLIC_URL in .env once you move to a real domain (e.g.,
+      # https://meddoc.example.com). Must match exactly what users see in
+      # the browser — if they hit http://1.2.3.4 but AUTH_URL says
+      # https://meddoc.example.com, the auth callback mismatches.
+      AUTH_URL: ${PUBLIC_URL:-http://5.231.107.93}
+      NEXTAUTH_URL: ${PUBLIC_URL:-http://5.231.107.93}  # v4 compat name
+      AUTH_TRUST_HOST: "true"  # redundant (also hardcoded in auth.config.ts) — safe belt-and-braces
+    ports:
+      # Bound to loopback only — public traffic goes through Caddy. Kept
+      # for dev debugging (e.g., curl http://127.0.0.1:3001 from the host).
+      - "127.0.0.1:3001:3000"
+
+  # ── Caddy Reverse Proxy ──
+  # Terminates inbound HTTP/HTTPS and forwards to `app:3000` on the
+  # internal Docker network, setting X-Forwarded-For / X-Real-IP so the
+  # app sees the real client IP.
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data       # persistent Let's Encrypt certs (when TLS on)
+      - caddy_config:/config   # Caddy's internal config cache
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

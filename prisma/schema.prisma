@@ -1,0 +1,620 @@
+// ============================================================================
+// MedDoc Pro — HIPAA-Compliant Healthcare CRM Schema
+// ----------------------------------------------------------------------------
+// Design principles:
+//  1. Minimize PHI stored in our DB — treat DrChrono as source of truth
+//  2. Every sensitive read/write MUST create an AuditLog row
+//  3. All IDs use cuid() for unguessable, URL-safe, sortable identifiers
+//  4. Timestamps are UTC (@db.Timestamptz) for proper timezone handling
+//  5. Documents point to Dropbox — we never store raw PHI files in PostgreSQL
+//  6. Soft delete (deletedAt) for auditability — records are never hard-deleted
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+/// Role-based access control (RBAC)
+/// - DOCTOR: full clinical access (view/edit patient notes, generate docs)
+/// - ADMIN:  user management, audit log access, billing, no direct clinical edits
+/// - STAFF:  scheduling, intake, limited PHI access
+enum UserRole {
+  DOCTOR
+  STAFF
+  /// Practice-scoped admin: manages users, sees audits/metrics for their own practice only.
+  ADMIN
+  /// Cross-practice admin: bypasses tenant scoping. Use sparingly — only for
+  /// platform operations (support, billing, compliance review).
+  SUPER_ADMIN
+}
+
+/// Actions we audit. Extend as new workflows are added.
+/// ALL_CAPS_SNAKE to match industry convention and make grep/queries easy.
+enum AuditAction {
+  // Auth
+  LOGIN_SUCCESS
+  LOGIN_FAILED
+  LOGOUT
+  MFA_ENABLED
+  MFA_DISABLED
+  MFA_CHALLENGE_PASSED
+  MFA_CHALLENGE_FAILED
+  PASSWORD_CHANGED
+  PASSWORD_RESET_BY_ADMIN
+  SESSION_EXPIRED
+
+  // Patient records
+  VIEWED_PATIENT_LIST
+  VIEWED_PATIENT_FILE
+  CREATED_PATIENT
+  UPDATED_PATIENT
+  ARCHIVED_PATIENT
+
+  // Clinical documents / notes
+  VIEWED_DOCUMENT
+  CREATED_DOCUMENT
+  CREATED_CLINICAL_NOTE
+  GENERATED_DRAFT_DOCUMENT
+  EDITED_NOTE
+  DOWNLOADED_DOCUMENT
+  DELETED_DOCUMENT
+  UPLOADED_TO_DROPBOX
+
+  // External systems
+  SYNCED_FROM_DRCHRONO
+  PUSHED_TO_DRCHRONO
+
+  // Scheduling
+  SCHEDULED_VISIT
+  UPDATED_APPOINTMENT_STATUS
+  DELETED_APPOINTMENT
+
+  // Admin
+  USER_CREATED
+  USER_UPDATED
+  USER_ROLE_CHANGED
+  USER_DEACTIVATED
+  USER_DELETED
+  EXPORTED_AUDIT_LOG
+}
+
+/// Document lifecycle status
+enum DocumentStatus {
+  DRAFT
+  FINALIZED
+  SIGNED
+  ARCHIVED
+}
+
+/// Patient record status (we don't hard delete — soft archive for HIPAA retention)
+enum PatientStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+/// Visit type for appointments
+enum VisitType {
+  CONSULTATION
+  FOLLOW_UP
+  PROCEDURE
+}
+
+/// Appointment lifecycle
+enum AppointmentStatus {
+  SCHEDULED
+  WAITING
+  IN_ROOM
+  COMPLETED
+  CANCELLED
+}
+
+// ============================================================================
+// PRACTICE — tenant boundary
+// ----------------------------------------------------------------------------
+// Every row with PHI belongs to exactly one Practice. Queries filter by
+// practiceId so practices never see each other's data. The default
+// practice (id = 'clinic_main') is seeded during the multi-tenancy
+// migration and owns all pre-existing data.
+// ============================================================================
+
+model Practice {
+  id   String @id @default(cuid())
+  name String
+  /// URL-safe handle. Used for subdomain routing, deep-linked invites,
+  /// and "which practice am I on?" displays. Lowercase alphanumerics + hyphens.
+  slug String @unique
+
+  address String?
+  phone   String?
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  // Reverse relations — every tenant-scoped table points back here.
+  users       User[]
+  patients    Patient[]
+  auditLogs   AuditLog[]
+  apiUsage    ApiUsage[]
+  sessionLogs SessionLog[]
+
+  @@index([slug])
+  @@map("practices")
+}
+
+// ============================================================================
+// USER — staff accounts (doctors, admins, front-desk)
+// ============================================================================
+
+model User {
+  id String @id @default(cuid())
+
+  // === NextAuth standard fields ===
+  /// User's email — unique, lowercased at application layer
+  email         String    @unique
+  /// Display name (NextAuth standard — was `fullName` before)
+  name          String?
+  /// Set when email is verified (used by email magic links)
+  emailVerified DateTime? @db.Timestamptz(6)
+  /// Optional avatar URL (used by OAuth providers)
+  image         String?
+
+  // === Credentials provider ===
+  /// bcrypt hash. NEVER store plaintext. Must meet org password policy.
+  passwordHash String
+
+  // === RBAC ===
+  role UserRole @default(STAFF)
+
+  // === MFA / security tracking (HIPAA §164.312(a)(2)(i)) ===
+  mfaEnabled     Boolean   @default(false)
+  /// Encrypted TOTP secret (app-layer encryption, e.g., AES-256-GCM with KMS key).
+  /// Never return this to the client.
+  mfaSecret      String?
+  /// Hashed (never plaintext) one-time recovery codes, newline-separated
+  mfaBackupCodes String?
+  mfaVerifiedAt  DateTime? @db.Timestamptz(6)
+
+  // === Session / login tracking ===
+  lastLogin        DateTime? @db.Timestamptz(6)
+  lastLoginIp      String?   @db.Inet
+  failedLoginCount Int       @default(0)
+  /// If set, account is locked until this timestamp (brute-force protection)
+  lockedUntil      DateTime? @db.Timestamptz(6)
+
+  // === Lifecycle ===
+  isActive      Boolean   @default(true)
+  deactivatedAt DateTime? @db.Timestamptz(6)
+  /// User who deactivated this account (for audit trail)
+  deactivatedBy String?
+
+  // === Tenant ===
+  // Every user belongs to exactly one Practice. Queries filter by this.
+  // A future SUPER_ADMIN role may bypass the filter; for now, everyone
+  // is practice-scoped.
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id])
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  // === Relations ===
+  // NextAuth adapter relations
+  accounts         Account[]
+  sessions         Session[]
+  // App relations
+  documentsCreated Document[]    @relation("DocumentCreator")
+  documentsUpdated Document[]    @relation("DocumentUpdater")
+  auditLogs        AuditLog[]
+  patientsCreated  Patient[]     @relation("PatientCreator")
+  patientsAssigned Patient[]     @relation("AssignedDoctor")
+  appointments     Appointment[]
+  sessionLogs      SessionLog[]
+  apiUsageLogs     ApiUsageLog[]
+  apiUsage         ApiUsage[]
+
+  @@index([practiceId])
+  @@index([role])
+  @@index([isActive])
+  @@map("users")
+}
+
+// ============================================================================
+// NEXTAUTH ADAPTER MODELS
+// ----------------------------------------------------------------------------
+// Standard tables required by `@auth/prisma-adapter`. Used for OAuth providers
+// (Google, Microsoft, etc.) and database-stored sessions. With our current
+// Credentials + JWT setup these tables stay empty, but they let us add OAuth
+// providers later without a schema migration.
+// ============================================================================
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime @db.Timestamptz(6)
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ============================================================================
+// PATIENT — minimal PHI; DrChrono is the source of truth
+// ============================================================================
+
+model Patient {
+  id String @id @default(cuid())
+
+  // === LINK TO SOURCE OF TRUTH (optional) ===
+  // When the patient has a DrChrono record, we cache the ID here and defer
+  // to DrChrono for sensitive reads (DOB, SSN, address). Optional so the
+  // CRM can also hold patients that aren't in DrChrono yet or at all.
+  // Unique when present; Postgres treats multiple NULLs as distinct.
+  drChronoId String?   @unique
+  /// Timestamp of the last successful sync from DrChrono
+  lastSyncAt DateTime? @db.Timestamptz(6)
+
+  // === MINIMAL WORKFLOW FIELDS (safe to cache locally) ===
+  /// Display name used in lists/UI. Store first + last only; full chart lives in DrChrono.
+  firstName String
+  lastName  String
+  /// MRN for cross-reference (NOT SSN)
+  mrn       String?
+  /// Practice-internal chart number. Separate from MRN — clinics often
+  /// maintain both: MRN for insurance filings, chartId for in-practice use.
+  chartId   String?
+
+  // Optional non-sensitive contact handles for workflow only.
+  // For HIPAA minimization, these are NULL unless required for the feature.
+  email      String?
+  /// Kept for back-compat + minimal-PHI workflows. Prefer `cellPhone` for
+  /// full-number storage when the practice needs to reach the patient.
+  phoneLast4 String? @db.VarChar(4)
+  /// Full cell phone number — E.164 or loose practice format, not normalized.
+  cellPhone  String?
+  /// Full home phone number.
+  homePhone  String?
+
+  /// Insurance verification state. `true` means verified on file, `false`
+  /// means explicitly not verified (e.g., self-pay), `null` means unknown /
+  /// not yet checked. Three-state so the UI can show "pending verification"
+  /// without an extra enum column.
+  insuranceVerified Boolean?
+
+  // Demographics — year only (de-identified per HIPAA Safe Harbor §164.514)
+  // Full DOB is fetched on-demand from DrChrono, never cached here.
+  birthYear Int?
+
+  // CRM workflow
+  status           PatientStatus @default(ACTIVE)
+  /// Free-text label for internal tagging (e.g., "post-op", "referral")
+  tags             String[]      @default([])
+  /// One-line summary entries the doctor maintains as the patient's
+  /// running clinical context (e.g., "Started LESI series 03/2025",
+  /// "Failed PT 2024"). Editable via Edit Patient or via the AI
+  /// assistant's update_patient tool. Replace-semantics — the full list
+  /// is sent on every update so callers must include existing entries
+  /// they want to keep.
+  briefHistory     String[]      @default([])
+  /// Assigned provider (relation to User). Nullable for unassigned intakes.
+  assignedDoctorId String?
+  assignedDoctor   User?         @relation("AssignedDoctor", fields: [assignedDoctorId], references: [id], onDelete: SetNull)
+
+  // Creator (who imported/created this record in our CRM)
+  createdById String?
+  createdBy   User?   @relation("PatientCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  // === Tenant ===
+  // Patients never cross practice boundaries. createdById / assignedDoctorId
+  // must belong to the same practice; Phase 2 enforces this.
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id])
+
+  // Audit trail — soft delete only
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt DateTime? @db.Timestamptz(6)
+
+  // Relations
+  documents    Document[]
+  appointments Appointment[]
+
+  @@index([practiceId])
+  @@index([drChronoId])
+  @@index([status])
+  @@index([assignedDoctorId])
+  @@index([lastName, firstName])
+  // Chart IDs are practice-scoped: Practice A's C-1001 is unrelated to
+  // Practice B's C-1001. Postgres treats multiple NULLs as distinct, so
+  // this composite unique doesn't break patients with no chartId set.
+  // The data layer relies on this constraint as the final race-condition
+  // gate — auto-generated IDs retry on collision.
+  @@unique([practiceId, chartId], name: "patient_practice_chartid_unique")
+  @@map("patients")
+}
+
+// ============================================================================
+// DOCUMENT — metadata only; raw file lives in Dropbox
+// ============================================================================
+
+model Document {
+  id String @id @default(cuid())
+
+  // Link to patient (nullable so we can have templates/drafts w/o a patient yet)
+  patientId String?
+  patient   Patient? @relation(fields: [patientId], references: [id], onDelete: SetNull)
+
+  // Document metadata
+  title         String
+  /// Short descriptor: "LESI", "CESI", "CE PRP", "LFB", "Consult Note", etc.
+  procedureType String?
+  status        DocumentStatus @default(DRAFT)
+
+  // === INLINE CONTENT (for AI-dictated clinical notes) ===
+  // Text-only notes (SOAP format, dictated via Whisper + GPT) are stored here.
+  // Large binary files (scans, DOCX uploads) still live in Dropbox via the
+  // fields below. A document has EITHER `content` OR `dropbox*`, not both.
+  content String? @db.Text
+
+  // === DROPBOX INTEGRATION ===
+  // We do NOT store the file in PostgreSQL. Dropbox holds the actual bytes,
+  // encrypted at rest with our BAA-covered Dropbox Business account.
+  /// Dropbox file ID (preferred — stable across moves/renames)
+  dropboxFileId String?
+  /// Dropbox shared/temporary URL. Regenerate on-demand; do not cache forever.
+  dropboxUrl    String?
+  /// Path in Dropbox for administrative reference
+  dropboxPath   String?
+
+  // Integrity
+  /// SHA-256 hash of the file (set after upload) to detect tampering
+  fileHash      String?
+  fileSizeBytes Int?
+  mimeType      String?
+
+  // Audit trail
+  createdById String?
+  createdBy   User?   @relation("DocumentCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedById String?
+  updatedBy   User?   @relation("DocumentUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
+  /// Soft delete — do not hard-delete for HIPAA retention (6 years minimum)
+  deletedAt DateTime? @db.Timestamptz(6)
+
+  @@index([patientId])
+  @@index([createdById])
+  @@index([status])
+  @@index([createdAt])
+  @@map("documents")
+}
+
+// ============================================================================
+// AUDIT LOG — immutable append-only trail (HIPAA §164.312(b))
+// ============================================================================
+//
+// Rules:
+//  - ONLY insert; never update or delete (enforce via DB role grants in prod)
+//  - One row per sensitive action
+//  - Captures who / what / when / where (IP + user agent)
+//  - `targetId` + `targetType` form a polymorphic pointer so we can log any entity
+//  - Keep 6+ years (HIPAA retention) — archive cold rows to S3 Glacier quarterly
+// ============================================================================
+
+model AuditLog {
+  id String @id @default(cuid())
+
+  // WHO — nullable because auth-failure events have no authenticated user yet
+  userId            String?
+  user              User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  /// Denormalized email snapshot in case the user record is later deactivated
+  userEmailSnapshot String?
+
+  // WHAT — action taken + polymorphic target
+  action     AuditAction
+  /// ID of the record acted upon (patient id, document id, user id, etc.)
+  targetId   String?
+  /// Type of the target record, e.g. "Patient", "Document", "User"
+  targetType String?
+
+  // WHERE — network context
+  ipAddress String? @db.Inet
+  userAgent String?
+
+  // WHY / CONTEXT — free-form JSON for request details
+  // NEVER put raw PHI here. Use field names, not values. e.g. { "changedFields": ["firstName"] }
+  metadata Json?
+
+  // Outcome — did the action succeed?
+  success   Boolean @default(true)
+  /// If success=false, short error code (e.g., "MFA_REQUIRED", "FORBIDDEN")
+  errorCode String?
+
+  // WHEN — immutable timestamp
+  timestamp DateTime @default(now()) @db.Timestamptz(6)
+
+  // === Tenant ===
+  // Auth-failure events with unknown emails still need a practice; Phase 2
+  // will route those to a designated "platform" practice. For now,
+  // practiceId is mandatory and Phase-1 backfill assigns everything to
+  // clinic_main.
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id])
+
+  @@index([practiceId])
+  @@index([userId])
+  @@index([action])
+  @@index([targetId])
+  @@index([timestamp])
+  // Composite for "show me everything user X did to patient Y" queries
+  @@index([userId, targetId, timestamp])
+  @@map("audit_logs")
+}
+
+// ============================================================================
+// APPOINTMENT — patient visit scheduling
+// ============================================================================
+
+model Appointment {
+  id String @id @default(cuid())
+
+  patientId String
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  /// Doctor / provider who owns this appointment
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Scheduled date + time (stored as a single timestamp in UTC)
+  scheduledAt DateTime @db.Timestamptz(6)
+
+  status AppointmentStatus @default(SCHEDULED)
+  type   VisitType         @default(CONSULTATION)
+
+  /// Optional free-text notes about the visit (non-PHI — just "3rd LESI follow-up")
+  notes String?
+
+  /// AI-generated prep briefing for the doctor (2-bullet summary of past notes)
+  aiPrepNote String? @db.Text
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([patientId])
+  @@index([userId])
+  @@index([scheduledAt])
+  @@map("appointments")
+}
+
+// ============================================================================
+// SESSION LOG — tracks login activity for admin dashboard
+// ============================================================================
+
+model SessionLog {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  ipAddress String?
+  userAgent String?
+  action    String  @default("LOGIN")
+
+  // === Tenant ===
+  // Always derivable from userId but denormalized for fast per-practice queries.
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id])
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([practiceId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("session_logs")
+}
+
+// ============================================================================
+// API USAGE LOG — tracks OpenAI token consumption & costs
+// ============================================================================
+
+model ApiUsageLog {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  model         String // e.g., 'gpt-4o-mini', 'whisper-1'
+  tokensUsed    Int
+  estimatedCost Float // USD
+  action        String // e.g., 'DICTATION', 'CLINICAL_NOTE', 'DOCUMENT_GEN', 'AI_PREP'
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("api_usage_logs")
+}
+
+// ============================================================================
+// ApiUsage — feature-hit counter for admin monitoring
+// ----------------------------------------------------------------------------
+// One row per authenticated successful API call, tagged with a semantic
+// feature name (e.g. "TRANSCRIBE", "DOC_EDITOR") rather than the raw route
+// path — survives route renames and reads cleanly in the admin UI.
+//
+// Thinner than ApiUsageLog (which tracks AI model cost): this table just
+// counts "user X used feature Y at time Z" so the Metrics page can show
+// top consumers and per-feature traffic. `tokens` is optional — populated
+// only when the caller knows the token count.
+// ============================================================================
+
+model ApiUsage {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  feature String // e.g., "TRANSCRIBE", "DOC_EDITOR"
+
+  // Cost-estimation inputs. Populated per-feature:
+  //   TRANSCRIBE  → durationSeconds (from Whisper verbose_json.duration)
+  //   DOC_EDITOR  → tokens (from OpenAI response.usage.total_tokens)
+  // Either can be null if capture failed — the metrics page falls back
+  // to a flat per-hit baseline rather than lying about the number.
+  tokens          Int?
+  durationSeconds Int?
+
+  // === Tenant ===
+  // Denormalized from user.practiceId so per-practice cost rollups
+  // don't need a user join.
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id])
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([practiceId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("api_usage")
+}
