@@ -75,23 +75,35 @@ interface ErrorResponse {
   error: string;
 }
 
-const EXTRACTION_SYSTEM_PROMPT = `You extract structured patient-intake fields from a dictated utterance for a new-patient form.
+const EXTRACTION_SYSTEM_PROMPT = `You extract structured patient-intake fields from a dictated utterance for a new-patient form. Your job is ALWAYS to extract whatever the speaker names, regardless of phrasing style. Never return all-null for an utterance that mentions any field.
 
-The utterance is either (a) initial intake ("New patient Sarah Mitchell, born 1978, MRN 440182…") OR (b) a correction/edit to a form the doctor has already partially filled ("The last name is Hagopian, not Hagorian", "Change the email to j.smith@clinic.com", "Actually the birth year is 1965").
+Speakers use wildly different phrasings. ALL of these are valid intake — extract the same fields from each:
+- "Add patient John Smith, born 1960, cell 555-1212." (narrative)
+- "For first name put Sarah. For last name put Wilson. MRN is MRN-440184." (imperative)
+- "First name Sarah, last name Wilson, MRN MRN-440184." (telegraphic)
+- "Put sex as female and assign to Dr. Chen." (imperative with keywords)
+- "It's Hagopian, not Hagorian." (correction to existing value)
+- "Change the email to it ends in .com." (partial correction)
 
-The CURRENT FORM STATE is provided below. Treat the utterance as an instruction that produces the DESIRED final value for each mentioned field. Examples:
+The CURRENT FORM STATE is provided below. Treat the utterance as producing the DESIRED final value for each mentioned field. The client overwrites only non-null fields, so null means "don't change this."
+
+Examples:
+
+CURRENT: {}
+UTTERANCE: "For first name, put Sarah. For last name, put Wilson. MRN is MRN-440184. Home phone is 818-854-1585. Email is sarah.wilson at gmail.com. Put sex on female and assign provider to Dr. Alvarez. Address is 5325 New Castle Avenue, Apartment 105. City is Encino, state California. Postal code 91316. Also put a note that she needs follow-up tomorrow. Brief history: had injections for L4 and L5."
+OUTPUT: {
+  firstName: "Sarah", lastName: "Wilson", mrn: "MRN-440184",
+  homePhone: "(818) 854-1585", email: "sarah.wilson@gmail.com",
+  sex: "FEMALE", assignedDoctorName: "Dr. Alvarez",
+  addressLine1: "5325 New Castle Avenue", addressLine2: "Apartment 105",
+  city: "Encino", state: "CA", postalCode: "91316",
+  briefHistory: ["Follow-up needed tomorrow", "Had injections for L4 and L5"],
+  ... (others null)
+}
 
 CURRENT: { lastName: "Hagorian", email: "j.smith@clinic.co" }
 UTTERANCE: "It's Hagopian, not Hagorian. And the email ends in .com."
 OUTPUT: { lastName: "Hagopian", email: "j.smith@clinic.com", ... (others null) }
-
-CURRENT: { email: "s.mitchell@clinica.com" }
-UTTERANCE: "Edit the last part of the email — it's clinic, not clinica."
-OUTPUT: { email: "s.mitchell@clinic.com", ... (others null) }
-
-CURRENT: {}
-UTTERANCE: "Add patient John Smith, born 1960, cell 555-1212."
-OUTPUT: { firstName: "John", lastName: "Smith", birthYear: 1960, cellPhone: "(555) 121-2…", ... (others null) }
 
 Rules:
 - Return STRICT JSON matching the schema. Every field MUST be present; use null when the utterance doesn't affect that field (leave the current value alone — the client only overwrites non-null fields).
@@ -110,7 +122,9 @@ Rules:
 - pharmacyPhone: same format rules as cellPhone. Null if not mentioned.
 - briefHistory: one array entry per distinct clinical fact or intake note the speaker mentioned ("chronic low back pain since 2023", "referred by Dr. Chen", "failed PT 2024"). Short prose lines, not bullet points. Null if none.
 
-If the utterance is just noise or clearly unrelated to patient intake (e.g., random speech, nothing actionable), return all-null. Pure corrections like "it's Hagopian not Hagorian" are NOT noise — they are field edits.`;
+Only return all-null when the utterance is completely incoherent (e.g., "uh what" or static) AND mentions no field value whatsoever. If ANY field is nameable from the utterance, extract it.
+
+birthYear out of range (< 1900 or > current year): return null for THAT field only. Do NOT let one bad field wipe out the rest of the extraction.`;
 
 const EXTRACTION_JSON_SCHEMA = {
   name: 'patient_intake_fields',
@@ -351,13 +365,16 @@ export async function POST(request: NextRequest) {
     extractionTokens = completion.usage?.total_tokens ?? null;
   } catch (err) {
     console.error('[extract-from-voice] extraction failed:', err);
-    // Transcript came through fine — return it so the doctor at least sees
-    // what the mic heard. Empty fields means the modal won't auto-fill.
-    return NextResponse.json<SuccessResponse>({
-      ok: true,
-      transcript,
-      fields: emptyFields(),
-    });
+    // Surface the real error. Previously we returned "ok: true, fields: empty"
+    // which made the UI say "nothing matched" — indistinguishable from a
+    // model refusal. Now the client can show "extractor error: <message>"
+    // instead, which is at least actionable (means the OpenAI call failed
+    // — schema mismatch, quota, etc., not a dictation problem).
+    const message = err instanceof Error ? err.message : 'Extraction failed';
+    return NextResponse.json<ErrorResponse>(
+      { ok: false, error: `Extractor failed: ${message}` },
+      { status: 500 }
+    );
   }
 
   void logApiUsage({
