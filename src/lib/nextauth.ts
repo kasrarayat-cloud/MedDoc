@@ -46,14 +46,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const practiceId = (user as any).practiceId as string | undefined;
       if (!practiceId) return; // Shouldn't happen — authorize always sets it.
       await Promise.all([
-        recordLoginIp(user.id, practiceId).catch(() => {}),
+        recordLoginIp(user.id, practiceId).catch((err) => {
+          console.error('[auth] recordLoginIp failed:', err);
+        }),
         logAudit({
           action: 'LOGIN_SUCCESS',
           success: true,
           userId: user.id,
           userEmail: user.email ?? null,
           practiceId,
-        }).catch(() => {}),
+        }).catch((err) => {
+          console.error('[auth] LOGIN_SUCCESS audit failed:', err);
+        }),
       ]);
     },
   },
@@ -151,7 +155,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 ...(lockUntil ? { lockedUntil: lockUntil } : {}),
               },
             })
-            .catch(() => {});
+            .catch((err: unknown) => {
+              // Lockout counter write failing is a security issue — brute-force
+              // protection only works if this commits. Log loudly so ops sees it.
+              console.error('[auth] failed-login counter update failed:', err);
+            });
 
           await logAudit({
             action: 'LOGIN_FAILED',
@@ -180,7 +188,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               lockedUntil: null,
             },
           })
-          .catch(() => {});
+          .catch((err: unknown) => {
+            console.error('[auth] lastLogin update failed:', err);
+          });
 
         // 6. Return user shape that matches our augmented `next-auth` User type.
         //    LOGIN_SUCCESS audit + IP capture happen in events.signIn above —
