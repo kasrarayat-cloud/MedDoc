@@ -28,6 +28,8 @@ import {
   AlertCircle,
   Archive,
   AudioLines,
+  Paperclip,
+  FileBadge,
 } from 'lucide-react';
 import { formatLastVisit, formatRelativeDate } from '@/lib/mock-patients';
 import type { PatientView } from '@/lib/data/patients';
@@ -43,6 +45,7 @@ import EditPatientModal from './EditPatientModal';
 import DocumentGeneratorModal from './DocumentGeneratorModal';
 import ScheduleVisitModal from './ScheduleVisitModal';
 import GlobalAIAssistant from './GlobalAIAssistant';
+import PatientFileUploadModal from './PatientFileUploadModal';
 
 const statusStyles = {
   ACTIVE: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
@@ -70,6 +73,7 @@ export default function PatientDetailClient({ patient, notes, customProcedures }
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [docGenModalOpen, setDocGenModalOpen] = useState(false);
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
+  const [fileUploadModalOpen, setFileUploadModalOpen] = useState(false);
   /** Centered Cmd+K-style assistant. Opened by the prominent header
    *  button or by the global Cmd/Ctrl+K shortcut. */
   const [aiOpen, setAiOpen] = useState(false);
@@ -791,6 +795,54 @@ export default function PatientDetailClient({ patient, notes, customProcedures }
                 </div>
               )}
             </div>
+
+            {/* ====== FINAL REPORTS SECTION ====== */}
+            {/* Big deal for the doctors — sits directly under Clinical Notes
+                so the eye lands on it after scanning the visit timeline.
+                UI-only for now: empty state + a Generate via AI button that
+                renders ready but isn't wired to a pipeline yet. */}
+            <div className="rounded-xl bg-white/5 backdrop-blur-md border border-white/10 p-5">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-rose-500/15 border border-rose-500/30">
+                    <FileBadge className="w-4 h-4 text-rose-300" />
+                  </div>
+                  <h2 className="text-sm font-semibold text-white uppercase tracking-wider">
+                    Final Reports
+                  </h2>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-slate-400 border border-white/10">
+                    0
+                  </span>
+                </div>
+
+                {/* Header action — visually primary so doctors spot it on
+                    an empty chart. Disabled visual + cursor intentionally
+                    left off so the button feels alive while we wire the
+                    backend. Click is a no-op for now (console trace only
+                    so a tester can confirm the click lands). */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    console.info('[FinalReports] Generate via AI not yet wired');
+                  }}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold text-white bg-gradient-to-r from-rose-500 to-pink-500 shadow-md shadow-rose-500/25 hover:shadow-rose-500/40 hover:scale-[1.02] transition-all cursor-pointer"
+                >
+                  <Sparkles className="w-3 h-3" />
+                  Generate via AI
+                </button>
+              </div>
+
+              <div className="py-10 text-center">
+                <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/20 mb-3">
+                  <FileBadge className="w-6 h-6 text-rose-400/60" />
+                </div>
+                <p className="text-sm text-slate-400">No final reports yet.</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  Use &ldquo;Generate via AI&rdquo; to synthesize a comprehensive
+                  case summary from this patient&apos;s history.
+                </p>
+              </div>
+            </div>
           </motion.div>
 
           {/* === COLUMN 2: FILES & ACTIONS (1/3 width) === */}
@@ -829,6 +881,13 @@ export default function PatientDetailClient({ patient, notes, customProcedures }
                 >
                   <Calendar className="w-4 h-4 text-emerald-300" />
                   Schedule Visit
+                </button>
+                <button
+                  onClick={() => setFileUploadModalOpen(true)}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white/5 border border-white/10 text-slate-200 text-sm hover:bg-white/10 hover:border-white/20 transition-all cursor-pointer"
+                >
+                  <Paperclip className="w-4 h-4 text-amber-300" />
+                  Attach File
                 </button>
               </div>
             </div>
@@ -878,6 +937,13 @@ export default function PatientDetailClient({ patient, notes, customProcedures }
         open={scheduleModalOpen}
         onClose={() => setScheduleModalOpen(false)}
         patientId={patient.id}
+        patientName={`${patient.firstName} ${patient.lastName}`}
+      />
+
+      {/* Attach File Modal — UI shell only; backend wiring pending. */}
+      <PatientFileUploadModal
+        open={fileUploadModalOpen}
+        onClose={() => setFileUploadModalOpen(false)}
         patientName={`${patient.firstName} ${patient.lastName}`}
       />
 
