@@ -157,69 +157,87 @@ function AddPatientModalContent({ onClose }: { onClose: () => void }) {
   // (non-null). That way a second voice pass can additively fill blanks
   // without wiping what the first pass got right. Also derives phoneLast4
   // from cellPhone when the model returned one.
+  //
+  // Returns the count of fields that will change. Count is computed BEFORE
+  // the setForm call so the caller gets a truthful number — React's
+  // setForm updater runs asynchronously during the next render commit,
+  // so reading a counter mutated inside the updater gives 0 every time
+  // (root cause of the phantom "nothing matched" banner).
   const applyExtractedFields = useCallback((fields: ExtractedFields): number => {
+    // Resolve assignedDoctorName → id against the loaded doctor list.
+    // Computed here so we count it correctly AND pass the resolved id
+    // into the setForm updater.
+    let resolvedDoctorId: string | null = null;
+    if (fields.assignedDoctorName) {
+      const wanted = fields.assignedDoctorName
+        .replace(/^(dr\.?|doctor)\s+/i, '')
+        .trim()
+        .toLowerCase();
+      const match = doctors.find((d) => {
+        const n = (d.name ?? '').replace(/^(dr\.?|doctor)\s+/i, '').trim().toLowerCase();
+        return n === wanted;
+      });
+      if (match) resolvedDoctorId = match.id;
+    }
+
+    // First: count what we're about to change. Each branch mirrors the
+    // guard used in the updater below — keep these in sync.
     let filled = 0;
+    if (fields.firstName) filled++;
+    if (fields.lastName) filled++;
+    if (fields.mrn) filled++;
+    if (fields.chartId) filled++;
+    if (fields.birthYear) filled++;
+    if (fields.email) filled++;
+    if (fields.cellPhone) filled++;
+    if (fields.homePhone) filled++;
+    if (fields.insuranceVerified !== null) filled++;
+    if (fields.tags && fields.tags.length > 0) filled++;
+    if (fields.sex && fields.sex !== 'UNKNOWN') filled++;
+    if (fields.addressLine1) filled++;
+    if (fields.addressLine2) filled++;
+    if (fields.city) filled++;
+    if (fields.state) filled++;
+    if (fields.postalCode) filled++;
+    if (fields.pharmacyName) filled++;
+    if (fields.pharmacyPhone) filled++;
+    if (fields.briefHistory && fields.briefHistory.length > 0) filled++;
+    if (resolvedDoctorId) filled++;
+
     setForm((prev) => {
       const next = { ...prev };
-      if (fields.firstName) { next.firstName = fields.firstName; filled++; }
-      if (fields.lastName) { next.lastName = fields.lastName; filled++; }
-      if (fields.mrn) { next.mrn = fields.mrn; filled++; }
-      if (fields.chartId) { next.chartId = fields.chartId; filled++; }
-      if (fields.birthYear) { next.birthYear = String(fields.birthYear); filled++; }
-      if (fields.email) { next.email = fields.email; filled++; }
+      if (fields.firstName) next.firstName = fields.firstName;
+      if (fields.lastName) next.lastName = fields.lastName;
+      if (fields.mrn) next.mrn = fields.mrn;
+      if (fields.chartId) next.chartId = fields.chartId;
+      if (fields.birthYear) next.birthYear = String(fields.birthYear);
+      if (fields.email) next.email = fields.email;
       if (fields.cellPhone) {
         next.cellPhone = fields.cellPhone;
         const last4 = fields.cellPhone.replace(/\D/g, '').slice(-4);
         if (last4) next.phoneLast4 = last4;
-        filled++;
       }
-      if (fields.homePhone) { next.homePhone = fields.homePhone; filled++; }
-      if (fields.insuranceVerified !== null) {
-        next.insuranceVerified = fields.insuranceVerified;
-        filled++;
-      }
-      if (fields.tags && fields.tags.length > 0) {
-        next.tags = fields.tags.join(', ');
-        filled++;
-      }
-      if (fields.sex && fields.sex !== 'UNKNOWN') {
-        next.sex = fields.sex;
-        filled++;
-      }
-      if (fields.addressLine1) { next.addressLine1 = fields.addressLine1; filled++; }
-      if (fields.addressLine2) { next.addressLine2 = fields.addressLine2; filled++; }
-      if (fields.city) { next.city = fields.city; filled++; }
-      if (fields.state) { next.state = fields.state.toUpperCase().slice(0, 2); filled++; }
-      if (fields.postalCode) { next.postalCode = fields.postalCode; filled++; }
-      if (fields.pharmacyName) { next.pharmacyName = fields.pharmacyName; filled++; }
-      if (fields.pharmacyPhone) { next.pharmacyPhone = fields.pharmacyPhone; filled++; }
+      if (fields.homePhone) next.homePhone = fields.homePhone;
+      if (fields.insuranceVerified !== null) next.insuranceVerified = fields.insuranceVerified;
+      if (fields.tags && fields.tags.length > 0) next.tags = fields.tags.join(', ');
+      if (fields.sex && fields.sex !== 'UNKNOWN') next.sex = fields.sex;
+      if (fields.addressLine1) next.addressLine1 = fields.addressLine1;
+      if (fields.addressLine2) next.addressLine2 = fields.addressLine2;
+      if (fields.city) next.city = fields.city;
+      if (fields.state) next.state = fields.state.toUpperCase().slice(0, 2);
+      if (fields.postalCode) next.postalCode = fields.postalCode;
+      if (fields.pharmacyName) next.pharmacyName = fields.pharmacyName;
+      if (fields.pharmacyPhone) next.pharmacyPhone = fields.pharmacyPhone;
       if (fields.briefHistory && fields.briefHistory.length > 0) {
-        // Append to whatever the user typed so a second voice pass adds rather
-        // than replaces. One entry per line.
+        // Append so a second voice pass adds to what's there.
         const existing = next.initialHistory.trim();
         const joined = fields.briefHistory.filter((s) => s.trim()).join('\n');
         next.initialHistory = existing ? `${existing}\n${joined}` : joined;
-        filled++;
       }
-      // Resolve assignedDoctorName → a doctor.id by matching against the
-      // loaded list. Case-insensitive, strip common honorifics so "Dr.
-      // Jane Smith" matches "Jane Smith" if that's what the list stored.
-      if (fields.assignedDoctorName) {
-        const wanted = fields.assignedDoctorName
-          .replace(/^(dr\.?|doctor)\s+/i, '')
-          .trim()
-          .toLowerCase();
-        const match = doctors.find((d) => {
-          const n = (d.name ?? '').replace(/^(dr\.?|doctor)\s+/i, '').trim().toLowerCase();
-          return n === wanted;
-        });
-        if (match) {
-          next.assignedDoctorId = match.id;
-          filled++;
-        }
-      }
+      if (resolvedDoctorId) next.assignedDoctorId = resolvedDoctorId;
       return next;
     });
+
     // Clear any stale field errors on fields we just filled — they'll be
     // re-validated at submit. Batched as one setState to avoid flash.
     setFieldErrors((prev) => {
