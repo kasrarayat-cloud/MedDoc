@@ -13,7 +13,31 @@ import prisma, { isDatabaseHealthy } from '@/lib/db';
 import type { Session } from '@/lib/auth';
 import { patientAccessWhere } from './patients';
 
-export type NoteCategory = 'CLINICAL_NOTE' | 'CUSTOM_PROCEDURE';
+export type NoteCategory =
+  | 'CLINICAL_NOTE'
+  | 'CUSTOM_PROCEDURE'
+  /** AI-synthesized summary/discharge reports. One content blob per row. */
+  | 'FINAL_REPORT'
+  /** Uploaded patient-chart attachment — metadata only (no bytes stored
+   *  yet). Distinct from CUSTOM_PROCEDURE because those carry the full
+   *  extracted procedure text as content; file attachments are pointers
+   *  (name / mime / size) for the doctor to reference. */
+  | 'PATIENT_FILE';
+
+// Sentinel values we write into the procedureType column to distinguish
+// non-clinical-note categories. CLINICAL_NOTE is the "null sentinel" case.
+const CATEGORY_SENTINELS: Record<Exclude<NoteCategory, 'CLINICAL_NOTE'>, string> = {
+  CUSTOM_PROCEDURE: 'CUSTOM_PROCEDURE',
+  FINAL_REPORT: 'FINAL_REPORT',
+  PATIENT_FILE: 'PATIENT_FILE',
+};
+
+function categoryFromProcedureType(procType: string | null): NoteCategory {
+  if (procType === 'CUSTOM_PROCEDURE') return 'CUSTOM_PROCEDURE';
+  if (procType === 'FINAL_REPORT') return 'FINAL_REPORT';
+  if (procType === 'PATIENT_FILE') return 'PATIENT_FILE';
+  return 'CLINICAL_NOTE';
+}
 
 export interface ClinicalNoteView {
   id: string;
@@ -29,6 +53,12 @@ export interface ClinicalNoteView {
   createdByName?: string;
   updatedAt?: string; // ISO — present only after an edit
   updatedByName?: string;
+  /** Only populated for PATIENT_FILE rows — the original filename. */
+  fileName?: string;
+  /** Only populated for PATIENT_FILE rows. */
+  mimeType?: string;
+  /** Only populated for PATIENT_FILE rows. */
+  sizeBytes?: number;
 }
 
 export interface CreateClinicalNoteInput {
@@ -76,11 +106,20 @@ export async function listNotesByPatient(
 ): Promise<ClinicalNoteView[]> {
   if (await isDatabaseHealthy()) {
     try {
+      // PATIENT_FILE rows have no content (they're metadata only) so we
+      // MUST NOT filter by content-null when the caller asks for files.
+      // For all other categories, the content-null filter keeps stray
+      // Dropbox-backed documents out of the clinical-note lists.
+      const excludeContentless =
+        category === undefined ||
+        category === 'CLINICAL_NOTE' ||
+        category === 'CUSTOM_PROCEDURE' ||
+        category === 'FINAL_REPORT';
       const rows = await prisma.document.findMany({
         where: {
           patientId,
           deletedAt: null,
-          NOT: { content: null },
+          ...(excludeContentless ? { NOT: { content: null } } : {}),
           patient: patientAccessWhere(session),
         },
         orderBy: { createdAt: 'desc' },
@@ -99,16 +138,125 @@ export async function listNotesByPatient(
   return category ? all.filter((n) => n.category === category) : all;
 }
 
+// ---------------------------------------------------------------------------
+// File-attachment helpers (PATIENT_FILE category)
+// ---------------------------------------------------------------------------
+// Stored in the Document table; no bytes persisted — this is a metadata
+// pointer the doctor uses to know what's been attached to the chart. When
+// actual file storage (Dropbox / S3) is wired later, set fileHash/dropbox*
+// on these same rows.
+// ---------------------------------------------------------------------------
+
+export interface CreatePatientFileInput {
+  patientId: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  createdById: string;
+}
+
+export async function createPatientFile(
+  input: CreatePatientFileInput
+): Promise<ClinicalNoteView> {
+  if (await isDatabaseHealthy()) {
+    try {
+      const row = await prisma.document.create({
+        data: {
+          patientId: input.patientId,
+          title: input.fileName,
+          procedureType: CATEGORY_SENTINELS.PATIENT_FILE,
+          status: 'FINALIZED',
+          content: null,
+          mimeType: input.mimeType,
+          fileSizeBytes: input.sizeBytes,
+          createdById: input.createdById,
+        },
+        include: { createdBy: { select: { name: true } } },
+      });
+      return prismaToView(row);
+    } catch (err) {
+      console.warn('[data/clinical-notes] Prisma createPatientFile failed, using memory:', err);
+    }
+  }
+  const note: ClinicalNoteView = {
+    id: generateId(),
+    patientId: input.patientId,
+    title: input.fileName,
+    procedureType: null,
+    category: 'PATIENT_FILE',
+    content: '',
+    status: 'FINALIZED',
+    createdAt: new Date().toISOString(),
+    createdById: input.createdById,
+    fileName: input.fileName,
+    mimeType: input.mimeType,
+    sizeBytes: input.sizeBytes,
+  };
+  memoryAdd(note);
+  return note;
+}
+
+// ---------------------------------------------------------------------------
+// Final-report helper (FINAL_REPORT category)
+// ---------------------------------------------------------------------------
+
+export interface CreateFinalReportInput {
+  patientId: string;
+  title: string;
+  content: string;
+  createdById: string;
+}
+
+export async function createFinalReport(
+  input: CreateFinalReportInput
+): Promise<ClinicalNoteView> {
+  if (await isDatabaseHealthy()) {
+    try {
+      const row = await prisma.document.create({
+        data: {
+          patientId: input.patientId,
+          title: input.title,
+          procedureType: CATEGORY_SENTINELS.FINAL_REPORT,
+          content: input.content,
+          // DRAFT until a doctor signs off. No separate workflow for reports
+          // yet — matches how clinical notes ship as DRAFT and get edited.
+          status: 'DRAFT',
+          createdById: input.createdById,
+        },
+        include: { createdBy: { select: { name: true } } },
+      });
+      return prismaToView(row);
+    } catch (err) {
+      console.warn('[data/clinical-notes] Prisma createFinalReport failed, using memory:', err);
+    }
+  }
+  const note: ClinicalNoteView = {
+    id: generateId(),
+    patientId: input.patientId,
+    title: input.title,
+    procedureType: null,
+    category: 'FINAL_REPORT',
+    content: input.content,
+    status: 'DRAFT',
+    createdAt: new Date().toISOString(),
+    createdById: input.createdById,
+  };
+  memoryAdd(note);
+  return note;
+}
+
 /**
  * Create a new clinical note tied to a patient + author.
  */
 export async function createClinicalNote(
   input: CreateClinicalNoteInput
 ): Promise<ClinicalNoteView> {
-  // For DB storage, CUSTOM_PROCEDURE category is stored in the procedureType field
+  // For DB storage, non-CLINICAL_NOTE categories use a sentinel value in
+  // the procedureType column. CLINICAL_NOTE stores the real procedure name
+  // (or null) there.
   const dbProcedureType =
-    input.category === 'CUSTOM_PROCEDURE'
-      ? 'CUSTOM_PROCEDURE'
+    input.category && input.category !== 'CLINICAL_NOTE'
+      ? CATEGORY_SENTINELS[input.category]
       : input.procedureType ?? null;
 
   if (await isDatabaseHealthy()) {
@@ -281,13 +429,18 @@ export async function deleteClinicalNote(
 // ---------------------------------------------------------------------------
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function prismaToView(row: any): ClinicalNoteView {
-  const procType = row.procedureType ?? null;
+  const procType: string | null = row.procedureType ?? null;
+  const category = categoryFromProcedureType(procType);
+  const isSentinel =
+    procType === 'CUSTOM_PROCEDURE' ||
+    procType === 'FINAL_REPORT' ||
+    procType === 'PATIENT_FILE';
   return {
     id: row.id,
     patientId: row.patientId ?? '',
     title: row.title,
-    procedureType: procType === 'CUSTOM_PROCEDURE' ? null : procType,
-    category: procType === 'CUSTOM_PROCEDURE' ? 'CUSTOM_PROCEDURE' : 'CLINICAL_NOTE',
+    procedureType: isSentinel ? null : procType,
+    category,
     content: row.content ?? '',
     status: row.status as ClinicalNoteView['status'],
     createdAt: row.createdAt.toISOString(),
@@ -295,5 +448,10 @@ function prismaToView(row: any): ClinicalNoteView {
     createdByName: row.createdBy?.name ?? undefined,
     updatedAt: row.updatedById ? row.updatedAt?.toISOString() : undefined,
     updatedByName: row.updatedBy?.name ?? undefined,
+    // PATIENT_FILE metadata lives in the existing Document columns.
+    fileName: category === 'PATIENT_FILE' ? row.title : undefined,
+    mimeType: category === 'PATIENT_FILE' ? row.mimeType ?? undefined : undefined,
+    sizeBytes:
+      category === 'PATIENT_FILE' ? row.fileSizeBytes ?? undefined : undefined,
   };
 }

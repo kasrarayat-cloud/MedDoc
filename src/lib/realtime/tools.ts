@@ -284,6 +284,17 @@ export const REALTIME_TOOLS: RealtimeTool[] = [
       additionalProperties: false,
     },
   },
+  {
+    type: 'function',
+    name: 'generate_final_report',
+    description:
+      'Synthesize a comprehensive Final Evaluation Report from the patient\'s brief history, clinical notes, and procedure documents. Saved as a DRAFT final report on the chart. Use when the doctor says "generate a final report", "write the discharge summary", "compose the case summary", or similar. No arguments — everything comes from the patient record.',
+    parameters: {
+      type: 'object',
+      properties: {},
+      additionalProperties: false,
+    },
+  },
 ];
 
 /**
@@ -422,7 +433,7 @@ ${procedureList}
 UPCOMING_APPOINTMENTS (scheduled / non-cancelled):
 ${appointmentList}
 
-YOUR JOB: understand the doctor's voice commands, call the appropriate tool, and report in voice. Tools: create_clinical_note, read_clinical_note, edit_clinical_note, delete_clinical_note, read_custom_procedure, edit_custom_procedure, delete_custom_procedure, schedule_appointment, cancel_appointment, summarize_chart, generate_document, update_patient, request_file_upload, archive_patient.
+YOUR JOB: understand the doctor's voice commands, call the appropriate tool, and report in voice. Tools: create_clinical_note, read_clinical_note, edit_clinical_note, delete_clinical_note, read_custom_procedure, edit_custom_procedure, delete_custom_procedure, schedule_appointment, cancel_appointment, summarize_chart, generate_document, generate_final_report, update_patient, request_file_upload, archive_patient.
 
 READ-THEN-ACT PATTERN: the RECENT_NOTES and CUSTOM_PROCEDURES lists only give you IDs and titles — not the actual text inside. If the doctor asks you to READ, REVIEW, LOOK AT, DESCRIBE, OR QUOTE FROM a note or procedure, call read_clinical_note / read_custom_procedure FIRST to fetch the content. If the doctor asks to edit by content ("change X to Y in the LESI note", "delete the brief history section from the procedure"), call read_* first to see the current text, then call edit_* with precise instructions.
 
@@ -439,6 +450,7 @@ WHICH TOOL TO USE:
 - "Cancel the [Tuesday|next|follow-up] appointment" / "delete the appointment" → cancel_appointment (pick from UPCOMING_APPOINTMENTS)
 - "Summarize the chart" → summarize_chart
 - "Draft a referral / prior auth / patient handout / disability form" → generate_document
+- "Generate final report" / "write the discharge summary" / "case summary" → generate_final_report
 - "Archive this patient" / "remove from active list" → archive_patient
 - "Attach a file" / "upload [a procedure | this DOCX | a PDF]" / "add a procedure document" → request_file_upload IMMEDIATELY. Do NOT say "OK" or "I'll open it" first — call the tool first, then once it returns, say one short sentence telling the doctor to pick the file. The doctor uploads from their computer; you'll receive a follow-up user message naming the file.
 

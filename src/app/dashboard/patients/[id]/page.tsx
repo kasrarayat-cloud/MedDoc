@@ -67,10 +67,14 @@ export default async function PatientDetailPage({ params }: PageProps) {
     return <PatientNotFound id={id} />;
   }
 
-  // 5. Fetch clinical notes + custom procedures separately (newest first)
-  const [notes, customProcedures] = await Promise.all([
+  // 5. Fetch all four chart categories in parallel (newest first).
+  //    Kept as separate lists so the UI can render each under its own
+  //    card without re-partitioning on the client.
+  const [notes, customProcedures, patientFiles, finalReports] = await Promise.all([
     listNotesByPatient(id, 'CLINICAL_NOTE', session),
     listNotesByPatient(id, 'CUSTOM_PROCEDURE', session),
+    listNotesByPatient(id, 'PATIENT_FILE', session),
+    listNotesByPatient(id, 'FINAL_REPORT', session),
   ]);
 
   // 6. Render
@@ -79,6 +83,8 @@ export default async function PatientDetailPage({ params }: PageProps) {
       patient={patient}
       notes={notes}
       customProcedures={customProcedures}
+      patientFiles={patientFiles}
+      finalReports={finalReports}
     />
   );
 }

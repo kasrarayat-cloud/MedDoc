@@ -18,6 +18,7 @@ import {
   dispatchSummarize,
   dispatchGenerateDocument,
   dispatchUpdatePatient,
+  dispatchGenerateFinalReport,
   type AssistantAction,
   type AssistantResult,
   type DocumentType,
@@ -385,6 +386,11 @@ export async function POST(request: NextRequest) {
           updates.briefHistory = args.briefHistory as string[];
         }
         const result = await dispatchUpdatePatient(patient, updates, session);
+        return NextResponse.json<ToolResponse>(toToolResponse(result));
+      }
+
+      case 'generate_final_report': {
+        const result = await dispatchGenerateFinalReport(patientId);
         return NextResponse.json<ToolResponse>(toToolResponse(result));
       }
 

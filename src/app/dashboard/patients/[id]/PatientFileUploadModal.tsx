@@ -23,12 +23,19 @@ import {
   CheckCircle2,
   AlertCircle,
   Paperclip,
+  Loader2,
 } from 'lucide-react';
+import { uploadPatientFileAction } from '@/app/dashboard/patients/actions';
+import type { ClinicalNoteView } from '@/lib/data/clinical-notes';
 
 interface PatientFileUploadModalProps {
   open: boolean;
   onClose: () => void;
+  patientId: string;
   patientName: string;
+  /** Called with the server-persisted row after a successful upload so the
+   *  parent can optimistically prepend it to its list. */
+  onUploaded?: (file: ClinicalNoteView) => void;
 }
 
 // 25 MB — same cap Whisper uses elsewhere so the limit feels consistent
@@ -72,25 +79,40 @@ function iconForFile(file: File) {
 export default function PatientFileUploadModal({
   open,
   onClose,
+  patientId,
   patientName,
+  onUploaded,
 }: PatientFileUploadModalProps) {
   return (
     <AnimatePresence>
-      {open && <ModalContent onClose={onClose} patientName={patientName} />}
+      {open && (
+        <ModalContent
+          onClose={onClose}
+          patientId={patientId}
+          patientName={patientName}
+          onUploaded={onUploaded}
+        />
+      )}
     </AnimatePresence>
   );
 }
 
 function ModalContent({
   onClose,
+  patientId,
   patientName,
+  onUploaded,
 }: {
   onClose: () => void;
+  patientId: string;
   patientName: string;
+  onUploaded?: (file: ClinicalNoteView) => void;
 }) {
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [success, setSuccess] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   // Track nested drag events so leaving an inner child doesn't flip the
@@ -166,11 +188,36 @@ function ModalContent({
     setError(null);
   };
 
-  // Placeholder — swap for a real POST once backend lands. The button is
-  // intentionally disabled while file is null so this never fires on an
-  // empty state.
-  const handleUpload = () => {
-    console.info('[PatientFileUploadModal] upload not yet wired:', file?.name);
+  const handleUpload = async () => {
+    if (!file || isUploading) return;
+    setIsUploading(true);
+    setError(null);
+    try {
+      // Metadata-only for now — the File's bytes stay in the browser.
+      // When real file storage lands, move to FormData + POST and pass
+      // the blob through to object storage before the DB insert.
+      const result = await uploadPatientFileAction({
+        patientId,
+        fileName: file.name,
+        mimeType: file.type || 'application/octet-stream',
+        sizeBytes: file.size,
+      });
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setSuccess(true);
+      onUploaded?.(result.data);
+      // Auto-close on success so the doctor's eye returns to the chart.
+      setTimeout(() => {
+        onClose();
+      }, 800);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Upload failed';
+      setError(message);
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   return (
@@ -227,6 +274,15 @@ function ModalContent({
               <div className="flex items-start gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/30">
                 <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
                 <p className="text-xs text-red-300">{error}</p>
+              </div>
+            )}
+
+            {success && (
+              <div className="flex items-start gap-2 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                <p className="text-xs text-emerald-300">
+                  File attached to {patientName}&apos;s chart.
+                </p>
               </div>
             )}
 
@@ -334,11 +390,25 @@ function ModalContent({
               <button
                 type="button"
                 onClick={handleUpload}
-                disabled={!file || !!error}
+                disabled={!file || !!error || isUploading || success}
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-blue-500 to-teal-500 text-white text-sm font-semibold shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
               >
-                <CheckCircle2 className="w-4 h-4" />
-                Upload
+                {isUploading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Uploading…
+                  </>
+                ) : success ? (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" />
+                    Attached
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" />
+                    Upload
+                  </>
+                )}
               </button>
             </div>
           </div>

@@ -40,6 +40,7 @@ import {
   createNoteFromTemplateAction,
   updateNoteManuallyAction,
   uploadCustomProcedureAction,
+  generateFinalReportAction,
 } from '@/app/dashboard/patients/actions';
 import EditPatientModal from './EditPatientModal';
 import DocumentGeneratorModal from './DocumentGeneratorModal';
@@ -63,9 +64,26 @@ interface PatientDetailClientProps {
   patient: PatientView;
   notes: ClinicalNoteView[];
   customProcedures: ClinicalNoteView[];
+  /** Attachments on the chart — metadata rows, no bytes yet. */
+  patientFiles: ClinicalNoteView[];
+  /** AI-synthesized reports. Saved as DRAFT; doctor signs off later. */
+  finalReports: ClinicalNoteView[];
 }
 
-export default function PatientDetailClient({ patient, notes, customProcedures }: PatientDetailClientProps) {
+function formatBytes(n: number | undefined): string {
+  if (!n || n <= 0) return '—';
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+export default function PatientDetailClient({
+  patient,
+  notes,
+  customProcedures,
+  patientFiles,
+  finalReports,
+}: PatientDetailClientProps) {
   const age = new Date().getFullYear() - patient.birthYear;
   const initials = `${patient.firstName[0]}${patient.lastName[0]}`;
   const router = useRouter();
@@ -74,6 +92,45 @@ export default function PatientDetailClient({ patient, notes, customProcedures }
   const [docGenModalOpen, setDocGenModalOpen] = useState(false);
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
   const [fileUploadModalOpen, setFileUploadModalOpen] = useState(false);
+  // Client-side mirrors of the server-rendered lists. Let the modal and
+  // the Generate button prepend new rows optimistically so the UI updates
+  // without a full page reload. A router.refresh() on the action still
+  // keeps these in sync across tabs eventually.
+  const [files, setFiles] = useState<ClinicalNoteView[]>(patientFiles);
+  const [reports, setReports] = useState<ClinicalNoteView[]>(finalReports);
+  /** Which final report is expanded in the list — matches the pattern used
+   *  for clinical notes above. */
+  const [expandedReportId, setExpandedReportId] = useState<string | null>(null);
+  /** `isPending` flag for the final-report generation call. Drives the
+   *  loading spinner + disabled state on the "Generate via AI" button. */
+  const [reportGenerating, setReportGenerating] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
+
+  const handleGenerateFinalReport = async () => {
+    if (reportGenerating) return;
+    setReportGenerating(true);
+    setReportError(null);
+    try {
+      const result = await generateFinalReportAction(patient.id);
+      if (!result.ok) {
+        setReportError(result.error);
+        return;
+      }
+      // Prepend — newest first matches the server-side ordering.
+      setReports((prev) => [result.data, ...prev]);
+      setExpandedReportId(result.data.id);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Failed to generate report';
+      setReportError(message);
+    } finally {
+      setReportGenerating(false);
+    }
+  };
+
+  const handleFileUploaded = (file: ClinicalNoteView) => {
+    setFiles((prev) => [file, ...prev]);
+  };
   /** Centered Cmd+K-style assistant. Opened by the prominent header
    *  button or by the global Cmd/Ctrl+K shortcut. */
   const [aiOpen, setAiOpen] = useState(false);
@@ -799,8 +856,9 @@ export default function PatientDetailClient({ patient, notes, customProcedures }
             {/* ====== FINAL REPORTS SECTION ====== */}
             {/* Big deal for the doctors — sits directly under Clinical Notes
                 so the eye lands on it after scanning the visit timeline.
-                UI-only for now: empty state + a Generate via AI button that
-                renders ready but isn't wired to a pipeline yet. */}
+                Generate button calls gpt-4o to synthesize brief history +
+                notes + procedures into a structured report; Upload routes
+                through the same file-attachment modal as Quick Actions. */}
             <div className="rounded-xl bg-white/5 backdrop-blur-md border border-white/10 p-5">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
@@ -811,37 +869,225 @@ export default function PatientDetailClient({ patient, notes, customProcedures }
                     Final Reports
                   </h2>
                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-slate-400 border border-white/10">
-                    0
+                    {reports.length}
                   </span>
                 </div>
 
-                {/* Header action — visually primary so doctors spot it on
-                    an empty chart. Disabled visual + cursor intentionally
-                    left off so the button feels alive while we wire the
-                    backend. Click is a no-op for now (console trace only
-                    so a tester can confirm the click lands). */}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFileUploadModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white transition-all cursor-pointer"
+                    title="Upload a report or reference file"
+                  >
+                    <UploadCloud className="w-3 h-3" />
+                    Upload
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleGenerateFinalReport}
+                    disabled={reportGenerating}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold text-white bg-gradient-to-r from-rose-500 to-pink-500 shadow-md shadow-rose-500/25 hover:shadow-rose-500/40 hover:scale-[1.02] disabled:opacity-60 disabled:hover:scale-100 transition-all cursor-pointer disabled:cursor-not-allowed"
+                  >
+                    {reportGenerating ? (
+                      <>
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        Generating…
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-3 h-3" />
+                        Generate via AI
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {reportError && (
+                <div className="flex items-start gap-2 p-2.5 rounded-lg bg-red-500/10 border border-red-500/30 mb-4">
+                  <AlertCircle className="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" />
+                  <p className="text-[11px] text-red-300 flex-1">{reportError}</p>
+                  <button
+                    type="button"
+                    onClick={() => setReportError(null)}
+                    className="text-red-400 hover:text-red-300 cursor-pointer"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
+
+              {reports.length === 0 ? (
+                <div className="py-10 text-center">
+                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/20 mb-3">
+                    <FileBadge className="w-6 h-6 text-rose-400/60" />
+                  </div>
+                  <p className="text-sm text-slate-400">No final reports yet.</p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Use &ldquo;Generate via AI&rdquo; to synthesize a
+                    comprehensive case summary from this patient&apos;s history.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {reports.map((report) => {
+                    const isExpanded = expandedReportId === report.id;
+                    const preview =
+                      report.content.split('\n').find((l) => l.trim())?.slice(0, 140) ?? '';
+                    return (
+                      <motion.div
+                        key={report.id}
+                        layout
+                        className="rounded-lg bg-slate-900/40 border border-white/5 hover:border-white/15 transition-all overflow-hidden"
+                      >
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setExpandedReportId(isExpanded ? null : report.id)
+                          }
+                          className="w-full flex items-start gap-3 p-3 text-left cursor-pointer hover:bg-slate-900/60 transition-colors"
+                        >
+                          <div className="shrink-0 p-2 rounded-md bg-rose-500/10 border border-rose-500/20">
+                            <FileBadge className="w-4 h-4 text-rose-300" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                              <p className="text-sm font-medium text-white truncate">
+                                {report.title}
+                              </p>
+                              <span
+                                className={`text-[9px] px-1.5 py-0.5 rounded font-semibold uppercase tracking-wider border ${noteStatusStyles[report.status]}`}
+                              >
+                                {report.status}
+                              </span>
+                            </div>
+                            {!isExpanded && (
+                              <p className="text-xs text-slate-400 leading-relaxed line-clamp-2">
+                                {preview}
+                              </p>
+                            )}
+                            <div className="flex items-center gap-3 mt-1.5 text-[10px] text-slate-500 flex-wrap">
+                              <span className="flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                {formatRelativeDate(report.createdAt)}
+                              </span>
+                              {report.createdByName && (
+                                <span className="flex items-center gap-1">
+                                  <span className="text-slate-600">·</span>
+                                  {report.createdByName}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <ChevronDown
+                            className={`w-4 h-4 text-slate-500 shrink-0 mt-1 transition-transform ${
+                              isExpanded ? 'rotate-180' : ''
+                            }`}
+                          />
+                        </button>
+
+                        <AnimatePresence>
+                          {isExpanded && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: 'auto', opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              transition={{ duration: 0.2 }}
+                              className="overflow-hidden"
+                            >
+                              <div className="px-4 pb-4 pt-1 border-t border-white/5 mx-3">
+                                <pre className="mt-3 text-xs text-slate-200 leading-relaxed whitespace-pre-wrap font-sans bg-slate-950/60 rounded-lg p-4 border border-white/5">
+                                  {report.content}
+                                </pre>
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* ====== ATTACHED DOCUMENTS SECTION ====== */}
+            {/* Shows file metadata the doctor has uploaded to this chart.
+                Entries here are pointers — clicking doesn't download yet;
+                that lands when real file storage is wired. */}
+            <div className="rounded-xl bg-white/5 backdrop-blur-md border border-white/10 p-5">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-amber-500/15 border border-amber-500/30">
+                    <Paperclip className="w-4 h-4 text-amber-300" />
+                  </div>
+                  <h2 className="text-sm font-semibold text-white uppercase tracking-wider">
+                    Attached Documents
+                  </h2>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-slate-400 border border-white/10">
+                    {files.length}
+                  </span>
+                </div>
+
                 <button
                   type="button"
-                  onClick={() => {
-                    console.info('[FinalReports] Generate via AI not yet wired');
-                  }}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold text-white bg-gradient-to-r from-rose-500 to-pink-500 shadow-md shadow-rose-500/25 hover:shadow-rose-500/40 hover:scale-[1.02] transition-all cursor-pointer"
+                  onClick={() => setFileUploadModalOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white transition-all cursor-pointer"
                 >
-                  <Sparkles className="w-3 h-3" />
-                  Generate via AI
+                  <UploadCloud className="w-3 h-3" />
+                  Attach
                 </button>
               </div>
 
-              <div className="py-10 text-center">
-                <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/20 mb-3">
-                  <FileBadge className="w-6 h-6 text-rose-400/60" />
+              {files.length === 0 ? (
+                <div className="py-8 text-center">
+                  <div className="inline-flex items-center justify-center w-10 h-10 rounded-2xl bg-amber-500/10 border border-amber-500/20 mb-3">
+                    <Paperclip className="w-5 h-5 text-amber-400/60" />
+                  </div>
+                  <p className="text-sm text-slate-400">No attachments yet</p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Attach imaging, lab results, or reference PDFs.
+                  </p>
                 </div>
-                <p className="text-sm text-slate-400">No final reports yet.</p>
-                <p className="text-xs text-slate-500 mt-1">
-                  Use &ldquo;Generate via AI&rdquo; to synthesize a comprehensive
-                  case summary from this patient&apos;s history.
-                </p>
-              </div>
+              ) : (
+                <ul className="space-y-2">
+                  {files.map((file) => (
+                    <li
+                      key={file.id}
+                      className="flex items-center gap-3 p-3 rounded-lg bg-slate-900/40 border border-white/5 hover:border-white/15 transition-colors"
+                    >
+                      <div className="shrink-0 p-2 rounded-md bg-amber-500/10 border border-amber-500/20">
+                        <FileText className="w-4 h-4 text-amber-300" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-white truncate">
+                          {file.fileName ?? file.title}
+                        </p>
+                        <div className="flex items-center gap-3 mt-0.5 text-[10px] text-slate-500 flex-wrap">
+                          <span>{formatBytes(file.sizeBytes)}</span>
+                          {file.mimeType && (
+                            <>
+                              <span className="text-slate-600">·</span>
+                              <span className="font-mono">{file.mimeType}</span>
+                            </>
+                          )}
+                          <span className="text-slate-600">·</span>
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {formatRelativeDate(file.createdAt)}
+                          </span>
+                          {file.createdByName && (
+                            <>
+                              <span className="text-slate-600">·</span>
+                              <span>{file.createdByName}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </motion.div>
 
@@ -940,11 +1186,14 @@ export default function PatientDetailClient({ patient, notes, customProcedures }
         patientName={`${patient.firstName} ${patient.lastName}`}
       />
 
-      {/* Attach File Modal — UI shell only; backend wiring pending. */}
+      {/* Attach File Modal. onUploaded prepends the returned row to the
+          Attached Documents list so the doctor sees it immediately. */}
       <PatientFileUploadModal
         open={fileUploadModalOpen}
         onClose={() => setFileUploadModalOpen(false)}
+        patientId={patient.id}
         patientName={`${patient.firstName} ${patient.lastName}`}
+        onUploaded={handleFileUploaded}
       />
 
       {/* Centered Spotlight-style AI assistant — opened by header button

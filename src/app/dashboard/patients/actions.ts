@@ -35,6 +35,8 @@ import {
   getNoteById as dataGetNoteById,
   listNotesByPatient as dataListNotesByPatient,
   updateClinicalNote as dataUpdateClinicalNote,
+  createPatientFile as dataCreatePatientFile,
+  createFinalReport as dataCreateFinalReport,
   type ClinicalNoteView,
 } from '@/lib/data/clinical-notes';
 
@@ -1537,6 +1539,7 @@ export type AssistantAction =
   | { type: 'updated_patient'; patientId: string; changedFields: string[] }
   | { type: 'awaiting_file_upload'; reason: string }
   | { type: 'awaiting_confirmation'; pending: PendingAssistantWrite }
+  | { type: 'final_report_generated'; reportId: string; title: string }
   | { type: 'chat' };
 
 export type AssistantResult =
@@ -2251,4 +2254,272 @@ function humanize(field: string): string {
     .replace(/([A-Z])/g, ' $1')
     .toLowerCase()
     .trim();
+}
+
+// ============================================================================
+// UPLOAD PATIENT FILE (metadata only for now)
+// ============================================================================
+// Accepts file metadata from PatientFileUploadModal and writes a
+// PATIENT_FILE-categorized Document row. Actual bytes are not persisted
+// yet — when Dropbox/S3 storage lands, extend this action to take a
+// FormData blob and hand the file off before inserting.
+// ----------------------------------------------------------------------------
+
+const uploadPatientFileSchema = z.object({
+  patientId: z.string().cuid(),
+  fileName: z.string().min(1).max(255),
+  mimeType: z.string().min(1).max(100),
+  sizeBytes: z.number().int().min(1).max(25 * 1024 * 1024), // 25 MB cap
+});
+
+export async function uploadPatientFileAction(
+  rawInput: unknown
+): Promise<ActionResult<ClinicalNoteView>> {
+  let session;
+  try {
+    session = await requireRole(['DOCTOR', 'ADMIN']);
+  } catch (err) {
+    await logAudit({
+      action: 'CREATED_DOCUMENT',
+      success: false,
+      errorCode: 'FORBIDDEN',
+      metadata: { category: 'PATIENT_FILE' },
+    });
+    return authErrorResult(err);
+  }
+
+  const parsed = uploadPatientFileSchema.safeParse(rawInput);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: 'Invalid file metadata',
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
+  const { patientId, fileName, mimeType, sizeBytes } = parsed.data;
+
+  // Tenant guard — patient must be visible to this session. getPatientById
+  // returns null both for "doesn't exist" and "forbidden", which is the
+  // right behavior here (don't leak existence to other tenants).
+  const patient = await getPatientById(patientId, session);
+  if (!patient) {
+    return { ok: false, error: 'Patient not found' };
+  }
+
+  try {
+    const file = await dataCreatePatientFile({
+      patientId,
+      fileName,
+      mimeType,
+      sizeBytes,
+      createdById: session.user.id,
+    });
+
+    await logAudit({
+      action: 'CREATED_DOCUMENT',
+      targetId: file.id,
+      targetType: 'Document',
+      metadata: {
+        category: 'PATIENT_FILE',
+        patientId,
+        fileName,
+        mimeType,
+        sizeBytes,
+      },
+    });
+
+    revalidatePath(`/dashboard/patients/${patientId}`);
+    return { ok: true, data: file };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Upload failed';
+    await logAudit({
+      action: 'CREATED_DOCUMENT',
+      success: false,
+      errorCode: 'UPLOAD_FAILED',
+      metadata: { category: 'PATIENT_FILE', patientId, reason: message },
+    });
+    return { ok: false, error: message };
+  }
+}
+
+// ============================================================================
+// GENERATE FINAL REPORT (AI-synthesized discharge/evaluation summary)
+// ============================================================================
+// Gathers the patient's brief history, clinical notes, and custom procedures,
+// sends them to GPT-4o, and persists the response as a FINAL_REPORT document.
+// Shared between the card button and the Realtime `generate_final_report`
+// tool, so both paths produce identical output.
+// ----------------------------------------------------------------------------
+
+const FINAL_REPORT_SYSTEM_PROMPT = `You are an expert clinical writer preparing a comprehensive Final Evaluation Report for a pain management practice.
+
+Given the patient's brief history, clinical notes, and procedure documents below, produce ONE cohesive narrative report with these sections in order:
+
+1. Patient Summary — name, age, sex, relevant demographics. One paragraph.
+2. Clinical History — chronologic synthesis of the brief-history entries and the presenting complaint. One paragraph.
+3. Course of Treatment — what was done, in order. Reference individual notes/procedures by date. Keep it factual, no invention.
+4. Findings & Outcomes — response to treatment per the notes. Call out pain-scale changes, functional improvements/declines, complications if noted.
+5. Current Status — where the patient stands as of the most recent note.
+6. Plan & Recommendations — next steps if notes indicate them; otherwise "to be determined at next follow-up."
+
+Rules:
+- Prose, not bullet lists, except for optional citations at end of each section.
+- Never invent facts. If a section has no source data, write "Not documented."
+- Do not include pleasantries, hedging, or meta-commentary about your own writing.
+- No markdown headers with # — use plain "Section Name:" prefixes.`;
+
+export async function generateFinalReportAction(
+  patientId: string
+): Promise<ActionResult<ClinicalNoteView>> {
+  let session;
+  try {
+    session = await requireRole(['DOCTOR', 'ADMIN']);
+  } catch (err) {
+    await logAudit({
+      action: 'GENERATED_DRAFT_DOCUMENT',
+      success: false,
+      errorCode: 'FORBIDDEN',
+      metadata: { category: 'FINAL_REPORT' },
+    });
+    return authErrorResult(err);
+  }
+
+  const patient = await getPatientById(patientId, session);
+  if (!patient) {
+    return { ok: false, error: 'Patient not found' };
+  }
+
+  // Pull context. Cap each list so one overgrown chart doesn't blow past
+  // the model's context window — newest-first ordering means the cap
+  // keeps the most recent/relevant entries.
+  const [notes, procedures] = await Promise.all([
+    dataListNotesByPatient(patientId, 'CLINICAL_NOTE', session),
+    dataListNotesByPatient(patientId, 'CUSTOM_PROCEDURE', session),
+  ]);
+
+  const NOTE_CAP = 12;
+  const PROC_CAP = 6;
+  const HISTORY_CAP = 20;
+
+  const briefHistoryBlock =
+    patient.briefHistory.slice(0, HISTORY_CAP).join('\n- ') || '(none)';
+  const notesBlock =
+    notes.slice(0, NOTE_CAP).map((n, i) =>
+      `### Note ${i + 1} — ${n.title} (${n.createdAt.slice(0, 10)})\n${n.content}`
+    ).join('\n\n') || '(none)';
+  const proceduresBlock =
+    procedures.slice(0, PROC_CAP).map((p, i) =>
+      `### Procedure Document ${i + 1} — ${p.title} (${p.createdAt.slice(0, 10)})\n${p.content}`
+    ).join('\n\n') || '(none)';
+
+  const demographics = [
+    `Name: ${patient.firstName} ${patient.lastName}`,
+    `Age: ${patient.birthYear ? new Date().getFullYear() - patient.birthYear : 'unknown'}`,
+    `MRN: ${patient.mrn || '(none)'}`,
+    `Chart ID: ${patient.chartId || '(none)'}`,
+  ].join('\n');
+
+  const userMessage = `PATIENT DEMOGRAPHICS:
+${demographics}
+
+BRIEF HISTORY:
+- ${briefHistoryBlock}
+
+CLINICAL NOTES (${notes.length} total, showing ${Math.min(notes.length, NOTE_CAP)} most recent):
+${notesBlock}
+
+PROCEDURE DOCUMENTS (${procedures.length} total, showing ${Math.min(procedures.length, PROC_CAP)} most recent):
+${proceduresBlock}`;
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey?.trim()) {
+    return { ok: false, error: 'AI service is not configured.' };
+  }
+
+  let content: string;
+  let totalTokens: number | null = null;
+  try {
+    const client = new OpenAI({ apiKey });
+    const completion = await client.chat.completions.create({
+      // gpt-4o here, not mini — this is a long-form clinical synthesis
+      // where the quality jump is worth the cost. Matches what the user
+      // specifically asked for in this feature.
+      model: 'gpt-4o',
+      temperature: 0.3,
+      messages: [
+        { role: 'system', content: FINAL_REPORT_SYSTEM_PROMPT },
+        { role: 'user', content: userMessage },
+      ],
+    });
+    content = (completion.choices[0]?.message?.content ?? '').trim();
+    totalTokens = completion.usage?.total_tokens ?? null;
+  } catch (err) {
+    console.error('[generateFinalReportAction] OpenAI call failed:', err);
+    const message = err instanceof Error ? err.message : 'AI generation failed';
+    await logAudit({
+      action: 'GENERATED_DRAFT_DOCUMENT',
+      success: false,
+      errorCode: 'AI_FAILED',
+      metadata: { category: 'FINAL_REPORT', patientId, reason: message },
+    });
+    return { ok: false, error: message };
+  }
+
+  if (!content) {
+    return { ok: false, error: 'AI returned an empty report. Try again.' };
+  }
+
+  // Persist + audit + revalidate.
+  const title = `Final Report — ${new Date().toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  })}`;
+
+  try {
+    const report = await dataCreateFinalReport({
+      patientId,
+      title,
+      content,
+      createdById: session.user.id,
+    });
+    await logAudit({
+      action: 'GENERATED_DRAFT_DOCUMENT',
+      targetId: report.id,
+      targetType: 'Document',
+      metadata: { category: 'FINAL_REPORT', patientId, totalTokens },
+    });
+    void logApiUsage({
+      feature: 'GPT_TOOL',
+      userId: session.user.id,
+      practiceId: session.user.practiceId,
+      tokens: totalTokens,
+    }).catch((e) => console.error('[generateFinalReportAction] usage log failed:', e));
+    revalidatePath(`/dashboard/patients/${patientId}`);
+    return { ok: true, data: report };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Save failed';
+    return { ok: false, error: message };
+  }
+}
+
+// Thin dispatcher wrapper for the Realtime assistant `generate_final_report`
+// tool. Returns an AssistantResult so /api/assistant-tool can adapt it
+// to the voice-channel response shape.
+export async function dispatchGenerateFinalReport(
+  patientId: string
+): Promise<AssistantResult> {
+  const result = await generateFinalReportAction(patientId);
+  if (!result.ok) {
+    return { ok: false, error: result.error };
+  }
+  return {
+    ok: true,
+    reply: `Generated the Final Report. It's in the patient's Final Reports section as a draft — review and sign when ready.`,
+    action: {
+      type: 'final_report_generated',
+      reportId: result.data.id,
+      title: result.data.title,
+    },
+  };
 }
