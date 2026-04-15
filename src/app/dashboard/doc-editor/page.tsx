@@ -11,6 +11,7 @@ declare global {
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useVoiceRecorder } from '@/lib/hooks/useVoiceRecorder';
 import {
   Upload,
   FileText,
@@ -71,49 +72,13 @@ export default function DocEditorPage() {
   const [inputText, setInputText] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Voice Assistant State - MediaRecorder + Whisper with first-speech buffer
-  // idle: not recording
-  // listening: recording, waiting for user's FIRST speech (no timer yet)
-  // processing: user has started speaking, 2.5s silence detection active
-  // submitting: audio uploaded to Whisper for transcription
-  // editing: transcribed text sent to AI for document editing
-  type VoiceState = 'idle' | 'listening' | 'processing' | 'submitting' | 'editing';
-  const [voiceState, setVoiceState] = useState<VoiceState>('idle');
-  const [voiceSupported, setVoiceSupported] = useState(false);
-  const [liveTranscript, setLiveTranscript] = useState(''); // last transcribed text
-  // volumeLevel: written but not currently rendered (UI viz pending). Keep
-  // the setter so the analyser node still drives state for future use.
-  const [, setVolumeLevel] = useState(0);
-
-  const voiceStateRef = useRef<VoiceState>('idle');
-
-  // MediaRecorder refs
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const mediaStreamRef = useRef<MediaStream | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const selectedMimeRef = useRef<string>('audio/webm');
-
-  // Web Audio API refs (for VAD / silence detection)
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
-  const rafIdRef = useRef<number | null>(null);
-
-  // Silence detection state
-  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const firstSpeechDetectedRef = useRef(false); // has user said anything yet?
-  const lastSoundTimeRef = useRef(0); // timestamp of last detected sound
-  const submittingRef = useRef(false); // prevent double-submit
-  const autoStoppedRef = useRef(false); // was this stop auto-triggered by silence?
-
-  // Keep refs in sync with state
-  useEffect(() => { voiceStateRef.current = voiceState; }, [voiceState]);
-
-  // VAD tuning constants
-  const SILENCE_THRESHOLD = 15; // audio level below which we consider "silence" (0-255)
-  const SPEECH_START_THRESHOLD = 25; // minimum level to consider "user is speaking"
-  const SILENCE_DURATION_MS = 2500; // 2.5s silence AFTER first speech = auto-submit
-  const MAX_WAIT_FOR_FIRST_SPEECH_MS = 15000; // stop after 15s if no speech at all
+  // Voice Assistant State — shared useVoiceRecorder hook (same one Add
+  // Patient uses). The hook owns the MediaRecorder + VAD + auto-stop.
+  // `voiceState` is a thin overlay for the two post-recording phases
+  // (submitting to Whisper, sending transcript to the doc-editor chat).
+  type VoiceState = 'submitting' | 'editing' | null;
+  const [voiceState, setVoiceState] = useState<VoiceState>(null);
+  const [liveTranscript, setLiveTranscript] = useState('');
 
   // Save state
   const [isSaving, setIsSaving] = useState(false);
@@ -122,52 +87,6 @@ export default function DocEditorPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  // Check voice support on mount
-  useEffect(() => {
-    const hasMediaRecorder =
-      typeof window !== 'undefined' &&
-      typeof navigator !== 'undefined' &&
-      !!navigator.mediaDevices &&
-      !!window.MediaRecorder &&
-      !!(window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext);
-    setVoiceSupported(hasMediaRecorder);
-  }, []);
-
-  // Global cleanup on unmount - release all resources
-  useEffect(() => {
-    return () => {
-      // Clear timers
-      if (silenceTimerRef.current) {
-        clearTimeout(silenceTimerRef.current);
-        silenceTimerRef.current = null;
-      }
-      // Cancel RAF loop
-      if (rafIdRef.current !== null) {
-        cancelAnimationFrame(rafIdRef.current);
-        rafIdRef.current = null;
-      }
-      // Stop mic tracks
-      if (mediaStreamRef.current) {
-        mediaStreamRef.current.getTracks().forEach(t => t.stop());
-        mediaStreamRef.current = null;
-      }
-      // Stop MediaRecorder
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        try { mediaRecorderRef.current.stop(); } catch { /* */ }
-      }
-      // Disconnect source + close audio context
-      if (sourceNodeRef.current) {
-        try { sourceNodeRef.current.disconnect(); } catch { /* */ }
-        sourceNodeRef.current = null;
-      }
-      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
-        try { audioContextRef.current.close(); } catch { /* */ }
-        audioContextRef.current = null;
-      }
-      analyserRef.current = null;
-    };
-  }, []);
 
   // Auto-scroll chat
   useEffect(() => {
@@ -236,393 +155,106 @@ export default function DocEditorPage() {
     }
   }, []);
 
+  // -----------------------------------------------------------------------
+  // Voice → Whisper → AI edit
+  // Same recording behavior as Add Patient (useVoiceRecorder), with the
+  // doc-editor-specific post-transcribe flow (POST the text to the AI
+  // chat that rewrites the document).
+  // -----------------------------------------------------------------------
 
-
-  // ---------------------------------------------------------------------
-  // Voice Assistant - MediaRecorder + OpenAI Whisper + VAD
-  // State machine: idle -> listening -> processing -> submitting -> editing -> idle
-  // First-speech buffer: silence timer only starts AFTER user speaks
-  // ---------------------------------------------------------------------
-
-  /** Clear silence debounce timer */
-  const clearSilenceTimer = useCallback(() => {
-    if (silenceTimerRef.current) {
-      clearTimeout(silenceTimerRef.current);
-      silenceTimerRef.current = null;
-    }
-  }, []);
-
-  /** Stop RAF loop (VAD volume analyzer) */
-  const stopVoiceAnalysis = useCallback(() => {
-    if (rafIdRef.current !== null) {
-      cancelAnimationFrame(rafIdRef.current);
-      rafIdRef.current = null;
-    }
-    clearSilenceTimer();
-  }, [clearSilenceTimer]);
-
-  /** Release all microphone + audio resources */
-  const releaseAudioResources = useCallback(() => {
-    stopVoiceAnalysis();
-    if (mediaStreamRef.current) {
-      mediaStreamRef.current.getTracks().forEach(t => {
-        try { t.stop(); } catch { /* */ }
-      });
-      mediaStreamRef.current = null;
-    }
-    if (sourceNodeRef.current) {
-      try { sourceNodeRef.current.disconnect(); } catch { /* */ }
-      sourceNodeRef.current = null;
-    }
-    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
-      try { audioContextRef.current.close(); } catch { /* */ }
-      audioContextRef.current = null;
-    }
-    analyserRef.current = null;
-    if (mediaRecorderRef.current) {
-      mediaRecorderRef.current.ondataavailable = null;
-      mediaRecorderRef.current.onstop = null;
-      mediaRecorderRef.current.onerror = null;
-      mediaRecorderRef.current = null;
-    }
-  }, [stopVoiceAnalysis]);
-
-  /** Reset all voice state to idle */
-  const resetVoiceState = useCallback(() => {
-    releaseAudioResources();
-    audioChunksRef.current = [];
-    firstSpeechDetectedRef.current = false;
-    lastSoundTimeRef.current = 0;
-    submittingRef.current = false;
-    autoStoppedRef.current = false;
-    setVolumeLevel(0);
-    setLiveTranscript('');
-    voiceStateRef.current = 'idle';
-    setVoiceState('idle');
-  }, [releaseAudioResources]);
-
-  // Forward refs so callbacks can reference each other
-  const startListeningRef = useRef<(() => Promise<void>) | null>(null);
-  const stopListeningRef = useRef<((autoTriggered?: boolean) => void) | null>(null);
-
-  /**
-   * Transcribe audio via Whisper API (server-side /api/transcribe)
-   * then send transcript to AI for document editing.
-   */
-  const transcribeAndSend = useCallback(async (audioBlob: Blob) => {
-    if (submittingRef.current) return;
-    submittingRef.current = true;
-
-    try {
-      // Guard against empty/tiny audio
-      if (audioBlob.size < 1000) {
-        setMessages(prev => [
+  const handleAudioBlob = useCallback(
+    async (blob: Blob | null) => {
+      if (!blob || blob.size < 1000) {
+        setMessages((prev) => [
           ...prev,
           { id: makeId(), role: 'system', content: 'No audio detected. Try again.', timestamp: new Date() },
         ]);
-        resetVoiceState();
+        setVoiceState(null);
         return;
       }
-
-      // State: submitting (Whisper transcription)
-      voiceStateRef.current = 'submitting';
       setVoiceState('submitting');
-
-      // Upload to server-side /api/transcribe (Whisper)
-      const formData = new FormData();
-      formData.append('audio', audioBlob, `recording.${selectedMimeRef.current.includes('webm') ? 'webm' : 'mp4'}`);
-
-      const res = await fetch('/api/transcribe', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: 'Transcription failed' }));
-        throw new Error(err.error || `Transcription failed: ${res.status}`);
-      }
-
-      const { text } = await res.json();
-
-      if (!text || !text.trim() || text.trim().length < 2) {
-        setMessages(prev => [
-          ...prev,
-          { id: makeId(), role: 'system', content: 'No speech detected. Try again.', timestamp: new Date() },
-        ]);
-        resetVoiceState();
-        return;
-      }
-
-      const transcript = text.trim();
-      setLiveTranscript(transcript);
-
-      // State: editing (AI processes transcript)
-      voiceStateRef.current = 'editing';
-      setVoiceState('editing');
-
-      // Send to AI for document editing
-      await sendToAI(transcript);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Voice processing failed';
-      setMessages(prev => [
-        ...prev,
-        { id: makeId(), role: 'system', content: `Voice error: ${msg}`, timestamp: new Date() },
-      ]);
-    } finally {
-      resetVoiceState();
-    }
-  }, [sendToAI, resetVoiceState]);
-
-  /**
-   * Start VAD RAF loop - analyzes audio levels for silence detection.
-   * Silence timer ONLY starts after first speech is detected (first-speech buffer).
-   */
-  const startVoiceAnalysis = useCallback((onSilenceDetected: () => void) => {
-    if (!analyserRef.current) return;
-
-    const analyser = analyserRef.current;
-    const bufferLength = analyser.frequencyBinCount;
-    const dataArray = new Uint8Array(bufferLength);
-    const recordStartTime = Date.now();
-
-    const analyse = () => {
-      if (!analyserRef.current) return;
-      analyser.getByteFrequencyData(dataArray);
-
-      // Calculate average volume (simple RMS approximation)
-      let sum = 0;
-      for (let i = 0; i < bufferLength; i++) {
-        sum += dataArray[i];
-      }
-      const average = sum / bufferLength;
-      setVolumeLevel(Math.min(100, (average / 128) * 100));
-
-      const now = Date.now();
-      const timeSinceStart = now - recordStartTime;
-
-      if (average > SPEECH_START_THRESHOLD) {
-        // SPEECH DETECTED
-        lastSoundTimeRef.current = now;
-        if (!firstSpeechDetectedRef.current) {
-          // FIRST SPEECH! Transition listening -> processing
-          firstSpeechDetectedRef.current = true;
-          voiceStateRef.current = 'processing';
-          setVoiceState('processing');
-        }
-        // Clear any pending silence timer (user is speaking again)
-        if (silenceTimerRef.current) {
-          clearTimeout(silenceTimerRef.current);
-          silenceTimerRef.current = null;
-        }
-      } else if (average < SILENCE_THRESHOLD) {
-        // SILENCE
-        if (firstSpeechDetectedRef.current) {
-          // User HAS spoken before - start/continue silence timer
-          if (!silenceTimerRef.current) {
-            silenceTimerRef.current = setTimeout(() => {
-              // 2.5s of silence passed - auto-stop
-              silenceTimerRef.current = null;
-              autoStoppedRef.current = true;
-              onSilenceDetected();
-            }, SILENCE_DURATION_MS);
-          }
-        } else {
-          // User hasn't spoken yet - wait patiently (no timer!)
-          if (timeSinceStart > MAX_WAIT_FOR_FIRST_SPEECH_MS) {
-            // Max wait exceeded - give up
-            autoStoppedRef.current = true;
-            onSilenceDetected();
-            return;
-          }
-        }
-      }
-
-      // Continue loop
-      rafIdRef.current = requestAnimationFrame(analyse);
-    };
-
-    rafIdRef.current = requestAnimationFrame(analyse);
-  }, [SPEECH_START_THRESHOLD, SILENCE_THRESHOLD, SILENCE_DURATION_MS, MAX_WAIT_FOR_FIRST_SPEECH_MS]);
-
-  /** Start MediaRecorder + VAD */
-  const startListening = useCallback(async () => {
-    if (voiceStateRef.current !== 'idle') return;
-    if (!documentContentRef.current) return;
-
-    try {
-      // 1. Request microphone access
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
-      mediaStreamRef.current = stream;
-
-      // 2. Set up Web Audio API for volume analysis
-      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      const audioContext = new AudioCtx();
-      audioContextRef.current = audioContext;
-
-      const source = audioContext.createMediaStreamSource(stream);
-      sourceNodeRef.current = source;
-
-      const analyser = audioContext.createAnalyser();
-      analyser.fftSize = 512;
-      analyser.smoothingTimeConstant = 0.5;
-      analyserRef.current = analyser;
-
-      source.connect(analyser);
-
-      // 3. Find supported MIME type
-      const mimeTypes = [
-        'audio/webm;codecs=opus',
-        'audio/webm',
-        'audio/mp4',
-        'audio/ogg;codecs=opus',
-      ];
-      let selectedMime = '';
-      for (const mime of mimeTypes) {
-        if (MediaRecorder.isTypeSupported(mime)) {
-          selectedMime = mime;
-          break;
-        }
-      }
-      selectedMimeRef.current = selectedMime || 'audio/webm';
-
-      // 4. Create MediaRecorder
-      const recorder = selectedMime
-        ? new MediaRecorder(stream, { mimeType: selectedMime })
-        : new MediaRecorder(stream);
-      mediaRecorderRef.current = recorder;
-      audioChunksRef.current = [];
-      firstSpeechDetectedRef.current = false;
-      lastSoundTimeRef.current = 0;
-      autoStoppedRef.current = false;
-      submittingRef.current = false;
-
-      // 5. Set up event handlers
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-        }
-      };
-
-      recorder.onstop = async () => {
-        // Stop VAD loop first
-        stopVoiceAnalysis();
-
-        // Release mic tracks immediately
-        if (mediaStreamRef.current) {
-          mediaStreamRef.current.getTracks().forEach(t => t.stop());
-          mediaStreamRef.current = null;
-        }
-        if (sourceNodeRef.current) {
-          try { sourceNodeRef.current.disconnect(); } catch { /* */ }
-          sourceNodeRef.current = null;
-        }
-        if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
-          try { await audioContextRef.current.close(); } catch { /* */ }
-          audioContextRef.current = null;
-        }
-        analyserRef.current = null;
-
-        // Build audio blob
-        const blob = new Blob(audioChunksRef.current, {
-          type: selectedMimeRef.current,
-        });
-        audioChunksRef.current = [];
-        mediaRecorderRef.current = null;
-        setVolumeLevel(0);
-
-        // Only transcribe if user actually spoke
-        if (firstSpeechDetectedRef.current) {
-          await transcribeAndSend(blob);
-        } else {
-          // No speech detected - silent reset
-          setMessages(prev => [
-            ...prev,
-            { id: makeId(), role: 'system', content: 'No speech detected.', timestamp: new Date() },
-          ]);
-          resetVoiceState();
-        }
-      };
-
-      recorder.onerror = () => {
-        console.error('MediaRecorder error');
-        setMessages(prev => [
-          ...prev,
-          { id: makeId(), role: 'system', content: 'Recording failed. Try again.', timestamp: new Date() },
-        ]);
-        resetVoiceState();
-      };
-
-      // 6. Start recording (collect chunks every 100ms)
-      recorder.start(100);
-      voiceStateRef.current = 'listening';
-      setVoiceState('listening');
-
-      // 7. Start VAD analysis loop
-      startVoiceAnalysis(() => {
-        // Silence detected callback - stop recording
-        stopListeningRef.current?.(true);
-      });
-    } catch (err) {
-      console.error('Failed to start recording:', err);
-      resetVoiceState();
-
-      const isPermissionError =
-        err instanceof Error &&
-        (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError');
-
-      const msg = isPermissionError
-        ? 'Microphone access denied. Please allow microphone in browser settings.'
-        : 'Could not access microphone. Please check your device.';
-
-      setMessages(prev => [
-        ...prev,
-        { id: makeId(), role: 'system', content: msg, timestamp: new Date() },
-      ]);
-    }
-  }, [resetVoiceState, startVoiceAnalysis, stopVoiceAnalysis, transcribeAndSend]);
-
-  /** Stop recording (triggers onstop → transcribeAndSend) */
-  const stopListening = useCallback((autoTriggered = false) => {
-    if (autoTriggered) autoStoppedRef.current = true;
-    stopVoiceAnalysis();
-
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       try {
-        mediaRecorderRef.current.stop();
+        const formData = new FormData();
+        formData.append('audio', blob, 'recording.webm');
+        const res = await fetch('/api/transcribe', {
+          method: 'POST',
+          body: formData,
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: 'Transcription failed' }));
+          throw new Error(err.error || `Transcription failed: ${res.status}`);
+        }
+        const { text } = (await res.json()) as { text?: string };
+        if (!text || text.trim().length < 2) {
+          setMessages((prev) => [
+            ...prev,
+            { id: makeId(), role: 'system', content: 'No speech detected. Try again.', timestamp: new Date() },
+          ]);
+          setVoiceState(null);
+          return;
+        }
+        const transcript = text.trim();
+        setLiveTranscript(transcript);
+        setVoiceState('editing');
+        await sendToAI(transcript);
       } catch (err) {
-        console.error('Failed to stop recorder:', err);
-        resetVoiceState();
+        const msg = err instanceof Error ? err.message : 'Voice processing failed';
+        setMessages((prev) => [
+          ...prev,
+          { id: makeId(), role: 'system', content: `Voice error: ${msg}`, timestamp: new Date() },
+        ]);
+      } finally {
+        setVoiceState(null);
       }
+    },
+    [sendToAI]
+  );
+
+  const voice = useVoiceRecorder({
+    // Same tuning as Add Patient: room to think between phrases + a
+    // generous hard cap for long dictated edits.
+    silenceTimeoutMs: 4000,
+    maxDurationMs: 120_000,
+    onAutoStop: handleAudioBlob,
+  });
+
+  const toggleVoice = useCallback(async () => {
+    if (voiceState === 'submitting' || voiceState === 'editing') return;
+    if (voice.isRecording) {
+      const blob = await voice.stop();
+      void handleAudioBlob(blob);
     } else {
-      resetVoiceState();
+      void voice.start();
     }
-  }, [stopVoiceAnalysis, resetVoiceState]);
+  }, [voice, voiceState, handleAudioBlob]);
 
-  // Keep refs synced
-  useEffect(() => { startListeningRef.current = startListening; }, [startListening]);
-  useEffect(() => { stopListeningRef.current = stopListening; }, [stopListening]);
-
-  /** Toggle: idle -> listening, or listening/processing -> stop */
-  const toggleVoice = useCallback(() => {
-    const state = voiceStateRef.current;
-    if (state === 'idle') {
-      startListening();
-    } else if (state === 'listening' || state === 'processing') {
-      stopListening(false);
-    }
-    // Ignore clicks during submitting/editing
-  }, [startListening, stopListening]);
-
-  /** Cancel voice entirely (Cancel button) */
   const cancelVoice = useCallback(() => {
-    resetVoiceState();
-  }, [resetVoiceState]);
+    if (voice.isRecording) void voice.stop();
+    setVoiceState(null);
+  }, [voice]);
+
+  // Support flag — the hook uses MediaRecorder under the hood, same
+  // checks as before. Kept as a ref-free derived constant for the UI.
+  const voiceSupported =
+    typeof window !== 'undefined' &&
+    typeof navigator !== 'undefined' &&
+    !!navigator.mediaDevices &&
+    typeof window.MediaRecorder !== 'undefined';
+
+  // Collapsed UI state — maps the hook's recorder status + our own
+  // post-recording overlay back into the 5-bucket view the JSX was
+  // built around. Keeps the render block untouched while the plumbing
+  // below matches Add Patient exactly.
+  const uiVoiceState: 'idle' | 'listening' | 'processing' | 'submitting' | 'editing' =
+    voiceState === 'submitting'
+      ? 'submitting'
+      : voiceState === 'editing'
+        ? 'editing'
+        : voice.status === 'recording'
+          ? 'processing'
+          : voice.status === 'listening' || voice.status === 'starting'
+            ? 'listening'
+            : 'idle';
 
   // -----------------------------------------------------------------------
   // File Upload
@@ -725,13 +357,13 @@ export default function DocEditorPage() {
       if (!messageText || !documentContent || isProcessing) return;
 
       // Cancel active voice recording if user types manually
-      if (voiceState === 'listening' || voiceState === 'processing') {
+      if (voice.isRecording) {
         cancelVoice();
       }
 
       await sendToAI(messageText);
     },
-    [inputText, documentContent, isProcessing, voiceState, cancelVoice, sendToAI]
+    [inputText, documentContent, isProcessing, voice, cancelVoice, sendToAI]
   );
 
   // -----------------------------------------------------------------------
@@ -1176,7 +808,7 @@ export default function DocEditorPage() {
 
           {/* Voice state indicators */}
           <AnimatePresence>
-            {voiceState === 'listening' && (
+            {uiVoiceState === 'listening' && (
               <motion.div
                 key="listening"
                 initial={{ opacity: 0, height: 0 }}
@@ -1204,7 +836,7 @@ export default function DocEditorPage() {
               </motion.div>
             )}
 
-            {voiceState === 'processing' && (
+            {uiVoiceState === 'processing' && (
               <motion.div
                 key="processing"
                 initial={{ opacity: 0, height: 0 }}
@@ -1235,7 +867,7 @@ export default function DocEditorPage() {
               </motion.div>
             )}
 
-            {voiceState === 'submitting' && (
+            {uiVoiceState === 'submitting' && (
               <motion.div
                 key="submitting"
                 initial={{ opacity: 0, height: 0 }}
@@ -1253,7 +885,7 @@ export default function DocEditorPage() {
               </motion.div>
             )}
 
-            {voiceState === 'editing' && (
+            {uiVoiceState === 'editing' && (
               <motion.div
                 key="editing"
                 initial={{ opacity: 0, height: 0 }}
@@ -1278,37 +910,37 @@ export default function DocEditorPage() {
               {/* Mic button */}
               {voiceSupported && (
                 <motion.button
-                  whileHover={{ scale: voiceState === 'idle' || voiceState === 'listening' || voiceState === 'processing' ? 1.08 : 1 }}
-                  whileTap={{ scale: voiceState === 'idle' || voiceState === 'listening' || voiceState === 'processing' ? 0.92 : 1 }}
+                  whileHover={{ scale: uiVoiceState === 'idle' || uiVoiceState === 'listening' || uiVoiceState === 'processing' ? 1.08 : 1 }}
+                  whileTap={{ scale: uiVoiceState === 'idle' || uiVoiceState === 'listening' || uiVoiceState === 'processing' ? 0.92 : 1 }}
                   onClick={toggleVoice}
-                  disabled={!file || isProcessing || voiceState === 'submitting' || voiceState === 'editing'}
+                  disabled={!file || isProcessing || uiVoiceState === 'submitting' || uiVoiceState === 'editing'}
                   className={`p-2.5 rounded-xl relative transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${
-                    voiceState === 'listening'
+                    uiVoiceState === 'listening'
                       ? 'bg-red-500/20 text-red-300 ring-2 ring-red-500/40'
-                      : voiceState === 'processing'
+                      : uiVoiceState === 'processing'
                       ? 'bg-emerald-500/20 text-emerald-300 ring-2 ring-emerald-500/40'
-                      : voiceState === 'submitting'
+                      : uiVoiceState === 'submitting'
                       ? 'bg-violet-500/20 text-violet-400'
-                      : voiceState === 'editing'
+                      : uiVoiceState === 'editing'
                       ? 'bg-blue-500/20 text-blue-400'
                       : 'text-slate-400 hover:text-white hover:bg-white/10'
                   }`}
                   title={
-                    voiceState === 'idle' ? 'Click to start voice input' :
-                    voiceState === 'listening' ? 'Listening... (click to cancel)' :
-                    voiceState === 'processing' ? 'Capturing command (click to stop & send)' :
-                    voiceState === 'submitting' ? 'Processing...' :
+                    uiVoiceState === 'idle' ? 'Click to start voice input' :
+                    uiVoiceState === 'listening' ? 'Listening... (click to cancel)' :
+                    uiVoiceState === 'processing' ? 'Capturing command (click to stop & send)' :
+                    uiVoiceState === 'submitting' ? 'Processing...' :
                     'Editing document...'
                   }
                 >
-                  {(voiceState === 'listening' || voiceState === 'processing') && (
+                  {(uiVoiceState === 'listening' || uiVoiceState === 'processing') && (
                     <span className={`absolute inset-0 rounded-xl animate-ping ${
-                      voiceState === 'listening' ? 'bg-red-500/20' : 'bg-emerald-500/20'
+                      uiVoiceState === 'listening' ? 'bg-red-500/20' : 'bg-emerald-500/20'
                     }`} />
                   )}
-                  {voiceState === 'submitting' || voiceState === 'editing' ? (
+                  {uiVoiceState === 'submitting' || uiVoiceState === 'editing' ? (
                     <Loader2 className="w-5 h-5 animate-spin relative" />
-                  ) : voiceState === 'listening' || voiceState === 'processing' ? (
+                  ) : uiVoiceState === 'listening' || uiVoiceState === 'processing' ? (
                     <MicOff className="w-5 h-5 relative" />
                   ) : (
                     <Mic className="w-5 h-5 relative" />
@@ -1326,17 +958,17 @@ export default function DocEditorPage() {
                 placeholder={
                   !file
                     ? 'Upload a document first...'
-                    : voiceState === 'listening'
+                    : uiVoiceState === 'listening'
                     ? 'Listening — start speaking anytime...'
-                    : voiceState === 'processing'
+                    : uiVoiceState === 'processing'
                     ? 'Capturing command — pause 2.5s to send'
-                    : voiceState === 'submitting'
+                    : uiVoiceState === 'submitting'
                     ? 'Processing...'
-                    : voiceState === 'editing'
+                    : uiVoiceState === 'editing'
                     ? 'Editing document...'
                     : 'Click mic or type your command...'
                 }
-                disabled={!file || isProcessing || voiceState !== 'idle'}
+                disabled={!file || isProcessing || uiVoiceState !== 'idle'}
                 className="flex-1 bg-transparent text-white placeholder-slate-500 text-sm px-2 py-2 outline-none disabled:opacity-50"
               />
 
@@ -1345,7 +977,7 @@ export default function DocEditorPage() {
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={() => sendMessage()}
-                disabled={!file || !inputText.trim() || isProcessing || voiceState !== 'idle'}
+                disabled={!file || !inputText.trim() || isProcessing || uiVoiceState !== 'idle'}
                 className="p-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-teal-500 text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
               >
                 {isProcessing ? (
@@ -1357,11 +989,11 @@ export default function DocEditorPage() {
             </div>
             <p className="text-center text-[11px] text-slate-500 mt-2">
               {voiceSupported
-                ? voiceState === 'idle'
+                ? uiVoiceState === 'idle'
                   ? 'Click the mic to start voice input, or type your command'
-                  : voiceState === 'listening'
+                  : uiVoiceState === 'listening'
                   ? 'Ready — start speaking whenever you want'
-                  : voiceState === 'processing'
+                  : uiVoiceState === 'processing'
                   ? 'Pause 2.5 seconds when done to auto-send'
                   : 'AI-powered document editing'
                 : 'AI-powered document editing'}
