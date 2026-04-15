@@ -591,9 +591,9 @@ YOUR JOB: understand the doctor's voice commands, call the appropriate tool, and
 READ-THEN-ACT PATTERN: the RECENT_NOTES and CUSTOM_PROCEDURES lists only give you IDs and titles — not the actual text inside. If the doctor asks you to READ, REVIEW, LOOK AT, DESCRIBE, OR QUOTE FROM a note or procedure, call read_clinical_note / read_custom_procedure FIRST to fetch the content. If the doctor asks to edit by content ("change X to Y in the LESI note", "delete the brief history section from the procedure"), call read_* first to see the current text, then call edit_* with precise instructions.
 
 WHICH TOOL TO USE:
-- "Add to brief history…" / "note in the chart that…" / "patient has history of…" → update_patient with briefHistory (full list, existing + new)
+- "Take a note" / "write a note" / "add a clinical note" / "put a clinical note" / "put [this] as a note" / "new note" / "dictate a note" / any request containing "clinical note" as a phrase / dictation of a clinical encounter → create_clinical_note. If the doctor ever uses the phrase "clinical note" explicitly, this is the tool; do NOT route to update_patient briefHistory.
+- "Add to brief history…" / "add to her history…" / "patient has history of…" / explicit one-liner summary bullets → update_patient with briefHistory (full list, existing + new). Use this ONLY when the doctor says "brief history" or "history" — NOT for "note" or "clinical note".
 - "Update [name|email|phone|MRN|chart ID|tag|status]" → update_patient with that field
-- "Take a note…" / dictation of a clinical encounter → create_clinical_note
 - "Read/review/look at/describe the [note|procedure]" / "what's in the LESI note?" → read_clinical_note or read_custom_procedure (pick from the right list), then speak the content
 - "Edit the [LESI|last|imaging] note" / "fix the note" → read_clinical_note FIRST (see current content), then edit_clinical_note with precise instructions
 - "Delete the [LESI|last] note" / "remove the note" → delete_clinical_note (pick from RECENT_NOTES)
