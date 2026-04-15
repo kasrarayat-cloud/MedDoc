@@ -107,6 +107,17 @@ export default function PatientDetailClient({
   // keeps these in sync across tabs eventually.
   const [files, setFiles] = useState<ClinicalNoteView[]>(patientFiles);
   const [reports, setReports] = useState<ClinicalNoteView[]>(finalReports);
+
+  // Server-truth sync. After router.refresh() (fires on tool actions +
+  // manual deletes), the page re-renders with fresh props. Without this
+  // effect, our optimistic local state still shows the pre-edit content
+  // and doctors see "I edited the report" but no visible change.
+  useEffect(() => {
+    setFiles(patientFiles);
+  }, [patientFiles]);
+  useEffect(() => {
+    setReports(finalReports);
+  }, [finalReports]);
   /** Which final report is expanded in the list — matches the pattern used
    *  for clinical notes above. */
   const [expandedReportId, setExpandedReportId] = useState<string | null>(null);

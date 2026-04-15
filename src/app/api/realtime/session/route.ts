@@ -136,6 +136,15 @@ export async function POST(request: NextRequest) {
         turn_detection: {
           type: 'semantic_vad',
           eagerness: 'medium',
+          // Explicitly enable server-driven response creation on every
+          // end-of-user-turn. Without this, subsequent turns after the
+          // first can silently fail to trigger a model response — the
+          // doctor asks a follow-up, the session stays quiet until they
+          // make noise (which OpenAI registers as a new turn).
+          create_response: true,
+          // Let the doctor interrupt the AI mid-speech without waiting
+          // for it to finish.
+          interrupt_response: true,
         },
         // Stream both directions as PCM16 — the WebRTC pipe handles the
         // codec negotiation, so we just declare the format we want.
