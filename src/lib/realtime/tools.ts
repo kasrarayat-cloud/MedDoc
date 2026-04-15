@@ -261,6 +261,24 @@ export const REALTIME_TOOLS: RealtimeTool[] = [
           description:
             "Patient's running clinical history bullets. REPLACE-SEMANTICS: send the FULL list (existing entries the doctor wants to keep + any new ones). Never send a list that omits existing entries unless the doctor explicitly asks to remove them.",
         },
+        sex: {
+          type: 'string',
+          enum: ['UNKNOWN', 'MALE', 'FEMALE', 'OTHER'],
+          description:
+            "Biological sex — clinical context only. Set only on direct statement from the doctor (\"mark as female\", \"set sex to male\"). Don't infer from pronouns.",
+        },
+        addressLine1: { type: 'string', description: 'Street address line 1 (e.g., "5325 New Castle Ave").' },
+        addressLine2: { type: 'string', description: 'Apt / suite / unit, optional.' },
+        city: { type: 'string', description: 'City name.' },
+        state: { type: 'string', description: 'US 2-letter state code ("CA"). Spell out → abbreviate (California → CA).' },
+        postalCode: { type: 'string', description: 'ZIP / postal code.' },
+        pharmacyName: { type: 'string', description: 'Preferred pharmacy name + location, e.g. "CVS on Market Street".' },
+        pharmacyPhone: { type: 'string', description: "Pharmacy phone, free-format — same rules as cellPhone." },
+        assignedDoctorId: {
+          type: 'string',
+          description:
+            "User ID of the assigned provider. ONLY set this if you have an actual cuid — do NOT pass a name here. If the doctor says 'assign to Dr. Smith', you cannot resolve the name to an ID from voice, so acknowledge verbally but leave this alone; the doctor can re-assign from the Edit modal.",
+        },
       },
       additionalProperties: false,
     },

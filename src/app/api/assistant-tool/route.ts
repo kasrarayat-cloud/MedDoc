@@ -385,6 +385,33 @@ export async function POST(request: NextRequest) {
         if (Array.isArray(args.briefHistory) && args.briefHistory.every((b) => typeof b === 'string')) {
           updates.briefHistory = args.briefHistory as string[];
         }
+        if (
+          typeof args.sex === 'string' &&
+          (args.sex === 'UNKNOWN' ||
+            args.sex === 'MALE' ||
+            args.sex === 'FEMALE' ||
+            args.sex === 'OTHER')
+        ) {
+          updates.sex = args.sex;
+        }
+        if (typeof args.addressLine1 === 'string') updates.addressLine1 = args.addressLine1;
+        if (typeof args.addressLine2 === 'string') updates.addressLine2 = args.addressLine2;
+        if (typeof args.city === 'string') updates.city = args.city;
+        if (typeof args.state === 'string') {
+          // US 2-char upper to match what the DB stores + the form
+          // normalizes to. Keeps voice edits consistent with typed edits.
+          updates.state = args.state.replace(/[^A-Za-z]/g, '').slice(0, 2).toUpperCase();
+        }
+        if (typeof args.postalCode === 'string') updates.postalCode = args.postalCode;
+        if (typeof args.pharmacyName === 'string') updates.pharmacyName = args.pharmacyName;
+        if (typeof args.pharmacyPhone === 'string') updates.pharmacyPhone = args.pharmacyPhone;
+        if (typeof args.assignedDoctorId === 'string') {
+          // dispatchUpdatePatient → dataUpdatePatient enforces tenant
+          // scope on the patient, but the target user has to be
+          // validated separately. Do the same check the Add Patient
+          // server action does.
+          updates.assignedDoctorId = args.assignedDoctorId;
+        }
         const result = await dispatchUpdatePatient(patient, updates, session);
         return NextResponse.json<ToolResponse>(toToolResponse(result));
       }

@@ -2191,6 +2191,17 @@ export interface UpdatePatientFromAssistant {
   status?: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
   insuranceVerified?: boolean;
   briefHistory?: string[];
+  sex?: 'UNKNOWN' | 'MALE' | 'FEMALE' | 'OTHER';
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+  pharmacyName?: string;
+  pharmacyPhone?: string;
+  /** User ID of the assigned provider. Must belong to the same
+   *  practice; enforced at dispatch time. */
+  assignedDoctorId?: string;
 }
 
 export async function dispatchUpdatePatient(
