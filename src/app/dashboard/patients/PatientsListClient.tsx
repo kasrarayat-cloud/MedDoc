@@ -16,6 +16,9 @@ import {
   MoreVertical,
   Archive,
   Loader2,
+  ShieldCheck,
+  ShieldAlert,
+  Shield,
 } from 'lucide-react';
 import { formatLastVisit, formatRelativeDate, type PatientStatus } from '@/lib/mock-patients';
 import type { PatientView } from '@/lib/data/patients';
@@ -45,6 +48,12 @@ export default function PatientsListClient({ initialPatients }: PatientsListClie
   const router = useRouter();
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | PatientStatus>('ALL');
+  // Insurance verification filter. Tri-state `insuranceVerified` on the
+  // patient row (true/false/null) maps to our three discriminating labels:
+  //   VERIFIED = true, UNVERIFIED = false, PENDING = null/undefined.
+  const [insuranceFilter, setInsuranceFilter] = useState<
+    'ALL' | 'VERIFIED' | 'UNVERIFIED' | 'PENDING'
+  >('ALL');
   const [showAddModal, setShowAddModal] = useState(false);
   const [openKebabId, setOpenKebabId] = useState<string | null>(null);
   const [archivingId, setArchivingId] = useState<string | null>(null);
@@ -108,8 +117,16 @@ export default function PatientsListClient({ initialPatients }: PatientsListClie
     if (statusFilter !== 'ALL') {
       result = result.filter((p) => p.status === statusFilter);
     }
+    if (insuranceFilter !== 'ALL') {
+      result = result.filter((p) => {
+        if (insuranceFilter === 'VERIFIED') return p.insuranceVerified === true;
+        if (insuranceFilter === 'UNVERIFIED') return p.insuranceVerified === false;
+        // PENDING = null/undefined (never been checked).
+        return p.insuranceVerified === undefined || p.insuranceVerified === null;
+      });
+    }
     return result;
-  }, [query, statusFilter, initialPatients]);
+  }, [query, statusFilter, insuranceFilter, initialPatients]);
 
   const totalActive = initialPatients.filter((p) => p.status === 'ACTIVE').length;
 
@@ -244,6 +261,39 @@ export default function PatientsListClient({ initialPatients }: PatientsListClie
               </button>
             ))}
           </div>
+          {/* Insurance filter chips. Tri-state + All so doctors can
+              quickly sort patients needing verification vs. already
+              cleared vs. not yet checked. */}
+          <div className="flex items-center gap-1 p-1 rounded-lg bg-slate-900/50 border border-white/5">
+            {(
+              [
+                { key: 'ALL', label: 'All ins.', icon: Shield },
+                { key: 'VERIFIED', label: 'Verified', icon: ShieldCheck },
+                { key: 'UNVERIFIED', label: 'Unverified', icon: ShieldAlert },
+                { key: 'PENDING', label: 'Pending', icon: Shield },
+              ] as const
+            ).map(({ key, label, icon: Icon }) => (
+              <button
+                key={key}
+                onClick={() => setInsuranceFilter(key)}
+                title={`Insurance: ${label}`}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-all cursor-pointer ${
+                  insuranceFilter === key
+                    ? key === 'VERIFIED'
+                      ? 'bg-emerald-500/20 text-emerald-300'
+                      : key === 'UNVERIFIED'
+                        ? 'bg-red-500/20 text-red-300'
+                        : key === 'PENDING'
+                          ? 'bg-slate-500/20 text-slate-200'
+                          : 'bg-white/10 text-white'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Icon className="w-3 h-3" />
+                {label}
+              </button>
+            ))}
+          </div>
           <button className="px-3 py-2 rounded-lg border border-white/10 hover:border-white/20 text-slate-300 hover:text-white text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer">
             <Filter className="w-3.5 h-3.5" />
             More
@@ -318,10 +368,38 @@ export default function PatientsListClient({ initialPatients }: PatientsListClie
                         <p className="text-sm font-semibold text-white truncate">
                           {patient.firstName} {patient.lastName}
                         </p>
-                        <div className="flex items-center gap-2 mt-0.5">
+                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                           <span className="text-[10px] text-slate-500 font-mono">
                             {patient.mrn || '—'}
                           </span>
+                          {/* Insurance verification badge — three states:
+                              verified (green), unverified (red), pending
+                              (slate). Tooltip carries the label for a11y. */}
+                          {patient.insuranceVerified === true ? (
+                            <span
+                              title="Insurance verified"
+                              className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20"
+                            >
+                              <ShieldCheck className="w-3 h-3" />
+                              Insurance
+                            </span>
+                          ) : patient.insuranceVerified === false ? (
+                            <span
+                              title="Insurance NOT verified"
+                              className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-300 border border-red-500/20"
+                            >
+                              <ShieldAlert className="w-3 h-3" />
+                              Unverified
+                            </span>
+                          ) : (
+                            <span
+                              title="Insurance verification pending"
+                              className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-slate-500/10 text-slate-400 border border-slate-500/20"
+                            >
+                              <Shield className="w-3 h-3" />
+                              Pending
+                            </span>
+                          )}
                           {patient.tags[0] && (
                             <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-slate-400 border border-white/5">
                               {patient.tags[0]}

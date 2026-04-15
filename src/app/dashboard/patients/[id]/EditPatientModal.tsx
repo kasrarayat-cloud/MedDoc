@@ -5,8 +5,7 @@
 // ----------------------------------------------------------------------------
 // Pre-populated form that calls `updatePatientAction`. Mirrors
 // AddPatientModal field-for-field so anything captured at intake can be
-// corrected later. DrChrono ID stays read-only (that's the source of
-// truth; edits belong in DrChrono, not here).
+// corrected later.
 // ============================================================================
 
 import { useState, useEffect, useTransition, useCallback } from 'react';
@@ -198,10 +197,10 @@ function EditPatientModalContent({
                 </h2>
                 <p className="text-xs text-slate-400 truncate">
                   {patient.firstName} {patient.lastName}
-                  {patient.drChronoId ? (
+                  {patient.chartId ? (
                     <>
                       {' · '}
-                      <span className="font-mono">{patient.drChronoId}</span>
+                      <span className="font-mono">{patient.chartId}</span>
                     </>
                   ) : null}
                 </p>
@@ -262,27 +261,16 @@ function EditPatientModalContent({
               </Field>
             </div>
 
-            {/* DrChrono ID (read-only) + MRN */}
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="DrChrono ID" hint="Read-only — source of truth">
-                <input
-                  type="text"
-                  value={patient.drChronoId ?? ''}
-                  readOnly
-                  placeholder="(none)"
-                  className="input-styled font-mono opacity-50 cursor-not-allowed"
-                />
-              </Field>
-              <Field label="MRN" error={fieldErrors.mrn?.[0]}>
-                <input
-                  type="text"
-                  value={form.mrn}
-                  onChange={(e) => update('mrn', e.target.value)}
-                  disabled={isPending}
-                  className="input-styled font-mono"
-                />
-              </Field>
-            </div>
+            {/* MRN */}
+            <Field label="MRN" error={fieldErrors.mrn?.[0]}>
+              <input
+                type="text"
+                value={form.mrn}
+                onChange={(e) => update('mrn', e.target.value)}
+                disabled={isPending}
+                className="input-styled font-mono"
+              />
+            </Field>
 
             {/* Birth year + phoneLast4 */}
             <div className="grid grid-cols-2 gap-3">
