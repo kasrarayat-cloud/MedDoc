@@ -80,6 +80,19 @@ export default function DocEditorPage() {
   const [voiceState, setVoiceState] = useState<VoiceState>(null);
   const [liveTranscript, setLiveTranscript] = useState('');
 
+  // Pending-update preview state — the diff shown before an AI edit is
+  // committed. When non-null, the doc pane renders a BEFORE/AFTER view
+  // with Apply / Reject buttons instead of the structured document. The
+  // doctor can reject an edit they didn't mean to request. Keeps bad AI
+  // edits from silently corrupting the doc.
+  type PendingUpdate = {
+    before: string;
+    after: string;
+    instruction: string;
+    aiNote: string;
+  };
+  const [pendingUpdate, setPendingUpdate] = useState<PendingUpdate | null>(null);
+
   // Save state
   const [isSaving, setIsSaving] = useState(false);
 
@@ -167,15 +180,14 @@ export default function DocEditorPage() {
       };
 
       const rawUpdated = extractUpdatedDoc(aiText);
-      let docWasUpdated = false;
+      let proposedDoc: string | null = null;
       if (rawUpdated) {
         const updated = rawUpdated
           .replace(/^---\s*$/gm, '') // strip our own --- separators if echoed back
           .replace(/^```\s*$/gm, '') // strip any stray fences
           .trim();
         if (updated.length > 20) {
-          setDocumentContent(updated);
-          docWasUpdated = true;
+          proposedDoc = updated;
         }
       }
 
@@ -185,7 +197,7 @@ export default function DocEditorPage() {
       // Also strip a truncated trailing block (no close fence).
       display = display.replace(/```[\s\S]*$/g, '').trim();
 
-      if (!docWasUpdated) {
+      if (!proposedDoc) {
         // The model replied but didn't include a valid UPDATED_DOC
         // block — the document was NOT changed. Tell the doctor
         // explicitly instead of silently showing "Changes applied."
@@ -197,16 +209,30 @@ export default function DocEditorPage() {
           ...prev,
           { id: makeId(), role: 'system', content: warning, timestamp: new Date() },
         ]);
-      } else {
+      } else if (proposedDoc === documentContentRef.current) {
+        // Edge case: the AI returned a document identical to the input
+        // (model decided not to change anything, or rebuilt it 1:1).
+        // Nothing to review — just surface the explanation in chat.
         setMessages((prev) => [
           ...prev,
           {
             id: makeId(),
-            role: 'assistant',
-            content: display || 'Changes applied.',
+            role: 'system',
+            content:
+              (display || 'No changes were needed.') +
+              '\n\nℹ️ The AI returned the document unchanged.',
             timestamp: new Date(),
           },
         ]);
+      } else {
+        // Don't commit the edit yet — stage it as a pending review.
+        // The doctor clicks Apply to commit or Reject to discard.
+        setPendingUpdate({
+          before: documentContentRef.current,
+          after: proposedDoc,
+          instruction: text,
+          aiNote: display || 'Proposed edit — review before applying.',
+        });
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Request failed';
@@ -272,22 +298,23 @@ export default function DocEditorPage() {
   );
 
   const voice = useVoiceRecorder({
-    // Same tuning as Add Patient: room to think between phrases + a
-    // generous hard cap for long dictated edits.
-    silenceTimeoutMs: 4000,
+    // 2.5s silence before auto-submit — matches the on-screen hint copy.
+    // Hard cap at 2 minutes for long dictated edits.
+    silenceTimeoutMs: 2500,
     maxDurationMs: 120_000,
     onAutoStop: handleAudioBlob,
   });
 
   const toggleVoice = useCallback(async () => {
     if (voiceState === 'submitting' || voiceState === 'editing') return;
+    if (pendingUpdate) return; // must resolve pending review first
     if (voice.isRecording) {
       const blob = await voice.stop();
       void handleAudioBlob(blob);
     } else {
       void voice.start();
     }
-  }, [voice, voiceState, handleAudioBlob]);
+  }, [voice, voiceState, pendingUpdate, handleAudioBlob]);
 
   const cancelVoice = useCallback(() => {
     if (voice.isRecording) void voice.stop();
@@ -404,9 +431,48 @@ export default function DocEditorPage() {
     setDocumentContent('');
     setMessages([]);
     setUploadError('');
+    setPendingUpdate(null);
     cancelVoice();
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
+
+  // -----------------------------------------------------------------------
+  // Pending-update preview: apply = commit the AI's edit. reject = discard.
+  // Both leave a chat breadcrumb so the doctor can see the history of
+  // approvals/rejections.
+  // -----------------------------------------------------------------------
+  const applyPendingUpdate = useCallback(() => {
+    setPendingUpdate((pending) => {
+      if (!pending) return null;
+      setDocumentContent(pending.after);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: makeId(),
+          role: 'assistant',
+          content: `✓ Applied: ${pending.instruction}`,
+          timestamp: new Date(),
+        },
+      ]);
+      return null;
+    });
+  }, []);
+
+  const rejectPendingUpdate = useCallback(() => {
+    setPendingUpdate((pending) => {
+      if (!pending) return null;
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: makeId(),
+          role: 'system',
+          content: `✗ Discarded AI edit (document unchanged). You can rephrase and try again.`,
+          timestamp: new Date(),
+        },
+      ]);
+      return null;
+    });
+  }, []);
 
   // -----------------------------------------------------------------------
   // Send Message (Edit instruction)
@@ -416,6 +482,7 @@ export default function DocEditorPage() {
     async (text?: string) => {
       const messageText = text || inputText.trim();
       if (!messageText || !documentContent || isProcessing) return;
+      if (pendingUpdate) return;
 
       // Cancel active voice recording if user types manually
       if (voice.isRecording) {
@@ -424,7 +491,7 @@ export default function DocEditorPage() {
 
       await sendToAI(messageText);
     },
-    [inputText, documentContent, isProcessing, voice, cancelVoice, sendToAI]
+    [inputText, documentContent, isProcessing, pendingUpdate, voice, cancelVoice, sendToAI]
   );
 
   // -----------------------------------------------------------------------
@@ -603,7 +670,8 @@ export default function DocEditorPage() {
                   whileHover={{ scale: 1.03 }}
                   whileTap={{ scale: 0.97 }}
                   onClick={() => saveDocument('docx')}
-                  disabled={isSaving}
+                  disabled={isSaving || !!pendingUpdate}
+                  title={pendingUpdate ? 'Apply or reject the pending AI edit first' : undefined}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white text-xs font-semibold rounded-lg shadow-lg shadow-emerald-500/20 disabled:opacity-50 transition-all cursor-pointer"
                 >
                   {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
@@ -624,6 +692,78 @@ export default function DocEditorPage() {
                     <Loader2 className="w-6 h-6 text-blue-400 animate-spin" />
                     <p className="ml-3 text-slate-400">Reading document...</p>
                   </div>
+                ) : pendingUpdate ? (
+                  (() => {
+                    const beforeWords = pendingUpdate.before.split(/\s+/).filter(Boolean).length;
+                    const afterWords = pendingUpdate.after.split(/\s+/).filter(Boolean).length;
+                    const delta = afterWords - beforeWords;
+                    const deltaLabel =
+                      delta === 0 ? 'no change' : delta > 0 ? `+${delta} words` : `${delta} words`;
+                    return (
+                      <div className="space-y-3">
+                        {/* Action banner */}
+                        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3">
+                          <div className="flex items-start gap-2">
+                            <AlertCircle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[13px] font-semibold text-amber-200">
+                                Review AI edit before applying
+                              </p>
+                              <p className="text-[11px] text-amber-300/80 mt-0.5 break-words">
+                                Instruction: &quot;{pendingUpdate.instruction}&quot;
+                              </p>
+                              <p className="text-[11px] text-amber-300/70 mt-0.5">
+                                Words: {beforeWords} → {afterWords} ({deltaLabel})
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex gap-2 mt-3">
+                            <motion.button
+                              whileHover={{ scale: 1.02 }}
+                              whileTap={{ scale: 0.98 }}
+                              onClick={applyPendingUpdate}
+                              className="flex-1 px-3 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-xs font-semibold rounded-lg shadow shadow-emerald-500/20 cursor-pointer"
+                            >
+                              ✓ Apply changes
+                            </motion.button>
+                            <motion.button
+                              whileHover={{ scale: 1.02 }}
+                              whileTap={{ scale: 0.98 }}
+                              onClick={rejectPendingUpdate}
+                              className="flex-1 px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white text-xs font-semibold rounded-lg cursor-pointer"
+                            >
+                              ✗ Reject
+                            </motion.button>
+                          </div>
+                          {pendingUpdate.aiNote && (
+                            <p className="text-[11px] text-amber-200/70 italic mt-2 whitespace-pre-wrap break-words">
+                              {pendingUpdate.aiNote}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* BEFORE */}
+                        <div className="rounded-lg border border-slate-700 bg-slate-800/40 p-3">
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">
+                            Before (current document)
+                          </p>
+                          <pre className="text-[12px] text-slate-400 font-sans whitespace-pre-wrap break-words leading-relaxed max-h-[300px] overflow-y-auto">
+                            {pendingUpdate.before}
+                          </pre>
+                        </div>
+
+                        {/* AFTER */}
+                        <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/5 p-3">
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-400 mb-2">
+                            After (proposed change)
+                          </p>
+                          <pre className="text-[12px] text-white font-sans whitespace-pre-wrap break-words leading-relaxed max-h-[300px] overflow-y-auto">
+                            {pendingUpdate.after}
+                          </pre>
+                        </div>
+                      </div>
+                    );
+                  })()
                 ) : (
                   <div className="space-y-2">
                     {(() => {
@@ -1019,6 +1159,8 @@ export default function DocEditorPage() {
                 placeholder={
                   !file
                     ? 'Upload a document first...'
+                    : pendingUpdate
+                    ? 'Apply or reject the pending AI edit before continuing...'
                     : uiVoiceState === 'listening'
                     ? 'Listening — start speaking anytime...'
                     : uiVoiceState === 'processing'
@@ -1029,7 +1171,7 @@ export default function DocEditorPage() {
                     ? 'Editing document...'
                     : 'Click mic or type your command...'
                 }
-                disabled={!file || isProcessing || uiVoiceState !== 'idle'}
+                disabled={!file || isProcessing || uiVoiceState !== 'idle' || !!pendingUpdate}
                 className="flex-1 bg-transparent text-white placeholder-slate-500 text-sm px-2 py-2 outline-none disabled:opacity-50"
               />
 
@@ -1038,7 +1180,7 @@ export default function DocEditorPage() {
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={() => sendMessage()}
-                disabled={!file || !inputText.trim() || isProcessing || uiVoiceState !== 'idle'}
+                disabled={!file || !inputText.trim() || isProcessing || uiVoiceState !== 'idle' || !!pendingUpdate}
                 className="p-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-teal-500 text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
               >
                 {isProcessing ? (

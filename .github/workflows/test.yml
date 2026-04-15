@@ -1,0 +1,90 @@
+# ============================================================================
+# CI — runs the same pipeline as `npm run test:all` locally
+# ----------------------------------------------------------------------------
+# Seeds tenancy fixtures + super-admin, runs Vitest adversarial suite, then
+# Playwright E2E suite. Playwright's webServer block boots `next dev` on its
+# own — no separate server step needed.
+#
+# The tests don't call OpenAI: unit tests are pure or mock the client, E2E
+# tests stop before the voice/AI flow (see tests/e2e/assistant.spec.ts). A
+# dummy OPENAI_API_KEY is fine and avoids requiring a repo secret for PRs
+# from forks.
+# ============================================================================
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: meddoc
+          POSTGRES_PASSWORD: meddoc
+          POSTGRES_DB: meddoc
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U meddoc -d meddoc"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://meddoc:meddoc@localhost:5432/meddoc?schema=public
+      AUTH_SECRET: ci-dummy-auth-secret-not-for-production
+      AUTH_USE_MOCK: "true"
+      NEXTAUTH_URL: http://localhost:3000
+      OPENAI_API_KEY: ci-dummy-openai-key
+      CI: "true"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Apply database migrations
+        run: npx prisma migrate deploy
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run test pipeline (seed + vitest + playwright)
+        run: npm run test:all
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+      - name: Upload Playwright traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results
+          path: test-results/
+          retention-days: 7
