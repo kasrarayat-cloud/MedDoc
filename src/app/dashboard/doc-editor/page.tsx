@@ -140,13 +140,74 @@ export default function DocEditorPage() {
       }
 
       const aiText: string = data.aiResponse || '';
-      const docMatch = aiText.match(/UPDATED_DOC\s*\n([\s\S]*?)```/);
-      if (docMatch?.[1]) {
-        const updated = docMatch[1].replace(/^---\s*$/gm, '').trim();
-        if (updated.length > 20) setDocumentContent(updated);
+
+      // Extract the UPDATED_DOC block. Multiple patterns because the
+      // model drifts: sometimes the fence is lowercase, sometimes it's
+      // truncated mid-doc and the closing ``` is missing, sometimes
+      // there's leading/trailing whitespace. Try strict → loose → open.
+      const extractUpdatedDoc = (text: string): string | null => {
+        // Strict: ```UPDATED_DOC\n<content>\n```
+        const strict = text.match(
+          /```\s*UPDATED_DOC\s*\r?\n([\s\S]*?)\r?\n```/i
+        );
+        if (strict?.[1]) return strict[1];
+        // Truncated: no closing fence. Take everything after the opener.
+        const truncated = text.match(/```\s*UPDATED_DOC\s*\r?\n([\s\S]*)$/i);
+        if (truncated?.[1]) {
+          // If there's a stray closing fence partway through (rare), cut
+          // there; otherwise keep the whole tail.
+          const tail = truncated[1];
+          const strayClose = tail.lastIndexOf('```');
+          return strayClose > 50 ? tail.slice(0, strayClose) : tail;
+        }
+        // Bare marker without fence (model emitted "UPDATED_DOC:" etc.).
+        const bare = text.match(/UPDATED_DOC[:\s-]*\r?\n([\s\S]*)$/i);
+        if (bare?.[1]) return bare[1];
+        return null;
+      };
+
+      const rawUpdated = extractUpdatedDoc(aiText);
+      let docWasUpdated = false;
+      if (rawUpdated) {
+        const updated = rawUpdated
+          .replace(/^---\s*$/gm, '') // strip our own --- separators if echoed back
+          .replace(/^```\s*$/gm, '') // strip any stray fences
+          .trim();
+        if (updated.length > 20) {
+          setDocumentContent(updated);
+          docWasUpdated = true;
+        }
       }
-      const display = aiText.replace(/```[\s\S]*?```/g, '').trim() || 'Changes applied.';
-      setMessages(prev => [...prev, { id: makeId(), role: 'assistant', content: display, timestamp: new Date() }]);
+
+      // Strip all fenced code blocks from the display text so the
+      // user doesn't see the raw UPDATED_DOC dump in chat.
+      let display = aiText.replace(/```[\s\S]*?```/g, '').trim();
+      // Also strip a truncated trailing block (no close fence).
+      display = display.replace(/```[\s\S]*$/g, '').trim();
+
+      if (!docWasUpdated) {
+        // The model replied but didn't include a valid UPDATED_DOC
+        // block — the document was NOT changed. Tell the doctor
+        // explicitly instead of silently showing "Changes applied."
+        // while the file still shows the old version.
+        const warning =
+          (display || 'The AI replied without an updated document.') +
+          '\n\n⚠️ No changes applied — the AI didn\'t return the edited document. Try rephrasing the request (e.g., "change X to Y in the document").';
+        setMessages((prev) => [
+          ...prev,
+          { id: makeId(), role: 'system', content: warning, timestamp: new Date() },
+        ]);
+      } else {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: makeId(),
+            role: 'assistant',
+            content: display || 'Changes applied.',
+            timestamp: new Date(),
+          },
+        ]);
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Request failed';
       setMessages(prev => [...prev, { id: makeId(), role: 'assistant', content: `Error: ${msg}`, timestamp: new Date() }]);

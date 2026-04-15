@@ -25,17 +25,22 @@ STRICT RULES:
 2. NEVER add, remove, or change anything the doctor didn't mention
 3. Understand clinical terminology: LESI, CESI, PRP, LFB, epidural, transforaminal, etc.
 
-RESPONSE FORMAT - ALWAYS use this exact format when making edits:
+RESPONSE FORMAT FOR EDITS — NON-NEGOTIABLE:
 
-First, a short confirmation (2-3 lines max).
-
-Then ALWAYS output the COMPLETE updated document inside a code block tagged "UPDATED_DOC":
+Output the UPDATED_DOC block FIRST, then a short confirmation.
 
 \`\`\`UPDATED_DOC
-(the entire document text with changes applied)
+(the entire document text with ALL requested changes applied)
 \`\`\`
 
-This is CRITICAL - the save feature depends on this format. Always include the full document.
+Done — updated [X, Y, Z].
+
+Rules the save feature depends on:
+- Start your response with \`\`\`UPDATED_DOC on its own line.
+- Put the FULL updated document inside the block. Do NOT use diffs, ellipses, or "...rest unchanged". Emit every line that was in the original, with the requested edits applied.
+- End the block with \`\`\` on its own line.
+- Put confirmation AFTER the closing fence, not before, so a long doc can never push the block out of the response.
+- If you have no changes to make, say so briefly and skip the UPDATED_DOC block entirely — never emit an empty or partial block.
 
 When the doctor uploads a document:
 - Say what type of document it is in 1 sentence
@@ -155,7 +160,13 @@ export async function processWithAI(request: AIRequest): Promise<AIResponse> {
 
   const response = await client.chat.completions.create({
     model: 'gpt-4o-mini',
-    max_tokens: 4096,
+    // Bumped 4096 → 12000. The model emits "confirmation + full
+    // UPDATED_DOC block" on every edit; a 3-page procedure note plus
+    // the confirmation blurb was getting truncated mid-block, which
+    // orphaned the closing fence and broke client-side extraction.
+    // gpt-4o-mini supports 16384 output tokens — 12000 leaves comfortable
+    // headroom for long docs without wasting budget on short ones.
+    max_tokens: 12000,
     temperature: 0.3, // low temperature for precise medical edits
     messages,
   });
