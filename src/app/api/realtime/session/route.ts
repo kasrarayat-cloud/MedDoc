@@ -123,15 +123,12 @@ export async function POST(request: NextRequest) {
           timezone,
         }),
         tools: REALTIME_TOOLS,
-        // Allow the model to call multiple tools in one response. Without
-        // this, a "update her email AND change the pharmacy AND fix the
-        // note" command would only execute the first one — doctors
-        // noticed partial work.
-        parallel_tool_calls: true,
-        // Raise the per-response token cap so a multi-step tool chain
-        // (read → edit → speak, or five updates in a row) doesn't get
-        // truncated and silently lose tail-end actions.
-        max_response_output_tokens: 4096,
+        // NOTE: parallel_tool_calls / max_response_output_tokens are NOT
+        // valid at the session level in the Realtime API (they're
+        // response-level fields). Setting them here produces a 400 on
+        // session creation. The prompt rule 1a ("complete every
+        // requested change before speaking") is the compliance
+        // mechanism for multi-edit turns instead.
         // Semantic VAD — ML classifier that distinguishes human speech
         // from ambient noise (breathing, chair scrapes, HVAC). Much better
         // in a clinic setting than the older server_vad threshold detector.
@@ -175,8 +172,17 @@ export async function POST(request: NextRequest) {
   if (!openaiResp.ok) {
     const text = await openaiResp.text();
     console.error('[realtime/session] OpenAI returned', openaiResp.status, text);
+    // Extract a short reason from OpenAI's JSON-shaped error so the
+    // client sees something actionable instead of a bare status code.
+    let detail = '';
+    try {
+      const parsed = JSON.parse(text) as { error?: { message?: string } };
+      detail = parsed.error?.message ? ` — ${parsed.error.message}` : '';
+    } catch {
+      // non-JSON body, leave detail empty
+    }
     return NextResponse.json(
-      { error: `OpenAI session creation failed (${openaiResp.status})` },
+      { error: `OpenAI session creation failed (${openaiResp.status})${detail}` },
       { status: 502 }
     );
   }
