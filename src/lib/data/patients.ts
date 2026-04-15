@@ -407,9 +407,15 @@ export async function updatePatient(
 
   if (await isDatabaseHealthy()) {
     try {
+      // `sex` is a NOT-NULL enum column (@default UNKNOWN), so callers
+      // passing null (meaning "not specified") would break the write.
+      // Translate null → UNKNOWN here so the DB always sees a valid
+      // enum value.
+      const dbInput: Record<string, unknown> = { ...input };
+      if (dbInput.sex === null) dbInput.sex = 'UNKNOWN';
       const row = await prisma.patient.update({
         where: { id },
-        data: input,
+        data: dbInput,
       });
       return { patient: prismaToView(row), changedFields };
     } catch (err) {
