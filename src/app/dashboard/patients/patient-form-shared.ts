@@ -42,7 +42,14 @@ export interface PatientProfileFormState {
   phoneLast4: string;
   cellPhone: string;
   homePhone: string;
-  insuranceVerified: boolean;
+  /** Tri-state insurance status:
+   *  - true:  card on file, eligibility checked
+   *  - false: explicit self-pay or denial
+   *  - null:  pending verification (also the default for new patients)
+   *
+   *  The patient list filter, the contact-strip badge on the detail
+   *  page, and this form all share the same tri-state convention. */
+  insuranceVerified: boolean | null;
   sex: PatientSex;
   addressLine1: string;
   addressLine2: string;
@@ -66,7 +73,10 @@ export function emptyPatientProfile(): PatientProfileFormState {
     phoneLast4: '',
     cellPhone: '',
     homePhone: '',
-    insuranceVerified: false,
+    // Default = null (Pending). New patients are unchecked until front desk
+    // verifies. Don't default to `false` — that would silently mark every
+    // intake as self-pay.
+    insuranceVerified: null,
     sex: 'UNKNOWN',
     addressLine1: '',
     addressLine2: '',
@@ -91,7 +101,7 @@ export function patientViewToProfile(p: PatientView): PatientProfileFormState {
     phoneLast4: p.phoneLast4 ?? '',
     cellPhone: p.cellPhone ?? '',
     homePhone: p.homePhone ?? '',
-    insuranceVerified: p.insuranceVerified ?? false,
+    insuranceVerified: p.insuranceVerified ?? null,
     sex: p.sex ?? 'UNKNOWN',
     addressLine1: p.addressLine1 ?? '',
     addressLine2: p.addressLine2 ?? '',
@@ -115,7 +125,8 @@ export interface PatientProfilePayload {
   phoneLast4: string | null;
   cellPhone: string | null;
   homePhone: string | null;
-  insuranceVerified: boolean;
+  /** Tri-state — see PatientProfileFormState.insuranceVerified. */
+  insuranceVerified: boolean | null;
   sex: PatientSex | null;
   addressLine1: string | null;
   addressLine2: string | null;

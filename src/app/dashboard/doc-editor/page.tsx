@@ -93,6 +93,12 @@ export default function DocEditorPage() {
   };
   const [pendingUpdate, setPendingUpdate] = useState<PendingUpdate | null>(null);
 
+  // Manual edit mode — doctor bypasses the AI and edits the raw document
+  // text directly. Separate draft state so the textarea can be edited
+  // without committing until the doctor clicks Save.
+  const [isManualEditing, setIsManualEditing] = useState(false);
+  const [manualDraft, setManualDraft] = useState('');
+
   // Save state
   const [isSaving, setIsSaving] = useState(false);
 
@@ -308,13 +314,14 @@ export default function DocEditorPage() {
   const toggleVoice = useCallback(async () => {
     if (voiceState === 'submitting' || voiceState === 'editing') return;
     if (pendingUpdate) return; // must resolve pending review first
+    if (isManualEditing) return; // manual edit locks out AI voice input
     if (voice.isRecording) {
       const blob = await voice.stop();
       void handleAudioBlob(blob);
     } else {
       void voice.start();
     }
-  }, [voice, voiceState, pendingUpdate, handleAudioBlob]);
+  }, [voice, voiceState, pendingUpdate, isManualEditing, handleAudioBlob]);
 
   const cancelVoice = useCallback(() => {
     if (voice.isRecording) void voice.stop();
@@ -432,6 +439,8 @@ export default function DocEditorPage() {
     setMessages([]);
     setUploadError('');
     setPendingUpdate(null);
+    setIsManualEditing(false);
+    setManualDraft('');
     cancelVoice();
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -475,6 +484,33 @@ export default function DocEditorPage() {
   }, []);
 
   // -----------------------------------------------------------------------
+  // Manual edit mode
+  // -----------------------------------------------------------------------
+  const enterManualEdit = useCallback(() => {
+    setManualDraft(documentContent);
+    setIsManualEditing(true);
+  }, [documentContent]);
+
+  const saveManualEdit = useCallback(() => {
+    setDocumentContent(manualDraft);
+    setIsManualEditing(false);
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: makeId(),
+        role: 'system',
+        content: '✓ Manual edits saved to the document.',
+        timestamp: new Date(),
+      },
+    ]);
+  }, [manualDraft]);
+
+  const cancelManualEdit = useCallback(() => {
+    setManualDraft('');
+    setIsManualEditing(false);
+  }, []);
+
+  // -----------------------------------------------------------------------
   // Send Message (Edit instruction)
   // -----------------------------------------------------------------------
 
@@ -483,6 +519,7 @@ export default function DocEditorPage() {
       const messageText = text || inputText.trim();
       if (!messageText || !documentContent || isProcessing) return;
       if (pendingUpdate) return;
+      if (isManualEditing) return;
 
       // Cancel active voice recording if user types manually
       if (voice.isRecording) {
@@ -491,7 +528,7 @@ export default function DocEditorPage() {
 
       await sendToAI(messageText);
     },
-    [inputText, documentContent, isProcessing, pendingUpdate, voice, cancelVoice, sendToAI]
+    [inputText, documentContent, isProcessing, pendingUpdate, isManualEditing, voice, cancelVoice, sendToAI]
   );
 
   // -----------------------------------------------------------------------
@@ -658,31 +695,75 @@ export default function DocEditorPage() {
           ) : (
             /* Document Preview - Real Document Look */
             <div className="flex flex-col h-full bg-slate-800/30">
-              {/* File header with Save */}
+              {/* File header */}
               <div className="flex items-center gap-2 px-3 py-2.5 border-b border-white/10 bg-slate-900/50">
                 <div className="p-1.5 rounded-lg bg-blue-500/20">
                   <FileText className="w-3.5 h-3.5 text-blue-400" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-white truncate">{file.name}</p>
+                  <p className="text-sm font-medium text-white truncate">
+                    {file.name}
+                    {isManualEditing && (
+                      <span className="text-blue-300 ml-2 font-normal">— editing manually</span>
+                    )}
+                  </p>
                 </div>
-                <motion.button
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.97 }}
-                  onClick={() => saveDocument('docx')}
-                  disabled={isSaving || !!pendingUpdate}
-                  title={pendingUpdate ? 'Apply or reject the pending AI edit first' : undefined}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white text-xs font-semibold rounded-lg shadow-lg shadow-emerald-500/20 disabled:opacity-50 transition-all cursor-pointer"
-                >
-                  {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                  Save .docx
-                </motion.button>
-                <button
-                  onClick={removeFile}
-                  className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-slate-400 hover:text-red-400 cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
+
+                {isManualEditing ? (
+                  <>
+                    <motion.button
+                      whileHover={{ scale: 1.03 }}
+                      whileTap={{ scale: 0.97 }}
+                      onClick={saveManualEdit}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white text-xs font-semibold rounded-lg shadow shadow-emerald-500/20 transition-all cursor-pointer"
+                    >
+                      ✓ Save edits
+                    </motion.button>
+                    <motion.button
+                      whileHover={{ scale: 1.03 }}
+                      whileTap={{ scale: 0.97 }}
+                      onClick={cancelManualEdit}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs font-semibold rounded-lg transition-all cursor-pointer"
+                    >
+                      ✗ Cancel
+                    </motion.button>
+                  </>
+                ) : (
+                  <>
+                    <motion.button
+                      whileHover={{ scale: 1.03 }}
+                      whileTap={{ scale: 0.97 }}
+                      onClick={enterManualEdit}
+                      disabled={!!pendingUpdate}
+                      title={
+                        pendingUpdate
+                          ? 'Apply or reject the pending AI edit first'
+                          : 'Edit the document manually'
+                      }
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs font-semibold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      Edit
+                    </motion.button>
+                    <motion.button
+                      whileHover={{ scale: 1.03 }}
+                      whileTap={{ scale: 0.97 }}
+                      onClick={() => saveDocument('docx')}
+                      disabled={isSaving || !!pendingUpdate}
+                      title={pendingUpdate ? 'Apply or reject the pending AI edit first' : undefined}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white text-xs font-semibold rounded-lg shadow-lg shadow-emerald-500/20 disabled:opacity-50 transition-all cursor-pointer"
+                    >
+                      {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                      Save .docx
+                    </motion.button>
+                    <button
+                      onClick={removeFile}
+                      className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-slate-400 hover:text-red-400 cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </>
+                )}
               </div>
 
               {/* Document - Clean Card Style */}
@@ -692,6 +773,15 @@ export default function DocEditorPage() {
                     <Loader2 className="w-6 h-6 text-blue-400 animate-spin" />
                     <p className="ml-3 text-slate-400">Reading document...</p>
                   </div>
+                ) : isManualEditing ? (
+                  <textarea
+                    value={manualDraft}
+                    onChange={(e) => setManualDraft(e.target.value)}
+                    autoFocus
+                    spellCheck
+                    className="w-full h-full min-h-[500px] bg-slate-900/50 text-white text-[13px] font-mono leading-relaxed p-3 rounded-lg border border-blue-400/40 focus:border-blue-400 focus:outline-none resize-none whitespace-pre-wrap"
+                    placeholder="Edit the document text directly. Click Save edits to commit."
+                  />
                 ) : pendingUpdate ? (
                   (() => {
                     const beforeWords = pendingUpdate.before.split(/\s+/).filter(Boolean).length;
@@ -1159,6 +1249,8 @@ export default function DocEditorPage() {
                 placeholder={
                   !file
                     ? 'Upload a document first...'
+                    : isManualEditing
+                    ? 'Save or cancel your manual edits before using the AI...'
                     : pendingUpdate
                     ? 'Apply or reject the pending AI edit before continuing...'
                     : uiVoiceState === 'listening'
@@ -1171,7 +1263,7 @@ export default function DocEditorPage() {
                     ? 'Editing document...'
                     : 'Click mic or type your command...'
                 }
-                disabled={!file || isProcessing || uiVoiceState !== 'idle' || !!pendingUpdate}
+                disabled={!file || isProcessing || uiVoiceState !== 'idle' || !!pendingUpdate || isManualEditing}
                 className="flex-1 bg-transparent text-white placeholder-slate-500 text-sm px-2 py-2 outline-none disabled:opacity-50"
               />
 
@@ -1180,7 +1272,7 @@ export default function DocEditorPage() {
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={() => sendMessage()}
-                disabled={!file || !inputText.trim() || isProcessing || uiVoiceState !== 'idle' || !!pendingUpdate}
+                disabled={!file || !inputText.trim() || isProcessing || uiVoiceState !== 'idle' || !!pendingUpdate || isManualEditing}
                 className="p-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-teal-500 text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
               >
                 {isProcessing ? (

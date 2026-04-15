@@ -72,13 +72,12 @@ export default async function PatientDetailPage({ params }: PageProps) {
     return <PatientNotFound id={id} />;
   }
 
-  // 5. Fetch all chart categories + safety data in parallel (newest first).
+  // 5. Fetch chart categories + safety data in parallel (newest first).
   //    Kept as separate lists so the UI can render each under its own card
   //    without re-partitioning on the client.
   const [
     notes,
     customProcedures,
-    patientFiles,
     finalReports,
     allergies,
     medications,
@@ -86,7 +85,6 @@ export default async function PatientDetailPage({ params }: PageProps) {
   ] = await Promise.all([
     listNotesByPatient(id, 'CLINICAL_NOTE', session),
     listNotesByPatient(id, 'CUSTOM_PROCEDURE', session),
-    listNotesByPatient(id, 'PATIENT_FILE', session),
     listNotesByPatient(id, 'FINAL_REPORT', session),
     listAllergiesForPatient(session, id),
     listMedicationsForPatient(session, id), // active only by default
@@ -102,7 +100,6 @@ export default async function PatientDetailPage({ params }: PageProps) {
       patient={patient}
       notes={notes}
       customProcedures={customProcedures}
-      patientFiles={patientFiles}
       finalReports={finalReports}
       allergies={allergies}
       medications={medications}

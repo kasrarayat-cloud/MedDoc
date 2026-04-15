@@ -28,11 +28,13 @@ import {
   AlertCircle,
   Archive,
   AudioLines,
-  Paperclip,
   FileBadge,
   Trash2,
   MapPin,
   Pill,
+  Shield,
+  ShieldCheck,
+  ShieldAlert,
 } from 'lucide-react';
 import { formatLastVisit, formatRelativeDate } from '@/lib/mock-patients';
 import type { PatientView } from '@/lib/data/patients';
@@ -70,8 +72,6 @@ interface PatientDetailClientProps {
   patient: PatientView;
   notes: ClinicalNoteView[];
   customProcedures: ClinicalNoteView[];
-  /** Attachments on the chart — metadata rows, no bytes yet. */
-  patientFiles: ClinicalNoteView[];
   /** AI-synthesized reports. Saved as DRAFT; doctor signs off later. */
   finalReports: ClinicalNoteView[];
   /** Patient drug/food/environmental allergies — safety-critical, top of chart. */
@@ -89,11 +89,39 @@ function formatBytes(n: number | undefined): string {
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
+// Insurance verified state has three values: true (verified), false
+// (explicitly self-pay or denied), null/undefined (not yet checked). Each
+// gets a different color so "we haven't asked" is visually distinct from
+// "patient is on the hook" — both matter for billing decisions on the day.
+function InsuranceBadge({ verified }: { verified: boolean | null | undefined }) {
+  if (verified === true) {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-medium bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">
+        <ShieldCheck className="w-3.5 h-3.5" />
+        Insurance verified
+      </span>
+    );
+  }
+  if (verified === false) {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-medium bg-amber-500/10 border border-amber-500/30 text-amber-300">
+        <ShieldAlert className="w-3.5 h-3.5" />
+        Self-pay / not verified
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-500/10 border border-slate-500/30 text-slate-400">
+      <Shield className="w-3.5 h-3.5" />
+      Insurance: not checked
+    </span>
+  );
+}
+
 export default function PatientDetailClient({
   patient,
   notes,
   customProcedures,
-  patientFiles,
   finalReports,
   allergies,
   medications,
@@ -107,25 +135,16 @@ export default function PatientDetailClient({
   const [docGenModalOpen, setDocGenModalOpen] = useState(false);
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
   const [fileUploadModalOpen, setFileUploadModalOpen] = useState(false);
-  /** Tracks which chart section triggered the upload modal so the
-   *  created row lands under the right card. null = modal closed. */
-  const [fileUploadIntent, setFileUploadIntent] = useState<
-    'PATIENT_FILE' | 'FINAL_REPORT'
-  >('PATIENT_FILE');
-  // Client-side mirrors of the server-rendered lists. Let the modal and
-  // the Generate button prepend new rows optimistically so the UI updates
-  // without a full page reload. A router.refresh() on the action still
-  // keeps these in sync across tabs eventually.
-  const [files, setFiles] = useState<ClinicalNoteView[]>(patientFiles);
+  // Client-side mirror of the server-rendered Final Reports list. Let the
+  // modal and the Generate button prepend new rows optimistically so the
+  // UI updates without a full page reload. A router.refresh() on the
+  // action still keeps this in sync across tabs eventually.
   const [reports, setReports] = useState<ClinicalNoteView[]>(finalReports);
 
   // Server-truth sync. After router.refresh() (fires on tool actions +
   // manual deletes), the page re-renders with fresh props. Without this
   // effect, our optimistic local state still shows the pre-edit content
   // and doctors see "I edited the report" but no visible change.
-  useEffect(() => {
-    setFiles(patientFiles);
-  }, [patientFiles]);
   useEffect(() => {
     setReports(finalReports);
   }, [finalReports]);
@@ -158,11 +177,6 @@ export default function PatientDetailClient({
     } finally {
       setReportGenerating(false);
     }
-  };
-
-  const handleFileUploaded = (file: ClinicalNoteView) => {
-    setFiles((prev) => [file, ...prev]);
-    notifyChartChanged();
   };
 
   // Dispatch a global signal whenever the chart changes via non-AI
@@ -448,6 +462,42 @@ export default function PatientDetailClient({
                     </span>
                   )}
                 </div>
+
+                {/* Contact strip — address, full phone, insurance status.
+                    The three things a doctor most often needs the moment a
+                    chart opens (where to send the rx, what number to call,
+                    is insurance covering this). City+state and phone render
+                    only if populated; the insurance badge always renders so
+                    "not checked" is visible too — that's a billing decision. */}
+                {(() => {
+                  const cityState = [patient.city, patient.state].filter(Boolean).join(', ');
+                  const fullPhone = patient.cellPhone || patient.homePhone;
+                  const phoneLabel =
+                    patient.cellPhone ? 'cell' : patient.homePhone ? 'home' : null;
+                  return (
+                    <div className="flex items-center gap-4 mt-2 text-sm text-slate-300 flex-wrap">
+                      {cityState && (
+                        <span className="flex items-center gap-1.5">
+                          <MapPin className="w-3.5 h-3.5 text-slate-500" />
+                          {cityState}
+                        </span>
+                      )}
+                      {fullPhone && (
+                        <span className="flex items-center gap-1.5">
+                          <Phone className="w-3.5 h-3.5 text-slate-500" />
+                          {fullPhone}
+                          {phoneLabel && (
+                            <span className="text-slate-500 text-[10px] uppercase tracking-wider">
+                              {phoneLabel}
+                            </span>
+                          )}
+                        </span>
+                      )}
+                      <InsuranceBadge verified={patient.insuranceVerified} />
+                    </div>
+                  );
+                })()}
+
                 {/* Tags */}
                 {patient.tags.length > 0 && (
                   <div className="flex items-center gap-1.5 mt-3 flex-wrap">
@@ -518,91 +568,6 @@ export default function PatientDetailClient({
               initialNoKnownAllergies={noKnownAllergies}
             />
 
-            {/* Profile Details — address + pharmacy + cell/home phone.
-                Only renders sections that actually have data, so an
-                intake-only chart doesn't show empty rows. Skipped
-                entirely if nothing's filled in. */}
-            {(patient.addressLine1 ||
-              patient.city ||
-              patient.pharmacyName ||
-              patient.pharmacyPhone ||
-              patient.cellPhone ||
-              patient.homePhone) && (
-              <div className="rounded-xl bg-white/5 backdrop-blur-md border border-white/10 p-5">
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="p-1.5 rounded-lg bg-sky-500/15 border border-sky-500/30">
-                    <MapPin className="w-4 h-4 text-sky-300" />
-                  </div>
-                  <h2 className="text-sm font-semibold text-white uppercase tracking-wider">
-                    Profile Details
-                  </h2>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-                  {(patient.addressLine1 || patient.city) && (
-                    <div className="min-w-0">
-                      <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1 flex items-center gap-1.5">
-                        <MapPin className="w-3 h-3" />
-                        Address
-                      </p>
-                      <div className="text-sm text-slate-200 leading-relaxed">
-                        {patient.addressLine1 && <p>{patient.addressLine1}</p>}
-                        {patient.addressLine2 && <p>{patient.addressLine2}</p>}
-                        {(patient.city ||
-                          patient.state ||
-                          patient.postalCode) && (
-                          <p className="text-slate-300">
-                            {[patient.city, patient.state].filter(Boolean).join(', ')}
-                            {patient.postalCode ? ` ${patient.postalCode}` : ''}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {(patient.cellPhone || patient.homePhone) && (
-                    <div className="min-w-0">
-                      <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1 flex items-center gap-1.5">
-                        <Phone className="w-3 h-3" />
-                        Phone
-                      </p>
-                      <div className="text-sm text-slate-200 leading-relaxed font-mono">
-                        {patient.cellPhone && (
-                          <p>
-                            <span className="text-[10px] text-slate-500 mr-1">CELL</span>
-                            {patient.cellPhone}
-                          </p>
-                        )}
-                        {patient.homePhone && (
-                          <p>
-                            <span className="text-[10px] text-slate-500 mr-1">HOME</span>
-                            {patient.homePhone}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {(patient.pharmacyName || patient.pharmacyPhone) && (
-                    <div className="min-w-0 sm:col-span-2">
-                      <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1 flex items-center gap-1.5">
-                        <Pill className="w-3 h-3" />
-                        Preferred Pharmacy
-                      </p>
-                      <div className="text-sm text-slate-200 leading-relaxed">
-                        {patient.pharmacyName && <p>{patient.pharmacyName}</p>}
-                        {patient.pharmacyPhone && (
-                          <p className="font-mono text-slate-400 text-xs">
-                            {patient.pharmacyPhone}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
             {/* Brief History card */}
             <div className="rounded-xl bg-white/5 backdrop-blur-md border border-white/10 p-5">
               <div className="flex items-center justify-between mb-4">
@@ -630,220 +595,6 @@ export default function PatientDetailClient({
                 </ul>
               ) : (
                 <p className="text-sm text-slate-500 italic">No clinical history recorded yet.</p>
-              )}
-            </div>
-
-            {/* ====== CUSTOM PROCEDURES SECTION ====== */}
-            <div className="rounded-xl bg-white/5 backdrop-blur-md border border-white/10 p-5">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <div className="p-1.5 rounded-lg bg-blue-500/15 border border-blue-500/30">
-                    <UploadCloud className="w-4 h-4 text-blue-300" />
-                  </div>
-                  <h2 className="text-sm font-semibold text-white uppercase tracking-wider">
-                    Custom Procedures
-                  </h2>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-slate-400 border border-white/10">
-                    {customProcedures.length}
-                  </span>
-                </div>
-
-                {/* Upload button */}
-                <div className="flex items-center gap-2">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={uploadPending}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white transition-all cursor-pointer disabled:opacity-50"
-                  >
-                    {uploadPending ? (
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                    ) : (
-                      <UploadCloud className="w-3 h-3" />
-                    )}
-                    {uploadPending ? 'Extracting...' : 'Upload PDF / DOCX'}
-                  </button>
-                </div>
-              </div>
-
-              {/* Upload error banner */}
-              {uploadError && (
-                <div className="flex items-start gap-2 p-2.5 rounded-lg bg-red-500/10 border border-red-500/30 mb-4">
-                  <AlertCircle className="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" />
-                  <p className="text-[11px] text-red-300 flex-1">{uploadError}</p>
-                  <button type="button" onClick={() => setUploadError(null)} className="text-red-400 hover:text-red-300 cursor-pointer">
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-              )}
-
-              {customProcedures.length === 0 ? (
-                <div className="py-8 text-center">
-                  <div className="inline-flex items-center justify-center w-10 h-10 rounded-2xl bg-blue-500/10 border border-blue-500/20 mb-3">
-                    <FileText className="w-5 h-5 text-blue-400/60" />
-                  </div>
-                  <p className="text-sm text-slate-400">No custom procedures</p>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Upload a PDF or Word document to import a procedure.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {customProcedures.map((proc) => {
-                    const isExpanded = expandedNoteId === proc.id;
-                    const preview = proc.content.split('\n').find((l) => l.trim())?.slice(0, 140) ?? '';
-                    return (
-                      <motion.div
-                        key={proc.id}
-                        layout
-                        className="rounded-lg bg-slate-900/40 border border-white/5 hover:border-white/15 transition-all overflow-hidden"
-                      >
-                        <div className="flex items-stretch">
-                        <button
-                          type="button"
-                          onClick={() => setExpandedNoteId(isExpanded ? null : proc.id)}
-                          className="flex-1 flex items-start gap-3 p-3 text-left cursor-pointer hover:bg-slate-900/60 transition-colors min-w-0"
-                        >
-                          <div className="shrink-0 p-2 rounded-md bg-blue-500/10 border border-blue-500/20">
-                            <FileText className="w-4 h-4 text-blue-300" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1 flex-wrap">
-                              <p className="text-sm font-medium text-white truncate">
-                                {proc.title}
-                              </p>
-                              <span className="text-[9px] px-1.5 py-0.5 rounded font-semibold uppercase tracking-wider border bg-blue-500/15 text-blue-300 border-blue-500/30">
-                                Uploaded
-                              </span>
-                            </div>
-                            {!isExpanded && (
-                              <p className="text-xs text-slate-400 leading-relaxed line-clamp-2">
-                                {preview}
-                              </p>
-                            )}
-                            <div className="flex items-center gap-3 mt-1.5 text-[10px] text-slate-500">
-                              <span className="flex items-center gap-1">
-                                <Clock className="w-3 h-3" />
-                                {formatRelativeDate(proc.createdAt)}
-                              </span>
-                            </div>
-                          </div>
-                          <ChevronDown
-                            className={`w-4 h-4 text-slate-500 shrink-0 mt-1 transition-transform ${
-                              isExpanded ? 'rotate-180' : ''
-                            }`}
-                          />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleDeleteDocument(proc.id, { kind: 'custom procedure' })
-                          }
-                          disabled={deletingId === proc.id}
-                          className="shrink-0 px-3 flex items-center justify-center text-red-300 hover:text-red-200 hover:bg-red-500/10 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed border-l border-white/5"
-                          aria-label="Delete custom procedure"
-                        >
-                          {deletingId === proc.id ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Trash2 className="w-4 h-4" />
-                          )}
-                        </button>
-                        </div>
-
-                        <AnimatePresence>
-                          {isExpanded && (
-                            <motion.div
-                              initial={{ height: 0, opacity: 0 }}
-                              animate={{ height: 'auto', opacity: 1 }}
-                              exit={{ height: 0, opacity: 0 }}
-                              transition={{ duration: 0.2 }}
-                              className="overflow-hidden"
-                            >
-                              <div className="px-4 pb-4 pt-1 border-t border-white/5 mx-3">
-                                {editingNoteId === proc.id ? (
-                                  <div className="mt-3 space-y-3">
-                                    <textarea
-                                      value={editDraft}
-                                      onChange={(e) => setEditDraft(e.target.value)}
-                                      rows={16}
-                                      disabled={savePending}
-                                      className="w-full rounded-lg bg-slate-950/60 border border-blue-500/30 p-4 text-xs text-slate-200 leading-relaxed font-mono resize-y outline-none focus:border-blue-400/60 focus:ring-1 focus:ring-blue-400/20 transition-colors disabled:opacity-50"
-                                    />
-                                    {saveError && (
-                                      <p className="text-[10px] text-red-400">{saveError}</p>
-                                    )}
-                                    <div className="flex items-center justify-end gap-2">
-                                      <button
-                                        type="button"
-                                        onClick={cancelManualEdit}
-                                        disabled={savePending}
-                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white bg-white/5 border border-white/10 hover:bg-white/10 transition-all cursor-pointer disabled:opacity-50"
-                                      >
-                                        <X className="w-3 h-3" /> Cancel
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleSaveManualEdit(proc.id)}
-                                        disabled={savePending}
-                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-gradient-to-r from-blue-500 to-teal-500 shadow-md shadow-blue-500/25 hover:shadow-blue-500/40 transition-all cursor-pointer disabled:opacity-50"
-                                      >
-                                        {savePending ? (
-                                          <><Loader2 className="w-3 h-3 animate-spin" /> Saving...</>
-                                        ) : (
-                                          <><Save className="w-3 h-3" /> Save Changes</>
-                                        )}
-                                      </button>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <>
-                                    <pre className="mt-3 text-xs text-slate-200 leading-relaxed whitespace-pre-wrap font-sans bg-slate-950/60 rounded-lg p-4 border border-white/5">
-                                      {proc.content}
-                                    </pre>
-                                    <div className="mt-2 flex items-center gap-2">
-                                      <button
-                                        type="button"
-                                        onClick={() => startManualEdit(proc)}
-                                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-slate-400 hover:text-white bg-white/5 border border-white/10 hover:bg-white/10 transition-all cursor-pointer"
-                                      >
-                                        <Pencil className="w-3 h-3" /> Edit Text
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          handleDeleteDocument(proc.id, {
-                                            kind: 'custom procedure',
-                                          })
-                                        }
-                                        disabled={deletingId === proc.id}
-                                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-red-300 hover:text-red-200 bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ml-auto"
-                                      >
-                                        {deletingId === proc.id ? (
-                                          <Loader2 className="w-3 h-3 animate-spin" />
-                                        ) : (
-                                          <Trash2 className="w-3 h-3" />
-                                        )}
-                                        Delete
-                                      </button>
-                                    </div>
-                                  </>
-                                )}
-                              </div>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-                      </motion.div>
-                    );
-                  })}
-                </div>
               )}
             </div>
 
@@ -1131,10 +882,7 @@ export default function PatientDetailClient({
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => {
-                      setFileUploadIntent('FINAL_REPORT');
-                      setFileUploadModalOpen(true);
-                    }}
+                    onClick={() => setFileUploadModalOpen(true)}
                     className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white transition-all cursor-pointer"
                     title="Upload a final report file"
                   >
@@ -1388,106 +1136,306 @@ export default function PatientDetailClient({
               )}
             </div>
 
-            {/* ====== ATTACHED DOCUMENTS SECTION ====== */}
-            {/* Shows file metadata the doctor has uploaded to this chart.
-                Entries here are pointers — clicking doesn't download yet;
-                that lands when real file storage is wired. */}
+            {/* ====== CUSTOM PROCEDURES SECTION ====== */}
             <div className="rounded-xl bg-white/5 backdrop-blur-md border border-white/10 p-5">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <div className="p-1.5 rounded-lg bg-amber-500/15 border border-amber-500/30">
-                    <Paperclip className="w-4 h-4 text-amber-300" />
+                  <div className="p-1.5 rounded-lg bg-blue-500/15 border border-blue-500/30">
+                    <UploadCloud className="w-4 h-4 text-blue-300" />
                   </div>
                   <h2 className="text-sm font-semibold text-white uppercase tracking-wider">
-                    Attached Documents
+                    Custom Procedures
                   </h2>
                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-slate-400 border border-white/10">
-                    {files.length}
+                    {customProcedures.length}
                   </span>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFileUploadIntent('PATIENT_FILE');
-                    setFileUploadModalOpen(true);
-                  }}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white transition-all cursor-pointer"
-                >
-                  <UploadCloud className="w-3 h-3" />
-                  Attach
-                </button>
+                {/* Upload button */}
+                <div className="flex items-center gap-2">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadPending}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    {uploadPending ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <UploadCloud className="w-3 h-3" />
+                    )}
+                    {uploadPending ? 'Extracting...' : 'Upload PDF / DOCX'}
+                  </button>
+                </div>
               </div>
 
-              {files.length === 0 ? (
+              {/* Upload error banner */}
+              {uploadError && (
+                <div className="flex items-start gap-2 p-2.5 rounded-lg bg-red-500/10 border border-red-500/30 mb-4">
+                  <AlertCircle className="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" />
+                  <p className="text-[11px] text-red-300 flex-1">{uploadError}</p>
+                  <button type="button" onClick={() => setUploadError(null)} className="text-red-400 hover:text-red-300 cursor-pointer">
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
+
+              {customProcedures.length === 0 ? (
                 <div className="py-8 text-center">
-                  <div className="inline-flex items-center justify-center w-10 h-10 rounded-2xl bg-amber-500/10 border border-amber-500/20 mb-3">
-                    <Paperclip className="w-5 h-5 text-amber-400/60" />
+                  <div className="inline-flex items-center justify-center w-10 h-10 rounded-2xl bg-blue-500/10 border border-blue-500/20 mb-3">
+                    <FileText className="w-5 h-5 text-blue-400/60" />
                   </div>
-                  <p className="text-sm text-slate-400">No attachments yet</p>
+                  <p className="text-sm text-slate-400">No custom procedures</p>
                   <p className="text-xs text-slate-500 mt-1">
-                    Attach imaging, lab results, or reference PDFs.
+                    Upload a PDF or Word document to import a procedure.
                   </p>
                 </div>
               ) : (
-                <ul className="space-y-2">
-                  {files.map((file) => (
-                    <li
-                      key={file.id}
-                      className="flex items-center gap-3 p-3 rounded-lg bg-slate-900/40 border border-white/5 hover:border-white/15 transition-colors"
-                    >
-                      <div className="shrink-0 p-2 rounded-md bg-amber-500/10 border border-amber-500/20">
-                        <FileText className="w-4 h-4 text-amber-300" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-white truncate">
-                          {file.fileName ?? file.title}
-                        </p>
-                        <div className="flex items-center gap-3 mt-0.5 text-[10px] text-slate-500 flex-wrap">
-                          <span>{formatBytes(file.sizeBytes)}</span>
-                          {file.mimeType && (
-                            <>
-                              <span className="text-slate-600">·</span>
-                              <span className="font-mono">{file.mimeType}</span>
-                            </>
-                          )}
-                          <span className="text-slate-600">·</span>
-                          <span className="flex items-center gap-1">
-                            <Clock className="w-3 h-3" />
-                            {formatRelativeDate(file.createdAt)}
-                          </span>
-                          {file.createdByName && (
-                            <>
-                              <span className="text-slate-600">·</span>
-                              <span>{file.createdByName}</span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleDeleteDocument(file.id, {
-                            kind: 'attached file',
-                            onSuccess: () =>
-                              setFiles((prev) => prev.filter((f) => f.id !== file.id)),
-                          })
-                        }
-                        disabled={deletingId === file.id}
-                        className="shrink-0 px-3 flex items-center justify-center text-red-300 hover:text-red-200 hover:bg-red-500/10 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed border-l border-white/5 -my-3 -mr-3"
-                        aria-label="Delete attached file"
+                <div className="space-y-2">
+                  {customProcedures.map((proc) => {
+                    const isExpanded = expandedNoteId === proc.id;
+                    const preview = proc.content.split('\n').find((l) => l.trim())?.slice(0, 140) ?? '';
+                    return (
+                      <motion.div
+                        key={proc.id}
+                        layout
+                        className="rounded-lg bg-slate-900/40 border border-white/5 hover:border-white/15 transition-all overflow-hidden"
                       >
-                        {deletingId === file.id ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Trash2 className="w-4 h-4" />
-                        )}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+                        <div className="flex items-stretch">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedNoteId(isExpanded ? null : proc.id)}
+                          className="flex-1 flex items-start gap-3 p-3 text-left cursor-pointer hover:bg-slate-900/60 transition-colors min-w-0"
+                        >
+                          <div className="shrink-0 p-2 rounded-md bg-blue-500/10 border border-blue-500/20">
+                            <FileText className="w-4 h-4 text-blue-300" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                              <p className="text-sm font-medium text-white truncate">
+                                {proc.title}
+                              </p>
+                              <span className="text-[9px] px-1.5 py-0.5 rounded font-semibold uppercase tracking-wider border bg-blue-500/15 text-blue-300 border-blue-500/30">
+                                Uploaded
+                              </span>
+                            </div>
+                            {!isExpanded && (
+                              <p className="text-xs text-slate-400 leading-relaxed line-clamp-2">
+                                {preview}
+                              </p>
+                            )}
+                            <div className="flex items-center gap-3 mt-1.5 text-[10px] text-slate-500">
+                              <span className="flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                {formatRelativeDate(proc.createdAt)}
+                              </span>
+                            </div>
+                          </div>
+                          <ChevronDown
+                            className={`w-4 h-4 text-slate-500 shrink-0 mt-1 transition-transform ${
+                              isExpanded ? 'rotate-180' : ''
+                            }`}
+                          />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleDeleteDocument(proc.id, { kind: 'custom procedure' })
+                          }
+                          disabled={deletingId === proc.id}
+                          className="shrink-0 px-3 flex items-center justify-center text-red-300 hover:text-red-200 hover:bg-red-500/10 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed border-l border-white/5"
+                          aria-label="Delete custom procedure"
+                        >
+                          {deletingId === proc.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-4 h-4" />
+                          )}
+                        </button>
+                        </div>
+
+                        <AnimatePresence>
+                          {isExpanded && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: 'auto', opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              transition={{ duration: 0.2 }}
+                              className="overflow-hidden"
+                            >
+                              <div className="px-4 pb-4 pt-1 border-t border-white/5 mx-3">
+                                {editingNoteId === proc.id ? (
+                                  <div className="mt-3 space-y-3">
+                                    <textarea
+                                      value={editDraft}
+                                      onChange={(e) => setEditDraft(e.target.value)}
+                                      rows={16}
+                                      disabled={savePending}
+                                      className="w-full rounded-lg bg-slate-950/60 border border-blue-500/30 p-4 text-xs text-slate-200 leading-relaxed font-mono resize-y outline-none focus:border-blue-400/60 focus:ring-1 focus:ring-blue-400/20 transition-colors disabled:opacity-50"
+                                    />
+                                    {saveError && (
+                                      <p className="text-[10px] text-red-400">{saveError}</p>
+                                    )}
+                                    <div className="flex items-center justify-end gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={cancelManualEdit}
+                                        disabled={savePending}
+                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white bg-white/5 border border-white/10 hover:bg-white/10 transition-all cursor-pointer disabled:opacity-50"
+                                      >
+                                        <X className="w-3 h-3" /> Cancel
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleSaveManualEdit(proc.id)}
+                                        disabled={savePending}
+                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-gradient-to-r from-blue-500 to-teal-500 shadow-md shadow-blue-500/25 hover:shadow-blue-500/40 transition-all cursor-pointer disabled:opacity-50"
+                                      >
+                                        {savePending ? (
+                                          <><Loader2 className="w-3 h-3 animate-spin" /> Saving...</>
+                                        ) : (
+                                          <><Save className="w-3 h-3" /> Save Changes</>
+                                        )}
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <pre className="mt-3 text-xs text-slate-200 leading-relaxed whitespace-pre-wrap font-sans bg-slate-950/60 rounded-lg p-4 border border-white/5">
+                                      {proc.content}
+                                    </pre>
+                                    <div className="mt-2 flex items-center gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => startManualEdit(proc)}
+                                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-slate-400 hover:text-white bg-white/5 border border-white/10 hover:bg-white/10 transition-all cursor-pointer"
+                                      >
+                                        <Pencil className="w-3 h-3" /> Edit Text
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleDeleteDocument(proc.id, {
+                                            kind: 'custom procedure',
+                                          })
+                                        }
+                                        disabled={deletingId === proc.id}
+                                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-red-300 hover:text-red-200 bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ml-auto"
+                                      >
+                                        {deletingId === proc.id ? (
+                                          <Loader2 className="w-3 h-3 animate-spin" />
+                                        ) : (
+                                          <Trash2 className="w-3 h-3" />
+                                        )}
+                                        Delete
+                                      </button>
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </motion.div>
+                    );
+                  })}
+                </div>
               )}
             </div>
+
+            {/* Profile Details — address + pharmacy + cell/home phone.
+                Only renders sections that actually have data, so an
+                intake-only chart doesn't show empty rows. Skipped
+                entirely if nothing's filled in. Lives at the bottom of
+                the clinical column — admin info, after the clinical
+                content the doctor uses on every visit. */}
+            {(patient.addressLine1 ||
+              patient.city ||
+              patient.pharmacyName ||
+              patient.pharmacyPhone ||
+              patient.cellPhone ||
+              patient.homePhone) && (
+              <div className="rounded-xl bg-white/5 backdrop-blur-md border border-white/10 p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="p-1.5 rounded-lg bg-sky-500/15 border border-sky-500/30">
+                    <MapPin className="w-4 h-4 text-sky-300" />
+                  </div>
+                  <h2 className="text-sm font-semibold text-white uppercase tracking-wider">
+                    Profile Details
+                  </h2>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                  {(patient.addressLine1 || patient.city) && (
+                    <div className="min-w-0">
+                      <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1 flex items-center gap-1.5">
+                        <MapPin className="w-3 h-3" />
+                        Address
+                      </p>
+                      <div className="text-sm text-slate-200 leading-relaxed">
+                        {patient.addressLine1 && <p>{patient.addressLine1}</p>}
+                        {patient.addressLine2 && <p>{patient.addressLine2}</p>}
+                        {(patient.city ||
+                          patient.state ||
+                          patient.postalCode) && (
+                          <p className="text-slate-300">
+                            {[patient.city, patient.state].filter(Boolean).join(', ')}
+                            {patient.postalCode ? ` ${patient.postalCode}` : ''}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {(patient.cellPhone || patient.homePhone) && (
+                    <div className="min-w-0">
+                      <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1 flex items-center gap-1.5">
+                        <Phone className="w-3 h-3" />
+                        Phone
+                      </p>
+                      <div className="text-sm text-slate-200 leading-relaxed font-mono">
+                        {patient.cellPhone && (
+                          <p>
+                            <span className="text-[10px] text-slate-500 mr-1">CELL</span>
+                            {patient.cellPhone}
+                          </p>
+                        )}
+                        {patient.homePhone && (
+                          <p>
+                            <span className="text-[10px] text-slate-500 mr-1">HOME</span>
+                            {patient.homePhone}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {(patient.pharmacyName || patient.pharmacyPhone) && (
+                    <div className="min-w-0 sm:col-span-2">
+                      <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1 flex items-center gap-1.5">
+                        <Pill className="w-3 h-3" />
+                        Preferred Pharmacy
+                      </p>
+                      <div className="text-sm text-slate-200 leading-relaxed">
+                        {patient.pharmacyName && <p>{patient.pharmacyName}</p>}
+                        {patient.pharmacyPhone && (
+                          <p className="font-mono text-slate-400 text-xs">
+                            {patient.pharmacyPhone}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </motion.div>
 
           {/* === COLUMN 2: FILES & ACTIONS (1/3 width) === */}
@@ -1526,16 +1474,6 @@ export default function PatientDetailClient({
                 >
                   <Calendar className="w-4 h-4 text-emerald-300" />
                   Schedule Visit
-                </button>
-                <button
-                  onClick={() => {
-                    setFileUploadIntent('PATIENT_FILE');
-                    setFileUploadModalOpen(true);
-                  }}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white/5 border border-white/10 text-slate-200 text-sm hover:bg-white/10 hover:border-white/20 transition-all cursor-pointer"
-                >
-                  <Paperclip className="w-4 h-4 text-amber-300" />
-                  Attach File
                 </button>
               </div>
             </div>
@@ -1588,24 +1526,17 @@ export default function PatientDetailClient({
         patientName={`${patient.firstName} ${patient.lastName}`}
       />
 
-      {/* File upload modal. fileUploadIntent routes the upload to the
-          right category + list. Upload from Final Reports saves as
-          FINAL_REPORT and prepends to reports; upload from Attached
-          Documents / Quick Actions saves as PATIENT_FILE and prepends
-          to files. */}
+      {/* File upload modal — only used for Final Reports now. The
+          PATIENT_FILE / "Attached Documents" path was removed. */}
       <PatientFileUploadModal
         open={fileUploadModalOpen}
         onClose={() => setFileUploadModalOpen(false)}
         patientId={patient.id}
         patientName={`${patient.firstName} ${patient.lastName}`}
-        uploadAs={fileUploadIntent}
+        uploadAs="FINAL_REPORT"
         onUploaded={(row) => {
-          if (fileUploadIntent === 'FINAL_REPORT') {
-            setReports((prev) => [row, ...prev]);
-            notifyChartChanged();
-          } else {
-            handleFileUploaded(row);
-          }
+          setReports((prev) => [row, ...prev]);
+          notifyChartChanged();
         }}
       />
 

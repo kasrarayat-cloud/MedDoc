@@ -25,6 +25,7 @@ import {
   type PatientProfileFormState,
   type PatientSex,
 } from '@/app/dashboard/patients/patient-form-shared';
+import InsuranceStatusToggle from '@/app/dashboard/patients/InsuranceStatusToggle';
 
 interface EditPatientModalProps {
   open: boolean;
@@ -529,28 +530,11 @@ function EditPatientModalContent({
 
             {/* Insurance + Tags */}
             <div className="grid grid-cols-[auto_1fr] gap-3 items-start">
-              <div className="flex flex-col">
-                <span
-                  aria-hidden="true"
-                  className="block text-[11px] font-semibold uppercase tracking-wider mb-1 invisible select-none"
-                >
-                  .
-                </span>
-                <label className="flex items-center gap-2 p-2.5 rounded-lg bg-white/5 border border-white/10 cursor-pointer hover:bg-white/10 transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={form.insuranceVerified}
-                    onChange={(e) =>
-                      update('insuranceVerified', e.target.checked)
-                    }
-                    disabled={isPending}
-                    className="w-4 h-4 accent-emerald-500 cursor-pointer"
-                  />
-                  <span className="text-[11px] font-semibold text-slate-300 whitespace-nowrap">
-                    Insurance verified
-                  </span>
-                </label>
-              </div>
+              <InsuranceStatusToggle
+                value={form.insuranceVerified}
+                onChange={(v) => update('insuranceVerified', v)}
+                disabled={isPending}
+              />
               <Field label="Tags" hint="Comma-separated">
                 <input
                   type="text"
