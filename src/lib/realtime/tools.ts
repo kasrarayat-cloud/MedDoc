@@ -304,6 +304,34 @@ export const REALTIME_TOOLS: RealtimeTool[] = [
   },
   {
     type: 'function',
+    name: 'read_patient_file',
+    description:
+      "Fetch details and extracted text (if any) of an attached file. Pick `fileId` from ATTACHED_FILES. Read-only — no confirmation. Image files have metadata only (filename, mime, size) until OCR lands; PDF/DOCX uploads return their extracted text.",
+    parameters: {
+      type: 'object',
+      properties: {
+        fileId: { type: 'string', description: 'ID of the attached file, from ATTACHED_FILES.' },
+      },
+      required: ['fileId'],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: 'function',
+    name: 'delete_patient_file',
+    description:
+      "Soft-delete an attached file. Pick `fileId` from ATTACHED_FILES. Execute immediately. Record stays in audit log per HIPAA; file disappears from active views.",
+    parameters: {
+      type: 'object',
+      properties: {
+        fileId: { type: 'string', description: 'ID of the attached file, from ATTACHED_FILES.' },
+      },
+      required: ['fileId'],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: 'function',
     name: 'read_final_report',
     description:
       'Fetch the FULL TEXT of a final report so you can read it, quote from it, or apply precise edits. Pick `reportId` from FINAL_REPORTS. Read-only — no confirmation needed. Use before any complex edit where you need the current contents.',
@@ -377,6 +405,7 @@ export function buildSystemPrompt(input: {
   recentNotes: ClinicalNoteView[];
   customProcedures: ClinicalNoteView[];
   finalReports: ClinicalNoteView[];
+  patientFiles: ClinicalNoteView[];
   upcomingAppointments: AppointmentView[];
   currentDateIso: string;
   /** IANA tz, e.g. "America/Los_Angeles". Defaults to UTC. */
@@ -387,6 +416,7 @@ export function buildSystemPrompt(input: {
     recentNotes,
     customProcedures,
     finalReports,
+    patientFiles,
     upcomingAppointments,
     currentDateIso,
     timezone = 'UTC',
@@ -428,6 +458,16 @@ export function buildSystemPrompt(input: {
           .map(
             (r, i) =>
               `  ${i + 1}. id="${r.id}" title="${r.title}" created=${r.createdAt.split('T')[0]}${r.fileName ? ' (uploaded file)' : ' (AI-generated)'}`
+          )
+          .join('\n');
+  const attachedFileList =
+    patientFiles.length === 0
+      ? '(no attached files)'
+      : patientFiles
+          .slice(0, 5)
+          .map(
+            (f, i) =>
+              `  ${i + 1}. id="${f.id}" name="${f.fileName ?? f.title}"${f.mimeType ? ` (${f.mimeType})` : ''} uploaded=${f.createdAt.split('T')[0]}`
           )
           .join('\n');
   const appointmentList =
@@ -538,10 +578,15 @@ ${procedureList}
 FINAL_REPORTS (AI-generated case summaries + uploaded report files — newest first):
 ${finalReportList}
 
+ATTACHED_FILES (uploaded reference docs/images — newest first):
+${attachedFileList}
+
 UPCOMING_APPOINTMENTS (scheduled / non-cancelled):
 ${appointmentList}
 
-YOUR JOB: understand the doctor's voice commands, call the appropriate tool, and report in voice. Tools: create_clinical_note, read_clinical_note, edit_clinical_note, delete_clinical_note, read_custom_procedure, edit_custom_procedure, delete_custom_procedure, read_final_report, edit_final_report, delete_final_report, schedule_appointment, cancel_appointment, summarize_chart, generate_document, generate_final_report, update_patient, request_file_upload, archive_patient.
+YOUR AUTHORITY: you have full edit access over this patient's chart — brief history, demographics, notes, procedures, final reports, attached files, appointments, and status. All actions are tenant-scoped and audit-logged server-side; that's the HIPAA guardrail. Your UX rule is simple: EXECUTE IMMEDIATELY on any clear command, do NOT ask for permission or confirmation, and speak one short sentence reporting what you did.
+
+YOUR JOB: understand the doctor's voice commands, call the appropriate tool, and report in voice. Tools: create_clinical_note, read_clinical_note, edit_clinical_note, delete_clinical_note, read_custom_procedure, edit_custom_procedure, delete_custom_procedure, read_final_report, edit_final_report, delete_final_report, read_patient_file, delete_patient_file, schedule_appointment, cancel_appointment, summarize_chart, generate_document, generate_final_report, update_patient, request_file_upload, archive_patient.
 
 READ-THEN-ACT PATTERN: the RECENT_NOTES and CUSTOM_PROCEDURES lists only give you IDs and titles — not the actual text inside. If the doctor asks you to READ, REVIEW, LOOK AT, DESCRIBE, OR QUOTE FROM a note or procedure, call read_clinical_note / read_custom_procedure FIRST to fetch the content. If the doctor asks to edit by content ("change X to Y in the LESI note", "delete the brief history section from the procedure"), call read_* first to see the current text, then call edit_* with precise instructions.
 
@@ -557,6 +602,8 @@ WHICH TOOL TO USE:
 - "Read/review the final report" / "what does the final report say?" → read_final_report (pick from FINAL_REPORTS), then speak the content
 - "Edit the [final|case|discharge] report" / "fix the final report" / "rewrite the summary" → read_final_report FIRST, then edit_final_report with precise instructions. Do NOT route to edit_custom_procedure — final reports live in FINAL_REPORTS, not CUSTOM_PROCEDURES.
 - "Delete the final report" / "remove the report" → delete_final_report (pick from FINAL_REPORTS)
+- "Read/describe the attached file" / "what's in the file I uploaded?" → read_patient_file (pick from ATTACHED_FILES)
+- "Delete the [attachment|attached file|uploaded image]" → delete_patient_file (pick from ATTACHED_FILES)
 - "Schedule…" → schedule_appointment
 - "Cancel the [Tuesday|next|follow-up] appointment" / "delete the appointment" → cancel_appointment (pick from UPCOMING_APPOINTMENTS)
 - "Summarize the chart" → summarize_chart

@@ -51,12 +51,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Patient not found' }, { status: 404 });
   }
 
-  const [recentNotes, customProcedures, finalReports, appointments] = await Promise.all([
-    listNotesByPatient(patientId, 'CLINICAL_NOTE', session),
-    listNotesByPatient(patientId, 'CUSTOM_PROCEDURE', session),
-    listNotesByPatient(patientId, 'FINAL_REPORT', session),
-    listAppointmentsByPatient(patientId, session),
-  ]);
+  const [recentNotes, customProcedures, finalReports, patientFiles, appointments] =
+    await Promise.all([
+      listNotesByPatient(patientId, 'CLINICAL_NOTE', session),
+      listNotesByPatient(patientId, 'CUSTOM_PROCEDURE', session),
+      listNotesByPatient(patientId, 'FINAL_REPORT', session),
+      listNotesByPatient(patientId, 'PATIENT_FILE', session),
+      listAppointmentsByPatient(patientId, session),
+    ]);
   const upcomingAppointments = filterUpcoming(appointments);
 
   const instructions = buildSystemPrompt({
@@ -64,6 +66,7 @@ export async function POST(request: NextRequest) {
     recentNotes: recentNotes.slice(0, 5),
     customProcedures: customProcedures.slice(0, 5),
     finalReports: finalReports.slice(0, 5),
+    patientFiles: patientFiles.slice(0, 5),
     upcomingAppointments: upcomingAppointments.slice(0, 5),
     currentDateIso: new Date().toISOString(),
     timezone,

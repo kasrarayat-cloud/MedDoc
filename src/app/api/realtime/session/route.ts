@@ -78,15 +78,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Patient not found' }, { status: 404 });
   }
 
-  // Recent notes + custom procedures + final reports + upcoming
-  // appointments seed the system prompt's edit_* / cancel_* routing.
-  // All tenant-scoped through the patient relation filter.
-  const [recentNotes, customProcedures, finalReports, appointments] = await Promise.all([
-    listNotesByPatient(patientId, 'CLINICAL_NOTE', session),
-    listNotesByPatient(patientId, 'CUSTOM_PROCEDURE', session),
-    listNotesByPatient(patientId, 'FINAL_REPORT', session),
-    listAppointmentsByPatient(patientId, session),
-  ]);
+  // Every chart surface the model might need to target. All tenant-
+  // scoped through the patient relation filter.
+  const [recentNotes, customProcedures, finalReports, patientFiles, appointments] =
+    await Promise.all([
+      listNotesByPatient(patientId, 'CLINICAL_NOTE', session),
+      listNotesByPatient(patientId, 'CUSTOM_PROCEDURE', session),
+      listNotesByPatient(patientId, 'FINAL_REPORT', session),
+      listNotesByPatient(patientId, 'PATIENT_FILE', session),
+      listAppointmentsByPatient(patientId, session),
+    ]);
   const upcomingAppointments = filterUpcomingAppointments(appointments);
 
   const apiKey = process.env.OPENAI_API_KEY;
@@ -116,6 +117,7 @@ export async function POST(request: NextRequest) {
           recentNotes: recentNotes.slice(0, 5),
           customProcedures: customProcedures.slice(0, 5),
           finalReports: finalReports.slice(0, 5),
+          patientFiles: patientFiles.slice(0, 5),
           upcomingAppointments: upcomingAppointments.slice(0, 5),
           currentDateIso: new Date().toISOString(),
           timezone,

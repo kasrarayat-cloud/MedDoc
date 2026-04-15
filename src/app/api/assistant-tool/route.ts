@@ -211,8 +211,9 @@ export async function POST(request: NextRequest) {
 
       case 'read_clinical_note':
       case 'read_custom_procedure':
-      case 'read_final_report': {
-        // Same underlying fetch for all three — differs only in where the
+      case 'read_final_report':
+      case 'read_patient_file': {
+        // Same underlying fetch for all four — differs only in where the
         // model sourced the ID. Tenant guard lives inside dataGetNoteById.
         const id =
           typeof args.noteId === 'string'
@@ -221,10 +222,12 @@ export async function POST(request: NextRequest) {
               ? args.procedureId
               : typeof args.reportId === 'string'
                 ? args.reportId
-                : '';
+                : typeof args.fileId === 'string'
+                  ? args.fileId
+                  : '';
         if (!id) {
           return NextResponse.json<ToolResponse>(
-            { ok: false, output: 'Missing noteId/procedureId/reportId.' },
+            { ok: false, output: 'Missing noteId/procedureId/reportId/fileId.' },
             { status: 400 }
           );
         }
@@ -249,6 +252,16 @@ export async function POST(request: NextRequest) {
           targetType: 'Document',
           metadata: { via: 'assistant', patientId },
         });
+        // File-only rows (images without extracted text) have no content.
+        // Return the metadata so the model can describe the file instead
+        // of reporting an empty document.
+        if (!note.content.trim() && note.fileName) {
+          const size = note.sizeBytes ? `${Math.round(note.sizeBytes / 1024)} KB` : 'unknown size';
+          return NextResponse.json<ToolResponse>({
+            ok: true,
+            output: `File "${note.fileName}" (${note.mimeType ?? 'unknown type'}, ${size}). No extracted text — this is an image or non-text upload.`,
+          });
+        }
         return NextResponse.json<ToolResponse>({
           ok: true,
           output: `Document "${note.title}" content:\n\n${truncated}`,
@@ -336,6 +349,34 @@ export async function POST(request: NextRequest) {
         return NextResponse.json<ToolResponse>({
           ok: true,
           output: 'Final report deleted.',
+        });
+      }
+
+      case 'delete_patient_file': {
+        const fileId = typeof args.fileId === 'string' ? args.fileId : '';
+        if (!fileId) {
+          return NextResponse.json<ToolResponse>(
+            { ok: false, output: 'fileId is required.' },
+            { status: 400 }
+          );
+        }
+        const ok = await dataDeleteClinicalNote(fileId, session);
+        if (!ok) {
+          return NextResponse.json<ToolResponse>(
+            { ok: false, output: 'File not found or not accessible.' },
+            { status: 404 }
+          );
+        }
+        await logAudit({
+          action: 'DELETED_DOCUMENT',
+          targetId: fileId,
+          targetType: 'Document',
+          metadata: { via: 'assistant', patientId, category: 'PATIENT_FILE' },
+        });
+        revalidatePath(`/dashboard/patients/${patientId}`);
+        return NextResponse.json<ToolResponse>({
+          ok: true,
+          output: 'File deleted.',
         });
       }
 

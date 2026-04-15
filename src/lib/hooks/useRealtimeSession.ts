@@ -120,6 +120,31 @@ export function useRealtimeSession(options: UseRealtimeSessionOptions): UseRealt
   // on the next response.done event.
   const activeResponseIdRef = useRef<string | null>(null);
   const pendingCreateRef = useRef(false);
+  // Watchdog — if we transition to "thinking" and no response.done /
+  // audio.delta / error arrives within this window, force back to
+  // listening. Covers cases where OpenAI drops the terminal event on
+  // the data channel (seen in practice: "thinking" sticks until the
+  // doctor makes a sound, which fires speech_started and unsticks it).
+  const thinkingWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const THINKING_WATCHDOG_MS = 15_000;
+
+  const clearThinkingWatchdog = useCallback(() => {
+    if (thinkingWatchdogRef.current) {
+      clearTimeout(thinkingWatchdogRef.current);
+      thinkingWatchdogRef.current = null;
+    }
+  }, []);
+
+  const armThinkingWatchdog = useCallback(() => {
+    clearThinkingWatchdog();
+    thinkingWatchdogRef.current = setTimeout(() => {
+      console.warn(
+        '[realtime] thinking watchdog fired — forcing listening (no response.done arrived)'
+      );
+      activeResponseIdRef.current = null;
+      setStatus('listening');
+    }, THINKING_WATCHDOG_MS);
+  }, [clearThinkingWatchdog]);
 
   // Gate every response.create behind the active-response tracker. If no
   // response is in flight, send immediately; otherwise buffer a single bit
@@ -168,6 +193,10 @@ export function useRealtimeSession(options: UseRealtimeSessionOptions): UseRealt
 
     activeResponseIdRef.current = null;
     pendingCreateRef.current = false;
+    if (thinkingWatchdogRef.current) {
+      clearTimeout(thinkingWatchdogRef.current);
+      thinkingWatchdogRef.current = null;
+    }
 
     dataChannelRef.current?.close();
     dataChannelRef.current = null;
@@ -252,7 +281,13 @@ export function useRealtimeSession(options: UseRealtimeSessionOptions): UseRealt
     [patientId, requestResponseCreate]
   );
 
-  // Main event handler for data channel messages from OpenAI.
+  // Main event handler for data channel messages from OpenAI. Do NOT
+  // read React state inside this callback — the dc.onmessage binding is
+  // set once at session start and captures whatever closure was current
+  // then. Using refs or unconditional setters is safe; reading `status`
+  // here reads a stale value and was the root cause of the orb getting
+  // stuck on "thinking" until the doctor made a noise (which flipped
+  // it via input_audio_buffer.speech_started).
   const handleEvent = useCallback(
     (raw: string) => {
       let event: { type: string; [key: string]: unknown };
@@ -267,11 +302,13 @@ export function useRealtimeSession(options: UseRealtimeSessionOptions): UseRealt
       switch (event.type) {
         case 'input_audio_buffer.speech_started':
           console.info('[realtime] speech_started (doctor talking)');
+          clearThinkingWatchdog();
           setStatus('listening');
           break;
         case 'input_audio_buffer.speech_stopped':
           console.info('[realtime] speech_stopped — committing, awaiting model');
           setStatus('thinking');
+          armThinkingWatchdog();
           break;
         case 'input_audio_buffer.committed':
           console.info('[realtime] audio_buffer.committed');
@@ -280,10 +317,17 @@ export function useRealtimeSession(options: UseRealtimeSessionOptions): UseRealt
           const resp = (event as { response?: { id?: string } }).response;
           activeResponseIdRef.current = resp?.id ?? 'unknown';
           console.info('[realtime] response.created', activeResponseIdRef.current);
+          // Re-arm so a response that starts but never emits audio/done
+          // still frees the orb.
+          armThinkingWatchdog();
           break;
         }
         case 'response.audio.delta':
-          if (status !== 'speaking') setStatus('speaking');
+          // Unconditional set — React bails on identity equality for
+          // primitives, and reading `status` here closes over a stale
+          // value from session-start.
+          setStatus('speaking');
+          clearThinkingWatchdog();
           break;
         case 'response.audio_transcript.done': {
           const transcript = (event as { transcript?: string }).transcript;
@@ -307,16 +351,24 @@ export function useRealtimeSession(options: UseRealtimeSessionOptions): UseRealt
           const args = (event as { arguments?: string }).arguments;
           console.info('[realtime] tool call:', name, args);
           if (callId && name) {
+            // Tool calls can run long; the watchdog shouldn't fire while
+            // the server is doing the work. handleToolCall sets 'working'
+            // and transitions back to 'thinking' at the end, which will
+            // re-arm via the speech_stopped path if needed.
+            clearThinkingWatchdog();
             void handleToolCall(callId, name, args ?? '{}');
           }
           break;
         }
-        case 'response.done': {
-          // Check for tool-call-only responses (no audio). If she CALLED
-          // a tool but didn't speak, we need to flip back to listening
-          // rather than leaving the orb stuck on 'thinking'.
-          console.info('[realtime] response.done');
+        case 'response.done':
+        case 'response.cancelled':
+        case 'response.failed':
+        case 'output_audio_buffer.stopped': {
+          // Any terminal event frees the orb. `response.done` is the
+          // normal path; the others cover OpenAI-side drops / cancels.
+          console.info('[realtime]', event.type);
           activeResponseIdRef.current = null;
+          clearThinkingWatchdog();
           if (pendingCreateRef.current) {
             pendingCreateRef.current = false;
             const dc = dataChannelRef.current;
@@ -331,11 +383,14 @@ export function useRealtimeSession(options: UseRealtimeSessionOptions): UseRealt
           const err = (event as { error?: { message?: string; code?: string } }).error;
           console.error('[realtime] error event:', err);
           if (err?.message) setError(err.message);
+          // Don't leave the orb spinning on a backend error.
+          clearThinkingWatchdog();
+          setStatus('listening');
           break;
         }
       }
     },
-    [status, handleToolCall]
+    [handleToolCall, armThinkingWatchdog, clearThinkingWatchdog]
   );
 
   const start = useCallback(async () => {
