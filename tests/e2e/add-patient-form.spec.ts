@@ -102,8 +102,8 @@ test.describe('Add Patient — new form QA', () => {
         ].join('\n')
       );
 
-    // Insurance verified + tags
-    await modal.getByRole('checkbox', { name: /insurance verified/i }).check();
+    // Insurance status (tri-state segmented toggle: Verified / Pending / Self-pay)
+    await modal.getByRole('radio', { name: /verified/i }).click();
     await modal
       .locator('input[placeholder="post-op, chronic-pain"]')
       .fill('chronic-pain, post-op');

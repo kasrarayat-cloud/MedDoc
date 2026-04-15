@@ -58,6 +58,7 @@ import {
   type AllergyView,
   type MedicationView,
 } from '@/lib/data/clinical-safety';
+import { editClinicalNoteTwoPass } from '@/lib/ai-service';
 
 // ---------------------------------------------------------------------------
 // Validation schemas
@@ -818,18 +819,11 @@ export async function generateDocumentAction(
   };
 }
 
-// EDIT_NOTE_SYSTEM_PROMPT is the instruction used by dispatchEditNote
-// below to rewrite an existing clinical document with precise, scoped
-// changes. Kept here (not at dispatcher site) so it's discoverable next
-// to the create/generate prompts.
-const EDIT_NOTE_SYSTEM_PROMPT = `You are a medical scribe AI for a pain management physician. You receive an EXISTING clinical document and the doctor's instructions describing edits to make. Produce the FULL updated document with ONLY the requested changes applied.
-
-Rules:
-1. Preserve everything the doctor did not ask to change — formatting, section headers, ordering, unrelated content.
-2. Apply the requested edit literally and narrowly. If the doctor says "change the diagnosis to X", replace only the diagnosis line; don't re-write the whole plan.
-3. If the instructions are ambiguous, prefer the minimal interpretation.
-4. Preserve medical terminology exactly as written (LESI, CESI, PRP, L4-L5, radiculopathy, etc.).
-5. Plain text only — no markdown, no code fences, no preamble. Start directly with the updated content.`;
+// dispatchEditNote no longer keeps a local edit-note system prompt — it
+// delegates to editClinicalNoteTwoPass in @/lib/ai-service, which runs
+// a structured intent parse (Pass 1) followed by an executor (Pass 2)
+// tuned for clinical-note edits. The single-shot prompt that used to
+// live here had the same fragility we already fixed for the Doc Editor.
 
 // ===========================================================================
 // CREATE NOTE FROM TEMPLATE — instant pre-filled draft
@@ -1246,7 +1240,9 @@ export async function dispatchEditNote(
   patient: PatientView,
   targetNoteId: string | null,
   instructions: string,
-  openai: OpenAI,
+  // Kept in the signature for back-compat with the realtime tool router's
+  // call sites; the two-pass executor uses its own client internally.
+  _openai: OpenAI,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   session: any
 ): Promise<AssistantResult> {
@@ -1263,26 +1259,34 @@ export async function dispatchEditNote(
     return { ok: false, error: 'Could not find that note on this patient.' };
   }
 
-  let updatedContent: string;
+  // Two-pass edit (Pass 1: gpt-4o-mini classifies intent into a structured
+  // EditIntent; Pass 2: gpt-4o applies it). Replaces the previous single-shot
+  // gpt-4o-mini call which had the same fragility we already fixed for the
+  // Doc Editor — silent drops of replacement content, judging short inputs
+  // as invalid, leaving boilerplate paragraphs behind, etc.
+  let result;
   try {
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      temperature: 0.2,
-      messages: [
-        { role: 'system', content: EDIT_NOTE_SYSTEM_PROMPT },
-        {
-          role: 'user',
-          content: `EXISTING NOTE:\n${existing.content}\n\nDOCTOR'S EDIT INSTRUCTIONS:\n${instructions}`,
-        },
-      ],
-    });
-    logGptToolUsage(completion, session);
-    updatedContent = (completion.choices[0]?.message?.content ?? '').trim();
+    result = await editClinicalNoteTwoPass(existing.content, instructions);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Edit failed';
     return { ok: false, error: `Edit failed: ${message}` };
   }
-  if (!updatedContent) return { ok: false, error: 'AI returned an empty result — please try again.' };
+
+  // Low-confidence / unclear → ask doctor to rephrase. Don't burn a Pass 2
+  // call and don't risk silently mangling a signed clinical record on a
+  // guessed interpretation.
+  if (!result.ok) {
+    return {
+      ok: true,
+      reply: result.message,
+      action: { type: 'chat' },
+    };
+  }
+
+  const updatedContent = result.content;
+  if (!updatedContent) {
+    return { ok: false, error: 'AI returned an empty result — please try again.' };
+  }
 
   const updated = await dataUpdateClinicalNote(
     targetNoteId,
@@ -1300,6 +1304,11 @@ export async function dispatchEditNote(
       patientId: patient.id,
       via: 'assistant',
       instructionLength: instructions.length,
+      // Audit trail captures Pass 1's interpretation. Useful for "the AI
+      // butchered my note — what did it think I asked for?" debugging.
+      intentOperation: result.intent.operation,
+      intentTarget: result.intent.target_section,
+      intentConfidence: result.intent.confidence,
     },
   });
   revalidatePath(`/dashboard/patients/${patient.id}`);

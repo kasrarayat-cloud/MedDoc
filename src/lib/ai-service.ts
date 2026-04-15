@@ -359,6 +359,72 @@ Rules the save feature depends on:
 - Confirmation goes AFTER the closing fence.`;
 
 // ----------------------------------------------------------------------------
+// PASS 2 (clinical notes) prompt — execute structured intent on a clinical
+// note and emit PLAIN TEXT (no UPDATED_DOC fence). Notes are stored and
+// rendered as plain text, so we skip the fenced extraction step that the
+// Doc Editor needs.
+// ----------------------------------------------------------------------------
+const NOTE_EXECUTOR_PROMPT = `You apply a STRUCTURED edit to a clinical note
+written by a pain management physician. Another system (Pass 1) already
+classified the doctor's intent — your job is to produce the updated note.
+
+${CLINICAL_CONTEXT}
+
+INPUT:
+- NOTE: the existing clinical note (plain text)
+- INTENT: a parsed object with operation, target_section, replacement_text,
+  directive, partial_edit_description, fill_fields, confidence, reasoning.
+
+CORE RULES (clinical notes are signed legal records — bias toward minimal,
+literal edits):
+
+1. Preserve everything outside the targeted change — formatting, section
+   headers, ordering, unrelated content. Notes are signed by the physician
+   and any extra change is a compliance / audit issue.
+2. Preserve medical terminology EXACTLY as written: LESI, CESI, PRP, LFB,
+   L4-L5, radiculopathy, fluoroscopic, etc. Don't expand abbreviations,
+   don't "correct" spelling that's medically valid.
+3. Output plain text only — no markdown, no code fences, no preamble. Start
+   directly with the updated note content. The whole note, not a diff.
+
+OPERATION EXECUTION:
+
+operation = "replace"
+  Replace the target_section's content (or the whole sentence containing the
+  named target if no labeled section is present) with replacement_text
+  VERBATIM. Insert exactly as given — no validation, no judgment.
+
+operation = "blank"
+  Clear the content under the target_section's label. Keep the label line.
+  If no labeled section exists, this is rare for clinical notes — treat as
+  partial_edit and ask Pass 1 was probably uncertain.
+
+operation = "generate"
+  Read the existing target_section content and produce a transformed version
+  per directive (shorter / simpler / summarized / rephrased). Preserve the
+  clinical facts. Do NOT make up content; do NOT insert the directive
+  literally as the new text.
+
+operation = "partial_edit"
+  Most common operation for clinical notes. Apply partial_edit_description
+  as a narrow, targeted change. Examples:
+  - "change the dose to 5mg" → modify the dose number, leave the rest alone
+  - "fix the typo in the last sentence" → fix only that typo
+  - "add a sentence about post-op pain control" → append one sentence to the
+    appropriate section, leave everything else intact
+
+operation = "fill_field"
+  For each {field, value}, find the labeled field and fill its value.
+
+NEVER do these on clinical notes (cumulative-edit risk on signed records):
+- Re-format paragraphs that the doctor didn't ask to touch
+- Move sentences around for "better flow"
+- Replace contractions / clean up grammar in unrelated paragraphs
+- Add helpful disclaimers, "see also" lines, or boilerplate
+
+OUTPUT: the entire updated note as plain text. No fences, no commentary.`;
+
+// ----------------------------------------------------------------------------
 // Public types
 // ----------------------------------------------------------------------------
 
@@ -469,6 +535,90 @@ async function executeEditIntent(
 
   const text = response.choices[0]?.message?.content ?? '';
   return { text, usage: response.usage ?? undefined };
+}
+
+// ----------------------------------------------------------------------------
+// Pass 2 (clinical notes) — execute structured intent against an existing
+// note. Returns plain text (the entire updated note), not a fenced block.
+// ----------------------------------------------------------------------------
+export async function executeNoteEdit(
+  noteContent: string,
+  intent: EditIntent
+): Promise<{ text: string; usage: OpenAI.CompletionUsage | undefined }> {
+  const client = getClient();
+
+  const response = await client.chat.completions.create({
+    model: 'gpt-4o',
+    // Lower than doc-editor (0.2 → 0.1) — clinical notes are signed legal
+    // records and we want minimal creative drift on edits.
+    temperature: 0.1,
+    max_tokens: 8000,
+    messages: [
+      { role: 'system', content: NOTE_EXECUTOR_PROMPT },
+      {
+        role: 'user',
+        content: `NOTE:\n---\n${noteContent}\n---\n\n${formatIntentForExecutor(intent)}\n\nApply the intent per the OPERATION EXECUTION rules and return the entire updated note as plain text.`,
+      },
+    ],
+  });
+
+  const text = (response.choices[0]?.message?.content ?? '').trim();
+  return { text, usage: response.usage ?? undefined };
+}
+
+// ----------------------------------------------------------------------------
+// Two-pass edit for clinical notes — orchestrates parseEditIntent then
+// executeNoteEdit. Used by dispatchEditNote in the realtime AI tool router.
+//
+// Returns:
+//   - { ok: true, content, intent, usage } on success
+//   - { ok: false, reason: 'unclear', message, intent } when Pass 1 couldn't
+//     classify the instruction (Pass 2 is skipped — voice flow asks the
+//     doctor to rephrase instead of guessing)
+// ----------------------------------------------------------------------------
+export type NoteEditResult =
+  | {
+      ok: true;
+      content: string;
+      intent: EditIntent;
+      usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
+    }
+  | {
+      ok: false;
+      reason: 'unclear';
+      message: string;
+      intent: EditIntent;
+    };
+
+export async function editClinicalNoteTwoPass(
+  noteContent: string,
+  instructions: string
+): Promise<NoteEditResult> {
+  const { intent, usage: pass1Usage } = await parseEditIntent(noteContent, instructions);
+
+  if (intent.operation === 'unclear' || intent.confidence === 'low') {
+    return {
+      ok: false,
+      reason: 'unclear',
+      message: `I'm not sure exactly what to change. Could you rephrase? (Parser note: ${intent.reasoning})`,
+      intent,
+    };
+  }
+
+  const { text, usage: pass2Usage } = await executeNoteEdit(noteContent, intent);
+
+  const combinedUsage = pass1Usage || pass2Usage
+    ? {
+        promptTokens:
+          (pass1Usage?.prompt_tokens ?? 0) + (pass2Usage?.prompt_tokens ?? 0),
+        completionTokens:
+          (pass1Usage?.completion_tokens ?? 0) + (pass2Usage?.completion_tokens ?? 0),
+        totalTokens:
+          (pass1Usage?.total_tokens ?? 0) + (pass2Usage?.total_tokens ?? 0),
+      }
+    : undefined;
+
+  return { ok: true, content: text, intent, usage: combinedUsage };
 }
 
 // ----------------------------------------------------------------------------
