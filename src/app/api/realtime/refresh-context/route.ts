@@ -4,6 +4,11 @@ import { getPatientById } from '@/lib/data/patients';
 import { listNotesByPatient } from '@/lib/data/clinical-notes';
 import { listAppointmentsByPatient, type AppointmentView } from '@/lib/data/appointments';
 import { buildSystemPrompt } from '@/lib/realtime/tools';
+import {
+  buildClinicalTrajectory,
+  fetchRecentAiActions,
+  invalidateTrajectory,
+} from '@/lib/realtime/intelligence';
 
 // ============================================================================
 // /api/realtime/refresh-context — return fresh system instructions for an
@@ -51,25 +56,37 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Patient not found' }, { status: 404 });
   }
 
-  const [recentNotes, customProcedures, finalReports, patientFiles, appointments] =
+  // A refresh is always triggered by a chart write — bust the trajectory
+  // cache so the regenerated prompt reflects whatever just changed.
+  invalidateTrajectory(patientId);
+
+  const [recentNotes, customProcedures, finalReports, patientFiles, appointments, recentAiActions] =
     await Promise.all([
       listNotesByPatient(patientId, 'CLINICAL_NOTE', session),
       listNotesByPatient(patientId, 'CUSTOM_PROCEDURE', session),
       listNotesByPatient(patientId, 'FINAL_REPORT', session),
       listNotesByPatient(patientId, 'PATIENT_FILE', session),
       listAppointmentsByPatient(patientId, session),
+      fetchRecentAiActions(patientId, session),
     ]);
   const upcomingAppointments = filterUpcoming(appointments);
+  const clinicalTrajectory = await buildClinicalTrajectory(
+    patient,
+    recentNotes,
+    customProcedures
+  );
 
   const instructions = buildSystemPrompt({
     patient,
-    recentNotes: recentNotes.slice(0, 5),
-    customProcedures: customProcedures.slice(0, 5),
-    finalReports: finalReports.slice(0, 5),
-    patientFiles: patientFiles.slice(0, 5),
-    upcomingAppointments: upcomingAppointments.slice(0, 5),
+    recentNotes: recentNotes.slice(0, 10),
+    customProcedures: customProcedures.slice(0, 10),
+    finalReports: finalReports.slice(0, 10),
+    patientFiles: patientFiles.slice(0, 10),
+    upcomingAppointments: upcomingAppointments.slice(0, 10),
     currentDateIso: new Date().toISOString(),
     timezone,
+    clinicalTrajectory,
+    recentAiActions,
   });
 
   return NextResponse.json({ instructions });

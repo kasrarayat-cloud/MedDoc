@@ -21,6 +21,7 @@
 import type { PatientView } from '@/lib/data/patients';
 import type { ClinicalNoteView } from '@/lib/data/clinical-notes';
 import type { AppointmentView } from '@/lib/data/appointments';
+import { enrichNoteLine } from './intelligence';
 
 export interface RealtimeTool {
   type: 'function';
@@ -410,6 +411,11 @@ export function buildSystemPrompt(input: {
   currentDateIso: string;
   /** IANA tz, e.g. "America/Los_Angeles". Defaults to UTC. */
   timezone?: string;
+  /** One-line AI-synthesized trajectory so the model doesn't have to
+   *  read five notes to answer "where are we with her?" */
+  clinicalTrajectory?: string;
+  /** Recent audit rows on this patient — cross-visit memory. */
+  recentAiActions?: string[];
 }): string {
   const {
     patient,
@@ -420,6 +426,8 @@ export function buildSystemPrompt(input: {
     upcomingAppointments,
     currentDateIso,
     timezone = 'UTC',
+    clinicalTrajectory = '',
+    recentAiActions = [],
   } = input;
 
   // Pre-format the current moment IN THE USER'S TZ so the model sees a
@@ -432,19 +440,22 @@ export function buildSystemPrompt(input: {
     timeStyle: 'short',
   }).format(now);
   const localOffsetIso = toLocalOffsetIso(now, timezone);
+  // Lists are enriched with a short semantic hint per row (#3) so voice
+  // phrasings like "edit the back injection note" can match LESI even
+  // when the title doesn't contain "back". Cap raised from 5 → 10 (#2).
   const noteList =
     recentNotes.length === 0
       ? '(no prior notes)'
       : recentNotes
-          .slice(0, 5)
-          .map((n, i) => `  ${i + 1}. id="${n.id}" title="${n.title}" created=${n.createdAt.split('T')[0]}`)
+          .slice(0, 10)
+          .map((n, i) => `  ${i + 1}.${enrichNoteLine(n)}`)
           .join('\n');
   const procedureList =
     customProcedures.length === 0
       ? '(no uploaded procedures)'
       : customProcedures
-          .slice(0, 5)
-          .map((p, i) => `  ${i + 1}. id="${p.id}" title="${p.title}" uploaded=${p.createdAt.split('T')[0]}`)
+          .slice(0, 10)
+          .map((p, i) => `  ${i + 1}.${enrichNoteLine(p)}`)
           .join('\n');
   // Final reports — both AI-generated syntheses and uploaded report files
   // live here. The model uses these IDs to route edit_final_report /
@@ -454,7 +465,7 @@ export function buildSystemPrompt(input: {
     finalReports.length === 0
       ? '(no final reports)'
       : finalReports
-          .slice(0, 5)
+          .slice(0, 10)
           .map(
             (r, i) =>
               `  ${i + 1}. id="${r.id}" title="${r.title}" created=${r.createdAt.split('T')[0]}${r.fileName ? ' (uploaded file)' : ' (AI-generated)'}`
@@ -464,7 +475,7 @@ export function buildSystemPrompt(input: {
     patientFiles.length === 0
       ? '(no attached files)'
       : patientFiles
-          .slice(0, 5)
+          .slice(0, 10)
           .map(
             (f, i) =>
               `  ${i + 1}. id="${f.id}" name="${f.fileName ?? f.title}"${f.mimeType ? ` (${f.mimeType})` : ''} uploaded=${f.createdAt.split('T')[0]}`
@@ -566,7 +577,13 @@ PATIENT:
 PROFILE (current values — preserve unless the doctor asks to change):
 ${profileLines}
 
-BRIEF_HISTORY (current entries — preserve when adding new ones):
+${clinicalTrajectory ? `CLINICAL_TRAJECTORY (AI-synthesized one-liner for quick orientation):
+  ${clinicalTrajectory}
+
+` : ''}${recentAiActions.length > 0 ? `RECENT_ACTIONS (last work on this chart — cross-session memory):
+${recentAiActions.join('\n')}
+
+` : ''}BRIEF_HISTORY (current entries — preserve when adding new ones):
 ${briefHistoryList}
 
 RECENT_NOTES (clinical SOAP/dictated notes — newest first):
@@ -613,6 +630,7 @@ WHICH TOOL TO USE:
 - "Attach a file" / "upload [a procedure | this DOCX | a PDF]" / "add a procedure document" → request_file_upload IMMEDIATELY. Do NOT say "OK" or "I'll open it" first — call the tool first, then once it returns, say one short sentence telling the doctor to pick the file. The doctor uploads from their computer; you'll receive a follow-up user message naming the file.
 
 CRITICAL RULES:
+0. THINK FIRST (one pass, silent). Before you act, parse the doctor's request into: (a) every discrete change they named, (b) which LIST each target lives in (RECENT_NOTES / CUSTOM_PROCEDURES / FINAL_REPORTS / ATTACHED_FILES / PROFILE / UPCOMING_APPOINTMENTS), (c) which tool serves each. If the doctor names a document by topic ("back injection note", "the imaging procedure") match it to the LIST entry whose hint contains that topic, not by trying other lists. Only after you have a plan, start calling tools.
 1. EXECUTE IMMEDIATELY — never ask for confirmation. The doctor wants speed. Call the tool right away, then briefly state what you did ("Saved.", "Updated.", "Scheduled Tuesday 10 AM."). Do NOT preface with "I'll" / "Should I" / "Confirm?" / "Are you sure?" — just do it and report.
 1a. COMPLETE EVERY REQUESTED CHANGE BEFORE SPEAKING. If the doctor asks for multiple things in one turn ("fix the email and update her phone and add to brief history"), call ALL the relevant tools in the same response. Don't stop after the first or second — keep going until every item on the list is addressed. Only speak once at the end, summarizing briefly ("Updated email, phone, and added to history."). If a single field change covers multiple items (e.g., update_patient can set email + phone together in one call), use one call; otherwise chain multiple tool calls in the same turn.
 2. The ONLY time to ask before acting is when the command is genuinely AMBIGUOUS — e.g., "edit the note" when there are multiple recent notes that could match. Then ask once: "Which one — LESI or consult?" After clarification, act immediately.

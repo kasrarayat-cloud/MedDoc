@@ -6,6 +6,11 @@ import { listNotesByPatient } from '@/lib/data/clinical-notes';
 import { listAppointmentsByPatient, type AppointmentView } from '@/lib/data/appointments';
 import { REALTIME_TOOLS, buildSystemPrompt } from '@/lib/realtime/tools';
 import { checkVoiceCap } from '@/lib/realtime/usage-cap';
+import {
+  buildClinicalTrajectory,
+  buildPatientVocabPrimer,
+  fetchRecentAiActions,
+} from '@/lib/realtime/intelligence';
 
 // ============================================================================
 // /api/realtime/session — mint an ephemeral OpenAI Realtime session token
@@ -29,7 +34,10 @@ import { checkVoiceCap } from '@/lib/realtime/usage-cap';
 // runs with full auth + tenant + audit.
 // ============================================================================
 
-const REALTIME_MODEL = 'gpt-4o-realtime-preview';
+// #1 — Upgraded from gpt-4o-realtime-preview to the GA gpt-realtime.
+// Sharper tool-routing + better multi-step reasoning; same cost class.
+// Overridable via env for easy rollback.
+const REALTIME_MODEL = process.env.REALTIME_MODEL || 'gpt-realtime';
 // Voice is env-tunable so you can A/B without a redeploy. Options (per
 // OpenAI Realtime docs): alloy, ash, ballad, coral, echo, sage, shimmer,
 // verse. Default `coral` = warm + clinical. `alloy` = most neutral/
@@ -79,16 +87,34 @@ export async function POST(request: NextRequest) {
   }
 
   // Every chart surface the model might need to target. All tenant-
-  // scoped through the patient relation filter.
-  const [recentNotes, customProcedures, finalReports, patientFiles, appointments] =
+  // scoped through the patient relation filter. recentAiActions comes
+  // from the AuditLog (cross-session memory, #5).
+  const [recentNotes, customProcedures, finalReports, patientFiles, appointments, recentAiActions] =
     await Promise.all([
       listNotesByPatient(patientId, 'CLINICAL_NOTE', session),
       listNotesByPatient(patientId, 'CUSTOM_PROCEDURE', session),
       listNotesByPatient(patientId, 'FINAL_REPORT', session),
       listNotesByPatient(patientId, 'PATIENT_FILE', session),
       listAppointmentsByPatient(patientId, session),
+      fetchRecentAiActions(patientId, session),
     ]);
   const upcomingAppointments = filterUpcomingAppointments(appointments);
+
+  // Trajectory synthesis (#2). Cached per-patient so re-opening the
+  // panel during the same clinic session is free. Runs in parallel
+  // with the OpenAI session-creation network call below if we fire it
+  // now — but it's fast enough (~400ms cold, instant warm) that the
+  // sequential flow is simpler and still sub-second.
+  const clinicalTrajectory = await buildClinicalTrajectory(
+    patient,
+    recentNotes,
+    customProcedures
+  );
+
+  // Whisper vocabulary primer (#4). Feeds patient-specific names and
+  // common terms to the transcription model so ethnic surnames and
+  // clinic-specific drugs don't get mangled.
+  const vocabPrimer = buildPatientVocabPrimer(patient, recentNotes, customProcedures);
 
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -114,13 +140,17 @@ export async function POST(request: NextRequest) {
         voice: REALTIME_VOICE,
         instructions: buildSystemPrompt({
           patient,
-          recentNotes: recentNotes.slice(0, 5),
-          customProcedures: customProcedures.slice(0, 5),
-          finalReports: finalReports.slice(0, 5),
-          patientFiles: patientFiles.slice(0, 5),
-          upcomingAppointments: upcomingAppointments.slice(0, 5),
+          // Caps raised to 10 (#2) so the model has more of the
+          // trajectory visible without needing extra read_* calls.
+          recentNotes: recentNotes.slice(0, 10),
+          customProcedures: customProcedures.slice(0, 10),
+          finalReports: finalReports.slice(0, 10),
+          patientFiles: patientFiles.slice(0, 10),
+          upcomingAppointments: upcomingAppointments.slice(0, 10),
           currentDateIso: new Date().toISOString(),
           timezone,
+          clinicalTrajectory,
+          recentAiActions,
         }),
         tools: REALTIME_TOOLS,
         // NOTE: parallel_tool_calls / max_response_output_tokens are NOT
@@ -158,6 +188,10 @@ export async function POST(request: NextRequest) {
         output_audio_format: 'pcm16',
         input_audio_transcription: {
           model: 'whisper-1',
+          // #4 — Biases Whisper toward patient-specific names and terms
+          // so ethnic surnames, specific medications, and procedure
+          // codes are transcribed correctly on the first try.
+          ...(vocabPrimer ? { prompt: vocabPrimer } : {}),
         },
       }),
     });
