@@ -40,6 +40,22 @@ interface TrajectoryCacheEntry {
 
 const trajectoryCache = new Map<string, TrajectoryCacheEntry>();
 const TRAJECTORY_TTL_MS = 10 * 60 * 1000;
+// Cap the cache so a long-running process with many patient visits
+// doesn't grow unbounded. 500 entries × ~200 bytes each is trivial RAM
+// but caps the blast radius of a memory leak. LRU-ish: when we breach
+// the cap, drop the oldest-expiring quarter in one pass.
+const TRAJECTORY_MAX_ENTRIES = 500;
+
+function enforceCacheBound(): void {
+  if (trajectoryCache.size <= TRAJECTORY_MAX_ENTRIES) return;
+  const entries = Array.from(trajectoryCache.entries());
+  entries.sort((a, b) => a[1].expires - b[1].expires);
+  const dropCount = Math.ceil(TRAJECTORY_MAX_ENTRIES / 4);
+  for (let i = 0; i < dropCount; i++) {
+    const entry = entries[i];
+    if (entry) trajectoryCache.delete(entry[0]);
+  }
+}
 
 /**
  * One-paragraph synthesis of the patient's current clinical state.
@@ -97,6 +113,7 @@ export async function buildClinicalTrajectory(
         summary,
         expires: Date.now() + TRAJECTORY_TTL_MS,
       });
+      enforceCacheBound();
     }
     return summary;
   } catch (err) {
