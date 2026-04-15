@@ -51,9 +51,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Patient not found' }, { status: 404 });
   }
 
-  const [recentNotes, customProcedures, appointments] = await Promise.all([
+  const [recentNotes, customProcedures, finalReports, appointments] = await Promise.all([
     listNotesByPatient(patientId, 'CLINICAL_NOTE', session),
     listNotesByPatient(patientId, 'CUSTOM_PROCEDURE', session),
+    listNotesByPatient(patientId, 'FINAL_REPORT', session),
     listAppointmentsByPatient(patientId, session),
   ]);
   const upcomingAppointments = filterUpcoming(appointments);
@@ -62,6 +63,7 @@ export async function POST(request: NextRequest) {
     patient,
     recentNotes: recentNotes.slice(0, 5),
     customProcedures: customProcedures.slice(0, 5),
+    finalReports: finalReports.slice(0, 5),
     upcomingAppointments: upcomingAppointments.slice(0, 5),
     currentDateIso: new Date().toISOString(),
     timezone,

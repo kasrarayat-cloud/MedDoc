@@ -162,6 +162,21 @@ export async function POST(request: NextRequest) {
         return NextResponse.json<ToolResponse>(toToolResponse(result));
       }
 
+      case 'edit_final_report': {
+        // Final reports are Document rows like notes/procedures — same
+        // dispatcher, separate tool so the model can't cross-route.
+        const reportId = typeof args.reportId === 'string' ? args.reportId : '';
+        const instructions = typeof args.instructions === 'string' ? args.instructions : '';
+        if (!reportId || !instructions.trim()) {
+          return NextResponse.json<ToolResponse>(
+            { ok: false, output: 'reportId and instructions are required.' },
+            { status: 400 }
+          );
+        }
+        const result = await dispatchEditNote(patient, reportId, instructions, getOpenAI(), session);
+        return NextResponse.json<ToolResponse>(toToolResponse(result));
+      }
+
       case 'schedule_appointment': {
         const scheduledAt = typeof args.scheduledAt === 'string' ? args.scheduledAt : '';
         const visitType = typeof args.visitType === 'string' ? args.visitType : 'FOLLOW_UP';
@@ -195,18 +210,21 @@ export async function POST(request: NextRequest) {
       }
 
       case 'read_clinical_note':
-      case 'read_custom_procedure': {
-        // Same underlying fetch for both — differs only in where the model
-        // sourced the ID. Tenant guard lives inside dataGetNoteById.
+      case 'read_custom_procedure':
+      case 'read_final_report': {
+        // Same underlying fetch for all three — differs only in where the
+        // model sourced the ID. Tenant guard lives inside dataGetNoteById.
         const id =
           typeof args.noteId === 'string'
             ? args.noteId
             : typeof args.procedureId === 'string'
               ? args.procedureId
-              : '';
+              : typeof args.reportId === 'string'
+                ? args.reportId
+                : '';
         if (!id) {
           return NextResponse.json<ToolResponse>(
-            { ok: false, output: 'Missing noteId/procedureId.' },
+            { ok: false, output: 'Missing noteId/procedureId/reportId.' },
             { status: 400 }
           );
         }
@@ -290,6 +308,34 @@ export async function POST(request: NextRequest) {
         return NextResponse.json<ToolResponse>({
           ok: true,
           output: 'Custom procedure deleted.',
+        });
+      }
+
+      case 'delete_final_report': {
+        const reportId = typeof args.reportId === 'string' ? args.reportId : '';
+        if (!reportId) {
+          return NextResponse.json<ToolResponse>(
+            { ok: false, output: 'reportId is required.' },
+            { status: 400 }
+          );
+        }
+        const ok = await dataDeleteClinicalNote(reportId, session);
+        if (!ok) {
+          return NextResponse.json<ToolResponse>(
+            { ok: false, output: 'Final report not found or not accessible.' },
+            { status: 404 }
+          );
+        }
+        await logAudit({
+          action: 'DELETED_DOCUMENT',
+          targetId: reportId,
+          targetType: 'Document',
+          metadata: { via: 'assistant', patientId, category: 'FINAL_REPORT' },
+        });
+        revalidatePath(`/dashboard/patients/${patientId}`);
+        return NextResponse.json<ToolResponse>({
+          ok: true,
+          output: 'Final report deleted.',
         });
       }
 

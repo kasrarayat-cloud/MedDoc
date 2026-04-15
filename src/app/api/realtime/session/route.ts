@@ -78,12 +78,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Patient not found' }, { status: 404 });
   }
 
-  // Recent notes + custom procedures + upcoming appointments seed the
-  // system prompt's edit_* / cancel_* routing. All tenant-scoped through
-  // the patient relation filter.
-  const [recentNotes, customProcedures, appointments] = await Promise.all([
+  // Recent notes + custom procedures + final reports + upcoming
+  // appointments seed the system prompt's edit_* / cancel_* routing.
+  // All tenant-scoped through the patient relation filter.
+  const [recentNotes, customProcedures, finalReports, appointments] = await Promise.all([
     listNotesByPatient(patientId, 'CLINICAL_NOTE', session),
     listNotesByPatient(patientId, 'CUSTOM_PROCEDURE', session),
+    listNotesByPatient(patientId, 'FINAL_REPORT', session),
     listAppointmentsByPatient(patientId, session),
   ]);
   const upcomingAppointments = filterUpcomingAppointments(appointments);
@@ -114,6 +115,7 @@ export async function POST(request: NextRequest) {
           patient,
           recentNotes: recentNotes.slice(0, 5),
           customProcedures: customProcedures.slice(0, 5),
+          finalReports: finalReports.slice(0, 5),
           upcomingAppointments: upcomingAppointments.slice(0, 5),
           currentDateIso: new Date().toISOString(),
           timezone,

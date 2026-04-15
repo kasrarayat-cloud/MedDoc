@@ -304,6 +304,56 @@ export const REALTIME_TOOLS: RealtimeTool[] = [
   },
   {
     type: 'function',
+    name: 'read_final_report',
+    description:
+      'Fetch the FULL TEXT of a final report so you can read it, quote from it, or apply precise edits. Pick `reportId` from FINAL_REPORTS. Read-only — no confirmation needed. Use before any complex edit where you need the current contents.',
+    parameters: {
+      type: 'object',
+      properties: {
+        reportId: { type: 'string', description: 'ID of the final report, from FINAL_REPORTS.' },
+      },
+      required: ['reportId'],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: 'function',
+    name: 'edit_final_report',
+    description:
+      'Modify an existing FINAL REPORT. Pick `reportId` from FINAL_REPORTS in the system context. Execute immediately — do NOT ask for confirmation. Use this — NOT edit_custom_procedure — when the doctor refers to the final report, discharge summary, case summary, etc.',
+    parameters: {
+      type: 'object',
+      properties: {
+        reportId: {
+          type: 'string',
+          description: 'ID of the final report to edit, taken from FINAL_REPORTS in the session context.',
+        },
+        instructions: {
+          type: 'string',
+          description:
+            "Specific edit instructions in natural language. Be concrete: quote the exact current phrasing to replace, and the new wording. The server model rewrites precisely — don't send vague 'make it better'.",
+        },
+      },
+      required: ['reportId', 'instructions'],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: 'function',
+    name: 'delete_final_report',
+    description:
+      'Soft-delete a FINAL REPORT. Pick `reportId` from FINAL_REPORTS in context. Execute immediately. Record stays in the audit log per HIPAA; report disappears from active views.',
+    parameters: {
+      type: 'object',
+      properties: {
+        reportId: { type: 'string', description: 'ID of the final report to delete, from FINAL_REPORTS.' },
+      },
+      required: ['reportId'],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: 'function',
     name: 'generate_final_report',
     description:
       'Synthesize a comprehensive Final Evaluation Report from the patient\'s brief history, clinical notes, and procedure documents. Saved as a DRAFT final report on the chart. Use when the doctor says "generate a final report", "write the discharge summary", "compose the case summary", or similar. No arguments — everything comes from the patient record.',
@@ -326,12 +376,21 @@ export function buildSystemPrompt(input: {
   patient: PatientView;
   recentNotes: ClinicalNoteView[];
   customProcedures: ClinicalNoteView[];
+  finalReports: ClinicalNoteView[];
   upcomingAppointments: AppointmentView[];
   currentDateIso: string;
   /** IANA tz, e.g. "America/Los_Angeles". Defaults to UTC. */
   timezone?: string;
 }): string {
-  const { patient, recentNotes, customProcedures, upcomingAppointments, currentDateIso, timezone = 'UTC' } = input;
+  const {
+    patient,
+    recentNotes,
+    customProcedures,
+    finalReports,
+    upcomingAppointments,
+    currentDateIso,
+    timezone = 'UTC',
+  } = input;
 
   // Pre-format the current moment IN THE USER'S TZ so the model sees a
   // "now" that matches the doctor's clock. Also emit a sample local-offset
@@ -356,6 +415,20 @@ export function buildSystemPrompt(input: {
       : customProcedures
           .slice(0, 5)
           .map((p, i) => `  ${i + 1}. id="${p.id}" title="${p.title}" uploaded=${p.createdAt.split('T')[0]}`)
+          .join('\n');
+  // Final reports — both AI-generated syntheses and uploaded report files
+  // live here. The model uses these IDs to route edit_final_report /
+  // delete_clinical_note correctly when the doctor says "the final
+  // report" (vs. notes or procedures).
+  const finalReportList =
+    finalReports.length === 0
+      ? '(no final reports)'
+      : finalReports
+          .slice(0, 5)
+          .map(
+            (r, i) =>
+              `  ${i + 1}. id="${r.id}" title="${r.title}" created=${r.createdAt.split('T')[0]}${r.fileName ? ' (uploaded file)' : ' (AI-generated)'}`
+          )
           .join('\n');
   const appointmentList =
     upcomingAppointments.length === 0
@@ -462,10 +535,13 @@ ${noteList}
 CUSTOM_PROCEDURES (uploaded procedure documents — PDFs/DOCXs the doctor attached, newest first):
 ${procedureList}
 
+FINAL_REPORTS (AI-generated case summaries + uploaded report files — newest first):
+${finalReportList}
+
 UPCOMING_APPOINTMENTS (scheduled / non-cancelled):
 ${appointmentList}
 
-YOUR JOB: understand the doctor's voice commands, call the appropriate tool, and report in voice. Tools: create_clinical_note, read_clinical_note, edit_clinical_note, delete_clinical_note, read_custom_procedure, edit_custom_procedure, delete_custom_procedure, schedule_appointment, cancel_appointment, summarize_chart, generate_document, generate_final_report, update_patient, request_file_upload, archive_patient.
+YOUR JOB: understand the doctor's voice commands, call the appropriate tool, and report in voice. Tools: create_clinical_note, read_clinical_note, edit_clinical_note, delete_clinical_note, read_custom_procedure, edit_custom_procedure, delete_custom_procedure, read_final_report, edit_final_report, delete_final_report, schedule_appointment, cancel_appointment, summarize_chart, generate_document, generate_final_report, update_patient, request_file_upload, archive_patient.
 
 READ-THEN-ACT PATTERN: the RECENT_NOTES and CUSTOM_PROCEDURES lists only give you IDs and titles — not the actual text inside. If the doctor asks you to READ, REVIEW, LOOK AT, DESCRIBE, OR QUOTE FROM a note or procedure, call read_clinical_note / read_custom_procedure FIRST to fetch the content. If the doctor asks to edit by content ("change X to Y in the LESI note", "delete the brief history section from the procedure"), call read_* first to see the current text, then call edit_* with precise instructions.
 
@@ -478,6 +554,9 @@ WHICH TOOL TO USE:
 - "Delete the [LESI|last] note" / "remove the note" → delete_clinical_note (pick from RECENT_NOTES)
 - "Edit the [uploaded|attached|procedure] document" / "fix the protocol" / "update the file I uploaded" → read_custom_procedure FIRST (see current content), then edit_custom_procedure with precise instructions
 - "Delete the procedure" / "remove the uploaded file" → delete_custom_procedure (pick from CUSTOM_PROCEDURES)
+- "Read/review the final report" / "what does the final report say?" → read_final_report (pick from FINAL_REPORTS), then speak the content
+- "Edit the [final|case|discharge] report" / "fix the final report" / "rewrite the summary" → read_final_report FIRST, then edit_final_report with precise instructions. Do NOT route to edit_custom_procedure — final reports live in FINAL_REPORTS, not CUSTOM_PROCEDURES.
+- "Delete the final report" / "remove the report" → delete_final_report (pick from FINAL_REPORTS)
 - "Schedule…" → schedule_appointment
 - "Cancel the [Tuesday|next|follow-up] appointment" / "delete the appointment" → cancel_appointment (pick from UPCOMING_APPOINTMENTS)
 - "Summarize the chart" → summarize_chart
@@ -491,7 +570,7 @@ CRITICAL RULES:
 2. The ONLY time to ask before acting is when the command is genuinely AMBIGUOUS — e.g., "edit the note" when there are multiple recent notes that could match. Then ask once: "Which one — LESI or consult?" After clarification, act immediately.
 3. For request_file_upload: call the tool FIRST, do not say "OK I'll open it" before the call — speak only after the tool returns.
 4. For update_patient briefHistory: send the FULL list (existing entries from BRIEF_HISTORY above + your additions). NEVER send a list that omits existing entries unless the doctor explicitly asks to remove one.
-5. For edit_clinical_note, pick noteId from RECENT_NOTES above. "The last note" = the FIRST entry. For edit_custom_procedure, pick procedureId from CUSTOM_PROCEDURES above. NEVER cross-target — clinical notes and custom procedures live in separate lists.
+5. For edit_clinical_note, pick noteId from RECENT_NOTES above. "The last note" = the FIRST entry. For edit_custom_procedure, pick procedureId from CUSTOM_PROCEDURES above. For edit_final_report, pick reportId from FINAL_REPORTS above. NEVER cross-target — the three lists are separate and the tools are NOT interchangeable. If the doctor says "final report", you MUST use the FINAL_REPORTS list; do not reach into CUSTOM_PROCEDURES or RECENT_NOTES.
 5a. IMPORTANT DISTINCTION — document content vs patient profile:
     - edit_clinical_note / edit_custom_procedure edit the FREE-FORM TEXT CONTENT inside a document. That text is whatever the doctor dictated or the uploaded file contained — it can include ANY information (dates, DOBs, doses, addresses, etc.). There is NO Safe Harbor restriction on content INSIDE a document; edit it as instructed.
     - update_patient edits the patient PROFILE row, where birthYear is year-only per HIPAA Safe Harbor.
