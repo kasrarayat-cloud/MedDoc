@@ -104,12 +104,11 @@ function EditPatientModalContent({
   const [isPending, startTransition] = useTransition();
   const [form, setForm] = useState<FormState>(() => patientToForm(patient));
   const [assignedDoctorId, setAssignedDoctorId] = useState<string>(
-    // PatientView doesn't currently expose assignedDoctorId as its own
-    // field (`assignedDoctor` is a display name), so we start empty and
-    // only write to it if the user changes the dropdown. When the user
-    // doesn't touch it, we omit it from the payload and the server
-    // leaves the existing assignment alone.
-    ''
+    // Preselect the current assignment so the dropdown reflects reality
+    // on open. Untouched submits leave it as-is; if the user actively
+    // changes it we flip assignedDoctorChanged and include it in the
+    // payload.
+    patient.assignedDoctorId ?? ''
   );
   const [assignedDoctorChanged, setAssignedDoctorChanged] = useState(false);
   const [doctors, setDoctors] = useState<DoctorOption[]>([]);

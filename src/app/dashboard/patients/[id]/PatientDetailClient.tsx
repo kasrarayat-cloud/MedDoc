@@ -31,6 +31,8 @@ import {
   Paperclip,
   FileBadge,
   Trash2,
+  MapPin,
+  Pill,
 } from 'lucide-react';
 import { formatLastVisit, formatRelativeDate } from '@/lib/mock-patients';
 import type { PatientView } from '@/lib/data/patients';
@@ -380,6 +382,14 @@ export default function PatientDetailClient({
                     <Calendar className="w-3.5 h-3.5" />
                     Born {patient.birthYear} ({age} y.o.)
                   </span>
+                  {patient.sex && patient.sex !== 'UNKNOWN' && (
+                    <span className="flex items-center gap-1.5 capitalize">
+                      <span className="text-slate-500 text-[10px] uppercase tracking-wider">
+                        Sex
+                      </span>
+                      {patient.sex.toLowerCase()}
+                    </span>
+                  )}
                   <span className="flex items-center gap-1.5">
                     <Stethoscope className="w-3.5 h-3.5" />
                     {patient.assignedDoctor}
@@ -457,6 +467,91 @@ export default function PatientDetailClient({
             transition={{ delay: 0.1 }}
             className="lg:col-span-2 space-y-6"
           >
+            {/* Profile Details — address + pharmacy + cell/home phone.
+                Only renders sections that actually have data, so an
+                intake-only chart doesn't show empty rows. Skipped
+                entirely if nothing's filled in. */}
+            {(patient.addressLine1 ||
+              patient.city ||
+              patient.pharmacyName ||
+              patient.pharmacyPhone ||
+              patient.cellPhone ||
+              patient.homePhone) && (
+              <div className="rounded-xl bg-white/5 backdrop-blur-md border border-white/10 p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="p-1.5 rounded-lg bg-sky-500/15 border border-sky-500/30">
+                    <MapPin className="w-4 h-4 text-sky-300" />
+                  </div>
+                  <h2 className="text-sm font-semibold text-white uppercase tracking-wider">
+                    Profile Details
+                  </h2>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                  {(patient.addressLine1 || patient.city) && (
+                    <div className="min-w-0">
+                      <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1 flex items-center gap-1.5">
+                        <MapPin className="w-3 h-3" />
+                        Address
+                      </p>
+                      <div className="text-sm text-slate-200 leading-relaxed">
+                        {patient.addressLine1 && <p>{patient.addressLine1}</p>}
+                        {patient.addressLine2 && <p>{patient.addressLine2}</p>}
+                        {(patient.city ||
+                          patient.state ||
+                          patient.postalCode) && (
+                          <p className="text-slate-300">
+                            {[patient.city, patient.state].filter(Boolean).join(', ')}
+                            {patient.postalCode ? ` ${patient.postalCode}` : ''}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {(patient.cellPhone || patient.homePhone) && (
+                    <div className="min-w-0">
+                      <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1 flex items-center gap-1.5">
+                        <Phone className="w-3 h-3" />
+                        Phone
+                      </p>
+                      <div className="text-sm text-slate-200 leading-relaxed font-mono">
+                        {patient.cellPhone && (
+                          <p>
+                            <span className="text-[10px] text-slate-500 mr-1">CELL</span>
+                            {patient.cellPhone}
+                          </p>
+                        )}
+                        {patient.homePhone && (
+                          <p>
+                            <span className="text-[10px] text-slate-500 mr-1">HOME</span>
+                            {patient.homePhone}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {(patient.pharmacyName || patient.pharmacyPhone) && (
+                    <div className="min-w-0 sm:col-span-2">
+                      <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1 flex items-center gap-1.5">
+                        <Pill className="w-3 h-3" />
+                        Preferred Pharmacy
+                      </p>
+                      <div className="text-sm text-slate-200 leading-relaxed">
+                        {patient.pharmacyName && <p>{patient.pharmacyName}</p>}
+                        {patient.pharmacyPhone && (
+                          <p className="font-mono text-slate-400 text-xs">
+                            {patient.pharmacyPhone}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Brief History card */}
             <div className="rounded-xl bg-white/5 backdrop-blur-md border border-white/10 p-5">
               <div className="flex items-center justify-between mb-4">

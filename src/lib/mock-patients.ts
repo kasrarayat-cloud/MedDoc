@@ -65,7 +65,12 @@ export interface MockPatient {
   pharmacyPhone?: string;
   status: PatientStatus;
   tags: string[];
+  /** Display name of the assigned provider (joined in the data layer
+   *  when possible, falls back to "Unassigned" / "Assigned provider"). */
   assignedDoctor: string;
+  /** Actual User.id of the assigned provider — drives the Edit dropdown
+   *  and the tenant-guarded update path. Undefined means unassigned. */
+  assignedDoctorId?: string;
   lastVisit: string; // ISO
   createdAt: string; // ISO
   briefHistory: string[];

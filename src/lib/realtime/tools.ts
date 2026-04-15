@@ -366,12 +366,26 @@ export function buildSystemPrompt(input: {
 
   // Profile snapshot — current values so the AI knows what to preserve when
   // calling update_patient. Don't echo PHI back to the doctor unprompted.
+  // Only include fields that have a value so the prompt stays compact
+  // (every token costs Realtime-voice latency).
+  const addressParts = [
+    patient.addressLine1,
+    patient.addressLine2,
+    [patient.city, patient.state].filter(Boolean).join(', '),
+    patient.postalCode,
+  ]
+    .filter(Boolean)
+    .join(' · ');
   const profileLines = [
     `  mrn: ${patient.mrn || '(none)'}`,
     `  chartId: ${patient.chartId || '(none)'}`,
     `  email: ${patient.email || '(none)'}`,
     `  cellPhone: ${patient.cellPhone || '(none)'}`,
     `  homePhone: ${patient.homePhone || '(none)'}`,
+    `  sex: ${patient.sex && patient.sex !== 'UNKNOWN' ? patient.sex : '(not specified)'}`,
+    `  address: ${addressParts || '(none)'}`,
+    `  pharmacy: ${patient.pharmacyName || '(none)'}${patient.pharmacyPhone ? ` [${patient.pharmacyPhone}]` : ''}`,
+    `  assignedDoctor: ${patient.assignedDoctor || '(unassigned)'}`,
     `  insuranceVerified: ${patient.insuranceVerified === undefined ? '(unknown)' : String(patient.insuranceVerified)}`,
     `  tags: [${(patient.tags ?? []).join(', ')}]`,
   ].join('\n');

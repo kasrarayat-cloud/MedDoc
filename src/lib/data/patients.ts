@@ -152,6 +152,9 @@ export async function getAllPatients(session: Session): Promise<PatientView[]> {
       const rows = await prisma.patient.findMany({
         where: patientAccessWhere(session),
         orderBy: [{ status: 'asc' }, { lastName: 'asc' }],
+        include: {
+          assignedDoctor: { select: { name: true, email: true } },
+        },
       });
       return rows.map(prismaToView);
     } catch (err) {
@@ -178,6 +181,9 @@ export async function getPatientById(
       // the ACL check — no row returned if the current user can't see it.
       const row = await prisma.patient.findFirst({
         where: { id, ...patientAccessWhere(session) },
+        include: {
+          assignedDoctor: { select: { name: true, email: true } },
+        },
       });
       if (!row) return null;
       return prismaToView(row);
@@ -452,6 +458,7 @@ export async function updatePatient(
     postalCode: nullableToUndef(input.postalCode, existing.postalCode),
     pharmacyName: nullableToUndef(input.pharmacyName, existing.pharmacyName),
     pharmacyPhone: nullableToUndef(input.pharmacyPhone, existing.pharmacyPhone),
+    assignedDoctorId: nullableToUndef(input.assignedDoctorId, existing.assignedDoctorId),
   };
   memoryStore.set(id, updated);
   return { patient: updated, changedFields };
@@ -530,7 +537,15 @@ function prismaToView(row: any): PatientView {
     pharmacyPhone: row.pharmacyPhone ?? undefined,
     status: row.status as PatientStatus,
     tags: row.tags ?? [],
-    assignedDoctor: 'Dr. Moussazadeh', // joined separately in real app
+    // Pull the real doctor name from the joined `assignedDoctor` relation
+    // when it's been included on the query. Callers that don't `include`
+    // it fall through to the unassigned label — safer default than the
+    // hardcoded "Dr. Moussazadeh" placeholder we used to carry.
+    assignedDoctor:
+      row.assignedDoctor?.name ||
+      row.assignedDoctor?.email ||
+      (row.assignedDoctorId ? 'Assigned provider' : 'Unassigned'),
+    assignedDoctorId: row.assignedDoctorId ?? undefined,
     lastVisit: row.lastSyncAt?.toISOString() ?? row.updatedAt.toISOString(),
     createdAt: row.createdAt.toISOString(),
     // briefHistory now lives on the Patient row (Phase 2 schema migration).
