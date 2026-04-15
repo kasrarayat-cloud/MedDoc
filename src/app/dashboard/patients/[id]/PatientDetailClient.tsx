@@ -96,6 +96,11 @@ export default function PatientDetailClient({
   const [docGenModalOpen, setDocGenModalOpen] = useState(false);
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
   const [fileUploadModalOpen, setFileUploadModalOpen] = useState(false);
+  /** Tracks which chart section triggered the upload modal so the
+   *  created row lands under the right card. null = modal closed. */
+  const [fileUploadIntent, setFileUploadIntent] = useState<
+    'PATIENT_FILE' | 'FINAL_REPORT'
+  >('PATIENT_FILE');
   // Client-side mirrors of the server-rendered lists. Let the modal and
   // the Generate button prepend new rows optimistically so the UI updates
   // without a full page reload. A router.refresh() on the action still
@@ -1080,9 +1085,12 @@ export default function PatientDetailClient({
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setFileUploadModalOpen(true)}
+                    onClick={() => {
+                      setFileUploadIntent('FINAL_REPORT');
+                      setFileUploadModalOpen(true);
+                    }}
                     className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white transition-all cursor-pointer"
-                    title="Upload a report or reference file"
+                    title="Upload a final report file"
                   >
                     <UploadCloud className="w-3 h-3" />
                     Upload
@@ -1137,8 +1145,13 @@ export default function PatientDetailClient({
                 <div className="space-y-2">
                   {reports.map((report) => {
                     const isExpanded = expandedReportId === report.id;
-                    const preview =
-                      report.content.split('\n').find((l) => l.trim())?.slice(0, 140) ?? '';
+                    // Uploaded final reports carry no content — just file
+                    // metadata. Render them as a file row (no expansion,
+                    // show size/mime) instead of showing an empty pre.
+                    const isUploadedFile = !report.content.trim() && !!report.fileName;
+                    const preview = isUploadedFile
+                      ? `${report.fileName} · ${formatBytes(report.sizeBytes)}`
+                      : report.content.split('\n').find((l) => l.trim())?.slice(0, 140) ?? '';
                     return (
                       <motion.div
                         key={report.id}
@@ -1222,9 +1235,30 @@ export default function PatientDetailClient({
                               className="overflow-hidden"
                             >
                               <div className="px-4 pb-4 pt-1 border-t border-white/5 mx-3">
-                                <pre className="mt-3 text-xs text-slate-200 leading-relaxed whitespace-pre-wrap font-sans bg-slate-950/60 rounded-lg p-4 border border-white/5">
-                                  {report.content}
-                                </pre>
+                                {isUploadedFile ? (
+                                  <div className="mt-3 rounded-lg bg-slate-950/60 border border-white/5 p-4 flex items-center gap-3">
+                                    <div className="shrink-0 p-2 rounded-md bg-rose-500/10 border border-rose-500/20">
+                                      <FileText className="w-5 h-5 text-rose-300" />
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="text-sm font-medium text-white truncate">
+                                        {report.fileName}
+                                      </p>
+                                      <p className="text-[11px] text-slate-400 font-mono">
+                                        {formatBytes(report.sizeBytes)}
+                                        {report.mimeType ? ` · ${report.mimeType}` : ''}
+                                      </p>
+                                      <p className="text-[10px] text-slate-500 italic mt-1">
+                                        File attached as a final report. Download/preview will
+                                        arrive with real file storage; metadata recorded for now.
+                                      </p>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <pre className="mt-3 text-xs text-slate-200 leading-relaxed whitespace-pre-wrap font-sans bg-slate-950/60 rounded-lg p-4 border border-white/5">
+                                    {report.content}
+                                  </pre>
+                                )}
                                 <div className="mt-2 flex items-center gap-2 justify-end">
                                   <button
                                     type="button"
@@ -1279,7 +1313,10 @@ export default function PatientDetailClient({
 
                 <button
                   type="button"
-                  onClick={() => setFileUploadModalOpen(true)}
+                  onClick={() => {
+                    setFileUploadIntent('PATIENT_FILE');
+                    setFileUploadModalOpen(true);
+                  }}
                   className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white transition-all cursor-pointer"
                 >
                   <UploadCloud className="w-3 h-3" />
@@ -1396,7 +1433,10 @@ export default function PatientDetailClient({
                   Schedule Visit
                 </button>
                 <button
-                  onClick={() => setFileUploadModalOpen(true)}
+                  onClick={() => {
+                    setFileUploadIntent('PATIENT_FILE');
+                    setFileUploadModalOpen(true);
+                  }}
                   className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white/5 border border-white/10 text-slate-200 text-sm hover:bg-white/10 hover:border-white/20 transition-all cursor-pointer"
                 >
                   <Paperclip className="w-4 h-4 text-amber-300" />
@@ -1453,14 +1493,24 @@ export default function PatientDetailClient({
         patientName={`${patient.firstName} ${patient.lastName}`}
       />
 
-      {/* Attach File Modal. onUploaded prepends the returned row to the
-          Attached Documents list so the doctor sees it immediately. */}
+      {/* File upload modal. fileUploadIntent routes the upload to the
+          right category + list. Upload from Final Reports saves as
+          FINAL_REPORT and prepends to reports; upload from Attached
+          Documents / Quick Actions saves as PATIENT_FILE and prepends
+          to files. */}
       <PatientFileUploadModal
         open={fileUploadModalOpen}
         onClose={() => setFileUploadModalOpen(false)}
         patientId={patient.id}
         patientName={`${patient.firstName} ${patient.lastName}`}
-        onUploaded={handleFileUploaded}
+        uploadAs={fileUploadIntent}
+        onUploaded={(row) => {
+          if (fileUploadIntent === 'FINAL_REPORT') {
+            setReports((prev) => [row, ...prev]);
+          } else {
+            handleFileUploaded(row);
+          }
+        }}
       />
 
       {/* Centered Spotlight-style AI assistant — opened by header button

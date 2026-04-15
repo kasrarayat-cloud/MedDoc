@@ -153,18 +153,25 @@ export interface CreatePatientFileInput {
   mimeType: string;
   sizeBytes: number;
   createdById: string;
+  /** Which chart card the upload should surface under. Defaults to
+   *  PATIENT_FILE (Attached Documents). FINAL_REPORT is used when the
+   *  doctor hits Upload on the Final Reports card — typically a signed
+   *  external PDF they want alongside AI-generated reports. */
+  category?: 'PATIENT_FILE' | 'FINAL_REPORT';
 }
 
 export async function createPatientFile(
   input: CreatePatientFileInput
 ): Promise<ClinicalNoteView> {
+  const category = input.category ?? 'PATIENT_FILE';
+  const sentinel = CATEGORY_SENTINELS[category];
   if (await isDatabaseHealthy()) {
     try {
       const row = await prisma.document.create({
         data: {
           patientId: input.patientId,
           title: input.fileName,
-          procedureType: CATEGORY_SENTINELS.PATIENT_FILE,
+          procedureType: sentinel,
           status: 'FINALIZED',
           content: null,
           mimeType: input.mimeType,
@@ -183,7 +190,7 @@ export async function createPatientFile(
     patientId: input.patientId,
     title: input.fileName,
     procedureType: null,
-    category: 'PATIENT_FILE',
+    category,
     content: '',
     status: 'FINALIZED',
     createdAt: new Date().toISOString(),

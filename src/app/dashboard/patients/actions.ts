@@ -2287,6 +2287,9 @@ const uploadPatientFileSchema = z.object({
   fileName: z.string().min(1).max(255),
   mimeType: z.string().min(1).max(100),
   sizeBytes: z.number().int().min(1).max(25 * 1024 * 1024), // 25 MB cap
+  // Controls which chart card the upload lands under. Optional; defaults
+  // to PATIENT_FILE (Attached Documents) for backward compat.
+  category: z.enum(['PATIENT_FILE', 'FINAL_REPORT']).optional(),
 });
 
 export async function uploadPatientFileAction(
@@ -2317,7 +2320,7 @@ export async function uploadPatientFileAction(
       fieldErrors: parsed.error.flatten().fieldErrors,
     };
   }
-  const { patientId, fileName, mimeType, sizeBytes } = parsed.data;
+  const { patientId, fileName, mimeType, sizeBytes, category } = parsed.data;
 
   // Tenant guard — patient must be visible to this session. getPatientById
   // returns null both for "doesn't exist" and "forbidden", which is the
@@ -2334,6 +2337,7 @@ export async function uploadPatientFileAction(
       mimeType,
       sizeBytes,
       createdById: session.user.id,
+      category,
     });
 
     await logAudit({
@@ -2341,7 +2345,7 @@ export async function uploadPatientFileAction(
       targetId: file.id,
       targetType: 'Document',
       metadata: {
-        category: 'PATIENT_FILE',
+        category: category ?? 'PATIENT_FILE',
         patientId,
         fileName,
         mimeType,

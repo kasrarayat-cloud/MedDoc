@@ -33,6 +33,10 @@ interface PatientFileUploadModalProps {
   onClose: () => void;
   patientId: string;
   patientName: string;
+  /** Which chart card the upload should land under. The Final Reports
+   *  card passes 'FINAL_REPORT' so uploaded PDFs surface alongside the
+   *  AI-generated reports instead of in Attached Documents. */
+  uploadAs?: 'PATIENT_FILE' | 'FINAL_REPORT';
   /** Called with the server-persisted row after a successful upload so the
    *  parent can optimistically prepend it to its list. */
   onUploaded?: (file: ClinicalNoteView) => void;
@@ -81,6 +85,7 @@ export default function PatientFileUploadModal({
   onClose,
   patientId,
   patientName,
+  uploadAs,
   onUploaded,
 }: PatientFileUploadModalProps) {
   return (
@@ -90,6 +95,7 @@ export default function PatientFileUploadModal({
           onClose={onClose}
           patientId={patientId}
           patientName={patientName}
+          uploadAs={uploadAs}
           onUploaded={onUploaded}
         />
       )}
@@ -101,11 +107,13 @@ function ModalContent({
   onClose,
   patientId,
   patientName,
+  uploadAs,
   onUploaded,
 }: {
   onClose: () => void;
   patientId: string;
   patientName: string;
+  uploadAs?: 'PATIENT_FILE' | 'FINAL_REPORT';
   onUploaded?: (file: ClinicalNoteView) => void;
 }) {
   const [file, setFile] = useState<File | null>(null);
@@ -201,6 +209,7 @@ function ModalContent({
         fileName: file.name,
         mimeType: file.type || 'application/octet-stream',
         sizeBytes: file.size,
+        category: uploadAs,
       });
       if (!result.ok) {
         setError(result.error);
@@ -252,10 +261,12 @@ function ModalContent({
                   id="patient-file-upload-title"
                   className="text-lg font-bold text-white"
                 >
-                  Upload Document
+                  {uploadAs === 'FINAL_REPORT' ? 'Upload Final Report' : 'Upload Document'}
                 </h2>
                 <p className="text-xs text-slate-400 truncate">
-                  Attach a file to {patientName}&apos;s chart
+                  {uploadAs === 'FINAL_REPORT'
+                    ? `Attach a final report to ${patientName}'s chart`
+                    : `Attach a file to ${patientName}'s chart`}
                 </p>
               </div>
             </div>
