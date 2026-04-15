@@ -261,16 +261,35 @@ function EditPatientModalContent({
               </Field>
             </div>
 
-            {/* MRN */}
-            <Field label="MRN" error={fieldErrors.mrn?.[0]}>
-              <input
-                type="text"
-                value={form.mrn}
-                onChange={(e) => update('mrn', e.target.value)}
-                disabled={isPending}
-                className="input-styled font-mono"
-              />
-            </Field>
+            {/* Chart ID + MRN. Chart ID is practice-unique; the server
+                rejects duplicates within the practice. Changing or
+                clearing it is allowed — rarely needed, but some intake
+                flows produce a temporary ID that gets renumbered later. */}
+            <div className="grid grid-cols-2 gap-3">
+              <Field
+                label="Chart ID"
+                error={fieldErrors.chartId?.[0]}
+                hint="Unique per practice"
+              >
+                <input
+                  type="text"
+                  value={form.chartId}
+                  onChange={(e) => update('chartId', e.target.value)}
+                  disabled={isPending}
+                  placeholder="C-1001"
+                  className="input-styled font-mono"
+                />
+              </Field>
+              <Field label="MRN" error={fieldErrors.mrn?.[0]}>
+                <input
+                  type="text"
+                  value={form.mrn}
+                  onChange={(e) => update('mrn', e.target.value)}
+                  disabled={isPending}
+                  className="input-styled font-mono"
+                />
+              </Field>
+            </div>
 
             {/* Birth year + phoneLast4 */}
             <div className="grid grid-cols-2 gap-3">

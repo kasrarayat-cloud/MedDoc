@@ -33,6 +33,10 @@ export interface PatientProfileFormState {
   firstName: string;
   lastName: string;
   mrn: string;
+  /** Practice-internal chart ID. Unique per practice (DB constraint).
+   *  On Add, leaving blank triggers auto-assignment of C-<n>. On Edit,
+   *  blank means "clear the chart ID" — rare but allowed. */
+  chartId: string;
   birthYear: string;
   email: string;
   phoneLast4: string;
@@ -56,6 +60,7 @@ export function emptyPatientProfile(): PatientProfileFormState {
     firstName: '',
     lastName: '',
     mrn: '',
+    chartId: '',
     birthYear: '',
     email: '',
     phoneLast4: '',
@@ -80,6 +85,7 @@ export function patientViewToProfile(p: PatientView): PatientProfileFormState {
     firstName: p.firstName,
     lastName: p.lastName,
     mrn: p.mrn ?? '',
+    chartId: p.chartId ?? '',
     birthYear: p.birthYear ? String(p.birthYear) : '',
     email: p.email ?? '',
     phoneLast4: p.phoneLast4 ?? '',
@@ -103,6 +109,7 @@ export interface PatientProfilePayload {
   firstName: string;
   lastName: string;
   mrn: string | null;
+  chartId: string | null;
   birthYear: number | null;
   email: string | null;
   phoneLast4: string | null;
@@ -132,6 +139,7 @@ export function profileToPayload(
     firstName: form.firstName.trim(),
     lastName: form.lastName.trim(),
     mrn: form.mrn.trim() || null,
+    chartId: form.chartId.trim() || null,
     birthYear: form.birthYear ? parseInt(form.birthYear, 10) : null,
     email: form.email.trim() || null,
     phoneLast4: form.phoneLast4.trim() || null,

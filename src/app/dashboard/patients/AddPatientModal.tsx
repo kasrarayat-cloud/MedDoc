@@ -62,7 +62,6 @@ interface FormState extends PatientProfileFormState {
   // Add-specific extensions on top of the shared profile shape. Any
   // field listed here lives ONLY in the Add flow — if you need it on
   // Edit too, put it in PatientProfileFormState instead.
-  chartId: string;
   assignedDoctorId: string;
   /** Free-text intake note; split on newlines and filtered at submit to
    *  become the first briefHistory[] entries. One line per item. */
@@ -71,7 +70,6 @@ interface FormState extends PatientProfileFormState {
 
 const initialState: FormState = {
   ...emptyPatientProfile(),
-  chartId: '',
   assignedDoctorId: '',
   initialHistory: '',
 };
@@ -428,7 +426,6 @@ function AddPatientModalContent({ onClose }: { onClose: () => void }) {
     // Add-only fields are spread on after.
     const payload = {
       ...profileToPayload(form),
-      chartId: form.chartId.trim() || null,
       assignedDoctorId: form.assignedDoctorId || null,
       briefHistory: form.initialHistory
         .split('\n')
