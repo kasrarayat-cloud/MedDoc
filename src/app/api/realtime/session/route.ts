@@ -123,19 +123,28 @@ export async function POST(request: NextRequest) {
           timezone,
         }),
         tools: REALTIME_TOOLS,
+        // Allow the model to call multiple tools in one response. Without
+        // this, a "update her email AND change the pharmacy AND fix the
+        // note" command would only execute the first one — doctors
+        // noticed partial work.
+        parallel_tool_calls: true,
+        // Raise the per-response token cap so a multi-step tool chain
+        // (read → edit → speak, or five updates in a row) doesn't get
+        // truncated and silently lose tail-end actions.
+        max_response_output_tokens: 4096,
         // Semantic VAD — ML classifier that distinguishes human speech
         // from ambient noise (breathing, chair scrapes, HVAC). Much better
         // in a clinic setting than the older server_vad threshold detector.
         //
-        // eagerness="medium" — OpenAI's balanced default. "low" was
-        // over-tuned for noise avoidance: the classifier already handles
-        // noise, but low eagerness also delayed commit-on-speech-stop,
-        // so the doctor would sometimes finish a sentence and nothing
-        // would happen. Medium still respects the ML classifier's noise
-        // filtering while responding promptly when the doctor's done.
+        // eagerness="low" — bias toward waiting for a clear end of
+        // utterance before committing. Higher selectivity on human
+        // speech vs. ambient noise (typing, keyboard, HVAC) at the
+        // cost of slightly slower commit after the doctor finishes.
+        // Combined with create_response: true below, follow-up turns
+        // still trigger reliably.
         turn_detection: {
           type: 'semantic_vad',
-          eagerness: 'medium',
+          eagerness: 'low',
           // Explicitly enable server-driven response creation on every
           // end-of-user-turn. Without this, subsequent turns after the
           // first can silently fail to trigger a model response — the
