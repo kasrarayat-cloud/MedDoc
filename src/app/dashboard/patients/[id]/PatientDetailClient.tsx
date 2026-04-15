@@ -128,6 +128,7 @@ export default function PatientDetailClient({
       // Prepend — newest first matches the server-side ordering.
       setReports((prev) => [result.data, ...prev]);
       setExpandedReportId(result.data.id);
+      notifyChartChanged();
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Failed to generate report';
@@ -139,6 +140,18 @@ export default function PatientDetailClient({
 
   const handleFileUploaded = (file: ClinicalNoteView) => {
     setFiles((prev) => [file, ...prev]);
+    notifyChartChanged();
+  };
+
+  // Dispatch a global signal whenever the chart changes via non-AI
+  // paths (modal uploads, manual deletes, generated reports). The open
+  // voice assistant panel listens for this and re-pulls its session
+  // prompt so FINAL_REPORTS / ATTACHED_FILES / RECENT_NOTES aren't
+  // stale when the doctor's next turn starts.
+  const notifyChartChanged = () => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('meddoc:chart-updated'));
+    }
   };
 
   /** id currently mid-delete. Drives per-row disabled + spinner, and
@@ -172,6 +185,7 @@ export default function PatientDetailClient({
       // customProcedures). Harmless for the state-backed lists — they've
       // already been updated optimistically.
       router.refresh();
+      notifyChartChanged();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Delete failed';
       window.alert(`Delete failed: ${message}`);
@@ -1556,6 +1570,7 @@ export default function PatientDetailClient({
         onUploaded={(row) => {
           if (fileUploadIntent === 'FINAL_REPORT') {
             setReports((prev) => [row, ...prev]);
+            notifyChartChanged();
           } else {
             handleFileUploaded(row);
           }

@@ -152,17 +152,36 @@ function GlobalAIAssistantPanel({
       // the chart below) AND refresh the AI's context (so she knows about
       // it on the next turn).
       const t = action.type;
+      // Every write-action needs to trigger a chart + AI-context
+      // refresh, otherwise the model's next turn sees stale lists and
+      // mis-routes follow-up commands (e.g. "edit the final report" →
+      // edit_custom_procedure because FINAL_REPORTS was empty in the
+      // cached prompt).
       if (
         t === 'created_note' ||
         t === 'edited_note' ||
         t === 'scheduled_appointment' ||
-        t === 'updated_patient'
+        t === 'updated_patient' ||
+        t === 'final_report_generated'
       ) {
         router.refresh();
         void refreshAssistantContext();
       }
     },
   });
+
+  // Chart writes outside the AI (modal uploads, manual edits, deletes
+  // etc.) dispatch a `meddoc:chart-updated` CustomEvent. We re-pull the
+  // session prompt on that signal so the AI's FINAL_REPORTS /
+  // ATTACHED_FILES / RECENT_NOTES context stays accurate within an open
+  // session.
+  useEffect(() => {
+    const handler = () => {
+      void refreshAssistantContext();
+    };
+    window.addEventListener('meddoc:chart-updated', handler);
+    return () => window.removeEventListener('meddoc:chart-updated', handler);
+  }, [refreshAssistantContext]);
 
   // Keep the ref in sync so refreshAssistantContext can reach updateInstructions.
   useEffect(() => {
