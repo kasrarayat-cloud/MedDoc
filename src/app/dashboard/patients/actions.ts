@@ -2278,22 +2278,21 @@ function humanize(field: string): string {
 // FormData blob and hand the file off before inserting.
 // ----------------------------------------------------------------------------
 
-const uploadPatientFileSchema = z.object({
-  // Loose ID format — the real authz is the getPatientById tenant guard
-  // below. z.string().cuid() was rejecting valid Prisma IDs in some
-  // environments and surfacing as a confusing "metadata error" to the
-  // doctor.
-  patientId: z.string().min(1).max(50),
-  fileName: z.string().min(1).max(255),
-  mimeType: z.string().min(1).max(100),
-  sizeBytes: z.number().int().min(1).max(25 * 1024 * 1024), // 25 MB cap
-  // Controls which chart card the upload lands under. Optional; defaults
-  // to PATIENT_FILE (Attached Documents) for backward compat.
-  category: z.enum(['PATIENT_FILE', 'FINAL_REPORT']).optional(),
-});
+// Accepts the actual file bytes (FormData) rather than just metadata so
+// PDF/DOCX text can be extracted and saved as searchable, editable
+// content — same flow as uploadCustomProcedureAction. Image uploads keep
+// metadata-only (no OCR yet).
+const UPLOAD_PATIENT_FILE_ALLOWED_MIMES = new Set([
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+]);
 
 export async function uploadPatientFileAction(
-  rawInput: unknown
+  patientId: string,
+  formData: FormData
 ): Promise<ActionResult<ClinicalNoteView>> {
   let session;
   try {
@@ -2308,60 +2307,142 @@ export async function uploadPatientFileAction(
     return authErrorResult(err);
   }
 
-  const parsed = uploadPatientFileSchema.safeParse(rawInput);
-  if (!parsed.success) {
-    // Surface the first real Zod issue so "Invalid file metadata" doesn't
-    // hide what actually failed validation.
-    const first = parsed.error.issues[0];
-    const detail = first ? `${first.path.join('.')}: ${first.message}` : 'Unknown';
-    return {
-      ok: false,
-      error: `Invalid file metadata — ${detail}`,
-      fieldErrors: parsed.error.flatten().fieldErrors,
-    };
+  if (!patientId || typeof patientId !== 'string') {
+    return { ok: false, error: 'Invalid patient id' };
   }
-  const { patientId, fileName, mimeType, sizeBytes, category } = parsed.data;
 
-  // Tenant guard — patient must be visible to this session. getPatientById
-  // returns null both for "doesn't exist" and "forbidden", which is the
-  // right behavior here (don't leak existence to other tenants).
+  // Tenant guard — patient must be visible to this session.
   const patient = await getPatientById(patientId, session);
   if (!patient) {
-    return { ok: false, error: 'Patient not found' };
+    return { ok: false, error: 'Patient not found.' };
   }
 
+  // Which chart card the upload should land under (optional, defaults to
+  // PATIENT_FILE). Sent as a plain form field alongside the file.
+  const rawCategory = formData.get('category');
+  const category: 'PATIENT_FILE' | 'FINAL_REPORT' =
+    rawCategory === 'FINAL_REPORT' ? 'FINAL_REPORT' : 'PATIENT_FILE';
+
+  const file = formData.get('file');
+  if (!file || typeof file === 'string') {
+    return { ok: false, error: 'No file provided.' };
+  }
+  const uploadedFile = file as File;
+
+  if (!UPLOAD_PATIENT_FILE_ALLOWED_MIMES.has(uploadedFile.type)) {
+    return {
+      ok: false,
+      error: 'Unsupported file type. Allowed: PDF, DOCX, PNG, JPG, WEBP.',
+    };
+  }
+  if (uploadedFile.size > 25 * 1024 * 1024) {
+    return { ok: false, error: 'File exceeds 25MB limit.' };
+  }
+  if (uploadedFile.size < 100) {
+    return { ok: false, error: 'File appears to be empty.' };
+  }
+
+  // Extract text when the file type supports it. Images skip extraction —
+  // they persist as metadata only until we wire OCR or real storage.
+  const buffer = Buffer.from(await uploadedFile.arrayBuffer());
+  let extractedText = '';
+  const isExtractable =
+    uploadedFile.type === 'application/pdf' ||
+    uploadedFile.type ===
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+  if (isExtractable) {
+    try {
+      if (uploadedFile.type === 'application/pdf') {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const pdfParse = require('pdf-parse') as (
+          buf: Buffer
+        ) => Promise<{ text: string }>;
+        const pdfData = await pdfParse(buffer);
+        extractedText = (pdfData.text ?? '').trim();
+      } else {
+        const mammoth = await import('mammoth');
+        const result = await mammoth.extractRawText({ buffer });
+        extractedText = (result.value ?? '').trim();
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to read file';
+      await logAudit({
+        action: 'CREATED_DOCUMENT',
+        success: false,
+        errorCode: 'FILE_PARSE_FAILED',
+        metadata: {
+          category,
+          patientId,
+          filename: uploadedFile.name,
+          mimeType: uploadedFile.type,
+          reason: message,
+        },
+      });
+      return { ok: false, error: `Failed to extract text from file: ${message}` };
+    }
+
+    if (!extractedText || extractedText.length < 10) {
+      return {
+        ok: false,
+        error:
+          'Could not extract meaningful text from this file. It may be image-based or empty.',
+      };
+    }
+  }
+
+  // When we have extracted content, store it on a text-style row so the
+  // UI can display + edit inline (matching CUSTOM_PROCEDURE pattern).
+  // When we don't (images), fall back to metadata-only.
+  const filename = uploadedFile.name.replace(/\.[^/.]+$/, ''); // strip extension
   try {
-    const file = await dataCreatePatientFile({
-      patientId,
-      fileName,
-      mimeType,
-      sizeBytes,
-      createdById: session.user.id,
-      category,
-    });
+    let row: ClinicalNoteView;
+    if (isExtractable && extractedText) {
+      row = await dataCreateClinicalNote({
+        patientId,
+        title:
+          category === 'FINAL_REPORT'
+            ? `Final Report: ${filename}`
+            : `Uploaded: ${filename}`,
+        procedureType: null,
+        category,
+        content: extractedText,
+        createdById: session.user.id,
+      });
+    } else {
+      row = await dataCreatePatientFile({
+        patientId,
+        fileName: uploadedFile.name,
+        mimeType: uploadedFile.type,
+        sizeBytes: uploadedFile.size,
+        createdById: session.user.id,
+        category,
+      });
+    }
 
     await logAudit({
       action: 'CREATED_DOCUMENT',
-      targetId: file.id,
+      targetId: row.id,
       targetType: 'Document',
       metadata: {
-        category: category ?? 'PATIENT_FILE',
+        category,
         patientId,
-        fileName,
-        mimeType,
-        sizeBytes,
+        filename: uploadedFile.name,
+        mimeType: uploadedFile.type,
+        sizeBytes: uploadedFile.size,
+        extracted: Boolean(isExtractable && extractedText),
       },
     });
 
     revalidatePath(`/dashboard/patients/${patientId}`);
-    return { ok: true, data: file };
+    return { ok: true, data: row };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Upload failed';
     await logAudit({
       action: 'CREATED_DOCUMENT',
       success: false,
       errorCode: 'UPLOAD_FAILED',
-      metadata: { category: 'PATIENT_FILE', patientId, reason: message },
+      metadata: { category, patientId, reason: message },
     });
     return { ok: false, error: message };
   }

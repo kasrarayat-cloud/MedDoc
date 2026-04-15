@@ -201,23 +201,19 @@ function ModalContent({
     setIsUploading(true);
     setError(null);
     try {
-      // Metadata-only for now — the File's bytes stay in the browser.
-      // When real file storage lands, move to FormData + POST and pass
-      // the blob through to object storage before the DB insert.
-      const result = await uploadPatientFileAction({
-        patientId,
-        fileName: file.name,
-        mimeType: file.type || 'application/octet-stream',
-        sizeBytes: file.size,
-        category: uploadAs,
-      });
+      // Send the real file bytes via FormData so the server can extract
+      // text from PDF/DOCX. Image types persist as metadata only for now
+      // (OCR / real storage is a separate build).
+      const formData = new FormData();
+      formData.append('file', file);
+      if (uploadAs) formData.append('category', uploadAs);
+      const result = await uploadPatientFileAction(patientId, formData);
       if (!result.ok) {
         setError(result.error);
         return;
       }
       setSuccess(true);
       onUploaded?.(result.data);
-      // Auto-close on success so the doctor's eye returns to the chart.
       setTimeout(() => {
         onClose();
       }, 800);

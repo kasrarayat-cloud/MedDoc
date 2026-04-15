@@ -1249,15 +1249,64 @@ export default function PatientDetailClient({
                                         {report.mimeType ? ` · ${report.mimeType}` : ''}
                                       </p>
                                       <p className="text-[10px] text-slate-500 italic mt-1">
-                                        File attached as a final report. Download/preview will
-                                        arrive with real file storage; metadata recorded for now.
+                                        Image attached. Preview/download lands with real
+                                        storage; metadata recorded for now.
                                       </p>
                                     </div>
                                   </div>
+                                ) : editingNoteId === report.id ? (
+                                  // Edit mode — reuses the clinical-note edit machinery.
+                                  <div className="mt-3 space-y-3">
+                                    <textarea
+                                      value={editDraft}
+                                      onChange={(e) => setEditDraft(e.target.value)}
+                                      rows={16}
+                                      disabled={savePending}
+                                      className="w-full rounded-lg bg-slate-950/60 border border-rose-500/30 p-4 text-xs text-slate-200 leading-relaxed font-mono resize-y outline-none focus:border-rose-400/60 focus:ring-1 focus:ring-rose-400/20 transition-colors disabled:opacity-50"
+                                    />
+                                    {saveError && (
+                                      <p className="text-[10px] text-red-400">{saveError}</p>
+                                    )}
+                                    <div className="flex items-center justify-end gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={cancelManualEdit}
+                                        disabled={savePending}
+                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white bg-white/5 border border-white/10 hover:bg-white/10 transition-all cursor-pointer disabled:opacity-50"
+                                      >
+                                        <X className="w-3 h-3" />
+                                        Cancel
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleSaveManualEdit(report.id)}
+                                        disabled={savePending}
+                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-gradient-to-r from-rose-500 to-pink-500 shadow-md shadow-rose-500/25 hover:shadow-rose-500/40 transition-all cursor-pointer disabled:opacity-50"
+                                      >
+                                        {savePending ? (
+                                          <><Loader2 className="w-3 h-3 animate-spin" /> Saving...</>
+                                        ) : (
+                                          <><Save className="w-3 h-3" /> Save Changes</>
+                                        )}
+                                      </button>
+                                    </div>
+                                  </div>
                                 ) : (
-                                  <pre className="mt-3 text-xs text-slate-200 leading-relaxed whitespace-pre-wrap font-sans bg-slate-950/60 rounded-lg p-4 border border-white/5">
-                                    {report.content}
-                                  </pre>
+                                  <>
+                                    <pre className="mt-3 text-xs text-slate-200 leading-relaxed whitespace-pre-wrap font-sans bg-slate-950/60 rounded-lg p-4 border border-white/5">
+                                      {report.content}
+                                    </pre>
+                                    <div className="mt-2 flex items-center gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => startManualEdit(report)}
+                                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-slate-400 hover:text-white bg-white/5 border border-white/10 hover:bg-white/10 transition-all cursor-pointer"
+                                      >
+                                        <Pencil className="w-3 h-3" />
+                                        Edit Text
+                                      </button>
+                                    </div>
+                                  </>
                                 )}
                                 <div className="mt-2 flex items-center gap-2 justify-end">
                                   <button
