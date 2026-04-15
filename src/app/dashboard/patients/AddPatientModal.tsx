@@ -886,7 +886,13 @@ function AddPatientModalContent({ onClose }: { onClose: () => void }) {
                       type="text"
                       value={form.state}
                       onChange={(e) =>
-                        update('state', e.target.value.replace(/[^A-Za-z]/g, '').slice(0, 2))
+                        update(
+                          'state',
+                          e.target.value
+                            .replace(/[^A-Za-z]/g, '')
+                            .slice(0, 2)
+                            .toUpperCase()
+                        )
                       }
                       disabled={isPending}
                       placeholder="CA"
@@ -1074,17 +1080,20 @@ function Field({
   error?: string;
   children: React.ReactNode;
 }) {
+  // Wrap children INSIDE the <label> so clicking the label focuses the
+  // control and accessibility tools (Playwright's getByLabel, screen
+  // readers) can associate the two without an explicit htmlFor/id pair.
   return (
-    <div>
-      <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1">
-        {label}
-      </label>
+    <label className="block">
+      <span className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1">
+        {label.replace(/\s*\*\s*$/, '')}
+      </span>
       {children}
       {error ? (
         <p className="text-[10px] text-red-400 mt-1">{error}</p>
       ) : hint ? (
         <p className="text-[10px] text-slate-500 mt-1">{hint}</p>
       ) : null}
-    </div>
+    </label>
   );
 }
