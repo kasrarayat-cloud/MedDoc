@@ -20,10 +20,15 @@ import {
   type DoctorOption,
 } from './actions';
 import { useVoiceRecorder } from '@/lib/hooks/useVoiceRecorder';
+import {
+  emptyPatientProfile,
+  profileToPayload,
+  type PatientProfileFormState,
+  type PatientSex,
+} from './patient-form-shared';
 
 // Response shape from /api/patients/extract-from-voice. Every field
 // nullable — null means "doctor didn't mention it", leave the form alone.
-type PatientSex = 'UNKNOWN' | 'MALE' | 'FEMALE' | 'OTHER';
 
 interface ExtractedFields {
   firstName: string | null;
@@ -53,54 +58,22 @@ interface AddPatientModalProps {
   onClose: () => void;
 }
 
-interface FormState {
-  firstName: string;
-  lastName: string;
-  mrn: string;
+interface FormState extends PatientProfileFormState {
+  // Add-specific extensions on top of the shared profile shape. Any
+  // field listed here lives ONLY in the Add flow — if you need it on
+  // Edit too, put it in PatientProfileFormState instead.
   chartId: string;
-  birthYear: string;
-  email: string;
-  phoneLast4: string;
-  cellPhone: string;
-  homePhone: string;
-  insuranceVerified: boolean;
-  sex: PatientSex;
-  addressLine1: string;
-  addressLine2: string;
-  city: string;
-  state: string;
-  postalCode: string;
-  pharmacyName: string;
-  pharmacyPhone: string;
   assignedDoctorId: string;
   /** Free-text intake note; split on newlines and filtered at submit to
    *  become the first briefHistory[] entries. One line per item. */
   initialHistory: string;
-  tags: string;
 }
 
 const initialState: FormState = {
-  firstName: '',
-  lastName: '',
-  mrn: '',
+  ...emptyPatientProfile(),
   chartId: '',
-  birthYear: '',
-  email: '',
-  phoneLast4: '',
-  cellPhone: '',
-  homePhone: '',
-  insuranceVerified: false,
-  sex: 'UNKNOWN',
-  addressLine1: '',
-  addressLine2: '',
-  city: '',
-  state: '',
-  postalCode: '',
-  pharmacyName: '',
-  pharmacyPhone: '',
   assignedDoctorId: '',
   initialHistory: '',
-  tags: '',
 };
 
 // Outer wrapper: AnimatePresence owns the open/close toggle. Form state
@@ -451,36 +424,15 @@ function AddPatientModalContent({ onClose }: { onClose: () => void }) {
     // clean shape. `insuranceVerified` stays as the boolean checkbox state;
     // we send false explicitly (it's meaningful: "unverified on file")
     // rather than dropping it when unchecked.
+    // Profile fields use the shared converter so Edit + Add stay in sync.
+    // Add-only fields are spread on after.
     const payload = {
-      firstName: form.firstName.trim(),
-      lastName: form.lastName.trim(),
-      mrn: form.mrn.trim() || null,
+      ...profileToPayload(form),
       chartId: form.chartId.trim() || null,
-      birthYear: form.birthYear ? parseInt(form.birthYear, 10) : null,
-      email: form.email.trim() || null,
-      phoneLast4: form.phoneLast4.trim() || null,
-      cellPhone: form.cellPhone.trim() || null,
-      homePhone: form.homePhone.trim() || null,
-      insuranceVerified: form.insuranceVerified,
-      // Store UNKNOWN as null in the payload — the server normalizes null
-      // back to the UNKNOWN default. Avoids the column getting peppered
-      // with explicit UNKNOWN values when the user simply didn't pick.
-      sex: form.sex === 'UNKNOWN' ? null : form.sex,
-      addressLine1: form.addressLine1.trim() || null,
-      addressLine2: form.addressLine2.trim() || null,
-      city: form.city.trim() || null,
-      state: form.state.trim().toUpperCase() || null,
-      postalCode: form.postalCode.trim() || null,
-      pharmacyName: form.pharmacyName.trim() || null,
-      pharmacyPhone: form.pharmacyPhone.trim() || null,
       assignedDoctorId: form.assignedDoctorId || null,
       briefHistory: form.initialHistory
         .split('\n')
         .map((s) => s.trim())
-        .filter(Boolean),
-      tags: form.tags
-        .split(',')
-        .map((t) => t.trim())
         .filter(Boolean),
     };
 

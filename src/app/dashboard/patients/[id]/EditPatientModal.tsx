@@ -20,8 +20,12 @@ import {
   type DoctorOption,
 } from '@/app/dashboard/patients/actions';
 import type { PatientView } from '@/lib/data/patients';
-
-type PatientSex = 'UNKNOWN' | 'MALE' | 'FEMALE' | 'OTHER';
+import {
+  patientViewToProfile,
+  profileToPayload,
+  type PatientProfileFormState,
+  type PatientSex,
+} from '@/app/dashboard/patients/patient-form-shared';
 
 interface EditPatientModalProps {
   open: boolean;
@@ -29,52 +33,18 @@ interface EditPatientModalProps {
   patient: PatientView;
 }
 
-interface FormState {
-  firstName: string;
-  lastName: string;
-  mrn: string;
-  birthYear: string;
-  email: string;
-  phoneLast4: string;
-  cellPhone: string;
-  homePhone: string;
-  insuranceVerified: boolean;
-  sex: PatientSex;
-  addressLine1: string;
-  addressLine2: string;
-  city: string;
-  state: string;
-  postalCode: string;
-  pharmacyName: string;
-  pharmacyPhone: string;
-  // briefHistory is stored as string[] server-side; edited as one entry
-  // per line in a textarea so doctors can freely add/remove/reorder.
+interface FormState extends PatientProfileFormState {
+  // Edit-specific extensions on top of the shared profile shape. Any
+  // field listed here lives ONLY in the Edit flow — if you need it on
+  // Add too, put it in PatientProfileFormState instead.
   briefHistory: string;
-  tags: string;
   status: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
 }
 
 function patientToForm(p: PatientView): FormState {
   return {
-    firstName: p.firstName,
-    lastName: p.lastName,
-    mrn: p.mrn ?? '',
-    birthYear: p.birthYear ? String(p.birthYear) : '',
-    email: p.email ?? '',
-    phoneLast4: p.phoneLast4 ?? '',
-    cellPhone: p.cellPhone ?? '',
-    homePhone: p.homePhone ?? '',
-    insuranceVerified: p.insuranceVerified ?? false,
-    sex: p.sex ?? 'UNKNOWN',
-    addressLine1: p.addressLine1 ?? '',
-    addressLine2: p.addressLine2 ?? '',
-    city: p.city ?? '',
-    state: p.state ?? '',
-    postalCode: p.postalCode ?? '',
-    pharmacyName: p.pharmacyName ?? '',
-    pharmacyPhone: p.pharmacyPhone ?? '',
+    ...patientViewToProfile(p),
     briefHistory: p.briefHistory.join('\n'),
-    tags: p.tags.join(', '),
     status: p.status,
   };
 }
@@ -159,31 +129,13 @@ function EditPatientModalContent({
     setError(null);
     setFieldErrors({});
 
+    // Profile fields use the shared converter so Edit + Add stay in sync.
+    // Edit-only fields (briefHistory, status) are spread on after.
     const payload: Record<string, unknown> = {
-      firstName: form.firstName.trim(),
-      lastName: form.lastName.trim(),
-      mrn: form.mrn.trim() || null,
-      birthYear: form.birthYear ? parseInt(form.birthYear, 10) : null,
-      email: form.email.trim() || null,
-      phoneLast4: form.phoneLast4.trim() || null,
-      cellPhone: form.cellPhone.trim() || null,
-      homePhone: form.homePhone.trim() || null,
-      insuranceVerified: form.insuranceVerified,
-      sex: form.sex === 'UNKNOWN' ? null : form.sex,
-      addressLine1: form.addressLine1.trim() || null,
-      addressLine2: form.addressLine2.trim() || null,
-      city: form.city.trim() || null,
-      state: form.state.trim().toUpperCase() || null,
-      postalCode: form.postalCode.trim() || null,
-      pharmacyName: form.pharmacyName.trim() || null,
-      pharmacyPhone: form.pharmacyPhone.trim() || null,
+      ...profileToPayload(form),
       briefHistory: form.briefHistory
         .split('\n')
         .map((s) => s.trim())
-        .filter(Boolean),
-      tags: form.tags
-        .split(',')
-        .map((t) => t.trim())
         .filter(Boolean),
       status: form.status,
     };
