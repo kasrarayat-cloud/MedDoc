@@ -459,10 +459,13 @@ function prismaToView(row: any): ClinicalNoteView {
     createdByName: row.createdBy?.name ?? undefined,
     updatedAt: row.updatedById ? row.updatedAt?.toISOString() : undefined,
     updatedByName: row.updatedBy?.name ?? undefined,
-    // PATIENT_FILE metadata lives in the existing Document columns.
-    fileName: category === 'PATIENT_FILE' ? row.title : undefined,
-    mimeType: category === 'PATIENT_FILE' ? row.mimeType ?? undefined : undefined,
-    sizeBytes:
-      category === 'PATIENT_FILE' ? row.fileSizeBytes ?? undefined : undefined,
+    // File-upload metadata. fileSizeBytes being set is the marker that
+    // this row represents an uploaded file (vs. text content). We used
+    // to gate this on category === 'PATIENT_FILE', which broke once
+    // FINAL_REPORT rows could also be file uploads — Final Reports UI
+    // then rendered them as empty text reports.
+    fileName: row.fileSizeBytes != null ? row.title : undefined,
+    mimeType: row.fileSizeBytes != null ? row.mimeType ?? undefined : undefined,
+    sizeBytes: row.fileSizeBytes != null ? row.fileSizeBytes : undefined,
   };
 }
