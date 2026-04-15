@@ -124,6 +124,44 @@ export const APPOINTMENTS = {
   b1: { id: 'test_apt_b1', patientId: PATIENTS.b1.id, userId: USERS.doctorB.id },
 } as const;
 
+// Allergies + medications — one row per practice so adversarial cross-tenant
+// reads can be checked from both directions.
+export const ALLERGIES = {
+  a1: {
+    id: 'test_allergy_a1',
+    patientId: PATIENTS.a1.id,
+    practiceId: PRACTICE_A_ID,
+    allergen: 'Penicillin',
+    severity: 'SEVERE' as const,
+  },
+  b1: {
+    id: 'test_allergy_b1',
+    patientId: PATIENTS.b1.id,
+    practiceId: PRACTICE_B_ID,
+    allergen: 'Latex',
+    severity: 'MODERATE' as const,
+  },
+} as const;
+
+export const MEDICATIONS = {
+  a1: {
+    id: 'test_med_a1',
+    patientId: PATIENTS.a1.id,
+    practiceId: PRACTICE_A_ID,
+    name: 'Gabapentin',
+    dosage: '300mg',
+    frequency: 'three times daily',
+  },
+  b1: {
+    id: 'test_med_b1',
+    patientId: PATIENTS.b1.id,
+    practiceId: PRACTICE_B_ID,
+    name: 'Cyclobenzaprine',
+    dosage: '10mg',
+    frequency: 'at bedtime',
+  },
+} as const;
+
 /**
  * Build a synthetic Session object for a given test user. Data-layer
  * tests use this directly (no NextAuth round-trip) — the data layer

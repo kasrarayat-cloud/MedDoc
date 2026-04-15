@@ -77,6 +77,14 @@ enum AuditAction {
   UPDATED_APPOINTMENT_STATUS
   DELETED_APPOINTMENT
 
+  // Clinical safety data
+  CREATED_ALLERGY
+  UPDATED_ALLERGY
+  DELETED_ALLERGY
+  CREATED_MEDICATION
+  UPDATED_MEDICATION
+  DELETED_MEDICATION
+
   // Admin
   USER_CREATED
   USER_UPDATED
@@ -128,6 +136,16 @@ enum AppointmentStatus {
   CANCELLED
 }
 
+/// Allergy severity. UNKNOWN is the safe default when the clinician has
+/// recorded the allergen but hasn't confirmed reaction severity yet.
+/// SEVERE drives the high-visibility red banner in the UI.
+enum AllergySeverity {
+  UNKNOWN
+  MILD
+  MODERATE
+  SEVERE
+}
+
 // ============================================================================
 // PRACTICE — tenant boundary
 // ----------------------------------------------------------------------------
@@ -158,6 +176,8 @@ model Practice {
   auditLogs   AuditLog[]
   apiUsage    ApiUsage[]
   sessionLogs SessionLog[]
+  allergies   Allergy[]
+  medications Medication[]
 
   @@index([slug])
   @@map("practices")
@@ -221,18 +241,22 @@ model User {
 
   // === Relations ===
   // NextAuth adapter relations
-  accounts         Account[]
-  sessions         Session[]
+  accounts           Account[]
+  sessions           Session[]
   // App relations
-  documentsCreated Document[]    @relation("DocumentCreator")
-  documentsUpdated Document[]    @relation("DocumentUpdater")
-  auditLogs        AuditLog[]
-  patientsCreated  Patient[]     @relation("PatientCreator")
-  patientsAssigned Patient[]     @relation("AssignedDoctor")
-  appointments     Appointment[]
-  sessionLogs      SessionLog[]
-  apiUsageLogs     ApiUsageLog[]
-  apiUsage         ApiUsage[]
+  documentsCreated   Document[]    @relation("DocumentCreator")
+  documentsUpdated   Document[]    @relation("DocumentUpdater")
+  auditLogs          AuditLog[]
+  patientsCreated    Patient[]     @relation("PatientCreator")
+  patientsAssigned   Patient[]     @relation("AssignedDoctor")
+  appointments       Appointment[]
+  sessionLogs        SessionLog[]
+  apiUsageLogs       ApiUsageLog[]
+  allergiesCreated   Allergy[]     @relation("AllergyCreator")
+  allergiesUpdated   Allergy[]     @relation("AllergyUpdater")
+  medicationsCreated Medication[]  @relation("MedicationCreator")
+  medicationsUpdated Medication[]  @relation("MedicationUpdater")
+  apiUsage           ApiUsage[]
 
   @@index([practiceId])
   @@index([role])
@@ -332,6 +356,12 @@ model Patient {
   /// without an extra enum column.
   insuranceVerified Boolean?
 
+  /// "No Known Allergies" — explicitly confirmed with the patient. This is
+  /// distinct from "we just haven't asked yet" (any non-NKA patient with
+  /// zero Allergy rows). The UI surfaces NKA as a green badge so the
+  /// doctor knows the screen is intentionally clear, not just empty.
+  noKnownAllergies Boolean @default(false)
+
   // Demographics — year only (de-identified per HIPAA Safe Harbor §164.514)
   // Full DOB is fetched on-demand from DrChrono, never cached here.
   birthYear Int?
@@ -391,18 +421,20 @@ model Patient {
   // Relations
   documents    Document[]
   appointments Appointment[]
+  allergies    Allergy[]
+  medications  Medication[]
 
-  @@index([practiceId])
-  @@index([drChronoId])
-  @@index([status])
-  @@index([assignedDoctorId])
-  @@index([lastName, firstName])
   // Chart IDs are practice-scoped: Practice A's C-1001 is unrelated to
   // Practice B's C-1001. Postgres treats multiple NULLs as distinct, so
   // this composite unique doesn't break patients with no chartId set.
   // The data layer relies on this constraint as the final race-condition
   // gate — auto-generated IDs retry on collision.
   @@unique([practiceId, chartId], name: "patient_practice_chartid_unique")
+  @@index([practiceId])
+  @@index([drChronoId])
+  @@index([status])
+  @@index([assignedDoctorId])
+  @@index([lastName, firstName])
   @@map("patients")
 }
 
@@ -558,6 +590,115 @@ model Appointment {
   @@index([userId])
   @@index([scheduledAt])
   @@map("appointments")
+}
+
+// ============================================================================
+// ALLERGY — patient drug/food/environmental allergies
+// ----------------------------------------------------------------------------
+// Safety-critical for pain practices: lidocaine, contrast media, latex,
+// steroids, NSAIDs are all on the procedure-day path. SEVERE rows surface
+// in the patient header banner so the doctor can't miss them.
+//
+// practiceId is denormalized (also derivable from patientId.practiceId) so
+// adversarial cross-tenant queries can be checked at the row level without
+// trusting a JOIN — defense in depth on clinical safety data.
+// ============================================================================
+
+model Allergy {
+  id String @id @default(cuid())
+
+  patientId String
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  /// What the patient is allergic to (drug, food, environmental). Free-text
+  /// so we can capture brand names, classes ("NSAIDs"), and combinations
+  /// without forcing an upstream coded vocabulary.
+  allergen String
+
+  /// Observed reaction — e.g. "hives", "anaphylaxis", "GI upset". Optional
+  /// because some allergies are reported by the patient without detail.
+  reaction String?
+
+  severity AllergySeverity @default(UNKNOWN)
+
+  /// Free-text clinician notes (verification source, last review date, etc.).
+  notes String? @db.Text
+
+  // === Tenant ===
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id])
+
+  // Audit trail
+  createdById String?
+  createdBy   User?   @relation("AllergyCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedById String?
+  updatedBy   User?   @relation("AllergyUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
+  /// Soft delete — never hard-delete clinical safety data (HIPAA retention).
+  deletedAt DateTime? @db.Timestamptz(6)
+
+  @@index([patientId])
+  @@index([practiceId])
+  @@index([severity])
+  @@map("allergies")
+}
+
+// ============================================================================
+// MEDICATION — current and historical patient medications
+// ----------------------------------------------------------------------------
+// Active meds matter for procedure planning (anticoagulants must be held
+// before injections; opioids signal pain trajectory). Historical rows stay
+// (isActive=false) so the doctor can see what was tried and stopped.
+//
+// practiceId denormalized for the same defense-in-depth reason as Allergy.
+// ============================================================================
+
+model Medication {
+  id String @id @default(cuid())
+
+  patientId String
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  /// Drug name as the doctor wrote it. Free-text — no NDC / RxNorm
+  /// integration in MVP. Brand or generic, doctor's choice.
+  name String
+
+  /// Dose strength + form, e.g. "5mg tablet", "500mg/5mL", "0.5%". Optional.
+  dosage String?
+
+  /// Frequency / schedule — e.g. "twice daily", "PRN", "q6h", "once weekly".
+  /// Free-text; medication regimens don't fit a closed enum well.
+  frequency String?
+
+  /// Whether the patient is currently taking this. false = past medication
+  /// kept for chart history. The UI defaults to showing only isActive=true
+  /// with a toggle to reveal stopped meds.
+  isActive Boolean @default(true)
+
+  /// Free-text clinician notes (indication, prescriber, response, etc.).
+  notes String? @db.Text
+
+  // === Tenant ===
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id])
+
+  // Audit trail
+  createdById String?
+  createdBy   User?   @relation("MedicationCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedById String?
+  updatedBy   User?   @relation("MedicationUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
+  /// Soft delete — never hard-delete clinical safety data.
+  deletedAt DateTime? @db.Timestamptz(6)
+
+  @@index([patientId])
+  @@index([practiceId])
+  @@index([isActive])
+  @@map("medications")
 }
 
 // ============================================================================

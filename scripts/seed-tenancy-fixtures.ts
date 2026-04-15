@@ -23,6 +23,8 @@ import {
   PATIENTS,
   NOTES,
   APPOINTMENTS,
+  ALLERGIES,
+  MEDICATIONS,
   type TestUser,
 } from '../tests/fixtures/tenancy';
 
@@ -131,6 +133,48 @@ async function main() {
         scheduledAt: new Date('2026-06-01T10:00:00Z'),
         type: 'CONSULTATION',
         status: 'SCHEDULED',
+      },
+    });
+  }
+
+  // --- Allergies ---
+  for (const a of Object.values(ALLERGIES)) {
+    await prisma.allergy.upsert({
+      where: { id: a.id },
+      update: {
+        allergen: a.allergen,
+        severity: a.severity,
+        deletedAt: null,
+      },
+      create: {
+        id: a.id,
+        patientId: a.patientId,
+        practiceId: a.practiceId,
+        allergen: a.allergen,
+        severity: a.severity,
+      },
+    });
+  }
+
+  // --- Medications ---
+  for (const m of Object.values(MEDICATIONS)) {
+    await prisma.medication.upsert({
+      where: { id: m.id },
+      update: {
+        name: m.name,
+        dosage: m.dosage,
+        frequency: m.frequency,
+        isActive: true,
+        deletedAt: null,
+      },
+      create: {
+        id: m.id,
+        patientId: m.patientId,
+        practiceId: m.practiceId,
+        name: m.name,
+        dosage: m.dosage,
+        frequency: m.frequency,
+        isActive: true,
       },
     });
   }

@@ -37,6 +37,8 @@ import {
 import { formatLastVisit, formatRelativeDate } from '@/lib/mock-patients';
 import type { PatientView } from '@/lib/data/patients';
 import type { ClinicalNoteView } from '@/lib/data/clinical-notes';
+import type { AllergyView, MedicationView } from '@/lib/data/clinical-safety';
+import ClinicalSafetyPanel from './ClinicalSafetyPanel';
 import { PROCEDURE_TEMPLATES } from '@/lib/constants/procedure-templates';
 import {
   archivePatientAction,
@@ -72,6 +74,12 @@ interface PatientDetailClientProps {
   patientFiles: ClinicalNoteView[];
   /** AI-synthesized reports. Saved as DRAFT; doctor signs off later. */
   finalReports: ClinicalNoteView[];
+  /** Patient drug/food/environmental allergies — safety-critical, top of chart. */
+  allergies: AllergyView[];
+  /** Active medications (inactive ones loaded on demand by the panel). */
+  medications: MedicationView[];
+  /** Explicit "patient confirmed no allergies" flag — distinct from "not yet asked". */
+  noKnownAllergies: boolean;
 }
 
 function formatBytes(n: number | undefined): string {
@@ -87,6 +95,9 @@ export default function PatientDetailClient({
   customProcedures,
   patientFiles,
   finalReports,
+  allergies,
+  medications,
+  noKnownAllergies,
 }: PatientDetailClientProps) {
   const age = new Date().getFullYear() - patient.birthYear;
   const initials = `${patient.firstName[0]}${patient.lastName[0]}`;
@@ -497,6 +508,16 @@ export default function PatientDetailClient({
             transition={{ delay: 0.1 }}
             className="lg:col-span-2 space-y-6"
           >
+            {/* Clinical safety — allergies + meds at the very top of the
+                chart, EHR convention. SEVERE allergies trigger a red banner
+                so the doctor can't miss them before any prescribing decision. */}
+            <ClinicalSafetyPanel
+              patientId={patient.id}
+              initialAllergies={allergies}
+              initialMedications={medications}
+              initialNoKnownAllergies={noKnownAllergies}
+            />
+
             {/* Profile Details — address + pharmacy + cell/home phone.
                 Only renders sections that actually have data, so an
                 intake-only chart doesn't show empty rows. Skipped

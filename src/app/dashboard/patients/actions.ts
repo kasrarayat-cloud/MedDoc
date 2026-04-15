@@ -45,6 +45,19 @@ import {
   createAppointment,
   type AppointmentView,
 } from '@/lib/data/appointments';
+import {
+  listAllergiesForPatient as dataListAllergies,
+  createAllergy as dataCreateAllergy,
+  updateAllergy as dataUpdateAllergy,
+  deleteAllergy as dataDeleteAllergy,
+  setNoKnownAllergies as dataSetNoKnownAllergies,
+  listMedicationsForPatient as dataListMedications,
+  createMedication as dataCreateMedication,
+  updateMedication as dataUpdateMedication,
+  deleteMedication as dataDeleteMedication,
+  type AllergyView,
+  type MedicationView,
+} from '@/lib/data/clinical-safety';
 
 // ---------------------------------------------------------------------------
 // Validation schemas
@@ -1974,4 +1987,265 @@ export async function dispatchGenerateFinalReport(
       title: result.data.title,
     },
   };
+}
+
+// ===========================================================================
+// CLINICAL SAFETY — Allergies + Medications
+// ---------------------------------------------------------------------------
+// Doctor-only writes: STAFF can view a patient but not edit safety data
+// (matches archivePatientAction's role guard). Every mutation:
+//   - re-validates session role
+//   - delegates tenant-isolation to the data layer (patientAccessWhere)
+//   - logs an audit row keyed by allergy/medication id
+//   - revalidates /dashboard/patients/[patientId] so the panel refreshes
+// ===========================================================================
+
+const allergySeveritySchema = z.enum(['UNKNOWN', 'MILD', 'MODERATE', 'SEVERE']);
+
+const addAllergySchema = z.object({
+  patientId: z.string().min(1),
+  allergen: z.string().min(1, 'Allergen is required').max(200),
+  reaction: z.string().max(200).nullable().optional(),
+  severity: allergySeveritySchema.optional(),
+  notes: z.string().max(2000).nullable().optional(),
+});
+
+const updateAllergySchema = z.object({
+  allergen: z.string().min(1).max(200).optional(),
+  reaction: z.string().max(200).nullable().optional(),
+  severity: allergySeveritySchema.optional(),
+  notes: z.string().max(2000).nullable().optional(),
+});
+
+const addMedicationSchema = z.object({
+  patientId: z.string().min(1),
+  name: z.string().min(1, 'Medication name is required').max(200),
+  dosage: z.string().max(120).nullable().optional(),
+  frequency: z.string().max(120).nullable().optional(),
+  isActive: z.boolean().optional(),
+  notes: z.string().max(2000).nullable().optional(),
+});
+
+const updateMedicationSchema = z.object({
+  name: z.string().min(1).max(200).optional(),
+  dosage: z.string().max(120).nullable().optional(),
+  frequency: z.string().max(120).nullable().optional(),
+  isActive: z.boolean().optional(),
+  notes: z.string().max(2000).nullable().optional(),
+});
+
+// ----- READ -----
+
+export async function listAllergiesAction(
+  patientId: string
+): Promise<ActionResult<AllergyView[]>> {
+  let session;
+  try {
+    session = await requireRole(['DOCTOR', 'ADMIN', 'STAFF']);
+  } catch (err) {
+    return authErrorResult(err);
+  }
+  try {
+    const data = await dataListAllergies(session, patientId);
+    return { ok: true, data };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Failed to load allergies' };
+  }
+}
+
+export async function listMedicationsAction(
+  patientId: string,
+  includeInactive = false
+): Promise<ActionResult<MedicationView[]>> {
+  let session;
+  try {
+    session = await requireRole(['DOCTOR', 'ADMIN', 'STAFF']);
+  } catch (err) {
+    return authErrorResult(err);
+  }
+  try {
+    const data = await dataListMedications(session, patientId, { includeInactive });
+    return { ok: true, data };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Failed to load medications' };
+  }
+}
+
+// ----- ALLERGY MUTATIONS -----
+
+export async function addAllergyAction(
+  raw: z.input<typeof addAllergySchema>
+): Promise<ActionResult<AllergyView>> {
+  let session;
+  try {
+    session = await requireRole(['DOCTOR', 'ADMIN']);
+  } catch (err) {
+    await logAudit({
+      action: 'CREATED_ALLERGY',
+      targetId: raw?.patientId ?? '',
+      targetType: 'Patient',
+      success: false,
+      errorCode: 'FORBIDDEN',
+    });
+    return authErrorResult(err);
+  }
+  const parsed = addAllergySchema.safeParse(raw);
+  if (!parsed.success) {
+    return { ok: false, error: 'Invalid input', fieldErrors: parsed.error.flatten().fieldErrors };
+  }
+  try {
+    const data = await dataCreateAllergy(session, parsed.data);
+    await logAudit({ action: 'CREATED_ALLERGY', targetId: data.id, targetType: 'Allergy' });
+    revalidatePath(`/dashboard/patients/${parsed.data.patientId}`);
+    return { ok: true, data };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Failed to add allergy' };
+  }
+}
+
+export async function updateAllergyAction(
+  allergyId: string,
+  patientId: string,
+  raw: z.input<typeof updateAllergySchema>
+): Promise<ActionResult<AllergyView>> {
+  let session;
+  try {
+    session = await requireRole(['DOCTOR', 'ADMIN']);
+  } catch (err) {
+    return authErrorResult(err);
+  }
+  const parsed = updateAllergySchema.safeParse(raw);
+  if (!parsed.success) {
+    return { ok: false, error: 'Invalid input', fieldErrors: parsed.error.flatten().fieldErrors };
+  }
+  try {
+    const data = await dataUpdateAllergy(session, allergyId, parsed.data);
+    await logAudit({ action: 'UPDATED_ALLERGY', targetId: allergyId, targetType: 'Allergy' });
+    revalidatePath(`/dashboard/patients/${patientId}`);
+    return { ok: true, data };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Failed to update allergy' };
+  }
+}
+
+export async function deleteAllergyAction(
+  allergyId: string,
+  patientId: string
+): Promise<ActionResult<{ deleted: true }>> {
+  let session;
+  try {
+    session = await requireRole(['DOCTOR', 'ADMIN']);
+  } catch (err) {
+    return authErrorResult(err);
+  }
+  try {
+    await dataDeleteAllergy(session, allergyId);
+    await logAudit({ action: 'DELETED_ALLERGY', targetId: allergyId, targetType: 'Allergy' });
+    revalidatePath(`/dashboard/patients/${patientId}`);
+    return { ok: true, data: { deleted: true } };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Failed to delete allergy' };
+  }
+}
+
+export async function setNoKnownAllergiesAction(
+  patientId: string,
+  value: boolean
+): Promise<ActionResult<{ noKnownAllergies: boolean }>> {
+  let session;
+  try {
+    session = await requireRole(['DOCTOR', 'ADMIN']);
+  } catch (err) {
+    return authErrorResult(err);
+  }
+  try {
+    await dataSetNoKnownAllergies(session, patientId, value);
+    await logAudit({
+      action: 'UPDATED_PATIENT',
+      targetId: patientId,
+      targetType: 'Patient',
+      metadata: { field: 'noKnownAllergies', value },
+    });
+    revalidatePath(`/dashboard/patients/${patientId}`);
+    return { ok: true, data: { noKnownAllergies: value } };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Failed to update NKA' };
+  }
+}
+
+// ----- MEDICATION MUTATIONS -----
+
+export async function addMedicationAction(
+  raw: z.input<typeof addMedicationSchema>
+): Promise<ActionResult<MedicationView>> {
+  let session;
+  try {
+    session = await requireRole(['DOCTOR', 'ADMIN']);
+  } catch (err) {
+    await logAudit({
+      action: 'CREATED_MEDICATION',
+      targetId: raw?.patientId ?? '',
+      targetType: 'Patient',
+      success: false,
+      errorCode: 'FORBIDDEN',
+    });
+    return authErrorResult(err);
+  }
+  const parsed = addMedicationSchema.safeParse(raw);
+  if (!parsed.success) {
+    return { ok: false, error: 'Invalid input', fieldErrors: parsed.error.flatten().fieldErrors };
+  }
+  try {
+    const data = await dataCreateMedication(session, parsed.data);
+    await logAudit({ action: 'CREATED_MEDICATION', targetId: data.id, targetType: 'Medication' });
+    revalidatePath(`/dashboard/patients/${parsed.data.patientId}`);
+    return { ok: true, data };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Failed to add medication' };
+  }
+}
+
+export async function updateMedicationAction(
+  medicationId: string,
+  patientId: string,
+  raw: z.input<typeof updateMedicationSchema>
+): Promise<ActionResult<MedicationView>> {
+  let session;
+  try {
+    session = await requireRole(['DOCTOR', 'ADMIN']);
+  } catch (err) {
+    return authErrorResult(err);
+  }
+  const parsed = updateMedicationSchema.safeParse(raw);
+  if (!parsed.success) {
+    return { ok: false, error: 'Invalid input', fieldErrors: parsed.error.flatten().fieldErrors };
+  }
+  try {
+    const data = await dataUpdateMedication(session, medicationId, parsed.data);
+    await logAudit({ action: 'UPDATED_MEDICATION', targetId: medicationId, targetType: 'Medication' });
+    revalidatePath(`/dashboard/patients/${patientId}`);
+    return { ok: true, data };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Failed to update medication' };
+  }
+}
+
+export async function deleteMedicationAction(
+  medicationId: string,
+  patientId: string
+): Promise<ActionResult<{ deleted: true }>> {
+  let session;
+  try {
+    session = await requireRole(['DOCTOR', 'ADMIN']);
+  } catch (err) {
+    return authErrorResult(err);
+  }
+  try {
+    await dataDeleteMedication(session, medicationId);
+    await logAudit({ action: 'DELETED_MEDICATION', targetId: medicationId, targetType: 'Medication' });
+    revalidatePath(`/dashboard/patients/${patientId}`);
+    return { ok: true, data: { deleted: true } };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Failed to delete medication' };
+  }
 }
