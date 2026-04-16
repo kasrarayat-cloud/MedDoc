@@ -392,6 +392,95 @@ export const REALTIME_TOOLS: RealtimeTool[] = [
       additionalProperties: false,
     },
   },
+  // === CLINICAL SAFETY: allergies + medications ===
+  {
+    type: 'function',
+    name: 'add_allergy',
+    description:
+      'Record a drug, food, or environmental allergy for this patient. Execute immediately — do NOT ask for confirmation. If the patient currently has NKA (No Known Allergies) set, adding an allergy automatically clears the NKA flag.',
+    parameters: {
+      type: 'object',
+      properties: {
+        allergen: { type: 'string', description: 'What the patient is allergic to (e.g. "Penicillin", "Latex", "NSAIDs", "Sulfa drugs").' },
+        reaction: { type: 'string', description: 'Observed reaction (e.g. "anaphylaxis", "hives", "GI upset"). Optional — some allergies are patient-reported without reaction detail.' },
+        severity: { type: 'string', enum: ['UNKNOWN', 'MILD', 'MODERATE', 'SEVERE'], description: 'Severity. SEVERE triggers a red banner on the chart. Default UNKNOWN if not stated.' },
+      },
+      required: ['allergen'],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: 'function',
+    name: 'remove_allergy',
+    description:
+      'Remove an allergy from the patient\'s chart (soft-delete — audit trail preserved). Pick allergyId from the ALLERGIES list in the system context. Execute immediately.',
+    parameters: {
+      type: 'object',
+      properties: {
+        allergyId: { type: 'string', description: 'ID of the allergy to remove (from the ALLERGIES list).' },
+      },
+      required: ['allergyId'],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: 'function',
+    name: 'add_medication',
+    description:
+      'Add an active medication to the patient\'s chart. Execute immediately — do NOT ask for confirmation.',
+    parameters: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Drug name — brand or generic, doctor\'s choice (e.g. "Gabapentin", "Oxycodone", "Meloxicam").' },
+        dosage: { type: 'string', description: 'Dose strength + form (e.g. "300mg", "5mg tablet", "0.5%"). Optional.' },
+        frequency: { type: 'string', description: 'Frequency / schedule (e.g. "twice daily", "PRN", "q6h", "at bedtime"). Optional.' },
+      },
+      required: ['name'],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: 'function',
+    name: 'remove_medication',
+    description:
+      'Remove a medication from the patient\'s chart entirely (soft-delete). Pick medicationId from the MEDICATIONS list. Use this for corrections ("that was wrong, remove it"). For stopping a med the patient was actually taking, prefer toggle_medication_active instead — that preserves the history.',
+    parameters: {
+      type: 'object',
+      properties: {
+        medicationId: { type: 'string', description: 'ID of the medication to remove (from the MEDICATIONS list).' },
+      },
+      required: ['medicationId'],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: 'function',
+    name: 'toggle_medication_active',
+    description:
+      'Stop or resume a medication. Stopped meds stay on the chart as historical records but show as inactive. Use when the doctor says "stop the gabapentin", "discontinue oxycodone", "resume the meloxicam", etc. Pick medicationId from the MEDICATIONS list.',
+    parameters: {
+      type: 'object',
+      properties: {
+        medicationId: { type: 'string', description: 'ID of the medication to toggle (from the MEDICATIONS list).' },
+      },
+      required: ['medicationId'],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: 'function',
+    name: 'set_nka',
+    description:
+      'Mark or unmark "No Known Allergies" on the patient. Set value=true when the doctor confirms the patient has no allergies. Setting NKA while allergies exist is blocked server-side — remove the allergies first.',
+    parameters: {
+      type: 'object',
+      properties: {
+        value: { type: 'boolean', description: 'true = patient confirmed no known allergies. false = unmark NKA.' },
+      },
+      required: ['value'],
+      additionalProperties: false,
+    },
+  },
 ];
 
 /**
@@ -416,6 +505,12 @@ export function buildSystemPrompt(input: {
   clinicalTrajectory?: string;
   /** Recent audit rows on this patient — cross-visit memory. */
   recentAiActions?: string[];
+  /** Patient's recorded allergies (from the Allergy table). */
+  allergies?: { id: string; allergen: string; reaction: string | null; severity: string }[];
+  /** Patient's active medications (from the Medication table). */
+  medications?: { id: string; name: string; dosage: string | null; frequency: string | null; isActive: boolean }[];
+  /** Whether the patient has been explicitly marked "No Known Allergies". */
+  noKnownAllergies?: boolean;
 }): string {
   const {
     patient,
@@ -428,6 +523,9 @@ export function buildSystemPrompt(input: {
     timezone = 'UTC',
     clinicalTrajectory = '',
     recentAiActions = [],
+    allergies = [],
+    medications = [],
+    noKnownAllergies = false,
   } = input;
 
   // Pre-format the current moment IN THE USER'S TZ so the model sees a
@@ -583,7 +681,13 @@ ${clinicalTrajectory ? `CLINICAL_TRAJECTORY (AI-synthesized one-liner for quick 
 ` : ''}${recentAiActions.length > 0 ? `RECENT_ACTIONS (last work on this chart — cross-session memory):
 ${recentAiActions.join('\n')}
 
-` : ''}BRIEF_HISTORY (current entries — preserve when adding new ones):
+` : ''}ALLERGIES (current — IDs for remove_allergy):
+${noKnownAllergies && allergies.length === 0 ? '  NKA (No Known Allergies — confirmed)' : allergies.length === 0 ? '  (none recorded)' : allergies.map((a, i) => `  ${i + 1}. id="${a.id}" ${a.allergen}${a.reaction ? ` — ${a.reaction}` : ''} [${a.severity}]`).join('\n')}
+
+MEDICATIONS (active — IDs for remove_medication / toggle_medication_active):
+${medications.filter(m => m.isActive).length === 0 ? '  (no active medications)' : medications.filter(m => m.isActive).map((m, i) => `  ${i + 1}. id="${m.id}" ${m.name}${m.dosage ? ` ${m.dosage}` : ''}${m.frequency ? ` — ${m.frequency}` : ''}`).join('\n')}
+${medications.filter(m => !m.isActive).length > 0 ? `\nMEDICATIONS_STOPPED (inactive — IDs for toggle to resume):\n${medications.filter(m => !m.isActive).map((m, i) => `  ${i + 1}. id="${m.id}" ${m.name}${m.dosage ? ` ${m.dosage}` : ''} [stopped]`).join('\n')}\n` : ''}
+BRIEF_HISTORY (current entries — preserve when adding new ones):
 ${briefHistoryList}
 
 RECENT_NOTES (clinical SOAP/dictated notes — newest first):
@@ -603,7 +707,7 @@ ${appointmentList}
 
 YOUR AUTHORITY: you have full edit access over this patient's chart — brief history, demographics, notes, procedures, final reports, attached files, appointments, and status. All actions are tenant-scoped and audit-logged server-side; that's the HIPAA guardrail. Your UX rule is simple: EXECUTE IMMEDIATELY on any clear command, do NOT ask for permission or confirmation, and speak one short sentence reporting what you did.
 
-YOUR JOB: understand the doctor's voice commands, call the appropriate tool, and report in voice. Tools: create_clinical_note, read_clinical_note, edit_clinical_note, delete_clinical_note, read_custom_procedure, edit_custom_procedure, delete_custom_procedure, read_final_report, edit_final_report, delete_final_report, read_patient_file, delete_patient_file, schedule_appointment, cancel_appointment, summarize_chart, generate_document, generate_final_report, update_patient, request_file_upload, archive_patient.
+YOUR JOB: understand the doctor's voice commands, call the appropriate tool, and report in voice. Tools: create_clinical_note, read_clinical_note, edit_clinical_note, delete_clinical_note, read_custom_procedure, edit_custom_procedure, delete_custom_procedure, read_final_report, edit_final_report, delete_final_report, read_patient_file, delete_patient_file, schedule_appointment, cancel_appointment, summarize_chart, generate_document, generate_final_report, update_patient, request_file_upload, archive_patient, add_allergy, remove_allergy, add_medication, remove_medication, toggle_medication_active, set_nka.
 
 READ-THEN-ACT PATTERN: the RECENT_NOTES and CUSTOM_PROCEDURES lists only give you IDs and titles — not the actual text inside. If the doctor asks you to READ, REVIEW, LOOK AT, DESCRIBE, OR QUOTE FROM a note or procedure, call read_clinical_note / read_custom_procedure FIRST to fetch the content. If the doctor asks to edit by content ("change X to Y in the LESI note", "delete the brief history section from the procedure"), call read_* first to see the current text, then call edit_* with precise instructions.
 
@@ -628,6 +732,13 @@ WHICH TOOL TO USE:
 - "Generate final report" / "write the discharge summary" / "case summary" → generate_final_report
 - "Archive this patient" / "remove from active list" → archive_patient
 - "Attach a file" / "upload [a procedure | this DOCX | a PDF]" / "add a procedure document" → request_file_upload IMMEDIATELY. Do NOT say "OK" or "I'll open it" first — call the tool first, then once it returns, say one short sentence telling the doctor to pick the file. The doctor uploads from their computer; you'll receive a follow-up user message naming the file.
+- "Add allergy [X]" / "patient is allergic to [X]" / "[X] allergy" / "allergic to [X]" → add_allergy with allergen=X. If severity or reaction is mentioned, include them.
+- "Remove the [X] allergy" / "delete [X] allergy" → remove_allergy (find allergyId from ALLERGIES list above)
+- "No known allergies" / "NKA" / "mark no allergies" → set_nka with value=true
+- "Add [drug] [dose] [frequency]" / "patient is on [drug]" / "start [drug]" / "put them on [drug]" → add_medication
+- "Stop the [drug]" / "discontinue [drug]" / "hold the [drug]" → toggle_medication_active (find medicationId from MEDICATIONS list, sets isActive=false)
+- "Resume [drug]" / "restart [drug]" → toggle_medication_active (sets isActive=true)
+- "Remove [drug] from meds" / "delete [drug] from medications" → remove_medication (permanent removal, not just stopping)
 
 CRITICAL RULES:
 0. THINK FIRST (one pass, silent). Before you act, parse the doctor's request into: (a) every discrete change they named, (b) which LIST each target lives in (RECENT_NOTES / CUSTOM_PROCEDURES / FINAL_REPORTS / ATTACHED_FILES / PROFILE / UPCOMING_APPOINTMENTS), (c) which tool serves each. If the doctor names a document by topic ("back injection note", "the imaging procedure") match it to the LIST entry whose hint contains that topic, not by trying other lists. Only after you have a plan, start calling tools.

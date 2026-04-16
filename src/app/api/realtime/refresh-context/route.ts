@@ -3,6 +3,8 @@ import { getSession } from '@/lib/auth';
 import { getPatientById } from '@/lib/data/patients';
 import { listNotesByPatient } from '@/lib/data/clinical-notes';
 import { listAppointmentsByPatient, type AppointmentView } from '@/lib/data/appointments';
+import { listAllergiesForPatient, listMedicationsForPatient } from '@/lib/data/clinical-safety';
+import prisma from '@/lib/db';
 import { buildSystemPrompt } from '@/lib/realtime/tools';
 import {
   buildClinicalTrajectory,
@@ -60,7 +62,7 @@ export async function POST(request: NextRequest) {
   // cache so the regenerated prompt reflects whatever just changed.
   invalidateTrajectory(patientId);
 
-  const [recentNotes, customProcedures, finalReports, patientFiles, appointments, recentAiActions] =
+  const [recentNotes, customProcedures, finalReports, patientFiles, appointments, recentAiActions, allergiesRaw, medicationsRaw, safetyFlags] =
     await Promise.all([
       listNotesByPatient(patientId, 'CLINICAL_NOTE', session),
       listNotesByPatient(patientId, 'CUSTOM_PROCEDURE', session),
@@ -68,6 +70,9 @@ export async function POST(request: NextRequest) {
       listNotesByPatient(patientId, 'PATIENT_FILE', session),
       listAppointmentsByPatient(patientId, session),
       fetchRecentAiActions(patientId, session),
+      listAllergiesForPatient(session, patientId),
+      listMedicationsForPatient(session, patientId, { includeInactive: true }),
+      prisma.patient.findUnique({ where: { id: patientId }, select: { noKnownAllergies: true } }),
     ]);
   const upcomingAppointments = filterUpcoming(appointments);
   const clinicalTrajectory = await buildClinicalTrajectory(
@@ -87,6 +92,9 @@ export async function POST(request: NextRequest) {
     timezone,
     clinicalTrajectory,
     recentAiActions,
+    allergies: allergiesRaw.map((a) => ({ id: a.id, allergen: a.allergen, reaction: a.reaction, severity: a.severity })),
+    medications: medicationsRaw.map((m) => ({ id: m.id, name: m.name, dosage: m.dosage, frequency: m.frequency, isActive: m.isActive })),
+    noKnownAllergies: safetyFlags?.noKnownAllergies ?? false,
   });
 
   return NextResponse.json({ instructions });

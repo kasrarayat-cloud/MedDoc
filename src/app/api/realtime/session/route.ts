@@ -4,6 +4,8 @@ import { logAudit } from '@/lib/audit';
 import { getPatientById } from '@/lib/data/patients';
 import { listNotesByPatient } from '@/lib/data/clinical-notes';
 import { listAppointmentsByPatient, type AppointmentView } from '@/lib/data/appointments';
+import { listAllergiesForPatient, listMedicationsForPatient } from '@/lib/data/clinical-safety';
+import prisma from '@/lib/db';
 import { REALTIME_TOOLS, buildSystemPrompt } from '@/lib/realtime/tools';
 import { checkVoiceCap } from '@/lib/realtime/usage-cap';
 import {
@@ -89,7 +91,7 @@ export async function POST(request: NextRequest) {
   // Every chart surface the model might need to target. All tenant-
   // scoped through the patient relation filter. recentAiActions comes
   // from the AuditLog (cross-session memory, #5).
-  const [recentNotes, customProcedures, finalReports, patientFiles, appointments, recentAiActions] =
+  const [recentNotes, customProcedures, finalReports, patientFiles, appointments, recentAiActions, allergiesRaw, medicationsRaw, safetyFlags] =
     await Promise.all([
       listNotesByPatient(patientId, 'CLINICAL_NOTE', session),
       listNotesByPatient(patientId, 'CUSTOM_PROCEDURE', session),
@@ -97,6 +99,9 @@ export async function POST(request: NextRequest) {
       listNotesByPatient(patientId, 'PATIENT_FILE', session),
       listAppointmentsByPatient(patientId, session),
       fetchRecentAiActions(patientId, session),
+      listAllergiesForPatient(session, patientId),
+      listMedicationsForPatient(session, patientId, { includeInactive: true }),
+      prisma.patient.findUnique({ where: { id: patientId }, select: { noKnownAllergies: true } }),
     ]);
   const upcomingAppointments = filterUpcomingAppointments(appointments);
 
@@ -140,8 +145,6 @@ export async function POST(request: NextRequest) {
         voice: REALTIME_VOICE,
         instructions: buildSystemPrompt({
           patient,
-          // Caps raised to 10 (#2) so the model has more of the
-          // trajectory visible without needing extra read_* calls.
           recentNotes: recentNotes.slice(0, 10),
           customProcedures: customProcedures.slice(0, 10),
           finalReports: finalReports.slice(0, 10),
@@ -151,6 +154,9 @@ export async function POST(request: NextRequest) {
           timezone,
           clinicalTrajectory,
           recentAiActions,
+          allergies: allergiesRaw.map((a) => ({ id: a.id, allergen: a.allergen, reaction: a.reaction, severity: a.severity })),
+          medications: medicationsRaw.map((m) => ({ id: m.id, name: m.name, dosage: m.dosage, frequency: m.frequency, isActive: m.isActive })),
+          noKnownAllergies: safetyFlags?.noKnownAllergies ?? false,
         }),
         tools: REALTIME_TOOLS,
         // NOTE: parallel_tool_calls / max_response_output_tokens are NOT
@@ -170,16 +176,16 @@ export async function POST(request: NextRequest) {
         // Combined with create_response: true below, follow-up turns
         // still trigger reliably.
         turn_detection: {
-          type: 'semantic_vad',
-          eagerness: 'low',
-          // Explicitly enable server-driven response creation on every
-          // end-of-user-turn. Without this, subsequent turns after the
-          // first can silently fail to trigger a model response — the
-          // doctor asks a follow-up, the session stays quiet until they
-          // make noise (which OpenAI registers as a new turn).
+          type: 'server_vad',
+          // 2.5s silence = end of utterance, consistent with the Doc Editor
+          // and Add Patient voice recorders. Switched from semantic_vad to
+          // server_vad because the doctor explicitly asked for a predictable
+          // 2.5s timeout. Trade-off: less intelligent about natural pauses,
+          // but simpler mental model for the doctor ("pause 2.5s = I'm done").
+          silence_duration_ms: 2500,
+          threshold: 0.5,
+          prefix_padding_ms: 300,
           create_response: true,
-          // Let the doctor interrupt the AI mid-speech without waiting
-          // for it to finish.
           interrupt_response: true,
         },
         // Stream both directions as PCM16 — the WebRTC pipe handles the

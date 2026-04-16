@@ -10,6 +10,14 @@ import {
   deleteClinicalNote as dataDeleteClinicalNote,
 } from '@/lib/data/clinical-notes';
 import { deleteAppointment as dataDeleteAppointment } from '@/lib/data/appointments';
+import {
+  createAllergy,
+  deleteAllergy,
+  setNoKnownAllergies,
+  createMedication,
+  deleteMedication,
+  updateMedication,
+} from '@/lib/data/clinical-safety';
 import OpenAI from 'openai';
 import {
   dispatchCreateNote,
@@ -521,6 +529,130 @@ export async function POST(request: NextRequest) {
           documentType as DocumentType
         );
         return NextResponse.json<ToolResponse>(toToolResponse(result));
+      }
+
+      // === CLINICAL SAFETY: allergies + medications ===
+
+      case 'add_allergy': {
+        const allergen = typeof args.allergen === 'string' ? args.allergen.trim() : '';
+        if (!allergen) {
+          return NextResponse.json<ToolResponse>(
+            { ok: false, output: 'Allergen name is required.' },
+            { status: 400 }
+          );
+        }
+        const severity = typeof args.severity === 'string' && ['UNKNOWN', 'MILD', 'MODERATE', 'SEVERE'].includes(args.severity)
+          ? (args.severity as 'UNKNOWN' | 'MILD' | 'MODERATE' | 'SEVERE')
+          : 'UNKNOWN';
+        const reaction = typeof args.reaction === 'string' ? args.reaction.trim() || null : null;
+        const allergy = await createAllergy(session, {
+          patientId,
+          allergen,
+          reaction,
+          severity,
+        });
+        await logAudit({ action: 'CREATED_ALLERGY', targetId: allergy.id, targetType: 'Allergy' });
+        revalidatePath(`/dashboard/patients/${patientId}`);
+        return NextResponse.json<ToolResponse>({
+          ok: true,
+          output: `Added allergy: ${allergen}${severity !== 'UNKNOWN' ? ` [${severity}]` : ''}.`,
+        });
+      }
+
+      case 'remove_allergy': {
+        const allergyId = typeof args.allergyId === 'string' ? args.allergyId.trim() : '';
+        if (!allergyId) {
+          return NextResponse.json<ToolResponse>(
+            { ok: false, output: 'allergyId is required.' },
+            { status: 400 }
+          );
+        }
+        await deleteAllergy(session, allergyId);
+        await logAudit({ action: 'DELETED_ALLERGY', targetId: allergyId, targetType: 'Allergy' });
+        revalidatePath(`/dashboard/patients/${patientId}`);
+        return NextResponse.json<ToolResponse>({
+          ok: true,
+          output: 'Allergy removed.',
+        });
+      }
+
+      case 'set_nka': {
+        const value = typeof args.value === 'boolean' ? args.value : true;
+        await setNoKnownAllergies(session, patientId, value);
+        await logAudit({ action: 'UPDATED_PATIENT', targetId: patientId, targetType: 'Patient', metadata: { field: 'noKnownAllergies', value } });
+        revalidatePath(`/dashboard/patients/${patientId}`);
+        return NextResponse.json<ToolResponse>({
+          ok: true,
+          output: value ? 'Marked No Known Allergies.' : 'NKA flag cleared.',
+        });
+      }
+
+      case 'add_medication': {
+        const name = typeof args.name === 'string' ? args.name.trim() : '';
+        if (!name) {
+          return NextResponse.json<ToolResponse>(
+            { ok: false, output: 'Medication name is required.' },
+            { status: 400 }
+          );
+        }
+        const dosage = typeof args.dosage === 'string' ? args.dosage.trim() || null : null;
+        const frequency = typeof args.frequency === 'string' ? args.frequency.trim() || null : null;
+        const med = await createMedication(session, { patientId, name, dosage, frequency });
+        await logAudit({ action: 'CREATED_MEDICATION', targetId: med.id, targetType: 'Medication' });
+        revalidatePath(`/dashboard/patients/${patientId}`);
+        return NextResponse.json<ToolResponse>({
+          ok: true,
+          output: `Added medication: ${name}${dosage ? ` ${dosage}` : ''}${frequency ? ` ${frequency}` : ''}.`,
+        });
+      }
+
+      case 'remove_medication': {
+        const medicationId = typeof args.medicationId === 'string' ? args.medicationId.trim() : '';
+        if (!medicationId) {
+          return NextResponse.json<ToolResponse>(
+            { ok: false, output: 'medicationId is required.' },
+            { status: 400 }
+          );
+        }
+        await deleteMedication(session, medicationId);
+        await logAudit({ action: 'DELETED_MEDICATION', targetId: medicationId, targetType: 'Medication' });
+        revalidatePath(`/dashboard/patients/${patientId}`);
+        return NextResponse.json<ToolResponse>({
+          ok: true,
+          output: 'Medication removed.',
+        });
+      }
+
+      case 'toggle_medication_active': {
+        const medicationId = typeof args.medicationId === 'string' ? args.medicationId.trim() : '';
+        if (!medicationId) {
+          return NextResponse.json<ToolResponse>(
+            { ok: false, output: 'medicationId is required.' },
+            { status: 400 }
+          );
+        }
+        // Read current state, flip it. The model uses this for both
+        // "stop the gabapentin" (active→inactive) and "resume the
+        // gabapentin" (inactive→active).
+        const { default: prisma } = await import('@/lib/db');
+        const existingMed = await prisma.medication.findFirst({
+          where: { id: medicationId, deletedAt: null },
+          select: { isActive: true },
+        });
+        if (!existingMed) {
+          return NextResponse.json<ToolResponse>(
+            { ok: false, output: 'Medication not found.' },
+            { status: 404 }
+          );
+        }
+        const newActive = !existingMed.isActive;
+        await updateMedication(session, medicationId, { isActive: newActive });
+        await logAudit({ action: 'UPDATED_MEDICATION', targetId: medicationId, targetType: 'Medication', metadata: { isActive: newActive } });
+        revalidatePath(`/dashboard/patients/${patientId}`);
+        return NextResponse.json<ToolResponse>({
+          ok: true,
+          output: newActive ? 'Medication resumed.' : 'Medication stopped.',
+        });
       }
 
       default:

@@ -326,7 +326,7 @@ function AddPatientModalContent({ onClose }: { onClose: () => void }) {
     // pauses ("birth year is… 1978"). 4s gives the user room to think
     // between fields without losing the "speak the whole form" flow.
     // The Stop chip is still one tap away if they want to end sooner.
-    silenceTimeoutMs: 4000,
+    silenceTimeoutMs: 2500,
     // Long enough for a full intake in one breath (name, DOB, address,
     // pharmacy, phones, insurance, history) without the hard cap cutting
     // them off. 2 min is well under Whisper's 25 MB input ceiling at
