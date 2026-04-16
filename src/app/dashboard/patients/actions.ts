@@ -1312,6 +1312,20 @@ export async function dispatchEditNote(
       intentConfidence: result.intent.confidence,
     },
   });
+
+  // Log the combined two-pass token count so voice-initiated note edits show
+  // up in the admin Metrics dashboard alongside Doc Editor / GPT tool calls.
+  if (result.usage?.totalTokens && session?.user?.id && session?.user?.practiceId) {
+    void logApiUsage({
+      feature: 'GPT_TOOL',
+      userId: session.user.id,
+      practiceId: session.user.practiceId,
+      tokens: result.usage.totalTokens,
+    }).catch((err) => {
+      console.error('[actions] dispatchEditNote usage log rejected:', err);
+    });
+  }
+
   revalidatePath(`/dashboard/patients/${patient.id}`);
 
   return {

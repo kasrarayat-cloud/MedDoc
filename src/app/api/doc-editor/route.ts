@@ -222,12 +222,11 @@ export async function POST(request: NextRequest) {
     const errorMessage =
       error instanceof Error ? error.message : 'An unexpected error occurred';
 
-    // Check for API key issues
-    if (errorMessage.includes('ANTHROPIC_API_KEY')) {
+    if (errorMessage.includes('OPENAI_API_KEY')) {
       return NextResponse.json(
         {
           error: 'API key not configured',
-          details: 'Please set ANTHROPIC_API_KEY in .env.local',
+          details: 'Please set OPENAI_API_KEY in .env.local',
         },
         { status: 500 }
       );

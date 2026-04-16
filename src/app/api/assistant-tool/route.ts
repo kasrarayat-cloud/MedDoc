@@ -3,7 +3,7 @@ import { revalidatePath } from 'next/cache';
 import { getSession } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
 import { archivePatient as dataArchivePatient } from '@/lib/data/patients';
-import { getPatientById } from '@/lib/data/patients';
+import { getPatientById, patientAccessWhere } from '@/lib/data/patients';
 import {
   listNotesByPatient,
   getNoteById as dataGetNoteById,
@@ -641,7 +641,11 @@ export async function POST(request: NextRequest) {
         // gabapentin" (inactive→active).
         const { default: prisma } = await import('@/lib/db');
         const existingMed = await prisma.medication.findFirst({
-          where: { id: medicationId, deletedAt: null },
+          where: {
+            id: medicationId,
+            deletedAt: null,
+            patient: patientAccessWhere(session),
+          },
           select: { isActive: true },
         });
         if (!existingMed) {
