@@ -176,15 +176,14 @@ export async function POST(request: NextRequest) {
         // Combined with create_response: true below, follow-up turns
         // still trigger reliably.
         turn_detection: {
-          type: 'server_vad',
-          // 2.5s silence = end of utterance, consistent with the Doc Editor
-          // and Add Patient voice recorders. Switched from semantic_vad to
-          // server_vad because the doctor explicitly asked for a predictable
-          // 2.5s timeout. Trade-off: less intelligent about natural pauses,
-          // but simpler mental model for the doctor ("pause 2.5s = I'm done").
-          silence_duration_ms: 2500,
-          threshold: 0.5,
-          prefix_padding_ms: 300,
+          type: 'semantic_vad',
+          // 'medium' balances speed and accuracy — commits faster than
+          // 'low' (the original setting, which felt sluggish) while still
+          // using OpenAI's neural turn-detection so natural pauses don't
+          // prematurely commit a turn and stutter the response. Reverted
+          // from server_vad (which caused choppy speech from background
+          // noise triggering micro-turn commits).
+          eagerness: 'medium',
           create_response: true,
           interrupt_response: true,
         },
