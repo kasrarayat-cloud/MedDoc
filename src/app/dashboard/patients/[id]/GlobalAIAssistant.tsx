@@ -162,7 +162,8 @@ function GlobalAIAssistantPanel({
         t === 'edited_note' ||
         t === 'scheduled_appointment' ||
         t === 'updated_patient' ||
-        t === 'final_report_generated'
+        t === 'final_report_generated' ||
+        t === 'clinical_safety_updated'
       ) {
         router.refresh();
         void refreshAssistantContext();

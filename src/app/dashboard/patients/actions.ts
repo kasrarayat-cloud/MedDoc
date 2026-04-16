@@ -1159,6 +1159,7 @@ export type AssistantAction =
   | { type: 'updated_patient'; patientId: string; changedFields: string[] }
   | { type: 'awaiting_file_upload'; reason: string }
   | { type: 'final_report_generated'; reportId: string; title: string }
+  | { type: 'clinical_safety_updated' }
   | { type: 'chat' };
 
 export type AssistantResult =

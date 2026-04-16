@@ -556,6 +556,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json<ToolResponse>({
           ok: true,
           output: `Added allergy: ${allergen}${severity !== 'UNKNOWN' ? ` [${severity}]` : ''}.`,
+          action: { type: 'clinical_safety_updated' },
         });
       }
 
@@ -573,6 +574,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json<ToolResponse>({
           ok: true,
           output: 'Allergy removed.',
+          action: { type: 'clinical_safety_updated' },
         });
       }
 
@@ -584,6 +586,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json<ToolResponse>({
           ok: true,
           output: value ? 'Marked No Known Allergies.' : 'NKA flag cleared.',
+          action: { type: 'clinical_safety_updated' },
         });
       }
 
@@ -603,6 +606,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json<ToolResponse>({
           ok: true,
           output: `Added medication: ${name}${dosage ? ` ${dosage}` : ''}${frequency ? ` ${frequency}` : ''}.`,
+          action: { type: 'clinical_safety_updated' },
         });
       }
 
@@ -620,6 +624,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json<ToolResponse>({
           ok: true,
           output: 'Medication removed.',
+          action: { type: 'clinical_safety_updated' },
         });
       }
 
@@ -652,6 +657,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json<ToolResponse>({
           ok: true,
           output: newActive ? 'Medication resumed.' : 'Medication stopped.',
+          action: { type: 'clinical_safety_updated' },
         });
       }
 
