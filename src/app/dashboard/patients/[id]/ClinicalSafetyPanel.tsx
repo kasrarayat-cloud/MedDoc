@@ -13,7 +13,7 @@
 // us a per-row inline-edit form.
 // ============================================================================
 
-import React, { useState, useTransition } from 'react';
+import React, { useState, useEffect, useTransition } from 'react';
 import {
   AlertTriangle,
   Pill,
@@ -59,6 +59,14 @@ export default function ClinicalSafetyPanel({
   const [allergies, setAllergies] = useState(initialAllergies);
   const [meds, setMeds] = useState(initialMedications);
   const [nka, setNka] = useState(initialNoKnownAllergies);
+
+  // Sync from server props when the page re-renders (e.g. after the voice
+  // assistant adds an allergy via router.refresh()). Without this, local
+  // state stays stale and the panel shows old data even though the DB is
+  // updated.
+  useEffect(() => { setAllergies(initialAllergies); }, [initialAllergies]);
+  useEffect(() => { setMeds(initialMedications); }, [initialMedications]);
+  useEffect(() => { setNka(initialNoKnownAllergies); }, [initialNoKnownAllergies]);
 
   const severeAllergies = allergies.filter((a) => a.severity === 'SEVERE');
   const allergyCount = allergies.length;
