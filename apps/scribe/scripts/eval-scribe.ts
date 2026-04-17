@@ -21,12 +21,61 @@
 import 'dotenv/config';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { z } from 'zod';
 import { modelClient } from '@meddoc/ai';
 import prisma from '@meddoc/db';
 import { SoapNoteSchema, type SoapNote } from '@meddoc/types';
 import { SCRIBE_EVAL_CASES, type ScribeEvalCase } from '../tests/evals/scribe-transcripts';
 
 const THRESHOLD = 0.8;
+/** Minimum mean judge score per case when --judge is active. */
+const JUDGE_THRESHOLD = 3.5;
+
+const CLI_ARGS = new Set(process.argv.slice(2));
+const JUDGE_ENABLED = CLI_ARGS.has('--judge');
+
+// ---------------------------------------------------------------------------
+// LLM-as-judge (M4 D7 — opt-in via --judge)
+// ---------------------------------------------------------------------------
+
+const JudgeScoreSchema = z.object({
+  score: z.number().min(1).max(5),
+  criteria: z.object({
+    hallucination: z.number().min(1).max(5),
+    completeness: z.number().min(1).max(5),
+    clarity: z.number().min(1).max(5),
+    specialty_appropriateness: z.number().min(1).max(5),
+  }),
+  notes: z.string(),
+});
+type JudgeScore = z.infer<typeof JudgeScoreSchema>;
+
+async function loadJudgePrompt(): Promise<string> {
+  return fs.readFile(
+    path.resolve(__dirname, '..', 'src', 'server', 'prompts', 'llm-judge.md'),
+    'utf8'
+  );
+}
+
+async function judgeSoap(args: {
+  transcript: string;
+  soap: SoapNote;
+  basePrompt: string;
+}): Promise<JudgeScore> {
+  const judgeModel = process.env.MODEL_FOR_JUDGE?.trim() || 'claude-sonnet-4-6';
+  return modelClient.complete({
+    provider: 'anthropic',
+    model: judgeModel,
+    system: args.basePrompt,
+    user:
+      `OUTPUT_TYPE: SOAP\n\nTRANSCRIPT:\n${args.transcript}\n\n` +
+      `OUTPUT:\n${JSON.stringify(args.soap, null, 2)}`,
+    schema: JudgeScoreSchema,
+    purpose: 'judge',
+    practiceId: 'clinic_main',
+    maxTokens: 1024,
+  });
+}
 
 const c = {
   reset: '\x1b[0m',
@@ -173,7 +222,9 @@ async function main() {
   console.log(
     `${c.dim}${SCRIBE_EVAL_CASES.length} cases, model=${
       process.env.MODEL_FOR_SOAP?.trim() || 'claude-sonnet-4-6'
-    }, threshold=${THRESHOLD * 100}%${c.reset}\n`
+    }, threshold=${THRESHOLD * 100}%${
+      JUDGE_ENABLED ? `, llm-judge=on (min mean ${JUDGE_THRESHOLD.toFixed(1)}/5)` : ''
+    }${c.reset}\n`
   );
 
   if (!process.env.ANTHROPIC_API_KEY?.trim()) {
@@ -182,9 +233,14 @@ async function main() {
   }
 
   const basePrompt = await loadSoapPrompt();
+  const judgePrompt = JUDGE_ENABLED ? await loadJudgePrompt() : null;
   const start = Date.now();
 
   let pass = 0;
+  let judgePass = 0;
+  let judgeRuns = 0;
+  const judgeSum = { hallucination: 0, completeness: 0, clarity: 0, specialty_appropriateness: 0, mean: 0 };
+
   for (const evalCase of SCRIBE_EVAL_CASES) {
     const score = await runCase(evalCase, basePrompt);
     const ok = passed(score);
@@ -195,6 +251,31 @@ async function main() {
     if (!ok) {
       for (const r of score.reasons) console.log(`    ${c.red}•${c.reset} ${r}`);
     }
+
+    if (JUDGE_ENABLED && score.soap && judgePrompt) {
+      try {
+        const j = await judgeSoap({
+          transcript: evalCase.transcript,
+          soap: score.soap,
+          basePrompt: judgePrompt,
+        });
+        judgeRuns += 1;
+        judgeSum.hallucination += j.criteria.hallucination;
+        judgeSum.completeness += j.criteria.completeness;
+        judgeSum.clarity += j.criteria.clarity;
+        judgeSum.specialty_appropriateness += j.criteria.specialty_appropriateness;
+        judgeSum.mean += j.score;
+        const judgeOk = j.score >= JUDGE_THRESHOLD;
+        if (judgeOk) judgePass += 1;
+        console.log(
+          `    ${judgeOk ? c.green + '★' : c.yellow + '☆'} judge ${j.score.toFixed(1)}/5${c.reset}  ${c.dim}H=${j.criteria.hallucination} C=${j.criteria.completeness} Cl=${j.criteria.clarity} Sp=${j.criteria.specialty_appropriateness} — ${j.notes.slice(0, 120)}${c.reset}`
+        );
+      } catch (err) {
+        console.log(
+          `    ${c.red}• judge call failed:${c.reset} ${err instanceof Error ? err.message : String(err)}`
+        );
+      }
+    }
   }
 
   const accuracy = pass / SCRIBE_EVAL_CASES.length;
@@ -203,10 +284,24 @@ async function main() {
     `\n${c.bold}Summary${c.reset}  passed ${pass}/${SCRIBE_EVAL_CASES.length}  accuracy ${(accuracy * 100).toFixed(1)}%  runtime ${(totalMs / 1000).toFixed(1)}s`
   );
 
-  if (accuracy < THRESHOLD) {
+  if (JUDGE_ENABLED && judgeRuns > 0) {
+    const n = judgeRuns;
     console.log(
-      `${c.red}${c.bold}FAIL${c.reset} — below ${THRESHOLD * 100}% threshold.`
+      `${c.bold}Judge${c.reset}    mean ${(judgeSum.mean / n).toFixed(2)}/5  ` +
+        `H=${(judgeSum.hallucination / n).toFixed(2)} ` +
+        `C=${(judgeSum.completeness / n).toFixed(2)} ` +
+        `Cl=${(judgeSum.clarity / n).toFixed(2)} ` +
+        `Sp=${(judgeSum.specialty_appropriateness / n).toFixed(2)}  ` +
+        `passed ${judgePass}/${n} @ ≥${JUDGE_THRESHOLD.toFixed(1)}`
     );
+  }
+
+  const judgeFailed = JUDGE_ENABLED && judgeRuns > 0 && judgePass < judgeRuns;
+  if (accuracy < THRESHOLD || judgeFailed) {
+    const reasons: string[] = [];
+    if (accuracy < THRESHOLD) reasons.push(`accuracy below ${THRESHOLD * 100}%`);
+    if (judgeFailed) reasons.push(`${judgeRuns - judgePass} case(s) below judge threshold`);
+    console.log(`${c.red}${c.bold}FAIL${c.reset} — ${reasons.join(', ')}.`);
     process.exit(1);
   }
   console.log(`${c.green}${c.bold}PASS${c.reset}`);

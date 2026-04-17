@@ -1,46 +1,95 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { SoapNote } from '@meddoc/types';
-import { saveEditedSoapAction, signAndSendVisitAction } from './actions';
+import type {
+  SoapNote,
+  CodingOutput,
+  RxOutput,
+  ReferralOutput,
+  PatientSummary,
+  OutputError,
+} from '@meddoc/types';
+import {
+  saveEditedSoapAction,
+  saveEditedCodingAction,
+  saveEditedRxAction,
+  saveEditedReferralsAction,
+  saveEditedPatientSummaryAction,
+  signAndSendVisitAction,
+} from './actions';
+import SoapTab from './tabs/SoapTab';
+import CodingTab from './tabs/CodingTab';
+import RxTab from './tabs/RxTab';
+import ReferralsTab from './tabs/ReferralsTab';
+import PatientSummaryTab from './tabs/PatientSummaryTab';
+import OutputErrorCard from './tabs/OutputErrorCard';
+
+export type LoadedOutput<T> =
+  | { kind: 'ok'; data: T }
+  | { kind: 'error'; error: OutputError['_error'] }
+  | { kind: 'missing' };
+
+export interface ReviewInitial {
+  soap: LoadedOutput<SoapNote>;
+  coding: LoadedOutput<CodingOutput>;
+  rx: LoadedOutput<RxOutput>;
+  referrals: LoadedOutput<ReferralOutput>;
+  summary: LoadedOutput<PatientSummary>;
+}
 
 interface Props {
   visitId: string;
-  initial: SoapNote;
+  initial: ReviewInitial;
   canSign: boolean;
 }
 
+type TabKey = 'soap' | 'coding' | 'rx' | 'referrals' | 'summary';
+
+const TAB_LABELS: Record<TabKey, string> = {
+  soap: 'SOAP',
+  coding: 'Codes',
+  rx: 'Rx',
+  referrals: 'Referrals',
+  summary: 'Patient summary',
+};
+
 export default function ReviewClient({ visitId, initial, canSign }: Props) {
   const router = useRouter();
-  const [soap, setSoap] = useState<SoapNote>(initial);
-  const [dirty, setDirty] = useState(false);
+  const [tab, setTab] = useState<TabKey>('soap');
+  const [soap, setSoap] = useState(initial.soap);
+  const [coding, setCoding] = useState(initial.coding);
+  const [rx, setRx] = useState(initial.rx);
+  const [referrals, setReferrals] = useState(initial.referrals);
+  const [summary, setSummary] = useState(initial.summary);
+  const [dirty, setDirty] = useState<Record<TabKey, boolean>>({
+    soap: false, coding: false, rx: false, referrals: false, summary: false,
+  });
   const [busy, setBusy] = useState<'idle' | 'saving' | 'signing'>('idle');
   const [error, setError] = useState<string | null>(null);
 
-  const subjectiveKeys = useMemo(() => Object.keys(soap.subjective), [soap.subjective]);
-  const objectiveKeys = useMemo(() => Object.keys(soap.objective), [soap.objective]);
-  const planKeys = useMemo(() => Object.keys(soap.plan), [soap.plan]);
+  const anyDirty = Object.values(dirty).some(Boolean);
 
-  function updateRecord(section: 'subjective' | 'objective' | 'plan', key: string, value: string) {
-    setSoap((prev) => ({ ...prev, [section]: { ...prev[section], [key]: value } }));
-    setDirty(true);
+  function markDirty(key: TabKey, value: boolean): void {
+    setDirty((prev) => ({ ...prev, [key]: value }));
   }
 
-  function updateAssessment(idx: number, patch: Partial<SoapNote['assessment'][number]>) {
-    setSoap((prev) => ({
-      ...prev,
-      assessment: prev.assessment.map((a, i) => (i === idx ? { ...a, ...patch } : a)),
-    }));
-    setDirty(true);
-  }
-
-  async function handleSave() {
+  async function handleSave(): Promise<void> {
     setError(null);
     setBusy('saving');
     try {
-      await saveEditedSoapAction({ visitId, soap });
-      setDirty(false);
+      if (tab === 'soap' && soap.kind === 'ok') {
+        await saveEditedSoapAction({ visitId, soap: soap.data });
+      } else if (tab === 'coding' && coding.kind === 'ok') {
+        await saveEditedCodingAction({ visitId, coding: coding.data });
+      } else if (tab === 'rx' && rx.kind === 'ok') {
+        await saveEditedRxAction({ visitId, rx: rx.data });
+      } else if (tab === 'referrals' && referrals.kind === 'ok') {
+        await saveEditedReferralsAction({ visitId, referrals: referrals.data });
+      } else if (tab === 'summary' && summary.kind === 'ok') {
+        await saveEditedPatientSummaryAction({ visitId, summary: summary.data });
+      }
+      markDirty(tab, false);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -48,9 +97,9 @@ export default function ReviewClient({ visitId, initial, canSign }: Props) {
     }
   }
 
-  async function handleSign() {
+  async function handleSign(): Promise<void> {
     setError(null);
-    if (dirty) {
+    if (anyDirty) {
       setError('Save your edits before signing.');
       return;
     }
@@ -66,111 +115,84 @@ export default function ReviewClient({ visitId, initial, canSign }: Props) {
     }
   }
 
+  // Per-tab renderer dispatches on the LoadedOutput.kind.
+  function renderTab() {
+    switch (tab) {
+      case 'soap':
+        return soap.kind === 'ok'
+          ? <SoapTab value={soap.data} readOnly={!canSign}
+              onChange={(v) => { setSoap({ kind: 'ok', data: v }); markDirty('soap', true); }} />
+          : soap.kind === 'error'
+            ? <OutputErrorCard outputType="SOAP" error={soap.error} />
+            : <EmptyTab type="SOAP" />;
+      case 'coding':
+        return coding.kind === 'ok'
+          ? <CodingTab value={coding.data} readOnly={!canSign}
+              onChange={(v) => { setCoding({ kind: 'ok', data: v }); markDirty('coding', true); }} />
+          : coding.kind === 'error'
+            ? <OutputErrorCard outputType="Codes" error={coding.error} />
+            : <EmptyTab type="Codes" />;
+      case 'rx':
+        return rx.kind === 'ok'
+          ? <RxTab value={rx.data} readOnly={!canSign}
+              onChange={(v) => { setRx({ kind: 'ok', data: v }); markDirty('rx', true); }} />
+          : rx.kind === 'error'
+            ? <OutputErrorCard outputType="Rx" error={rx.error} />
+            : <EmptyTab type="Rx" />;
+      case 'referrals':
+        return referrals.kind === 'ok'
+          ? <ReferralsTab value={referrals.data} readOnly={!canSign}
+              onChange={(v) => { setReferrals({ kind: 'ok', data: v }); markDirty('referrals', true); }} />
+          : referrals.kind === 'error'
+            ? <OutputErrorCard outputType="Referrals" error={referrals.error} />
+            : <EmptyTab type="Referrals" />;
+      case 'summary':
+        return summary.kind === 'ok'
+          ? <PatientSummaryTab value={summary.data} readOnly={!canSign}
+              onChange={(v) => { setSummary({ kind: 'ok', data: v }); markDirty('summary', true); }} />
+          : summary.kind === 'error'
+            ? <OutputErrorCard outputType="Patient summary" error={summary.error} />
+            : <EmptyTab type="Patient summary" />;
+    }
+  }
+
+  const activeIsEditable =
+    (tab === 'soap' && soap.kind === 'ok') ||
+    (tab === 'coding' && coding.kind === 'ok') ||
+    (tab === 'rx' && rx.kind === 'ok') ||
+    (tab === 'referrals' && referrals.kind === 'ok') ||
+    (tab === 'summary' && summary.kind === 'ok');
+
+  const tabState: Record<TabKey, LoadedOutput<unknown>> = { soap, coding, rx, referrals, summary };
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3 text-sm">
-        <span className="px-2 py-0.5 rounded bg-slate-800 font-mono">
-          confidence: {soap.confidence}
-        </span>
-        {dirty && <span className="text-amber-300">Unsaved edits</span>}
-      </div>
+    <div className="space-y-5">
+      <nav className="flex gap-1 border-b border-slate-800">
+        {(Object.keys(TAB_LABELS) as TabKey[]).map((key) => {
+          const state = tabState[key];
+          const flagOff = state.kind === 'error' && state.error.code === 'FLAG_OFF';
+          const broken = state.kind === 'error' && state.error.code !== 'FLAG_OFF';
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setTab(key)}
+              className={`px-3 py-2 text-sm border-b-2 -mb-px transition-colors ${
+                tab === key
+                  ? 'border-blue-500 text-slate-100'
+                  : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              {TAB_LABELS[key]}
+              {dirty[key] && <span className="ml-1 text-amber-300">•</span>}
+              {broken && <span className="ml-1 text-rose-400">⚠</span>}
+              {flagOff && <span className="ml-1 text-slate-500">◌</span>}
+            </button>
+          );
+        })}
+      </nav>
 
-      {soap.missing_required_elements.length > 0 && (
-        <div className="border border-amber-600/50 bg-amber-500/5 rounded-lg p-4 text-sm">
-          <div className="font-medium text-amber-300">Missing required elements</div>
-          <div className="text-slate-300 mt-1">
-            {soap.missing_required_elements.join(', ')}
-          </div>
-        </div>
-      )}
-
-      {soap.ambiguities.length > 0 && (
-        <div className="border border-slate-700 rounded-lg p-4 text-sm bg-slate-900/40">
-          <div className="font-medium">Model flagged ambiguities</div>
-          <ul className="text-slate-300 mt-2 list-disc list-inside space-y-1">
-            {soap.ambiguities.map((a, i) => (
-              <li key={i}>{a}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Subjective</h2>
-        {subjectiveKeys.map((k) => (
-          <SectionField
-            key={k}
-            label={k}
-            value={soap.subjective[k]}
-            onChange={(v) => updateRecord('subjective', k, v)}
-          />
-        ))}
-      </section>
-
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Objective</h2>
-        {objectiveKeys.map((k) => (
-          <SectionField
-            key={k}
-            label={k}
-            value={soap.objective[k]}
-            onChange={(v) => updateRecord('objective', k, v)}
-          />
-        ))}
-      </section>
-
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Assessment</h2>
-        {soap.assessment.length === 0 && (
-          <div className="text-sm text-slate-500">No assessment items.</div>
-        )}
-        {soap.assessment.map((item, i) => (
-          <div key={i} className="border border-slate-800 rounded-lg p-3 space-y-2">
-            <div className="flex gap-2 items-center text-xs">
-              <input
-                value={item.icd10_candidate}
-                onChange={(e) => updateAssessment(i, { icd10_candidate: e.target.value })}
-                className="font-mono bg-slate-900 border border-slate-700 rounded px-2 py-1 w-32"
-              />
-              <select
-                value={item.confidence}
-                onChange={(e) =>
-                  updateAssessment(i, {
-                    confidence: e.target.value as 'low' | 'medium' | 'high',
-                  })
-                }
-                className="bg-slate-900 border border-slate-700 rounded px-2 py-1"
-              >
-                <option value="low">low</option>
-                <option value="medium">medium</option>
-                <option value="high">high</option>
-              </select>
-            </div>
-            <textarea
-              value={item.description}
-              onChange={(e) => updateAssessment(i, { description: e.target.value })}
-              rows={2}
-              className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-sm"
-            />
-            <div className="text-xs text-slate-400">Evidence from transcript:</div>
-            <blockquote className="text-xs text-slate-300 border-l-2 border-slate-600 pl-3 italic">
-              {item.evidence_quote}
-            </blockquote>
-          </div>
-        ))}
-      </section>
-
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Plan</h2>
-        {planKeys.map((k) => (
-          <SectionField
-            key={k}
-            label={k}
-            value={soap.plan[k]}
-            onChange={(v) => updateRecord('plan', k, v)}
-          />
-        ))}
-      </section>
+      {renderTab()}
 
       {error && (
         <div className="text-sm text-amber-400 border border-amber-600/40 rounded-lg p-3 bg-amber-500/5">
@@ -182,42 +204,35 @@ export default function ReviewClient({ visitId, initial, canSign }: Props) {
         <button
           type="button"
           onClick={handleSave}
-          disabled={!dirty || busy !== 'idle'}
+          disabled={!activeIsEditable || !dirty[tab] || busy !== 'idle'}
           className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-sm font-semibold"
         >
-          {busy === 'saving' ? 'Saving…' : 'Save draft'}
+          {busy === 'saving' ? 'Saving…' : `Save ${TAB_LABELS[tab]} draft`}
         </button>
         <button
           type="button"
           onClick={handleSign}
-          disabled={!canSign || dirty || busy !== 'idle'}
+          disabled={!canSign || anyDirty || busy !== 'idle'}
           className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:cursor-not-allowed text-sm font-semibold"
         >
           {busy === 'signing' ? 'Signing…' : 'Sign & send to MedDoc Pro'}
         </button>
+        {anyDirty && (
+          <span className="text-xs text-amber-300">
+            Unsaved changes in{' '}
+            {(Object.keys(dirty) as TabKey[]).filter((k) => dirty[k]).map((k) => TAB_LABELS[k]).join(', ')}
+          </span>
+        )}
       </div>
     </div>
   );
 }
 
-function SectionField({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-}) {
+function EmptyTab({ type }: { type: string }) {
   return (
-    <label className="block">
-      <span className="text-xs font-mono text-slate-400">{label}</span>
-      <textarea
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        rows={3}
-        className="mt-1 w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-sm"
-      />
-    </label>
+    <div className="border border-slate-800 rounded-xl p-6 bg-slate-900/40 text-sm text-slate-400">
+      No {type} output yet. The pipeline may still be running, or this
+      output type wasn&apos;t generated for this visit.
+    </div>
   );
 }
