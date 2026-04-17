@@ -11,14 +11,19 @@
 // We NEVER retry 4xx — those are stable "this payload is wrong" signals.
 // ============================================================================
 
+import { readServiceToken } from '@meddoc/auth';
+
 const MEDDOC_PRO_INTERNAL_URL =
   process.env.MEDDOC_PRO_INTERNAL_URL?.trim() || 'http://meddoc-pro:3000';
 
 const RETRY_BACKOFF_MS = 500;
 
 function getInternalToken(): string {
-  const token = process.env.SCRIBE_SERVICE_TOKEN;
-  if (!token) throw new Error('SCRIBE_SERVICE_TOKEN is not set.');
+  // M7 — file-based rotation supported via SCRIBE_SERVICE_TOKEN_FILE.
+  const token = readServiceToken();
+  if (!token) {
+    throw new Error('Service token not configured (SCRIBE_SERVICE_TOKEN[_FILE] unset).');
+  }
   return token;
 }
 

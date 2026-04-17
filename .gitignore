@@ -32,6 +32,10 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...but track the placeholder-only example file so new env vars travel
+# with the repo (M7 — was on-VPS-only through M2-M6). Contents MUST stay
+# placeholder; never commit real values.
+!.env.production.example
 
 # vercel
 .vercel
