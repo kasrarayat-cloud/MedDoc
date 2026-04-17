@@ -171,6 +171,15 @@ model Practice {
 
   isActive Boolean @default(true)
 
+  // M7 — clinic-configurable retention (spec §13).
+  /// Days to retain uploaded audio (MinIO objects) past ScribeVisit.endedAt.
+  /// Default 90 matches the spec. Admin UI to edit per-practice lands in
+  /// a later milestone; adjust directly via SQL for now.
+  audioRetentionDays      Int @default(90)
+  /// Days to retain transcripts + outputs past ScribeVisit.endedAt. Default
+  /// 2555 = 7 years (HIPAA's 6-year minimum + a year of buffer).
+  transcriptRetentionDays Int @default(2555)
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 

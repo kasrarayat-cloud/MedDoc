@@ -25,6 +25,7 @@
     "@meddoc/types": "*",
     "@prisma/adapter-pg": "^7.7.0",
     "@prisma/client": "^7.7.0",
+    "@sentry/nextjs": "^10.49.0",
     "@stripe/stripe-js": "^9.1.0",
     "bcryptjs": "^3.0.3",
     "docx": "^9.6.1",
