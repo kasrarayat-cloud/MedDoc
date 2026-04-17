@@ -49,6 +49,18 @@ export const SoapNoteSchema = z.object({
    * A flagged ambiguity is strictly better than a confident wrong note.
    */
   ambiguities: z.array(z.string()),
+  /**
+   * M5 addition — set by the generator when a visit raises an acute
+   * clinical safety concern (SI/HI, abuse, red-flag symptoms, etc.).
+   * Drives:
+   *   - a red banner at the top of the SOAP review tab
+   *   - crisis resources appended to the patient-facing summary
+   *     (see server/prompts/patient-summary.md)
+   *
+   * Optional so ScribeOutput rows written by M2/M3/M4 (before this
+   * field existed) still parse.
+   */
+  requires_immediate_follow_up: z.boolean().optional(),
 });
 export type SoapNote = z.infer<typeof SoapNoteSchema>;
 

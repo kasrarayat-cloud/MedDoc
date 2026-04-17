@@ -1,0 +1,108 @@
+# ──────────────────────────────────────────────────────────────────────
+# DRAFT — authored by engineering without licensed-specialist review.
+# Route through an orthopedic surgeon before using with real patient
+# data. See docs/SPECIALTY_TEMPLATES.md.
+# ──────────────────────────────────────────────────────────────────────
+slug: orthopedics
+displayName: Orthopedics
+version: "1.0.0"
+clinicalReviewStatus: draft
+
+requiredExamElements:
+  - inspection
+  - palpation
+  - range_of_motion
+  - neurovascular_distal
+  - special_tests
+
+soapSchema:
+  subjective:
+    - chief_complaint
+    - hpi
+    - mechanism_of_injury
+    - past_musculoskeletal_history
+    - medications
+    - allergies
+    - occupation_and_activity
+  objective:
+    - vitals
+    - inspection
+    - palpation
+    - range_of_motion
+    - neurovascular_distal
+    - special_tests
+    - imaging_reviewed
+  assessment:
+    - problem_list_with_icd10
+  plan:
+    - imaging
+    - procedures_in_clinic
+    - medications
+    - physical_therapy
+    - activity_restrictions
+    - follow_up
+
+defaultIcd10Hints:
+  - M54.50     # Low back pain, unspecified
+  - M25.511    # Right shoulder pain
+  - M25.512    # Left shoulder pain
+  - M25.561    # Right knee pain
+  - M25.562    # Left knee pain
+  - M17.11     # Primary osteoarthritis, right knee
+  - M17.12     # Primary osteoarthritis, left knee
+  - M75.100    # Rotator cuff tear, unspecified
+  - S83.511A   # Sprain ACL, right knee, initial
+  - M79.3      # Panniculitis, unspecified (placeholder for common soft-tissue)
+  - S52.501A   # Fx upper end right radius, closed, initial
+
+defaultCptHints:
+  - "99213"
+  - "99214"
+  - "99203"
+  - "99204"
+  - "20610"    # Arthrocentesis / injection, major joint
+  - "20552"    # Injection, single or multiple trigger points, 1-2 muscles
+  - "73560"    # Radiologic exam, knee, 1-2 views
+  - "73610"    # Radiologic exam, ankle, 3 views
+  - "29881"    # Arthroscopy, knee, with meniscectomy
+
+defaultFormularyHints:
+  - naproxen
+  - ibuprofen
+  - meloxicam
+  - diclofenac
+  - acetaminophen
+  - cyclobenzaprine
+  - methocarbamol
+  - tramadol
+  - gabapentin
+  - triamcinolone acetonide
+  - lidocaine
+
+systemPrompt: |
+  You are documenting an orthopedic visit. Be precise about laterality,
+  anatomic location, and functional impact.
+
+  RULES:
+  1. Laterality is required whenever applicable — "right shoulder,"
+     "left knee." Ambiguous laterality goes in `ambiguities[]`, never
+     guess.
+  2. Range of motion: quantify in degrees when the transcript provides
+     it; otherwise describe limitations qualitatively ("flexion
+     limited by pain at end range"). Use active vs passive ROM when
+     distinguished.
+  3. Neurovascular status distal to the injury/joint must appear in
+     every visit — sensation, motor, pulses, cap refill if examined.
+  4. Special tests must be named (e.g., Lachman, McMurray, Neer,
+     Hawkins, Phalen, Spurling) and reported as positive or negative
+     with the finding that makes it so.
+  5. Imaging: document what was reviewed (X-ray, MRI, CT) with body
+     part + views/sequences + laterality. If not reviewed but
+     pending, note in plan.imaging.
+  6. Injections performed in-clinic belong in plan.procedures_in_clinic
+     with the drug, dose, and site, AND a corresponding CPT code.
+  7. Every assessment item must have an `evidence_quote` that is a
+     verbatim substring of the transcript. No ungrounded diagnoses.
+  8. Controlled substances (opioids, benzodiazepines) require an
+     explicit transcript mention by the clinician; flag deviations
+     in `ambiguities[]`.

@@ -1,0 +1,100 @@
+# ──────────────────────────────────────────────────────────────────────
+# DRAFT — authored by engineering without licensed-specialist review.
+# Route through an internist before using with real patient data.
+# See docs/SPECIALTY_TEMPLATES.md.
+# ──────────────────────────────────────────────────────────────────────
+slug: internal-medicine
+displayName: Internal Medicine
+version: "1.0.0"
+clinicalReviewStatus: draft
+
+requiredExamElements:
+  - vitals
+  - general_appearance
+  - cardiopulmonary_exam
+  - abdominal_exam
+  - extremities
+
+soapSchema:
+  subjective:
+    - chief_complaint
+    - hpi
+    - ros
+    - past_medical_history
+    - medications
+    - allergies
+    - social_history
+    - family_history
+  objective:
+    - vitals
+    - general_exam
+    - cardiopulmonary_exam
+    - abdominal_exam
+    - extremities
+    - relevant_focused_exam
+  assessment:
+    - problem_list_with_icd10
+  plan:
+    - diagnostics
+    - medications
+    - consultations
+    - counseling
+    - follow_up
+
+defaultIcd10Hints:
+  - I10        # Essential hypertension
+  - E11.9      # Type 2 diabetes without complications
+  - E78.5      # Hyperlipidemia, unspecified
+  - J44.9      # COPD, unspecified
+  - N18.30     # CKD stage 3 unspecified
+  - K21.9      # GERD without esophagitis
+  - F41.1      # Generalized anxiety disorder
+  - I25.10     # Atherosclerotic heart disease, native
+  - E03.9      # Hypothyroidism, unspecified
+
+defaultCptHints:
+  - "99213"
+  - "99214"
+  - "99215"
+  - "99203"
+  - "99204"
+  - "99205"
+  - "99395"
+  - "99396"
+
+defaultFormularyHints:
+  - lisinopril
+  - losartan
+  - amlodipine
+  - metoprolol
+  - hydrochlorothiazide
+  - metformin
+  - atorvastatin
+  - rosuvastatin
+  - levothyroxine
+  - omeprazole
+
+systemPrompt: |
+  You are documenting an adult internal-medicine encounter. Write like
+  a competent general internist — terse, organized, evidence-anchored.
+
+  RULES:
+  1. Multi-problem visits are common. List every active problem in
+     `assessment` with its own ICD-10 candidate and evidence quote.
+  2. Use standard internal-medicine terminology (CHF, COPD, CKD stage
+     X, DM-II). Don't use patient-level language in the SOAP unless
+     quoting.
+  3. Continuation of chronic meds is worth documenting explicitly in
+     plan.medications even when no change is made ("Continue
+     atorvastatin 40 mg daily").
+  4. If the transcript describes a red-flag symptom (chest pain with
+     exertion, new neurological deficit, melena, unintended weight loss
+     >5% in 6 months) but the plan doesn't address it, add an entry
+     to `ambiguities[]` calling that out.
+  5. Never invent findings. Required exam elements that weren't
+     mentioned belong in `missing_required_elements[]`, not as
+     "normal" / "WNL" fabrication.
+  6. Every assessment item must have an `evidence_quote` that is a
+     verbatim substring of the transcript.
+  7. Controlled substances require an explicit transcript mention by
+     the clinician before they may appear in the plan or Rx draft.
