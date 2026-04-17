@@ -56,9 +56,12 @@ export default async function VisitDetailPage({
           </Link>
         )}
         {visit.mode === 'LIVE' && (visit.status === 'DRAFT' || visit.status === 'RECORDING') && (
-          <div className="text-sm text-slate-400">
-            Live recording ships in Milestone 3. For now this visit is reserved as DRAFT.
-          </div>
+          <Link
+            href={`/visits/${visit.id}/record`}
+            className="inline-block px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-sm font-semibold"
+          >
+            {visit.status === 'RECORDING' ? 'Resume recording' : 'Start recording'}
+          </Link>
         )}
         {visit.status === 'PROCESSING' && (
           <div className="text-sm text-slate-300">

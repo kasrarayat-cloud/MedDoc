@@ -168,6 +168,34 @@ services:
       MODEL_FOR_SOAP: ${MODEL_FOR_SOAP:-claude-sonnet-4-6}
       SCRIBE_WORKER_CONCURRENCY: ${SCRIBE_WORKER_CONCURRENCY:-2}
 
+  # ── Scribe WebSocket sidecar (M3 — real-time visits) ──
+  # Next 16 + `output: 'standalone'` rules out a custom WS server inside
+  # the web container. This sidecar owns the WS upgrade path and proxies
+  # to Deepgram Nova-3 Medical. Caddy routes scribe.<domain>/api/ws/* here.
+  # Authenticates via the shared NextAuth cookie (AUTH_COOKIE_DOMAIN).
+  scribe-ws:
+    build:
+      context: .
+      dockerfile: apps/scribe/Dockerfile.ws
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://meddoc:${DB_PASSWORD:-changeme_in_production}@postgres:5432/meddoc?schema=public
+      REDIS_URL: redis://redis:6379
+      AUTH_SECRET: ${AUTH_SECRET}
+      AUTH_COOKIE_DOMAIN: ${AUTH_COOKIE_DOMAIN:-.localhost}
+      DEEPGRAM_API_KEY: ${DEEPGRAM_API_KEY}
+      DEEPGRAM_MODEL: ${DEEPGRAM_MODEL:-nova-3-medical}
+      SCRIBE_WS_PORT: "3003"
+    ports:
+      - "127.0.0.1:3003:3003"
+
   # ── Caddy Reverse Proxy ──
   # Terminates inbound HTTP/HTTPS and forwards to `app:3000` on the
   # internal Docker network, setting X-Forwarded-For / X-Real-IP so the
@@ -178,6 +206,7 @@ services:
     depends_on:
       - meddoc-pro
       - scribe
+      - scribe-ws
     ports:
       - "80:80"
       - "443:443"

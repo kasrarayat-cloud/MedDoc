@@ -43,3 +43,45 @@ export function logAiCall(input: AiCallLogInput): void {
       console.error('[ai] AiCall write failed:', err);
     });
 }
+
+// ----------------------------------------------------------------------------
+// PHI scrubber for log lines
+// ----------------------------------------------------------------------------
+// Spec §13: "No PHI in logs, Sentry, or analytics." Most of the AI
+// surface already honours this (AiCall carries only metadata + prompt
+// hash). M3 adds Deepgram error paths where raw messages may contain
+// transcript text — redactPhi() is the defense-in-depth used on those
+// paths before console.error / log writes.
+//
+// Not a full clinical-NER pass — that's M7. Approach is minimal:
+//   1. Mask common PII patterns (email / phone / SSN).
+//   2. If the resulting string is longer than MAX_WORDS_BEFORE_REDACT
+//      words, assume it's free-text transcript content and collapse it
+//      to a length marker. Short structured log values are preserved so
+//      ops can still debug.
+// ----------------------------------------------------------------------------
+
+const EMAIL_RE = /\b[\w.+-]+@[\w-]+\.[\w.-]+\b/g;
+// No leading \b so an opening paren like "(415) 555-0142" is covered.
+// Minimum 10 total digits once separators are stripped — covers US 10-digit
+// numbers, international +E.164, and the SSN-without-dashes edge case
+// already handled by SSN_RE before this runs.
+const PHONE_RE = /\(?\+?\d[\d \-()]{8,}\d/g;
+const SSN_RE = /\b\d{3}-?\d{2}-?\d{4}\b/g;
+const MAX_WORDS_BEFORE_REDACT = 20;
+
+export function redactPhi(input: unknown): string {
+  if (input === null || input === undefined) return String(input);
+  let s = typeof input === 'string' ? input : JSON.stringify(input);
+  s = s.replace(EMAIL_RE, '[EMAIL]');
+  // SSN before PHONE — the phone regex is loose enough that a dashed SSN
+  // like "123-45-6789" would otherwise match PHONE first and never get
+  // the SSN label.
+  s = s.replace(SSN_RE, '[SSN]');
+  s = s.replace(PHONE_RE, '[PHONE]');
+  const words = s.trim().split(/\s+/).filter(Boolean);
+  if (words.length > MAX_WORDS_BEFORE_REDACT) {
+    return `[REDACTED:${words.length}w]`;
+  }
+  return s;
+}
