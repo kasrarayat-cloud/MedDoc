@@ -1,0 +1,113 @@
+# ──────────────────────────────────────────────────────────────────────
+# DRAFT — authored by engineering without licensed-specialist review.
+# Route through a pediatrician before using with real patient data.
+# See docs/SPECIALTY_TEMPLATES.md.
+# ──────────────────────────────────────────────────────────────────────
+slug: pediatrics
+displayName: Pediatrics
+version: "1.0.0"
+clinicalReviewStatus: draft
+
+requiredExamElements:
+  - vitals_with_growth_parameters
+  - general_appearance
+  - cardiopulmonary_exam
+  - abdominal_exam
+  - developmental_screening
+
+soapSchema:
+  subjective:
+    - chief_complaint
+    - hpi
+    - birth_history
+    - growth_and_development
+    - immunizations
+    - feeding_and_nutrition
+    - past_medical_history
+    - medications
+    - allergies
+    - family_history
+    - social_history
+  objective:
+    - vitals_and_growth
+    - general_exam
+    - cardiopulmonary_exam
+    - abdominal_exam
+    - skin_exam
+    - neurologic_and_developmental
+  assessment:
+    - problem_list_with_icd10
+  plan:
+    - diagnostics
+    - medications
+    - immunizations_due
+    - anticipatory_guidance
+    - follow_up
+
+defaultIcd10Hints:
+  - Z00.121    # Routine child health exam with abnormal findings
+  - Z00.129    # Routine child health exam without abnormal findings
+  - J06.9      # Acute URI, unspecified
+  - H66.90     # Otitis media, unspecified
+  - J20.9      # Acute bronchitis, unspecified
+  - J45.909    # Asthma, unspecified, uncomplicated
+  - R50.9      # Fever, unspecified
+  - K59.00     # Constipation, unspecified
+  - L20.9      # Atopic dermatitis, unspecified
+  - Z23        # Encounter for immunization
+
+defaultCptHints:
+  - "99213"
+  - "99214"
+  - "99381"    # New pt preventive, infant (<1 yr)
+  - "99382"    # New pt preventive, early childhood (1-4)
+  - "99383"    # New pt preventive, late childhood (5-11)
+  - "99384"    # New pt preventive, adolescent (12-17)
+  - "99385"    # New pt preventive, young adult (18-39)
+  - "99391"    # Est pt preventive, infant (<1 yr)
+  - "99392"    # Est pt preventive, early childhood (1-4)
+  - "99393"    # Est pt preventive, late childhood (5-11)
+  - "99394"    # Est pt preventive, adolescent (12-17)
+  - "99395"    # Est pt preventive, young adult (18-39)
+
+defaultFormularyHints:
+  - amoxicillin
+  - azithromycin
+  - cephalexin
+  - acetaminophen
+  - ibuprofen
+  - albuterol
+  - fluticasone
+  - methylphenidate
+  - oseltamivir
+  - ondansetron
+
+systemPrompt: |
+  You are documenting a pediatric visit. The patient is a minor; the
+  historian is typically a parent or caregiver. Use age-appropriate
+  framing throughout.
+
+  RULES:
+  1. Every visit must document growth parameters (weight, length/
+     height, head circumference for <2 yr). If not mentioned, list
+     the specific parameter in `missing_required_elements[]`.
+  2. Developmental milestones or AAP-recommended screening
+     (autism, depression, developmental surveillance) are core content
+     at well-child checks — surface them in subjective or plan as
+     relevant.
+  3. Always dose pediatric medications in mg/kg when the transcript
+     provides weight; otherwise quote the clinician's dose verbatim
+     and flag in `ambiguities[]` if weight-based dosing is standard
+     (e.g. amoxicillin).
+  4. Immunizations: document each vaccine given by name + dose. If
+     the schedule is discussed but nothing administered today, note
+     what's due in plan.immunizations_due.
+  5. Anticipatory guidance is part of pediatric care — document what
+     was counseled on (safety, nutrition, screen time, etc.) when
+     mentioned.
+  6. Every assessment item must have an `evidence_quote` that is a
+     verbatim substring of the transcript.
+  7. Controlled stimulants (methylphenidate, amphetamines) require
+     an explicit transcript mention by the clinician, and an
+     established ADHD diagnosis. Flag any deviation in
+     `ambiguities[]`.

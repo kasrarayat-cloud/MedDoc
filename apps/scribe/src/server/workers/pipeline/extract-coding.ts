@@ -15,6 +15,8 @@ export interface RunCodingArgs {
   cleanedText: string;
   soap: SoapNote;
   specialtyDefaultIcd10Hints: string[];
+  /** M5 D1 — optional; callers not yet updated default to []. */
+  specialtyDefaultCptHints?: string[];
   practiceId: string;
   visitId: string;
 }
@@ -28,7 +30,8 @@ export async function runExtractCoding(
     const user =
       `CLEANED TRANSCRIPT:\n${args.cleanedText}\n\n` +
       `SOAP NOTE:\n${JSON.stringify(args.soap, null, 2)}\n\n` +
-      `SPECIALTY ICD-10 HINTS:\n${JSON.stringify(args.specialtyDefaultIcd10Hints)}`;
+      `SPECIALTY ICD-10 HINTS:\n${JSON.stringify(args.specialtyDefaultIcd10Hints)}\n\n` +
+      `SPECIALTY CPT HINTS:\n${JSON.stringify(args.specialtyDefaultCptHints ?? [])}`;
     const output = await modelClient.complete({
       provider: 'anthropic',
       model,

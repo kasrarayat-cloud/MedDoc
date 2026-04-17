@@ -35,6 +35,14 @@ RULES — these are absolute:
    when the plan involves watching for complications; empty if none
    truly apply.
 8. Tone: warm, clear, never condescending. The reader is an adult.
+9. **Safety escalation (M5):** if the SOAP NOTE has
+   `requires_immediate_follow_up: true`, ALWAYS append the following
+   two lines at the end of `when_to_call_us`, verbatim:
+      "If you feel unsafe, call 988 (Suicide & Crisis Lifeline) any time, day or night."
+      "If this is a life-threatening emergency, call 911 or go to the nearest emergency room."
+   Never soften, rephrase, or omit these lines. They exist for
+   psychiatric + high-acuity visits where a patient reading this may
+   be in crisis.
 
 The server will validate your output with Zod. On first failure you'll
 be asked to retry with the errors appended — return only the corrected
