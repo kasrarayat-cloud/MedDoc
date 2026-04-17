@@ -18,7 +18,7 @@ import bcrypt from 'bcryptjs';
 
 import authConfig from '@/lib/auth.config';
 import prisma from '@meddoc/db';
-import type { UserRole } from '@/types/next-auth';
+import type { UserRole } from '@meddoc/auth';
 import { recordLoginIp } from '@/lib/session-log';
 import { logAudit } from '@/lib/audit';
 
