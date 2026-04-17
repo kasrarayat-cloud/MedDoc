@@ -166,6 +166,23 @@ services:
       TRANSCRIPTION_MODEL: ${TRANSCRIPTION_MODEL:-gpt-4o-transcribe}
       MODEL_FOR_CLEANUP: ${MODEL_FOR_CLEANUP:-claude-sonnet-4-6}
       MODEL_FOR_SOAP: ${MODEL_FOR_SOAP:-claude-sonnet-4-6}
+      # M4 — full output bundle. All default to Claude Sonnet 4.6 (spec §5
+      # suggests GPT-4o for referral/patient_summary but the OpenAI-complete
+      # path in @meddoc/ai is deferred to M7 per M4 D12).
+      MODEL_FOR_CODING: ${MODEL_FOR_CODING:-claude-sonnet-4-6}
+      MODEL_FOR_RX: ${MODEL_FOR_RX:-claude-sonnet-4-6}
+      MODEL_FOR_REFERRAL: ${MODEL_FOR_REFERRAL:-claude-sonnet-4-6}
+      MODEL_FOR_PATIENT_SUMMARY: ${MODEL_FOR_PATIENT_SUMMARY:-claude-sonnet-4-6}
+      # Per-output feature flags (M4 D10). Set to "false" to disable an
+      # extraction without redeploying code.
+      SCRIBE_EXTRACT_CODING: ${SCRIBE_EXTRACT_CODING:-true}
+      SCRIBE_EXTRACT_RX: ${SCRIBE_EXTRACT_RX:-true}
+      SCRIBE_EXTRACT_REFERRALS: ${SCRIBE_EXTRACT_REFERRALS:-true}
+      SCRIBE_EXTRACT_PATIENT_SUMMARY: ${SCRIBE_EXTRACT_PATIENT_SUMMARY:-true}
+      # Worker talks to MedDoc Pro's /api/internal/patients/:id/clinical-safety
+      # for Rx interaction / allergy / duplicate checks (M4 D3/D4).
+      MEDDOC_PRO_INTERNAL_URL: http://meddoc-pro:3000
+      SCRIBE_SERVICE_TOKEN: ${SCRIBE_SERVICE_TOKEN}
       SCRIBE_WORKER_CONCURRENCY: ${SCRIBE_WORKER_CONCURRENCY:-2}
 
   # ── Scribe WebSocket sidecar (M3 — real-time visits) ──

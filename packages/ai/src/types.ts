@@ -17,6 +17,7 @@ export type ModelCallPurpose =
   | 'rx'
   | 'referral'
   | 'summary'
+  | 'judge'
   | 'eval';
 
 export interface AiLogContext {
