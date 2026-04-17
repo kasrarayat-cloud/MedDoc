@@ -9,5 +9,6 @@
 
 export * from './types';
 export * from './model-client';
+export * from './deepgram';
 export { hashPrompt } from './prompt-hash';
-export { logAiCall } from './log';
+export { logAiCall, redactPhi } from './log';
