@@ -10,6 +10,7 @@ import type {
   PatientSummary,
   OutputError,
 } from '@meddoc/types';
+import type { PushOutcome, SignPushResults } from '@/server/push/types';
 import {
   saveEditedSoapAction,
   saveEditedCodingAction,
@@ -17,6 +18,7 @@ import {
   saveEditedReferralsAction,
   saveEditedPatientSummaryAction,
   signAndSendVisitAction,
+  retryFailedPushesAction,
 } from './actions';
 import SoapTab from './tabs/SoapTab';
 import CodingTab from './tabs/CodingTab';
@@ -75,8 +77,12 @@ export default function ReviewClient({
   const [dirty, setDirty] = useState<Record<TabKey, boolean>>({
     soap: false, coding: false, rx: false, referrals: false, summary: false,
   });
-  const [busy, setBusy] = useState<'idle' | 'saving' | 'signing'>('idle');
+  const [busy, setBusy] = useState<'idle' | 'saving' | 'signing' | 'retrying'>(
+    'idle'
+  );
   const [error, setError] = useState<string | null>(null);
+  // M6: after Sign returns, show per-push status + "Retry failed" button.
+  const [pushResults, setPushResults] = useState<SignPushResults | null>(null);
 
   const anyDirty = Object.values(dirty).some(Boolean);
 
@@ -115,14 +121,47 @@ export default function ReviewClient({
     }
     setBusy('signing');
     try {
-      await signAndSendVisitAction({ visitId });
-      router.replace(`/visits/${visitId}`);
-      router.refresh();
+      const result = await signAndSendVisitAction({ visitId });
+      // M6 — instead of redirecting immediately, show per-push status so
+      // the clinician can see what landed in the chart and retry any
+      // failed pushes before walking away from the visit.
+      setPushResults(result.pushResults);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy('idle');
     }
+  }
+
+  async function handleRetry(): Promise<void> {
+    if (!pushResults) return;
+    setError(null);
+    setBusy('retrying');
+    try {
+      const result = await retryFailedPushesAction({
+        visitId,
+        targets: pushResults.failedTargets,
+      });
+      // Merge: keep the original success/skip outcomes; overlay the
+      // retried targets with their new outcomes.
+      const retriedByTarget = new Map(result.outcomes.map((o) => [o.target, o]));
+      const merged = pushResults.outcomes.map((prior) =>
+        retriedByTarget.get(prior.target) ?? prior
+      );
+      const newFailed = merged
+        .filter((o): o is Extract<PushOutcome, { status: 'error' }> => o.status === 'error')
+        .map((o) => o.target);
+      setPushResults({ outcomes: merged, failedTargets: newFailed });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy('idle');
+    }
+  }
+
+  function handleReturnToVisit(): void {
+    router.replace(`/visits/${visitId}`);
+    router.refresh();
   }
 
   // Per-tab renderer dispatches on the LoadedOutput.kind.
@@ -174,6 +213,19 @@ export default function ReviewClient({
     (tab === 'summary' && summary.kind === 'ok');
 
   const tabState: Record<TabKey, LoadedOutput<unknown>> = { soap, coding, rx, referrals, summary };
+
+  // Post-sign overlay — replace the review UI with a per-push status panel.
+  if (pushResults) {
+    return (
+      <PushResultsPanel
+        results={pushResults}
+        busy={busy}
+        error={error}
+        onRetry={handleRetry}
+        onDone={handleReturnToVisit}
+      />
+    );
+  }
 
   return (
     <div className="space-y-5">
@@ -252,6 +304,130 @@ function EmptyTab({ type }: { type: string }) {
     <div className="border border-slate-800 rounded-xl p-6 bg-slate-900/40 text-sm text-slate-400">
       No {type} output yet. The pipeline may still be running, or this
       output type wasn&apos;t generated for this visit.
+    </div>
+  );
+}
+
+// ─── Per-push status panel (M6 critical UI addition) ──────────────────────
+
+const PUSH_LABELS: Record<PushOutcome['target'], string> = {
+  note: 'Clinical note',
+  billing: 'Billing event',
+  medications: 'Active medications',
+  referrals: 'Referral letter(s)',
+  tasks: 'Follow-up tasks',
+  problem_list: 'Problem list',
+};
+
+/** Stable display order so retry + refresh don't shuffle lines. */
+const PUSH_ORDER: PushOutcome['target'][] = [
+  'note',
+  'billing',
+  'medications',
+  'referrals',
+  'tasks',
+  'problem_list',
+];
+
+function PushResultsPanel({
+  results,
+  busy,
+  error,
+  onRetry,
+  onDone,
+}: {
+  results: SignPushResults;
+  busy: 'idle' | 'saving' | 'signing' | 'retrying';
+  error: string | null;
+  onRetry: () => void;
+  onDone: () => void;
+}) {
+  const byTarget = new Map(results.outcomes.map((o) => [o.target, o]));
+  const rows = PUSH_ORDER.map((t) => byTarget.get(t)).filter(
+    (o): o is PushOutcome => o !== undefined
+  );
+  const hasFailures = results.failedTargets.length > 0;
+  const okCount = rows.filter((o) => o.status === 'ok').length;
+  const skipCount = rows.filter((o) => o.status === 'skipped').length;
+  const errCount = rows.filter((o) => o.status === 'error').length;
+
+  return (
+    <div className="space-y-4">
+      <div className="border border-slate-700 rounded-xl p-5 bg-slate-900/40">
+        <h2 className="text-lg font-semibold text-slate-100">
+          {hasFailures ? 'Visit signed — some pushes need retry' : 'Visit signed'}
+        </h2>
+        <p className="text-sm text-slate-400 mt-1">
+          {okCount} succeeded · {skipCount} skipped · {errCount} failed
+        </p>
+      </div>
+
+      <ul className="space-y-2">
+        {rows.map((o) => (
+          <li
+            key={o.target}
+            className={`flex items-start gap-3 border rounded-lg p-3 text-sm ${
+              o.status === 'ok'
+                ? 'border-emerald-700/40 bg-emerald-500/5'
+                : o.status === 'error'
+                  ? 'border-rose-600/40 bg-rose-500/5'
+                  : 'border-slate-700 bg-slate-900/40'
+            }`}
+          >
+            <span
+              className={`mt-0.5 font-mono ${
+                o.status === 'ok'
+                  ? 'text-emerald-300'
+                  : o.status === 'error'
+                    ? 'text-rose-300'
+                    : 'text-slate-500'
+              }`}
+              aria-hidden
+            >
+              {o.status === 'ok' ? '✓' : o.status === 'error' ? '✗' : '·'}
+            </span>
+            <div className="flex-1">
+              <div className="font-medium text-slate-200">
+                {PUSH_LABELS[o.target]}
+              </div>
+              <div className="text-slate-400 text-xs mt-0.5">
+                {o.status === 'ok'
+                  ? o.summary
+                  : o.status === 'error'
+                    ? `Failed${o.httpStatus && o.httpStatus > 0 ? ` (HTTP ${o.httpStatus})` : ''}: ${o.message}`
+                    : o.reason}
+              </div>
+            </div>
+          </li>
+        ))}
+      </ul>
+
+      {error && (
+        <div className="text-sm text-amber-400 border border-amber-600/40 rounded-lg p-3 bg-amber-500/5">
+          {error}
+        </div>
+      )}
+
+      <div className="flex items-center gap-3 pt-2 border-t border-slate-800">
+        {hasFailures && (
+          <button
+            type="button"
+            onClick={onRetry}
+            disabled={busy !== 'idle'}
+            className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-sm font-semibold"
+          >
+            {busy === 'retrying' ? 'Retrying…' : 'Retry failed pushes'}
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={onDone}
+          disabled={busy !== 'idle'}
+          className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-sm font-semibold"
+        >
+          Return to visit
+        </button>
+      </div>
     </div>
   );
 }
