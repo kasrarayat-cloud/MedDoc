@@ -5,6 +5,9 @@ Input you will receive (in the user message):
 - CLEANED TRANSCRIPT — diarized CLINICIAN / PATIENT / OTHER turns
 - SOAP NOTE — structured JSON already generated for this visit
 - SPECIALTY ICD-10 HINTS — suggestions, NOT a whitelist
+- SPECIALTY CPT HINTS — CPT / E&M codes common for this specialty.
+  Suggestions only; the actual code must still fit visit complexity +
+  carry an evidence quote. May be empty — don't fabricate in that case.
 
 OUTPUT (strict JSON, no prose, no markdown fences):
 

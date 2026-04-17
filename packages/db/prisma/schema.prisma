@@ -943,6 +943,18 @@ model ScribeOutput {
   @@map("scribe_outputs")
 }
 
+/// Provenance stamp on each specialty template so the review UI can
+/// warn reviewers that an active template hasn't been vetted by a
+/// licensed specialist yet. M5 D4 addition.
+///   DRAFT               — engineer-authored; not clinically vetted
+///   SPECIALIST_REVIEWED — a specialist in the field has signed off
+///   PRODUCTION          — cleared for real-patient use
+enum ClinicalReviewStatus {
+  DRAFT
+  SPECIALIST_REVIEWED
+  PRODUCTION
+}
+
 model ScribeSpecialtyTemplate {
   id String @id @default(cuid())
 
@@ -957,7 +969,15 @@ model ScribeSpecialtyTemplate {
   /// Nested object describing subjective/objective/assessment/plan sections.
   soapSchema            Json
   defaultIcd10Hints     String[]
+  /// CPT / E&M code hints the coder pass seeds with (M5 D1). Suggestive
+  /// only — generator still pulls evidence from the transcript.
+  defaultCptHints       String[] @default([])
   defaultFormularyHints String[]
+
+  /// DRAFT until a licensed specialist reviews the template. Drives a
+  /// review-UI banner so clinicians know the template hasn't been vetted
+  /// (M5 D4).
+  clinicalReviewStatus ClinicalReviewStatus @default(DRAFT)
 
   active Boolean @default(true)
 

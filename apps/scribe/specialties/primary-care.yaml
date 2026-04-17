@@ -1,6 +1,12 @@
+# ──────────────────────────────────────────────────────────────────────
+# DRAFT — authored by engineering without licensed-specialist review.
+# Route through a clinical advisor before using with real patient data.
+# See docs/SPECIALTY_TEMPLATES.md.
+# ──────────────────────────────────────────────────────────────────────
 slug: primary-care
 displayName: Primary Care / Family Medicine
-version: "1.0.0"
+version: "1.1.0"
+clinicalReviewStatus: draft
 
 # Exam elements the SOAP note must cite evidence for. If the clinician did
 # not mention one, the generator flags it in `missing_required_elements[]`
@@ -45,7 +51,22 @@ defaultIcd10Hints:
   - K21.9    # GERD without esophagitis
   - M54.50   # Low back pain, unspecified
 
-defaultFormularyHints: []
+defaultCptHints:
+  - "99213"   # Est pt office visit, low complexity
+  - "99214"   # Est pt office visit, moderate complexity
+  - "99212"   # Est pt office visit, minimal
+  - "99205"   # New pt office visit, high complexity
+  - "99395"   # Est pt preventive, 18-39
+  - "99396"   # Est pt preventive, 40-64
+
+defaultFormularyHints:
+  - lisinopril
+  - amlodipine
+  - metformin
+  - atorvastatin
+  - levothyroxine
+  - albuterol
+  - amoxicillin
 
 systemPrompt: |
   You are documenting a primary-care / family-medicine encounter. Produce

@@ -42,6 +42,10 @@ interface Props {
   visitId: string;
   initial: ReviewInitial;
   canSign: boolean;
+  /** M5 D4 — when the active specialty template hasn't been reviewed by
+   *  a licensed specialist yet, show a provenance banner above the tabs. */
+  templateIsDraft: boolean;
+  specialtyName: string;
 }
 
 type TabKey = 'soap' | 'coding' | 'rx' | 'referrals' | 'summary';
@@ -54,7 +58,13 @@ const TAB_LABELS: Record<TabKey, string> = {
   summary: 'Patient summary',
 };
 
-export default function ReviewClient({ visitId, initial, canSign }: Props) {
+export default function ReviewClient({
+  visitId,
+  initial,
+  canSign,
+  templateIsDraft,
+  specialtyName,
+}: Props) {
   const router = useRouter();
   const [tab, setTab] = useState<TabKey>('soap');
   const [soap, setSoap] = useState(initial.soap);
@@ -167,6 +177,15 @@ export default function ReviewClient({ visitId, initial, canSign }: Props) {
 
   return (
     <div className="space-y-5">
+      {templateIsDraft && (
+        <div className="border border-amber-600/40 bg-amber-500/5 rounded-lg p-3 text-xs text-amber-200">
+          <span className="font-semibold">Draft template</span> — the{' '}
+          {specialtyName} specialty template was authored by engineering and
+          has not yet been reviewed by a licensed specialist. Outputs may need
+          deeper editing than usual. Please verify carefully before signing.
+        </div>
+      )}
+
       <nav className="flex gap-1 border-b border-slate-800">
         {(Object.keys(TAB_LABELS) as TabKey[]).map((key) => {
           const state = tabState[key];

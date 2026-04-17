@@ -37,6 +37,31 @@ export default function SoapTab({ value, onChange, readOnly }: Props) {
         </span>
       </div>
 
+      {value.requires_immediate_follow_up && (
+        <div className="border-2 border-rose-500/60 bg-rose-500/10 rounded-lg p-3 text-sm">
+          <div className="font-semibold text-rose-200">
+            🚨 Requires immediate clinical follow-up
+          </div>
+          <div className="text-slate-200 mt-1">
+            The generator flagged an acute safety concern in this visit.
+            Review the safety plan and document the follow-up before signing.
+            The patient-facing summary auto-appends 988 and 911 resources.
+          </div>
+          {!readOnly && (
+            <label className="flex items-center gap-2 mt-2 text-xs text-slate-300">
+              <input
+                type="checkbox"
+                checked={Boolean(value.requires_immediate_follow_up)}
+                onChange={(e) =>
+                  onChange({ ...value, requires_immediate_follow_up: e.target.checked || undefined })
+                }
+              />
+              Keep this flag set
+            </label>
+          )}
+        </div>
+      )}
+
       {value.missing_required_elements.length > 0 && (
         <div className="border border-amber-600/50 bg-amber-500/5 rounded-lg p-3 text-sm">
           <div className="font-medium text-amber-300">Missing required elements</div>

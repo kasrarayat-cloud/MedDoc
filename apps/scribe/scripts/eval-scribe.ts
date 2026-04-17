@@ -31,6 +31,23 @@ const THRESHOLD = 0.8;
 /** Minimum mean judge score per case when --judge is active. */
 const JUDGE_THRESHOLD = 3.5;
 
+/**
+ * Normalise whitespace + strip speaker-turn prefixes before substring
+ * matching. Both Whisper-style "UNKNOWN:" and Deepgram "speaker_N:"
+ * labels get removed, along with the CLINICIAN/PATIENT/OTHER tokens.
+ * This lets a valid evidence quote that happens to span two turn
+ * boundaries match against the transcript body text. Added M5 after a
+ * multi-turn quote legitimately landed in an assessment item.
+ */
+function normalizeForHallucination(text: string): string {
+  return text
+    .replace(/\s+/g, ' ')
+    .replace(/\b(clinician|patient|other|unknown|speaker_\d+):\s*/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .toLowerCase()
+    .trim();
+}
+
 const CLI_ARGS = new Set(process.argv.slice(2));
 const JUDGE_ENABLED = CLI_ARGS.has('--judge');
 
@@ -112,10 +129,11 @@ function scoreCase(
   const reasons: string[] = [];
 
   // Hallucination detector: every evidence_quote must appear verbatim in
-  // the transcript. We normalize whitespace for a friendlier comparison.
-  const normalized = transcriptRaw.replace(/\s+/g, ' ').toLowerCase();
+  // the transcript. Normalize whitespace + strip speaker labels so a
+  // legitimate quote across a turn boundary isn't falsely flagged.
+  const normalized = normalizeForHallucination(transcriptRaw);
   const hallucinations = soap.assessment.filter((a) => {
-    const quote = a.evidence_quote.replace(/\s+/g, ' ').toLowerCase().trim();
+    const quote = normalizeForHallucination(a.evidence_quote);
     return quote.length > 0 && !normalized.includes(quote);
   });
   const hallucinationOk = hallucinations.length === 0;
