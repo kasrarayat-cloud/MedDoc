@@ -50,6 +50,9 @@ export type AuditAction =
   | 'DELETED_MEDICATION'
   | 'SYNCED_FROM_DRCHRONO'
   | 'PUSHED_TO_DRCHRONO'
+  // M6 — CRM loop-closing
+  | 'CREATED_TASK'
+  | 'CREATED_BILLING_EVENT'
   | 'USER_CREATED'
   | 'USER_UPDATED'
   | 'USER_ROLE_CHANGED'

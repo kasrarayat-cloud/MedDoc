@@ -85,6 +85,10 @@ enum AuditAction {
   UPDATED_MEDICATION
   DELETED_MEDICATION
 
+  // M6 — CRM loop-closing (internal API from Scribe Sign)
+  CREATED_TASK
+  CREATED_BILLING_EVENT
+
   // Admin
   USER_CREATED
   USER_UPDATED
@@ -178,6 +182,9 @@ model Practice {
   sessionLogs       SessionLog[]
   allergies         Allergy[]
   medications       Medication[]
+  // M6 — CRM loop-closing
+  tasks             Task[]
+  billingEvents     BillingEvent[]
   // Scribe (M1+)
   scribeVisits       ScribeVisit[]
   scribeTranscripts  ScribeTranscript[]
@@ -263,6 +270,11 @@ model User {
   medicationsCreated Medication[]  @relation("MedicationCreator")
   medicationsUpdated Medication[]  @relation("MedicationUpdater")
   apiUsage           ApiUsage[]
+  // M6 — CRM loop-closing
+  tasksAssigned       Task[]         @relation("TaskAssignee")
+  tasksCreated        Task[]         @relation("TaskCreator")
+  billingEventsOwned  BillingEvent[] @relation("BillingClinician")
+  billingEventsSubmitted BillingEvent[] @relation("BillingSubmitter")
   // Scribe (M1+)
   scribeVisits       ScribeVisit[]
   scribeAuditEvents  ScribeAuditEvent[]
@@ -432,6 +444,9 @@ model Patient {
   appointments Appointment[]
   allergies    Allergy[]
   medications  Medication[]
+  // M6 — CRM loop-closing
+  tasks        Task[]
+  billingEvents BillingEvent[]
   // Scribe (M1+)
   scribeVisits ScribeVisit[]
 
@@ -499,10 +514,25 @@ model Document {
   /// Soft delete — do not hard-delete for HIPAA retention (6 years minimum)
   deletedAt DateTime? @db.Timestamptz(6)
 
+  // --- M6 provenance + idempotency ---
+  /// The Scribe ScribeOutput.id that produced this Document (null for
+  /// non-Scribe documents). Populated when the Scribe Sign flow creates
+  /// Referral-letter Documents in MedDoc Pro. See M6 D2 + D6.
+  sourceScribeOutputId String?
+  /// Index WITHIN the source output when that output fans out to multiple
+  /// Documents (one ScribeOutput REFERRAL → N referral letters → N
+  /// Documents). Null for non-Scribe / non-fan-out documents.
+  sourceItemIndex      Int?
+
   @@index([patientId])
   @@index([createdById])
   @@index([status])
   @@index([createdAt])
+  // Composite unique so an M6 push retry doesn't create a duplicate letter.
+  // Both nullable → Postgres treats NULL,NULL as distinct, so non-Scribe
+  // Documents are unconstrained. The endpoint returns the existing row's
+  // id on unique-violation.
+  @@unique([sourceScribeOutputId, sourceItemIndex], name: "document_scribe_source_unique")
   @@map("documents")
 }
 
@@ -706,10 +736,139 @@ model Medication {
   /// Soft delete — never hard-delete clinical safety data.
   deletedAt DateTime? @db.Timestamptz(6)
 
+  /// M6 provenance — when this medication was created from a Scribe
+  /// visit's Rx draft push, this points at the ScribeOutput.id. NULL for
+  /// manually-entered meds. Application-level dedup compares
+  /// (patientId, sourceScribeOutputId, lower(trim(name))) before insert.
+  sourceScribeOutputId String?
+
   @@index([patientId])
   @@index([practiceId])
   @@index([isActive])
+  @@index([sourceScribeOutputId])
   @@map("medications")
+}
+
+// ============================================================================
+// TASK — CRM task/to-do items (M6 "CRM loop-closing")
+// ----------------------------------------------------------------------------
+// Created by Scribe's Sign flow for follow-up items extracted from the SOAP
+// plan ("schedule follow-up in 3 months", "order A1c in 6 weeks"). Also
+// open for manual creation via the CRM UI in later milestones.
+//
+// sourceScribeOutputId + sourceItemIndex together form the idempotency key
+// so a sign-retry never double-creates. Each SOAP output can fan out to
+// multiple Task rows (one per plan action item), each at its own index.
+// ============================================================================
+
+enum TaskStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model Task {
+  id String @id @default(cuid())
+
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id])
+
+  patientId String
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  /// Who's responsible. Defaults to the visit clinician when a Task is
+  /// created from a Scribe sign; manual tasks pick their own assignee.
+  /// Nullable so unassigned tasks are supported.
+  assignedUserId String?
+  assignedUser   User?   @relation("TaskAssignee", fields: [assignedUserId], references: [id], onDelete: SetNull)
+
+  /// Who created this task. Same user the sign API was called as, or the
+  /// manually-creating clinician. Null if the creator was later deleted.
+  createdByUserId String?
+  createdByUser   User?   @relation("TaskCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  title       String
+  description String? @db.Text
+
+  status TaskStatus @default(OPEN)
+  dueAt  DateTime?  @db.Timestamptz(6)
+
+  /// Source ScribeVisit this task came from, for provenance + cross-linking.
+  /// Nullable because future manual-CRM tasks won't have one.
+  sourceVisitId String?
+  /// Source ScribeOutput.id — the exact row whose content produced this task.
+  sourceScribeOutputId String?
+  /// Index within the source output when one output fans out to multiple
+  /// tasks. Paired with sourceScribeOutputId for a composite unique.
+  sourceItemIndex      Int?
+
+  createdAt     DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(6)
+  completedAt   DateTime? @db.Timestamptz(6)
+  completedById String?
+
+  @@index([practiceId, status, dueAt])
+  @@index([patientId])
+  @@index([assignedUserId])
+  @@index([sourceVisitId])
+  // Idempotency for M6 Scribe Sign → Task creation. Nullable pair, so
+  // non-Scribe manual tasks are unconstrained.
+  @@unique([sourceScribeOutputId, sourceItemIndex], name: "task_scribe_source_unique")
+  @@map("tasks")
+}
+
+// ============================================================================
+// BILLING EVENT — ICD-10 + CPT bundle for one clinical encounter (M6)
+// ----------------------------------------------------------------------------
+// Created by Scribe's Sign flow from the ICD10_CPT ScribeOutput. Defaults
+// to PENDING_REVIEW so billing ops can eyeball before external claim
+// submission (which remains external to this system — we don't emit 837P).
+// ============================================================================
+
+enum BillingEventStatus {
+  PENDING_REVIEW
+  SUBMITTED
+  PAID
+  DENIED
+}
+
+model BillingEvent {
+  id String @id @default(cuid())
+
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id])
+
+  patientId String
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  /// Clinician this encounter is billed under (source of truth for the claim).
+  clinicianUserId String
+  clinicianUser   User @relation("BillingClinician", fields: [clinicianUserId], references: [id])
+
+  /// JSON array of { code, description, evidence_quote, confidence }. Mirrors
+  /// CodingOutput.icd10 from @meddoc/types.
+  icd10Items Json
+  /// JSON array of the same shape for CPT/E&M + modifiers.
+  cptItems   Json
+
+  status BillingEventStatus @default(PENDING_REVIEW)
+
+  sourceVisitId        String?
+  /// One BillingEvent per Scribe coding output — hence @unique, not composite.
+  sourceScribeOutputId String? @unique
+
+  submittedAt   DateTime? @db.Timestamptz(6)
+  submittedById String?
+  submittedBy   User?     @relation("BillingSubmitter", fields: [submittedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([practiceId, status, createdAt])
+  @@index([patientId])
+  @@index([sourceVisitId])
+  @@map("billing_events")
 }
 
 // ============================================================================
