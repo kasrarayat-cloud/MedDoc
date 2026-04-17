@@ -34,6 +34,17 @@ http://scribe.localhost {
         format console
     }
 
+    # M3: WS upgrade path → scribe-ws sidecar. Caddy's reverse_proxy
+    # forwards the Upgrade/Connection headers automatically; the path
+    # matcher runs before the catch-all to scribe:3000 below.
+    @ws path /api/ws/*
+    reverse_proxy @ws scribe-ws:3003 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
     reverse_proxy scribe:3000 {
         header_up Host {host}
         header_up X-Real-IP {remote_host}
