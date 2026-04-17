@@ -27,6 +27,8 @@
     "seed:specialties": "npm run seed:specialties -w scribe",
     "eval:doc-editor": "npm run eval:doc-editor -w meddoc-pro",
     "eval:clinical-notes": "npm run eval:clinical-notes -w meddoc-pro",
+    "eval:scribe": "npm run eval:scribe -w scribe",
+    "worker:scribe": "npm run worker -w scribe",
     "db:generate": "npm run generate -w @meddoc/db",
     "db:migrate:deploy": "npm run migrate:deploy -w @meddoc/db",
     "db:migrate:status": "npm run migrate:status -w @meddoc/db",
