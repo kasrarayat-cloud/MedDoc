@@ -52,6 +52,11 @@ export function renderSoapMarkdown(soap: SoapNote): string {
   lines.push(`_AI-generated from a Scribe visit. Confidence: **${soap.confidence}**._`);
   lines.push('');
 
+  if (soap.requires_immediate_follow_up) {
+    lines.push('> 🚨 **Requires immediate clinical follow-up.** Review safety plan before dismissing.');
+    lines.push('');
+  }
+
   if (soap.missing_required_elements.length > 0) {
     lines.push('> ⚠️ Missing documented elements: ' + soap.missing_required_elements.map(humanize).join(', '));
     lines.push('');

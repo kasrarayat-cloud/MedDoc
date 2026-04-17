@@ -74,7 +74,9 @@ export default async function ReviewPage({
       id: true,
       status: true,
       patient: { select: { firstName: true, lastName: true, chartId: true } },
-      specialty: { select: { displayName: true, version: true } },
+      specialty: {
+        select: { displayName: true, version: true, clinicalReviewStatus: true },
+      },
     },
   });
   if (!visit) notFound();
@@ -151,6 +153,8 @@ export default async function ReviewPage({
         visitId={visit.id}
         initial={initial}
         canSign={visit.status === 'READY_FOR_REVIEW'}
+        templateIsDraft={visit.specialty.clinicalReviewStatus === 'DRAFT'}
+        specialtyName={visit.specialty.displayName}
       />
     </div>
   );

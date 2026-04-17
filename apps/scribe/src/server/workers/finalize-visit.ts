@@ -189,6 +189,7 @@ export async function runFinalizeVisit(payload: FinalizeVisitPayload): Promise<v
         cleanedText,
         soap: soap as SoapNote,
         specialtyDefaultIcd10Hints: specialtyIcd10Hints,
+        specialtyDefaultCptHints: specialty.defaultCptHints ?? [],
         practiceId: visit.practiceId,
         visitId,
       })

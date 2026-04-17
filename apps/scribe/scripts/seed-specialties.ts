@@ -19,6 +19,8 @@ import path from 'node:path';
 import yaml from 'js-yaml';
 import prisma from '@meddoc/db';
 
+type ClinicalReviewStatus = 'draft' | 'specialist_reviewed' | 'production';
+
 interface TemplateYaml {
   slug: string;
   displayName: string;
@@ -26,11 +28,35 @@ interface TemplateYaml {
   requiredExamElements: unknown;
   soapSchema: unknown;
   defaultIcd10Hints: string[];
+  /** M5 D1: optional; defaults to [] if the YAML omits it. */
+  defaultCptHints?: string[];
   defaultFormularyHints: string[];
   systemPrompt: string;
+  /** M5 D4: optional; defaults to 'draft' if the YAML omits it. */
+  clinicalReviewStatus?: ClinicalReviewStatus;
 }
 
 const SPECIALTIES_DIR = path.resolve(__dirname, '..', 'specialties');
+
+/**
+ * YAML's `clinicalReviewStatus` is lowercase; Prisma's enum is UPPERCASE.
+ * Undefined defaults to DRAFT (the column's DB default anyway — we still
+ * send it explicitly so version-bumps flip status back to DRAFT unless
+ * the YAML says otherwise).
+ */
+function reviewStatusToPrisma(
+  status: ClinicalReviewStatus | undefined
+): 'DRAFT' | 'SPECIALIST_REVIEWED' | 'PRODUCTION' {
+  switch (status) {
+    case 'production':
+      return 'PRODUCTION';
+    case 'specialist_reviewed':
+      return 'SPECIALIST_REVIEWED';
+    case 'draft':
+    case undefined:
+      return 'DRAFT';
+  }
+}
 
 function loadYamlFiles(): TemplateYaml[] {
   if (!fs.existsSync(SPECIALTIES_DIR)) {
@@ -72,7 +98,9 @@ async function upsertTemplate(t: TemplateYaml): Promise<'created' | 'updated' | 
         requiredExamElements: t.requiredExamElements as object,
         soapSchema: t.soapSchema as object,
         defaultIcd10Hints: t.defaultIcd10Hints ?? [],
+        defaultCptHints: t.defaultCptHints ?? [],
         defaultFormularyHints: t.defaultFormularyHints ?? [],
+        clinicalReviewStatus: reviewStatusToPrisma(t.clinicalReviewStatus),
         active: true,
       },
     });
@@ -88,7 +116,9 @@ async function upsertTemplate(t: TemplateYaml): Promise<'created' | 'updated' | 
         requiredExamElements: t.requiredExamElements as object,
         soapSchema: t.soapSchema as object,
         defaultIcd10Hints: t.defaultIcd10Hints ?? [],
+        defaultCptHints: t.defaultCptHints ?? [],
         defaultFormularyHints: t.defaultFormularyHints ?? [],
+        clinicalReviewStatus: reviewStatusToPrisma(t.clinicalReviewStatus),
         active: true,
       },
     });
@@ -108,7 +138,9 @@ async function upsertTemplate(t: TemplateYaml): Promise<'created' | 'updated' | 
       requiredExamElements: t.requiredExamElements as object,
       soapSchema: t.soapSchema as object,
       defaultIcd10Hints: t.defaultIcd10Hints ?? [],
+      defaultCptHints: t.defaultCptHints ?? [],
       defaultFormularyHints: t.defaultFormularyHints ?? [],
+      clinicalReviewStatus: reviewStatusToPrisma(t.clinicalReviewStatus),
       active: true,
     },
   });
