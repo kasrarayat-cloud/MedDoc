@@ -28,7 +28,7 @@
         format console
     }
 
-    reverse_proxy app:3000 {
+    reverse_proxy meddoc-pro:3000 {
         header_up Host {host}
         header_up X-Real-IP {remote_host}
         header_up X-Forwarded-For {remote_host}
@@ -58,7 +58,7 @@
 #     header Referrer-Policy "strict-origin-when-cross-origin"
 #     header Permissions-Policy "microphone=(self), camera=(), geolocation=()"
 #
-#     reverse_proxy app:3000 {
+#     reverse_proxy meddoc-pro:3000 {
 #         header_up Host {host}
 #         header_up X-Real-IP {remote_host}
 #         header_up X-Forwarded-For {remote_host}
