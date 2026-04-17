@@ -29,6 +29,8 @@ function getConnection(): IORedis {
 
 export const JOB_TRANSCRIBE_BATCH = 'transcribe_batch';
 export const JOB_FINALIZE_VISIT = 'finalize_visit';
+/** M7 — BullMQ repeatable, daily 02:00 UTC, scans + (optionally) purges. */
+export const JOB_RETENTION_PURGE = 'retention_purge';
 
 export interface TranscribeBatchPayload {
   visitId: string;
@@ -38,6 +40,11 @@ export interface TranscribeBatchPayload {
 
 export interface FinalizeVisitPayload {
   visitId: string;
+}
+
+export interface RetentionPurgePayload {
+  /** ISO timestamp override for tests; omit in prod. */
+  now?: string;
 }
 
 export function getScribeQueue(): Queue {

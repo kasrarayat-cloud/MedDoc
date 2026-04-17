@@ -16,6 +16,8 @@
 // ============================================================================
 
 import 'dotenv/config';
+// M7 — Sentry init; no-op when SENTRY_DSN_* unset.
+import '../sentry.server.config';
 import http from 'node:http';
 import { parse as parseUrl } from 'node:url';
 import { parse as parseCookie } from 'cookie';

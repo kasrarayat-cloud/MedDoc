@@ -11,6 +11,7 @@
 
 import { timingSafeEqual } from 'node:crypto';
 import type { NextRequest } from 'next/server';
+import { readServiceToken } from '@meddoc/auth';
 
 function isPrivateIp(ip: string | null): boolean {
   if (!ip) return false;
@@ -61,9 +62,11 @@ export type InternalAuthResult =
   | { ok: false; status: 401 | 403; error: string };
 
 export function verifyInternalRequest(req: NextRequest): InternalAuthResult {
-  const expected = process.env.SCRIBE_SERVICE_TOKEN;
+  // M7 — readServiceToken() prefers SCRIBE_SERVICE_TOKEN_FILE (for
+  // secret-mount rotation), falls back to the SCRIBE_SERVICE_TOKEN env.
+  const expected = readServiceToken();
   if (!expected) {
-    return { ok: false, status: 403, error: 'Internal API is disabled (SCRIBE_SERVICE_TOKEN unset).' };
+    return { ok: false, status: 403, error: 'Internal API is disabled (no service token configured).' };
   }
 
   const auth = req.headers.get('authorization') || '';

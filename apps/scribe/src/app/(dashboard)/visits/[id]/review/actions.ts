@@ -19,14 +19,15 @@ import {
   type CreateClinicalNoteResponse,
 } from '@meddoc/types';
 import { getSession } from '@/lib/auth';
-import { tenantScope } from '@meddoc/auth';
+import { tenantScope, readServiceToken } from '@meddoc/auth';
 
 const MEDDOC_PRO_INTERNAL_URL =
   process.env.MEDDOC_PRO_INTERNAL_URL?.trim() || 'http://meddoc-pro:3000';
 
 function getInternalToken(): string {
-  const token = process.env.SCRIBE_SERVICE_TOKEN;
-  if (!token) throw new Error('SCRIBE_SERVICE_TOKEN is not set.');
+  // M7 — readServiceToken prefers SCRIBE_SERVICE_TOKEN_FILE for rotation.
+  const token = readServiceToken();
+  if (!token) throw new Error('Service token not configured (SCRIBE_SERVICE_TOKEN[_FILE] unset).');
   return token;
 }
 

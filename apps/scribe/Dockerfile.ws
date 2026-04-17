@@ -1,15 +1,15 @@
 # ============================================================================
-# Scribe WebSocket sidecar image — runs src/ws-server.ts via tsx
+# Scribe WebSocket sidecar — runs src/ws-server.ts via tsx on port 3003
 # ----------------------------------------------------------------------------
-# Separate container from the web + worker so the WS path can own its own
-# port (SCRIBE_WS_PORT, default 3003) without conflicting with Next's
-# standalone server on :3000. No ffmpeg here — the WS server doesn't
-# touch audio files; audio is proxied straight through to Deepgram.
+# M7 slim rewrite (was 1.98 GB). Same pattern as Dockerfile.worker but
+# without ffmpeg (the WS server never touches audio files — it proxies
+# binary frames straight through to Deepgram).
 #
-# Build context is the monorepo root (context: . in docker-compose.yml).
+# Target: <400 MB. Report `docker images | grep scribe-ws` after build.
 # ============================================================================
 
-FROM node:22-alpine AS deps
+# ── Stage 1: full-deps ──
+FROM node:22-alpine AS full-deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/meddoc-pro/package.json ./apps/meddoc-pro/package.json
@@ -18,21 +18,55 @@ COPY packages/db/package.json ./packages/db/package.json
 COPY packages/auth/package.json ./packages/auth/package.json
 COPY packages/types/package.json ./packages/types/package.json
 COPY packages/ai/package.json ./packages/ai/package.json
-# Server runs from source via tsx → needs full deps (no --omit=dev).
 RUN npm ci
 
+# ── Stage 2: prod-deps ──
+FROM node:22-alpine AS prod-deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY apps/meddoc-pro/package.json ./apps/meddoc-pro/package.json
+COPY apps/scribe/package.json ./apps/scribe/package.json
+COPY packages/db/package.json ./packages/db/package.json
+COPY packages/auth/package.json ./packages/auth/package.json
+COPY packages/types/package.json ./packages/types/package.json
+COPY packages/ai/package.json ./packages/ai/package.json
+RUN npm ci --omit=dev
+
+# ── Stage 3: prisma-generate ──
+FROM full-deps AS prisma-generate
+WORKDIR /app
+COPY packages/db/prisma ./packages/db/prisma
+COPY packages/db/src ./packages/db/src
+COPY packages/db/prisma.config.ts ./packages/db/prisma.config.ts
+RUN npm run generate -w @meddoc/db
+
+# ── Stage 4: runtime ──
 FROM node:22-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
 
-# Whole workspace — tsx resolves imports from source paths, and the WS
-# server touches apps/scribe/src/**, packages/db/src/**, packages/ai/src/**.
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
+COPY --from=prod-deps /app/node_modules ./node_modules
+COPY --from=prisma-generate /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=prisma-generate /app/node_modules/@prisma ./node_modules/@prisma
 
-# Prisma client (generated into node_modules/@prisma/client by db package).
-RUN npm run db:generate
+COPY package.json package-lock.json tsconfig.base.json ./
+
+COPY apps/scribe/package.json ./apps/scribe/package.json
+COPY apps/scribe/tsconfig.json ./apps/scribe/tsconfig.json
+COPY apps/scribe/src ./apps/scribe/src
+COPY apps/scribe/sentry.server.config.ts ./apps/scribe/sentry.server.config.ts
+
+COPY packages/db/package.json ./packages/db/package.json
+COPY packages/db/src ./packages/db/src
+COPY packages/db/prisma ./packages/db/prisma
+COPY packages/db/prisma.config.ts ./packages/db/prisma.config.ts
+COPY packages/auth/package.json ./packages/auth/package.json
+COPY packages/auth/src ./packages/auth/src
+COPY packages/types/package.json ./packages/types/package.json
+COPY packages/types/src ./packages/types/src
+COPY packages/ai/package.json ./packages/ai/package.json
+COPY packages/ai/src ./packages/ai/src
 
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 wsuser
