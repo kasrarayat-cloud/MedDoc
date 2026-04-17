@@ -28,6 +28,7 @@
     "eval:doc-editor": "npm run eval:doc-editor -w meddoc-pro",
     "eval:clinical-notes": "npm run eval:clinical-notes -w meddoc-pro",
     "eval:scribe": "npm run eval:scribe -w scribe",
+    "eval:scribe:judge": "npm run eval:scribe -w scribe -- --judge",
     "worker:scribe": "npm run worker -w scribe",
     "ws:scribe": "npm run ws -w scribe",
     "db:generate": "npm run generate -w @meddoc/db",
