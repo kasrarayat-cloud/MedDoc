@@ -10,6 +10,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { NextRequest } from 'next/server';
+import { _resetServiceTokenCache } from '@meddoc/auth';
 import { verifyInternalRequest } from '../../src/lib/internal-auth';
 
 const VALID = 'abcdefghijklmnopqrstuvwxyz0123456789ABCDEF';
@@ -32,12 +33,20 @@ function mkReq(opts: {
 
 describe('verifyInternalRequest', () => {
   const origToken = process.env.SCRIBE_SERVICE_TOKEN;
+  const origFile = process.env.SCRIBE_SERVICE_TOKEN_FILE;
   beforeEach(() => {
     process.env.SCRIBE_SERVICE_TOKEN = VALID;
+    delete process.env.SCRIBE_SERVICE_TOKEN_FILE;
+    // M7 — readServiceToken() caches per-process; reset so each test's
+    // env override actually takes effect.
+    _resetServiceTokenCache();
   });
   afterEach(() => {
     if (origToken == null) delete process.env.SCRIBE_SERVICE_TOKEN;
     else process.env.SCRIBE_SERVICE_TOKEN = origToken;
+    if (origFile == null) delete process.env.SCRIBE_SERVICE_TOKEN_FILE;
+    else process.env.SCRIBE_SERVICE_TOKEN_FILE = origFile;
+    _resetServiceTokenCache();
   });
 
   it('rejects when no token is set on the server', () => {

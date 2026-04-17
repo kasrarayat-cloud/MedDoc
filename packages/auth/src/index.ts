@@ -1,3 +1,13 @@
+// M7: file-based + env service-token resolution — re-export as the
+// canonical surface. Kept alongside NextAuth config since both apps
+// that import this package already import from here for session
+// handling.
+export {
+  readServiceToken,
+  resolveServiceToken,
+  _resetServiceTokenCache,
+} from './service-token';
+
 // ============================================================================
 // @meddoc/auth — shared auth surface for apps/meddoc-pro and apps/scribe
 // ----------------------------------------------------------------------------

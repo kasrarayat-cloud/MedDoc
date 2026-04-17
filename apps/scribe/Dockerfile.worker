@@ -1,16 +1,23 @@
 # ============================================================================
 # Scribe worker image — BullMQ consumer running src/worker.ts via tsx
 # ----------------------------------------------------------------------------
-# Separate from the web Dockerfile because the worker needs ffmpeg (for
-# audio chunking at 25 min) and tsx at runtime (no Next standalone output
-# for the worker entrypoint). Build context is the monorepo root, same
-# as the other Dockerfiles.
+# M7 slim rewrite: was 2.1 GB (full monorepo COPY + all deps). Now uses
+# multi-stage with prod-only deps + selective COPY of only the source
+# paths the worker actually imports at runtime.
+#
+# Excluded vs the old image:
+#   - apps/meddoc-pro/** (worker never imports it)
+#   - apps/scribe/tests, apps/scribe/.next, apps/scribe/node_modules
+#   - playwright-report/, test-results/, venv/
+#   - root node_modules dev deps (next, next-auth UI, playwright, vitest…)
+#
+# Build context: monorepo root (context: . in docker-compose.yml).
+# Target: <400 MB. Report `docker images | grep scribe-worker` after build.
 # ============================================================================
 
-FROM node:22-alpine AS deps
+# ── Stage 1: full-deps (needed for prisma generate) ──
+FROM node:22-alpine AS full-deps
 WORKDIR /app
-# ffmpeg handles chunking / re-encoding of uploaded audio. alpine package
-# is ~80 MB — acceptable cost per M2 plan decision D3.
 RUN apk add --no-cache ffmpeg
 COPY package.json package-lock.json ./
 COPY apps/meddoc-pro/package.json ./apps/meddoc-pro/package.json
@@ -19,24 +26,66 @@ COPY packages/db/package.json ./packages/db/package.json
 COPY packages/auth/package.json ./packages/auth/package.json
 COPY packages/types/package.json ./packages/types/package.json
 COPY packages/ai/package.json ./packages/ai/package.json
-# Worker runs from source via tsx → needs full deps (no --omit=dev).
 RUN npm ci
 
+# ── Stage 2: prod-deps (prune dev deps for the runtime layer) ──
+FROM node:22-alpine AS prod-deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY apps/meddoc-pro/package.json ./apps/meddoc-pro/package.json
+COPY apps/scribe/package.json ./apps/scribe/package.json
+COPY packages/db/package.json ./packages/db/package.json
+COPY packages/auth/package.json ./packages/auth/package.json
+COPY packages/types/package.json ./packages/types/package.json
+COPY packages/ai/package.json ./packages/ai/package.json
+RUN npm ci --omit=dev
+
+# ── Stage 3: prisma-generate ──
+FROM full-deps AS prisma-generate
+WORKDIR /app
+COPY packages/db/prisma ./packages/db/prisma
+COPY packages/db/src ./packages/db/src
+COPY packages/db/prisma.config.ts ./packages/db/prisma.config.ts
+RUN npm run generate -w @meddoc/db
+
+# ── Stage 4: runtime ──
 FROM node:22-alpine AS runner
 WORKDIR /app
 RUN apk add --no-cache ffmpeg
 
 ENV NODE_ENV=production
 
-# Bring the whole workspace — tsx resolves imports from source paths,
-# and the worker touches apps/scribe/src/**, packages/**/src/**.
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
+# Prod-only node_modules (M7 — cut dev deps = huge shrink).
+COPY --from=prod-deps /app/node_modules ./node_modules
+# Generated Prisma client (produced in the full-deps stage).
+COPY --from=prisma-generate /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=prisma-generate /app/node_modules/@prisma ./node_modules/@prisma
 
-# Prisma client (generated into node_modules/@prisma/client by db package).
-RUN npm run db:generate
+# Root manifests — tsx resolves workspace paths via these.
+COPY package.json package-lock.json tsconfig.base.json ./
 
-# Non-root for defense in depth.
+# Worker source + prompts + specialties + scripts.
+# tests/evals is intentionally NOT copied (user-confirmed M7 D6).
+COPY apps/scribe/package.json ./apps/scribe/package.json
+COPY apps/scribe/tsconfig.json ./apps/scribe/tsconfig.json
+COPY apps/scribe/src ./apps/scribe/src
+COPY apps/scribe/scripts ./apps/scribe/scripts
+COPY apps/scribe/specialties ./apps/scribe/specialties
+COPY apps/scribe/sentry.server.config.ts ./apps/scribe/sentry.server.config.ts
+
+# Workspace packages — source + package.json (worker imports via @meddoc/*).
+COPY packages/db/package.json ./packages/db/package.json
+COPY packages/db/src ./packages/db/src
+COPY packages/db/prisma ./packages/db/prisma
+COPY packages/db/prisma.config.ts ./packages/db/prisma.config.ts
+COPY packages/auth/package.json ./packages/auth/package.json
+COPY packages/auth/src ./packages/auth/src
+COPY packages/types/package.json ./packages/types/package.json
+COPY packages/types/src ./packages/types/src
+COPY packages/ai/package.json ./packages/ai/package.json
+COPY packages/ai/src ./packages/ai/src
+
+# Non-root user for defense in depth.
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 worker
 USER worker

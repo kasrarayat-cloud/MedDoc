@@ -183,6 +183,20 @@ services:
       # for Rx interaction / allergy / duplicate checks (M4 D3/D4).
       MEDDOC_PRO_INTERNAL_URL: http://meddoc-pro:3000
       SCRIBE_SERVICE_TOKEN: ${SCRIBE_SERVICE_TOKEN}
+      # M7 — optional file-based rotation. Mount a Docker secret at this
+      # path and the worker reads the token from the file instead of the
+      # env var. See docs/ROTATION_RUNBOOK.md.
+      SCRIBE_SERVICE_TOKEN_FILE: ${SCRIBE_SERVICE_TOKEN_FILE:-}
+      # M7 retention — daily cron is ALWAYS registered; live purge is
+      # flag-gated separately so the dry-run baseline can run for weeks
+      # before anything actually gets deleted.
+      RETENTION_PURGE_LIVE: ${RETENTION_PURGE_LIVE:-false}
+      RETENTION_PURGE_ENABLED: ${RETENTION_PURGE_ENABLED:-true}
+      RETENTION_PURGE_CRON: ${RETENTION_PURGE_CRON:-0 2 * * *}
+      # Sentry — empty DSN = SDK no-ops, fine for dev.
+      SENTRY_DSN: ${SENTRY_DSN_SCRIBE:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
+      SENTRY_RELEASE: ${SENTRY_RELEASE:-}
       SCRIBE_WORKER_CONCURRENCY: ${SCRIBE_WORKER_CONCURRENCY:-2}
 
   # ── Scribe WebSocket sidecar (M3 — real-time visits) ──
