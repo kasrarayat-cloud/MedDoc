@@ -19,6 +19,18 @@ export interface ScribeEvalCase {
   expectedPlanKeys: string[];
   /** At least one assessment item must match one of these ICD-10 codes. */
   expectedIcd10Candidates: string[];
+  /**
+   * M4 extensions (all optional). Added now so cases carry the expectation
+   * metadata needed when the eval harness grows to check coding / rx /
+   * referrals output tabs directly (M5+ full-bundle evals). Unused today
+   * but locked in the test-data contract.
+   */
+  /** At least one CPT code (E/M or otherwise) must appear. */
+  expectedCptCodes?: string[];
+  /** At least one Rx draft must mention one of these drug names (case-insensitive substring). */
+  expectedRxDrugs?: string[];
+  /** If a referral is made, its specialty field must match this string. */
+  expectedReferralSpecialty?: string;
 }
 
 export const SCRIBE_EVAL_CASES: ScribeEvalCase[] = [
@@ -45,6 +57,8 @@ PATIENT: Got it. Thanks, doc.
     expectedSubjectiveKeys: ['chief_complaint', 'hpi'],
     expectedPlanKeys: ['medications', 'counseling'],
     expectedIcd10Candidates: ['J06.9', 'J00', 'J06'],
+    expectedCptCodes: ['99213', '99214', '99212'],
+    expectedRxDrugs: [],
   },
   {
     id: 'primary-care-htn-refill',
@@ -64,6 +78,8 @@ PATIENT: Sounds good. Thanks.
     expectedSubjectiveKeys: ['chief_complaint'],
     expectedPlanKeys: ['medications', 'follow_up'],
     expectedIcd10Candidates: ['I10'],
+    expectedCptCodes: ['99213', '99212', '99214'],
+    expectedRxDrugs: ['lisinopril'],
   },
   {
     id: 'primary-care-annual-brief',
@@ -90,5 +106,7 @@ PATIENT: Okay, I'll do the walks.
     expectedSubjectiveKeys: ['chief_complaint', 'hpi'],
     expectedPlanKeys: ['diagnostics', 'medications', 'follow_up'],
     expectedIcd10Candidates: ['E11.9', 'E78.5', 'Z00.00'],
+    expectedCptCodes: ['99214', '99213', '99395', '99396'],
+    expectedRxDrugs: ['metformin', 'atorvastatin'],
   },
 ];
