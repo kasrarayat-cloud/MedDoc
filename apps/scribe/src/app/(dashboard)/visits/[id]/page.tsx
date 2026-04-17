@@ -46,15 +46,46 @@ export default async function VisitDetailPage({
         </p>
       </div>
 
-      <div className="border border-slate-800 rounded-xl p-6 bg-slate-900/40">
-        <h2 className="font-medium">What happens here</h2>
-        <ul className="mt-3 space-y-2 text-sm text-slate-300 list-disc list-inside">
-          <li>Live recording (mic + streaming transcript) — shipping in Milestone 3.</li>
-          <li>Audio upload (drag-drop mp3/m4a/wav) — shipping in Milestone 2.</li>
-          <li>Review of SOAP / ICD-10 / Rx / referrals / patient summary — Milestone 4.</li>
-        </ul>
-        <p className="mt-4 text-xs text-slate-500">
-          Visit ID: <span className="font-mono">{visit.id}</span>
+      <div className="border border-slate-800 rounded-xl p-6 bg-slate-900/40 space-y-4">
+        {visit.mode === 'BATCH' && (visit.status === 'DRAFT' || visit.status === 'UPLOADING') && (
+          <Link
+            href={`/visits/${visit.id}/upload`}
+            className="inline-block px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-sm font-semibold"
+          >
+            Upload audio
+          </Link>
+        )}
+        {visit.mode === 'LIVE' && (visit.status === 'DRAFT' || visit.status === 'RECORDING') && (
+          <div className="text-sm text-slate-400">
+            Live recording ships in Milestone 3. For now this visit is reserved as DRAFT.
+          </div>
+        )}
+        {visit.status === 'PROCESSING' && (
+          <div className="text-sm text-slate-300">
+            Transcribing… refresh in a minute or two.
+          </div>
+        )}
+        {visit.status === 'READY_FOR_REVIEW' && (
+          <Link
+            href={`/visits/${visit.id}/review`}
+            className="inline-block px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-sm font-semibold"
+          >
+            Review SOAP note
+          </Link>
+        )}
+        {visit.status === 'SIGNED' && (
+          <div className="text-sm text-slate-300">
+            Signed. SOAP note has been sent to MedDoc Pro.
+          </div>
+        )}
+        {visit.status === 'ERROR' && (
+          <div className="text-sm text-amber-300">
+            Processing errored. Check the audit log or retry upload.
+          </div>
+        )}
+        <p className="text-xs text-slate-500 pt-2 border-t border-slate-800">
+          Visit ID: <span className="font-mono">{visit.id}</span> · Mode:{' '}
+          <span className="font-mono">{visit.mode}</span>
         </p>
       </div>
     </div>
