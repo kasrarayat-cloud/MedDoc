@@ -6,5 +6,11 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.85.0",
+    "@meddoc/db": "*",
+    "openai": "^6.33.0",
+    "zod": "^4.3.6"
   }
 }

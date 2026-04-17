@@ -1,6 +1,13 @@
-// @meddoc/ai — placeholder.
-// The ModelClient abstraction (OpenAI + Anthropic) described in SCRIBE_SPEC
-// section 5 will live here starting in Milestone 1. Until then this file
-// is intentionally empty — apps/meddoc-pro continues to call OpenAI
-// directly through apps/meddoc-pro/src/lib/ai-service.ts.
-export {};
+// ============================================================================
+// @meddoc/ai — shared AI model client for the MedDoc monorepo
+// ----------------------------------------------------------------------------
+// Scoped per the M1 plan decision: Anthropic SDK lives HERE only, not in
+// apps/meddoc-pro. apps/scribe is the only consumer in M2. apps/meddoc-pro
+// continues to call OpenAI directly from src/lib/ai-service.ts for Doc
+// Editor + Clinical Notes.
+// ============================================================================
+
+export * from './types';
+export * from './model-client';
+export { hashPrompt } from './prompt-hash';
+export { logAiCall } from './log';

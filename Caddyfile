@@ -49,6 +49,13 @@ http://scribe.localhost {
         format console
     }
 
+    # Never proxy /api/internal/* externally — it's service-to-service
+    # only (scribe → meddoc-pro), authenticated by the shared token +
+    # IP allowlist. Caddy returning 404 here is defense in depth on top
+    # of the app-layer rejection in apps/meddoc-pro/src/lib/internal-auth.ts.
+    @internal path /api/internal/*
+    respond @internal 404
+
     reverse_proxy meddoc-pro:3000 {
         header_up Host {host}
         header_up X-Real-IP {remote_host}

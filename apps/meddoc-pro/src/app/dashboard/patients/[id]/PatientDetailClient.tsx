@@ -36,6 +36,7 @@ import {
   ShieldCheck,
   ShieldAlert,
 } from 'lucide-react';
+import { parseSoapNote, renderSoapMarkdown, type SoapNote } from '@meddoc/types';
 import { formatLastVisit, formatRelativeDate } from '@/lib/mock-patients';
 import type { PatientView } from '@/lib/data/patients';
 import type { ClinicalNoteView } from '@/lib/data/clinical-notes';
@@ -691,7 +692,17 @@ export default function PatientDetailClient({
                 <div className="space-y-2">
                   {notes.map((note) => {
                     const isExpanded = expandedNoteId === note.id;
-                    const preview = note.content.split('\n').find((l) => l.trim())?.slice(0, 140) ?? '';
+                    // Scribe-authored notes (M2+) store the full SOAP JSON
+                    // in content. Detect and pull chief_complaint for the
+                    // preview; fall back to first non-empty line for
+                    // legacy plain-text / AI-dictated notes.
+                    const soapJson: SoapNote | null = parseSoapNote(note.content);
+                    const preview = soapJson
+                      ? (soapJson.subjective.chief_complaint ||
+                          soapJson.subjective.hpi ||
+                          Object.values(soapJson.subjective)[0] ||
+                          '').slice(0, 140)
+                      : note.content.split('\n').find((l) => l.trim())?.slice(0, 140) ?? '';
                     return (
                       <motion.div
                         key={note.id}
@@ -816,7 +827,7 @@ export default function PatientDetailClient({
                                   /* ── View Mode ── */
                                   <>
                                     <pre className="mt-3 text-xs text-slate-200 leading-relaxed whitespace-pre-wrap font-sans bg-slate-950/60 rounded-lg p-4 border border-white/5">
-                                      {note.content}
+                                      {soapJson ? renderSoapMarkdown(soapJson) : note.content}
                                     </pre>
                                     {/* Action buttons row */}
                                     <div className="mt-2 flex items-center gap-2">
