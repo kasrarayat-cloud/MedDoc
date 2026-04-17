@@ -21,7 +21,28 @@
 # ─── MODE A: IP-based, no TLS (current) ───────────────────────────────────
 # Active until you set up DNS. Plaintext — do NOT ship real patient data
 # to this until the domain block is turned on.
+#
+# In M1 we added a `scribe.<host>` sibling block for MedDoc Scribe so the
+# two apps live on the same node. Host-based match runs first; the raw
+# `:80` block is the catch-all that still points at meddoc-pro.
 
+# Scribe subdomain — dev via scribe.localhost, prod uncomment the domain
+# block below alongside meddoc's domain block.
+http://scribe.localhost {
+    log {
+        output stdout
+        format console
+    }
+
+    reverse_proxy scribe:3000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+}
+
+# Everything else on :80 → meddoc-pro.
 :80 {
     log {
         output stdout

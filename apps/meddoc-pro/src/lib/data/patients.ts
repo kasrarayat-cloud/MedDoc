@@ -15,54 +15,15 @@
 import prisma, { isDatabaseHealthy } from '@meddoc/db';
 import { MOCK_PATIENTS, type MockPatient, type PatientStatus } from '@/lib/mock-patients';
 import type { Session } from '@/lib/auth';
+import { patientAccessWhere } from '@meddoc/auth';
 
 /** Public shape returned to UI — same fields whether DB or memory backed */
 export type PatientView = MockPatient;
 
-// ---------------------------------------------------------------------------
-// HIPAA patient isolation (now tenant-aware)
-// ---------------------------------------------------------------------------
-// Rules:
-//   SUPER_ADMIN: sees everything across all practices.
-//   ADMIN      : sees every patient in their OWN practice (no user-level filter).
-//   DOCTOR/STAFF: sees patients in their practice AND (created OR assigned to them).
-//
-// The filter runs at the Prisma query level so we never pull other tenants'
-// PHI into memory. Mock mode (DB unhealthy) skips isolation — mock rows
-// don't carry practiceId/createdById, and real PHI never goes through it.
-// ---------------------------------------------------------------------------
-/**
- * Returns a Prisma `where` predicate that scopes Patient queries to what
- * the given session can see. Exported so other data modules (appointments,
- * clinical notes) can use it as a *nested relation filter* — e.g.
- *   `prisma.appointment.findMany({ where: { patient: patientAccessWhere(session) } })`
- * — which pushes tenant isolation down to the Postgres join and closes
- * cross-tenant access on patient-owned rows at the query layer.
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function patientAccessWhere(session: Session): any {
-  const base: Record<string, unknown> = { deletedAt: null };
-
-  if (session.user.role === 'SUPER_ADMIN') {
-    return base;
-  }
-
-  // Everyone below is tenant-scoped.
-  base.practiceId = session.user.practiceId;
-
-  if (session.user.role === 'ADMIN') {
-    return base;
-  }
-
-  // DOCTOR / STAFF — additionally constrained to their own patients.
-  return {
-    ...base,
-    OR: [
-      { createdById: session.user.id },
-      { assignedDoctorId: session.user.id },
-    ],
-  };
-}
+// Re-export so existing callers (`import { patientAccessWhere } from
+// '@/lib/data/patients'`) keep working. The definition lives in
+// @meddoc/auth since M1 — apps/scribe needs it too.
+export { patientAccessWhere };
 
 // ---------------------------------------------------------------------------
 // In-memory fallback store (seeded from mock data, mutates within process)
