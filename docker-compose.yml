@@ -57,6 +57,31 @@ services:
       # for dev debugging (e.g., curl http://127.0.0.1:3001 from the host).
       - "127.0.0.1:3001:3000"
 
+  # ── Next.js App (MedDoc Scribe) ──
+  # New in M1 — subdomain scribe.<domain>. Shares the same Postgres + AUTH_SECRET
+  # with meddoc-pro. Users authenticate on meddoc-pro and the JWT cookie is
+  # shared via AUTH_COOKIE_DOMAIN.
+  scribe:
+    build:
+      context: .
+      dockerfile: apps/scribe/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://meddoc:${DB_PASSWORD:-changeme_in_production}@postgres:5432/meddoc?schema=public
+      AUTH_URL: ${SCRIBE_PUBLIC_URL:-http://scribe.localhost}
+      MEDDOC_PRO_PUBLIC_URL: ${PUBLIC_URL:-http://meddoc-pro.localhost}
+      # Cross-subdomain JWT cookie. Leave unset in prod only if both apps
+      # sit on the SAME host (they don't in the scribe.<domain> design).
+      AUTH_COOKIE_DOMAIN: ${AUTH_COOKIE_DOMAIN:-.localhost}
+      AUTH_TRUST_HOST: "true"
+    ports:
+      - "127.0.0.1:3002:3000"
+
   # ── Caddy Reverse Proxy ──
   # Terminates inbound HTTP/HTTPS and forwards to `app:3000` on the
   # internal Docker network, setting X-Forwarded-For / X-Real-IP so the
@@ -66,6 +91,7 @@ services:
     restart: unless-stopped
     depends_on:
       - meddoc-pro
+      - scribe
     ports:
       - "80:80"
       - "443:443"

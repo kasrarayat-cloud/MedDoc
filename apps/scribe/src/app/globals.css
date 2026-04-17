@@ -1,0 +1,14 @@
+@import "tailwindcss";
+
+/* Force class-based dark mode in Tailwind v4 */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --color-primary-500: #3b82f6;
+  --color-primary-600: #2563eb;
+  --color-primary-700: #1d4ed8;
+}
+
+html, body {
+  height: 100%;
+}

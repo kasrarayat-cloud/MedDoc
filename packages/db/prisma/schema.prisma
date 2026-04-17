@@ -171,13 +171,19 @@ model Practice {
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   // Reverse relations — every tenant-scoped table points back here.
-  users       User[]
-  patients    Patient[]
-  auditLogs   AuditLog[]
-  apiUsage    ApiUsage[]
-  sessionLogs SessionLog[]
-  allergies   Allergy[]
-  medications Medication[]
+  users             User[]
+  patients          Patient[]
+  auditLogs         AuditLog[]
+  apiUsage          ApiUsage[]
+  sessionLogs       SessionLog[]
+  allergies         Allergy[]
+  medications       Medication[]
+  // Scribe (M1+)
+  scribeVisits       ScribeVisit[]
+  scribeTranscripts  ScribeTranscript[]
+  scribeOutputs      ScribeOutput[]
+  scribeAuditEvents  ScribeAuditEvent[]
+  aiCalls            AiCall[]
 
   @@index([slug])
   @@map("practices")
@@ -257,6 +263,9 @@ model User {
   medicationsCreated Medication[]  @relation("MedicationCreator")
   medicationsUpdated Medication[]  @relation("MedicationUpdater")
   apiUsage           ApiUsage[]
+  // Scribe (M1+)
+  scribeVisits       ScribeVisit[]
+  scribeAuditEvents  ScribeAuditEvent[]
 
   @@index([practiceId])
   @@index([role])
@@ -423,6 +432,8 @@ model Patient {
   appointments Appointment[]
   allergies    Allergy[]
   medications  Medication[]
+  // Scribe (M1+)
+  scribeVisits ScribeVisit[]
 
   // Chart IDs are practice-scoped: Practice A's C-1001 is unrelated to
   // Practice B's C-1001. Postgres treats multiple NULLs as distinct, so
@@ -791,4 +802,236 @@ model ApiUsage {
   @@index([userId])
   @@index([createdAt])
   @@map("api_usage")
+}
+
+// ============================================================================
+// SCRIBE — M1 foundations (per docs/SCRIBE_SPEC.md §7)
+// ----------------------------------------------------------------------------
+// Naming follows the existing tenancy convention: practiceId + userId (not
+// tenantId / clinicianId per the M1 plan drift decisions). Transcripts are
+// stored inline in Postgres per spec §13 — confirmed M7 hardening item is
+// to ensure the volume has disk-level encryption at rest before prod.
+//
+// Soft-delete (deletedAt) on ScribeVisit for HIPAA retention. Transcripts,
+// outputs, and audit events cascade on visit delete (metadata rollup) but
+// the visit itself is always soft-deleted; hard-cascade never runs in prod.
+// ============================================================================
+
+enum VisitMode {
+  LIVE
+  BATCH
+}
+
+enum VisitStatus {
+  DRAFT
+  RECORDING
+  UPLOADING
+  PROCESSING
+  READY_FOR_REVIEW
+  SIGNED
+  ERROR
+}
+
+enum OutputType {
+  SOAP
+  ICD10_CPT
+  RX
+  REFERRAL
+  PATIENT_SUMMARY
+}
+
+model ScribeVisit {
+  id String @id @default(cuid())
+
+  // === Tenant ===
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id])
+
+  // === Ownership — clinician who owns the visit ===
+  // Per M1 spec drift decision: `userId` not `clinicianId`; DOCTOR role
+  // enforced at app layer (schema-level enum doesn't discriminate).
+  userId String
+  user   User @relation(fields: [userId], references: [id])
+
+  patientId String
+  patient   Patient @relation(fields: [patientId], references: [id])
+
+  // Specialty template stamped on every visit so outputs are reproducible
+  // even if the template is edited later. See spec §8.
+  specialtyId String
+  specialty   ScribeSpecialtyTemplate @relation(fields: [specialtyId], references: [id])
+
+  mode   VisitMode
+  status VisitStatus @default(DRAFT)
+
+  startedAt DateTime  @db.Timestamptz(6)
+  endedAt   DateTime? @db.Timestamptz(6)
+
+  // Audio metadata — null in M1, populated by M2 (batch upload) or M3 (live).
+  audioObjectKey   String?
+  audioDurationSec Int?
+  sourceFileName   String?
+
+  // Relations
+  transcript  ScribeTranscript?
+  outputs     ScribeOutput[]
+  auditEvents ScribeAuditEvent[]
+  aiCalls     AiCall[]
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
+  /// Soft delete — HIPAA retention. Never hard-deleted.
+  deletedAt DateTime? @db.Timestamptz(6)
+
+  @@index([practiceId, userId, createdAt])
+  @@index([practiceId, patientId])
+  @@index([status])
+  @@map("scribe_visits")
+}
+
+model ScribeTranscript {
+  id String @id @default(cuid())
+
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id])
+
+  visitId String      @unique
+  visit   ScribeVisit @relation(fields: [visitId], references: [id], onDelete: Cascade)
+
+  /// Diarized segments: [{ speaker, startMs, endMs, text, confidence }]
+  segments    Json
+  language    String @default("en")
+  rawFullText String @db.Text
+  /// e.g. "deepgram-nova-3-medical" | "openai-whisper" | "cleaned-by-claude-sonnet-4"
+  provider    String
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([practiceId])
+  @@map("scribe_transcripts")
+}
+
+model ScribeOutput {
+  id String @id @default(cuid())
+
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id])
+
+  visitId String
+  visit   ScribeVisit @relation(fields: [visitId], references: [id], onDelete: Cascade)
+
+  type            OutputType
+  /// Structured payload — shape varies per OutputType, validated via
+  /// Zod schemas in @meddoc/types (M2+).
+  content         Json
+  version         Int      @default(1)
+  /// e.g. "claude-sonnet-4-20250514" | "gpt-4o-2024-08-06"
+  modelUsed       String
+  /// The ScribeSpecialtyTemplate.version in effect when this output was
+  /// generated. Lets us reproduce / reconcile outputs after a template
+  /// revision.
+  templateVersion String
+
+  editedByClinician Boolean   @default(false)
+  signedAt          DateTime? @db.Timestamptz(6)
+  signedBy          String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([practiceId, visitId, type])
+  @@map("scribe_outputs")
+}
+
+model ScribeSpecialtyTemplate {
+  id String @id @default(cuid())
+
+  /// Stable identifier used by apps/scribe's UI and by ScribeOutput.templateVersion.
+  slug        String @unique
+  displayName String
+  version     String
+
+  systemPrompt          String   @db.Text
+  /// Array of required exam element keys, e.g. ["cardiac_rhythm", "murmurs", ...].
+  requiredExamElements  Json
+  /// Nested object describing subjective/objective/assessment/plan sections.
+  soapSchema            Json
+  defaultIcd10Hints     String[]
+  defaultFormularyHints String[]
+
+  active Boolean @default(true)
+
+  visits ScribeVisit[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([active])
+  @@map("scribe_specialty_templates")
+}
+
+// Dedicated audit trail for Scribe visits — separate from AuditLog because
+// `diff` (full before/after of clinician edits) is medical-legal evidence,
+// which AuditLog's "field names only, no values" metadata pattern cannot
+// carry. See M1 plan drift D3.
+model ScribeAuditEvent {
+  id String @id @default(cuid())
+
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id])
+
+  visitId String
+  visit   ScribeVisit @relation(fields: [visitId], references: [id], onDelete: Cascade)
+
+  actorId String
+  actor   User @relation(fields: [actorId], references: [id])
+
+  /// e.g. "CREATED_VISIT", "STARTED_RECORDING", "EDITED_SOAP", "SIGNED_VISIT"
+  action String
+  /// Structured before/after payload — PHI-carrying, treat as PHI in any
+  /// export. Optional because some actions (create, start) have no diff.
+  diff   Json?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([practiceId, visitId, createdAt])
+  @@index([actorId])
+  @@map("scribe_audit_events")
+}
+
+// Per-model-call log for cost + latency observability. No PHI — promptHash
+// stores a SHA-256 of the prompt content, not the prompt itself.
+model AiCall {
+  id String @id @default(cuid())
+
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id])
+
+  /// Optional — some AI calls (e.g. eval runs) aren't tied to a visit.
+  visitId String?
+  visit   ScribeVisit? @relation(fields: [visitId], references: [id], onDelete: SetNull)
+
+  /// "cleanup" | "soap" | "coding" | "rx" | "referral" | "summary"
+  purpose  String
+  /// "openai" | "anthropic" | "deepgram"
+  provider String
+  model    String
+  /// SHA-256 of the prompt content. Lets us correlate retries without
+  /// storing the (potentially PHI-laden) prompt text.
+  promptHash String
+
+  latencyMs    Int
+  inputTokens  Int?
+  outputTokens Int?
+  /// Integer cents so we can sum without float drift.
+  costUsdCents Int?
+
+  success   Boolean
+  errorCode String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([practiceId, purpose, createdAt])
+  @@index([visitId])
+  @@map("ai_calls")
 }
