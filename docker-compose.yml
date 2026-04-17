@@ -52,10 +52,51 @@ services:
       AUTH_URL: ${PUBLIC_URL:-http://5.231.107.93}
       NEXTAUTH_URL: ${PUBLIC_URL:-http://5.231.107.93}  # v4 compat name
       AUTH_TRUST_HOST: "true"  # redundant (also hardcoded in auth.config.ts) — safe belt-and-braces
+      # Used to verify /api/internal/* calls coming from Scribe (M2+).
+      SCRIBE_SERVICE_TOKEN: ${SCRIBE_SERVICE_TOKEN}
     ports:
       # Bound to loopback only — public traffic goes through Caddy. Kept
       # for dev debugging (e.g., curl http://127.0.0.1:3001 from the host).
       - "127.0.0.1:3001:3000"
+
+  # ── Redis (BullMQ broker + ephemeral state) ──
+  # Introduced in M2 for the batch pipeline. Internal-only — bound to
+  # loopback for ops visibility, but apps reach it via the compose
+  # network name `redis`.
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── MinIO (S3-compatible object storage for audio) ──
+  # Browsers upload audio directly here via presigned PUT URLs (spec §10).
+  # The worker downloads by object key. Data lives in a docker volume —
+  # production must enable SSE-S3 + verify disk-level encryption (M7).
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-meddoc}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-changeme_in_production}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "127.0.0.1:9000:9000"  # S3 API
+      - "127.0.0.1:9001:9001"  # Web console
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # ── Next.js App (MedDoc Scribe) ──
   # New in M1 — subdomain scribe.<domain>. Shares the same Postgres + AUTH_SECRET
@@ -69,18 +110,63 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
     env_file:
       - .env
     environment:
       DATABASE_URL: postgresql://meddoc:${DB_PASSWORD:-changeme_in_production}@postgres:5432/meddoc?schema=public
       AUTH_URL: ${SCRIBE_PUBLIC_URL:-http://scribe.localhost}
       MEDDOC_PRO_PUBLIC_URL: ${PUBLIC_URL:-http://meddoc-pro.localhost}
-      # Cross-subdomain JWT cookie. Leave unset in prod only if both apps
-      # sit on the SAME host (they don't in the scribe.<domain> design).
+      MEDDOC_PRO_INTERNAL_URL: http://meddoc-pro:3000
       AUTH_COOKIE_DOMAIN: ${AUTH_COOKIE_DOMAIN:-.localhost}
       AUTH_TRUST_HOST: "true"
+      # Scribe-pipeline (M2+) — these live here so the web container can
+      # serve presigned URLs and enqueue jobs, but model calls happen in
+      # the worker.
+      REDIS_URL: redis://redis:6379
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-meddoc}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-changeme_in_production}
+      MINIO_BUCKET: ${MINIO_BUCKET:-scribe-audio}
+      MINIO_USE_SSL: "false"
+      SCRIBE_SERVICE_TOKEN: ${SCRIBE_SERVICE_TOKEN}
     ports:
       - "127.0.0.1:3002:3000"
+
+  # ── Scribe worker (BullMQ consumer) ──
+  # Same build as the web container BUT a different Dockerfile that adds
+  # ffmpeg + tsx, and runs src/worker.ts as its entrypoint.
+  scribe-worker:
+    build:
+      context: .
+      dockerfile: apps/scribe/Dockerfile.worker
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://meddoc:${DB_PASSWORD:-changeme_in_production}@postgres:5432/meddoc?schema=public
+      REDIS_URL: redis://redis:6379
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-meddoc}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-changeme_in_production}
+      MINIO_BUCKET: ${MINIO_BUCKET:-scribe-audio}
+      MINIO_USE_SSL: "false"
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      TRANSCRIPTION_MODEL: ${TRANSCRIPTION_MODEL:-gpt-4o-transcribe}
+      MODEL_FOR_CLEANUP: ${MODEL_FOR_CLEANUP:-claude-sonnet-4-6}
+      MODEL_FOR_SOAP: ${MODEL_FOR_SOAP:-claude-sonnet-4-6}
+      SCRIBE_WORKER_CONCURRENCY: ${SCRIBE_WORKER_CONCURRENCY:-2}
 
   # ── Caddy Reverse Proxy ──
   # Terminates inbound HTTP/HTTPS and forwards to `app:3000` on the
@@ -100,7 +186,12 @@ services:
       - caddy_data:/data       # persistent Let's Encrypt certs (when TLS on)
       - caddy_config:/config   # Caddy's internal config cache
 
+  # SCRIBE_SERVICE_TOKEN is also available to meddoc-pro so it can
+  # verify incoming /api/internal/* requests — added via env_file.
+
 volumes:
   pgdata:
+  redis_data:
+  minio_data:
   caddy_data:
   caddy_config:
