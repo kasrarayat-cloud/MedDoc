@@ -7,6 +7,7 @@ import { GradientBorder } from '@/components/gradient-border';
 import { GradientText } from '@/components/gradient-text';
 import { SpecularButton } from '@/components/specular-button';
 import { cn } from '@/lib/cn';
+import { APP_SIGNUP_URL } from '@/lib/constants';
 
 // TODO: Real pricing to be finalized after pilot. These tiers are
 // placeholders and should not be communicated externally until then.
@@ -143,7 +144,7 @@ function TierBody({ tier }: { tier: (typeof TIERS)[number] }) {
       </ul>
       <div className="mt-8 pt-6 border-t border-border-subtle">
         <SpecularButton
-          href="/signup"
+          href={APP_SIGNUP_URL}
           variant={tier.highlight ? 'primary' : 'secondary'}
           size="md"
           className="w-full"

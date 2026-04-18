@@ -1,0 +1,271 @@
+@import "tailwindcss";
+
+/* ============================================================================
+   TranscribeMD design tokens — Linear/Raycast/Vercel/Resend idiom
+   ----------------------------------------------------------------------------
+   Background layers (bg-base → bg-surface-3) climb from deepest to most
+   elevated. Borders climb from subtle → emphasis the same way. Violet is
+   the only brand colour; cyan/green/amber/red are status.
+
+   All tokens exposed as Tailwind utilities via the @theme directive
+   (Tailwind v4 CSS-first config — no tailwind.config.ts).
+   ========================================================================== */
+@theme {
+  /* Backgrounds */
+  --color-bg-base: #08090D;
+  --color-bg-surface-1: #101119;
+  --color-bg-surface-2: #161822;
+  --color-bg-surface-3: #1E2030;
+
+  /* Borders */
+  --color-border-subtle: #1C1D28;
+  --color-border-default: #2A2C3A;
+  --color-border-emphasis: #3C3E50;
+
+  /* Violet — brand */
+  --color-violet-300: #C4B5FD;
+  --color-violet-400: #A78BFA;
+  --color-violet-500: #8B5CF6;
+  --color-violet-600: #7C3AED;
+  --color-violet-700: #6D28D9;
+
+  /* Accent */
+  --color-cyan-400: #22D3EE;
+  --color-cyan-500: #06B6D4;
+  --color-success: #10B981;
+  --color-warning: #F59E0B;
+  --color-danger: #EF4444;
+
+  /* Text */
+  --color-text-primary: #F8FAFC;
+  --color-text-secondary: #CBD5E1;
+  --color-text-tertiary: #94A3B8;
+  --color-text-muted: #64748B;
+
+  /* Motion */
+  --ease-out-premium: cubic-bezier(0.4, 0, 0.2, 1);
+  --duration-fast: 150ms;
+  --duration-base: 300ms;
+  --duration-slow: 500ms;
+}
+
+/* ============================================================================
+   Base styles — dark-only, Geist everywhere, crisp rendering
+   ========================================================================== */
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: var(--color-bg-base);
+  color: var(--color-text-primary);
+  font-family: var(--font-geist-sans, system-ui, -apple-system, sans-serif);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  /* A page-level radial glow anchored upper-centre. Sits behind everything;
+     per-section gradients layer over it. */
+  background-image:
+    radial-gradient(
+      ellipse 90% 60% at 50% 0%,
+      rgba(124, 58, 237, 0.14) 0%,
+      rgba(124, 58, 237, 0.04) 35%,
+      transparent 70%
+    );
+  background-attachment: fixed;
+}
+
+/* Disable text selection highlights that look ugly on dark. */
+::selection {
+  background: rgba(139, 92, 246, 0.35);
+  color: #F8FAFC;
+}
+
+/* Scrollbar — thin, violet accent on thumb hover. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #2A2C3A transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #2A2C3A;
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #3C3E50;
+  background-clip: content-box;
+}
+
+/* ============================================================================
+   Reusable utilities
+   ========================================================================== */
+
+/* Gradient-border trick: a padding-box + border-box double-background.
+   The outer gradient becomes the "border"; the inner surface covers the
+   middle. Used by <GradientBorder>. */
+.gradient-border {
+  background:
+    linear-gradient(var(--gb-surface, #161822), var(--gb-surface, #161822))
+      padding-box,
+    linear-gradient(
+        var(--gb-angle, 135deg),
+        var(--gb-from, #7C3AED) 0%,
+        var(--gb-to, #A855F7) 100%
+      )
+      border-box;
+  border: 1px solid transparent;
+}
+
+/* Specular button — light sweep on hover. Uses a pseudo-element with a
+   translucent-white diagonal gradient that slides across. Linear's
+   "shine" idiom; timing kept tight. */
+.specular-button {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+.specular-button::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    115deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.18) 45%,
+    rgba(255, 255, 255, 0.28) 50%,
+    rgba(255, 255, 255, 0.18) 55%,
+    transparent 70%
+  );
+  transform: translateX(-120%);
+  transition: transform 650ms var(--ease-out-premium);
+  pointer-events: none;
+  z-index: 1;
+}
+.specular-button:hover::before {
+  transform: translateX(120%);
+}
+.specular-button > * {
+  position: relative;
+  z-index: 2;
+}
+
+/* 48px grid background that fades toward edges. Used behind hero / CTA. */
+.grid-bg {
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse 90% 70% at 50% 50%, black 40%, transparent 85%);
+  -webkit-mask-image: radial-gradient(ellipse 90% 70% at 50% 50%, black 40%, transparent 85%);
+}
+
+/* Tilt card — inline 3D perspective; transform applied via inline style
+   from TiltCard.tsx. This class sets the perspective context. */
+.tilt-perspective {
+  perspective: 1200px;
+  transform-style: preserve-3d;
+}
+
+/* Text gradient — violet. */
+.text-gradient-violet {
+  background: linear-gradient(135deg, #A78BFA 0%, #C4B5FD 60%, #E9D5FF 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  /* Prevent text-shadow + selection showing white behind the gradient. */
+  -webkit-text-fill-color: transparent;
+}
+
+/* Glow card — subtle violet halo behind an element. Pair with relative
+   positioning on the container. */
+.glow-violet::after {
+  content: "";
+  position: absolute;
+  inset: -40%;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(139, 92, 246, 0.25) 0%,
+    rgba(139, 92, 246, 0.08) 35%,
+    transparent 65%
+  );
+  filter: blur(30px);
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--duration-base) var(--ease-out-premium);
+}
+.glow-violet:hover::after,
+.glow-violet[data-glow="on"]::after {
+  opacity: 1;
+}
+
+/* Typography helpers — let the page use these instead of inline Tailwind
+   classes so we can enforce tracking + weight consistently. */
+.type-display {
+  font-weight: 800;
+  font-size: clamp(48px, 6vw, 88px);
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+}
+.type-h1 {
+  font-weight: 600;
+  font-size: clamp(36px, 4vw, 48px);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+.type-h2 {
+  font-weight: 600;
+  font-size: clamp(28px, 3vw, 32px);
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+}
+.type-body {
+  font-weight: 400;
+  font-size: 17px;
+  line-height: 1.6;
+}
+.type-small {
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* Radix Accordion — animated open/close tied to data-state. The CSS
+   variable --radix-accordion-content-height is set by Radix at runtime,
+   so we can animate to it without measuring the DOM ourselves. */
+@keyframes accordion-down {
+  from { height: 0; opacity: 0; }
+  to { height: var(--radix-accordion-content-height); opacity: 1; }
+}
+@keyframes accordion-up {
+  from { height: var(--radix-accordion-content-height); opacity: 1; }
+  to { height: 0; opacity: 0; }
+}
+.animate-accordion-down {
+  animation: accordion-down 260ms var(--ease-out-premium);
+}
+.animate-accordion-up {
+  animation: accordion-up 200ms var(--ease-out-premium);
+}
+
+/* Respect reduced-motion preferences. Animations collapse to a single
+   step, parallax disables, gradients stop shifting. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

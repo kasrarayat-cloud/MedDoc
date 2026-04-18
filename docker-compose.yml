@@ -244,6 +244,7 @@ services:
       - scribe
       - scribe-ws
       - marketing
+      - transcribe-md
     ports:
       - "80:80"
       - "443:443"
@@ -254,6 +255,8 @@ services:
       # :8080 = Scribe preview on the public IP (author-only, plaintext).
       # See the matching :8080 block in Caddyfile.
       - "8080:8080"
+      # T-M2: the TranscribeMD solo app itself. Doctors sign up + work here.
+      - "9020:9020"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data       # persistent Let's Encrypt certs (when TLS on)
@@ -274,6 +277,39 @@ services:
     ports:
       # Loopback only — all public traffic goes through Caddy on :9010.
       - "127.0.0.1:3010:3010"
+
+  # ── TranscribeMD Solo App (T-M2) ──
+  # The real product surface — sign up, log in, create visits. Shares
+  # Postgres with meddoc-pro + scribe (same User/Practice tables via
+  # @meddoc/db). Redis is a dependency so BullMQ-based features in later
+  # milestones have somewhere to enqueue work; today's shell doesn't use
+  # it at runtime but we wire it now to avoid a compose edit later.
+  transcribe-md:
+    build:
+      context: .
+      dockerfile: apps/transcribe-md/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://meddoc:${DB_PASSWORD:-changeme_in_production}@postgres:5432/meddoc?schema=public
+      AUTH_URL: ${TRANSCRIBE_MD_AUTH_URL:-http://5.231.107.93:9020}
+      NEXTAUTH_URL: ${TRANSCRIBE_MD_AUTH_URL:-http://5.231.107.93:9020}
+      AUTH_COOKIE_DOMAIN: ${AUTH_COOKIE_DOMAIN:-}
+      AUTH_TRUST_HOST: "true"
+      NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL: ${TRANSCRIBE_MD_AUTH_URL:-http://5.231.107.93:9020}
+      NEXT_PUBLIC_MARKETING_URL: ${MARKETING_URL:-http://5.231.107.93:9010}
+      REDIS_URL: redis://redis:6379
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: "1"
+    ports:
+      # Loopback only — public traffic arrives via Caddy on :9020.
+      - "127.0.0.1:3011:3011"
 
   # SCRIBE_SERVICE_TOKEN is also available to meddoc-pro so it can
   # verify incoming /api/internal/* requests — added via env_file.

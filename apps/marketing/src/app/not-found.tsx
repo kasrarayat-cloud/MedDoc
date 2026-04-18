@@ -6,6 +6,7 @@ import { NavBar } from '@/components/nav-bar';
 import { Footer } from '@/components/footer';
 import { GradientText } from '@/components/gradient-text';
 import { SpecularButton } from '@/components/specular-button';
+import { APP_SIGNUP_URL } from '@/lib/constants';
 
 export default function NotFound() {
   return (
@@ -71,7 +72,7 @@ export default function NotFound() {
                 <ArrowLeft className="h-4 w-4" />
                 Back to home
               </SpecularButton>
-              <SpecularButton href="/signup" variant="secondary" size="lg" sweep={false}>
+              <SpecularButton href={APP_SIGNUP_URL} variant="secondary" size="lg" sweep={false}>
                 Start free trial
               </SpecularButton>
             </motion.div>

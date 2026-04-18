@@ -74,6 +74,25 @@ http://scribe.localhost {
     }
 }
 
+# ─── :9020 — TranscribeMD Solo app (T-M2) ────────────────────────────────
+# The actual product — where doctors sign up and use the service.
+# Plaintext on the VPS public IP until DNS + HTTPS are in place.
+# Cookies ride through Caddy with Forwarded-* so NextAuth's host-matching
+# lands on the same origin the browser sees.
+:9020 {
+    log {
+        output stdout
+        format console
+    }
+
+    reverse_proxy transcribe-md:3011 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+}
+
 # ─── :8080 — Scribe on the public IP (author-only preview) ─────────────────
 # Same shape as the scribe.localhost block: WS upgrade path → scribe-ws,
 # catch-all → scribe. Exposed on the VPS public IP so Scribe can be

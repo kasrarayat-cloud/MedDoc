@@ -1,0 +1,126 @@
+// ============================================================================
+// NextAuth (Auth.js v5) — Full Node Runtime Configuration (apps/transcribe-md)
+// ----------------------------------------------------------------------------
+// Imports the edge-safe shared config from `./auth.config.ts` and layers on:
+//   - A Credentials provider (email + bcrypt password)
+//   - A 7-day session.maxAge override (vs. 8 hours on the shared config).
+//     The longer TTL is fine for a solo-doctor consumer app; the clinical
+//     apps (meddoc-pro, scribe) keep 8 hours for HIPAA reasons.
+//   - Silent product-grant: an existing MedDoc Pro user logging in here
+//     who doesn't yet have TRANSCRIBE_MD gets it appended to `products`
+//     before the sign-in flow returns.
+//
+// Single-session enforcement + UserSession tracking is already wired up
+// by the shared jwt() callback in @meddoc/auth — we inherit it by
+// spreading authConfig below.
+// ============================================================================
+
+import NextAuth from 'next-auth';
+import Credentials from 'next-auth/providers/credentials';
+import bcrypt from 'bcryptjs';
+
+import authConfig from '@/lib/auth.config';
+import prisma from '@meddoc/db';
+import type { UserRole } from '@meddoc/auth';
+import { Product } from '@prisma/client';
+
+/** 7 days. Longer than meddoc-pro (8hr) because TranscribeMD is a solo
+ *  consumer surface, not a PHI-heavy clinical tool. */
+const SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
+
+export const { handlers, auth, signIn, signOut } = NextAuth({
+  ...authConfig,
+
+  session: {
+    strategy: 'jwt',
+    maxAge: SESSION_MAX_AGE_SECONDS,
+    // Refresh the JWT on activity — when the user is active within this
+    // window, their cookie is re-signed with a bumped expiry. 1 day picked
+    // so active users don't suddenly get logged out on day 7.
+    updateAge: 24 * 60 * 60,
+  },
+
+  providers: [
+    Credentials({
+      name: 'Email + Password',
+      credentials: {
+        email: { label: 'Email', type: 'email' },
+        password: { label: 'Password', type: 'password' },
+      },
+      async authorize(credentials) {
+        const email =
+          typeof credentials?.email === 'string'
+            ? credentials.email.trim().toLowerCase()
+            : '';
+        const password =
+          typeof credentials?.password === 'string' ? credentials.password : '';
+        if (!email || !password) return null;
+
+        let user;
+        try {
+          user = await prisma.user.findUnique({ where: { email } });
+        } catch (err) {
+          console.error('[auth] user lookup failed:', err);
+          return null;
+        }
+        if (!user) return null;
+        if (!user.isActive) return null;
+        if (user.lockedUntil && user.lockedUntil > new Date()) return null;
+
+        const valid = await bcrypt.compare(password, user.passwordHash);
+        if (!valid) {
+          // Mirror meddoc-pro's brute-force guard so a shared email can't
+          // be attacked at the TranscribeMD surface to bypass the guard.
+          const LOCKOUT_THRESHOLD = 5;
+          const LOCKOUT_MINUTES = 15;
+          const nextCount = user.failedLoginCount + 1;
+          const shouldLock = nextCount >= LOCKOUT_THRESHOLD;
+          const lockUntil = shouldLock
+            ? new Date(Date.now() + LOCKOUT_MINUTES * 60 * 1000)
+            : null;
+          await prisma.user
+            .update({
+              where: { id: user.id },
+              data: {
+                failedLoginCount: { increment: 1 },
+                ...(lockUntil ? { lockedUntil: lockUntil } : {}),
+              },
+            })
+            .catch((err: unknown) => {
+              console.error('[auth] failed-login counter update failed:', err);
+            });
+          return null;
+        }
+
+        // Successful login — clear counters + grant TranscribeMD product
+        // access to pre-existing MedDoc Pro users who are signing in here
+        // for the first time. The update is awaited so products[] is
+        // reflected on the next read.
+        const hasTranscribeMd = user.products.includes(Product.TRANSCRIBE_MD);
+        await prisma.user
+          .update({
+            where: { id: user.id },
+            data: {
+              lastLogin: new Date(),
+              failedLoginCount: 0,
+              lockedUntil: null,
+              ...(hasTranscribeMd
+                ? {}
+                : { products: { push: Product.TRANSCRIBE_MD } }),
+            },
+          })
+          .catch((err: unknown) => {
+            console.error('[auth] lastLogin update failed:', err);
+          });
+
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role as UserRole,
+          practiceId: user.practiceId,
+        };
+      },
+    }),
+  ],
+});
