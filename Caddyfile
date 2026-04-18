@@ -53,6 +53,27 @@ http://scribe.localhost {
     }
 }
 
+# ─── :9010 — TranscribeMD Marketing (T-M1) ────────────────────────────────
+# Standalone marketing site for the new product. Plaintext on the VPS
+# public IP until DNS + HTTPS are in place. No patient data of any kind
+# flows here — it's a static landing site. Exposed specifically so the
+# author can preview the live build without an SSH tunnel.
+# Port 9001 was already taken by MinIO's web console — 9010 is the
+# next unused slot in the public-port range.
+:9010 {
+    log {
+        output stdout
+        format console
+    }
+
+    reverse_proxy marketing:3010 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+}
+
 # Everything else on :80 → meddoc-pro.
 :80 {
     log {

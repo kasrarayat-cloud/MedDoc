@@ -238,13 +238,34 @@ services:
       - meddoc-pro
       - scribe
       - scribe-ws
+      - marketing
     ports:
       - "80:80"
       - "443:443"
+      # T-M1: public entry for TranscribeMD marketing site. 9001 was
+      # already claimed by MinIO's web console (see minio service), so
+      # marketing lives on 9010 until DNS + TLS are configured.
+      - "9010:9010"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data       # persistent Let's Encrypt certs (when TLS on)
       - caddy_config:/config   # Caddy's internal config cache
+
+  # ── TranscribeMD Marketing (T-M1) ──
+  # Static Next.js landing site for the new standalone product. No DB,
+  # no shared packages beyond what the Dockerfile already pulls. Caddy
+  # proxies :9010 → marketing:3010.
+  marketing:
+    build:
+      context: .
+      dockerfile: apps/marketing/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: "1"
+    ports:
+      # Loopback only — all public traffic goes through Caddy on :9010.
+      - "127.0.0.1:3010:3010"
 
   # SCRIBE_SERVICE_TOKEN is also available to meddoc-pro so it can
   # verify incoming /api/internal/* requests — added via env_file.
