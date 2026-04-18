@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { GradientBorder } from '@/components/gradient-border';
 import { GradientText } from '@/components/gradient-text';
 import { SpecularButton } from '@/components/specular-button';
+import { APP_SIGNUP_URL } from '@/lib/constants';
 
 export function PricingTeaser() {
   // TODO: Real pricing to be finalized after pilot. These numbers are
@@ -47,7 +48,7 @@ export function PricingTeaser() {
               10 free notes. 14-day trial. No credit card.
             </p>
             <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-              <SpecularButton href="/signup" variant="primary" size="md">
+              <SpecularButton href={APP_SIGNUP_URL} variant="primary" size="md">
                 Start free trial
                 <ArrowRight className="h-4 w-4" />
               </SpecularButton>

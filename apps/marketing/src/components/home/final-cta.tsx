@@ -5,6 +5,7 @@ import { ArrowRight } from 'lucide-react';
 import { AnimatedGrid } from '@/components/animated-grid';
 import { GradientText } from '@/components/gradient-text';
 import { SpecularButton } from '@/components/specular-button';
+import { APP_SIGNUP_URL } from '@/lib/constants';
 
 export function FinalCTA() {
   return (
@@ -32,7 +33,7 @@ export function FinalCTA() {
           <GradientText>typing notes?</GradientText>
         </h2>
         <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <SpecularButton href="/signup" variant="primary" size="lg">
+          <SpecularButton href={APP_SIGNUP_URL} variant="primary" size="lg">
             Start free trial
             <ArrowRight className="h-4 w-4" />
           </SpecularButton>
