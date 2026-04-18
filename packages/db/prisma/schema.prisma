@@ -36,6 +36,15 @@ enum UserRole {
   SUPER_ADMIN
 }
 
+/// Which of our products a user has access to (T-M2).
+/// - MEDDOC_PRO: the existing clinical CRM (all pre-TranscribeMD users get this by default)
+/// - TRANSCRIBE_MD: the standalone solo-doctor transcription/SOAP app
+/// A user can have both — one login, two product surfaces.
+enum Product {
+  MEDDOC_PRO
+  TRANSCRIBE_MD
+}
+
 /// Actions we audit. Extend as new workflows are added.
 /// ALL_CAPS_SNAKE to match industry convention and make grep/queries easy.
 enum AuditAction {
@@ -195,11 +204,11 @@ model Practice {
   tasks             Task[]
   billingEvents     BillingEvent[]
   // Scribe (M1+)
-  scribeVisits       ScribeVisit[]
-  scribeTranscripts  ScribeTranscript[]
-  scribeOutputs      ScribeOutput[]
-  scribeAuditEvents  ScribeAuditEvent[]
-  aiCalls            AiCall[]
+  scribeVisits      ScribeVisit[]
+  scribeTranscripts ScribeTranscript[]
+  scribeOutputs     ScribeOutput[]
+  scribeAuditEvents ScribeAuditEvent[]
+  aiCalls           AiCall[]
 
   @@index([slug])
   @@map("practices")
@@ -255,38 +264,55 @@ model User {
   // Every user belongs to exactly one Practice. Queries filter by this.
   // A future SUPER_ADMIN role may bypass the filter; for now, everyone
   // is practice-scoped.
+  //
+  // T-M2: for TranscribeMD solo doctors (no real clinic) we create a
+  // synthetic Practice at signup — name="Solo — {user.name}",
+  // slug=cuid() — so existing tenant-scoped queries keep working
+  // unchanged. 1:1 with user. When a solo doctor later wants to work
+  // with colleagues, migrate them to a real Practice.
   practiceId String
   practice   Practice @relation(fields: [practiceId], references: [id])
+
+  // === Product access (T-M2) ===
+  // Which apps this user can use. Existing users default to [MEDDOC_PRO]
+  // so the roll-forward is a no-op for them. New TranscribeMD signups
+  // get [TRANSCRIBE_MD]; MedDoc Pro users who later log into the
+  // TranscribeMD app have TRANSCRIBE_MD appended silently on first
+  // successful login.
+  products Product[] @default([MEDDOC_PRO])
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   // === Relations ===
   // NextAuth adapter relations
-  accounts           Account[]
-  sessions           Session[]
+  accounts               Account[]
+  sessions               Session[]
   // App relations
-  documentsCreated   Document[]    @relation("DocumentCreator")
-  documentsUpdated   Document[]    @relation("DocumentUpdater")
-  auditLogs          AuditLog[]
-  patientsCreated    Patient[]     @relation("PatientCreator")
-  patientsAssigned   Patient[]     @relation("AssignedDoctor")
-  appointments       Appointment[]
-  sessionLogs        SessionLog[]
-  apiUsageLogs       ApiUsageLog[]
-  allergiesCreated   Allergy[]     @relation("AllergyCreator")
-  allergiesUpdated   Allergy[]     @relation("AllergyUpdater")
-  medicationsCreated Medication[]  @relation("MedicationCreator")
-  medicationsUpdated Medication[]  @relation("MedicationUpdater")
-  apiUsage           ApiUsage[]
+  documentsCreated       Document[]         @relation("DocumentCreator")
+  documentsUpdated       Document[]         @relation("DocumentUpdater")
+  auditLogs              AuditLog[]
+  patientsCreated        Patient[]          @relation("PatientCreator")
+  patientsAssigned       Patient[]          @relation("AssignedDoctor")
+  appointments           Appointment[]
+  sessionLogs            SessionLog[]
+  apiUsageLogs           ApiUsageLog[]
+  allergiesCreated       Allergy[]          @relation("AllergyCreator")
+  allergiesUpdated       Allergy[]          @relation("AllergyUpdater")
+  medicationsCreated     Medication[]       @relation("MedicationCreator")
+  medicationsUpdated     Medication[]       @relation("MedicationUpdater")
+  apiUsage               ApiUsage[]
   // M6 — CRM loop-closing
-  tasksAssigned       Task[]         @relation("TaskAssignee")
-  tasksCreated        Task[]         @relation("TaskCreator")
-  billingEventsOwned  BillingEvent[] @relation("BillingClinician")
-  billingEventsSubmitted BillingEvent[] @relation("BillingSubmitter")
+  tasksAssigned          Task[]             @relation("TaskAssignee")
+  tasksCreated           Task[]             @relation("TaskCreator")
+  billingEventsOwned     BillingEvent[]     @relation("BillingClinician")
+  billingEventsSubmitted BillingEvent[]     @relation("BillingSubmitter")
   // Scribe (M1+)
-  scribeVisits       ScribeVisit[]
-  scribeAuditEvents  ScribeAuditEvent[]
+  scribeVisits           ScribeVisit[]
+  scribeAuditEvents      ScribeAuditEvent[]
+  // TranscribeMD (T-M2)
+  transcribeVisits       TranscribeVisit[]
+  userSessions           UserSession[]
 
   @@index([practiceId])
   @@index([role])
@@ -449,15 +475,15 @@ model Patient {
   deletedAt DateTime? @db.Timestamptz(6)
 
   // Relations
-  documents    Document[]
-  appointments Appointment[]
-  allergies    Allergy[]
-  medications  Medication[]
+  documents     Document[]
+  appointments  Appointment[]
+  allergies     Allergy[]
+  medications   Medication[]
   // M6 — CRM loop-closing
-  tasks        Task[]
+  tasks         Task[]
   billingEvents BillingEvent[]
   // Scribe (M1+)
-  scribeVisits ScribeVisit[]
+  scribeVisits  ScribeVisit[]
 
   // Chart IDs are practice-scoped: Practice A's C-1001 is unrelated to
   // Practice B's C-1001. Postgres treats multiple NULLs as distinct, so
@@ -533,15 +559,15 @@ model Document {
   /// Documents). Null for non-Scribe / non-fan-out documents.
   sourceItemIndex      Int?
 
-  @@index([patientId])
-  @@index([createdById])
-  @@index([status])
-  @@index([createdAt])
   // Composite unique so an M6 push retry doesn't create a duplicate letter.
   // Both nullable → Postgres treats NULL,NULL as distinct, so non-Scribe
   // Documents are unconstrained. The endpoint returns the existing row's
   // id on unique-violation.
   @@unique([sourceScribeOutputId, sourceItemIndex], name: "document_scribe_source_unique")
+  @@index([patientId])
+  @@index([createdById])
+  @@index([status])
+  @@index([createdAt])
   @@map("documents")
 }
 
@@ -805,25 +831,25 @@ model Task {
 
   /// Source ScribeVisit this task came from, for provenance + cross-linking.
   /// Nullable because future manual-CRM tasks won't have one.
-  sourceVisitId String?
+  sourceVisitId        String?
   /// Source ScribeOutput.id — the exact row whose content produced this task.
   sourceScribeOutputId String?
   /// Index within the source output when one output fans out to multiple
   /// tasks. Paired with sourceScribeOutputId for a composite unique.
   sourceItemIndex      Int?
 
-  createdAt     DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt     DateTime @updatedAt @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(6)
   completedAt   DateTime? @db.Timestamptz(6)
   completedById String?
 
+  // Idempotency for M6 Scribe Sign → Task creation. Nullable pair, so
+  // non-Scribe manual tasks are unconstrained.
+  @@unique([sourceScribeOutputId, sourceItemIndex], name: "task_scribe_source_unique")
   @@index([practiceId, status, dueAt])
   @@index([patientId])
   @@index([assignedUserId])
   @@index([sourceVisitId])
-  // Idempotency for M6 Scribe Sign → Task creation. Nullable pair, so
-  // non-Scribe manual tasks are unconstrained.
-  @@unique([sourceScribeOutputId, sourceItemIndex], name: "task_scribe_source_unique")
   @@map("tasks")
 }
 
@@ -853,7 +879,7 @@ model BillingEvent {
 
   /// Clinician this encounter is billed under (source of truth for the claim).
   clinicianUserId String
-  clinicianUser   User @relation("BillingClinician", fields: [clinicianUserId], references: [id])
+  clinicianUser   User   @relation("BillingClinician", fields: [clinicianUserId], references: [id])
 
   /// JSON array of { code, description, evidence_quote, confidence }. Mirrors
   /// CodingOutput.icd10 from @meddoc/types.
@@ -1019,7 +1045,7 @@ model ScribeVisit {
   // Per M1 spec drift decision: `userId` not `clinicianId`; DOCTOR role
   // enforced at app layer (schema-level enum doesn't discriminate).
   userId String
-  user   User @relation(fields: [userId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
 
   patientId String
   patient   Patient @relation(fields: [patientId], references: [id])
@@ -1092,7 +1118,7 @@ model ScribeOutput {
   /// Structured payload — shape varies per OutputType, validated via
   /// Zod schemas in @meddoc/types (M2+).
   content         Json
-  version         Int      @default(1)
+  version         Int        @default(1)
   /// e.g. "claude-sonnet-4-20250514" | "gpt-4o-2024-08-06"
   modelUsed       String
   /// The ScribeSpecialtyTemplate.version in effect when this output was
@@ -1172,7 +1198,7 @@ model ScribeAuditEvent {
   visit   ScribeVisit @relation(fields: [visitId], references: [id], onDelete: Cascade)
 
   actorId String
-  actor   User @relation(fields: [actorId], references: [id])
+  actor   User   @relation(fields: [actorId], references: [id])
 
   /// e.g. "CREATED_VISIT", "STARTED_RECORDING", "EDITED_SOAP", "SIGNED_VISIT"
   action String
@@ -1200,10 +1226,10 @@ model AiCall {
   visit   ScribeVisit? @relation(fields: [visitId], references: [id], onDelete: SetNull)
 
   /// "cleanup" | "soap" | "coding" | "rx" | "referral" | "summary"
-  purpose  String
+  purpose    String
   /// "openai" | "anthropic" | "deepgram"
-  provider String
-  model    String
+  provider   String
+  model      String
   /// SHA-256 of the prompt content. Lets us correlate retries without
   /// storing the (potentially PHI-laden) prompt text.
   promptHash String
@@ -1222,4 +1248,91 @@ model AiCall {
   @@index([practiceId, purpose, createdAt])
   @@index([visitId])
   @@map("ai_calls")
+}
+
+// ============================================================================
+// TRANSCRIBE-MD (T-M2)
+// ----------------------------------------------------------------------------
+// Standalone solo-doctor app. Visits here are owned by a User (not scoped to
+// a Practice at the query layer); for solo users the Practice is a synthetic
+// 1:1 container created at signup, so tenant scoping still works if we ever
+// reuse Practice-aware code paths. Most of the fields stay nullable because
+// T-M2 only ships the shell — the audio / SOAP / coding pipelines land in
+// T-M4 onwards.
+// ============================================================================
+
+model TranscribeVisit {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  patientName    String?
+  specialty      String
+  chiefComplaint String?
+
+  /// "audio_upload" | "voice_dictation" | "text_notes" — chosen at /visits/new.
+  inputMode String
+  /// "draft" | "processing" | "ready" | "signed" — driven by the T-M4/T-M5
+  /// pipeline. Defaults to "draft" so the shell alone compiles a sensible row.
+  status    String @default("draft")
+
+  audioKey         String?
+  transcriptText   String? @db.Text
+  soapNote         Json?
+  icdCodes         Json?
+  cptCodes         Json?
+  rxDrafts         Json?
+  referrals        Json?
+  patientSummary   String? @db.Text
+  confidenceScores Json?
+
+  signedAt  DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([status])
+  @@map("transcribe_visits")
+}
+
+// ============================================================================
+// USER SESSION — anti-account-sharing tracking (T-M2)
+// ----------------------------------------------------------------------------
+// A separate table from the NextAuth `Session` model (which is adapter-
+// managed and currently unused under JWT strategy). Writing one row per
+// sign-in lets us:
+//   - enforce a single concurrent session per user (new login deletes the
+//     prior rows, which the jwt callback checks on next request)
+//   - surface "active session" info to the user on /settings
+//   - log the IP + UA + device fingerprint for after-the-fact investigation
+// Unlike the JWT itself, rows here are long-lived and queryable.
+// ============================================================================
+
+model UserSession {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Opaque token we generate at login and embed in the JWT's `sessionId`
+  /// claim. Matching this row to the JWT is what makes "single session"
+  /// enforceable — a new login deletes the old row, so the old JWT's
+  /// sessionId no longer resolves and the next auth() call signs them out.
+  sessionToken String @unique
+
+  ipAddress         String?
+  userAgent         String? @db.Text
+  /// Hash of UA + Accept-Language today; richer signals (canvas, font list,
+  /// etc.) can be folded in later without a schema change.
+  deviceFingerprint String?
+
+  createdAt    DateTime @default(now())
+  lastActiveAt DateTime @default(now())
+  expiresAt    DateTime
+
+  @@index([userId])
+  @@index([sessionToken])
+  @@index([expiresAt])
+  @@map("user_sessions")
 }

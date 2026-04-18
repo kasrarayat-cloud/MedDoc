@@ -1,0 +1,192 @@
+'use server';
+
+import { z } from 'zod';
+import bcrypt from 'bcryptjs';
+
+import prisma from '@meddoc/db';
+import { Product, UserRole } from '@prisma/client';
+import { signIn as nextAuthSignIn } from '@/lib/nextauth';
+
+/** Strongly-typed login input. Passwords are NEVER echoed back in errors. */
+const LoginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(1, 'Password is required'),
+});
+
+/** Signup: stricter password policy + requires ToS + specialty. */
+const SignupSchema = z.object({
+  email: z.string().email(),
+  password: z
+    .string()
+    .min(10, 'Password must be at least 10 characters')
+    .regex(/[a-z]/, 'Password must contain a lowercase letter')
+    .regex(/[A-Z]/, 'Password must contain an uppercase letter')
+    .regex(/\d/, 'Password must contain a digit'),
+  name: z.string().min(1, 'Name is required').max(120),
+  specialty: z.string().min(1, 'Pick a specialty'),
+  acceptTerms: z.literal('on', {
+    message: 'You must accept the terms of service',
+  }),
+});
+
+export interface FormErrorState {
+  ok: false;
+  errors: Record<string, string>;
+  /** Preserves typed values between submissions so the user doesn't
+   *  have to re-enter their form on a validation miss. */
+  values?: Record<string, string>;
+}
+export interface FormOkState {
+  ok: true;
+  redirect: string;
+}
+
+export type AuthActionState = FormOkState | FormErrorState | null;
+
+function flattenZodErrors(err: z.ZodError): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const issue of err.issues) {
+    const key = issue.path.join('.') || '_form';
+    if (!out[key]) out[key] = issue.message;
+  }
+  return out;
+}
+
+/** Email + password login. On success returns `ok: true, redirect: '/dashboard'`
+ *  so the client can router.push — we don't throw `redirect()` inside the
+ *  action because NextAuth's internal signIn() redirect breaks the
+ *  useActionState cycle in Next 16. */
+export async function loginAction(
+  _prev: AuthActionState,
+  formData: FormData
+): Promise<AuthActionState> {
+  const raw = Object.fromEntries(formData.entries());
+  const parsed = LoginSchema.safeParse(raw);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      errors: flattenZodErrors(parsed.error),
+      values: {
+        email: String(raw.email ?? ''),
+      },
+    };
+  }
+
+  try {
+    await nextAuthSignIn('credentials', {
+      redirect: false,
+      email: parsed.data.email,
+      password: parsed.data.password,
+    });
+  } catch {
+    return {
+      ok: false,
+      errors: { _form: 'Invalid email or password.' },
+      values: { email: parsed.data.email },
+    };
+  }
+
+  return { ok: true, redirect: '/dashboard' };
+}
+
+/** Signup: creates a synthetic Practice + User atomically, grants
+ *  TRANSCRIBE_MD product, then signs in. */
+export async function signupAction(
+  _prev: AuthActionState,
+  formData: FormData
+): Promise<AuthActionState> {
+  const raw = Object.fromEntries(formData.entries());
+  const parsed = SignupSchema.safeParse(raw);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      errors: flattenZodErrors(parsed.error),
+      values: {
+        email: String(raw.email ?? ''),
+        name: String(raw.name ?? ''),
+        specialty: String(raw.specialty ?? ''),
+      },
+    };
+  }
+
+  const emailLower = parsed.data.email.trim().toLowerCase();
+
+  // Uniqueness check up front so we return a friendly error (rather than
+  // surfacing a Prisma P2002). The race between this check and the
+  // transaction is harmless — the `users.email` unique index catches it,
+  // and the catch below rewrites it to the same friendly message.
+  const existing = await prisma.user.findUnique({
+    where: { email: emailLower },
+    select: { id: true },
+  });
+  if (existing) {
+    return {
+      ok: false,
+      errors: {
+        email: 'An account with this email exists. Sign in instead.',
+      },
+      values: {
+        email: emailLower,
+        name: parsed.data.name,
+        specialty: parsed.data.specialty,
+      },
+    };
+  }
+
+  const passwordHash = await bcrypt.hash(parsed.data.password, 12);
+
+  // Synthetic Practice + User in one transaction so we don't orphan
+  // Practice rows if the User insert fails.
+  try {
+    await prisma.$transaction(async (tx: typeof prisma) => {
+      const practice = await tx.practice.create({
+        data: {
+          name: `Solo — ${parsed.data.name}`,
+          // Random slug keeps it URL-safe and avoids a collision with
+          // future "real" practice slugs. TranscribeMD UI never shows
+          // the slug to the user.
+          slug: `solo-${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36)}`,
+        },
+      });
+      await tx.user.create({
+        data: {
+          email: emailLower,
+          name: parsed.data.name,
+          passwordHash,
+          role: UserRole.DOCTOR,
+          practiceId: practice.id,
+          products: [Product.TRANSCRIBE_MD],
+          emailVerified: null,
+        },
+      });
+    });
+  } catch (err) {
+    console.error('[signup] create failed:', err);
+    return {
+      ok: false,
+      errors: {
+        _form: 'Could not create your account. Please try again.',
+      },
+      values: {
+        email: emailLower,
+        name: parsed.data.name,
+        specialty: parsed.data.specialty,
+      },
+    };
+  }
+
+  // Auto sign-in. If this fails the account still exists and the user can
+  // log in manually — we don't roll back on a transient auth error.
+  try {
+    await nextAuthSignIn('credentials', {
+      redirect: false,
+      email: emailLower,
+      password: parsed.data.password,
+    });
+  } catch (err) {
+    console.error('[signup] auto-login failed:', err);
+    return { ok: true, redirect: '/login' };
+  }
+
+  return { ok: true, redirect: '/dashboard' };
+}

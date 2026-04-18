@@ -7,6 +7,7 @@ import { AnimatedGrid } from '@/components/animated-grid';
 import { Badge } from '@/components/badge';
 import { GradientText } from '@/components/gradient-text';
 import { SpecularButton } from '@/components/specular-button';
+import { APP_SIGNUP_URL } from '@/lib/constants';
 
 // Three.js SSR's into bundle bloat; load only client-side.
 const DocumentStream3D = dynamic(
@@ -79,7 +80,7 @@ export function Hero() {
           transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1], delay: 0.6 }}
           className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row"
         >
-          <SpecularButton href="/signup" variant="primary" size="lg">
+          <SpecularButton href={APP_SIGNUP_URL} variant="primary" size="lg">
             Start free trial
             <ArrowRight className="h-4 w-4" />
           </SpecularButton>

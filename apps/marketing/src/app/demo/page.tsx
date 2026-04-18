@@ -6,6 +6,7 @@ import { Badge } from '@/components/badge';
 import { GradientText } from '@/components/gradient-text';
 import { GradientBorder } from '@/components/gradient-border';
 import { SpecularButton } from '@/components/specular-button';
+import { APP_SIGNUP_URL } from '@/lib/constants';
 
 export const metadata: Metadata = {
   title: 'Demo',
@@ -61,7 +62,7 @@ export default function DemoPage() {
             </GradientBorder>
 
             <div className="mt-12 flex flex-col items-center justify-center gap-3 sm:flex-row">
-              <SpecularButton href="/signup" variant="primary" size="lg">
+              <SpecularButton href={APP_SIGNUP_URL} variant="primary" size="lg">
                 Start free trial instead
               </SpecularButton>
               <SpecularButton href="/" variant="secondary" size="lg" sweep={false}>
