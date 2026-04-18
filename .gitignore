@@ -51,3 +51,7 @@ test-results/
 # local tool state
 /venv/
 .claude/settings.local.json
+
+# On-VPS snapshot copies kept next to the live config for quick rollback
+# (Caddyfile.backup, docker-compose.yml.backup). Host-only — do not commit.
+*.backup

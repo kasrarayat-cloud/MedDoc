@@ -74,6 +74,34 @@ http://scribe.localhost {
     }
 }
 
+# ─── :8080 — Scribe on the public IP (author-only preview) ─────────────────
+# Same shape as the scribe.localhost block: WS upgrade path → scribe-ws,
+# catch-all → scribe. Exposed on the VPS public IP so Scribe can be
+# reviewed in a browser without an SSH tunnel. Plaintext — do NOT route
+# real patient data through this until the domain + HTTPS + BAAs + full
+# clinical review are in place (see docs/BAA_CHECKLIST.md).
+:8080 {
+    log {
+        output stdout
+        format console
+    }
+
+    @ws path /api/ws/*
+    reverse_proxy @ws scribe-ws:3003 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    reverse_proxy scribe:3000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+}
+
 # Everything else on :80 → meddoc-pro.
 :80 {
     log {

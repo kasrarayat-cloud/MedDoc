@@ -73,4 +73,5 @@ RUN addgroup --system --gid 1001 nodejs && \
 USER wsuser
 
 EXPOSE 3003
-CMD ["npx", "tsx", "apps/scribe/src/ws-server.ts"]
+WORKDIR /app/apps/scribe
+CMD ["npx", "tsx", "src/ws-server.ts"]
