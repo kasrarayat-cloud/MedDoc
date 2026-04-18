@@ -121,7 +121,11 @@ services:
       AUTH_URL: ${SCRIBE_PUBLIC_URL:-http://scribe.localhost}
       MEDDOC_PRO_PUBLIC_URL: ${PUBLIC_URL:-http://meddoc-pro.localhost}
       MEDDOC_PRO_INTERNAL_URL: http://meddoc-pro:3000
-      AUTH_COOKIE_DOMAIN: ${AUTH_COOKIE_DOMAIN:-.localhost}
+      # Empty by default so NextAuth binds the cookie host-only (needed
+      # for the IP-based :8080 preview where there's no shared parent
+      # domain). Set AUTH_COOKIE_DOMAIN in .env when you move to a real
+      # subdomain layout like scribe.example.com + example.com.
+      AUTH_COOKIE_DOMAIN: ${AUTH_COOKIE_DOMAIN:-}
       AUTH_TRUST_HOST: "true"
       # Scribe-pipeline (M2+) — these live here so the web container can
       # serve presigned URLs and enqueue jobs, but model calls happen in
@@ -220,7 +224,8 @@ services:
       DATABASE_URL: postgresql://meddoc:${DB_PASSWORD:-changeme_in_production}@postgres:5432/meddoc?schema=public
       REDIS_URL: redis://redis:6379
       AUTH_SECRET: ${AUTH_SECRET}
-      AUTH_COOKIE_DOMAIN: ${AUTH_COOKIE_DOMAIN:-.localhost}
+      # See note on scribe service above — empty default for host-only cookies.
+      AUTH_COOKIE_DOMAIN: ${AUTH_COOKIE_DOMAIN:-}
       DEEPGRAM_API_KEY: ${DEEPGRAM_API_KEY}
       DEEPGRAM_MODEL: ${DEEPGRAM_MODEL:-nova-3-medical}
       SCRIBE_WS_PORT: "3003"
@@ -246,6 +251,9 @@ services:
       # already claimed by MinIO's web console (see minio service), so
       # marketing lives on 9010 until DNS + TLS are configured.
       - "9010:9010"
+      # :8080 = Scribe preview on the public IP (author-only, plaintext).
+      # See the matching :8080 block in Caddyfile.
+      - "8080:8080"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data       # persistent Let's Encrypt certs (when TLS on)

@@ -90,4 +90,5 @@ RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 worker
 USER worker
 
-CMD ["npx", "tsx", "apps/scribe/src/worker.ts"]
+WORKDIR /app/apps/scribe
+CMD ["npx", "tsx", "src/worker.ts"]
