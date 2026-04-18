@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/cn';
+import { APP_URL, APP_SIGNUP_URL } from '@/lib/constants';
 import { SpecularButton } from './specular-button';
 
 /**
@@ -67,7 +68,7 @@ export function NavBar() {
 
         <div className="flex items-center gap-2">
           <SpecularButton
-            href="/signup"
+            href={`${APP_URL}/login`}
             variant="ghost"
             size="sm"
             className="hidden sm:inline-flex"
@@ -75,7 +76,7 @@ export function NavBar() {
           >
             Sign in
           </SpecularButton>
-          <SpecularButton href="/signup" variant="primary" size="sm">
+          <SpecularButton href={APP_SIGNUP_URL} variant="primary" size="sm">
             Start free trial
           </SpecularButton>
         </div>

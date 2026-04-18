@@ -8,6 +8,20 @@ export {
   _resetServiceTokenCache,
 } from './service-token';
 
+// T-M2: single-session tracking helpers. Node-only; don't import these
+// from edge middleware — the shared authConfig below uses dynamic
+// import() so the edge bundle never pulls them in.
+export {
+  recordSessionLogin,
+  validateSession,
+  revokeSession,
+  revokeAllUserSessions,
+  getUserSessions,
+  randomSessionToken,
+  computeDeviceFingerprint,
+} from './user-session';
+export type { RecordSessionLoginInput } from './user-session';
+
 // ============================================================================
 // @meddoc/auth — shared auth surface for apps/meddoc-pro and apps/scribe
 // ----------------------------------------------------------------------------
@@ -150,13 +164,76 @@ export const authConfig: NextAuthConfig = {
     },
 
     async jwt({ token, user }) {
+      // ── Sign-in path — `user` is the object returned by authorize() ──
       if (user) {
         token.id = user.id as string;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         token.role = (user as any).role;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         token.practiceId = (user as any).practiceId;
+
+        // T-M2: record this login as a UserSession row, revoking any
+        // prior rows for the user so older JWTs stop resolving. Done via
+        // dynamic import so the edge middleware bundle (which loads
+        // authConfig at module parse time) doesn't pull next/headers or
+        // @meddoc/db for this callback's body.
+        try {
+          const [headersMod, sessionMod] = await Promise.all([
+            import('next/headers'),
+            import('./user-session'),
+          ]);
+          const h = await headersMod.headers();
+          const ipAddress =
+            h.get('x-forwarded-for')?.split(',')[0]?.trim() ??
+            h.get('x-real-ip') ??
+            null;
+          const userAgent = h.get('user-agent') ?? null;
+          const acceptLanguage = h.get('accept-language') ?? null;
+          const sessionToken = sessionMod.randomSessionToken();
+          await sessionMod.recordSessionLogin({
+            userId: user.id as string,
+            sessionToken,
+            ipAddress,
+            userAgent,
+            deviceFingerprint: sessionMod.computeDeviceFingerprint(
+              userAgent,
+              acceptLanguage
+            ),
+          });
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (token as any).sessionId = sessionToken;
+        } catch (err) {
+          // Fail OPEN: login succeeds even if session tracking fails.
+          // The alternative (blocking login on a DB hiccup) would be a
+          // worse UX than a temporarily-unenforced single-session rule.
+          console.error('[auth] UserSession record on sign-in failed:', err);
+        }
+        return token;
       }
+
+      // ── Subsequent-request path — validate the existing sessionId ──
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sessionId = (token as any).sessionId as string | undefined;
+      if (sessionId) {
+        try {
+          const { validateSession } = await import('./user-session');
+          const valid = await validateSession(sessionId);
+          if (!valid) {
+            // Row is gone (revoked by a newer login on another device)
+            // or expired. Returning null invalidates the JWT — the next
+            // request sees no session and the authorized() middleware
+            // redirects to /login.
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            return null as any;
+          }
+        } catch (err) {
+          // Fail OPEN on DB errors — don't kick users off for a transient
+          // outage; the row will be re-validated on the next request.
+          console.error('[auth] UserSession validate failed:', err);
+        }
+      }
+      // Legacy tokens (minted before T-M2) have no sessionId — they pass
+      // through until their natural JWT expiry, then re-login gains one.
       return token;
     },
 
@@ -167,6 +244,8 @@ export const authConfig: NextAuthConfig = {
         session.user.role = token.role as any;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         session.user.practiceId = (token as any).practiceId;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (session.user as any).sessionId = (token as any).sessionId;
       }
       return session;
     },
@@ -239,6 +318,10 @@ declare module 'next-auth' {
       id: string;
       role: UserRole;
       practiceId: string;
+      /** T-M2: opaque token matching a row in user_sessions. Absent on
+       *  pre-T-M2 JWTs (those ride out their original TTL and re-enter
+       *  the single-session regime on the next login). */
+      sessionId?: string;
     } & import('next-auth').DefaultSession['user'];
   }
 
@@ -256,6 +339,8 @@ declare module 'next-auth/jwt' {
     id: string;
     role: UserRole;
     practiceId: string;
+    /** T-M2: see Session.user.sessionId above. */
+    sessionId?: string;
   }
 }
 
