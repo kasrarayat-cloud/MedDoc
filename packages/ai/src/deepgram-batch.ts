@@ -13,6 +13,7 @@
 // ============================================================================
 
 import { logAiCall } from './log';
+import { isMockEnabled, mockDeepgramBatch } from './mock';
 import { deepgramBatchCostCents } from './pricing';
 import type { AiLogContext } from './types';
 
@@ -119,6 +120,11 @@ export interface DeepgramBatchResult {
 export async function deepgramBatchTranscribe(
   args: DeepgramBatchArgs
 ): Promise<DeepgramBatchResult> {
+  // T-M10: MOCK_AI_CALLS short-circuit. See packages/ai/src/mock.ts.
+  if (isMockEnabled()) {
+    return mockDeepgramBatch();
+  }
+
   const apiKey = process.env.DEEPGRAM_API_KEY;
   if (!apiKey) {
     throw new Error('DEEPGRAM_API_KEY is not set.');
