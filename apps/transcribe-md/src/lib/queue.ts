@@ -13,6 +13,7 @@ const redisUrl = process.env.REDIS_URL?.trim() || 'redis://redis:6379';
 
 let connection: IORedis | null = null;
 let transcribeMdQueue: Queue | null = null;
+let cleanupQueue: Queue | null = null;
 
 function getConnection(): IORedis {
   if (connection) return connection;
@@ -58,4 +59,30 @@ export function getTranscribeMdQueue(): Queue<ProcessVisitPayload> {
 
 export function getSharedRedisConnection(): IORedis {
   return getConnection();
+}
+
+// ---------------------------------------------------------------------------
+// T-M12: separate queue for scheduled MinIO orphan cleanup. Kept apart
+// from the main pipeline queue so a long-running sweep (hundreds of
+// deletes) can't block visit processing. Only instantiated when the
+// worker enables cleanup — so a web container that never opts in
+// doesn't accidentally create a Redis queue structure.
+// ---------------------------------------------------------------------------
+export const CLEANUP_QUEUE_NAME = 'transcribe-md-cleanup';
+export const JOB_MINIO_ORPHAN_CLEANUP = 'minio_orphan_cleanup';
+
+export function getCleanupQueue(): Queue {
+  if (cleanupQueue) return cleanupQueue;
+  cleanupQueue = new Queue(CLEANUP_QUEUE_NAME, {
+    connection: getConnection(),
+    defaultJobOptions: {
+      // Cleanup is eventually consistent — if a scheduled run fails,
+      // the next scheduled invocation retries the whole sweep from
+      // scratch. No in-job retries; they'd just double the time spent.
+      attempts: 1,
+      removeOnComplete: { count: 50, age: 7 * 24 * 3600 },
+      removeOnFail: { count: 50 },
+    },
+  });
+  return cleanupQueue;
 }

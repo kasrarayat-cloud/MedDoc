@@ -23,10 +23,14 @@ import type { DeepgramBatchResponse, DeepgramUtterance } from '@meddoc/ai';
 import {
   QUEUE_NAME,
   JOB_PROCESS_VISIT,
+  CLEANUP_QUEUE_NAME,
+  JOB_MINIO_ORPHAN_CLEANUP,
   getSharedRedisConnection,
+  getCleanupQueue,
   type ProcessVisitPayload,
 } from '@/lib/queue';
 import { ensureBucket } from '@/lib/minio';
+import { runMinioOrphanCleanup } from '@/worker/cleanup/minio-orphans';
 import { runLayer1Transcribe } from '@/worker/layers/01-transcribe';
 import { runLayer1bTranscribeDictation } from '@/worker/layers/01b-transcribe-dictation';
 import {
@@ -59,6 +63,25 @@ const JOB_TIMEOUT_MS = Number.parseInt(
   process.env.TRANSCRIBE_MD_JOB_TIMEOUT_MS ?? String(15 * 60 * 1000),
   10
 );
+
+// T-M12 — cleanup config. All three env vars default to "off" /
+// "30-day retention" / "Sunday 3am UTC" / "dry-run yes" so a fresh
+// deploy doesn't start deleting anything until ops explicitly opts in.
+const CLEANUP_ENABLED =
+  process.env.MINIO_ORPHAN_CLEANUP_ENABLED === 'true';
+const CLEANUP_DRY_RUN =
+  (process.env.MINIO_ORPHAN_CLEANUP_DRY_RUN ?? 'true').toLowerCase() !==
+  'false';
+const CLEANUP_RETENTION_DAYS = Number.parseInt(
+  process.env.MINIO_ORPHAN_CLEANUP_RETENTION_DAYS ?? '30',
+  10
+);
+const CLEANUP_CRON =
+  process.env.MINIO_ORPHAN_CLEANUP_CRON?.trim() || '0 3 * * 0';
+// 5 min ceiling on the sweep itself. A cleanly-run sweep on our
+// current bucket size takes seconds; 5 min gives head-room for a
+// high-object-count bucket and auto-fails a hung MinIO connection.
+const CLEANUP_TIMEOUT_MS = 5 * 60 * 1000;
 
 function withTimeout<T>(p: Promise<T>, ms: number, tag: string): Promise<T> {
   return Promise.race([
@@ -489,6 +512,70 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
   }
 }
 
+/** T-M12 — start the MinIO orphan cleanup worker + schedule the
+ *  recurring job. No-op unless MINIO_ORPHAN_CLEANUP_ENABLED=true, so
+ *  production deployments stay off until ops flips the flag. */
+async function startCleanupWorker(): Promise<void> {
+  if (!CLEANUP_ENABLED) {
+    console.log(
+      '[ops:minio-cleanup] disabled (MINIO_ORPHAN_CLEANUP_ENABLED != "true")'
+    );
+    return;
+  }
+
+  const cleanupWorker = new Worker(
+    CLEANUP_QUEUE_NAME,
+    async (job) => {
+      if (job.name !== JOB_MINIO_ORPHAN_CLEANUP) {
+        throw new Error(`Unknown cleanup job name: ${job.name}`);
+      }
+      // Read env on every run so ops can toggle dryRun between
+      // scheduled invocations without touching the scheduler.
+      const dryRun =
+        (process.env.MINIO_ORPHAN_CLEANUP_DRY_RUN ?? 'true').toLowerCase() !==
+        'false';
+      const retentionDays = Number.parseInt(
+        process.env.MINIO_ORPHAN_CLEANUP_RETENTION_DAYS ?? '30',
+        10
+      );
+      await withTimeout(
+        runMinioOrphanCleanup({ dryRun, retentionDays }),
+        CLEANUP_TIMEOUT_MS,
+        'minio-orphan-cleanup'
+      );
+    },
+    {
+      connection: getSharedRedisConnection(),
+      concurrency: 1,
+    }
+  );
+
+  cleanupWorker.on('failed', (job, err) => {
+    console.error(
+      `[ops:minio-cleanup] job ${job?.id} failed:`,
+      err
+    );
+  });
+
+  // Register (or refresh) the cron schedule. upsertJobScheduler is
+  // idempotent — redeploying the worker re-registers with no side
+  // effect on in-flight jobs.
+  await getCleanupQueue().upsertJobScheduler(
+    'minio-orphan-cleanup',
+    { pattern: CLEANUP_CRON, tz: 'UTC' },
+    {
+      name: JOB_MINIO_ORPHAN_CLEANUP,
+      data: {},
+      opts: { attempts: 1 },
+    }
+  );
+
+  console.log(
+    `[ops:minio-cleanup] enabled, cron="${CLEANUP_CRON}" UTC, ` +
+      `retentionDays=${CLEANUP_RETENTION_DAYS}, dryRun=${CLEANUP_DRY_RUN}`
+  );
+}
+
 async function main() {
   console.log('[transcribe-md-worker] booting…');
   await ensureBucket();
@@ -525,6 +612,10 @@ async function main() {
   console.log(
     `[transcribe-md-worker] listening on queue "${QUEUE_NAME}" concurrency=${CONCURRENCY}`
   );
+
+  // T-M12 — schedule cleanup AFTER the main worker is up. Cleanup
+  // failure should never block pipeline processing.
+  await startCleanupWorker();
 }
 
 main().catch((err) => {
