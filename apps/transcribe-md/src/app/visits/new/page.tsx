@@ -7,6 +7,7 @@ import { NavBar } from '@/components/nav-bar';
 import { PageWrapper } from '@/components/page-wrapper';
 import { SpecialtyDropdown } from '@/components/specialty-dropdown';
 import { createVisitAction } from '@/actions/visits';
+import { SPECIALTIES } from '@/lib/specialties';
 import { ModeTileWithForm } from './mode-tile-with-form';
 
 export const metadata: Metadata = { title: 'New visit' };
@@ -15,15 +16,10 @@ export default async function NewVisitPage() {
   const session = await auth();
   if (!session?.user?.id) redirect('/login');
 
-  const [user, specialties, mostRecentVisit] = await Promise.all([
+  const [user, mostRecentVisit] = await Promise.all([
     prisma.user.findUnique({
       where: { id: session.user.id },
       select: { name: true, email: true },
-    }),
-    prisma.scribeSpecialtyTemplate.findMany({
-      where: { active: true },
-      orderBy: { displayName: 'asc' },
-      select: { slug: true, displayName: true },
     }),
     prisma.transcribeVisit.findFirst({
       where: { userId: session.user.id },
@@ -32,6 +28,8 @@ export default async function NewVisitPage() {
     }),
   ]);
   if (!user) redirect('/login');
+
+  const specialties = SPECIALTIES;
 
   const defaultSpecialty = mostRecentVisit?.specialty ?? '';
 
