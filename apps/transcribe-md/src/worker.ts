@@ -1,13 +1,17 @@
 // ============================================================================
-// apps/transcribe-md — BullMQ worker entrypoint (T-M4)
+// apps/transcribe-md — BullMQ worker entrypoint (T-M4 + T-M5)
 // ----------------------------------------------------------------------------
-// Runs as a separate container (transcribe-md-worker in docker-compose).
-// Connects to the shared Redis, pulls jobs off the `transcribe-md` queue,
-// drives each visit through the 6-layer pipeline (Deepgram → speaker
-// roles → entities → SOAP draft → self-critique → polish).
+// Runs as a separate container (transcribe-md-worker). Pulls jobs off the
+// shared `transcribe-md` queue and drives each visit through the pipeline.
 //
-// Dev:  `npm run worker -w transcribe-md`
-// Prod: container CMD runs `tsx src/worker.ts`
+// Pipeline branches by visit.inputMode:
+//   audio_upload    → L1 (diarize) + L2 + L3 (conversation) + L4 + L5 + L6
+//   voice_dictation → L1' (single-speaker) + L3 (dictation) + L4 + L5 + L6
+//   text_notes      →                         L3 (text)     + L4 + L5 + L6
+//
+// Layers 4-6 are mode-agnostic: they consume (entities, contextText) and
+// produce SOAP draft → critique → polish. That uniformity is the point —
+// the doctor gets the same output quality regardless of input shape.
 // ============================================================================
 
 import 'dotenv/config';
@@ -24,14 +28,12 @@ import {
 } from '@/lib/queue';
 import { ensureBucket } from '@/lib/minio';
 import { runLayer1Transcribe } from '@/worker/layers/01-transcribe';
+import { runLayer1bTranscribeDictation } from '@/worker/layers/01b-transcribe-dictation';
 import {
   runLayer2SpeakerRoles,
   type SpeakerMap,
 } from '@/worker/layers/02-speaker-roles';
-import {
-  runLayer3ExtractEntities,
-  buildRoleLabeledTranscript,
-} from '@/worker/layers/03-extract-entities';
+import { runLayer3ExtractEntities } from '@/worker/layers/03-extract-entities';
 import { runLayer4GenerateSoap } from '@/worker/layers/04-generate-soap';
 import { runLayer5SelfCritique } from '@/worker/layers/05-self-critique';
 import { runLayer6Polish } from '@/worker/layers/06-polish';
@@ -44,8 +46,6 @@ const CONCURRENCY = Number.parseInt(
 async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
   const { visitId } = job.data;
 
-  // Read the visit + user's practice once; we need practiceId on every
-  // AiCall for cost attribution + eventual per-practice unit economics.
   const visit = await prisma.transcribeVisit.findUnique({
     where: { id: visitId },
     select: {
@@ -53,80 +53,136 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       userId: true,
       audioKey: true,
       audioMimeType: true,
+      dictationAudioKey: true,
+      rawTextInput: true,
       specialty: true,
       inputMode: true,
       user: { select: { practiceId: true } },
     },
   });
   if (!visit) throw new Error(`Visit ${visitId} not found`);
-  if (!visit.audioKey) throw new Error(`Visit ${visitId} has no audioKey`);
-  if (visit.inputMode !== 'audio_upload') {
-    throw new Error(
-      `Visit ${visitId} inputMode is "${visit.inputMode}" — this queue only handles audio_upload.`
-    );
-  }
 
   const practiceId = visit.user.practiceId;
   const startedAt = new Date();
 
+  // Per-mode input validation. Keeps the branch bodies below simple.
+  if (visit.inputMode === 'audio_upload') {
+    if (!visit.audioKey)
+      throw new Error(`Visit ${visitId} has no audioKey (audio_upload mode).`);
+    if (!visit.audioMimeType)
+      throw new Error(`Visit ${visitId} has no audioMimeType.`);
+  } else if (visit.inputMode === 'voice_dictation') {
+    if (!visit.dictationAudioKey)
+      throw new Error(`Visit ${visitId} has no dictationAudioKey.`);
+  } else if (visit.inputMode === 'text_notes') {
+    if (!visit.rawTextInput?.trim())
+      throw new Error(`Visit ${visitId} has no rawTextInput.`);
+  } else {
+    throw new Error(`Unknown inputMode: ${visit.inputMode}`);
+  }
+
+  // text_notes skips TRANSCRIBING — nothing to transcribe.
+  const initialStatus =
+    visit.inputMode === 'text_notes'
+      ? TranscribeVisitStatus.EXTRACTING
+      : TranscribeVisitStatus.TRANSCRIBING;
+
   await prisma.transcribeVisit.update({
     where: { id: visitId },
     data: {
-      status: TranscribeVisitStatus.TRANSCRIBING,
+      status: initialStatus,
       processingStartedAt: startedAt,
-      // Clear any prior-run review flag so a retry starts clean. Layers
-      // will re-set it if they find new reasons.
       needsReview: false,
       reviewReason: null,
     },
   });
 
   try {
-    // ── L1: Deepgram ──
-    await runLayer1Transcribe({
-      visitId,
-      practiceId,
-      audioKey: visit.audioKey,
-      audioMimeType: visit.audioMimeType,
-    });
+    // -------------------------------------------------------------------
+    // Per-mode input stage — produces (entities, contextText).
+    // -------------------------------------------------------------------
+    let entities: Awaited<ReturnType<typeof runLayer3ExtractEntities>>['entities'];
+    let contextText: string;
 
-    // Re-read transcriptRaw for downstream layers. It's been persisted
-    // by L1 so we can trust it.
-    const withTranscript = await prisma.transcribeVisit.findUnique({
-      where: { id: visitId },
-      select: { transcriptRaw: true },
-    });
-    const raw = withTranscript?.transcriptRaw as
-      | DeepgramBatchResponse
-      | null
-      | undefined;
-    const utterances: DeepgramUtterance[] = raw?.results?.utterances ?? [];
+    if (visit.inputMode === 'audio_upload') {
+      // L1 — Deepgram with diarize on.
+      await runLayer1Transcribe({
+        visitId,
+        practiceId,
+        audioKey: visit.audioKey!,
+        audioMimeType: visit.audioMimeType!,
+      });
+      const withTranscript = await prisma.transcribeVisit.findUnique({
+        where: { id: visitId },
+        select: { transcriptRaw: true },
+      });
+      const raw = withTranscript?.transcriptRaw as
+        | DeepgramBatchResponse
+        | null
+        | undefined;
+      const utterances: DeepgramUtterance[] = raw?.results?.utterances ?? [];
 
-    // ── L2: Speaker roles ──
-    await prisma.transcribeVisit.update({
-      where: { id: visitId },
-      data: { status: TranscribeVisitStatus.EXTRACTING },
-    });
-    const { speakerMap } = await runLayer2SpeakerRoles({
-      visitId,
-      practiceId,
-      utterances,
-    });
+      // L2 — speaker roles.
+      await prisma.transcribeVisit.update({
+        where: { id: visitId },
+        data: { status: TranscribeVisitStatus.EXTRACTING },
+      });
+      const { speakerMap } = await runLayer2SpeakerRoles({
+        visitId,
+        practiceId,
+        utterances,
+      });
 
-    // ── L3: Entity extraction ──
-    const entities = await runLayer3ExtractEntities({
-      visitId,
-      practiceId,
-      utterances,
-      speakerMap,
-    });
+      // L3 — conversation entities.
+      const l3 = await runLayer3ExtractEntities({
+        visitId,
+        practiceId,
+        mode: 'conversation',
+        utterances,
+        speakerMap: speakerMap as SpeakerMap,
+      });
+      entities = l3.entities;
+      contextText = l3.contextText;
+    } else if (visit.inputMode === 'voice_dictation') {
+      // L1' — single-speaker Deepgram.
+      const l1b = await runLayer1bTranscribeDictation({
+        visitId,
+        practiceId,
+        dictationAudioKey: visit.dictationAudioKey!,
+        // Dictations come from browser MediaRecorder → webm/opus.
+        // Deepgram auto-detects encoding from the Content-Type header.
+        dictationMimeType:
+          process.env.TRANSCRIBE_MD_DICTATION_MIME ?? 'audio/webm',
+      });
 
-    const roleLabeledTranscript = buildRoleLabeledTranscript(
-      utterances,
-      speakerMap as SpeakerMap
-    );
+      // L3 — dictation entities.
+      await prisma.transcribeVisit.update({
+        where: { id: visitId },
+        data: { status: TranscribeVisitStatus.EXTRACTING },
+      });
+      const l3 = await runLayer3ExtractEntities({
+        visitId,
+        practiceId,
+        mode: 'dictation',
+        dictationText: l1b.transcript,
+      });
+      entities = l3.entities;
+      contextText = l3.contextText;
+    } else {
+      // text_notes — no transcription step.
+      const l3 = await runLayer3ExtractEntities({
+        visitId,
+        practiceId,
+        mode: 'text',
+        rawText: visit.rawTextInput!,
+      });
+      entities = l3.entities;
+      contextText = l3.contextText;
+    }
 
-    // ── L4: SOAP draft ──
+    // -------------------------------------------------------------------
+    // Layers 4-6 — mode-agnostic.
+    // -------------------------------------------------------------------
     await prisma.transcribeVisit.update({
       where: { id: visitId },
       data: { status: TranscribeVisitStatus.DRAFTING },
@@ -135,11 +191,10 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       visitId,
       practiceId,
       specialty: visit.specialty,
-      roleLabeledTranscript,
+      roleLabeledTranscript: contextText,
       entities,
     });
 
-    // ── L5: Self-critique ──
     await prisma.transcribeVisit.update({
       where: { id: visitId },
       data: { status: TranscribeVisitStatus.CRITIQUING },
@@ -149,11 +204,10 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       practiceId,
       specialty: visit.specialty,
       soapDraft,
-      roleLabeledTranscript,
+      roleLabeledTranscript: contextText,
       entities,
     });
 
-    // ── L6: Polish ──
     await prisma.transcribeVisit.update({
       where: { id: visitId },
       data: { status: TranscribeVisitStatus.POLISHING },
@@ -165,8 +219,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       critique,
     });
 
-    // ── Done. Sum per-layer costs from ai_calls into the visit-level
-    //       total so /settings → usage can read one column. ──
+    // Sum per-layer costs from ai_calls into the visit-level total.
     const costRows = await prisma.aiCall.findMany({
       where: { visitId },
       select: { costUsdCents: true },
@@ -197,7 +250,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
           reviewReason:
             err instanceof Error
               ? err.message.slice(0, 500)
-              : 'Unknown error during audio processing. Try again or contact support.',
+              : 'Unknown error during processing. Try again or contact support.',
         },
       })
       .catch((writeErr: unknown) => {

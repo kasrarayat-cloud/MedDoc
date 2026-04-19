@@ -19,6 +19,16 @@ import type { AiLogContext } from './types';
 const DEEPGRAM_BATCH_URL = 'https://api.deepgram.com/v1/listen';
 export const DEFAULT_BATCH_MODEL = 'nova-3-medical';
 
+export interface DeepgramBatchOptions {
+  /** Speaker diarization. Defaults true (conversation transcripts).
+   *  Set false for single-speaker dictation. */
+  diarize?: boolean;
+  /** Utterance segmentation. Defaults true — Layer 2/3 read these for
+   *  role assignment + evidence quoting. Turn off for dictation where
+   *  the whole transcript is treated as one block. */
+  utterances?: boolean;
+}
+
 export interface DeepgramBatchArgs extends AiLogContext {
   /** Raw audio bytes. The caller is responsible for downloading from MinIO. */
   audio: Buffer;
@@ -33,6 +43,9 @@ export interface DeepgramBatchArgs extends AiLogContext {
   /** Network timeout in ms. Long by default — a 45 min recording takes
    *  Deepgram ~60s wall-clock to process. */
   timeoutMs?: number;
+  /** T-M5 opt-outs for single-speaker dictation. Undefined = current
+   *  Layer 1 conversation defaults (diarize+utterances on). */
+  options?: DeepgramBatchOptions;
 }
 
 export interface DeepgramWord {
@@ -115,14 +128,16 @@ export async function deepgramBatchTranscribe(
     args.model ?? process.env.DEEPGRAM_MODEL?.trim() ?? DEFAULT_BATCH_MODEL;
   const language = args.language ?? 'en';
 
+  const wantDiarize = args.options?.diarize ?? true;
+  const wantUtterances = args.options?.utterances ?? true;
   const params = new URLSearchParams({
     model,
     language,
-    diarize: 'true',
+    diarize: String(wantDiarize),
     punctuate: 'true',
     smart_format: 'true',
     paragraphs: 'true',
-    utterances: 'true',
+    utterances: String(wantUtterances),
     filler_words: 'false',
     detect_language: 'false',
   });
