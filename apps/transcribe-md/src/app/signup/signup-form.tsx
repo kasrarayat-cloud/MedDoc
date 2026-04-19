@@ -7,24 +7,25 @@ import { ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { SpecularButton } from '@/components/specular-button';
-import { SpecialtyDropdown, type SpecialtyOption } from '@/components/specialty-dropdown';
 import { signupAction, type AuthActionState } from '@/actions/auth';
 
 const initialState: AuthActionState = null;
 
-interface SignupFormProps {
-  specialties: SpecialtyOption[];
-}
-
-export function SignupForm({ specialties }: SignupFormProps) {
+export function SignupForm() {
   const [state, formAction, pending] = useActionState(signupAction, initialState);
   const router = useRouter();
 
   useEffect(() => {
     if (state && state.ok) {
-      toast.success('Welcome to TranscribeMD', {
-        description: "You're in. Start your first visit whenever you're ready.",
-      });
+      if (state.warning) {
+        // Partial success — e.g., account created but auto-login
+        // failed. Don't fire the triumphant green toast.
+        toast.warning('Account created', { description: state.warning });
+      } else {
+        toast.success('Welcome to TranscribeMD', {
+          description: "You're in. Start your first visit whenever you're ready.",
+        });
+      }
       router.push(state.redirect);
       router.refresh();
     } else if (state && !state.ok && state.errors._form) {
@@ -76,15 +77,6 @@ export function SignupForm({ specialties }: SignupFormProps) {
           At least 10 characters, with upper + lowercase letters and a digit.
         </p>
         <FieldError message={errors.password} />
-      </FieldLabel>
-
-      <FieldLabel htmlFor="specialty" label="Specialty">
-        <SpecialtyDropdown
-          options={specialties}
-          name="specialty"
-          defaultValue={values.specialty ?? ''}
-        />
-        <FieldError message={errors.specialty} />
       </FieldLabel>
 
       <label className="flex items-start gap-2.5 pt-1 text-[12px] text-text-tertiary">

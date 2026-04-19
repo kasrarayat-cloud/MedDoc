@@ -5,7 +5,6 @@ import { auth } from '@/lib/nextauth';
 import { AnimatedGrid } from '@/components/animated-grid';
 import { GradientBorder } from '@/components/gradient-border';
 import { GradientText } from '@/components/gradient-text';
-import { SPECIALTIES } from '@/lib/specialties';
 import { SignupForm } from './signup-form';
 
 export const metadata: Metadata = { title: 'Sign up' };
@@ -15,8 +14,6 @@ export default async function SignupPage() {
   if (session?.user?.id) {
     redirect('/dashboard');
   }
-
-  const specialties = SPECIALTIES;
 
   return (
     <main className="relative min-h-screen overflow-hidden">
@@ -50,7 +47,7 @@ export default async function SignupPage() {
             </p>
           </div>
 
-          <SignupForm specialties={specialties} />
+          <SignupForm />
           </div>
         </GradientBorder>
       </div>

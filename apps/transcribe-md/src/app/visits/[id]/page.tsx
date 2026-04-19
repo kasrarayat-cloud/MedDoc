@@ -15,6 +15,19 @@ import { VisitReadyView, type Utterance, type SpeakerInfo } from './visit-ready-
 import { VisitFailedView } from './visit-failed-view';
 import { BackToDashboardLink } from './back-to-dashboard-link';
 
+/** Email delivery is gated by domain-verification status. The "Email
+ *  to me" checkbox in Sign & Send is only shown when both conditions
+ *  hold. Operators flip RESEND_FROM_VERIFIED=true after running DNS
+ *  verification at https://resend.com/domains and restart the
+ *  container. Defaults to off so a new deployment doesn't show a
+ *  checkbox that just errors out. */
+function isEmailDeliveryEnabled(): boolean {
+  return (
+    !!process.env.RESEND_API_KEY &&
+    process.env.RESEND_FROM_VERIFIED === 'true'
+  );
+}
+
 export const metadata: Metadata = { title: 'Visit' };
 
 // Human-readable progress hint — duplicated from /api/visits/[id]/status
@@ -119,6 +132,7 @@ export default async function VisitPage({
           <VisitBody
             visitId={visit.id}
             doctorEmail={user.email}
+            emailEnabled={isEmailDeliveryEnabled()}
             inputMode={visit.inputMode}
             status={visit.status}
             audioKey={visit.audioKey}
@@ -162,6 +176,7 @@ function Chip({ children }: { children: React.ReactNode }) {
 interface VisitBodyProps {
   visitId: string;
   doctorEmail: string;
+  emailEnabled: boolean;
   inputMode: string;
   status: TranscribeVisitStatus;
   audioKey: string | null;
@@ -281,6 +296,7 @@ function VisitBody(props: VisitBodyProps) {
     <VisitReadyView
       visitId={props.visitId}
       doctorEmail={props.doctorEmail}
+      emailEnabled={props.emailEnabled}
       inputMode={props.inputMode}
       soapText={soapText}
       readonly={readonly}

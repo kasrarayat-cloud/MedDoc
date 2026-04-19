@@ -13,6 +13,10 @@ interface SoapEditorProps {
   visitId: string;
   /** Doctor's email — pre-filled in the Sign & Send modal. */
   doctorEmail: string;
+  /** T-M9 — whether Email delivery is configured. Hides the checkbox
+   *  from Sign & Send when false so users can't request an
+   *  un-shippable destination. */
+  emailEnabled: boolean;
   initialText: string;
   /** Readonly when the visit is SIGNED. The signed copy lives in
    *  signedSoap; the client passes that value as initialText. */
@@ -25,6 +29,7 @@ interface SoapEditorProps {
 export function SoapEditor({
   visitId,
   doctorEmail,
+  emailEnabled,
   initialText,
   readonly = false,
   needsReview,
@@ -138,6 +143,7 @@ export function SoapEditor({
           <SignAndSendModal
             visitId={visitId}
             doctorEmail={doctorEmail}
+            emailEnabled={emailEnabled}
             signOnSubmit
             triggerLabel="Sign & Send"
             triggerIcon={<Lock className="h-3.5 w-3.5" aria-hidden />}
@@ -148,6 +154,7 @@ export function SoapEditor({
           <SignAndSendModal
             visitId={visitId}
             doctorEmail={doctorEmail}
+            emailEnabled={emailEnabled}
             signOnSubmit={false}
             triggerLabel="Export again"
             triggerIcon={<Send className="h-3.5 w-3.5" aria-hidden />}
