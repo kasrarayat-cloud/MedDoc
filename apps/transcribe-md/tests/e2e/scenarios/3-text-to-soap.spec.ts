@@ -32,13 +32,15 @@ test('scenario 3: fresh signup → text → READY → sign PDF', async ({ page }
   await page.goto('/visits/new');
   await page.getByRole('button', { name: /text to soap/i }).click();
 
-  await page.waitForURL(/\/visits\/[^/]+$/, { timeout: 15_000 });
+  // Cuid format — matches /visits/c<alphanumeric> but NOT /visits/new
+  // (which would be the pre-submission state).
+  await page.waitForURL(/\/visits\/c[a-z0-9]{10,}/, { timeout: 15_000 });
   const visitId = new URL(page.url()).pathname.split('/').pop()!;
 
   // TextComposer renders a textarea with aria-label "Clinical
-  // shorthand". Fill it and submit.
+  // shorthand". Fill it and click the "Expand to SOAP" CTA.
   await page.getByLabel('Clinical shorthand').fill(CLINICAL_NOTES);
-  await page.getByRole('button', { name: /generate|submit|continue|start/i }).click();
+  await page.getByRole('button', { name: /expand to soap/i }).click();
 
   // Pipeline kicks off. With MOCK_AI_CALLS on the worker this
   // resolves in ~1-3 sec; 60s cap for safety.

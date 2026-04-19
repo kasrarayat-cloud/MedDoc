@@ -31,7 +31,7 @@ test('scenario 4: back-to-dashboard navigates from a visit page', async ({
   await page.goto('/visits/new');
   await page.getByRole('button', { name: /text to soap/i }).click();
 
-  await page.waitForURL(/\/visits\/[^/]+$/, { timeout: 15_000 });
+  await page.waitForURL(/\/visits\/c[a-z0-9]{10,}/, { timeout: 15_000 });
   const visitUrl = page.url();
 
   // The back link is an <a href="/dashboard"> rendered by
