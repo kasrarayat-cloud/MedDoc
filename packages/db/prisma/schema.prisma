@@ -1274,6 +1274,10 @@ enum TranscribeVisitStatus {
   DRAFTING
   CRITIQUING
   POLISHING
+  /// T-M6: parallel automation layers (ICD/CPT/Rx/Referrals/Summary).
+  /// Runs after POLISHING. Layer failures are isolated; the visit still
+  /// reaches READY even if a subset of automation layers error.
+  AUTOMATING
   READY
   FAILED
   SIGNED

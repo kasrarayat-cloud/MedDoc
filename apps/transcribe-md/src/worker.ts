@@ -37,11 +37,43 @@ import { runLayer3ExtractEntities } from '@/worker/layers/03-extract-entities';
 import { runLayer4GenerateSoap } from '@/worker/layers/04-generate-soap';
 import { runLayer5SelfCritique } from '@/worker/layers/05-self-critique';
 import { runLayer6Polish } from '@/worker/layers/06-polish';
+import { runLayer7aIcdCoding } from '@/worker/layers/07a-icd-coding';
+import { runLayer7bCptCoding } from '@/worker/layers/07b-cpt-coding';
+import { runLayer7cRxDrafting } from '@/worker/layers/07c-rx-drafting';
+import { runLayer7dReferrals } from '@/worker/layers/07d-referrals';
+import { runLayer7ePatientSummary } from '@/worker/layers/07e-patient-summary';
 
 const CONCURRENCY = Number.parseInt(
   process.env.TRANSCRIBE_MD_WORKER_CONCURRENCY ?? '2',
   10
 );
+
+/** Null-out the persisted column for a failed automation layer so a
+ *  partially-written row can't mislead the UI. Each L7x layer writes
+ *  its own column inside the fulfilled path; if the call threw (e.g.
+ *  schema-fail after a Prisma write already landed — vanishingly rare
+ *  but possible), this wipes the column clean. */
+async function clearAutomationColumn(
+  visitId: string,
+  key:
+    | 'icd_coding'
+    | 'cpt_coding'
+    | 'rx_drafting'
+    | 'referrals'
+    | 'patient_summary'
+): Promise<void> {
+  const map: Record<typeof key, Record<string, null>> = {
+    icd_coding: { icdCodes: null },
+    cpt_coding: { cptCodes: null },
+    rx_drafting: { rxDrafts: null },
+    referrals: { referrals: null },
+    patient_summary: { patientSummary: null },
+  };
+  await prisma.transcribeVisit.update({
+    where: { id: visitId },
+    data: map[key],
+  });
+}
 
 async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
   const { visitId } = job.data;
@@ -94,6 +126,15 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       processingStartedAt: startedAt,
       needsReview: false,
       reviewReason: null,
+      // T-M6: a retry should clear any prior-run automation outputs +
+      // confidence ledger so a previously-failed layer doesn't carry
+      // its stale 'failed' status through to the fresh run.
+      icdCodes: null,
+      cptCodes: null,
+      rxDrafts: null,
+      referrals: null,
+      patientSummary: null,
+      confidenceScores: null,
     },
   });
 
@@ -212,14 +253,169 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       where: { id: visitId },
       data: { status: TranscribeVisitStatus.POLISHING },
     });
-    await runLayer6Polish({
+    const polished = await runLayer6Polish({
       visitId,
       practiceId,
       soapDraft,
       critique,
     });
 
-    // Sum per-layer costs from ai_calls into the visit-level total.
+    // -------------------------------------------------------------------
+    // T-M6 — parallel automation fan-out. Each L7x layer runs
+    // independently against the same polished SOAP + entities; a single
+    // layer failing never fails the visit. Missing outputs show up as
+    // empty columns + a confidenceScores note.
+    // -------------------------------------------------------------------
+    await prisma.transcribeVisit.update({
+      where: { id: visitId },
+      data: { status: TranscribeVisitStatus.AUTOMATING },
+    });
+
+    const soapFinalForFanout = polished.soapFinal;
+    const entitiesJson = JSON.stringify(entities);
+
+    // Env feature flags — operators can disable any layer without a
+    // code change if costs spike or a layer misbehaves in prod.
+    const flags = {
+      icd: process.env.TM_ENABLE_ICD_CPT !== 'false',
+      cpt: process.env.TM_ENABLE_ICD_CPT !== 'false',
+      rx: process.env.TM_ENABLE_RX !== 'false',
+      referrals: process.env.TM_ENABLE_REFERRALS !== 'false',
+      summary: process.env.TM_ENABLE_PATIENT_SUMMARY !== 'false',
+    };
+
+    type AutomationTask = {
+      key:
+        | 'icd_coding'
+        | 'cpt_coding'
+        | 'rx_drafting'
+        | 'referrals'
+        | 'patient_summary';
+      enabled: boolean;
+      run: () => Promise<unknown>;
+    };
+
+    const tasks: AutomationTask[] = [
+      {
+        key: 'icd_coding',
+        enabled: flags.icd,
+        run: () =>
+          runLayer7aIcdCoding({
+            visitId,
+            practiceId,
+            specialty: visit.specialty,
+            soapFinal: soapFinalForFanout,
+            entitiesJson,
+          }),
+      },
+      {
+        key: 'cpt_coding',
+        enabled: flags.cpt,
+        run: () =>
+          runLayer7bCptCoding({
+            visitId,
+            practiceId,
+            specialty: visit.specialty,
+            soapFinal: soapFinalForFanout,
+            entitiesJson,
+          }),
+      },
+      {
+        key: 'rx_drafting',
+        enabled: flags.rx,
+        run: () =>
+          runLayer7cRxDrafting({
+            visitId,
+            practiceId,
+            soapFinal: soapFinalForFanout,
+            entitiesJson,
+          }),
+      },
+      {
+        key: 'referrals',
+        enabled: flags.referrals,
+        run: () =>
+          runLayer7dReferrals({
+            visitId,
+            practiceId,
+            soapFinal: soapFinalForFanout,
+            entitiesJson,
+          }),
+      },
+      {
+        key: 'patient_summary',
+        enabled: flags.summary,
+        run: () =>
+          runLayer7ePatientSummary({
+            visitId,
+            practiceId,
+            specialty: visit.specialty,
+            soapFinal: soapFinalForFanout,
+            entitiesJson,
+          }),
+      },
+    ];
+
+    const enabled = tasks.filter((t) => t.enabled);
+    const results = await Promise.allSettled(enabled.map((t) => t.run()));
+
+    // Roll settled results up into confidenceScores so the UI + future
+    // observability can see per-layer status without re-reading ai_calls.
+    type LayerStatus =
+      | { status: 'ok'; metadata?: unknown }
+      | { status: 'skipped' }
+      | { status: 'failed'; reason: string };
+    const confidenceScores: Record<string, LayerStatus> = {};
+
+    for (const t of tasks) {
+      if (!t.enabled) {
+        confidenceScores[t.key] = { status: 'skipped' };
+        continue;
+      }
+      const idx = enabled.indexOf(t);
+      const r = results[idx];
+      if (r.status === 'fulfilled') {
+        // Persist Layer 7e readability grade into confidenceScores so
+        // the Extras tab can show the grade without re-computing.
+        if (t.key === 'patient_summary') {
+          const out = r.value as {
+            fleschKincaid?: number;
+            flagged?: boolean;
+          };
+          confidenceScores[t.key] = {
+            status: 'ok',
+            metadata: {
+              flesch_kincaid: out.fleschKincaid,
+              flagged: out.flagged,
+            },
+          };
+        } else {
+          confidenceScores[t.key] = { status: 'ok' };
+        }
+      } else {
+        const reason =
+          r.reason instanceof Error
+            ? r.reason.message
+            : String(r.reason ?? 'unknown');
+        console.error(
+          `[transcribe-md-worker] automation layer ${t.key} failed:`,
+          reason
+        );
+        confidenceScores[t.key] = {
+          status: 'failed',
+          reason: reason.slice(0, 500),
+        };
+        // Clear any column the layer might have partially written so a
+        // stale "almost-populated" row can't mislead the UI.
+        await clearAutomationColumn(visitId, t.key).catch(() => {});
+      }
+    }
+
+    // -------------------------------------------------------------------
+    // Finalise. Sum per-layer costs from ai_calls (includes T-M4 layers
+    // + T-M6 layers). Fail-open if AiCall read errors; the cost number
+    // is observability, not load-bearing for correctness.
+    // -------------------------------------------------------------------
     const costRows = await prisma.aiCall.findMany({
       where: { visitId },
       select: { costUsdCents: true },
@@ -236,6 +432,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         status: TranscribeVisitStatus.READY,
         processingFinishedAt: new Date(),
         processingCostCents: totalCents,
+        confidenceScores: confidenceScores as unknown as object,
       },
     });
   } catch (err) {

@@ -27,6 +27,7 @@ const PROGRESS_HINT: Record<TranscribeVisitStatus, string> = {
   DRAFTING: 'Drafting the SOAP note',
   CRITIQUING: 'Auditing the draft for clinical accuracy',
   POLISHING: 'Applying polish fixes',
+  AUTOMATING: 'Generating codes, prescriptions, and summary',
   READY: 'Ready to review',
   FAILED: 'Processing failed',
   SIGNED: 'Signed and locked',
@@ -38,6 +39,7 @@ const PROCESSING_STATES: ReadonlyArray<TranscribeVisitStatus> = [
   TranscribeVisitStatus.DRAFTING,
   TranscribeVisitStatus.CRITIQUING,
   TranscribeVisitStatus.POLISHING,
+  TranscribeVisitStatus.AUTOMATING,
 ];
 
 export default async function VisitPage({
@@ -81,6 +83,13 @@ export default async function VisitPage({
         processingStartedAt: true,
         processingFinishedAt: true,
         processingCostCents: true,
+        // T-M6 automation outputs.
+        icdCodes: true,
+        cptCodes: true,
+        rxDrafts: true,
+        referrals: true,
+        patientSummary: true,
+        confidenceScores: true,
       },
     }),
   ]);
@@ -135,6 +144,12 @@ export default async function VisitPage({
             processingStartedAt={visit.processingStartedAt}
             processingFinishedAt={visit.processingFinishedAt}
             processingCostCents={visit.processingCostCents}
+            icdCodes={visit.icdCodes as unknown}
+            cptCodes={visit.cptCodes as unknown}
+            rxDrafts={visit.rxDrafts as unknown}
+            referrals={visit.referrals as unknown}
+            patientSummary={visit.patientSummary}
+            confidenceScores={visit.confidenceScores as unknown}
           />
         </div>
       </main>
@@ -171,6 +186,12 @@ interface VisitBodyProps {
   processingStartedAt: Date | null;
   processingFinishedAt: Date | null;
   processingCostCents: number | null;
+  icdCodes: unknown;
+  cptCodes: unknown;
+  rxDrafts: unknown;
+  referrals: unknown;
+  patientSummary: string | null;
+  confidenceScores: unknown;
 }
 
 function VisitBody(props: VisitBodyProps) {
@@ -280,6 +301,12 @@ function VisitBody(props: VisitBodyProps) {
       }
       entities={props.entities}
       critique={critique}
+      icdCodes={props.icdCodes}
+      cptCodes={props.cptCodes}
+      rxDrafts={props.rxDrafts}
+      referrals={props.referrals}
+      patientSummary={props.patientSummary}
+      confidenceScores={props.confidenceScores}
       durationSec={displayDurationSec}
       costCents={props.processingCostCents}
       processingStartedAt={props.processingStartedAt?.toISOString() ?? null}
