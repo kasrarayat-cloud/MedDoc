@@ -121,7 +121,8 @@ export function ProcessingState({
 }
 
 // ---------------------------------------------------------------------------
-// Visual strip showing which of the 6 layers is active.
+// Visual strip showing which layer is active. 7 segments now that T-M6
+// added AUTOMATING between POLISHING and READY.
 // ---------------------------------------------------------------------------
 
 const PIPELINE_ORDER: TranscribeVisitStatus[] = [
@@ -130,6 +131,7 @@ const PIPELINE_ORDER: TranscribeVisitStatus[] = [
   'DRAFTING',
   'CRITIQUING',
   'POLISHING',
+  'AUTOMATING',
   'READY',
 ];
 
