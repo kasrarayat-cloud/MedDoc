@@ -42,24 +42,32 @@ test('scenario 2: fresh signup → voice dictation → READY → sign clipboard'
   await page.goto('/visits/new');
   await page.getByRole('button', { name: /dictate live/i }).click();
 
-  await page.waitForURL(/\/visits\/[^/]+$/, { timeout: 15_000 });
-  const visitId = new URL(page.url()).pathname.split('/').pop()!;
+  await page.waitForURL(/\/visits\/c[a-z0-9]{10,}/, { timeout: 15_000 });
+  const visitIdMatch = page.url().match(/\/visits\/(c[a-z0-9]+)/);
+  const visitId = visitIdMatch?.[1];
+  expect(visitId, `couldn't parse visitId from ${page.url()}`).toBeTruthy();
 
   // Bypass MediaRecorder UI. Send the audio bytes straight to the
   // dictation upload route — same contract the recorder uses after
-  // it finalizes.
+  // it finalizes. Use the page's absolute URL so we don't rely on
+  // relative-URL resolution inside APIRequestContext.
   const audioBytes = readFileSync(AUDIO_FIXTURE);
-  const response = await page.request.post(
+  const uploadUrl = new URL(
     `/api/visits/${visitId}/dictation/upload`,
-    {
-      data: audioBytes,
-      headers: {
-        'content-type': 'audio/webm',
-        'x-tm-filename': 'qa-dictation.webm',
-      },
-    }
-  );
-  expect(response.ok(), `dictation upload failed: ${response.status()}`).toBe(true);
+    page.url()
+  ).toString();
+  const response = await page.request.post(uploadUrl, {
+    data: audioBytes,
+    headers: {
+      'content-type': 'audio/webm',
+      'content-length': String(audioBytes.byteLength),
+      'x-tm-filename': 'qa-dictation.webm',
+    },
+  });
+  expect(
+    response.ok(),
+    `dictation upload failed: ${response.status()} ${await response.text()}`
+  ).toBe(true);
 
   await waitForVisitStatus(page, visitId, 'READY');
 

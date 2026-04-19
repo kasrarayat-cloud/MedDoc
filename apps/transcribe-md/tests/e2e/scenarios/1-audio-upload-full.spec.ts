@@ -34,16 +34,18 @@ test('scenario 1: fresh signup → audio upload → sign clipboard+PDF+DOCX', as
   await page.goto('/visits/new');
   await page.getByRole('button', { name: /upload audio/i }).click();
 
-  await page.waitForURL(/\/visits\/[^/]+$/, { timeout: 15_000 });
+  await page.waitForURL(/\/visits\/c[a-z0-9]{10,}/, { timeout: 15_000 });
   const visitId = new URL(page.url()).pathname.split('/').pop()!;
 
   // AudioUploader uses a hidden <input type="file">. setInputFiles
-  // fires the same onChange the drop-zone click uses.
+  // fires the same onChange the drop-zone click uses, which only
+  // populates the file-preview card — the actual upload POST
+  // doesn't fire until "Upload & transcribe" is clicked.
   const fileInput = page.locator('input[type="file"]').first();
   await fileInput.setInputFiles(AUDIO_FIXTURE);
+  await page.getByRole('button', { name: /upload & transcribe/i }).click();
 
-  // Upload triggers a POST /api/visits/[id]/upload; once that
-  // returns 202, the visit goes QUEUED → pipeline. Wait for READY.
+  // Upload POST → 202 → visit goes QUEUED → pipeline. Wait for READY.
   await waitForVisitStatus(page, visitId, 'READY');
 
   // Sign & Send modal.
