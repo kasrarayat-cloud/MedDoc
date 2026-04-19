@@ -7,6 +7,7 @@ import { getCurrentSessionId } from '@/lib/auth';
 import { describeUserAgent, describeIpLocation, parseUserAgent } from '@/lib/fingerprint';
 import { NavBar } from '@/components/nav-bar';
 import { PageWrapper } from '@/components/page-wrapper';
+import { SPECIALTIES } from '@/lib/specialties';
 import { ProfileForm } from './profile-form';
 import { SessionPanel } from './session-panel';
 
@@ -34,7 +35,7 @@ export default async function SettingsPage() {
   const session = await auth();
   if (!session?.user?.id) redirect('/login');
 
-  const [user, specialties, sessionId, mostRecentVisit] = await Promise.all([
+  const [user, sessionId, mostRecentVisit] = await Promise.all([
     prisma.user.findUnique({
       where: { id: session.user.id },
       select: {
@@ -42,11 +43,6 @@ export default async function SettingsPage() {
         email: true,
         createdAt: true,
       },
-    }),
-    prisma.scribeSpecialtyTemplate.findMany({
-      where: { active: true },
-      orderBy: { displayName: 'asc' },
-      select: { slug: true, displayName: true },
     }),
     getCurrentSessionId(),
     prisma.transcribeVisit.findFirst({
@@ -56,6 +52,8 @@ export default async function SettingsPage() {
     }),
   ]);
   if (!user) redirect('/login');
+
+  const specialties = SPECIALTIES;
 
   // Look up the live UserSession row so we can show IP / UA / timestamps.
   // A null `sessionId` means a legacy (pre-T-M2) token — display a nudge.
