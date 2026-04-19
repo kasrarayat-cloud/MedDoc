@@ -5,13 +5,15 @@
 // Response: { text: string }  — what the browser pastes into the EHR.
 // ============================================================================
 
-import { NextResponse, type NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { auth } from '@/lib/nextauth';
 import { loadVisitExportData } from '@/lib/visit-export-server';
 import { formatForEhr } from '@/lib/ehr-formatters';
 import { logDelivery, type DeliveryChannel } from '@/lib/deliveries';
+
+import { apiError, withApiHandler } from '@/lib/api-error';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -31,44 +33,42 @@ const CHANNEL_BY_FORMAT: Record<
   generic: 'clipboard_generic',
 };
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const { id: visitId } = await params;
+export const POST = withApiHandler<{ id: string }>(
+  'api:visits:export:clipboard',
+  async (req, { params }) => {
+    const { id: visitId } = await params;
 
-  const session = await auth();
-  const userId = session?.user?.id;
-  if (!userId) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+    const session = await auth();
+    const userId = session?.user?.id;
+    if (!userId) return apiError('unauthorized', 401);
+
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return apiError('invalid JSON body', 400);
+    }
+    const parsed = BodySchema.safeParse(body);
+    if (!parsed.success) {
+      return apiError(
+        'format must be epic | athena | cerner | eclinicalworks | generic',
+        400
+      );
+    }
+
+    const data = await loadVisitExportData(visitId, userId);
+    // loadVisitExportData returns null for both missing-visit and
+    // not-yours; 404 guards against ID enumeration.
+    if (!data) return apiError('not found', 404);
+
+    const text = formatForEhr(parsed.data.format, data);
+
+    logDelivery({
+      visitId,
+      channel: CHANNEL_BY_FORMAT[parsed.data.format],
+      sizeBytes: Buffer.byteLength(text, 'utf8'),
+    });
+
+    return NextResponse.json({ text }, { status: 200 });
   }
-
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: 'invalid JSON body' }, { status: 400 });
-  }
-  const parsed = BodySchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: 'format must be epic | athena | cerner | eclinicalworks | generic' },
-      { status: 400 }
-    );
-  }
-
-  const data = await loadVisitExportData(visitId, userId);
-  if (!data) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 });
-  }
-
-  const text = formatForEhr(parsed.data.format, data);
-
-  logDelivery({
-    visitId,
-    channel: CHANNEL_BY_FORMAT[parsed.data.format],
-    sizeBytes: Buffer.byteLength(text, 'utf8'),
-  });
-
-  return NextResponse.json({ text }, { status: 200 });
-}
+);

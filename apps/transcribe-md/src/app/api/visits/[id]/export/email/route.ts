@@ -9,7 +9,7 @@
 // colleague's) rather than a patient's by mistake.
 // ============================================================================
 
-import { NextResponse, type NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { auth } from '@/lib/nextauth';
@@ -19,6 +19,8 @@ import { generateVisitPdf } from '@/lib/pdf-generator';
 import { sendVisitPdfEmail } from '@/lib/email';
 import { logDelivery } from '@/lib/deliveries';
 
+import { apiError, withApiHandler } from '@/lib/api-error';
+
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -27,77 +29,66 @@ const BodySchema = z.object({
   to: z.string().email().optional(),
 });
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const { id: visitId } = await params;
+export const POST = withApiHandler<{ id: string }>(
+  'api:visits:export:email',
+  async (req, { params }) => {
+    const { id: visitId } = await params;
 
-  const session = await auth();
-  const userId = session?.user?.id;
-  const sessionEmail = session?.user?.email;
-  if (!userId || !sessionEmail) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-  }
+    const session = await auth();
+    const userId = session?.user?.id;
+    const sessionEmail = session?.user?.email;
+    if (!userId || !sessionEmail) return apiError('unauthorized', 401);
 
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: 'invalid JSON body' }, { status: 400 });
-  }
-  const parsed = BodySchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: 'invalid email address' },
-      { status: 400 }
-    );
-  }
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return apiError('invalid JSON body', 400);
+    }
+    const parsed = BodySchema.safeParse(body);
+    if (!parsed.success) return apiError('invalid email address', 400);
 
-  const toEmail = parsed.data.to ?? sessionEmail;
+    const toEmail = parsed.data.to ?? sessionEmail;
 
-  const data = await loadVisitExportData(visitId, userId);
-  if (!data) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 });
-  }
+    const data = await loadVisitExportData(visitId, userId);
+    if (!data) return apiError('not found', 404);
 
-  if (!process.env.RESEND_API_KEY) {
-    // Fail softly rather than returning a stack trace to the client.
-    // The Sign & Send modal can catch this and show a toast.
-    return NextResponse.json(
-      { error: 'email delivery is not configured on this environment' },
-      { status: 503 }
-    );
-  }
+    if (!process.env.RESEND_API_KEY) {
+      // Fail softly rather than throwing a stack at the client. The
+      // Sign & Send modal's T-M9 error-classification logic turns
+      // this into a loud "email delivery not configured" toast.
+      return apiError(
+        'email delivery is not configured on this environment',
+        503
+      );
+    }
 
-  const pdf = await generateVisitPdf(data);
-  try {
-    const result = await sendVisitPdfEmail({
-      toEmail,
-      visitId,
-      pdfBuffer: pdf,
-      doctorName: data.clinicianName,
-      patientName: data.patientName,
-      visitDate: formatVisitDate(data.signedAt ?? data.createdAt),
-    });
-    logDelivery({
-      visitId,
-      channel: 'email',
-      destination: toEmail,
-      sizeBytes: pdf.byteLength,
-    });
-    return NextResponse.json(
-      { ok: true, messageId: result.id },
-      { status: 200 }
-    );
-  } catch (err) {
-    console.error('[email-export] send failed:', err);
-    return NextResponse.json(
-      {
-        error:
-          'email delivery failed — try again or download the PDF instead',
-      },
-      { status: 502 }
-    );
+    const pdf = await generateVisitPdf(data);
+    try {
+      const result = await sendVisitPdfEmail({
+        toEmail,
+        visitId,
+        pdfBuffer: pdf,
+        doctorName: data.clinicianName,
+        patientName: data.patientName,
+        visitDate: formatVisitDate(data.signedAt ?? data.createdAt),
+      });
+      logDelivery({
+        visitId,
+        channel: 'email',
+        destination: toEmail,
+        sizeBytes: pdf.byteLength,
+      });
+      return NextResponse.json(
+        { ok: true, messageId: result.id },
+        { status: 200 }
+      );
+    } catch (err) {
+      console.error('[api:visits:export:email] send failed:', err);
+      return apiError(
+        'email delivery failed — try again or download the PDF instead',
+        502
+      );
+    }
   }
-}
+);
