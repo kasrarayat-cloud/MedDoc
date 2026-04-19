@@ -17,9 +17,6 @@ interface SpecialtyDropdownProps {
    *  the TranscribeVisit.specialty column stays human-readable. */
   name: string;
   defaultValue?: string;
-  /** When true, the trigger takes focus on mount — used on /visits/new
-   *  where specialty is the first decision the clinician makes. */
-  autoFocus?: boolean;
   placeholder?: string;
 }
 
@@ -27,20 +24,25 @@ export function SpecialtyDropdown({
   options,
   name,
   defaultValue,
-  autoFocus,
   placeholder = 'Pick a specialty',
 }: SpecialtyDropdownProps) {
+  // Radix Select treats value="" as the placeholder state, so we only
+  // pass a real string through `value` once the user actually picks
+  // something. Before that, Radix is uncontrolled and the placeholder
+  // shows correctly.
   const [value, setValue] = useState<string>(defaultValue ?? '');
 
   return (
     <>
-      {/* Hidden input carries the value to the server action. Radix Select's
-          own <Select.Value> only renders the display text, not a form field. */}
+      {/* Hidden input carries the value to the server action. Radix's
+          <Select.Value> only renders the display text, not a form field. */}
       <input type="hidden" name={name} value={value} />
 
-      <Select.Root value={value} onValueChange={setValue}>
+      <Select.Root
+        value={value || undefined}
+        onValueChange={setValue}
+      >
         <Select.Trigger
-          autoFocus={autoFocus}
           className={cn(
             'inline-flex w-full items-center justify-between gap-2 rounded-lg',
             'border border-border-default bg-bg-surface-1/60 px-3.5 py-2.5',
@@ -62,12 +64,19 @@ export function SpecialtyDropdown({
           <Select.Content
             position="popper"
             sideOffset={6}
+            // z-index 100 so the popper lands above the glassy NavBar
+            // (z-40) on /dashboard when the dropdown is used there.
+            // NOTE: no tailwindcss-animate classes — we don't ship the
+            // plugin, and without it `data-[state=open]:animate-in` sat
+            // on an undefined utility; combined with Radix's own inline
+            // styles that left the content invisible on some builds
+            // (manifested as an "empty" dropdown in T-M2 testing).
             className={cn(
-              'z-50 overflow-hidden rounded-lg',
-              'border border-border-default bg-bg-surface-1/95 backdrop-blur',
+              'z-[100] overflow-hidden rounded-lg',
+              'border border-border-default bg-bg-surface-1 backdrop-blur',
               'shadow-[0_16px_48px_-16px_rgba(0,0,0,0.7)]',
               'min-w-[var(--radix-select-trigger-width)]',
-              'data-[state=open]:animate-in data-[state=open]:fade-in-0'
+              'max-h-[var(--radix-select-content-available-height)]'
             )}
           >
             <Select.Viewport className="p-1">

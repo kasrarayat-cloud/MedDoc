@@ -1,27 +1,40 @@
 'use client';
 
-import { type ComponentType } from 'react';
+import { Mic, Radio, PenLine } from 'lucide-react';
 import { TiltCard } from '@/components/tilt-card';
 import { GlowCard } from '@/components/glow-card';
 
+export type ModeIconKey = 'mic' | 'radio' | 'pen-line';
+
 interface Props {
   formId: string;
-  icon: ComponentType<{ className?: string; 'aria-hidden'?: boolean }>;
+  /** String key — NOT a component reference. The server page renders this
+   *  inside the client tree via the ICON_MAP lookup below, avoiding
+   *  Next 16's "Functions cannot be passed to Client Components" error
+   *  that a ComponentType prop would trigger (digest 1109689143). */
+  icon: ModeIconKey;
   title: string;
   description: string;
   value: 'audio_upload' | 'voice_dictation' | 'text_notes';
 }
+
+const ICON_MAP = {
+  mic: Mic,
+  radio: Radio,
+  'pen-line': PenLine,
+} as const;
 
 /** Submit button that targets the /visits/new form via the HTML `form`
  *  attribute. Kept separate from the generic ModeTile so the generic
  *  component stays free of form-specific wiring. */
 export function ModeTileWithForm({
   formId,
-  icon: Icon,
+  icon,
   title,
   description,
   value,
 }: Props) {
+  const Icon = ICON_MAP[icon];
   return (
     <button
       type="submit"
