@@ -45,11 +45,12 @@ export function UserMenu({ name, email }: UserMenuProps) {
           sideOffset={8}
           align="end"
           className={cn(
-            'z-50 min-w-[220px] overflow-hidden rounded-lg',
-            'border border-border-default bg-bg-surface-1/95 backdrop-blur',
-            'shadow-[0_16px_48px_-16px_rgba(0,0,0,0.7)]',
-            'data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',
-            'data-[side=bottom]:slide-in-from-top-2'
+            'z-[100] min-w-[220px] overflow-hidden rounded-lg',
+            'border border-border-default bg-bg-surface-1 backdrop-blur',
+            'shadow-[0_16px_48px_-16px_rgba(0,0,0,0.7)]'
+            // Removed tailwindcss-animate classes (animate-in/fade-in-0/
+            // zoom-in-95) — plugin not installed, caused invisible
+            // content on production builds in T-M2.
           )}
         >
           <div className="border-b border-border-subtle px-3 py-2.5">
