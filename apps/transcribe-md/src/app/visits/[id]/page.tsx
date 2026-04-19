@@ -8,9 +8,9 @@ import { TranscribeVisitStatus } from '@prisma/client';
 import { auth } from '@/lib/nextauth';
 import { NavBar } from '@/components/nav-bar';
 import { PageWrapper } from '@/components/page-wrapper';
-import { SpecularButton } from '@/components/specular-button';
-import { VisitOrb } from '@/components/visit-orb';
 import { AudioUploader } from '@/components/audio-uploader';
+import { VoiceDictator } from '@/components/voice-dictator';
+import { TextComposer } from '@/components/text-composer';
 
 import { ProcessingState } from './processing-state';
 import { VisitReadyView, type Utterance, type SpeakerInfo } from './visit-ready-view';
@@ -40,17 +40,6 @@ const PROCESSING_STATES: ReadonlyArray<TranscribeVisitStatus> = [
   TranscribeVisitStatus.POLISHING,
 ];
 
-const MODE_PLACEHOLDER: Record<string, string> = {
-  voice_dictation:
-    'Voice dictation is coming in the next release. This mode will let you ' +
-    'dictate a short summary into your mic and have it expanded into a full ' +
-    'SOAP note. For now, please use Upload audio or Text to SOAP.',
-  text_notes:
-    'Text to SOAP is coming in the next release. This mode will let you type ' +
-    'bullet points and have AI expand them into a full SOAP note. For now, ' +
-    'please use Upload audio.',
-};
-
 export default async function VisitPage({
   params,
 }: {
@@ -77,7 +66,11 @@ export default async function VisitPage({
         status: true,
         audioKey: true,
         audioDurationSec: true,
+        dictationAudioKey: true,
+        dictationDurationSec: true,
+        rawTextInput: true,
         transcriptRaw: true,
+        transcriptText: true,
         speakerMap: true,
         entities: true,
         critique: true,
@@ -127,7 +120,11 @@ export default async function VisitPage({
             status={visit.status}
             audioKey={visit.audioKey}
             audioDurationSec={visit.audioDurationSec}
+            dictationAudioKey={visit.dictationAudioKey}
+            dictationDurationSec={visit.dictationDurationSec}
+            rawTextInput={visit.rawTextInput}
             transcriptRaw={visit.transcriptRaw as unknown}
+            transcriptText={visit.transcriptText}
             speakerMap={visit.speakerMap as unknown}
             entities={visit.entities as unknown}
             critique={visit.critique as unknown}
@@ -159,7 +156,11 @@ interface VisitBodyProps {
   status: TranscribeVisitStatus;
   audioKey: string | null;
   audioDurationSec: number | null;
+  dictationAudioKey: string | null;
+  dictationDurationSec: number | null;
+  rawTextInput: string | null;
   transcriptRaw: unknown;
+  transcriptText: string | null;
   speakerMap: unknown;
   entities: unknown;
   critique: unknown;
@@ -173,21 +174,32 @@ interface VisitBodyProps {
 }
 
 function VisitBody(props: VisitBodyProps) {
-  // Non-audio modes show upgraded T-M5 placeholder copy.
-  if (props.inputMode !== 'audio_upload') {
-    return <ModePlaceholder mode={props.inputMode} />;
+  // ── Input stage — show the right "collect input" UI per mode ──
+  if (props.status === TranscribeVisitStatus.QUEUED) {
+    if (props.inputMode === 'audio_upload' && !props.audioKey) {
+      return <AudioUploader visitId={props.visitId} />;
+    }
+    if (
+      props.inputMode === 'voice_dictation' &&
+      !props.dictationAudioKey
+    ) {
+      return <VoiceDictator visitId={props.visitId} />;
+    }
+    if (props.inputMode === 'text_notes' && !props.rawTextInput) {
+      return <TextComposer visitId={props.visitId} />;
+    }
+    // else: input is already captured — fall through to the
+    // "processing / ready / failed" branches below.
   }
 
-  // State A — no audio yet.
-  if (props.status === TranscribeVisitStatus.QUEUED && !props.audioKey) {
-    return <AudioUploader visitId={props.visitId} />;
-  }
-
-  // State B — mid-pipeline (or QUEUED with audio already sitting in
-  // MinIO waiting for the worker to wake up).
+  // ── Processing — any worker-active state, plus QUEUED with captured
+  //    input (worker just hasn't picked up the job yet) ──
   if (
     PROCESSING_STATES.includes(props.status) ||
-    (props.status === TranscribeVisitStatus.QUEUED && props.audioKey !== null)
+    (props.status === TranscribeVisitStatus.QUEUED &&
+      (props.audioKey ||
+        props.dictationAudioKey ||
+        props.rawTextInput))
   ) {
     return (
       <ProcessingState
@@ -198,12 +210,14 @@ function VisitBody(props: VisitBodyProps) {
     );
   }
 
-  // State D — failed.
+  // ── Failed ──
   if (props.status === TranscribeVisitStatus.FAILED) {
-    return <VisitFailedView visitId={props.visitId} reason={props.reviewReason} />;
+    return (
+      <VisitFailedView visitId={props.visitId} reason={props.reviewReason} />
+    );
   }
 
-  // State C — READY or SIGNED.
+  // ── READY or SIGNED ──
   const raw = (props.transcriptRaw as
     | { results?: { utterances?: Utterance[] } }
     | null) ?? null;
@@ -237,9 +251,20 @@ function VisitBody(props: VisitBodyProps) {
     ? props.signedSoap ?? props.soapFinal ?? ''
     : props.soapFinal ?? '';
 
+  // Pick the duration number to show in the Pipeline tab: audioDurationSec
+  // for audio_upload, dictationDurationSec for voice_dictation, null
+  // for text_notes (there's no media to time).
+  const displayDurationSec =
+    props.inputMode === 'audio_upload'
+      ? props.audioDurationSec
+      : props.inputMode === 'voice_dictation'
+        ? props.dictationDurationSec
+        : null;
+
   return (
     <VisitReadyView
       visitId={props.visitId}
+      inputMode={props.inputMode}
       soapText={soapText}
       readonly={readonly}
       needsReview={props.needsReview}
@@ -247,40 +272,18 @@ function VisitBody(props: VisitBodyProps) {
       overallQuality={overallQuality}
       utterances={utterances}
       speakerMap={speakerMap}
+      dictationTranscript={
+        props.inputMode === 'voice_dictation' ? props.transcriptText : null
+      }
+      rawTextInput={
+        props.inputMode === 'text_notes' ? props.rawTextInput : null
+      }
       entities={props.entities}
       critique={critique}
-      durationSec={props.audioDurationSec}
+      durationSec={displayDurationSec}
       costCents={props.processingCostCents}
       processingStartedAt={props.processingStartedAt?.toISOString() ?? null}
       processingFinishedAt={props.processingFinishedAt?.toISOString() ?? null}
     />
-  );
-}
-
-function ModePlaceholder({ mode }: { mode: string }) {
-  const copy = MODE_PLACEHOLDER[mode] ?? 'This visit mode is not yet supported.';
-  return (
-    <div className="mx-auto flex max-w-xl flex-col items-center py-16 text-center sm:py-24">
-      <div className="relative mb-10 h-56 w-56">
-        <div
-          aria-hidden
-          className="orb-pulse pointer-events-none absolute inset-0 -z-10 rounded-full"
-          style={{
-            background:
-              'radial-gradient(ellipse at center, rgba(139,92,246,0.4) 0%, rgba(139,92,246,0.1) 40%, transparent 70%)',
-            filter: 'blur(28px)',
-          }}
-        />
-        <VisitOrb />
-      </div>
-      <p className="max-w-xl text-center text-[15px] leading-relaxed text-text-secondary">
-        {copy}
-      </p>
-      <div className="mt-8">
-        <SpecularButton href="/visits/new" variant="secondary" size="md">
-          Start a new visit
-        </SpecularButton>
-      </div>
-    </div>
   );
 }

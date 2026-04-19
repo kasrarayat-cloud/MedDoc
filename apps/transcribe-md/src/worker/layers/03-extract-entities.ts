@@ -1,14 +1,15 @@
 // ============================================================================
-// Layer 3 — Medical entity extraction with evidence quotes (T-M4)
+// Layer 3 — Medical entity extraction with evidence quotes (T-M4 + T-M5)
 // ----------------------------------------------------------------------------
-// Input: the role-labeled transcript.
-// Output: structured entities (HPI, meds, allergies, exam findings, plan…)
-// where every item carries a verbatim evidence_quote + speaker + timestamp.
+// Takes whatever the upstream layer produced (full conversation from L1+L2,
+// a single-speaker dictation from L1', or raw typed text from the doctor)
+// and turns it into a structured entity set. Every item still carries an
+// evidence_quote so Layer 4 can never invent findings.
 //
-// The prompt's #1 rule is: if you cannot cite evidence, DO NOT include
-// the entity. Claude is explicitly told that hallucinating is a
-// critical failure — this is the layer that prevents the SOAP note from
-// inventing history.
+// Three modes:
+//   - conversation (audio_upload)   — role-labeled lines, speaker + ts required
+//   - dictation    (voice_dictation) — one doctor-only block, speaker = "Doctor"
+//   - text         (text_notes)     — raw typed bullets, no timestamps
 // ============================================================================
 
 import { z } from 'zod';
@@ -19,29 +20,30 @@ import type { SpeakerMap } from './02-speaker-roles';
 const MODEL = 'claude-sonnet-4-6';
 
 // ---------------------------------------------------------------------------
-// Schema — every leaf entity has an evidence_quote + speaker + timestamp.
-// Nested fields within HPI / social history use the same shape.
+// Schema — evidence_quote is always required (no hallucination rule), but
+// speaker + timestamp are optional so dictation/text modes don't have to
+// fake them. In conversation mode the prompt still demands both.
 // ---------------------------------------------------------------------------
 
 export const Evidence = z.object({
   evidence_quote: z.string().min(1),
-  speaker: z.string(),
-  /** seconds from audio start; Deepgram provides this on every utterance. */
+  speaker: z.string().optional(),
+  /** seconds from audio start; only conversation + dictation populate this. */
   timestamp: z.number().nonnegative().optional(),
 });
 export type Evidence = z.infer<typeof Evidence>;
 
-// A "fact plus evidence" wrapper used everywhere there's a single
-// textual finding to capture.
+// A "fact plus evidence" wrapper used everywhere there's a single textual
+// finding to capture.
 function factWithEvidence<K extends string>(
   key: K
 ): z.ZodObject<{ [P in K | 'evidence_quote' | 'speaker' | 'timestamp']: z.ZodTypeAny }> {
   return z.object({
     [key]: z.string(),
     evidence_quote: z.string().min(1),
-    speaker: z.string(),
+    speaker: z.string().optional(),
     timestamp: z.number().nonnegative().optional(),
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   }) as any;
 }
 
@@ -55,11 +57,8 @@ const HpiDimensions = z.object({
   context: z.string().optional(),
   modifying_factors: z.string().optional(),
   associated_symptoms: z.string().optional(),
-  // Evidence for the HPI as a whole (the dimensions above can be
-  // inferred from the same few utterances — we don't require per-
-  // dimension evidence, just the HPI paragraph).
   evidence_quote: z.string().min(1),
-  speaker: z.string(),
+  speaker: z.string().optional(),
   timestamp: z.number().nonnegative().optional(),
 });
 
@@ -68,7 +67,7 @@ export const ExtractedEntities = z.object({
     .object({
       statement: z.string(),
       evidence_quote: z.string().min(1),
-      speaker: z.string(),
+      speaker: z.string().optional(),
       timestamp: z.number().nonnegative().optional(),
     })
     .nullable(),
@@ -82,7 +81,7 @@ export const ExtractedEntities = z.object({
         route: z.string().nullable().optional(),
         frequency: z.string().nullable().optional(),
         evidence_quote: z.string().min(1),
-        speaker: z.string(),
+        speaker: z.string().optional(),
         timestamp: z.number().nonnegative().optional(),
       })
     )
@@ -93,7 +92,7 @@ export const ExtractedEntities = z.object({
         substance: z.string(),
         reaction: z.string().nullable().optional(),
         evidence_quote: z.string().min(1),
-        speaker: z.string(),
+        speaker: z.string().optional(),
         timestamp: z.number().nonnegative().optional(),
       })
     )
@@ -104,7 +103,7 @@ export const ExtractedEntities = z.object({
         relation: z.string(),
         condition: z.string(),
         evidence_quote: z.string().min(1),
-        speaker: z.string(),
+        speaker: z.string().optional(),
         timestamp: z.number().nonnegative().optional(),
       })
     )
@@ -123,7 +122,7 @@ export const ExtractedEntities = z.object({
         system: z.string(),
         finding: z.string(),
         evidence_quote: z.string().min(1),
-        speaker: z.string(),
+        speaker: z.string().optional(),
         timestamp: z.number().nonnegative().optional(),
       })
     )
@@ -134,7 +133,7 @@ export const ExtractedEntities = z.object({
         system: z.string(),
         finding: z.string(),
         evidence_quote: z.string().min(1),
-        speaker: z.string(),
+        speaker: z.string().optional(),
         timestamp: z.number().nonnegative().optional(),
       })
     )
@@ -145,7 +144,7 @@ export const ExtractedEntities = z.object({
         test: z.string(),
         result_if_given: z.string().nullable().optional(),
         evidence_quote: z.string().min(1),
-        speaker: z.string(),
+        speaker: z.string().optional(),
         timestamp: z.number().nonnegative().optional(),
       })
     )
@@ -157,19 +156,11 @@ export const ExtractedEntities = z.object({
 });
 export type ExtractedEntities = z.infer<typeof ExtractedEntities>;
 
-export interface Layer3Input {
-  visitId: string;
-  practiceId: string;
-  utterances: DeepgramUtterance[];
-  speakerMap: SpeakerMap;
-}
-
 // ---------------------------------------------------------------------------
-// Formatting helper — produce the role-labeled transcript the prompt
-// and Layers 4+5 all consume.
+// Formatting helper for conversation mode — produces the role-labeled
+// transcript that Layer 4 + 5 also consume.
 // ---------------------------------------------------------------------------
 
-/** "[Doctor, 0:05]: Tell me what brings you in today." */
 function formatRoleLabeledLine(
   u: DeepgramUtterance,
   speakerMap: SpeakerMap
@@ -193,17 +184,69 @@ export function buildRoleLabeledTranscript(
 }
 
 // ---------------------------------------------------------------------------
-// The layer itself.
+// Layer 3 input — discriminated union by mode.
 // ---------------------------------------------------------------------------
 
-export async function runLayer3ExtractEntities(
-  input: Layer3Input
-): Promise<ExtractedEntities> {
-  const transcript = buildRoleLabeledTranscript(
-    input.utterances,
-    input.speakerMap
-  );
+export interface Layer3ConversationInput {
+  visitId: string;
+  practiceId: string;
+  mode: 'conversation';
+  utterances: DeepgramUtterance[];
+  speakerMap: SpeakerMap;
+}
+export interface Layer3DictationInput {
+  visitId: string;
+  practiceId: string;
+  mode: 'dictation';
+  /** Full text from Layer 1' (single-speaker Deepgram). */
+  dictationText: string;
+}
+export interface Layer3TextInput {
+  visitId: string;
+  practiceId: string;
+  mode: 'text';
+  /** Raw bullet-point / prose the doctor typed in the TextComposer UI. */
+  rawText: string;
+}
+export type Layer3Input =
+  | Layer3ConversationInput
+  | Layer3DictationInput
+  | Layer3TextInput;
 
+// Bundled output — Layer 4 wants a "context text" to include alongside the
+// entities. Different shape per mode (role-labeled transcript, dictation
+// block, raw bullets) but we return it as a single string here so Layer 4
+// doesn't have to re-branch.
+export interface Layer3Output {
+  entities: ExtractedEntities;
+  contextText: string;
+}
+
+// ---------------------------------------------------------------------------
+// Prompt builders — one per mode. Extracted to small functions so the
+// surface is testable + easy to eyeball.
+// ---------------------------------------------------------------------------
+
+const COMMON_CATEGORIES = [
+  'Categories:',
+  '- chief_complaint (single statement + evidence, or null)',
+  '- hpi: onset, duration, quality, severity, location, timing,',
+  '  context, modifying_factors, associated_symptoms — each string;',
+  '  all optional; one evidence quote for the paragraph.',
+  '- past_medical_history: list of {condition, evidence…}',
+  '- medications: list of {name, dose?, route?, frequency?, evidence…}',
+  '- allergies: list of {substance, reaction?, evidence…}',
+  '- family_history: list of {relation, condition, evidence…}',
+  '- social_history: smoking/alcohol/drugs/occupation, each optional',
+  '- ros: list of {system, finding, evidence…} (review of systems)',
+  '- exam_findings: list of {system, finding, evidence…} — only what',
+  '  the doctor stated/observed',
+  '- tests_mentioned: list of {test, result_if_given?, evidence…}',
+  '- assessment_discussed: list of {finding, evidence…}',
+  '- plan_discussed: list of {item, evidence…}',
+].join('\n');
+
+function buildConversationPrompt(): { system: string; userPrefix: string } {
   const system = [
     'You are a medical entity extraction system. You extract structured',
     'entities from clinical conversations for downstream SOAP-note',
@@ -219,31 +262,97 @@ export async function runLayer3ExtractEntities(
     '4. If the transcript is silent on a category, return [] (or null',
     '   for singleton categories) — do not stretch to populate.',
     '',
-    'Categories:',
-    '- chief_complaint (single statement + evidence)',
-    '- hpi: onset, duration, quality, severity, location, timing,',
-    '  context, modifying_factors, associated_symptoms — each string;',
-    '  all optional; one evidence quote for the paragraph.',
-    '- past_medical_history: list of {condition, evidence…}',
-    '- medications: list of {name, dose?, route?, frequency?, evidence…}',
-    '- allergies: list of {substance, reaction?, evidence…}',
-    '- family_history: list of {relation, condition, evidence…}',
-    '- social_history: smoking/alcohol/drugs/occupation, each optional',
-    '- ros: list of {system, finding, evidence…} (review of systems)',
-    '- exam_findings: list of {system, finding, evidence…} — only what',
-    '  the doctor stated/observed during the encounter',
-    '- tests_mentioned: list of {test, result_if_given?, evidence…}',
-    '- assessment_discussed: list of {finding, evidence…}',
-    '- plan_discussed: list of {item, evidence…}',
+    COMMON_CATEGORIES,
     '',
     'Respond with VALID JSON ONLY, no markdown fences.',
   ].join('\n');
+  return { system, userPrefix: 'Role-labeled transcript:' };
+}
 
-  const user = [
-    'Role-labeled transcript:',
+function buildDictationPrompt(): { system: string; userPrefix: string } {
+  const system = [
+    'You are a medical entity extraction system. The input below is a',
+    'doctor\'s own dictated summary of a visit, transcribed as a single',
+    'block of text (no speakers, no patient-doctor turn-taking). Extract',
+    'structured entities for downstream SOAP-note generation.',
     '',
-    transcript,
+    'CRITICAL RULES (violating these is a pipeline failure):',
+    '1. Every entity MUST include an "evidence_quote" — a verbatim',
+    '   snippet from the dictation. Speaker is always "Doctor". Timestamp',
+    '   is optional (there\'s no meaningful time cue in a single block).',
+    '2. If you CANNOT cite evidence for an entity, OMIT IT. Never invent.',
+    '   Expanding shorthand is allowed (e.g. "f/u 3mo" → "Follow-up in 3',
+    '   months", "bp 148/92" → systolic 148, diastolic 92). Inventing',
+    '   findings that weren\'t mentioned is hallucination.',
+    '3. Treat the doctor as the only narrator. Everything in the',
+    '   dictation is either (a) something the doctor observed, (b)',
+    '   something the patient told the doctor, or (c) the doctor\'s',
+    '   plan. Use context to decide which category each point belongs',
+    '   to — if ambiguous, prefer exam_findings or plan_discussed over',
+    '   hpi.',
+    '4. If the dictation is silent on a category, return [] (or null).',
+    '',
+    COMMON_CATEGORIES,
+    '',
+    'Respond with VALID JSON ONLY, no markdown fences.',
   ].join('\n');
+  return { system, userPrefix: 'Doctor\'s dictated visit summary:' };
+}
+
+function buildTextPrompt(): { system: string; userPrefix: string } {
+  const system = [
+    'You are a medical entity extraction system. The input below is a',
+    'doctor\'s TYPED shorthand — bullets, abbreviations, or prose — that',
+    'they want expanded into a full SOAP note downstream. Extract',
+    'structured entities.',
+    '',
+    'CRITICAL RULES (violating these is a pipeline failure):',
+    '1. Every entity MUST include an "evidence_quote" — the relevant',
+    '   line/phrase from the typed input, verbatim. Speaker and',
+    '   timestamp are both optional and should usually be omitted (this',
+    '   isn\'t a recording).',
+    '2. Expand common medical shorthand sensibly:',
+    '   - "yo" → "year-old", "f/u" → "follow-up", "RTC" → "return to',
+    '     clinic", "ROS -" → "review of systems negative",',
+    '   - "bp 148/92" → systolic 148, diastolic 92,',
+    '   - "A1c 6.8" → HbA1c 6.8,',
+    '   - "incr X to Y" → "increase X to Y".',
+    '3. If you CANNOT cite an evidence line for an entity, OMIT IT.',
+    '   Inventing findings the doctor didn\'t type is hallucination and',
+    '   a critical failure.',
+    '4. Short or sparse inputs are valid; empty categories stay empty.',
+    '',
+    COMMON_CATEGORIES,
+    '',
+    'Respond with VALID JSON ONLY, no markdown fences.',
+  ].join('\n');
+  return { system, userPrefix: 'Doctor\'s typed shorthand:' };
+}
+
+// ---------------------------------------------------------------------------
+// The layer itself.
+// ---------------------------------------------------------------------------
+
+export async function runLayer3ExtractEntities(
+  input: Layer3Input
+): Promise<Layer3Output> {
+  let contextText: string;
+  let prompts: { system: string; userPrefix: string };
+  if (input.mode === 'conversation') {
+    contextText = buildRoleLabeledTranscript(
+      input.utterances,
+      input.speakerMap
+    );
+    prompts = buildConversationPrompt();
+  } else if (input.mode === 'dictation') {
+    contextText = input.dictationText.trim();
+    prompts = buildDictationPrompt();
+  } else {
+    contextText = input.rawText.trim();
+    prompts = buildTextPrompt();
+  }
+
+  const user = [prompts.userPrefix, '', contextText].join('\n');
 
   const entities = await modelClient.complete({
     practiceId: input.practiceId,
@@ -251,7 +360,7 @@ export async function runLayer3ExtractEntities(
     purpose: 'tm_entities',
     provider: 'anthropic',
     model: MODEL,
-    system,
+    system: prompts.system,
     user,
     schema: ExtractedEntities,
     maxTokens: 6144,
@@ -262,5 +371,5 @@ export async function runLayer3ExtractEntities(
     data: { entities: entities as unknown as object },
   });
 
-  return entities;
+  return { entities, contextText };
 }

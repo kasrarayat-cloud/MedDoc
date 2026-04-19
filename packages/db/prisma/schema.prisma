@@ -1313,6 +1313,18 @@ model TranscribeVisit {
   audioDurationSec Int?
   audioUploadedAt  DateTime?
 
+  // ── T-M5: dictation + text inputs ──
+  /// MinIO object key for a voice dictation recording (inputMode
+  /// voice_dictation). Separate column from audioKey so a future
+  /// "dictate an addendum to an uploaded visit" flow can carry both.
+  dictationAudioKey    String?
+  dictationDurationSec Int?
+  /// Raw bullet-point / prose text when inputMode = text_notes.
+  /// 5000-char soft cap enforced at the action boundary; using
+  /// @db.Text here so a doctor pasting a long clinical paragraph
+  /// doesn't hit Postgres's default VARCHAR(255).
+  rawTextInput         String? @db.Text
+
   // ── T-M4: pipeline artifacts (one field per layer) ──
   /// Full Deepgram response JSON. Used by Layers 2-5 + the Pipeline tab.
   transcriptRaw Json?

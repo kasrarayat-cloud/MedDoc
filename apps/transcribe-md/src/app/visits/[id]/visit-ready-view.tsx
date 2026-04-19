@@ -44,6 +44,9 @@ export interface SpeakerInfo {
 
 export interface VisitReadyViewProps {
   visitId: string;
+  /** Determines which "input" tab is shown + whether speaker reassignment
+   *  is available. */
+  inputMode: string;
   /** The note shown in the SOAP tab — soapFinal when READY, signedSoap
    *  when SIGNED. The caller picks. */
   soapText: string;
@@ -51,8 +54,14 @@ export interface VisitReadyViewProps {
   needsReview: boolean;
   reviewReason: string | null;
   overallQuality: 'high' | 'medium' | 'low' | null;
+  /** audio_upload only — full diarized utterance list from Deepgram. */
   utterances: Utterance[];
+  /** audio_upload only — per-speaker role assignments from Layer 2. */
   speakerMap: Record<string, SpeakerInfo>;
+  /** voice_dictation only — flat transcript of the doctor's dictation. */
+  dictationTranscript: string | null;
+  /** text_notes only — the raw shorthand the doctor typed. */
+  rawTextInput: string | null;
   entities: unknown;
   critique: {
     issues: { severity: string; location: string; description: string; suggested_fix: string }[];
@@ -69,12 +78,17 @@ export interface VisitReadyViewProps {
 export function VisitReadyView(props: VisitReadyViewProps) {
   const [tab, setTab] = useState<TabKey>('soap');
 
+  // The second tab is labelled "Input" for text_notes, "Transcript" for
+  // the other two modes. Everything else renders identically.
+  const secondTabLabel =
+    props.inputMode === 'text_notes' ? 'Input' : 'Transcript';
+
   return (
     <div className="w-full">
       <Tabs
         tab={tab}
         onChange={setTab}
-        readonly={props.readonly}
+        secondTabLabel={secondTabLabel}
       />
       <div className="mt-6">
         {tab === 'soap' && (
@@ -87,14 +101,22 @@ export function VisitReadyView(props: VisitReadyViewProps) {
             overallQuality={props.overallQuality}
           />
         )}
-        {tab === 'transcript' && (
-          <TranscriptView
-            visitId={props.visitId}
-            utterances={props.utterances}
-            speakerMap={props.speakerMap}
-            readonly={props.readonly}
-          />
-        )}
+        {tab === 'transcript' &&
+          (props.inputMode === 'audio_upload' ? (
+            <TranscriptView
+              visitId={props.visitId}
+              utterances={props.utterances}
+              speakerMap={props.speakerMap}
+              readonly={props.readonly}
+            />
+          ) : props.inputMode === 'voice_dictation' ? (
+            <DictationTranscriptView
+              visitId={props.visitId}
+              transcript={props.dictationTranscript}
+            />
+          ) : (
+            <RawTextInputView text={props.rawTextInput} />
+          ))}
         {tab === 'pipeline' && (
           <PipelineView
             entities={props.entities}
@@ -117,14 +139,15 @@ export function VisitReadyView(props: VisitReadyViewProps) {
 function Tabs({
   tab,
   onChange,
+  secondTabLabel,
 }: {
   tab: TabKey;
   onChange: (t: TabKey) => void;
-  readonly: boolean;
+  secondTabLabel: string;
 }) {
   const tabs: { key: TabKey; label: string; icon: React.ReactNode }[] = [
     { key: 'soap', label: 'SOAP Note', icon: <FileText className="h-3.5 w-3.5" aria-hidden /> },
-    { key: 'transcript', label: 'Transcript', icon: <MessageSquare className="h-3.5 w-3.5" aria-hidden /> },
+    { key: 'transcript', label: secondTabLabel, icon: <MessageSquare className="h-3.5 w-3.5" aria-hidden /> },
     { key: 'pipeline', label: 'Pipeline', icon: <Layers className="h-3.5 w-3.5" aria-hidden /> },
   ];
   return (
@@ -442,5 +465,63 @@ function CollapsibleSection({
       </button>
       {open && <div className="border-t border-border-subtle px-4 py-3">{children}</div>}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Dictation transcript view (T-M5) — single-speaker block + audio replay.
+// ---------------------------------------------------------------------------
+function DictationTranscriptView({
+  visitId,
+  transcript,
+}: {
+  visitId: string;
+  transcript: string | null;
+}) {
+  // Audio is fetched from our own route — keeps the object private
+  // behind the session cookie rather than handing out a MinIO presign.
+  const audioSrc = `/api/visits/${visitId}/dictation/audio`;
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-border-default bg-bg-surface-1/60 p-3">
+        <audio
+          src={audioSrc}
+          controls
+          preload="metadata"
+          className="w-full"
+          aria-label="Replay dictation"
+        />
+      </div>
+
+      {transcript ? (
+        <div className="rounded-xl border border-border-subtle bg-bg-surface-1/40 p-5 leading-relaxed text-[14px] text-text-secondary whitespace-pre-wrap">
+          {transcript}
+        </div>
+      ) : (
+        <div className="rounded-xl border border-border-subtle bg-bg-surface-1/40 p-5 text-[13px] text-text-muted">
+          Dictation transcript not available.
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Raw typed input view (T-M5) — text_notes. Monospace block so the
+// doctor sees exactly what they typed.
+// ---------------------------------------------------------------------------
+function RawTextInputView({ text }: { text: string | null }) {
+  if (!text) {
+    return (
+      <div className="rounded-xl border border-border-subtle bg-bg-surface-1/40 p-5 text-[13px] text-text-muted">
+        No input text stored.
+      </div>
+    );
+  }
+  return (
+    <pre className="overflow-x-auto rounded-xl border border-border-default bg-bg-surface-1/60 p-5 font-mono text-[12.5px] leading-relaxed text-text-secondary whitespace-pre-wrap">
+      {text}
+    </pre>
   );
 }
