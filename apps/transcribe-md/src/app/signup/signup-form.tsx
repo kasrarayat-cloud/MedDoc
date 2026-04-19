@@ -4,6 +4,7 @@ import { useActionState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { SpecularButton } from '@/components/specular-button';
 import { SpecialtyDropdown, type SpecialtyOption } from '@/components/specialty-dropdown';
@@ -21,8 +22,13 @@ export function SignupForm({ specialties }: SignupFormProps) {
 
   useEffect(() => {
     if (state && state.ok) {
+      toast.success('Welcome to TranscribeMD', {
+        description: "You're in. Start your first visit whenever you're ready.",
+      });
       router.push(state.redirect);
       router.refresh();
+    } else if (state && !state.ok && state.errors._form) {
+      toast.error('Signup failed', { description: state.errors._form });
     }
   }, [state, router]);
 

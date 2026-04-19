@@ -64,19 +64,19 @@ export function SpecialtyDropdown({
           <Select.Content
             position="popper"
             sideOffset={6}
-            // z-index 100 so the popper lands above the glassy NavBar
-            // (z-40) on /dashboard when the dropdown is used there.
-            // NOTE: no tailwindcss-animate classes — we don't ship the
-            // plugin, and without it `data-[state=open]:animate-in` sat
-            // on an undefined utility; combined with Radix's own inline
-            // styles that left the content invisible on some builds
-            // (manifested as an "empty" dropdown in T-M2 testing).
+            // z-100 clears the glassy NavBar (z-40) on /dashboard.
+            // T-M3: tailwindcss-animate plugin (or the fallback utilities
+            // in globals.css) now supplies animate-in/fade-in-0/
+            // zoom-in-95, restoring the entry animation the T-M2 fix had
+            // to strip when the plugin wasn't installed.
             className={cn(
               'z-[100] overflow-hidden rounded-lg',
-              'border border-border-default bg-bg-surface-1 backdrop-blur',
+              'border border-border-default bg-bg-surface-1/95 backdrop-blur',
               'shadow-[0_16px_48px_-16px_rgba(0,0,0,0.7)]',
               'min-w-[var(--radix-select-trigger-width)]',
-              'max-h-[var(--radix-select-content-available-height)]'
+              'max-h-[var(--radix-select-content-available-height)]',
+              'data-[state=open]:animate-in data-[state=open]:fade-in-0',
+              'data-[state=open]:zoom-in-95 data-[state=open]:slide-in-from-top-2'
             )}
           >
             <Select.Viewport className="p-1">

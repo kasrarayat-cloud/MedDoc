@@ -46,11 +46,12 @@ export function UserMenu({ name, email }: UserMenuProps) {
           align="end"
           className={cn(
             'z-[100] min-w-[220px] overflow-hidden rounded-lg',
-            'border border-border-default bg-bg-surface-1 backdrop-blur',
-            'shadow-[0_16px_48px_-16px_rgba(0,0,0,0.7)]'
-            // Removed tailwindcss-animate classes (animate-in/fade-in-0/
-            // zoom-in-95) — plugin not installed, caused invisible
-            // content on production builds in T-M2.
+            'border border-border-default bg-bg-surface-1/95 backdrop-blur',
+            'shadow-[0_16px_48px_-16px_rgba(0,0,0,0.7)]',
+            // T-M3: plugin + fallback utilities now exist, so the
+            // fade/zoom/slide entry animations work again.
+            'data-[state=open]:animate-in data-[state=open]:fade-in-0',
+            'data-[state=open]:zoom-in-95 data-[state=open]:slide-in-from-top-2'
           )}
         >
           <div className="border-b border-border-subtle px-3 py-2.5">
