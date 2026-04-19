@@ -13,7 +13,14 @@ const LoginSchema = z.object({
   password: z.string().min(1, 'Password is required'),
 });
 
-/** Signup: stricter password policy + requires ToS + specialty. */
+/** Signup: stricter password policy + requires ToS.
+ *
+ *  T-M9: dropped the specialty field. The dropdown was captured but
+ *  never persisted (no User.specialty column), so collecting it at
+ *  signup was a UX no-op. Users pick specialty per-visit on
+ *  /visits/new (which now defaults to the first specialty in the
+ *  catalog so it's never empty). Future: if we add User.specialty,
+ *  bring the field back and persist it. */
 const SignupSchema = z.object({
   email: z.string().email(),
   password: z
@@ -23,7 +30,6 @@ const SignupSchema = z.object({
     .regex(/[A-Z]/, 'Password must contain an uppercase letter')
     .regex(/\d/, 'Password must contain a digit'),
   name: z.string().min(1, 'Name is required').max(120),
-  specialty: z.string().min(1, 'Pick a specialty'),
   acceptTerms: z.literal('on', {
     message: 'You must accept the terms of service',
   }),
@@ -39,6 +45,12 @@ export interface FormErrorState {
 export interface FormOkState {
   ok: true;
   redirect: string;
+  /** When set, the action technically succeeded (e.g., signup created
+   *  the account) but a follow-up step (auto-login) didn't, so the
+   *  caller should show a warning toast instead of the green
+   *  success one. The email-bug lesson in T-M9: don't let a partial
+   *  success toast as clean success. */
+  warning?: string;
 }
 
 export type AuthActionState = FormOkState | FormErrorState | null;
@@ -104,7 +116,6 @@ export async function signupAction(
       values: {
         email: String(raw.email ?? ''),
         name: String(raw.name ?? ''),
-        specialty: String(raw.specialty ?? ''),
       },
     };
   }
@@ -128,7 +139,6 @@ export async function signupAction(
       values: {
         email: emailLower,
         name: parsed.data.name,
-        specialty: parsed.data.specialty,
       },
     };
   }
@@ -170,7 +180,6 @@ export async function signupAction(
       values: {
         email: emailLower,
         name: parsed.data.name,
-        specialty: parsed.data.specialty,
       },
     };
   }
@@ -185,7 +194,16 @@ export async function signupAction(
     });
   } catch (err) {
     console.error('[signup] auto-login failed:', err);
-    return { ok: true, redirect: '/login' };
+    // Previously returned `{ ok: true, redirect: '/login' }` with no
+    // marker, so the signup form fired its green success toast while
+    // sending the user to the login page. Surface it as a warning so
+    // the user understands why they landed on /login immediately
+    // after "signing up".
+    return {
+      ok: true,
+      redirect: '/login',
+      warning: 'Account created — please sign in to continue.',
+    };
   }
 
   return { ok: true, redirect: '/dashboard' };

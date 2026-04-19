@@ -54,6 +54,11 @@ interface SignAndSendModalProps {
    *  calls the individual export routes directly (used on already-
    *  SIGNED visits so "Export again" doesn't try to re-sign). */
   signOnSubmit: boolean;
+  /** T-M9 — whether Email is a selectable destination. When false the
+   *  "Email to me" checkbox is hidden entirely and 'email' is stripped
+   *  from any submission payload as belt-and-braces. Set from the
+   *  server based on RESEND_API_KEY + RESEND_FROM_VERIFIED. */
+  emailEnabled: boolean;
   /** The trigger button's label — "Sign & Send" vs "Export again". */
   triggerLabel: string;
   /** Icon shown on the trigger. */
@@ -85,7 +90,12 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
   }, []);
 
   const submit = useCallback(() => {
-    const destinations = Array.from(selected);
+    // Strip 'email' defensively — if emailEnabled flips off between
+    // renders, or a stale entry somehow lingers in `selected`, don't
+    // send it to the server.
+    const destinations = Array.from(selected).filter(
+      (d) => d !== 'email' || props.emailEnabled
+    );
     if (destinations.length === 0) {
       toast.error('Pick at least one destination.');
       return;
@@ -104,19 +114,58 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
         // browser-side delivery. `pending` (useTransition) clears here,
         // so even if a download stalls or navigator.clipboard hangs on
         // an expired user-activation, the spinner never gets stuck.
-        // Previously we awaited browser-side deliveries inside the
-        // transition, which meant any silent hang (esp. clipboard
-        // writeText after an async boundary) left the modal showing
-        // "Signing…" indefinitely.
-        toast.success(props.signOnSubmit ? 'Signed' : 'Exported', {
-          description: props.signOnSubmit
-            ? 'Your note is locked. Delivered to the chosen destinations.'
-            : 'Delivered to the chosen destinations.',
-        });
         setOpen(false);
         router.refresh();
 
-        // Step 3: fire-and-forget the browser-side deliveries. Errors
+        // Step 3: classify outcome. Previously we ALWAYS fired the
+        // green "Signed" toast and then a tiny "some destinations
+        // failed" one — users missed the second toast and assumed
+        // email was sent. Now we branch: setup errors get a loud
+        // persistent error toast; partial failures get a warning;
+        // only clean runs show the green success.
+        const deliveryErrors = payload.deliveryErrors ?? {};
+        const failedEntries = Object.entries(deliveryErrors);
+        const setupErrors = failedEntries.filter(([, msg]) =>
+          /isn't set up|not configured|EMAIL_NOT_CONFIGURED/i.test(msg)
+        );
+        const failureSummary = failedEntries
+          .map(([k, v]) => `${k}: ${v}`)
+          .join('\n');
+
+        if (setupErrors.length > 0) {
+          toast.error('Email delivery not configured', {
+            description: `${setupErrors[0][1]}\n\nAll other destinations ran normally — PDF/DOCX/clipboard have been delivered. Download the PDF if you need the record immediately.`,
+            duration: 15_000,
+          });
+          if (failedEntries.length > setupErrors.length) {
+            const rest = failedEntries
+              .filter(([k]) => !setupErrors.some(([sk]) => sk === k))
+              .map(([k, v]) => `${k}: ${v}`)
+              .join('\n');
+            toast.error('Other destinations also failed', {
+              description: rest,
+              duration: 10_000,
+            });
+          }
+        } else if (failedEntries.length > 0) {
+          toast.warning(
+            props.signOnSubmit
+              ? 'Signed — some destinations failed'
+              : 'Partial export',
+            {
+              description: failureSummary,
+              duration: 10_000,
+            }
+          );
+        } else {
+          toast.success(props.signOnSubmit ? 'Signed' : 'Exported', {
+            description: props.signOnSubmit
+              ? 'Your note is locked. Delivered to the chosen destinations.'
+              : 'Delivered to the chosen destinations.',
+          });
+        }
+
+        // Step 4: fire-and-forget the browser-side deliveries. Errors
         // surface as toasts, but crucially they don't block the modal.
         void applyBrowserSideDeliveries(payload, destinations).catch(
           (err: unknown) => {
@@ -127,19 +176,12 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
             });
           }
         );
-
-        if (payload.deliveryErrors) {
-          const failed = Object.entries(payload.deliveryErrors)
-            .map(([k, v]) => `${k}: ${v}`)
-            .join(', ');
-          toast.error('Some destinations failed', { description: failed });
-        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Unknown error';
         toast.error('Could not deliver', { description: msg });
       }
     });
-  }, [props.visitId, props.signOnSubmit, router, selected]);
+  }, [props.visitId, props.signOnSubmit, props.emailEnabled, router, selected]);
 
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
@@ -212,13 +254,15 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
               selected={selected}
               onToggle={toggle}
             />
-            <Group
-              title="Email"
-              hint={`Send a PDF to ${props.doctorEmail} for your records. Don't use for patient communication.`}
-              items={DESTINATIONS.filter((d) => d.group === 'email')}
-              selected={selected}
-              onToggle={toggle}
-            />
+            {props.emailEnabled && (
+              <Group
+                title="Email"
+                hint={`Send a PDF to ${props.doctorEmail} for your records. Don't use for patient communication.`}
+                items={DESTINATIONS.filter((d) => d.group === 'email')}
+                selected={selected}
+                onToggle={toggle}
+              />
+            )}
           </div>
 
           <div className="flex items-center justify-between gap-3 border-t border-border-subtle bg-bg-surface-2/40 px-6 py-3">

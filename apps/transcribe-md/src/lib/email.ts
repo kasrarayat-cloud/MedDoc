@@ -11,20 +11,38 @@
 
 import { Resend } from 'resend';
 
+/** Thrown when Resend rejects the send because the deployment isn't
+ *  set up correctly (domain not verified, API key revoked, etc.) —
+ *  i.e., a CONFIG error the ops team needs to fix, not a per-message
+ *  transient error. Callers can distinguish this from "delivery
+ *  failed" and surface it more prominently. */
+export class EmailNotConfiguredError extends Error {
+  readonly code = 'EMAIL_NOT_CONFIGURED' as const;
+  constructor(message: string) {
+    super(message);
+    this.name = 'EmailNotConfiguredError';
+  }
+}
+
 let clientSingleton: Resend | null = null;
 
 function getClient(): Resend {
   if (clientSingleton) return clientSingleton;
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
-    throw new Error(
-      'RESEND_API_KEY is not set. Add it to .env before enabling email delivery.'
+    throw new EmailNotConfiguredError(
+      'RESEND_API_KEY is not set — email delivery is disabled on this deployment.'
     );
   }
   clientSingleton = new Resend(apiKey);
   return clientSingleton;
 }
 
+/** From-address defaults to notes@transcribemd.app — that domain MUST
+ *  be verified in the Resend account attached to RESEND_API_KEY.
+ *  Verify at https://resend.com/domains (needs DNS access). Override
+ *  with RESEND_FROM="Name <addr@verified-domain.tld>" if you want to
+ *  ship from a different address. */
 const DEFAULT_FROM = 'TranscribeMD <notes@transcribemd.app>';
 
 export interface SendVisitPdfEmailArgs {
@@ -101,11 +119,29 @@ export async function sendVisitPdfEmail(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const error = (result as any)?.error;
   if (error) {
-    throw new Error(
-      `Resend rejected the message: ${
-        typeof error === 'string' ? error : error.message ?? JSON.stringify(error)
-      }`
-    );
+    const message =
+      typeof error === 'string'
+        ? error
+        : error.message ?? JSON.stringify(error);
+    // Classify setup-level errors so callers can show them as a LOUD
+    // "email isn't configured" banner rather than a per-message blip.
+    // Known Resend setup-error phrases as of 2026-04 — extend the
+    // list if Resend reshapes their error messages.
+    if (
+      /domain is not verified/i.test(message) ||
+      /api key.*restricted/i.test(message) ||
+      /api key.*invalid/i.test(message) ||
+      /from.*not.*allowed/i.test(message)
+    ) {
+      console.error(
+        '[OPS] [email] Resend setup error — email delivery is broken until fixed:',
+        message
+      );
+      throw new EmailNotConfiguredError(
+        `Email delivery isn't set up on this deployment: ${message}. Contact the admin.`
+      );
+    }
+    throw new Error(`Resend rejected the message: ${message}`);
   }
   return { id, toEmail: args.toEmail };
 }
