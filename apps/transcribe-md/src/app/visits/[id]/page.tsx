@@ -1,7 +1,5 @@
 import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
-import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
 
 import prisma from '@meddoc/db';
 import { TranscribeVisitStatus } from '@prisma/client';
@@ -15,6 +13,7 @@ import { TextComposer } from '@/components/text-composer';
 import { ProcessingState } from './processing-state';
 import { VisitReadyView, type Utterance, type SpeakerInfo } from './visit-ready-view';
 import { VisitFailedView } from './visit-failed-view';
+import { BackToDashboardLink } from './back-to-dashboard-link';
 
 export const metadata: Metadata = { title: 'Visit' };
 
@@ -105,13 +104,7 @@ export default async function VisitPage({
 
       <main className="mx-auto max-w-4xl px-4 pb-24 pt-8 sm:px-6 lg:px-8 lg:pt-12">
         <div className="mb-8">
-          <Link
-            href="/dashboard"
-            className="inline-flex items-center gap-1.5 rounded-md text-[13px] text-text-tertiary transition-colors hover:text-text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
-            Back to dashboard
-          </Link>
+          <BackToDashboardLink />
         </div>
 
         <div className="flex flex-wrap items-center gap-2 text-[13px]">
