@@ -4,6 +4,7 @@ import { useActionState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { SpecularButton } from '@/components/specular-button';
 import { loginAction, type AuthActionState } from '@/actions/auth';
@@ -18,6 +19,8 @@ export function LoginForm() {
     if (state && state.ok) {
       router.push(state.redirect);
       router.refresh();
+    } else if (state && !state.ok && state.errors._form) {
+      toast.error('Sign-in failed', { description: state.errors._form });
     }
   }, [state, router]);
 

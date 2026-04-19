@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 import { SpecularButton } from '@/components/specular-button';
 import { signOutAction, signOutAllDevicesAction } from '@/actions/session';
 
@@ -19,12 +20,16 @@ export function SessionPanel(props: SessionPanelProps) {
 
   async function doSignOut() {
     await signOutAction();
+    toast.success('Signed out');
     router.push('/login');
     router.refresh();
   }
 
   async function doSignOutAll() {
     await signOutAllDevicesAction();
+    toast.success('Signed out from all devices', {
+      description: 'Every active session has been revoked.',
+    });
     router.push('/login');
     router.refresh();
   }

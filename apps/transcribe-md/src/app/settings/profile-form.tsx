@@ -1,6 +1,7 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useEffect, useRef } from 'react';
+import { toast } from 'sonner';
 import { SpecularButton } from '@/components/specular-button';
 import { SpecialtyDropdown, type SpecialtyOption } from '@/components/specialty-dropdown';
 import { updateProfileAction, type ProfileState } from '@/actions/profile';
@@ -20,10 +21,26 @@ export function ProfileForm({
     updateProfileAction,
     null
   );
-  // Show "Saved" while the most recent save is still the last action. The
-  // CSS transition on opacity handles the gentle fade-out — no setState
-  // inside an effect, no cascading re-renders.
+  // Show "Saved" while the most recent save is still the last action.
   const showSaved = state?.ok === true;
+
+  // Fire a toast on each successful save. Keyed by savedAt so a repeat
+  // save produces a fresh toast rather than silently updating the same
+  // one. Errors also toast so the user notices them if the inline
+  // field error is below the fold.
+  const lastSavedAt = useRef<number | null>(null);
+  useEffect(() => {
+    if (state?.ok && state.savedAt !== lastSavedAt.current) {
+      lastSavedAt.current = state.savedAt;
+      toast.success('Profile updated', {
+        description: 'Your changes are saved.',
+      });
+    } else if (state && !state.ok && state.errors._form) {
+      toast.error('Could not save profile', {
+        description: state.errors._form,
+      });
+    }
+  }, [state]);
 
   const errors = state && !state.ok ? state.errors : {};
 
