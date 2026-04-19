@@ -63,6 +63,10 @@ COPY package.json package-lock.json tsconfig.base.json ./
 COPY apps/transcribe-md/package.json ./apps/transcribe-md/package.json
 COPY apps/transcribe-md/tsconfig.json ./apps/transcribe-md/tsconfig.json
 COPY apps/transcribe-md/src ./apps/transcribe-md/src
+# T-M12: ship the scripts/ dir so ops can run `npm run minio:cleanup`
+# inside the container (or npx tsx scripts/minio-cleanup.ts). No
+# runtime bloat — it's two files totaling a few KB.
+COPY apps/transcribe-md/scripts ./apps/transcribe-md/scripts
 
 # Workspace packages the worker imports from.
 COPY packages/db/package.json ./packages/db/package.json
