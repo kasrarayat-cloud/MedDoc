@@ -16,6 +16,11 @@ import {
   anthropicCompleteText,
   type AnthropicCompleteTextResult,
 } from './anthropic';
+import {
+  isMockEnabled,
+  mockComplete,
+  mockCompleteText,
+} from './mock';
 import type { AiLogContext, ModelProvider } from './types';
 
 export type * from './types';
@@ -42,6 +47,11 @@ export interface CompleteTextArgs extends AiLogContext {
 
 export const modelClient = {
   async complete<T>(args: CompleteArgs<T>): Promise<T> {
+    // T-M10: MOCK_AI_CALLS short-circuit. See packages/ai/src/mock.ts
+    // for the contract. No-op unless the env flag is true.
+    if (isMockEnabled()) {
+      return mockComplete({ purpose: args.purpose, schema: args.schema });
+    }
     if (args.provider !== 'anthropic') {
       throw new Error(
         `complete() with provider=${args.provider} is not wired yet — M2 only uses Anthropic.`
@@ -79,6 +89,10 @@ export const modelClient = {
    * of the AiCall row this call already wrote.
    */
   async completeText(args: CompleteTextArgs): Promise<AnthropicCompleteTextResult> {
+    // T-M10: MOCK_AI_CALLS short-circuit. See packages/ai/src/mock.ts.
+    if (isMockEnabled()) {
+      return mockCompleteText({ purpose: args.purpose });
+    }
     if (args.provider !== 'anthropic') {
       throw new Error(
         `completeText() with provider=${args.provider} is not wired yet — T-M4 only uses Anthropic.`

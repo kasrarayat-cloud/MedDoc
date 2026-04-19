@@ -1,0 +1,65 @@
+// ============================================================================
+// Playwright config (T-M10) — E2E regression suite
+// ----------------------------------------------------------------------------
+// Tests run against a LIVE transcribe-md stack (real app, real Prisma, real
+// MinIO). The transcribe-md-worker container must be running with
+// MOCK_AI_CALLS=true so pipeline jobs complete with canned fixtures instead
+// of hitting Deepgram / Anthropic. See tests/e2e/README.md for setup.
+//
+// Parallelism: workers=1 on purpose. BullMQ worker concurrency is capped
+// at 2 by default, and four visits submitted in parallel often end up
+// racing on the post-signup cookie + the dashboard refresh. Safer to go
+// sequential than flaky.
+//
+// Browsers: Chromium only. Firefox/WebKit would triple CI time for no
+// useful coverage — the TranscribeMD UI is a standard-library React app
+// with no browser-specific quirks.
+// ============================================================================
+
+import { defineConfig, devices } from '@playwright/test';
+
+const BASE_URL = process.env.PW_BASE_URL ?? 'http://localhost:9020';
+
+export default defineConfig({
+  testDir: './tests/e2e',
+  testMatch: '**/*.spec.ts',
+  globalSetup: './tests/e2e/global-setup.ts',
+  globalTeardown: './tests/e2e/global-teardown.ts',
+
+  // Each scenario creates a signup + visit + optional pipeline wait. With
+  // mocks on the pipeline is fast but the UI round-trips + animations add
+  // up; 120s gives comfortable headroom without hiding a hung-forever bug.
+  timeout: 120_000,
+  expect: { timeout: 10_000 },
+
+  fullyParallel: false,
+  workers: 1,
+  retries: process.env.CI ? 1 : 0,
+
+  reporter: [
+    ['list'],
+    ['html', { outputFolder: 'playwright-report', open: 'never' }],
+  ],
+
+  use: {
+    baseURL: BASE_URL,
+    // Collect screenshot + trace on first failure for post-mortem — the
+    // VPS runs headless, there's no way to re-run with --headed on a CI
+    // box and catch the same flake twice.
+    screenshot: 'only-on-failure',
+    trace: 'retain-on-failure',
+    video: 'retain-on-failure',
+    actionTimeout: 15_000,
+    navigationTimeout: 20_000,
+  },
+
+  projects: [
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+    },
+  ],
+
+  // No webServer block — the app is managed by docker compose; Playwright
+  // just points at the running instance.
+});
