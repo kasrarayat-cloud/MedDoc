@@ -104,19 +104,58 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
         // browser-side delivery. `pending` (useTransition) clears here,
         // so even if a download stalls or navigator.clipboard hangs on
         // an expired user-activation, the spinner never gets stuck.
-        // Previously we awaited browser-side deliveries inside the
-        // transition, which meant any silent hang (esp. clipboard
-        // writeText after an async boundary) left the modal showing
-        // "Signing…" indefinitely.
-        toast.success(props.signOnSubmit ? 'Signed' : 'Exported', {
-          description: props.signOnSubmit
-            ? 'Your note is locked. Delivered to the chosen destinations.'
-            : 'Delivered to the chosen destinations.',
-        });
         setOpen(false);
         router.refresh();
 
-        // Step 3: fire-and-forget the browser-side deliveries. Errors
+        // Step 3: classify outcome. Previously we ALWAYS fired the
+        // green "Signed" toast and then a tiny "some destinations
+        // failed" one — users missed the second toast and assumed
+        // email was sent. Now we branch: setup errors get a loud
+        // persistent error toast; partial failures get a warning;
+        // only clean runs show the green success.
+        const deliveryErrors = payload.deliveryErrors ?? {};
+        const failedEntries = Object.entries(deliveryErrors);
+        const setupErrors = failedEntries.filter(([, msg]) =>
+          /isn't set up|not configured|EMAIL_NOT_CONFIGURED/i.test(msg)
+        );
+        const failureSummary = failedEntries
+          .map(([k, v]) => `${k}: ${v}`)
+          .join('\n');
+
+        if (setupErrors.length > 0) {
+          toast.error('Email delivery not configured', {
+            description: `${setupErrors[0][1]}\n\nAll other destinations ran normally — PDF/DOCX/clipboard have been delivered. Download the PDF if you need the record immediately.`,
+            duration: 15_000,
+          });
+          if (failedEntries.length > setupErrors.length) {
+            const rest = failedEntries
+              .filter(([k]) => !setupErrors.some(([sk]) => sk === k))
+              .map(([k, v]) => `${k}: ${v}`)
+              .join('\n');
+            toast.error('Other destinations also failed', {
+              description: rest,
+              duration: 10_000,
+            });
+          }
+        } else if (failedEntries.length > 0) {
+          toast.warning(
+            props.signOnSubmit
+              ? 'Signed — some destinations failed'
+              : 'Partial export',
+            {
+              description: failureSummary,
+              duration: 10_000,
+            }
+          );
+        } else {
+          toast.success(props.signOnSubmit ? 'Signed' : 'Exported', {
+            description: props.signOnSubmit
+              ? 'Your note is locked. Delivered to the chosen destinations.'
+              : 'Delivered to the chosen destinations.',
+          });
+        }
+
+        // Step 4: fire-and-forget the browser-side deliveries. Errors
         // surface as toasts, but crucially they don't block the modal.
         void applyBrowserSideDeliveries(payload, destinations).catch(
           (err: unknown) => {
@@ -127,13 +166,6 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
             });
           }
         );
-
-        if (payload.deliveryErrors) {
-          const failed = Object.entries(payload.deliveryErrors)
-            .map(([k, v]) => `${k}: ${v}`)
-            .join(', ');
-          toast.error('Some destinations failed', { description: failed });
-        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Unknown error';
         toast.error('Could not deliver', { description: msg });
