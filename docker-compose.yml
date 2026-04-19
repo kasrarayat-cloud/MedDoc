@@ -278,6 +278,44 @@ services:
       # Loopback only — all public traffic goes through Caddy on :9010.
       - "127.0.0.1:3010:3010"
 
+  # ── TranscribeMD worker (T-M4 — BullMQ consumer) ──
+  # Runs the 6-layer audio → SOAP pipeline (Deepgram → speaker roles →
+  # entities → SOAP draft → self-critique → polish). Separate image
+  # from the web container; same monorepo source, different Dockerfile.
+  # No ffmpeg: Deepgram batch handles 10h files natively so we skip
+  # the chunking step scribe-worker needs.
+  transcribe-md-worker:
+    build:
+      context: .
+      dockerfile: apps/transcribe-md/Dockerfile.worker
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://meddoc:${DB_PASSWORD:-changeme_in_production}@postgres:5432/meddoc?schema=public
+      REDIS_URL: redis://redis:6379
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-meddoc}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-changeme_in_production}
+      TRANSCRIBE_MD_MINIO_BUCKET: ${TRANSCRIBE_MD_MINIO_BUCKET:-transcribe-md-audio}
+      MINIO_USE_SSL: "false"
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      DEEPGRAM_API_KEY: ${DEEPGRAM_API_KEY}
+      DEEPGRAM_MODEL: ${DEEPGRAM_MODEL:-nova-3-medical}
+      # Per-call pricing rate cards (cents per million tokens / per min).
+      # See packages/ai/src/pricing.ts for defaults.
+      CLAUDE_SONNET_46_INPUT_CENTS_PER_M: ${CLAUDE_SONNET_46_INPUT_CENTS_PER_M:-300}
+      CLAUDE_SONNET_46_OUTPUT_CENTS_PER_M: ${CLAUDE_SONNET_46_OUTPUT_CENTS_PER_M:-1500}
+      DEEPGRAM_COST_PER_MIN_CENTS: ${DEEPGRAM_COST_PER_MIN_CENTS:-1.45}
+      TRANSCRIBE_MD_WORKER_CONCURRENCY: ${TRANSCRIBE_MD_WORKER_CONCURRENCY:-2}
+
   # ── TranscribeMD Solo App (T-M2) ──
   # The real product surface — sign up, log in, create visits. Shares
   # Postgres with meddoc-pro + scribe (same User/Practice tables via
@@ -304,6 +342,12 @@ services:
       AUTH_TRUST_HOST: "true"
       NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL: ${TRANSCRIBE_MD_AUTH_URL:-http://5.231.107.93:9020}
       NEXT_PUBLIC_MARKETING_URL: ${MARKETING_URL:-http://5.231.107.93:9010}
+      # T-M4 — web container enqueues jobs + stores uploaded audio.
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-meddoc}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-changeme_in_production}
+      TRANSCRIBE_MD_MINIO_BUCKET: ${TRANSCRIBE_MD_MINIO_BUCKET:-transcribe-md-audio}
+      MINIO_USE_SSL: "false"
       REDIS_URL: redis://redis:6379
       NODE_ENV: production
       NEXT_TELEMETRY_DISABLED: "1"

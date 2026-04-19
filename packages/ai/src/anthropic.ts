@@ -11,6 +11,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { z } from 'zod';
 import { hashPrompt } from './prompt-hash';
 import { logAiCall } from './log';
+import { claudeSonnet46CostCents } from './pricing';
 import type { AiLogContext } from './types';
 
 let clientSingleton: Anthropic | null = null;
@@ -79,6 +80,10 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
         latencyMs,
         inputTokens: response.usage.input_tokens,
         outputTokens: response.usage.output_tokens,
+        costUsdCents: claudeSonnet46CostCents(
+          response.usage.input_tokens,
+          response.usage.output_tokens
+        ),
         success: false,
         errorCode: 'JSON_PARSE_FAIL',
       });
@@ -94,6 +99,10 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
         latencyMs,
         inputTokens: response.usage.input_tokens,
         outputTokens: response.usage.output_tokens,
+        costUsdCents: claudeSonnet46CostCents(
+          response.usage.input_tokens,
+          response.usage.output_tokens
+        ),
         success: false,
         errorCode: 'SCHEMA_FAIL',
       });
@@ -113,6 +122,10 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
       latencyMs,
       inputTokens: response.usage.input_tokens,
       outputTokens: response.usage.output_tokens,
+      costUsdCents: claudeSonnet46CostCents(
+        response.usage.input_tokens,
+        response.usage.output_tokens
+      ),
       success: true,
     });
 
@@ -131,6 +144,84 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
         errorCode: err instanceof Error ? err.name.toUpperCase() : 'UNKNOWN',
       });
     }
+    throw err;
+  }
+}
+
+// ============================================================================
+// Text completion — T-M4 layers 4 (SOAP draft) + 6 (polish) expect
+// markdown output, not JSON. Mirror the logging surface of
+// anthropicComplete so AiCall rows are homogeneous; only difference is
+// we don't parse the output.
+// ============================================================================
+
+export interface AnthropicCompleteTextArgs extends AiLogContext {
+  model: string;
+  system: string;
+  user: string;
+  maxTokens?: number;
+  /** How many text tokens we want the model to be willing to produce.
+   *  SOAP notes can run long — default 8192 rather than 4096. */
+}
+
+export interface AnthropicCompleteTextResult {
+  text: string;
+  inputTokens: number;
+  outputTokens: number;
+}
+
+export async function anthropicCompleteText(
+  args: AnthropicCompleteTextArgs
+): Promise<AnthropicCompleteTextResult> {
+  const client = getClient();
+  const promptHash = hashPrompt(args.system, args.user);
+  const started = Date.now();
+
+  try {
+    const response = await client.messages.create({
+      model: args.model,
+      max_tokens: args.maxTokens ?? 8192,
+      system: args.system,
+      messages: [{ role: 'user', content: args.user }],
+    });
+
+    const latencyMs = Date.now() - started;
+
+    const text = response.content
+      .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+      .map((b) => b.text)
+      .join('\n')
+      .trim();
+
+    logAiCall({
+      ...args,
+      provider: 'anthropic',
+      promptHash,
+      latencyMs,
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+      costUsdCents: claudeSonnet46CostCents(
+        response.usage.input_tokens,
+        response.usage.output_tokens
+      ),
+      success: true,
+    });
+
+    return {
+      text,
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+    };
+  } catch (err) {
+    const latencyMs = Date.now() - started;
+    logAiCall({
+      ...args,
+      provider: 'anthropic',
+      promptHash,
+      latencyMs,
+      success: false,
+      errorCode: err instanceof Error ? err.name.toUpperCase() : 'UNKNOWN',
+    });
     throw err;
   }
 }
