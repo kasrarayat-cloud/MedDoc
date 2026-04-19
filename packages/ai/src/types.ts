@@ -26,7 +26,13 @@ export type ModelCallPurpose =
   | 'tm_entities'
   | 'tm_soap_draft'
   | 'tm_critique'
-  | 'tm_polish';
+  | 'tm_polish'
+  // T-M6: parallel automation layers that fan out after polish.
+  | 'tm_icd_coding'
+  | 'tm_cpt_coding'
+  | 'tm_rx_drafting'
+  | 'tm_referrals'
+  | 'tm_patient_summary';
 
 export interface AiLogContext {
   practiceId: string;
