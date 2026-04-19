@@ -180,6 +180,15 @@ services:
       # pipeline runs complete in ~1-2 sec. Default "false" — never
       # touch this in a production deployment.
       MOCK_AI_CALLS: ${MOCK_AI_CALLS:-false}
+      # T-M12: scheduled MinIO orphan cleanup. DISABLED by default;
+      # flip ENABLED=true in .env when ops is ready. First production
+      # run should stay in DRY_RUN mode (the default when enabled)
+      # so the delete list can be audited before anything's actually
+      # removed.
+      MINIO_ORPHAN_CLEANUP_ENABLED: ${MINIO_ORPHAN_CLEANUP_ENABLED:-false}
+      MINIO_ORPHAN_CLEANUP_DRY_RUN: ${MINIO_ORPHAN_CLEANUP_DRY_RUN:-true}
+      MINIO_ORPHAN_CLEANUP_RETENTION_DAYS: ${MINIO_ORPHAN_CLEANUP_RETENTION_DAYS:-30}
+      MINIO_ORPHAN_CLEANUP_CRON: ${MINIO_ORPHAN_CLEANUP_CRON:-0 3 * * 0}
 
   # ── TranscribeMD Solo App (T-M2) ──
   # The real product surface — sign up, log in, create visits. Shares

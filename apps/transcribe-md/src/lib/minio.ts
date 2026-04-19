@@ -13,6 +13,16 @@
 import { Client as MinioClient, type BucketItemStat } from 'minio';
 import type { Readable } from 'node:stream';
 
+/** Shape of each item the MinIO listObjects stream yields. Named in the
+ *  SDK but not conveniently exported — re-declared here so callers
+ *  don't have to fish it out of the transitive types. */
+export interface MinioObjectInfo {
+  name: string;
+  lastModified?: Date;
+  size?: number;
+  etag?: string;
+}
+
 const bucket =
   process.env.TRANSCRIBE_MD_MINIO_BUCKET?.trim() || 'transcribe-md-audio';
 const endpoint = process.env.MINIO_ENDPOINT?.trim() || 'minio';
@@ -93,6 +103,38 @@ export async function statAudio(
   } catch {
     return null;
   }
+}
+
+/** List every object under the transcribe-md audio bucket. Used by the
+ *  T-M12 orphan-cleanup sweep. Paginates internally — the MinIO SDK's
+ *  listObjects() returns an async stream that yields all matching
+ *  items; we collect into an array. For the current scale (hundreds to
+ *  low thousands of audio files) an in-memory array is fine; past
+ *  ~100k objects the caller should switch to streaming iteration. */
+export async function listAllAudioObjects(): Promise<MinioObjectInfo[]> {
+  await ensureBucket();
+  const client = getMinio();
+  const stream = client.listObjects(bucket, '', true);
+  const out: MinioObjectInfo[] = [];
+  for await (const item of stream) {
+    if (typeof item.name !== 'string' || item.name.length === 0) continue;
+    out.push({
+      name: item.name,
+      lastModified: item.lastModified,
+      size: item.size,
+      etag: item.etag,
+    });
+  }
+  return out;
+}
+
+/** Delete one audio object. Idempotent — MinIO's removeObject returns
+ *  success even if the key doesn't exist. Callers should only invoke
+ *  this after confirming the key has no DB reference. */
+export async function deleteAudioObject(objectKey: string): Promise<void> {
+  await ensureBucket();
+  const client = getMinio();
+  await client.removeObject(bucket, objectKey);
 }
 
 /** Sanitize user-provided filenames before including in the object key. */
