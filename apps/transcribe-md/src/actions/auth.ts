@@ -39,6 +39,12 @@ export interface FormErrorState {
 export interface FormOkState {
   ok: true;
   redirect: string;
+  /** When set, the action technically succeeded (e.g., signup created
+   *  the account) but a follow-up step (auto-login) didn't, so the
+   *  caller should show a warning toast instead of the green
+   *  success one. The email-bug lesson in T-M9: don't let a partial
+   *  success toast as clean success. */
+  warning?: string;
 }
 
 export type AuthActionState = FormOkState | FormErrorState | null;
@@ -185,7 +191,16 @@ export async function signupAction(
     });
   } catch (err) {
     console.error('[signup] auto-login failed:', err);
-    return { ok: true, redirect: '/login' };
+    // Previously returned `{ ok: true, redirect: '/login' }` with no
+    // marker, so the signup form fired its green success toast while
+    // sending the user to the login page. Surface it as a warning so
+    // the user understands why they landed on /login immediately
+    // after "signing up".
+    return {
+      ok: true,
+      redirect: '/login',
+      warning: 'Account created — please sign in to continue.',
+    };
   }
 
   return { ok: true, redirect: '/dashboard' };

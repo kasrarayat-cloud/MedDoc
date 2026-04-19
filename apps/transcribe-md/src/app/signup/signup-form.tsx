@@ -22,9 +22,15 @@ export function SignupForm({ specialties }: SignupFormProps) {
 
   useEffect(() => {
     if (state && state.ok) {
-      toast.success('Welcome to TranscribeMD', {
-        description: "You're in. Start your first visit whenever you're ready.",
-      });
+      if (state.warning) {
+        // Partial success — e.g., account created but auto-login
+        // failed. Don't fire the triumphant green toast.
+        toast.warning('Account created', { description: state.warning });
+      } else {
+        toast.success('Welcome to TranscribeMD', {
+          description: "You're in. Start your first visit whenever you're ready.",
+        });
+      }
       router.push(state.redirect);
       router.refresh();
     } else if (state && !state.ok && state.errors._form) {
