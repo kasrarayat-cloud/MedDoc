@@ -398,9 +398,16 @@ async function applyBrowserSideDeliveries(
   destinations: Destination[]
 ): Promise<void> {
   // 1. Download URLs fire FIRST — so if the clipboard write fails the
-  //    doctor has already gotten the file as a fallback.
-  if (res.pdfDownloadUrl) triggerDownload(res.pdfDownloadUrl);
-  if (res.docxDownloadUrl) triggerDownload(res.docxDownloadUrl);
+  //    doctor has already gotten the file as a fallback. When both PDF
+  //    and DOCX are selected we gap them: Chrome drops the second
+  //    programmatic download if two anchors click inside the same tick.
+  if (res.pdfDownloadUrl) triggerDownload(res.pdfDownloadUrl, 'pdf');
+  if (res.docxDownloadUrl) {
+    if (res.pdfDownloadUrl) {
+      await new Promise((r) => setTimeout(r, 600));
+    }
+    triggerDownload(res.docxDownloadUrl, 'docx');
+  }
 
   // 2. Clipboard writes — navigator.clipboard only holds ONE payload
   //    at a time. If the user picked multiple clipboard formats, the
@@ -433,11 +440,19 @@ async function applyBrowserSideDeliveries(
   }
 }
 
-function triggerDownload(href: string) {
+function triggerDownload(href: string, kind: 'pdf' | 'docx') {
   const a = document.createElement('a');
   a.href = href;
   a.rel = 'noopener';
-  a.target = '_self';
+  // Setting `download` tells the browser "this is a download, not a
+  // navigation", so even if the server's Content-Disposition is
+  // missed (proxy strip, browser quirk) the current tab doesn't
+  // navigate away from the visit page mid-sign. Empty string lets
+  // the server's filename win via Content-Disposition.
+  a.download = '';
+  // Hint for tooling/accessibility; the browser doesn't strictly need
+  // it but it helps if something along the way inspects the element.
+  a.setAttribute('data-download-kind', kind);
   document.body.appendChild(a);
   a.click();
   a.remove();
