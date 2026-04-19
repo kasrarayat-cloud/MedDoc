@@ -13,7 +13,14 @@ const LoginSchema = z.object({
   password: z.string().min(1, 'Password is required'),
 });
 
-/** Signup: stricter password policy + requires ToS + specialty. */
+/** Signup: stricter password policy + requires ToS.
+ *
+ *  T-M9: dropped the specialty field. The dropdown was captured but
+ *  never persisted (no User.specialty column), so collecting it at
+ *  signup was a UX no-op. Users pick specialty per-visit on
+ *  /visits/new (which now defaults to the first specialty in the
+ *  catalog so it's never empty). Future: if we add User.specialty,
+ *  bring the field back and persist it. */
 const SignupSchema = z.object({
   email: z.string().email(),
   password: z
@@ -23,7 +30,6 @@ const SignupSchema = z.object({
     .regex(/[A-Z]/, 'Password must contain an uppercase letter')
     .regex(/\d/, 'Password must contain a digit'),
   name: z.string().min(1, 'Name is required').max(120),
-  specialty: z.string().min(1, 'Pick a specialty'),
   acceptTerms: z.literal('on', {
     message: 'You must accept the terms of service',
   }),
@@ -110,7 +116,6 @@ export async function signupAction(
       values: {
         email: String(raw.email ?? ''),
         name: String(raw.name ?? ''),
-        specialty: String(raw.specialty ?? ''),
       },
     };
   }
@@ -134,7 +139,6 @@ export async function signupAction(
       values: {
         email: emailLower,
         name: parsed.data.name,
-        specialty: parsed.data.specialty,
       },
     };
   }
@@ -176,7 +180,6 @@ export async function signupAction(
       values: {
         email: emailLower,
         name: parsed.data.name,
-        specialty: parsed.data.specialty,
       },
     };
   }
