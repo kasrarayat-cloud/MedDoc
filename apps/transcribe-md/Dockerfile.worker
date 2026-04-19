@@ -1,0 +1,87 @@
+# ============================================================================
+# TranscribeMD worker image (T-M4) — BullMQ consumer running src/worker.ts
+# ----------------------------------------------------------------------------
+# Same multi-stage shape as apps/scribe/Dockerfile.worker: full-deps for
+# prisma generate, prod-deps for the runtime, a prisma-generate stage for
+# the .prisma client, and a lean runner. No ffmpeg — we don't chunk
+# audio in T-M4 (Deepgram batch handles 10h files natively).
+#
+# Build context: monorepo root (context: . in docker-compose.yml).
+# ============================================================================
+
+# ── Stage 1: full-deps (needed for prisma generate) ──
+FROM node:22-alpine AS full-deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY apps/meddoc-pro/package.json ./apps/meddoc-pro/package.json
+COPY apps/scribe/package.json ./apps/scribe/package.json
+COPY apps/marketing/package.json ./apps/marketing/package.json
+COPY apps/transcribe-md/package.json ./apps/transcribe-md/package.json
+COPY packages/db/package.json ./packages/db/package.json
+COPY packages/auth/package.json ./packages/auth/package.json
+COPY packages/types/package.json ./packages/types/package.json
+COPY packages/ai/package.json ./packages/ai/package.json
+RUN npm ci
+
+# ── Stage 2: prod-deps (prune dev deps for the runtime layer) ──
+FROM node:22-alpine AS prod-deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY apps/meddoc-pro/package.json ./apps/meddoc-pro/package.json
+COPY apps/scribe/package.json ./apps/scribe/package.json
+COPY apps/marketing/package.json ./apps/marketing/package.json
+COPY apps/transcribe-md/package.json ./apps/transcribe-md/package.json
+COPY packages/db/package.json ./packages/db/package.json
+COPY packages/auth/package.json ./packages/auth/package.json
+COPY packages/types/package.json ./packages/types/package.json
+COPY packages/ai/package.json ./packages/ai/package.json
+RUN npm ci --omit=dev
+
+# ── Stage 3: prisma-generate ──
+FROM full-deps AS prisma-generate
+WORKDIR /app
+COPY packages/db/prisma ./packages/db/prisma
+COPY packages/db/src ./packages/db/src
+COPY packages/db/prisma.config.ts ./packages/db/prisma.config.ts
+RUN npm run generate -w @meddoc/db
+
+# ── Stage 4: runtime ──
+FROM node:22-alpine AS runner
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+# Prod-only node_modules.
+COPY --from=prod-deps /app/node_modules ./node_modules
+# Generated Prisma client (produced in the full-deps stage).
+COPY --from=prisma-generate /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=prisma-generate /app/node_modules/@prisma ./node_modules/@prisma
+
+# Root manifests — tsx + npm workspace resolution need these.
+COPY package.json package-lock.json tsconfig.base.json ./
+
+# Worker source. Deliberately omits the .next/ build output and public/
+# assets — those belong to the web container.
+COPY apps/transcribe-md/package.json ./apps/transcribe-md/package.json
+COPY apps/transcribe-md/tsconfig.json ./apps/transcribe-md/tsconfig.json
+COPY apps/transcribe-md/src ./apps/transcribe-md/src
+
+# Workspace packages the worker imports from.
+COPY packages/db/package.json ./packages/db/package.json
+COPY packages/db/src ./packages/db/src
+COPY packages/db/prisma ./packages/db/prisma
+COPY packages/db/prisma.config.ts ./packages/db/prisma.config.ts
+COPY packages/auth/package.json ./packages/auth/package.json
+COPY packages/auth/src ./packages/auth/src
+COPY packages/types/package.json ./packages/types/package.json
+COPY packages/types/src ./packages/types/src
+COPY packages/ai/package.json ./packages/ai/package.json
+COPY packages/ai/src ./packages/ai/src
+
+# Non-root for defense in depth.
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 worker
+USER worker
+
+WORKDIR /app/apps/transcribe-md
+CMD ["npx", "tsx", "src/worker.ts"]
