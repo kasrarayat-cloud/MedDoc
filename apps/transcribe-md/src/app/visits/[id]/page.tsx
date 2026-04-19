@@ -125,6 +125,7 @@ export default async function VisitPage({
         <div className="mt-10">
           <VisitBody
             visitId={visit.id}
+            doctorEmail={user.email}
             inputMode={visit.inputMode}
             status={visit.status}
             audioKey={visit.audioKey}
@@ -167,6 +168,7 @@ function Chip({ children }: { children: React.ReactNode }) {
 
 interface VisitBodyProps {
   visitId: string;
+  doctorEmail: string;
   inputMode: string;
   status: TranscribeVisitStatus;
   audioKey: string | null;
@@ -285,6 +287,7 @@ function VisitBody(props: VisitBodyProps) {
   return (
     <VisitReadyView
       visitId={props.visitId}
+      doctorEmail={props.doctorEmail}
       inputMode={props.inputMode}
       soapText={soapText}
       readonly={readonly}

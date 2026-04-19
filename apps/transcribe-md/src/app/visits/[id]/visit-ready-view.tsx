@@ -20,6 +20,14 @@ import { reassignSpeakerAction } from '@/actions/soap';
 import { CodesTab, codesTabHasWarnings } from './codes-tab';
 import { RxTab, rxTabWarningLevel } from './rx-tab';
 import { ExtrasTab, extrasTabHasFlag } from './extras-tab';
+import { CopySectionButton } from './copy-section-button';
+import type { VisitExportData } from '@/lib/visit-export';
+import {
+  sectionSoap,
+  sectionCodes,
+  sectionRx,
+  sectionExtras,
+} from '@/lib/ehr-formatters';
 
 // T-M6: six tabs — SOAP, Transcript/Input, Codes, Rx, Extras, Pipeline.
 type TabKey = 'soap' | 'transcript' | 'codes' | 'rx' | 'extras' | 'pipeline';
@@ -87,6 +95,9 @@ export interface VisitReadyViewProps {
   costCents: number | null;
   processingStartedAt: string | null;
   processingFinishedAt: string | null;
+  /** T-M7 — passed into SoapEditor so the Sign & Send modal knows
+   *  where the "Email to me" destination points. */
+  doctorEmail: string;
 }
 
 export function VisitReadyView(props: VisitReadyViewProps) {
@@ -117,6 +128,12 @@ export function VisitReadyView(props: VisitReadyViewProps) {
     Boolean(props.patientSummary)
   );
 
+  // Synthesize the minimum VisitExportData shape the section-copy
+  // helpers need. sectionSoap / sectionCodes / sectionRx /
+  // sectionExtras don't touch patient header or clinician info, so
+  // the placeholder fields below are never read.
+  const sectionData = buildSectionData(props);
+
   return (
     <div className="w-full">
       <Tabs
@@ -131,14 +148,24 @@ export function VisitReadyView(props: VisitReadyViewProps) {
       />
       <div className="mt-6">
         {tab === 'soap' && (
-          <SoapEditor
-            visitId={props.visitId}
-            initialText={props.soapText}
-            readonly={props.readonly}
-            needsReview={props.needsReview}
-            reviewReason={props.reviewReason}
-            overallQuality={props.overallQuality}
-          />
+          <div className="space-y-3">
+            <div className="flex justify-end">
+              <CopySectionButton
+                text={sectionSoap(sectionData)}
+                label="Copy SOAP"
+                section="SOAP note"
+              />
+            </div>
+            <SoapEditor
+              visitId={props.visitId}
+              doctorEmail={props.doctorEmail}
+              initialText={props.soapText}
+              readonly={props.readonly}
+              needsReview={props.needsReview}
+              reviewReason={props.reviewReason}
+              overallQuality={props.overallQuality}
+            />
+          </div>
         )}
         {tab === 'transcript' &&
           (props.inputMode === 'audio_upload' ? (
@@ -157,16 +184,45 @@ export function VisitReadyView(props: VisitReadyViewProps) {
             <RawTextInputView text={props.rawTextInput} />
           ))}
         {tab === 'codes' && (
-          <CodesTab icd={props.icdCodes} cpt={props.cptCodes} />
+          <div className="space-y-3">
+            <div className="flex justify-end">
+              <CopySectionButton
+                text={sectionCodes(sectionData)}
+                label="Copy codes"
+                section="Codes"
+              />
+            </div>
+            <CodesTab icd={props.icdCodes} cpt={props.cptCodes} />
+          </div>
         )}
-        {tab === 'rx' && <RxTab rx={props.rxDrafts} />}
+        {tab === 'rx' && (
+          <div className="space-y-3">
+            <div className="flex justify-end">
+              <CopySectionButton
+                text={sectionRx(sectionData)}
+                label="Copy Rx"
+                section="Prescriptions"
+              />
+            </div>
+            <RxTab rx={props.rxDrafts} />
+          </div>
+        )}
         {tab === 'extras' && (
-          <ExtrasTab
-            referrals={props.referrals}
-            patientSummary={props.patientSummary}
-            fleschKincaid={fleschKincaid}
-            flagged={summaryFlagged}
-          />
+          <div className="space-y-3">
+            <div className="flex justify-end">
+              <CopySectionButton
+                text={sectionExtras(sectionData)}
+                label="Copy extras"
+                section="Referrals + patient summary"
+              />
+            </div>
+            <ExtrasTab
+              referrals={props.referrals}
+              patientSummary={props.patientSummary}
+              fleschKincaid={fleschKincaid}
+              flagged={summaryFlagged}
+            />
+          </div>
         )}
         {tab === 'pipeline' && (
           <PipelineView
@@ -181,6 +237,55 @@ export function VisitReadyView(props: VisitReadyViewProps) {
       </div>
     </div>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Minimal VisitExportData for the section-copy helpers. Placeholder
+// fields are never read by sectionSoap/Codes/Rx/Extras; centralising
+// this keeps the ehr-formatters module the single source of truth for
+// section formatting.
+// ---------------------------------------------------------------------------
+function buildSectionData(props: VisitReadyViewProps): VisitExportData {
+  // Unpack the unknown-typed blob columns the same way the tab
+  // components do. The section helpers in ehr-formatters expect the
+  // shape VisitExportData defines.
+  const cptBlob =
+    (props.cptCodes as {
+      em?: VisitExportData['em'];
+      procedures?: VisitExportData['procedures'];
+      modifiers?: VisitExportData['modifiers'];
+    } | null) ?? null;
+  const rxBlob =
+    (props.rxDrafts as {
+      prescriptions?: VisitExportData['prescriptions'];
+      warnings?: VisitExportData['rxWarnings'];
+    } | null) ?? null;
+  const icdBlob =
+    (props.icdCodes as { codes?: VisitExportData['icdCodes'] } | null) ?? null;
+  const refBlob =
+    (props.referrals as { referrals?: VisitExportData['referrals'] } | null) ??
+    null;
+
+  return {
+    visitId: props.visitId,
+    patientName: null,
+    specialty: '',
+    chiefComplaint: null,
+    status: 'READY',
+    createdAt: new Date(0),
+    signedAt: null,
+    clinicianName: null,
+    clinicianEmail: props.doctorEmail,
+    soapText: props.soapText,
+    icdCodes: icdBlob?.codes ?? [],
+    em: cptBlob?.em ?? null,
+    procedures: cptBlob?.procedures ?? [],
+    modifiers: cptBlob?.modifiers ?? [],
+    prescriptions: rxBlob?.prescriptions ?? [],
+    rxWarnings: rxBlob?.warnings ?? [],
+    referrals: refBlob?.referrals ?? [],
+    patientSummary: props.patientSummary,
+  };
 }
 
 // ---------------------------------------------------------------------------
