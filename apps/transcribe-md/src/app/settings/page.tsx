@@ -6,6 +6,7 @@ import { auth } from '@/lib/nextauth';
 import { getCurrentSessionId } from '@/lib/auth';
 import { describeUserAgent, describeIpLocation, parseUserAgent } from '@/lib/fingerprint';
 import { NavBar } from '@/components/nav-bar';
+import { PageWrapper } from '@/components/page-wrapper';
 import { ProfileForm } from './profile-form';
 import { SessionPanel } from './session-panel';
 
@@ -68,10 +69,10 @@ export default async function SettingsPage() {
   void describeUserAgent; // kept for potential future inline usage
 
   return (
-    <>
+    <PageWrapper>
       <NavBar name={user.name} email={user.email} />
 
-      <main className="mx-auto max-w-3xl px-6 pb-24 pt-8 lg:px-8 lg:pt-12">
+      <main className="mx-auto max-w-3xl px-4 pb-24 pt-8 sm:px-6 lg:px-8 lg:pt-12">
         <h1 className="type-h1 text-text-primary">Settings</h1>
 
         {/* Profile */}
@@ -119,7 +120,7 @@ export default async function SettingsPage() {
           </div>
         </section>
       </main>
-    </>
+    </PageWrapper>
   );
 }
 
