@@ -11,7 +11,14 @@ export default defineConfig({
   },
   test: {
     // Exclude the .next/ build output + node_modules so vitest only
-    // picks up our real tests.
-    exclude: ['**/node_modules/**', '**/.next/**', '**/dist/**'],
+    // picks up our real tests. Also exclude Playwright's tests/e2e/
+    // tree — those use @playwright/test hooks (test.afterEach, etc.)
+    // which conflict with vitest's globals.
+    exclude: [
+      '**/node_modules/**',
+      '**/.next/**',
+      '**/dist/**',
+      '**/tests/e2e/**',
+    ],
   },
 });

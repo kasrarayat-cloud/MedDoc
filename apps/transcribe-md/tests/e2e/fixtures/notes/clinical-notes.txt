@@ -1,0 +1,9 @@
+Patient: 54M, hx HTN (on lisinopril 20mg), T2DM (on metformin 1000mg BID).
+CC: follow-up for BP. Home readings 135-145/85-92 over last two weeks.
+Denies chest pain, SOB, headache, vision changes, lower-extremity edema.
+Medication adherence good. No new meds or supplements.
+Exam: BP 138/88 seated, HR 76 regular, afebrile. Cardiac: RRR, no murmurs.
+Lungs CTA b/l. Extremities: no edema, pulses 2+.
+Assessment: Essential HTN, uncontrolled at goal. T2DM stable, will recheck A1c.
+Plan: Increase lisinopril to 40mg daily. Continue metformin. BMP + A1c in 6 wks.
+Lifestyle counseling on DASH diet, 2g Na. Follow-up 8 weeks.
