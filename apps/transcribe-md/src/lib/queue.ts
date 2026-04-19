@@ -47,6 +47,11 @@ export function getTranscribeMdQueue(): Queue<ProcessVisitPayload> {
       removeOnComplete: { count: 500, age: 24 * 3600 },
       removeOnFail: { count: 500 },
     },
+    // T-M11: per-attempt hard cap lives in worker.ts (not here) —
+    // BullMQ v5's DefaultJobOptions doesn't have a `timeout` field.
+    // The worker wraps processVisit() in Promise.race against a
+    // 15-minute timer so a stuck Anthropic / Deepgram / Prisma call
+    // fails the attempt instead of occupying a worker slot forever.
   });
   return transcribeMdQueue as Queue<ProcessVisitPayload>;
 }
