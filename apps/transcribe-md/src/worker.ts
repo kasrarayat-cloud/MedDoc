@@ -48,6 +48,35 @@ const CONCURRENCY = Number.parseInt(
   10
 );
 
+/** T-M11 — hard cap per job attempt. Typical pipeline completes in
+ *  3-5 min; a 45-min recording comfortably fits under 15. Anything
+ *  past that is a genuine hang (stuck fetch, deadlocked query) and
+ *  should fail-fast rather than occupy a worker slot indefinitely.
+ *  The layer promises keep resolving in the background after timeout
+ *  — their writes land on an already-FAILED row, which is harmless.
+ *  Configurable via env so ops can tune without redeploy. */
+const JOB_TIMEOUT_MS = Number.parseInt(
+  process.env.TRANSCRIBE_MD_JOB_TIMEOUT_MS ?? String(15 * 60 * 1000),
+  10
+);
+
+function withTimeout<T>(p: Promise<T>, ms: number, tag: string): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<never>((_, reject) =>
+      setTimeout(
+        () =>
+          reject(
+            new Error(
+              `${tag} exceeded ${ms}ms hard cap — fail-fast, retry per BullMQ attempts`
+            )
+          ),
+        ms
+      )
+    ),
+  ]);
+}
+
 /** Null-out the persisted column for a failed automation layer so a
  *  partially-written row can't mislead the UI. Each L7x layer writes
  *  its own column inside the fulfilled path; if the call threw (e.g.
@@ -471,7 +500,11 @@ async function main() {
       if (job.name !== JOB_PROCESS_VISIT) {
         throw new Error(`Unknown job name: ${job.name}`);
       }
-      await processVisit(job);
+      await withTimeout(
+        processVisit(job),
+        JOB_TIMEOUT_MS,
+        `visit ${job.data.visitId}`
+      );
     },
     {
       connection: getSharedRedisConnection(),

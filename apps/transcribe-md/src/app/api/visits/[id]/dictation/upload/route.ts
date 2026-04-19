@@ -12,7 +12,7 @@
 // the worker.
 // ============================================================================
 
-import { NextResponse, type NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 import { Readable } from 'node:stream';
 
 import { auth } from '@/lib/nextauth';
@@ -23,6 +23,8 @@ import {
   getTranscribeMdQueue,
   JOB_PROCESS_VISIT,
 } from '@/lib/queue';
+
+import { apiError, withApiHandler } from '@/lib/api-error';
 
 export const runtime = 'nodejs';
 export const maxDuration = 120;
@@ -43,133 +45,107 @@ const ALLOWED_MIME = new Set([
   'audio/mp3',
 ]);
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const { id: visitId } = await params;
+export const POST = withApiHandler<{ id: string }>(
+  'api:visits:dictation:upload',
+  async (req, { params }) => {
+    const { id: visitId } = await params;
 
-  const session = await auth();
-  const userId = session?.user?.id;
-  if (!userId) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-  }
+    const session = await auth();
+    const userId = session?.user?.id;
+    if (!userId) return apiError('unauthorized', 401);
 
-  const visit = await prisma.transcribeVisit.findUnique({
-    where: { id: visitId },
-    select: {
-      id: true,
-      userId: true,
-      inputMode: true,
-      status: true,
-      dictationAudioKey: true,
-    },
-  });
-  if (!visit || visit.userId !== userId) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 });
-  }
-  if (visit.inputMode !== 'voice_dictation') {
-    return NextResponse.json(
-      { error: 'this visit is not a voice-dictation visit' },
-      { status: 400 }
-    );
-  }
-  if (visit.dictationAudioKey) {
-    return NextResponse.json(
-      { error: 'a dictation has already been recorded for this visit' },
-      { status: 409 }
-    );
-  }
-  if (visit.status !== TranscribeVisitStatus.QUEUED) {
-    return NextResponse.json(
-      { error: 'visit is already processing or finalized' },
-      { status: 409 }
-    );
-  }
-
-  const contentLengthHeader = req.headers.get('content-length');
-  const contentLength = contentLengthHeader
-    ? Number.parseInt(contentLengthHeader, 10)
-    : NaN;
-  if (!Number.isFinite(contentLength) || contentLength <= 0) {
-    return NextResponse.json(
-      { error: 'content-length header missing or invalid' },
-      { status: 400 }
-    );
-  }
-  if (contentLength > MAX_BYTES) {
-    return NextResponse.json(
-      {
-        error: `dictation too large: ${contentLength} bytes exceeds ${MAX_BYTES / 1024 / 1024} MB limit`,
+    const visit = await prisma.transcribeVisit.findUnique({
+      where: { id: visitId },
+      select: {
+        id: true,
+        userId: true,
+        inputMode: true,
+        status: true,
+        dictationAudioKey: true,
       },
-      { status: 413 }
-    );
-  }
+    });
+    if (!visit || visit.userId !== userId) return apiError('not found', 404);
+    if (visit.inputMode !== 'voice_dictation') {
+      return apiError('this visit is not a voice-dictation visit', 400);
+    }
+    if (visit.dictationAudioKey) {
+      return apiError(
+        'a dictation has already been recorded for this visit',
+        409
+      );
+    }
+    if (visit.status !== TranscribeVisitStatus.QUEUED) {
+      return apiError('visit is already processing or finalized', 409);
+    }
 
-  const mimeHeader = req.headers.get('content-type')?.trim() ?? '';
-  const mimeType = mimeHeader.split(';')[0]!.trim();
-  if (!ALLOWED_MIME.has(mimeType)) {
-    return NextResponse.json(
-      { error: `unsupported content-type: ${mimeHeader || '(missing)'}` },
-      { status: 415 }
-    );
-  }
+    const contentLengthHeader = req.headers.get('content-length');
+    const contentLength = contentLengthHeader
+      ? Number.parseInt(contentLengthHeader, 10)
+      : NaN;
+    if (!Number.isFinite(contentLength) || contentLength <= 0) {
+      return apiError('content-length header missing or invalid', 400);
+    }
+    if (contentLength > MAX_BYTES) {
+      return apiError(
+        `dictation too large: ${contentLength} bytes exceeds ${MAX_BYTES / 1024 / 1024} MB limit`,
+        413
+      );
+    }
 
-  if (!req.body) {
-    return NextResponse.json({ error: 'empty body' }, { status: 400 });
-  }
+    const mimeHeader = req.headers.get('content-type')?.trim() ?? '';
+    const mimeType = mimeHeader.split(';')[0]!.trim();
+    if (!ALLOWED_MIME.has(mimeType)) {
+      return apiError(
+        `unsupported content-type: ${mimeHeader || '(missing)'}`,
+        415
+      );
+    }
 
-  // Object-key prefix distinguishes dictation from the bulk audio the
-  // other route uses — simplifies bucket policy + debugging later.
-  const objectKey = `${userId}/${visitId}/dictation-${Date.now()}.webm`;
+    if (!req.body) return apiError('empty body', 400);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const nodeReadable = Readable.fromWeb(req.body as any);
+    // Object-key prefix distinguishes dictation from the bulk audio the
+    // other route uses — simplifies bucket policy + debugging later.
+    const objectKey = `${userId}/${visitId}/dictation-${Date.now()}.webm`;
 
-  try {
-    await putAudioStream(objectKey, nodeReadable, contentLength, mimeType);
-  } catch (err) {
-    console.error('[dictation-upload] MinIO put failed:', err);
-    return NextResponse.json(
-      { error: 'storage write failed' },
-      { status: 502 }
-    );
-  }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const nodeReadable = Readable.fromWeb(req.body as any);
 
-  await prisma.transcribeVisit.update({
-    where: { id: visitId },
-    data: {
-      dictationAudioKey: objectKey,
-      audioMimeType: mimeType,
-      audioUploadedAt: new Date(),
-      status: TranscribeVisitStatus.QUEUED,
-      needsReview: false,
-      reviewReason: null,
-      processingStartedAt: null,
-      processingFinishedAt: null,
-      processingCostCents: null,
-    },
-  });
+    try {
+      await putAudioStream(objectKey, nodeReadable, contentLength, mimeType);
+    } catch (err) {
+      console.error('[api:visits:dictation:upload] MinIO put failed:', err);
+      return apiError('storage write failed', 502);
+    }
 
-  try {
-    await getTranscribeMdQueue().add(
-      JOB_PROCESS_VISIT,
-      { visitId, userId },
-      { jobId: `visit-${visitId}-${Date.now()}` }
-    );
-  } catch (err) {
-    console.error('[dictation-upload] queue enqueue failed:', err);
-    return NextResponse.json(
-      {
-        error:
-          'dictation stored but worker enqueue failed; please refresh and try again',
+    await prisma.transcribeVisit.update({
+      where: { id: visitId },
+      data: {
+        dictationAudioKey: objectKey,
+        audioMimeType: mimeType,
+        audioUploadedAt: new Date(),
+        status: TranscribeVisitStatus.QUEUED,
+        needsReview: false,
+        reviewReason: null,
+        processingStartedAt: null,
+        processingFinishedAt: null,
+        processingCostCents: null,
       },
-      { status: 502 }
-    );
-  }
+    });
 
-  return NextResponse.json(
-    { visitId, status: 'QUEUED' },
-    { status: 202 }
-  );
-}
+    try {
+      await getTranscribeMdQueue().add(
+        JOB_PROCESS_VISIT,
+        { visitId, userId },
+        { jobId: `visit-${visitId}-${Date.now()}` }
+      );
+    } catch (err) {
+      console.error('[api:visits:dictation:upload] queue enqueue failed:', err);
+      return apiError(
+        'dictation stored but worker enqueue failed; please refresh and try again',
+        502
+      );
+    }
+
+    return NextResponse.json({ visitId, status: 'QUEUED' }, { status: 202 });
+  }
+);
