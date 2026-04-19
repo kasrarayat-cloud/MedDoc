@@ -54,6 +54,11 @@ interface SignAndSendModalProps {
    *  calls the individual export routes directly (used on already-
    *  SIGNED visits so "Export again" doesn't try to re-sign). */
   signOnSubmit: boolean;
+  /** T-M9 — whether Email is a selectable destination. When false the
+   *  "Email to me" checkbox is hidden entirely and 'email' is stripped
+   *  from any submission payload as belt-and-braces. Set from the
+   *  server based on RESEND_API_KEY + RESEND_FROM_VERIFIED. */
+  emailEnabled: boolean;
   /** The trigger button's label — "Sign & Send" vs "Export again". */
   triggerLabel: string;
   /** Icon shown on the trigger. */
@@ -85,7 +90,12 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
   }, []);
 
   const submit = useCallback(() => {
-    const destinations = Array.from(selected);
+    // Strip 'email' defensively — if emailEnabled flips off between
+    // renders, or a stale entry somehow lingers in `selected`, don't
+    // send it to the server.
+    const destinations = Array.from(selected).filter(
+      (d) => d !== 'email' || props.emailEnabled
+    );
     if (destinations.length === 0) {
       toast.error('Pick at least one destination.');
       return;
@@ -171,7 +181,7 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
         toast.error('Could not deliver', { description: msg });
       }
     });
-  }, [props.visitId, props.signOnSubmit, router, selected]);
+  }, [props.visitId, props.signOnSubmit, props.emailEnabled, router, selected]);
 
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
@@ -244,13 +254,15 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
               selected={selected}
               onToggle={toggle}
             />
-            <Group
-              title="Email"
-              hint={`Send a PDF to ${props.doctorEmail} for your records. Don't use for patient communication.`}
-              items={DESTINATIONS.filter((d) => d.group === 'email')}
-              selected={selected}
-              onToggle={toggle}
-            />
+            {props.emailEnabled && (
+              <Group
+                title="Email"
+                hint={`Send a PDF to ${props.doctorEmail} for your records. Don't use for patient communication.`}
+                items={DESTINATIONS.filter((d) => d.group === 'email')}
+                selected={selected}
+                onToggle={toggle}
+              />
+            )}
           </div>
 
           <div className="flex items-center justify-between gap-3 border-t border-border-subtle bg-bg-surface-2/40 px-6 py-3">
