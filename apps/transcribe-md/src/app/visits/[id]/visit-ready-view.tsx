@@ -4,9 +4,12 @@ import { useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import {
-  FileText,
-  MessageSquare,
-  Layers,
+  FileText as FileTextIcon,
+  MessageSquare as MessageSquareIcon,
+  Layers as LayersIcon,
+  Stethoscope,
+  Pill,
+  Sparkles,
   Download,
   ChevronDown,
 } from 'lucide-react';
@@ -14,10 +17,12 @@ import {
 import { cn } from '@/lib/cn';
 import { SoapEditor } from './soap-editor';
 import { reassignSpeakerAction } from '@/actions/soap';
+import { CodesTab, codesTabHasWarnings } from './codes-tab';
+import { RxTab, rxTabWarningLevel } from './rx-tab';
+import { ExtrasTab, extrasTabHasFlag } from './extras-tab';
 
-// The UI has 3 tabs per the spec. Shape is kept here so the ready
-// view owns all tab state without prop-drilling into the server page.
-type TabKey = 'soap' | 'transcript' | 'pipeline';
+// T-M6: six tabs — SOAP, Transcript/Input, Codes, Rx, Extras, Pipeline.
+type TabKey = 'soap' | 'transcript' | 'codes' | 'rx' | 'extras' | 'pipeline';
 
 // Keep in sync with Layer 2's role enum. Changing this breaks the
 // speaker-reassign dropdown; update both.
@@ -68,6 +73,15 @@ export interface VisitReadyViewProps {
     overall_quality: string;
     safe_to_sign_without_review: boolean;
   } | null;
+  /** T-M6 automation-layer outputs. All unknown-typed — the tab
+   *  components own their wire-types so the server page doesn't have
+   *  to import them. */
+  icdCodes: unknown;
+  cptCodes: unknown;
+  rxDrafts: unknown;
+  referrals: unknown;
+  patientSummary: string | null;
+  confidenceScores: unknown;
   /** Display-only pipeline metadata. */
   durationSec: number | null;
   costCents: number | null;
@@ -83,12 +97,37 @@ export function VisitReadyView(props: VisitReadyViewProps) {
   const secondTabLabel =
     props.inputMode === 'text_notes' ? 'Input' : 'Transcript';
 
+  // Extract Layer 7e readability metadata for the Extras-tab chip.
+  const cs =
+    (props.confidenceScores as Record<
+      string,
+      { status?: string; metadata?: { flesch_kincaid?: number; flagged?: boolean } }
+    > | null) ?? {};
+  const fleschKincaid =
+    typeof cs.patient_summary?.metadata?.flesch_kincaid === 'number'
+      ? cs.patient_summary.metadata.flesch_kincaid
+      : null;
+  const summaryFlagged = Boolean(cs.patient_summary?.metadata?.flagged);
+
+  // Per-tab warning badges driven by confidenceScores + wire-data.
+  const codesWarn = codesTabHasWarnings(props.confidenceScores);
+  const rxWarn = rxTabWarningLevel(props.rxDrafts);
+  const extrasWarn = extrasTabHasFlag(
+    props.confidenceScores,
+    Boolean(props.patientSummary)
+  );
+
   return (
     <div className="w-full">
       <Tabs
         tab={tab}
         onChange={setTab}
         secondTabLabel={secondTabLabel}
+        warnings={{
+          codes: codesWarn ? 'any' : null,
+          rx: rxWarn,
+          extras: extrasWarn ? 'any' : null,
+        }}
       />
       <div className="mt-6">
         {tab === 'soap' && (
@@ -117,6 +156,18 @@ export function VisitReadyView(props: VisitReadyViewProps) {
           ) : (
             <RawTextInputView text={props.rawTextInput} />
           ))}
+        {tab === 'codes' && (
+          <CodesTab icd={props.icdCodes} cpt={props.cptCodes} />
+        )}
+        {tab === 'rx' && <RxTab rx={props.rxDrafts} />}
+        {tab === 'extras' && (
+          <ExtrasTab
+            referrals={props.referrals}
+            patientSummary={props.patientSummary}
+            fleschKincaid={fleschKincaid}
+            flagged={summaryFlagged}
+          />
+        )}
         {tab === 'pipeline' && (
           <PipelineView
             entities={props.entities}
@@ -136,22 +187,43 @@ export function VisitReadyView(props: VisitReadyViewProps) {
 // Tabs — simple role=tab buttons, no Radix (3 static options, not worth
 // the bundle). Labels collapse to icon-only on mobile.
 // ---------------------------------------------------------------------------
+interface TabDescriptor {
+  key: TabKey;
+  label: string;
+  icon: React.ReactNode;
+  /** When set, Tabs draws a dot badge — red for 'critical', amber for
+   *  anything else. */
+  warning?: 'critical' | 'any' | null;
+}
+
 function Tabs({
   tab,
   onChange,
   secondTabLabel,
+  warnings,
 }: {
   tab: TabKey;
   onChange: (t: TabKey) => void;
   secondTabLabel: string;
+  warnings: {
+    codes: 'critical' | 'any' | null;
+    rx: 'critical' | 'any' | null;
+    extras: 'critical' | 'any' | null;
+  };
 }) {
-  const tabs: { key: TabKey; label: string; icon: React.ReactNode }[] = [
-    { key: 'soap', label: 'SOAP Note', icon: <FileText className="h-3.5 w-3.5" aria-hidden /> },
-    { key: 'transcript', label: secondTabLabel, icon: <MessageSquare className="h-3.5 w-3.5" aria-hidden /> },
-    { key: 'pipeline', label: 'Pipeline', icon: <Layers className="h-3.5 w-3.5" aria-hidden /> },
+  const tabs: TabDescriptor[] = [
+    { key: 'soap', label: 'SOAP Note', icon: <FileTextIcon className="h-3.5 w-3.5" aria-hidden /> },
+    { key: 'transcript', label: secondTabLabel, icon: <MessageSquareIcon className="h-3.5 w-3.5" aria-hidden /> },
+    { key: 'codes', label: 'Codes', icon: <Stethoscope className="h-3.5 w-3.5" aria-hidden />, warning: warnings.codes },
+    { key: 'rx', label: 'Rx', icon: <Pill className="h-3.5 w-3.5" aria-hidden />, warning: warnings.rx },
+    { key: 'extras', label: 'Extras', icon: <Sparkles className="h-3.5 w-3.5" aria-hidden />, warning: warnings.extras },
+    { key: 'pipeline', label: 'Pipeline', icon: <LayersIcon className="h-3.5 w-3.5" aria-hidden /> },
   ];
   return (
-    <div role="tablist" className="inline-flex rounded-full border border-border-subtle bg-bg-surface-2/60 p-1">
+    <div
+      role="tablist"
+      className="inline-flex max-w-full flex-wrap gap-0.5 rounded-full border border-border-subtle bg-bg-surface-2/60 p-1"
+    >
       {tabs.map((t) => (
         <button
           key={t.key}
@@ -160,16 +232,26 @@ function Tabs({
           aria-selected={tab === t.key}
           onClick={() => onChange(t.key)}
           className={cn(
-            'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium tracking-tight',
+            'relative inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium tracking-tight',
             'transition-colors duration-150 ease-[cubic-bezier(0.4,0,0.2,1)]',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base',
             tab === t.key
               ? 'bg-bg-surface-3 text-text-primary shadow-[0_0_0_1px_rgba(139,92,246,0.3)]'
               : 'text-text-tertiary hover:text-text-primary'
           )}
+          aria-label={t.label}
         >
           {t.icon}
           <span className="hidden sm:inline">{t.label}</span>
+          {t.warning && (
+            <span
+              aria-hidden
+              className={cn(
+                'absolute right-1.5 top-1 inline-block h-1.5 w-1.5 rounded-full',
+                t.warning === 'critical' ? 'bg-danger' : 'bg-warning'
+              )}
+            />
+          )}
         </button>
       ))}
     </div>

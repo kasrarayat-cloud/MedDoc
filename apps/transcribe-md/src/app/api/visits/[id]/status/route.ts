@@ -25,6 +25,7 @@ const PROGRESS_HINT: Record<TranscribeVisitStatus, string> = {
   DRAFTING: 'Drafting the SOAP note',
   CRITIQUING: 'Auditing the draft for clinical accuracy',
   POLISHING: 'Applying polish fixes',
+  AUTOMATING: 'Generating codes, prescriptions, and summary',
   READY: 'Ready to review',
   FAILED: 'Processing failed',
   SIGNED: 'Signed and locked',
