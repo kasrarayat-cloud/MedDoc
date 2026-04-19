@@ -10,5 +10,13 @@
 export * from './types';
 export * from './model-client';
 export * from './deepgram';
+export * from './deepgram-batch';
+export {
+  claudeSonnet46CostCents,
+  deepgramBatchCostCents,
+  sonnetInputCentsPerM,
+  sonnetOutputCentsPerM,
+  deepgramCentsPerMin,
+} from './pricing';
 export { hashPrompt } from './prompt-hash';
 export { logAiCall, redactPhi } from './log';

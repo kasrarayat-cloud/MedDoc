@@ -18,7 +18,15 @@ export type ModelCallPurpose =
   | 'referral'
   | 'summary'
   | 'judge'
-  | 'eval';
+  | 'eval'
+  // T-M4: TranscribeMD 6-layer audio pipeline. Own tags so unit
+  // economics per layer are cheap to pivot in SQL.
+  | 'tm_transcribe'
+  | 'tm_speaker_roles'
+  | 'tm_entities'
+  | 'tm_soap_draft'
+  | 'tm_critique'
+  | 'tm_polish';
 
 export interface AiLogContext {
   practiceId: string;
