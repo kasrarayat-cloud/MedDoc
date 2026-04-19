@@ -7,11 +7,13 @@
 // without owning the enum → phrase mapping.
 // ============================================================================
 
-import { NextResponse, type NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
 import { auth } from '@/lib/nextauth';
 import prisma from '@meddoc/db';
 import { TranscribeVisitStatus } from '@prisma/client';
+
+import { apiError, withApiHandler } from '@/lib/api-error';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -31,43 +33,40 @@ const PROGRESS_HINT: Record<TranscribeVisitStatus, string> = {
   SIGNED: 'Signed and locked',
 };
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const { id: visitId } = await params;
+export const GET = withApiHandler<{ id: string }>(
+  'api:visits:status',
+  async (_req, { params }) => {
+    const { id: visitId } = await params;
 
-  const session = await auth();
-  const userId = session?.user?.id;
-  if (!userId) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+    const session = await auth();
+    const userId = session?.user?.id;
+    if (!userId) return apiError('unauthorized', 401);
+
+    const visit = await prisma.transcribeVisit.findUnique({
+      where: { id: visitId },
+      select: {
+        id: true,
+        userId: true,
+        status: true,
+        needsReview: true,
+        reviewReason: true,
+        audioDurationSec: true,
+      },
+    });
+    // 404 on both "not found" AND "not yours" prevents ID enumeration.
+    if (!visit || visit.userId !== userId) return apiError('not found', 404);
+
+    const status = visit.status as TranscribeVisitStatus;
+    return NextResponse.json(
+      {
+        visitId: visit.id,
+        status,
+        progressHint: PROGRESS_HINT[status] ?? status,
+        needsReview: visit.needsReview,
+        reviewReason: visit.reviewReason,
+        audioDurationSec: visit.audioDurationSec,
+      },
+      { status: 200 }
+    );
   }
-
-  const visit = await prisma.transcribeVisit.findUnique({
-    where: { id: visitId },
-    select: {
-      id: true,
-      userId: true,
-      status: true,
-      needsReview: true,
-      reviewReason: true,
-      audioDurationSec: true,
-    },
-  });
-  if (!visit || visit.userId !== userId) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 });
-  }
-
-  const status = visit.status as TranscribeVisitStatus;
-  return NextResponse.json(
-    {
-      visitId: visit.id,
-      status,
-      progressHint: PROGRESS_HINT[status] ?? status,
-      needsReview: visit.needsReview,
-      reviewReason: visit.reviewReason,
-      audioDurationSec: visit.audioDurationSec,
-    },
-    { status: 200 }
-  );
-}
+);
