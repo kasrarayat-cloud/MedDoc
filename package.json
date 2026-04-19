@@ -15,6 +15,8 @@
     "test:unit:watch": "npm run test:unit:watch -w meddoc-pro",
     "test:e2e": "npm run test:e2e -w meddoc-pro",
     "test:e2e:ui": "npm run test:e2e:ui -w meddoc-pro",
+    "test:e2e:transcribe-md": "npm run test:e2e -w transcribe-md",
+    "test:e2e:transcribe-md:install": "npm run test:e2e:install -w transcribe-md",
     "test:all": "npm run test:all -w meddoc-pro",
     "seed:e2e": "npm run seed:e2e -w meddoc-pro",
     "seed:e2e-admin": "npm run seed:e2e-admin -w meddoc-pro",
