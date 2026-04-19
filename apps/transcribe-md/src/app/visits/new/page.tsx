@@ -31,7 +31,13 @@ export default async function NewVisitPage() {
 
   const specialties = SPECIALTIES;
 
-  const defaultSpecialty = mostRecentVisit?.specialty ?? '';
+  // Fresh signups have no prior visit — fall back to the first specialty
+  // in the catalog so the hidden-input value is never empty. A blank
+  // specialty made it to the server, failed Zod's min(1), and surfaced
+  // as a 500 ("Invalid visit input") when the user clicked a mode tile
+  // without opening the dropdown.
+  const defaultSpecialty =
+    mostRecentVisit?.specialty ?? SPECIALTIES[0]?.displayName ?? '';
 
   return (
     <PageWrapper>
