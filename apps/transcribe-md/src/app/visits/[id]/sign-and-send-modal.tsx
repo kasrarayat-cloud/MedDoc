@@ -92,19 +92,48 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
     }
     startTransition(async () => {
       try {
-        if (props.signOnSubmit) {
-          await runSignAndDeliver(props.visitId, destinations);
-          toast.success('Signed', {
-            description: 'Your note is locked. Delivered to the chosen destinations.',
-          });
-        } else {
-          await runDeliverOnly(props.visitId, destinations);
-          toast.success('Exported', {
-            description: 'Delivered to the chosen destinations.',
-          });
-        }
+        // Step 1: the server-side work (sign + collect clipboard text /
+        // URLs / email-queued status). This is the ONLY thing awaited
+        // inside the transition — once it returns, the visit is signed
+        // in the DB and we know what to hand to the browser.
+        const payload = props.signOnSubmit
+          ? await fetchSignAndDeliver(props.visitId, destinations)
+          : await prepareDeliverOnly(props.visitId, destinations);
+
+        // Step 2: close the modal + refresh the page BEFORE firing any
+        // browser-side delivery. `pending` (useTransition) clears here,
+        // so even if a download stalls or navigator.clipboard hangs on
+        // an expired user-activation, the spinner never gets stuck.
+        // Previously we awaited browser-side deliveries inside the
+        // transition, which meant any silent hang (esp. clipboard
+        // writeText after an async boundary) left the modal showing
+        // "Signing…" indefinitely.
+        toast.success(props.signOnSubmit ? 'Signed' : 'Exported', {
+          description: props.signOnSubmit
+            ? 'Your note is locked. Delivered to the chosen destinations.'
+            : 'Delivered to the chosen destinations.',
+        });
         setOpen(false);
         router.refresh();
+
+        // Step 3: fire-and-forget the browser-side deliveries. Errors
+        // surface as toasts, but crucially they don't block the modal.
+        void applyBrowserSideDeliveries(payload, destinations).catch(
+          (err: unknown) => {
+            console.error('[sign] browser-side delivery failed:', err);
+            toast.error('Some deliveries were blocked by the browser', {
+              description:
+                'Try copy/download again from the signed-visit view.',
+            });
+          }
+        );
+
+        if (payload.deliveryErrors) {
+          const failed = Object.entries(payload.deliveryErrors)
+            .map(([k, v]) => `${k}: ${v}`)
+            .join(', ');
+          toast.error('Some destinations failed', { description: failed });
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Unknown error';
         toast.error('Could not deliver', { description: msg });
@@ -316,10 +345,10 @@ function CheckboxRow({
 // server call differs.
 // ---------------------------------------------------------------------------
 
-async function runSignAndDeliver(
+async function fetchSignAndDeliver(
   visitId: string,
   destinations: Destination[]
-): Promise<void> {
+): Promise<SignResponse> {
   const res = await fetch(`/api/visits/${visitId}/sign`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -329,21 +358,16 @@ async function runSignAndDeliver(
   if (!res.ok) {
     throw new Error(body?.error ?? `sign failed (${res.status})`);
   }
-  await applyBrowserSideDeliveries(body, destinations);
-  if (body.deliveryErrors) {
-    const failed = Object.entries(body.deliveryErrors)
-      .map(([k, v]) => `${k}: ${v}`)
-      .join(', ');
-    toast.error('Some destinations failed', { description: failed });
-  }
+  return body;
 }
 
-async function runDeliverOnly(
+async function prepareDeliverOnly(
   visitId: string,
   destinations: Destination[]
-): Promise<void> {
-  // Already-signed path: hit the per-channel routes. Small downside:
-  // several HTTPs where /sign is one — fine, this is a rare action.
+): Promise<SignResponse> {
+  // Already-signed path: hit the per-channel routes + collect into a
+  // SignResponse-shaped payload so the caller can hand it to
+  // applyBrowserSideDeliveries exactly like the sign path does.
   const clipboardTexts: Partial<Record<Destination, string>> = {};
   let pdfDownloadUrl: string | undefined;
   let docxDownloadUrl: string | undefined;
@@ -381,16 +405,13 @@ async function runDeliverOnly(
     }
   }
 
-  await applyBrowserSideDeliveries(
-    {
-      signedAt: null,
-      clipboardTexts,
-      pdfDownloadUrl,
-      docxDownloadUrl,
-      emailQueued,
-    },
-    destinations
-  );
+  return {
+    signedAt: null,
+    clipboardTexts,
+    pdfDownloadUrl,
+    docxDownloadUrl,
+    emailQueued,
+  };
 }
 
 async function applyBrowserSideDeliveries(
@@ -398,15 +419,27 @@ async function applyBrowserSideDeliveries(
   destinations: Destination[]
 ): Promise<void> {
   // 1. Download URLs fire FIRST — so if the clipboard write fails the
-  //    doctor has already gotten the file as a fallback.
-  if (res.pdfDownloadUrl) triggerDownload(res.pdfDownloadUrl);
-  if (res.docxDownloadUrl) triggerDownload(res.docxDownloadUrl);
+  //    doctor has already gotten the file as a fallback. When both PDF
+  //    and DOCX are selected we gap them: Chrome drops the second
+  //    programmatic download if two anchors click inside the same tick.
+  if (res.pdfDownloadUrl) triggerDownload(res.pdfDownloadUrl, 'pdf');
+  if (res.docxDownloadUrl) {
+    if (res.pdfDownloadUrl) {
+      await new Promise((r) => setTimeout(r, 600));
+    }
+    triggerDownload(res.docxDownloadUrl, 'docx');
+  }
 
   // 2. Clipboard writes — navigator.clipboard only holds ONE payload
   //    at a time. If the user picked multiple clipboard formats, the
   //    last one selected wins automatically, and we toast offering the
   //    others via the dedicated "Copy other format" buttons on the
   //    signed-state page.
+  //
+  //    writeText() can hang indefinitely when the browser decides
+  //    user-activation has expired — wrap in a 3s timeout so a silent
+  //    hang can't block the rest of the deliveries (email toast below,
+  //    and more importantly, the calling promise's completion).
   const clipboardChoices = destinations.filter(
     (d) => d.startsWith('clipboard_')
   ) as Array<Extract<Destination, `clipboard_${string}`>>;
@@ -415,7 +448,12 @@ async function applyBrowserSideDeliveries(
     const text = res.clipboardTexts[lastKey];
     if (text) {
       try {
-        await navigator.clipboard.writeText(text);
+        await Promise.race([
+          navigator.clipboard.writeText(text),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('clipboard-timeout')), 3_000)
+          ),
+        ]);
       } catch {
         toast.error('Copy blocked', {
           description:
@@ -433,11 +471,19 @@ async function applyBrowserSideDeliveries(
   }
 }
 
-function triggerDownload(href: string) {
+function triggerDownload(href: string, kind: 'pdf' | 'docx') {
   const a = document.createElement('a');
   a.href = href;
   a.rel = 'noopener';
-  a.target = '_self';
+  // Setting `download` tells the browser "this is a download, not a
+  // navigation", so even if the server's Content-Disposition is
+  // missed (proxy strip, browser quirk) the current tab doesn't
+  // navigate away from the visit page mid-sign. Empty string lets
+  // the server's filename win via Content-Disposition.
+  a.download = '';
+  // Hint for tooling/accessibility; the browser doesn't strictly need
+  // it but it helps if something along the way inspects the element.
+  a.setAttribute('data-download-kind', kind);
   document.body.appendChild(a);
   a.click();
   a.remove();
