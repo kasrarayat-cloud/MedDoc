@@ -7,9 +7,11 @@
     "build": "next build",
     "start": "next start -p 3011",
     "lint": "eslint",
-    "test:unit": "vitest run"
+    "test:unit": "vitest run",
+    "worker": "tsx src/worker.ts"
   },
   "dependencies": {
+    "@meddoc/ai": "*",
     "@meddoc/auth": "*",
     "@meddoc/db": "*",
     "@meddoc/types": "*",
@@ -21,8 +23,11 @@
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.6.0",
     "bcryptjs": "^3.0.2",
+    "bullmq": "^5.68.0",
     "clsx": "^2.1.1",
     "cmdk": "^1.0.4",
+    "ioredis": "^5.9.0",
+    "minio": "^8.0.6",
     "framer-motion": "^11.11.11",
     "geist": "^1.4.2",
     "lucide-react": "^1.7.0",
@@ -33,6 +38,7 @@
     "sonner": "^1.7.0",
     "tailwind-merge": "^2.5.4",
     "three": "^0.169.0",
+    "tsx": "^4.21.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {

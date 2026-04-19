@@ -1261,6 +1261,24 @@ model AiCall {
 // T-M4 onwards.
 // ============================================================================
 
+/// T-M4: the lifecycle states for a TranscribeVisit. QUEUED covers
+/// "created, waiting for audio or a mode-specific input" (which is why
+/// the T-M2 "draft" rows are migrated here in the same migration).
+/// The pipeline walks through TRANSCRIBING → EXTRACTING → DRAFTING →
+/// CRITIQUING → POLISHING → READY on the happy path. FAILED is terminal
+/// until the user retries. SIGNED freezes the note (see signedSoap).
+enum TranscribeVisitStatus {
+  QUEUED
+  TRANSCRIBING
+  EXTRACTING
+  DRAFTING
+  CRITIQUING
+  POLISHING
+  READY
+  FAILED
+  SIGNED
+}
+
 model TranscribeVisit {
   id String @id @default(cuid())
 
@@ -1273,12 +1291,13 @@ model TranscribeVisit {
 
   /// "audio_upload" | "voice_dictation" | "text_notes" — chosen at /visits/new.
   inputMode String
-  /// "draft" | "processing" | "ready" | "signed" — driven by the T-M4/T-M5
-  /// pipeline. Defaults to "draft" so the shell alone compiles a sensible row.
-  status    String @default("draft")
+  /// Drives the /visits/[id] UI + the worker pipeline dispatch. See the
+  /// TranscribeVisitStatus comment above.
+  status    TranscribeVisitStatus @default(QUEUED)
 
   audioKey         String?
   transcriptText   String? @db.Text
+  /// T-M2 placeholder — kept for T-M6/T-M7 to repurpose (ICD coding pass).
   soapNote         Json?
   icdCodes         Json?
   cptCodes         Json?
@@ -1287,9 +1306,49 @@ model TranscribeVisit {
   patientSummary   String? @db.Text
   confidenceScores Json?
 
-  signedAt  DateTime?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  // ── T-M4: audio metadata ──
+  audioMimeType    String?
+  audioSizeBytes   Int?
+  /// Populated by Layer 1 (Deepgram) after parse. Used for cost math.
+  audioDurationSec Int?
+  audioUploadedAt  DateTime?
+
+  // ── T-M4: pipeline artifacts (one field per layer) ──
+  /// Full Deepgram response JSON. Used by Layers 2-5 + the Pipeline tab.
+  transcriptRaw Json?
+  /// Layer 2 output — {"0":{"role":"doctor","confidence":0.9,"reasoning":"..."}, ...}
+  speakerMap    Json?
+  /// Layer 3 output — structured entities with evidence_quote + speaker + ts.
+  entities      Json?
+  /// Layer 4 output — markdown SOAP draft. Editable until signed.
+  soapDraft     String? @db.Text
+  /// Layer 5 output — {issues:[], overall_quality, safe_to_sign_without_review}
+  critique      Json?
+  /// Layer 6 output — the version the UI shows + the doctor edits.
+  soapFinal     String? @db.Text
+
+  // ── T-M4: review flag ──
+  /// Layer 5/6 can set this when critical issues can't be auto-fixed,
+  /// or Layer 2 can set it when any speaker's confidence < 0.7.
+  needsReview  Boolean @default(false)
+  /// Human-readable explanation surfaced in the UI banner.
+  reviewReason String? @db.Text
+
+  // ── T-M4: pipeline telemetry ──
+  processingStartedAt  DateTime?
+  processingFinishedAt DateTime?
+  /// Sum of AiCall.costUsdCents rows for this visit. Tracked per visit
+  /// for unit-economics + per-user "notes remaining on plan" later.
+  processingCostCents  Int?
+
+  // ── T-M4: signing ──
+  /// Frozen copy of the note at sign time. Immutable; doctor's edits
+  /// after signing are rejected at the action layer.
+  signedSoap String?   @db.Text
+  signedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([userId, createdAt])
   @@index([status])
