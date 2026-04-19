@@ -98,6 +98,10 @@ export interface VisitReadyViewProps {
   /** T-M7 — passed into SoapEditor so the Sign & Send modal knows
    *  where the "Email to me" destination points. */
   doctorEmail: string;
+  /** T-M9 — whether the "Email to me" checkbox is visible in Sign &
+   *  Send. Hidden by default until ops verifies the from-domain on
+   *  Resend (RESEND_FROM_VERIFIED=true). */
+  emailEnabled: boolean;
 }
 
 export function VisitReadyView(props: VisitReadyViewProps) {
@@ -159,6 +163,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
             <SoapEditor
               visitId={props.visitId}
               doctorEmail={props.doctorEmail}
+              emailEnabled={props.emailEnabled}
               initialText={props.soapText}
               readonly={props.readonly}
               needsReview={props.needsReview}
