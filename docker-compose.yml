@@ -358,6 +358,32 @@ services:
   # SCRIBE_SERVICE_TOKEN is also available to meddoc-pro so it can
   # verify incoming /api/internal/* requests — added via env_file.
 
+  # ── DB Migrator (one-shot) ──
+  # Targets the transcribe-md builder stage because it already runs
+  # `npm ci` + `npm run db:generate` and has the full Prisma CLI
+  # toolchain (prisma, @prisma/config, effect, c12, jiti …). Shipping
+  # those into runtime app images adds ~75MB of dead weight — here we
+  # reuse what's already built.
+  #
+  # Profile-gated so `docker compose up` ignores it. Invoke with:
+  #   docker compose run --rm db-migrate
+  # which defaults to `migrate deploy`. Override to peek:
+  #   docker compose run --rm db-migrate npx prisma migrate status
+  db-migrate:
+    build:
+      context: .
+      dockerfile: apps/transcribe-md/Dockerfile
+      target: builder
+    profiles: ["migrations"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://meddoc:${DB_PASSWORD:-changeme_in_production}@postgres:5432/meddoc?schema=public
+    working_dir: /app/packages/db
+    entrypoint: ["npx", "--no-install", "prisma"]
+    command: ["migrate", "deploy"]
+
 volumes:
   pgdata:
   redis_data:
