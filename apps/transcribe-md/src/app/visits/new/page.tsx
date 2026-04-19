@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
-import { Mic, Radio, PenLine } from 'lucide-react';
 
 import prisma from '@meddoc/db';
 import { auth } from '@/lib/nextauth';
@@ -101,21 +100,21 @@ export default async function NewVisitPage() {
                 action creates the visit then redirects to /visits/[id]. */}
             <ModeTileWithForm
               formId="new-visit-form"
-              icon={Mic}
+              icon="mic"
               title="Upload audio"
               description="Record your visit on your phone, then drop the file here."
               value="audio_upload"
             />
             <ModeTileWithForm
               formId="new-visit-form"
-              icon={Radio}
+              icon="radio"
               title="Dictate live"
               description="Speak a summary into your mic — we'll clean it up."
               value="voice_dictation"
             />
             <ModeTileWithForm
               formId="new-visit-form"
-              icon={PenLine}
+              icon="pen-line"
               title="Text to SOAP"
               description="Type bullets — AI expands them into a full note."
               value="text_notes"
