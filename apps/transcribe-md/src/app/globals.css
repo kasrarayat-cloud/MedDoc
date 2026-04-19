@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+/* tailwindcss-animate is a v3-era plugin that Tailwind v4 can still load
+   via the @plugin directive. If this ever breaks, the utility definitions
+   below (.animate-in, .fade-in-0, .zoom-in-95, .slide-in-from-top-2)
+   duplicate exactly what the plugin provides, so the UI stays working
+   regardless of plugin compatibility. Belt-and-suspenders on purpose. */
+@plugin "tailwindcss-animate";
+
 /* ============================================================================
    TranscribeMD design tokens — Linear/Raycast/Vercel/Resend idiom
    ----------------------------------------------------------------------------
@@ -44,9 +51,12 @@
 
   /* Motion */
   --ease-out-premium: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out-back: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-in-out-soft: cubic-bezier(0.65, 0, 0.35, 1);
   --duration-fast: 150ms;
   --duration-base: 300ms;
   --duration-slow: 500ms;
+  --duration-lazy: 800ms;
 }
 
 /* ============================================================================
@@ -255,6 +265,126 @@ body {
 }
 .animate-accordion-up {
   animation: accordion-up 200ms var(--ease-out-premium);
+}
+
+/* ============================================================================
+   Enter/exit animation utilities (T-M3)
+   ----------------------------------------------------------------------------
+   Same class names as tailwindcss-animate. The @plugin directive at the
+   top SHOULD emit these in Tailwind v4, but this block is an explicit
+   fallback so we never end up in T-M2's "silently invisible Radix
+   portal" state again if the plugin stops cooperating with Tailwind v4.
+   tailwindcss-animate uses the --tw-enter-* and --tw-exit-* CSS-variable
+   convention so classes compose: `animate-in fade-in-0 zoom-in-95`.
+   ========================================================================== */
+@keyframes enter {
+  from {
+    opacity: var(--tw-enter-opacity, 1);
+    transform: translate3d(
+        var(--tw-enter-translate-x, 0),
+        var(--tw-enter-translate-y, 0),
+        0
+      )
+      scale3d(
+        var(--tw-enter-scale, 1),
+        var(--tw-enter-scale, 1),
+        var(--tw-enter-scale, 1)
+      )
+      rotate(var(--tw-enter-rotate, 0));
+  }
+}
+@keyframes exit {
+  to {
+    opacity: var(--tw-exit-opacity, 1);
+    transform: translate3d(
+        var(--tw-exit-translate-x, 0),
+        var(--tw-exit-translate-y, 0),
+        0
+      )
+      scale3d(
+        var(--tw-exit-scale, 1),
+        var(--tw-exit-scale, 1),
+        var(--tw-exit-scale, 1)
+      )
+      rotate(var(--tw-exit-rotate, 0));
+  }
+}
+.animate-in {
+  animation-name: enter;
+  animation-duration: 180ms;
+  animation-timing-function: var(--ease-out-premium);
+  --tw-enter-opacity: initial;
+  --tw-enter-scale: initial;
+  --tw-enter-rotate: initial;
+  --tw-enter-translate-x: initial;
+  --tw-enter-translate-y: initial;
+}
+.animate-out {
+  animation-name: exit;
+  animation-duration: 140ms;
+  animation-timing-function: var(--ease-out-premium);
+  --tw-exit-opacity: initial;
+  --tw-exit-scale: initial;
+  --tw-exit-rotate: initial;
+  --tw-exit-translate-x: initial;
+  --tw-exit-translate-y: initial;
+}
+.fade-in-0 { --tw-enter-opacity: 0; }
+.fade-out-0 { --tw-exit-opacity: 0; }
+.zoom-in-95 { --tw-enter-scale: 0.95; }
+.zoom-out-95 { --tw-exit-scale: 0.95; }
+.slide-in-from-top-2 { --tw-enter-translate-y: -0.5rem; }
+.slide-in-from-bottom-2 { --tw-enter-translate-y: 0.5rem; }
+.slide-in-from-left-2 { --tw-enter-translate-x: -0.5rem; }
+.slide-in-from-right-2 { --tw-enter-translate-x: 0.5rem; }
+.slide-out-to-top-2 { --tw-exit-translate-y: -0.5rem; }
+.slide-out-to-bottom-2 { --tw-exit-translate-y: 0.5rem; }
+
+/* ============================================================================
+   Skeleton shimmer (T-M3)
+   ----------------------------------------------------------------------------
+   A 1.4s linear sweep used by <Skeleton> to hint at loading content.
+   ========================================================================== */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+.shimmer {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(
+    90deg,
+    var(--color-bg-surface-2) 0%,
+    var(--color-bg-surface-3) 50%,
+    var(--color-bg-surface-2) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+/* ============================================================================
+   Orb halo pulse (T-M3)
+   ----------------------------------------------------------------------------
+   Ambient breathe behind the <VioletOrb>. The 3D sphere itself has its
+   own useFrame pulse — this second, slower, CSS layer makes the two
+   rhythms intertwine so the orb never feels metronomic.
+   ========================================================================== */
+@keyframes orb-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+}
+.orb-pulse {
+  animation: orb-pulse 4s var(--ease-in-out-soft) infinite;
 }
 
 /* Respect reduced-motion preferences. Animations collapse to a single

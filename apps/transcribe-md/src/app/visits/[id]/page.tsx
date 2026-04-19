@@ -6,6 +6,7 @@ import { ArrowLeft } from 'lucide-react';
 import prisma from '@meddoc/db';
 import { auth } from '@/lib/nextauth';
 import { NavBar } from '@/components/nav-bar';
+import { PageWrapper } from '@/components/page-wrapper';
 import { SpecularButton } from '@/components/specular-button';
 import { VisitOrb } from '@/components/visit-orb';
 
@@ -55,10 +56,10 @@ export default async function VisitPage({
   const modeCopy = MODE_COPY[visit.inputMode] ?? 'This visit mode is not yet supported.';
 
   return (
-    <>
+    <PageWrapper>
       <NavBar name={user.name} email={user.email} />
 
-      <main className="mx-auto max-w-4xl px-6 pb-24 pt-8 lg:px-8 lg:pt-12">
+      <main className="mx-auto max-w-4xl px-4 pb-24 pt-8 sm:px-6 lg:px-8 lg:pt-12">
         <div className="mb-8">
           <Link
             href="/dashboard"
@@ -92,7 +93,7 @@ export default async function VisitPage({
           </div>
         </div>
       </main>
-    </>
+    </PageWrapper>
   );
 }
 
