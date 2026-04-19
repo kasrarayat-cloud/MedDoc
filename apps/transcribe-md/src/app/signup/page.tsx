@@ -1,11 +1,11 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 
-import prisma from '@meddoc/db';
 import { auth } from '@/lib/nextauth';
 import { AnimatedGrid } from '@/components/animated-grid';
 import { GradientBorder } from '@/components/gradient-border';
 import { GradientText } from '@/components/gradient-text';
+import { SPECIALTIES } from '@/lib/specialties';
 import { SignupForm } from './signup-form';
 
 export const metadata: Metadata = { title: 'Sign up' };
@@ -16,11 +16,7 @@ export default async function SignupPage() {
     redirect('/dashboard');
   }
 
-  const specialties = await prisma.scribeSpecialtyTemplate.findMany({
-    where: { active: true },
-    orderBy: { displayName: 'asc' },
-    select: { slug: true, displayName: true },
-  });
+  const specialties = SPECIALTIES;
 
   return (
     <main className="relative min-h-screen overflow-hidden">

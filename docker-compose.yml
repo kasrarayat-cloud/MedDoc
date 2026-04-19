@@ -52,8 +52,6 @@ services:
       AUTH_URL: ${PUBLIC_URL:-http://5.231.107.93}
       NEXTAUTH_URL: ${PUBLIC_URL:-http://5.231.107.93}  # v4 compat name
       AUTH_TRUST_HOST: "true"  # redundant (also hardcoded in auth.config.ts) — safe belt-and-braces
-      # Used to verify /api/internal/* calls coming from Scribe (M2+).
-      SCRIBE_SERVICE_TOKEN: ${SCRIBE_SERVICE_TOKEN}
     ports:
       # Bound to loopback only — public traffic goes through Caddy. Kept
       # for dev debugging (e.g., curl http://127.0.0.1:3001 from the host).
@@ -98,140 +96,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # ── Next.js App (MedDoc Scribe) ──
-  # New in M1 — subdomain scribe.<domain>. Shares the same Postgres + AUTH_SECRET
-  # with meddoc-pro. Users authenticate on meddoc-pro and the JWT cookie is
-  # shared via AUTH_COOKIE_DOMAIN.
-  scribe:
-    build:
-      context: .
-      dockerfile: apps/scribe/Dockerfile
-    restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-    env_file:
-      - .env
-    environment:
-      DATABASE_URL: postgresql://meddoc:${DB_PASSWORD:-changeme_in_production}@postgres:5432/meddoc?schema=public
-      AUTH_URL: ${SCRIBE_PUBLIC_URL:-http://scribe.localhost}
-      MEDDOC_PRO_PUBLIC_URL: ${PUBLIC_URL:-http://meddoc-pro.localhost}
-      MEDDOC_PRO_INTERNAL_URL: http://meddoc-pro:3000
-      # Empty by default so NextAuth binds the cookie host-only (needed
-      # for the IP-based :8080 preview where there's no shared parent
-      # domain). Set AUTH_COOKIE_DOMAIN in .env when you move to a real
-      # subdomain layout like scribe.example.com + example.com.
-      AUTH_COOKIE_DOMAIN: ${AUTH_COOKIE_DOMAIN:-}
-      AUTH_TRUST_HOST: "true"
-      # Scribe-pipeline (M2+) — these live here so the web container can
-      # serve presigned URLs and enqueue jobs, but model calls happen in
-      # the worker.
-      REDIS_URL: redis://redis:6379
-      MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-meddoc}
-      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-changeme_in_production}
-      MINIO_BUCKET: ${MINIO_BUCKET:-scribe-audio}
-      MINIO_USE_SSL: "false"
-      SCRIBE_SERVICE_TOKEN: ${SCRIBE_SERVICE_TOKEN}
-    ports:
-      - "127.0.0.1:3002:3000"
-
-  # ── Scribe worker (BullMQ consumer) ──
-  # Same build as the web container BUT a different Dockerfile that adds
-  # ffmpeg + tsx, and runs src/worker.ts as its entrypoint.
-  scribe-worker:
-    build:
-      context: .
-      dockerfile: apps/scribe/Dockerfile.worker
-    restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-    env_file:
-      - .env
-    environment:
-      DATABASE_URL: postgresql://meddoc:${DB_PASSWORD:-changeme_in_production}@postgres:5432/meddoc?schema=public
-      REDIS_URL: redis://redis:6379
-      MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-meddoc}
-      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-changeme_in_production}
-      MINIO_BUCKET: ${MINIO_BUCKET:-scribe-audio}
-      MINIO_USE_SSL: "false"
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-      TRANSCRIPTION_MODEL: ${TRANSCRIPTION_MODEL:-gpt-4o-transcribe}
-      MODEL_FOR_CLEANUP: ${MODEL_FOR_CLEANUP:-claude-sonnet-4-6}
-      MODEL_FOR_SOAP: ${MODEL_FOR_SOAP:-claude-sonnet-4-6}
-      # M4 — full output bundle. All default to Claude Sonnet 4.6 (spec §5
-      # suggests GPT-4o for referral/patient_summary but the OpenAI-complete
-      # path in @meddoc/ai is deferred to M7 per M4 D12).
-      MODEL_FOR_CODING: ${MODEL_FOR_CODING:-claude-sonnet-4-6}
-      MODEL_FOR_RX: ${MODEL_FOR_RX:-claude-sonnet-4-6}
-      MODEL_FOR_REFERRAL: ${MODEL_FOR_REFERRAL:-claude-sonnet-4-6}
-      MODEL_FOR_PATIENT_SUMMARY: ${MODEL_FOR_PATIENT_SUMMARY:-claude-sonnet-4-6}
-      # Per-output feature flags (M4 D10). Set to "false" to disable an
-      # extraction without redeploying code.
-      SCRIBE_EXTRACT_CODING: ${SCRIBE_EXTRACT_CODING:-true}
-      SCRIBE_EXTRACT_RX: ${SCRIBE_EXTRACT_RX:-true}
-      SCRIBE_EXTRACT_REFERRALS: ${SCRIBE_EXTRACT_REFERRALS:-true}
-      SCRIBE_EXTRACT_PATIENT_SUMMARY: ${SCRIBE_EXTRACT_PATIENT_SUMMARY:-true}
-      # Worker talks to MedDoc Pro's /api/internal/patients/:id/clinical-safety
-      # for Rx interaction / allergy / duplicate checks (M4 D3/D4).
-      MEDDOC_PRO_INTERNAL_URL: http://meddoc-pro:3000
-      SCRIBE_SERVICE_TOKEN: ${SCRIBE_SERVICE_TOKEN}
-      # M7 — optional file-based rotation. Mount a Docker secret at this
-      # path and the worker reads the token from the file instead of the
-      # env var. See docs/ROTATION_RUNBOOK.md.
-      SCRIBE_SERVICE_TOKEN_FILE: ${SCRIBE_SERVICE_TOKEN_FILE:-}
-      # M7 retention — daily cron is ALWAYS registered; live purge is
-      # flag-gated separately so the dry-run baseline can run for weeks
-      # before anything actually gets deleted.
-      RETENTION_PURGE_LIVE: ${RETENTION_PURGE_LIVE:-false}
-      RETENTION_PURGE_ENABLED: ${RETENTION_PURGE_ENABLED:-true}
-      RETENTION_PURGE_CRON: ${RETENTION_PURGE_CRON:-0 2 * * *}
-      # Sentry — empty DSN = SDK no-ops, fine for dev.
-      SENTRY_DSN: ${SENTRY_DSN_SCRIBE:-}
-      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
-      SENTRY_RELEASE: ${SENTRY_RELEASE:-}
-      SCRIBE_WORKER_CONCURRENCY: ${SCRIBE_WORKER_CONCURRENCY:-2}
-
-  # ── Scribe WebSocket sidecar (M3 — real-time visits) ──
-  # Next 16 + `output: 'standalone'` rules out a custom WS server inside
-  # the web container. This sidecar owns the WS upgrade path and proxies
-  # to Deepgram Nova-3 Medical. Caddy routes scribe.<domain>/api/ws/* here.
-  # Authenticates via the shared NextAuth cookie (AUTH_COOKIE_DOMAIN).
-  scribe-ws:
-    build:
-      context: .
-      dockerfile: apps/scribe/Dockerfile.ws
-    restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    env_file:
-      - .env
-    environment:
-      DATABASE_URL: postgresql://meddoc:${DB_PASSWORD:-changeme_in_production}@postgres:5432/meddoc?schema=public
-      REDIS_URL: redis://redis:6379
-      AUTH_SECRET: ${AUTH_SECRET}
-      # See note on scribe service above — empty default for host-only cookies.
-      AUTH_COOKIE_DOMAIN: ${AUTH_COOKIE_DOMAIN:-}
-      DEEPGRAM_API_KEY: ${DEEPGRAM_API_KEY}
-      DEEPGRAM_MODEL: ${DEEPGRAM_MODEL:-nova-3-medical}
-      SCRIBE_WS_PORT: "3003"
-    ports:
-      - "127.0.0.1:3003:3003"
-
   # ── Caddy Reverse Proxy ──
   # Terminates inbound HTTP/HTTPS and forwards to `app:3000` on the
   # internal Docker network, setting X-Forwarded-For / X-Real-IP so the
@@ -241,8 +105,6 @@ services:
     restart: unless-stopped
     depends_on:
       - meddoc-pro
-      - scribe
-      - scribe-ws
       - marketing
       - transcribe-md
     ports:
@@ -252,9 +114,6 @@ services:
       # already claimed by MinIO's web console (see minio service), so
       # marketing lives on 9010 until DNS + TLS are configured.
       - "9010:9010"
-      # :8080 = Scribe preview on the public IP (author-only, plaintext).
-      # See the matching :8080 block in Caddyfile.
-      - "8080:8080"
       # T-M2: the TranscribeMD solo app itself. Doctors sign up + work here.
       - "9020:9020"
     volumes:
@@ -354,9 +213,6 @@ services:
     ports:
       # Loopback only — public traffic arrives via Caddy on :9020.
       - "127.0.0.1:3011:3011"
-
-  # SCRIBE_SERVICE_TOKEN is also available to meddoc-pro so it can
-  # verify incoming /api/internal/* requests — added via env_file.
 
   # ── DB Migrator (one-shot) ──
   # Targets the transcribe-md builder stage because it already runs

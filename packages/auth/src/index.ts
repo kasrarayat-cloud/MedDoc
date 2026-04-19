@@ -1,13 +1,3 @@
-// M7: file-based + env service-token resolution — re-export as the
-// canonical surface. Kept alongside NextAuth config since both apps
-// that import this package already import from here for session
-// handling.
-export {
-  readServiceToken,
-  resolveServiceToken,
-  _resetServiceTokenCache,
-} from './service-token';
-
 // T-M2: single-session tracking helpers. Node-only; don't import these
 // from edge middleware — the shared authConfig below uses dynamic
 // import() so the edge bundle never pulls them in.

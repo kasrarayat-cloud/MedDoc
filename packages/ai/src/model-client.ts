@@ -16,11 +16,10 @@ import {
   anthropicCompleteText,
   type AnthropicCompleteTextResult,
 } from './anthropic';
-import { openaiTranscribe, type TranscribeResult } from './openai';
 import type { AiLogContext, ModelProvider } from './types';
 
 export type * from './types';
-export type { TranscribeResult, AnthropicCompleteTextResult };
+export type { AnthropicCompleteTextResult };
 
 export interface CompleteArgs<T> extends AiLogContext {
   provider: Exclude<ModelProvider, 'deepgram'>;
@@ -31,13 +30,6 @@ export interface CompleteArgs<T> extends AiLogContext {
   maxTokens?: number;
   /** Retry once on schema-fail with the error appended. Default true. */
   retryOnSchemaFail?: boolean;
-}
-
-export interface TranscribeArgs extends AiLogContext {
-  audio: Buffer;
-  fileName: string;
-  language?: string;
-  model?: string;
 }
 
 export interface CompleteTextArgs extends AiLogContext {
@@ -77,10 +69,6 @@ export const modelClient = {
       }
       throw err;
     }
-  },
-
-  async transcribe(args: TranscribeArgs): Promise<TranscribeResult> {
-    return openaiTranscribe(args);
   },
 
   /**

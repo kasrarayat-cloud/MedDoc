@@ -36,7 +36,6 @@ type NavItem = {
 const NAV_ITEMS: NavItem[] = [
   { label: 'Users', href: '/system-admin', icon: Users, exact: true },
   { label: 'Security Logs', href: '/system-admin/audit', icon: Shield },
-  { label: 'Scribe Audit', href: '/system-admin/scribe-audit', icon: Terminal },
   { label: 'Metrics', href: '/system-admin/metrics', icon: Activity },
 ];
 

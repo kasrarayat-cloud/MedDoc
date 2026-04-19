@@ -9,7 +9,6 @@
 
 export * from './types';
 export * from './model-client';
-export * from './deepgram';
 export * from './deepgram-batch';
 export {
   claudeSonnet46CostCents,
