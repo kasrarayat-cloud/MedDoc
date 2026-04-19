@@ -67,6 +67,11 @@ COPY --from=builder /app/apps/transcribe-md/.next/static ./apps/transcribe-md/.n
 COPY --from=builder /app/packages/db/prisma ./packages/db/prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+# Migrations don't run from this image — @prisma/config pulls ~75MB of
+# transitive deps (effect, c12, jiti, …) that have no business in a
+# runtime container. The dedicated `db-migrate` compose service targets
+# the `builder` stage which already has the full toolchain. See
+# docker-compose.yml and the "Migrations" note at the top of this file.
 
 USER nextjs
 

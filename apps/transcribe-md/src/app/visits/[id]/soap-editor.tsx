@@ -1,19 +1,18 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { useRouter } from 'next/navigation';
-import { Lock, Loader2, Check, PencilLine } from 'lucide-react';
+import { Lock, Loader2, Check, PencilLine, Send } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { cn } from '@/lib/cn';
 import { SpecularButton } from '@/components/specular-button';
-import {
-  saveSoapDraftAction,
-  signVisitAction,
-} from '@/actions/soap';
+import { saveSoapDraftAction } from '@/actions/soap';
+import { SignAndSendModal } from './sign-and-send-modal';
 
 interface SoapEditorProps {
   visitId: string;
+  /** Doctor's email — pre-filled in the Sign & Send modal. */
+  doctorEmail: string;
   initialText: string;
   /** Readonly when the visit is SIGNED. The signed copy lives in
    *  signedSoap; the client passes that value as initialText. */
@@ -25,17 +24,16 @@ interface SoapEditorProps {
 
 export function SoapEditor({
   visitId,
+  doctorEmail,
   initialText,
   readonly = false,
   needsReview,
   reviewReason,
   overallQuality,
 }: SoapEditorProps) {
-  const router = useRouter();
   const [text, setText] = useState(initialText);
   const [editing, setEditing] = useState(false);
   const [saving, startSaving] = useTransition();
-  const [signing, startSigning] = useTransition();
 
   const onSave = () => {
     startSaving(async () => {
@@ -46,20 +44,6 @@ export function SoapEditor({
       }
       toast.success('Saved');
       setEditing(false);
-    });
-  };
-
-  const onSign = () => {
-    startSigning(async () => {
-      const res = await signVisitAction(visitId);
-      if (!res.ok) {
-        toast.error('Could not sign', { description: res.error });
-        return;
-      }
-      toast.success('Signed & locked', {
-        description: 'This note is now immutable.',
-      });
-      router.refresh();
     });
   };
 
@@ -151,24 +135,24 @@ export function SoapEditor({
         )}
 
         {!editing && !readonly && (
-          <SpecularButton
-            variant="primary"
-            size="md"
-            onClick={onSign}
-            disabled={signing}
-          >
-            {signing ? (
-              <>
-                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-                Signing…
-              </>
-            ) : (
-              <>
-                <Lock className="h-3.5 w-3.5" aria-hidden />
-                Sign &amp; lock
-              </>
-            )}
-          </SpecularButton>
+          <SignAndSendModal
+            visitId={visitId}
+            doctorEmail={doctorEmail}
+            signOnSubmit
+            triggerLabel="Sign & Send"
+            triggerIcon={<Lock className="h-3.5 w-3.5" aria-hidden />}
+          />
+        )}
+
+        {!editing && readonly && (
+          <SignAndSendModal
+            visitId={visitId}
+            doctorEmail={doctorEmail}
+            signOnSubmit={false}
+            triggerLabel="Export again"
+            triggerIcon={<Send className="h-3.5 w-3.5" aria-hidden />}
+            triggerVariant="secondary"
+          />
         )}
 
         {readonly && (
