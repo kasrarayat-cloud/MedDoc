@@ -12,7 +12,8 @@
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:debug": "playwright test --debug",
     "test:e2e:install": "playwright install chromium",
-    "worker": "tsx src/worker.ts"
+    "worker": "tsx src/worker.ts",
+    "minio:cleanup": "tsx scripts/minio-cleanup.ts"
   },
   "dependencies": {
     "@meddoc/ai": "*",
