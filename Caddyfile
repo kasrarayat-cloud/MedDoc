@@ -26,33 +26,6 @@
 # two apps live on the same node. Host-based match runs first; the raw
 # `:80` block is the catch-all that still points at meddoc-pro.
 
-# Scribe subdomain — dev via scribe.localhost, prod uncomment the domain
-# block below alongside meddoc's domain block.
-http://scribe.localhost {
-    log {
-        output stdout
-        format console
-    }
-
-    # M3: WS upgrade path → scribe-ws sidecar. Caddy's reverse_proxy
-    # forwards the Upgrade/Connection headers automatically; the path
-    # matcher runs before the catch-all to scribe:3000 below.
-    @ws path /api/ws/*
-    reverse_proxy @ws scribe-ws:3003 {
-        header_up Host {host}
-        header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-For {remote_host}
-        header_up X-Forwarded-Proto {scheme}
-    }
-
-    reverse_proxy scribe:3000 {
-        header_up Host {host}
-        header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-For {remote_host}
-        header_up X-Forwarded-Proto {scheme}
-    }
-}
-
 # ─── :9010 — TranscribeMD Marketing (T-M1) ────────────────────────────────
 # Standalone marketing site for the new product. Plaintext on the VPS
 # public IP until DNS + HTTPS are in place. No patient data of any kind
@@ -86,34 +59,6 @@ http://scribe.localhost {
     }
 
     reverse_proxy transcribe-md:3011 {
-        header_up Host {host}
-        header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-For {remote_host}
-        header_up X-Forwarded-Proto {scheme}
-    }
-}
-
-# ─── :8080 — Scribe on the public IP (author-only preview) ─────────────────
-# Same shape as the scribe.localhost block: WS upgrade path → scribe-ws,
-# catch-all → scribe. Exposed on the VPS public IP so Scribe can be
-# reviewed in a browser without an SSH tunnel. Plaintext — do NOT route
-# real patient data through this until the domain + HTTPS + BAAs + full
-# clinical review are in place (see docs/BAA_CHECKLIST.md).
-:8080 {
-    log {
-        output stdout
-        format console
-    }
-
-    @ws path /api/ws/*
-    reverse_proxy @ws scribe-ws:3003 {
-        header_up Host {host}
-        header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-For {remote_host}
-        header_up X-Forwarded-Proto {scheme}
-    }
-
-    reverse_proxy scribe:3000 {
         header_up Host {host}
         header_up X-Real-IP {remote_host}
         header_up X-Forwarded-For {remote_host}

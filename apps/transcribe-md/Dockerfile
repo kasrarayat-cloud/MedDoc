@@ -15,7 +15,6 @@ FROM node:22-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/meddoc-pro/package.json ./apps/meddoc-pro/package.json
-COPY apps/scribe/package.json ./apps/scribe/package.json
 COPY apps/marketing/package.json ./apps/marketing/package.json
 COPY apps/transcribe-md/package.json ./apps/transcribe-md/package.json
 COPY packages/db/package.json ./packages/db/package.json
@@ -29,7 +28,6 @@ FROM node:22-alpine AS builder
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/meddoc-pro/package.json ./apps/meddoc-pro/package.json
-COPY apps/scribe/package.json ./apps/scribe/package.json
 COPY apps/marketing/package.json ./apps/marketing/package.json
 COPY apps/transcribe-md/package.json ./apps/transcribe-md/package.json
 COPY packages/db/package.json ./packages/db/package.json
