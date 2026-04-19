@@ -1363,12 +1363,48 @@ model TranscribeVisit {
   signedSoap String?   @db.Text
   signedAt   DateTime?
 
+  // ── T-M7: delivery audit trail ──
+  /// One row per export (clipboard paste, PDF download, DOCX download,
+  /// email). Doesn't affect the pipeline — exists so the doctor +
+  /// support can trace "where did this note go?" weeks later.
+  deliveries VisitDelivery[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([userId, createdAt])
   @@index([status])
   @@map("transcribe_visits")
+}
+
+// ============================================================================
+// VISIT DELIVERY — T-M7 export audit
+// ----------------------------------------------------------------------------
+// Every time the doctor exports a signed (or ready-but-not-signed) visit
+// via a clipboard-format copy, a PDF/DOCX download, or an email send, we
+// log one row here. Keeps the ops + support surface debuggable without
+// needing to grep container logs.
+// ============================================================================
+
+model VisitDelivery {
+  id String @id @default(cuid())
+
+  visitId String
+  visit   TranscribeVisit @relation(fields: [visitId], references: [id], onDelete: Cascade)
+
+  /// "clipboard_epic" | "clipboard_athena" | "clipboard_cerner" |
+  /// "clipboard_eclinicalworks" | "clipboard_generic" | "pdf" | "docx" |
+  /// "email".
+  channel     String
+  /// Email address for channel="email"; null otherwise.
+  destination String?
+  /// Size in bytes for pdf/docx deliveries; null otherwise.
+  sizeBytes   Int?
+
+  createdAt DateTime @default(now())
+
+  @@index([visitId])
+  @@map("visit_deliveries")
 }
 
 // ============================================================================
