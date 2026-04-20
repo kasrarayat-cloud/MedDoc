@@ -19,10 +19,7 @@ import { auth } from '@/lib/nextauth';
 import prisma from '@meddoc/db';
 import { TranscribeVisitStatus } from '@prisma/client';
 import { buildAudioObjectKey, putAudioStream } from '@/lib/minio';
-import {
-  getTranscribeMdQueue,
-  JOB_PROCESS_VISIT,
-} from '@/lib/queue';
+import { enqueueProcessVisit } from '@/lib/queue';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
@@ -90,20 +87,26 @@ export const POST = withApiHandler<{ id: string }>(
       ? Number.parseInt(contentLengthHeader, 10)
       : NaN;
     if (!Number.isFinite(contentLength) || contentLength <= 0) {
-      return apiError('content-length header missing or invalid', 400);
+      return apiError(
+        'Content-length header missing or invalid.',
+        400,
+        { code: 'INVALID_REQUEST', retry: false }
+      );
     }
     if (contentLength > MAX_BYTES) {
       return apiError(
-        `file too large: ${contentLength} bytes exceeds 500 MB limit`,
-        413
+        `File too large: ${contentLength} bytes exceeds the ${Math.round(MAX_BYTES / 1024 / 1024)} MB limit.`,
+        413,
+        { code: 'FILE_TOO_LARGE', retry: false }
       );
     }
 
     const mimeType = req.headers.get('content-type')?.trim() ?? '';
     if (!mimeType || !ALLOWED_MIME.has(mimeType.split(';')[0]!.trim())) {
       return apiError(
-        `unsupported content-type: ${mimeType || '(missing)'}`,
-        415
+        `Unsupported file format: ${mimeType || '(missing)'}. Try MP3, M4A, WAV, or WebM.`,
+        415,
+        { code: 'UNSUPPORTED_FORMAT', retry: false }
       );
     }
 
@@ -121,11 +124,29 @@ export const POST = withApiHandler<{ id: string }>(
     try {
       await putAudioStream(objectKey, nodeReadable, contentLength, mimeType);
     } catch (err) {
+      // MinIO classification: 5xx → transient (retry worth it);
+      // 4xx with an error message mentioning the bucket → permanent
+      // (bucket missing or credentials bad). We err on the side of
+      // retry:true except for obviously-permanent auth failures.
+      const msg = err instanceof Error ? err.message.toLowerCase() : '';
+      const permanent =
+        /access denied|invalid accesskey|invalid signature|not found.*bucket/.test(
+          msg
+        );
       console.error(
         '[api:visits:upload] MinIO put failed:',
         redactPhi(err instanceof Error ? err.message : err)
       );
-      return apiError('storage write failed', 502);
+      return apiError(
+        permanent
+          ? 'Storage is misconfigured; please contact support.'
+          : 'Storage write failed. Please try again in a moment.',
+        502,
+        {
+          code: permanent ? 'STORAGE_PERMANENT' : 'STORAGE_TEMPORARY',
+          retry: !permanent,
+        }
+      );
     }
 
     // Persist upload metadata + flip back to QUEUED (covers the "retry
@@ -147,11 +168,7 @@ export const POST = withApiHandler<{ id: string }>(
     });
 
     try {
-      await getTranscribeMdQueue().add(
-        JOB_PROCESS_VISIT,
-        { visitId, userId },
-        { jobId: `visit-${visitId}-${Date.now()}` }
-      );
+      await enqueueProcessVisit(visitId, userId);
     } catch (err) {
       console.error(
         '[api:visits:upload] queue enqueue failed:',
@@ -160,8 +177,9 @@ export const POST = withApiHandler<{ id: string }>(
       // The audio is in MinIO and the visit is QUEUED; the user can retry
       // upload or an ops tool can re-enqueue. Don't lose the upload.
       return apiError(
-        'upload stored but worker enqueue failed; please refresh and try again',
-        502
+        'Upload stored, but the worker queue is unreachable. Please refresh and try again.',
+        502,
+        { code: 'QUEUE_TEMPORARY', retry: true }
       );
     }
 

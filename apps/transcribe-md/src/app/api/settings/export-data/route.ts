@@ -36,6 +36,7 @@ import { downloadAudio } from '@/lib/minio';
 import { loadVisitExportData } from '@/lib/visit-export-server';
 import { generateVisitPdf } from '@/lib/pdf-generator';
 import { redactPhi } from '@meddoc/ai';
+import { log } from '@/lib/log';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -209,9 +210,11 @@ export const GET = withApiHandler('api:settings:export-data', async () => {
       }
 
       await archive.finalize();
-      console.info(
-        `[api:settings:export-data] user=${userId} visits=${visits.length} editPatterns=${editPatterns.length} — archive finalized`
-      );
+      log.info('api:settings:export-data', 'archive finalized', {
+        userId,
+        visitCount: visits.length,
+        editPatternCount: editPatterns.length,
+      });
     } catch (err) {
       console.error(
         `[api:settings:export-data] unhandled user=${userId}:`,

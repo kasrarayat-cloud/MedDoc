@@ -29,6 +29,7 @@ import prisma from '@meddoc/db';
 import { embedText } from '@meddoc/ai';
 
 import { charLevenshtein } from './edit-distance';
+import { log } from './log';
 
 const LOG = '[edit-tracking]';
 
@@ -120,9 +121,12 @@ export async function captureEditPattern(args: {
       );
     }
 
-    console.info(
-      `${LOG} visit=${args.visitId} captured doctor=${args.doctorId} editDistance=${editDistance} embedded=${embedded ? 'yes' : 'no'}`
-    );
+    log.info('edit-tracking', 'edit pattern captured', {
+      visitId: args.visitId,
+      doctorId: args.doctorId,
+      editDistance,
+      embedded,
+    });
   } catch (err) {
     // Catchall: unique violation, DB outage, any other surprise. Must
     // never propagate — sign must always succeed from the user's POV.

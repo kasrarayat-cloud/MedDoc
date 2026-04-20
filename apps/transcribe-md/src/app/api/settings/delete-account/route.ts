@@ -41,6 +41,7 @@ import { deleteAudioObjectsByPrefix } from '@/lib/minio';
 import { sendAccountDeletedConfirmation } from '@/lib/email';
 import { MARKETING_URL } from '@/lib/constants';
 import { redactPhi } from '@meddoc/ai';
+import { log } from '@/lib/log';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -151,9 +152,10 @@ export const POST = withApiHandler('api:settings:delete-account', async (req) =>
     );
   }
 
-  console.info(
-    `[api:settings:delete-account] purged user=${user.id} visits=${visitCount}`
-  );
+  log.info('api:settings:delete-account', 'user purged', {
+    userId: user.id,
+    visitCount,
+  });
 
   // ── Best-effort post-transaction cleanup ────────────────────────
 

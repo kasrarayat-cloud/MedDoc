@@ -32,16 +32,36 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 export interface ApiErrorBody {
   error: string;
+  /** T-M16.4: machine-readable error taxonomy. Clients that care
+   *  branch on this; older clients still read `error` and work
+   *  unchanged. SHOUT_CASE so a `switch` feels at home. */
+  code?: string;
+  /** T-M16.4: hint for clients that have a "retry" affordance —
+   *  true when the failure was transient (network blip, upstream
+   *  5xx), false when it was a permanent misconfiguration (bad MIME,
+   *  oversized file). Absent = caller didn't classify. */
+  retry?: boolean;
+}
+
+export interface ApiErrorExtras {
+  code?: string;
+  retry?: boolean;
 }
 
 /** Canonical error response. Every route handler uses this (directly
  *  or via withApiHandler) so clients see the same shape for every
- *  failure mode: `{ error: string }`. */
+ *  failure mode: `{ error: string }`. Optional 3rd arg carries the
+ *  T-M16.4 `{code, retry}` classification; omit for routes that don't
+ *  care to classify yet. */
 export function apiError(
   message: string,
-  status: number
+  status: number,
+  extras: ApiErrorExtras = {}
 ): NextResponse<ApiErrorBody> {
-  return NextResponse.json({ error: message }, { status });
+  const body: ApiErrorBody = { error: message };
+  if (extras.code !== undefined) body.code = extras.code;
+  if (extras.retry !== undefined) body.retry = extras.retry;
+  return NextResponse.json(body, { status });
 }
 
 export interface ApiRouteContext<P extends Record<string, string>> {

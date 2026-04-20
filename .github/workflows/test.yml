@@ -29,7 +29,10 @@ jobs:
 
     services:
       postgres:
-        image: postgres:16
+        # T-M14.1 migration runs CREATE EXTENSION "vector" — the stock
+        # postgres:16 image doesn't ship pgvector, so use the same
+        # pgvector/pgvector:pg16 image as the production compose file.
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: meddoc
           POSTGRES_PASSWORD: meddoc

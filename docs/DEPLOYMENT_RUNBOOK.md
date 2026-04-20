@@ -263,18 +263,24 @@ free -h                                    # confirm headroom is back
 docker compose up -d transcribe-md-worker  # bring it back with fresh allocation
 ```
 
-Long-term: set `mem_limit` per service in `docker-compose.yml` (T-M15 finding H9). Tentative limits: worker 1 Gi, app 512 Mi, postgres 512 Mi.
+Resource-limit ceilings landed in T-M16.4; see §7 for the
+per-service table. If a specific container keeps OOM-killing,
+bump its `mem_limit` in `docker-compose.yml` and recreate.
 
 ### 5.4 Disk full
 
+Fast triage — see §9 for the full monthly cleanup workflow:
+
 ```bash
 df -h /                             # confirm 95%+
-docker system df                    # usually 30+ GB in build cache
-docker system prune -af --volumes   # DESTRUCTIVE — removes ALL unused
-                                    # images, networks, volumes, build cache
+docker system df                    # ~30 GB in build cache is typical
+make prune-docker                   # interactive confirm + prune (T-M16.4)
+# or, without the Makefile wrapper:
+docker system prune -a --volumes --filter "until=720h" -f
 ```
 
-Scheduled cleanup: add to crontab once a month (`0 4 1 * * docker system prune -af`). Never prune while a build is in flight.
+Don't cron-schedule prune — image deletion can take out rollback
+candidates. Keep it manual + monthly. Full playbook in §9.
 
 ### 5.5 MinIO bucket disappeared
 
@@ -383,7 +389,179 @@ A dedicated worker-liveness probe is a future milestone; until then
 the "completed jobs per hour == 0 for 1+ hour" heuristic is a good
 proxy for "worker stuck".
 
-## 7. Post-deploy checklist
+## 7. Host memory baseline (T-M16.4 diagnosis)
+
+The T-M15 audit flagged swap usage at 1.9 GB on a 1.8 GB-RAM host;
+the T-M16.4 re-audit confirmed 2.0 GB swap on the same physical box
+after an hour of dev work. Digging into `ps aux --sort=-rss` showed
+**our app containers are not the culprit** — they total ~285 MB
+across all eight Docker services. The top userspace consumers:
+
+| Process | RSS | Nature |
+|---------|-----|--------|
+| `dockerd` | 504 MB | Docker daemon — aggregates all container-process memory |
+| Dev-session tooling (Claude agent, etc.) | ~390 MB | Ephemeral; vanishes when the dev session ends |
+| `next-server` × 4 | ~150 MB | Next.js runtime processes across the 3 apps |
+| Unrelated co-located projects (openclaw, meilisearch, ai-deal-hunter) | ~70 MB | Shared VPS tenants outside this repo |
+| Linux + systemd + containerd + multipathd + journald | ~150 MB | OS baseline |
+
+**No Postgres tuning is warranted** — postgres is at 6 MiB resident.
+**No app-side memory refactor is warranted** — the apps are light.
+The pressure is a combination of dockerd overhead, this VPS hosting
+other projects, and the dev session itself.
+
+**What we did instead (T-M16.4 Commit 1)**: compose `mem_limit` +
+`cpus` on every service as protective ceilings (see
+`docker-compose.yml`). These limits protect against a future
+runaway container OOM-killing postgres, not against current-state
+swap pressure. Current values:
+
+| Service | mem_limit | cpus |
+|---------|-----------|------|
+| postgres | 512 MB | 1.0 |
+| redis | 128 MB | 0.5 |
+| minio | 256 MB | 0.5 |
+| caddy | 128 MB | 0.5 |
+| marketing | 256 MB | 0.5 |
+| meddoc-pro | 512 MB | 1.0 |
+| transcribe-md | 512 MB | 1.0 |
+| transcribe-md-worker | 1024 MB | 1.5 |
+
+Sum of `mem_limit` across services (≈ 3.3 GB) exceeds physical RAM
+(1.8 GB) on purpose — limits are ceilings, not reservations. They
+only fire when a container actually hits them.
+
+**Future note**: if memory pressure starts causing observable
+problems (slow API latency, worker OOM-kills, PDF renders failing)
+post-pilot, **upgrade the VPS to 4 GB RAM** rather than trying to
+squeeze the apps further. At 4 GB + the current co-located-tenant
+mix, we'd have ~2 GB of real headroom for traffic spikes.
+
+## 8. Automated DB backups (T-M16.4)
+
+A `postgres-backup` sidecar container runs pg_dump against the
+meddoc DB on a `@daily` cron schedule and writes rotated gzipped
+dumps to `/opt/meddoc-pro/backups/`. Retention policy:
+
+- 7 daily backups
+- 4 weekly backups
+- 6 monthly backups
+- 1 always-latest copy (`last/`)
+
+Total disk budget at current DB size (~68 MB compressed) is well
+under 2 GB even with the full rotation in place.
+
+### 8.1 Verify the service is running
+
+```bash
+docker compose ps postgres-backup
+# Should show "Up (healthy)" once the HEALTHCHECK_PORT probe converges.
+```
+
+### 8.2 Trigger a one-off backup on demand
+
+The image exposes the internal script at `/backup.sh`:
+
+```bash
+docker compose exec postgres-backup /backup.sh
+ls -lht /opt/meddoc-pro/backups/daily/ | head
+```
+
+Use this before risky operations (schema changes, data migrations).
+
+### 8.3 Filename patterns
+
+Two patterns coexist in `/opt/meddoc-pro/backups/`:
+
+- `<prefix>-meddoc-<date>.sql.gz` — written by the automated service,
+  where `<prefix>` is one of `daily`, `weekly`, `monthly`, `last`.
+  Landing in the matching subdirectory (`backups/daily/`, etc.).
+- `pre_<label>_<timestamp>.sql.gz` — historical manual dumps taken
+  before risky milestone deploys (T-M14.1, T-M16.2). These remain
+  for posterity; the automated service does not touch them.
+
+Both are regular pg_dump gzipped output. §4 restore procedure works
+for either — just point the `gunzip -c` path at whichever file you
+want to restore.
+
+### 8.4 Off-host mirror (operator task, DEFERRED)
+
+These backups are useless against VPS loss if they live only on the
+VPS. Before real customer data lands, configure an off-host mirror:
+
+```bash
+# Example: rsync to a second VPS every 6 hours (add to host crontab).
+0 */6 * * * rsync -aq --delete /opt/meddoc-pro/backups/ \
+  backups@other-vps:/opt/meddoc-backups/
+```
+
+Alternatives: restic to a cheap object-storage bucket (B2, R2),
+borg to a dedicated backup VPS, or a provider-native snapshot
+schedule if Hetzner / whoever has one. Pick one; document the
+restore chain; don't skip this step before onboarding PHI.
+
+### 8.5 Restoring from an automated backup
+
+Same as §4, just point at the automated file:
+
+```bash
+gunzip -c /opt/meddoc-pro/backups/last/meddoc-latest.sql.gz \
+  | docker compose exec -T postgres psql -U meddoc -d meddoc
+```
+
+## 9. Monthly docker cleanup (T-M16.4)
+
+Build cache + stale images accumulate faster than you'd think on
+this single-VPS deploy. Rebuilding apps a few times a week pushes
+the 99 GB root filesystem past 80% in a couple of weeks. Ops task:
+**run the prune once a month on a day you're NOT about to roll back
+to a previous image**.
+
+### 9.1 What the prune removes
+
+```bash
+docker system prune -a --volumes --filter "until=720h" -f
+```
+
+- `-a` — untagged AND unused tagged images
+- `--volumes` — dangling volumes (none of our named volumes qualify
+  — `pgdata`, `redis_data`, `minio_data`, `caddy_data`, `caddy_config`
+  are attached to active services and are safe)
+- `--filter "until=720h"` — only objects untouched for >30 days.
+  This is the safety rail — yesterday's fallback image stays put.
+- `-f` — no confirmation prompt (use `make prune-docker` for an
+  interactive confirmation instead)
+
+Typical reclaim at the point it's worth running: **~25-35 GB**.
+
+### 9.2 Wrapper
+
+```bash
+make prune-docker        # interactive; prompts before deleting
+make prune-docker-dry    # shows what would go, deletes nothing
+```
+
+### 9.3 Scheduling
+
+**Do NOT add this to cron.** Image deletion can take out a rollback
+target you wanted to keep around. The monthly cadence is a calendar
+reminder for ops, not an automated job.
+
+Guidance:
+- Only run after a successful deploy has been stable for ≥1 week.
+- Don't run during / right before a build — prune races with the
+  build's temporary image tags.
+- After `make prune-docker`, re-check `df -h /` and `docker system
+  df`. Expected: root fs drops 20-30%, `Reclaimable` columns near 0.
+
+### 9.4 When to NOT prune (even on schedule)
+
+- A new milestone just shipped → you might want to roll back to the
+  previous image if a regression surfaces.
+- Active incident → don't introduce more variables.
+- Disk is already under 50% full → not worth the risk.
+
+## 10. Post-deploy checklist
 
 After any change hits main:
 

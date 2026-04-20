@@ -6,6 +6,11 @@ import { z } from 'zod';
 
 import prisma from '@meddoc/db';
 import { requireSession } from '@/lib/auth';
+import {
+  DASHBOARD_PAGE_SIZE,
+  type DashboardCursor,
+  type LoadMoreVisitsResult,
+} from '@/lib/dashboard-pagination';
 
 const INPUT_MODES = ['audio_upload', 'voice_dictation', 'text_notes'] as const;
 
@@ -57,4 +62,62 @@ export async function createVisitAction(formData: FormData): Promise<void> {
 
   revalidatePath('/dashboard');
   redirect(`/visits/${visit.id}`);
+}
+
+// ---------------------------------------------------------------------------
+// T-M16.4: dashboard pagination (M5)
+// ---------------------------------------------------------------------------
+//
+// Cursor-based — dashboard/page.tsx server-renders the first page via a
+// direct Prisma call (so the initial paint is SSR'd without a client
+// round-trip), and the "Load more" button calls this action for
+// subsequent pages. Page size + cursor types live in
+// @/lib/dashboard-pagination because Next 16's 'use server' directive
+// forbids non-async exports from this file.
+
+export async function loadMoreVisitsAction(
+  cursor: DashboardCursor
+): Promise<LoadMoreVisitsResult> {
+  const session = await requireSession();
+
+  const cursorDate = new Date(cursor.createdAt);
+  if (Number.isNaN(cursorDate.getTime())) {
+    throw new Error('Invalid cursor');
+  }
+
+  // Fetch one extra so we can set nextCursor without a second query.
+  // Compound "older than" via OR because Prisma lacks native tuple
+  // comparison. Query is always scoped to the authed userId regardless
+  // of cursor contents.
+  const rows = await prisma.transcribeVisit.findMany({
+    where: {
+      userId: session.user.id,
+      OR: [
+        { createdAt: { lt: cursorDate } },
+        {
+          createdAt: cursorDate,
+          id: { lt: cursor.id },
+        },
+      ],
+    },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take: DASHBOARD_PAGE_SIZE + 1,
+    select: {
+      id: true,
+      patientName: true,
+      specialty: true,
+      status: true,
+      createdAt: true,
+    },
+  });
+
+  const hasMore = rows.length > DASHBOARD_PAGE_SIZE;
+  const visits = hasMore ? rows.slice(0, DASHBOARD_PAGE_SIZE) : rows;
+  const last = visits[visits.length - 1];
+  const nextCursor: DashboardCursor | null =
+    hasMore && last
+      ? { createdAt: last.createdAt.toISOString(), id: last.id }
+      : null;
+
+  return { visits, nextCursor };
 }

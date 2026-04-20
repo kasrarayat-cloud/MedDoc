@@ -25,6 +25,7 @@ import {
   clientIpFromRequest,
   rateLimitOr429,
 } from '@/lib/rate-limit';
+import { log } from '@/lib/log';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -109,9 +110,9 @@ export const POST = withApiHandler('api:auth:reset-password', async (req) => {
     }),
   ]);
 
-  console.info(
-    `[auth:reset-password] password reset + sessions revoked user=${consumed.userId}`
-  );
+  log.info('auth:reset-password', 'password reset + sessions revoked', {
+    userId: consumed.userId,
+  });
 
   return NextResponse.json({ ok: true }, { status: 200 });
 });

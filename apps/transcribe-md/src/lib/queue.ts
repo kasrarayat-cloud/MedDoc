@@ -62,6 +62,47 @@ export function getSharedRedisConnection(): IORedis {
 }
 
 // ---------------------------------------------------------------------------
+// T-M16.4: shared enqueue helper with per-minute jobId idempotency.
+// ---------------------------------------------------------------------------
+//
+// BullMQ dedupes on jobId — `add()` with an existing jobId is a silent
+// no-op (returns the existing Job). Before T-M16.4 the three upload
+// routes each used `jobId: visit-<id>-<Date.now()>` which is unique per
+// millisecond → a double-click within the same second enqueued twice.
+//
+// Per-minute suffix gives:
+//   - Double-click within 60s → same jobId → BullMQ dedupes, no extra
+//     pipeline run.
+//   - Intentional retry > 60s later → different jobId → new run.
+//
+// `retry` variant carries a separate suffix so the retry endpoint can
+// re-enqueue a visit whose initial job is still sitting in BullMQ's
+// completed/failed buffer under the 24h age limit.
+
+export interface EnqueueVisitOpts {
+  /** True for POST /api/visits/[id]/retry. Keeps the jobId namespace
+   *  separate from initial enqueues so a retry-within-the-same-minute
+   *  isn't deduped against an active initial job. */
+  retry?: boolean;
+}
+
+export async function enqueueProcessVisit(
+  visitId: string,
+  userId: string,
+  opts: EnqueueVisitOpts = {}
+): Promise<void> {
+  const minute = Math.floor(Date.now() / 60_000);
+  const jobId = opts.retry
+    ? `visit-${visitId}-retry-${minute}`
+    : `visit-${visitId}-${minute}`;
+  await getTranscribeMdQueue().add(
+    JOB_PROCESS_VISIT,
+    { visitId, userId },
+    { jobId }
+  );
+}
+
+// ---------------------------------------------------------------------------
 // T-M12: separate queue for scheduled MinIO orphan cleanup. Kept apart
 // from the main pipeline queue so a long-running sweep (hundreds of
 // deletes) can't block visit processing. Only instantiated when the
