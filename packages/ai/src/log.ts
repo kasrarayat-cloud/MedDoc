@@ -19,6 +19,8 @@ export interface AiCallLogInput extends AiLogContext {
   costUsdCents?: number | null;
   success: boolean;
   errorCode?: string | null;
+  /** T-M17.1: raw model response body on failed calls, capped upstream. */
+  errorDetails?: string | null;
 }
 
 export function logAiCall(input: AiCallLogInput): void {
@@ -37,6 +39,7 @@ export function logAiCall(input: AiCallLogInput): void {
         costUsdCents: input.costUsdCents ?? null,
         success: input.success,
         errorCode: input.errorCode ?? null,
+        errorDetails: input.errorDetails ?? null,
       },
     })
     .catch((err: unknown) => {

@@ -25,6 +25,20 @@ function getClient(): Anthropic {
   return clientSingleton;
 }
 
+/** T-M17.1: cap persisted response bodies so a pathological 100 KB
+ *  Claude stream doesn't bloat ai_calls rows. ~10 KB is ample for a
+ *  failing JSON payload + Zod errors. */
+const ERROR_DETAILS_MAX_BYTES = 10_240;
+const TRUNCATED_SUFFIX = '\n... [truncated]';
+
+function capErrorDetails(raw: string): string {
+  if (raw.length <= ERROR_DETAILS_MAX_BYTES) return raw;
+  return (
+    raw.slice(0, ERROR_DETAILS_MAX_BYTES - TRUNCATED_SUFFIX.length) +
+    TRUNCATED_SUFFIX
+  );
+}
+
 export interface AnthropicCompleteArgs<T> extends AiLogContext {
   model: string;
   system: string;
@@ -86,6 +100,7 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
         ),
         success: false,
         errorCode: 'JSON_PARSE_FAIL',
+        errorDetails: capErrorDetails(unfenced),
       });
       throw new Error(`Anthropic response was not valid JSON: ${String(err)}`);
     }
@@ -105,6 +120,9 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
         ),
         success: false,
         errorCode: 'SCHEMA_FAIL',
+        errorDetails: capErrorDetails(
+          `${unfenced}\n\n--- Zod errors ---\n${JSON.stringify(schemaResult.error.issues, null, 2)}`
+        ),
       });
       const err = new Error('SCHEMA_FAIL') as Error & {
         rawOutput?: string;
