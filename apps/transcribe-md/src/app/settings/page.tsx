@@ -10,6 +10,7 @@ import { PageWrapper } from '@/components/page-wrapper';
 import { SPECIALTIES } from '@/lib/specialties';
 import { ProfileForm } from './profile-form';
 import { SessionPanel } from './session-panel';
+import { DeleteAccountDialog } from './delete-account-dialog';
 
 export const metadata: Metadata = { title: 'Settings' };
 
@@ -115,6 +116,32 @@ export default async function SettingsPage() {
                 rollout. Sign out and back in to enable it.
               </div>
             )}
+          </div>
+        </section>
+
+        {/* Danger zone */}
+        <section className="mt-10">
+          <SectionHeader
+            title="Danger zone"
+            description="Deleting your account is permanent. We erase every visit, transcript, and exported file."
+          />
+          <div className="mt-6 rounded-xl border border-red-500/30 bg-red-500/5 p-6">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="text-[13px] leading-relaxed text-text-secondary">
+                <p>
+                  This removes your account and all associated data from
+                  our servers. A compliance record (email, deletion date,
+                  visit count) is kept for 90 days and then purged.
+                </p>
+                <p className="mt-2 text-text-tertiary">
+                  You&apos;ll be asked to re-enter your password and type
+                  DELETE to confirm.
+                </p>
+              </div>
+              <div className="shrink-0">
+                <DeleteAccountDialog />
+              </div>
+            </div>
           </div>
         </section>
       </main>

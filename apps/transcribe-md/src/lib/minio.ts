@@ -137,6 +137,38 @@ export async function deleteAudioObject(objectKey: string): Promise<void> {
   await client.removeObject(bucket, objectKey);
 }
 
+/** Delete every audio object under a prefix (e.g. `${userId}/`).
+ *  Used by T-M16.2 delete-account cleanup — after the user + their
+ *  visits cascade-drop from Postgres, every object under their userId
+ *  prefix is orphaned; wipe them here so the T-M12 sweep doesn't have
+ *  to wait for the retention window.
+ *
+ *  Best-effort: errors are collected and returned; the caller logs +
+ *  continues (we NEVER fail a DB delete because MinIO is flapping).
+ *  Any stragglers get picked up by the T-M12 orphan-cleanup cron. */
+export async function deleteAudioObjectsByPrefix(
+  prefix: string
+): Promise<{ deleted: number; failures: Array<{ key: string; error: string }> }> {
+  await ensureBucket();
+  const client = getMinio();
+  const stream = client.listObjects(bucket, prefix, true);
+  const failures: Array<{ key: string; error: string }> = [];
+  let deleted = 0;
+  for await (const item of stream) {
+    if (typeof item.name !== 'string' || item.name.length === 0) continue;
+    try {
+      await client.removeObject(bucket, item.name);
+      deleted++;
+    } catch (err) {
+      failures.push({
+        key: item.name,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+  return { deleted, failures };
+}
+
 /** Sanitize user-provided filenames before including in the object key. */
 export function sanitizeFilename(name: string): string {
   // Strip path, keep only ASCII alphanumerics + a few safe separators,
