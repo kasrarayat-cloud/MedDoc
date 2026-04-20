@@ -21,7 +21,7 @@ import { NavBar } from '@/components/nav-bar';
 import { PageWrapper } from '@/components/page-wrapper';
 import { SpecularButton } from '@/components/specular-button';
 import { VisitCard, type VisitCardData } from '@/components/visit-card';
-import { BackToDashboardLink } from '@/app/visits/[id]/back-to-dashboard-link';
+import { BackToDashboardLink } from '@/app/visits/[id]/back-link';
 import { EditPatientDialog } from './edit-patient-dialog';
 import { DeletePatientDialog } from './delete-patient-dialog';
 

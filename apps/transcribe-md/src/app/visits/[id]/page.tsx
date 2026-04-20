@@ -13,7 +13,7 @@ import { TextComposer } from '@/components/text-composer';
 import { ProcessingState } from './processing-state';
 import { VisitReadyView, type Utterance, type SpeakerInfo } from './visit-ready-view';
 import { VisitFailedView } from './visit-failed-view';
-import { BackToDashboardLink } from './back-to-dashboard-link';
+import { BackToPatientLink } from './back-link';
 import { VisitLifecycleActions } from './visit-lifecycle-actions';
 
 // T-M16.2: the flag check moved to @/lib/email-enabled as the single
@@ -67,6 +67,7 @@ export default async function VisitPage({
       select: {
         id: true,
         userId: true,
+        patientId: true,
         patientName: true,
         specialty: true,
         chiefComplaint: true,
@@ -114,7 +115,7 @@ export default async function VisitPage({
 
       <main className="mx-auto max-w-4xl px-4 pb-24 pt-8 sm:px-6 lg:px-8 lg:pt-12">
         <div className="mb-8">
-          <BackToDashboardLink />
+          <BackToPatientLink patientId={visit.patientId} />
         </div>
 
         <VisitLifecycleActions
