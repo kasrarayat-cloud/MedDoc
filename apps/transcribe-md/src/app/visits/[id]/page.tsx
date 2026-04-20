@@ -14,6 +14,7 @@ import { ProcessingState } from './processing-state';
 import { VisitReadyView, type Utterance, type SpeakerInfo } from './visit-ready-view';
 import { VisitFailedView } from './visit-failed-view';
 import { BackToDashboardLink } from './back-to-dashboard-link';
+import { VisitLifecycleActions } from './visit-lifecycle-actions';
 
 // T-M16.2: the flag check moved to @/lib/email-enabled as the single
 // source of truth (used by signup, login, forgot-password, change-
@@ -71,6 +72,9 @@ export default async function VisitPage({
         chiefComplaint: true,
         inputMode: true,
         status: true,
+        // T-M17.3: feed the lifecycle banner + action buttons.
+        deletedAt: true,
+        archivedAt: true,
         audioKey: true,
         audioDurationSec: true,
         dictationAudioKey: true,
@@ -112,6 +116,20 @@ export default async function VisitPage({
         <div className="mb-8">
           <BackToDashboardLink />
         </div>
+
+        <VisitLifecycleActions
+          visitId={visit.id}
+          status={visit.status}
+          deletedAt={visit.deletedAt ? visit.deletedAt.toISOString() : null}
+          archivedAt={
+            visit.archivedAt ? visit.archivedAt.toISOString() : null
+          }
+          hasInput={
+            visit.audioKey !== null ||
+            visit.dictationAudioKey !== null ||
+            (visit.rawTextInput !== null && visit.rawTextInput.length > 0)
+          }
+        />
 
         <div className="flex flex-wrap items-center gap-2 text-[13px]">
           {visit.patientName && <Chip>Patient: {visit.patientName}</Chip>}

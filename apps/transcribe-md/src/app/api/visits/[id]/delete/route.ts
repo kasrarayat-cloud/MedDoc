@@ -9,14 +9,18 @@
 //                      doctor probably mis-created it (mode-tile click
 //                      without committing content). AiCall rows for the
 //                      visit are cascaded via a transaction; MinIO
-//                      objects under `${userId}/visits/${visitId}/` are
-//                      swept best-effort afterward.
+//                      objects are swept best-effort afterward.
+//   Already trashed + ?permanent=1 → HARD delete now (user clicked
+//                      "Delete permanently" from the trash banner). Full
+//                      MinIO sweep of audioKey + dictationAudioKey so
+//                      the cleanup cron doesn't have to wait.
 //   Anything else    → SOFT delete (deletedAt = now()). The 15-day
 //                      cleanup cron hard-deletes later; the doctor can
 //                      restore in the meantime via /api/visits/[id]/restore.
 //
-// Already-deleted visits return 200 idempotently so a double-click or
-// a flaky network replay can't flip UI state into an error.
+// Already-deleted visits without ?permanent=1 return 200 idempotently
+// so a double-click or a flaky network replay can't flip UI state into
+// an error.
 // 404 on wrong owner (anti-enumeration — same pattern as /retry).
 // ============================================================================
 
@@ -37,8 +41,9 @@ export const dynamic = 'force-dynamic';
 
 export const POST = withApiHandler<{ id: string }>(
   'api:visits:delete',
-  async (_req, { params }) => {
+  async (req, { params }) => {
     const { id: visitId } = await params;
+    const permanent = new URL(req.url).searchParams.get('permanent') === '1';
 
     const session = await auth();
     const userId = session?.user?.id;
@@ -70,6 +75,41 @@ export const POST = withApiHandler<{ id: string }>(
         },
         { status: 400 }
       );
+    }
+
+    // ── Already-trashed + ?permanent=1 → HARD purge now ──
+    if (visit.deletedAt !== null && permanent) {
+      try {
+        await prisma.$transaction(async (tx: typeof prisma) => {
+          await tx.aiCall.deleteMany({ where: { visitId } });
+          await tx.transcribeVisit.delete({ where: { id: visitId } });
+        });
+      } catch (err) {
+        console.error(
+          '[api:visits:delete] permanent-purge tx failed:',
+          redactPhi(err instanceof Error ? err.message : err)
+        );
+        return apiError('Could not delete permanently. Try again.', 500);
+      }
+      await Promise.all(
+        [visit.audioKey, visit.dictationAudioKey].map(async (key) => {
+          if (!key) return;
+          try {
+            await deleteAudioObject(key);
+          } catch (err) {
+            console.warn(
+              `[api:visits:delete] minio cleanup failed key=${key}:`,
+              redactPhi(err instanceof Error ? err.message : err)
+            );
+          }
+        })
+      );
+      log.info('api:visits:delete', 'permanent-purged', {
+        userId,
+        visitId,
+        prevStatus: visit.status,
+      });
+      return NextResponse.json({ ok: true, mode: 'permanent' });
     }
 
     if (visit.deletedAt !== null) {
