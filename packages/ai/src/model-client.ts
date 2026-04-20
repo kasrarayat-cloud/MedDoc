@@ -4,8 +4,8 @@
 // The surface apps/scribe + apps/transcribe-md workers call for every AI
 // operation. Handles:
 //   - Provider routing (openai vs anthropic)
-//   - Zod-validated structured output with one automatic retry on schema
-//     fail (spec §11)
+//   - Zod-validated structured output with automatic retry on schema-fail
+//     or JSON-parse-fail (T-M17.1: up to 2 retries)
 //   - Plain-text completion for markdown-producing layers (T-M4 §L4, §L6)
 //   - Per-call AiCall row (via the backend modules)
 // ============================================================================
@@ -26,6 +26,12 @@ import type { AiLogContext, ModelProvider } from './types';
 export type * from './types';
 export type { AnthropicCompleteTextResult };
 
+/** T-M17.1: SCHEMA_FAIL and JSON_PARSE_FAIL from Claude have a ~5% per-call
+ *  rate on dense-entity specialties (cardiology cohort saw 6/10 tm_entities
+ *  calls fail before succeeding on a later attempt). Two retries catches
+ *  >99% of these before BullMQ even sees the job as failed. */
+const MAX_RETRIES = 2;
+
 export interface CompleteArgs<T> extends AiLogContext {
   provider: Exclude<ModelProvider, 'deepgram'>;
   model: string;
@@ -33,7 +39,8 @@ export interface CompleteArgs<T> extends AiLogContext {
   user: string;
   schema: z.ZodType<T>;
   maxTokens?: number;
-  /** Retry once on schema-fail with the error appended. Default true. */
+  /** Retry on schema-fail or JSON-parse-fail with the prior output + error
+   *  appended. Default true. Up to MAX_RETRIES attempts after the initial. */
   retryOnSchemaFail?: boolean;
 }
 
@@ -57,28 +64,32 @@ export const modelClient = {
         `complete() with provider=${args.provider} is not wired yet — M2 only uses Anthropic.`
       );
     }
-    try {
-      return await anthropicComplete<T>({
-        ...args,
-        model: args.model,
-      });
-    } catch (err) {
-      const retry = args.retryOnSchemaFail ?? true;
-      if (
-        retry &&
-        err instanceof Error &&
-        err.message === 'SCHEMA_FAIL'
-      ) {
-        const rawOutput = (err as Error & { rawOutput?: string }).rawOutput;
-        const zodErrors = (err as Error & { zodErrors?: unknown }).zodErrors;
+    const retryEnabled = args.retryOnSchemaFail ?? true;
+    let retryContext: string | undefined;
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
         return await anthropicComplete<T>({
           ...args,
           model: args.model,
-          retryContext: `${rawOutput ?? ''}\n\nZod errors:\n${JSON.stringify(zodErrors, null, 2)}`,
+          retryContext,
         });
+      } catch (err) {
+        const isRetryable =
+          err instanceof Error &&
+          (err.message === 'SCHEMA_FAIL' ||
+            err.message.startsWith('Anthropic response was not valid JSON'));
+        if (!retryEnabled || !isRetryable || attempt === MAX_RETRIES) {
+          throw err;
+        }
+        const rawOutput = (err as Error & { rawOutput?: string }).rawOutput;
+        const zodErrors = (err as Error & { zodErrors?: unknown }).zodErrors;
+        retryContext = zodErrors
+          ? `${rawOutput ?? ''}\n\nZod errors:\n${JSON.stringify(zodErrors, null, 2)}`
+          : `Previous response failed to parse: ${err.message}`;
       }
-      throw err;
     }
+    // TS needs a terminal return — unreachable given the loop above.
+    throw new Error('modelClient.complete: retry loop exhausted unexpectedly');
   },
 
   /**

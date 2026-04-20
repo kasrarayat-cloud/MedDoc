@@ -1148,6 +1148,10 @@ model AiCall {
 
   success   Boolean
   errorCode String?
+  /// T-M17.1: raw model response body on failed calls, capped at ~10 KB
+  /// by the writer. NULL on success. May contain PHI (same envelope as
+  /// transcribe_visits columns). Not surfaced in UI; psql-only.
+  errorDetails String? @db.Text
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
 
