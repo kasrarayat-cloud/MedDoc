@@ -32,6 +32,7 @@ import type {
   DeepgramBatchResponse,
   DeepgramBatchResult,
 } from './deepgram-batch';
+import type { EmbedTextResult } from './embed';
 import type { ModelCallPurpose } from './types';
 
 /** Single source of truth for "are we in mock mode". Read each call —
@@ -193,4 +194,38 @@ export function mockDeepgramBatch(): DeepgramBatchResult {
     utterances: raw.results?.utterances ?? [],
     durationSec: Math.round(raw.metadata?.duration ?? 0),
   };
+}
+
+// ---------------------------------------------------------------------------
+// T-M14.1 embed fixture — deterministic 1536-length vector for the
+// sign-time capture hook. Values are tiny and non-zero so:
+//   • length matches vector(1536) — a real INSERT against pgvector
+//     accepts it without dimension mismatch,
+//   • any cosine-similarity math in tests returns a defined number
+//     rather than NaN (all-zero vectors have length 0).
+// ---------------------------------------------------------------------------
+const MOCK_EMBED_VECTOR: number[] = Array.from(
+  { length: 1536 },
+  (_, i) => ((i % 10) + 1) / 10000
+);
+
+const MOCK_EMBED_FIXTURES: Partial<Record<ModelCallPurpose, EmbedTextResult>> =
+  {
+    tm_embed: {
+      embedding: MOCK_EMBED_VECTOR,
+      inputTokens: 1,
+      costCents: 0,
+    },
+  };
+
+export function mockEmbed(args: {
+  purpose: ModelCallPurpose;
+}): EmbedTextResult {
+  const fixture = MOCK_EMBED_FIXTURES[args.purpose];
+  if (fixture === undefined) {
+    throw new Error(
+      `[MOCK_AI_CALLS] no embedText() fixture for purpose=${args.purpose}.`
+    );
+  }
+  return fixture;
 }
