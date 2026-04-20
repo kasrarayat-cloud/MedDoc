@@ -48,6 +48,10 @@ interface Props {
    *  on the server. Non-null otherwise (server still does the final
    *  routing; this just drives the confirm copy). */
   hasInput: boolean;
+  /** T-M17.3 Commit 7: Edit-draft dialog slotted in next to the
+   *  Delete button for QUEUED+no-input visits. Null for every other
+   *  lifecycle state. */
+  editSlot?: React.ReactNode;
 }
 
 function daysUntilAutoPurge(deletedAtIso: string): number {
@@ -63,6 +67,7 @@ export function VisitLifecycleActions({
   deletedAt,
   archivedAt,
   hasInput,
+  editSlot,
 }: Props) {
   if (deletedAt !== null) {
     return (
@@ -76,9 +81,20 @@ export function VisitLifecycleActions({
     return <ArchivedBanner visitId={visitId} />;
   }
   if (status === TranscribeVisitStatus.SIGNED) {
-    return <ArchiveButton visitId={visitId} />;
+    return (
+      <div className="mb-6 flex flex-wrap justify-end gap-2">
+        <ArchiveButton visitId={visitId} />
+      </div>
+    );
   }
-  return <DeleteButton visitId={visitId} status={status} hasInput={hasInput} />;
+  // QUEUED / PROCESSING / REVIEW / READY — Edit lives here (when the
+  // visit is still a blank draft) alongside Delete.
+  return (
+    <div className="mb-6 flex flex-wrap justify-end gap-2">
+      {editSlot}
+      <DeleteButton visitId={visitId} status={status} hasInput={hasInput} />
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------

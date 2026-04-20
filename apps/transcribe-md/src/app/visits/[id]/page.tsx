@@ -15,6 +15,7 @@ import { VisitReadyView, type Utterance, type SpeakerInfo } from './visit-ready-
 import { VisitFailedView } from './visit-failed-view';
 import { BackToPatientLink } from './back-link';
 import { VisitLifecycleActions } from './visit-lifecycle-actions';
+import { EditDraftDialog } from './edit-draft-dialog';
 
 // T-M16.2: the flag check moved to @/lib/email-enabled as the single
 // source of truth (used by signup, login, forgot-password, change-
@@ -76,6 +77,17 @@ export default async function VisitPage({
         // T-M17.3: feed the lifecycle banner + action buttons.
         deletedAt: true,
         archivedAt: true,
+        // Commit 7 — Edit Draft dialog needs the full patient record
+        // to render the "current patient" pill. Only used when the
+        // visit is a draft; cheap to include unconditionally.
+        patient: {
+          select: {
+            id: true,
+            name: true,
+            dateOfBirth: true,
+            externalId: true,
+          },
+        },
         audioKey: true,
         audioDurationSec: true,
         dictationAudioKey: true,
@@ -129,6 +141,38 @@ export default async function VisitPage({
             visit.audioKey !== null ||
             visit.dictationAudioKey !== null ||
             (visit.rawTextInput !== null && visit.rawTextInput.length > 0)
+          }
+          editSlot={
+            // Only offer Edit while the visit is a QUEUED blank
+            // draft — the server enforces the same gate, the UI
+            // just hides the button when it would fail.
+            visit.status === TranscribeVisitStatus.QUEUED &&
+            visit.audioKey === null &&
+            visit.dictationAudioKey === null &&
+            (visit.rawTextInput === null ||
+              visit.rawTextInput.length === 0) &&
+            visit.deletedAt === null &&
+            visit.patient !== null ? (
+              <EditDraftDialog
+                visitId={visit.id}
+                initialPatient={{
+                  id: visit.patient.id,
+                  name: visit.patient.name,
+                  dateOfBirth: visit.patient.dateOfBirth
+                    ? visit.patient.dateOfBirth.toISOString().slice(0, 10)
+                    : null,
+                  externalId: visit.patient.externalId,
+                }}
+                initialSpecialty={visit.specialty}
+                initialChiefComplaint={visit.chiefComplaint}
+                initialInputMode={
+                  visit.inputMode as
+                    | 'audio_upload'
+                    | 'voice_dictation'
+                    | 'text_notes'
+                }
+              />
+            ) : null
           }
         />
 

@@ -18,6 +18,11 @@ interface SpecialtyDropdownProps {
   name: string;
   defaultValue?: string;
   placeholder?: string;
+  /** Optional controlled-value callback. When set, fires on every
+   *  pick — callers inside a dialog (T-M17.3 Edit Draft) need to
+   *  mirror the value into their own form-state-gated Save button
+   *  instead of relying on the hidden input + form submission. */
+  onChange?: (value: string) => void;
 }
 
 export function SpecialtyDropdown({
@@ -25,6 +30,7 @@ export function SpecialtyDropdown({
   name,
   defaultValue,
   placeholder = 'Pick a specialty',
+  onChange,
 }: SpecialtyDropdownProps) {
   // Radix Select treats value="" as the placeholder state, so we only
   // pass a real string through `value` once the user actually picks
@@ -40,7 +46,10 @@ export function SpecialtyDropdown({
 
       <Select.Root
         value={value || undefined}
-        onValueChange={setValue}
+        onValueChange={(v) => {
+          setValue(v);
+          onChange?.(v);
+        }}
       >
         <Select.Trigger
           className={cn(

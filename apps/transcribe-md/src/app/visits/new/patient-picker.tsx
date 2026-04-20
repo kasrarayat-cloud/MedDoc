@@ -48,15 +48,36 @@ interface FuzzyApiResponse {
   matches: FuzzyMatch[];
 }
 
-interface Props {
+interface CoreProps {
   onSelect: (p: SelectedPatient) => void;
+}
+
+/** Full picker with the `/visits/new` "Who's this visit for?" card
+ *  wrapper. Used as Step 1 of the new-visit flow. For callers that
+ *  want the picker inside their own container (Edit-draft dialog,
+ *  future command-palette entry), use PatientPickerCore instead. */
+export function PatientPicker(props: CoreProps) {
+  return (
+    <div className="rounded-2xl border border-border-default bg-bg-surface-1/60 p-5">
+      <div className="mb-4 flex items-center gap-2">
+        <UserPlus className="h-4 w-4 text-violet-400" aria-hidden />
+        <h2 className="text-[15px] font-semibold tracking-tight text-text-primary">
+          Who&apos;s this visit for?
+        </h2>
+      </div>
+      <PatientPickerCore {...props} />
+    </div>
+  );
 }
 
 function formatDob(iso: string | null): string {
   return iso ? iso.slice(0, 10) : 'No DOB';
 }
 
-export function PatientPicker({ onSelect }: Props) {
+/** Headless picker — search + results + inline create + duplicate
+ *  modal. No outer card/header; callers supply their own framing.
+ *  Contract: call onSelect with the chosen patient. */
+export function PatientPickerCore({ onSelect }: CoreProps) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<PatientListApiRow[]>([]);
   const [searching, setSearching] = useState(false);
@@ -197,14 +218,7 @@ export function PatientPicker({ onSelect }: Props) {
   }
 
   return (
-    <div className="rounded-2xl border border-border-default bg-bg-surface-1/60 p-5">
-      <div className="mb-4 flex items-center gap-2">
-        <UserPlus className="h-4 w-4 text-violet-400" aria-hidden />
-        <h2 className="text-[15px] font-semibold tracking-tight text-text-primary">
-          Who&apos;s this visit for?
-        </h2>
-      </div>
-
+    <div>
       {/* --- Search --- */}
       <label className="relative block">
         <span className="sr-only">Search patients</span>
