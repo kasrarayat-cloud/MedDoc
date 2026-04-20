@@ -111,6 +111,13 @@ docker compose exec redis redis-cli LLEN "bull:transcribe-md:failed"    # 0
 
 # pgvector extension present
 docker compose exec postgres psql -U meddoc -d meddoc -c "\dx vector"
+
+# T-M16.3: /api/health checks + docker healthcheck status
+curl -sS http://localhost:3001/api/health | head -c 500  # meddoc-pro
+curl -sS http://localhost:3011/api/health | head -c 500  # transcribe-md
+#   Both should return JSON with { "status": "healthy", ... } and HTTP 200.
+#   Docker healthchecks run every 30s; `docker compose ps` shows
+#   (healthy) once they converge.
 ```
 
 ### 1.6 Smoke test (mock mode, no real AI calls)
@@ -281,13 +288,111 @@ Restart the worker so it rediscovers the bucket via its client cache.
 
 ---
 
-## 6. Post-deploy checklist
+## 6. Observability — Sentry + external uptime monitor
+
+T-M16.3 wired Sentry into both apps + the transcribe-md worker, and
+added a `/api/health` probe to both apps. Neither is useful without
+the operator configuring two small pieces:
+
+### 6.1 Sentry DSNs
+
+At https://sentry.io, create two projects (one per app) and copy
+their DSNs into `.env`:
+
+```bash
+# Server-side Sentry DSNs — empty strings = Sentry no-ops (safe default)
+SENTRY_DSN_MEDDOC_PRO=https://<key>@o<org>.ingest.sentry.io/<project>
+SENTRY_DSN_TRANSCRIBE_MD=https://<key>@o<org>.ingest.sentry.io/<project>
+
+# Browser-side DSNs. Must mirror the server values. MUST start with
+# NEXT_PUBLIC_ because the Next bundler embeds them at build time.
+NEXT_PUBLIC_SENTRY_DSN_MEDDOC_PRO=<same-as-above>
+NEXT_PUBLIC_SENTRY_DSN_TRANSCRIBE_MD=<same-as-above>
+
+# Optional: tag events by environment and release.
+SENTRY_ENVIRONMENT=production
+NEXT_PUBLIC_SENTRY_ENVIRONMENT=production
+SENTRY_RELEASE=<short-sha>
+NEXT_PUBLIC_SENTRY_RELEASE=<short-sha>
+```
+
+Changing Sentry env vars requires a full rebuild for the client
+bundle to pick them up (NEXT_PUBLIC_* is a build-time embed). The
+server side picks them up on container recreate.
+
+```bash
+docker compose build meddoc-pro transcribe-md transcribe-md-worker
+docker compose up -d --force-recreate meddoc-pro transcribe-md \
+  transcribe-md-worker
+```
+
+Sentry's own beforeSend hook scrubs PHI via
+`redactPhi` from `@meddoc/ai` before emission, so even if an error
+message accidentally carries a transcript snippet the >20-word
+collapser masks it as `[REDACTED:Nw]`.
+
+Worker errors are captured with `{ visitId, layer }` tags so ops can
+filter Sentry issues by failure point. The capture happens BEFORE
+the BullMQ re-throw, so retry semantics are preserved.
+
+### 6.2 External uptime monitor
+
+Docker's built-in healthchecks restart containers but don't tell
+anyone. Point a third-party monitor at `/api/health` on each app so
+a multi-container failure (e.g. postgres down → both apps unhealthy)
+sends a pager.
+
+Recommended providers (pick one, free tier is enough):
+- **UptimeRobot** — 50 monitors free, 5-minute intervals.
+- **Better Stack** — richer incident timeline, also free tier.
+- **Hetzner Cloud Monitor** (if you're already on Hetzner) — no
+  extra account needed.
+
+Configure two monitors per deployment:
+
+| Name | URL | Expected |
+|------|-----|----------|
+| meddoc-pro health | `http://<host>:80/api/health` | 200 + JSON with `"status": "healthy"` |
+| transcribe-md health | `http://<host>:9020/api/health` | 200 + JSON with `"status": "healthy"` |
+
+Both endpoints return `503 { "status": "unhealthy", ... }` when any
+required dependency (postgres for meddoc-pro; postgres + redis +
+minio for transcribe-md) is down. Status-code monitoring catches
+503; `status == "healthy"` body checking catches a 200-with-failed-
+checks edge case.
+
+Alert routing: email the operator on any 503 for >5 minutes. Page on
+repeated fails in a 30-minute window.
+
+Once TLS is live, switch monitor URLs to `https://` and enable
+TLS-expiry monitoring on the same checks (most providers include
+this for free).
+
+### 6.3 Worker liveness (gap)
+
+The transcribe-md worker is a BullMQ consumer with no HTTP endpoint,
+so it has no docker healthcheck and doesn't appear in `/api/health`.
+Today's signals:
+- Sentry captures any pipeline throw via `captureWorkerException` in
+  `apps/transcribe-md/src/worker-sentry.ts`.
+- `docker compose ps` shows `Up <duration>` based on process lifecycle.
+- BullMQ's `failed` queue depth grows if jobs are failing:
+  `docker compose exec redis redis-cli LLEN "bull:transcribe-md:failed"`.
+
+A dedicated worker-liveness probe is a future milestone; until then
+the "completed jobs per hour == 0 for 1+ hour" heuristic is a good
+proxy for "worker stuck".
+
+## 7. Post-deploy checklist
 
 After any change hits main:
 
-- [ ] `docker compose ps` shows 8/8 Up.
+- [ ] `docker compose ps` shows 8/8 Up, app containers `(healthy)`.
 - [ ] Port 80 / 9010 / 9020 respond (regression matrix).
+- [ ] `/api/health` on both apps returns `{"status":"healthy"}` + 200.
 - [ ] `docker compose logs --tail 20 transcribe-md-worker` shows booting → listening on queue.
 - [ ] `doctor_edit_patterns` count >0 after a real sign (or confirm legacy skip log if testing with a pre-T-M14.1 visit).
 - [ ] `AiCall` rows appearing with expected `purpose` tags and nonzero cost.
 - [ ] If you changed `.env`: confirm `docker compose exec <service> printenv VAR_NAME` matches, container was recreated (not just restarted).
+- [ ] Sentry dashboard shows the test-deploy release tag (if `SENTRY_RELEASE` was bumped).
+- [ ] External uptime monitor reports both health endpoints green.
