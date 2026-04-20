@@ -64,7 +64,15 @@ async function main() {
 
   console.log(`\n  E2E admin seeded.`);
   console.log(`  Email:      ${email}`);
-  console.log(`  Password:   ${password}`);
+  // T-M16.4 L6: gate the plaintext password on non-production — the
+  // e2e admin script shouldn't run in prod anyway, but this is
+  // belt-and-braces so a misdirected invocation doesn't dump a
+  // credential into the ops log.
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`  Password:   ${password}`);
+  } else {
+    console.log(`  Password:   [hidden in production]`);
+  }
   console.log(`  Role:       ${user.role}`);
   console.log(`  Practice:   ${practiceId}`);
   console.log(`  User ID:    ${user.id}\n`);
