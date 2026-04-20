@@ -4,9 +4,19 @@ Living list of things the operator should know about but that are not
 worth interrupting a milestone for. Each entry has a trigger, an
 owner, and an escalation path. Remove entries once they're resolved.
 
+> **Validation note (2026-04-20):** T-M17.1 pipeline resilience + T-M17.2
+> patient model were validated end-to-end on the live VPS against real
+> production-shape data. A single visit (Kasra, Primary Care, 16:05 UTC)
+> hit three retryable Claude failures — one SCHEMA_FAIL on `tm_entities`,
+> one SCHEMA_FAIL on `tm_rx_drafting`, one JSON_PARSE_FAIL on
+> `tm_icd_coding` — and the T-M17.1 two-retry loop caught all three
+> without surfacing a user-visible failure. All three failed rows
+> persisted `errorDetails` to `ai_calls` as designed. T-M17.2 patient
+> linkage verified at 18/18 visits post-deploy.
+
 ---
 
-## KI-1 — L3 `tm_entities` SCHEMA_FAIL rate on dense-entity specialties
+## KI-1 — L3 `tm_entities` SCHEMA_FAIL rate on dense-entity specialties <sub>RESOLVED 2026-04-20</sub>
 
 **First observed:** 2026-04-20 (T-M16.4 post-deploy; visit
 `cmo7brsct000101pepxco9u4w`, Cardiology).
@@ -64,6 +74,20 @@ Schema at the decoder level — near-zero JSON-parse or missing-field
 failures in practice. This is a larger refactor (touches 6+ layer
 files + the modelClient abstraction), hence deferred as its own
 milestone.
+
+**Resolution (2026-04-20, same day):** T-M17.1 mitigation cleared
+the user-visible failure rate on the very next incident — a
+Cardiology-shape visit on 2026-04-20 16:05 UTC hit three
+independent retryable failures across three different layers
+(`tm_entities` SCHEMA_FAIL, `tm_rx_drafting` SCHEMA_FAIL,
+`tm_icd_coding` JSON_PARSE_FAIL), all succeeded on the second
+attempt, and the visit reached `status=READY` instead of FAILED.
+`ai_calls.errorDetails` captured the raw model output for all
+three (858 B / 5310 B / 2275 B, well under the 10 KB cap),
+giving us the first on-disk post-mortem material this class of
+failure has ever left behind. Closing KI-1 until / unless the
+rate climbs past 1%/day as measured by the SQL in the original
+entry. Tool_use refactor is no longer on the near-term roadmap.
 
 ---
 
