@@ -4,8 +4,12 @@ import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 
 import prisma from '@meddoc/db';
-import { Product, UserRole } from '@prisma/client';
+import { AuthTokenPurpose, Product, UserRole } from '@prisma/client';
 import { signIn as nextAuthSignIn } from '@/lib/nextauth';
+import { createAuthToken } from '@/lib/auth-tokens';
+import { isEmailDeliveryEnabled } from '@/lib/email-enabled';
+import { sendEmailVerification } from '@/lib/email';
+import { APP_URL } from '@/lib/constants';
 
 /** Strongly-typed login input. Passwords are NEVER echoed back in errors. */
 const LoginSchema = z.object({
@@ -41,6 +45,11 @@ export interface FormErrorState {
   /** Preserves typed values between submissions so the user doesn't
    *  have to re-enter their form on a validation miss. */
   values?: Record<string, string>;
+  /** T-M16.2: signals that the credentials were correct but the
+   *  account hasn't verified its email yet. The login form shows a
+   *  "resend verification email" affordance when this is set. Holds
+   *  the attempted email so the resend button knows what to ship. */
+  needsVerificationFor?: string;
 }
 export interface FormOkState {
   ok: true;
@@ -82,6 +91,49 @@ export async function loginAction(
         email: String(raw.email ?? ''),
       },
     };
+  }
+
+  // T-M16.2: pre-check the email-verification gate BEFORE handing off
+  // to NextAuth. If credentials are correct but the account isn't
+  // verified, we want to tell the user specifically rather than
+  // showing the generic "invalid email or password" — otherwise they
+  // have no way to discover the resend-verification link. When gate
+  // is off (no RESEND) the check is skipped entirely.
+  if (isEmailDeliveryEnabled()) {
+    const preCheckUser = await prisma.user.findUnique({
+      where: { email: parsed.data.email.trim().toLowerCase() },
+      select: {
+        id: true,
+        passwordHash: true,
+        emailVerified: true,
+        isActive: true,
+        lockedUntil: true,
+      },
+    });
+    if (
+      preCheckUser?.isActive &&
+      (!preCheckUser.lockedUntil || preCheckUser.lockedUntil < new Date()) &&
+      preCheckUser.emailVerified === null
+    ) {
+      const pwOk = await bcrypt.compare(
+        parsed.data.password,
+        preCheckUser.passwordHash
+      );
+      if (pwOk) {
+        // Password correct, email not verified — block and surface
+        // the resend affordance.
+        return {
+          ok: false,
+          errors: {
+            _form: 'Please verify your email before signing in.',
+          },
+          values: { email: parsed.data.email },
+          needsVerificationFor: parsed.data.email,
+        };
+      }
+      // Wrong password — fall through to the generic error below so
+      // we don't leak that the account is unverified.
+    }
   }
 
   try {
@@ -145,8 +197,18 @@ export async function signupAction(
 
   const passwordHash = await bcrypt.hash(parsed.data.password, 12);
 
+  // T-M16.2: email-verification gate decides whether to stamp
+  // emailVerified at create time. When RESEND is enabled we leave it
+  // null and send a verify link (the user clicks → emailVerified set
+  // → they can sign in). When RESEND is unavailable we stamp
+  // createdAt so the unverified-login gate (also conditional on
+  // isEmailDeliveryEnabled) doesn't block them.
+  const verifyEnabled = isEmailDeliveryEnabled();
+  const nowForVerified = verifyEnabled ? null : new Date();
+
   // Synthetic Practice + User in one transaction so we don't orphan
   // Practice rows if the User insert fails.
+  let createdUserId: string | null = null;
   try {
     await prisma.$transaction(async (tx: typeof prisma) => {
       const practice = await tx.practice.create({
@@ -158,7 +220,7 @@ export async function signupAction(
           slug: `solo-${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36)}`,
         },
       });
-      await tx.user.create({
+      const user = await tx.user.create({
         data: {
           email: emailLower,
           name: parsed.data.name,
@@ -166,9 +228,11 @@ export async function signupAction(
           role: UserRole.DOCTOR,
           practiceId: practice.id,
           products: [Product.TRANSCRIBE_MD],
-          emailVerified: null,
+          emailVerified: nowForVerified,
         },
+        select: { id: true },
       });
+      createdUserId = user.id;
     });
   } catch (err) {
     console.error('[signup] create failed:', err);
@@ -184,8 +248,33 @@ export async function signupAction(
     };
   }
 
-  // Auto sign-in. If this fails the account still exists and the user can
-  // log in manually — we don't roll back on a transient auth error.
+  // T-M16.2: verification-gate branch — mint token + send email,
+  // DON'T auto-login. User lands on /check-email.
+  if (verifyEnabled && createdUserId) {
+    try {
+      const { token } = await createAuthToken({
+        userId: createdUserId,
+        purpose: AuthTokenPurpose.EMAIL_VERIFICATION,
+        expiresInMs: 24 * 60 * 60 * 1000,
+      });
+      const verifyUrl = `${APP_URL}/api/auth/verify-email?token=${encodeURIComponent(token)}`;
+      await sendEmailVerification({
+        toEmail: emailLower,
+        verifyUrl,
+        userName: parsed.data.name,
+      });
+    } catch (err) {
+      // Verification email failed — account exists, user can request
+      // a resend from /check-email. Don't roll back.
+      console.error('[signup] verification email failed:', err);
+    }
+    return {
+      ok: true,
+      redirect: `/check-email?email=${encodeURIComponent(emailLower)}`,
+    };
+  }
+
+  // No verification gate — original auto-login path.
   try {
     await nextAuthSignIn('credentials', {
       redirect: false,
@@ -194,11 +283,6 @@ export async function signupAction(
     });
   } catch (err) {
     console.error('[signup] auto-login failed:', err);
-    // Previously returned `{ ok: true, redirect: '/login' }` with no
-    // marker, so the signup form fired its green success toast while
-    // sending the user to the login page. Surface it as a warning so
-    // the user understands why they landed on /login immediately
-    // after "signing up".
     return {
       ok: true,
       redirect: '/login',
