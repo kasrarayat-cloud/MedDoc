@@ -85,12 +85,17 @@ export const POST = withApiHandler<{ id: string }>(
       ? Number.parseInt(contentLengthHeader, 10)
       : NaN;
     if (!Number.isFinite(contentLength) || contentLength <= 0) {
-      return apiError('content-length header missing or invalid', 400);
+      return apiError(
+        'Content-length header missing or invalid.',
+        400,
+        { code: 'INVALID_REQUEST', retry: false }
+      );
     }
     if (contentLength > MAX_BYTES) {
       return apiError(
-        `dictation too large: ${contentLength} bytes exceeds ${MAX_BYTES / 1024 / 1024} MB limit`,
-        413
+        `Dictation too large: ${contentLength} bytes exceeds the ${Math.round(MAX_BYTES / 1024 / 1024)} MB limit.`,
+        413,
+        { code: 'FILE_TOO_LARGE', retry: false }
       );
     }
 
@@ -98,12 +103,18 @@ export const POST = withApiHandler<{ id: string }>(
     const mimeType = mimeHeader.split(';')[0]!.trim();
     if (!ALLOWED_MIME.has(mimeType)) {
       return apiError(
-        `unsupported content-type: ${mimeHeader || '(missing)'}`,
-        415
+        `Unsupported dictation format: ${mimeHeader || '(missing)'}. WebM/Opus is expected.`,
+        415,
+        { code: 'UNSUPPORTED_FORMAT', retry: false }
       );
     }
 
-    if (!req.body) return apiError('empty body', 400);
+    if (!req.body) {
+      return apiError('Empty body.', 400, {
+        code: 'INVALID_REQUEST',
+        retry: false,
+      });
+    }
 
     // Object-key prefix distinguishes dictation from the bulk audio the
     // other route uses — simplifies bucket policy + debugging later.
@@ -115,11 +126,25 @@ export const POST = withApiHandler<{ id: string }>(
     try {
       await putAudioStream(objectKey, nodeReadable, contentLength, mimeType);
     } catch (err) {
+      const msg = err instanceof Error ? err.message.toLowerCase() : '';
+      const permanent =
+        /access denied|invalid accesskey|invalid signature|not found.*bucket/.test(
+          msg
+        );
       console.error(
         '[api:visits:dictation:upload] MinIO put failed:',
         redactPhi(err instanceof Error ? err.message : err)
       );
-      return apiError('storage write failed', 502);
+      return apiError(
+        permanent
+          ? 'Storage is misconfigured; please contact support.'
+          : 'Storage write failed. Please try again in a moment.',
+        502,
+        {
+          code: permanent ? 'STORAGE_PERMANENT' : 'STORAGE_TEMPORARY',
+          retry: !permanent,
+        }
+      );
     }
 
     await prisma.transcribeVisit.update({
@@ -145,8 +170,9 @@ export const POST = withApiHandler<{ id: string }>(
         redactPhi(err instanceof Error ? err.message : err)
       );
       return apiError(
-        'dictation stored but worker enqueue failed; please refresh and try again',
-        502
+        'Dictation stored, but the worker queue is unreachable. Please refresh and try again.',
+        502,
+        { code: 'QUEUE_TEMPORARY', retry: true }
       );
     }
 
