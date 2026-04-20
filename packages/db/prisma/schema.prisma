@@ -11,11 +11,16 @@
 // ============================================================================
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  // T-M14.1: pgvector extension for doctor_edit_patterns.embedding.
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
+  provider   = "postgresql"
+  // T-M14.1: declares `CREATE EXTENSION vector` so prisma migrate
+  // resolves the extension reference used by doctor_edit_patterns.
+  extensions = [vector]
 }
 
 // ============================================================================
@@ -193,17 +198,17 @@ model Practice {
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   // Reverse relations — every tenant-scoped table points back here.
-  users             User[]
-  patients          Patient[]
-  auditLogs         AuditLog[]
-  apiUsage          ApiUsage[]
-  sessionLogs       SessionLog[]
-  allergies         Allergy[]
-  medications       Medication[]
+  users         User[]
+  patients      Patient[]
+  auditLogs     AuditLog[]
+  apiUsage      ApiUsage[]
+  sessionLogs   SessionLog[]
+  allergies     Allergy[]
+  medications   Medication[]
   // M6 — CRM loop-closing
-  tasks             Task[]
-  billingEvents     BillingEvent[]
-  aiCalls           AiCall[]
+  tasks         Task[]
+  billingEvents BillingEvent[]
+  aiCalls       AiCall[]
 
   @@index([slug])
   @@map("practices")
@@ -284,27 +289,29 @@ model User {
   accounts               Account[]
   sessions               Session[]
   // App relations
-  documentsCreated       Document[]         @relation("DocumentCreator")
-  documentsUpdated       Document[]         @relation("DocumentUpdater")
+  documentsCreated       Document[]          @relation("DocumentCreator")
+  documentsUpdated       Document[]          @relation("DocumentUpdater")
   auditLogs              AuditLog[]
-  patientsCreated        Patient[]          @relation("PatientCreator")
-  patientsAssigned       Patient[]          @relation("AssignedDoctor")
+  patientsCreated        Patient[]           @relation("PatientCreator")
+  patientsAssigned       Patient[]           @relation("AssignedDoctor")
   appointments           Appointment[]
   sessionLogs            SessionLog[]
   apiUsageLogs           ApiUsageLog[]
-  allergiesCreated       Allergy[]          @relation("AllergyCreator")
-  allergiesUpdated       Allergy[]          @relation("AllergyUpdater")
-  medicationsCreated     Medication[]       @relation("MedicationCreator")
-  medicationsUpdated     Medication[]       @relation("MedicationUpdater")
+  allergiesCreated       Allergy[]           @relation("AllergyCreator")
+  allergiesUpdated       Allergy[]           @relation("AllergyUpdater")
+  medicationsCreated     Medication[]        @relation("MedicationCreator")
+  medicationsUpdated     Medication[]        @relation("MedicationUpdater")
   apiUsage               ApiUsage[]
   // M6 — CRM loop-closing
-  tasksAssigned          Task[]             @relation("TaskAssignee")
-  tasksCreated           Task[]             @relation("TaskCreator")
-  billingEventsOwned     BillingEvent[]     @relation("BillingClinician")
-  billingEventsSubmitted BillingEvent[]     @relation("BillingSubmitter")
+  tasksAssigned          Task[]              @relation("TaskAssignee")
+  tasksCreated           Task[]              @relation("TaskCreator")
+  billingEventsOwned     BillingEvent[]      @relation("BillingClinician")
+  billingEventsSubmitted BillingEvent[]      @relation("BillingSubmitter")
   // TranscribeMD (T-M2)
   transcribeVisits       TranscribeVisit[]
   userSessions           UserSession[]
+  // T-M14.1: per-doctor edit tracking (one row per signed visit).
+  doctorEditPatterns     DoctorEditPattern[]
 
   @@index([practiceId])
   @@index([role])
@@ -1107,17 +1114,24 @@ model TranscribeVisit {
 
   // ── T-M4: pipeline artifacts (one field per layer) ──
   /// Full Deepgram response JSON. Used by Layers 2-5 + the Pipeline tab.
-  transcriptRaw Json?
+  transcriptRaw  Json?
   /// Layer 2 output — {"0":{"role":"doctor","confidence":0.9,"reasoning":"..."}, ...}
-  speakerMap    Json?
+  speakerMap     Json?
   /// Layer 3 output — structured entities with evidence_quote + speaker + ts.
-  entities      Json?
+  entities       Json?
   /// Layer 4 output — markdown SOAP draft. Editable until signed.
-  soapDraft     String? @db.Text
+  soapDraft      String? @db.Text
   /// Layer 5 output — {issues:[], overall_quality, safe_to_sign_without_review}
-  critique      Json?
+  critique       Json?
   /// Layer 6 output — the version the UI shows + the doctor edits.
-  soapFinal     String? @db.Text
+  soapFinal      String? @db.Text
+  /// T-M14.1: immutable snapshot of Layer 6 output, written once by
+  /// runLayer6Polish alongside soapFinal. soapFinal gets overwritten
+  /// when the doctor edits; soapL6Original does not. Used by the
+  /// sign-time capture hook to record (original_ai, doctor_edited)
+  /// pairs into DoctorEditPattern. Nullable for pre-T-M14 visits —
+  /// the capture hook skips those.
+  soapL6Original String? @db.Text
 
   // ── T-M4: review flag ──
   /// Layer 5/6 can set this when critical issues can't be auto-fixed,
@@ -1144,6 +1158,13 @@ model TranscribeVisit {
   /// email). Doesn't affect the pipeline — exists so the doctor +
   /// support can trace "where did this note go?" weeks later.
   deliveries VisitDelivery[]
+
+  // ── T-M14.1: per-doctor edit tracking ──
+  /// At most one row per visit, written at sign time when
+  /// soapL6Original is populated. Optional so legacy visits (no
+  /// original snapshot) and signed-with-capture-failure visits
+  /// don't violate the relation.
+  editPattern DoctorEditPattern?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1181,6 +1202,66 @@ model VisitDelivery {
 
   @@index([visitId])
   @@map("visit_deliveries")
+}
+
+// ============================================================================
+// DOCTOR EDIT PATTERN — per-doctor style tracking (T-M14.1)
+// ----------------------------------------------------------------------------
+// One row per signed TranscribeVisit that had an original L6 snapshot.
+// Invisible to the doctor; the sign-time capture hook writes it
+// asynchronously (catch+log, never blocks sign).
+//
+// Why both originalSoap + editedSoap are stored here (vs pointing at
+// visit.soapL6Original / visit.signedSoap):
+//   - Analysis stability: future retention / export logic on
+//     TranscribeVisit should not silently invalidate the training
+//     corpus. Storing copies makes this table self-contained.
+//   - Simple diff queries: JOINless "find visits where the doctor
+//     rewrote > 30% of the draft" ranks tuning candidates cheaply.
+//
+// The embedding is on originalSoap (the AI's work), not the edit —
+// future few-shot retrieval is "given a new draft, find past drafts
+// that looked similar to this doctor, and use their edits as
+// style examples". Similarity is computed on the AI input side.
+// ============================================================================
+
+model DoctorEditPattern {
+  id String @id @default(cuid())
+
+  /// 1:1 with TranscribeVisit — one capture per signed visit.
+  visitId String          @unique
+  visit   TranscribeVisit @relation(fields: [visitId], references: [id], onDelete: Cascade)
+
+  /// The user who signed — the "doctor" for retrieval purposes. STAFF
+  /// users don't sign in transcribe-md, but denormalizing here future-
+  /// proofs against role changes on the User row.
+  doctorId String
+  doctor   User   @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  /// Frozen copy of soapL6Original at sign time. Never updated.
+  originalSoap String @db.Text
+  /// Frozen copy of signedSoap at sign time (== soapFinal at that
+  /// instant). Equals originalSoap when the doctor signed without
+  /// editing — still captured so "doctor rarely edits" is a visible
+  /// signal in the distribution, not a missing row.
+  editedSoap   String @db.Text
+
+  /// Character-level Levenshtein distance between originalSoap and
+  /// editedSoap. 0 when the doctor didn't edit. Indexed so "highly
+  /// edited notes for this doctor" is a cheap ORDER BY DESC query.
+  editDistance Int
+
+  /// pgvector embedding of originalSoap (OpenAI text-embedding-3-small,
+  /// 1536 dims). Nullable so capture still succeeds if the embed call
+  /// fails — a follow-up batch job can backfill. Unsupported() because
+  /// Prisma's type system doesn't model pgvector natively.
+  embedding Unsupported("vector(1536)")?
+
+  createdAt DateTime @default(now())
+
+  @@index([doctorId, createdAt])
+  @@index([doctorId, editDistance])
+  @@map("doctor_edit_patterns")
 }
 
 // ============================================================================
