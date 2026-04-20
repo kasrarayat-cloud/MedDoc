@@ -83,6 +83,11 @@ export const RATE_LIMITS = {
   UPLOAD:        { bucket: 'upload',        limit: 20, windowMs: HOUR_MS },
   CLIENT_ERRORS: { bucket: 'client-errors', limit: 30, windowMs: HOUR_MS },
   SETTINGS:      { bucket: 'settings',      limit: 10, windowMs: HOUR_MS },
+  /// T-M17.3 visit-management mutations (delete/archive/restore/edit).
+  /// Higher than SETTINGS because a doctor cleaning up an old visit
+  /// queue can legitimately fire these in quick succession; lower
+  /// than CLIENT_ERRORS because they write DB state.
+  VISIT_OPS:     { bucket: 'visit-ops',     limit: 30, windowMs: HOUR_MS },
 } satisfies Record<string, RateLimitRule>;
 
 // ---------------------------------------------------------------------------
