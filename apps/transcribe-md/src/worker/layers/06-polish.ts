@@ -99,6 +99,13 @@ export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output>
     where: { id: input.visitId },
     data: {
       soapFinal,
+      // T-M14.1: immutable snapshot of the AI's final output. soapFinal
+      // gets overwritten when the doctor edits; soapL6Original does not.
+      // The sign-time capture hook reads this to record the
+      // (original_ai, doctor_edited) pair into doctor_edit_patterns.
+      // Always written alongside soapFinal so the two columns agree at
+      // the end of a clean pipeline run.
+      soapL6Original: soapFinal,
       ...(needsReview
         ? { needsReview: true, reviewReason }
         : {}),
