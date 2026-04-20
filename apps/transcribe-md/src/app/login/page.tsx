@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
 
 import { auth } from '@/lib/nextauth';
@@ -6,6 +7,7 @@ import { AnimatedGrid } from '@/components/animated-grid';
 import { GradientBorder } from '@/components/gradient-border';
 import { GradientText } from '@/components/gradient-text';
 import { LoginForm } from './login-form';
+import { VerifyToast } from './verify-toast';
 
 export const metadata: Metadata = { title: 'Sign in' };
 
@@ -29,6 +31,10 @@ export default async function LoginPage() {
             'radial-gradient(ellipse 60% 50% at 50% 0%, rgba(139,92,246,0.2) 0%, rgba(124,58,237,0.05) 45%, transparent 75%)',
         }}
       />
+
+      <Suspense fallback={null}>
+        <VerifyToast />
+      </Suspense>
 
       <div className="relative z-10 mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-6 py-16">
         <GradientBorder className="w-full">

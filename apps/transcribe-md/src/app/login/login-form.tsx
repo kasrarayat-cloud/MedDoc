@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useEffect } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
@@ -14,18 +14,50 @@ const initialState: AuthActionState = null;
 export function LoginForm() {
   const [state, formAction, pending] = useActionState(loginAction, initialState);
   const router = useRouter();
+  const [resendPending, setResendPending] = useState(false);
 
   useEffect(() => {
     if (state && state.ok) {
       router.push(state.redirect);
       router.refresh();
-    } else if (state && !state.ok && state.errors._form) {
+    } else if (state && !state.ok && state.errors._form && !state.needsVerificationFor) {
       toast.error('Sign-in failed', { description: state.errors._form });
     }
   }, [state, router]);
 
   const errors = state && !state.ok ? state.errors : {};
   const values = state && !state.ok ? state.values ?? {} : {};
+  const needsVerificationFor =
+    state && !state.ok ? state.needsVerificationFor : undefined;
+
+  async function resendVerification() {
+    if (!needsVerificationFor) return;
+    setResendPending(true);
+    try {
+      const res = await fetch('/api/auth/resend-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: needsVerificationFor }),
+      });
+      if (res.status === 429) {
+        toast.error('Too many requests', {
+          description: 'Wait a few minutes before trying again.',
+        });
+      } else if (res.ok) {
+        toast.success('Verification email sent', {
+          description: 'Check your inbox.',
+        });
+      } else {
+        toast.error('Could not resend', {
+          description: 'Please try again later.',
+        });
+      }
+    } catch {
+      toast.error('Network error', { description: 'Please try again.' });
+    } finally {
+      setResendPending(false);
+    }
+  }
 
   return (
     <form action={formAction} className="space-y-4">
@@ -55,6 +87,24 @@ export function LoginForm() {
       </FieldLabel>
 
       <FieldError message={errors._form} />
+
+      {needsVerificationFor && (
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-[12px] leading-relaxed text-amber-200">
+          <p>
+            We sent a verification link to{' '}
+            <strong className="text-amber-100">{needsVerificationFor}</strong>.
+            Click it, then sign in again.
+          </p>
+          <button
+            type="button"
+            onClick={resendVerification}
+            disabled={resendPending}
+            className="mt-2 inline-flex items-center gap-1.5 text-[12px] font-medium text-amber-100 underline-offset-2 hover:underline disabled:opacity-50"
+          >
+            {resendPending ? 'Sending…' : 'Resend the verification email'}
+          </button>
+        </div>
+      )}
 
       <div className="flex justify-end -mt-2">
         <Link
