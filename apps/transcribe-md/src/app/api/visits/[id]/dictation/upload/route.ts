@@ -26,6 +26,7 @@ import {
 
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
+import { redactPhi } from '@meddoc/ai';
 
 export const runtime = 'nodejs';
 export const maxDuration = 120;
@@ -117,7 +118,10 @@ export const POST = withApiHandler<{ id: string }>(
     try {
       await putAudioStream(objectKey, nodeReadable, contentLength, mimeType);
     } catch (err) {
-      console.error('[api:visits:dictation:upload] MinIO put failed:', err);
+      console.error(
+        '[api:visits:dictation:upload] MinIO put failed:',
+        redactPhi(err instanceof Error ? err.message : err)
+      );
       return apiError('storage write failed', 502);
     }
 
@@ -143,7 +147,10 @@ export const POST = withApiHandler<{ id: string }>(
         { jobId: `visit-${visitId}-${Date.now()}` }
       );
     } catch (err) {
-      console.error('[api:visits:dictation:upload] queue enqueue failed:', err);
+      console.error(
+        '[api:visits:dictation:upload] queue enqueue failed:',
+        redactPhi(err instanceof Error ? err.message : err)
+      );
       return apiError(
         'dictation stored but worker enqueue failed; please refresh and try again',
         502

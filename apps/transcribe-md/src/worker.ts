@@ -24,6 +24,7 @@ import { Worker, type Job } from 'bullmq';
 import prisma from '@meddoc/db';
 import { TranscribeVisitStatus } from '@prisma/client';
 import type { DeepgramBatchResponse, DeepgramUtterance } from '@meddoc/ai';
+import { redactPhi } from '@meddoc/ai';
 
 import {
   QUEUE_NAME,
@@ -684,7 +685,14 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
     // skipped, so happy-path first attempts stay quiet.
     logSkipSummary(visitId, attempt, skipped);
   } catch (err) {
-    console.error(`[transcribe-md-worker] visit ${visitId} failed:`, err);
+    // T-M16.3: Deepgram/Anthropic errors can quote audio/file metadata
+    // or URLs — scrub before emitting to container stdout. Sentry path
+    // (captureWorkerException below) does its own redactPhi via the
+    // beforeSend hook, so double-coverage is intentional.
+    console.error(
+      `[transcribe-md-worker] visit ${visitId} failed:`,
+      redactPhi(err instanceof Error ? err.message : err)
+    );
     // T-M16.3: capture to Sentry BEFORE the re-throw so BullMQ's retry
     // still sees the original error. The {visitId, layer} tags let ops
     // filter errors by failure point without reading the stack trace.
@@ -819,6 +827,9 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error('[transcribe-md-worker] fatal:', err);
+  console.error(
+    '[transcribe-md-worker] fatal:',
+    redactPhi(err instanceof Error ? err.message : err)
+  );
   process.exit(1);
 });

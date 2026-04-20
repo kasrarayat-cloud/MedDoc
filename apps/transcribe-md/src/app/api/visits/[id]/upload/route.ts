@@ -26,6 +26,7 @@ import {
 
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
+import { redactPhi } from '@meddoc/ai';
 
 export const runtime = 'nodejs';
 // Next's default body-size limit on route handlers is 1 MB — we need
@@ -120,7 +121,10 @@ export const POST = withApiHandler<{ id: string }>(
     try {
       await putAudioStream(objectKey, nodeReadable, contentLength, mimeType);
     } catch (err) {
-      console.error('[api:visits:upload] MinIO put failed:', err);
+      console.error(
+        '[api:visits:upload] MinIO put failed:',
+        redactPhi(err instanceof Error ? err.message : err)
+      );
       return apiError('storage write failed', 502);
     }
 
@@ -149,7 +153,10 @@ export const POST = withApiHandler<{ id: string }>(
         { jobId: `visit-${visitId}-${Date.now()}` }
       );
     } catch (err) {
-      console.error('[api:visits:upload] queue enqueue failed:', err);
+      console.error(
+        '[api:visits:upload] queue enqueue failed:',
+        redactPhi(err instanceof Error ? err.message : err)
+      );
       // The audio is in MinIO and the visit is QUEUED; the user can retry
       // upload or an ops tool can re-enqueue. Don't lose the upload.
       return apiError(

@@ -21,6 +21,7 @@ import {
 
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
+import { redactPhi } from '@meddoc/ai';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -96,7 +97,10 @@ export const POST = withApiHandler<{ id: string }>(
         { jobId: `visit-${visitId}-${Date.now()}` }
       );
     } catch (err) {
-      console.error('[api:visits:text] queue enqueue failed:', err);
+      console.error(
+        '[api:visits:text] queue enqueue failed:',
+        redactPhi(err instanceof Error ? err.message : err)
+      );
       return apiError(
         'text stored but worker enqueue failed; please refresh and try again',
         502

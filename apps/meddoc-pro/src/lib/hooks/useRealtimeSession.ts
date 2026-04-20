@@ -331,7 +331,14 @@ export function useRealtimeSession(options: UseRealtimeSessionOptions): UseRealt
           break;
         case 'response.audio_transcript.done': {
           const transcript = (event as { transcript?: string }).transcript;
-          console.info('[realtime] assistant transcript done:', transcript?.slice(0, 120));
+          // T-M16.3: log length only. Previous versions logged
+          // transcript.slice(0, 120) which leaked 120 chars of live
+          // clinical speech into the browser console (and, via
+          // Sentry's default console breadcrumbs, into Sentry).
+          console.info(
+            '[realtime] assistant transcript done — length:',
+            transcript?.length ?? 0
+          );
           if (typeof transcript === 'string' && transcript.trim()) {
             onAssistantTranscriptRef.current?.(transcript);
           }
@@ -339,7 +346,11 @@ export function useRealtimeSession(options: UseRealtimeSessionOptions): UseRealt
         }
         case 'conversation.item.input_audio_transcription.completed': {
           const transcript = (event as { transcript?: string }).transcript;
-          console.info('[realtime] user transcript:', transcript?.slice(0, 120));
+          // T-M16.3: length-only log, see sibling case above.
+          console.info(
+            '[realtime] user transcript — length:',
+            transcript?.length ?? 0
+          );
           if (typeof transcript === 'string' && transcript.trim()) {
             onUserTranscriptRef.current?.(transcript);
           }

@@ -29,6 +29,7 @@ import {
   clientIpFromRequest,
   rateLimitOr429,
 } from '@/lib/rate-limit';
+import { redactPhi } from '@meddoc/ai';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -79,7 +80,11 @@ export const POST = withApiHandler(
       })
     );
     if (d.stack) {
-      console.error(`[client-error] ${d.errorId} stack:\n${d.stack}`);
+      // T-M16.3: React render stacks shouldn't carry PHI but some libs
+      // stringify props into error messages; scrub before logging.
+      console.error(
+        `[client-error] ${d.errorId} stack:\n${redactPhi(d.stack)}`
+      );
     }
 
     return NextResponse.json({ ok: true }, { status: 202 });

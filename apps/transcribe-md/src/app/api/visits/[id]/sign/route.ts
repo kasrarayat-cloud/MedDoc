@@ -42,6 +42,7 @@ import {
 import { captureEditPattern } from '@/lib/edit-tracking';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
+import { redactPhi } from '@meddoc/ai';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -216,7 +217,12 @@ export const POST = withApiHandler<{ id: string }>(
           });
         }
       } catch (err) {
-        console.error(`[api:visits:sign] destination ${dest} failed:`, err);
+        // T-M16.3: Resend/MinIO/PDF errors occasionally echo recipient
+        // email or filename — scrub before logging.
+        console.error(
+          `[api:visits:sign] destination ${dest} failed:`,
+          redactPhi(err instanceof Error ? err.message : err)
+        );
         deliveryErrors[dest] =
           err instanceof Error ? err.message : 'delivery failed';
       }
