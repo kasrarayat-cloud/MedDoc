@@ -35,6 +35,7 @@ import {
 import { sendEmailChangedNotification } from '@/lib/email';
 import { APP_URL } from '@/lib/constants';
 import { redactPhi } from '@meddoc/ai';
+import { log } from '@/lib/log';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -104,9 +105,9 @@ export const GET = withApiHandler('api:auth:confirm-email', async (req) => {
       select: { name: true },
     });
 
-    console.info(
-      `[api:auth:confirm-email] email updated user=${consumed.userId}`
-    );
+    log.info('api:auth:confirm-email', 'email updated', {
+      userId: consumed.userId,
+    });
 
     // Fire-and-forget notification to the old address. Never fail the
     // redirect on email hiccup.

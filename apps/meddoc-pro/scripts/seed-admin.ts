@@ -36,7 +36,14 @@ async function main() {
 
   console.log(`\n  User seeded successfully!`);
   console.log(`  Email:    ${email}`);
-  console.log(`  Password: ${password}`);
+  // T-M16.4 L6: don't print the plaintext password when NODE_ENV is
+  // production — prevents a pasted ops log from leaking a live
+  // credential. Dev-box runs still need it to complete the flow.
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`  Password: ${password}`);
+  } else {
+    console.log(`  Password: [hidden in production — check the value you just passed in]`);
+  }
   console.log(`  Role:     ${user.role}`);
   console.log(`  ID:       ${user.id}\n`);
 

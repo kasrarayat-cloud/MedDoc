@@ -20,6 +20,13 @@ services:
     # on-disk format → the existing `pgdata` volume mounts unchanged.
     image: pgvector/pgvector:pg16
     restart: unless-stopped
+    # T-M16.4: protective ceilings, not reservations. Sum across all
+    # services > host RAM is intentional — compose mem_limits only
+    # fire when a container actually hits the limit, preventing one
+    # runaway from OOM-killing its neighbours. See DEPLOYMENT_RUNBOOK
+    # §8 for the host-memory breakdown.
+    mem_limit: 512m
+    cpus: '1.0'
     environment:
       POSTGRES_DB: meddoc
       POSTGRES_USER: meddoc
@@ -40,6 +47,8 @@ services:
       context: .
       dockerfile: apps/meddoc-pro/Dockerfile
     restart: unless-stopped
+    mem_limit: 512m
+    cpus: '1.0'
     # T-M16.3: app-level health — hits /api/health which checks
     # postgres. 30s start_period covers Next cold-start + Prisma client
     # init; without it the first check fires before the app is ready
@@ -77,6 +86,8 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    mem_limit: 128m
+    cpus: '0.5'
     volumes:
       - redis_data:/data
     ports:
@@ -94,6 +105,15 @@ services:
   minio:
     image: minio/minio:latest
     restart: unless-stopped
+    mem_limit: 256m
+    cpus: '0.5'
+    # T-M16.4: MinIO holds many open sockets under concurrent uploads;
+    # default 1024 FDs is tight once more than a couple doctors are
+    # streaming audio simultaneously.
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     command: ["server", "/data", "--console-address", ":9001"]
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-meddoc}
@@ -116,6 +136,8 @@ services:
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
+    mem_limit: 128m
+    cpus: '0.5'
     # T-M16.3: wget the internal reverse-proxy port. --spider sends HEAD
     # so the proxied app doesn't do real work on every health tick.
     # We accept any response (2xx/3xx/4xx) because caddy responding at
@@ -153,6 +175,8 @@ services:
       context: .
       dockerfile: apps/marketing/Dockerfile
     restart: unless-stopped
+    mem_limit: 256m
+    cpus: '0.5'
     # T-M16.3: marketing has no API — hit the home page to confirm the
     # Next server is responding. Static content so 0 cost per tick.
     healthcheck:
@@ -179,6 +203,16 @@ services:
       context: .
       dockerfile: apps/transcribe-md/Dockerfile.worker
     restart: unless-stopped
+    # T-M16.4: worker is the heaviest service — runs Deepgram batch
+    # transcription, Anthropic polish, and the Puppeteer-based PDF
+    # renderer concurrently. 1 GB accommodates a peak PDF render
+    # alongside a pipeline pass; bump to 1.5g if ops sees OOM-kills.
+    mem_limit: 1g
+    cpus: '1.5'
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     depends_on:
       postgres:
         condition: service_healthy
@@ -232,6 +266,14 @@ services:
       context: .
       dockerfile: apps/transcribe-md/Dockerfile
     restart: unless-stopped
+    mem_limit: 512m
+    cpus: '1.0'
+    # T-M16.4: 500 MB upload streams + MinIO SDK + NextAuth + BullMQ
+    # keep a lot of sockets open; 1024 default FDs is tight.
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     # T-M16.3: hits /api/health which races postgres + redis + minio
     # checks with a 2s per-dep timeout. Returns 503 if any dependency
     # is unreachable so the container reports unhealthy and Caddy can
@@ -295,6 +337,49 @@ services:
     working_dir: /app/packages/db
     entrypoint: ["npx", "--no-install", "prisma"]
     command: ["migrate", "deploy"]
+
+  # ── Postgres backup (T-M16.4) ──
+  # Sidecar container runs pg_dump on a schedule and writes rotated
+  # gzipped dumps to /opt/meddoc-pro/backups on the host. Image is
+  # prodrigestivill/postgres-backup-local — a tiny pg_dump + cron
+  # wrapper used by many teams at this scale. PITR (wal-g /
+  # pgBackRest) is out of scope for the pilot; daily logical dumps
+  # are enough.
+  #
+  # Filename pattern: <prefix>-<db>-<date>.sql.gz where <prefix> is
+  # "daily"|"weekly"|"monthly"|"last". Our pre-milestone manual
+  # dumps use a different prefix (pre_<label>) and coexist cleanly.
+  #
+  # Ops task (documented in DEPLOYMENT_RUNBOOK.md §9): configure an
+  # off-host mirror via rsync / borgbackup so a VPS loss doesn't
+  # lose the dumps too.
+  postgres-backup:
+    image: prodrigestivill/postgres-backup-local:16
+    restart: unless-stopped
+    mem_limit: 128m
+    cpus: '0.5'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: meddoc
+      POSTGRES_USER: meddoc
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme_in_production}
+      POSTGRES_EXTRA_OPTS: "-Z6 --no-owner --no-acl"
+      SCHEDULE: "@daily"
+      BACKUP_KEEP_DAYS: "7"
+      BACKUP_KEEP_WEEKS: "4"
+      BACKUP_KEEP_MONTHS: "6"
+      HEALTHCHECK_PORT: "8080"
+    volumes:
+      - ./backups:/backups
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
 volumes:
   pgdata:
