@@ -383,7 +383,55 @@ A dedicated worker-liveness probe is a future milestone; until then
 the "completed jobs per hour == 0 for 1+ hour" heuristic is a good
 proxy for "worker stuck".
 
-## 7. Post-deploy checklist
+## 7. Host memory baseline (T-M16.4 diagnosis)
+
+The T-M15 audit flagged swap usage at 1.9 GB on a 1.8 GB-RAM host;
+the T-M16.4 re-audit confirmed 2.0 GB swap on the same physical box
+after an hour of dev work. Digging into `ps aux --sort=-rss` showed
+**our app containers are not the culprit** — they total ~285 MB
+across all eight Docker services. The top userspace consumers:
+
+| Process | RSS | Nature |
+|---------|-----|--------|
+| `dockerd` | 504 MB | Docker daemon — aggregates all container-process memory |
+| Dev-session tooling (Claude agent, etc.) | ~390 MB | Ephemeral; vanishes when the dev session ends |
+| `next-server` × 4 | ~150 MB | Next.js runtime processes across the 3 apps |
+| Unrelated co-located projects (openclaw, meilisearch, ai-deal-hunter) | ~70 MB | Shared VPS tenants outside this repo |
+| Linux + systemd + containerd + multipathd + journald | ~150 MB | OS baseline |
+
+**No Postgres tuning is warranted** — postgres is at 6 MiB resident.
+**No app-side memory refactor is warranted** — the apps are light.
+The pressure is a combination of dockerd overhead, this VPS hosting
+other projects, and the dev session itself.
+
+**What we did instead (T-M16.4 Commit 1)**: compose `mem_limit` +
+`cpus` on every service as protective ceilings (see
+`docker-compose.yml`). These limits protect against a future
+runaway container OOM-killing postgres, not against current-state
+swap pressure. Current values:
+
+| Service | mem_limit | cpus |
+|---------|-----------|------|
+| postgres | 512 MB | 1.0 |
+| redis | 128 MB | 0.5 |
+| minio | 256 MB | 0.5 |
+| caddy | 128 MB | 0.5 |
+| marketing | 256 MB | 0.5 |
+| meddoc-pro | 512 MB | 1.0 |
+| transcribe-md | 512 MB | 1.0 |
+| transcribe-md-worker | 1024 MB | 1.5 |
+
+Sum of `mem_limit` across services (≈ 3.3 GB) exceeds physical RAM
+(1.8 GB) on purpose — limits are ceilings, not reservations. They
+only fire when a container actually hits them.
+
+**Future note**: if memory pressure starts causing observable
+problems (slow API latency, worker OOM-kills, PDF renders failing)
+post-pilot, **upgrade the VPS to 4 GB RAM** rather than trying to
+squeeze the apps further. At 4 GB + the current co-located-tenant
+mix, we'd have ~2 GB of real headroom for traffic spikes.
+
+## 8. Post-deploy checklist
 
 After any change hits main:
 
