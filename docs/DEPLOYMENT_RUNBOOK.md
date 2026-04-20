@@ -263,18 +263,24 @@ free -h                                    # confirm headroom is back
 docker compose up -d transcribe-md-worker  # bring it back with fresh allocation
 ```
 
-Long-term: set `mem_limit` per service in `docker-compose.yml` (T-M15 finding H9). Tentative limits: worker 1 Gi, app 512 Mi, postgres 512 Mi.
+Resource-limit ceilings landed in T-M16.4; see §7 for the
+per-service table. If a specific container keeps OOM-killing,
+bump its `mem_limit` in `docker-compose.yml` and recreate.
 
 ### 5.4 Disk full
 
+Fast triage — see §9 for the full monthly cleanup workflow:
+
 ```bash
 df -h /                             # confirm 95%+
-docker system df                    # usually 30+ GB in build cache
-docker system prune -af --volumes   # DESTRUCTIVE — removes ALL unused
-                                    # images, networks, volumes, build cache
+docker system df                    # ~30 GB in build cache is typical
+make prune-docker                   # interactive confirm + prune (T-M16.4)
+# or, without the Makefile wrapper:
+docker system prune -a --volumes --filter "until=720h" -f
 ```
 
-Scheduled cleanup: add to crontab once a month (`0 4 1 * * docker system prune -af`). Never prune while a build is in flight.
+Don't cron-schedule prune — image deletion can take out rollback
+candidates. Keep it manual + monthly. Full playbook in §9.
 
 ### 5.5 MinIO bucket disappeared
 
@@ -503,7 +509,59 @@ gunzip -c /opt/meddoc-pro/backups/last/meddoc-latest.sql.gz \
   | docker compose exec -T postgres psql -U meddoc -d meddoc
 ```
 
-## 9. Post-deploy checklist
+## 9. Monthly docker cleanup (T-M16.4)
+
+Build cache + stale images accumulate faster than you'd think on
+this single-VPS deploy. Rebuilding apps a few times a week pushes
+the 99 GB root filesystem past 80% in a couple of weeks. Ops task:
+**run the prune once a month on a day you're NOT about to roll back
+to a previous image**.
+
+### 9.1 What the prune removes
+
+```bash
+docker system prune -a --volumes --filter "until=720h" -f
+```
+
+- `-a` — untagged AND unused tagged images
+- `--volumes` — dangling volumes (none of our named volumes qualify
+  — `pgdata`, `redis_data`, `minio_data`, `caddy_data`, `caddy_config`
+  are attached to active services and are safe)
+- `--filter "until=720h"` — only objects untouched for >30 days.
+  This is the safety rail — yesterday's fallback image stays put.
+- `-f` — no confirmation prompt (use `make prune-docker` for an
+  interactive confirmation instead)
+
+Typical reclaim at the point it's worth running: **~25-35 GB**.
+
+### 9.2 Wrapper
+
+```bash
+make prune-docker        # interactive; prompts before deleting
+make prune-docker-dry    # shows what would go, deletes nothing
+```
+
+### 9.3 Scheduling
+
+**Do NOT add this to cron.** Image deletion can take out a rollback
+target you wanted to keep around. The monthly cadence is a calendar
+reminder for ops, not an automated job.
+
+Guidance:
+- Only run after a successful deploy has been stable for ≥1 week.
+- Don't run during / right before a build — prune races with the
+  build's temporary image tags.
+- After `make prune-docker`, re-check `df -h /` and `docker system
+  df`. Expected: root fs drops 20-30%, `Reclaimable` columns near 0.
+
+### 9.4 When to NOT prune (even on schedule)
+
+- A new milestone just shipped → you might want to roll back to the
+  previous image if a regression surfaces.
+- Active incident → don't introduce more variables.
+- Disk is already under 50% full → not worth the risk.
+
+## 10. Post-deploy checklist
 
 After any change hits main:
 
