@@ -15,18 +15,11 @@ import { VisitReadyView, type Utterance, type SpeakerInfo } from './visit-ready-
 import { VisitFailedView } from './visit-failed-view';
 import { BackToDashboardLink } from './back-to-dashboard-link';
 
-/** Email delivery is gated by domain-verification status. The "Email
- *  to me" checkbox in Sign & Send is only shown when both conditions
- *  hold. Operators flip RESEND_FROM_VERIFIED=true after running DNS
- *  verification at https://resend.com/domains and restart the
- *  container. Defaults to off so a new deployment doesn't show a
- *  checkbox that just errors out. */
-function isEmailDeliveryEnabled(): boolean {
-  return (
-    !!process.env.RESEND_API_KEY &&
-    process.env.RESEND_FROM_VERIFIED === 'true'
-  );
-}
+// T-M16.2: the flag check moved to @/lib/email-enabled as the single
+// source of truth (used by signup, login, forgot-password, change-
+// email, and the Sign & Send modal). See that module for the
+// RESEND_API_KEY + RESEND_FROM_VERIFIED reasoning.
+import { isEmailDeliveryEnabled } from '@/lib/email-enabled';
 
 export const metadata: Metadata = { title: 'Visit' };
 

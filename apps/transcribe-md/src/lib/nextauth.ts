@@ -23,6 +23,7 @@ import authConfig from '@/lib/auth.config';
 import prisma from '@meddoc/db';
 import type { UserRole } from '@meddoc/auth';
 import { Product } from '@prisma/client';
+import { isEmailDeliveryEnabled } from '@/lib/email-enabled';
 
 /** 7 days. Longer than meddoc-pro (8hr) because TranscribeMD is a solo
  *  consumer surface, not a PHI-heavy clinical tool. */
@@ -66,6 +67,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!user) return null;
         if (!user.isActive) return null;
         if (user.lockedUntil && user.lockedUntil > new Date()) return null;
+
+        // T-M16.2 defense-in-depth: the email-verification gate is
+        // primarily enforced in loginAction (which can return a
+        // dedicated "needsVerificationFor" state to surface the resend
+        // affordance to the user). If someone bypasses the action and
+        // hits NextAuth signIn directly, we still block here. No
+        // counter increment — this isn't a failed credential, it's a
+        // state gate.
+        if (isEmailDeliveryEnabled() && user.emailVerified === null) {
+          return null;
+        }
 
         const valid = await bcrypt.compare(password, user.passwordHash);
         if (!valid) {

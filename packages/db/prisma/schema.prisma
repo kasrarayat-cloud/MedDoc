@@ -164,6 +164,22 @@ enum AllergySeverity {
   SEVERE
 }
 
+/// T-M16.2: why a one-time AuthToken was minted. Each purpose maps to
+/// exactly one email flow and has its own TTL + consumer handler.
+/// - PASSWORD_RESET: 1-hour link emailed to a user who clicked
+///   "Forgot password?". Consumer resets passwordHash + revokes all
+///   their UserSession rows.
+/// - EMAIL_VERIFICATION: link emailed at signup (when RESEND is
+///   enabled). Consumer sets User.emailVerified = now().
+/// - EMAIL_CHANGE: link emailed to the NEW address the user is
+///   moving to; `metadata.newEmail` holds that address. Consumer
+///   updates User.email after verifying the current password.
+enum AuthTokenPurpose {
+  PASSWORD_RESET
+  EMAIL_VERIFICATION
+  EMAIL_CHANGE
+}
+
 // ============================================================================
 // PRACTICE — tenant boundary
 // ----------------------------------------------------------------------------
@@ -312,6 +328,9 @@ model User {
   userSessions           UserSession[]
   // T-M14.1: per-doctor edit tracking (one row per signed visit).
   doctorEditPatterns     DoctorEditPattern[]
+  // T-M16.2: one-time tokens for password reset, email verification,
+  // email change. All cascade-deleted with the user.
+  authTokens             AuthToken[]
 
   @@index([practiceId])
   @@index([role])
@@ -366,6 +385,110 @@ model VerificationToken {
 
   @@unique([identifier, token])
   @@map("verification_tokens")
+}
+
+// ============================================================================
+// AUTH TOKEN — T-M16.2 one-time link tokens (password reset, email
+// verification, email change)
+// ----------------------------------------------------------------------------
+// Stored HASHED, never plaintext. The caller handing out a reset link
+// sees the plaintext exactly once (to embed in the email URL); the DB
+// only ever sees SHA-256(token). Consumer flow:
+//   1. incoming URL carries ?token=<raw>
+//   2. server hashes it the same way
+//   3. looks up the matching row that matches purpose + hash + not
+//      yet used + not expired
+//   4. atomically sets usedAt = now() and returns userId/metadata
+//
+// Why one table with a purpose enum instead of three separate tables:
+// the consumer pattern is identical for every flow (validate hash,
+// check freshness, mark used); a single table means one code path to
+// audit + one index set to maintain.
+// ============================================================================
+
+model AuthToken {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  purpose AuthTokenPurpose
+
+  /// SHA-256 hex of the raw token. The raw token is 32 bytes
+  /// base64url-encoded (~43 chars) — it's only in memory briefly
+  /// during the issue + email send path.
+  tokenHash String @unique
+
+  /// Issued TTL varies by purpose:
+  ///   PASSWORD_RESET      — 1 hour
+  ///   EMAIL_VERIFICATION  — 24 hours
+  ///   EMAIL_CHANGE        — 24 hours
+  expiresAt DateTime
+
+  /// Null until consumed. Marking usedAt and failing on a second read
+  /// is how we make tokens single-use.
+  usedAt DateTime?
+
+  /// Purpose-specific extras. EMAIL_CHANGE carries `{newEmail: "..."}`.
+  /// PASSWORD_RESET + EMAIL_VERIFICATION leave it null.
+  metadata Json?
+
+  createdAt DateTime @default(now())
+
+  // (userId, purpose) makes "invalidate all pending resets for this
+  // user" cheap (WHERE userId=? AND purpose='PASSWORD_RESET'). The
+  // expiresAt index is for the future cleanup sweep.
+  @@index([userId, purpose])
+  @@index([expiresAt])
+  @@map("auth_tokens")
+}
+
+// ============================================================================
+// ACCOUNT DELETION — T-M16.2 HIPAA audit trail
+// ----------------------------------------------------------------------------
+// Written inside the delete-account transaction BEFORE the User row is
+// cascade-dropped. We keep the minimum metadata required to prove we
+// honored a deletion request (HIPAA 45 CFR § 164.530 documentation
+// requirement) without retaining any PHI.
+//
+// The `purgeAt` column marks when this audit row itself should be
+// scrubbed (deletedAt + 90 days). A scheduled sweep that deletes rows
+// where purgeAt < now() is NOT implemented here — this table just
+// captures the signal. The sweeper lands in a future milestone.
+//
+// TODO(T-M16.3+): implement scheduled purge of rows where
+// purgeAt < now(). Until then, old rows accumulate indefinitely;
+// manual SQL cleanup is OK if volume becomes a concern.
+// ============================================================================
+
+model AccountDeletion {
+  id String @id @default(cuid())
+
+  /// The ex-user's id. No FK relation — by the time this row exists,
+  /// the User row has already cascade-dropped.
+  userId String
+
+  /// Frozen copy of the email at deletion time, for compliance
+  /// recordkeeping. Treated as PHI-adjacent — this table itself is
+  /// the thing that eventually gets purged via purgeAt.
+  email String
+
+  /// Most-recent-visit specialty (if any). Null for never-completed
+  /// accounts.
+  specialty String?
+
+  /// Count of TranscribeVisit rows the user had at deletion time.
+  /// Useful for engagement-by-deletion analysis later.
+  visitCount Int
+
+  deletedAt DateTime @default(now())
+
+  /// deletedAt + 90 days. When the sweeper lands it deletes rows
+  /// where this is in the past.
+  purgeAt DateTime
+
+  @@index([purgeAt])
+  @@map("account_deletions")
 }
 
 // ============================================================================
