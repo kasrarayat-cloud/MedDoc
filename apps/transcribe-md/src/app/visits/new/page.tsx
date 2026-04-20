@@ -1,3 +1,20 @@
+// ============================================================================
+// /visits/new — patient picker (Step 1) + capture form (Step 2)
+// ----------------------------------------------------------------------------
+// T-M17.2 Commit 9. Server component loads:
+//   - user (for NavBar)
+//   - SPECIALTIES + mostRecentVisit.specialty (for the Step 2 default)
+//   - If ?patientId= is present, the patient row, validated against
+//     the caller's practiceId and deletedAt=null. An invalid patientId
+//     triggers a clean redirect to /visits/new (no query param) rather
+//     than a 404 — the doctor wanted to start a visit, not hit a dead
+//     end.
+//
+// Everything after the shell (picker vs form) is a client component —
+// searching + inline-create + the duplicate modal need interactivity,
+// and the transition Step 1 ↔ Step 2 happens without a re-fetch.
+// ============================================================================
+
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 
@@ -5,21 +22,26 @@ import prisma from '@meddoc/db';
 import { auth } from '@/lib/nextauth';
 import { NavBar } from '@/components/nav-bar';
 import { PageWrapper } from '@/components/page-wrapper';
-import { SpecialtyDropdown } from '@/components/specialty-dropdown';
-import { createVisitAction } from '@/actions/visits';
 import { SPECIALTIES } from '@/lib/specialties';
-import { ModeTileWithForm } from './mode-tile-with-form';
+import { NewVisitClient } from './new-visit-client';
+import type { SelectedPatient } from './patient-types';
 
 export const metadata: Metadata = { title: 'New visit' };
 
-export default async function NewVisitPage() {
+type SearchParams = Record<string, string | string[] | undefined>;
+
+export default async function NewVisitPage({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}) {
   const session = await auth();
   if (!session?.user?.id) redirect('/login');
 
   const [user, mostRecentVisit] = await Promise.all([
     prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { name: true, email: true },
+      select: { name: true, email: true, practiceId: true },
     }),
     prisma.transcribeVisit.findFirst({
       where: { userId: session.user.id },
@@ -29,13 +51,44 @@ export default async function NewVisitPage() {
   ]);
   if (!user) redirect('/login');
 
-  const specialties = SPECIALTIES;
+  const params = await searchParams;
+  const patientIdParam = Array.isArray(params.patientId)
+    ? params.patientId[0]
+    : params.patientId;
 
-  // Fresh signups have no prior visit — fall back to the first specialty
-  // in the catalog so the hidden-input value is never empty. A blank
-  // specialty made it to the server, failed Zod's min(1), and surfaced
-  // as a 500 ("Invalid visit input") when the user clicked a mode tile
-  // without opening the dropdown.
+  // Validate the deep-linked patient, if any. Invalid → redirect to
+  // /visits/new with no query string so the picker shows up instead
+  // of a confusing error page.
+  let initialPatient: SelectedPatient | null = null;
+  if (patientIdParam) {
+    const patient = await prisma.transcribeMdPatient.findUnique({
+      where: { id: patientIdParam },
+      select: {
+        id: true,
+        practiceId: true,
+        name: true,
+        dateOfBirth: true,
+        externalId: true,
+        deletedAt: true,
+      },
+    });
+    if (
+      !patient ||
+      patient.practiceId !== user.practiceId ||
+      patient.deletedAt !== null
+    ) {
+      redirect('/visits/new');
+    }
+    initialPatient = {
+      id: patient.id,
+      name: patient.name,
+      dateOfBirth: patient.dateOfBirth
+        ? patient.dateOfBirth.toISOString().slice(0, 10)
+        : null,
+      externalId: patient.externalId,
+    };
+  }
+
   const defaultSpecialty =
     mostRecentVisit?.specialty ?? SPECIALTIES[0]?.displayName ?? '';
 
@@ -47,85 +100,17 @@ export default async function NewVisitPage() {
         <div className="mb-8">
           <h1 className="type-h1 text-text-primary">Start a new visit</h1>
           <p className="mt-2 text-[14px] text-text-tertiary">
-            Add optional context, then pick how you want to capture the encounter.
+            {initialPatient
+              ? 'Pick a capture mode below and we&apos;ll take it from there.'
+              : 'Pick the patient, then choose how you want to capture the encounter.'}
           </p>
         </div>
 
-        <form
-          id="new-visit-form"
-          action={createVisitAction}
-          className="grid grid-cols-1 gap-6 sm:grid-cols-2"
-        >
-          <div>
-            <label className="mb-1.5 block text-[12px] font-medium tracking-tight text-text-tertiary">
-              Patient name{' '}
-              <span className="font-normal text-text-muted">(optional)</span>
-            </label>
-            <input
-              name="patientName"
-              type="text"
-              className="block w-full rounded-lg border border-border-default bg-bg-surface-1/60 px-3.5 py-2.5 text-[14px] text-text-primary placeholder:text-text-muted outline-none transition-colors focus:border-violet-500 focus:ring-2 focus:ring-violet-500/30"
-              placeholder="e.g. Jane Doe"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1.5 block text-[12px] font-medium tracking-tight text-text-tertiary">
-              Specialty
-            </label>
-            <SpecialtyDropdown
-              options={specialties}
-              name="specialty"
-              defaultValue={defaultSpecialty}
-            />
-          </div>
-
-          <div className="sm:col-span-2">
-            <label className="mb-1.5 block text-[12px] font-medium tracking-tight text-text-tertiary">
-              Chief complaint{' '}
-              <span className="font-normal text-text-muted">(optional)</span>
-            </label>
-            <input
-              name="chiefComplaint"
-              type="text"
-              className="block w-full rounded-lg border border-border-default bg-bg-surface-1/60 px-3.5 py-2.5 text-[14px] text-text-primary placeholder:text-text-muted outline-none transition-colors focus:border-violet-500 focus:ring-2 focus:ring-violet-500/30"
-              placeholder="e.g. Headache for 3 days"
-            />
-          </div>
-        </form>
-
-        <div className="mt-10">
-          <div className="mb-4 text-[13px] font-medium tracking-tight text-text-tertiary">
-            Pick a capture mode
-          </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            {/* Each ModeTile is its own submit button INSIDE the form above,
-                targeting it via the `form` attribute. Clicking sends the
-                form data + the chosen inputMode=<value> and the server
-                action creates the visit then redirects to /visits/[id]. */}
-            <ModeTileWithForm
-              formId="new-visit-form"
-              icon="mic"
-              title="Upload audio"
-              description="Record your visit on your phone, then drop the file here."
-              value="audio_upload"
-            />
-            <ModeTileWithForm
-              formId="new-visit-form"
-              icon="radio"
-              title="Dictate live"
-              description="Speak a summary into your mic — we'll clean it up."
-              value="voice_dictation"
-            />
-            <ModeTileWithForm
-              formId="new-visit-form"
-              icon="pen-line"
-              title="Text to SOAP"
-              description="Type bullets — AI expands them into a full note."
-              value="text_notes"
-            />
-          </div>
-        </div>
+        <NewVisitClient
+          initialPatient={initialPatient}
+          specialties={SPECIALTIES}
+          defaultSpecialty={defaultSpecialty}
+        />
       </main>
     </PageWrapper>
   );
