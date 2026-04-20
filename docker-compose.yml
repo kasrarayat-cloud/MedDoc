@@ -40,6 +40,16 @@ services:
       context: .
       dockerfile: apps/meddoc-pro/Dockerfile
     restart: unless-stopped
+    # T-M16.3: app-level health — hits /api/health which checks
+    # postgres. 30s start_period covers Next cold-start + Prisma client
+    # init; without it the first check fires before the app is ready
+    # and the container reports "unhealthy" until a retry passes.
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     depends_on:
       postgres:
         condition: service_healthy
@@ -106,6 +116,16 @@ services:
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
+    # T-M16.3: wget the internal reverse-proxy port. --spider sends HEAD
+    # so the proxied app doesn't do real work on every health tick.
+    # We accept any response (2xx/3xx/4xx) because caddy responding at
+    # all proves the process is up — upstream 5xx would fail it naturally.
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "--spider", "http://localhost:80/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     depends_on:
       - meddoc-pro
       - marketing
@@ -133,6 +153,14 @@ services:
       context: .
       dockerfile: apps/marketing/Dockerfile
     restart: unless-stopped
+    # T-M16.3: marketing has no API — hit the home page to confirm the
+    # Next server is responding. Static content so 0 cost per tick.
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "--spider", "http://localhost:3010/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     environment:
       NODE_ENV: production
       NEXT_TELEMETRY_DISABLED: "1"
@@ -204,6 +232,16 @@ services:
       context: .
       dockerfile: apps/transcribe-md/Dockerfile
     restart: unless-stopped
+    # T-M16.3: hits /api/health which races postgres + redis + minio
+    # checks with a 2s per-dep timeout. Returns 503 if any dependency
+    # is unreachable so the container reports unhealthy and Caddy can
+    # (eventually) route around it once we wire that up.
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "--spider", "http://localhost:3011/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     depends_on:
       postgres:
         condition: service_healthy
