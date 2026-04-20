@@ -1259,11 +1259,12 @@ model TranscribeVisit {
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  /// T-M17.2: link to the TranscribeMdPatient. Nullable during the
-  /// Phase 1 backfill window; tightened to NOT NULL in a later
-  /// migration once every legacy visit has been paired with a patient.
-  patientId String?
-  patient   TranscribeMdPatient? @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  /// T-M17.2: link to the TranscribeMdPatient. Tightened to NOT NULL
+  /// by migration 20260420192818 after the full patient-aware code
+  /// path (backend + UI) was live and confirmed to write the FK on
+  /// every insert.
+  patientId String
+  patient   TranscribeMdPatient @relation(fields: [patientId], references: [id], onDelete: Restrict)
 
   /// Legacy free-text patient name — kept nullable through T-M17.2
   /// because some older visits never set it. After the Phase 1
