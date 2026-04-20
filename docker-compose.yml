@@ -338,6 +338,49 @@ services:
     entrypoint: ["npx", "--no-install", "prisma"]
     command: ["migrate", "deploy"]
 
+  # ── Postgres backup (T-M16.4) ──
+  # Sidecar container runs pg_dump on a schedule and writes rotated
+  # gzipped dumps to /opt/meddoc-pro/backups on the host. Image is
+  # prodrigestivill/postgres-backup-local — a tiny pg_dump + cron
+  # wrapper used by many teams at this scale. PITR (wal-g /
+  # pgBackRest) is out of scope for the pilot; daily logical dumps
+  # are enough.
+  #
+  # Filename pattern: <prefix>-<db>-<date>.sql.gz where <prefix> is
+  # "daily"|"weekly"|"monthly"|"last". Our pre-milestone manual
+  # dumps use a different prefix (pre_<label>) and coexist cleanly.
+  #
+  # Ops task (documented in DEPLOYMENT_RUNBOOK.md §9): configure an
+  # off-host mirror via rsync / borgbackup so a VPS loss doesn't
+  # lose the dumps too.
+  postgres-backup:
+    image: prodrigestivill/postgres-backup-local:16
+    restart: unless-stopped
+    mem_limit: 128m
+    cpus: '0.5'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: meddoc
+      POSTGRES_USER: meddoc
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme_in_production}
+      POSTGRES_EXTRA_OPTS: "-Z6 --no-owner --no-acl"
+      SCHEDULE: "@daily"
+      BACKUP_KEEP_DAYS: "7"
+      BACKUP_KEEP_WEEKS: "4"
+      BACKUP_KEEP_MONTHS: "6"
+      HEALTHCHECK_PORT: "8080"
+    volumes:
+      - ./backups:/backups
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
 volumes:
   pgdata:
   redis_data:

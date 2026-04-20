@@ -431,7 +431,79 @@ post-pilot, **upgrade the VPS to 4 GB RAM** rather than trying to
 squeeze the apps further. At 4 GB + the current co-located-tenant
 mix, we'd have ~2 GB of real headroom for traffic spikes.
 
-## 8. Post-deploy checklist
+## 8. Automated DB backups (T-M16.4)
+
+A `postgres-backup` sidecar container runs pg_dump against the
+meddoc DB on a `@daily` cron schedule and writes rotated gzipped
+dumps to `/opt/meddoc-pro/backups/`. Retention policy:
+
+- 7 daily backups
+- 4 weekly backups
+- 6 monthly backups
+- 1 always-latest copy (`last/`)
+
+Total disk budget at current DB size (~68 MB compressed) is well
+under 2 GB even with the full rotation in place.
+
+### 8.1 Verify the service is running
+
+```bash
+docker compose ps postgres-backup
+# Should show "Up (healthy)" once the HEALTHCHECK_PORT probe converges.
+```
+
+### 8.2 Trigger a one-off backup on demand
+
+The image exposes the internal script at `/backup.sh`:
+
+```bash
+docker compose exec postgres-backup /backup.sh
+ls -lht /opt/meddoc-pro/backups/daily/ | head
+```
+
+Use this before risky operations (schema changes, data migrations).
+
+### 8.3 Filename patterns
+
+Two patterns coexist in `/opt/meddoc-pro/backups/`:
+
+- `<prefix>-meddoc-<date>.sql.gz` — written by the automated service,
+  where `<prefix>` is one of `daily`, `weekly`, `monthly`, `last`.
+  Landing in the matching subdirectory (`backups/daily/`, etc.).
+- `pre_<label>_<timestamp>.sql.gz` — historical manual dumps taken
+  before risky milestone deploys (T-M14.1, T-M16.2). These remain
+  for posterity; the automated service does not touch them.
+
+Both are regular pg_dump gzipped output. §4 restore procedure works
+for either — just point the `gunzip -c` path at whichever file you
+want to restore.
+
+### 8.4 Off-host mirror (operator task, DEFERRED)
+
+These backups are useless against VPS loss if they live only on the
+VPS. Before real customer data lands, configure an off-host mirror:
+
+```bash
+# Example: rsync to a second VPS every 6 hours (add to host crontab).
+0 */6 * * * rsync -aq --delete /opt/meddoc-pro/backups/ \
+  backups@other-vps:/opt/meddoc-backups/
+```
+
+Alternatives: restic to a cheap object-storage bucket (B2, R2),
+borg to a dedicated backup VPS, or a provider-native snapshot
+schedule if Hetzner / whoever has one. Pick one; document the
+restore chain; don't skip this step before onboarding PHI.
+
+### 8.5 Restoring from an automated backup
+
+Same as §4, just point at the automated file:
+
+```bash
+gunzip -c /opt/meddoc-pro/backups/last/meddoc-latest.sql.gz \
+  | docker compose exec -T postgres psql -U meddoc -d meddoc
+```
+
+## 9. Post-deploy checklist
 
 After any change hits main:
 
