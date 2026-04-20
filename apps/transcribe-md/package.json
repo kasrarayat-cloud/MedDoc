@@ -27,6 +27,8 @@
     "@radix-ui/react-toast": "^1.2.4",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.6.0",
+    "@sentry/nextjs": "^10.49.0",
+    "@sentry/node": "^10.49.0",
     "@types/archiver": "^7.0.0",
     "archiver": "^7.0.1",
     "bcryptjs": "^3.0.2",
