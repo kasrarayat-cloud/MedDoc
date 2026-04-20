@@ -21,6 +21,11 @@ import { AuthTokenPurpose } from '@prisma/client';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { consumeAuthToken } from '@/lib/auth-tokens';
+import {
+  RATE_LIMITS,
+  clientIpFromRequest,
+  rateLimitOr429,
+} from '@/lib/rate-limit';
 import { APP_URL } from '@/lib/constants';
 import { redactPhi } from '@meddoc/ai';
 
@@ -35,6 +40,12 @@ function redirectToLogin(reason: string): NextResponse {
 }
 
 export const GET = withApiHandler('api:auth:verify-email', async (req) => {
+  const blocked = rateLimitOr429(
+    RATE_LIMITS.AUTH_EMAIL,
+    clientIpFromRequest(req)
+  );
+  if (blocked) return blocked;
+
   const url = new URL(req.url);
   const token = url.searchParams.get('token');
   if (!token) return apiError('missing token', 400);

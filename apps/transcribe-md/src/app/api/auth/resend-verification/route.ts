@@ -25,9 +25,10 @@ import { AuthTokenPurpose } from '@prisma/client';
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { createAuthToken } from '@/lib/auth-tokens';
 import {
+  RATE_LIMITS,
   clientIpFromRequest,
-  tryConsume,
-} from '@/lib/rate-limit-inline';
+  rateLimitOr429,
+} from '@/lib/rate-limit';
 import { sendEmailVerification } from '@/lib/email';
 import { APP_URL } from '@/lib/constants';
 import { redactPhi } from '@meddoc/ai';
@@ -40,28 +41,14 @@ const BodySchema = z.object({
 });
 
 const VERIFY_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
-const RATE_LIMIT = 5;
-const RATE_WINDOW_MS = 60 * 60 * 1000;
-const RATE_KEY_PREFIX = 'auth-email:'; // shared with forgot-password
 
 export const POST = withApiHandler(
   'api:auth:resend-verification',
   async (req) => {
     const ip = clientIpFromRequest(req);
-    const rl = tryConsume(
-      `${RATE_KEY_PREFIX}${ip}`,
-      RATE_LIMIT,
-      RATE_WINDOW_MS
-    );
-    if (!rl.allowed) {
-      return NextResponse.json(
-        { error: 'Too many requests. Try again later.' },
-        {
-          status: 429,
-          headers: { 'Retry-After': String(rl.retryAfterSec) },
-        }
-      );
-    }
+    // AUTH_EMAIL shared bucket — see forgot-password/route.ts for why.
+    const blocked = rateLimitOr429(RATE_LIMITS.AUTH_EMAIL, ip);
+    if (blocked) return blocked;
 
     let body: unknown;
     try {

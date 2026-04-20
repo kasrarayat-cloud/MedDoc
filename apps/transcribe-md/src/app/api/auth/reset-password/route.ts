@@ -20,6 +20,11 @@ import { AuthTokenPurpose } from '@prisma/client';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { consumeAuthToken } from '@/lib/auth-tokens';
+import {
+  RATE_LIMITS,
+  clientIpFromRequest,
+  rateLimitOr429,
+} from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -46,6 +51,12 @@ const BodySchema = z
   });
 
 export const POST = withApiHandler('api:auth:reset-password', async (req) => {
+  const blocked = rateLimitOr429(
+    RATE_LIMITS.AUTH_EMAIL,
+    clientIpFromRequest(req)
+  );
+  if (blocked) return blocked;
+
   let body: unknown;
   try {
     body = await req.json();
