@@ -1,36 +1,157 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# MedDoc Pro + TranscribeMD
 
-## Getting Started
+Two products, one monorepo:
 
-First, run the development server:
+- **MedDoc Pro** — HIPAA-compliant clinical CRM for small practices. Patient files, clinical notes, document editor, voice intake, audit log.
+- **TranscribeMD** — solo-doctor AI scribe. Upload audio / dictate / paste notes → SOAP note + ICD/CPT codes + Rx drafts + referrals + patient summary, all signed and exported to the EHR of choice.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+Both share infrastructure: Postgres, NextAuth, shared types, same VPS. A third app (`marketing`) is the static landing site that points new users at TranscribeMD signup.
+
+---
+
+## Architecture at a glance
+
+- **Frontend**: Next.js 16 (App Router) for all three apps.
+- **Auth**: NextAuth v5 with JWT strategy + single-session enforcement via `UserSession` rows.
+- **Database**: PostgreSQL 16 with the `pgvector` extension (for per-doctor edit-pattern embeddings added in T-M14.1).
+- **Queue**: Redis + BullMQ drives the 6+7 transcription pipeline.
+- **Object storage**: MinIO (S3-compatible) for uploaded audio + dictation.
+- **AI providers**: Anthropic Claude Sonnet 4.6 (pipeline), Deepgram Nova-3 Medical (transcription), OpenAI (embeddings + meddoc-pro voice features).
+- **Email**: Resend (signed-note delivery; gated behind a verified-domain flag).
+- **Edge**: Caddy terminates HTTP and routes by port/host to each app.
+- **Observability**: Sentry on meddoc-pro (transcribe-md pending).
+
+Everything runs in Docker Compose on a single VPS — 8 containers total at steady state.
+
+---
+
+## Monorepo layout
+
+```
+/opt/meddoc-pro/
+├── apps/
+│   ├── meddoc-pro/        Next.js — clinical CRM (port 3000 internal)
+│   ├── transcribe-md/     Next.js + BullMQ worker (port 9020 public)
+│   └── marketing/         Next.js — static landing site (port 9010 public)
+├── packages/
+│   ├── ai/                Shared Anthropic + Deepgram + OpenAI client, MOCK hook, pricing
+│   ├── auth/              Shared NextAuth config + tenant helpers
+│   ├── db/                Prisma schema + migrations + generated client
+│   └── types/             Shared Zod schemas (SOAP parser + renderer)
+├── docs/
+│   ├── BAA_CHECKLIST.md
+│   ├── DEPLOYMENT_RUNBOOK.md
+│   ├── ROTATION_RUNBOOK.md
+│   ├── T-M11-FOLLOWUPS.md
+│   ├── T-M12-MINIO-CLEANUP.md
+│   └── T-M15-AUDIT-REPORT.md
+├── docker-compose.yml     8 services (caddy + marketing + meddoc-pro + transcribe-md
+│                          + transcribe-md-worker + postgres + redis + minio)
+├── Caddyfile              reverse proxy config (MODE A = IP, MODE B = domain+TLS)
+└── .env.production.example  copy to .env and fill in real values
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Prerequisites
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- Docker Engine 24+ with the Compose v2 plugin
+- Node 22+ (for local dev + running migrations)
+- npm 10+
+- A VPS with ≥2 GB RAM for all 8 containers at idle. More is better; the current setup swaps under real load.
+- Optional for real AI calls: accounts + API keys with Anthropic, Deepgram, OpenAI. All three offer BAAs — **sign them before sending real PHI**.
 
-## Learn More
+---
 
-To learn more about Next.js, take a look at the following resources:
+## Local dev setup
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+# 1. Clone
+git clone https://github.com/kasrarayat-cloud/MedDoc.git /opt/meddoc-pro
+cd /opt/meddoc-pro
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+# 2. Copy the env template and fill in values
+cp .env.production.example .env
+$EDITOR .env     # at minimum: DB_PASSWORD, AUTH_SECRET, ANTHROPIC_API_KEY,
+                 # OPENAI_API_KEY, DEEPGRAM_API_KEY (or set MOCK_AI_CALLS=true
+                 # to skip real provider calls for local dev)
 
-## Deploy on Vercel
+# 3. Install dependencies (workspace-aware)
+npm install
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+# 4. Start the stack
+docker compose up -d
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+# 5. Run migrations once
+docker compose run --rm db-migrate
+
+# 6. Smoke-check
+curl -sS -o /dev/null -w "marketing: %{http_code}\n" http://localhost:9010/
+curl -sS -o /dev/null -w "transcribe-md: %{http_code}\n" http://localhost:9020/
+# Both should return 200 or 307.
+```
+
+Local ports (all bound to `127.0.0.1` only):
+
+| Service | Container port → Host port | Purpose |
+|---------|----------------------------|---------|
+| caddy | 80 → 80 | meddoc-pro via Caddy |
+| marketing | 9010 → 9010 | Public landing site |
+| transcribe-md | 9020 → 9020 | Solo-doctor app |
+| meddoc-pro (behind caddy) | 3000 (internal only) | Clinical CRM |
+| postgres | 5432 → 127.0.0.1:5432 | Direct SQL via `psql -h localhost` |
+| redis | 6379 → 127.0.0.1:6379 | BullMQ broker |
+| minio API | 9000 → 127.0.0.1:9000 | Object storage |
+| minio console | 9001 → 127.0.0.1:9001 | Web UI for bucket inspection |
+
+---
+
+## Production deploy
+
+See **[docs/DEPLOYMENT_RUNBOOK.md](docs/DEPLOYMENT_RUNBOOK.md)** for:
+
+- First-time deploy on a fresh Ubuntu VPS
+- Rolling updates (`git pull` → rebuild → recreate)
+- Rollback procedure
+- Restore from pg_dump backup
+- Common failure modes
+
+For secret rotation (AUTH_SECRET, OPENAI_API_KEY, DB password, TLS certs), see **[docs/ROTATION_RUNBOOK.md](docs/ROTATION_RUNBOOK.md)**.
+
+For BAA / HIPAA pre-flight, see **[docs/BAA_CHECKLIST.md](docs/BAA_CHECKLIST.md)**.
+
+---
+
+## Tests
+
+```bash
+# Unit tests (both apps). Vitest.
+cd apps/transcribe-md && npx vitest run
+cd apps/meddoc-pro   && npx vitest run
+
+# Playwright E2E (TranscribeMD only). Runs with MOCK_AI_CALLS=true so
+# it never touches Anthropic/Deepgram.
+cd apps/transcribe-md && npx playwright test
+```
+
+Current counts at time of writing: 181 unit tests (85 transcribe-md + 96 meddoc-pro), 4 Playwright E2E scenarios.
+
+---
+
+## Milestones
+
+This repo ships in numbered milestones. Each milestone gets a PR, a set of focused commits, and (usually) a follow-up doc in `docs/`. Recent:
+
+- **T-M12** — MinIO orphan cleanup cron.
+- **T-M13** — Per-layer pipeline resumability (retries skip already-completed stages).
+- **T-M14.1** — Invisible per-doctor edit tracking (pgvector schema + sign-time capture hook).
+- **T-M15** — Pre-launch QA audit. See [docs/T-M15-AUDIT-REPORT.md](docs/T-M15-AUDIT-REPORT.md) for the findings driving T-M16.
+- **T-M16** — Audit follow-ups, shipped in batches. T-M16.1 (this one) = docs sprint + legal pages.
+
+---
+
+## Support / contact
+
+Issues or questions: **support@ashtechgroup.com** (also the NextAuth admin address).
+
+For HIPAA / compliance questions: read `docs/BAA_CHECKLIST.md` first, then email the same address.
