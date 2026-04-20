@@ -171,9 +171,14 @@ async function main() {
 
     const totalPatients = allStats.reduce((a, s) => a + s.patientsCreated, 0);
     const totalVisits = allStats.reduce((a, s) => a + s.visitsUpdated, 0);
-    const unlinked = await prisma.transcribeVisit.count({
-      where: { patientId: null },
-    });
+    // $queryRaw because the schema tightens patientId to NOT NULL right
+    // after this backfill runs — the generated Prisma types then refuse
+    // to express `patientId: null`. Raw SQL stays valid across both the
+    // nullable-column and NOT-NULL states.
+    const unlinkedRows = await prisma.$queryRaw<
+      Array<{ count: bigint }>
+    >`SELECT COUNT(*)::bigint AS count FROM transcribe_visits WHERE "patientId" IS NULL`;
+    const unlinked = Number(unlinkedRows[0]?.count ?? BigInt(0));
 
     console.log(
       `\n[backfill-patients] done — ${totalPatients} patient(s), ${totalVisits} visit(s) linked.`
