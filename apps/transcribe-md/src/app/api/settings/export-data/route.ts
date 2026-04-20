@@ -31,6 +31,7 @@ import archiver from 'archiver';
 import prisma from '@meddoc/db';
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { auth } from '@/lib/nextauth';
+import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 import { downloadAudio } from '@/lib/minio';
 import { loadVisitExportData } from '@/lib/visit-export-server';
 import { generateVisitPdf } from '@/lib/pdf-generator';
@@ -56,6 +57,9 @@ export const GET = withApiHandler('api:settings:export-data', async () => {
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) return apiError('unauthorized', 401);
+
+  const blocked = rateLimitOr429(RATE_LIMITS.SETTINGS, userId);
+  if (blocked) return blocked;
 
   // Load user profile (strict PII only — no secrets).
   const user = await prisma.user.findUnique({

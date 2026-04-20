@@ -15,10 +15,16 @@
 // ============================================================================
 
 import 'dotenv/config';
+// T-M16.3: init @sentry/node via side-effect import BEFORE any layer
+// code runs. An early throw in Prisma / Redis init still flows to
+// Sentry via global exception handlers.
+import './worker-sentry';
+import { captureWorkerException } from './worker-sentry';
 import { Worker, type Job } from 'bullmq';
 import prisma from '@meddoc/db';
 import { TranscribeVisitStatus } from '@prisma/client';
 import type { DeepgramBatchResponse, DeepgramUtterance } from '@meddoc/ai';
+import { redactPhi } from '@meddoc/ai';
 
 import {
   QUEUE_NAME,
@@ -186,6 +192,14 @@ async function loadResumeState(visitId: string): Promise<LayerSkipState> {
 async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
   const { visitId } = job.data;
 
+  // T-M16.3: tracks which pipeline layer is currently running. Updated
+  // right before each `await runLayerX(...)` call so the outer catch
+  // block can tag the Sentry event with an accurate `layer` value.
+  // Values mirror the PipelineLayer enum in layer-skip.ts ('L1', 'L1b',
+  // 'L2', 'L3', 'L4', 'L5', 'L6', 'automation') plus 'init'/'finalize'
+  // bookends.
+  let currentLayer: string = 'init';
+
   const visit = await prisma.transcribeVisit.findUnique({
     where: { id: visitId },
     select: {
@@ -270,6 +284,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         logSkippedLayer(visitId, 'L1', attempt);
         skipped.push('L1');
       } else {
+        currentLayer = 'L1';
         await runLayer1Transcribe({
           visitId,
           practiceId,
@@ -301,6 +316,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         skipped.push('L2');
         speakerMap = (withTranscript?.speakerMap ?? {}) as SpeakerMap;
       } else {
+        currentLayer = 'L2';
         const r = await runLayer2SpeakerRoles({
           visitId,
           practiceId,
@@ -318,6 +334,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         // from the same inputs L3 would have used.
         contextText = buildRoleLabeledTranscript(utterances, speakerMap);
       } else {
+        currentLayer = 'L3';
         const l3 = await runLayer3ExtractEntities({
           visitId,
           practiceId,
@@ -336,6 +353,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         skipped.push('L1b');
         dictationText = resumeState.transcriptText ?? '';
       } else {
+        currentLayer = 'L1b';
         const r = await runLayer1bTranscribeDictation({
           visitId,
           practiceId,
@@ -359,6 +377,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         entities = resumeState.entities as ExtractedEntities;
         contextText = dictationText.trim();
       } else {
+        currentLayer = 'L3';
         const l3 = await runLayer3ExtractEntities({
           visitId,
           practiceId,
@@ -376,6 +395,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         entities = resumeState.entities as ExtractedEntities;
         contextText = (visit.rawTextInput ?? '').trim();
       } else {
+        currentLayer = 'L3';
         const l3 = await runLayer3ExtractEntities({
           visitId,
           practiceId,
@@ -400,6 +420,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       skipped.push('L4');
       soapDraft = resumeState.soapDraft ?? '';
     } else {
+      currentLayer = 'L4';
       soapDraft = await runLayer4GenerateSoap({
         visitId,
         practiceId,
@@ -419,6 +440,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       skipped.push('L5');
       critique = resumeState.critique as typeof critique;
     } else {
+      currentLayer = 'L5';
       critique = await runLayer5SelfCritique({
         visitId,
         practiceId,
@@ -439,6 +461,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       skipped.push('L6');
       polished = { soapFinal: resumeState.soapFinal ?? '' };
     } else {
+      currentLayer = 'L6';
       polished = await runLayer6Polish({
         visitId,
         practiceId,
@@ -453,6 +476,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
     // layer failing never fails the visit. Missing outputs show up as
     // empty columns + a confidenceScores note.
     // -------------------------------------------------------------------
+    currentLayer = 'automation';
     await prisma.transcribeVisit.update({
       where: { id: visitId },
       data: { status: TranscribeVisitStatus.AUTOMATING },
@@ -661,7 +685,18 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
     // skipped, so happy-path first attempts stay quiet.
     logSkipSummary(visitId, attempt, skipped);
   } catch (err) {
-    console.error(`[transcribe-md-worker] visit ${visitId} failed:`, err);
+    // T-M16.3: Deepgram/Anthropic errors can quote audio/file metadata
+    // or URLs — scrub before emitting to container stdout. Sentry path
+    // (captureWorkerException below) does its own redactPhi via the
+    // beforeSend hook, so double-coverage is intentional.
+    console.error(
+      `[transcribe-md-worker] visit ${visitId} failed:`,
+      redactPhi(err instanceof Error ? err.message : err)
+    );
+    // T-M16.3: capture to Sentry BEFORE the re-throw so BullMQ's retry
+    // still sees the original error. The {visitId, layer} tags let ops
+    // filter errors by failure point without reading the stack trace.
+    captureWorkerException(err, { visitId, layer: currentLayer });
     await prisma.transcribeVisit
       .update({
         where: { id: visitId },
@@ -792,6 +827,9 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error('[transcribe-md-worker] fatal:', err);
+  console.error(
+    '[transcribe-md-worker] fatal:',
+    redactPhi(err instanceof Error ? err.message : err)
+  );
   process.exit(1);
 });

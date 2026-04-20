@@ -91,7 +91,28 @@ export const authConfig: NextAuthConfig = {
     maxAge: 60 * 60 * 8, // 8 hours — short for HIPAA
   },
 
-  secret: process.env.AUTH_SECRET || 'dev_secret_change_in_production_min_32_chars_xyz',
+  // T-M16.3: hard-fail in production if AUTH_SECRET is unset. The dev
+  // fallback below stays for local development (NODE_ENV !== production)
+  // so `npm run dev` without an env file still works. In prod a missing
+  // value would silently sign every JWT with the hardcoded literal —
+  // identical across deployments — which is a forgeable-session class
+  // bug. Fail fast + loud instead.
+  //
+  // NEXT_PHASE guard: `next build` sets NODE_ENV=production but doesn't
+  // need a real secret (no actual auth happens during prerender / page-
+  // data collection, and the build-time env typically lacks .env). Skip
+  // the throw during the build phase — we only want to fail at
+  // container-start time, not at build time.
+  secret:
+    process.env.NODE_ENV === 'production' &&
+    process.env.NEXT_PHASE !== 'phase-production-build' &&
+    !process.env.AUTH_SECRET
+      ? (() => {
+          throw new Error(
+            'AUTH_SECRET is required in production. Set it in /opt/meddoc-pro/.env (openssl rand -base64 32) and recreate the app containers.'
+          );
+        })()
+      : process.env.AUTH_SECRET || 'dev_secret_change_in_production_min_32_chars_xyz',
 
   trustHost: true,
 

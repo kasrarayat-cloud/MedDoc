@@ -14,6 +14,7 @@ import prisma from '@meddoc/db';
 import { downloadAudio } from '@/lib/minio';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
+import { redactPhi } from '@meddoc/ai';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -44,7 +45,10 @@ export const GET = withApiHandler<{ id: string }>(
     try {
       buf = await downloadAudio(visit.dictationAudioKey);
     } catch (err) {
-      console.error('[api:visits:dictation:audio] download failed:', err);
+      console.error(
+        '[api:visits:dictation:audio] download failed:',
+        redactPhi(err instanceof Error ? err.message : err)
+      );
       return apiError('storage read failed', 502);
     }
 

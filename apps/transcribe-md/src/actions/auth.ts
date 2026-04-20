@@ -2,6 +2,7 @@
 
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
+import { headers } from 'next/headers';
 
 import prisma from '@meddoc/db';
 import { AuthTokenPurpose, Product, UserRole } from '@prisma/client';
@@ -10,6 +11,33 @@ import { createAuthToken } from '@/lib/auth-tokens';
 import { isEmailDeliveryEnabled } from '@/lib/email-enabled';
 import { sendEmailVerification } from '@/lib/email';
 import { APP_URL } from '@/lib/constants';
+import {
+  RATE_LIMITS,
+  checkRateLimit,
+  clientIpFromHeaders,
+  type RateLimitRule,
+} from '@/lib/rate-limit';
+
+/** Server-action rate-limit helper. Unlike route handlers this can't
+ *  return a NextResponse — we surface the 429 as a FormErrorState so
+ *  the existing useActionState wiring shows it cleanly. */
+async function actionRateLimitOrError(
+  rule: RateLimitRule,
+  values?: Record<string, string>
+): Promise<FormErrorState | null> {
+  const h = await headers();
+  const ip = clientIpFromHeaders(h);
+  const rl = checkRateLimit(rule, ip);
+  if (rl.allowed) return null;
+  const mins = Math.ceil(rl.retryAfterSec / 60);
+  return {
+    ok: false,
+    errors: {
+      _form: `Too many attempts. Try again in ${mins} minute${mins === 1 ? '' : 's'}.`,
+    },
+    values,
+  };
+}
 
 /** Strongly-typed login input. Passwords are NEVER echoed back in errors. */
 const LoginSchema = z.object({
@@ -82,13 +110,18 @@ export async function loginAction(
   formData: FormData
 ): Promise<AuthActionState> {
   const raw = Object.fromEntries(formData.entries());
+  const email = String(raw.email ?? '');
+
+  const blocked = await actionRateLimitOrError(RATE_LIMITS.LOGIN, { email });
+  if (blocked) return blocked;
+
   const parsed = LoginSchema.safeParse(raw);
   if (!parsed.success) {
     return {
       ok: false,
       errors: flattenZodErrors(parsed.error),
       values: {
-        email: String(raw.email ?? ''),
+        email,
       },
     };
   }
@@ -160,6 +193,15 @@ export async function signupAction(
   formData: FormData
 ): Promise<AuthActionState> {
   const raw = Object.fromEntries(formData.entries());
+  const emailField = String(raw.email ?? '');
+  const nameField = String(raw.name ?? '');
+
+  const blocked = await actionRateLimitOrError(RATE_LIMITS.SIGNUP, {
+    email: emailField,
+    name: nameField,
+  });
+  if (blocked) return blocked;
+
   const parsed = SignupSchema.safeParse(raw);
   if (!parsed.success) {
     return {
