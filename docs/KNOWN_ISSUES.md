@@ -13,6 +13,17 @@ owner, and an escalation path. Remove entries once they're resolved.
 > without surfacing a user-visible failure. All three failed rows
 > persisted `errorDetails` to `ai_calls` as designed. T-M17.2 patient
 > linkage verified at 18/18 visits post-deploy.
+>
+> **T-M17.3 Visit Management (2026-04-20):** shipped delete / archive /
+> restore / unarchive lifecycle, Trash tab on patient detail, Edit-draft
+> for QUEUED visits, dashboard Show-archived toggle, and a daily
+> cleanup cron (3am UTC) that sweeps abandoned QUEUED drafts + expired
+> trash. User verified end-to-end in browser: soft-delete → trash
+> banner → permanent-delete flows all worked; lifecycle log trail
+> confirmed on visit `cmo7dz54j…` (READY → trash → hard-purge, 46s
+> between steps). Back-link fix ("Back to patient" instead of
+> "Back to dashboard" from `/visits/[id]`) landed mid-milestone after
+> the same live test surfaced the navigation friction.
 
 ---
 
@@ -120,7 +131,7 @@ meantime is also viable if duplicates multiply before that ships.
 
 ---
 
-## KI-3 — Abandoned QUEUED visits accumulate without cleanup
+## KI-3 — Abandoned QUEUED visits accumulate without cleanup <sub>RESOLVED 2026-04-20</sub>
 
 **First observed:** 2026-04-20 (T-M17.2 Phase 3 E2E verification —
 Kash's visit `cmo7kj4o8…`).
@@ -152,5 +163,16 @@ IS NULL AND rawTextInput IS NULL AND createdAt < now() - interval
 '24 hours'`; transition them to FAILED with reviewReason
 `"Abandoned — no input within 24 hours"`. Or hard-delete — this
 class of row is pure UI noise with nothing to recover.
+
+**Resolution (2026-04-20, T-M17.3):** hard-delete chosen. A daily
+BullMQ cron at 3am UTC runs `runStaleVisitCleanup()` from
+`worker/cleanup/stale-visits.ts`, which sweeps both abandoned-
+QUEUED drafts (24h threshold) and expired trash (15-day threshold
+from T-M17.3's soft-delete window). Structured log lines
+`cleanup:abandoned-queued swept { found, deleted, userIds }` and
+`cleanup:expired-trash swept { … }` surface the day's activity.
+Verified at deploy: the worker startup log emits "T-M17.3 cleanup
+job scheduled", and `bull:transcribe-md-cleanup:repeat:stale-visit-cleanup:<next-fire>`
+appears in Redis pointing at 2026-04-21 03:00 UTC.
 
 ---
