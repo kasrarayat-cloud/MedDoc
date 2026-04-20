@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 
 import { SpecularButton } from '@/components/specular-button';
 import { signupAction, type AuthActionState } from '@/actions/auth';
+import { MARKETING_URL } from '@/lib/constants';
 
 const initialState: AuthActionState = null;
 
@@ -87,7 +88,25 @@ export function SignupForm() {
           className="mt-0.5 h-3.5 w-3.5 rounded border-border-emphasis bg-bg-surface-1 text-violet-500 focus:ring-violet-500/40"
         />
         <span>
-          I agree to the terms of service and privacy policy.
+          I agree to the{' '}
+          <a
+            href={`${MARKETING_URL}/terms`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-violet-400 underline-offset-2 hover:text-violet-300 hover:underline"
+          >
+            terms of service
+          </a>{' '}
+          and{' '}
+          <a
+            href={`${MARKETING_URL}/privacy`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-violet-400 underline-offset-2 hover:text-violet-300 hover:underline"
+          >
+            privacy policy
+          </a>
+          .
         </span>
       </label>
       <FieldError message={errors.acceptTerms} />

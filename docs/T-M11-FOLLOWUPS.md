@@ -1,68 +1,27 @@
-# T-M11 — deferred follow-ups
+# T-M11 — deferred follow-ups (historical log)
 
-The T-M11 error-hardening pass flagged four worker-side improvements.
-Two landed (per-job 15-min timeout, audit rollup); two are deferred
-because they're not blocking launch and each is a larger scope than
-T-M11 had room for. Capturing here so they don't get lost.
+The T-M11 error-hardening pass flagged four worker-side improvements. Two landed in T-M11 itself (per-job 15-min timeout, audit rollup); two were deferred and **both have since shipped**. This file is kept as a historical record — do not use it for current planning, it's frozen at T-M13.
 
-## 1. Per-layer pipeline resumability
+---
 
-**Today**: if Layer 6 (polish) throws, the BullMQ retry re-runs Layers
-1-5 from scratch — re-hitting Deepgram for Layer 1 and re-prompting
-Claude for Layers 2-5. At current MOCK-mode speeds that's free; at
-production rates a single failed visit costs ~2× the normal
-Deepgram + Anthropic spend per retry (up to 3 attempts = 3× waste).
+## 1. Per-layer pipeline resumability — **shipped in T-M13** ✓
 
-**What to do**: checkpoint after each layer writes its Prisma column.
-On retry, the worker inspects the visit row and skips ahead to the
-first empty column. Most of the pieces are already there —
-`processVisit` already clears the automation columns at the start of
-each attempt, but it re-runs L1-6 unconditionally. Would need:
+Merged 2026-04-20 (PR #24).
 
-- Layer-by-layer read-first: if `transcriptRaw` exists skip L1, if
-  `speakerMap` exists skip L2, etc.
-- A retry-attempt guard at the start of the outer catch path so
-  L7x automation doesn't re-persist columns we already filled.
-- Decide whether a retry after a SUCCESSFUL L1 but failed L2 counts
-  as a fresh visit for cost telemetry — probably "sum across
-  retries by visitId" is the right answer; current roll-up already
-  does that.
+**Was the problem**: if Layer 6 (polish) threw, the BullMQ retry re-ran Layers 1-5 from scratch — re-hitting Deepgram for Layer 1 and re-prompting Claude for Layers 2-5. A single failed visit could cost ~2× the normal spend per retry (up to 3× at max attempts).
 
-**Blast radius**: worker-only, no schema. A half-day of careful
-rewriting + a couple of new Playwright scenarios covering retry
-paths.
+**How T-M13 solved it**: `apps/transcribe-md/src/worker/layer-skip.ts` maps each pipeline layer to a column-presence check on the TranscribeVisit row. `isLayerComplete(visit, 'L4')` returns true when the column that layer writes to is already populated, so retries skip ahead to the first empty slot. Unit tests at `apps/transcribe-md/tests/worker/layer-skip.test.ts` cover each layer + mid-pipeline-failure resume paths.
 
-## 2. MinIO orphan cleanup
+## 2. MinIO orphan cleanup — **shipped in T-M12** ✓
 
-**Today**: `/api/visits/[id]/upload` puts bytes into MinIO under
-`{userId}/{visitId}/…`. If a visit row later disappears (test
-cleanup, manual DB delete, HIPAA retention cron) the MinIO object
-hangs around. The bucket grows monotonically.
+Merged 2026-04-20 (PR #23).
 
-**What to do**: scheduled sweep that lists MinIO objects, cross-
-checks against `transcribe_visits.audioKey` / `dictationAudioKey`,
-and deletes any object older than (say) 30 days that no DB row
-references. Needs:
+**Was the problem**: `/api/visits/[id]/upload` wrote bytes to MinIO under `{userId}/{visitId}/…`. If a visit row later disappeared (test cleanup, HIPAA retention), the MinIO object orphaned. Bucket grew monotonically.
 
-- A new cron/scheduler — today there's no scheduling infrastructure
-  on the TranscribeMD side (the deleted scribe-worker had BullMQ
-  repeat jobs for retention but that whole pattern went away with
-  Scribe).
-- A safety threshold so a transient DB outage can't make the
-  cleanup delete everything.
-- Ops log + a dry-run flag so the first run can be audited before
-  deletions land.
+**How T-M12 solved it**: a scheduled sweep in `apps/transcribe-md/src/worker/cleanup/minio-orphans.ts` lists MinIO objects, cross-checks against `transcribe_visits.audioKey` / `dictationAudioKey`, and deletes objects older than `MINIO_ORPHAN_CLEANUP_RETENTION_DAYS` (default 30) that no row references. Gated behind `MINIO_ORPHAN_CLEANUP_ENABLED` (default false) with a separate `MINIO_ORPHAN_CLEANUP_DRY_RUN` flag for audited first-run visibility. Cron schedule is env-configurable. Full details in `docs/T-M12-MINIO-CLEANUP.md`.
 
-**Blast radius**: new cron service + MinIO listing/deletion logic.
-Larger than T-M11 — probably its own small milestone.
+---
 
-## When to revisit
+## Where to file new follow-ups
 
-- **Resumability**: when retry costs start showing up in the monthly
-  Anthropic bill, or a single customer has a stuck visit retry
-  story that burns support time.
-- **Orphan cleanup**: when MinIO usage graph shows unbounded growth
-  that doesn't match active-visit counts, or at the next HIPAA
-  retention review.
-
-Neither is on the launch critical path.
+Post-T-M14.1, the active follow-up log is `docs/T-M15-AUDIT-REPORT.md`, which catalogs ~40 findings from the pre-launch QA audit. T-M16 subtasks are scoped from that report.
