@@ -56,6 +56,15 @@ export function LoginForm() {
 
       <FieldError message={errors._form} />
 
+      <div className="flex justify-end -mt-2">
+        <Link
+          href="/forgot-password"
+          className="text-[12px] text-text-muted hover:text-violet-300 transition-colors"
+        >
+          Forgot password?
+        </Link>
+      </div>
+
       <SpecularButton type="submit" variant="primary" size="lg" className="w-full">
         {pending ? 'Signing in…' : 'Sign in'}
         {!pending && <ArrowRight className="h-4 w-4" />}
