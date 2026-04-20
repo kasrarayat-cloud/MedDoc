@@ -1,0 +1,199 @@
+// ============================================================================
+// POST /api/settings/delete-account (T-M16.2)
+// ----------------------------------------------------------------------------
+// Body: { password: string, confirmation: string }
+//   - `password` must match the current user's passwordHash.
+//   - `confirmation` must be literally "DELETE" (typed by the user in
+//     the dialog).
+//
+// Safety ordering:
+//   1. Auth check + password check + confirmation string check.
+//      Any of these failing returns 400/401 before we touch anything.
+//   2. Read the data needed for the audit row (visit count, specialty,
+//      email, name, practiceId).
+//   3. Transaction:
+//        a. INSERT AccountDeletion (the audit row — written BEFORE
+//           the User is dropped so a crash mid-transaction rolls BOTH
+//           back and we never end up with an audit row pointing at a
+//           user that still exists, or a deleted user with no audit).
+//        b. DELETE AiCall WHERE practiceId = user.practiceId (PHI-
+//           adjacent; user's explicit scope is a full purge).
+//        c. DELETE Practice (the synthetic 1:1 for a solo-TranscribeMD
+//           user; FK to users has no cascade so we do it manually).
+//        d. DELETE User — Prisma cascades TranscribeVisit →
+//           VisitDelivery + DoctorEditPattern, UserSession, Account,
+//           Session, AuthToken.
+//   4. Best-effort MinIO prefix purge + goodbye email — both
+//      catch-and-log. The T-M12 orphan sweep handles MinIO stragglers.
+//   5. Return 200 with a redirect URL; the client signs out + navigates.
+// ============================================================================
+
+import { z } from 'zod';
+import { NextResponse } from 'next/server';
+import bcrypt from 'bcryptjs';
+
+import prisma from '@meddoc/db';
+
+import { apiError, withApiHandler } from '@/lib/api-error';
+import { auth } from '@/lib/nextauth';
+import { deleteAudioObjectsByPrefix } from '@/lib/minio';
+import { sendAccountDeletedConfirmation } from '@/lib/email';
+import { MARKETING_URL } from '@/lib/constants';
+import { redactPhi } from '@meddoc/ai';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+const BodySchema = z.object({
+  password: z.string().min(1),
+  confirmation: z.literal('DELETE', {
+    message: 'Type DELETE to confirm.',
+  }),
+});
+
+/** Audit-row retention window. When the T-M16.3+ sweeper lands it
+ *  deletes AccountDeletion rows with purgeAt in the past. */
+const PURGE_DELAY_MS = 90 * 24 * 60 * 60 * 1000;
+
+export const POST = withApiHandler('api:settings:delete-account', async (req) => {
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) return apiError('unauthorized', 401);
+
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return apiError('invalid JSON body', 400);
+  }
+  const parsed = BodySchema.safeParse(body);
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    const field = first?.path.join('.') || '_form';
+    return NextResponse.json(
+      { error: first?.message || 'invalid payload', field },
+      { status: 400 }
+    );
+  }
+
+  // Verify the password ourselves — don't call NextAuth signIn because
+  // that would rotate the session cookie + trip single-session tracking.
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      passwordHash: true,
+      practiceId: true,
+    },
+  });
+  if (!user) return apiError('user not found', 404);
+
+  const passwordOk = await bcrypt.compare(parsed.data.password, user.passwordHash);
+  if (!passwordOk) {
+    return NextResponse.json(
+      { error: 'Password is incorrect.', field: 'password' },
+      { status: 400 }
+    );
+  }
+
+  // Read the audit-row data inside a read-only snapshot. We don't care
+  // about strict isolation here — a visit created in the microsecond
+  // between this read and the transaction below only skews visitCount
+  // by one, and will be cascade-dropped anyway.
+  const [visitCount, lastVisit] = await Promise.all([
+    prisma.transcribeVisit.count({ where: { userId: user.id } }),
+    prisma.transcribeVisit.findFirst({
+      where: { userId: user.id },
+      orderBy: { createdAt: 'desc' },
+      select: { specialty: true },
+    }),
+  ]);
+  const specialty = lastVisit?.specialty ?? null;
+
+  const purgeAt = new Date(Date.now() + PURGE_DELAY_MS);
+
+  // ── Atomic destructive path ─────────────────────────────────────
+  try {
+    await prisma.$transaction(async (tx: typeof prisma) => {
+      await tx.accountDeletion.create({
+        data: {
+          userId: user.id,
+          email: user.email,
+          specialty,
+          visitCount,
+          purgeAt,
+        },
+      });
+      await tx.aiCall.deleteMany({
+        where: { practiceId: user.practiceId },
+      });
+      // User and Practice are symmetric for solo TranscribeMD users
+      // (1:1 synthetic Practice). Non-solo users would keep the
+      // Practice — but TranscribeMD signup only creates solo ones,
+      // so dropping it is always correct here.
+      await tx.user.delete({ where: { id: user.id } });
+      await tx.practice.delete({ where: { id: user.practiceId } });
+    });
+  } catch (err) {
+    console.error(
+      `[api:settings:delete-account] transaction failed user=${user.id}:`,
+      redactPhi(err instanceof Error ? err.message : err)
+    );
+    return apiError(
+      'Could not complete deletion. Please try again or contact support.',
+      500
+    );
+  }
+
+  console.info(
+    `[api:settings:delete-account] purged user=${user.id} visits=${visitCount}`
+  );
+
+  // ── Best-effort post-transaction cleanup ────────────────────────
+
+  // MinIO: wipe everything under `{userId}/`. T-M12 sweep handles
+  // stragglers if this errors.
+  try {
+    const result = await deleteAudioObjectsByPrefix(`${user.id}/`);
+    if (result.failures.length > 0) {
+      console.warn(
+        `[api:settings:delete-account] minio: ${result.deleted} deleted, ${result.failures.length} failed (T-M12 sweep will catch them)`
+      );
+    } else if (result.deleted > 0) {
+      console.info(
+        `[api:settings:delete-account] minio: purged ${result.deleted} audio objects under ${user.id}/`
+      );
+    }
+  } catch (err) {
+    console.error(
+      `[api:settings:delete-account] minio cleanup threw (T-M12 sweep will catch):`,
+      redactPhi(err instanceof Error ? err.message : err)
+    );
+  }
+
+  // Goodbye email — catch-and-log; never fail the delete on an email
+  // hiccup.
+  if (process.env.RESEND_API_KEY) {
+    try {
+      await sendAccountDeletedConfirmation({
+        toEmail: user.email,
+        userName: user.name,
+      });
+    } catch (err) {
+      console.error(
+        `[api:settings:delete-account] goodbye email failed:`,
+        redactPhi(err instanceof Error ? err.message : err)
+      );
+    }
+  }
+
+  return NextResponse.json(
+    {
+      ok: true,
+      redirectTo: `${MARKETING_URL}/?deleted=1`,
+    },
+    { status: 200 }
+  );
+});
