@@ -1,21 +1,25 @@
 import Link from 'next/link';
 
-const COLS = [
+// External = absolute URL, opens in new tab. Internal = same-origin Link.
+type LinkDef = { href: string; label: string; external?: boolean };
+const COLS: { title: string; links: LinkDef[] }[] = [
   {
     title: 'Product',
     links: [
       { href: '/#features', label: 'Features' },
       { href: '/pricing', label: 'Pricing' },
       { href: '/demo', label: 'Demo' },
-      { href: '/docs', label: 'Docs' },
+      {
+        href: 'https://github.com/kasrarayat-cloud/MedDoc',
+        label: 'Docs',
+        external: true,
+      },
     ],
   },
   {
     title: 'Company',
     links: [
       { href: '/about', label: 'About' },
-      { href: '/blog', label: 'Blog' },
-      { href: '/careers', label: 'Careers' },
       { href: '/contact', label: 'Contact' },
     ],
   },
@@ -31,9 +35,11 @@ const COLS = [
   {
     title: 'Social',
     links: [
-      { href: 'https://twitter.com', label: 'Twitter' },
-      { href: 'https://linkedin.com', label: 'LinkedIn' },
-      { href: 'https://github.com', label: 'GitHub' },
+      {
+        href: 'https://github.com/kasrarayat-cloud/MedDoc',
+        label: 'GitHub',
+        external: true,
+      },
     ],
   },
 ];
@@ -63,16 +69,29 @@ export function Footer() {
                 {col.title}
               </h3>
               <ul className="mt-4 space-y-2">
-                {col.links.map((l) => (
-                  <li key={l.href}>
-                    <Link
-                      href={l.href}
-                      className="text-[13px] text-text-tertiary transition-colors hover:text-text-primary"
-                    >
-                      {l.label}
-                    </Link>
-                  </li>
-                ))}
+                {col.links.map((l) =>
+                  l.external ? (
+                    <li key={l.href}>
+                      <a
+                        href={l.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[13px] text-text-tertiary transition-colors hover:text-text-primary"
+                      >
+                        {l.label}
+                      </a>
+                    </li>
+                  ) : (
+                    <li key={l.href}>
+                      <Link
+                        href={l.href}
+                        className="text-[13px] text-text-tertiary transition-colors hover:text-text-primary"
+                      >
+                        {l.label}
+                      </Link>
+                    </li>
+                  )
+                )}
               </ul>
             </div>
           ))}
