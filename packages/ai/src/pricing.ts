@@ -54,3 +54,21 @@ export function deepgramBatchCostCents(audioDurationSec: number): number {
   const minutes = audioDurationSec / 60;
   return Math.round(minutes * deepgramCentsPerMin());
 }
+
+// T-M14.1: OpenAI text-embedding-3-small pricing. Published rate is
+// $0.020 / 1M tokens ⇒ 2 cents / M. A full SOAP note is ~1-2K tokens,
+// so a single sign-time embed costs a fraction of a cent and rounds to
+// 0 in the AiCall row. Kept in the pricing surface anyway so future
+// aggregates-across-calls math doesn't silently skip embeds.
+const DEFAULT_OPENAI_EMBED_SMALL_CENTS_PER_M = 2;
+
+export function openaiEmbedSmallCentsPerM(): number {
+  return envFloat(
+    'OPENAI_EMBED_SMALL_CENTS_PER_M',
+    DEFAULT_OPENAI_EMBED_SMALL_CENTS_PER_M
+  );
+}
+
+export function openaiEmbedSmallCostCents(inputTokens: number): number {
+  return Math.round((inputTokens / 1_000_000) * openaiEmbedSmallCentsPerM());
+}
