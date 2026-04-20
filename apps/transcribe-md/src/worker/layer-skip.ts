@@ -110,7 +110,9 @@ export function isLayerComplete(
   }
 }
 
-const LOG = '[layer-skip]';
+import { log } from '@/lib/log';
+
+const SCOPE = 'layer-skip';
 
 /** Uniform log line for a skipped layer so cost-recovered attempts
  *  are grepable. `attempt` comes from BullMQ's job.attemptsMade — the
@@ -121,9 +123,11 @@ export function logSkippedLayer(
   layer: PipelineLayer,
   attempt: number
 ): void {
-  console.log(
-    `${LOG} visit=${visitId} layer=${layer} attempt=${attempt} — column populated, skipping`
-  );
+  log.info(SCOPE, 'skipped layer (column already populated)', {
+    visitId,
+    layer,
+    attempt,
+  });
 }
 
 /** Summary line emitted once at the end of an attempt. Empty `skipped`
@@ -134,7 +138,10 @@ export function logSkipSummary(
   skipped: PipelineLayer[]
 ): void {
   if (skipped.length === 0) return;
-  console.log(
-    `${LOG} visit=${visitId} attempt=${attempt} resumed — skipped ${skipped.length} layer(s): ${skipped.join(', ')}`
-  );
+  log.info(SCOPE, 'resumed attempt — layers skipped', {
+    visitId,
+    attempt,
+    skippedCount: skipped.length,
+    skipped,
+  });
 }

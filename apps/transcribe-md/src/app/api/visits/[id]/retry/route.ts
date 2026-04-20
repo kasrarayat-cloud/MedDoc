@@ -32,6 +32,7 @@ import { auth } from '@/lib/nextauth';
 import { enqueueProcessVisit } from '@/lib/queue';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 import { redactPhi } from '@meddoc/ai';
+import { log } from '@/lib/log';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -115,9 +116,11 @@ export const POST = withApiHandler<{ id: string }>(
         },
       });
       await enqueueProcessVisit(visitId, userId, { retry: true });
-      console.info(
-        `[api:visits:retry] re-enqueued user=${userId} visit=${visitId} prev-status=${visit.status}`
-      );
+      log.info('api:visits:retry', 're-enqueued', {
+        userId,
+        visitId,
+        prevStatus: visit.status,
+      });
     } catch (err) {
       console.error(
         '[api:visits:retry] enqueue failed:',
