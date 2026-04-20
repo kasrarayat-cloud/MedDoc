@@ -66,3 +66,67 @@ files + the modelClient abstraction), hence deferred as its own
 milestone.
 
 ---
+
+## KI-2 — Case-variant duplicate patients in legacy data
+
+**First observed:** 2026-04-20 (T-M17.2 Phase 3 E2E verification).
+
+**Pattern:** the T-M17.2 Phase 1 backfill deduped `TranscribeMdPatient`
+rows by `LOWER(TRIM(patientName))` per practice, but did NOT merge
+rows that were already distinct in the DB. Practice
+`cmo5ye2nf000b01s3q0xlkaxb` currently has two rows — `Kasra` and
+`kAsra` — that collide case-insensitively. They both have null DOB
+so disambiguation from metadata alone is ambiguous.
+
+**Runtime impact:** `createVisitAction.resolvePatient` uses Prisma's
+case-insensitive equals, so the *next* visit named "Kasra" (any
+case) will pick whichever row Prisma returns first. After that,
+linkage is stable — but two different visits can end up on two
+different patient records that should arguably have been one.
+
+**Mitigation:** none in the current milestone. Safe for now at the
+observed scale (1 duplicate across 13 patients).
+
+**Escalation — T-M18+ "merge patients" UI:**
+Add a doctor-facing "Merge into existing patient" action from the
+patient detail page: pick a second patient, confirm, the server
+re-FKs every `transcribe_visits.patientId` from source → target
+and soft-deletes the source. A one-shot cleanup SQL in the
+meantime is also viable if duplicates multiply before that ships.
+
+---
+
+## KI-3 — Abandoned QUEUED visits accumulate without cleanup
+
+**First observed:** 2026-04-20 (T-M17.2 Phase 3 E2E verification —
+Kash's visit `cmo7kj4o8…`).
+
+**Pattern:** `/visits/new` creates a `TranscribeVisit` row in
+`status=QUEUED` as soon as the doctor clicks a capture-mode tile.
+If the doctor then walks away without uploading audio, starting a
+dictation, or submitting text notes, the row sits in QUEUED
+indefinitely — `audioKey`, `dictationAudioKey`, and `rawTextInput`
+are all NULL, and the worker never picks it up because the
+per-mode upload route is what enqueues the BullMQ job.
+
+T-M16.4's stuck-job banners (10-min amber, 30-min red) render on
+`/visits/[id]` only if the user is actually looking at the visit.
+A user who never returns never sees them, and the row is invisible
+to the dashboard's patient-centric view unless they click through.
+
+**Runtime impact:** cosmetic — tiny row with all NULLs, zero audio
+bytes, zero AI calls. No storage / compute / billing impact. Will
+show up as a dangling "QUEUED" card if the doctor ever clicks
+through on the linked patient.
+
+**Mitigation:** none in the current milestone.
+
+**Escalation — T-M18+ stuck-job cleanup sweep:**
+Scheduled sweep similar to the T-M12 MinIO orphan cleanup: find
+visits where `status=QUEUED AND audioKey IS NULL AND dictationAudioKey
+IS NULL AND rawTextInput IS NULL AND createdAt < now() - interval
+'24 hours'`; transition them to FAILED with reviewReason
+`"Abandoned — no input within 24 hours"`. Or hard-delete — this
+class of row is pure UI noise with nothing to recover.
+
+---
