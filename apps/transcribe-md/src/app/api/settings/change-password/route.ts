@@ -16,6 +16,7 @@ import bcrypt from 'bcryptjs';
 import prisma from '@meddoc/db';
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { auth } from '@/lib/nextauth';
+import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 import { redactPhi } from '@meddoc/ai';
 
 export const runtime = 'nodejs';
@@ -50,6 +51,9 @@ export const POST = withApiHandler(
     const userId = session?.user?.id;
     const currentSessionToken = session?.user?.sessionId;
     if (!userId) return apiError('unauthorized', 401);
+
+    const blocked = rateLimitOr429(RATE_LIMITS.SETTINGS, userId);
+    if (blocked) return blocked;
 
     let body: unknown;
     try {

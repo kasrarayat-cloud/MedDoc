@@ -1,0 +1,129 @@
+// ============================================================================
+// GET /api/health (T-M16.3)
+// ----------------------------------------------------------------------------
+// Probe endpoint for external uptime monitors + docker healthcheck.
+// Unauthenticated by design — if your monitor needs auth, the "auth
+// lookup is healthy" signal is a separate problem from "the app is
+// up at all".
+//
+// Response:
+//   200 { status: "healthy",   uptime_seconds, checks: {...}, version }
+//   503 { status: "unhealthy", uptime_seconds, checks: {...}, version }
+//
+// Status aggregation:
+//   - Any REQUIRED check failing → 503 unhealthy.
+//   - Optional checks returning `ok: null` mean "unknown / not a
+//     failure" (e.g. worker liveness — we don't have a cheap "alive"
+//     signal and returning 503 on a quiet queue is worse UX than
+//     returning unknown).
+//
+// Every check is raced against a 2-second timeout so a hung dependency
+// never stretches the probe past 3 seconds total.
+// ============================================================================
+
+import { NextResponse } from 'next/server';
+
+import prisma from '@meddoc/db';
+import { getSharedRedisConnection } from '@/lib/queue';
+import { getMinio, TRANSCRIBE_MD_BUCKET } from '@/lib/minio';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+// Skip Next's caching for this route so monitors see live state.
+export const revalidate = 0;
+
+const PROCESS_START_AT = Date.now();
+const CHECK_TIMEOUT_MS = 2_000;
+const VERSION = 'T-M16.3';
+
+interface CheckResult {
+  ok: boolean | null;
+  latency_ms?: number;
+  error?: string;
+}
+
+async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`timeout after ${ms}ms`)), ms)
+    ),
+  ]);
+}
+
+async function checkPostgres(): Promise<CheckResult> {
+  const started = Date.now();
+  try {
+    await withTimeout(prisma.$queryRaw`SELECT 1`, CHECK_TIMEOUT_MS);
+    return { ok: true, latency_ms: Date.now() - started };
+  } catch (err) {
+    return {
+      ok: false,
+      latency_ms: Date.now() - started,
+      error: err instanceof Error ? err.message : 'unknown',
+    };
+  }
+}
+
+async function checkRedis(): Promise<CheckResult> {
+  const started = Date.now();
+  try {
+    const redis = getSharedRedisConnection();
+    const reply = await withTimeout(redis.ping(), CHECK_TIMEOUT_MS);
+    return {
+      ok: reply === 'PONG',
+      latency_ms: Date.now() - started,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      latency_ms: Date.now() - started,
+      error: err instanceof Error ? err.message : 'unknown',
+    };
+  }
+}
+
+async function checkMinio(): Promise<CheckResult> {
+  const started = Date.now();
+  try {
+    // bucketExists catches "MinIO up but our bucket missing" which is
+    // a distinct failure mode from "MinIO down" — same 503 though.
+    const client = getMinio();
+    const exists = await withTimeout(
+      client.bucketExists(TRANSCRIBE_MD_BUCKET),
+      CHECK_TIMEOUT_MS
+    );
+    return { ok: exists === true, latency_ms: Date.now() - started };
+  } catch (err) {
+    return {
+      ok: false,
+      latency_ms: Date.now() - started,
+      error: err instanceof Error ? err.message : 'unknown',
+    };
+  }
+}
+
+export async function GET(): Promise<NextResponse> {
+  const [postgres, redis, minio] = await Promise.all([
+    checkPostgres(),
+    checkRedis(),
+    checkMinio(),
+  ]);
+
+  const allOk =
+    postgres.ok === true && redis.ok === true && minio.ok === true;
+
+  const body = {
+    status: allOk ? 'healthy' : 'unhealthy',
+    uptime_seconds: Math.floor((Date.now() - PROCESS_START_AT) / 1000),
+    checks: { postgres, redis, minio },
+    version: VERSION,
+  };
+
+  return NextResponse.json(body, {
+    status: allOk ? 200 : 503,
+    headers: {
+      'Cache-Control': 'no-store, no-cache, must-revalidate',
+    },
+  });
+}

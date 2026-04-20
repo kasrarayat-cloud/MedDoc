@@ -36,6 +36,7 @@ import prisma from '@meddoc/db';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { auth } from '@/lib/nextauth';
+import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 import { deleteAudioObjectsByPrefix } from '@/lib/minio';
 import { sendAccountDeletedConfirmation } from '@/lib/email';
 import { MARKETING_URL } from '@/lib/constants';
@@ -59,6 +60,9 @@ export const POST = withApiHandler('api:settings:delete-account', async (req) =>
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) return apiError('unauthorized', 401);
+
+  const blocked = rateLimitOr429(RATE_LIMITS.SETTINGS, userId);
+  if (blocked) return blocked;
 
   let body: unknown;
   try {
