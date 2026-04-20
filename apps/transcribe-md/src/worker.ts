@@ -32,12 +32,14 @@ import {
   JOB_PROCESS_VISIT,
   CLEANUP_QUEUE_NAME,
   JOB_MINIO_ORPHAN_CLEANUP,
+  JOB_STALE_VISIT_CLEANUP,
   getSharedRedisConnection,
   getCleanupQueue,
   type ProcessVisitPayload,
 } from '@/lib/queue';
 import { ensureBucket } from '@/lib/minio';
 import { runMinioOrphanCleanup } from '@/worker/cleanup/minio-orphans';
+import { runStaleVisitCleanup } from '@/worker/cleanup/stale-visits';
 import {
   isLayerComplete,
   logSkipSummary,
@@ -100,6 +102,18 @@ const CLEANUP_CRON =
 // current bucket size takes seconds; 5 min gives head-room for a
 // high-object-count bucket and auto-fails a hung MinIO connection.
 const CLEANUP_TIMEOUT_MS = 5 * 60 * 1000;
+
+// T-M17.3 — stale visit cleanup (abandoned QUEUED + expired trash).
+// Defaults to enabled; flip STALE_VISIT_CLEANUP_ENABLED=false to
+// keep the worker alive without the sweep. Cron defaults to daily
+// at 3am UTC, which offsets from the weekly MinIO sweep so the two
+// don't fight for DB connections.
+const STALE_VISIT_CLEANUP_ENABLED =
+  (process.env.STALE_VISIT_CLEANUP_ENABLED ?? 'true').toLowerCase() !==
+  'false';
+const STALE_VISIT_CLEANUP_CRON =
+  process.env.STALE_VISIT_CLEANUP_CRON?.trim() || '0 3 * * *';
+const STALE_VISIT_CLEANUP_TIMEOUT_MS = 5 * 60 * 1000;
 
 function withTimeout<T>(p: Promise<T>, ms: number, tag: string): Promise<T> {
   return Promise.race([
@@ -725,9 +739,14 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
  *  recurring job. No-op unless MINIO_ORPHAN_CLEANUP_ENABLED=true, so
  *  production deployments stay off until ops flips the flag. */
 async function startCleanupWorker(): Promise<void> {
-  if (!CLEANUP_ENABLED) {
-    log.info('ops:minio-cleanup', 'disabled', {
-      reason: 'MINIO_ORPHAN_CLEANUP_ENABLED != "true"',
+  // T-M17.3: the cleanup worker now handles TWO job types on the
+  // shared CLEANUP_QUEUE_NAME — MinIO orphan sweeps (T-M12) and
+  // stale-visit sweeps (T-M17.3). Start the worker if EITHER is
+  // enabled; register each scheduler independently below.
+  if (!CLEANUP_ENABLED && !STALE_VISIT_CLEANUP_ENABLED) {
+    log.info('ops:cleanup', 'disabled', {
+      reason:
+        'MINIO_ORPHAN_CLEANUP_ENABLED != "true" AND STALE_VISIT_CLEANUP_ENABLED == "false"',
     });
     return;
   }
@@ -735,23 +754,32 @@ async function startCleanupWorker(): Promise<void> {
   const cleanupWorker = new Worker(
     CLEANUP_QUEUE_NAME,
     async (job) => {
-      if (job.name !== JOB_MINIO_ORPHAN_CLEANUP) {
-        throw new Error(`Unknown cleanup job name: ${job.name}`);
+      if (job.name === JOB_MINIO_ORPHAN_CLEANUP) {
+        // Read env on every run so ops can toggle dryRun between
+        // scheduled invocations without touching the scheduler.
+        const dryRun =
+          (process.env.MINIO_ORPHAN_CLEANUP_DRY_RUN ?? 'true').toLowerCase() !==
+          'false';
+        const retentionDays = Number.parseInt(
+          process.env.MINIO_ORPHAN_CLEANUP_RETENTION_DAYS ?? '30',
+          10
+        );
+        await withTimeout(
+          runMinioOrphanCleanup({ dryRun, retentionDays }),
+          CLEANUP_TIMEOUT_MS,
+          'minio-orphan-cleanup'
+        );
+        return;
       }
-      // Read env on every run so ops can toggle dryRun between
-      // scheduled invocations without touching the scheduler.
-      const dryRun =
-        (process.env.MINIO_ORPHAN_CLEANUP_DRY_RUN ?? 'true').toLowerCase() !==
-        'false';
-      const retentionDays = Number.parseInt(
-        process.env.MINIO_ORPHAN_CLEANUP_RETENTION_DAYS ?? '30',
-        10
-      );
-      await withTimeout(
-        runMinioOrphanCleanup({ dryRun, retentionDays }),
-        CLEANUP_TIMEOUT_MS,
-        'minio-orphan-cleanup'
-      );
+      if (job.name === JOB_STALE_VISIT_CLEANUP) {
+        await withTimeout(
+          runStaleVisitCleanup(),
+          STALE_VISIT_CLEANUP_TIMEOUT_MS,
+          'stale-visit-cleanup'
+        );
+        return;
+      }
+      throw new Error(`Unknown cleanup job name: ${job.name}`);
     },
     {
       connection: getSharedRedisConnection(),
@@ -761,30 +789,55 @@ async function startCleanupWorker(): Promise<void> {
 
   cleanupWorker.on('failed', (job, err) => {
     console.error(
-      `[ops:minio-cleanup] job ${job?.id} failed:`,
+      `[ops:cleanup] job ${job?.name}/${job?.id} failed:`,
       err
     );
   });
 
-  // Register (or refresh) the cron schedule. upsertJobScheduler is
-  // idempotent — redeploying the worker re-registers with no side
-  // effect on in-flight jobs.
-  await getCleanupQueue().upsertJobScheduler(
-    'minio-orphan-cleanup',
-    { pattern: CLEANUP_CRON, tz: 'UTC' },
-    {
-      name: JOB_MINIO_ORPHAN_CLEANUP,
-      data: {},
-      opts: { attempts: 1 },
-    }
-  );
+  // ── T-M12 MinIO orphan sweep (opt-in) ─────────────────────────
+  if (CLEANUP_ENABLED) {
+    await getCleanupQueue().upsertJobScheduler(
+      'minio-orphan-cleanup',
+      { pattern: CLEANUP_CRON, tz: 'UTC' },
+      {
+        name: JOB_MINIO_ORPHAN_CLEANUP,
+        data: {},
+        opts: { attempts: 1 },
+      }
+    );
+    log.info('ops:minio-cleanup', 'enabled', {
+      cron: CLEANUP_CRON,
+      tz: 'UTC',
+      retentionDays: CLEANUP_RETENTION_DAYS,
+      dryRun: CLEANUP_DRY_RUN,
+    });
+  } else {
+    log.info('ops:minio-cleanup', 'disabled', {
+      reason: 'MINIO_ORPHAN_CLEANUP_ENABLED != "true"',
+    });
+  }
 
-  log.info('ops:minio-cleanup', 'enabled', {
-    cron: CLEANUP_CRON,
-    tz: 'UTC',
-    retentionDays: CLEANUP_RETENTION_DAYS,
-    dryRun: CLEANUP_DRY_RUN,
-  });
+  // ── T-M17.3 stale-visit sweep (default: on) ───────────────────
+  if (STALE_VISIT_CLEANUP_ENABLED) {
+    await getCleanupQueue().upsertJobScheduler(
+      'stale-visit-cleanup',
+      { pattern: STALE_VISIT_CLEANUP_CRON, tz: 'UTC' },
+      {
+        name: JOB_STALE_VISIT_CLEANUP,
+        data: {},
+        opts: { attempts: 1 },
+      }
+    );
+    log.info('ops:stale-visit-cleanup', 'T-M17.3 cleanup job scheduled', {
+      cron: STALE_VISIT_CLEANUP_CRON,
+      tz: 'UTC',
+      timeoutMs: STALE_VISIT_CLEANUP_TIMEOUT_MS,
+    });
+  } else {
+    log.info('ops:stale-visit-cleanup', 'disabled', {
+      reason: 'STALE_VISIT_CLEANUP_ENABLED == "false"',
+    });
+  }
 }
 
 async function main() {

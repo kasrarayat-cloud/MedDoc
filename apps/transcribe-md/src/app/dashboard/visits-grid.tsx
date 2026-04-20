@@ -17,9 +17,18 @@ import type { DashboardCursor } from '@/lib/dashboard-pagination';
 interface Props {
   initialVisits: VisitCardData[];
   initialCursor: DashboardCursor | null;
+  /** T-M17.3: mirrors the server's `?archived=1` flag so each Load-
+   *  more call stays consistent with the initial page's filter.
+   *  Without this, paging past the first page would silently drop
+   *  archived rows that matched the initial render. */
+  includeArchived?: boolean;
 }
 
-export function VisitsGrid({ initialVisits, initialCursor }: Props) {
+export function VisitsGrid({
+  initialVisits,
+  initialCursor,
+  includeArchived = false,
+}: Props) {
   const [visits, setVisits] = useState<VisitCardData[]>(initialVisits);
   const [cursor, setCursor] = useState<DashboardCursor | null>(initialCursor);
   const [pending, startTransition] = useTransition();
@@ -31,7 +40,7 @@ export function VisitsGrid({ initialVisits, initialCursor }: Props) {
     const c = cursor;
     startTransition(async () => {
       try {
-        const result = await loadMoreVisitsAction(c);
+        const result = await loadMoreVisitsAction(c, { includeArchived });
         setVisits((prev) => [...prev, ...(result.visits as VisitCardData[])]);
         setCursor(result.nextCursor);
       } catch {

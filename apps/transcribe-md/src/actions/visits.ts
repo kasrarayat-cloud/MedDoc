@@ -167,9 +167,11 @@ export async function createVisitAction(formData: FormData): Promise<void> {
 // forbids non-async exports from this file.
 
 export async function loadMoreVisitsAction(
-  cursor: DashboardCursor
+  cursor: DashboardCursor,
+  opts?: { includeArchived?: boolean }
 ): Promise<LoadMoreVisitsResult> {
   const session = await requireSession();
+  const includeArchived = opts?.includeArchived ?? false;
 
   const cursorDate = new Date(cursor.createdAt);
   if (Number.isNaN(cursorDate.getTime())) {
@@ -180,9 +182,15 @@ export async function loadMoreVisitsAction(
   // Compound "older than" via OR because Prisma lacks native tuple
   // comparison. Query is always scoped to the authed userId regardless
   // of cursor contents.
+  //
+  // T-M17.3: honour the caller's includeArchived flag so paging past
+  // the first page keeps the same filter as the SSR'd initial
+  // render.
   const rows = await prisma.transcribeVisit.findMany({
     where: {
       userId: session.user.id,
+      deletedAt: null,
+      ...(includeArchived ? {} : { archivedAt: null }),
       OR: [
         { createdAt: { lt: cursorDate } },
         {
@@ -199,6 +207,7 @@ export async function loadMoreVisitsAction(
       specialty: true,
       status: true,
       createdAt: true,
+      archivedAt: true,
     },
   });
 

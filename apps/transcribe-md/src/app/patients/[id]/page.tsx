@@ -1,13 +1,16 @@
 // ============================================================================
-// Patient detail page (T-M17.2 Phase 3 Commit 8)
+// Patient detail page (T-M17.2 Phase 3 Commit 8 + T-M17.3 Commit 8)
 // ----------------------------------------------------------------------------
 // Server component. Auth-guarded, practiceId-scoped with a 404 on
 // mismatch (anti-enumeration — matches the /api/patients/[id] pattern).
 //
-// Soft-deleted patients render with a top banner; the page doesn't
-// redirect so the doctor can still see the visit history for an
-// archived patient. New visits for a deleted patient are prevented
-// by the server action + by hiding the CTA here.
+// Two tabs (T-M17.3):
+//   /patients/[id]              → Active (default)
+//   /patients/[id]?tab=trash    → Trashed visits, only shown when
+//                                 the patient has at least one
+//                                 trashed row. Each card has
+//                                 [Restore] and [Delete permanently]
+//                                 plus a countdown badge.
 // ============================================================================
 
 import type { Metadata } from 'next';
@@ -21,9 +24,14 @@ import { NavBar } from '@/components/nav-bar';
 import { PageWrapper } from '@/components/page-wrapper';
 import { SpecularButton } from '@/components/specular-button';
 import { VisitCard, type VisitCardData } from '@/components/visit-card';
-import { BackToDashboardLink } from '@/app/visits/[id]/back-to-dashboard-link';
+import { BackToDashboardLink } from '@/app/visits/[id]/back-link';
 import { EditPatientDialog } from './edit-patient-dialog';
 import { DeletePatientDialog } from './delete-patient-dialog';
+import { PatientTabs } from './patient-tabs';
+import {
+  TrashedVisitCard,
+  type TrashedVisitCardData,
+} from './trashed-visit-card';
 
 export const metadata: Metadata = { title: 'Patient' };
 
@@ -40,12 +48,21 @@ function formatCreated(d: Date): string {
   });
 }
 
+type SearchParams = Record<string, string | string[] | undefined>;
+
 export default async function PatientPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<SearchParams>;
 }) {
   const { id } = await params;
+  const spRaw = await searchParams;
+  const tabParam = Array.isArray(spRaw.tab) ? spRaw.tab[0] : spRaw.tab;
+  const activeTab: 'active' | 'trash' =
+    tabParam === 'trash' ? 'trash' : 'active';
+
   const session = await auth();
   if (!session?.user?.id) redirect('/login');
 
@@ -55,10 +72,9 @@ export default async function PatientPage({
   });
   if (!user) redirect('/login');
 
-  // Load the patient + all visits for them in one round-trip. No
-  // deleted-filter on the patient itself — we still render archived
-  // patients so the doctor can see their history. Visits order by
-  // createdAt DESC so the timeline is newest-first.
+  // Base patient record (no nested visits — the two tab queries
+  // below pull their own lists so we don't over-fetch for whichever
+  // tab isn't active).
   const patient = await prisma.transcribeMdPatient.findUnique({
     where: { id },
     select: {
@@ -70,28 +86,73 @@ export default async function PatientPage({
       deletedAt: true,
       createdAt: true,
       updatedAt: true,
-      transcribeVisits: {
-        where: { userId: user.id },
-        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-        select: {
-          id: true,
-          patientName: true,
-          specialty: true,
-          status: true,
-          createdAt: true,
-        },
-      },
     },
   });
-  // 404 on both "doesn't exist" and "wrong practice" — identical
-  // response prevents ID enumeration.
   if (!patient || patient.practiceId !== user.practiceId) {
     notFound();
   }
 
+  // Fan out: counts for both tabs + the content list for whichever
+  // tab is active. Active-tab content filter excludes archived
+  // because archived visits live in the dashboard's "Show archived"
+  // toggle (Commit 9), not on the patient detail page.
+  const [activeCount, trashCount, activeVisits, trashVisits] =
+    await Promise.all([
+      prisma.transcribeVisit.count({
+        where: {
+          patientId: id,
+          userId: user.id,
+          deletedAt: null,
+          archivedAt: null,
+        },
+      }),
+      prisma.transcribeVisit.count({
+        where: {
+          patientId: id,
+          userId: user.id,
+          deletedAt: { not: null },
+        },
+      }),
+      activeTab === 'active'
+        ? prisma.transcribeVisit.findMany({
+            where: {
+              patientId: id,
+              userId: user.id,
+              deletedAt: null,
+              archivedAt: null,
+            },
+            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+            select: {
+              id: true,
+              patientName: true,
+              specialty: true,
+              status: true,
+              createdAt: true,
+            },
+          })
+        : Promise.resolve([]),
+      activeTab === 'trash'
+        ? prisma.transcribeVisit.findMany({
+            where: {
+              patientId: id,
+              userId: user.id,
+              deletedAt: { not: null },
+            },
+            orderBy: [{ deletedAt: 'desc' }, { id: 'desc' }],
+            select: {
+              id: true,
+              patientName: true,
+              specialty: true,
+              status: true,
+              createdAt: true,
+              deletedAt: true,
+            },
+          })
+        : Promise.resolve([]),
+    ]);
+
   const dob = formatDob(patient.dateOfBirth);
   const isDeleted = patient.deletedAt !== null;
-  const visitCount = patient.transcribeVisits.length;
 
   return (
     <PageWrapper>
@@ -111,7 +172,7 @@ export default async function PatientPage({
           externalId={patient.externalId}
           createdAt={patient.createdAt}
           deleted={isDeleted}
-          visitCount={visitCount}
+          visitCount={activeCount}
         >
           <EditPatientDialog
             patientId={patient.id}
@@ -122,18 +183,36 @@ export default async function PatientPage({
           <DeletePatientDialog
             patientId={patient.id}
             patientName={patient.name}
-            visitCount={visitCount}
+            visitCount={activeCount}
           />
         </PatientHeader>
 
         <section className="mt-10">
           <h2 className="mb-4 type-h2 text-text-primary">Visit history</h2>
-          {visitCount === 0 ? (
-            <VisitsEmpty deleted={isDeleted} patientId={patient.id} />
+
+          <PatientTabs
+            patientId={patient.id}
+            active={activeTab}
+            activeCount={activeCount}
+            trashCount={trashCount}
+          />
+
+          {activeTab === 'active' ? (
+            activeCount === 0 ? (
+              <VisitsEmpty deleted={isDeleted} patientId={patient.id} />
+            ) : (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {activeVisits.map((v: VisitCardData) => (
+                  <VisitCard key={v.id} visit={v} />
+                ))}
+              </div>
+            )
+          ) : trashVisits.length === 0 ? (
+            <TrashEmpty />
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {patient.transcribeVisits.map((v: VisitCardData) => (
-                <VisitCard key={v.id} visit={v} />
+              {trashVisits.map((v: TrashedVisitCardData) => (
+                <TrashedVisitCard key={v.id} visit={v} />
               ))}
             </div>
           )}
@@ -263,6 +342,17 @@ function VisitsEmpty({
           .
         </p>
       )}
+    </div>
+  );
+}
+
+function TrashEmpty() {
+  // Edge case: the tab is rendered (trashCount > 0 at fetch time)
+  // but the doctor restored the last row while viewing. The page
+  // hasn't refreshed yet so the tab is still there.
+  return (
+    <div className="rounded-xl border border-border-subtle bg-bg-surface-1/40 px-6 py-10 text-center">
+      <p className="text-[14px] text-text-tertiary">No deleted visits.</p>
     </div>
   );
 }

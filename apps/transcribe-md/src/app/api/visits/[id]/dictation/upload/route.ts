@@ -64,9 +64,18 @@ export const POST = withApiHandler<{ id: string }>(
         inputMode: true,
         status: true,
         dictationAudioKey: true,
+        deletedAt: true,
+        archivedAt: true,
       },
     });
     if (!visit || visit.userId !== userId) return apiError('not found', 404);
+    if (visit.deletedAt !== null || visit.archivedAt !== null) {
+      return apiError(
+        'Visit is no longer active. Restore it first.',
+        400,
+        { code: 'VISIT_NOT_ACTIVE' }
+      );
+    }
     if (visit.inputMode !== 'voice_dictation') {
       return apiError('this visit is not a voice-dictation visit', 400);
     }

@@ -27,6 +27,10 @@ export interface LoadMoreVisitsResult {
     specialty: string;
     status: TranscribeVisitStatus;
     createdAt: Date;
+    /** T-M17.3: carries through for the dashboard "Show archived"
+     *  treatment. Null when the visit isn't archived (always the
+     *  case when the toggle is off). */
+    archivedAt: Date | null;
   }>;
   /** Null when this was the last page. */
   nextCursor: DashboardCursor | null;
