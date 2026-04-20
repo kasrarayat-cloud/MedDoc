@@ -16,6 +16,7 @@ import { generateVisitPdf } from '@/lib/pdf-generator';
 import { logDelivery } from '@/lib/deliveries';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
+import { redactPhi } from '@meddoc/ai';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -38,7 +39,10 @@ export const GET = withApiHandler<{ id: string }>(
     try {
       pdf = await generateVisitPdf(data);
     } catch (err) {
-      console.error('[api:visits:export:pdf] generation failed:', err);
+      console.error(
+        '[api:visits:export:pdf] generation failed:',
+        redactPhi(err instanceof Error ? err.message : err)
+      );
       return apiError('pdf generation failed', 500);
     }
 

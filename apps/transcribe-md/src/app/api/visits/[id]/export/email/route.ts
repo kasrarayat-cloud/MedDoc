@@ -20,6 +20,7 @@ import { sendVisitPdfEmail } from '@/lib/email';
 import { logDelivery } from '@/lib/deliveries';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
+import { redactPhi } from '@meddoc/ai';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -84,7 +85,12 @@ export const POST = withApiHandler<{ id: string }>(
         { status: 200 }
       );
     } catch (err) {
-      console.error('[api:visits:export:email] send failed:', err);
+      // T-M16.3: Resend error messages quote the recipient address on
+      // bounces — scrub before logging.
+      console.error(
+        '[api:visits:export:email] send failed:',
+        redactPhi(err instanceof Error ? err.message : err)
+      );
       return apiError(
         'email delivery failed — try again or download the PDF instead',
         502
