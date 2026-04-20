@@ -6,6 +6,11 @@ import { z } from 'zod';
 
 import prisma from '@meddoc/db';
 import { requireSession } from '@/lib/auth';
+import {
+  DASHBOARD_PAGE_SIZE,
+  type DashboardCursor,
+  type LoadMoreVisitsResult,
+} from '@/lib/dashboard-pagination';
 
 const INPUT_MODES = ['audio_upload', 'voice_dictation', 'text_notes'] as const;
 
@@ -66,32 +71,9 @@ export async function createVisitAction(formData: FormData): Promise<void> {
 // Cursor-based — dashboard/page.tsx server-renders the first page via a
 // direct Prisma call (so the initial paint is SSR'd without a client
 // round-trip), and the "Load more" button calls this action for
-// subsequent pages. Page size is 20 visits.
-//
-// Cursor shape = the (createdAt, id) of the LAST visit in the prior
-// page. TranscribeVisit has @@index([userId, createdAt]); the id
-// tiebreaker handles the rare case of two visits created inside the
-// same millisecond.
-
-export const DASHBOARD_PAGE_SIZE = 20;
-
-export interface DashboardCursor {
-  /** ISO string — JSON-safe across the server-action boundary. */
-  createdAt: string;
-  id: string;
-}
-
-export interface LoadMoreVisitsResult {
-  visits: Array<{
-    id: string;
-    patientName: string | null;
-    specialty: string;
-    status: import('@prisma/client').TranscribeVisitStatus;
-    createdAt: Date;
-  }>;
-  /** Null when this was the last page. */
-  nextCursor: DashboardCursor | null;
-}
+// subsequent pages. Page size + cursor types live in
+// @/lib/dashboard-pagination because Next 16's 'use server' directive
+// forbids non-async exports from this file.
 
 export async function loadMoreVisitsAction(
   cursor: DashboardCursor
