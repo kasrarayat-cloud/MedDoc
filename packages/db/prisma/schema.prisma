@@ -1366,12 +1366,32 @@ model TranscribeVisit {
   /// don't violate the relation.
   editPattern DoctorEditPattern?
 
+  // ── T-M17.3: visit management ──
+  /// Soft-delete marker for non-SIGNED visits. Rows with a non-null
+  /// deletedAt are hidden from every default-view query and scheduled
+  /// for hard delete 15 days later by the daily cleanup cron. A visit
+  /// can be restored (deletedAt → NULL) up until that cron fires.
+  /// SIGNED visits use `archivedAt` instead — clinical records never
+  /// get soft-deleted per HIPAA retention.
+  deletedAt DateTime? @db.Timestamptz(6)
+  /// Archive marker for SIGNED visits. Archived visits are hidden
+  /// from the default dashboard but kept forever. Never nulled out
+  /// via UI (an "Unarchive" action can clear it; has no retention
+  /// consequence).
+  archivedAt DateTime? @db.Timestamptz(6)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([userId, createdAt])
   @@index([status])
   @@index([patientId])
+  /// T-M17.3: supports the default-view filter across every surface —
+  /// patient timeline, dashboard visits tab, per-patient aggregates
+  /// — which always pairs patientId with (deletedAt IS NULL AND
+  /// archivedAt IS NULL). Adding it here rather than splitting into
+  /// two single-column indexes keeps the planner honest.
+  @@index([patientId, deletedAt, archivedAt])
   @@map("transcribe_visits")
 }
 
