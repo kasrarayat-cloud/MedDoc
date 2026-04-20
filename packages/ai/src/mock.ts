@@ -65,6 +65,14 @@ const MOCK_COMPLETE_FIXTURES: Partial<Record<ModelCallPurpose, unknown>> = {
   tm_cpt_coding: { em: null },
   tm_rx_drafting: {},
   tm_referrals: {},
+  // Layer 7e calls modelClient.complete<PatientSummaryResult>({ schema }),
+  // not completeText — so its fixture lives here, not in the text map.
+  // Pre-T-M13 this was misfiled and the layer silently failed on every
+  // MOCK run (rescued by Promise.allSettled; surfaced as a latent
+  // [MOCK_AI_CALLS] log line).
+  tm_patient_summary: {
+    summary: '[MOCK] Your visit went well. Drink fluids, rest, and come back if symptoms worsen.',
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -102,11 +110,8 @@ const MOCK_COMPLETE_TEXT_FIXTURES: Partial<
     inputTokens: 1,
     outputTokens: 1,
   },
-  tm_patient_summary: {
-    text: '[MOCK] Your visit went well. Drink fluids, rest, and return if your headache gets worse.',
-    inputTokens: 1,
-    outputTokens: 1,
-  },
+  // tm_patient_summary lives in MOCK_COMPLETE_FIXTURES (L7e uses
+  // modelClient.complete(), not completeText).
 };
 
 // ---------------------------------------------------------------------------
