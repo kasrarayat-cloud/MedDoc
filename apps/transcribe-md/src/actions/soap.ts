@@ -32,10 +32,22 @@ export async function saveSoapDraftAction(
 
   const visit = await prisma.transcribeVisit.findUnique({
     where: { id: visitId },
-    select: { id: true, userId: true, status: true },
+    select: {
+      id: true,
+      userId: true,
+      status: true,
+      deletedAt: true,
+      archivedAt: true,
+    },
   });
   if (!visit || visit.userId !== session.user.id) {
     return { ok: false, error: 'Visit not found.' };
+  }
+  // T-M17.3: reject writes on trashed / archived visits. The UI
+  // already hides these from the default dashboard but a stale tab
+  // could still fire this action.
+  if (visit.deletedAt !== null || visit.archivedAt !== null) {
+    return { ok: false, error: 'Visit is no longer active. Restore it first.' };
   }
   if (visit.status === TranscribeVisitStatus.SIGNED) {
     return { ok: false, error: 'Signed notes cannot be edited.' };
@@ -69,10 +81,17 @@ export async function signVisitAction(
       status: true,
       soapFinal: true,
       signedAt: true,
+      deletedAt: true,
+      archivedAt: true,
     },
   });
   if (!visit || visit.userId !== session.user.id) {
     return { ok: false, error: 'Visit not found.' };
+  }
+  // T-M17.3: never re-sign a trashed or archived visit silently. The
+  // UI hides these but a stale tab could still reach here.
+  if (visit.deletedAt !== null || visit.archivedAt !== null) {
+    return { ok: false, error: 'Visit is no longer active. Restore it first.' };
   }
   if (visit.status === TranscribeVisitStatus.SIGNED) {
     return { ok: true };
@@ -129,10 +148,20 @@ export async function reassignSpeakerAction(
 
   const visit = await prisma.transcribeVisit.findUnique({
     where: { id: visitId },
-    select: { id: true, userId: true, status: true, speakerMap: true },
+    select: {
+      id: true,
+      userId: true,
+      status: true,
+      speakerMap: true,
+      deletedAt: true,
+      archivedAt: true,
+    },
   });
   if (!visit || visit.userId !== session.user.id) {
     return { ok: false, error: 'Visit not found.' };
+  }
+  if (visit.deletedAt !== null || visit.archivedAt !== null) {
+    return { ok: false, error: 'Visit is no longer active. Restore it first.' };
   }
   if (visit.status === TranscribeVisitStatus.SIGNED) {
     return { ok: false, error: 'Signed notes cannot be edited.' };
