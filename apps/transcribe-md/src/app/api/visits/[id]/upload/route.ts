@@ -25,6 +25,7 @@ import {
 } from '@/lib/queue';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
+import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 // Next's default body-size limit on route handlers is 1 MB — we need
@@ -55,6 +56,10 @@ export const POST = withApiHandler<{ id: string }>(
     const session = await auth();
     const userId = session?.user?.id;
     if (!userId) return apiError('unauthorized', 401);
+
+    // UPLOAD bucket — each upload burns real Deepgram/Anthropic cost.
+    const blocked = rateLimitOr429(RATE_LIMITS.UPLOAD, userId);
+    if (blocked) return blocked;
 
     const visit = await prisma.transcribeVisit.findUnique({
       where: { id: visitId },

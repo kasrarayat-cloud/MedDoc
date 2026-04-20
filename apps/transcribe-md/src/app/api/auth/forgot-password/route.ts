@@ -29,9 +29,10 @@ import { AuthTokenPurpose } from '@prisma/client';
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { createAuthToken } from '@/lib/auth-tokens';
 import {
+  RATE_LIMITS,
   clientIpFromRequest,
-  tryConsume,
-} from '@/lib/rate-limit-inline';
+  rateLimitOr429,
+} from '@/lib/rate-limit';
 import { sendPasswordResetEmail } from '@/lib/email';
 import { MARKETING_URL, APP_URL } from '@/lib/constants';
 import { redactPhi } from '@meddoc/ai';
@@ -44,31 +45,16 @@ const BodySchema = z.object({
 });
 
 const RESET_TTL_MS = 60 * 60 * 1000; // 1 hour
-const RATE_LIMIT = 5;
-const RATE_WINDOW_MS = 60 * 60 * 1000; // 1 hour
-// Single bucket name — shared with resend-verification, see header comment.
-const RATE_KEY_PREFIX = 'auth-email:';
 
 void MARKETING_URL; // kept for future "link to marketing from email" copy
 
 export const POST = withApiHandler('api:auth:forgot-password', async (req) => {
   const ip = clientIpFromRequest(req);
-  const rl = tryConsume(
-    `${RATE_KEY_PREFIX}${ip}`,
-    RATE_LIMIT,
-    RATE_WINDOW_MS
-  );
-  if (!rl.allowed) {
-    // 429 is the honest answer. We don't worry about enumeration here
-    // because the rate limit is keyed by IP, not by email.
-    return NextResponse.json(
-      { error: 'Too many requests. Try again later.' },
-      {
-        status: 429,
-        headers: { 'Retry-After': String(rl.retryAfterSec) },
-      }
-    );
-  }
+  // AUTH_EMAIL bucket is shared with resend-verification / reset-password
+  // / verify-email / confirm-email so an attacker mixing them can't
+  // bypass by round-robin.
+  const blocked = rateLimitOr429(RATE_LIMITS.AUTH_EMAIL, ip);
+  if (blocked) return blocked;
 
   let body: unknown;
   try {

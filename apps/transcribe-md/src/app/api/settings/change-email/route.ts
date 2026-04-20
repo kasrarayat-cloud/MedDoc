@@ -30,6 +30,7 @@ import { AuthTokenPurpose } from '@prisma/client';
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { auth } from '@/lib/nextauth';
 import { createAuthToken } from '@/lib/auth-tokens';
+import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 import { sendEmailChangeRequestEmail } from '@/lib/email';
 import { APP_URL } from '@/lib/constants';
 import { redactPhi } from '@meddoc/ai';
@@ -50,6 +51,9 @@ export const POST = withApiHandler(
     const session = await auth();
     const userId = session?.user?.id;
     if (!userId) return apiError('unauthorized', 401);
+
+    const blocked = rateLimitOr429(RATE_LIMITS.SETTINGS, userId);
+    if (blocked) return blocked;
 
     let body: unknown;
     try {
