@@ -11,10 +11,8 @@ import { useState, useTransition } from 'react';
 import { Loader2 } from 'lucide-react';
 
 import { VisitCard, type VisitCardData } from '@/components/visit-card';
-import {
-  loadMoreVisitsAction,
-  type DashboardCursor,
-} from '@/actions/visits';
+import { loadMoreVisitsAction } from '@/actions/visits';
+import type { DashboardCursor } from '@/lib/dashboard-pagination';
 
 interface Props {
   initialVisits: VisitCardData[];

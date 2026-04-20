@@ -12,7 +12,7 @@ import { SkeletonVisitGrid } from '@/components/skeleton';
 import {
   DASHBOARD_PAGE_SIZE,
   type DashboardCursor,
-} from '@/actions/visits';
+} from '@/lib/dashboard-pagination';
 import { VisitsGrid } from './visits-grid';
 
 export const metadata: Metadata = { title: 'Dashboard' };
