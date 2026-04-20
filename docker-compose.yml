@@ -45,7 +45,7 @@ services:
     # init; without it the first check fires before the app is ready
     # and the container reports "unhealthy" until a retry passes.
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "--spider", "http://localhost:3000/api/health"]
+      test: ["CMD", "wget", "-qO-", "--spider", "http://127.0.0.1:3000/api/health"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -121,7 +121,7 @@ services:
     # We accept any response (2xx/3xx/4xx) because caddy responding at
     # all proves the process is up — upstream 5xx would fail it naturally.
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "--spider", "http://localhost:80/"]
+      test: ["CMD", "wget", "-qO-", "--spider", "http://127.0.0.1:80/"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -156,7 +156,7 @@ services:
     # T-M16.3: marketing has no API — hit the home page to confirm the
     # Next server is responding. Static content so 0 cost per tick.
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "--spider", "http://localhost:3010/"]
+      test: ["CMD", "wget", "-qO-", "--spider", "http://127.0.0.1:3010/"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -237,7 +237,7 @@ services:
     # is unreachable so the container reports unhealthy and Caddy can
     # (eventually) route around it once we wire that up.
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "--spider", "http://localhost:3011/api/health"]
+      test: ["CMD", "wget", "-qO-", "--spider", "http://127.0.0.1:3011/api/health"]
       interval: 30s
       timeout: 5s
       retries: 3
