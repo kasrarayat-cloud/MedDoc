@@ -62,7 +62,11 @@ export const GET = withApiHandler<{ id: string }>(
     // Attach visit count + last-visit-at so the detail page doesn't
     // need a second round-trip.
     const aggregate = await prisma.transcribeVisit.aggregate({
-      where: { patientId: patient.id },
+      where: {
+        patientId: patient.id,
+        deletedAt: null,
+        archivedAt: null,
+      },
       _count: { _all: true },
       _max: { createdAt: true },
     });

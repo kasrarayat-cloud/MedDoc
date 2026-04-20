@@ -183,6 +183,8 @@ export async function loadMoreVisitsAction(
   const rows = await prisma.transcribeVisit.findMany({
     where: {
       userId: session.user.id,
+      deletedAt: null,
+      archivedAt: null,
       OR: [
         { createdAt: { lt: cursorDate } },
         {
