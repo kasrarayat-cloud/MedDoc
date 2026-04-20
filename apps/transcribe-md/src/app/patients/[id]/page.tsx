@@ -13,7 +13,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import { Pencil, Trash2, Download, Plus } from 'lucide-react';
+import { Download, Plus } from 'lucide-react';
 
 import prisma from '@meddoc/db';
 import { auth } from '@/lib/nextauth';
@@ -22,6 +22,8 @@ import { PageWrapper } from '@/components/page-wrapper';
 import { SpecularButton } from '@/components/specular-button';
 import { VisitCard, type VisitCardData } from '@/components/visit-card';
 import { BackToDashboardLink } from '@/app/visits/[id]/back-to-dashboard-link';
+import { EditPatientDialog } from './edit-patient-dialog';
+import { DeletePatientDialog } from './delete-patient-dialog';
 
 export const metadata: Metadata = { title: 'Patient' };
 
@@ -110,7 +112,19 @@ export default async function PatientPage({
           createdAt={patient.createdAt}
           deleted={isDeleted}
           visitCount={visitCount}
-        />
+        >
+          <EditPatientDialog
+            patientId={patient.id}
+            initialName={patient.name}
+            initialDob={dob}
+            initialExternalId={patient.externalId}
+          />
+          <DeletePatientDialog
+            patientId={patient.id}
+            patientName={patient.name}
+            visitCount={visitCount}
+          />
+        </PatientHeader>
 
         <section className="mt-10">
           <h2 className="mb-4 type-h2 text-text-primary">Visit history</h2>
@@ -149,6 +163,7 @@ function PatientHeader({
   createdAt,
   deleted,
   visitCount,
+  children,
 }: {
   id: string;
   name: string;
@@ -157,6 +172,10 @@ function PatientHeader({
   createdAt: Date;
   deleted: boolean;
   visitCount: number;
+  /** Edit + Delete dialog buttons are client components passed in by
+   *  the server parent. Kept as children so the header stays a pure
+   *  server component (no 'use client' contagion). */
+  children: React.ReactNode;
 }) {
   const initial = name.charAt(0).toUpperCase() || '?';
   return (
@@ -214,37 +233,10 @@ function PatientHeader({
               Export visits
             </a>
           )}
-          <StubButton icon={<Pencil className="h-3.5 w-3.5" />} label="Edit" />
-          <StubButton
-            icon={<Trash2 className="h-3.5 w-3.5" />}
-            label="Delete"
-          />
+          {children}
         </div>
       </div>
     </div>
-  );
-}
-
-/** Placeholder for Commit 10's edit/delete modals. Rendered as a
- *  disabled, tooltipped button so the layout matches what'll ship
- *  when the UI lands. */
-function StubButton({
-  icon,
-  label,
-}: {
-  icon: React.ReactNode;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      disabled
-      title="Coming in the next release"
-      className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-full border border-border-subtle bg-bg-surface-1/30 px-4 py-2 text-[13px] font-medium text-text-muted opacity-50"
-    >
-      {icon}
-      {label}
-    </button>
   );
 }
 
