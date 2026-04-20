@@ -31,13 +31,24 @@ import {
 } from '@/lib/queue';
 import { ensureBucket } from '@/lib/minio';
 import { runMinioOrphanCleanup } from '@/worker/cleanup/minio-orphans';
+import {
+  isLayerComplete,
+  logSkipSummary,
+  logSkippedLayer,
+  type LayerSkipState,
+  type PipelineLayer,
+} from '@/worker/layer-skip';
 import { runLayer1Transcribe } from '@/worker/layers/01-transcribe';
 import { runLayer1bTranscribeDictation } from '@/worker/layers/01b-transcribe-dictation';
 import {
   runLayer2SpeakerRoles,
   type SpeakerMap,
 } from '@/worker/layers/02-speaker-roles';
-import { runLayer3ExtractEntities } from '@/worker/layers/03-extract-entities';
+import {
+  runLayer3ExtractEntities,
+  buildRoleLabeledTranscript,
+  type ExtractedEntities,
+} from '@/worker/layers/03-extract-entities';
 import { runLayer4GenerateSoap } from '@/worker/layers/04-generate-soap';
 import { runLayer5SelfCritique } from '@/worker/layers/05-self-critique';
 import { runLayer6Polish } from '@/worker/layers/06-polish';
@@ -127,6 +138,51 @@ async function clearAutomationColumn(
   });
 }
 
+/** T-M13 — load every layer's checkpoint column in one query. Returns
+ *  a LayerSkipState the skip checks consume. An all-nulls shape on
+ *  the first attempt ⇒ every isLayerComplete() returns false ⇒ the
+ *  pipeline runs end-to-end as before. A partially-populated shape
+ *  on retry ⇒ skips fire for completed layers. */
+async function loadResumeState(visitId: string): Promise<LayerSkipState> {
+  const row = await prisma.transcribeVisit.findUnique({
+    where: { id: visitId },
+    select: {
+      transcriptRaw: true,
+      transcriptText: true,
+      speakerMap: true,
+      entities: true,
+      soapDraft: true,
+      critique: true,
+      soapFinal: true,
+      icdCodes: true,
+      cptCodes: true,
+      rxDrafts: true,
+      referrals: true,
+      patientSummary: true,
+    },
+  });
+  if (!row) {
+    // Defensive — if the row disappeared between the top-level
+    // findUnique and here, fall back to all-nulls so everything runs
+    // fresh. The caller's next DB write will error, which is fine.
+    return {
+      transcriptRaw: null,
+      transcriptText: null,
+      speakerMap: null,
+      entities: null,
+      soapDraft: null,
+      critique: null,
+      soapFinal: null,
+      icdCodes: null,
+      cptCodes: null,
+      rxDrafts: null,
+      referrals: null,
+      patientSummary: null,
+    };
+  }
+  return row as LayerSkipState;
+}
+
 async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
   const { visitId } = job.data;
 
@@ -178,36 +234,55 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       processingStartedAt: startedAt,
       needsReview: false,
       reviewReason: null,
-      // T-M6: a retry should clear any prior-run automation outputs +
-      // confidence ledger so a previously-failed layer doesn't carry
-      // its stale 'failed' status through to the fresh run.
-      icdCodes: null,
-      cptCodes: null,
-      rxDrafts: null,
-      referrals: null,
-      patientSummary: null,
+      // T-M13: previously cleared the five L7 columns here so a retry
+      // wouldn't carry stale 'failed' entries. With per-layer resume
+      // (below), successful L7 outputs are a CHECKPOINT — wiping them
+      // would defeat resumability. Failed L7 layers are nulled by the
+      // per-task catch (clearAutomationColumn) so the skip check
+      // naturally re-runs only those. confidenceScores IS still
+      // cleared because it's rebuilt from scratch in the roll-up
+      // below, and stale failed entries would otherwise leak through.
       confidenceScores: null,
     },
   });
+
+  // T-M13 — load the per-layer checkpoint state BEFORE the sequential
+  // stage. On attempt 1 (and after a user-triggered upload reset)
+  // every column is null and the skip checks all return false, so
+  // behavior matches the pre-T-M13 happy path. On BullMQ retry
+  // (attempt > 1) whatever L1-L6 already succeeded is preserved in
+  // columns — the checks below short-circuit those and the retry
+  // resumes at the first non-populated layer.
+  const attempt = job.attemptsMade + 1;
+  const resumeState = await loadResumeState(visitId);
+  const skipped: PipelineLayer[] = [];
 
   try {
     // -------------------------------------------------------------------
     // Per-mode input stage — produces (entities, contextText).
     // -------------------------------------------------------------------
-    let entities: Awaited<ReturnType<typeof runLayer3ExtractEntities>>['entities'];
+    let entities: ExtractedEntities;
     let contextText: string;
 
     if (visit.inputMode === 'audio_upload') {
-      // L1 — Deepgram with diarize on.
-      await runLayer1Transcribe({
-        visitId,
-        practiceId,
-        audioKey: visit.audioKey!,
-        audioMimeType: visit.audioMimeType!,
-      });
+      // ── L1 — Deepgram with diarize on ───────────────────────────
+      if (isLayerComplete(resumeState, 'L1')) {
+        logSkippedLayer(visitId, 'L1', attempt);
+        skipped.push('L1');
+      } else {
+        await runLayer1Transcribe({
+          visitId,
+          practiceId,
+          audioKey: visit.audioKey!,
+          audioMimeType: visit.audioMimeType!,
+        });
+      }
+
+      // Always re-read transcriptRaw — whether L1 ran or was skipped,
+      // downstream layers need the utterances.
       const withTranscript = await prisma.transcribeVisit.findUnique({
         where: { id: visitId },
-        select: { transcriptRaw: true },
+        select: { transcriptRaw: true, speakerMap: true },
       });
       const raw = withTranscript?.transcriptRaw as
         | DeepgramBatchResponse
@@ -215,62 +290,101 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         | undefined;
       const utterances: DeepgramUtterance[] = raw?.results?.utterances ?? [];
 
-      // L2 — speaker roles.
+      // ── L2 — speaker roles ──────────────────────────────────────
       await prisma.transcribeVisit.update({
         where: { id: visitId },
         data: { status: TranscribeVisitStatus.EXTRACTING },
       });
-      const { speakerMap } = await runLayer2SpeakerRoles({
-        visitId,
-        practiceId,
-        utterances,
-      });
+      let speakerMap: SpeakerMap;
+      if (isLayerComplete(resumeState, 'L2')) {
+        logSkippedLayer(visitId, 'L2', attempt);
+        skipped.push('L2');
+        speakerMap = (withTranscript?.speakerMap ?? {}) as SpeakerMap;
+      } else {
+        const r = await runLayer2SpeakerRoles({
+          visitId,
+          practiceId,
+          utterances,
+        });
+        speakerMap = r.speakerMap;
+      }
 
-      // L3 — conversation entities.
-      const l3 = await runLayer3ExtractEntities({
-        visitId,
-        practiceId,
-        mode: 'conversation',
-        utterances,
-        speakerMap: speakerMap as SpeakerMap,
-      });
-      entities = l3.entities;
-      contextText = l3.contextText;
+      // ── L3 — conversation entities ──────────────────────────────
+      if (isLayerComplete(resumeState, 'L3')) {
+        logSkippedLayer(visitId, 'L3', attempt);
+        skipped.push('L3');
+        entities = resumeState.entities as ExtractedEntities;
+        // contextText is a derived string (not persisted) — rebuild
+        // from the same inputs L3 would have used.
+        contextText = buildRoleLabeledTranscript(utterances, speakerMap);
+      } else {
+        const l3 = await runLayer3ExtractEntities({
+          visitId,
+          practiceId,
+          mode: 'conversation',
+          utterances,
+          speakerMap,
+        });
+        entities = l3.entities;
+        contextText = l3.contextText;
+      }
     } else if (visit.inputMode === 'voice_dictation') {
-      // L1' — single-speaker Deepgram.
-      const l1b = await runLayer1bTranscribeDictation({
-        visitId,
-        practiceId,
-        dictationAudioKey: visit.dictationAudioKey!,
-        // Dictations come from browser MediaRecorder → webm/opus.
-        // Deepgram auto-detects encoding from the Content-Type header.
-        dictationMimeType:
-          process.env.TRANSCRIBE_MD_DICTATION_MIME ?? 'audio/webm',
-      });
+      // ── L1' — single-speaker Deepgram ──────────────────────────
+      let dictationText: string;
+      if (isLayerComplete(resumeState, 'L1b')) {
+        logSkippedLayer(visitId, 'L1b', attempt);
+        skipped.push('L1b');
+        dictationText = resumeState.transcriptText ?? '';
+      } else {
+        const r = await runLayer1bTranscribeDictation({
+          visitId,
+          practiceId,
+          dictationAudioKey: visit.dictationAudioKey!,
+          // Dictations come from browser MediaRecorder → webm/opus.
+          // Deepgram auto-detects encoding from the Content-Type header.
+          dictationMimeType:
+            process.env.TRANSCRIBE_MD_DICTATION_MIME ?? 'audio/webm',
+        });
+        dictationText = r.transcript;
+      }
 
-      // L3 — dictation entities.
+      // ── L3 — dictation entities ─────────────────────────────────
       await prisma.transcribeVisit.update({
         where: { id: visitId },
         data: { status: TranscribeVisitStatus.EXTRACTING },
       });
-      const l3 = await runLayer3ExtractEntities({
-        visitId,
-        practiceId,
-        mode: 'dictation',
-        dictationText: l1b.transcript,
-      });
-      entities = l3.entities;
-      contextText = l3.contextText;
+      if (isLayerComplete(resumeState, 'L3')) {
+        logSkippedLayer(visitId, 'L3', attempt);
+        skipped.push('L3');
+        entities = resumeState.entities as ExtractedEntities;
+        contextText = dictationText.trim();
+      } else {
+        const l3 = await runLayer3ExtractEntities({
+          visitId,
+          practiceId,
+          mode: 'dictation',
+          dictationText,
+        });
+        entities = l3.entities;
+        contextText = l3.contextText;
+      }
     } else {
-      // text_notes — no transcription step.
-      const l3 = await runLayer3ExtractEntities({
-        visitId,
-        practiceId,
-        mode: 'text',
-        rawText: visit.rawTextInput!,
-      });
-      entities = l3.entities;
-      contextText = l3.contextText;
+      // text_notes — no transcription step. L3 is the earliest layer.
+      if (isLayerComplete(resumeState, 'L3')) {
+        logSkippedLayer(visitId, 'L3', attempt);
+        skipped.push('L3');
+        entities = resumeState.entities as ExtractedEntities;
+        contextText = (visit.rawTextInput ?? '').trim();
+      } else {
+        const l3 = await runLayer3ExtractEntities({
+          visitId,
+          practiceId,
+          mode: 'text',
+          rawText: visit.rawTextInput!,
+        });
+        entities = l3.entities;
+        contextText = l3.contextText;
+      }
     }
 
     // -------------------------------------------------------------------
@@ -280,37 +394,58 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       where: { id: visitId },
       data: { status: TranscribeVisitStatus.DRAFTING },
     });
-    const soapDraft = await runLayer4GenerateSoap({
-      visitId,
-      practiceId,
-      specialty: visit.specialty,
-      roleLabeledTranscript: contextText,
-      entities,
-    });
+    let soapDraft: string;
+    if (isLayerComplete(resumeState, 'L4')) {
+      logSkippedLayer(visitId, 'L4', attempt);
+      skipped.push('L4');
+      soapDraft = resumeState.soapDraft ?? '';
+    } else {
+      soapDraft = await runLayer4GenerateSoap({
+        visitId,
+        practiceId,
+        specialty: visit.specialty,
+        roleLabeledTranscript: contextText,
+        entities,
+      });
+    }
 
     await prisma.transcribeVisit.update({
       where: { id: visitId },
       data: { status: TranscribeVisitStatus.CRITIQUING },
     });
-    const critique = await runLayer5SelfCritique({
-      visitId,
-      practiceId,
-      specialty: visit.specialty,
-      soapDraft,
-      roleLabeledTranscript: contextText,
-      entities,
-    });
+    let critique: Awaited<ReturnType<typeof runLayer5SelfCritique>>;
+    if (isLayerComplete(resumeState, 'L5')) {
+      logSkippedLayer(visitId, 'L5', attempt);
+      skipped.push('L5');
+      critique = resumeState.critique as typeof critique;
+    } else {
+      critique = await runLayer5SelfCritique({
+        visitId,
+        practiceId,
+        specialty: visit.specialty,
+        soapDraft,
+        roleLabeledTranscript: contextText,
+        entities,
+      });
+    }
 
     await prisma.transcribeVisit.update({
       where: { id: visitId },
       data: { status: TranscribeVisitStatus.POLISHING },
     });
-    const polished = await runLayer6Polish({
-      visitId,
-      practiceId,
-      soapDraft,
-      critique,
-    });
+    let polished: { soapFinal: string };
+    if (isLayerComplete(resumeState, 'L6')) {
+      logSkippedLayer(visitId, 'L6', attempt);
+      skipped.push('L6');
+      polished = { soapFinal: resumeState.soapFinal ?? '' };
+    } else {
+      polished = await runLayer6Polish({
+        visitId,
+        practiceId,
+        soapDraft,
+        critique,
+      });
+    }
 
     // -------------------------------------------------------------------
     // T-M6 — parallel automation fan-out. Each L7x layer runs
@@ -408,8 +543,32 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       },
     ];
 
+    // T-M13 — per-task resumability. For each enabled L7 task, check
+    // its checkpoint column: if populated from a prior attempt, skip
+    // the run and carry a bare 'ok' status. Failed L7 columns are
+    // nulled by the catch below, so the skip check correctly returns
+    // false for them and they re-run.
+    const TASK_KEY_TO_LAYER: Record<AutomationTask['key'], PipelineLayer> = {
+      icd_coding: 'L7a',
+      cpt_coding: 'L7b',
+      rx_drafting: 'L7c',
+      referrals: 'L7d',
+      patient_summary: 'L7e',
+    };
     const enabled = tasks.filter((t) => t.enabled);
-    const results = await Promise.allSettled(enabled.map((t) => t.run()));
+    const toRun: AutomationTask[] = [];
+    const resumedOk = new Set<AutomationTask['key']>();
+    for (const t of enabled) {
+      const layer = TASK_KEY_TO_LAYER[t.key];
+      if (isLayerComplete(resumeState, layer)) {
+        logSkippedLayer(visitId, layer, attempt);
+        skipped.push(layer);
+        resumedOk.add(t.key);
+      } else {
+        toRun.push(t);
+      }
+    }
+    const results = await Promise.allSettled(toRun.map((t) => t.run()));
 
     // Roll settled results up into confidenceScores so the UI + future
     // observability can see per-layer status without re-reading ai_calls.
@@ -424,7 +583,16 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         confidenceScores[t.key] = { status: 'skipped' };
         continue;
       }
-      const idx = enabled.indexOf(t);
+      if (resumedOk.has(t.key)) {
+        // Persisted from a prior attempt — we don't have the original
+        // metadata (flesch_kincaid grade for patient_summary) in memory
+        // and re-reading it isn't worth the complexity. Bare 'ok' is
+        // accurate. The actual patientSummary column is intact, which
+        // is what the Extras tab reads.
+        confidenceScores[t.key] = { status: 'ok' };
+        continue;
+      }
+      const idx = toRun.indexOf(t);
       const r = results[idx];
       if (r.status === 'fulfilled') {
         // Persist Layer 7e readability grade into confidenceScores so
@@ -458,7 +626,8 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
           reason: reason.slice(0, 500),
         };
         // Clear any column the layer might have partially written so a
-        // stale "almost-populated" row can't mislead the UI.
+        // stale "almost-populated" row can't mislead the UI, AND so
+        // the T-M13 skip check returns false on the next retry.
         await clearAutomationColumn(visitId, t.key).catch(() => {});
       }
     }
@@ -487,6 +656,10 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         confidenceScores: confidenceScores as unknown as object,
       },
     });
+
+    // T-M13 summary line — logs only when at least one layer was
+    // skipped, so happy-path first attempts stay quiet.
+    logSkipSummary(visitId, attempt, skipped);
   } catch (err) {
     console.error(`[transcribe-md-worker] visit ${visitId} failed:`, err);
     await prisma.transcribeVisit
