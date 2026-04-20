@@ -31,6 +31,7 @@ import { fetchPatientsPage } from '@/lib/patients-query';
 import { VisitsGrid } from './visits-grid';
 import { PatientsGrid } from './patients-grid';
 import { TabNav } from './tab-nav';
+import { ShowArchivedToggle } from './show-archived-toggle';
 
 export const metadata: Metadata = { title: 'Dashboard' };
 
@@ -54,6 +55,10 @@ export default async function DashboardPage({
   const tabParam = Array.isArray(params.tab) ? params.tab[0] : params.tab;
   const activeTab: 'patients' | 'visits' =
     tabParam === 'visits' ? 'visits' : 'patients';
+  const archivedParam = Array.isArray(params.archived)
+    ? params.archived[0]
+    : params.archived;
+  const includeArchived = archivedParam === '1';
 
   return (
     <PageWrapper>
@@ -65,6 +70,7 @@ export default async function DashboardPage({
             userId={session.user.id}
             practiceId={user.practiceId}
             activeTab={activeTab}
+            includeArchived={includeArchived}
           />
         </Suspense>
       </main>
@@ -76,13 +82,20 @@ async function DashboardBody({
   userId,
   practiceId,
   activeTab,
+  includeArchived,
 }: {
   userId: string;
   practiceId: string;
   activeTab: 'patients' | 'visits';
+  includeArchived: boolean;
 }) {
   // Small COUNT queries for the tab badges — both always visible, so
   // both need a number. Cheap via the existing indexes.
+  // NOTE: visitCount stays archive-exclusive even when the toggle is
+  // on — the badge shows "active visits on this account", not
+  // "visits currently rendered in the grid". Otherwise toggling the
+  // switch would make the badge jump, which reads like the other
+  // tab's count changed.
   const [patientCount, visitCount] = await Promise.all([
     prisma.transcribeMdPatient.count({
       where: { practiceId, deletedAt: null },
@@ -122,7 +135,11 @@ async function DashboardBody({
       {activeTab === 'patients' ? (
         <PatientsTabBody practiceId={practiceId} patientCount={patientCount} />
       ) : (
-        <VisitsTabBody userId={userId} visitCount={visitCount} />
+        <VisitsTabBody
+          userId={userId}
+          visitCount={visitCount}
+          includeArchived={includeArchived}
+        />
       )}
     </>
   );
@@ -150,17 +167,25 @@ async function PatientsTabBody({
 async function VisitsTabBody({
   userId,
   visitCount,
+  includeArchived,
 }: {
   userId: string;
   visitCount: number;
+  includeArchived: boolean;
 }) {
-  if (visitCount === 0) {
+  if (visitCount === 0 && !includeArchived) {
     return <VisitsEmptyTabBody />;
   }
   // Matches the T-M16.4 first-page render — fetch PAGE_SIZE+1 to
-  // detect hasMore without a second query.
+  // detect hasMore without a second query. When the toggle is on
+  // we drop the archivedAt filter; deletedAt filter stays (trash
+  // belongs on the patient detail page, not this dashboard).
   const rows = await prisma.transcribeVisit.findMany({
-    where: { userId, deletedAt: null, archivedAt: null },
+    where: {
+      userId,
+      deletedAt: null,
+      ...(includeArchived ? {} : { archivedAt: null }),
+    },
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     take: DASHBOARD_PAGE_SIZE + 1,
     select: {
@@ -169,6 +194,7 @@ async function VisitsTabBody({
       specialty: true,
       status: true,
       createdAt: true,
+      archivedAt: true,
     },
   });
   const hasMore = rows.length > DASHBOARD_PAGE_SIZE;
@@ -180,10 +206,16 @@ async function VisitsTabBody({
       : null;
 
   return (
-    <VisitsGrid
-      initialVisits={firstPage as VisitCardData[]}
-      initialCursor={initialCursor}
-    />
+    <>
+      <div className="mb-3 flex justify-end">
+        <ShowArchivedToggle />
+      </div>
+      <VisitsGrid
+        initialVisits={firstPage as VisitCardData[]}
+        initialCursor={initialCursor}
+        includeArchived={includeArchived}
+      />
+    </>
   );
 }
 
