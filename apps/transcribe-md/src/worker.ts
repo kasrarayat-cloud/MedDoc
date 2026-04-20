@@ -25,6 +25,7 @@ import prisma from '@meddoc/db';
 import { TranscribeVisitStatus } from '@prisma/client';
 import type { DeepgramBatchResponse, DeepgramUtterance } from '@meddoc/ai';
 import { redactPhi } from '@meddoc/ai';
+import { log } from '@/lib/log';
 
 import {
   QUEUE_NAME,
@@ -725,9 +726,9 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
  *  production deployments stay off until ops flips the flag. */
 async function startCleanupWorker(): Promise<void> {
   if (!CLEANUP_ENABLED) {
-    console.log(
-      '[ops:minio-cleanup] disabled (MINIO_ORPHAN_CLEANUP_ENABLED != "true")'
-    );
+    log.info('ops:minio-cleanup', 'disabled', {
+      reason: 'MINIO_ORPHAN_CLEANUP_ENABLED != "true"',
+    });
     return;
   }
 
@@ -778,16 +779,18 @@ async function startCleanupWorker(): Promise<void> {
     }
   );
 
-  console.log(
-    `[ops:minio-cleanup] enabled, cron="${CLEANUP_CRON}" UTC, ` +
-      `retentionDays=${CLEANUP_RETENTION_DAYS}, dryRun=${CLEANUP_DRY_RUN}`
-  );
+  log.info('ops:minio-cleanup', 'enabled', {
+    cron: CLEANUP_CRON,
+    tz: 'UTC',
+    retentionDays: CLEANUP_RETENTION_DAYS,
+    dryRun: CLEANUP_DRY_RUN,
+  });
 }
 
 async function main() {
-  console.log('[transcribe-md-worker] booting…');
+  log.info('transcribe-md-worker', 'booting');
   await ensureBucket();
-  console.log('[transcribe-md-worker] bucket ready');
+  log.info('transcribe-md-worker', 'bucket ready');
 
   const worker = new Worker<ProcessVisitPayload>(
     QUEUE_NAME,
@@ -808,7 +811,10 @@ async function main() {
   );
 
   worker.on('completed', (job) => {
-    console.log(`[transcribe-md-worker] job ${job.id} visit ${job.data.visitId} OK`);
+    log.info('transcribe-md-worker', 'visit completed', {
+      jobId: job.id,
+      visitId: job.data.visitId,
+    });
   });
   worker.on('failed', (job, err) => {
     console.error(
@@ -817,9 +823,10 @@ async function main() {
     );
   });
 
-  console.log(
-    `[transcribe-md-worker] listening on queue "${QUEUE_NAME}" concurrency=${CONCURRENCY}`
-  );
+  log.info('transcribe-md-worker', 'listening on queue', {
+    queue: QUEUE_NAME,
+    concurrency: CONCURRENCY,
+  });
 
   // T-M12 — schedule cleanup AFTER the main worker is up. Cleanup
   // failure should never block pipeline processing.

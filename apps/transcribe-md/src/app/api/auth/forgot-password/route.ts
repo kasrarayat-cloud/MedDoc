@@ -36,6 +36,7 @@ import {
 import { sendPasswordResetEmail } from '@/lib/email';
 import { MARKETING_URL, APP_URL } from '@/lib/constants';
 import { redactPhi } from '@meddoc/ai';
+import { log } from '@/lib/log';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -94,9 +95,10 @@ export const POST = withApiHandler('api:auth:forgot-password', async (req) => {
           resetUrl,
           userName: user.name,
         });
-        console.info(
-          `[auth:forgot-password] reset email sent ip=${ip} user=${user.id}`
-        );
+        log.info('auth:forgot-password', 'reset email sent', {
+          ip,
+          userId: user.id,
+        });
       } else {
         // Dev-escape: log the link so local testing doesn't need
         // a real Resend account. NEVER log the full URL in prod
@@ -106,9 +108,7 @@ export const POST = withApiHandler('api:auth:forgot-password', async (req) => {
         );
       }
     } else {
-      console.info(
-        `[auth:forgot-password] no matching active user ip=${ip}`
-      );
+      log.info('auth:forgot-password', 'no matching active user', { ip });
     }
   } catch (err) {
     // Catch-and-log so the failure mode doesn't leak through the

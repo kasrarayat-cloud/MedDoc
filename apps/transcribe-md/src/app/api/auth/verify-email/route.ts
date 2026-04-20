@@ -28,6 +28,7 @@ import {
 } from '@/lib/rate-limit';
 import { APP_URL } from '@/lib/constants';
 import { redactPhi } from '@meddoc/ai';
+import { log } from '@/lib/log';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -63,9 +64,9 @@ export const GET = withApiHandler('api:auth:verify-email', async (req) => {
       where: { id: consumed.userId },
       data: { emailVerified: new Date() },
     });
-    console.info(
-      `[api:auth:verify-email] verified user=${consumed.userId}`
-    );
+    log.info('api:auth:verify-email', 'email verified', {
+      userId: consumed.userId,
+    });
   } catch (err) {
     console.error(
       `[api:auth:verify-email] update failed user=${consumed.userId}:`,

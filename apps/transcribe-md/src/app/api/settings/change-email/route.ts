@@ -34,6 +34,7 @@ import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 import { sendEmailChangeRequestEmail } from '@/lib/email';
 import { APP_URL } from '@/lib/constants';
 import { redactPhi } from '@meddoc/ai';
+import { log } from '@/lib/log';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -150,9 +151,9 @@ export const POST = withApiHandler(
       );
     }
 
-    console.info(
-      `[api:settings:change-email] request started user=${user.id}`
-    );
+    log.info('api:settings:change-email', 'request started', {
+      userId: user.id,
+    });
     return NextResponse.json(
       {
         ok: true,

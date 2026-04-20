@@ -18,6 +18,7 @@ import { apiError, withApiHandler } from '@/lib/api-error';
 import { auth } from '@/lib/nextauth';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 import { redactPhi } from '@meddoc/ai';
+import { log } from '@/lib/log';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -123,9 +124,10 @@ export const POST = withApiHandler(
       return apiError('Could not update your password. Try again.', 500);
     }
 
-    console.info(
-      `[api:settings:change-password] password updated user=${userId} kept-session=${currentSessionToken ? 'yes' : 'no'}`
-    );
+    log.info('api:settings:change-password', 'password updated', {
+      userId,
+      keptCurrentSession: Boolean(currentSessionToken),
+    });
     return NextResponse.json({ ok: true }, { status: 200 });
   }
 );
