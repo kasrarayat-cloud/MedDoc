@@ -11,6 +11,7 @@ import { SPECIALTIES } from '@/lib/specialties';
 import { ProfileForm } from './profile-form';
 import { SessionPanel } from './session-panel';
 import { DeleteAccountDialog } from './delete-account-dialog';
+import { isDataExportEnabled } from '../api/settings/export-data/route';
 
 export const metadata: Metadata = { title: 'Settings' };
 
@@ -118,6 +119,37 @@ export default async function SettingsPage() {
             )}
           </div>
         </section>
+
+        {/* Your data (T-M16.2) */}
+        {isDataExportEnabled() && (
+          <section className="mt-10">
+            <SectionHeader
+              title="Your data"
+              description="Download a ZIP containing every visit, transcript, SOAP note, audio file, and signed PDF we have for your account."
+            />
+            <div className="mt-6 rounded-xl border border-border-default bg-bg-surface-1/60 p-6">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-[13px] leading-relaxed text-text-secondary">
+                  <p>
+                    The export includes visit metadata as JSON, original
+                    audio files, signed PDFs, and your per-doctor edit
+                    patterns. No passwords or MFA secrets.
+                  </p>
+                  <p className="mt-2 text-text-tertiary">
+                    Large exports can take up to five minutes. Your browser
+                    will start the download as bytes become available.
+                  </p>
+                </div>
+                <a
+                  href="/api/settings/export-data"
+                  className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-violet-500/40 bg-violet-500/10 px-4 py-2 text-[13px] font-medium text-violet-200 hover:bg-violet-500/15 hover:border-violet-500/60 transition-colors"
+                >
+                  Export my data
+                </a>
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* Danger zone */}
         <section className="mt-10">
