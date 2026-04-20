@@ -88,15 +88,46 @@ export function AudioUploader({ visitId }: AudioUploaderProps) {
         return;
       }
       let msg = `Upload failed (${xhr.status}).`;
+      let toastTitle = 'Upload failed';
+      let toastDescription = msg;
+      // T-M16.4: read optional {code, retry} from the error body so
+      // FILE_TOO_LARGE / UNSUPPORTED_FORMAT / STORAGE_* paths show the
+      // right user-facing CTA (contact support vs try again).
       try {
-        const body = JSON.parse(xhr.responseText);
-        if (body?.error) msg = `Upload failed: ${body.error}`;
+        const body = JSON.parse(xhr.responseText) as {
+          error?: string;
+          code?: string;
+          retry?: boolean;
+        };
+        if (body?.error) {
+          msg = body.error;
+          toastDescription = body.error;
+        }
+        switch (body?.code) {
+          case 'FILE_TOO_LARGE':
+            toastTitle = 'File too large';
+            break;
+          case 'UNSUPPORTED_FORMAT':
+            toastTitle = 'Unsupported file format';
+            break;
+          case 'STORAGE_TEMPORARY':
+          case 'QUEUE_TEMPORARY':
+            toastTitle = 'Temporary storage error';
+            toastDescription = `${body.error ?? msg} (Please try the upload again.)`;
+            break;
+          case 'STORAGE_PERMANENT':
+            toastTitle = 'Storage misconfigured';
+            toastDescription = `${body.error ?? msg} (Please contact support — this is not something a retry will fix.)`;
+            break;
+          default:
+            break;
+        }
       } catch {
         /* ignore */
       }
       setProgress(null);
       setUploadError(msg);
-      toast.error('Upload failed', { description: msg });
+      toast.error(toastTitle, { description: toastDescription });
     };
 
     xhr.onerror = () => {
