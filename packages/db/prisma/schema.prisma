@@ -225,6 +225,11 @@ model Practice {
   tasks         Task[]
   billingEvents BillingEvent[]
   aiCalls       AiCall[]
+  // T-M17.2 — TranscribeMD-scoped patients. Kept separate from the
+  // CRM `Patient` model so the two products can diverge on schema +
+  // privacy posture (TranscribeMdPatient stores full DOB; CRM Patient
+  // stores birthYear only per Safe Harbor).
+  transcribeMdPatients TranscribeMdPatient[]
 
   @@index([slug])
   @@map("practices")
@@ -1193,12 +1198,79 @@ enum TranscribeVisitStatus {
   SIGNED
 }
 
+// ============================================================================
+// TRANSCRIBE-MD PATIENT — standalone patient record for TranscribeMD
+// ----------------------------------------------------------------------------
+// T-M17.2. Distinct from the CRM `Patient` model (schema.prisma above):
+//   - Scoped to Practice (for solo-TranscribeMD users the Practice is
+//     the 1:1 synthetic signup practice; forward-compatible with
+//     multi-seat practices).
+//   - Full DOB is OK here — TranscribeMD has no DrChrono sync that would
+//     make Safe Harbor birthYear-only the right call, and full DOB is
+//     the medical workflow standard doctors expect.
+//   - Soft-deletable: `deletedAt IS NOT NULL` hides the patient from
+//     search + lists; linked TranscribeVisit rows keep the FK intact.
+// ============================================================================
+
+model TranscribeMdPatient {
+  id String @id @default(cuid())
+
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+
+  /// Single-string display name. The UI renders as-is — there is no
+  /// first/last split. Doctors dictate "John Smith" or "Patient MRN
+  /// 4821" and that's the identifier carried through the pipeline.
+  name String
+
+  /// Full DOB. NULL for patients backfilled from legacy visits where
+  /// the doctor never entered a DOB; new patients created through the
+  /// T-M17.2 UI require this.
+  dateOfBirth DateTime? @db.Date
+
+  /// Optional external / practice-internal ID (EMR MRN, chart number,
+  /// etc). No uniqueness constraint — doctors sometimes reuse or
+  /// leave blank.
+  externalId String?
+
+  /// Soft-delete marker. Deleted patients are hidden from the
+  /// dashboard + search, but their visits remain intact. Hard delete
+  /// is not exposed in the UI.
+  deletedAt DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  /// Visits linked to this patient. FK points here; delete is RESTRICT
+  /// (hard-deleting a patient with visits requires deleting the visits
+  /// first — soft-delete is the expected path).
+  transcribeVisits TranscribeVisit[]
+
+  @@index([practiceId, deletedAt])
+  // Trigram GIN index for fuzzy name search is added by the migration
+  // SQL directly (Prisma doesn't natively express `USING gin (LOWER(name)
+  // gin_trgm_ops)`). See migration 20260420_*_add_transcribe_md_patients.
+  @@map("transcribe_md_patients")
+}
+
 model TranscribeVisit {
   id String @id @default(cuid())
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  /// T-M17.2: link to the TranscribeMdPatient. Nullable during the
+  /// Phase 1 backfill window; tightened to NOT NULL in a later
+  /// migration once every legacy visit has been paired with a patient.
+  patientId String?
+  patient   TranscribeMdPatient? @relation(fields: [patientId], references: [id], onDelete: Restrict)
+
+  /// Legacy free-text patient name — kept nullable through T-M17.2
+  /// because some older visits never set it. After the Phase 1
+  /// backfill this is superseded by the `patient` relation, but we
+  /// retain the column for one release as a safety net in case a
+  /// visit ends up with `patientId = NULL` through some unexpected
+  /// path. Remove in a follow-up once Phase 3 is battle-tested.
   patientName    String?
   specialty      String
   chiefComplaint String?
@@ -1298,6 +1370,7 @@ model TranscribeVisit {
 
   @@index([userId, createdAt])
   @@index([status])
+  @@index([patientId])
   @@map("transcribe_visits")
 }
 
