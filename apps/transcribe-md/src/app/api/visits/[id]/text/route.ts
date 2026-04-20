@@ -14,10 +14,7 @@ import { z } from 'zod';
 import { auth } from '@/lib/nextauth';
 import prisma from '@meddoc/db';
 import { TranscribeVisitStatus } from '@prisma/client';
-import {
-  getTranscribeMdQueue,
-  JOB_PROCESS_VISIT,
-} from '@/lib/queue';
+import { enqueueProcessVisit } from '@/lib/queue';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
@@ -91,11 +88,7 @@ export const POST = withApiHandler<{ id: string }>(
     });
 
     try {
-      await getTranscribeMdQueue().add(
-        JOB_PROCESS_VISIT,
-        { visitId, userId },
-        { jobId: `visit-${visitId}-${Date.now()}` }
-      );
+      await enqueueProcessVisit(visitId, userId);
     } catch (err) {
       console.error(
         '[api:visits:text] queue enqueue failed:',
