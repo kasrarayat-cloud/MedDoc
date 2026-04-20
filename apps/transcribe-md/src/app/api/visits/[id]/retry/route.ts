@@ -75,9 +75,21 @@ export const POST = withApiHandler<{ id: string }>(
         userId: true,
         status: true,
         updatedAt: true,
+        deletedAt: true,
+        archivedAt: true,
       },
     });
     if (!visit || visit.userId !== userId) return apiError('not found', 404);
+
+    if (visit.deletedAt !== null || visit.archivedAt !== null) {
+      return NextResponse.json(
+        {
+          error: 'Visit is no longer active. Restore it first.',
+          code: 'VISIT_NOT_ACTIVE',
+        },
+        { status: 400 }
+      );
+    }
 
     if (visit.status === TranscribeVisitStatus.SIGNED) {
       return NextResponse.json(

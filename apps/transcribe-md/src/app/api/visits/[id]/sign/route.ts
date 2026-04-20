@@ -104,9 +104,23 @@ export const POST = withApiHandler<{ id: string }>(
         status: true,
         soapFinal: true,
         signedAt: true,
+        deletedAt: true,
+        archivedAt: true,
       },
     });
     if (!visit || visit.userId !== userId) return apiError('not found', 404);
+    // T-M17.3: never silently sign a trashed / archived visit. Archived
+    // SIGNED visits cannot be re-signed via this route — the operator
+    // must unarchive first (dedicated flow, not in T-M17.3 scope).
+    if (visit.deletedAt !== null || visit.archivedAt !== null) {
+      return NextResponse.json(
+        {
+          error: 'Visit is no longer active. Restore it first.',
+          code: 'VISIT_NOT_ACTIVE',
+        },
+        { status: 400 }
+      );
+    }
     if (
       visit.status !== TranscribeVisitStatus.READY &&
       visit.status !== TranscribeVisitStatus.SIGNED
