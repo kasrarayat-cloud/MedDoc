@@ -61,9 +61,23 @@ export const POST = withApiHandler<{ id: string }>(
 
     const visit = await prisma.transcribeVisit.findUnique({
       where: { id: visitId },
-      select: { id: true, userId: true, inputMode: true, status: true },
+      select: {
+        id: true,
+        userId: true,
+        inputMode: true,
+        status: true,
+        deletedAt: true,
+        archivedAt: true,
+      },
     });
     if (!visit || visit.userId !== userId) return apiError('not found', 404);
+    if (visit.deletedAt !== null || visit.archivedAt !== null) {
+      return apiError(
+        'Visit is no longer active. Restore it first.',
+        400,
+        { code: 'VISIT_NOT_ACTIVE' }
+      );
+    }
     if (visit.inputMode !== 'audio_upload') {
       return apiError('this visit does not accept audio uploads', 400);
     }

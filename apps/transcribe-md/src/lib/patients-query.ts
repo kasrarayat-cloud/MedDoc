@@ -48,11 +48,15 @@ async function fetchRows(
           SELECT v2.specialty
           FROM transcribe_visits v2
           WHERE v2."patientId" = p.id
+            AND v2."deletedAt" IS NULL
+            AND v2."archivedAt" IS NULL
           ORDER BY v2."createdAt" DESC
           LIMIT 1
         ) AS "lastVisitSpecialty"
       FROM transcribe_md_patients p
       LEFT JOIN transcribe_visits v ON v."patientId" = p.id
+        AND v."deletedAt" IS NULL
+        AND v."archivedAt" IS NULL
       WHERE p."practiceId" = ${practiceId}
         AND p."deletedAt" IS NULL
       GROUP BY p.id
@@ -76,11 +80,15 @@ async function fetchRows(
           SELECT v2.specialty
           FROM transcribe_visits v2
           WHERE v2."patientId" = p.id
+            AND v2."deletedAt" IS NULL
+            AND v2."archivedAt" IS NULL
           ORDER BY v2."createdAt" DESC
           LIMIT 1
         ) AS "lastVisitSpecialty"
       FROM transcribe_md_patients p
       LEFT JOIN transcribe_visits v ON v."patientId" = p.id
+        AND v."deletedAt" IS NULL
+        AND v."archivedAt" IS NULL
       WHERE p."practiceId" = ${practiceId}
         AND p."deletedAt" IS NULL
         AND p.id < ${cursor.id}
@@ -108,6 +116,8 @@ async function fetchRows(
         SELECT v2.specialty
         FROM transcribe_visits v2
         WHERE v2."patientId" = p.id
+          AND v2."deletedAt" IS NULL
+          AND v2."archivedAt" IS NULL
         ORDER BY v2."createdAt" DESC
         LIMIT 1
       ) AS "lastVisitSpecialty"

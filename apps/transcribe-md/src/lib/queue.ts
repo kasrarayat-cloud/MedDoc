@@ -111,6 +111,10 @@ export async function enqueueProcessVisit(
 // ---------------------------------------------------------------------------
 export const CLEANUP_QUEUE_NAME = 'transcribe-md-cleanup';
 export const JOB_MINIO_ORPHAN_CLEANUP = 'minio_orphan_cleanup';
+/** T-M17.3: daily sweep of abandoned-QUEUED drafts + expired trash.
+ *  Shares the cleanup queue so a single BullMQ Worker processes both
+ *  kinds of job. */
+export const JOB_STALE_VISIT_CLEANUP = 'stale_visit_cleanup';
 
 export function getCleanupQueue(): Queue {
   if (cleanupQueue) return cleanupQueue;

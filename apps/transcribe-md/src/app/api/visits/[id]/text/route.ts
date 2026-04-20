@@ -61,9 +61,18 @@ export const POST = withApiHandler<{ id: string }>(
         inputMode: true,
         status: true,
         rawTextInput: true,
+        deletedAt: true,
+        archivedAt: true,
       },
     });
     if (!visit || visit.userId !== userId) return apiError('not found', 404);
+    if (visit.deletedAt !== null || visit.archivedAt !== null) {
+      return apiError(
+        'Visit is no longer active. Restore it first.',
+        400,
+        { code: 'VISIT_NOT_ACTIVE' }
+      );
+    }
     if (visit.inputMode !== 'text_notes') {
       return apiError('this visit is not a text-to-SOAP visit', 400);
     }

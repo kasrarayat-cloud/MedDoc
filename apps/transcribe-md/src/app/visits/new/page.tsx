@@ -44,7 +44,11 @@ export default async function NewVisitPage({
       select: { name: true, email: true, practiceId: true },
     }),
     prisma.transcribeVisit.findFirst({
-      where: { userId: session.user.id },
+      where: {
+        userId: session.user.id,
+        deletedAt: null,
+        archivedAt: null,
+      },
       orderBy: { createdAt: 'desc' },
       select: { specialty: true },
     }),
