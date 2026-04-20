@@ -15,9 +15,10 @@
 // hands the patient off to Step 2.
 // ============================================================================
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Loader2, Search, Plus, UserPlus, X } from 'lucide-react';
 
+import { MIN_DOB_YEAR, validateDob } from '@/lib/dob';
 import { DuplicateModal } from './duplicate-modal';
 import type { FuzzyMatch, SelectedPatient } from './patient-types';
 
@@ -49,36 +50,6 @@ interface FuzzyApiResponse {
 
 interface Props {
   onSelect: (p: SelectedPatient) => void;
-}
-
-// ---------------------------------------------------------------------------
-// DOB validation — catches typos like 5000-01-01 + future dates.
-// ---------------------------------------------------------------------------
-const MIN_DOB_YEAR = 1900;
-function validateDob(input: string): { ok: true; iso: string } | { ok: false; error: string } {
-  if (!input) return { ok: false, error: 'Date of birth is required.' };
-  // Parse as a local calendar date to avoid TZ shifts.
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input);
-  if (!m) return { ok: false, error: 'Use YYYY-MM-DD.' };
-  const year = Number(m[1]);
-  const month = Number(m[2]);
-  const day = Number(m[3]);
-  const date = new Date(Date.UTC(year, month - 1, day));
-  if (
-    Number.isNaN(date.getTime()) ||
-    date.getUTCFullYear() !== year ||
-    date.getUTCMonth() !== month - 1 ||
-    date.getUTCDate() !== day
-  ) {
-    return { ok: false, error: 'Not a real date.' };
-  }
-  if (year < MIN_DOB_YEAR) {
-    return { ok: false, error: `Year must be ${MIN_DOB_YEAR} or later.` };
-  }
-  if (date.getTime() > Date.now()) {
-    return { ok: false, error: 'DOB cannot be in the future.' };
-  }
-  return { ok: true, iso: input };
 }
 
 function formatDob(iso: string | null): string {
