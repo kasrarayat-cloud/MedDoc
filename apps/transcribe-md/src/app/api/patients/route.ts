@@ -74,6 +74,8 @@ export const GET = withApiHandler('api:patients:list', async (req) => {
           MAX(v."createdAt") AS "lastVisitAt"
         FROM transcribe_md_patients p
         LEFT JOIN transcribe_visits v ON v."patientId" = p.id
+          AND v."deletedAt" IS NULL
+          AND v."archivedAt" IS NULL
         WHERE p."practiceId" = ${session.user.practiceId}
           AND p."deletedAt" IS NULL
           AND (
@@ -95,6 +97,8 @@ export const GET = withApiHandler('api:patients:list', async (req) => {
           MAX(v."createdAt") AS "lastVisitAt"
         FROM transcribe_md_patients p
         LEFT JOIN transcribe_visits v ON v."patientId" = p.id
+          AND v."deletedAt" IS NULL
+          AND v."archivedAt" IS NULL
         WHERE p."practiceId" = ${session.user.practiceId}
           AND p."deletedAt" IS NULL
         GROUP BY p.id

@@ -71,7 +71,14 @@ export default async function PatientPage({
       createdAt: true,
       updatedAt: true,
       transcribeVisits: {
-        where: { userId: user.id },
+        where: {
+          userId: user.id,
+          // T-M17.3: default view hides trashed + archived visits. The
+          // Phase 4 Commit 7 Trash tab fetches deletedAt IS NOT NULL
+          // separately; this include is the Active tab's content.
+          deletedAt: null,
+          archivedAt: null,
+        },
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         select: {
           id: true,

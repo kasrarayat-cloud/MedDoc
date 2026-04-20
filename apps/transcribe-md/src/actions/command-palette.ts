@@ -19,7 +19,11 @@ export async function getRecentVisits(): Promise<RecentVisitItem[]> {
   if (!session?.user?.id) return [];
 
   const rows = await prisma.transcribeVisit.findMany({
-    where: { userId: session.user.id },
+    where: {
+      userId: session.user.id,
+      deletedAt: null,
+      archivedAt: null,
+    },
     orderBy: { createdAt: 'desc' },
     take: 10,
     select: {

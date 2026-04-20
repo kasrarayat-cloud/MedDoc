@@ -87,7 +87,9 @@ async function DashboardBody({
     prisma.transcribeMdPatient.count({
       where: { practiceId, deletedAt: null },
     }),
-    prisma.transcribeVisit.count({ where: { userId } }),
+    prisma.transcribeVisit.count({
+      where: { userId, deletedAt: null, archivedAt: null },
+    }),
   ]);
 
   // Brand-new user (no patients, no visits) — keep the full-bleed
@@ -158,7 +160,7 @@ async function VisitsTabBody({
   // Matches the T-M16.4 first-page render — fetch PAGE_SIZE+1 to
   // detect hasMore without a second query.
   const rows = await prisma.transcribeVisit.findMany({
-    where: { userId },
+    where: { userId, deletedAt: null, archivedAt: null },
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     take: DASHBOARD_PAGE_SIZE + 1,
     select: {

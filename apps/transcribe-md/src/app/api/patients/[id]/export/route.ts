@@ -76,7 +76,12 @@ export const GET = withApiHandler<{ id: string }>(
     }
 
     const visits = await prisma.transcribeVisit.findMany({
-      where: { patientId, userId },
+      where: {
+        patientId,
+        userId,
+        deletedAt: null,
+        archivedAt: null,
+      },
       select: {
         id: true,
         audioKey: true,
