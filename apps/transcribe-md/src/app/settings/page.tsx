@@ -8,9 +8,13 @@ import { describeUserAgent, describeIpLocation, parseUserAgent } from '@/lib/fin
 import { NavBar } from '@/components/nav-bar';
 import { PageWrapper } from '@/components/page-wrapper';
 import { SPECIALTIES } from '@/lib/specialties';
+import { Suspense } from 'react';
 import { ProfileForm } from './profile-form';
 import { SessionPanel } from './session-panel';
 import { DeleteAccountDialog } from './delete-account-dialog';
+import { ChangePasswordForm } from './change-password-form';
+import { ChangeEmailDialog } from './change-email-dialog';
+import { EmailChangeToast } from './email-change-toast';
 import { isDataExportEnabled } from '../api/settings/export-data/route';
 
 export const metadata: Metadata = { title: 'Settings' };
@@ -73,6 +77,9 @@ export default async function SettingsPage() {
       <NavBar name={user.name} email={user.email} />
 
       <main className="mx-auto max-w-3xl px-4 pb-24 pt-8 sm:px-6 lg:px-8 lg:pt-12">
+        <Suspense fallback={null}>
+          <EmailChangeToast />
+        </Suspense>
         <h1 className="type-h1 text-text-primary">Settings</h1>
 
         {/* Profile */}
@@ -88,9 +95,20 @@ export default async function SettingsPage() {
               specialties={specialties}
             />
             <div className="mt-6 grid grid-cols-1 gap-3 border-t border-border-subtle pt-5 sm:grid-cols-2">
-              <ReadOnlyRow label="Email" value={user.email} />
+              <EmailWithChangeButton email={user.email} />
               <ReadOnlyRow label="Member since" value={formatDate(user.createdAt)} />
             </div>
+          </div>
+        </section>
+
+        {/* Security (T-M16.2) */}
+        <section className="mt-10">
+          <SectionHeader
+            title="Security"
+            description="Change your password. Other devices are signed out — this one stays."
+          />
+          <div className="mt-6 rounded-xl border border-border-default bg-bg-surface-1/60 p-6">
+            <ChangePasswordForm />
           </div>
         </section>
 
@@ -203,6 +221,20 @@ function ReadOnlyRow({ label, value }: { label: string; value: string }) {
         {label}
       </div>
       <div className="mt-1 text-[13px] text-text-secondary break-all">{value}</div>
+    </div>
+  );
+}
+
+function EmailWithChangeButton({ email }: { email: string }) {
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-[11px] font-medium uppercase tracking-wider text-text-muted">
+          Email
+        </div>
+        <ChangeEmailDialog currentEmail={email} />
+      </div>
+      <div className="mt-1 text-[13px] text-text-secondary break-all">{email}</div>
     </div>
   );
 }
