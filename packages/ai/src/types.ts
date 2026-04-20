@@ -32,7 +32,10 @@ export type ModelCallPurpose =
   | 'tm_cpt_coding'
   | 'tm_rx_drafting'
   | 'tm_referrals'
-  | 'tm_patient_summary';
+  | 'tm_patient_summary'
+  // T-M14.1: OpenAI text-embedding-3-small for per-doctor edit
+  // pattern capture at sign time. One call per signed visit.
+  | 'tm_embed';
 
 export interface AiLogContext {
   practiceId: string;
