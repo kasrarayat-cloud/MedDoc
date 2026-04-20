@@ -39,6 +39,7 @@ import {
   logDelivery,
   type DeliveryChannel,
 } from '@/lib/deliveries';
+import { captureEditPattern } from '@/lib/edit-tracking';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
 
@@ -144,6 +145,11 @@ export const POST = withApiHandler<{ id: string }>(
           select: { signedAt: true },
         });
         signedAt = refreshed?.signedAt ?? new Date();
+        // T-M14.1: fire-and-forget edit-pattern capture. Only on the
+        // winning transition — race losers already have a capture in
+        // flight from the winner's handler, and the @unique visitId
+        // constraint would reject a second insert anyway.
+        void captureEditPattern({ visitId, doctorId: userId });
       }
     }
 

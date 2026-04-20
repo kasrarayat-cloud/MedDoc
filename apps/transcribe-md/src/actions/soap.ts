@@ -6,6 +6,7 @@ import { z } from 'zod';
 import prisma from '@meddoc/db';
 import { TranscribeVisitStatus } from '@prisma/client';
 import { requireSession } from '@/lib/auth';
+import { captureEditPattern } from '@/lib/edit-tracking';
 
 const SaveSoapSchema = z.object({
   visitId: z.string().min(1),
@@ -91,6 +92,11 @@ export async function signVisitAction(
       signedAt: new Date(),
     },
   });
+
+  // T-M14.1: fire-and-forget edit-pattern capture. captureEditPattern
+  // swallows every error internally — discarding the promise with
+  // `void` keeps this action's happy path unaffected.
+  void captureEditPattern({ visitId, doctorId: session.user.id });
 
   revalidatePath(`/visits/${visitId}`);
   revalidatePath('/dashboard');

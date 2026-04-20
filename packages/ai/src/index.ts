@@ -11,11 +11,19 @@ export * from './types';
 export * from './model-client';
 export * from './deepgram-batch';
 export {
+  EMBED_DIMENSION,
+  embedText,
+  type EmbedTextArgs,
+  type EmbedTextResult,
+} from './embed';
+export {
   claudeSonnet46CostCents,
   deepgramBatchCostCents,
   sonnetInputCentsPerM,
   sonnetOutputCentsPerM,
   deepgramCentsPerMin,
+  openaiEmbedSmallCentsPerM,
+  openaiEmbedSmallCostCents,
 } from './pricing';
 export { hashPrompt } from './prompt-hash';
 export { logAiCall, redactPhi } from './log';
