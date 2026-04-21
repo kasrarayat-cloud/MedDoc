@@ -439,15 +439,32 @@ function renderSoapParagraphs(soap: string): Paragraph[] {
       continue;
     }
     if (/^\s*[-*]\s+/.test(line)) {
+      // T-M22.3: proper Word bulleted list via the `bullet` prop
+      // on Paragraph — previously used a literal "• " prefix with
+      // a manual left-indent, which works but doesn't integrate
+      // with Word's list-promotion / outline features.
       const body = line.replace(/^\s*[-*]\s+/, '');
       out.push(
         new Paragraph({
           spacing: { after: 40 },
-          indent: { left: 360 },
-          children: [
-            new TextRun({ text: '•  ' }),
-            ...renderInlineRuns(body),
-          ],
+          bullet: { level: 0 },
+          children: renderInlineRuns(body),
+        })
+      );
+      continue;
+    }
+    const numbered = line.match(/^(\d+)\.\s+(.*)$/);
+    if (numbered) {
+      // T-M22.3: numbered Plan items go through the "plan-numbering"
+      // Numbering config declared on the Document. Previously these
+      // fell through to the plain-paragraph branch so "1." / "2." /
+      // "3." rendered as literal text without Word's numbering
+      // machinery (no auto-renumbering on edit, no indent).
+      out.push(
+        new Paragraph({
+          spacing: { after: 40 },
+          numbering: { reference: 'plan-numbering', level: 0 },
+          children: renderInlineRuns(numbered[2]),
         })
       );
       continue;
