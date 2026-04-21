@@ -37,6 +37,17 @@ RUN npm ci
 
 COPY . .
 
+# T-M19.2: NEXT_PUBLIC_* need to be in the build environment so the
+# `next build` step inlines them into the client bundle + ISR'd HTML.
+# Compose passes these via `build.args:` so a domain cutover is a
+# single edit at the compose level — no .env-in-monorepo-root
+# contamination dance required (npm workspaces runs `next build` from
+# apps/marketing/ where root .env files aren't picked up).
+ARG NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL
+ARG NEXT_PUBLIC_MARKETING_URL
+ENV NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL=${NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL}
+ENV NEXT_PUBLIC_MARKETING_URL=${NEXT_PUBLIC_MARKETING_URL}
+
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build -w marketing
 

@@ -1,63 +1,71 @@
 # ============================================================================
 # MedDoc Pro — Caddy Reverse Proxy
 # ----------------------------------------------------------------------------
-# Terminates inbound traffic and forwards to the Next.js `app` service on the
-# internal Docker network. Sets X-Forwarded-For / X-Real-IP / X-Forwarded-Proto
-# so the Node runtime reads the real client IP and scheme via
-# getRequestContext() in src/lib/auth.ts.
+# T-M19 (2026-04-21): cut over from MODE A (plaintext, IP-based) to MODE B
+# (HTTPS, domain-based). Live hostnames:
 #
-# TWO MODES BELOW — the IP block is active by default. When you have DNS:
-#   1. Point an A record for your domain (e.g. meddoc.example.com) at this VPS
-#   2. Uncomment the domain block below
-#   3. Comment out or delete the :80 / :9010 / :9020 blocks
-#   4. Update AUTH_URL / TRANSCRIBE_MD_AUTH_URL / MARKETING_URL in
-#      docker-compose.yml to https://your-domain
-#   5. `docker compose up -d --force-recreate caddy app`
+#   quillmd.com + www.quillmd.com  →  marketing  (port 3010 internal)
+#   app.quillmd.com                →  TranscribeMD (port 3011 internal)
+#   pro.quillmd.com                →  MedDoc Pro CRM (port 3000 internal)
 #
-# Caddy auto-provisions a Let's Encrypt cert on first request to the domain
+# Caddy auto-provisions + auto-renews Let's Encrypt certs for each hostname
 # (persisted in the `caddy_data` volume). HTTP→HTTPS redirect is automatic
-# when a hostname is configured.
+# once a hostname is configured.
 #
-# T-M16.3: security headers were previously only in the commented MODE B
-# block. Every active block now sets the subset that's safe over plaintext
-# (nosniff, X-Frame-Options, Referrer-Policy, Permissions-Policy). HSTS + CSP
-# stay gated to MODE B because HSTS over plaintext would lock clients out
-# and CSP needs TLS to be meaningful anyway.
+# The MODE A blocks are kept below as commented rollback reference. DO NOT
+# uncomment them while MODE B is active: the MODE B HSTS header
+# (max-age=31536000; includeSubDomains) tells every client that has hit us
+# to refuse plaintext for up to a year. Safe-rollback procedure is:
+#   1. Serve `Strict-Transport-Security: max-age=0` over HTTPS first
+#   2. Wait for clients to re-fetch and clear their cache
+#   3. Then flip back to MODE A
 # ============================================================================
 
 # ─── Shared header snippet — MODE A (plaintext-safe) ──────────────────────
-# Imported from each :9010/:9020/:80 block. Keeps the header set in one
-# place so we only tune nosniff / X-Frame-Options / Referrer-Policy /
-# Permissions-Policy once.
+# Kept so the rollback commented block below still parses. No active block
+# currently imports it.
 (security_headers_mode_a) {
     header {
-        # Block MIME-type sniffing attacks. Cheap, universal win.
         X-Content-Type-Options "nosniff"
-        # Allow same-origin framing (doctor → doctor's tab embedding).
-        # SAMEORIGIN not DENY so future in-app iframes still work.
         X-Frame-Options "SAMEORIGIN"
-        # Leak only the origin (not the path) when navigating off-site.
         Referrer-Policy "strict-origin-when-cross-origin"
-        # Permissions: mic needed for /visits dictation, camera reserved
-        # for future photo-intake, geolocation explicitly off.
         Permissions-Policy "microphone=(self), camera=(self), geolocation=()"
-        # Don't leak the server brand.
         -Server
     }
 }
 
-# ─── MODE A: IP-based, no TLS (current) ───────────────────────────────────
-# Active until you set up DNS. Plaintext — do NOT ship real patient data
-# to this until the domain block is turned on.
+# ─── Shared header snippet — MODE B (HTTPS-only) ──────────────────────────
+# Imported from every active domain block below. Adds HSTS + CSP
+# Report-Only on top of the MODE A subset. CSP stays Report-Only for now
+# — observe violations, tighten later; 'unsafe-inline' + 'unsafe-eval' are
+# both required today for Next 16 + Tailwind inline emission.
+(security_headers_mode_b) {
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "microphone=(self), camera=(self), geolocation=()"
+        Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://*.ingest.sentry.io; frame-ancestors 'self'; form-action 'self'; base-uri 'self'; object-src 'none';"
+        -Server
+    }
+}
 
-# ─── :9010 — TranscribeMD Marketing (T-M1) ────────────────────────────────
-:9010 {
+# ==========================================================================
+# MODE B — active
+# ==========================================================================
+
+# ─── quillmd.com + www.quillmd.com — Marketing site ───────────────────────
+# Apex + www both served from the same block so visitors land on the same
+# content regardless of whether they type the `www.` prefix. Caddy auto-
+# issues separate certs for each hostname.
+quillmd.com, www.quillmd.com {
     log {
         output stdout
         format console
     }
 
-    import security_headers_mode_a
+    import security_headers_mode_b
 
     reverse_proxy marketing:3010 {
         header_up Host {host}
@@ -67,15 +75,14 @@
     }
 }
 
-# ─── :9020 — TranscribeMD Solo app (T-M2) ────────────────────────────────
-# The actual product — where doctors sign up and use the service.
-:9020 {
+# ─── app.quillmd.com — TranscribeMD (pilot doctors log in here) ───────────
+app.quillmd.com {
     log {
         output stdout
         format console
     }
 
-    import security_headers_mode_a
+    import security_headers_mode_b
 
     reverse_proxy transcribe-md:3011 {
         header_up Host {host}
@@ -85,19 +92,20 @@
     }
 }
 
-# Everything else on :80 → meddoc-pro.
-:80 {
+# ─── pro.quillmd.com — MedDoc Pro CRM (internal admin) ────────────────────
+pro.quillmd.com {
     log {
         output stdout
         format console
     }
 
-    import security_headers_mode_a
+    import security_headers_mode_b
 
-    # Never proxy /api/internal/* externally — it's service-to-service
-    # only (scribe → meddoc-pro), authenticated by the shared token +
-    # IP allowlist. Caddy returning 404 here is defense in depth on top
-    # of the app-layer rejection in apps/meddoc-pro/src/lib/internal-auth.ts.
+    # Defense-in-depth carried over from the MODE A :80 block. The
+    # /api/internal/* endpoints are service-to-service (scribe →
+    # meddoc-pro) authenticated by shared token + IP allowlist at the
+    # app layer; Caddy 404s the path at the edge so external probes
+    # can't even reach the handler.
     @internal path /api/internal/*
     respond @internal 404
 
@@ -109,50 +117,19 @@
     }
 }
 
-# ─── Shared header snippet — MODE B (HTTPS-only) ──────────────────────────
-# Used by every domain block once TLS is live. Adds HSTS + CSP
-# Report-Only to the MODE A subset. The CSP policy starts conservative;
-# violations log to the browser console and (once we stand up a report
-# endpoint) to our collector — no actual requests get blocked.
-(security_headers_mode_b) {
-    header {
-        # HSTS — 1 year, subdomains, preload-ready. Only safe over TLS.
-        # A mistake here with a broken cert locks clients out of the
-        # site for up to 1 year: confirm the cert works BEFORE
-        # uncommenting the MODE B block.
-        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-
-        # Same four MODE A headers repeated here — CSP-Report-Only is
-        # the MODE B addition.
-        X-Content-Type-Options "nosniff"
-        X-Frame-Options "SAMEORIGIN"
-        Referrer-Policy "strict-origin-when-cross-origin"
-        Permissions-Policy "microphone=(self), camera=(self), geolocation=()"
-
-        # CSP starter, Report-Only for now. Observe what breaks, tighten
-        # later. 'unsafe-inline' + 'unsafe-eval' are NOT ideal but Next
-        # 16 + Tailwind both inline enough stuff that strict-dynamic
-        # needs a nonce-propagation plan first. Sentry's ingest origin
-        # is whitelisted so browser-side beforeSend can POST errors.
-        Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://*.ingest.sentry.io; frame-ancestors 'self'; form-action 'self'; base-uri 'self'; object-src 'none';"
-
-        -Server
-    }
-}
-
-# ─── MODE B: Domain-based, auto-TLS (uncomment when DNS is ready) ─────────
-# Replace `meddoc.example.com` with your actual domain. Caddy will obtain
-# and auto-renew a Let's Encrypt cert, and serve HTTPS with HSTS + CSP.
+# ==========================================================================
+# MODE A — rollback reference (inactive)
+# ==========================================================================
+# The original IP-based plaintext blocks. Kept in comment form for
+# emergency rollback. See the header warning about HSTS before uncommenting.
 #
-# meddoc.example.com {
+# :9010 {
 #     log {
 #         output stdout
 #         format console
 #     }
-#
-#     import security_headers_mode_b
-#
-#     reverse_proxy meddoc-pro:3000 {
+#     import security_headers_mode_a
+#     reverse_proxy marketing:3010 {
 #         header_up Host {host}
 #         header_up X-Real-IP {remote_host}
 #         header_up X-Forwarded-For {remote_host}
@@ -160,14 +137,12 @@
 #     }
 # }
 #
-# app.transcribemd.example.com {
+# :9020 {
 #     log {
 #         output stdout
 #         format console
 #     }
-#
-#     import security_headers_mode_b
-#
+#     import security_headers_mode_a
 #     reverse_proxy transcribe-md:3011 {
 #         header_up Host {host}
 #         header_up X-Real-IP {remote_host}
@@ -176,15 +151,15 @@
 #     }
 # }
 #
-# transcribemd.example.com {
+# :80 {
 #     log {
 #         output stdout
 #         format console
 #     }
-#
-#     import security_headers_mode_b
-#
-#     reverse_proxy marketing:3010 {
+#     import security_headers_mode_a
+#     @internal path /api/internal/*
+#     respond @internal 404
+#     reverse_proxy meddoc-pro:3000 {
 #         header_up Host {host}
 #         header_up X-Real-IP {remote_host}
 #         header_up X-Forwarded-For {remote_host}
