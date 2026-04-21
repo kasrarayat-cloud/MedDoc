@@ -19,8 +19,8 @@ Last reviewed: **2026-04-21** (post T-M18.3 merge)
 
 This is the TL;DR. Every item below is expanded in its own section.
 
-- [ ] **1. Domain purchased + A records set** (§1)
-- [ ] **2. HTTPS live via Caddy MODE B** (§2)
+- [x] **1. Domain purchased + A records set** (§1) — `quillmd.com` + 3 subdomains live (T-M19)
+- [x] **2. HTTPS live via Caddy MODE B** (§2) — Let's Encrypt certs for all 4 hostnames (T-M19.1)
 - [ ] **3. All four BAAs signed + on file** — Anthropic, OpenAI, Deepgram, hosting provider (§3)
 - [ ] **4. Stripe subscription flow working end-to-end** ($49/mo tier) (§4)
 - [ ] **5. Resend sender domain verified** (SPF/DKIM/DMARC green) (§5)
@@ -61,35 +61,36 @@ canonical references in Terms/Privacy.
 
 ## 2. DNS + Caddy HTTPS setup
 
-**Status:** code ready; blocked on §1.
+**Status:** ✅ shipped 2026-04-21 (T-M19.1 + T-M19.2).
 
-`Caddyfile` already contains a commented-out MODE B block (domain-based
-+ auto-TLS). The `security_headers_mode_b` snippet layers on HSTS + CSP
-(which are unsafe over plaintext). Switching modes is a 5-line edit
-documented inline in the Caddyfile header. `caddy_data` volume already
-persists Let's Encrypt certs across restarts.
+Caddy cut over from MODE A (IP-based plaintext) to MODE B (domain-based
+HTTPS with HSTS + CSP Report-Only). Let's Encrypt certs issued on first
+hit for all four hostnames, persisted in the `caddy_data` volume.
 
 ### Pre-flight
-- [ ] Confirm ports `80` + `443` are open on the VPS firewall (currently only `80` is public)
-- [ ] Set three `A` records pointing to the VPS IP: `app`, `www`, `pro`
-- [ ] Wait for DNS propagation (`dig +short A app.<domain>` must return the VPS IP from a remote resolver)
+- [x] Ports `80` + `443` open on the VPS firewall
+- [x] Four `A` records pointing at the VPS IP: `@`, `www`, `app`, `pro` (all four — `pro` added for the MedDoc Pro CRM subdomain that the original plan missed)
+- [x] DNS propagated — all four `dig +short A` lookups returned the VPS IP before cutover
 
-### Cutover
-- [ ] Uncomment the MODE B blocks in `Caddyfile` (one per hostname)
-- [ ] Comment out or delete the `:80` / `:9010` / `:9020` MODE A blocks
-- [ ] Update `docker-compose.yml` env:
-  - `PUBLIC_URL=https://pro.<domain>`
-  - `TRANSCRIBE_MD_AUTH_URL=https://app.<domain>`
-  - `MARKETING_URL=https://www.<domain>`
-  - `AUTH_COOKIE_DOMAIN=.<domain>`  ← required for cross-subdomain session sharing
-- [ ] `docker compose up -d --force-recreate caddy transcribe-md meddoc-pro marketing`
-- [ ] First request to each hostname triggers Let's Encrypt ACME — watch `docker compose logs caddy` for `certificate obtained successfully`
-- [ ] Smoke test: `curl -I https://app.<domain>/api/health` → `HTTP/2 200` with HSTS header present
+### Cutover (done)
+- [x] Uncommented MODE B blocks in `Caddyfile`, commented out MODE A (`:80` / `:9010` / `:9020`) as rollback reference with HSTS-safe-rollback note
+- [x] Updated `.env` (kept out of git) with production URL envs:
+  - `PUBLIC_URL=https://pro.quillmd.com`
+  - `TRANSCRIBE_MD_AUTH_URL=https://app.quillmd.com`
+  - `MARKETING_URL=https://quillmd.com`
+  - `AUTH_COOKIE_DOMAIN=` (left empty — meddoc-pro + transcribe-md run independent auth stacks; sharing a cookie scope would risk JWT cross-verification gaps)
+- [x] `docker compose up -d --force-recreate caddy transcribe-md meddoc-pro marketing`
+- [x] Let's Encrypt E7/E8 certs obtained for all four hostnames on first hit
+- [x] Smoke test: `curl -I https://app.quillmd.com/api/health` → `HTTP/2 200` with HSTS header present
+
+### T-M19.2 follow-up fix
+- [x] Marketing "Sign In" link was baked in at build-time with the old `http://5.231.107.93:9020` fallback — `NEXT_PUBLIC_*` vars weren't landing in the Next builder stage (monorepo `next build` doesn't read root `.env`). Fixed by wiring `NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL` + `NEXT_PUBLIC_MARKETING_URL` as `build: args:` in `docker-compose.yml` + `ARG`/`ENV` in both Dockerfiles. Marketing rebuilt with correct URLs post-fix.
+- [x] `/api/health` version string fix (`??` → `||`) so compose's `${APP_VERSION:-}` empty-string default falls back correctly to the hardcoded milestone.
 
 ### Post-cutover regressions to re-run
-- [ ] `bash scripts/verify-t-m18-2.sh` — adjust the hardcoded `http://localhost:9020` URLs to the new HTTPS hostname before running, or keep MODE A temporarily in parallel
+- [ ] `bash scripts/verify-t-m18-2.sh` — adjust the hardcoded `http://localhost:9020` URLs to the new HTTPS hostname before running, or keep localhost-probes in parallel
 - [ ] `bash scripts/verify-t-m18-3.sh` — same
-- [ ] Sign-in flow: the 7-day session cookie must land on the `AUTH_COOKIE_DOMAIN` parent domain, not host-only
+- [ ] Browser-test the full signup → email-verify → login → dashboard flow from `https://quillmd.com` through `https://app.quillmd.com/dashboard` — in progress as of this PR
 
 ---
 
