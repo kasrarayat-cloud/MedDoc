@@ -38,12 +38,14 @@ function getClient(): Resend {
   return clientSingleton;
 }
 
-/** From-address defaults to notes@transcribemd.app — that domain MUST
- *  be verified in the Resend account attached to RESEND_API_KEY.
- *  Verify at https://resend.com/domains (needs DNS access). Override
- *  with RESEND_FROM="Name <addr@verified-domain.tld>" if you want to
- *  ship from a different address. */
-const DEFAULT_FROM = 'TranscribeMD <notes@transcribemd.app>';
+/** From-address defaults to noreply@quillmd.com — that domain is
+ *  verified (DKIM + SPF + DMARC + MX) in the Resend account attached
+ *  to RESEND_API_KEY as of T-M19.3 (2026-04-21). Override with
+ *  RESEND_FROM="Name <addr@verified-domain.tld>" in .env if you need
+ *  a different sender (e.g. support@quillmd.com for support mail).
+ *  The override wins; this constant is just the fallback for a
+ *  deploy that forgot to set RESEND_FROM. */
+const DEFAULT_FROM = 'QuillMD <noreply@quillmd.com>';
 
 export interface SendVisitPdfEmailArgs {
   toEmail: string;
