@@ -26,6 +26,7 @@ import { writeFile, mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 import { generateVisitPdf } from '../src/lib/pdf-generator';
+import { generateVisitDocx } from '../src/lib/docx-generator';
 import type { VisitExportData } from '../src/lib/visit-export';
 
 // SOAP note mirrors the exact pattern the T-M18.x Layer-4 prompt emits:
@@ -153,6 +154,10 @@ async function writePdf(data: VisitExportData, outPath: string): Promise<void> {
   const pdf = await generateVisitPdf(data);
   await writeFile(outPath, pdf);
   console.log(`wrote ${pdf.length} bytes → ${outPath}`);
+  const docxPath = outPath.replace(/\.pdf$/, '.docx');
+  const docx = await generateVisitDocx(data);
+  await writeFile(docxPath, docx);
+  console.log(`wrote ${docx.length} bytes → ${docxPath}`);
 }
 
 async function main(): Promise<void> {
