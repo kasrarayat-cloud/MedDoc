@@ -7,6 +7,7 @@
 // ============================================================================
 
 import prisma from '@meddoc/db';
+import { redactPhi } from '@meddoc/ai';
 
 export type DeliveryChannel =
   | 'clipboard_epic'
@@ -36,6 +37,11 @@ export function logDelivery(input: LogDeliveryInput): void {
       },
     })
     .catch((err: unknown) => {
-      console.error('[delivery-log] write failed:', err);
+      // T-M18.3 A17: redactPhi in case a Prisma error echoes a column
+      // value (visit.destination can carry an email address).
+      console.error(
+        '[delivery-log] write failed:',
+        redactPhi(err instanceof Error ? err.message : err)
+      );
     });
 }

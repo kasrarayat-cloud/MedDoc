@@ -23,6 +23,7 @@ import authConfig from '@/lib/auth.config';
 import prisma from '@meddoc/db';
 import type { UserRole } from '@meddoc/auth';
 import { Product } from '@prisma/client';
+import { redactPhi } from '@meddoc/ai';
 import { isEmailDeliveryEnabled } from '@/lib/email-enabled';
 
 /** 7 days. Longer than meddoc-pro (8hr) because TranscribeMD is a solo
@@ -71,7 +72,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         try {
           user = await prisma.user.findUnique({ where: { email } });
         } catch (err) {
-          console.error('[auth] user lookup failed:', err);
+          // T-M18.3 A17: Prisma errors can echo column values.
+          console.error(
+            '[auth] user lookup failed:',
+            redactPhi(err instanceof Error ? err.message : err)
+          );
           return null;
         }
         if (!user) return null;
@@ -116,7 +121,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               },
             })
             .catch((err: unknown) => {
-              console.error('[auth] failed-login counter update failed:', err);
+              console.error(
+                '[auth] failed-login counter update failed:',
+                redactPhi(err instanceof Error ? err.message : err)
+              );
             });
           return null;
         }
@@ -139,7 +147,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             },
           })
           .catch((err: unknown) => {
-            console.error('[auth] lastLogin update failed:', err);
+            console.error(
+              '[auth] lastLogin update failed:',
+              redactPhi(err instanceof Error ? err.message : err)
+            );
           });
 
         return {

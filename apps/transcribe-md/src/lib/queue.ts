@@ -8,6 +8,7 @@
 
 import IORedis, { type RedisOptions } from 'ioredis';
 import { Queue } from 'bullmq';
+import { redactPhi } from '@meddoc/ai';
 
 const redisUrl = process.env.REDIS_URL?.trim() || 'redis://redis:6379';
 
@@ -22,7 +23,14 @@ function getConnection(): IORedis {
   const opts: RedisOptions = { maxRetriesPerRequest: null };
   connection = new IORedis(redisUrl, opts);
   connection.on('error', (err) => {
-    console.error('[transcribe-md-queue] redis error:', err);
+    // T-M18.3 A17: redactPhi guard — the ioredis error is almost never
+    // PHI-shaped, but the pipeline sometimes passes payloads through
+    // the command arg trace on failures, so err.message could leak a
+    // patient name or email on a rare shape. Cheap insurance.
+    console.error(
+      '[transcribe-md-queue] redis error:',
+      redactPhi(err instanceof Error ? err.message : err)
+    );
   });
   return connection;
 }
