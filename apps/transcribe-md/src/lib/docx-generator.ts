@@ -61,8 +61,13 @@ export async function generateVisitDocx(
           text: 'QUILLMD',
           bold: true,
           color: '7C3AED',
-          size: 18, // half-points
+          size: 18, // half-points (9pt)
           font: FONTS.label,
+          // T-M22.5: match PDF's 1.2pt letterspacing on the brand
+          // wordmark. docx character-spacing unit is 1/20 pt, so 24
+          // ≈ 1.2pt — same visual rhythm as the pdf-generator's
+          // `characterSpacing: 1.2` in the section-heading primitive.
+          characterSpacing: 24,
         }),
       ],
     })
