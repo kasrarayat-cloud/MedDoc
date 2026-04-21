@@ -109,6 +109,12 @@ function TrashedBanner({
   deletedAtIso: string;
 }) {
   const daysLeft = daysUntilAutoPurge(deletedAtIso);
+  // T-M18.3 A27: shared banner-level busy flag. Either Restore or
+  // Delete-permanently sets it true for the life of its fetch; the
+  // sibling is `disabled` throughout. Prevents the narrow race where
+  // a user escapes the Delete dialog mid-fetch and then clicks
+  // Restore while the permanent-delete request is still in flight.
+  const [busy, setBusy] = useState(false);
   return (
     <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warning/40 bg-warning/5 px-4 py-3 text-[13px]">
       <div className="flex items-center gap-2 text-text-secondary">
@@ -122,8 +128,8 @@ function TrashedBanner({
         </span>
       </div>
       <div className="flex items-center gap-2">
-        <RestoreButton visitId={visitId} />
-        <DeletePermanentlyButton visitId={visitId} />
+        <RestoreButton visitId={visitId} busy={busy} setBusy={setBusy} />
+        <DeletePermanentlyButton visitId={visitId} busy={busy} setBusy={setBusy} />
       </div>
     </div>
   );
@@ -145,11 +151,20 @@ function ArchivedBanner({ visitId }: { visitId: string }) {
 // Buttons w/ built-in fetch wrappers
 // ---------------------------------------------------------------------------
 
-function RestoreButton({ visitId }: { visitId: string }) {
+function RestoreButton({
+  visitId,
+  busy,
+  setBusy,
+}: {
+  visitId: string;
+  busy: boolean;
+  setBusy: (b: boolean) => void;
+}) {
   const router = useRouter();
-  const [pending, setPending] = useState(false);
+  const [selfPending, setSelfPending] = useState(false);
   async function onClick() {
-    setPending(true);
+    setSelfPending(true);
+    setBusy(true);
     try {
       const res = await fetch(`/api/visits/${visitId}/restore`, {
         method: 'POST',
@@ -164,17 +179,18 @@ function RestoreButton({ visitId }: { visitId: string }) {
     } catch {
       toast.error('Network error. Please try again.');
     } finally {
-      setPending(false);
+      setSelfPending(false);
+      setBusy(false);
     }
   }
   return (
     <button
       type="button"
       onClick={onClick}
-      disabled={pending}
+      disabled={busy}
       className="inline-flex items-center gap-1.5 rounded-full border border-border-default bg-bg-surface-1/60 px-3 py-1.5 text-[12px] font-medium text-text-secondary transition-colors hover:border-violet-500/60 hover:text-text-primary disabled:opacity-50"
     >
-      {pending ? (
+      {selfPending ? (
         <Loader2 className="h-3 w-3 animate-spin" />
       ) : (
         <RotateCcw className="h-3 w-3" aria-hidden />
@@ -350,13 +366,22 @@ function DeleteButton({
 // Delete permanently from trash — unconditional hard delete.
 // ---------------------------------------------------------------------------
 
-function DeletePermanentlyButton({ visitId }: { visitId: string }) {
+function DeletePermanentlyButton({
+  visitId,
+  busy,
+  setBusy,
+}: {
+  visitId: string;
+  busy: boolean;
+  setBusy: (b: boolean) => void;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [pending, setPending] = useState(false);
+  const [selfPending, setSelfPending] = useState(false);
 
   async function onConfirm() {
-    setPending(true);
+    setSelfPending(true);
+    setBusy(true);
     try {
       // ?permanent=1 flips the delete endpoint from the idempotent
       // "already trashed" short-circuit into a full hard-purge on
@@ -377,16 +402,24 @@ function DeletePermanentlyButton({ visitId }: { visitId: string }) {
     } catch {
       toast.error('Network error. Please try again.');
     } finally {
-      setPending(false);
+      setSelfPending(false);
+      setBusy(false);
     }
   }
 
   return (
-    <Dialog.Root open={open} onOpenChange={setOpen}>
+    <Dialog.Root
+      open={open}
+      // T-M18.3 A27: swallow open-change events while the fetch is
+      // in flight so Escape / outside-click can't close the dialog
+      // and leave a zombie request racing against Restore.
+      onOpenChange={selfPending ? undefined : setOpen}
+    >
       <Dialog.Trigger asChild>
         <button
           type="button"
-          className="inline-flex items-center gap-1.5 rounded-full border border-danger/60 bg-danger/10 px-3 py-1.5 text-[12px] font-medium text-danger transition-colors hover:bg-danger/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
+          disabled={busy}
+          className="inline-flex items-center gap-1.5 rounded-full border border-danger/60 bg-danger/10 px-3 py-1.5 text-[12px] font-medium text-danger transition-colors hover:bg-danger/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger disabled:opacity-50"
         >
           <Trash2 className="h-3 w-3" aria-hidden />
           Delete permanently
@@ -398,7 +431,7 @@ function DeletePermanentlyButton({ visitId }: { visitId: string }) {
         description="This cannot be undone. All audio, transcripts, and AI-generated outputs will be deleted."
         onConfirm={onConfirm}
         confirmLabel="Delete permanently"
-        pending={pending}
+        pending={selfPending}
       />
     </Dialog.Root>
   );

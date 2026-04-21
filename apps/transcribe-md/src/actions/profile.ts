@@ -6,9 +6,13 @@ import { z } from 'zod';
 import prisma from '@meddoc/db';
 import { requireSession } from '@/lib/auth';
 
+// T-M18.3 A22: specialty field removed from the form + schema. It was
+// never persisted (no User.specialty column) — the dropdown read from
+// the doctor's most-recent visit's specialty on open and silently
+// discarded any edit on save. Specialty still gets picked per-visit
+// on /visits/new, which is the actual source of truth.
 const UpdateProfileSchema = z.object({
   name: z.string().trim().min(1, 'Name is required').max(120),
-  specialty: z.string().trim().min(1, 'Specialty is required'),
 });
 
 export type ProfileState =
@@ -33,10 +37,6 @@ export async function updateProfileAction(
     return { ok: false, errors };
   }
 
-  // Specialty is stored as the most recent visit's specialty field
-  // (there's no User.specialty column yet; T-M2.5 adds one). For now
-  // we only persist the name. The specialty defaults to user's most-
-  // recent visit at /visits/new time.
   try {
     await prisma.user.update({
       where: { id: session.user.id },
