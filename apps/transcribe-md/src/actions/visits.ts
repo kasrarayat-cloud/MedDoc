@@ -49,6 +49,15 @@ const CreateVisitSchema = z.object({
     .nullable()
     .optional(),
   inputMode: z.enum(INPUT_MODES),
+  /** T-M24: optional per-visit template. Empty string from the UI's
+   *  "Standard only" option nullifies here; when set, we validate
+   *  ownership + not-deleted in resolveTemplate() before writing. */
+  templateId: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => (v === '' || v === undefined ? null : v))
+    .nullable(),
 });
 
 /** Resolve the (patientId, patientName) pair into a real TranscribeMdPatient.
@@ -112,6 +121,27 @@ async function resolvePatient(
   return created;
 }
 
+/** Validate that the doctor owns the referenced template and it hasn't
+ *  been soft-deleted. Returns the id or null. We do NOT pass a stale
+ *  id through to the visit row — that'd orphan the FK at write time. */
+async function resolveTemplateId(
+  userId: string,
+  templateId: string | null
+): Promise<string | null> {
+  if (!templateId) return null;
+  const template = await prisma.transcribeTemplate.findUnique({
+    where: { id: templateId },
+    select: { id: true, userId: true, deletedAt: true },
+  });
+  if (!template || template.userId !== userId || template.deletedAt !== null) {
+    // Quietly drop instead of throwing — the doctor shouldn't fail a
+    // visit creation just because the template picker showed a row
+    // that got deleted in another tab.
+    return null;
+  }
+  return template.id;
+}
+
 export async function createVisitAction(formData: FormData): Promise<void> {
   const session = await requireSession();
   const raw = Object.fromEntries(formData.entries());
@@ -121,6 +151,7 @@ export async function createVisitAction(formData: FormData): Promise<void> {
     patientId: raw.patientId ?? null,
     patientName: raw.patientName ?? null,
     chiefComplaint: raw.chiefComplaint ?? null,
+    templateId: raw.templateId ?? null,
   });
   if (!parsed.success) {
     // The form's client component re-renders and shows the error. With
@@ -129,11 +160,14 @@ export async function createVisitAction(formData: FormData): Promise<void> {
     throw new Error('Invalid visit input');
   }
 
-  const patient = await resolvePatient(
-    session.user.practiceId,
-    parsed.data.patientId ?? null,
-    parsed.data.patientName ?? null
-  );
+  const [patient, resolvedTemplateId] = await Promise.all([
+    resolvePatient(
+      session.user.practiceId,
+      parsed.data.patientId ?? null,
+      parsed.data.patientName ?? null
+    ),
+    resolveTemplateId(session.user.id, parsed.data.templateId ?? null),
+  ]);
 
   const visit = await prisma.transcribeVisit.create({
     data: {
@@ -147,6 +181,7 @@ export async function createVisitAction(formData: FormData): Promise<void> {
       specialty: parsed.data.specialty,
       chiefComplaint: parsed.data.chiefComplaint ?? null,
       inputMode: parsed.data.inputMode,
+      templateId: resolvedTemplateId,
     },
     select: { id: true },
   });

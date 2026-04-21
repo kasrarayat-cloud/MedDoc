@@ -14,6 +14,10 @@ import Link from 'next/link';
 import { ArrowLeftRight } from 'lucide-react';
 
 import { SpecialtyDropdown } from '@/components/specialty-dropdown';
+import {
+  TemplateDropdown,
+  type TemplateOption,
+} from '@/components/template-dropdown';
 import { createVisitAction } from '@/actions/visits';
 import { ModeTileWithForm } from './mode-tile-with-form';
 import type { SPECIALTIES } from '@/lib/specialties';
@@ -30,6 +34,9 @@ interface Props {
   onChangePatient?: () => void;
   specialties: Specialty[];
   defaultSpecialty: string;
+  /** Doctor's non-deleted templates. Empty array hides the picker
+   *  entirely — no point showing "Standard only" as a single choice. */
+  templates: TemplateOption[];
 }
 
 function formatDob(iso: string | null): string {
@@ -41,6 +48,7 @@ export function VisitFormStep2({
   onChangePatient,
   specialties,
   defaultSpecialty,
+  templates,
 }: Props) {
   return (
     <>
@@ -76,6 +84,27 @@ export function VisitFormStep2({
             placeholder="e.g. Headache for 3 days"
           />
         </div>
+
+        {templates.length > 0 && (
+          <div className="sm:col-span-2">
+            <label className="mb-1.5 block text-[12px] font-medium tracking-tight text-text-tertiary">
+              Output template{' '}
+              <span className="font-normal text-text-muted">(optional)</span>
+            </label>
+            <TemplateDropdown options={templates} name="templateId" />
+            <p className="mt-1.5 text-[11px] text-text-muted">
+              “Standard only” delivers the usual SOAP, ICD, Rx outputs.
+              Picking a template also produces a .docx filled with your
+              template&apos;s layout.{' '}
+              <Link
+                href="/settings/templates"
+                className="text-text-tertiary underline-offset-2 hover:text-text-primary hover:underline"
+              >
+                Manage templates
+              </Link>
+            </p>
+          </div>
+        )}
       </form>
 
       <div className="mt-10">

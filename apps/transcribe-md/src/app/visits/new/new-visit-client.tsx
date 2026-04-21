@@ -18,6 +18,7 @@ import { PatientPicker } from './patient-picker';
 import { VisitFormStep2 } from './visit-form-step2';
 import type { SelectedPatient } from './patient-types';
 import type { SPECIALTIES } from '@/lib/specialties';
+import type { TemplateOption } from '@/components/template-dropdown';
 
 type Specialty = (typeof SPECIALTIES)[number];
 
@@ -25,12 +26,14 @@ interface Props {
   initialPatient: SelectedPatient | null;
   specialties: Specialty[];
   defaultSpecialty: string;
+  templates: TemplateOption[];
 }
 
 export function NewVisitClient({
   initialPatient,
   specialties,
   defaultSpecialty,
+  templates,
 }: Props) {
   const [selectedPatient, setSelectedPatient] = useState<SelectedPatient | null>(
     initialPatient
@@ -46,6 +49,7 @@ export function NewVisitClient({
       onChangePatient={() => setSelectedPatient(null)}
       specialties={specialties}
       defaultSpecialty={defaultSpecialty}
+      templates={templates}
     />
   );
 }
