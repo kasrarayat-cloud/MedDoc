@@ -15,7 +15,7 @@ import { APP_SIGNUP_URL } from '@/lib/constants';
 // SpecularButton is the manual fallback.
 export const metadata: Metadata = {
   title: 'Redirecting to signup',
-  description: 'Create your TranscribeMD account — redirecting to the app.',
+  description: 'Create your QuillMD account — redirecting to the app.',
   // 1-second meta-refresh to the real signup surface. Short enough that
   // the banner below is mostly informational, long enough that browsers
   // that block meta-refresh still render the CTA before the redirect.

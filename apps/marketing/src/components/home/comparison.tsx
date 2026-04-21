@@ -23,7 +23,7 @@ const COLUMNS = [
 
 const ROWS = [
   {
-    name: 'TranscribeMD',
+    name: 'QuillMD',
     highlight: true,
     cells: {
       turnaround: yes('2–5 min'),
@@ -99,7 +99,7 @@ export function Comparison() {
             Stack it up
           </p>
           <h2 className="mt-3 type-h2 text-text-primary">
-            How TranscribeMD stacks up.
+            How QuillMD stacks up.
           </h2>
           <p className="mt-4 type-body text-text-tertiary">
             Every option has its place. Here&apos;s where each one wins.

@@ -268,7 +268,7 @@ interface ReadmeArgs {
 
 function readmeText(a: ReadmeArgs): string {
   return [
-    'TranscribeMD — data export',
+    'QuillMD — data export',
     '================================',
     '',
     `Generated:          ${a.generatedAt}`,

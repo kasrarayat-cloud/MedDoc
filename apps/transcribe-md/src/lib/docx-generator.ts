@@ -35,7 +35,7 @@ export async function generateVisitDocx(
       spacing: { after: 120 },
       children: [
         new TextRun({
-          text: 'TRANSCRIBEMD',
+          text: 'QUILLMD',
           bold: true,
           color: '7C3AED',
           size: 18, // half-points
@@ -266,9 +266,9 @@ export async function generateVisitDocx(
   );
 
   const doc = new Document({
-    creator: data.clinicianName ?? 'TranscribeMD',
+    creator: data.clinicianName ?? 'QuillMD',
     title: `Visit — ${data.patientName ?? 'Anonymous'}`,
-    description: `TranscribeMD visit note exported ${formatVisitDate(new Date())}`,
+    description: `QuillMD visit note exported ${formatVisitDate(new Date())}`,
     numbering: {
       // Unused today — declared so future Plan sections can render as a
       // real Word numbered list without adding another Document option.
