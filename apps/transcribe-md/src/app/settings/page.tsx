@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { FileText, ArrowRight } from 'lucide-react';
 
 import prisma from '@meddoc/db';
 import { auth } from '@/lib/nextauth';
@@ -97,6 +99,41 @@ export default async function SettingsPage() {
           />
           <div className="mt-6 rounded-xl border border-border-default bg-bg-surface-1/60 p-6">
             <ChangePasswordForm />
+          </div>
+        </section>
+
+        {/* Templates (T-M24) */}
+        <section className="mt-10">
+          <SectionHeader
+            title="Templates"
+            description="Upload your own SOAP template (.docx) — we fill it with AI-generated content on every visit that uses it."
+          />
+          <div className="mt-6 rounded-xl border border-border-default bg-bg-surface-1/60 p-6">
+            <Link
+              href="/settings/templates"
+              className="group flex items-center justify-between gap-4"
+            >
+              <div className="flex items-start gap-3">
+                <div
+                  aria-hidden
+                  className="flex h-9 w-9 flex-none items-center justify-center rounded-lg bg-violet-500/10 text-violet-300"
+                >
+                  <FileText className="h-4 w-4" aria-hidden />
+                </div>
+                <div>
+                  <div className="text-[14px] font-medium text-text-primary">
+                    Manage your templates
+                  </div>
+                  <div className="mt-0.5 text-[12px] text-text-tertiary">
+                    Upload, preview, and delete templates.
+                  </div>
+                </div>
+              </div>
+              <ArrowRight
+                className="h-4 w-4 flex-none text-text-muted transition-colors group-hover:text-text-primary"
+                aria-hidden
+              />
+            </Link>
           </div>
         </section>
 
