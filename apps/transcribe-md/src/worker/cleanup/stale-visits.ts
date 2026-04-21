@@ -1,7 +1,7 @@
 // ============================================================================
-// T-M17.3 stale-visit cleanup sweeps
+// T-M17.3 stale-visit cleanup sweeps (+ T-M18.2 A5 account-deletion purge)
 // ----------------------------------------------------------------------------
-// Two sweeps run as a single BullMQ cron job (daily at 3am UTC):
+// Three sweeps run as a single BullMQ cron job (daily at 3am UTC):
 //
 //   Sweep 1 — Abandoned QUEUED drafts (resolves KI-3)
 //     WHERE status='QUEUED'
@@ -14,11 +14,14 @@
 //     WHERE deletedAt IS NOT NULL
 //       AND deletedAt < now() - 15 days
 //
-// Both do the DB work in one transaction per sweep (AiCall.deleteMany +
-// TranscribeVisit.deleteMany by id set). MinIO sweep runs after the
-// transaction commits; failures there are logged best-effort because
-// the T-M12 orphan sweeper handles stragglers anyway. Each sweep
-// returns a count so the scheduler can log the day's activity.
+//   Sweep 3 — Expired AccountDeletion audit rows (T-M18.2 A5; the 90d
+//     retention the settings/delete-account flow promises)
+//     WHERE purgeAt < now()
+//
+// Visit sweeps do their DB work in one transaction per sweep (AiCall.
+// deleteMany + TranscribeVisit.deleteMany by id set). MinIO sweep runs
+// after the transaction commits; failures there are logged best-effort
+// because the T-M12 orphan sweeper handles stragglers anyway.
 // ============================================================================
 
 import prisma from '@meddoc/db';
@@ -163,11 +166,60 @@ async function sweepExpiredTrash(): Promise<SweepResult> {
   return result;
 }
 
+/** T-M18.2 A5 — delete AccountDeletion audit rows whose `purgeAt`
+ *  has passed. The delete-account flow writes these with `purgeAt =
+ *  now + 90d` as the HIPAA-adjacent audit record of "user asked to
+ *  be forgotten on this date, here's what they left behind (email,
+ *  visit count, specialty)". The schema promises to purge after
+ *  90 days — this sweep is what makes that promise real.
+ *
+ *  No MinIO side effects (audit row has no external bytes). No
+ *  transaction needed — deleteMany is atomic at the row-set level. */
+async function sweepExpiredAccountDeletions(): Promise<{
+  found: number;
+  deleted: number;
+}> {
+  const expired = await prisma.accountDeletion.findMany({
+    where: { purgeAt: { lt: new Date() } },
+    select: { id: true, userId: true },
+  });
+  if (expired.length === 0) {
+    log.info('cleanup:expired-account-deletions', 'swept', {
+      found: 0,
+      deleted: 0,
+    });
+    return { found: 0, deleted: 0 };
+  }
+  let deleted = 0;
+  try {
+    const d = await prisma.accountDeletion.deleteMany({
+      where: { id: { in: expired.map((r: { id: string }) => r.id) } },
+    });
+    deleted = d.count;
+  } catch (err) {
+    console.error(
+      '[cleanup:expired-account-deletions] purge failed:',
+      redactPhi(err instanceof Error ? err.message : err)
+    );
+  }
+  log.info('cleanup:expired-account-deletions', 'swept', {
+    found: expired.length,
+    deleted,
+    // userIds here are EX-users (rows exist because the user deleted
+    // themselves); logging the userIds helps support reconstruct a
+    // timeline if a question comes up within the 90-day window.
+    userIds: expired.map((r: { userId: string }) => r.userId),
+  });
+  return { found: expired.length, deleted };
+}
+
 export async function runStaleVisitCleanup(): Promise<{
   abandoned: SweepResult;
   trash: SweepResult;
+  accountDeletions: { found: number; deleted: number };
 }> {
   const abandoned = await sweepAbandonedQueued();
   const trash = await sweepExpiredTrash();
-  return { abandoned, trash };
+  const accountDeletions = await sweepExpiredAccountDeletions();
+  return { abandoned, trash, accountDeletions };
 }
