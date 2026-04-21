@@ -7,6 +7,8 @@
 // strictly text + section headings, it's the right size tool.
 // ============================================================================
 
+import { join } from 'node:path';
+
 import PDFDocument from 'pdfkit';
 
 import {
@@ -14,6 +16,23 @@ import {
   prescriptionOneLine,
   formatVisitDate,
 } from './visit-export';
+
+// ---------------------------------------------------------------------------
+// Font assets — bundled in apps/transcribe-md/fonts/ (committed to repo,
+// COPY'd into the runner image by the Dockerfile). Charter is
+// purpose-built for print at small sizes (Bitstream → Matthew
+// Butterick); Inter Tight matches the marketing site's brand voice
+// for labels + the QUILLMD wordmark.
+//
+// Path defaults to the absolute Docker path because both contexts
+// that generate PDFs (the transcribe-md runner with WORKDIR /app and
+// the db-migrate one-off with WORKDIR /app/packages/db) put the
+// fonts at exactly /app/apps/transcribe-md/fonts. Override via
+// PDF_FONTS_DIR env var for local dev where the path differs.
+// ---------------------------------------------------------------------------
+
+const FONTS_DIR =
+  process.env.PDF_FONTS_DIR ?? '/app/apps/transcribe-md/fonts';
 
 // ---------------------------------------------------------------------------
 // Page + type tokens. Keeping them at module top so every helper reads
@@ -37,14 +56,18 @@ const COLORS = {
 };
 
 const FONTS = {
-  // PDFKit ships Helvetica + Times-Roman + Courier by default. We use
-  // the built-in Times-Bold for headings (gives the "letter from your
-  // doctor" feel without needing to embed a custom font file).
-  bodyRegular: 'Times-Roman',
-  bodyBold: 'Times-Bold',
-  bodyItalic: 'Times-Italic',
-  labelRegular: 'Helvetica',
-  labelBold: 'Helvetica-Bold',
+  // T-M21: replaced PDFKit's built-in Times-Roman / Helvetica with
+  // Charter (body) + Inter Tight (labels + brand). Charter is tuned
+  // for print at small sizes — exactly the PDF use case — while
+  // Fraunces (the marketing display serif) is optical-size'd for
+  // screen and would distort below 14pt. Inter Tight tracks the
+  // marketing-site label font for visual continuity.
+  bodyRegular:  'Charter',
+  bodyBold:     'Charter-Bold',
+  bodyItalic:   'Charter-Italic',
+  labelRegular: 'InterTight',           // footer signed-by line
+  labelBold:    'InterTight-SemiBold',  // section heads + per-row labels
+  brand:        'InterTight-Medium',    // QUILLMD wordmark (header + watermark)
 } as const;
 
 const SIZE = {
@@ -88,6 +111,33 @@ export async function generateVisitPdf(
     doc.on('error', reject);
   });
 
+  // T-M21: register the bundled font files BEFORE any renderer touches
+  // them. The names on the left are the aliases used by `doc.font(…)`
+  // throughout this module via the FONTS constant. The Dockerfile
+  // copies apps/transcribe-md/fonts/ into /app at runner-stage build
+  // time so the join(cwd, …) path resolves under the standalone
+  // server's working directory.
+  doc.registerFont(FONTS.bodyRegular,  join(FONTS_DIR, 'Charter-Regular.ttf'));
+  doc.registerFont(FONTS.bodyBold,     join(FONTS_DIR, 'Charter-Bold.ttf'));
+  doc.registerFont(FONTS.bodyItalic,   join(FONTS_DIR, 'Charter-Italic.ttf'));
+  doc.registerFont(FONTS.labelRegular, join(FONTS_DIR, 'InterTight-Regular.ttf'));
+  doc.registerFont(FONTS.labelBold,    join(FONTS_DIR, 'InterTight-SemiBold.ttf'));
+  doc.registerFont(FONTS.brand,        join(FONTS_DIR, 'InterTight-Medium.ttf'));
+
+  // T-M21 hot-fix: pdfkit's paragraph-finalize line advance pulls from
+  // the TTF font's OS/2 ascent+descent. Charter reports ~0.74 × fontSize
+  // (~7.8pt at body size 10.5) — much tighter than the ~1.2 × fontSize
+  // (~12.6pt) that built-in Helvetica/Times produced. Without a
+  // compensating gap, consecutive `doc.text(...)` calls collapse into
+  // each other — patient-block rows, Plan numbered items, and any
+  // multi-line bullet list all stack with 4-5pt of overlap.
+  //
+  // Setting lineGap globally adds the missing space on every paragraph
+  // boundary. 4pt lands body lines at ~11.8pt advance — within a
+  // half-point of the pre-T-M21 rhythm and tight enough that single-
+  // line chunks (section headings, footer, etc.) still read right.
+  doc.lineGap(4);
+
   renderHeader(doc, data);
   renderPatientBlock(doc, data);
   renderSoap(doc, data);
@@ -119,7 +169,7 @@ function renderHeader(
   doc: PDFKit.PDFDocument,
   data: VisitExportData
 ): void {
-  doc.font(FONTS.labelBold).fontSize(SIZE.small).fillColor(COLORS.accent);
+  doc.font(FONTS.brand).fontSize(SIZE.small).fillColor(COLORS.accent);
   doc.text('QUILLMD', { align: 'left' });
   doc.moveDown(0.25);
 
@@ -133,25 +183,95 @@ function renderHeader(
   doc.moveDown(0.8);
 }
 
+/** T-M21.2: patient metadata as a horizontal info bar (columns, not
+ *  stacked rows). Each cell is label-on-top / value-below with
+ *  absolute x-positioning so the columns align cleanly regardless
+ *  of the value's character count. The old inline-continued layout
+ *  stacked everything in one column because `\n` between rows plus
+ *  the lineGap(4) advance produced a vertical list — fine for
+ *  transcript blocks but wrong for a chart-header info bar. */
 function renderPatientBlock(
   doc: PDFKit.PDFDocument,
   data: VisitExportData
 ): void {
-  const labels: [string, string][] = [
-    ['Patient', data.patientName?.trim() || 'Anonymous'],
-    ['Visit date', formatVisitDate(data.signedAt ?? data.createdAt)],
+  const cells: Array<{ label: string; value: string }> = [
+    { label: 'Patient', value: data.patientName?.trim() || 'Anonymous' },
+    { label: 'Visit date', value: formatVisitDate(data.signedAt ?? data.createdAt) },
   ];
-  if (data.chiefComplaint) labels.push(['Chief complaint', data.chiefComplaint]);
-  if (data.signedAt) labels.push(['Status', 'Signed']);
-
-  for (const [k, v] of labels) {
-    doc.font(FONTS.labelBold).fontSize(SIZE.small).fillColor(COLORS.textMuted);
-    doc.text(`${k.toUpperCase()}  `, { continued: true });
-    doc.font(FONTS.bodyRegular).fontSize(SIZE.body).fillColor(COLORS.textPrimary);
-    doc.text(v);
+  if (data.chiefComplaint) {
+    cells.push({ label: 'Chief complaint', value: data.chiefComplaint });
   }
-  doc.moveDown(0.8);
+  if (data.signedAt) {
+    cells.push({ label: 'Status', value: 'Signed' });
+  }
+
+  const n = cells.length;
+  const availableWidth = doc.page.width - PAGE.margin * 2;
+  const colWidth = availableWidth / n;
+  const colInnerGap = 10; // right-side padding inside each column
+  const startY = doc.y;
+
+  // Typography tokens for this block — tuned for a chart-header look:
+  // label smaller + uppercase + muted, value larger + primary.
+  const LABEL_SIZE = 8;
+  const VALUE_SIZE = 11;
+  const LABEL_VALUE_GAP = 2; // pts between the label baseline and the value top
+
+  let maxY = startY;
+  for (let i = 0; i < n; i++) {
+    const { label, value } = cells[i];
+    const x = PAGE.margin + i * colWidth;
+    const cellWidth = colWidth - colInnerGap;
+
+    // Label (top line): InterTight-SemiBold, small, uppercase, muted.
+    doc
+      .font(FONTS.labelBold)
+      .fontSize(LABEL_SIZE)
+      .fillColor(COLORS.textMuted)
+      .text(label.toUpperCase(), x, startY, {
+        width: cellWidth,
+        lineBreak: false,
+      });
+    const afterLabelY = doc.y;
+
+    // Value (below label): Charter, larger, primary. Wrap within the
+    // column on overflow so a long Chief Complaint doesn't bleed
+    // into the neighbouring cell — the maxY tally below handles the
+    // uneven-column-height case.
+    doc
+      .font(FONTS.bodyRegular)
+      .fontSize(VALUE_SIZE)
+      .fillColor(COLORS.textPrimary)
+      .text(value, x, afterLabelY + LABEL_VALUE_GAP, {
+        width: cellWidth,
+      });
+
+    if (doc.y > maxY) maxY = doc.y;
+  }
+
+  // Reset cursor to after the tallest column so the next block
+  // (renderSoap → sectionHeading('Clinical Note')) starts below
+  // every cell regardless of which one wrapped furthest.
+  doc.x = PAGE.margin;
+  doc.y = maxY;
+  doc.moveDown(0.6);
 }
+
+// T-M21.1: line-level label patterns. `**Label:**` (bold) takes priority
+// over `*Label:*` (italic) so `**foo:**` doesn't accidentally match the
+// italic pattern. Both capture (label, content); content may be empty
+// when the AI emits just the label and supplies the value in bullets
+// below (e.g. `**PMH:**\n- item`).
+const BOLD_LABEL_LINE_RE = /^\*\*([^*]+?):\*\*\s*(.*)$/;
+const ITALIC_LABEL_LINE_RE = /^\*([^*]+?):\*\s*(.*)$/;
+
+// Inline markdown tokenizer — matches either `**bold**` or `*italic*`
+// non-greedy so `**foo**` consumed before its inner `*`s trigger an
+// italic match. Nested `*italic with **bold** inside*` is NOT handled
+// — the inner `**bold**` wins and the outer single `*`s stay as
+// literal characters. Rare enough in clinical prose that the simpler
+// tokenizer is fine for the common cases.
+const INLINE_MARKDOWN_RE = /(\*\*[^*]+?\*\*|\*[^*]+?\*)/g;
 
 function renderSoap(doc: PDFKit.PDFDocument, data: VisitExportData): void {
   sectionHeading(doc, 'Clinical Note');
@@ -160,11 +280,12 @@ function renderSoap(doc: PDFKit.PDFDocument, data: VisitExportData): void {
     muted(doc, 'No SOAP note available.');
     return;
   }
-  // Walk the markdown line-by-line. We support:
-  //  ## Heading     →  body-bold, slightly larger
-  //  **bold text**  →  body-bold inline
-  //  - bullet       →  indented bullet
-  //  (everything else → body-regular)
+  // Walk the markdown line-by-line. Dispatch order matters:
+  //   ## Heading           →  body-bold, slightly larger
+  //   bullet               →  renderBullet (may also be label-shape)
+  //   **Label:** content   →  renderLabelContent (bold label)
+  //   *Label:* content     →  renderLabelContent (italic label)
+  //   everything else      →  renderInlineMarkdown (bold + italic spans)
   for (const raw of soap.split('\n')) {
     const line = raw.trimEnd();
     if (!line.trim()) {
@@ -180,11 +301,21 @@ function renderSoap(doc: PDFKit.PDFDocument, data: VisitExportData): void {
       continue;
     }
     if (/^\s*[-*]\s+/.test(line)) {
-      const body = line.replace(/^\s*[-*]\s+/, '');
-      renderInlineWithBold(doc, `•  ${body}`, { indent: 18 });
+      renderBullet(doc, line.replace(/^\s*[-*]\s+/, ''));
       continue;
     }
-    renderInlineWithBold(doc, line);
+    const boldLabel = line.match(BOLD_LABEL_LINE_RE);
+    if (boldLabel) {
+      renderLabelContent(doc, boldLabel[1], boldLabel[2], 'bold');
+      continue;
+    }
+    const italicLabel = line.match(ITALIC_LABEL_LINE_RE);
+    if (italicLabel) {
+      renderLabelContent(doc, italicLabel[1], italicLabel[2], 'italic');
+      continue;
+    }
+    // Plain prose with possible inline **bold**/*italic* spans.
+    renderInlineMarkdown(doc, line);
   }
   doc.moveDown(0.8);
 }
@@ -265,11 +396,17 @@ function renderRx(doc: PDFKit.PDFDocument, data: VisitExportData): void {
     for (const w of data.rxWarnings) {
       const tone =
         w.severity === 'critical' ? COLORS.warningRed : COLORS.warningAmber;
+      // T-M21.1: dropped the two-space leading indent that preceded
+      // `[CRITICAL]`. In InterTight-SemiBold at 9pt those spaces
+      // rendered with enough visual weight to read as a glyph
+      // placeholder in some PDF viewers. Flush-left tags line up
+      // cleanly with the "Rx safety warnings — review before sending"
+      // header above them and read as an obvious list.
       doc
         .font(FONTS.labelBold)
         .fontSize(SIZE.small)
         .fillColor(tone)
-        .text(`  [${w.severity.toUpperCase()}]`, { continued: true });
+        .text(`[${w.severity.toUpperCase()}]`, { continued: true });
       doc
         .font(FONTS.bodyRegular)
         .fillColor(COLORS.textSecondary)
@@ -365,38 +502,143 @@ function muted(doc: PDFKit.PDFDocument, s: string): void {
     .text(s);
 }
 
-/** Render a line that may contain **bold** segments. pdfkit doesn't
- *  parse markdown, so we split on `**…**` and toggle fonts.
+/** T-M21: explicit two-text-call renderer for the dominant SOAP line
+ *  shape `**Label:** content` (or T-M21.1 `*Label:* content`).
+ *  Replaces T-M20.1's split-and-toggle approach which still left
+ *  edge cases where pdfkit's `continued` state didn't finalize
+ *  cleanly between lines.
  *
- *  T-M20.1: `String.split(regex-with-capture)` produces empty-string
- *  slots whenever the regex matches at the start or end of the input
- *  (e.g. `"**PMH:** [not documented]".split(...)` → `["", "**PMH:**",
- *  " [not documented]"]`). Passing `""` to `doc.text()` with
- *  `continued:false` does NOT reliably finalize the paragraph in
- *  pdfkit — y stays put, and the next line of text renders on top
- *  of the one we just emitted. Filtering empties before iterating
- *  sidesteps the issue. The bug was visible as "PMH:" overlapping
- *  "Medications:" on SOAP fields the AI emitted as "[not documented]".
+ *  When content is empty (e.g. `**PMH:**` followed by bullets on
+ *  subsequent lines), render just the label as its own paragraph —
+ *  letting the bullets that follow supply the field's content.
+ *  Faking "[not documented]" here would incorrectly paint that
+ *  placeholder above legitimate multi-line content.
+ *
+ *  labelStyle picks the label font: 'bold' → InterTight-SemiBold
+ *  (the default, for `**Label:**`), 'italic' → Charter-Italic (for
+ *  T-M21.1 `*Label:*` patterns like nested ROS sub-labels).
  */
-function renderInlineWithBold(
+function renderLabelContent(
   doc: PDFKit.PDFDocument,
-  line: string,
-  opts: { indent?: number } = {}
+  label: string,
+  content: string,
+  labelStyle: 'bold' | 'italic' = 'bold'
 ): void {
-  const parts = line.split(/(\*\*[^*]+\*\*)/g).filter((p) => p !== '');
+  const trimmed = stripInlineMarkdown(content).trim();
+  const labelFont = labelStyle === 'italic' ? FONTS.bodyItalic : FONTS.labelBold;
+  const labelColor =
+    labelStyle === 'italic' ? COLORS.textSecondary : COLORS.textPrimary;
+  doc
+    .font(labelFont)
+    .fontSize(SIZE.body)
+    .fillColor(labelColor);
+  if (!trimmed) {
+    doc.text(`${label}:`);
+    return;
+  }
+  doc.text(`${label}: `, { continued: true });
+  doc
+    .font(FONTS.bodyRegular)
+    .fillColor(COLORS.textSecondary)
+    .text(trimmed);
+}
+
+/** Bullet line. If the body is a label-content shape (bold OR italic),
+ *  render with the same explicit-two-call pattern after a bullet
+ *  marker; if the body is plain prose, render with inline markdown
+ *  handling applied to the body text. */
+function renderBullet(doc: PDFKit.PDFDocument, body: string): void {
+  const bold = body.match(BOLD_LABEL_LINE_RE);
+  const italic = !bold ? body.match(ITALIC_LABEL_LINE_RE) : null;
+  const match = bold ?? italic;
+  if (match) {
+    const labelStyle: 'bold' | 'italic' = bold ? 'bold' : 'italic';
+    const trimmed = stripInlineMarkdown(match[2]).trim();
+    doc
+      .font(FONTS.bodyRegular)
+      .fontSize(SIZE.body)
+      .fillColor(COLORS.textSecondary)
+      .text('•  ', { continued: true });
+    const labelFont = labelStyle === 'italic' ? FONTS.bodyItalic : FONTS.labelBold;
+    const labelColor =
+      labelStyle === 'italic' ? COLORS.textSecondary : COLORS.textPrimary;
+    doc.font(labelFont).fillColor(labelColor);
+    if (!trimmed) {
+      doc.text(`${match[1]}:`);
+      return;
+    }
+    doc.text(`${match[1]}: `, { continued: true });
+    doc
+      .font(FONTS.bodyRegular)
+      .fillColor(COLORS.textSecondary)
+      .text(trimmed);
+    return;
+  }
+  // Plain-body bullet with possibly embedded inline markdown.
+  // Emits the bullet marker with a continued chain, then hands off
+  // to renderMarkdownSpans so *italic* + **bold** inside the bullet
+  // keep their formatting rather than getting stripped to plain text.
+  const parts = body.split(INLINE_MARKDOWN_RE).filter((p) => p !== '');
   if (parts.length === 0) return;
-  doc.font(FONTS.bodyRegular).fontSize(SIZE.body).fillColor(COLORS.textSecondary);
-  if (opts.indent) doc.text('', { continued: true, indent: opts.indent });
+  doc
+    .font(FONTS.bodyRegular)
+    .fontSize(SIZE.body)
+    .fillColor(COLORS.textSecondary)
+    .text('•  ', { continued: true, indent: 18 });
+  renderMarkdownSpans(doc, parts);
+}
+
+/** T-M21.1: render a line with possibly embedded **bold** and *italic*
+ *  spans. Tokenizes via INLINE_MARKDOWN_RE, filters empty slots (same
+ *  insight as T-M20.1), then chains `continued: true` text calls with
+ *  the matching font per span. The final span defaults to
+ *  `continued: false` which finalizes the paragraph. Relies on the
+ *  T-M21 `doc.lineGap(4)` compensator set at document start so the
+ *  advance between paragraphs is right; without it the chain would
+ *  re-introduce the T-M20.1-era overlap bug. */
+function renderInlineMarkdown(doc: PDFKit.PDFDocument, line: string): void {
+  const parts = line.split(INLINE_MARKDOWN_RE).filter((p) => p !== '');
+  if (parts.length === 0) return;
+  doc.fontSize(SIZE.body);
+  renderMarkdownSpans(doc, parts);
+}
+
+/** Shared span emitter used by renderInlineMarkdown (whole-line plain
+ *  text) and renderBullet (the plain-bullet path). Caller is expected
+ *  to have set fontSize + any prefix text (e.g. `•  `) with
+ *  `continued: true` before calling; this helper picks up at the
+ *  current cursor and finalizes the paragraph on the last span. */
+function renderMarkdownSpans(
+  doc: PDFKit.PDFDocument,
+  parts: string[]
+): void {
   parts.forEach((part, i) => {
     const last = i === parts.length - 1;
-    if (part.startsWith('**') && part.endsWith('**')) {
-      doc.font(FONTS.bodyBold).fillColor(COLORS.textPrimary);
-      doc.text(part.slice(2, -2), { continued: !last });
-      doc.font(FONTS.bodyRegular).fillColor(COLORS.textSecondary);
-    } else {
-      doc.text(part, { continued: !last });
+    let font: string = FONTS.bodyRegular;
+    let color: string = COLORS.textSecondary;
+    let text = part;
+    if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
+      font = FONTS.bodyBold;
+      color = COLORS.textPrimary;
+      text = part.slice(2, -2);
+    } else if (part.startsWith('*') && part.endsWith('*') && part.length > 2) {
+      font = FONTS.bodyItalic;
+      color = COLORS.textSecondary;
+      text = part.slice(1, -1);
     }
+    doc.font(font).fillColor(color).text(text, { continued: !last });
   });
+}
+
+/** Strip residual `**…**` AND `*…*` markers from a string. Used for
+ *  content that goes into renderLabelContent (label context doesn't
+ *  support inline formatting) and as a defense-in-depth for any
+ *  downgraded render path where markers would otherwise show as
+ *  literal asterisks. */
+function stripInlineMarkdown(s: string): string {
+  return s
+    .replace(/\*\*([^*]+?)\*\*/g, '$1')
+    .replace(/\*([^*]+?)\*/g, '$1');
 }
 
 function drawWatermark(doc: PDFKit.PDFDocument): void {
@@ -405,7 +647,7 @@ function drawWatermark(doc: PDFKit.PDFDocument): void {
   const y = doc.page.height - 36;
   doc
     .save()
-    .font(FONTS.labelRegular)
+    .font(FONTS.brand)
     .fontSize(7)
     .fillColor('#cccccc')
     .text(

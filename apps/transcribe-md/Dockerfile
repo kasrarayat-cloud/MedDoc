@@ -76,6 +76,14 @@ COPY --from=builder /app/apps/transcribe-md/public ./apps/transcribe-md/public
 COPY --from=builder /app/apps/transcribe-md/.next/standalone ./
 COPY --from=builder /app/apps/transcribe-md/.next/static ./apps/transcribe-md/.next/static
 
+# T-M21: PDF generator embeds Charter (body) + Inter Tight (labels)
+# at request time via pdfkit's registerFont. The font files must be
+# present in the runner image at the path lib/pdf-generator.ts
+# resolves via join(process.cwd(), …). Standalone server runs with
+# WORKDIR /app, so the relative join below lands on these COPY'd
+# files. ~1MB total (4 Charter weights + 3 Inter Tight weights).
+COPY --from=builder /app/apps/transcribe-md/fonts ./apps/transcribe-md/fonts
+
 # Prisma runtime artifacts. Required because the standalone bundle loads
 # @prisma/client at runtime and that module reads from node_modules/.prisma.
 COPY --from=builder /app/packages/db/prisma ./packages/db/prisma
