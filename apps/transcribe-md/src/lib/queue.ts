@@ -115,6 +115,11 @@ export const JOB_MINIO_ORPHAN_CLEANUP = 'minio_orphan_cleanup';
  *  Shares the cleanup queue so a single BullMQ Worker processes both
  *  kinds of job. */
 export const JOB_STALE_VISIT_CLEANUP = 'stale_visit_cleanup';
+/** T-M18.1 A3: daily audio-retention sweep. Purges audioKey +
+ *  dictationAudioKey on SIGNED visits past AUDIO_RETENTION_DAYS.
+ *  Transcripts + SOAP stay — the 7-year clinical-record retention
+ *  window is separate from the 180-day audio window. */
+export const JOB_RETENTION_SWEEP = 'retention_sweep';
 
 export function getCleanupQueue(): Queue {
   if (cleanupQueue) return cleanupQueue;
