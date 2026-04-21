@@ -107,6 +107,16 @@ export interface VisitReadyViewProps {
    *  the server page reads `NEXT_PUBLIC_SHOW_PIPELINE_TAB=true` from
    *  the runtime env. */
   showPipelineTab: boolean;
+  /** T-M24 — JSON blob of the L7f-filled token dict. Non-null means
+   *  the worker finished the template fill; we show a Download button
+   *  that calls the on-demand filled-docx endpoint. */
+  filledTemplate: string | null;
+  /** T-M24 — the source template for the "Download [Name]" button
+   *  label. Null when no template was picked OR the source row was
+   *  soft-deleted after generation (we keep the filled JSON around
+   *  for debugging, but can't render the download UI without a
+   *  human-readable name). */
+  template: { id: string; name: string } | null;
 }
 
 export function VisitReadyView(props: VisitReadyViewProps) {
@@ -159,7 +169,13 @@ export function VisitReadyView(props: VisitReadyViewProps) {
       <div className="mt-6">
         {tab === 'soap' && (
           <div className="space-y-3">
-            <div className="flex justify-end">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {props.filledTemplate && props.template && (
+                <TemplateDownloadButton
+                  visitId={props.visitId}
+                  templateName={props.template.name}
+                />
+              )}
               <CopySectionButton
                 text={sectionSoap(sectionData)}
                 label="Copy SOAP"
@@ -728,5 +744,65 @@ function RawTextInputView({ text }: { text: string | null }) {
     <pre className="overflow-x-auto rounded-xl border border-border-default bg-bg-surface-1/60 p-5 font-mono text-[12.5px] leading-relaxed text-text-secondary whitespace-pre-wrap">
       {text}
     </pre>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// T-M24 — small button next to Copy SOAP that downloads the filled-
+// template .docx. A plain <a download> doesn't work here because the
+// server sets Content-Disposition at runtime and the filename matters;
+// wrapping in a click handler lets us show the loading state + toast
+// on the (rare) 500 from the on-demand fill endpoint.
+// ---------------------------------------------------------------------------
+function TemplateDownloadButton({
+  visitId,
+  templateName,
+}: {
+  visitId: string;
+  templateName: string;
+}) {
+  const [pending, setPending] = useState(false);
+
+  async function onClick() {
+    setPending(true);
+    try {
+      const res = await fetch(`/api/visits/${visitId}/export/template-docx`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        toast.error('Template not available', {
+          description:
+            (body as { error?: string })?.error ??
+            `Server returned ${res.status}.`,
+        });
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      // Let the server's Content-Disposition win — leaving `download`
+      // empty tells the browser to honour the server-supplied filename.
+      a.download = '';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error('Template not available', { description: 'Network error.' });
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={pending}
+      className="inline-flex items-center gap-1.5 rounded-full border border-violet-500/40 bg-violet-500/10 px-3 py-1.5 text-[12px] font-medium text-violet-200 transition-colors hover:bg-violet-500/15 hover:border-violet-500/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base disabled:opacity-60"
+    >
+      <Download className="h-3.5 w-3.5" aria-hidden />
+      {pending ? 'Preparing…' : `Download ${templateName}`}
+    </button>
   );
 }
