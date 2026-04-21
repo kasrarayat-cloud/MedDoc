@@ -38,7 +38,7 @@ export default async function NewVisitPage({
   const session = await auth();
   if (!session?.user?.id) redirect('/login');
 
-  const [user, mostRecentVisit] = await Promise.all([
+  const [user, mostRecentVisit, templateRows] = await Promise.all([
     prisma.user.findUnique({
       where: { id: session.user.id },
       select: { name: true, email: true, practiceId: true },
@@ -52,8 +52,21 @@ export default async function NewVisitPage({
       orderBy: { createdAt: 'desc' },
       select: { specialty: true },
     }),
+    prisma.transcribeTemplate.findMany({
+      where: { userId: session.user.id, deletedAt: null },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, name: true, tokens: true },
+    }),
   ]);
   if (!user) redirect('/login');
+
+  const templates = (
+    templateRows as Array<{ id: string; name: string; tokens: string[] }>
+  ).map((t) => ({
+    id: t.id,
+    name: t.name,
+    tokenCount: t.tokens.length,
+  }));
 
   const params = await searchParams;
   const patientIdParam = Array.isArray(params.patientId)
@@ -114,6 +127,7 @@ export default async function NewVisitPage({
           initialPatient={initialPatient}
           specialties={SPECIALTIES}
           defaultSpecialty={defaultSpecialty}
+          templates={templates}
         />
       </main>
     </PageWrapper>
