@@ -72,8 +72,9 @@ export async function runLayer7fTemplateFill(
   // tokens the doctor added (e.g. {{custom_field}}) aren't in
   // SUPPORTED_TOKENS; docxtemplater fills them with empty at the
   // generation stage.
-  const supportedTokensUsed = template.tokens.filter((t): t is string =>
-    (SUPPORTED_TOKENS as readonly string[]).includes(t)
+  const supportedSet = new Set<string>(SUPPORTED_TOKENS);
+  const supportedTokensUsed: string[] = template.tokens.filter((t: string) =>
+    supportedSet.has(t)
   );
   if (supportedTokensUsed.length === 0) {
     // Template has no known tokens — nothing for us to fill. Still
