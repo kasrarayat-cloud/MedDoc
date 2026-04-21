@@ -95,13 +95,18 @@ async function DashboardBody({
   // on — the badge shows "active visits on this account", not
   // "visits currently rendered in the grid". Otherwise toggling the
   // switch would make the badge jump, which reads like the other
-  // tab's count changed.
-  const [patientCount, visitCount] = await Promise.all([
+  // tab's count changed. T-M18.2 A11 adds a companion archivedCount
+  // so the header subheading can disambiguate (7 active · 5 archived)
+  // when the toggle is on.
+  const [patientCount, visitCount, archivedCount] = await Promise.all([
     prisma.transcribeMdPatient.count({
       where: { practiceId, deletedAt: null },
     }),
     prisma.transcribeVisit.count({
       where: { userId, deletedAt: null, archivedAt: null },
+    }),
+    prisma.transcribeVisit.count({
+      where: { userId, deletedAt: null, archivedAt: { not: null } },
     }),
   ]);
 
@@ -121,7 +126,9 @@ async function DashboardBody({
           <p className="mt-1 text-[13px] text-text-tertiary">
             {activeTab === 'patients'
               ? `${patientCount} patient${patientCount === 1 ? '' : 's'} · most-recent visit first`
-              : `${visitCount} ${visitCount === 1 ? 'visit' : 'visits'} · most recent first`}
+              : includeArchived
+                ? `${visitCount} active · ${archivedCount} archived · most recent first`
+                : `${visitCount} ${visitCount === 1 ? 'visit' : 'visits'} · most recent first`}
           </p>
         </div>
       </div>
