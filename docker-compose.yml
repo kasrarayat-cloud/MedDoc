@@ -278,6 +278,14 @@ services:
       args:
         NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL: ${TRANSCRIBE_MD_AUTH_URL:-http://5.231.107.93:9020}
         NEXT_PUBLIC_MARKETING_URL: ${MARKETING_URL:-http://5.231.107.93:9010}
+        # T-M20.3: Pipeline tab gate. Build-time default is "false"
+        # (host env not set → image ships with tab hidden). Runtime
+        # override via the `environment:` block below — dev flips
+        # `NEXT_PUBLIC_SHOW_PIPELINE_TAB=true` on the host, runs
+        # `docker compose up -d --force-recreate transcribe-md` (no
+        # rebuild needed because the gate is read server-side at
+        # request time, not inlined into the client bundle).
+        NEXT_PUBLIC_SHOW_PIPELINE_TAB: ${NEXT_PUBLIC_SHOW_PIPELINE_TAB:-false}
     restart: unless-stopped
     mem_limit: 512m
     cpus: '1.0'
@@ -326,6 +334,12 @@ services:
       # stamp a git-sha or milestone tag without a source-tree edit.
       # Falls back to "T-M18.3" in the route handler if unset.
       APP_VERSION: ${APP_VERSION:-}
+      # T-M20.3: runtime override of the Pipeline-tab gate. Unset on
+      # the host ⇒ falls back to the Dockerfile ARG default ("false").
+      # Dev flips to "true" on the host + force-recreates the
+      # container — no rebuild needed because /visits/[id]/page.tsx
+      # is a server component reading process.env at request time.
+      NEXT_PUBLIC_SHOW_PIPELINE_TAB: ${NEXT_PUBLIC_SHOW_PIPELINE_TAB:-}
     ports:
       # Loopback only — public traffic arrives via Caddy on :9020.
       - "127.0.0.1:3011:3011"
