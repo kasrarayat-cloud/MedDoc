@@ -17,6 +17,10 @@
 //                       Delete instead.
 //   VISIT_DELETED     — deletedAt IS NOT NULL (not technically
 //                       "deleted" yet but in the 15-day trash window).
+//   VISIT_ARCHIVED    — archivedAt IS NOT NULL (impossible today —
+//                       only SIGNED visits archive and SIGNED ≠
+//                       QUEUED — but the gate is defensive against
+//                       future archive-expansion).
 //   INVALID_PATIENT   — patientId doesn't exist, belongs to a
 //                       different practice, or is soft-deleted.
 // ============================================================================
@@ -117,7 +121,7 @@ export const PATCH = withApiHandler<{ id: string }>(
       return NextResponse.json(
         {
           error: 'Archived visits cannot be edited.',
-          code: 'VISIT_DELETED',
+          code: 'VISIT_ARCHIVED',
         },
         { status: 400 }
       );

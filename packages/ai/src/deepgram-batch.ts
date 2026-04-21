@@ -30,9 +30,20 @@ export interface DeepgramBatchOptions {
   utterances?: boolean;
 }
 
+export interface DeepgramBatchStreamSource {
+  /** Web ReadableStream — Node Readable should be converted via
+   *  `Readable.toWeb(nodeReadable)`. */
+  stream: ReadableStream<Uint8Array>;
+  /** Object size in bytes. Required because Deepgram /v1/listen
+   *  rejects chunked-transfer bodies; fetch needs Content-Length. */
+  sizeBytes: number;
+}
+
 export interface DeepgramBatchArgs extends AiLogContext {
-  /** Raw audio bytes. The caller is responsible for downloading from MinIO. */
-  audio: Buffer;
+  /** Raw audio. Pass a Buffer for small/legacy paths, or a
+   *  `{ stream, sizeBytes }` pair for the T-M18.2 streaming path
+   *  that never buffers the whole file in the worker's memory. */
+  audio: Buffer | DeepgramBatchStreamSource;
   /** MIME type from the upload (audio/mpeg, audio/mp4, audio/wav, etc).
    *  Deepgram accepts Content-Type and auto-detects encoding/sample-rate,
    *  which is what the live path also relies on. */
@@ -150,9 +161,28 @@ export async function deepgramBatchTranscribe(
   const url = `${DEEPGRAM_BATCH_URL}?${params.toString()}`;
   const started = Date.now();
 
+  // T-M18.2 A7: source type drives two parallel paths.
+  //   Buffer  → legacy in-memory body (small payloads, export-path
+  //             callers that already had the bytes)
+  //   stream  → forward the MinIO stream directly into fetch, with
+  //             Content-Length preset so Deepgram doesn't reject
+  //             the chunked-transfer variant.
+  let sizeBytes: number;
+  let body: BodyInit;
+  let isStreamed: boolean;
+  if (args.audio instanceof Uint8Array) {
+    isStreamed = false;
+    sizeBytes = args.audio.byteLength;
+    body = args.audio as unknown as BodyInit;
+  } else {
+    isStreamed = true;
+    sizeBytes = args.audio.sizeBytes;
+    body = args.audio.stream as unknown as BodyInit;
+  }
+
   // promptHash carries "batch:<bytes>" as a size marker — we deliberately
   // never hash audio content (PHI).
-  const promptHash = `batch:${args.audio.byteLength}b`;
+  const promptHash = `batch:${sizeBytes}b`;
 
   const timeoutMs = args.timeoutMs ?? 10 * 60 * 1000; // 10 min ceiling.
   const controller = new AbortController();
@@ -160,18 +190,22 @@ export async function deepgramBatchTranscribe(
 
   let res: Response;
   try {
-    // Node 22's fetch accepts Buffer at runtime, but TS 5.6 narrowed
-    // BlobPart/BodyInit to `ArrayBufferView<ArrayBuffer>` (rejects the
-    // `ArrayBufferLike` variance coming off Buffer.buffer). Cast to
-    // BodyInit — Node does the right thing at runtime.
+    // Node 22's fetch accepts Buffer and ReadableStream at runtime.
+    // TS 5.6 narrowed BlobPart/BodyInit; cast to BodyInit — Node does
+    // the right thing at runtime. For the streaming path we pass
+    // `duplex: 'half'` (required by Node fetch when body is a stream).
     res = await fetch(url, {
       method: 'POST',
       headers: {
         Authorization: `Token ${apiKey}`,
         'Content-Type': args.mimeType,
+        'Content-Length': String(sizeBytes),
       },
-      body: args.audio as unknown as BodyInit,
+      body,
       signal: controller.signal,
+      ...(isStreamed
+        ? ({ duplex: 'half' } as { duplex: 'half' })
+        : {}),
     });
   } catch (err) {
     clearTimeout(timer);

@@ -10,9 +10,11 @@
 // for the cost math + UI replay duration hint.
 // ============================================================================
 
+import { Readable } from 'node:stream';
+
 import prisma from '@meddoc/db';
 import { deepgramBatchTranscribe } from '@meddoc/ai';
-import { downloadAudio } from '@/lib/minio';
+import { statAudio, streamAudio } from '@/lib/minio';
 
 export interface Layer1bInput {
   visitId: string;
@@ -31,14 +33,21 @@ const BACKOFF_MS = 2_000;
 export async function runLayer1bTranscribeDictation(
   input: Layer1bInput
 ): Promise<Layer1bOutput> {
-  const audio = await downloadAudio(input.dictationAudioKey);
-
-  const attempt = async () =>
-    deepgramBatchTranscribe({
+  // T-M18.2 A7: stream MinIO → fetch instead of buffering.
+  const attempt = async () => {
+    const stat = await statAudio(input.dictationAudioKey);
+    if (!stat || typeof stat.size !== 'number') {
+      throw new Error(
+        `[L1b] dictation audio missing or has no size: ${input.dictationAudioKey}`
+      );
+    }
+    const nodeStream = await streamAudio(input.dictationAudioKey);
+    const webStream = Readable.toWeb(nodeStream) as ReadableStream<Uint8Array>;
+    return deepgramBatchTranscribe({
       practiceId: input.practiceId,
       visitId: input.visitId,
       purpose: 'tm_transcribe',
-      audio,
+      audio: { stream: webStream, sizeBytes: stat.size },
       mimeType: input.dictationMimeType,
       // Options below intentionally differ from Layer 1: single speaker
       // → no diarize, and we don't need utterance boundaries since the
@@ -48,6 +57,7 @@ export async function runLayer1bTranscribeDictation(
         utterances: false,
       },
     });
+  };
 
   let result;
   try {

@@ -1,13 +1,17 @@
 // ============================================================================
-// Dashboard — tabbed [Patients] / [All visits] layout (T-M17.2 Commit 7)
+// Dashboard — tabbed [Patients] / [All visits] / [Trash] layout
 // ----------------------------------------------------------------------------
 // /dashboard                 → Patients tab (default)
 // /dashboard?tab=visits      → All visits tab
+// /dashboard?tab=trash       → T-M18.2 A12 — global trash view across
+//                              ALL patients. Only surfaces when
+//                              trashCount > 0 so a healthy account's
+//                              tab row stays clean.
 //
-// Both tabs SSR their first page so the initial paint is fast. Switching
-// tabs is a Link navigation — the RSC re-renders with the new searchParams
-// value. "Load more" within each tab calls the corresponding action
-// (loadMorePatientsAction / loadMoreVisitsAction).
+// All three tabs SSR their first page so the initial paint is fast.
+// Switching tabs is a Link navigation — the RSC re-renders with the
+// new searchParams value. "Load more" within each tab calls the
+// corresponding action.
 // ============================================================================
 
 import type { Metadata } from 'next';
@@ -32,6 +36,10 @@ import { VisitsGrid } from './visits-grid';
 import { PatientsGrid } from './patients-grid';
 import { TabNav } from './tab-nav';
 import { ShowArchivedToggle } from './show-archived-toggle';
+import {
+  TrashedVisitCard,
+  type TrashedVisitCardData,
+} from '@/app/patients/[id]/trashed-visit-card';
 
 export const metadata: Metadata = { title: 'Dashboard' };
 
@@ -53,8 +61,8 @@ export default async function DashboardPage({
 
   const params = await searchParams;
   const tabParam = Array.isArray(params.tab) ? params.tab[0] : params.tab;
-  const activeTab: 'patients' | 'visits' =
-    tabParam === 'visits' ? 'visits' : 'patients';
+  const activeTab: 'patients' | 'visits' | 'trash' =
+    tabParam === 'visits' ? 'visits' : tabParam === 'trash' ? 'trash' : 'patients';
   const archivedParam = Array.isArray(params.archived)
     ? params.archived[0]
     : params.archived;
@@ -73,6 +81,8 @@ export default async function DashboardPage({
             includeArchived={includeArchived}
           />
         </Suspense>
+        {/* DashboardBody signature updated below — `activeTab` now
+            accepts 'trash'. */}
       </main>
     </PageWrapper>
   );
@@ -86,24 +96,33 @@ async function DashboardBody({
 }: {
   userId: string;
   practiceId: string;
-  activeTab: 'patients' | 'visits';
+  activeTab: 'patients' | 'visits' | 'trash';
   includeArchived: boolean;
 }) {
-  // Small COUNT queries for the tab badges — both always visible, so
-  // both need a number. Cheap via the existing indexes.
-  // NOTE: visitCount stays archive-exclusive even when the toggle is
-  // on — the badge shows "active visits on this account", not
-  // "visits currently rendered in the grid". Otherwise toggling the
-  // switch would make the badge jump, which reads like the other
-  // tab's count changed.
-  const [patientCount, visitCount] = await Promise.all([
-    prisma.transcribeMdPatient.count({
-      where: { practiceId, deletedAt: null },
-    }),
-    prisma.transcribeVisit.count({
-      where: { userId, deletedAt: null, archivedAt: null },
-    }),
-  ]);
+  // Small COUNT queries for the tab badges. All four are cheap via
+  // the existing indexes.
+  //
+  // visitCount stays archive-exclusive even when the toggle is on —
+  // the badge shows "active visits on this account", not "visits
+  // currently rendered in the grid". T-M18.2 A11 adds archivedCount
+  // so the header subheading can disambiguate. T-M18.2 A12 adds
+  // trashCount so the global Trash tab is only offered when it has
+  // something to show.
+  const [patientCount, visitCount, archivedCount, trashCount] =
+    await Promise.all([
+      prisma.transcribeMdPatient.count({
+        where: { practiceId, deletedAt: null },
+      }),
+      prisma.transcribeVisit.count({
+        where: { userId, deletedAt: null, archivedAt: null },
+      }),
+      prisma.transcribeVisit.count({
+        where: { userId, deletedAt: null, archivedAt: { not: null } },
+      }),
+      prisma.transcribeVisit.count({
+        where: { userId, deletedAt: { not: null } },
+      }),
+    ]);
 
   // Brand-new user (no patients, no visits) — keep the full-bleed
   // orb empty state. Landing on a row of tabs with zeroed badges
@@ -121,7 +140,11 @@ async function DashboardBody({
           <p className="mt-1 text-[13px] text-text-tertiary">
             {activeTab === 'patients'
               ? `${patientCount} patient${patientCount === 1 ? '' : 's'} · most-recent visit first`
-              : `${visitCount} ${visitCount === 1 ? 'visit' : 'visits'} · most recent first`}
+              : activeTab === 'trash'
+                ? `${trashCount} trashed · auto-delete countdown on each card`
+                : includeArchived
+                  ? `${visitCount} active · ${archivedCount} archived · most recent first`
+                  : `${visitCount} ${visitCount === 1 ? 'visit' : 'visits'} · most recent first`}
           </p>
         </div>
       </div>
@@ -130,10 +153,13 @@ async function DashboardBody({
         active={activeTab}
         patientCount={patientCount}
         visitCount={visitCount}
+        trashCount={trashCount}
       />
 
       {activeTab === 'patients' ? (
         <PatientsTabBody practiceId={practiceId} patientCount={patientCount} />
+      ) : activeTab === 'trash' ? (
+        <TrashTabBody userId={userId} trashCount={trashCount} />
       ) : (
         <VisitsTabBody
           userId={userId}
@@ -161,6 +187,49 @@ async function PatientsTabBody({
       initialPatients={firstPage.patients}
       initialCursor={firstPage.nextCursor}
     />
+  );
+}
+
+async function TrashTabBody({
+  userId,
+  trashCount,
+}: {
+  userId: string;
+  trashCount: number;
+}) {
+  if (trashCount === 0) {
+    // Edge case — doctor restored the last trashed visit while on
+    // the tab. The tab itself hides when trashCount=0 on the next
+    // render, but for this render we still want a clean state.
+    return (
+      <div className="rounded-xl border border-border-subtle bg-bg-surface-1/40 px-6 py-10 text-center">
+        <p className="text-[14px] text-text-tertiary">No deleted visits.</p>
+      </div>
+    );
+  }
+  // Fetch all trashed visits ordered by when they were deleted (most-
+  // recently-trashed first so the auto-delete countdown is intuitive).
+  // Per-practice volume caps this at a small number; no pagination
+  // for now.
+  const rows = await prisma.transcribeVisit.findMany({
+    where: { userId, deletedAt: { not: null } },
+    orderBy: [{ deletedAt: 'desc' }, { id: 'desc' }],
+    select: {
+      id: true,
+      patientName: true,
+      specialty: true,
+      status: true,
+      createdAt: true,
+      deletedAt: true,
+    },
+  });
+
+  return (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {rows.map((v: TrashedVisitCardData) => (
+        <TrashedVisitCard key={v.id} visit={v} />
+      ))}
+    </div>
   );
 }
 

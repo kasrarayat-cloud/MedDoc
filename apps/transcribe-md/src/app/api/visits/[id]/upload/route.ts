@@ -18,7 +18,11 @@ import { Readable } from 'node:stream';
 import { auth } from '@/lib/nextauth';
 import prisma from '@meddoc/db';
 import { TranscribeVisitStatus } from '@prisma/client';
-import { buildAudioObjectKey, putAudioStream } from '@/lib/minio';
+import {
+  buildAudioObjectKey,
+  deleteAudioObject,
+  putAudioStream,
+} from '@/lib/minio';
 import { enqueueProcessVisit } from '@/lib/queue';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
@@ -68,6 +72,9 @@ export const POST = withApiHandler<{ id: string }>(
         status: true,
         deletedAt: true,
         archivedAt: true,
+        // T-M18.2 A9: pulled so we can sweep a stale MinIO object
+        // left by a previous failed-then-reuploaded attempt.
+        audioKey: true,
       },
     });
     if (!visit || visit.userId !== userId) return apiError('not found', 404);
@@ -181,6 +188,21 @@ export const POST = withApiHandler<{ id: string }>(
         processingCostCents: null,
       },
     });
+
+    // T-M18.2 A9: if this was a re-upload (FAILED → new upload), the
+    // old audioKey is now orphaned in MinIO. Best-effort delete so
+    // the T-M12 orphan sweep doesn't have to catch it later. Fire
+    // AFTER the DB update succeeds — if the delete races ahead and
+    // the DB update fails, the user loses BOTH the old and new
+    // audio.
+    if (visit.audioKey && visit.audioKey !== objectKey) {
+      void deleteAudioObject(visit.audioKey).catch((err: unknown) => {
+        console.warn(
+          `[api:visits:upload] orphan cleanup failed key=${visit.audioKey}:`,
+          redactPhi(err instanceof Error ? err.message : err)
+        );
+      });
+    }
 
     try {
       await enqueueProcessVisit(visitId, userId);
