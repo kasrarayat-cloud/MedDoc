@@ -233,3 +233,36 @@ schema, just not wired up.
   skips `deletedAt IS NOT NULL` rows so the two jobs don't race.
 
 ---
+
+## KI-4 — Rate limiter buckets are process-local (T-M18.3 A14)
+
+**First observed:** 2026-04-21 (T-M18 pre-launch audit, finding A14).
+
+**Pattern:** `apps/transcribe-md/src/lib/rate-limit.ts` keeps
+buckets in an in-memory `Map<string, Bucket>` on each container.
+Buckets reset on worker restart, and a horizontally-scaled web
+tier would let an attacker distribute requests across replicas
+to bypass per-IP or per-user caps.
+
+**Impact today:** none. TranscribeMD runs a single `transcribe-md`
+replica on the VPS. Restart-resets last ~seconds, during which an
+attacker could fire at most one extra allotment of any bucket —
+far below the abuse threshold the limits exist to catch.
+
+**Trigger to revisit:** any of —
+1. Spinning up a second `transcribe-md` container (even behind a
+   load balancer) — buckets stop being coherent.
+2. Moving web traffic to a rolling-deploy strategy that keeps old
+   + new containers live simultaneously during cutover.
+3. Repeated in-the-wild abuse that suggests attackers are exploiting
+   the restart reset.
+
+**Fix path when it's time:** lift buckets into Redis (`INCR` + TTL
+per `<bucket>:<identifier>` key). The named-preset API in
+`RATE_LIMITS` is already the SSOT, so only the `tryConsume` + helper
+functions need swapping — every caller stays put. Estimated half a
+day once a second replica is on the table.
+
+**Owner:** platform.
+
+---

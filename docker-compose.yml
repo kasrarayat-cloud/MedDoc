@@ -308,6 +308,11 @@ services:
       REDIS_URL: redis://redis:6379
       NODE_ENV: production
       NEXT_TELEMETRY_DISABLED: "1"
+      # T-M18.3 A15: surface the deployed milestone through /api/health.
+      # Passed through from the host env so the deploy pipeline can
+      # stamp a git-sha or milestone tag without a source-tree edit.
+      # Falls back to "T-M18.3" in the route handler if unset.
+      APP_VERSION: ${APP_VERSION:-}
     ports:
       # Loopback only — public traffic arrives via Caddy on :9020.
       - "127.0.0.1:3011:3011"

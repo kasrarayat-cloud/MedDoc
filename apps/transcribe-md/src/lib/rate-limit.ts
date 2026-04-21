@@ -21,6 +21,8 @@
 //   1. In-memory state resets on worker restart.
 //   2. Buckets don't cross containers (single transcribe-md replica
 //      today — revisit when we horizontally scale).
+// See `docs/KNOWN_ISSUES.md` KI-4 for the trigger-to-revisit list
+// and the Redis-backed fix path.
 // ============================================================================
 
 import { NextResponse } from 'next/server';
