@@ -10,9 +10,11 @@
 // so the clinician sees why (bad content type, corrupt file, etc).
 // ============================================================================
 
+import { Readable } from 'node:stream';
+
 import prisma from '@meddoc/db';
 import { deepgramBatchTranscribe } from '@meddoc/ai';
-import { downloadAudio } from '@/lib/minio';
+import { statAudio, streamAudio } from '@/lib/minio';
 
 export interface Layer1Input {
   visitId: string;
@@ -38,18 +40,27 @@ export async function runLayer1Transcribe(
     throw new Error('[L1] audioMimeType is missing — cannot contact Deepgram.');
   }
 
-  // Download once. For files > ~250MB this is the hot path; a streaming
-  // variant is a T-M4.5 optimisation.
-  const audio = await downloadAudio(input.audioKey);
-
-  const attempt = async () =>
-    deepgramBatchTranscribe({
+  // T-M18.2 A7: stream MinIO → fetch → Deepgram instead of buffering
+  // the whole audio. Each retry opens a fresh stream (HTTP requests
+  // can't replay a consumed ReadableStream).
+  const attempt = async () => {
+    const stat = await statAudio(input.audioKey);
+    if (!stat || typeof stat.size !== 'number') {
+      throw new Error(`[L1] audio object missing or has no size: ${input.audioKey}`);
+    }
+    const nodeStream = await streamAudio(input.audioKey);
+    // Cast — the minio SDK types the stream as a generic Readable;
+    // `Readable.toWeb()` yields the ReadableStream<Uint8Array> fetch
+    // needs.
+    const webStream = Readable.toWeb(nodeStream) as ReadableStream<Uint8Array>;
+    return deepgramBatchTranscribe({
       practiceId: input.practiceId,
       visitId: input.visitId,
       purpose: 'tm_transcribe',
-      audio,
+      audio: { stream: webStream, sizeBytes: stat.size },
       mimeType: input.audioMimeType!,
     });
+  };
 
   let result;
   try {
