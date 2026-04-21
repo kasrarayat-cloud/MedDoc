@@ -43,6 +43,14 @@ COPY . .
 # artifacts must exist at import time. Same pattern as apps/scribe.
 RUN npm run db:generate
 
+# T-M19.2: mirror of apps/marketing/Dockerfile — NEXT_PUBLIC_* must be
+# in the builder env so `next build` inlines them into client bundles
+# + ISR HTML. See docker-compose.yml `build.args:` for the wiring.
+ARG NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL
+ARG NEXT_PUBLIC_MARKETING_URL
+ENV NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL=${NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL}
+ENV NEXT_PUBLIC_MARKETING_URL=${NEXT_PUBLIC_MARKETING_URL}
+
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build -w transcribe-md
 
