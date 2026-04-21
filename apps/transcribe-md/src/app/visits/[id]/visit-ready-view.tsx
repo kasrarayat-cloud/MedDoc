@@ -102,6 +102,11 @@ export interface VisitReadyViewProps {
    *  Send. Hidden by default until ops verifies the from-domain on
    *  Resend (RESEND_FROM_VERIFIED=true). */
   emailEnabled: boolean;
+  /** T-M20.3 — Pipeline tab is developer/debug UI (raw entities JSON,
+   *  wall-time, cost). Hidden from doctors in production; shown when
+   *  the server page reads `NEXT_PUBLIC_SHOW_PIPELINE_TAB=true` from
+   *  the runtime env. */
+  showPipelineTab: boolean;
 }
 
 export function VisitReadyView(props: VisitReadyViewProps) {
@@ -144,6 +149,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
         tab={tab}
         onChange={setTab}
         secondTabLabel={secondTabLabel}
+        showPipelineTab={props.showPipelineTab}
         warnings={{
           codes: codesWarn ? 'any' : null,
           rx: rxWarn,
@@ -229,7 +235,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
             />
           </div>
         )}
-        {tab === 'pipeline' && (
+        {props.showPipelineTab && tab === 'pipeline' && (
           <PipelineView
             entities={props.entities}
             critique={props.critique}
@@ -310,11 +316,13 @@ function Tabs({
   tab,
   onChange,
   secondTabLabel,
+  showPipelineTab,
   warnings,
 }: {
   tab: TabKey;
   onChange: (t: TabKey) => void;
   secondTabLabel: string;
+  showPipelineTab: boolean;
   warnings: {
     codes: 'critical' | 'any' | null;
     rx: 'critical' | 'any' | null;
@@ -327,7 +335,12 @@ function Tabs({
     { key: 'codes', label: 'Codes', icon: <Stethoscope className="h-3.5 w-3.5" aria-hidden />, warning: warnings.codes },
     { key: 'rx', label: 'Rx', icon: <Pill className="h-3.5 w-3.5" aria-hidden />, warning: warnings.rx },
     { key: 'extras', label: 'Extras', icon: <Sparkles className="h-3.5 w-3.5" aria-hidden />, warning: warnings.extras },
-    { key: 'pipeline', label: 'Pipeline', icon: <LayersIcon className="h-3.5 w-3.5" aria-hidden /> },
+    // T-M20.3: Pipeline tab carries developer/debug UI (raw entities
+    // JSON, wall-time, cost). Hidden from doctors by default; surfaced
+    // only when NEXT_PUBLIC_SHOW_PIPELINE_TAB=true in the server env.
+    ...(showPipelineTab
+      ? [{ key: 'pipeline' as const, label: 'Pipeline', icon: <LayersIcon className="h-3.5 w-3.5" aria-hidden /> }]
+      : []),
   ];
   return (
     <div
