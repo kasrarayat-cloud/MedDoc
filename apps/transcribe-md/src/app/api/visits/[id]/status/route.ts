@@ -51,6 +51,11 @@ export const GET = withApiHandler<{ id: string }>(
         needsReview: true,
         reviewReason: true,
         audioDurationSec: true,
+        // T-M18.3 A21: include lifecycle fields so a polling UI whose
+        // visit was trashed/archived in another tab can detect it and
+        // redirect to /dashboard instead of spinning indefinitely.
+        deletedAt: true,
+        archivedAt: true,
       },
     });
     // 404 on both "not found" AND "not yours" prevents ID enumeration.
@@ -65,6 +70,8 @@ export const GET = withApiHandler<{ id: string }>(
         needsReview: visit.needsReview,
         reviewReason: visit.reviewReason,
         audioDurationSec: visit.audioDurationSec,
+        deletedAt: visit.deletedAt?.toISOString() ?? null,
+        archivedAt: visit.archivedAt?.toISOString() ?? null,
       },
       { status: 200 }
     );

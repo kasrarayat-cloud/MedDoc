@@ -65,7 +65,11 @@ export const POST = withApiHandler<{ id: string }>(
     const userId = session?.user?.id;
     if (!userId) return apiError('unauthorized', 401);
 
-    const blocked = rateLimitOr429(RATE_LIMITS.UPLOAD, userId);
+    // T-M18.3 A26: retry is a visit-management op (same cadence as
+    // delete / archive / restore), not an upload. Aligning the bucket
+    // prevents a user cleaning up stale visits from tripping the
+    // UPLOAD cost-shield bucket prematurely.
+    const blocked = rateLimitOr429(RATE_LIMITS.VISIT_OPS, userId);
     if (blocked) return blocked;
 
     const visit = await prisma.transcribeVisit.findUnique({
