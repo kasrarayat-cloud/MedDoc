@@ -6,7 +6,7 @@ import { Badge } from '@/components/badge';
 export const metadata: Metadata = {
   title: 'HIPAA Compliance',
   description:
-    'How TranscribeMD handles PHI under HIPAA — BAAs, encryption, retention, audit logs.',
+    'How QuillMD handles PHI under HIPAA — BAAs, encryption, retention, audit logs.',
 };
 
 const LAST_UPDATED = '2026-04-20';
@@ -47,7 +47,7 @@ export default function HipaaPage() {
               <p className="mt-4">
                 AshTech Group will execute a Business Associate Agreement with
                 any Covered Entity or Business Associate customer before PHI
-                is sent to TranscribeMD. Our subprocessors that process PHI on
+                is sent to QuillMD. Our subprocessors that process PHI on
                 our behalf have signed BAAs with us:
               </p>
               <ul className="mt-3 list-disc space-y-2 pl-5">
@@ -150,7 +150,7 @@ export default function HipaaPage() {
                 De-identification for product improvement
               </h2>
               <p className="mt-4">
-                TranscribeMD captures anonymized edit patterns to improve AI
+                QuillMD captures anonymized edit patterns to improve AI
                 output for each doctor (the &quot;few-shot prompting&quot;
                 system). This data is scoped to the signed-in doctor and
                 stored as embeddings of text snippets. It is never shared

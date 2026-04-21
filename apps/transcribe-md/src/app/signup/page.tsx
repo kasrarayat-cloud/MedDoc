@@ -37,7 +37,7 @@ export default async function SignupPage() {
                 aria-hidden
                 className="inline-block h-3 w-3 rounded-full bg-[radial-gradient(circle_at_30%_30%,#C4B5FD_0%,#7C3AED_55%,#4C1D95_100%)] shadow-[0_0_12px_rgba(139,92,246,0.6)]"
               />
-              TranscribeMD
+              QuillMD
             </div>
             <h1 className="type-h1">
               <GradientText>Create your account</GradientText>

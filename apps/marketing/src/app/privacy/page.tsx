@@ -6,7 +6,7 @@ import { Badge } from '@/components/badge';
 export const metadata: Metadata = {
   title: 'Privacy Policy',
   description:
-    'How TranscribeMD collects, uses, and protects patient and clinician information.',
+    'How QuillMD collects, uses, and protects patient and clinician information.',
 };
 
 const LAST_UPDATED = '2026-04-20';
@@ -44,9 +44,9 @@ export default function PrivacyPage() {
             <div>
               <h2 className="type-h2 text-text-primary">1. Who we are</h2>
               <p className="mt-4">
-                TranscribeMD is a medical-transcription product operated by
+                QuillMD is a medical-transcription product operated by
                 AshTech Group. This Privacy Policy covers information collected
-                through the TranscribeMD app (https://app.transcribemd.com once
+                through the QuillMD app (https://app.quillmd.com once
                 DNS lands) and the marketing site you&apos;re reading now.
               </p>
             </div>

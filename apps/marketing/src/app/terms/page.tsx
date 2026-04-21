@@ -6,7 +6,7 @@ import { Badge } from '@/components/badge';
 export const metadata: Metadata = {
   title: 'Terms of Service',
   description:
-    'The terms under which TranscribeMD is provided to clinicians and practices.',
+    'The terms under which QuillMD is provided to clinicians and practices.',
 };
 
 const LAST_UPDATED = '2026-04-20';
@@ -48,7 +48,7 @@ export default function TermsPage() {
                 1. Acceptance
               </h2>
               <p className="mt-4">
-                By creating an account on TranscribeMD you agree to these Terms
+                By creating an account on QuillMD you agree to these Terms
                 and our{' '}
                 <a
                   href="/privacy"
@@ -66,7 +66,7 @@ export default function TermsPage() {
                 2. What we provide
               </h2>
               <p className="mt-4">
-                TranscribeMD is an AI-assisted medical-transcription service.
+                QuillMD is an AI-assisted medical-transcription service.
                 You upload audio or dictation; we return a draft SOAP note,
                 ICD/CPT code suggestions, prescription drafts, referral drafts,
                 and a patient summary. All output is a draft until YOU sign
@@ -105,7 +105,7 @@ export default function TermsPage() {
                 4. AI output disclaimer
               </h2>
               <p className="mt-4">
-                AI-generated text is a draft. TranscribeMD is not a medical
+                AI-generated text is a draft. QuillMD is not a medical
                 device, not a replacement for clinical judgment, and does not
                 diagnose, treat, or prescribe. Drug-interaction warnings are
                 advisory and not exhaustive. You are responsible for every
@@ -149,7 +149,7 @@ export default function TermsPage() {
                 7. Limitation of liability
               </h2>
               <p className="mt-4">
-                To the maximum extent permitted by law, TranscribeMD&apos;s
+                To the maximum extent permitted by law, QuillMD&apos;s
                 total liability for any claim arising out of these Terms is
                 limited to the fees you paid us in the twelve months preceding
                 the claim. We are not liable for indirect, incidental, or

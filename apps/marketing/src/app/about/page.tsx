@@ -7,7 +7,7 @@ import { Badge } from '@/components/badge';
 export const metadata: Metadata = {
   title: 'About',
   description:
-    'The story, the reason, and the approach behind TranscribeMD.',
+    'The story, the reason, and the approach behind QuillMD.',
 };
 
 export default function AboutPage() {
