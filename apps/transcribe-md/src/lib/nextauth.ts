@@ -29,6 +29,16 @@ import { isEmailDeliveryEnabled } from '@/lib/email-enabled';
  *  consumer surface, not a PHI-heavy clinical tool. */
 const SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 
+/** T-M18.3 A18: pre-computed dummy bcrypt hash used to equalize the
+ *  wall-clock time of paths that would otherwise short-circuit before
+ *  running the real `bcrypt.compare` below. The specific plaintext
+ *  doesn't matter — bcrypt.compare against this hash returns false for
+ *  every realistic input. Computed once at module load (~100 ms). */
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync(
+  'timing-equalizer-never-matches',
+  12
+);
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
 
@@ -75,7 +85,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // hits NextAuth signIn directly, we still block here. No
         // counter increment — this isn't a failed credential, it's a
         // state gate.
+        //
+        // T-M18.3 A18: run a no-op bcrypt.compare before early-return
+        // so this path takes the same wall-clock time as the verified
+        // path (which hits the real bcrypt below). Prevents an attacker
+        // from distinguishing "email exists + unverified" via response
+        // timing.
         if (isEmailDeliveryEnabled() && user.emailVerified === null) {
+          await bcrypt.compare(password, DUMMY_PASSWORD_HASH).catch(() => false);
           return null;
         }
 
