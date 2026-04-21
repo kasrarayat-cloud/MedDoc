@@ -183,24 +183,78 @@ function renderHeader(
   doc.moveDown(0.8);
 }
 
+/** T-M21.2: patient metadata as a horizontal info bar (columns, not
+ *  stacked rows). Each cell is label-on-top / value-below with
+ *  absolute x-positioning so the columns align cleanly regardless
+ *  of the value's character count. The old inline-continued layout
+ *  stacked everything in one column because `\n` between rows plus
+ *  the lineGap(4) advance produced a vertical list — fine for
+ *  transcript blocks but wrong for a chart-header info bar. */
 function renderPatientBlock(
   doc: PDFKit.PDFDocument,
   data: VisitExportData
 ): void {
-  const labels: [string, string][] = [
-    ['Patient', data.patientName?.trim() || 'Anonymous'],
-    ['Visit date', formatVisitDate(data.signedAt ?? data.createdAt)],
+  const cells: Array<{ label: string; value: string }> = [
+    { label: 'Patient', value: data.patientName?.trim() || 'Anonymous' },
+    { label: 'Visit date', value: formatVisitDate(data.signedAt ?? data.createdAt) },
   ];
-  if (data.chiefComplaint) labels.push(['Chief complaint', data.chiefComplaint]);
-  if (data.signedAt) labels.push(['Status', 'Signed']);
-
-  for (const [k, v] of labels) {
-    doc.font(FONTS.labelBold).fontSize(SIZE.small).fillColor(COLORS.textMuted);
-    doc.text(`${k.toUpperCase()}  `, { continued: true });
-    doc.font(FONTS.bodyRegular).fontSize(SIZE.body).fillColor(COLORS.textPrimary);
-    doc.text(v);
+  if (data.chiefComplaint) {
+    cells.push({ label: 'Chief complaint', value: data.chiefComplaint });
   }
-  doc.moveDown(0.8);
+  if (data.signedAt) {
+    cells.push({ label: 'Status', value: 'Signed' });
+  }
+
+  const n = cells.length;
+  const availableWidth = doc.page.width - PAGE.margin * 2;
+  const colWidth = availableWidth / n;
+  const colInnerGap = 10; // right-side padding inside each column
+  const startY = doc.y;
+
+  // Typography tokens for this block — tuned for a chart-header look:
+  // label smaller + uppercase + muted, value larger + primary.
+  const LABEL_SIZE = 8;
+  const VALUE_SIZE = 11;
+  const LABEL_VALUE_GAP = 2; // pts between the label baseline and the value top
+
+  let maxY = startY;
+  for (let i = 0; i < n; i++) {
+    const { label, value } = cells[i];
+    const x = PAGE.margin + i * colWidth;
+    const cellWidth = colWidth - colInnerGap;
+
+    // Label (top line): InterTight-SemiBold, small, uppercase, muted.
+    doc
+      .font(FONTS.labelBold)
+      .fontSize(LABEL_SIZE)
+      .fillColor(COLORS.textMuted)
+      .text(label.toUpperCase(), x, startY, {
+        width: cellWidth,
+        lineBreak: false,
+      });
+    const afterLabelY = doc.y;
+
+    // Value (below label): Charter, larger, primary. Wrap within the
+    // column on overflow so a long Chief Complaint doesn't bleed
+    // into the neighbouring cell — the maxY tally below handles the
+    // uneven-column-height case.
+    doc
+      .font(FONTS.bodyRegular)
+      .fontSize(VALUE_SIZE)
+      .fillColor(COLORS.textPrimary)
+      .text(value, x, afterLabelY + LABEL_VALUE_GAP, {
+        width: cellWidth,
+      });
+
+    if (doc.y > maxY) maxY = doc.y;
+  }
+
+  // Reset cursor to after the tallest column so the next block
+  // (renderSoap → sectionHeading('Clinical Note')) starts below
+  // every cell regardless of which one wrapped furthest.
+  doc.x = PAGE.margin;
+  doc.y = maxY;
+  doc.moveDown(0.6);
 }
 
 // T-M21.1: line-level label patterns. `**Label:**` (bold) takes priority
