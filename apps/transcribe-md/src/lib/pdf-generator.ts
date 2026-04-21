@@ -124,6 +124,20 @@ export async function generateVisitPdf(
   doc.registerFont(FONTS.labelBold,    join(FONTS_DIR, 'InterTight-SemiBold.ttf'));
   doc.registerFont(FONTS.brand,        join(FONTS_DIR, 'InterTight-Medium.ttf'));
 
+  // T-M21 hot-fix: pdfkit's paragraph-finalize line advance pulls from
+  // the TTF font's OS/2 ascent+descent. Charter reports ~0.74 × fontSize
+  // (~7.8pt at body size 10.5) — much tighter than the ~1.2 × fontSize
+  // (~12.6pt) that built-in Helvetica/Times produced. Without a
+  // compensating gap, consecutive `doc.text(...)` calls collapse into
+  // each other — patient-block rows, Plan numbered items, and any
+  // multi-line bullet list all stack with 4-5pt of overlap.
+  //
+  // Setting lineGap globally adds the missing space on every paragraph
+  // boundary. 4pt lands body lines at ~11.8pt advance — within a
+  // half-point of the pre-T-M21 rhythm and tight enough that single-
+  // line chunks (section headings, footer, etc.) still read right.
+  doc.lineGap(4);
+
   renderHeader(doc, data);
   renderPatientBlock(doc, data);
   renderSoap(doc, data);
