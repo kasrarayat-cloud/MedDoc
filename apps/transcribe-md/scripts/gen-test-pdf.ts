@@ -96,6 +96,14 @@ const REALISTIC_SOAP = `## Subjective
 - Visible swelling of right knee
 - Tenderness on palpation, medial joint line
 - Limited ROM on flexion
+- *Ability to fully bear weight was not assessed at this visit.*
+
+**ROS:**
+*Musculoskeletal:* Positive for right knee pain, worsening with weight-bearing.
+*Cardiovascular:* denies chest pain, palpitations.
+*Respiratory:* as documented in HPI.
+
+*The following HPI elements were not assessed at this visit: onset modifiers, alleviating factors, prior imaging history.*
 
 ## Assessment
 
@@ -155,28 +163,43 @@ async function main(): Promise<void> {
     `${outDir}/test-empty.pdf`
   );
 
-  await writePdf(
-    buildMock(
-      'test-t-m21-realistic',
-      'Robert Smith',
-      REALISTIC_SOAP,
-      [
-        {
-          code: 'I50.9',
-          description: 'Heart failure, unspecified',
-          evidence_quote: 'bibasilar crackles + edema',
-          confidence: 0.85,
-        },
-        {
-          code: 'I10',
-          description: 'Essential hypertension',
-          evidence_quote: 'BP 142/88',
-          confidence: 0.95,
-        },
-      ]
-    ),
-    `${outDir}/test-realistic.pdf`
+  const realistic = buildMock(
+    'test-t-m21-realistic',
+    'Robert Smith',
+    REALISTIC_SOAP,
+    [
+      {
+        code: 'I50.9',
+        description: 'Heart failure, unspecified',
+        evidence_quote: 'bibasilar crackles + edema',
+        confidence: 0.85,
+      },
+      {
+        code: 'I10',
+        description: 'Essential hypertension',
+        evidence_quote: 'BP 142/88',
+        confidence: 0.95,
+      },
+    ]
   );
+  realistic.prescriptions = [
+    { drug: 'Furosemide', strength: '20 mg', form: 'tablet', sig: 'one tablet by mouth daily',
+      quantity: '30', refills: '3', action: 'new', evidence_quote: 'instruct patient on weight monitoring' },
+    { drug: 'Naproxen', strength: '500 mg', form: 'tablet', sig: 'one tablet by mouth twice daily with food',
+      quantity: '30', refills: '1', action: 'new', evidence_quote: 'for knee pain' },
+  ];
+  realistic.rxWarnings = [
+    { severity: 'critical', rx_drug: 'Furosemide',
+      message: 'Potassium depletion risk — check K+ within 1 week and monitor',
+      evidence_quote: 'new diuretic on ACE-I' },
+    { severity: 'major', rx_drug: 'Naproxen',
+      message: 'NSAID + HF relative contraindication; consider acetaminophen instead',
+      evidence_quote: 'new HF dx' },
+    { severity: 'minor', rx_drug: 'Naproxen',
+      message: 'Take with food to reduce GI upset',
+      evidence_quote: 'standard counseling' },
+  ];
+  await writePdf(realistic, `${outDir}/test-realistic.pdf`);
 }
 
 void main().catch((err) => {

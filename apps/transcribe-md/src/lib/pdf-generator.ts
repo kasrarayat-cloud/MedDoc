@@ -203,12 +203,21 @@ function renderPatientBlock(
   doc.moveDown(0.8);
 }
 
-// Detects the dominant SOAP line shape: `**Label:** content` (content
-// may be empty when the AI emits just `**Label:**` with no value).
-// Captures (label, content). Used by the bullet + plain renderers
-// below to pick the explicit two-text-call rendering path that
-// supersedes T-M20.1's filtered-split workaround.
-const LABEL_LINE_RE = /^\*\*([^*]+?):\*\*\s*(.*)$/;
+// T-M21.1: line-level label patterns. `**Label:**` (bold) takes priority
+// over `*Label:*` (italic) so `**foo:**` doesn't accidentally match the
+// italic pattern. Both capture (label, content); content may be empty
+// when the AI emits just the label and supplies the value in bullets
+// below (e.g. `**PMH:**\n- item`).
+const BOLD_LABEL_LINE_RE = /^\*\*([^*]+?):\*\*\s*(.*)$/;
+const ITALIC_LABEL_LINE_RE = /^\*([^*]+?):\*\s*(.*)$/;
+
+// Inline markdown tokenizer — matches either `**bold**` or `*italic*`
+// non-greedy so `**foo**` consumed before its inner `*`s trigger an
+// italic match. Nested `*italic with **bold** inside*` is NOT handled
+// — the inner `**bold**` wins and the outer single `*`s stay as
+// literal characters. Rare enough in clinical prose that the simpler
+// tokenizer is fine for the common cases.
+const INLINE_MARKDOWN_RE = /(\*\*[^*]+?\*\*|\*[^*]+?\*)/g;
 
 function renderSoap(doc: PDFKit.PDFDocument, data: VisitExportData): void {
   sectionHeading(doc, 'Clinical Note');
@@ -217,14 +226,12 @@ function renderSoap(doc: PDFKit.PDFDocument, data: VisitExportData): void {
     muted(doc, 'No SOAP note available.');
     return;
   }
-  // Walk the markdown line-by-line. We support:
-  //  ## Heading           →  body-bold, slightly larger
-  //  **Label:** content   →  explicit label-content (label in
-  //                          InterTight-SemiBold, content in Charter)
-  //  - bullet             →  indented; bullet body may also be a
-  //                          label-content shape
-  //  (everything else)    →  Charter regular, residual **bold** marks
-  //                          stripped so they don't show as literal *
+  // Walk the markdown line-by-line. Dispatch order matters:
+  //   ## Heading           →  body-bold, slightly larger
+  //   bullet               →  renderBullet (may also be label-shape)
+  //   **Label:** content   →  renderLabelContent (bold label)
+  //   *Label:* content     →  renderLabelContent (italic label)
+  //   everything else      →  renderInlineMarkdown (bold + italic spans)
   for (const raw of soap.split('\n')) {
     const line = raw.trimEnd();
     if (!line.trim()) {
@@ -243,19 +250,18 @@ function renderSoap(doc: PDFKit.PDFDocument, data: VisitExportData): void {
       renderBullet(doc, line.replace(/^\s*[-*]\s+/, ''));
       continue;
     }
-    const labelMatch = line.match(LABEL_LINE_RE);
-    if (labelMatch) {
-      renderLabelContent(doc, labelMatch[1], labelMatch[2]);
+    const boldLabel = line.match(BOLD_LABEL_LINE_RE);
+    if (boldLabel) {
+      renderLabelContent(doc, boldLabel[1], boldLabel[2], 'bold');
       continue;
     }
-    // Plain line — strip residual bold markers so they don't render
-    // as literal `**`. SOAP rarely uses inline bold outside the
-    // label pattern, so accepting "bold lost" here is fine.
-    doc
-      .font(FONTS.bodyRegular)
-      .fontSize(SIZE.body)
-      .fillColor(COLORS.textSecondary)
-      .text(stripInlineBold(line));
+    const italicLabel = line.match(ITALIC_LABEL_LINE_RE);
+    if (italicLabel) {
+      renderLabelContent(doc, italicLabel[1], italicLabel[2], 'italic');
+      continue;
+    }
+    // Plain prose with possible inline **bold**/*italic* spans.
+    renderInlineMarkdown(doc, line);
   }
   doc.moveDown(0.8);
 }
@@ -443,31 +449,35 @@ function muted(doc: PDFKit.PDFDocument, s: string): void {
 }
 
 /** T-M21: explicit two-text-call renderer for the dominant SOAP line
- *  shape `**Label:** content`. Replaces T-M20.1's split-and-toggle
- *  approach which still left edge cases where pdfkit's `continued`
- *  state didn't finalize cleanly between lines.
+ *  shape `**Label:** content` (or T-M21.1 `*Label:* content`).
+ *  Replaces T-M20.1's split-and-toggle approach which still left
+ *  edge cases where pdfkit's `continued` state didn't finalize
+ *  cleanly between lines.
  *
- *  Pattern when content is present: bold label with `continued: true`,
- *  regular content with default `continued: false` (finalizes the
- *  paragraph and advances y). Predictable, single cycle per line,
- *  no empty-string slots feeding pdfkit.
+ *  When content is empty (e.g. `**PMH:**` followed by bullets on
+ *  subsequent lines), render just the label as its own paragraph —
+ *  letting the bullets that follow supply the field's content.
+ *  Faking "[not documented]" here would incorrectly paint that
+ *  placeholder above legitimate multi-line content.
  *
- *  When content is empty (`**PMH:**` followed by bullets on subsequent
- *  lines), render just the label as its own paragraph — letting the
- *  bullets that follow supply the field's content. Faking
- *  "[not documented]" here would incorrectly paint that placeholder
- *  above legitimate multi-line content.
+ *  labelStyle picks the label font: 'bold' → InterTight-SemiBold
+ *  (the default, for `**Label:**`), 'italic' → Charter-Italic (for
+ *  T-M21.1 `*Label:*` patterns like nested ROS sub-labels).
  */
 function renderLabelContent(
   doc: PDFKit.PDFDocument,
   label: string,
-  content: string
+  content: string,
+  labelStyle: 'bold' | 'italic' = 'bold'
 ): void {
-  const trimmed = stripInlineBold(content).trim();
+  const trimmed = stripInlineMarkdown(content).trim();
+  const labelFont = labelStyle === 'italic' ? FONTS.bodyItalic : FONTS.labelBold;
+  const labelColor =
+    labelStyle === 'italic' ? COLORS.textSecondary : COLORS.textPrimary;
   doc
-    .font(FONTS.labelBold)
+    .font(labelFont)
     .fontSize(SIZE.body)
-    .fillColor(COLORS.textPrimary);
+    .fillColor(labelColor);
   if (!trimmed) {
     doc.text(`${label}:`);
     return;
@@ -479,41 +489,102 @@ function renderLabelContent(
     .text(trimmed);
 }
 
-/** Bullet line. If the body is a label-content shape, render with
- *  the same explicit-two-call pattern after a bullet marker; if the
- *  body is plain prose, just render the bullet + text. */
+/** Bullet line. If the body is a label-content shape (bold OR italic),
+ *  render with the same explicit-two-call pattern after a bullet
+ *  marker; if the body is plain prose, render with inline markdown
+ *  handling applied to the body text. */
 function renderBullet(doc: PDFKit.PDFDocument, body: string): void {
-  const labelMatch = body.match(LABEL_LINE_RE);
-  doc
-    .font(FONTS.bodyRegular)
-    .fontSize(SIZE.body)
-    .fillColor(COLORS.textSecondary);
-  if (labelMatch) {
-    const trimmed = stripInlineBold(labelMatch[2]).trim();
-    doc.text('•  ', { continued: true });
+  const bold = body.match(BOLD_LABEL_LINE_RE);
+  const italic = !bold ? body.match(ITALIC_LABEL_LINE_RE) : null;
+  const match = bold ?? italic;
+  if (match) {
+    const labelStyle: 'bold' | 'italic' = bold ? 'bold' : 'italic';
+    const trimmed = stripInlineMarkdown(match[2]).trim();
     doc
-      .font(FONTS.labelBold)
-      .fillColor(COLORS.textPrimary);
+      .font(FONTS.bodyRegular)
+      .fontSize(SIZE.body)
+      .fillColor(COLORS.textSecondary)
+      .text('•  ', { continued: true });
+    const labelFont = labelStyle === 'italic' ? FONTS.bodyItalic : FONTS.labelBold;
+    const labelColor =
+      labelStyle === 'italic' ? COLORS.textSecondary : COLORS.textPrimary;
+    doc.font(labelFont).fillColor(labelColor);
     if (!trimmed) {
-      doc.text(`${labelMatch[1]}:`);
+      doc.text(`${match[1]}:`);
       return;
     }
-    doc.text(`${labelMatch[1]}: `, { continued: true });
+    doc.text(`${match[1]}: `, { continued: true });
     doc
       .font(FONTS.bodyRegular)
       .fillColor(COLORS.textSecondary)
       .text(trimmed);
     return;
   }
-  doc.text(`•  ${stripInlineBold(body)}`, { indent: 18 });
+  // Plain-body bullet with possibly embedded inline markdown.
+  // Emits the bullet marker with a continued chain, then hands off
+  // to renderMarkdownSpans so *italic* + **bold** inside the bullet
+  // keep their formatting rather than getting stripped to plain text.
+  const parts = body.split(INLINE_MARKDOWN_RE).filter((p) => p !== '');
+  if (parts.length === 0) return;
+  doc
+    .font(FONTS.bodyRegular)
+    .fontSize(SIZE.body)
+    .fillColor(COLORS.textSecondary)
+    .text('•  ', { continued: true, indent: 18 });
+  renderMarkdownSpans(doc, parts);
 }
 
-/** Strip residual `**…**` markers without trying to render them as
- *  bold. SOAP almost never uses inline bold outside the dominant
- *  label-content shape; the few stray cases get downgraded to plain
- *  Charter rather than risk re-introducing the T-M20.1 overlap. */
-function stripInlineBold(s: string): string {
-  return s.replace(/\*\*([^*]+?)\*\*/g, '$1');
+/** T-M21.1: render a line with possibly embedded **bold** and *italic*
+ *  spans. Tokenizes via INLINE_MARKDOWN_RE, filters empty slots (same
+ *  insight as T-M20.1), then chains `continued: true` text calls with
+ *  the matching font per span. The final span defaults to
+ *  `continued: false` which finalizes the paragraph. Relies on the
+ *  T-M21 `doc.lineGap(4)` compensator set at document start so the
+ *  advance between paragraphs is right; without it the chain would
+ *  re-introduce the T-M20.1-era overlap bug. */
+function renderInlineMarkdown(doc: PDFKit.PDFDocument, line: string): void {
+  const parts = line.split(INLINE_MARKDOWN_RE).filter((p) => p !== '');
+  if (parts.length === 0) return;
+  doc.fontSize(SIZE.body);
+  renderMarkdownSpans(doc, parts);
+}
+
+/** Shared span emitter used by renderInlineMarkdown (whole-line plain
+ *  text) and renderBullet (the plain-bullet path). Caller is expected
+ *  to have set fontSize + any prefix text (e.g. `•  `) with
+ *  `continued: true` before calling; this helper picks up at the
+ *  current cursor and finalizes the paragraph on the last span. */
+function renderMarkdownSpans(
+  doc: PDFKit.PDFDocument,
+  parts: string[]
+): void {
+  parts.forEach((part, i) => {
+    const last = i === parts.length - 1;
+    let font: string = FONTS.bodyRegular;
+    let color: string = COLORS.textSecondary;
+    let text = part;
+    if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
+      font = FONTS.bodyBold;
+      color = COLORS.textPrimary;
+      text = part.slice(2, -2);
+    } else if (part.startsWith('*') && part.endsWith('*') && part.length > 2) {
+      font = FONTS.bodyItalic;
+      color = COLORS.textSecondary;
+      text = part.slice(1, -1);
+    }
+    doc.font(font).fillColor(color).text(text, { continued: !last });
+  });
+}
+
+/** Strip residual `**…**` AND `*…*` markers from a string. Used for
+ *  content that goes into renderLabelContent (label context doesn't
+ *  support inline formatting) and as a defense-in-depth for any
+ *  downgraded render path where markers would otherwise show as
+ *  literal asterisks. */
+function stripInlineMarkdown(s: string): string {
+  return s
+    .replace(/\*\*([^*]+?)\*\*/g, '$1')
+    .replace(/\*([^*]+?)\*/g, '$1');
 }
 
 function drawWatermark(doc: PDFKit.PDFDocument): void {
