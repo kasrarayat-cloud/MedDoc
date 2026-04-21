@@ -23,7 +23,7 @@ This is the TL;DR. Every item below is expanded in its own section.
 - [x] **2. HTTPS live via Caddy MODE B** (§2) — Let's Encrypt certs for all 4 hostnames (T-M19.1)
 - [ ] **3. All four BAAs signed + on file** — Anthropic, OpenAI, Deepgram, hosting provider (§3)
 - [ ] **4. Stripe subscription flow working end-to-end** ($49/mo tier) (§4)
-- [ ] **5. Resend sender domain verified** (SPF/DKIM/DMARC green) (§5)
+- [x] **5. Resend sender domain verified** (SPF/DKIM/DMARC green) (§5) — `quillmd.com` green, delivery gate on, forgot-password verified end-to-end 2026-04-22 (T-M19.3)
 - [ ] **6. OPENAI_API_KEY rotated + old key revoked** (§6)
 - [ ] **7. Legal docs reviewed + published** — ToS, Privacy, BAA template, HIPAA attestation (§7)
 - [ ] **8. Monitoring wired** — Sentry alerts + uptime probe + cron heartbeat alerts (§8)
@@ -160,30 +160,28 @@ place when we onboard paying users.
 
 ## 5. Resend domain verification
 
-**Status:** config scaffolded; blocked on §1.
-
-`.env.production.example` already has `RESEND_API_KEY` + `RESEND_FROM` +
-`RESEND_FROM_VERIFIED=false`. The last flag gates production sends —
-the code refuses to send from an unverified sender per T-M16.2. Flipping
-to `true` is the last step, not the first.
+**Status:** ✅ shipped 2026-04-22 (T-M19.3). `quillmd.com` fully
+verified at Resend, delivery gate flipped on, forgot-password +
+email-verification both confirmed delivering to a real mailbox
+with a valid DKIM signature.
 
 ### Sender setup (post-domain)
-- [ ] Log into Resend dashboard, add `<domain>` as a sender domain
-- [ ] Resend emits four DNS records: three TXT (SPF, DKIM, DMARC) + one MX
-- [ ] Add all four records at your DNS registrar
-- [ ] Wait for Resend to verify (polls DNS; usually <10 min)
-- [ ] Pick a production sender address: `noreply@<domain>` or `hello@<domain>`
+- [x] Added `quillmd.com` as a sender domain in the Resend dashboard
+- [x] All four DNS records landed at Namecheap: SPF TXT, DKIM TXT, DMARC TXT, MX
+- [x] Resend verified all four records (green)
+- [x] Production sender chosen: `noreply@quillmd.com` (branded as `QuillMD <noreply@quillmd.com>`)
 
 ### Env flip
-- [ ] `RESEND_API_KEY=re_...` (live key, not test)
-- [ ] `RESEND_FROM=noreply@<domain>`
-- [ ] `RESEND_FROM_VERIFIED=true`  ← only after DNS verified
-- [ ] `docker compose up -d --force-recreate transcribe-md meddoc-pro`
+- [x] `RESEND_API_KEY=re_...` live key, loaded from `/opt/meddoc-pro/.env`
+- [x] `RESEND_FROM=QuillMD <noreply@quillmd.com>`
+- [x] `RESEND_FROM_VERIFIED=true` — gate now `isEmailDeliveryEnabled() === true`
+- [x] `docker compose up -d --force-recreate transcribe-md`
+- [x] Source `DEFAULT_FROM` in `apps/transcribe-md/src/lib/email.ts` bumped to `QuillMD <noreply@quillmd.com>` (PR #38) so a deploy that forgets the env override still ships from a verified sender
 
 ### Smoke test
-- [ ] Trigger a password-reset email to a real mailbox you control
-- [ ] Confirm: inbox (not spam), valid DKIM signature, sender shows as `<domain>` not `resend.dev`
-- [ ] Check Resend dashboard — delivery event recorded
+- [x] Password-reset email delivered end-to-end to a real mailbox
+- [x] Inbox (not spam); DKIM signature validates against `quillmd.com`; sender displayed as `QuillMD` not `resend.dev`
+- [x] Resend dashboard recorded the `delivered` event
 
 ---
 
