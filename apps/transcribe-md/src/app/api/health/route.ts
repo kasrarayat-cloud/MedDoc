@@ -42,7 +42,13 @@ const CHECK_TIMEOUT_MS = 2_000;
 // rather than "unknown". docker-compose.yml passes APP_VERSION through
 // from the host environment; CI populates it with the git tag at
 // build time.
-const VERSION = process.env.APP_VERSION ?? 'T-M18.3';
+//
+// T-M19.1: `||` rather than `??` because docker-compose's default
+// pattern is `${APP_VERSION:-}` which substitutes an empty string when
+// the host var is unset. Empty string is a defined value — `??` would
+// propagate it through and we'd report `"version":""` instead of the
+// fallback. `||` treats empty string as falsy and falls back correctly.
+const VERSION = process.env.APP_VERSION || 'T-M19.1';
 
 interface CheckResult {
   ok: boolean | null;
