@@ -24,13 +24,14 @@ function emptyState(): LayerSkipState {
     rxDrafts: null,
     referrals: null,
     patientSummary: null,
+    filledTemplate: null,
   };
 }
 
 describe('isLayerComplete — all layers false on a fresh visit', () => {
   const layers: PipelineLayer[] = [
     'L1', 'L1b', 'L2', 'L3', 'L4', 'L5', 'L6',
-    'L7a', 'L7b', 'L7c', 'L7d', 'L7e',
+    'L7a', 'L7b', 'L7c', 'L7d', 'L7e', 'L7f',
   ];
 
   it.each(layers)('%s is incomplete when all columns are null', (layer) => {
