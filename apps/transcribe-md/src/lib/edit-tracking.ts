@@ -26,7 +26,7 @@
 // ============================================================================
 
 import prisma from '@meddoc/db';
-import { embedText } from '@meddoc/ai';
+import { embedText, redactPhi } from '@meddoc/ai';
 
 import { charLevenshtein } from './edit-distance';
 import { log } from './log';
@@ -130,6 +130,11 @@ export async function captureEditPattern(args: {
   } catch (err) {
     // Catchall: unique violation, DB outage, any other surprise. Must
     // never propagate — sign must always succeed from the user's POV.
-    console.error(`${LOG} visit=${args.visitId} capture failed:`, err);
+    // T-M18.3 A17: wrap err through redactPhi since originalSoap is in
+    // scope and a Prisma error could in theory echo a column value.
+    console.error(
+      `${LOG} visit=${args.visitId} capture failed:`,
+      redactPhi(err instanceof Error ? err.message : err)
+    );
   }
 }

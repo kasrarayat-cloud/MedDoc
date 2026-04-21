@@ -3,20 +3,17 @@
 import { useActionState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { SpecularButton } from '@/components/specular-button';
-import { SpecialtyDropdown, type SpecialtyOption } from '@/components/specialty-dropdown';
 import { updateProfileAction, type ProfileState } from '@/actions/profile';
 
 interface ProfileFormProps {
   defaultName: string;
-  defaultSpecialty: string;
-  specialties: SpecialtyOption[];
 }
 
-export function ProfileForm({
-  defaultName,
-  defaultSpecialty,
-  specialties,
-}: ProfileFormProps) {
+// T-M18.3 A22: specialty input removed. It was never persisted, and
+// the displayed default came from the doctor's most-recent visit —
+// which remains the actual source of truth and is still what the
+// /visits/new form pre-fills.
+export function ProfileForm({ defaultName }: ProfileFormProps) {
   const [state, formAction, pending] = useActionState<ProfileState, FormData>(
     updateProfileAction,
     null
@@ -62,18 +59,6 @@ export function ProfileForm({
           className={inputClass}
         />
         <FieldError message={errors.name} />
-      </div>
-
-      <div>
-        <label className="mb-1.5 block text-[12px] font-medium tracking-tight text-text-tertiary">
-          Primary specialty
-        </label>
-        <SpecialtyDropdown
-          options={specialties}
-          name="specialty"
-          defaultValue={defaultSpecialty}
-        />
-        <FieldError message={errors.specialty} />
       </div>
 
       <FieldError message={errors._form} />

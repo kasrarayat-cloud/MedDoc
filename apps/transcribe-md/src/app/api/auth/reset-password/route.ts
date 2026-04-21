@@ -6,9 +6,8 @@
 // Validates the token, updates the password, revokes every UserSession
 // for the account so any logged-in device logs out immediately.
 // Returns 200 on success, 400 on invalid token / weak password /
-// mismatch. No rate limiting here because attackers need a valid
-// 32-byte token to proceed — guessing is infeasible without the email
-// link. The preceding /forgot-password route IS rate-limited.
+// mismatch. Rate limited (AUTH_EMAIL bucket) to slow brute-force
+// attempts against enumerated tokens — see `rateLimitOr429` below.
 // ============================================================================
 
 import { z } from 'zod';

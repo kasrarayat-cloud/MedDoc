@@ -18,6 +18,14 @@ import {
   type RateLimitRule,
 } from '@/lib/rate-limit';
 
+/** T-M18.3 A20: pre-computed dummy bcrypt hash, used to equalize the
+ *  wall-clock time of loginAction paths that would otherwise skip the
+ *  pre-check bcrypt.compare. Computed once at module load. */
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync(
+  'timing-equalizer-never-matches',
+  12
+);
+
 /** Server-action rate-limit helper. Unlike route handlers this can't
  *  return a NextResponse — we surface the 429 as a FormErrorState so
  *  the existing useActionState wiring shows it cleanly. */
@@ -143,11 +151,11 @@ export async function loginAction(
         lockedUntil: true,
       },
     });
-    if (
-      preCheckUser?.isActive &&
+    const isUnverifiedCandidate =
+      !!preCheckUser?.isActive &&
       (!preCheckUser.lockedUntil || preCheckUser.lockedUntil < new Date()) &&
-      preCheckUser.emailVerified === null
-    ) {
+      preCheckUser.emailVerified === null;
+    if (isUnverifiedCandidate && preCheckUser) {
       const pwOk = await bcrypt.compare(
         parsed.data.password,
         preCheckUser.passwordHash
@@ -166,6 +174,15 @@ export async function loginAction(
       }
       // Wrong password — fall through to the generic error below so
       // we don't leak that the account is unverified.
+    } else {
+      // T-M18.3 A20: verified / missing / locked / inactive paths skip
+      // the pre-check bcrypt above. Run a dummy compare here so the
+      // wall-clock time of this block matches the unverified branch —
+      // prevents an attacker from enumerating "email exists + unverified"
+      // by measuring response time.
+      await bcrypt
+        .compare(parsed.data.password, DUMMY_PASSWORD_HASH)
+        .catch(() => false);
     }
   }
 
