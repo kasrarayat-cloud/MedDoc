@@ -176,3 +176,60 @@ job scheduled", and `bull:transcribe-md-cleanup:repeat:stale-visit-cleanup:<next
 appears in Redis pointing at 2026-04-21 03:00 UTC.
 
 ---
+
+## Audio retention policy (T-M18.1 A3, 2026-04-21)
+
+**Decision:** SIGNED visits have their audio (both `audioKey` and
+`dictationAudioKey`) hard-deleted from MinIO — and the column
+pointers cleared in the DB — **180 days after signing**. Transcripts,
+SOAP notes, ICD/CPT codes, Rx drafts, referrals, and patient
+summaries are NOT affected — they carry the 7-year retention window
+the schema already promises via `Practice.transcriptRetentionDays =
+2555`.
+
+**Why 180 days, not 90:**
+- The HIPAA 6-year minimum applies to the clinical RECORD (transcript
+  + SOAP + codes), not to the audio-evidence input.
+- The audio's real re-use window is 30-90 days for any legitimate
+  "wait, what did the patient actually say?" review.
+- 180 days is a generous floor that catches the rare delayed-audit
+  case without indefinite storage of patient voice clips.
+- The schema's `Practice.audioRetentionDays` default is 90 but was
+  never enforced. T-M18.1 hardcodes a 180-day default instead of
+  using the schema field directly, so the ops team can tune it via
+  env without touching the DB.
+
+**Config:**
+- `AUDIO_RETENTION_DAYS` — env var, default `180`. Clamped to
+  `[7, 3650]`; out-of-range values fall back to the default with a
+  warning log.
+- `RETENTION_SWEEP_ENABLED` — env flag, default `'true'`. Flip to
+  `'false'` to keep the worker alive without the sweep.
+- `RETENTION_SWEEP_CRON` — default `'0 4 * * *'` (4am UTC daily,
+  offset 1h from the T-M17.3 stale-visit sweep at 3am UTC to avoid
+  DB + MinIO contention).
+
+**Observability:** structured log line per run —
+`ops:retention-sweep swept { count, audioDeleted, minioFailures,
+retentionDays, userIds }`. Zero-activity days still log, so a silent
+failure is visible as "cron didn't run today" rather than "cron ran
+and found nothing."
+
+**Escalation — per-practice retention override:**
+The `Practice.audioRetentionDays` column exists in the schema and is
+the natural home for a per-practice override once an admin UI
+surfaces the setting. Until then, every practice uses the global
+default. Changing a single practice today requires a SQL UPDATE +
+re-reading the column in the sweep — both already supported by the
+schema, just not wired up.
+
+**What this does NOT do (flagged explicitly):**
+- Transcripts are kept. A doctor can still read the SOAP note,
+  signed version, ICD codes, etc. for 7 years.
+- Audio before retention is also visible normally — the sweep only
+  targets visits past the window.
+- Unsigned visits (ABANDONED QUEUED, expired trash) are covered by
+  the T-M17.3 stale-visit cleanup. The retention sweep explicitly
+  skips `deletedAt IS NOT NULL` rows so the two jobs don't race.
+
+---
