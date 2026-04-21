@@ -26,6 +26,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@meddoc/db';
 import { getSharedRedisConnection } from '@/lib/queue';
 import { getMinio, TRANSCRIBE_MD_BUCKET } from '@/lib/minio';
+import { readCleanupHeartbeats } from '@/lib/cleanup-heartbeat';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -104,10 +105,13 @@ async function checkMinio(): Promise<CheckResult> {
 }
 
 export async function GET(): Promise<NextResponse> {
-  const [postgres, redis, minio] = await Promise.all([
+  const [postgres, redis, minio, cleanupHeartbeats] = await Promise.all([
     checkPostgres(),
     checkRedis(),
     checkMinio(),
+    // T-M18.2 A13 — best-effort; a Redis hiccup here should NOT
+    // fail the health check (Redis itself has its own check line).
+    readCleanupHeartbeats().catch(() => []),
   ]);
 
   const allOk =
@@ -117,6 +121,12 @@ export async function GET(): Promise<NextResponse> {
     status: allOk ? 'healthy' : 'unhealthy',
     uptime_seconds: Math.floor((Date.now() - PROCESS_START_AT) / 1000),
     checks: { postgres, redis, minio },
+    // Each cron reports `ageSeconds: null` until its first run. An
+    // external monitor can alert on `ageSeconds > 26 * 3600` (24h
+    // expected cadence + 2h grace) — but this probe stays 200 even
+    // when a cron is stale, because "app up, cron sleepy" shouldn't
+    // take the container out of Docker's healthcheck loop.
+    cleanup_crons: cleanupHeartbeats,
     version: VERSION,
   };
 

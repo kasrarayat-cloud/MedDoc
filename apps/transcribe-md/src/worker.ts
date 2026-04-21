@@ -42,6 +42,7 @@ import { ensureBucket } from '@/lib/minio';
 import { runMinioOrphanCleanup } from '@/worker/cleanup/minio-orphans';
 import { runStaleVisitCleanup } from '@/worker/cleanup/stale-visits';
 import { runRetentionSweep } from '@/worker/cleanup/retention-sweep';
+import { recordCleanupHeartbeat } from '@/lib/cleanup-heartbeat';
 import {
   isLayerComplete,
   logSkipSummary,
@@ -808,22 +809,38 @@ async function startCleanupWorker(): Promise<void> {
           CLEANUP_TIMEOUT_MS,
           'minio-orphan-cleanup'
         );
+        // T-M18.2 A13: mark "I ran" so /api/health can surface a
+        // silently-dead cron.
+        await recordCleanupHeartbeat('minio-orphan-cleanup', {
+          dryRun,
+          retentionDays,
+        });
         return;
       }
       if (job.name === JOB_STALE_VISIT_CLEANUP) {
-        await withTimeout(
+        const result = await withTimeout(
           runStaleVisitCleanup(),
           STALE_VISIT_CLEANUP_TIMEOUT_MS,
           'stale-visit-cleanup'
         );
+        await recordCleanupHeartbeat('stale-visit-cleanup', {
+          abandoned: result.abandoned.deleted,
+          trash: result.trash.deleted,
+          accountDeletions: result.accountDeletions.deleted,
+        });
         return;
       }
       if (job.name === JOB_RETENTION_SWEEP) {
-        await withTimeout(
+        const result = await withTimeout(
           runRetentionSweep(),
           RETENTION_SWEEP_TIMEOUT_MS,
           'retention-sweep'
         );
+        await recordCleanupHeartbeat('retention-sweep', {
+          found: result.found,
+          audioDeleted: result.audioDeleted,
+          minioFailures: result.minioFailures,
+        });
         return;
       }
       throw new Error(`Unknown cleanup job name: ${job.name}`);
