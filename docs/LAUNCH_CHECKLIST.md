@@ -11,7 +11,7 @@ This doc complements — does not replace:
 - `docs/ROTATION_RUNBOOK.md` — credential rotation procedure
 - `docs/KNOWN_ISSUES.md` — open operational caveats
 
-Last reviewed: **2026-04-21** (post T-M18.3 merge)
+Last reviewed: **2026-04-22** (post T-M19 HTTPS cutover + T-M19.3 email + T-M20 product polish)
 
 ---
 
@@ -86,6 +86,12 @@ hit for all four hostnames, persisted in the `caddy_data` volume.
 ### T-M19.2 follow-up fix
 - [x] Marketing "Sign In" link was baked in at build-time with the old `http://5.231.107.93:9020` fallback — `NEXT_PUBLIC_*` vars weren't landing in the Next builder stage (monorepo `next build` doesn't read root `.env`). Fixed by wiring `NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL` + `NEXT_PUBLIC_MARKETING_URL` as `build: args:` in `docker-compose.yml` + `ARG`/`ENV` in both Dockerfiles. Marketing rebuilt with correct URLs post-fix.
 - [x] `/api/health` version string fix (`??` → `||`) so compose's `${APP_VERSION:-}` empty-string default falls back correctly to the hardcoded milestone.
+
+### T-M20 product polish (2026-04-22)
+Non-gate-but-launch-blocking issues caught during the browser-test pass on the new HTTPS deployment:
+- [x] **T-M20.1** — PDF label overlap when SOAP fields were `[not documented]` (PR #40). Root cause in `renderInlineWithBold`'s split on bold-markdown producing empty slots that pdfkit failed to finalize. One-line fix + a committed regression script (`apps/transcribe-md/scripts/gen-test-pdf.ts`) that reproduces the scenario end-to-end.
+- [x] **T-M20.2** — Rebrand TranscribeMD → QuillMD across all 26 user-facing string surfaces: email templates (subjects + bodies), PDF header/watermark/metadata, DOCX export, EHR-paste footer, app nav + auth pages, marketing site (PR #41). Internal identifiers (Docker services, package names, DB schemas, enum values, code comments) explicitly left alone to keep the change surface to 80 inserts / 80 deletes.
+- [x] **T-M20.3** — Pipeline tab (raw entities JSON, wall-time, cost, critique) gated behind `NEXT_PUBLIC_SHOW_PIPELINE_TAB`, defaulting hidden in production (PR #42). Gate lives in the server page so a dev can flip via runtime env override + force-recreate — no rebuild required.
 
 ### Post-cutover regressions to re-run
 - [ ] `bash scripts/verify-t-m18-2.sh` — adjust the hardcoded `http://localhost:9020` URLs to the new HTTPS hostname before running, or keep localhost-probes in parallel
