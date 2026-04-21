@@ -89,7 +89,13 @@ const REALISTIC_SOAP = `## Subjective
 ## Objective
 
 **Vitals:** BP 142/88, HR 84 regular, RR 18, SpO2 96% on room air, Temp 98.4 F, Weight 198 lb (BMI 30.1).
-**Physical Exam:** Alert, mildly diaphoretic. Cardiac: regular rate and rhythm, no murmurs/rubs/gallops. Lungs: bilateral basal crackles, no wheezing. Extremities: trace pretibial edema bilaterally.
+
+**Physical Exam:** Alert, mildly diaphoretic. Cardiac: regular rate and rhythm, no murmurs/rubs/gallops. Lungs: bilateral basal crackles, no wheezing.
+
+**Musculoskeletal:**
+- Visible swelling of right knee
+- Tenderness on palpation, medial joint line
+- Limited ROM on flexion
 
 ## Assessment
 
@@ -99,12 +105,11 @@ const REALISTIC_SOAP = `## Subjective
 
 ## Plan
 
-- Order echocardiogram, BNP, basic metabolic panel, CBC
-- Add furosemide 20 mg PO daily; instruct patient on weight monitoring
-- Increase lisinopril to 40 mg PO daily for HTN + HF benefit
-- Refer to cardiology for HFrEF workup if EF <50%
-- Counseled on low-sodium diet, daily weight log
-- Return in 2 weeks for follow-up + lab review
+1. Diagnostics: echocardiogram, BNP, basic metabolic panel, CBC.
+2. Medications: start furosemide 20 mg PO daily; increase lisinopril to 40 mg PO daily.
+3. Referrals: cardiology for HFrEF workup if EF <50%.
+4. Counseling: low-sodium diet, daily weight log.
+5. Follow-up in 2 weeks with labs reviewed.
 `;
 
 function buildMock(
