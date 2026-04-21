@@ -81,14 +81,15 @@ export const POST = withApiHandler<{ id: string }>(
     if (visit.inputMode !== 'audio_upload') {
       return apiError('this visit does not accept audio uploads', 400);
     }
+    // T-M18.1 A4: switched from a deny-list of 7 in-flight statuses to
+    // an allowlist of 2. The deny-list was missing AUTOMATING — a
+    // re-upload during the L7 fan-out would have flipped the visit
+    // back to QUEUED and enqueued a duplicate pipeline run, wasting
+    // Deepgram + Anthropic tokens. Allowlist pattern matches
+    // /dictation/upload and /text routes and closes the class.
     if (
-      visit.status === TranscribeVisitStatus.SIGNED ||
-      visit.status === TranscribeVisitStatus.READY ||
-      visit.status === TranscribeVisitStatus.TRANSCRIBING ||
-      visit.status === TranscribeVisitStatus.EXTRACTING ||
-      visit.status === TranscribeVisitStatus.DRAFTING ||
-      visit.status === TranscribeVisitStatus.CRITIQUING ||
-      visit.status === TranscribeVisitStatus.POLISHING
+      visit.status !== TranscribeVisitStatus.QUEUED &&
+      visit.status !== TranscribeVisitStatus.FAILED
     ) {
       return apiError('visit is already processing or finalized', 409);
     }
