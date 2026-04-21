@@ -26,6 +26,7 @@ import { TranscribeVisitStatus } from '@prisma/client';
 import type { DeepgramBatchResponse, DeepgramUtterance } from '@meddoc/ai';
 import { redactPhi } from '@meddoc/ai';
 import { log } from '@/lib/log';
+import { shouldMarkVisitFailed } from './worker/retry-decision';
 
 import {
   QUEUE_NAME,
@@ -724,6 +725,30 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
     // still sees the original error. The {visitId, layer} tags let ops
     // filter errors by failure point without reading the stack trace.
     captureWorkerException(err, { visitId, layer: currentLayer });
+
+    // T-M23.A: only persist FAILED on the final BullMQ attempt. A
+    // non-final throw leaves visit.status at whatever the current
+    // layer wrote (EXTRACTING, DRAFTING, etc.) — the UI keeps
+    // showing the processing spinner through the exp-backoff window
+    // and the user never sees a "Processing failed" banner that
+    // auto-resolves 5 seconds later. Re-throw either way so BullMQ
+    // either schedules the next retry or records the final failure.
+    const attemptsMade = job.attemptsMade ?? 0;
+    const attempts = job.opts.attempts ?? 1;
+    if (!shouldMarkVisitFailed(attemptsMade, attempts)) {
+      log.info(
+        'transcribe-md-worker',
+        'transient failure, awaiting BullMQ retry',
+        {
+          visitId,
+          layer: currentLayer,
+          attemptsMade,
+          attempts,
+        }
+      );
+      throw err;
+    }
+
     await prisma.transcribeVisit
       .update({
         where: { id: visitId },

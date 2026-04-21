@@ -229,21 +229,44 @@ export interface Layer3Output {
 
 const COMMON_CATEGORIES = [
   'Categories:',
-  '- chief_complaint (single statement + evidence, or null)',
-  '- hpi: onset, duration, quality, severity, location, timing,',
-  '  context, modifying_factors, associated_symptoms — each string;',
-  '  all optional; one evidence quote for the paragraph.',
-  '- past_medical_history: list of {condition, evidence…}',
-  '- medications: list of {name, dose?, route?, frequency?, evidence…}',
-  '- allergies: list of {substance, reaction?, evidence…}',
-  '- family_history: list of {relation, condition, evidence…}',
-  '- social_history: smoking/alcohol/drugs/occupation, each optional',
-  '- ros: list of {system, finding, evidence…} (review of systems)',
-  '- exam_findings: list of {system, finding, evidence…} — only what',
-  '  the doctor stated/observed',
-  '- tests_mentioned: list of {test, result_if_given?, evidence…}',
-  '- assessment_discussed: list of {finding, evidence…}',
-  '- plan_discussed: list of {item, evidence…}',
+  '- chief_complaint: {statement, evidence_quote, speaker?, timestamp?} or null',
+  '- hpi: {onset?, duration?, quality?, severity?, location?, timing?,',
+  '  context?, modifying_factors?, associated_symptoms?, evidence_quote,',
+  '  speaker?, timestamp?} or null — each sub-field is a string; all',
+  '  sub-fields are optional; one evidence_quote covers the paragraph.',
+  '- past_medical_history: list of {condition, evidence_quote, ...}',
+  '- medications: list of {name, dose?, route?, frequency?, evidence_quote, ...}',
+  '- allergies: list of {substance, reaction?, evidence_quote, ...}',
+  '- family_history: list of {relation, condition, evidence_quote, ...}',
+  //
+  // T-M23.B: expanded social_history shape guidance. Prior wording
+  // ("smoking/alcohol/drugs/occupation, each optional") let Claude
+  // shortcut to bare strings like `"occupation": "factory operative"`
+  // which fails the Zod schema with "expected object, received
+  // string" — every ~1 in 50 long audio uploads triggered SCHEMA_FAIL
+  // here because the content patterns that invite the shortcut (a
+  // single clear occupation phrase) are common. Explicit shape +
+  // side-by-side correct/wrong example makes the wrapper non-
+  // negotiable.
+  //
+  '- social_history: an OBJECT with optional sub-fields. Each sub-field',
+  '  must itself be an OBJECT (never a bare string):',
+  '    smoking:    {status, evidence_quote, speaker?, timestamp?}',
+  '    alcohol:    {status, evidence_quote, speaker?, timestamp?}',
+  '    drugs:      {status, evidence_quote, speaker?, timestamp?}',
+  '    occupation: {value,  evidence_quote, speaker?, timestamp?}',
+  '  If you have no evidence quote for a sub-field, OMIT that sub-field',
+  '  entirely — do not emit it as a bare string.',
+  '  CORRECT:  "social_history": { "occupation": { "value": "factory',
+  '            operative", "evidence_quote": "he works as a factory',
+  '            operative at Simple Signs Ltd" } }',
+  '  WRONG:    "social_history": { "occupation": "factory operative" }',
+  '- ros: list of {system, finding, evidence_quote, ...} (review of systems)',
+  '- exam_findings: list of {system, finding, evidence_quote, ...} — only',
+  '  what the doctor stated/observed',
+  '- tests_mentioned: list of {test, result_if_given?, evidence_quote, ...}',
+  '- assessment_discussed: list of {finding, evidence_quote, ...}',
+  '- plan_discussed: list of {item, evidence_quote, ...}',
 ].join('\n');
 
 function buildConversationPrompt(): { system: string; userPrefix: string } {
