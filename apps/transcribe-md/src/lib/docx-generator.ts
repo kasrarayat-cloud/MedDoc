@@ -326,9 +326,22 @@ function spacer(): Paragraph {
   return new Paragraph({ spacing: { before: 120, after: 0 }, children: [] });
 }
 
+// T-M22.1: line-level label patterns (mirrors pdf-generator.ts). Bold
+// check runs first so `**foo:**` never falls through to the italic
+// match. Content may be empty when the AI emits just the label
+// (e.g. `**PMH:**` with bullets supplying the value below).
+const BOLD_LABEL_LINE_RE = /^\*\*([^*]+?):\*\*\s*(.*)$/;
+const ITALIC_LABEL_LINE_RE = /^\*([^*]+?):\*\s*(.*)$/;
+
+// Inline markdown tokenizer — matches `**bold**` or `*italic*`
+// non-greedy. Nested `*italic with **bold** inside*` is not
+// supported; the inner bold wins and the outer `*`s stay literal.
+const INLINE_MARKDOWN_RE = /(\*\*[^*]+?\*\*|\*[^*]+?\*)/g;
+
 /** Walk markdown-ish SOAP text and emit Paragraphs. Supports `##`
- *  headings, `**bold**` inline, and `-` bullets — everything else
- *  renders as a plain paragraph. */
+ *  headings, `**Label:** content` / `*Label:* content`, `**bold**`
+ *  + `*italic*` inline, and `-` bullets — everything else renders
+ *  as a plain paragraph. */
 function renderSoapParagraphs(soap: string): Paragraph[] {
   const out: Paragraph[] = [];
   if (!soap.trim()) {
@@ -373,7 +386,30 @@ function renderSoapParagraphs(soap: string): Paragraph[] {
         new Paragraph({
           spacing: { after: 40 },
           indent: { left: 360 },
-          children: inlineRuns(`•  ${body}`),
+          children: [
+            new TextRun({ text: '•  ' }),
+            ...renderInlineRuns(body),
+          ],
+        })
+      );
+      continue;
+    }
+    const boldLabel = line.match(BOLD_LABEL_LINE_RE);
+    if (boldLabel) {
+      out.push(
+        new Paragraph({
+          spacing: { after: 60 },
+          children: renderLabelledRuns(boldLabel[1], boldLabel[2], 'bold'),
+        })
+      );
+      continue;
+    }
+    const italicLabel = line.match(ITALIC_LABEL_LINE_RE);
+    if (italicLabel) {
+      out.push(
+        new Paragraph({
+          spacing: { after: 60 },
+          children: renderLabelledRuns(italicLabel[1], italicLabel[2], 'italic'),
         })
       );
       continue;
@@ -381,19 +417,43 @@ function renderSoapParagraphs(soap: string): Paragraph[] {
     out.push(
       new Paragraph({
         spacing: { after: 60 },
-        children: inlineRuns(line),
+        children: renderInlineRuns(line),
       })
     );
   }
   return out;
 }
 
-/** `**bold**` inline → bold TextRun; everything else stays regular. */
-function inlineRuns(line: string): TextRun[] {
-  const parts = line.split(/(\*\*[^*]+\*\*)/g);
+/** T-M22.1: emit a TextRun[] for a `**Label:** content` or
+ *  `*Label:* content` shape. Label gets bold or italic depending
+ *  on `style`; content goes through renderInlineRuns so any nested
+ *  formatting inside the content keeps its bold/italic spans. */
+function renderLabelledRuns(
+  label: string,
+  content: string,
+  style: 'bold' | 'italic'
+): TextRun[] {
+  const labelRun = new TextRun(
+    style === 'italic'
+      ? { text: `${label}:${content ? ' ' : ''}`, italics: true }
+      : { text: `${label}:${content ? ' ' : ''}`, bold: true }
+  );
+  if (!content.trim()) return [labelRun];
+  return [labelRun, ...renderInlineRuns(content)];
+}
+
+/** T-M22.1: `**bold**` / `*italic*` inline markdown → TextRun[].
+ *  Filter empty segments the same way pdf-generator.ts does — the
+ *  split-on-capturing-regex produces empty slots at the string
+ *  boundaries that would otherwise emit zero-content runs. */
+function renderInlineRuns(line: string): TextRun[] {
+  const parts = line.split(INLINE_MARKDOWN_RE).filter((p) => p !== '');
   return parts.map((part) => {
-    if (part.startsWith('**') && part.endsWith('**')) {
+    if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
       return new TextRun({ text: part.slice(2, -2), bold: true });
+    }
+    if (part.startsWith('*') && part.endsWith('*') && part.length > 2) {
+      return new TextRun({ text: part.slice(1, -1), italics: true });
     }
     return new TextRun({ text: part });
   });
