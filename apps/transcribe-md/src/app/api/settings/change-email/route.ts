@@ -98,25 +98,30 @@ export const POST = withApiHandler(
       );
     }
 
-    // Early-fail on conflict so the user learns now, not 24 hours from
-    // now when they click the confirm link.
+    // T-M18.3 A19: probe the conflict but DON'T surface the outcome to
+    // the caller — a logged-in attacker could otherwise fish for "is
+    // X@Y a registered email" by flipping through candidate addresses
+    // from an authenticated session. Instead, we return the same 200
+    // "check your new email" response in both branches, and silently
+    // skip the send + token mint when the address is taken. The user
+    // who actually owns `newEmail` never sees a confirm link, so the
+    // pending change never completes.
     const existing = await prisma.user.findUnique({
       where: { email: newEmail },
       select: { id: true },
     });
+
+    const GENERIC_OK_BODY = {
+      ok: true,
+      message:
+        "Check your new email for a confirmation link. Your email won't change until you click it.",
+    } as const;
+
     if (existing) {
-      // Generic wording — don't confirm account existence for an
-      // attacker probing random addresses. The fact that password was
-      // validated means they're a logged-in user anyway, so enumeration
-      // impact is minimal, but stay consistent with the forgot-password
-      // posture.
-      return NextResponse.json(
-        {
-          error: "That address can't be used. Try another one.",
-          field: 'newEmail',
-        },
-        { status: 400 }
-      );
+      log.info('api:settings:change-email', 'request suppressed — email taken', {
+        userId: user.id,
+      });
+      return NextResponse.json(GENERIC_OK_BODY, { status: 200 });
     }
 
     const { token } = await createAuthToken({
@@ -154,13 +159,6 @@ export const POST = withApiHandler(
     log.info('api:settings:change-email', 'request started', {
       userId: user.id,
     });
-    return NextResponse.json(
-      {
-        ok: true,
-        message:
-          "Check your new email for a confirmation link. Your email won't change until you click it.",
-      },
-      { status: 200 }
-    );
+    return NextResponse.json(GENERIC_OK_BODY, { status: 200 });
   }
 );

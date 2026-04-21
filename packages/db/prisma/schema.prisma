@@ -1392,6 +1392,18 @@ model TranscribeVisit {
   /// archivedAt IS NULL). Adding it here rather than splitting into
   /// two single-column indexes keeps the planner honest.
   @@index([patientId, deletedAt, archivedAt])
+  /// T-M18.3 A23: mirror of the per-patient index above, for the
+  /// per-user selector used on /dashboard where patientId isn't
+  /// narrowed. At ≥1000 visits/user the existing (userId, createdAt)
+  /// index forces a post-filter on the IS-NULL predicates; this
+  /// composite lets the planner use the index directly.
+  @@index([userId, deletedAt, archivedAt])
+  /// T-M18.3 A24: supports the 15-day stale-trash sweep's scan
+  /// `WHERE deletedAt < cutoff`. Plain btree (vs a partial index)
+  /// because Prisma's schema DSL doesn't expose partial indexes; at
+  /// current scale the cost of indexing NULL values is negligible
+  /// and the sweep's single-scan cost dominates the index tradeoff.
+  @@index([deletedAt])
   @@map("transcribe_visits")
 }
 

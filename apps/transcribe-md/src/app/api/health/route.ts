@@ -35,7 +35,14 @@ export const revalidate = 0;
 
 const PROCESS_START_AT = Date.now();
 const CHECK_TIMEOUT_MS = 2_000;
-const VERSION = 'T-M16.3';
+// T-M18.3 A15: version is read from APP_VERSION at runtime so a deploy
+// doesn't require a source-tree edit to bump the reported string. The
+// fallback tracks the latest milestone this code is known to ship
+// against, so an unset env var still produces a semi-useful answer
+// rather than "unknown". docker-compose.yml passes APP_VERSION through
+// from the host environment; CI populates it with the git tag at
+// build time.
+const VERSION = process.env.APP_VERSION ?? 'T-M18.3';
 
 interface CheckResult {
   ok: boolean | null;
