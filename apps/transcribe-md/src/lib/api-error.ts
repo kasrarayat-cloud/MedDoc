@@ -30,6 +30,8 @@
 
 import { NextResponse, type NextRequest } from 'next/server';
 
+import { redactPhi } from '@meddoc/ai';
+
 export interface ApiErrorBody {
   error: string;
   /** T-M16.4: machine-readable error taxonomy. Clients that care
@@ -86,7 +88,19 @@ export function withApiHandler<P extends Record<string, string>>(
     try {
       return await handler(req, ctx);
     } catch (err) {
-      console.error(`[${prefix}] unexpected error:`, err);
+      // T-M18.1 A1: scrub before stdout. `err` here is whatever slipped
+      // past the handler's own try/catch — Prisma errors in particular
+      // quote failing column values in their `.message`, which for
+      // routes that write soapFinal / patientName / etc. means PHI
+      // landing in Docker logs unscrubbed. redactPhi catches emails,
+      // phone, SSN, and falls back to a length marker on long
+      // free-text blocks. Every route-level try/catch in this codebase
+      // already pipes err through redactPhi; without this line, the
+      // catchall defeated the pattern.
+      console.error(
+        `[${prefix}] unexpected error:`,
+        redactPhi(err instanceof Error ? err.message : err)
+      );
       return apiError('internal server error', 500);
     }
   };

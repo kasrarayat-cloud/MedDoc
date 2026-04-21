@@ -33,6 +33,7 @@ import {
   CLEANUP_QUEUE_NAME,
   JOB_MINIO_ORPHAN_CLEANUP,
   JOB_STALE_VISIT_CLEANUP,
+  JOB_RETENTION_SWEEP,
   getSharedRedisConnection,
   getCleanupQueue,
   type ProcessVisitPayload,
@@ -40,6 +41,7 @@ import {
 import { ensureBucket } from '@/lib/minio';
 import { runMinioOrphanCleanup } from '@/worker/cleanup/minio-orphans';
 import { runStaleVisitCleanup } from '@/worker/cleanup/stale-visits';
+import { runRetentionSweep } from '@/worker/cleanup/retention-sweep';
 import {
   isLayerComplete,
   logSkipSummary,
@@ -114,6 +116,15 @@ const STALE_VISIT_CLEANUP_ENABLED =
 const STALE_VISIT_CLEANUP_CRON =
   process.env.STALE_VISIT_CLEANUP_CRON?.trim() || '0 3 * * *';
 const STALE_VISIT_CLEANUP_TIMEOUT_MS = 5 * 60 * 1000;
+
+// T-M18.1 A3 — audio retention sweep (SIGNED visits past 180d).
+// Opt-out via env. Cron offset 1h from the T-M17.3 stale-visit sweep
+// so the two don't contend for DB + MinIO connections.
+const RETENTION_SWEEP_ENABLED =
+  (process.env.RETENTION_SWEEP_ENABLED ?? 'true').toLowerCase() !== 'false';
+const RETENTION_SWEEP_CRON =
+  process.env.RETENTION_SWEEP_CRON?.trim() || '0 4 * * *';
+const RETENTION_SWEEP_TIMEOUT_MS = 10 * 60 * 1000;
 
 function withTimeout<T>(p: Promise<T>, ms: number, tag: string): Promise<T> {
   return Promise.race([
@@ -719,20 +730,44 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
           status: TranscribeVisitStatus.FAILED,
           processingFinishedAt: new Date(),
           needsReview: true,
-          reviewReason:
-            err instanceof Error
-              ? err.message.slice(0, 500)
-              : 'Unknown error during processing. Try again or contact support.',
+          // T-M18.1 A2: DO NOT write the raw err.message to reviewReason
+          // — it renders as the failure banner on /visits/[id] and a
+          // Prisma/Deepgram/Anthropic error can quote patient content
+          // (PHI in the DB + UI). Instead, write a phase-tagged
+          // user-friendly string derived only from currentLayer.
+          reviewReason: buildUserFacingFailureReason(currentLayer),
         },
       })
       .catch((writeErr: unknown) => {
         console.error(
           '[transcribe-md-worker] failed to write FAILED state:',
-          writeErr
+          redactPhi(writeErr instanceof Error ? writeErr.message : writeErr)
         );
       });
     throw err;
   }
+}
+
+/** Maps `currentLayer` (the worker's pipeline tracker — 'L1', 'L2',
+ *  'automation', etc.) to a human-readable phrase used in the
+ *  FAILED-state banner. Never includes any content from the thrown
+ *  error, so PHI can't bleed into the UI. Doctors see a layer name,
+ *  ops + Sentry see the full scrubbed error + stack. */
+function buildUserFacingFailureReason(currentLayer: string): string {
+  const phraseByLayer: Record<string, string> = {
+    init: 'setup',
+    L1: 'transcription',
+    L1b: 'transcription',
+    L2: 'speaker identification',
+    L3: 'entity extraction',
+    L4: 'SOAP drafting',
+    L5: 'clinical audit',
+    L6: 'polish',
+    automation: 'codes / Rx / referrals generation',
+    finalize: 'finalization',
+  };
+  const phrase = phraseByLayer[currentLayer] ?? 'processing';
+  return `Processing failed during ${phrase}. Try retrying this visit, or contact support if it keeps failing.`;
 }
 
 /** T-M12 — start the MinIO orphan cleanup worker + schedule the
@@ -743,10 +778,14 @@ async function startCleanupWorker(): Promise<void> {
   // shared CLEANUP_QUEUE_NAME — MinIO orphan sweeps (T-M12) and
   // stale-visit sweeps (T-M17.3). Start the worker if EITHER is
   // enabled; register each scheduler independently below.
-  if (!CLEANUP_ENABLED && !STALE_VISIT_CLEANUP_ENABLED) {
+  if (
+    !CLEANUP_ENABLED &&
+    !STALE_VISIT_CLEANUP_ENABLED &&
+    !RETENTION_SWEEP_ENABLED
+  ) {
     log.info('ops:cleanup', 'disabled', {
       reason:
-        'MINIO_ORPHAN_CLEANUP_ENABLED != "true" AND STALE_VISIT_CLEANUP_ENABLED == "false"',
+        'all three cleanup flags off (MINIO_ORPHAN_CLEANUP_ENABLED, STALE_VISIT_CLEANUP_ENABLED, RETENTION_SWEEP_ENABLED)',
     });
     return;
   }
@@ -776,6 +815,14 @@ async function startCleanupWorker(): Promise<void> {
           runStaleVisitCleanup(),
           STALE_VISIT_CLEANUP_TIMEOUT_MS,
           'stale-visit-cleanup'
+        );
+        return;
+      }
+      if (job.name === JOB_RETENTION_SWEEP) {
+        await withTimeout(
+          runRetentionSweep(),
+          RETENTION_SWEEP_TIMEOUT_MS,
+          'retention-sweep'
         );
         return;
       }
@@ -836,6 +883,32 @@ async function startCleanupWorker(): Promise<void> {
   } else {
     log.info('ops:stale-visit-cleanup', 'disabled', {
       reason: 'STALE_VISIT_CLEANUP_ENABLED == "false"',
+    });
+  }
+
+  // ── T-M18.1 A3 audio retention sweep (default: on) ────────────
+  if (RETENTION_SWEEP_ENABLED) {
+    await getCleanupQueue().upsertJobScheduler(
+      'retention-sweep',
+      { pattern: RETENTION_SWEEP_CRON, tz: 'UTC' },
+      {
+        name: JOB_RETENTION_SWEEP,
+        data: {},
+        opts: { attempts: 1 },
+      }
+    );
+    log.info('ops:retention-sweep', 'T-M18.1 retention sweep scheduled', {
+      cron: RETENTION_SWEEP_CRON,
+      tz: 'UTC',
+      timeoutMs: RETENTION_SWEEP_TIMEOUT_MS,
+      retentionDays: Number.parseInt(
+        process.env.AUDIO_RETENTION_DAYS?.trim() || '180',
+        10
+      ),
+    });
+  } else {
+    log.info('ops:retention-sweep', 'disabled', {
+      reason: 'RETENTION_SWEEP_ENABLED == "false"',
     });
   }
 }
