@@ -112,6 +112,16 @@ export default async function VisitPage({
         referrals: true,
         patientSummary: true,
         confidenceScores: true,
+        // T-M24 — surface the template download tab when the worker
+        // has produced a filledTemplate. The join gives us the name
+        // for the button label; `deletedAt` check is done below
+        // since the filled JSON remains valid even if the source
+        // template was soft-deleted after generation.
+        templateId: true,
+        filledTemplate: true,
+        template: {
+          select: { id: true, name: true, deletedAt: true },
+        },
       },
     }),
   ]);
@@ -214,6 +224,12 @@ export default async function VisitPage({
             referrals={visit.referrals as unknown}
             patientSummary={visit.patientSummary}
             confidenceScores={visit.confidenceScores as unknown}
+            filledTemplate={visit.filledTemplate}
+            template={
+              visit.template
+                ? { id: visit.template.id, name: visit.template.name }
+                : null
+            }
           />
         </div>
       </main>
@@ -258,6 +274,8 @@ interface VisitBodyProps {
   referrals: unknown;
   patientSummary: string | null;
   confidenceScores: unknown;
+  filledTemplate: string | null;
+  template: { id: string; name: string } | null;
 }
 
 function VisitBody(props: VisitBodyProps) {
@@ -384,6 +402,13 @@ function VisitBody(props: VisitBodyProps) {
       // so the check happens per-request — dev can flip it via env
       // override without a rebuild. Default false: hidden in prod.
       showPipelineTab={process.env.NEXT_PUBLIC_SHOW_PIPELINE_TAB === 'true'}
+      // T-M24 — show the Download-template button when the worker
+      // filled the template. Both fields must be present; filled
+      // without a template means the source row was deleted before
+      // we could render the link (we leave the filled JSON around
+      // for re-renders, but the name + FK are what the button needs).
+      filledTemplate={props.filledTemplate}
+      template={props.template}
     />
   );
 }
