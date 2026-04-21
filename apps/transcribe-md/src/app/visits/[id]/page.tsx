@@ -379,6 +379,11 @@ function VisitBody(props: VisitBodyProps) {
       costCents={props.processingCostCents}
       processingStartedAt={props.processingStartedAt?.toISOString() ?? null}
       processingFinishedAt={props.processingFinishedAt?.toISOString() ?? null}
+      // T-M20.3: gate the Pipeline tab (dev-facing raw entities JSON +
+      // cost + wall-time) behind a runtime env flag. Server component
+      // so the check happens per-request — dev can flip it via env
+      // override without a rebuild. Default false: hidden in prod.
+      showPipelineTab={process.env.NEXT_PUBLIC_SHOW_PIPELINE_TAB === 'true'}
     />
   );
 }
