@@ -6,7 +6,7 @@ import { Badge } from '@/components/badge';
 export const metadata: Metadata = {
   title: 'Contact',
   description:
-    'Ways to reach TranscribeMD for support, sales, compliance, and security.',
+    'Ways to reach QuillMD for support, sales, compliance, and security.',
 };
 
 export default function ContactPage() {

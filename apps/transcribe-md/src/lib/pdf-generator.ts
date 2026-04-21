@@ -75,9 +75,9 @@ export async function generateVisitPdf(
       Title: `Visit — ${data.patientName ?? 'Anonymous'} — ${formatVisitDate(
         data.signedAt ?? data.createdAt
       )}`,
-      Author: data.clinicianName ?? 'TranscribeMD',
-      Creator: 'TranscribeMD',
-      Producer: 'TranscribeMD PDF Generator (pdfkit)',
+      Author: data.clinicianName ?? 'QuillMD',
+      Creator: 'QuillMD',
+      Producer: 'QuillMD PDF Generator (pdfkit)',
     },
   });
 
@@ -120,7 +120,7 @@ function renderHeader(
   data: VisitExportData
 ): void {
   doc.font(FONTS.labelBold).fontSize(SIZE.small).fillColor(COLORS.accent);
-  doc.text('TRANSCRIBEMD', { align: 'left' });
+  doc.text('QUILLMD', { align: 'left' });
   doc.moveDown(0.25);
 
   doc.font(FONTS.bodyBold).fontSize(SIZE.title).fillColor(COLORS.textPrimary);
@@ -409,7 +409,7 @@ function drawWatermark(doc: PDFKit.PDFDocument): void {
     .fontSize(7)
     .fillColor('#cccccc')
     .text(
-      'TRANSCRIBEMD',
+      'QUILLMD',
       doc.page.width - PAGE.margin - 80,
       y,
       { width: 80, align: 'right', lineBreak: false }

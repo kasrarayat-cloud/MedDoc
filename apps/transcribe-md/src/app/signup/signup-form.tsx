@@ -23,7 +23,7 @@ export function SignupForm() {
         // failed. Don't fire the triumphant green toast.
         toast.warning('Account created', { description: state.warning });
       } else {
-        toast.success('Welcome to TranscribeMD', {
+        toast.success('Welcome to QuillMD', {
           description: "You're in. Start your first visit whenever you're ready.",
         });
       }
