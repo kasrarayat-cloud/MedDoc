@@ -51,6 +51,14 @@ ARG NEXT_PUBLIC_MARKETING_URL
 ENV NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL=${NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL}
 ENV NEXT_PUBLIC_MARKETING_URL=${NEXT_PUBLIC_MARKETING_URL}
 
+# T-M20.3: NEXT_PUBLIC_SHOW_PIPELINE_TAB gates the dev-facing Pipeline
+# tab on /visits/[id]. The gate is read in the server page at request
+# time — a dev can flip the runtime env (via compose `environment:`)
+# and reload without rebuilding. Default here is "false" so an image
+# built with no override ships the tab hidden (production posture).
+ARG NEXT_PUBLIC_SHOW_PIPELINE_TAB=false
+ENV NEXT_PUBLIC_SHOW_PIPELINE_TAB=${NEXT_PUBLIC_SHOW_PIPELINE_TAB}
+
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build -w transcribe-md
 
