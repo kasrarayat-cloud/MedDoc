@@ -719,20 +719,44 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
           status: TranscribeVisitStatus.FAILED,
           processingFinishedAt: new Date(),
           needsReview: true,
-          reviewReason:
-            err instanceof Error
-              ? err.message.slice(0, 500)
-              : 'Unknown error during processing. Try again or contact support.',
+          // T-M18.1 A2: DO NOT write the raw err.message to reviewReason
+          // — it renders as the failure banner on /visits/[id] and a
+          // Prisma/Deepgram/Anthropic error can quote patient content
+          // (PHI in the DB + UI). Instead, write a phase-tagged
+          // user-friendly string derived only from currentLayer.
+          reviewReason: buildUserFacingFailureReason(currentLayer),
         },
       })
       .catch((writeErr: unknown) => {
         console.error(
           '[transcribe-md-worker] failed to write FAILED state:',
-          writeErr
+          redactPhi(writeErr instanceof Error ? writeErr.message : writeErr)
         );
       });
     throw err;
   }
+}
+
+/** Maps `currentLayer` (the worker's pipeline tracker — 'L1', 'L2',
+ *  'automation', etc.) to a human-readable phrase used in the
+ *  FAILED-state banner. Never includes any content from the thrown
+ *  error, so PHI can't bleed into the UI. Doctors see a layer name,
+ *  ops + Sentry see the full scrubbed error + stack. */
+function buildUserFacingFailureReason(currentLayer: string): string {
+  const phraseByLayer: Record<string, string> = {
+    init: 'setup',
+    L1: 'transcription',
+    L1b: 'transcription',
+    L2: 'speaker identification',
+    L3: 'entity extraction',
+    L4: 'SOAP drafting',
+    L5: 'clinical audit',
+    L6: 'polish',
+    automation: 'codes / Rx / referrals generation',
+    finalize: 'finalization',
+  };
+  const phrase = phraseByLayer[currentLayer] ?? 'processing';
+  return `Processing failed during ${phrase}. Try retrying this visit, or contact support if it keeps failing.`;
 }
 
 /** T-M12 — start the MinIO orphan cleanup worker + schedule the
