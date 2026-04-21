@@ -366,13 +366,25 @@ function muted(doc: PDFKit.PDFDocument, s: string): void {
 }
 
 /** Render a line that may contain **bold** segments. pdfkit doesn't
- *  parse markdown, so we split on `**…**` and toggle fonts. */
+ *  parse markdown, so we split on `**…**` and toggle fonts.
+ *
+ *  T-M20.1: `String.split(regex-with-capture)` produces empty-string
+ *  slots whenever the regex matches at the start or end of the input
+ *  (e.g. `"**PMH:** [not documented]".split(...)` → `["", "**PMH:**",
+ *  " [not documented]"]`). Passing `""` to `doc.text()` with
+ *  `continued:false` does NOT reliably finalize the paragraph in
+ *  pdfkit — y stays put, and the next line of text renders on top
+ *  of the one we just emitted. Filtering empties before iterating
+ *  sidesteps the issue. The bug was visible as "PMH:" overlapping
+ *  "Medications:" on SOAP fields the AI emitted as "[not documented]".
+ */
 function renderInlineWithBold(
   doc: PDFKit.PDFDocument,
   line: string,
   opts: { indent?: number } = {}
 ): void {
-  const parts = line.split(/(\*\*[^*]+\*\*)/g);
+  const parts = line.split(/(\*\*[^*]+\*\*)/g).filter((p) => p !== '');
+  if (parts.length === 0) return;
   doc.font(FONTS.bodyRegular).fontSize(SIZE.body).fillColor(COLORS.textSecondary);
   if (opts.indent) doc.text('', { continued: true, indent: opts.indent });
   parts.forEach((part, i) => {
