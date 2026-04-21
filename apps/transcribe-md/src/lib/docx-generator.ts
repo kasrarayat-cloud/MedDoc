@@ -10,12 +10,17 @@
 
 import {
   AlignmentType,
+  BorderStyle,
   Document,
   HeadingLevel,
   LevelFormat,
   Packer,
   Paragraph,
+  Table,
+  TableCell,
+  TableRow,
   TextRun,
+  WidthType,
 } from 'docx';
 
 import {
@@ -27,7 +32,10 @@ import {
 export async function generateVisitDocx(
   data: VisitExportData
 ): Promise<Buffer> {
-  const children: Paragraph[] = [];
+  // T-M22.2: section body now holds Tables too (the patient info
+  // bar is an invisible-border Word table). The docx library
+  // accepts a heterogeneous array on `sections[].children`.
+  const children: (Paragraph | Table)[] = [];
 
   // ── Header ────────────────────────────────────────────────────────
   children.push(
@@ -59,18 +67,12 @@ export async function generateVisitDocx(
   );
 
   // ── Patient block ─────────────────────────────────────────────────
-  children.push(
-    labelledLine('Patient', data.patientName?.trim() || 'Anonymous')
-  );
-  children.push(
-    labelledLine('Visit date', formatVisitDate(data.signedAt ?? data.createdAt))
-  );
-  if (data.chiefComplaint) {
-    children.push(labelledLine('Chief complaint', data.chiefComplaint));
-  }
-  if (data.signedAt) {
-    children.push(labelledLine('Status', 'Signed'));
-  }
+  // T-M22.2: horizontal info bar matching the PDF T-M21.2 design.
+  // Word table with all borders set to NONE, one row, N cells
+  // (N = 2 when minimal visit data, up to 4 with chief complaint
+  // + signed). Each cell holds two paragraphs: label on top
+  // (bold uppercase muted), value below (regular, larger).
+  children.push(renderPatientInfoBar(data));
   children.push(spacer());
 
   // ── SOAP note ─────────────────────────────────────────────────────
@@ -291,17 +293,73 @@ export async function generateVisitDocx(
 // Primitives
 // ---------------------------------------------------------------------------
 
-function labelledLine(label: string, value: string): Paragraph {
-  return new Paragraph({
-    spacing: { after: 60 },
-    children: [
-      new TextRun({
-        text: `${label.toUpperCase()}  `,
-        bold: true,
-        color: '666666',
-        size: 18,
+/** T-M22.2: patient info bar as a Word table with all borders set
+ *  to NONE. One row, N cells where N is the count of populated
+ *  fields (2 minimum — Patient + Visit Date; up to 4 with Chief
+ *  Complaint + Status). Cell layout mirrors PDF T-M21.2: label
+ *  on top (bold, uppercase, muted), value below (regular, larger). */
+function renderPatientInfoBar(data: VisitExportData): Table {
+  const cells: Array<{ label: string; value: string }> = [
+    { label: 'Patient', value: data.patientName?.trim() || 'Anonymous' },
+    {
+      label: 'Visit date',
+      value: formatVisitDate(data.signedAt ?? data.createdAt),
+    },
+  ];
+  if (data.chiefComplaint) {
+    cells.push({ label: 'Chief complaint', value: data.chiefComplaint });
+  }
+  if (data.signedAt) {
+    cells.push({ label: 'Status', value: 'Signed' });
+  }
+
+  const invisibleBorder = {
+    style: BorderStyle.NONE,
+    size: 0,
+    color: 'FFFFFF',
+  } as const;
+  const invisibleBorders = {
+    top: invisibleBorder,
+    bottom: invisibleBorder,
+    left: invisibleBorder,
+    right: invisibleBorder,
+    insideHorizontal: invisibleBorder,
+    insideVertical: invisibleBorder,
+  };
+
+  return new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    borders: invisibleBorders,
+    rows: [
+      new TableRow({
+        children: cells.map(
+          ({ label, value }) =>
+            new TableCell({
+              borders: invisibleBorders,
+              children: [
+                new Paragraph({
+                  spacing: { after: 20 },
+                  children: [
+                    new TextRun({
+                      text: label.toUpperCase(),
+                      bold: true,
+                      color: '666666',
+                      size: 16, // 8pt label
+                    }),
+                  ],
+                }),
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: value,
+                      size: 22, // 11pt value
+                    }),
+                  ],
+                }),
+              ],
+            })
+        ),
       }),
-      new TextRun({ text: value, size: 22 }),
     ],
   });
 }
