@@ -336,11 +336,17 @@ function renderRx(doc: PDFKit.PDFDocument, data: VisitExportData): void {
     for (const w of data.rxWarnings) {
       const tone =
         w.severity === 'critical' ? COLORS.warningRed : COLORS.warningAmber;
+      // T-M21.1: dropped the two-space leading indent that preceded
+      // `[CRITICAL]`. In InterTight-SemiBold at 9pt those spaces
+      // rendered with enough visual weight to read as a glyph
+      // placeholder in some PDF viewers. Flush-left tags line up
+      // cleanly with the "Rx safety warnings — review before sending"
+      // header above them and read as an obvious list.
       doc
         .font(FONTS.labelBold)
         .fontSize(SIZE.small)
         .fillColor(tone)
-        .text(`  [${w.severity.toUpperCase()}]`, { continued: true });
+        .text(`[${w.severity.toUpperCase()}]`, { continued: true });
       doc
         .font(FONTS.bodyRegular)
         .fillColor(COLORS.textSecondary)
