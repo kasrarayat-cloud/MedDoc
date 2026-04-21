@@ -41,6 +41,11 @@ export interface LayerSkipState {
   rxDrafts: unknown;
   referrals: unknown;
   patientSummary: string | null;
+  /** T-M24: JSON-serialised token → content dict from L7f. Present only
+   *  when the visit's templateId is set and L7f ran. Populated (even as
+   *  "{}") marks L7f complete so BullMQ retries don't re-invoke the
+   *  fill layer unnecessarily. */
+  filledTemplate: string | null;
 }
 
 /** All sequential-stage layers. Names align with the comments in
@@ -59,7 +64,8 @@ export type AutomationLayer =
   | 'L7b'  // CPT coding
   | 'L7c'  // Rx drafting
   | 'L7d'  // referrals
-  | 'L7e'; // patient summary
+  | 'L7e'  // patient summary
+  | 'L7f'; // T-M24: custom-template fill (opt-in, gated on visit.templateId)
 
 export type PipelineLayer = SequentialLayer | AutomationLayer;
 
@@ -107,6 +113,8 @@ export function isLayerComplete(
       return hasContent(state.referrals);
     case 'L7e':
       return hasContent(state.patientSummary);
+    case 'L7f':
+      return hasContent(state.filledTemplate);
   }
 }
 
