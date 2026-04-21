@@ -29,6 +29,21 @@ import {
   formatVisitDate,
 } from './visit-export';
 
+// T-M22.4: typography tokens. Font NAMES are set on every TextRun
+// so Word renders Charter (body) and Inter Tight (labels + brand)
+// when those fonts are installed locally; Word's font-substitution
+// falls back to the user's default (typically Calibri) when they
+// aren't. The docx library doesn't expose the fontTable.xml /
+// fontEmbed mechanism that would bundle the TTFs into the .docx
+// itself — full typography parity with the PDF would require a
+// separate milestone (T-M23) manipulating that XML directly.
+// PDFs keep rendering in embedded Charter + Inter Tight; DOCX
+// typography is best-effort.
+const FONTS = {
+  body:  'Charter',
+  label: 'Inter Tight',
+} as const;
+
 export async function generateVisitDocx(
   data: VisitExportData
 ): Promise<Buffer> {
@@ -47,6 +62,7 @@ export async function generateVisitDocx(
           bold: true,
           color: '7C3AED',
           size: 18, // half-points
+          font: FONTS.label,
         }),
       ],
     })
@@ -163,6 +179,7 @@ export async function generateVisitDocx(
               bold: true,
               color: 'B91C1C',
               size: 20,
+              font: FONTS.label,
             }),
           ],
         })
@@ -178,6 +195,7 @@ export async function generateVisitDocx(
                 bold: true,
                 color,
                 size: 20,
+                font: FONTS.label,
               }),
               new TextRun({
                 text: `${w.rx_drug} — ${w.message}`,
@@ -271,6 +289,18 @@ export async function generateVisitDocx(
     creator: data.clinicianName ?? 'QuillMD',
     title: `Visit — ${data.patientName ?? 'Anonymous'}`,
     description: `QuillMD visit note exported ${formatVisitDate(new Date())}`,
+    // T-M22.4: Charter as the document-level default body font.
+    // Every TextRun inherits it unless a specific run overrides
+    // with `font: FONTS.label` (Inter Tight — brand + labels).
+    // Word substitutes to Calibri when Charter isn't installed on
+    // the reader's system; graceful degradation, no error.
+    styles: {
+      default: {
+        document: {
+          run: { font: FONTS.body },
+        },
+      },
+    },
     numbering: {
       // Unused today — declared so future Plan sections can render as a
       // real Word numbered list without adding another Document option.
@@ -345,6 +375,7 @@ function renderPatientInfoBar(data: VisitExportData): Table {
                       bold: true,
                       color: '666666',
                       size: 16, // 8pt label
+                      font: FONTS.label,
                     }),
                   ],
                 }),
@@ -375,6 +406,7 @@ function sectionHeading(text: string): Paragraph {
         color: '7C3AED',
         characterSpacing: 20,
         size: 22,
+        font: FONTS.label,
       }),
     ],
   });
@@ -508,10 +540,18 @@ function renderLabelledRuns(
   content: string,
   style: 'bold' | 'italic'
 ): TextRun[] {
+  // T-M22.4: bold labels use Inter Tight (mirrors PDF's
+  // InterTight-SemiBold at the run level); italic labels stay
+  // on Charter-Italic since the PDF convention is Charter-Italic
+  // for italic labels, not Inter Tight italic.
   const labelRun = new TextRun(
     style === 'italic'
       ? { text: `${label}:${content ? ' ' : ''}`, italics: true }
-      : { text: `${label}:${content ? ' ' : ''}`, bold: true }
+      : {
+          text: `${label}:${content ? ' ' : ''}`,
+          bold: true,
+          font: FONTS.label,
+        }
   );
   if (!content.trim()) return [labelRun];
   return [labelRun, ...renderInlineRuns(content)];
