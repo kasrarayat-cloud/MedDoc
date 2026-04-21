@@ -79,10 +79,19 @@ export async function putAudioStream(
   });
 }
 
-/** Worker path — read the audio back out as a Buffer. For 500MB ceilings
- *  this stays under Node's default 2GB buffer limit with a wide margin;
- *  we'd want a streaming variant for arbitrarily-large files but that's
- *  out of T-M4 scope. */
+/** Worker path — read the audio back out as a Buffer.
+ *
+ *  T-M18.2 A7 note: the worker's L1 / L1b layers now prefer
+ *  `streamAudio()` below, which avoids buffering the whole file
+ *  before the Deepgram fetch. This buffered helper is kept for
+ *  callers that genuinely need the bytes in memory (per-visit
+ *  export ZIPs, dictation audio playback endpoint, the T-M16.2
+ *  full-data export).
+ *
+ *  Memory math: worker mem_limit is 1 GB (T-M16.4). With the old
+ *  downloadAudio + concurrency 2, a 500 MB upload could OOM the
+ *  container. Streaming brings the hot-path peak to ~the fetch
+ *  buffer (~64 KB per chunk) instead. */
 export async function downloadAudio(objectKey: string): Promise<Buffer> {
   await ensureBucket();
   const client = getMinio();
@@ -92,6 +101,21 @@ export async function downloadAudio(objectKey: string): Promise<Buffer> {
     chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
   }
   return Buffer.concat(chunks);
+}
+
+/** Streaming counterpart. Returns a Node Readable over the MinIO
+ *  object — callers convert to a Web ReadableStream (`Readable.toWeb`)
+ *  to pass as a fetch body, or consume it directly.
+ *
+ *  Pairs with `statAudio()` for Content-Length: some HTTP targets
+ *  (Deepgram's /v1/listen specifically) reject chunked-transfer
+ *  bodies, so the caller must know the size ahead of time. */
+export async function streamAudio(
+  objectKey: string
+): Promise<import('node:stream').Readable> {
+  await ensureBucket();
+  const client = getMinio();
+  return client.getObject(bucket, objectKey);
 }
 
 export async function statAudio(
