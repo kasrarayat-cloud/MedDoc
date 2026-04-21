@@ -10,8 +10,8 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: {
-    default: 'TranscribeMD',
-    template: '%s · TranscribeMD',
+    default: 'QuillMD',
+    template: '%s · QuillMD',
   },
   description:
     'AI medical transcription for solo doctors. Send audio, get a signed note.',

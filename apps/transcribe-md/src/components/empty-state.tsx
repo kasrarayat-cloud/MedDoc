@@ -57,7 +57,7 @@ export function EmptyState() {
         transition={{ duration: 0.5, delay: 0.35, ...base }}
         className="mt-3 max-w-md text-[15px] leading-relaxed text-text-tertiary"
       >
-        Upload audio, dictate live, or paste text notes. TranscribeMD turns it
+        Upload audio, dictate live, or paste text notes. QuillMD turns it
         into a signed SOAP note in minutes.
       </motion.p>
 

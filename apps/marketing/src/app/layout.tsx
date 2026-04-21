@@ -5,13 +5,13 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: {
-    default: 'TranscribeMD — AI medical transcription that takes 5 minutes',
-    template: '%s · TranscribeMD',
+    default: 'QuillMD — AI medical transcription that takes 5 minutes',
+    template: '%s · QuillMD',
   },
   description:
     'Send audio. Get a signed note. 5 minutes. The AI medical transcription service built for solo doctors who deserve better tools.',
   openGraph: {
-    title: 'TranscribeMD',
+    title: 'QuillMD',
     description: 'Send audio. Get a signed note. 5 minutes.',
     type: 'website',
   },

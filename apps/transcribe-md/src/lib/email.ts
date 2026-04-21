@@ -74,7 +74,7 @@ export async function sendVisitPdfEmail(
   const subjectTail = args.patientName?.trim()
     ? ` — ${args.patientName.trim()}`
     : ' — signed visit';
-  const subject = `Your TranscribeMD visit note${subjectTail}`;
+  const subject = `Your QuillMD visit note${subjectTail}`;
   const greeting = args.doctorName?.trim()
     ? `Hi ${args.doctorName.trim()},`
     : 'Hi,';
@@ -82,9 +82,9 @@ export async function sendVisitPdfEmail(
   const html = [
     `<p>${greeting}</p>`,
     `<p>Your signed visit note is attached as a PDF.</p>`,
-    `<p style="color:#666;font-size:13px;">This email is for your records. Do not forward to patients — TranscribeMD does not handle patient-facing delivery yet. For patient hand-off, download the PDF and share through your usual secure channel.</p>`,
+    `<p style="color:#666;font-size:13px;">This email is for your records. Do not forward to patients — QuillMD does not handle patient-facing delivery yet. For patient hand-off, download the PDF and share through your usual secure channel.</p>`,
     `<hr style="border:none;border-top:1px solid #eee;margin:24px 0;" />`,
-    `<p style="color:#999;font-size:12px;">TranscribeMD · signed ${args.visitDate}</p>`,
+    `<p style="color:#999;font-size:12px;">QuillMD · signed ${args.visitDate}</p>`,
   ].join('\n');
 
   const text = [
@@ -92,10 +92,10 @@ export async function sendVisitPdfEmail(
     '',
     'Your signed visit note is attached as a PDF.',
     '',
-    'This email is for your records. Do not forward to patients — TranscribeMD does not handle patient-facing delivery yet. For patient hand-off, download the PDF and share through your usual secure channel.',
+    'This email is for your records. Do not forward to patients — QuillMD does not handle patient-facing delivery yet. For patient hand-off, download the PDF and share through your usual secure channel.',
     '',
     `—`,
-    `TranscribeMD · signed ${args.visitDate}`,
+    `QuillMD · signed ${args.visitDate}`,
   ].join('\n');
 
   const filename = `visit-${args.visitId}-${args.visitDate}.pdf`;
@@ -232,25 +232,25 @@ export async function sendPasswordResetEmail(
   args: SendPasswordResetArgs
 ): Promise<SenderResult> {
   const greeting = greetingFor(args.userName);
-  const subject = 'Reset your TranscribeMD password';
+  const subject = 'Reset your QuillMD password';
   const html = [
     `<p>${greeting}</p>`,
-    `<p>Someone (hopefully you) asked to reset the password on your TranscribeMD account. Click the link below to set a new one:</p>`,
+    `<p>Someone (hopefully you) asked to reset the password on your QuillMD account. Click the link below to set a new one:</p>`,
     `<p><a href="${args.resetUrl}" style="display:inline-block;padding:10px 18px;background:#7C3AED;color:#fff;border-radius:6px;text-decoration:none;">Reset my password</a></p>`,
     `<p style="color:#666;font-size:13px;">The link expires in 1 hour and can only be used once. If you didn't request this, you can safely ignore this email — your password stays the same.</p>`,
     `<hr style="border:none;border-top:1px solid #eee;margin:24px 0;" />`,
-    `<p style="color:#999;font-size:12px;">TranscribeMD · account security</p>`,
+    `<p style="color:#999;font-size:12px;">QuillMD · account security</p>`,
   ].join('\n');
   const text = [
     greeting,
     '',
-    'Someone asked to reset the password on your TranscribeMD account. Open this link to set a new one:',
+    'Someone asked to reset the password on your QuillMD account. Open this link to set a new one:',
     '',
     args.resetUrl,
     '',
     "The link expires in 1 hour and can only be used once. If you didn't request this, ignore this email — your password stays the same.",
     '',
-    '— TranscribeMD',
+    '— QuillMD',
   ].join('\n');
   return sendOne({ to: args.toEmail, subject, html, text });
 }
@@ -269,25 +269,25 @@ export async function sendEmailVerification(
   args: SendEmailVerificationArgs
 ): Promise<SenderResult> {
   const greeting = greetingFor(args.userName);
-  const subject = 'Verify your TranscribeMD email';
+  const subject = 'Verify your QuillMD email';
   const html = [
     `<p>${greeting}</p>`,
-    `<p>Welcome to TranscribeMD. Please confirm this email address so we know we can reach you:</p>`,
+    `<p>Welcome to QuillMD. Please confirm this email address so we know we can reach you:</p>`,
     `<p><a href="${args.verifyUrl}" style="display:inline-block;padding:10px 18px;background:#7C3AED;color:#fff;border-radius:6px;text-decoration:none;">Verify my email</a></p>`,
-    `<p style="color:#666;font-size:13px;">The link expires in 24 hours. If you didn't sign up for TranscribeMD, you can ignore this email.</p>`,
+    `<p style="color:#666;font-size:13px;">The link expires in 24 hours. If you didn't sign up for QuillMD, you can ignore this email.</p>`,
     `<hr style="border:none;border-top:1px solid #eee;margin:24px 0;" />`,
-    `<p style="color:#999;font-size:12px;">TranscribeMD · account security</p>`,
+    `<p style="color:#999;font-size:12px;">QuillMD · account security</p>`,
   ].join('\n');
   const text = [
     greeting,
     '',
-    'Welcome to TranscribeMD. Please confirm this email address by opening the link below:',
+    'Welcome to QuillMD. Please confirm this email address by opening the link below:',
     '',
     args.verifyUrl,
     '',
-    "The link expires in 24 hours. If you didn't sign up for TranscribeMD, you can ignore this email.",
+    "The link expires in 24 hours. If you didn't sign up for QuillMD, you can ignore this email.",
     '',
-    '— TranscribeMD',
+    '— QuillMD',
   ].join('\n');
   return sendOne({ to: args.toEmail, subject, html, text });
 }
@@ -306,25 +306,25 @@ export async function sendEmailChangeRequestEmail(
   args: SendEmailChangeRequestArgs
 ): Promise<SenderResult> {
   const greeting = greetingFor(args.userName);
-  const subject = 'Confirm your new TranscribeMD email';
+  const subject = 'Confirm your new QuillMD email';
   const html = [
     `<p>${greeting}</p>`,
-    `<p>You asked to change the email address on your TranscribeMD account to this one. Click below to confirm:</p>`,
+    `<p>You asked to change the email address on your QuillMD account to this one. Click below to confirm:</p>`,
     `<p><a href="${args.confirmUrl}" style="display:inline-block;padding:10px 18px;background:#7C3AED;color:#fff;border-radius:6px;text-decoration:none;">Confirm new email</a></p>`,
     `<p style="color:#666;font-size:13px;">The link expires in 24 hours. Until you confirm, you'll keep signing in with your old email. If you didn't request this change, ignore this email.</p>`,
     `<hr style="border:none;border-top:1px solid #eee;margin:24px 0;" />`,
-    `<p style="color:#999;font-size:12px;">TranscribeMD · account security</p>`,
+    `<p style="color:#999;font-size:12px;">QuillMD · account security</p>`,
   ].join('\n');
   const text = [
     greeting,
     '',
-    'You asked to change the email address on your TranscribeMD account to this one. Confirm by opening the link below:',
+    'You asked to change the email address on your QuillMD account to this one. Confirm by opening the link below:',
     '',
     args.confirmUrl,
     '',
     "The link expires in 24 hours. Until you confirm, you'll keep signing in with your old email. If you didn't request this change, ignore this email.",
     '',
-    '— TranscribeMD',
+    '— QuillMD',
   ].join('\n');
   return sendOne({ to: args.toEmail, subject, html, text });
 }
@@ -343,22 +343,22 @@ export async function sendEmailChangedNotification(
   args: SendEmailChangedNotificationArgs
 ): Promise<SenderResult> {
   const greeting = greetingFor(args.userName);
-  const subject = 'Your TranscribeMD email was changed';
+  const subject = 'Your QuillMD email was changed';
   const html = [
     `<p>${greeting}</p>`,
-    `<p>The email address on your TranscribeMD account was just changed to <strong>${args.newEmail}</strong>.</p>`,
+    `<p>The email address on your QuillMD account was just changed to <strong>${args.newEmail}</strong>.</p>`,
     `<p style="color:#666;font-size:13px;">If you made this change, nothing else is required. If you didn't, reply to this email from <em>this</em> address immediately — we can roll it back before the session expires.</p>`,
     `<hr style="border:none;border-top:1px solid #eee;margin:24px 0;" />`,
-    `<p style="color:#999;font-size:12px;">TranscribeMD · account security</p>`,
+    `<p style="color:#999;font-size:12px;">QuillMD · account security</p>`,
   ].join('\n');
   const text = [
     greeting,
     '',
-    `The email address on your TranscribeMD account was just changed to ${args.newEmail}.`,
+    `The email address on your QuillMD account was just changed to ${args.newEmail}.`,
     '',
     "If you made this change, nothing else is required. If you didn't, reply to this email from THIS address immediately — we can roll it back before the session expires.",
     '',
-    '— TranscribeMD',
+    '— QuillMD',
   ].join('\n');
   return sendOne({ to: args.toEmail, subject, html, text });
 }
@@ -376,22 +376,22 @@ export async function sendAccountDeletedConfirmation(
   args: SendAccountDeletedArgs
 ): Promise<SenderResult> {
   const greeting = greetingFor(args.userName);
-  const subject = 'Your TranscribeMD account was deleted';
+  const subject = 'Your QuillMD account was deleted';
   const html = [
     `<p>${greeting}</p>`,
-    `<p>Your TranscribeMD account and all associated data have been deleted. This can't be undone.</p>`,
+    `<p>Your QuillMD account and all associated data have been deleted. This can't be undone.</p>`,
     `<p style="color:#666;font-size:13px;">We keep a minimal compliance record (email, deletion date, visit count at deletion time) for 90 days and then erase that too. If you ever want to come back, you can sign up again from scratch.</p>`,
     `<hr style="border:none;border-top:1px solid #eee;margin:24px 0;" />`,
-    `<p style="color:#999;font-size:12px;">TranscribeMD · goodbye</p>`,
+    `<p style="color:#999;font-size:12px;">QuillMD · goodbye</p>`,
   ].join('\n');
   const text = [
     greeting,
     '',
-    "Your TranscribeMD account and all associated data have been deleted. This can't be undone.",
+    "Your QuillMD account and all associated data have been deleted. This can't be undone.",
     '',
     'We keep a minimal compliance record (email, deletion date, visit count) for 90 days, then erase that too. If you ever want to come back, you can sign up again from scratch.',
     '',
-    '— TranscribeMD',
+    '— QuillMD',
   ].join('\n');
   return sendOne({ to: args.toEmail, subject, html, text });
 }

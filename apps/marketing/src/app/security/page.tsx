@@ -6,7 +6,7 @@ import { Badge } from '@/components/badge';
 export const metadata: Metadata = {
   title: 'Security',
   description:
-    'How TranscribeMD is built, deployed, and monitored to keep patient data safe.',
+    'How QuillMD is built, deployed, and monitored to keep patient data safe.',
 };
 
 const LAST_UPDATED = '2026-04-20';
@@ -31,7 +31,7 @@ export default function SecurityPage() {
                 [DRAFT — PENDING LEGAL REVIEW]
               </strong>
               <p className="mt-1.5">
-                This page summarizes how TranscribeMD is built and operated.
+                This page summarizes how QuillMD is built and operated.
                 It&apos;s a transparent operational statement, not a marketing
                 claim. If you need a signed SOC 2, ISO 27001, or HITRUST
                 report, see &quot;Certifications&quot; below.
@@ -151,7 +151,7 @@ export default function SecurityPage() {
                 Certifications
               </h2>
               <p className="mt-4">
-                TranscribeMD does not currently hold a SOC 2, ISO 27001, or
+                QuillMD does not currently hold a SOC 2, ISO 27001, or
                 HITRUST certification. Our launch target is SOC 2 Type 2
                 readiness within 12 months of general availability. Our
                 HIPAA posture is covered by{' '}

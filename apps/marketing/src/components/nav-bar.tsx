@@ -51,7 +51,7 @@ export function NavBar() {
               className="block h-4 w-4 rotate-45 rounded-[3px] bg-[linear-gradient(135deg,#7C3AED_0%,#A855F7_100%)] transition-transform duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] group-hover:rotate-[135deg]"
             />
           </span>
-          <span>TranscribeMD</span>
+          <span>QuillMD</span>
         </Link>
 
         <nav className="hidden items-center gap-1 md:flex">

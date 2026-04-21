@@ -56,7 +56,7 @@ export function Footer() {
                 className="block h-4 w-4 rotate-45 rounded-[3px] bg-[linear-gradient(135deg,#7C3AED_0%,#A855F7_100%)]"
               />
               <span className="text-[15px] font-semibold tracking-tight text-text-primary">
-                TranscribeMD
+                QuillMD
               </span>
             </div>
             <p className="mt-4 text-[13px] leading-relaxed text-text-tertiary">
@@ -97,7 +97,7 @@ export function Footer() {
           ))}
         </div>
         <div className="mt-12 flex flex-col items-start justify-between gap-4 border-t border-border-subtle pt-6 text-[12px] text-text-muted md:flex-row md:items-center">
-          <p>© {new Date().getFullYear()} TranscribeMD. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} QuillMD. All rights reserved.</p>
           <p className="flex items-center gap-1">
             <span className="inline-block h-1.5 w-1.5 rounded-full bg-cyan-400" />
             All systems operational
