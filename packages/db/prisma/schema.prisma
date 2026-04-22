@@ -1479,6 +1479,14 @@ model TranscribeTemplate {
   /// Postgres text[] — order preserved for consistent display.
   tokens String[]
 
+  /// T-M24.smart — auto-injected template variant. When the upload
+  /// endpoint detects a template with zero hand-written {{tokens}},
+  /// it runs detectSections + injectTokens and stores the resulting
+  /// .docx at a separate MinIO key. The L7f worker and the on-demand
+  /// download endpoint both prefer this key when present; null means
+  /// "use minioKey directly" (token_fill mode or uninjected legacy).
+  injectedMinioKey String?
+
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime? @db.Timestamptz(6)
