@@ -1,14 +1,45 @@
-'use client';
-
-import { useRef } from 'react';
 import { APP_SIGNUP_URL } from '@/lib/constants';
-import { useWordStagger } from '@/hooks/useWordStagger';
 import { HeroOrb } from './HeroOrb';
 
-export function Hero() {
-  const titleRef = useRef<HTMLHeadingElement>(null);
-  useWordStagger(titleRef);
+/**
+ * Split `text` into word spans with staggered `animation-delay` values so the
+ * H1 fades up word-by-word on first paint. Server-rendered — no DOM mutation
+ * and no hydration risk. The initial state (opacity 0, translateY) comes from
+ * the `.word-anim` rule in landing.css; the `charIn` keyframe drives them to
+ * final state with `forwards` fill-mode.
+ */
+function Staggered({
+  text,
+  startMs,
+  stepMs = 70,
+}: {
+  text: string;
+  startMs: number;
+  stepMs?: number;
+}) {
+  const parts = text.split(/(\s+)/);
+  let delay = startMs;
+  return (
+    <>
+      {parts.map((part, i) => {
+        if (!part) return null;
+        if (/^\s+$/.test(part)) return <span key={i}>{part}</span>;
+        delay += stepMs;
+        return (
+          <span
+            key={i}
+            className="word-anim"
+            style={{ animationDelay: `${delay}ms` }}
+          >
+            {part}
+          </span>
+        );
+      })}
+    </>
+  );
+}
 
+export function Hero() {
   return (
     <section className="hero">
       <div className="container hero-inner">
@@ -20,10 +51,14 @@ export function Hero() {
             <span>ICD‑10 · CPT · Rx</span>
           </div>
 
-          <h1 ref={titleRef} className="hero-title" id="heroTitle">
-            <span>Stop writing notes.</span>
+          <h1 className="hero-title" id="heroTitle">
+            <span>
+              <Staggered text="Stop writing notes." startMs={100} />
+            </span>
             <br />
-            <em>Start practicing medicine.</em>
+            <em>
+              <Staggered text="Start practicing medicine." startMs={310} />
+            </em>
           </h1>
 
           <p className="hero-sub reveal">
