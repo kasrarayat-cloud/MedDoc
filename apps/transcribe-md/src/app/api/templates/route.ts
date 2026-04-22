@@ -22,6 +22,7 @@ import {
   putTemplate,
 } from '@/lib/minio';
 import { extractTokens, partitionTokens } from '@/lib/template-tokens';
+import { injectTokens } from '@/lib/template-inject';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 import { log } from '@/lib/log';
 
@@ -160,17 +161,55 @@ export const POST = withApiHandler('api:templates:upload', async (req) => {
     },
   });
 
+  // T-M24.smart — best-effort auto-token injection when the doctor
+  // didn't hand-write any {{tokens}}. We run detectSections +
+  // injectTokens, upload the injected binary to a sibling MinIO key,
+  // and point the DB row at it. Failure is NOT fatal: the template
+  // still uploads and the doctor can use it; L7f just fills nothing
+  // (which is exactly the token_fill behaviour for a zero-token
+  // template anyway).
+  let injectedTokenCount = 0;
+  if (tokensFound.length === 0) {
+    try {
+      const result = injectTokens(buffer);
+      if (result.tokensInjected.length > 0) {
+        const injectedKey = buildTemplateObjectKey(
+          userId,
+          `${randomUUID()}-injected`
+        );
+        await putTemplate(injectedKey, result.injected);
+        await prisma.transcribeTemplate.update({
+          where: { id: row.id },
+          data: { injectedMinioKey: injectedKey },
+        });
+        injectedTokenCount = result.tokensInjected.length;
+      }
+    } catch (err) {
+      // Keep the upload: the original .docx is stored and the DB
+      // row exists. A subsequent visit using this template will
+      // pass through L7f with the unparsed original and fill zero
+      // tokens — exactly the old behaviour, so we degrade to
+      // legacy token_fill rather than bailing out on upload.
+      console.error(
+        '[api:templates:upload] smart-inject failed (template stays usable):',
+        redactPhi(err instanceof Error ? err.message : err)
+      );
+    }
+  }
+
   log.info('api:templates:upload', 'template uploaded', {
     userId,
     templateId: row.id,
     tokenCount: tokensFound.length,
     unsupportedCount: unsupported.length,
+    injectedTokenCount,
   });
 
   return NextResponse.json(
     {
       ...row,
       unsupportedTokens: unsupported,
+      injectedTokens: injectedTokenCount,
     },
     { status: 201 }
   );
