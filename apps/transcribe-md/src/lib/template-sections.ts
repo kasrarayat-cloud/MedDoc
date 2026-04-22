@@ -27,7 +27,16 @@ import { SUPPORTED_TOKENS, type SupportedToken } from './template-tokens';
 // XML block types
 // ---------------------------------------------------------------------------
 
-interface ParaBlock {
+interface BlockOffsets {
+  /** Byte offset of this block's opening tag inside the body string
+   *  (i.e., inside xml[bodyStart..bodyEnd]). The injector uses these
+   *  to slice the original XML surgically while replacing ranges. */
+  startOffset: number;
+  /** Offset immediately AFTER this block's closing tag. */
+  endOffset: number;
+}
+
+interface ParaBlock extends BlockOffsets {
   kind: 'para';
   text: string;
   isBold: boolean;
@@ -35,14 +44,14 @@ interface ParaBlock {
   styleId: string | null;
 }
 
-interface TableBlock {
+interface TableBlock extends BlockOffsets {
   kind: 'table';
   rowCount: number;
   /** Flattened cell text for preview / matching. */
   text: string;
 }
 
-type Block = ParaBlock | TableBlock;
+export type Block = ParaBlock | TableBlock;
 
 // ---------------------------------------------------------------------------
 // Detected-section type
@@ -69,6 +78,20 @@ export interface DetectedSection {
   preview: string;
   blockCount: number;
   hasTable: boolean;
+  /** Indices into the Block[] array returned by parseBlocks. `start`
+   *  is the first block touched (the heading, when one exists);
+   *  `end` is the last block (inclusive). `null` for synthesised
+   *  sections (e.g., signature) that span a range but where the
+   *  heading was not a real block. The injector uses this to slice
+   *  the right body range. */
+  blockRange: { start: number; end: number } | null;
+  /** True when the heading paragraph also contains inline content on
+   *  the same paragraph ("Medications This Visit:\tGabapentin…").
+   *  The injector distinguishes: when this is true we must replace
+   *  the entire heading paragraph (heading + inline tail → heading +
+   *  {{token}}); when false we keep the heading paragraph verbatim
+   *  and replace subsequent body paragraphs. */
+  headingHasInlineContent: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -225,6 +248,8 @@ export function parseBlocks(xml: string): Block[] {
           isBold: false,
           isAllCaps: false,
           styleId: null,
+          startOffset: start,
+          endOffset: openClose + 1,
         });
       }
       cursor = openClose + 1;
@@ -241,11 +266,26 @@ export function parseBlocks(xml: string): Block[] {
     if (end < 0) break;
 
     const inner = body.slice(openClose + 1, end);
-    blocks.push(tag === 'p' ? parseParagraph(inner) : parseTable(inner));
-    cursor = end + closeTag.length;
+    const blockEndOffset = end + closeTag.length;
+    blocks.push(
+      tag === 'p'
+        ? parseParagraph(inner, start, blockEndOffset)
+        : parseTable(inner, start, blockEndOffset)
+    );
+    cursor = blockEndOffset;
   }
 
   return blocks;
+}
+
+/** Return the absolute offset range of the body string inside xml.
+ *  Callers need this to translate the relative offsets on Block into
+ *  absolute positions in the XML for surgical slicing. */
+export function bodyRange(xml: string): { start: number; end: number } {
+  const openIdx = xml.indexOf('<w:body>');
+  const closeIdx = xml.indexOf('</w:body>');
+  if (openIdx < 0 || closeIdx < 0) throw new Error('word/document.xml has no <w:body>');
+  return { start: openIdx + '<w:body>'.length, end: closeIdx };
 }
 
 /** Find the next `tag` occurrence that is a real element start (not a
@@ -287,7 +327,11 @@ function findMatchingClose(
   return -1;
 }
 
-function parseParagraph(inner: string): ParaBlock {
+function parseParagraph(
+  inner: string,
+  startOffset: number,
+  endOffset: number
+): ParaBlock {
   const styleMatch = inner.match(/<w:pStyle\s+w:val="([^"]+)"/);
   const styleId = styleMatch?.[1] ?? null;
 
@@ -321,10 +365,14 @@ function parseParagraph(inner: string): ParaBlock {
     trimmed === trimmed.toUpperCase() &&
     /[A-Z]/.test(trimmed);
 
-  return { kind: 'para', text, isBold, isAllCaps, styleId };
+  return { kind: 'para', text, isBold, isAllCaps, styleId, startOffset, endOffset };
 }
 
-function parseTable(inner: string): TableBlock {
+function parseTable(
+  inner: string,
+  startOffset: number,
+  endOffset: number
+): TableBlock {
   const rowCount = (inner.match(/<w:tr\b/g) ?? []).length;
   let text = '';
   const TEXT_RE = /<w:t(?:\s+[^>]*)?>([^<]*)<\/w:t>/g;
@@ -332,7 +380,7 @@ function parseTable(inner: string): TableBlock {
     text += m[1] + ' ';
   }
   text = decodeXmlEntities(text).trim().replace(/\s+/g, ' ');
-  return { kind: 'table', rowCount, text };
+  return { kind: 'table', rowCount, text, startOffset, endOffset };
 }
 
 function decodeXmlEntities(s: string): string {
@@ -593,6 +641,8 @@ function classify(blocks: Block[]): DetectedSection[] {
       preview: preview.slice(0, 120),
       blockCount: 1,
       hasTable: b.kind === 'table',
+      blockRange: { start: i, end: i },
+      headingHasInlineContent: false,
     });
   }
 
@@ -604,6 +654,9 @@ function classify(blocks: Block[]): DetectedSection[] {
     paragraphs: string[];
     tableCount: number;
     token: SupportedToken | null;
+    blockStart: number;
+    blockEnd: number;
+    headingHasInlineContent: boolean;
   } | null = null;
 
   const flush = () => {
@@ -632,6 +685,8 @@ function classify(blocks: Block[]): DetectedSection[] {
       preview: content.slice(0, 120),
       blockCount: cur.paragraphs.length + cur.tableCount,
       hasTable: cur.tableCount > 0,
+      blockRange: { start: cur.blockStart, end: cur.blockEnd },
+      headingHasInlineContent: cur.headingHasInlineContent,
     });
     cur = null;
   };
@@ -657,6 +712,8 @@ function classify(blocks: Block[]): DetectedSection[] {
         preview: sigText.slice(0, 120),
         blockCount: sigBlocks.length,
         hasTable: false,
+        blockRange: { start: signatureRange.start, end: signatureRange.end },
+        headingHasInlineContent: false,
       });
       i = signatureRange.end;
       continue;
@@ -672,11 +729,15 @@ function classify(blocks: Block[]): DetectedSection[] {
         paragraphs: tail ? [tail] : [],
         tableCount: 0,
         token: mapHeadingToToken(heading),
+        blockStart: i,
+        blockEnd: i,
+        headingHasInlineContent: tail.length > 0,
       };
     } else if (b.kind === 'para') {
       if (cur) {
         const t = b.text.trim();
         if (t) cur.paragraphs.push(t);
+        cur.blockEnd = i;
       } else if (b.text.trim()) {
         // Trailing paragraph with no containing heading — likely a
         // closing line or orphaned content. Keep as boilerplate.
@@ -688,11 +749,14 @@ function classify(blocks: Block[]): DetectedSection[] {
           preview: b.text.trim().slice(0, 120),
           blockCount: 1,
           hasTable: false,
+          blockRange: { start: i, end: i },
+          headingHasInlineContent: false,
         });
       }
     } else {
       if (cur) {
         cur.tableCount++;
+        cur.blockEnd = i;
       } else {
         sections.push({
           heading: null,
@@ -702,6 +766,8 @@ function classify(blocks: Block[]): DetectedSection[] {
           preview: `[table, ${b.rowCount} rows] ${b.text.slice(0, 80)}`,
           blockCount: 1,
           hasTable: true,
+          blockRange: { start: i, end: i },
+          headingHasInlineContent: false,
         });
       }
     }
