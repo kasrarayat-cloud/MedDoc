@@ -70,7 +70,6 @@ import { runLayer7bCptCoding } from '@/worker/layers/07b-cpt-coding';
 import { runLayer7cRxDrafting } from '@/worker/layers/07c-rx-drafting';
 import { runLayer7dReferrals } from '@/worker/layers/07d-referrals';
 import { runLayer7ePatientSummary } from '@/worker/layers/07e-patient-summary';
-import { runLayer7fTemplateFill } from '@/worker/layers/07f-template-fill';
 
 const CONCURRENCY = Number.parseInt(
   process.env.TRANSCRIBE_MD_WORKER_CONCURRENCY ?? '2',
@@ -159,7 +158,6 @@ async function clearAutomationColumn(
     | 'rx_drafting'
     | 'referrals'
     | 'patient_summary'
-    | 'template_fill'
 ): Promise<void> {
   const map: Record<typeof key, Record<string, null>> = {
     icd_coding: { icdCodes: null },
@@ -167,7 +165,6 @@ async function clearAutomationColumn(
     rx_drafting: { rxDrafts: null },
     referrals: { referrals: null },
     patient_summary: { patientSummary: null },
-    template_fill: { filledTemplate: null },
   };
   await prisma.transcribeVisit.update({
     where: { id: visitId },
@@ -196,7 +193,6 @@ async function loadResumeState(visitId: string): Promise<LayerSkipState> {
       rxDrafts: true,
       referrals: true,
       patientSummary: true,
-      filledTemplate: true,
     },
   });
   if (!row) {
@@ -216,7 +212,6 @@ async function loadResumeState(visitId: string): Promise<LayerSkipState> {
       rxDrafts: null,
       referrals: null,
       patientSummary: null,
-      filledTemplate: null,
     };
   }
   return row as LayerSkipState;
@@ -244,10 +239,6 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       rawTextInput: true,
       specialty: true,
       inputMode: true,
-      // T-M24: read templateId here so the L7f task in the parallel
-      // fan-out below knows whether to run. Null = opt-out, standard
-      // pipeline only (identical to pre-T-M24 behaviour).
-      templateId: true,
       user: { select: { practiceId: true } },
     },
   });
@@ -530,13 +521,6 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       rx: process.env.TM_ENABLE_RX !== 'false',
       referrals: process.env.TM_ENABLE_REFERRALS !== 'false',
       summary: process.env.TM_ENABLE_PATIENT_SUMMARY !== 'false',
-      // T-M24: ops kill-switch for the new L7f template-fill layer.
-      // Defaults ON when the visit has a templateId; setting
-      // TM_ENABLE_TEMPLATE_FILL=false globally disables it across
-      // all visits without a redeploy (Claude outage, cost spike).
-      templateFill:
-        process.env.TM_ENABLE_TEMPLATE_FILL !== 'false' &&
-        visit.templateId !== null,
     };
 
     type AutomationTask = {
@@ -545,8 +529,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         | 'cpt_coding'
         | 'rx_drafting'
         | 'referrals'
-        | 'patient_summary'
-        | 'template_fill';
+        | 'patient_summary';
       enabled: boolean;
       run: () => Promise<unknown>;
     };
@@ -610,23 +593,6 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
             entitiesJson,
           }),
       },
-      // T-M24: L7f fills the doctor's {{tokens}}. Only enabled when
-      // the visit has a templateId AND the global kill-switch is on.
-      // visit.templateId is narrowed to non-null by flags.templateFill,
-      // so the non-null assertion is provably safe.
-      {
-        key: 'template_fill',
-        enabled: flags.templateFill,
-        run: () =>
-          runLayer7fTemplateFill({
-            visitId,
-            practiceId,
-            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-            templateId: visit.templateId!,
-            soapFinal: soapFinalForFanout,
-            transcriptText: resumeState.transcriptText,
-          }),
-      },
     ];
 
     // T-M13 — per-task resumability. For each enabled L7 task, check
@@ -640,7 +606,6 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       rx_drafting: 'L7c',
       referrals: 'L7d',
       patient_summary: 'L7e',
-      template_fill: 'L7f',
     };
     const enabled = tasks.filter((t) => t.enabled);
     const toRun: AutomationTask[] = [];

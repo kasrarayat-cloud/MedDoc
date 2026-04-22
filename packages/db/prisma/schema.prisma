@@ -330,9 +330,6 @@ model User {
   billingEventsSubmitted BillingEvent[]      @relation("BillingSubmitter")
   // TranscribeMD (T-M2)
   transcribeVisits       TranscribeVisit[]
-  // T-M24: per-doctor SOAP templates with {{tokens}}. One User ↔
-  // many Templates; each signed visit can optionally reference one.
-  transcribeTemplates    TranscribeTemplate[]
   userSessions           UserSession[]
   // T-M14.1: per-doctor edit tracking (one row per signed visit).
   doctorEditPatterns     DoctorEditPattern[]
@@ -1383,30 +1380,12 @@ model TranscribeVisit {
   /// consequence).
   archivedAt DateTime? @db.Timestamptz(6)
 
-  /// T-M24: optional reference to a custom SOAP template the doctor
-  /// uploaded. When set, the L7f template-fill layer generates a
-  /// JSON dict of token→content (one field per supported token
-  /// like {{chief_complaint}}, {{hpi}}, ...) which the on-demand
-  /// docxtemplater endpoint uses to produce the filled .docx.
-  /// Nullable + opt-in — visits without a templateId behave
-  /// identically to pre-T-M24.
-  templateId String?
-  template   TranscribeTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
-
-  /// T-M24: L7f output — JSON-serialised `{ token: content }` dict
-  /// keyed by the supported-token list. On-demand DOCX generation
-  /// merges this with the cached template binary in MinIO. Stored
-  /// as text (serialised JSON) rather than Json column because
-  /// we never query the content, only read-and-reserialize.
-  filledTemplate String? @db.Text
-
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([userId, createdAt])
   @@index([status])
   @@index([patientId])
-  @@index([templateId])
   /// T-M17.3: supports the default-view filter across every surface —
   /// patient timeline, dashboard visits tab, per-patient aggregates
   /// — which always pairs patientId with (deletedAt IS NULL AND
@@ -1426,67 +1405,6 @@ model TranscribeVisit {
   /// and the sweep's single-scan cost dominates the index tradeoff.
   @@index([deletedAt])
   @@map("transcribe_visits")
-}
-
-// ============================================================================
-// TRANSCRIBE-MD TEMPLATE — T-M24 custom SOAP templates
-// ----------------------------------------------------------------------------
-// Doctor-uploaded .docx files containing {{placeholder}} tokens. The L7f
-// template-fill layer produces a JSON dict of token → content based on
-// the visit transcript + final polished SOAP; the on-demand DOCX
-// endpoint uses docxtemplater to merge that dict into the binary
-// template stored in MinIO.
-//
-// Supported tokens (enforced by the L7f schema, not the DB):
-//   {{chief_complaint}} {{hpi}} {{pmh}} {{medications}} {{allergies}}
-//   {{ros}} {{exam}} {{assessment}} {{plan}}
-// Extra tokens the doctor adds are extracted + surfaced in the upload
-// preview but filled with empty string at generation time.
-//
-// Soft-deleted via `deletedAt` — the row + MinIO object both survive
-// a delete so visits that referenced the template can still render
-// their filled output. Hard-delete + purge is a future ops job.
-// ============================================================================
-
-model TranscribeTemplate {
-  id String @id @default(cuid())
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  /// User-facing name ("New Patient", "Follow-up", "Cardiology Consult").
-  /// 1–80 chars enforced at the action boundary.
-  name String
-
-  /// Original filename as uploaded — displayed in the UI card so the
-  /// doctor recognises which template they're looking at.
-  originalFileName String
-
-  /// MinIO object key under the existing `transcribe-md-audio` bucket
-  /// at path `templates/{userId}/{templateId}.docx`. One-to-one with
-  /// this row — no multi-version support in the POC.
-  minioKey String @unique
-
-  /// mammoth-extracted plain text of the template at upload time.
-  /// Fed to the L7f prompt as structural context so Claude sees the
-  /// template's headings + flow without needing to re-parse the
-  /// binary. Cached here rather than re-parsing from MinIO per-visit.
-  extractedText String @db.Text
-
-  /// Tokens regex-extracted at upload time, deduplicated. Used to
-  /// drive the upload-preview UI ("Tokens found: hpi, exam, ...")
-  /// and to warn the doctor about unsupported tokens. Stored as a
-  /// Postgres text[] — order preserved for consistent display.
-  tokens String[]
-
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime? @db.Timestamptz(6)
-
-  transcribeVisits TranscribeVisit[]
-
-  @@index([userId, deletedAt])
-  @@map("transcribe_templates")
 }
 
 // ============================================================================
