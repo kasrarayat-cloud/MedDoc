@@ -46,8 +46,23 @@ export function TemplateUploadForm({ supportedTokens }: Props) {
       );
       return;
     }
+    // Specific nudge for legacy .doc — upload would fail at the
+    // server anyway (mammoth doesn't parse .doc), and in-container
+    // conversion via LibreOffice isn't worth the 300+ MB image bloat
+    // for a rare case. Word and Pages both do the Save-As in one
+    // click. Toast over inline error so the doctor notices.
+    if (/\.doc$/i.test(f.name)) {
+      toast.error("We don't accept legacy .doc files", {
+        description:
+          'Please open it in Word and Save As → Word Document (.docx), then upload the .docx.',
+      });
+      setFile(null);
+      setError(null);
+      if (inputRef.current) inputRef.current.value = '';
+      return;
+    }
     if (!/\.docx$/i.test(f.name)) {
-      setError('Please upload a .docx file (Word / Pages / Google Docs export).');
+      setError('Only .docx files are supported.');
       return;
     }
     setError(null);
