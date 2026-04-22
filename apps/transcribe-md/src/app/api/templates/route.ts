@@ -78,17 +78,17 @@ export const POST = withApiHandler('api:templates:upload', async (req) => {
     );
   }
 
-  // Accept the canonical docx mime AND a couple of fallbacks browsers
-  // sometimes send (Safari occasionally emits octet-stream; desktop
-  // File Manager pastes can strip the mime entirely). We verify the
-  // mammoth parse at the end, which is the real source of truth.
+  // Belt-and-suspenders behind the client's filename nudge. Require
+  // BOTH the .docx extension AND either the canonical docx mime OR a
+  // generic octet-stream (Safari / File Manager paste sometimes strip
+  // the mime entirely — tightening to DOCX_MIME only would block
+  // legit uploads). Mammoth downstream is the real source of truth
+  // on actual parseability.
   const mime = file.type || 'application/octet-stream';
-  const looksLikeDocx =
-    mime === DOCX_MIME ||
-    mime === 'application/octet-stream' ||
-    file.name.toLowerCase().endsWith('.docx');
-  if (!looksLikeDocx) {
-    return apiError('file must be a .docx Word document', 415);
+  const filenameIsDocx = file.name.toLowerCase().endsWith('.docx');
+  const mimeIsCompatible = mime === DOCX_MIME || mime === 'application/octet-stream';
+  if (!filenameIsDocx || !mimeIsCompatible) {
+    return apiError('Only .docx files are supported.', 400);
   }
 
   const arrayBuf = await file.arrayBuffer();
