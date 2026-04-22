@@ -54,7 +54,15 @@ export interface InjectionResult {
 }
 
 interface InjectionAction {
-  kind: 'replace_inline' | 'keep_heading_replace_body' | 'append_after_heading';
+  kind:
+    | 'replace_inline'
+    | 'keep_heading_replace_body'
+    | 'append_after_heading'
+    /** Lever 2 — clinical_table section (PE sub-sections like RIGHT
+     *  LOWER EXTREMITY). Heading + clinical narrative paragraphs +
+     *  one or more tables. Replace the narrative with `{{token}}`
+     *  and keep the tables verbatim in their original order. */
+    | 'replace_body_preserve_tables';
   /** Start block index in `blocks` (inclusive). */
   startBlock: number;
   /** End block index in `blocks` (inclusive). */
@@ -108,37 +116,50 @@ function xmlBody(xml: string) {
 function planInjection(sections: DetectedSection[]): InjectionAction[] {
   const actions: InjectionAction[] = [];
   for (const s of sections) {
-    if (s.contentType !== 'clinical_narrative') continue;
     if (!s.mappedToken) continue;
     if (!s.blockRange) continue;
     const { start, end } = s.blockRange;
-    if (s.headingHasInlineContent) {
-      // The heading paragraph has the body content inlined ("Label:\tvalue").
-      // Replace that paragraph wholesale with a synthesised one.
+    if (s.contentType === 'clinical_narrative') {
+      if (s.headingHasInlineContent) {
+        // The heading paragraph has the body content inlined (e.g.
+        // "Patient:\tKasra Rayat" or "Medications This Visit:\tGabapentin").
+        actions.push({
+          kind: 'replace_inline',
+          startBlock: start,
+          endBlock: start,
+          token: s.mappedToken,
+          headingText: s.heading ?? '',
+        });
+      } else if (end > start) {
+        // Heading on its own line + N body paragraphs. Keep heading,
+        // replace [start+1..end] with a single token paragraph.
+        actions.push({
+          kind: 'keep_heading_replace_body',
+          startBlock: start,
+          endBlock: end,
+          token: s.mappedToken,
+        });
+      } else {
+        // Heading with no body paragraphs — the next heading landed
+        // immediately after. Keep the heading and drop a token
+        // paragraph immediately afterwards.
+        actions.push({
+          kind: 'append_after_heading',
+          startBlock: start,
+          endBlock: start,
+          token: s.mappedToken,
+        });
+      }
+    } else if (s.contentType === 'clinical_table') {
+      // Lever 2 — PE sub-sections with embedded tables. Replace the
+      // clinical narrative paragraphs with `{{token}}` but keep the
+      // tables (Range of Motion, Motor Exam) verbatim. Table cell
+      // VALUES stay as the sample patient's data (Lever 3 scope);
+      // structure + labels stay too, which is the design goal.
       actions.push({
-        kind: 'replace_inline',
-        startBlock: start,
-        endBlock: start,
-        token: s.mappedToken,
-        headingText: s.heading ?? '',
-      });
-    } else if (end > start) {
-      // Heading on its own line + N body paragraphs. Keep heading,
-      // replace [start+1..end] with a single token paragraph.
-      actions.push({
-        kind: 'keep_heading_replace_body',
+        kind: 'replace_body_preserve_tables',
         startBlock: start,
         endBlock: end,
-        token: s.mappedToken,
-      });
-    } else {
-      // Heading with no body paragraphs — the next heading landed
-      // immediately after. Keep the heading and drop a token
-      // paragraph immediately afterwards.
-      actions.push({
-        kind: 'append_after_heading',
-        startBlock: start,
-        endBlock: start,
         token: s.mappedToken,
       });
     }
@@ -199,6 +220,23 @@ function splice(
         out += makeTokenParagraph(action.token);
         cursor = headingEnd;
         break;
+
+      case 'replace_body_preserve_tables': {
+        // Write through the heading, insert the token paragraph,
+        // then emit any tables from the body range in their original
+        // order — skipping all non-table (paragraph) blocks in
+        // between, which are the clinical narrative we're replacing.
+        out += xml.slice(cursor, headingEnd);
+        out += makeTokenParagraph(action.token);
+        for (let bi = action.startBlock + 1; bi <= action.endBlock; bi++) {
+          const b = blocks[bi];
+          if (b.kind === 'table') {
+            out += xml.slice(blockStartAbs(bi), blockEndAbs(bi));
+          }
+        }
+        cursor = lastEnd;
+        break;
+      }
     }
   }
 
@@ -220,8 +258,12 @@ function makeTokenParagraph(token: SupportedToken): string {
 /** Heading line + tab + token, in one paragraph. Used when the
  *  original template had `Label:\tvalue` on a single line — we mirror
  *  the layout so the filled output still reads "Label: <content>"
- *  with the label preserved. */
+ *  with the label preserved.
+ *
+ *  Empty heading → plain `{{token}}` paragraph (used for standalone
+ *  visit-date lines — no label to preserve). */
 function makeHeadingWithToken(headingText: string, token: SupportedToken): string {
+  if (!headingText.trim()) return makeTokenParagraph(token);
   const safe = escapeXml(headingText);
   return `<w:p><w:r><w:t xml:space="preserve">${safe}</w:t><w:tab/><w:t xml:space="preserve">{{${token}}}</w:t></w:r></w:p>`;
 }

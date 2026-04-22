@@ -12,8 +12,26 @@
 // at generation time.
 // ============================================================================
 
-/** Canonical token list. Order matters for consistent UI display. */
+/** Canonical token list. Order matters for consistent UI display.
+ *
+ *  T-M24.smart Lever 1 — metadata tokens for consultation-letter
+ *  templates whose header row carries Patient: / DOB: / DOI: / visit
+ *  date. Without these, the top of the filled doc keeps the sample
+ *  patient's name + dates (the original failure mode on Dr M's
+ *  pain-mgmt template).
+ *
+ *  T-M24.smart Lever 2 — sub-section tokens so the content UNDER the
+ *  primary SOAP headings gets rewritten per visit instead of being
+ *  preserved verbatim. Covers the Current Status / PMH-adjacent and
+ *  PE sub-section layouts common in consultation and pain-mgmt
+ *  letters. */
 export const SUPPORTED_TOKENS = [
+  // --- metadata header (Lever 1) ---
+  'patient_name',
+  'patient_dob',
+  'visit_date',
+  'date_of_injury',
+  // --- primary SOAP ---
   'chief_complaint',
   'hpi',
   'pmh',
@@ -23,6 +41,20 @@ export const SUPPORTED_TOKENS = [
   'exam',
   'assessment',
   'plan',
+  // --- clinical sub-sections (Lever 2) ---
+  'current_status',
+  'prior_injuries',
+  'social_history',
+  'family_history',
+  'past_surgical_history',
+  'imaging',
+  'general_exam',
+  'heent',
+  'lumbar_spine',
+  'right_lower_extremity',
+  'left_lower_extremity',
+  'reflexes',
+  'integument',
 ] as const;
 
 export type SupportedToken = (typeof SUPPORTED_TOKENS)[number];

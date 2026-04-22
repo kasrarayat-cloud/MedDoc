@@ -99,6 +99,7 @@ export interface DetectedSection {
 // ---------------------------------------------------------------------------
 
 const HEADING_TO_TOKEN: Array<{ patterns: RegExp[]; token: SupportedToken }> = [
+  // --- primary SOAP ---
   {
     patterns: [/^chief\s*complaints?\b/i, /^cc\b/i, /^presenting\s+complaint/i],
     token: 'chief_complaint',
@@ -169,7 +170,109 @@ const HEADING_TO_TOKEN: Array<{ patterns: RegExp[]; token: SupportedToken }> = [
     ],
     token: 'pmh',
   },
+  // --- clinical sub-sections (Lever 2) ---
+  {
+    patterns: [/^current\s+status\b/i, /^functional\s+status\b/i],
+    token: 'current_status',
+  },
+  {
+    patterns: [/^prior\s+injur(y|ies)\b/i, /^previous\s+injur(y|ies)\b/i],
+    token: 'prior_injuries',
+  },
+  {
+    patterns: [/^social\s+history\b/i, /^sh\b/i],
+    token: 'social_history',
+  },
+  {
+    patterns: [/^family\s+history\b/i, /^fh\b/i, /^family\s+medical\s+history\b/i],
+    token: 'family_history',
+  },
+  {
+    patterns: [/^past\s+surgical\s+history\b/i, /^psh\b/i, /^surgical\s+history\b/i],
+    token: 'past_surgical_history',
+  },
+  {
+    patterns: [
+      /^imaging\b/i,
+      /^mri\s+of/i,
+      /^ct\s+(of|scan)/i,
+      /^x-?ray(s)?\b/i,
+      /^diagnostic\s+imaging\b/i,
+      /^radiolog(y|ic\s+findings)/i,
+    ],
+    token: 'imaging',
+  },
+  {
+    patterns: [/^general\b/i, /^general\s+(exam|appearance)\b/i, /^vitals?\b/i],
+    token: 'general_exam',
+  },
+  {
+    patterns: [/^heent\b/i, /^head\s+and\s+neck\b/i],
+    token: 'heent',
+  },
+  {
+    patterns: [
+      /^lumbar\s+spine\b/i,
+      /^lumbosacral\s+spine\b/i,
+      /^low\s+back\s+exam\b/i,
+    ],
+    token: 'lumbar_spine',
+  },
+  {
+    patterns: [/^right\s+lower\s+extremity\b/i, /^r\s+lower\s+extremity\b/i],
+    token: 'right_lower_extremity',
+  },
+  {
+    patterns: [/^left\s+lower\s+extremity\b/i, /^l\s+lower\s+extremity\b/i],
+    token: 'left_lower_extremity',
+  },
+  {
+    patterns: [/^reflexes\b/i, /^deep\s+tendon\s+reflexes\b/i, /^dtrs?\b/i],
+    token: 'reflexes',
+  },
+  {
+    patterns: [/^integument\b/i, /^skin(\s+exam)?\b/i, /^dermatolog/i],
+    token: 'integument',
+  },
 ];
+
+// T-M24.smart Lever 1 — metadata labels in the header row. Tab/space
+// delimiter between label and value is typical ("Patient:\tKasra Rayat");
+// the reclassifier below promotes the block to clinical_narrative with
+// the matching token so the injector's replace_inline step rewrites
+// the whole row as "Patient:\t{{patient_name}}".
+const METADATA_LABEL_TO_TOKEN: Array<{ patterns: RegExp[]; token: SupportedToken }> = [
+  {
+    patterns: [/^(patient|pt)\s*[:\t]/i],
+    token: 'patient_name',
+  },
+  {
+    patterns: [/^(d\.?o\.?b\.?|date\s+of\s+birth)\s*[:\t]/i],
+    token: 'patient_dob',
+  },
+  {
+    patterns: [/^(d\.?o\.?i\.?|date\s+of\s+injury)\s*[:\t]/i],
+    token: 'date_of_injury',
+  },
+];
+
+// Standalone date — March 3, 2026 / 03/03/2026 / 3-3-2026 — sitting
+// by itself on a pre-clinical line. Promoted to visit_date when it's
+// the ONLY content of the paragraph (we don't want to match dates
+// embedded inside prose).
+const STANDALONE_DATE_RE =
+  /^(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}$|^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}$/i;
+
+function mapMetadataToToken(text: string): SupportedToken | null {
+  const trimmed = text.trim();
+  for (const entry of METADATA_LABEL_TO_TOKEN) {
+    for (const re of entry.patterns) {
+      if (re.test(trimmed)) return entry.token;
+    }
+  }
+  if (STANDALONE_DATE_RE.test(trimmed)) return 'visit_date';
+  return null;
+}
 
 // Keywords that mark a section as boilerplate (disclaimer / legal / fee
 // schedule / insurance advisory — stuff we never rewrite).
@@ -626,23 +729,51 @@ function classify(blocks: Block[]): DetectedSection[] {
   const sections: DetectedSection[] = [];
 
   // Pre-clinical: each non-empty block becomes its own "section" so
-  // the report shows letterhead lines distinctly.
+  // the report shows letterhead lines distinctly. Lever 1 — blocks
+  // carrying a metadata label (Patient:, DOB:, DOI:) or a standalone
+  // date get promoted to clinical_narrative so the injector rewrites
+  // their value portion per-visit. Letterhead stays as-is.
   const preEnd = firstClinicalIdx < 0 ? blocks.length : firstClinicalIdx;
   for (let i = 0; i < preEnd; i++) {
     const b = blocks[i];
     if (b.kind === 'para' && !b.text.trim()) continue;
     const preview =
       b.kind === 'para' ? b.text.trim() : `[table, ${b.rowCount} rows] ${b.text}`;
+
+    let contentType: SectionContentType = classifyPreClinical(b);
+    let mappedToken: SupportedToken | null = null;
+    let heading: string | null = null;
+    let headingHasInlineContent = false;
+
+    if (b.kind === 'para') {
+      const token = mapMetadataToToken(b.text);
+      if (token) {
+        contentType = 'clinical_narrative';
+        mappedToken = token;
+        // Extract the label prefix for replace_inline: "Patient:",
+        // "DOB:", "DOI:". Standalone dates have no label → empty
+        // heading, and the injector emits `{{visit_date}}` alone.
+        if (token === 'visit_date') {
+          heading = '';
+          headingHasInlineContent = true;
+        } else {
+          const { heading: h } = splitHeadingInline(b.text);
+          heading = h;
+          headingHasInlineContent = true;
+        }
+      }
+    }
+
     sections.push({
-      heading: null,
-      headingType: 'none',
-      contentType: classifyPreClinical(b),
-      mappedToken: null,
+      heading,
+      headingType: mappedToken ? 'bold' : 'none',
+      contentType,
+      mappedToken,
       preview: preview.slice(0, 120),
       blockCount: 1,
       hasTable: b.kind === 'table',
       blockRange: { start: i, end: i },
-      headingHasInlineContent: false,
+      headingHasInlineContent,
     });
   }
 
