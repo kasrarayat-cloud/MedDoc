@@ -59,6 +59,11 @@ export async function runLayer7fTemplateFill(
       extractedText: true,
       tokens: true,
       deletedAt: true,
+      // T-M24.smart — when the upload endpoint auto-injected tokens,
+      // the injected tokens aren't in `tokens` (that field only
+      // captures hand-written {{tokens}} in the original). We detect
+      // smart-mode by checking whether an injected variant exists.
+      injectedMinioKey: true,
     },
   });
 
@@ -68,12 +73,17 @@ export async function runLayer7fTemplateFill(
     return {};
   }
 
-  // Only ask Claude to fill tokens we know the schema accepts. Extra
-  // tokens the doctor added (e.g. {{custom_field}}) aren't in
-  // SUPPORTED_TOKENS; docxtemplater fills them with empty at the
-  // generation stage.
+  // When the template was auto-injected, the tokens the fill layer
+  // should target are the 9 SUPPORTED_TOKENS (Claude produces content
+  // for any subset that's relevant to the visit). The detector only
+  // injects placeholders for clinical_narrative sections that mapped
+  // to a token, so asking for all 9 is safe — extras get silently
+  // dropped by docxtemplater.
   const supportedSet = new Set<string>(SUPPORTED_TOKENS);
-  const supportedTokensUsed: string[] = template.tokens.filter((t: string) =>
+  const tokensInDoc = template.injectedMinioKey
+    ? [...SUPPORTED_TOKENS]
+    : template.tokens;
+  const supportedTokensUsed: string[] = tokensInDoc.filter((t: string) =>
     supportedSet.has(t)
   );
   if (supportedTokensUsed.length === 0) {

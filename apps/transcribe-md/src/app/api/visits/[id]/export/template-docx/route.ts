@@ -51,6 +51,12 @@ export const GET = withApiHandler<{ id: string }>(
             name: true,
             originalFileName: true,
             minioKey: true,
+            // T-M24.smart — when set, this is the auto-injected
+            // variant and we fill *it* instead of the doctor's
+            // original. The original stays on disk for forensic /
+            // debug use (and for re-injection if the heuristics
+            // change in a future release).
+            injectedMinioKey: true,
             deletedAt: true,
           },
         },
@@ -99,9 +105,16 @@ export const GET = withApiHandler<{ id: string }>(
       );
     }
 
+    // Prefer the injected variant when present. The original stays
+    // usable as a fallback but shouldn't normally be read — the
+    // injected binary is what has the {{tokens}} for docxtemplater
+    // to fill.
+    const keyToFetch =
+      visit.template.injectedMinioKey ?? visit.template.minioKey;
+
     let templateBuffer: Buffer;
     try {
-      templateBuffer = await downloadTemplate(visit.template.minioKey);
+      templateBuffer = await downloadTemplate(keyToFetch);
     } catch (err) {
       console.error(
         '[api:visits:export:template-docx] MinIO read failed:',
