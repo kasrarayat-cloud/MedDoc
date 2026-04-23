@@ -1,8 +1,10 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { SpecularButton } from '@/components/specular-button';
+import { LocalTime } from '@/components/ui/local-time';
 import { signOutAction, signOutAllDevicesAction } from '@/actions/session';
 
 interface SessionPanelProps {
@@ -10,9 +12,13 @@ interface SessionPanelProps {
   browser: string;
   os: string;
   locationLabel: string;
-  loggedInAt: string;
-  expiresAt: string;
-  lastActiveAt: string;
+  /** ISO 8601 UTC — session createdAt. Formatted client-side in the
+   *  viewer's local timezone. */
+  loggedInAtIso: string;
+  /** ISO 8601 UTC — session expiresAt. */
+  expiresAtIso: string;
+  /** ISO 8601 UTC — session lastActiveAt. */
+  lastActiveAtIso: string;
 }
 
 export function SessionPanel(props: SessionPanelProps) {
@@ -40,9 +46,18 @@ export function SessionPanel(props: SessionPanelProps) {
         <Row label="IP address" value={props.ipAddress ?? 'Unknown'} />
         <Row label="Location" value={props.locationLabel} />
         <Row label="Browser" value={`${props.browser} · ${props.os}`} />
-        <Row label="Logged in" value={props.loggedInAt} />
-        <Row label="Last active" value={props.lastActiveAt} />
-        <Row label="Expires" value={props.expiresAt} />
+        <Row
+          label="Logged in"
+          value={<LocalTime iso={props.loggedInAtIso} variant="dateTime" />}
+        />
+        <Row
+          label="Last active"
+          value={<LocalTime iso={props.lastActiveAtIso} variant="relative" />}
+        />
+        <Row
+          label="Expires"
+          value={<LocalTime iso={props.expiresAtIso} variant="dateTime" />}
+        />
       </dl>
 
       <div>
@@ -72,7 +87,7 @@ export function SessionPanel(props: SessionPanelProps) {
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function Row({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="rounded-lg border border-border-subtle bg-bg-surface-1/60 px-3.5 py-3">
       <dt className="text-[11px] font-medium uppercase tracking-wider text-text-muted">

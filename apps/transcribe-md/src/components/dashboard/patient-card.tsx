@@ -1,19 +1,30 @@
+'use client';
+
 // HANDOFF §2.2 PatientCard — .qm-glass.hover card with avatar + serif
 // name + b.YYYY / visits meta, status chip (from latest visit), and a
 // specialty chip + last-visit timestamp footer.
+//
+// Client component so the relative-time label ("2h ago", "Apr 14")
+// renders in the viewer's local timezone. `lastVisitAt` and
+// `dateOfBirth` arrive as ISO 8601 strings from the server — the
+// server converts via `Date.toISOString()` / `.toISOString().slice(0,10)`.
 
 import Link from 'next/link';
 import type { TranscribeVisitStatus } from '@prisma/client';
 
 import { Avatar } from '@/components/ui/avatar';
 import { SpecChip, type SpecialtyKind } from '@/components/ui/spec-chip';
+import { formatRelativeTime } from '@/lib/format-time';
 
 export type DashboardPatient = {
   id: string;
   name: string;
-  dateOfBirth: Date | null;
+  /** YYYY-MM-DD or null. DOB is a date — timezone is irrelevant so we
+   *  flatten it on the server. */
+  dateOfBirth: string | null;
   visitCount: number;
-  lastVisitAt: Date | null;
+  /** ISO 8601 UTC or null. Formatted locally via formatRelativeTime. */
+  lastVisitAt: string | null;
   lastVisitSpecialty: string | null;
   lastVisitStatus: TranscribeVisitStatus | null;
   lastVisitNeedsReview: boolean;
@@ -36,22 +47,6 @@ function chipFor(
   return { label: 'Drafting', tone: 'accent' };
 }
 
-/** Soft relative-time string used in the card footer (not crucial
- *  enough to pull in date-fns). */
-function relTime(d: Date): string {
-  const diffMs = Date.now() - d.getTime();
-  const diffMin = diffMs / 60000;
-  if (diffMin < 1) return 'just now';
-  if (diffMin < 60) return `${Math.round(diffMin)}m ago`;
-  const diffH = diffMin / 60;
-  if (diffH < 24) return `${Math.round(diffH)}h ago`;
-  if (diffH < 48) return 'yesterday';
-  const diffD = diffH / 24;
-  if (diffD < 7) return `${Math.round(diffD)}d ago`;
-  if (diffD < 30) return `${Math.round(diffD / 7)}w ago`;
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
-
 /** The six-specialty enum (HANDOFF §4) is a closed list; anything the
  *  DB carries that doesn't match falls back to `primary` so the chip
  *  still renders. */
@@ -71,8 +66,10 @@ function toSpecKind(raw: string | null): SpecialtyKind {
 
 export function PatientCard({ patient }: { patient: DashboardPatient }) {
   const chip = chipFor(patient.lastVisitStatus, patient.lastVisitNeedsReview);
+  // DOB comes as YYYY-MM-DD — parse the year without going through
+  // Date() so a browser in UTC-8 doesn't subtract a day on "2026-01-01".
   const birthYear = patient.dateOfBirth
-    ? patient.dateOfBirth.getUTCFullYear()
+    ? Number.parseInt(patient.dateOfBirth.slice(0, 4), 10)
     : null;
 
   return (
@@ -141,7 +138,9 @@ export function PatientCard({ patient }: { patient: DashboardPatient }) {
             fontFamily: 'var(--mono)',
           }}
         >
-          {patient.lastVisitAt ? `Last: ${relTime(patient.lastVisitAt)}` : 'No visits yet'}
+          {patient.lastVisitAt
+            ? `Last: ${formatRelativeTime(patient.lastVisitAt)}`
+            : 'No visits yet'}
         </div>
       </div>
     </Link>
