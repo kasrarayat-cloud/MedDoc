@@ -23,6 +23,7 @@ import {
 } from '@/lib/fingerprint';
 import { AppFrame } from '@/components/ui/app-frame';
 import { Ic } from '@/components/ui/icon';
+import { LocalTime } from '@/components/ui/local-time';
 import { PageHeader } from '@/components/ui/page-header';
 import { ProfileForm } from './profile-form';
 import { SessionPanel } from './session-panel';
@@ -33,24 +34,6 @@ import { EmailChangeToast } from './email-change-toast';
 import { isDataExportEnabled } from '../api/settings/export-data/route';
 
 export const metadata: Metadata = { title: 'Settings' };
-
-function formatDate(d: Date): string {
-  return d.toLocaleString(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  });
-}
-
-function relativeAgo(d: Date): string {
-  const diff = Date.now() - d.getTime();
-  const min = Math.max(0, Math.floor(diff / 60_000));
-  if (min < 1) return 'just now';
-  if (min < 60) return `${min} min ago`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr} hr ago`;
-  const days = Math.floor(hr / 24);
-  return `${days} day${days === 1 ? '' : 's'} ago`;
-}
 
 const SECTIONS = [
   { id: 'profile', label: 'Profile' },
@@ -179,7 +162,15 @@ export default async function SettingsPage() {
               }}
             >
               <EmailWithChangeButton email={user.email} />
-              <ReadOnlyRow label="Member since" value={formatDate(user.createdAt)} />
+              <ReadOnlyRow
+                label="Member since"
+                value={
+                  <LocalTime
+                    iso={user.createdAt.toISOString()}
+                    variant="date"
+                  />
+                }
+              />
             </div>
           </Section>
 
@@ -253,9 +244,9 @@ export default async function SettingsPage() {
                 browser={browser}
                 os={os}
                 locationLabel={describeIpLocation(activeSession.ipAddress)}
-                loggedInAt={formatDate(activeSession.createdAt)}
-                expiresAt={formatDate(activeSession.expiresAt)}
-                lastActiveAt={relativeAgo(activeSession.lastActiveAt)}
+                loggedInAtIso={activeSession.createdAt.toISOString()}
+                expiresAtIso={activeSession.expiresAt.toISOString()}
+                lastActiveAtIso={activeSession.lastActiveAt.toISOString()}
               />
             ) : (
               <p style={{ fontSize: 13, color: 'var(--fg-3)' }}>
@@ -445,7 +436,13 @@ function Section({
   );
 }
 
-function ReadOnlyRow({ label, value }: { label: string; value: string }) {
+function ReadOnlyRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: React.ReactNode;
+}) {
   return (
     <div>
       <div
