@@ -1,18 +1,21 @@
 'use client';
 
+// ============================================================================
+// Processing state — app-redesign-v1 cinematic (HANDOFF §2.3 Gate 10).
+// ----------------------------------------------------------------------------
+// Keeps the T-M16.4 polling + retry semantics (2s interval, 10min warn,
+// 30min stuck) and swaps the visual for the handoff's 7-step pipeline
+// ladder + LiveOrb. Status → hint text streams in under the orb; the
+// ladder highlights the active stage with a moving violet rail.
+// ============================================================================
+
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import dynamic from 'next/dynamic';
-import { motion, AnimatePresence } from 'framer-motion';
-import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 
 import type { TranscribeVisitStatus } from '@prisma/client';
-
-const VioletOrb = dynamic(
-  () => import('@/components/violet-orb').then((m) => m.VioletOrb),
-  { ssr: false, loading: () => <div className="h-64 w-64" /> }
-);
+import { Ic } from '@/components/ui/icon';
+import { LiveOrb } from '@/components/recording/live-orb';
 
 interface StatusResponse {
   visitId: string;
@@ -29,19 +32,28 @@ interface ProcessingStateProps {
 }
 
 const POLL_MS = 2000;
-
-/** Elapsed-time thresholds for the T-M16.4 stuck-job UI (H13).
- *  Healthy pipeline completes in 3-5 min; 10 min is mildly unusual,
- *  30 min means something is genuinely off (the worker's own per-job
- *  timeout is 15 min × 3 attempts = 45 min worst-case — by 30 min we're
- *  either mid-retry-attempt-2 or the worker is wedged). */
 const WARN_AT_MIN = 10;
 const STUCK_AT_MIN = 30;
 
-/** Processing screen while the worker walks through the pipeline.
- *  Polls /api/visits/[id]/status every 2s; when status flips to READY
- *  or FAILED (or SIGNED, unlikely here) the outer page re-reads on
- *  router.refresh() and renders the correct view. */
+type StageId =
+  | 'TRANSCRIBING'
+  | 'EXTRACTING'
+  | 'DRAFTING'
+  | 'CRITIQUING'
+  | 'POLISHING'
+  | 'AUTOMATING'
+  | 'READY';
+
+const STAGES: { id: StageId; title: string; blurb: string }[] = [
+  { id: 'TRANSCRIBING', title: 'Transcribe', blurb: 'Deepgram Nova-3 · diarised turns' },
+  { id: 'EXTRACTING', title: 'Understand', blurb: 'Structured entities + evidence quotes' },
+  { id: 'DRAFTING', title: 'SOAP draft', blurb: 'Section-by-section composition' },
+  { id: 'CRITIQUING', title: 'Review', blurb: 'Low-confidence + safety flags' },
+  { id: 'POLISHING', title: 'Polish', blurb: 'Doctor-style conformance' },
+  { id: 'AUTOMATING', title: 'Codes + Rx', blurb: 'ICD-10 / CPT / prescriptions' },
+  { id: 'READY', title: 'Ready', blurb: 'Your draft is signable' },
+];
+
 export function ProcessingState({
   visitId,
   initialStatus,
@@ -52,20 +64,32 @@ export function ProcessingState({
   const [hint, setHint] = useState<string>(initialHint);
   const [elapsedMin, setElapsedMin] = useState(0);
   const [retrying, setRetrying] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  });
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  // Track elapsed time in a ref so the interval closure can read it
-  // without adding it to useEffect's dep list (which would restart
-  // the interval every tick).
-  const startedAtRef = useRef<number>(Date.now());
+  const startedAtRef = useRef<number>(0);
+
+  // Capture the processing start time on mount (refs aren't allowed
+  // to be initialised with impure expressions per the react-hooks
+  // lint rule). Zero sentinel means "not yet initialised".
+  useEffect(() => {
+    if (startedAtRef.current === 0) startedAtRef.current = Date.now();
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const handler = () => setReducedMotion(mq.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
 
   useEffect(() => {
     pollingRef.current = setInterval(async () => {
-      // Update elapsed on every tick, regardless of fetch outcome.
-      const elapsed = Math.floor(
-        (Date.now() - startedAtRef.current) / 60_000
-      );
+      const elapsed = Math.floor((Date.now() - startedAtRef.current) / 60_000);
       setElapsedMin(elapsed);
-
       try {
         const res = await fetch(`/api/visits/${visitId}/status`, {
           cache: 'no-store',
@@ -80,12 +104,10 @@ export function ProcessingState({
           data.status === 'SIGNED'
         ) {
           if (pollingRef.current) clearInterval(pollingRef.current);
-          // router.refresh re-runs the server page → dispatches on the
-          // new status and renders the ready/failed view.
           router.refresh();
         }
       } catch {
-        // Swallow transient network errors; the next tick will retry.
+        /* transient — next tick retries */
       }
     }, POLL_MS);
     return () => {
@@ -104,16 +126,15 @@ export function ProcessingState({
           code?: string;
           error?: string;
         };
-        if (body.code === 'STILL_PROCESSING') {
-          toast.info('Still processing', {
+        toast.info(
+          body.code === 'STILL_PROCESSING'
+            ? 'Still processing'
+            : 'Cannot retry this visit',
+          {
             description:
               body.error ?? 'The worker is making progress — hold on a bit.',
-          });
-        } else {
-          toast.error('Cannot retry this visit', {
-            description: body.error ?? 'This visit is no longer retryable.',
-          });
-        }
+          }
+        );
         return;
       }
       if (!res.ok) {
@@ -122,8 +143,6 @@ export function ProcessingState({
         });
         return;
       }
-      // Successful retry — reset the timer so banners don't re-fire
-      // instantly, and let the next poll tick pick up the new status.
       startedAtRef.current = Date.now();
       setElapsedMin(0);
       toast.success('Retry queued', {
@@ -136,146 +155,280 @@ export function ProcessingState({
     }
   }
 
+  const currentIdx = STAGES.findIndex((s) => s.id === (status as StageId));
   const showWarn = elapsedMin >= WARN_AT_MIN && elapsedMin < STUCK_AT_MIN;
   const showStuck = elapsedMin >= STUCK_AT_MIN;
 
   return (
-    <div className="mx-auto flex max-w-xl flex-col items-center py-16 text-center sm:py-24">
-      <div className="relative mb-10 h-64 w-64 sm:h-72 sm:w-72">
-        <div
-          aria-hidden
-          className="orb-pulse pointer-events-none absolute inset-0 -z-10 rounded-full"
-          style={{
-            background:
-              'radial-gradient(ellipse at center, rgba(139,92,246,0.45) 0%, rgba(139,92,246,0.12) 40%, transparent 72%)',
-            filter: 'blur(28px)',
-          }}
-        />
-        <VioletOrb radius={1.35} state="processing" reactive={0.5} />
-      </div>
-
-      <motion.h2
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
-        className="type-h1 text-text-primary"
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 380px',
+        minHeight: 'calc(100vh - 120px)',
+        gap: 0,
+      }}
+    >
+      {/* Centre stage — orb + status text */}
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 40,
+          gap: 28,
+        }}
       >
-        Working on your note
-      </motion.h2>
-
-      <div className="mt-3 min-h-[1.5rem] max-w-md text-[15px] leading-relaxed text-text-tertiary">
-        <AnimatePresence mode="wait">
-          <motion.span
-            key={status}
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.25 }}
+        <div className="qm-sectlabel">§ Drafting · in flight</div>
+        <LiveOrb paused={false} reducedMotion={reducedMotion} />
+        <div
+          style={{
+            textAlign: 'center',
+            maxWidth: 460,
+          }}
+        >
+          <h1
+            className="qm-serif"
+            style={{
+              margin: 0,
+              fontSize: 32,
+              fontWeight: 400,
+              letterSpacing: '-0.02em',
+              color: 'var(--fg)',
+            }}
           >
-            {hint}
-          </motion.span>
-        </AnimatePresence>
-      </div>
-
-      <div className="mt-10 w-full max-w-md">
-        <PipelineStrip status={status} />
-      </div>
-
-      {showWarn && (
-        <div className="mt-8 w-full max-w-md rounded-lg border border-amber-500/40 bg-amber-500/5 p-4 text-left">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
-            <div>
-              <div className="text-[13px] font-medium text-amber-200">
-                Taking longer than usual
-              </div>
-              <p className="mt-1 text-[12px] leading-relaxed text-amber-200/80">
-                Most notes finish in 3-5 minutes. We&apos;ll keep
-                checking — you can also leave this page and come back
-                later.
-              </p>
-            </div>
-          </div>
+            Working on your <em style={{ color: 'var(--accent-bright)' }}>note</em>
+          </h1>
+          <p
+            style={{
+              margin: '12px 0 0',
+              fontSize: 14,
+              color: 'var(--fg-3)',
+              lineHeight: 1.55,
+            }}
+          >
+            {hint || 'Hold tight — the worker is routing through the pipeline.'}
+          </p>
+          <p
+            style={{
+              marginTop: 12,
+              fontSize: 11.5,
+              fontFamily: 'var(--mono)',
+              color: 'var(--fg-4)',
+              letterSpacing: '0.04em',
+              textTransform: 'uppercase',
+            }}
+          >
+            Elapsed {elapsedMin} min · leave the page and we\u2019ll finish in the background
+          </p>
         </div>
-      )}
 
-      {showStuck && (
-        <div className="mt-8 w-full max-w-md rounded-lg border border-red-500/50 bg-red-500/5 p-4 text-left">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-400" />
-            <div className="flex-1">
-              <div className="text-[13px] font-medium text-red-200">
-                Something may be wrong
-              </div>
-              <p className="mt-1 text-[12px] leading-relaxed text-red-200/80">
-                Your visit has been processing for {elapsedMin} minutes,
-                which is well past normal. You can try re-running it,
-                or contact support with the visit ID below.
-              </p>
-              <div className="mt-2 font-mono text-[11px] text-red-200/70 break-all">
-                visit {visitId}
-              </div>
+        {showWarn && (
+          <StatusBanner tone="amber" title="Taking longer than usual">
+            Most notes finish in 3-5 minutes. We&apos;ll keep checking — you can
+            also leave this page and come back later.
+          </StatusBanner>
+        )}
+        {showStuck && (
+          <StatusBanner tone="coral" title="Something may be wrong">
+            Processing for {elapsedMin} minutes. You can retry, or contact
+            support with visit{' '}
+            <span style={{ fontFamily: 'var(--mono)' }}>{visitId}</span>.
+            <div style={{ marginTop: 10 }}>
               <button
                 type="button"
                 onClick={onRetry}
                 disabled={retrying}
-                className="mt-3 inline-flex items-center gap-2 rounded-lg border border-red-400/50 bg-red-500/10 px-3 py-1.5 text-[12px] font-medium text-red-100 hover:bg-red-500/15 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="qm-btn qm-btn-ghost qm-btn-sm"
+                style={{ color: 'var(--coral)' }}
               >
-                <RefreshCw
-                  className={
-                    retrying ? 'h-3.5 w-3.5 animate-spin' : 'h-3.5 w-3.5'
-                  }
-                />
+                <Ic.sparkle width={12} height={12} />
                 {retrying ? 'Retrying…' : 'Retry upload'}
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          </StatusBanner>
+        )}
+      </div>
 
-      <p className="mt-10 text-[12px] text-text-muted">
-        You can leave this page — your note will be waiting on the dashboard.
-      </p>
+      {/* Right rail — pipeline ladder */}
+      <aside
+        style={{
+          borderLeft: '1px solid var(--line)',
+          background: 'rgba(12,10,22,0.4)',
+          padding: 24,
+          overflow: 'auto',
+        }}
+      >
+        <div className="qm-sectlabel" style={{ marginBottom: 18 }}>
+          § Pipeline
+        </div>
+        <ol
+          style={{
+            listStyle: 'none',
+            margin: 0,
+            padding: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 2,
+          }}
+        >
+          {STAGES.map((stage, i) => {
+            const state =
+              currentIdx === -1
+                ? 'pending'
+                : i < currentIdx
+                  ? 'done'
+                  : i === currentIdx
+                    ? 'active'
+                    : 'pending';
+            return (
+              <StageRow
+                key={stage.id}
+                index={i + 1}
+                title={stage.title}
+                blurb={stage.blurb}
+                state={state}
+              />
+            );
+          })}
+        </ol>
+      </aside>
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Visual strip showing which layer is active. 7 segments now that T-M6
-// added AUTOMATING between POLISHING and READY.
-// ---------------------------------------------------------------------------
-
-const PIPELINE_ORDER: TranscribeVisitStatus[] = [
-  'TRANSCRIBING',
-  'EXTRACTING',
-  'DRAFTING',
-  'CRITIQUING',
-  'POLISHING',
-  'AUTOMATING',
-  'READY',
-];
-
-function PipelineStrip({ status }: { status: TranscribeVisitStatus }) {
-  const currentIdx = PIPELINE_ORDER.indexOf(status);
+function StageRow({
+  index,
+  title,
+  blurb,
+  state,
+}: {
+  index: number;
+  title: string;
+  blurb: string;
+  state: 'done' | 'active' | 'pending';
+}) {
+  const fg =
+    state === 'active'
+      ? 'var(--fg)'
+      : state === 'done'
+        ? 'var(--fg-2)'
+        : 'var(--fg-4)';
+  const badgeBg =
+    state === 'active'
+      ? 'linear-gradient(135deg, #A87CFF, #6B3FD9)'
+      : state === 'done'
+        ? 'rgba(110, 231, 183, 0.18)'
+        : 'rgba(255,255,255,0.03)';
+  const badgeColor =
+    state === 'active'
+      ? '#fff'
+      : state === 'done'
+        ? 'var(--mint)'
+        : 'var(--fg-4)';
   return (
-    <div className="flex items-center gap-1.5">
-      {PIPELINE_ORDER.map((s, i) => {
-        const state =
-          i < currentIdx ? 'done' : i === currentIdx ? 'active' : 'pending';
-        return (
-          <div
-            key={s}
-            className={
-              state === 'done'
-                ? 'h-1 flex-1 rounded-full bg-violet-500'
-                : state === 'active'
-                  ? 'h-1 flex-1 rounded-full bg-violet-400 animate-pulse'
-                  : 'h-1 flex-1 rounded-full bg-bg-surface-3'
-            }
-            aria-label={s.toLowerCase()}
-          />
-        );
-      })}
+    <li
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '28px 1fr',
+        gap: 12,
+        padding: '10px 4px',
+        borderRadius: 8,
+        background:
+          state === 'active' ? 'rgba(139,92,255,0.05)' : 'transparent',
+      }}
+    >
+      <div
+        style={{
+          width: 26,
+          height: 26,
+          borderRadius: 999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: badgeBg,
+          border: `1px solid ${
+            state === 'active'
+              ? 'rgba(139,92,255,0.4)'
+              : state === 'done'
+                ? 'rgba(110,231,183,0.3)'
+                : 'var(--line)'
+          }`,
+          color: badgeColor,
+          fontFamily: 'var(--mono)',
+          fontSize: 11,
+          fontWeight: 600,
+        }}
+      >
+        {state === 'done' ? <Ic.check width={12} height={12} /> : index}
+      </div>
+      <div>
+        <div
+          style={{
+            fontSize: 13.5,
+            color: fg,
+            fontWeight: state === 'active' ? 600 : 500,
+          }}
+        >
+          {title}
+          {state === 'active' && (
+            <span
+              className="qm-pulse"
+              style={{
+                display: 'inline-block',
+                marginLeft: 8,
+                width: 6,
+                height: 6,
+                borderRadius: 999,
+                background: 'var(--accent-bright)',
+                verticalAlign: 'middle',
+              }}
+            />
+          )}
+        </div>
+        <div
+          style={{
+            marginTop: 3,
+            fontSize: 11.5,
+            color: 'var(--fg-4)',
+            fontFamily: 'var(--mono)',
+            letterSpacing: '0.02em',
+          }}
+        >
+          {blurb}
+        </div>
+      </div>
+    </li>
+  );
+}
+
+function StatusBanner({
+  tone,
+  title,
+  children,
+}: {
+  tone: 'amber' | 'coral';
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      role="status"
+      style={{
+        width: '100%',
+        maxWidth: 460,
+        padding: 14,
+        borderRadius: 12,
+        border: `1px solid var(--${tone})55`,
+        background: `var(--${tone})0a`,
+        color: `var(--${tone})`,
+        fontSize: 12.5,
+        lineHeight: 1.55,
+        textAlign: 'left',
+      }}
+    >
+      <div style={{ fontWeight: 600, marginBottom: 6 }}>{title}</div>
+      <div style={{ color: 'var(--fg-2)' }}>{children}</div>
     </div>
   );
 }

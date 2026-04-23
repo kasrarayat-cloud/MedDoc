@@ -1,17 +1,17 @@
 // ============================================================================
-// Dashboard — tabbed [Patients] / [All visits] / [Trash] layout
+// Dashboard — app-redesign-v1 (HANDOFF §2.2).
 // ----------------------------------------------------------------------------
-// /dashboard                 → Patients tab (default)
-// /dashboard?tab=visits      → All visits tab
-// /dashboard?tab=trash       → T-M18.2 A12 — global trash view across
-//                              ALL patients. Only surfaces when
-//                              trashCount > 0 so a healthy account's
-//                              tab row stays clean.
+// /dashboard                → Patients tab (default)
+// /dashboard?tab=all        → All visits tab (grouped by day)
 //
-// All three tabs SSR their first page so the initial paint is fast.
-// Switching tabs is a Link navigation — the RSC re-renders with the
-// new searchParams value. "Load more" within each tab calls the
-// corresponding action.
+// This is the first screen that mounts the new shell chrome — wraps
+// in <AppFrame> which owns TopNav + IconRail + the scrollable main
+// per §8.2. Stats + tab content run in parallel inside the same
+// server component; the page is re-rendered on tab change via Link.
+//
+// The previous T-M18.2 "Trash" tab + archived toggle are not ported
+// yet — the new dashboard is deliberately two-tab per the redesign
+// brief. Global trash stays recoverable via /patients/[id] pages.
 // ============================================================================
 
 import type { Metadata } from 'next';
@@ -20,30 +20,28 @@ import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
 
 import prisma from '@meddoc/db';
+import { TranscribeVisitStatus } from '@prisma/client';
 import { auth } from '@/lib/nextauth';
-import { NavBar } from '@/components/nav-bar';
-import { EmptyState } from '@/components/empty-state';
-import { SpecularButton } from '@/components/specular-button';
-import type { VisitCardData } from '@/components/visit-card';
-import { PageWrapper } from '@/components/page-wrapper';
-import { SkeletonVisitGrid } from '@/components/skeleton';
+import { AppFrame } from '@/components/ui/app-frame';
+import { Ic } from '@/components/ui/icon';
+import { PageHeader } from '@/components/ui/page-header';
+import { StatCard } from '@/components/dashboard/stat-card';
 import {
-  DASHBOARD_PAGE_SIZE,
-  type DashboardCursor,
-} from '@/lib/dashboard-pagination';
-import { fetchPatientsPage } from '@/lib/patients-query';
-import { VisitsGrid } from './visits-grid';
-import { PatientsGrid } from './patients-grid';
-import { TabNav } from './tab-nav';
-import { ShowArchivedToggle } from './show-archived-toggle';
+  PatientCard,
+  type DashboardPatient,
+} from '@/components/dashboard/patient-card';
 import {
-  TrashedVisitCard,
-  type TrashedVisitCardData,
-} from '@/app/patients/[id]/trashed-visit-card';
+  VisitList,
+  type DashboardVisit,
+} from '@/components/dashboard/visit-list';
 
 export const metadata: Metadata = { title: 'Dashboard' };
 
 type SearchParams = Record<string, string | string[] | undefined>;
+type ActiveTab = 'patients' | 'all';
+
+const PATIENTS_PAGE_SIZE = 20;
+const VISITS_PAGE_SIZE = 20;
 
 export default async function DashboardPage({
   searchParams,
@@ -55,36 +53,24 @@ export default async function DashboardPage({
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { name: true, email: true, practiceId: true },
+    select: { practiceId: true },
   });
   if (!user) redirect('/login');
 
   const params = await searchParams;
-  const tabParam = Array.isArray(params.tab) ? params.tab[0] : params.tab;
-  const activeTab: 'patients' | 'visits' | 'trash' =
-    tabParam === 'visits' ? 'visits' : tabParam === 'trash' ? 'trash' : 'patients';
-  const archivedParam = Array.isArray(params.archived)
-    ? params.archived[0]
-    : params.archived;
-  const includeArchived = archivedParam === '1';
+  const tabRaw = Array.isArray(params.tab) ? params.tab[0] : params.tab;
+  const activeTab: ActiveTab = tabRaw === 'all' ? 'all' : 'patients';
 
   return (
-    <PageWrapper>
-      <NavBar name={user.name} email={user.email} />
-
-      <main className="mx-auto max-w-7xl px-4 pb-24 pt-8 sm:px-6 lg:px-8 lg:pt-12">
-        <Suspense fallback={<DashboardSkeleton />}>
-          <DashboardBody
-            userId={session.user.id}
-            practiceId={user.practiceId}
-            activeTab={activeTab}
-            includeArchived={includeArchived}
-          />
-        </Suspense>
-        {/* DashboardBody signature updated below — `activeTab` now
-            accepts 'trash'. */}
-      </main>
-    </PageWrapper>
+    <AppFrame>
+      <Suspense fallback={<DashboardSkeleton />}>
+        <DashboardBody
+          userId={session.user.id}
+          practiceId={user.practiceId}
+          activeTab={activeTab}
+        />
+      </Suspense>
+    </AppFrame>
   );
 }
 
@@ -92,252 +78,509 @@ async function DashboardBody({
   userId,
   practiceId,
   activeTab,
-  includeArchived,
 }: {
   userId: string;
   practiceId: string;
-  activeTab: 'patients' | 'visits' | 'trash';
-  includeArchived: boolean;
+  activeTab: ActiveTab;
 }) {
-  // Small COUNT queries for the tab badges. All four are cheap via
-  // the existing indexes.
-  //
-  // visitCount stays archive-exclusive even when the toggle is on —
-  // the badge shows "active visits on this account", not "visits
-  // currently rendered in the grid". T-M18.2 A11 adds archivedCount
-  // so the header subheading can disambiguate. T-M18.2 A12 adds
-  // trashCount so the global Trash tab is only offered when it has
-  // something to show.
-  const [patientCount, visitCount, archivedCount, trashCount] =
-    await Promise.all([
-      prisma.transcribeMdPatient.count({
-        where: { practiceId, deletedAt: null },
-      }),
-      prisma.transcribeVisit.count({
-        where: { userId, deletedAt: null, archivedAt: null },
-      }),
-      prisma.transcribeVisit.count({
-        where: { userId, deletedAt: null, archivedAt: { not: null } },
-      }),
-      prisma.transcribeVisit.count({
-        where: { userId, deletedAt: { not: null } },
-      }),
-    ]);
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const startOfWeek = (() => {
+    const d = new Date(now);
+    d.setHours(0, 0, 0, 0);
+    const dow = d.getDay();
+    const diff = dow === 0 ? -6 : 1 - dow;
+    d.setDate(d.getDate() + diff);
+    return d;
+  })();
 
-  // Brand-new user (no patients, no visits) — keep the full-bleed
-  // orb empty state. Landing on a row of tabs with zeroed badges
-  // feels clinical; the orb matches the rest of the first-session
-  // onboarding moment.
-  if (patientCount === 0 && visitCount === 0) {
-    return <EmptyState />;
-  }
+  // Parallel stats queries. All scoped to the authed user — no cross-
+  // tenant leakage possible because userId is from the session.
+  const [
+    visitsThisMonth,
+    avgDraftedAgg,
+    pendingReview,
+    signedThisWeek,
+    patientCount,
+    activeVisitCount,
+  ] = await Promise.all([
+    prisma.transcribeVisit.count({
+      where: {
+        userId,
+        deletedAt: null,
+        createdAt: { gte: startOfMonth },
+      },
+    }),
+    prisma.transcribeVisit.aggregate({
+      where: {
+        userId,
+        deletedAt: null,
+        draftedInSeconds: { not: null },
+      },
+      _avg: { draftedInSeconds: true },
+    }),
+    prisma.transcribeVisit.count({
+      where: {
+        userId,
+        deletedAt: null,
+        archivedAt: null,
+        status: TranscribeVisitStatus.READY,
+        needsReview: true,
+      },
+    }),
+    prisma.transcribeVisit.count({
+      where: {
+        userId,
+        status: TranscribeVisitStatus.SIGNED,
+        signedAt: { gte: startOfWeek },
+      },
+    }),
+    prisma.transcribeMdPatient.count({
+      where: { practiceId, deletedAt: null },
+    }),
+    prisma.transcribeVisit.count({
+      where: { userId, deletedAt: null, archivedAt: null },
+    }),
+  ]);
+
+  const avgDraftedSec = avgDraftedAgg._avg.draftedInSeconds;
+  const avgDraftedMin = avgDraftedSec != null ? Math.round(avgDraftedSec / 60) : null;
+
+  // Brand-new account (no data yet) — first-session orb was the old
+  // empty state; here we fall through to the patients empty-state
+  // below. Stats row stays at zero so the doctor can see the scaffold
+  // before it fills in.
 
   return (
     <>
-      <div className="mb-6 flex items-end justify-between">
-        <div>
-          <h1 className="type-h1 text-text-primary">Your dashboard</h1>
-          <p className="mt-1 text-[13px] text-text-tertiary">
-            {activeTab === 'patients'
-              ? `${patientCount} patient${patientCount === 1 ? '' : 's'} · most-recent visit first`
-              : activeTab === 'trash'
-                ? `${trashCount} trashed · auto-delete countdown on each card`
-                : includeArchived
-                  ? `${visitCount} active · ${archivedCount} archived · most recent first`
-                  : `${visitCount} ${visitCount === 1 ? 'visit' : 'visits'} · most recent first`}
-          </p>
-        </div>
-      </div>
-
-      <TabNav
-        active={activeTab}
-        patientCount={patientCount}
-        visitCount={visitCount}
-        trashCount={trashCount}
+      <PageHeader
+        eyebrow="§ Home / Today"
+        title={
+          <>
+            Your <em style={{ color: 'var(--accent-bright)' }}>workspace</em>.
+          </>
+        }
+        subtitle={
+          <>
+            {patientCount} patient{patientCount === 1 ? '' : 's'} ·{' '}
+            {activeVisitCount} total visit
+            {activeVisitCount === 1 ? '' : 's'}
+            {pendingReview > 0 && (
+              <>
+                {' · '}
+                <span style={{ color: 'var(--amber)' }}>
+                  {pendingReview} awaiting your review
+                </span>
+              </>
+            )}
+          </>
+        }
+        actions={
+          <Link
+            href="/visits/new"
+            className="qm-btn qm-btn-primary"
+            style={{ textDecoration: 'none' }}
+          >
+            <Ic.plus width={14} height={14} />
+            New visit
+          </Link>
+        }
       />
 
-      {activeTab === 'patients' ? (
-        <PatientsTabBody practiceId={practiceId} patientCount={patientCount} />
-      ) : activeTab === 'trash' ? (
-        <TrashTabBody userId={userId} trashCount={trashCount} />
-      ) : (
-        <VisitsTabBody
-          userId={userId}
-          visitCount={visitCount}
-          includeArchived={includeArchived}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, 1fr)',
+          gap: 14,
+          padding: '0 32px 18px',
+        }}
+      >
+        <StatCard
+          label={`§ Visits / ${now.toLocaleString('en-US', { month: 'short' })}`}
+          value={visitsThisMonth}
+          unit="this month"
         />
+        <StatCard
+          label="§ Avg drafted in"
+          value={avgDraftedMin != null ? avgDraftedMin : '—'}
+          unit={avgDraftedMin != null ? 'min / visit' : 'no data yet'}
+        />
+        <StatCard
+          label="§ Pending review"
+          value={pendingReview}
+          unit={pendingReview === 1 ? 'visit' : 'visits'}
+          deltaTone={pendingReview > 0 ? 'amber' : 'mint'}
+        />
+        <StatCard
+          label="§ Signed this week"
+          value={signedThisWeek}
+          unit={signedThisWeek === 1 ? 'note' : 'notes'}
+        />
+      </div>
+
+      <TabBar activeTab={activeTab} patientCount={patientCount} visitCount={activeVisitCount} />
+
+      {activeTab === 'patients' ? (
+        <PatientsTab practiceId={practiceId} patientCount={patientCount} />
+      ) : (
+        <AllVisitsTab userId={userId} visitCount={activeVisitCount} />
       )}
     </>
   );
 }
 
-async function PatientsTabBody({
+function TabBar({
+  activeTab,
+  patientCount,
+  visitCount,
+}: {
+  activeTab: ActiveTab;
+  patientCount: number;
+  visitCount: number;
+}) {
+  const tabs: { id: ActiveTab; label: string; count: number; href: string }[] = [
+    { id: 'patients', label: 'Patients', count: patientCount, href: '/dashboard' },
+    { id: 'all', label: 'All visits', count: visitCount, href: '/dashboard?tab=all' },
+  ];
+  return (
+    <div
+      style={{
+        padding: '0 32px',
+        display: 'flex',
+        gap: 4,
+        borderBottom: '1px solid var(--line)',
+        marginTop: 6,
+      }}
+    >
+      {tabs.map((t) => {
+        const active = t.id === activeTab;
+        return (
+          <Link
+            key={t.id}
+            href={t.href}
+            scroll={false}
+            style={{
+              padding: '12px 16px',
+              background: 'none',
+              cursor: 'pointer',
+              color: active ? 'var(--fg)' : 'var(--fg-3)',
+              borderBottom: `2px solid ${active ? 'var(--accent-bright)' : 'transparent'}`,
+              fontFamily: 'var(--sans)',
+              fontSize: 13,
+              fontWeight: 500,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              marginBottom: -1,
+              textDecoration: 'none',
+            }}
+            aria-current={active ? 'page' : undefined}
+          >
+            {t.label}
+            <span
+              style={{
+                fontFamily: 'var(--mono)',
+                fontSize: 10,
+                color: 'var(--fg-4)',
+              }}
+            >
+              {t.count}
+            </span>
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
+async function PatientsTab({
   practiceId,
   patientCount,
 }: {
   practiceId: string;
   patientCount: number;
 }) {
-  if (patientCount === 0) {
-    return <PatientsEmptyState />;
-  }
-  const firstPage = await fetchPatientsPage(practiceId, null);
-  return (
-    <PatientsGrid
-      initialPatients={firstPage.patients}
-      initialCursor={firstPage.nextCursor}
-    />
-  );
-}
+  if (patientCount === 0) return <EmptyPatients />;
 
-async function TrashTabBody({
-  userId,
-  trashCount,
-}: {
-  userId: string;
-  trashCount: number;
-}) {
-  if (trashCount === 0) {
-    // Edge case — doctor restored the last trashed visit while on
-    // the tab. The tab itself hides when trashCount=0 on the next
-    // render, but for this render we still want a clean state.
-    return (
-      <div className="rounded-xl border border-border-subtle bg-bg-surface-1/40 px-6 py-10 text-center">
-        <p className="text-[14px] text-text-tertiary">No deleted visits.</p>
-      </div>
-    );
-  }
-  // Fetch all trashed visits ordered by when they were deleted (most-
-  // recently-trashed first so the auto-delete countdown is intuitive).
-  // Per-practice volume caps this at a small number; no pagination
-  // for now.
-  const rows = await prisma.transcribeVisit.findMany({
-    where: { userId, deletedAt: { not: null } },
-    orderBy: [{ deletedAt: 'desc' }, { id: 'desc' }],
+  // Two-query form: patient row + latest visit (take:1), then a
+  // separate groupBy for active-visit counts. Explicit local types
+  // because the shared `@meddoc/db` export is typed `any` (adapter-
+  // pg require-wrap, see packages/db/src/index.ts) and loses Prisma's
+  // generated row types at the boundary.
+  type LatestVisit = {
+    createdAt: Date;
+    specialty: string;
+    status: import('@prisma/client').TranscribeVisitStatus;
+    needsReview: boolean;
+  };
+  type PatientRow = {
+    id: string;
+    name: string;
+    dateOfBirth: Date | null;
+    transcribeVisits: LatestVisit[];
+  };
+  type CountRow = { patientId: string; _count: { _all: number } };
+
+  const rows: PatientRow[] = await prisma.transcribeMdPatient.findMany({
+    where: { practiceId, deletedAt: null },
+    orderBy: { updatedAt: 'desc' },
+    take: PATIENTS_PAGE_SIZE,
     select: {
       id: true,
-      patientName: true,
-      specialty: true,
-      status: true,
-      createdAt: true,
-      deletedAt: true,
+      name: true,
+      dateOfBirth: true,
+      transcribeVisits: {
+        where: { deletedAt: null, archivedAt: null },
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+        select: {
+          createdAt: true,
+          specialty: true,
+          status: true,
+          needsReview: true,
+        },
+      },
     },
   });
 
+  const patientIds = rows.map((r: PatientRow) => r.id);
+  const counts: CountRow[] = patientIds.length
+    ? await prisma.transcribeVisit.groupBy({
+        by: ['patientId'],
+        where: {
+          patientId: { in: patientIds },
+          deletedAt: null,
+          archivedAt: null,
+        },
+        _count: { _all: true },
+      })
+    : [];
+  const countByPatient = new Map<string, number>(
+    counts.map((c: CountRow) => [c.patientId, c._count._all])
+  );
+
+  const patients: DashboardPatient[] = rows.map(
+    (r: PatientRow): DashboardPatient => {
+      const latest = r.transcribeVisits[0];
+      return {
+        id: r.id,
+        name: r.name,
+        dateOfBirth: r.dateOfBirth,
+        visitCount: countByPatient.get(r.id) ?? 0,
+        lastVisitAt: latest?.createdAt ?? null,
+        lastVisitSpecialty: latest?.specialty ?? null,
+        lastVisitStatus: latest?.status ?? null,
+        lastVisitNeedsReview: latest?.needsReview ?? false,
+      };
+    }
+  );
+
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {rows.map((v: TrashedVisitCardData) => (
-        <TrashedVisitCard key={v.id} visit={v} />
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+        gap: 14,
+        padding: '22px 32px 32px',
+      }}
+    >
+      {patients.map((p) => (
+        <PatientCard key={p.id} patient={p} />
       ))}
     </div>
   );
 }
 
-async function VisitsTabBody({
+async function AllVisitsTab({
   userId,
   visitCount,
-  includeArchived,
 }: {
   userId: string;
   visitCount: number;
-  includeArchived: boolean;
 }) {
-  if (visitCount === 0 && !includeArchived) {
-    return <VisitsEmptyTabBody />;
-  }
-  // Matches the T-M16.4 first-page render — fetch PAGE_SIZE+1 to
-  // detect hasMore without a second query. When the toggle is on
-  // we drop the archivedAt filter; deletedAt filter stays (trash
-  // belongs on the patient detail page, not this dashboard).
-  const rows = await prisma.transcribeVisit.findMany({
-    where: {
-      userId,
-      deletedAt: null,
-      ...(includeArchived ? {} : { archivedAt: null }),
-    },
+  if (visitCount === 0) return <EmptyVisits />;
+
+  type VisitRow = {
+    id: string;
+    patientName: string | null;
+    specialty: string;
+    status: import('@prisma/client').TranscribeVisitStatus;
+    needsReview: boolean;
+    createdAt: Date;
+    audioDurationSec: number | null;
+    patient: { name: string } | null;
+  };
+  const rows: VisitRow[] = await prisma.transcribeVisit.findMany({
+    where: { userId, deletedAt: null, archivedAt: null },
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-    take: DASHBOARD_PAGE_SIZE + 1,
+    take: VISITS_PAGE_SIZE,
     select: {
       id: true,
       patientName: true,
       specialty: true,
       status: true,
+      needsReview: true,
       createdAt: true,
-      archivedAt: true,
+      audioDurationSec: true,
+      patient: { select: { name: true } },
     },
   });
-  const hasMore = rows.length > DASHBOARD_PAGE_SIZE;
-  const firstPage = hasMore ? rows.slice(0, DASHBOARD_PAGE_SIZE) : rows;
-  const last = firstPage[firstPage.length - 1];
-  const initialCursor: DashboardCursor | null =
-    hasMore && last
-      ? { createdAt: last.createdAt.toISOString(), id: last.id }
-      : null;
 
-  return (
-    <>
-      <div className="mb-3 flex justify-end">
-        <ShowArchivedToggle />
-      </div>
-      <VisitsGrid
-        initialVisits={firstPage as VisitCardData[]}
-        initialCursor={initialCursor}
-        includeArchived={includeArchived}
-      />
-    </>
+  const visits: DashboardVisit[] = rows.map(
+    (v: VisitRow): DashboardVisit => ({
+      id: v.id,
+      patientName: v.patient?.name ?? null,
+      patientFallback: v.patientName ?? null,
+      specialty: v.specialty,
+      status: v.status,
+      needsReview: v.needsReview,
+      createdAt: v.createdAt,
+      audioDurationSec: v.audioDurationSec,
+    })
   );
+
+  return <VisitList visits={visits} />;
 }
 
-function PatientsEmptyState() {
+function EmptyPatients() {
   return (
-    <div className="mx-auto flex max-w-md flex-col items-center py-20 text-center">
+    <div
+      style={{
+        margin: '60px auto',
+        maxWidth: 420,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        textAlign: 'center',
+      }}
+    >
+      {/* Minimal violet quill illustration — final version ported in
+         Gate 13 (EmptyState + IlloQuill). Placeholder keeps the
+         composition right without the asset work. */}
       <div
         aria-hidden
-        className="mb-6 flex h-14 w-14 items-center justify-center rounded-full bg-[linear-gradient(135deg,#4C1D95_0%,#7C3AED_50%,#A855F7_100%)] text-[22px] font-semibold text-white shadow-[0_0_0_1px_rgba(167,139,250,0.3)]"
+        style={{
+          width: 96,
+          height: 96,
+          borderRadius: 24,
+          background:
+            'radial-gradient(circle at 30% 30%, rgba(209,181,255,0.35), rgba(107,63,217,0.08))',
+          border: '1px solid rgba(139,92,255,0.2)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginBottom: 22,
+        }}
       >
-        +
+        <Ic.sparkle
+          width={36}
+          height={36}
+          style={{ color: 'var(--accent-bright)' }}
+        />
       </div>
-      <h2 className="type-h2 text-text-primary">No patients yet</h2>
-      <p className="mt-3 max-w-sm text-[14px] leading-relaxed text-text-tertiary">
-        Start your first visit — we&apos;ll create a patient record for
-        you along the way.
+      <h2
+        className="qm-serif"
+        style={{
+          margin: 0,
+          fontSize: 24,
+          fontWeight: 400,
+          letterSpacing: '-0.015em',
+        }}
+      >
+        No patients <em style={{ color: 'var(--accent-bright)' }}>yet</em>
+      </h2>
+      <p
+        style={{
+          marginTop: 10,
+          fontSize: 13.5,
+          color: 'var(--fg-3)',
+          lineHeight: 1.55,
+          maxWidth: 340,
+        }}
+      >
+        Start your first visit — we&apos;ll create a patient record for you
+        along the way.
       </p>
-      <div className="mt-6">
-        <SpecularButton href="/visits/new" variant="primary" size="md">
-          Create first patient
-        </SpecularButton>
-      </div>
+      <Link
+        href="/visits/new"
+        className="qm-btn qm-btn-primary"
+        style={{
+          marginTop: 20,
+          padding: '10px 18px',
+          textDecoration: 'none',
+        }}
+      >
+        <Ic.plus width={14} height={14} />
+        Start your first visit
+      </Link>
     </div>
   );
 }
 
-function VisitsEmptyTabBody() {
-  // Narrow case: patients exist but zero visits. Keep it understated —
-  // the big orb EmptyState handles brand-new accounts above.
+function EmptyVisits() {
   return (
-    <div className="mx-auto max-w-md py-16 text-center">
-      <p className="text-[14px] text-text-tertiary">
-        No visits yet for any patient.{' '}
-        <Link
-          href="/visits/new"
-          className="font-medium text-violet-300 hover:text-violet-200"
-        >
-          Start one
-        </Link>
-        .
-      </p>
+    <div
+      style={{
+        margin: '60px auto',
+        maxWidth: 420,
+        textAlign: 'center',
+        color: 'var(--fg-3)',
+        fontSize: 13.5,
+      }}
+    >
+      No visits yet for any patient.{' '}
+      <Link
+        href="/visits/new"
+        style={{ color: 'var(--accent-bright)', fontWeight: 500 }}
+      >
+        Start one →
+      </Link>
     </div>
   );
 }
 
 function DashboardSkeleton() {
   return (
-    <>
-      <div className="mb-6 space-y-2">
-        <div className="h-8 w-44 shimmer rounded-md" />
-        <div className="h-3 w-32 shimmer rounded-md" />
+    <div style={{ padding: '28px 32px' }}>
+      <div
+        className="qm-shimmer"
+        style={{ height: 36, width: 300, borderRadius: 6, marginBottom: 10 }}
+      />
+      <div
+        className="qm-shimmer"
+        style={{ height: 14, width: 220, borderRadius: 4, marginBottom: 24 }}
+      />
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, 1fr)',
+          gap: 14,
+          marginBottom: 20,
+        }}
+      >
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div
+            key={i}
+            className="qm-shimmer"
+            style={{ height: 110, borderRadius: 12 }}
+          />
+        ))}
       </div>
-      <SkeletonVisitGrid count={6} />
-    </>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+          gap: 14,
+        }}
+      >
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div
+            key={i}
+            className="qm-shimmer"
+            style={{ height: 120, borderRadius: 12 }}
+          />
+        ))}
+      </div>
+    </div>
   );
 }

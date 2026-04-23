@@ -6,19 +6,32 @@ import { z } from 'zod';
 import prisma from '@meddoc/db';
 import { requireSession } from '@/lib/auth';
 
-// T-M18.3 A22: specialty field removed from the form + schema. It was
-// never persisted (no User.specialty column) — the dropdown read from
-// the doctor's most-recent visit's specialty on open and silently
-// discarded any edit on save. Specialty still gets picked per-visit
-// on /visits/new, which is the actual source of truth.
+// Gate 1 added User.specialty + npi + clinicName + timeZone columns to
+// support the redesign's Settings screen. All are optional on the
+// form; empty strings clear the stored value. Name stays required so
+// the navbar + avatar never render a blank.
 const UpdateProfileSchema = z.object({
   name: z.string().trim().min(1, 'Name is required').max(120),
+  specialty: z.string().trim().max(60).optional().default(''),
+  npi: z
+    .string()
+    .trim()
+    .max(20)
+    .regex(/^[0-9]*$/, 'NPI is digits only (10 characters)')
+    .optional()
+    .default(''),
+  clinicName: z.string().trim().max(120).optional().default(''),
+  timeZone: z.string().trim().max(60).optional().default(''),
 });
 
 export type ProfileState =
   | { ok: true; savedAt: number }
   | { ok: false; errors: Record<string, string> }
   | null;
+
+function orNull(v: string): string | null {
+  return v.length === 0 ? null : v;
+}
 
 export async function updateProfileAction(
   _prev: ProfileState,
@@ -40,7 +53,13 @@ export async function updateProfileAction(
   try {
     await prisma.user.update({
       where: { id: session.user.id },
-      data: { name: parsed.data.name },
+      data: {
+        name: parsed.data.name,
+        specialty: orNull(parsed.data.specialty),
+        npi: orNull(parsed.data.npi),
+        clinicName: orNull(parsed.data.clinicName),
+        timeZone: orNull(parsed.data.timeZone),
+      },
     });
   } catch (err) {
     console.error('[profile] update failed:', err);

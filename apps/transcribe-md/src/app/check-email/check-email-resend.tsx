@@ -35,40 +35,63 @@ export function CheckEmailResend({ email }: Props) {
       }
       setSent(true);
       toast.success('Sent', {
-        description: "If your account is unverified, you'll see a new link shortly.",
+        description:
+          "If your account is unverified, you'll see a new link shortly.",
       });
     } catch {
-      toast.error('Network error', {
-        description: 'Please try again.',
-      });
+      toast.error('Network error', { description: 'Please try again.' });
     } finally {
       setPending(false);
     }
   }
 
+  const canSend = Boolean(email) && !pending && !sent;
+
   return (
-    <div className="space-y-4 text-center">
-      <p className="text-[13px] text-text-tertiary">
-        Didn&apos;t get the email? Check your spam folder, or resend the link.
+    <div style={{ marginTop: 14 }}>
+      <p
+        style={{
+          margin: '0 0 14px',
+          fontSize: 12.5,
+          color: 'var(--fg-3)',
+          textAlign: 'center',
+        }}
+      >
+        Didn&apos;t get it? Check your spam folder — or resend below.
       </p>
 
       <button
         type="button"
-        disabled={!email || pending || sent}
+        disabled={!canSend}
         onClick={onResend}
-        className="w-full rounded-lg border border-border-default bg-bg-surface-1/60 px-4 py-2 text-[13px] font-medium text-text-secondary hover:bg-bg-surface-2/70 hover:border-border-emphasis transition-colors disabled:opacity-50"
+        className="qm-btn qm-btn-ghost"
+        style={{
+          width: '100%',
+          justifyContent: 'center',
+          padding: 10,
+          opacity: canSend ? 1 : 0.55,
+          cursor: canSend ? 'pointer' : 'not-allowed',
+        }}
       >
-        {pending ? 'Sending…' : sent ? 'Sent — check your inbox' : 'Resend verification link'}
+        {pending
+          ? 'Sending…'
+          : sent
+            ? 'Sent — check your inbox'
+            : 'Resend verification link'}
       </button>
 
-      <p className="pt-2 text-[13px] text-text-muted">
-        <Link
-          href="/login"
-          className="text-violet-400 hover:text-violet-300 transition-colors"
-        >
+      <div
+        style={{
+          textAlign: 'center',
+          color: 'var(--fg-3)',
+          fontSize: 12.5,
+          marginTop: 18,
+        }}
+      >
+        <Link href="/login" style={{ color: 'var(--accent-bright)' }}>
           Back to sign in →
         </Link>
-      </p>
+      </div>
     </div>
   );
 }
