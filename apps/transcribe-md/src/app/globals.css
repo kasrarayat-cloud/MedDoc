@@ -492,3 +492,387 @@ body {
     scroll-behavior: auto !important;
   }
 }
+
+/* ============================================================================
+   App-redesign-v1 utility classes (HANDOFF §2.5 global patterns + rest of
+   /tmp/design_handoff_quillmd_app/app/tokens.css lines 46–333).
+   ----------------------------------------------------------------------------
+   Every redesigned screen wraps its tree in `.qm-app` so these classes
+   resolve with the scoped tokens (see :root / .qm-app blocks above).
+   ========================================================================== */
+
+/* Frame base — font, colors, overflow-hidden so the shader doesn't bleed
+   past page boundaries. Combined with the scoped tokens block above so
+   the whole redesign contract sits under one selector. */
+.qm-app {
+  font-family: var(--sans);
+  color: var(--fg);
+  background: var(--bg);
+  font-size: 14px;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+.qm-app *,
+.qm-app *::before,
+.qm-app *::after {
+  box-sizing: border-box;
+}
+
+.qm-serif {
+  font-family: var(--serif);
+  letter-spacing: -0.015em;
+}
+.qm-mono {
+  font-family: var(--mono);
+  letter-spacing: 0;
+}
+.qm-sans {
+  font-family: var(--sans);
+}
+
+/* Section label — "§ 01 / METHOD" pattern. */
+.qm-sectlabel {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+
+/* ── Shader mesh background ── */
+.qm-shader {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+.qm-shader canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Noise overlay on top of the shader. */
+.qm-noise {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.28;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.05 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+}
+
+/* ── Glass cards ── */
+.qm-glass {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.025),
+    rgba(255, 255, 255, 0.01)
+  );
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  backdrop-filter: blur(14px);
+  position: relative;
+  transition: border-color 0.18s, transform 0.18s, box-shadow 0.18s;
+}
+.qm-glass.hover:hover {
+  border-color: rgba(139, 92, 255, 0.35);
+  box-shadow: var(--glow-accent);
+  transform: translateY(-2px);
+}
+
+/* ── Buttons ── */
+.qm-btn {
+  font-family: var(--sans);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  letter-spacing: -0.005em;
+  transition: all 0.15s;
+  white-space: nowrap;
+  background: none;
+  color: inherit;
+}
+.qm-btn-primary {
+  background: linear-gradient(180deg, #A87CFF 0%, #7B4BF0 45%, #5A2FCC 100%);
+  color: white;
+  border-color: rgba(139, 92, 255, 0.45);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.25),
+    0 4px 14px rgba(139, 92, 255, 0.35);
+}
+.qm-btn-primary:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.25),
+    0 8px 22px rgba(139, 92, 255, 0.45);
+}
+.qm-btn-ghost {
+  border-color: var(--line);
+  color: var(--fg-2);
+  background: rgba(255, 255, 255, 0.02);
+}
+.qm-btn-ghost:hover {
+  border-color: var(--line-strong);
+  color: var(--fg);
+  background: rgba(255, 255, 255, 0.04);
+}
+.qm-btn-icon {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  justify-content: center;
+  border-radius: 8px;
+  border-color: var(--line);
+  color: var(--fg-2);
+  background: rgba(255, 255, 255, 0.02);
+}
+.qm-btn-icon:hover {
+  color: var(--fg);
+  border-color: var(--line-strong);
+}
+.qm-btn-sm {
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 8px;
+}
+
+/* Inputs */
+.qm-input {
+  font-family: var(--sans);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: var(--fg);
+  font-size: 13px;
+  width: 100%;
+  transition: border-color 0.15s, background 0.15s;
+  outline: none;
+}
+.qm-input:focus {
+  border-color: var(--accent);
+  background: rgba(139, 92, 255, 0.06);
+  box-shadow: 0 0 0 3px rgba(139, 92, 255, 0.14);
+}
+.qm-input::placeholder {
+  color: var(--fg-4);
+}
+
+/* Chip */
+.qm-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-family: var(--mono);
+  letter-spacing: 0.04em;
+  border: 1px solid var(--line);
+  color: var(--fg-2);
+  background: rgba(255, 255, 255, 0.02);
+  white-space: nowrap;
+}
+.qm-chip.dot::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.qm-chip-accent {
+  color: var(--accent-bright);
+  border-color: rgba(139, 92, 255, 0.35);
+  background: rgba(139, 92, 255, 0.08);
+}
+.qm-chip-mint {
+  color: var(--mint);
+  border-color: rgba(110, 231, 183, 0.35);
+  background: rgba(110, 231, 183, 0.06);
+}
+.qm-chip-amber {
+  color: var(--amber);
+  border-color: rgba(251, 191, 36, 0.35);
+  background: rgba(251, 191, 36, 0.06);
+}
+.qm-chip-coral {
+  color: var(--coral);
+  border-color: rgba(251, 113, 133, 0.35);
+  background: rgba(251, 113, 133, 0.06);
+}
+.qm-chip-blue {
+  color: var(--accent-c);
+  border-color: rgba(96, 165, 250, 0.35);
+  background: rgba(96, 165, 250, 0.06);
+}
+
+/* ── LOUD status chips (HANDOFF §5) ── */
+.qm-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.005em;
+  border: 1px solid transparent;
+  white-space: nowrap;
+  line-height: 1;
+}
+.qm-status-queued {
+  color: #0F0A1C;
+  background: linear-gradient(180deg, #C8BFDB, #9C92B8);
+  border-color: rgba(156, 146, 184, 0.5);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    0 2px 6px rgba(0, 0, 0, 0.25);
+}
+.qm-status-processing {
+  color: #0E0A1D;
+  background: linear-gradient(180deg, #D1B5FF, #8B5CFF);
+  border-color: rgba(139, 92, 255, 0.7);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 2px 10px rgba(139, 92, 255, 0.35);
+}
+.qm-status-processing::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.8);
+  animation: qm-pulse-white 1.4s infinite;
+}
+@keyframes qm-pulse-white {
+  0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.9); }
+  80% { box-shadow: 0 0 0 6px rgba(255, 255, 255, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
+}
+.qm-status-ready {
+  color: #052E1E;
+  background: linear-gradient(180deg, #86EFAC, #22C55E);
+  border-color: rgba(34, 197, 94, 0.7);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 2px 8px rgba(34, 197, 94, 0.35);
+}
+.qm-status-review {
+  color: #3A1C04;
+  background: linear-gradient(180deg, #FCD34D, #F59E0B);
+  border-color: rgba(245, 158, 11, 0.7);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 2px 8px rgba(245, 158, 11, 0.35);
+}
+.qm-status-signed {
+  color: #D1B5FF;
+  background: rgba(139, 92, 255, 0.12);
+  border-color: rgba(139, 92, 255, 0.3);
+}
+.qm-status-error {
+  color: #3D0A10;
+  background: linear-gradient(180deg, #FDA4AF, #F43F5E);
+  border-color: rgba(244, 63, 94, 0.7);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 2px 8px rgba(244, 63, 94, 0.35);
+}
+
+/* Keyboard key */
+.qm-kbd {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--fg-2);
+  line-height: 1;
+}
+
+/* Divider line */
+.qm-divider {
+  height: 1px;
+  background: var(--line);
+  width: 100%;
+}
+
+/* Pulsing status dot (ambient — not the loud status chip's pulse). */
+@keyframes qm-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(110, 231, 183, 0.6); }
+  80%  { box-shadow: 0 0 0 8px rgba(110, 231, 183, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(110, 231, 183, 0); }
+}
+.qm-pulse {
+  animation: qm-pulse 2s infinite;
+}
+
+@keyframes qm-spin {
+  to { transform: rotate(360deg); }
+}
+.qm-spin {
+  animation: qm-spin 1.2s linear infinite;
+}
+
+/* Shimmer for skeletons */
+@keyframes qm-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.qm-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.04) 0%,
+    rgba(139, 92, 255, 0.12) 50%,
+    rgba(255, 255, 255, 0.04) 100%
+  );
+  background-size: 200% 100%;
+  animation: qm-shimmer 1.6s infinite;
+  border-radius: 4px;
+}
+
+/* Scoped scrollbar inside the app (violet accent, thinner). */
+.qm-app ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.qm-app ::-webkit-scrollbar-track {
+  background: transparent;
+}
+.qm-app ::-webkit-scrollbar-thumb {
+  background: rgba(139, 92, 255, 0.15);
+  border-radius: 4px;
+}
+.qm-app ::-webkit-scrollbar-thumb:hover {
+  background: rgba(139, 92, 255, 0.3);
+}
+
+/* Select-none helper (keyboard legends, etc). */
+.qm-nosel {
+  user-select: none;
+}
+
+/* Focus ring — violet, part of the redesign identity. Applies only
+   inside .qm-app so the landing's focus ring stays its own thing. */
+.qm-app :focus-visible {
+  outline: 2px solid rgba(139, 92, 255, 0.55);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
