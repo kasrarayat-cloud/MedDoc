@@ -214,17 +214,17 @@ model Practice {
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   // Reverse relations — every tenant-scoped table points back here.
-  users         User[]
-  patients      Patient[]
-  auditLogs     AuditLog[]
-  apiUsage      ApiUsage[]
-  sessionLogs   SessionLog[]
-  allergies     Allergy[]
-  medications   Medication[]
+  users                User[]
+  patients             Patient[]
+  auditLogs            AuditLog[]
+  apiUsage             ApiUsage[]
+  sessionLogs          SessionLog[]
+  allergies            Allergy[]
+  medications          Medication[]
   // M6 — CRM loop-closing
-  tasks         Task[]
-  billingEvents BillingEvent[]
-  aiCalls       AiCall[]
+  tasks                Task[]
+  billingEvents        BillingEvent[]
+  aiCalls              AiCall[]
   // T-M17.2 — TranscribeMD-scoped patients. Kept separate from the
   // CRM `Patient` model so the two products can diverge on schema +
   // privacy posture (TranscribeMdPatient stores full DOB; CRM Patient
@@ -259,13 +259,26 @@ model User {
   // === RBAC ===
   role UserRole @default(STAFF)
 
+  // === Clinician profile (app-redesign-v1) ===
+  // Doctor-facing profile fields the Settings UI writes to. `clinicName`
+  // is a display override distinct from Practice.name (a solo doctor
+  // with a synthetic Practice still wants a branded clinic name on
+  // exports); leaving it null falls back to Practice.name at render
+  // time. timeZone default matches the majority user base; the Settings
+  // tz picker overrides per user.
+  specialty  String?
+  npi        String?
+  clinicName String?
+  timeZone   String? @default("America/Los_Angeles")
+
   // === MFA / security tracking (HIPAA §164.312(a)(2)(i)) ===
   mfaEnabled     Boolean   @default(false)
   /// Encrypted TOTP secret (app-layer encryption, e.g., AES-256-GCM with KMS key).
   /// Never return this to the client.
   mfaSecret      String?
-  /// Hashed (never plaintext) one-time recovery codes, newline-separated
-  mfaBackupCodes String?
+  /// Hashed (never plaintext) one-time recovery codes. One per element;
+  /// consumed codes are removed from the array at verify time.
+  mfaBackupCodes String[]  @default([])
   mfaVerifiedAt  DateTime? @db.Timestamptz(6)
 
   // === Session / login tracking ===
@@ -1151,8 +1164,8 @@ model AiCall {
   /// Integer cents so we can sum without float drift.
   costUsdCents Int?
 
-  success   Boolean
-  errorCode String?
+  success      Boolean
+  errorCode    String?
   /// T-M17.1: raw model response body on failed calls, capped at ~10 KB
   /// by the writer. NULL on success. May contain PHI (same envelope as
   /// transcribe_visits columns). Not surfaced in UI; psql-only.
@@ -1233,6 +1246,23 @@ model TranscribeMdPatient {
   /// leave blank.
   externalId String?
 
+  // === app-redesign-v1 — patient header + problem list ===
+  /// Medical record number as shown on the patient header. Distinct
+  /// from `externalId` (which is a generic EMR pointer) — MRN is the
+  /// clinic-internal identifier doctors read back to patients. Kept
+  /// nullable: older patients created before the header redesign do
+  /// not have one.
+  mrn         String?
+  /// Free-text insurance descriptor rendered on the patient header
+  /// ("Aetna PPO", "Self-pay"). No structured payer lookup yet; the
+  /// redesign's "Edit patient" drawer writes whatever the doctor types.
+  insurance   String?
+  /// Running problem list rendered as chips on the patient header.
+  /// Shape: [{ condition: string, status: 'active'|'resolved'|'chronic',
+  /// icd10?: string }]. Phase 1 writes plain-text `icd10` from a free-
+  /// text input; the ICD-10 lookup UI lands in a later pass.
+  problemList Json?
+
   /// Soft-delete marker. Deleted patients are hidden from the
   /// dashboard + search, but their visits remain intact. Hard delete
   /// is not exposed in the UI.
@@ -1284,7 +1314,19 @@ model TranscribeVisit {
 
   audioKey         String?
   transcriptText   String? @db.Text
-  /// T-M2 placeholder — kept for T-M6/T-M7 to repurpose (ICD coding pass).
+  /// Line-level SOAP content (app-redesign-v1+). Each section's value
+  /// is either a legacy string OR an array of line objects with the
+  /// shape:
+  ///   { text: string,
+  ///     source: 'transcript'|'emr'|'template'|'doctor-edit',
+  ///     transcriptTurnIds?: number[],
+  ///     confidence?: number,    // 0..1 — drives low-confidence highlight
+  ///     editedAt?: DateTime }
+  /// The visit UI reads `soapNote` when populated and falls back to
+  /// `soapFinal` (plain markdown) otherwise. Writers MUST treat both
+  /// shapes as valid and never overwrite an array with a string.
+  /// Repurposed from the original T-M2 placeholder — the ICD coding
+  /// pass this was reserved for ultimately landed in `icdCodes`.
   soapNote         Json?
   icdCodes         Json?
   cptCodes         Json?
@@ -1373,12 +1415,26 @@ model TranscribeVisit {
   /// can be restored (deletedAt → NULL) up until that cron fires.
   /// SIGNED visits use `archivedAt` instead — clinical records never
   /// get soft-deleted per HIPAA retention.
-  deletedAt DateTime? @db.Timestamptz(6)
+  deletedAt  DateTime? @db.Timestamptz(6)
   /// Archive marker for SIGNED visits. Archived visits are hidden
   /// from the default dashboard but kept forever. Never nulled out
   /// via UI (an "Unarchive" action can clear it; has no retention
   /// consequence).
   archivedAt DateTime? @db.Timestamptz(6)
+
+  // ── app-redesign-v1: recording + telemetry surfaces ──
+  /// Seconds from `processingStartedAt` to `processingFinishedAt`,
+  /// persisted for fast dashboard aggregates ("avg drafted-in" stat
+  /// card) and for the Processing screen's ETA estimator. Redundant
+  /// with the two timestamps above but cheaper than SUM/AVG over
+  /// difference-of-timestamps on every dashboard render.
+  draftedInSeconds Int?
+  /// Doctor-tagged moments from the Live Recording screen. Shape:
+  ///   [{ timestampMs: number, label?: string }]
+  /// timestampMs is the offset from recording start, matching the
+  /// transcript turn timeline so the Transcript tab can render a mark
+  /// glyph at the right spot. `label` is optional free-text.
+  markedMoments    Json?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
