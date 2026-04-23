@@ -876,3 +876,449 @@ body {
   outline-offset: 2px;
   border-radius: 6px;
 }
+
+/* ============================================================================
+   Rx warning card (DESIGN_SPEC §2–§8, docs/design/rx_warning_handoff/).
+   ----------------------------------------------------------------------------
+   Three severity variants via 4 CSS vars remapped per modifier class:
+   --sev-hue-{r,g,b}, --sev-fg, --sev-fg-2, --sev-bg, --sev-border,
+   --sev-border-strong. Default = critical (coral). Override with
+   .qm-warn-sev-warning or .qm-warn-sev-info.
+   ========================================================================== */
+
+.qm-warn {
+  /* Default — critical (coral). Remapped below for warning + info. */
+  --sev-hue-r: 251;
+  --sev-hue-g: 113;
+  --sev-hue-b: 133;
+  --sev-fg: rgb(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b));
+  --sev-fg-2: rgb(253, 164, 175);
+  --sev-bg: rgba(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b), 0.04);
+  --sev-border: rgba(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b), 0.28);
+  --sev-border-strong: rgba(
+    var(--sev-hue-r),
+    var(--sev-hue-g),
+    var(--sev-hue-b),
+    0.55
+  );
+
+  position: relative;
+  border-radius: 12px;
+  border: 1px solid var(--sev-border);
+  background: var(--sev-bg);
+  overflow: hidden;
+  color: var(--fg-2);
+  font-family: var(--sans);
+  /* Rx slip scrolls the card into view; §8.3. */
+  scroll-margin-top: 80px;
+}
+
+.qm-warn-sev-warning {
+  --sev-hue-r: 251;
+  --sev-hue-g: 191;
+  --sev-hue-b: 36;
+  --sev-fg-2: rgb(253, 214, 112);
+}
+.qm-warn-sev-info {
+  --sev-hue-r: 96;
+  --sev-hue-g: 165;
+  --sev-hue-b: 250;
+  --sev-fg-2: rgb(125, 183, 255);
+}
+
+/* 3px severity rail on the left edge. */
+.qm-warn::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--sev-fg);
+}
+
+/* ── Region 1 — Header ── */
+.qm-warn-head {
+  display: grid;
+  grid-template-columns: 36px auto auto 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 18px 22px 10px 22px;
+}
+.qm-warn-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--sev-border);
+  background: rgba(
+    var(--sev-hue-r),
+    var(--sev-hue-g),
+    var(--sev-hue-b),
+    0.08
+  );
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--sev-fg);
+}
+
+/* Region 2 — severity pill. Mono, uppercase, severity-tinted. */
+.qm-warn-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px 0 7px;
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #fff;
+  background: var(--sev-fg);
+  border: 1px solid var(--sev-border-strong);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* Field label (Rx · Line 2) */
+.qm-warn-field {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+
+.qm-warn-headline {
+  grid-column: 1 / -2;
+  margin: 2px 0 0 0;
+  padding-top: 6px;
+  font-family: var(--serif);
+  font-size: 19px;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  color: var(--fg);
+}
+
+.qm-warn-dismiss {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--fg-3);
+  padding: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 150ms ease, border-color 150ms ease,
+    background 150ms ease;
+}
+.qm-warn-dismiss:hover {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: var(--line);
+  color: var(--fg);
+}
+
+/* ── Region 3 — Action tile ── */
+.qm-warn-body {
+  padding: 0 22px 14px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.qm-warn-action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 9px;
+  background: rgba(
+    var(--sev-hue-r),
+    var(--sev-hue-g),
+    var(--sev-hue-b),
+    0.1
+  );
+  border: 1px solid var(--sev-border);
+  color: var(--sev-fg-2);
+  font-family: var(--sans);
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  box-shadow: inset 0 0 0 1px
+    rgba(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b), 0.04);
+}
+/* Info variant softens the action tile. */
+.qm-warn-sev-info .qm-warn-action {
+  padding: 8px 14px;
+  font-weight: 500;
+}
+.qm-warn-action-icon {
+  flex: 0 0 18px;
+  color: var(--sev-fg);
+}
+
+/* ── Region 4 — Transcribed (heard + guess) ── */
+.qm-warn-transcribed {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 14px;
+  align-items: center;
+}
+.qm-warn-field-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.qm-warn-field-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+.qm-warn-field-value {
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--fg);
+}
+.qm-warn-transcribed-arrow {
+  color: var(--fg-4);
+  font-family: var(--mono);
+  font-size: 13px;
+  padding-top: 14px;
+}
+.qm-warn-confidence {
+  margin-left: 8px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--amber);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  background: rgba(251, 191, 36, 0.08);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+/* ── Region 5 — Risks ── */
+.qm-warn-risks {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.qm-warn-mini-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--fg-4);
+}
+.qm-warn-risk {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 10px;
+  align-items: start;
+}
+.qm-warn-risk-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--sev-fg);
+  margin: 7px 0 0 6px;
+  box-shadow: 0 0 0 3px
+    rgba(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b), 0.12);
+}
+.qm-warn-risk-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.qm-warn-risk-primary {
+  font-family: var(--serif);
+  font-size: 13.5px;
+  letter-spacing: -0.005em;
+  color: var(--fg);
+}
+.qm-warn-risk-primary .qm-warn-pill {
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--sev-fg-2);
+  background: rgba(
+    var(--sev-hue-r),
+    var(--sev-hue-g),
+    var(--sev-hue-b),
+    0.08
+  );
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.qm-warn-risk-outcome {
+  font-family: var(--sans);
+  font-size: 12.5px;
+  color: var(--fg-3);
+}
+.qm-warn-risk-outcome .qm-warn-outcome-bold {
+  color: var(--sev-fg-2);
+  font-weight: 500;
+}
+
+/* ── Region 6 — Next step ── */
+.qm-warn-next {
+  display: grid;
+  grid-template-columns: 18px auto 1fr;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 14px;
+  border-radius: 9px;
+  border: 1px dashed var(--line-strong);
+  background: rgba(255, 255, 255, 0.015);
+  color: var(--fg-2);
+  font-family: var(--sans);
+  font-size: 13px;
+}
+.qm-warn-next-icon {
+  color: var(--fg-3);
+}
+.qm-warn-next-label {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+
+/* ── Region 7 — Details toggle ── */
+.qm-warn-details-toggle {
+  all: unset;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 22px;
+  width: 100%;
+  box-sizing: border-box;
+  border-top: 1px solid var(--line-soft);
+  font-family: var(--sans);
+  font-size: 12.5px;
+  color: var(--fg-3);
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease;
+}
+.qm-warn-details-toggle:hover {
+  color: var(--fg-2);
+  background: rgba(255, 255, 255, 0.02);
+}
+.qm-warn-details-chev {
+  display: inline-block;
+  transition: transform 200ms ease;
+  color: var(--fg-3);
+}
+.qm-warn-details-toggle[aria-expanded='true'] .qm-warn-details-chev {
+  transform: rotate(90deg);
+}
+.qm-warn-details-source {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--fg-4);
+}
+.qm-warn-details-body {
+  padding: 10px 22px 14px 22px;
+  border-top: 1px dashed var(--line);
+  font-family: var(--serif);
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--fg-2);
+  letter-spacing: -0.005em;
+}
+.qm-warn-details-body p {
+  margin: 0 0 10px 0;
+}
+.qm-warn-details-body p:last-child {
+  margin-bottom: 0;
+}
+.qm-warn-details-cite {
+  margin-top: 8px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--fg-4);
+}
+
+/* ── Region 8 — Actions ── */
+.qm-warn-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 22px 14px 22px;
+  border-top: 1px solid var(--line);
+}
+.qm-warn-actions-spacer {
+  flex: 1;
+}
+.qm-warn-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--fg-2);
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+.qm-warn-btn:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--line-strong);
+  color: var(--fg);
+}
+.qm-warn-btn:active {
+  background: rgba(255, 255, 255, 0.06);
+}
+.qm-warn-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.qm-warn-btn-primary {
+  background: linear-gradient(
+    180deg,
+    rgba(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b), 0.22),
+    rgba(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b), 0.1)
+  );
+  border-color: var(--sev-border-strong);
+  color: var(--sev-fg-2);
+}
+.qm-warn-btn-primary:hover {
+  background: linear-gradient(
+    180deg,
+    rgba(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b), 0.32),
+    rgba(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b), 0.16)
+  );
+  color: #fff;
+}
+.qm-warn-btn-primary:active {
+  filter: brightness(0.95);
+}
+
+/* Keyboard-hint chip on action buttons. */
+.qm-warn-kbd {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--fg-3);
+  line-height: 1;
+}
+
+/* Reduced motion — disable chevron rotation per §8.4. */
+@media (prefers-reduced-motion: reduce) {
+  .qm-warn-details-chev {
+    transition: none;
+  }
+}

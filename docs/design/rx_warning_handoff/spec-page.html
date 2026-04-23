@@ -1,0 +1,1187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>QuillMD — Unverified Rx Warning Card</title>
+<meta name="viewport" content="width=1680">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../app/tokens.css">
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<style>
+  html,body{margin:0;padding:0;background:#07060C;color:#F5F2FA;font-family:'Inter Tight',system-ui,sans-serif;}
+  *{box-sizing:border-box;}
+
+  /* ═══ Page scaffold ═══ */
+  .page{
+    min-height:100vh;
+    padding:56px 72px 96px;
+    max-width:1680px;
+    margin:0 auto;
+    position:relative;
+  }
+  .page::before{
+    content:'';
+    position:fixed;inset:0;pointer-events:none;z-index:0;
+    background:
+      radial-gradient(1200px 600px at 15% -10%, rgba(139,92,255,.10), transparent 60%),
+      radial-gradient(900px 500px at 90% 100%, rgba(217,70,239,.05), transparent 60%);
+  }
+  .page > *{position:relative;z-index:1;}
+
+  .page-head{
+    display:flex;align-items:flex-end;justify-content:space-between;
+    gap:40px;margin-bottom:56px;
+    padding-bottom:24px;border-bottom:1px solid var(--line);
+  }
+  .page-title{
+    font-family:'Source Serif 4',Georgia,serif;
+    font-size:44px;font-weight:500;letter-spacing:-.025em;
+    margin:0 0 10px;line-height:1.05;
+  }
+  .page-title em{font-style:italic;color:var(--accent-bright);font-weight:500;}
+  .page-sub{
+    font-size:14px;color:var(--fg-3);max-width:640px;line-height:1.55;margin:0;
+  }
+  .meta{
+    font-family:'JetBrains Mono',ui-monospace,monospace;
+    font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--fg-4);
+    display:flex;flex-direction:column;gap:6px;align-items:flex-end;
+  }
+  .meta b{color:var(--fg-2);font-weight:500;}
+
+  /* ═══ Section layout ═══ */
+  .section{margin-bottom:80px;}
+  .section-label{
+    display:flex;align-items:baseline;gap:14px;margin-bottom:28px;
+  }
+  .section-num{
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px;letter-spacing:.2em;color:var(--fg-4);
+  }
+  .section-title{
+    font-family:'Source Serif 4',serif;
+    font-size:22px;font-weight:500;letter-spacing:-.015em;
+    margin:0;color:var(--fg);
+  }
+  .section-note{
+    font-size:13px;color:var(--fg-3);margin-left:auto;max-width:420px;text-align:right;
+  }
+
+  /* ═══ Frame — mimics SOAP card container ═══ */
+  .frame{
+    background:linear-gradient(180deg, rgba(255,255,255,.015), rgba(255,255,255,.005));
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:28px;
+    position:relative;
+  }
+  .frame-label{
+    position:absolute;top:-9px;left:20px;
+    background:#07060C;padding:0 10px;
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--fg-4);
+  }
+  .frame-label b{color:var(--fg-2);font-weight:500;}
+
+  /* Before / after layout for the hero comparison */
+  .compare{
+    display:grid;grid-template-columns:1fr 1fr;gap:28px;align-items:stretch;
+  }
+
+  /* Variants grid */
+  .variants{
+    display:grid;grid-template-columns:repeat(3,1fr);gap:24px;
+  }
+  .variant-col{display:flex;flex-direction:column;gap:10px;}
+  .variant-tag{
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--fg-3);margin-bottom:4px;
+  }
+
+  /* ═══ THE WARNING CARD — redesigned ═══ */
+  .qm-warn{
+    --sev-hue-r: 251;
+    --sev-hue-g: 113;
+    --sev-hue-b: 133;
+    --sev-fg: rgb(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b));
+    --sev-fg-2: rgb(253, 164, 175);
+    --sev-bg: rgba(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b), 0.04);
+    --sev-border: rgba(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b), 0.28);
+    --sev-border-strong: rgba(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b), 0.55);
+
+    position:relative;
+    background: linear-gradient(180deg, var(--sev-bg), rgba(255,255,255,0.005));
+    border:1px solid var(--sev-border);
+    border-radius:12px;
+    overflow:hidden;
+    font-family:'Inter Tight',system-ui,sans-serif;
+    color:var(--fg);
+  }
+  /* Left severity rail */
+  .qm-warn::before{
+    content:'';
+    position:absolute;top:0;bottom:0;left:0;width:3px;
+    background:linear-gradient(180deg, var(--sev-fg), rgba(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b), 0.2));
+  }
+
+  /* Warning variant — amber */
+  .qm-warn.sev-warning{
+    --sev-hue-r: 251; --sev-hue-g: 191; --sev-hue-b: 36;
+    --sev-fg: rgb(251,191,36);
+    --sev-fg-2: rgb(253, 215, 110);
+  }
+  /* Info variant — blue */
+  .qm-warn.sev-info{
+    --sev-hue-r: 96; --sev-hue-g: 165; --sev-hue-b: 250;
+    --sev-fg: rgb(125, 183, 255);
+    --sev-fg-2: rgb(160, 200, 255);
+  }
+
+  /* ═══ Header row ═══ */
+  .qm-warn-head{
+    display:flex;align-items:flex-start;gap:14px;
+    padding:18px 22px 10px 22px;
+  }
+  .qm-warn-icon{
+    flex:none;
+    width:36px;height:36px;border-radius:10px;
+    display:flex;align-items:center;justify-content:center;
+    background:rgba(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b), 0.12);
+    border:1px solid var(--sev-border);
+    color:var(--sev-fg);
+  }
+  .qm-warn-head-text{flex:1;min-width:0;}
+  .qm-warn-badge-row{
+    display:flex;align-items:center;gap:10px;margin-bottom:4px;
+    flex-wrap:wrap;
+  }
+  .qm-sev-badge{
+    display:inline-flex;align-items:center;gap:5px;
+    height:20px;padding:0 8px 0 7px;
+    border-radius:4px;
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;font-weight:600;letter-spacing:.14em;
+    text-transform:uppercase;line-height:1;
+
+    color: #1A0608;
+    background: linear-gradient(180deg, rgb(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b)), rgb(calc(var(--sev-hue-r) - 30), calc(var(--sev-hue-g) - 30), calc(var(--sev-hue-b) - 30)));
+    /* Fallback solid (calc in rgb not universal) */
+    background: var(--sev-fg);
+    border:1px solid var(--sev-border-strong);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 1px 4px rgba(0,0,0,.3);
+  }
+  .qm-warn.sev-warning .qm-sev-badge{ color:#2A1A04; }
+  .qm-warn.sev-info .qm-sev-badge{ color:#061A2E; }
+
+  .qm-sev-badge svg{ width:11px; height:11px; }
+
+  .qm-warn-field{
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--fg-3);
+  }
+  .qm-warn-field b{color:var(--fg-2);font-weight:500;}
+
+  .qm-warn-headline{
+    font-family:'Source Serif 4',Georgia,serif;
+    font-size:19px;font-weight:500;letter-spacing:-.015em;
+    line-height:1.25;color:var(--fg);
+    margin:0;
+  }
+  .qm-warn-headline em{font-style:italic;color:var(--sev-fg-2);}
+
+  .qm-warn-dismiss{
+    margin-left:auto;flex:none;
+    width:28px;height:28px;border-radius:7px;
+    display:flex;align-items:center;justify-content:center;
+    background:transparent;border:1px solid transparent;
+    color:var(--fg-3);cursor:pointer;
+    transition:all .15s;
+  }
+  .qm-warn-dismiss:hover{ color:var(--fg);border-color:var(--line); background:rgba(255,255,255,.03);}
+
+  /* ═══ Action line — highest visual weight ═══ */
+  .qm-warn-action{
+    display:flex;align-items:center;gap:10px;
+    margin:10px 22px 16px 22px;
+    padding:12px 14px;
+    border-radius:9px;
+    background: rgba(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b), 0.10);
+    border:1px solid var(--sev-border);
+    box-shadow: inset 0 0 0 1px rgba(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b), 0.04);
+  }
+  .qm-warn-action svg{
+    flex:none;color:var(--sev-fg);
+    width:18px;height:18px;
+  }
+  .qm-warn-action-text{
+    font-size:14.5px;font-weight:600;letter-spacing:-.005em;
+    color:var(--sev-fg-2);
+  }
+  .qm-warn-action-text b{color:#fff;font-weight:700;}
+  /* For info variant, tone down — not a hard stop */
+  .qm-warn.sev-info .qm-warn-action{
+    padding:8px 14px;
+  }
+  .qm-warn.sev-info .qm-warn-action-text{font-weight:500;}
+
+  /* ═══ Transcribed block ═══ */
+  .qm-warn-trans{
+    margin:0 22px 14px;
+    display:flex;align-items:center;gap:18px;flex-wrap:wrap;
+    padding:10px 14px;
+    border-radius:9px;
+    background: rgba(255,255,255,.02);
+    border:1px solid var(--line);
+  }
+  .qm-trans-field{
+    display:flex;flex-direction:column;gap:2px;
+  }
+  .qm-trans-label{
+    font-family:'JetBrains Mono',monospace;
+    font-size:9px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--fg-4);
+  }
+  .qm-trans-val{
+    font-family:'JetBrains Mono',monospace;
+    font-size:14px;font-weight:500;color:var(--fg);
+  }
+  .qm-trans-val.q{
+    color:var(--fg-2);
+    position:relative;padding-left:0;
+  }
+  .qm-trans-val.q::before{
+    content:'';
+    width:1px;height:14px;
+    background:var(--line-strong);
+    display:inline-block;vertical-align:middle;
+    margin-right:14px;
+  }
+  .qm-trans-val.guess{color:var(--accent-bright);}
+  .qm-trans-arrow{
+    color:var(--fg-4);
+    font-family:'JetBrains Mono',monospace;
+    font-size:12px;
+  }
+
+  /* ═══ Risks list ═══ */
+  .qm-warn-risks{
+    margin:0 22px 14px;
+  }
+  .qm-risks-label{
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--fg-3);margin-bottom:8px;
+    display:flex;align-items:center;gap:8px;
+  }
+  .qm-risks-label::after{
+    content:'';flex:1;height:1px;background:var(--line-soft);
+  }
+  .qm-risk{
+    display:flex;align-items:flex-start;gap:12px;
+    padding:10px 12px;
+    border-radius:8px;
+    background:rgba(255,255,255,.015);
+    border:1px solid transparent;
+    margin-bottom:6px;
+  }
+  .qm-risk:last-child{margin-bottom:0;}
+  .qm-risk-dot{
+    flex:none;width:6px;height:6px;border-radius:50%;
+    background:var(--sev-fg);
+    margin-top:7px;
+    box-shadow: 0 0 0 3px rgba(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b), 0.12);
+  }
+  .qm-risk-text{
+    font-size:13.5px;line-height:1.5;color:var(--fg);
+    font-family:'Source Serif 4',Georgia,serif;
+    letter-spacing:-.005em;
+  }
+  .qm-risk-text b{
+    font-weight:600;color:var(--sev-fg-2);
+    font-family:'Inter Tight',sans-serif;
+    font-size:12.5px;
+    letter-spacing:0;
+    background:rgba(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b), 0.08);
+    padding:1px 6px;border-radius:4px;
+    margin:0 1px;
+  }
+  .qm-risk-out{
+    display:block;
+    color:var(--fg-3);font-size:12.5px;margin-top:3px;
+    font-family:'Inter Tight',sans-serif;
+    letter-spacing:-.005em;
+  }
+  .qm-risk-out b{
+    background:none;padding:0;color:var(--sev-fg-2);font-size:12.5px;
+  }
+
+  /* ═══ Next step ═══ */
+  .qm-warn-next{
+    margin:0 22px 14px;
+    display:flex;align-items:center;gap:10px;
+    padding:10px 12px;
+    border-radius:8px;
+    border:1px dashed var(--line-strong);
+    background:rgba(255,255,255,.01);
+  }
+  .qm-warn-next svg{color:var(--fg-3);width:15px;height:15px;flex:none;}
+  .qm-warn-next-label{
+    font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--fg-3);margin-right:4px;
+  }
+  .qm-warn-next-text{font-size:13px;color:var(--fg-2);flex:1;}
+  .qm-warn-next-text b{color:var(--fg);font-weight:500;}
+
+  /* ═══ Details (collapsible) ═══ */
+  .qm-warn-details{
+    border-top:1px solid var(--line-soft);
+    margin:0;
+  }
+  .qm-details-toggle{
+    width:100%;
+    display:flex;align-items:center;gap:10px;
+    padding:10px 22px;
+    background:transparent;border:none;cursor:pointer;
+    font-family:'Inter Tight',sans-serif;
+    font-size:12px;color:var(--fg-3);
+    letter-spacing:-.005em;
+    transition:color .15s, background .15s;
+    text-align:left;
+  }
+  .qm-details-toggle:hover{color:var(--fg-2);background:rgba(255,255,255,.02);}
+  .qm-details-toggle svg{
+    width:13px;height:13px;transition:transform .2s;
+  }
+  .qm-details-toggle[aria-expanded="true"] svg{transform:rotate(90deg);}
+  .qm-details-count{
+    margin-left:auto;
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;letter-spacing:.1em;color:var(--fg-4);
+  }
+  .qm-details-body{
+    padding:4px 22px 18px 22px;
+    font-family:'Source Serif 4',Georgia,serif;
+    font-size:13px;line-height:1.65;color:var(--fg-2);
+    letter-spacing:-.005em;
+    border-top:1px dashed var(--line-soft);
+    padding-top:14px;
+    margin-top:0;
+  }
+  .qm-details-body p{margin:0 0 8px;}
+  .qm-details-body p:last-child{margin-bottom:0;}
+  .qm-details-body .src{
+    display:block;margin-top:10px;
+    font-family:'JetBrains Mono',monospace;font-size:10px;
+    letter-spacing:.1em;text-transform:uppercase;color:var(--fg-4);
+  }
+
+  /* ═══ Actions footer ═══ */
+  .qm-warn-actions{
+    display:flex;align-items:center;gap:8px;
+    padding:12px 22px;
+    border-top:1px solid var(--line-soft);
+    background:rgba(0,0,0,.12);
+  }
+  .qm-warn-actions .spacer{flex:1;}
+  .qm-warn-btn{
+    font-family:'Inter Tight',sans-serif;
+    font-size:12.5px;font-weight:500;letter-spacing:-.005em;
+    padding:7px 12px;border-radius:7px;
+    border:1px solid var(--line);
+    background:rgba(255,255,255,.02);color:var(--fg-2);
+    cursor:pointer;display:inline-flex;align-items:center;gap:6px;
+    transition:all .15s;
+  }
+  .qm-warn-btn:hover{color:var(--fg);border-color:var(--line-strong);background:rgba(255,255,255,.04);}
+  .qm-warn-btn svg{width:13px;height:13px;}
+  .qm-warn-btn.primary{
+    color: #fff;
+    background: linear-gradient(180deg, rgba(var(--sev-hue-r),var(--sev-hue-g),var(--sev-hue-b),.22), rgba(var(--sev-hue-r),var(--sev-hue-g),var(--sev-hue-b),.10));
+    border-color: var(--sev-border-strong);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
+  }
+  .qm-warn.sev-warning .qm-warn-btn.primary{color:#FCD34D;}
+  .qm-warn.sev-critical .qm-warn-btn.primary{color:#FDA4AF;}
+  .qm-warn.sev-info .qm-warn-btn.primary{color:#A0C8FF;}
+  .qm-warn-btn.primary:hover{
+    background: linear-gradient(180deg, rgba(var(--sev-hue-r),var(--sev-hue-g),var(--sev-hue-b),.32), rgba(var(--sev-hue-r),var(--sev-hue-g),var(--sev-hue-b),.16));
+    color:#fff;
+  }
+  .qm-warn-kbd{
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;padding:2px 5px;border-radius:4px;
+    border:1px solid rgba(255,255,255,.08);
+    background:rgba(0,0,0,.2);color:var(--fg-3);
+    margin-left:4px;
+  }
+
+  /* ═══ "Before" — the old dense paragraph card ═══ */
+  .old-card{
+    background:rgba(251,113,133,.04);
+    border:1px solid rgba(251,113,133,.28);
+    border-radius:12px;
+    padding:20px 22px;
+    font-size:13.5px;
+    line-height:1.6;
+    color:var(--fg-2);
+  }
+  .old-card-head{
+    display:flex;align-items:center;gap:10px;margin-bottom:10px;
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--coral);font-weight:600;
+  }
+  .old-card-head svg{width:14px;height:14px;}
+  .old-card-body{
+    color:var(--fg-2);
+    font-family:'Source Serif 4',Georgia,serif;
+    font-size:14px;line-height:1.65;
+    letter-spacing:-.005em;
+  }
+  .old-card-body b{color:var(--fg);font-weight:600;}
+
+  /* ═══ Context chrome (fake SOAP shell around a card) ═══ */
+  .context-shell{
+    background:linear-gradient(180deg, rgba(255,255,255,.015), rgba(255,255,255,.005));
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:22px;
+    position:relative;
+  }
+  .context-head{
+    display:flex;align-items:center;gap:10px;margin-bottom:16px;
+    padding-bottom:14px;border-bottom:1px solid var(--line-soft);
+  }
+  .context-title{
+    font-family:'Source Serif 4',serif;
+    font-size:13px;font-weight:600;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--accent-bright);
+  }
+  .context-meta{
+    margin-left:auto;
+    font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--fg-4);
+  }
+  .context-rx{
+    display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;
+  }
+  .rx-row{
+    padding:10px 14px;
+    background:rgba(255,255,255,.015);
+    border:1px solid var(--line-soft);
+    border-radius:8px;
+  }
+  .rx-row .rx-name{
+    font-family:'Source Serif 4',serif;font-size:15px;font-weight:500;color:var(--fg);
+  }
+  .rx-row .rx-sig{
+    font-size:12px;color:var(--fg-3);margin-top:2px;
+    font-family:'JetBrains Mono',monospace;letter-spacing:.02em;
+  }
+
+  /* ═══ Anatomy annotations (numbered callouts) ═══ */
+  .anatomy{
+    display:grid;grid-template-columns:1.2fr 1fr;gap:40px;align-items:flex-start;
+  }
+  .anatomy-card{position:relative;}
+  .anatomy-dot{
+    position:absolute;
+    width:22px;height:22px;border-radius:50%;
+    background:#07060C;
+    border:1px solid var(--accent);
+    color:var(--accent-bright);
+    font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;
+    display:flex;align-items:center;justify-content:center;
+    z-index:4;
+    box-shadow: 0 0 0 3px rgba(139,92,255,.15), 0 4px 12px rgba(0,0,0,.4);
+  }
+  .anatomy-notes{
+    display:flex;flex-direction:column;gap:16px;
+    padding-top:8px;
+  }
+  .anatomy-note{
+    display:flex;gap:14px;align-items:flex-start;
+  }
+  .anatomy-note-num{
+    flex:none;
+    width:22px;height:22px;border-radius:50%;
+    border:1px solid var(--accent);
+    color:var(--accent-bright);
+    font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;
+    display:flex;align-items:center;justify-content:center;
+    background:rgba(139,92,255,.06);
+  }
+  .anatomy-note-body{flex:1;}
+  .anatomy-note-title{
+    font-size:13.5px;font-weight:600;color:var(--fg);
+    margin:0 0 4px;letter-spacing:-.005em;
+  }
+  .anatomy-note-body p{
+    margin:0;font-size:12.5px;line-height:1.55;color:var(--fg-3);
+  }
+  .anatomy-note-body code{
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px;color:var(--fg-2);
+    background:rgba(255,255,255,.04);padding:1px 5px;border-radius:3px;
+  }
+
+  /* ═══ Spec table ═══ */
+  .spec{
+    display:grid;grid-template-columns:auto auto auto auto 1fr;
+    gap:0;
+    border:1px solid var(--line);
+    border-radius:10px;
+    overflow:hidden;
+  }
+  .spec > div{
+    padding:10px 14px;
+    border-bottom:1px solid var(--line-soft);
+    font-size:12px;
+  }
+  .spec > div:nth-last-child(-n+5){border-bottom:none;}
+  .spec-head{
+    background:rgba(255,255,255,.02);
+    font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--fg-3);font-weight:500;
+  }
+  .spec-sev{font-weight:600;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;}
+  .spec-sev.c{color:var(--coral);}
+  .spec-sev.w{color:var(--amber);}
+  .spec-sev.i{color:#7DB7FF;}
+  .spec-swatch{display:inline-flex;align-items:center;gap:8px;}
+  .spec-swatch span{width:14px;height:14px;border-radius:3px;display:inline-block;}
+  .spec code{font-family:'JetBrains Mono',monospace;color:var(--fg-2);font-size:11px;}
+  .spec-note{color:var(--fg-3);}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════
+     Lucide inline SVG defs (we inline only what we need)
+     ═══════════════════════════════════════════════════════ -->
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+  <defs>
+    <symbol id="i-alert-triangle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+      <path d="M12 9v4"/><path d="M12 17h.01"/>
+    </symbol>
+    <symbol id="i-ban" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"/>
+      <path d="m4.9 4.9 14.2 14.2"/>
+    </symbol>
+    <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"/>
+      <path d="M12 16v-4"/><path d="M12 8h.01"/>
+    </symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="9" y="2" width="6" height="12" rx="3"/>
+      <path d="M5 10a7 7 0 0 0 14 0"/>
+      <path d="M12 19v3"/>
+    </symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92Z"/>
+    </symbol>
+    <symbol id="i-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="m9 18 6-6-6-6"/>
+    </symbol>
+    <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+    </symbol>
+    <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/>
+    </symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M20 6 9 17l-5-5"/>
+    </symbol>
+    <symbol id="i-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>
+    </symbol>
+    <symbol id="i-pill" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z"/>
+      <path d="m8.5 8.5 7 7"/>
+    </symbol>
+  </defs>
+</svg>
+
+<main class="page qm-app">
+
+  <header class="page-head">
+    <div>
+      <h1 class="page-title">Unverified Rx warning — <em>redesign</em></h1>
+      <p class="page-sub">
+        Physicians need the key action and patient-specific risks visible in under two seconds.
+        The card keeps the full clinical rationale available for those who want it, but leads with
+        severity → action → what was heard → why it's blocked.
+      </p>
+    </div>
+    <div class="meta">
+      <span>Asset · <b>Rx warning card</b></span>
+      <span>Variants · <b>Critical · Warning · Info</b></span>
+      <span>States · <b>Collapsed / expanded</b></span>
+    </div>
+  </header>
+
+  <!-- ═══════════════════════════════════════════════════════
+       SECTION 1 — Before / After
+       ═══════════════════════════════════════════════════════ -->
+  <section class="section">
+    <div class="section-label">
+      <span class="section-num">§ 01</span>
+      <h2 class="section-title">Before · After</h2>
+      <p class="section-note">
+        Same content, same depth of information. Re-organized so the <em>action</em> and <em>risks</em>
+        land first.
+      </p>
+    </div>
+
+    <div class="compare">
+
+      <!-- BEFORE -->
+      <div class="frame">
+        <div class="frame-label">Current · <b>one paragraph</b></div>
+        <div class="old-card">
+          <div class="old-card-head">
+            <svg><use href="#i-alert-triangle"/></svg>
+            Unverified medication
+          </div>
+          <div class="old-card-body">
+            <b>Unverified medication.</b> Transcribed as "abirrobing" — low-confidence pharma match (possibly ibuprofen?). Given the patient is currently on <b>Valsartan + HCTZ</b> (ACE-inhibitor combination with thiazide diuretic), concurrent use of an NSAID may precipitate acute kidney injury due to reduced renal perfusion via the "triple whammy" effect. Additionally, the patient is on <b>Omeprazole</b>, suggesting a history of GI concerns that an NSAID would aggravate. Cannot auto-fill — please confirm medication name verbally with the provider before signing.
+          </div>
+        </div>
+      </div>
+
+      <!-- AFTER -->
+      <div class="frame">
+        <div class="frame-label">Redesigned · <b>scannable</b></div>
+        <div id="warn-critical-expanded"></div>
+      </div>
+
+    </div>
+  </section>
+
+
+  <!-- ═══════════════════════════════════════════════════════
+       SECTION 2 — Anatomy
+       ═══════════════════════════════════════════════════════ -->
+  <section class="section">
+    <div class="section-label">
+      <span class="section-num">§ 02</span>
+      <h2 class="section-title">Anatomy</h2>
+      <p class="section-note">
+        The card hierarchy matches how a physician's eye moves: severity → action → facts → context.
+      </p>
+    </div>
+
+    <div class="anatomy">
+      <div class="anatomy-card" id="anatomy-host"></div>
+
+      <div class="anatomy-notes">
+        <div class="anatomy-note">
+          <div class="anatomy-note-num">1</div>
+          <div class="anatomy-note-body">
+            <h4 class="anatomy-note-title">Severity pill + field label</h4>
+            <p>
+              Mono-case <code>CRITICAL</code> badge, color-coded by level. Right of it, the field
+              being flagged (<code>Rx · Line 2</code>) — so the physician knows where this attaches
+              without scanning the whole slip.
+            </p>
+          </div>
+        </div>
+        <div class="anatomy-note">
+          <div class="anatomy-note-num">2</div>
+          <div class="anatomy-note-body">
+            <h4 class="anatomy-note-title">Headline — one clause, serif</h4>
+            <p>
+              "Cannot verify medication." The only sentence the physician should need to read
+              to know this row is unsafe.
+            </p>
+          </div>
+        </div>
+        <div class="anatomy-note">
+          <div class="anatomy-note-num">3</div>
+          <div class="anatomy-note-body">
+            <h4 class="anatomy-note-title">Primary action — the only red sentence</h4>
+            <p>
+              <code>Ban</code> icon + <b>Do NOT prescribe until confirmed.</b> The single highest-contrast line,
+              boxed so the eye catches it even in peripheral vision. Reserving red here keeps the
+              rest of the card readable.
+            </p>
+          </div>
+        </div>
+        <div class="anatomy-note">
+          <div class="anatomy-note-num">4</div>
+          <div class="anatomy-note-body">
+            <h4 class="anatomy-note-title">Transcribed → guess</h4>
+            <p>
+              Facts, not prose. <code>Heard: "abirrobing"</code> on the left, phonetic guess
+              on the right. Mono type signals raw/unprocessed; the guess is purple — the system's
+              tentative proposal, never a commitment.
+            </p>
+          </div>
+        </div>
+        <div class="anatomy-note">
+          <div class="anatomy-note-num">5</div>
+          <div class="anatomy-note-body">
+            <h4 class="anatomy-note-title">Patient-specific risks</h4>
+            <p>
+              Each bullet names a <b>current med</b> and the <b>clinical outcome</b>. Two lines, two beats.
+              Designed to be read in ~3 seconds total.
+            </p>
+          </div>
+        </div>
+        <div class="anatomy-note">
+          <div class="anatomy-note-num">6</div>
+          <div class="anatomy-note-body">
+            <h4 class="anatomy-note-title">Next step — dashed tile</h4>
+            <p>
+              Says what to do with this warning, not just why it exists. Dashed border signals
+              "procedural, not blocking" — the card above already blocks.
+            </p>
+          </div>
+        </div>
+        <div class="anatomy-note">
+          <div class="anatomy-note-num">7</div>
+          <div class="anatomy-note-body">
+            <h4 class="anatomy-note-title">Details — collapsible rationale</h4>
+            <p>
+              The original paragraph lives here. Collapsed by default because 95% of physicians
+              won't need it; one click away for those who do. Citation line at the bottom ties
+              back to the transcript timestamp.
+            </p>
+          </div>
+        </div>
+        <div class="anatomy-note">
+          <div class="anatomy-note-num">8</div>
+          <div class="anatomy-note-body">
+            <h4 class="anatomy-note-title">Resolution actions — per severity</h4>
+            <p style="margin-bottom:8px;">
+              Buttons shift with severity so the only paths offered match what's clinically appropriate.
+            </p>
+            <p style="margin:0 0 4px; font-family:'JetBrains Mono',monospace; font-size:11px;">
+              <b style="color:var(--coral);">Critical</b> → <code>Edit medication</code> · <code>Call provider</code> · <code>Override &amp; sign anyway</code>
+            </p>
+            <p style="margin:0 0 4px; font-family:'JetBrains Mono',monospace; font-size:11px;">
+              <b style="color:var(--amber);">Warning</b> &nbsp;→ <code>Edit</code> · <code>Call provider</code> · <code>Acknowledge</code>
+            </p>
+            <p style="margin:0 0 10px; font-family:'JetBrains Mono',monospace; font-size:11px;">
+              <b style="color:#7DB7FF;">Info</b> &nbsp;&nbsp;&nbsp;&nbsp;→ <code>Dismiss</code>
+            </p>
+            <p>
+              <b>Critical warnings never offer a passive dismiss.</b> Overriding is a deliberate action
+              that opens a confirmation modal and is recorded in the audit log.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ═══════════════════════════════════════════════════════
+       SECTION 3 — Severity variants
+       ═══════════════════════════════════════════════════════ -->
+  <section class="section">
+    <div class="section-label">
+      <span class="section-num">§ 03</span>
+      <h2 class="section-title">Severity scale</h2>
+      <p class="section-note">
+        Same skeleton, three intensities. Rail, icon, badge, and action tile carry the severity color;
+        the rest stays quiet.
+      </p>
+    </div>
+
+    <div class="variants">
+      <div class="variant-col">
+        <div class="variant-tag">Level 1 — Critical · blocks signing</div>
+        <div id="warn-critical-var"></div>
+      </div>
+      <div class="variant-col">
+        <div class="variant-tag">Level 2 — Warning · needs attention</div>
+        <div id="warn-warning-var"></div>
+      </div>
+      <div class="variant-col">
+        <div class="variant-tag">Level 3 — Info · fyi only</div>
+        <div id="warn-info-var"></div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ═══════════════════════════════════════════════════════
+       SECTION 4 — Collapsed vs expanded
+       ═══════════════════════════════════════════════════════ -->
+  <section class="section">
+    <div class="section-label">
+      <span class="section-num">§ 04</span>
+      <h2 class="section-title">Collapsed · Expanded</h2>
+      <p class="section-note">
+        Details collapsed by default. Click, keypress <span class="qm-warn-kbd" style="display:inline-block">D</span>, or focus the toggle.
+      </p>
+    </div>
+
+    <div class="compare">
+      <div class="frame">
+        <div class="frame-label">Collapsed · <b>default state</b></div>
+        <div id="warn-critical-collapsed"></div>
+      </div>
+      <div class="frame">
+        <div class="frame-label">Expanded · <b>after click</b></div>
+        <div id="warn-critical-expanded-2"></div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ═══════════════════════════════════════════════════════
+       SECTION 5 — In context (inside the Rx slip)
+       ═══════════════════════════════════════════════════════ -->
+  <section class="section">
+    <div class="section-label">
+      <span class="section-num">§ 05</span>
+      <h2 class="section-title">In context — Rx slip</h2>
+      <p class="section-note">
+        How the card sits inside the existing SOAP Rx panel. Other rows stay calm; the flagged
+        row is the only one pulling attention.
+      </p>
+    </div>
+
+    <div class="frame">
+      <div class="frame-label">Rx · <b>Jeffrey Hodge · visit 12/30/2025</b></div>
+      <div class="context-shell">
+        <div class="context-head">
+          <div class="context-title">Rx — Prescriptions</div>
+          <div class="context-meta">3 items · 1 needs review</div>
+        </div>
+        <div class="context-rx">
+          <div class="rx-row">
+            <div class="rx-name">Cyclobenzaprine 10 mg</div>
+            <div class="rx-sig">TAKE 1 TAB PO QHS · #30 · NO REFILLS</div>
+          </div>
+          <div class="rx-row">
+            <div class="rx-name">Lidocaine 5% patch</div>
+            <div class="rx-sig">APPLY TO LOW BACK Q12H · #30 PATCHES · 1 REFILL</div>
+          </div>
+        </div>
+        <div id="warn-context"></div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ═══════════════════════════════════════════════════════
+       SECTION 6 — Token spec
+       ═══════════════════════════════════════════════════════ -->
+  <section class="section">
+    <div class="section-label">
+      <span class="section-num">§ 06</span>
+      <h2 class="section-title">Severity tokens</h2>
+      <p class="section-note">
+        Three tokens, all scaled from the existing palette — coral / amber / blue already exist in the
+        app's chip system.
+      </p>
+    </div>
+
+    <div class="spec">
+      <div class="spec-head">Level</div>
+      <div class="spec-head">Token</div>
+      <div class="spec-head">Color</div>
+      <div class="spec-head">Icon</div>
+      <div class="spec-head">Behavior</div>
+
+      <div><span class="spec-sev c">Critical</span></div>
+      <div><code>--coral · #FB7185</code></div>
+      <div class="spec-swatch"><span style="background:#FB7185"></span><span style="background:rgba(251,113,133,.28)"></span><span style="background:rgba(251,113,133,.10)"></span></div>
+      <div><code>AlertTriangle + Ban</code></div>
+      <div class="spec-note">Blocks signing. Required resolution. Action tile + resolution buttons.</div>
+
+      <div><span class="spec-sev w">Warning</span></div>
+      <div><code>--amber · #FBBF24</code></div>
+      <div class="spec-swatch"><span style="background:#FBBF24"></span><span style="background:rgba(251,191,36,.28)"></span><span style="background:rgba(251,191,36,.10)"></span></div>
+      <div><code>AlertTriangle</code></div>
+      <div class="spec-note">Needs acknowledgement. Physician can accept or edit.</div>
+
+      <div><span class="spec-sev i">Info</span></div>
+      <div><code>--accent-c · #7DB7FF</code></div>
+      <div class="spec-swatch"><span style="background:#7DB7FF"></span><span style="background:rgba(96,165,250,.28)"></span><span style="background:rgba(96,165,250,.10)"></span></div>
+      <div><code>Info</code></div>
+      <div class="spec-note">FYI. Compact. No action required, no buttons.</div>
+    </div>
+  </section>
+
+</main>
+
+<script type="text/babel">
+const { useState } = React;
+
+/* Severity icon picker */
+function SevIcon({sev}){
+  if(sev==='info') return <svg><use href="#i-info"/></svg>;
+  return <svg><use href="#i-alert-triangle"/></svg>;
+}
+
+function WarnCard({
+  sev='critical',
+  field='Rx · Line 2',
+  headline,
+  action,
+  actionKind='ban',          // 'ban' | 'alert' | 'info'
+  heard,
+  guess,
+  risks = [],
+  nextStep,
+  details,
+  source,
+  defaultOpen=false,
+  dense=false,
+  compact=false,              // info variant hides most blocks
+  showActions=true,
+  onPrimaryLabel='Edit medication',
+  onPrimaryIcon='pencil',
+  onDismissLabel=null,
+  onDismissKey='Esc',
+  anatomy=false,
+}){
+  const [open, setOpen] = useState(defaultOpen);
+
+  const ActionIcon = actionKind==='ban' ? 'i-ban'
+                   : actionKind==='info' ? 'i-info'
+                   : 'i-alert-triangle';
+
+  // anatomy numeric labels
+  const Dot = ({n, style}) => anatomy ? (
+    <div className="anatomy-dot" style={style}>{n}</div>
+  ) : null;
+
+  return (
+    <div className={`qm-warn sev-${sev}`}>
+      <Dot n="1" style={{top:14, left:-11}} />
+      <Dot n="2" style={{top:40, left:-11}} />
+
+      <div className="qm-warn-head">
+        <div className="qm-warn-icon">
+          <svg width="18" height="18"><SevIcon sev={sev}/></svg>
+        </div>
+        <div className="qm-warn-head-text">
+          <div className="qm-warn-badge-row">
+            <span className="qm-sev-badge">
+              <svg width="11" height="11"><SevIcon sev={sev}/></svg>
+              {sev}
+            </span>
+            <span className="qm-warn-field">{field}</span>
+          </div>
+          <h3 className="qm-warn-headline">{headline}</h3>
+        </div>
+        {onDismissLabel !== null && (
+          <button className="qm-warn-dismiss" title="Dismiss" aria-label="Dismiss">
+            <svg width="14" height="14"><use href="#i-x"/></svg>
+          </button>
+        )}
+      </div>
+
+      {action && (
+        <div className="qm-warn-action" style={anatomy?{position:'relative'}:null}>
+          <Dot n="3" style={{top:-11, left:-11}} />
+          <svg><use href={`#${ActionIcon}`}/></svg>
+          <div className="qm-warn-action-text">{action}</div>
+        </div>
+      )}
+
+      {heard && !compact && (
+        <div className="qm-warn-trans" style={anatomy?{position:'relative'}:null}>
+          <Dot n="4" style={{top:-11, left:-11}} />
+          <div className="qm-trans-field">
+            <div className="qm-trans-label">Heard</div>
+            <div className="qm-trans-val">"{heard}"</div>
+          </div>
+          <div className="qm-trans-arrow">→</div>
+          <div className="qm-trans-field">
+            <div className="qm-trans-label">Phonetic guess</div>
+            <div className="qm-trans-val guess">{guess}</div>
+          </div>
+        </div>
+      )}
+
+      {risks.length > 0 && !compact && (
+        <div className="qm-warn-risks" style={anatomy?{position:'relative'}:null}>
+          <Dot n="5" style={{top:-4, left:-11}} />
+          <div className="qm-risks-label">Patient-specific risks · {risks.length}</div>
+          {risks.map((r,i) => (
+            <div className="qm-risk" key={i}>
+              <div className="qm-risk-dot"/>
+              <div className="qm-risk-text">
+                {r.parts.map((p, j) => p.b ? <b key={j}>{p.t}</b> : <React.Fragment key={j}>{p.t}</React.Fragment>)}
+                {r.outcome && (
+                  <span className="qm-risk-out">
+                    → {r.outcome.map((p, j) => p.b ? <b key={j}>{p.t}</b> : <React.Fragment key={j}>{p.t}</React.Fragment>)}
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {nextStep && !compact && (
+        <div className="qm-warn-next" style={anatomy?{position:'relative'}:null}>
+          <Dot n="6" style={{top:-11, left:-11}} />
+          <svg><use href="#i-phone"/></svg>
+          <span className="qm-warn-next-label">Next</span>
+          <div className="qm-warn-next-text">{nextStep}</div>
+        </div>
+      )}
+
+      {details && !compact && (
+        <div className="qm-warn-details" style={anatomy?{position:'relative'}:null}>
+          <Dot n="7" style={{top:4, left:-11}} />
+          <button
+            className="qm-details-toggle"
+            aria-expanded={open}
+            onClick={() => setOpen(v => !v)}
+          >
+            <svg><use href="#i-chevron-right"/></svg>
+            <span>{open ? 'Hide' : 'Show'} clinical reasoning</span>
+            <span className="qm-details-count">{source || '1 source'}</span>
+          </button>
+          {open && (
+            <div className="qm-details-body">
+              {details.map((p,i) => <p key={i}>{p}</p>)}
+              {source && <span className="src">↳ {source}</span>}
+            </div>
+          )}
+        </div>
+      )}
+
+      {showActions && !compact && (
+        <div className="qm-warn-actions" style={anatomy?{position:'relative'}:null}>
+          <Dot n="8" style={{top:-11, left:-11}} />
+          <button className="qm-warn-btn primary">
+            <svg><use href={`#i-${onPrimaryIcon}`}/></svg>
+            {onPrimaryLabel}
+          </button>
+          <button className="qm-warn-btn">
+            <svg><use href="#i-phone"/></svg>
+            Call provider
+          </button>
+          <div className="spacer"/>
+          {sev !== 'critical' && (
+            <button className="qm-warn-btn">
+              Acknowledge
+              <span className="qm-warn-kbd">A</span>
+            </button>
+          )}
+          {sev === 'critical' && (
+            <button className="qm-warn-btn">
+              Override & sign anyway
+              <span className="qm-warn-kbd">⇧ O</span>
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Content ─── */
+
+const CRITICAL_PROPS = {
+  sev: 'critical',
+  field: 'Rx · Line 2',
+  headline: <>Cannot verify medication.</>,
+  action: <>Do <b>NOT</b> prescribe until confirmed.</>,
+  actionKind: 'ban',
+  heard: 'abirrobing',
+  guess: 'possibly ibuprofen?',
+  risks: [
+    {
+      parts: [
+        {t: 'Patient is on '}, {t: 'Valsartan + HCTZ', b: true}, {t: ' (ACE-I + thiazide).'}
+      ],
+      outcome: [
+        {t: 'Adding an NSAID risks '}, {t: 'acute kidney injury', b: true}, {t: ' ("triple whammy").'}
+      ],
+    },
+    {
+      parts: [
+        {t: 'Patient is on '}, {t: 'Omeprazole', b: true}, {t: ' — active GI prophylaxis.'}
+      ],
+      outcome: [
+        {t: 'NSAIDs may '}, {t: 'aggravate gastric irritation', b: true}, {t: '.'}
+      ],
+    },
+  ],
+  nextStep: <>Confirm medication name <b>verbally</b> with the prescribing provider before signing.</>,
+  details: [
+    'Transcriber confidence 0.31 for this token (below the 0.55 auto-fill threshold). Phonetic search returned "ibuprofen" as the closest branded match, but also matched "naproxen" and "meloxicam" weakly.',
+    'The triple-whammy effect describes reduced renal perfusion when an NSAID is added to concurrent RAAS blockade and a diuretic — in this case Valsartan (ARB) and HCTZ. Published incidence of AKI within 30 days is 2–4× baseline.',
+    'Patient is also on Omeprazole, which is a strong clinical signal of prior or active GI concern; adding an NSAID should be weighed against this history even in the absence of the renal risk.',
+  ],
+  source: 'Transcript 14:22 · clinical rules v2.1',
+};
+
+const WARNING_PROPS = {
+  sev: 'warning',
+  field: 'Rx · Line 1',
+  headline: <>Dose above formulary guideline.</>,
+  action: <>Review dose before signing.</>,
+  actionKind: 'alert',
+  heard: '10 mg QHS',
+  guess: 'max recommended 5 mg QHS',
+  risks: [
+    {
+      parts: [
+        {t: 'Patient age '}, {t: '72', b: true}, {t: ' — geriatric dosing applies.'}
+      ],
+      outcome: [
+        {t: 'Starting dose typically '}, {t: '5 mg QHS', b: true}, {t: '.'}
+      ],
+    },
+  ],
+  nextStep: <>Confirm dose with provider, or document deviation reason.</>,
+  details: [
+    'Cyclobenzaprine geriatric starting dose per Beers Criteria is 5 mg; anticholinergic burden in patients over 65 increases fall risk and delirium.',
+    'Documented patient weight 78 kg does not materially change this recommendation.',
+  ],
+  source: 'Beers Criteria 2023',
+  onPrimaryLabel: 'Adjust dose',
+  onDismissLabel: null,
+};
+
+const INFO_PROPS = {
+  sev: 'info',
+  field: 'Rx · Line 3',
+  headline: <>Generic substitution available.</>,
+  action: <>Lower-cost generic exists for this prescription.</>,
+  actionKind: 'info',
+  compact: true,
+  details: null,
+  risks: [],
+  showActions: false,
+};
+
+/* ─── Mount ─── */
+function mount(id, node){
+  const el = document.getElementById(id);
+  if(el) ReactDOM.createRoot(el).render(node);
+}
+
+mount('warn-critical-expanded', <WarnCard {...CRITICAL_PROPS} defaultOpen={true} />);
+mount('warn-critical-expanded-2', <WarnCard {...CRITICAL_PROPS} defaultOpen={true} />);
+mount('warn-critical-collapsed', <WarnCard {...CRITICAL_PROPS} defaultOpen={false} />);
+mount('warn-critical-var', <WarnCard {...CRITICAL_PROPS} defaultOpen={false} />);
+mount('warn-warning-var', <WarnCard {...WARNING_PROPS} defaultOpen={false} />);
+mount('warn-info-var', <WarnCard {...INFO_PROPS} />);
+mount('warn-context', <WarnCard {...CRITICAL_PROPS} defaultOpen={false} />);
+mount('anatomy-host', <WarnCard {...CRITICAL_PROPS} defaultOpen={true} anatomy={true} />);
+</script>
+
+</body>
+</html>
