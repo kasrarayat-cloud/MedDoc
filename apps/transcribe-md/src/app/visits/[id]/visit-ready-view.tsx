@@ -215,7 +215,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
                 section="Prescriptions"
               />
             </div>
-            <RxTab rx={props.rxDrafts} />
+            <RxTab rx={props.rxDrafts} visitId={props.visitId} />
           </div>
         )}
         {tab === 'extras' && (
