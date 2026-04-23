@@ -349,6 +349,11 @@ model User {
   // T-M16.2: one-time tokens for password reset, email verification,
   // email change. All cascade-deleted with the user.
   authTokens             AuthToken[]
+  // Rx warning overrides authored by this user. Every time the
+  // doctor overrides a critical Rx warning, one row is inserted in
+  // `rx_warning_overrides` with the reason. Audit trail for sign-
+  // anyway decisions.
+  rxWarningOverrides     RxWarningOverride[]
 
   @@index([practiceId])
   @@index([role])
@@ -1401,6 +1406,12 @@ model TranscribeVisit {
   /// support can trace "where did this note go?" weeks later.
   deliveries VisitDelivery[]
 
+  // ── rx-warning-card: override audit ──
+  /// One row per critical Rx warning the doctor overrode with a
+  /// typed reason. Critical warnings block signing by default;
+  /// overriding is the explicit "sign anyway" escape hatch.
+  rxWarningOverrides RxWarningOverride[]
+
   // ── T-M14.1: per-doctor edit tracking ──
   /// At most one row per visit, written at sign time when
   /// soapL6Original is populated. Optional so legacy visits (no
@@ -1592,4 +1603,55 @@ model UserSession {
   @@index([sessionToken])
   @@index([expiresAt])
   @@map("user_sessions")
+}
+
+// ============================================================================
+// RX WARNING OVERRIDE — audit log for "sign anyway" on critical Rx warnings
+// ----------------------------------------------------------------------------
+// Critical Rx warnings block signing by default (AI-confidence dips,
+// clinical-rules flags). The doctor can override via the <OverrideConfirmModal>
+// with a typed reason (10–500 chars). One row per override so support +
+// compliance can trace which warnings were bypassed and why.
+//
+// `warningId` is an opaque identifier the worker emits alongside the
+// warning — a stable hash of (severity + headline + rxLineNumber). No FK
+// because the warning itself lives inside TranscribeVisit JSON payloads,
+// not a relational table.
+// ============================================================================
+
+model RxWarningOverride {
+  id String @id @default(cuid())
+
+  visitId String
+  visit   TranscribeVisit @relation(fields: [visitId], references: [id])
+
+  /// Which Rx line in the SOAP note this warning attached to. Useful
+  /// for joining back to the line in replay without parsing JSON.
+  rxLineNumber Int
+
+  /// Worker-emitted stable identifier for the warning — a hash of
+  /// (severity + headline + rxLineNumber) at worker time.
+  warningId String
+
+  /// Frozen 'critical' | 'warning' | 'info' at override time. Kept
+  /// as a raw string so schema changes to the client-side enum don't
+  /// invalidate historical rows.
+  severity String
+
+  /// Frozen copy of the warning's headline — compliance view doesn't
+  /// want to re-parse the original worker payload.
+  headline String
+
+  /// The doctor's typed reason. Required; client enforces 10–500 chars
+  /// but the server also validates before insert.
+  reason String @db.Text
+
+  overriddenBy String
+  user         User   @relation(fields: [overriddenBy], references: [id])
+
+  overriddenAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([visitId])
+  @@index([overriddenBy])
+  @@map("rx_warning_overrides")
 }

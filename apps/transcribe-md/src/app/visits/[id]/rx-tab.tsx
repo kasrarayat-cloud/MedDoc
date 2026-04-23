@@ -1,8 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronDown, AlertTriangle } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/cn';
+import {
+  RxWarningCard,
+  type RxWarning as RxWarningCardData,
+  type Severity as RxWarningSeverity,
+} from '@/components/rx/rx-warning-card';
 
 // ---------------------------------------------------------------------------
 // Wire types — mirror Layer 7c output.
@@ -39,7 +44,7 @@ export interface RxBlob {
   warnings?: RxWarning[];
 }
 
-export function RxTab({ rx }: { rx: unknown }) {
+export function RxTab({ rx, visitId }: { rx: unknown; visitId: string }) {
   const blob = (rx as RxBlob | null) ?? null;
   const prescriptions = blob?.prescriptions ?? [];
   const warnings = blob?.warnings ?? [];
@@ -72,7 +77,15 @@ export function RxTab({ rx }: { rx: unknown }) {
   return (
     <div className="space-y-6">
       {sortedWarnings.length > 0 && (
-        <WarningsPanel warnings={sortedWarnings} />
+        <div className="flex flex-col gap-3">
+          {sortedWarnings.map((w, i) => (
+            <RxWarningCard
+              key={`${w.rx_drug}-${i}`}
+              warning={mapWorkerWarning(w, i)}
+              visitId={visitId}
+            />
+          ))}
+        </div>
       )}
 
       <section>
@@ -90,69 +103,37 @@ export function RxTab({ rx }: { rx: unknown }) {
 }
 
 // ---------------------------------------------------------------------------
-// Sub-components
+// Worker → component boundary mapping.
 // ---------------------------------------------------------------------------
+//
+// Worker currently emits `severity: 'critical' | 'major' | 'minor'`; the
+// RxWarningCard expects the design-spec enum `critical | warning | info`.
+// Map at the integration boundary so today's worker output still renders;
+// a follow-up PR will narrow the backend enum to match.
+// The worker doesn't emit the rich shape (risks / heard / guess / details)
+// yet — the card gracefully degrades to header + action tile.
 
-function WarningsPanel({ warnings }: { warnings: RxWarning[] }) {
-  const hasCritical = warnings.some((w) => w.severity === 'critical');
-  return (
-    <div
-      role="alert"
-      className={cn(
-        'rounded-xl border p-4',
-        hasCritical
-          ? 'border-danger/40 bg-danger/5'
-          : 'border-warning/40 bg-warning/5'
-      )}
-    >
-      <div className="mb-3 flex items-center gap-2">
-        <AlertTriangle
-          className={cn(
-            'h-4 w-4',
-            hasCritical ? 'text-danger' : 'text-warning'
-          )}
-          aria-hidden
-        />
-        <span className="text-[13px] font-semibold text-text-primary">
-          {hasCritical
-            ? 'Critical safety warnings — review before signing'
-            : 'Review these warnings before signing'}
-        </span>
-      </div>
-      <ul className="space-y-2">
-        {warnings.map((w, i) => (
-          <li
-            key={i}
-            className="rounded-lg border border-border-subtle bg-bg-surface-1/40 px-3 py-2"
-          >
-            <div className="flex flex-wrap items-center gap-2 text-[12px]">
-              <span
-                className={cn(
-                  'inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider',
-                  w.severity === 'critical'
-                    ? 'border-danger/40 bg-danger/10 text-danger'
-                    : w.severity === 'major'
-                      ? 'border-warning/40 bg-warning/10 text-warning'
-                      : 'border-border-default bg-bg-surface-2 text-text-tertiary'
-                )}
-              >
-                {w.severity}
-              </span>
-              <span className="font-medium text-text-primary">{w.rx_drug}</span>
-            </div>
-            <div className="mt-1 text-[12px] text-text-secondary">
-              {w.message}
-            </div>
-            {w.evidence_quote && (
-              <div className="mt-1 text-[11px] italic text-text-muted">
-                “{w.evidence_quote}”
-              </div>
-            )}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
+function severityToCardSev(s: RxWarning['severity']): RxWarningSeverity {
+  if (s === 'critical') return 'critical';
+  if (s === 'major') return 'warning';
+  return 'info';
+}
+
+function mapWorkerWarning(
+  w: RxWarning,
+  index: number
+): RxWarningCardData {
+  return {
+    // Worker doesn't emit stable IDs yet; fall back to a positional
+    // synthetic so the audit row (which requires an ID) has something
+    // deterministic to hash against. Real worker PR will replace this.
+    id: `worker-${index}-${w.rx_drug}`,
+    rxLineNumber: index + 1,
+    sev: severityToCardSev(w.severity),
+    headline: `${w.rx_drug} — ${w.message}`,
+    action: w.evidence_quote ? `"${w.evidence_quote}"` : undefined,
+    // All rich fields stay undefined until the worker is updated.
+  };
 }
 
 function PrescriptionCard({ rx }: { rx: Prescription }) {
