@@ -15,6 +15,7 @@ import { Readable } from 'node:stream';
 import prisma from '@meddoc/db';
 import { deepgramBatchTranscribe } from '@meddoc/ai';
 import { statAudio, streamAudio } from '@/lib/minio';
+import { MEDICATION_KEYTERMS } from '@/lib/deepgram-vocabulary';
 
 export interface Layer1Input {
   visitId: string;
@@ -59,6 +60,10 @@ export async function runLayer1Transcribe(
       purpose: 'tm_transcribe',
       audio: { stream: webStream, sizeBytes: stat.size },
       mimeType: input.audioMimeType!,
+      // Phase-2 voice batch 1: boost the medication lexicon so
+      // near-homophones decode as the drug name rather than an
+      // invented word. See src/lib/deepgram-vocabulary.ts.
+      keyterms: MEDICATION_KEYTERMS,
     });
   };
 
