@@ -55,7 +55,10 @@ export function RecordingClient({
   const [elapsed, setElapsed] = useState(0);
   const [marks, setMarks] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [reducedMotion, setReducedMotion] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  });
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -64,11 +67,12 @@ export function RecordingClient({
   const startTsRef = useRef<number>(0);
   const finalizingRef = useRef(false);
 
-  // Reduced-motion gate (§8.9) — mount-only read.
+  // Reduced-motion subscription (§8.9). Initial value is read by the
+  // lazy useState initializer above; this effect only subscribes to
+  // runtime flips (e.g. the user toggling the OS setting).
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
-    setReducedMotion(mq.matches);
     const handler = () => setReducedMotion(mq.matches);
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
@@ -170,7 +174,6 @@ export function RecordingClient({
       setPhase('error');
       toast.error('Could not start recording', { description: msg });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [finalizeAndUpload]);
 
   function stop() {

@@ -64,14 +64,23 @@ export function ProcessingState({
   const [hint, setHint] = useState<string>(initialHint);
   const [elapsedMin, setElapsedMin] = useState(0);
   const [retrying, setRetrying] = useState(false);
-  const [reducedMotion, setReducedMotion] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  });
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const startedAtRef = useRef<number>(Date.now());
+  const startedAtRef = useRef<number>(0);
+
+  // Capture the processing start time on mount (refs aren't allowed
+  // to be initialised with impure expressions per the react-hooks
+  // lint rule). Zero sentinel means "not yet initialised".
+  useEffect(() => {
+    if (startedAtRef.current === 0) startedAtRef.current = Date.now();
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
-    setReducedMotion(mq.matches);
     const handler = () => setReducedMotion(mq.matches);
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);

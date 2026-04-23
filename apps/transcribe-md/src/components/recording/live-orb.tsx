@@ -21,7 +21,10 @@ export function LiveOrb({
     if (reducedMotion || paused) {
       if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
-      setAmp(0.5);
+      // Amp is intentionally NOT reset here — the render just below
+      // handles the static frame, and writing setAmp would trigger a
+      // cascading render. The component re-mounts clean on state
+      // changes that matter (paused flip → new effect run).
       return;
     }
     let cancelled = false;
