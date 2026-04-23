@@ -1,12 +1,15 @@
 'use client';
 
-import { useActionState, useEffect } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { SpecularButton } from '@/components/specular-button';
+import { Ic } from '@/components/ui/icon';
+import {
+  AuthFieldError,
+  AuthFieldLabel,
+} from '@/components/ui/auth-shell';
 import { signupAction, type AuthActionState } from '@/actions/auth';
 import { MARKETING_URL } from '@/lib/constants';
 
@@ -15,12 +18,12 @@ const initialState: AuthActionState = null;
 export function SignupForm() {
   const [state, formAction, pending] = useActionState(signupAction, initialState);
   const router = useRouter();
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
 
   useEffect(() => {
     if (state && state.ok) {
       if (state.warning) {
-        // Partial success — e.g., account created but auto-login
-        // failed. Don't fire the triumphant green toast.
         toast.warning('Account created', { description: state.warning });
       } else {
         toast.success('Welcome to QuillMD', {
@@ -37,9 +40,18 @@ export function SignupForm() {
   const errors = state && !state.ok ? state.errors : {};
   const values = state && !state.ok ? state.values ?? {} : {};
 
+  // Client-side confirm-password check. The server schema doesn't carry
+  // a confirmPassword field — mismatches simply block submit with a
+  // local message; the useActionState path never sees confirmPassword.
+  const mismatchMessage =
+    confirmPassword.length > 0 && confirmPassword !== password
+      ? 'Passwords do not match'
+      : undefined;
+
   return (
-    <form action={formAction} className="space-y-4">
-      <FieldLabel htmlFor="name" label="Full name">
+    <form action={formAction}>
+      <div style={{ marginTop: 14 }}>
+        <AuthFieldLabel htmlFor="name">Full name</AuthFieldLabel>
         <input
           id="name"
           name="name"
@@ -47,12 +59,14 @@ export function SignupForm() {
           autoComplete="name"
           defaultValue={values.name ?? ''}
           required
-          className={inputClass}
+          className="qm-input"
+          style={{ marginTop: 6 }}
         />
-        <FieldError message={errors.name} />
-      </FieldLabel>
+        <AuthFieldError message={errors.name} />
+      </div>
 
-      <FieldLabel htmlFor="email" label="Email">
+      <div style={{ marginTop: 14 }}>
+        <AuthFieldLabel htmlFor="email">Email</AuthFieldLabel>
         <input
           id="email"
           name="email"
@@ -60,32 +74,75 @@ export function SignupForm() {
           autoComplete="email"
           defaultValue={values.email ?? ''}
           required
-          className={inputClass}
+          className="qm-input"
+          style={{ marginTop: 6 }}
         />
-        <FieldError message={errors.email} />
-      </FieldLabel>
+        <AuthFieldError message={errors.email} />
+      </div>
 
-      <FieldLabel htmlFor="password" label="Password">
+      <div style={{ marginTop: 14 }}>
+        <AuthFieldLabel htmlFor="password">Password</AuthFieldLabel>
         <input
           id="password"
           name="password"
           type="password"
           autoComplete="new-password"
           required
-          className={inputClass}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          className="qm-input"
+          style={{ marginTop: 6 }}
         />
-        <p className="mt-1.5 text-[11px] text-text-muted">
+        <p
+          style={{
+            marginTop: 6,
+            fontSize: 11,
+            color: 'var(--fg-4)',
+            lineHeight: 1.4,
+          }}
+        >
           At least 10 characters, with upper + lowercase letters and a digit.
         </p>
-        <FieldError message={errors.password} />
-      </FieldLabel>
+        <AuthFieldError message={errors.password} />
+      </div>
 
-      <label className="flex items-start gap-2.5 pt-1 text-[12px] text-text-tertiary">
+      <div style={{ marginTop: 14 }}>
+        <AuthFieldLabel htmlFor="confirmPassword">Confirm password</AuthFieldLabel>
+        <input
+          id="confirmPassword"
+          name="confirmPassword"
+          type="password"
+          autoComplete="new-password"
+          required
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
+          className="qm-input"
+          style={{ marginTop: 6 }}
+        />
+        <AuthFieldError message={mismatchMessage} />
+      </div>
+
+      <label
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 10,
+          marginTop: 18,
+          fontSize: 12,
+          color: 'var(--fg-3)',
+          lineHeight: 1.5,
+        }}
+      >
         <input
           type="checkbox"
           name="acceptTerms"
           required
-          className="mt-0.5 h-3.5 w-3.5 rounded border-border-emphasis bg-bg-surface-1 text-violet-500 focus:ring-violet-500/40"
+          style={{
+            marginTop: 3,
+            width: 14,
+            height: 14,
+            accentColor: 'var(--accent)',
+          }}
         />
         <span>
           I agree to the{' '}
@@ -93,7 +150,7 @@ export function SignupForm() {
             href={`${MARKETING_URL}/terms`}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-violet-400 underline-offset-2 hover:text-violet-300 hover:underline"
+            style={{ color: 'var(--accent-bright)' }}
           >
             terms of service
           </a>{' '}
@@ -102,64 +159,47 @@ export function SignupForm() {
             href={`${MARKETING_URL}/privacy`}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-violet-400 underline-offset-2 hover:text-violet-300 hover:underline"
+            style={{ color: 'var(--accent-bright)' }}
           >
             privacy policy
           </a>
           .
         </span>
       </label>
-      <FieldError message={errors.acceptTerms} />
-      <FieldError message={errors._form} />
+      <AuthFieldError message={errors.acceptTerms} />
+      <AuthFieldError message={errors._form} />
 
-      <SpecularButton type="submit" variant="primary" size="lg" className="w-full">
+      <button
+        type="submit"
+        disabled={pending || Boolean(mismatchMessage)}
+        className="qm-btn qm-btn-primary"
+        style={{
+          width: '100%',
+          justifyContent: 'center',
+          padding: 12,
+          marginTop: 22,
+          opacity: pending || mismatchMessage ? 0.6 : 1,
+          cursor:
+            pending || mismatchMessage ? 'not-allowed' : 'pointer',
+        }}
+      >
         {pending ? 'Creating account…' : 'Create account'}
-        {!pending && <ArrowRight className="h-4 w-4" />}
-      </SpecularButton>
+        {!pending && <Ic.arrowRight width={14} height={14} />}
+      </button>
 
-      <p className="text-center text-[13px] text-text-muted">
+      <div
+        style={{
+          textAlign: 'center',
+          color: 'var(--fg-3)',
+          fontSize: 12.5,
+          marginTop: 18,
+        }}
+      >
         Have an account?{' '}
-        <Link
-          href="/login"
-          className="text-violet-400 hover:text-violet-300 transition-colors"
-        >
+        <Link href="/login" style={{ color: 'var(--accent-bright)' }}>
           Sign in →
         </Link>
-      </p>
+      </div>
     </form>
-  );
-}
-
-const inputClass =
-  'block w-full rounded-lg border border-border-default bg-bg-surface-1/60 px-3.5 py-2.5 text-[14px] text-text-primary placeholder:text-text-muted outline-none transition-colors duration-200 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/30';
-
-function FieldLabel({
-  htmlFor,
-  label,
-  children,
-}: {
-  htmlFor: string;
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <label
-        htmlFor={htmlFor}
-        className="mb-1.5 block text-[12px] font-medium tracking-tight text-text-tertiary"
-      >
-        {label}
-      </label>
-      {children}
-    </div>
-  );
-}
-
-function FieldError({ message }: { message?: string }) {
-  if (!message) return null;
-  return (
-    <p role="alert" className="mt-1.5 text-[12px] text-danger">
-      {message}
-    </p>
   );
 }
