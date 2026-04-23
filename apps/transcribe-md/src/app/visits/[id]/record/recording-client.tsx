@@ -54,6 +54,12 @@ export function RecordingClient({
   const [phase, setPhase] = useState<Phase>('idle');
   const [elapsed, setElapsed] = useState(0);
   const [marks, setMarks] = useState<number[]>([]);
+  // Mirror of `marks` for stable access from the MediaRecorder.onstop
+  // handler, which is registered once inside `start()` and captures a
+  // stale finalizeAndUpload closure otherwise. Writing here in
+  // markMoment() keeps the ref current so the post-stop PATCH sees
+  // every mark the doctor tagged.
+  const marksRef = useRef<number[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [reducedMotion, setReducedMotion] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
@@ -109,13 +115,16 @@ export function RecordingClient({
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error ?? `Upload failed (${res.status})`);
       }
-      // Persist marked moments alongside the upload. The PATCH route
-      // lives on /api/visits/[id] in a later gate — for now we POST
-      // onto a side helper via the same dictation route if markedMoments
-      // are present. If the endpoint doesn't know the field yet it's
-      // ignored; payload stays small.
-      if (marks.length > 0) {
-        const momentsPayload = marks.map((t) => ({ timestampMs: t }));
+      // Persist marked moments alongside the upload. Read from
+      // marksRef (not the `marks` state) because this callback runs
+      // from the MediaRecorder.onstop handler registered inside
+      // start(), which captured the finalizeAndUpload closure when
+      // marks was still []. The ref is mutated by markMoment() on
+      // every click so the post-stop payload always reflects the
+      // latest tagged moments.
+      const currentMarks = marksRef.current;
+      if (currentMarks.length > 0) {
+        const momentsPayload = currentMarks.map((t) => ({ timestampMs: t }));
         try {
           await fetch(`/api/visits/${visitId}/dictation/upload`, {
             method: 'PATCH',
@@ -138,7 +147,7 @@ export function RecordingClient({
       setPhase('error');
       toast.error('Upload failed', { description: msg });
     }
-  }, [visitId, marks, router]);
+  }, [visitId, router]);
 
   const start = useCallback(async () => {
     setError(null);
@@ -189,6 +198,7 @@ export function RecordingClient({
   function markMoment() {
     if (phase !== 'recording') return;
     const t = Date.now() - startTsRef.current;
+    marksRef.current = [...marksRef.current, t];
     setMarks((prev) => [...prev, t]);
   }
 
