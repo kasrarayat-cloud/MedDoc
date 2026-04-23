@@ -1,13 +1,22 @@
-// HANDOFF §2.2 VisitList — grouped by day (Today / Yesterday / This week
-// / Earlier). Each row is a glass-surface grid linking to the visit page
-// with time · avatar+name · specialty chip · duration · status chip.
+'use client';
+
+// HANDOFF §2.2 VisitList — grouped by day (Today / Yesterday / This
+// week / Earlier). Each row is a glass-surface grid linking to the
+// visit page with time · avatar+name · specialty chip · duration ·
+// status chip.
+//
+// Client component so grouping + time formatting use the VIEWER's
+// timezone, not the Node container's. Callers pass ISO 8601 UTC
+// strings for createdAt; everything downstream resolves locally.
 
 import Link from 'next/link';
 import type { TranscribeVisitStatus } from '@prisma/client';
 
 import { Avatar } from '@/components/ui/avatar';
 import { Ic } from '@/components/ui/icon';
+import { LocalTime } from '@/components/ui/local-time';
 import { SpecChip, type SpecialtyKind } from '@/components/ui/spec-chip';
+import { bucketForLocalDay, type DayBucket } from '@/lib/format-time';
 
 export type DashboardVisit = {
   id: string;
@@ -16,7 +25,8 @@ export type DashboardVisit = {
   specialty: string;
   status: TranscribeVisitStatus;
   needsReview: boolean;
-  createdAt: Date;
+  /** ISO 8601 UTC — `createdAt.toISOString()` from the server. */
+  createdAt: string;
   audioDurationSec: number | null;
 };
 
@@ -56,52 +66,25 @@ function formatDuration(sec: number | null): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-function pad2(n: number): string {
-  return n < 10 ? `0${n}` : String(n);
-}
-function formatTime(d: Date, withDay: boolean): string {
-  const t = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
-  if (!withDay) return t;
-  const dow = d.toLocaleDateString('en-US', { weekday: 'short' });
-  return `${dow} ${t}`;
-}
-
-/** Group visits by Today / Yesterday / This week / Earlier. Callers
- *  pass already-ordered (desc createdAt) visits. Empty groups are
- *  dropped so the UI doesn't render an empty "Yesterday" divider. */
+/** Group visits by local-day bucket. Callers pass already-ordered
+ *  (desc createdAt) visits. Empty groups are dropped so the UI
+ *  doesn't render an empty "Yesterday" divider. */
 function groupByDay(visits: DashboardVisit[]): {
-  label: 'Today' | 'Yesterday' | 'This week' | 'Earlier';
+  label: DayBucket;
   withDow: boolean;
   rows: DashboardVisit[];
 }[] {
-  const now = new Date();
-  const today = new Date(now);
-  today.setHours(0, 0, 0, 0);
-  const yesterday = new Date(today);
-  yesterday.setDate(today.getDate() - 1);
-
-  // Start of this week = most-recent Monday 00:00 local.
-  const weekStart = new Date(today);
-  const dow = today.getDay(); // 0=Sun…6=Sat
-  const diff = dow === 0 ? -6 : 1 - dow;
-  weekStart.setDate(today.getDate() + diff);
-
-  const buckets: Record<'Today' | 'Yesterday' | 'This week' | 'Earlier', DashboardVisit[]> = {
+  const buckets: Record<DayBucket, DashboardVisit[]> = {
     Today: [],
     Yesterday: [],
     'This week': [],
     Earlier: [],
   };
-
   for (const v of visits) {
-    const c = v.createdAt;
-    if (c >= today) buckets.Today.push(v);
-    else if (c >= yesterday) buckets.Yesterday.push(v);
-    else if (c >= weekStart) buckets['This week'].push(v);
-    else buckets.Earlier.push(v);
+    const bucket = bucketForLocalDay(v.createdAt) ?? 'Earlier';
+    buckets[bucket].push(v);
   }
-
-  const orderedLabels: ('Today' | 'Yesterday' | 'This week' | 'Earlier')[] = [
+  const orderedLabels: DayBucket[] = [
     'Today',
     'Yesterday',
     'This week',
@@ -167,7 +150,10 @@ export function VisitList({ visits }: { visits: DashboardVisit[] }) {
                       color: 'var(--fg-3)',
                     }}
                   >
-                    {formatTime(v.createdAt, group.withDow)}
+                    <LocalTime
+                      iso={v.createdAt}
+                      variant={group.withDow ? 'timeWithDay' : 'time'}
+                    />
                   </div>
                   <div
                     style={{

@@ -92,9 +92,11 @@ export default async function PatientsPage() {
       return {
         id: r.id,
         name: r.name,
-        dateOfBirth: r.dateOfBirth,
+        dateOfBirth: r.dateOfBirth
+          ? r.dateOfBirth.toISOString().slice(0, 10)
+          : null,
         visitCount: countByPatient.get(r.id) ?? 0,
-        lastVisitAt: latest?.createdAt ?? null,
+        lastVisitAt: latest?.createdAt.toISOString() ?? null,
         lastVisitSpecialty: latest?.specialty ?? null,
         lastVisitStatus: latest?.status ?? null,
         lastVisitNeedsReview: latest?.needsReview ?? false,

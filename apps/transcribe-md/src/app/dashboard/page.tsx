@@ -365,9 +365,13 @@ async function PatientsTab({
       return {
         id: r.id,
         name: r.name,
-        dateOfBirth: r.dateOfBirth,
+        // DOB is a date — slice the ISO to avoid any TZ influence.
+        dateOfBirth: r.dateOfBirth
+          ? r.dateOfBirth.toISOString().slice(0, 10)
+          : null,
         visitCount: countByPatient.get(r.id) ?? 0,
-        lastVisitAt: latest?.createdAt ?? null,
+        // Full ISO UTC — client formats in viewer's timezone.
+        lastVisitAt: latest?.createdAt.toISOString() ?? null,
         lastVisitSpecialty: latest?.specialty ?? null,
         lastVisitStatus: latest?.status ?? null,
         lastVisitNeedsReview: latest?.needsReview ?? false,
@@ -434,7 +438,8 @@ async function AllVisitsTab({
       specialty: v.specialty,
       status: v.status,
       needsReview: v.needsReview,
-      createdAt: v.createdAt,
+      // ISO UTC — <VisitList> formats + buckets in viewer's local TZ.
+      createdAt: v.createdAt.toISOString(),
       audioDurationSec: v.audioDurationSec,
     })
   );
