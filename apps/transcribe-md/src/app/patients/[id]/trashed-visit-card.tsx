@@ -24,6 +24,8 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { AlertTriangle, Loader2, RotateCcw, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 
+import { formatRelativeTime } from '@/lib/format-time';
+
 const SOFT_DELETE_WINDOW_DAYS = 15;
 
 export interface TrashedVisitCardData {
@@ -42,16 +44,10 @@ interface Props {
   visit: TrashedVisitCardData;
 }
 
+// Thin wrapper around the shared formatter so the "Apr 14" fallback
+// resolves in the viewer's local timezone.
 function formatAgo(d: Date): string {
-  const diffMs = Date.now() - d.getTime();
-  const m = Math.floor(diffMs / 60_000);
-  if (m < 1) return 'just now';
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  const days = Math.floor(h / 24);
-  if (days < 7) return `${days}d ago`;
-  return d.toLocaleDateString();
+  return formatRelativeTime(d);
 }
 
 function daysUntilPurge(deletedAt: Date): number {

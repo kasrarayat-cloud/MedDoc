@@ -602,7 +602,7 @@ async function VisitsTab({
       specialty: v.specialty,
       status: v.status,
       needsReview: v.needsReview,
-      createdAt: v.createdAt,
+      createdAt: v.createdAt.toISOString(),
       audioDurationSec: v.audioDurationSec,
     })
   );
