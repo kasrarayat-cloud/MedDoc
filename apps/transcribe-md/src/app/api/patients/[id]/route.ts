@@ -18,6 +18,7 @@ import prisma from '@meddoc/db';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { getSession } from '@/lib/auth';
+import { ProblemListSchema } from '@/lib/problem-list';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
@@ -36,6 +37,9 @@ async function loadPatientForSession(
       name: true,
       dateOfBirth: true,
       externalId: true,
+      mrn: true,
+      insurance: true,
+      problemList: true,
       deletedAt: true,
       createdAt: true,
       updatedAt: true,
@@ -77,6 +81,9 @@ export const GET = withApiHandler<{ id: string }>(
         name: patient.name,
         dateOfBirth: patient.dateOfBirth,
         externalId: patient.externalId,
+        mrn: patient.mrn,
+        insurance: patient.insurance,
+        problemList: patient.problemList,
         createdAt: patient.createdAt,
         updatedAt: patient.updatedAt,
         visitCount: aggregate._count._all,
@@ -109,6 +116,25 @@ const UpdateBodySchema = z.object({
       if (v === null) return null;
       return v.length === 0 ? null : v;
     }),
+  mrn: z
+    .union([z.string().trim().max(50), z.null()])
+    .optional()
+    .transform((v) => {
+      if (v === undefined) return undefined;
+      if (v === null) return null;
+      return v.length === 0 ? null : v;
+    }),
+  insurance: z
+    .union([z.string().trim().max(200), z.null()])
+    .optional()
+    .transform((v) => {
+      if (v === undefined) return undefined;
+      if (v === null) return null;
+      return v.length === 0 ? null : v;
+    }),
+  /** Full-array replace. Caller sends the complete post-edit list;
+   *  server treats it as truth. `null` clears the list. */
+  problemList: z.union([ProblemListSchema, z.null()]).optional(),
 });
 
 export const PATCH = withApiHandler<{ id: string }>(
@@ -147,6 +173,9 @@ export const PATCH = withApiHandler<{ id: string }>(
       name?: string;
       dateOfBirth?: Date | null;
       externalId?: string | null;
+      mrn?: string | null;
+      insurance?: string | null;
+      problemList?: unknown;
     } = {};
     if (parsed.data.name !== undefined) data.name = parsed.data.name;
     if (parsed.data.dateOfBirth !== undefined) {
@@ -157,6 +186,13 @@ export const PATCH = withApiHandler<{ id: string }>(
     }
     if (parsed.data.externalId !== undefined) {
       data.externalId = parsed.data.externalId;
+    }
+    if (parsed.data.mrn !== undefined) data.mrn = parsed.data.mrn;
+    if (parsed.data.insurance !== undefined) {
+      data.insurance = parsed.data.insurance;
+    }
+    if (parsed.data.problemList !== undefined) {
+      data.problemList = parsed.data.problemList;
     }
 
     if (Object.keys(data).length === 0) {
@@ -174,6 +210,9 @@ export const PATCH = withApiHandler<{ id: string }>(
         name: true,
         dateOfBirth: true,
         externalId: true,
+        mrn: true,
+        insurance: true,
+        problemList: true,
         updatedAt: true,
       },
     });

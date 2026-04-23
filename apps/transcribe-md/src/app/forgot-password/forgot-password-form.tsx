@@ -2,9 +2,12 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight } from 'lucide-react';
 
-import { SpecularButton } from '@/components/specular-button';
+import { Ic } from '@/components/ui/icon';
+import {
+  AuthFieldError,
+  AuthFieldLabel,
+} from '@/components/ui/auth-shell';
 
 export function ForgotPasswordForm() {
   const [email, setEmail] = useState('');
@@ -42,35 +45,41 @@ export function ForgotPasswordForm() {
 
   if (submitted) {
     return (
-      <div className="space-y-4 text-center">
-        <p className="text-[14px] text-text-secondary">
-          If an account exists for <strong>{email}</strong>, we&apos;ve
-          sent a reset link. It expires in 1 hour.
+      <div
+        style={{
+          marginTop: 20,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 12,
+          textAlign: 'center',
+        }}
+      >
+        <p style={{ margin: 0, fontSize: 13.5, color: 'var(--fg-2)' }}>
+          If an account exists for <strong style={{ color: 'var(--fg)' }}>{email}</strong>,
+          we&apos;ve sent a reset link. It expires in 1 hour.
         </p>
-        <p className="text-[13px] text-text-muted">
+        <p style={{ margin: 0, fontSize: 12.5, color: 'var(--fg-3)' }}>
           Check your inbox — and your spam folder too.
         </p>
-        <p className="pt-2 text-[13px] text-text-muted">
-          <Link
-            href="/login"
-            className="text-violet-400 hover:text-violet-300 transition-colors"
-          >
-            ← Back to sign in
-          </Link>
-        </p>
+        <Link
+          href="/login"
+          style={{
+            marginTop: 6,
+            fontSize: 12.5,
+            color: 'var(--accent-bright)',
+          }}
+        >
+          ← Back to sign in
+        </Link>
       </div>
     );
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4" noValidate>
-      <div>
-        <label
-          htmlFor="email"
-          className="mb-1.5 block text-[12px] font-medium tracking-tight text-text-tertiary"
-        >
-          Email
-        </label>
+    <form onSubmit={onSubmit} noValidate>
+      <div style={{ marginTop: 14 }}>
+        <AuthFieldLabel htmlFor="email">Email</AuthFieldLabel>
         <input
           id="email"
           name="email"
@@ -79,36 +88,43 @@ export function ForgotPasswordForm() {
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="block w-full rounded-lg border border-border-default bg-bg-surface-1/60 px-3.5 py-2.5 text-[14px] text-text-primary placeholder:text-text-muted outline-none transition-colors duration-200 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/30"
+          className="qm-input"
+          style={{ marginTop: 6 }}
         />
       </div>
 
-      {error && (
-        <p role="alert" className="text-[12px] text-danger">
-          {error}
-        </p>
-      )}
+      <AuthFieldError message={error ?? undefined} />
 
-      <SpecularButton
+      <button
         type="submit"
-        variant="primary"
-        size="lg"
-        className="w-full"
         disabled={pending || !email.trim()}
+        className="qm-btn qm-btn-primary"
+        style={{
+          width: '100%',
+          justifyContent: 'center',
+          padding: 12,
+          marginTop: 22,
+          opacity: pending || !email.trim() ? 0.6 : 1,
+          cursor: pending || !email.trim() ? 'not-allowed' : 'pointer',
+        }}
       >
         {pending ? 'Sending…' : 'Send reset link'}
-        {!pending && <ArrowRight className="h-4 w-4" />}
-      </SpecularButton>
+        {!pending && <Ic.arrowRight width={14} height={14} />}
+      </button>
 
-      <p className="text-center text-[13px] text-text-muted">
+      <div
+        style={{
+          textAlign: 'center',
+          color: 'var(--fg-3)',
+          fontSize: 12.5,
+          marginTop: 18,
+        }}
+      >
         Remembered it?{' '}
-        <Link
-          href="/login"
-          className="text-violet-400 hover:text-violet-300 transition-colors"
-        >
+        <Link href="/login" style={{ color: 'var(--accent-bright)' }}>
           Back to sign in →
         </Link>
-      </p>
+      </div>
     </form>
   );
 }

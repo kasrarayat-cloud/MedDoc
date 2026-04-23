@@ -1,11 +1,13 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 
 import prisma from '@meddoc/db';
 import { TranscribeVisitStatus } from '@prisma/client';
 import { auth } from '@/lib/nextauth';
-import { NavBar } from '@/components/nav-bar';
-import { PageWrapper } from '@/components/page-wrapper';
+import { AppFrame } from '@/components/ui/app-frame';
+import { Ic } from '@/components/ui/icon';
+import { SpecChip, type SpecialtyKind } from '@/components/ui/spec-chip';
 import { AudioUploader } from '@/components/audio-uploader';
 import { VoiceDictator } from '@/components/voice-dictator';
 import { TextComposer } from '@/components/text-composer';
@@ -13,20 +15,13 @@ import { TextComposer } from '@/components/text-composer';
 import { ProcessingState } from './processing-state';
 import { VisitReadyView, type Utterance, type SpeakerInfo } from './visit-ready-view';
 import { VisitFailedView } from './visit-failed-view';
-import { BackToPatientLink } from './back-link';
 import { VisitLifecycleActions } from './visit-lifecycle-actions';
 import { EditDraftDialog } from './edit-draft-dialog';
 
-// T-M16.2: the flag check moved to @/lib/email-enabled as the single
-// source of truth (used by signup, login, forgot-password, change-
-// email, and the Sign & Send modal). See that module for the
-// RESEND_API_KEY + RESEND_FROM_VERIFIED reasoning.
 import { isEmailDeliveryEnabled } from '@/lib/email-enabled';
 
 export const metadata: Metadata = { title: 'Visit' };
 
-// Human-readable progress hint — duplicated from /api/visits/[id]/status
-// so the initial SSR doesn't have to round-trip to itself.
 const PROGRESS_HINT: Record<TranscribeVisitStatus, string> = {
   QUEUED: 'Queued — waiting for a worker',
   TRANSCRIBING: 'Transcribing audio',
@@ -49,6 +44,19 @@ const PROCESSING_STATES: ReadonlyArray<TranscribeVisitStatus> = [
   TranscribeVisitStatus.AUTOMATING,
 ];
 
+const KNOWN_SPECIALTIES: readonly SpecialtyKind[] = [
+  'cardiology',
+  'pain',
+  'ortho',
+  'primary',
+  'pulmonology',
+  'ophthalmology',
+];
+function toSpecKind(raw: string): SpecialtyKind {
+  const lower = raw.toLowerCase() as SpecialtyKind;
+  return KNOWN_SPECIALTIES.includes(lower) ? lower : 'primary';
+}
+
 export default async function VisitPage({
   params,
 }: {
@@ -58,7 +66,50 @@ export default async function VisitPage({
   const session = await auth();
   if (!session?.user?.id) redirect('/login');
 
-  const [user, visit] = await Promise.all([
+  type UserRow = { name: string | null; email: string };
+  type VisitRow = {
+    id: string;
+    userId: string;
+    patientId: string;
+    patientName: string | null;
+    specialty: string;
+    chiefComplaint: string | null;
+    inputMode: string;
+    status: TranscribeVisitStatus;
+    deletedAt: Date | null;
+    archivedAt: Date | null;
+    patient: {
+      id: string;
+      name: string;
+      dateOfBirth: Date | null;
+      externalId: string | null;
+    } | null;
+    audioKey: string | null;
+    audioDurationSec: number | null;
+    dictationAudioKey: string | null;
+    dictationDurationSec: number | null;
+    rawTextInput: string | null;
+    transcriptRaw: unknown;
+    transcriptText: string | null;
+    speakerMap: unknown;
+    entities: unknown;
+    critique: unknown;
+    soapFinal: string | null;
+    signedSoap: string | null;
+    needsReview: boolean;
+    reviewReason: string | null;
+    processingStartedAt: Date | null;
+    processingFinishedAt: Date | null;
+    processingCostCents: number | null;
+    icdCodes: unknown;
+    cptCodes: unknown;
+    rxDrafts: unknown;
+    referrals: unknown;
+    patientSummary: string | null;
+    confidenceScores: unknown;
+  };
+
+  const [user, visit] = (await Promise.all([
     prisma.user.findUnique({
       where: { id: session.user.id },
       select: { name: true, email: true },
@@ -74,12 +125,8 @@ export default async function VisitPage({
         chiefComplaint: true,
         inputMode: true,
         status: true,
-        // T-M17.3: feed the lifecycle banner + action buttons.
         deletedAt: true,
         archivedAt: true,
-        // Commit 7 — Edit Draft dialog needs the full patient record
-        // to render the "current patient" pill. Only used when the
-        // visit is a draft; cheap to include unconditionally.
         patient: {
           select: {
             id: true,
@@ -105,7 +152,6 @@ export default async function VisitPage({
         processingStartedAt: true,
         processingFinishedAt: true,
         processingCostCents: true,
-        // T-M6 automation outputs.
         icdCodes: true,
         cptCodes: true,
         rxDrafts: true,
@@ -114,22 +160,79 @@ export default async function VisitPage({
         confidenceScores: true,
       },
     }),
-  ]);
+  ])) as [UserRow | null, VisitRow | null];
 
   if (!user) redirect('/login');
-  // 404 on both "no such visit" AND "visit belongs to another user" so
-  // an attacker can't enumerate IDs to probe for existence.
   if (!visit || visit.userId !== session.user.id) notFound();
 
+  const isReadyOrSigned =
+    visit.status === TranscribeVisitStatus.READY ||
+    visit.status === TranscribeVisitStatus.SIGNED;
+
+  const patientDisplayName =
+    visit.patient?.name ?? visit.patientName ?? 'Patient';
+  const nameTrim = patientDisplayName.trim();
+  const nameSpaceIdx = nameTrim.lastIndexOf(' ');
+  const nameFirst =
+    nameSpaceIdx >= 0 ? nameTrim.slice(0, nameSpaceIdx) : nameTrim;
+  const nameLast = nameSpaceIdx >= 0 ? nameTrim.slice(nameSpaceIdx + 1) : '';
+
   return (
-    <PageWrapper>
-      <NavBar name={user.name} email={user.email} />
+    <AppFrame>
+      <div
+        style={{
+          padding: '18px 32px 0',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          fontSize: 12.5,
+          color: 'var(--fg-3)',
+        }}
+      >
+        <Link
+          href="/dashboard"
+          style={{ color: 'var(--fg-3)', textDecoration: 'none' }}
+        >
+          Dashboard
+        </Link>
+        <Ic.chevRight width={12} height={12} />
+        {visit.patient ? (
+          <>
+            <Link
+              href={`/patients/${visit.patient.id}`}
+              style={{ color: 'var(--fg-3)', textDecoration: 'none' }}
+            >
+              {visit.patient.name}
+            </Link>
+            <Ic.chevRight width={12} height={12} />
+          </>
+        ) : null}
+        <span style={{ color: 'var(--fg)' }}>
+          Visit · {visit.status.toLowerCase()}
+        </span>
+      </div>
 
-      <main className="mx-auto max-w-4xl px-4 pb-24 pt-8 sm:px-6 lg:px-8 lg:pt-12">
-        <div className="mb-8">
-          <BackToPatientLink patientId={visit.patientId} />
-        </div>
+      {isReadyOrSigned && (
+        <VisitReadyHeader
+          title={
+            <>
+              {nameFirst}
+              {nameLast && (
+                <>
+                  {' '}
+                  <em style={{ color: 'var(--accent-bright)' }}>{nameLast}</em>
+                </>
+              )}
+            </>
+          }
+          specialty={visit.specialty}
+          chiefComplaint={visit.chiefComplaint}
+          status={visit.status}
+          needsReview={visit.needsReview}
+        />
+      )}
 
+      <div style={{ padding: '12px 32px 0' }}>
         <VisitLifecycleActions
           visitId={visit.id}
           status={visit.status}
@@ -143,9 +246,6 @@ export default async function VisitPage({
             (visit.rawTextInput !== null && visit.rawTextInput.length > 0)
           }
           editSlot={
-            // Only offer Edit while the visit is a QUEUED blank
-            // draft — the server enforces the same gate, the UI
-            // just hides the button when it would fail.
             visit.status === TranscribeVisitStatus.QUEUED &&
             visit.audioKey === null &&
             visit.dictationAudioKey === null &&
@@ -175,57 +275,125 @@ export default async function VisitPage({
             ) : null
           }
         />
+      </div>
 
-        <div className="flex flex-wrap items-center gap-2 text-[13px]">
-          {visit.patientName && <Chip>Patient: {visit.patientName}</Chip>}
-          <Chip>{visit.specialty}</Chip>
-          {visit.chiefComplaint && <Chip>CC: {visit.chiefComplaint}</Chip>}
-          <Chip>Mode: {visit.inputMode.replace(/_/g, ' ')}</Chip>
-          <Chip>Status: {visit.status.toLowerCase()}</Chip>
-        </div>
-
-        <div className="mt-10">
-          <VisitBody
-            visitId={visit.id}
-            doctorEmail={user.email}
-            emailEnabled={isEmailDeliveryEnabled()}
-            inputMode={visit.inputMode}
-            status={visit.status}
-            audioKey={visit.audioKey}
-            audioDurationSec={visit.audioDurationSec}
-            dictationAudioKey={visit.dictationAudioKey}
-            dictationDurationSec={visit.dictationDurationSec}
-            rawTextInput={visit.rawTextInput}
-            transcriptRaw={visit.transcriptRaw as unknown}
-            transcriptText={visit.transcriptText}
-            speakerMap={visit.speakerMap as unknown}
-            entities={visit.entities as unknown}
-            critique={visit.critique as unknown}
-            soapFinal={visit.soapFinal}
-            signedSoap={visit.signedSoap}
-            needsReview={visit.needsReview}
-            reviewReason={visit.reviewReason}
-            processingStartedAt={visit.processingStartedAt}
-            processingFinishedAt={visit.processingFinishedAt}
-            processingCostCents={visit.processingCostCents}
-            icdCodes={visit.icdCodes as unknown}
-            cptCodes={visit.cptCodes as unknown}
-            rxDrafts={visit.rxDrafts as unknown}
-            referrals={visit.referrals as unknown}
-            patientSummary={visit.patientSummary}
-            confidenceScores={visit.confidenceScores as unknown}
-          />
-        </div>
-      </main>
-    </PageWrapper>
+      <div style={{ padding: '18px 32px 48px' }}>
+        <VisitBody
+          visitId={visit.id}
+          doctorEmail={user.email}
+          emailEnabled={isEmailDeliveryEnabled()}
+          inputMode={visit.inputMode}
+          status={visit.status}
+          audioKey={visit.audioKey}
+          audioDurationSec={visit.audioDurationSec}
+          dictationAudioKey={visit.dictationAudioKey}
+          dictationDurationSec={visit.dictationDurationSec}
+          rawTextInput={visit.rawTextInput}
+          transcriptRaw={visit.transcriptRaw}
+          transcriptText={visit.transcriptText}
+          speakerMap={visit.speakerMap}
+          entities={visit.entities}
+          critique={visit.critique}
+          soapFinal={visit.soapFinal}
+          signedSoap={visit.signedSoap}
+          needsReview={visit.needsReview}
+          reviewReason={visit.reviewReason}
+          processingStartedAt={visit.processingStartedAt}
+          processingFinishedAt={visit.processingFinishedAt}
+          processingCostCents={visit.processingCostCents}
+          icdCodes={visit.icdCodes}
+          cptCodes={visit.cptCodes}
+          rxDrafts={visit.rxDrafts}
+          referrals={visit.referrals}
+          patientSummary={visit.patientSummary}
+          confidenceScores={visit.confidenceScores}
+        />
+      </div>
+    </AppFrame>
   );
 }
 
-function Chip({ children }: { children: React.ReactNode }) {
+function VisitReadyHeader({
+  title,
+  specialty,
+  chiefComplaint,
+  status,
+  needsReview,
+}: {
+  title: React.ReactNode;
+  specialty: string;
+  chiefComplaint: string | null;
+  status: TranscribeVisitStatus;
+  needsReview: boolean;
+}) {
+  const signed = status === TranscribeVisitStatus.SIGNED;
+  const statusLabel = signed ? 'Signed' : needsReview ? 'Needs review' : 'Ready';
+  const statusClass = signed
+    ? 'qm-status qm-status-signed'
+    : needsReview
+      ? 'qm-status qm-status-review'
+      : 'qm-status qm-status-ready';
   return (
-    <span className="inline-flex items-center rounded-full border border-border-subtle bg-bg-surface-2 px-2.5 py-1 text-[12px] font-medium tracking-tight text-text-tertiary">
-      {children}
-    </span>
+    <div
+      style={{
+        padding: '16px 32px 24px',
+        display: 'flex',
+        alignItems: 'flex-end',
+        gap: 20,
+        borderBottom: '1px solid var(--line)',
+        flexWrap: 'wrap',
+      }}
+    >
+      <div style={{ flex: 1, minWidth: 280 }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            marginBottom: 10,
+          }}
+        >
+          <SpecChip kind={toSpecKind(specialty)} size="md" />
+          <span className={statusClass}>{statusLabel}</span>
+        </div>
+        <h1
+          className="qm-serif"
+          style={{
+            margin: 0,
+            fontSize: 34,
+            fontWeight: 400,
+            letterSpacing: '-0.02em',
+            lineHeight: 1.1,
+          }}
+        >
+          {title}
+        </h1>
+        {chiefComplaint && (
+          <p
+            style={{
+              margin: '8px 0 0',
+              fontSize: 13.5,
+              color: 'var(--fg-3)',
+              lineHeight: 1.5,
+            }}
+          >
+            <span
+              style={{
+                fontFamily: 'var(--mono)',
+                fontSize: 11.5,
+                letterSpacing: '0.04em',
+                textTransform: 'uppercase',
+                color: 'var(--fg-4)',
+                marginRight: 8,
+              }}
+            >
+              CC
+            </span>
+            {chiefComplaint}
+          </p>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -261,7 +429,6 @@ interface VisitBodyProps {
 }
 
 function VisitBody(props: VisitBodyProps) {
-  // ── Input stage — show the right "collect input" UI per mode ──
   if (props.status === TranscribeVisitStatus.QUEUED) {
     if (props.inputMode === 'audio_upload' && !props.audioKey) {
       return <AudioUploader visitId={props.visitId} />;
@@ -275,12 +442,8 @@ function VisitBody(props: VisitBodyProps) {
     if (props.inputMode === 'text_notes' && !props.rawTextInput) {
       return <TextComposer visitId={props.visitId} />;
     }
-    // else: input is already captured — fall through to the
-    // "processing / ready / failed" branches below.
   }
 
-  // ── Processing — any worker-active state, plus QUEUED with captured
-  //    input (worker just hasn't picked up the job yet) ──
   if (
     PROCESSING_STATES.includes(props.status) ||
     (props.status === TranscribeVisitStatus.QUEUED &&
@@ -297,14 +460,12 @@ function VisitBody(props: VisitBodyProps) {
     );
   }
 
-  // ── Failed ──
   if (props.status === TranscribeVisitStatus.FAILED) {
     return (
       <VisitFailedView visitId={props.visitId} reason={props.reviewReason} />
     );
   }
 
-  // ── READY or SIGNED ──
   const raw = (props.transcriptRaw as
     | { results?: { utterances?: Utterance[] } }
     | null) ?? null;
@@ -330,43 +491,35 @@ function VisitBody(props: VisitBodyProps) {
     critique?.overall_quality === 'high' ||
     critique?.overall_quality === 'medium' ||
     critique?.overall_quality === 'low'
-      ? critique.overall_quality
+      ? (critique.overall_quality as 'high' | 'medium' | 'low')
       : null;
 
-  const readonly = props.status === TranscribeVisitStatus.SIGNED;
-  const soapText = readonly
-    ? props.signedSoap ?? props.soapFinal ?? ''
-    : props.soapFinal ?? '';
+  const soapText =
+    props.status === TranscribeVisitStatus.SIGNED
+      ? (props.signedSoap ?? props.soapFinal ?? '')
+      : (props.soapFinal ?? '');
 
-  // Pick the duration number to show in the Pipeline tab: audioDurationSec
-  // for audio_upload, dictationDurationSec for voice_dictation, null
-  // for text_notes (there's no media to time).
-  const displayDurationSec =
-    props.inputMode === 'audio_upload'
-      ? props.audioDurationSec
-      : props.inputMode === 'voice_dictation'
-        ? props.dictationDurationSec
-        : null;
+  const durationSec =
+    props.inputMode === 'voice_dictation'
+      ? props.dictationDurationSec
+      : props.audioDurationSec;
+
+  const showPipelineTab =
+    process.env.NEXT_PUBLIC_SHOW_PIPELINE_TAB === 'true';
 
   return (
     <VisitReadyView
       visitId={props.visitId}
-      doctorEmail={props.doctorEmail}
-      emailEnabled={props.emailEnabled}
       inputMode={props.inputMode}
       soapText={soapText}
-      readonly={readonly}
+      readonly={props.status === TranscribeVisitStatus.SIGNED}
       needsReview={props.needsReview}
       reviewReason={props.reviewReason}
       overallQuality={overallQuality}
       utterances={utterances}
       speakerMap={speakerMap}
-      dictationTranscript={
-        props.inputMode === 'voice_dictation' ? props.transcriptText : null
-      }
-      rawTextInput={
-        props.inputMode === 'text_notes' ? props.rawTextInput : null
-      }
+      dictationTranscript={props.transcriptText}
+      rawTextInput={props.rawTextInput}
       entities={props.entities}
       critique={critique}
       icdCodes={props.icdCodes}
@@ -375,15 +528,21 @@ function VisitBody(props: VisitBodyProps) {
       referrals={props.referrals}
       patientSummary={props.patientSummary}
       confidenceScores={props.confidenceScores}
-      durationSec={displayDurationSec}
+      durationSec={durationSec}
       costCents={props.processingCostCents}
-      processingStartedAt={props.processingStartedAt?.toISOString() ?? null}
-      processingFinishedAt={props.processingFinishedAt?.toISOString() ?? null}
-      // T-M20.3: gate the Pipeline tab (dev-facing raw entities JSON +
-      // cost + wall-time) behind a runtime env flag. Server component
-      // so the check happens per-request — dev can flip it via env
-      // override without a rebuild. Default false: hidden in prod.
-      showPipelineTab={process.env.NEXT_PUBLIC_SHOW_PIPELINE_TAB === 'true'}
+      processingStartedAt={
+        props.processingStartedAt
+          ? props.processingStartedAt.toISOString()
+          : null
+      }
+      processingFinishedAt={
+        props.processingFinishedAt
+          ? props.processingFinishedAt.toISOString()
+          : null
+      }
+      doctorEmail={props.doctorEmail}
+      emailEnabled={props.emailEnabled}
+      showPipelineTab={showPipelineTab}
     />
   );
 }

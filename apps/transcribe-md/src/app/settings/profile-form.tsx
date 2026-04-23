@@ -2,29 +2,39 @@
 
 import { useActionState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
-import { SpecularButton } from '@/components/specular-button';
 import { updateProfileAction, type ProfileState } from '@/actions/profile';
 
 interface ProfileFormProps {
   defaultName: string;
+  defaultSpecialty?: string;
+  defaultNpi?: string;
+  defaultClinicName?: string;
+  defaultTimeZone?: string;
 }
 
-// T-M18.3 A22: specialty input removed. It was never persisted, and
-// the displayed default came from the doctor's most-recent visit —
-// which remains the actual source of truth and is still what the
-// /visits/new form pre-fills.
-export function ProfileForm({ defaultName }: ProfileFormProps) {
+const SPECIALTY_OPTIONS = [
+  '',
+  'cardiology',
+  'pain',
+  'ortho',
+  'primary',
+  'pulmonology',
+  'ophthalmology',
+] as const;
+
+export function ProfileForm({
+  defaultName,
+  defaultSpecialty = '',
+  defaultNpi = '',
+  defaultClinicName = '',
+  defaultTimeZone = '',
+}: ProfileFormProps) {
   const [state, formAction, pending] = useActionState<ProfileState, FormData>(
     updateProfileAction,
     null
   );
-  // Show "Saved" while the most recent save is still the last action.
   const showSaved = state?.ok === true;
 
-  // Fire a toast on each successful save. Keyed by savedAt so a repeat
-  // save produces a fresh toast rather than silently updating the same
-  // one. Errors also toast so the user notices them if the inline
-  // field error is below the fold.
   const lastSavedAt = useRef<number | null>(null);
   useEffect(() => {
     if (state?.ok && state.savedAt !== lastSavedAt.current) {
@@ -42,47 +52,165 @@ export function ProfileForm({ defaultName }: ProfileFormProps) {
   const errors = state && !state.ok ? state.errors : {};
 
   return (
-    <form action={formAction} className="space-y-4">
-      <div>
-        <label
-          htmlFor="profile-name"
-          className="mb-1.5 block text-[12px] font-medium tracking-tight text-text-tertiary"
-        >
-          Name
-        </label>
-        <input
-          id="profile-name"
+    <form
+      action={formAction}
+      style={{ display: 'flex', flexDirection: 'column', gap: 14 }}
+    >
+      <Row>
+        <Field
+          label="Display name"
           name="name"
-          type="text"
           defaultValue={defaultName}
           required
-          className={inputClass}
+          error={errors.name}
         />
-        <FieldError message={errors.name} />
-      </div>
-
-      <FieldError message={errors._form} />
-
-      <div className="flex items-center gap-3 pt-1">
-        <SpecularButton type="submit" variant="primary" size="md">
-          {pending ? 'Saving…' : 'Save'}
-        </SpecularButton>
+        <Field
+          label="Specialty"
+          name="specialty"
+          defaultValue={defaultSpecialty}
+          as="select"
+          options={SPECIALTY_OPTIONS.map((s) => ({
+            value: s,
+            label: s === '' ? 'Unspecified' : s[0].toUpperCase() + s.slice(1),
+          }))}
+          error={errors.specialty}
+        />
+      </Row>
+      <Row>
+        <Field
+          label="NPI"
+          name="npi"
+          defaultValue={defaultNpi}
+          placeholder="10-digit NPI"
+          error={errors.npi}
+        />
+        <Field
+          label="Clinic name"
+          name="clinicName"
+          defaultValue={defaultClinicName}
+          placeholder="Optional — overrides practice name on exports"
+          error={errors.clinicName}
+        />
+      </Row>
+      <Field
+        label="Time zone"
+        name="timeZone"
+        defaultValue={defaultTimeZone}
+        placeholder="e.g. America/Los_Angeles"
+        error={errors.timeZone}
+      />
+      {errors._form && (
+        <p role="alert" style={{ fontSize: 12, color: 'var(--coral)' }}>
+          {errors._form}
+        </p>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 4 }}>
+        <button
+          type="submit"
+          disabled={pending}
+          className="qm-btn qm-btn-primary"
+          style={{ padding: '9px 16px' }}
+        >
+          {pending ? 'Saving…' : 'Save profile'}
+        </button>
         {showSaved && (
-          <span className="text-[12px] text-success">Saved</span>
+          <span
+            style={{
+              fontSize: 12,
+              color: 'var(--mint)',
+              fontFamily: 'var(--mono)',
+            }}
+          >
+            Saved
+          </span>
         )}
       </div>
     </form>
   );
 }
 
-const inputClass =
-  'block w-full rounded-lg border border-border-default bg-bg-surface-1/60 px-3.5 py-2.5 text-[14px] text-text-primary placeholder:text-text-muted outline-none transition-colors duration-200 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/30';
-
-function FieldError({ message }: { message?: string }) {
-  if (!message) return null;
+function Row({ children }: { children: React.ReactNode }) {
   return (
-    <p role="alert" className="mt-1.5 text-[12px] text-danger">
-      {message}
-    </p>
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        gap: 14,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function Field({
+  label,
+  name,
+  defaultValue,
+  required,
+  placeholder,
+  error,
+  as = 'input',
+  options,
+}: {
+  label: string;
+  name: string;
+  defaultValue?: string;
+  required?: boolean;
+  placeholder?: string;
+  error?: string;
+  as?: 'input' | 'select';
+  options?: { value: string; label: string }[];
+}) {
+  const id = `profile-${name}`;
+  return (
+    <div>
+      <label
+        htmlFor={id}
+        style={{
+          display: 'block',
+          marginBottom: 6,
+          fontSize: 11.5,
+          color: 'var(--fg-3)',
+          letterSpacing: '0.04em',
+          textTransform: 'uppercase',
+          fontFamily: 'var(--mono)',
+        }}
+      >
+        {label}
+      </label>
+      {as === 'select' ? (
+        <select
+          id={id}
+          name={name}
+          defaultValue={defaultValue}
+          className="qm-input"
+        >
+          {options?.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <input
+          id={id}
+          name={name}
+          type="text"
+          defaultValue={defaultValue}
+          required={required}
+          placeholder={placeholder}
+          className="qm-input"
+        />
+      )}
+      {error && (
+        <p
+          role="alert"
+          style={{ marginTop: 6, fontSize: 12, color: 'var(--coral)' }}
+        >
+          {error}
+        </p>
+      )}
+    </div>
   );
 }

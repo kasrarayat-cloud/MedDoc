@@ -1,18 +1,10 @@
 // ============================================================================
-// /visits/new — patient picker (Step 1) + capture form (Step 2)
+// /visits/new — app-redesign-v1 shell (Gate 8, HANDOFF §2.3 NewVisitScreen).
 // ----------------------------------------------------------------------------
-// T-M17.2 Commit 9. Server component loads:
-//   - user (for NavBar)
-//   - SPECIALTIES + mostRecentVisit.specialty (for the Step 2 default)
-//   - If ?patientId= is present, the patient row, validated against
-//     the caller's practiceId and deletedAt=null. An invalid patientId
-//     triggers a clean redirect to /visits/new (no query param) rather
-//     than a 404 — the doctor wanted to start a visit, not hit a dead
-//     end.
-//
-// Everything after the shell (picker vs form) is a client component —
-// searching + inline-create + the duplicate modal need interactivity,
-// and the transition Step 1 ↔ Step 2 happens without a re-fetch.
+// The underlying flow (PatientPicker → VisitFormStep2 → createVisitAction)
+// is preserved end-to-end — we wrap it in AppFrame + stepper + visit-summary
+// rail. Step state is driven by the selected patient (absent → step 1,
+// present → step 2). Full three-step URL routing lands in a later pass.
 // ============================================================================
 
 import type { Metadata } from 'next';
@@ -20,8 +12,9 @@ import { redirect } from 'next/navigation';
 
 import prisma from '@meddoc/db';
 import { auth } from '@/lib/nextauth';
-import { NavBar } from '@/components/nav-bar';
-import { PageWrapper } from '@/components/page-wrapper';
+import { AppFrame } from '@/components/ui/app-frame';
+import { Ic } from '@/components/ui/icon';
+import { PageHeader } from '@/components/ui/page-header';
 import { SPECIALTIES } from '@/lib/specialties';
 import { NewVisitClient } from './new-visit-client';
 import type { SelectedPatient } from './patient-types';
@@ -38,7 +31,14 @@ export default async function NewVisitPage({
   const session = await auth();
   if (!session?.user?.id) redirect('/login');
 
-  const [user, mostRecentVisit] = await Promise.all([
+  type MinimalUser = {
+    name: string | null;
+    email: string;
+    practiceId: string;
+  };
+  type MinimalVisit = { specialty: string } | null;
+
+  const [user, mostRecentVisit] = (await Promise.all([
     prisma.user.findUnique({
       where: { id: session.user.id },
       select: { name: true, email: true, practiceId: true },
@@ -52,7 +52,7 @@ export default async function NewVisitPage({
       orderBy: { createdAt: 'desc' },
       select: { specialty: true },
     }),
-  ]);
+  ])) as [MinimalUser | null, MinimalVisit];
   if (!user) redirect('/login');
 
   const params = await searchParams;
@@ -60,12 +60,17 @@ export default async function NewVisitPage({
     ? params.patientId[0]
     : params.patientId;
 
-  // Validate the deep-linked patient, if any. Invalid → redirect to
-  // /visits/new with no query string so the picker shows up instead
-  // of a confusing error page.
   let initialPatient: SelectedPatient | null = null;
   if (patientIdParam) {
-    const patient = await prisma.transcribeMdPatient.findUnique({
+    type PatientRow = {
+      id: string;
+      practiceId: string;
+      name: string;
+      dateOfBirth: Date | null;
+      externalId: string | null;
+      deletedAt: Date | null;
+    };
+    const patient: PatientRow | null = await prisma.transcribeMdPatient.findUnique({
       where: { id: patientIdParam },
       select: {
         id: true,
@@ -97,25 +102,38 @@ export default async function NewVisitPage({
     mostRecentVisit?.specialty ?? SPECIALTIES[0]?.displayName ?? '';
 
   return (
-    <PageWrapper>
-      <NavBar name={user.name} email={user.email} />
+    <AppFrame>
+      <PageHeader
+        eyebrow="§ New / Visit"
+        title={
+          <>
+            Start a <em style={{ color: 'var(--accent-bright)' }}>new visit</em>
+          </>
+        }
+        subtitle={
+          initialPatient
+            ? 'Pick a capture mode below and we\u2019ll take it from there.'
+            : 'Pick the patient, then choose how you want to capture the encounter.'
+        }
+        actions={
+          <a
+            href="/dashboard"
+            className="qm-btn qm-btn-ghost"
+            style={{ textDecoration: 'none' }}
+          >
+            <Ic.close width={13} height={13} />
+            Cancel
+          </a>
+        }
+      />
 
-      <main className="mx-auto max-w-4xl px-4 pb-24 pt-8 sm:px-6 lg:px-8 lg:pt-12">
-        <div className="mb-8">
-          <h1 className="type-h1 text-text-primary">Start a new visit</h1>
-          <p className="mt-2 text-[14px] text-text-tertiary">
-            {initialPatient
-              ? 'Pick a capture mode below and we&apos;ll take it from there.'
-              : 'Pick the patient, then choose how you want to capture the encounter.'}
-          </p>
-        </div>
-
+      <div style={{ padding: '0 32px 48px', maxWidth: 1280 }}>
         <NewVisitClient
           initialPatient={initialPatient}
           specialties={SPECIALTIES}
           defaultSpecialty={defaultSpecialty}
         />
-      </main>
-    </PageWrapper>
+      </div>
+    </AppFrame>
   );
 }

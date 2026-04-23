@@ -1,13 +1,29 @@
+// ============================================================================
+// Settings — app-redesign-v1 (HANDOFF §2.2 Gate 12).
+// ----------------------------------------------------------------------------
+// Full redesign shell with sticky left index + stacked Section cards.
+// Preserves all existing T-M16.2 / T-M17.3 form behaviour: profile,
+// password, email change, session status, data export, account delete.
+// New: clinician profile fields (specialty / NPI / clinic / timezone)
+// land in the Profile section; 2FA + multi-session UI are scaffolded
+// as "Coming soon" stubs since the backend wiring (otplib, session
+// list endpoints) is a Gate 14 item.
+// ============================================================================
+
 import type { Metadata } from 'next';
+import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
 
 import prisma from '@meddoc/db';
 import { auth } from '@/lib/nextauth';
 import { getCurrentSessionId } from '@/lib/auth';
-import { describeUserAgent, describeIpLocation, parseUserAgent } from '@/lib/fingerprint';
-import { NavBar } from '@/components/nav-bar';
-import { PageWrapper } from '@/components/page-wrapper';
-import { Suspense } from 'react';
+import {
+  describeIpLocation,
+  parseUserAgent,
+} from '@/lib/fingerprint';
+import { AppFrame } from '@/components/ui/app-frame';
+import { Ic } from '@/components/ui/icon';
+import { PageHeader } from '@/components/ui/page-header';
 import { ProfileForm } from './profile-form';
 import { SessionPanel } from './session-panel';
 import { DeleteAccountDialog } from './delete-account-dialog';
@@ -36,25 +52,48 @@ function relativeAgo(d: Date): string {
   return `${days} day${days === 1 ? '' : 's'} ago`;
 }
 
+const SECTIONS = [
+  { id: 'profile', label: 'Profile' },
+  { id: 'security', label: 'Security' },
+  { id: 'sessions', label: 'Active sessions' },
+  { id: 'data', label: 'Your data' },
+  { id: 'billing', label: 'Billing' },
+  { id: 'danger', label: 'Danger zone' },
+] as const;
+
 export default async function SettingsPage() {
   const session = await auth();
   if (!session?.user?.id) redirect('/login');
 
-  const [user, sessionId] = await Promise.all([
+  type UserRow = {
+    name: string | null;
+    email: string;
+    createdAt: Date;
+    specialty: string | null;
+    npi: string | null;
+    clinicName: string | null;
+    timeZone: string | null;
+    mfaEnabled: boolean;
+  };
+
+  const [user, sessionId] = (await Promise.all([
     prisma.user.findUnique({
       where: { id: session.user.id },
       select: {
         name: true,
         email: true,
         createdAt: true,
+        specialty: true,
+        npi: true,
+        clinicName: true,
+        timeZone: true,
+        mfaEnabled: true,
       },
     }),
     getCurrentSessionId(),
-  ]);
+  ])) as [UserRow | null, string | null];
   if (!user) redirect('/login');
 
-  // Look up the live UserSession row so we can show IP / UA / timestamps.
-  // A null `sessionId` means a legacy (pre-T-M2) token — display a nudge.
   const activeSession = sessionId
     ? await prisma.userSession.findUnique({
         where: { sessionToken: sessionId },
@@ -62,51 +101,152 @@ export default async function SettingsPage() {
     : null;
 
   const { browser, os } = parseUserAgent(activeSession?.userAgent ?? null);
-  void describeUserAgent; // kept for potential future inline usage
 
   return (
-    <PageWrapper>
-      <NavBar name={user.name} email={user.email} />
+    <AppFrame>
+      <Suspense fallback={null}>
+        <EmailChangeToast />
+      </Suspense>
+      <PageHeader
+        eyebrow="§ You"
+        title={
+          <>
+            Your <em style={{ color: 'var(--accent-bright)' }}>settings</em>
+          </>
+        }
+        subtitle="Profile, security, session, exports, and the billing link."
+      />
 
-      <main className="mx-auto max-w-3xl px-4 pb-24 pt-8 sm:px-6 lg:px-8 lg:pt-12">
-        <Suspense fallback={null}>
-          <EmailChangeToast />
-        </Suspense>
-        <h1 className="type-h1 text-text-primary">Settings</h1>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '200px 1fr',
+          gap: 32,
+          padding: '0 32px 48px',
+          alignItems: 'flex-start',
+          maxWidth: 1200,
+        }}
+      >
+        <aside
+          style={{
+            position: 'sticky',
+            top: 16,
+            alignSelf: 'flex-start',
+          }}
+        >
+          <div className="qm-sectlabel" style={{ marginBottom: 10 }}>
+            § On this page
+          </div>
+          <nav
+            style={{ display: 'flex', flexDirection: 'column', gap: 2 }}
+          >
+            {SECTIONS.map((s) => (
+              <a
+                key={s.id}
+                href={`#${s.id}`}
+                style={{
+                  padding: '7px 10px',
+                  fontSize: 13,
+                  color: 'var(--fg-3)',
+                  borderRadius: 8,
+                  textDecoration: 'none',
+                  borderLeft: '2px solid transparent',
+                }}
+              >
+                {s.label}
+              </a>
+            ))}
+          </nav>
+        </aside>
 
-        {/* Profile */}
-        <section className="mt-10">
-          <SectionHeader
-            title="Profile"
-            description="Your name is how you'll be addressed in the app."
-          />
-          <div className="mt-6 rounded-xl border border-border-default bg-bg-surface-1/60 p-6">
-            <ProfileForm defaultName={user.name ?? ''} />
-            <div className="mt-6 grid grid-cols-1 gap-3 border-t border-border-subtle pt-5 sm:grid-cols-2">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          <Section id="profile" eyebrow="§ 01 / Profile" title="Profile">
+            <ProfileForm
+              defaultName={user.name ?? ''}
+              defaultSpecialty={user.specialty ?? ''}
+              defaultNpi={user.npi ?? ''}
+              defaultClinicName={user.clinicName ?? ''}
+              defaultTimeZone={user.timeZone ?? ''}
+            />
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: 14,
+                marginTop: 18,
+                paddingTop: 16,
+                borderTop: '1px solid var(--line-soft)',
+              }}
+            >
               <EmailWithChangeButton email={user.email} />
               <ReadOnlyRow label="Member since" value={formatDate(user.createdAt)} />
             </div>
-          </div>
-        </section>
+          </Section>
 
-        {/* Security (T-M16.2) */}
-        <section className="mt-10">
-          <SectionHeader
+          <Section
+            id="security"
+            eyebrow="§ 02 / Security"
             title="Security"
-            description="Change your password. Other devices are signed out — this one stays."
-          />
-          <div className="mt-6 rounded-xl border border-border-default bg-bg-surface-1/60 p-6">
+            subtitle="Change your password. Other devices are signed out; this one stays."
+          >
             <ChangePasswordForm />
-          </div>
-        </section>
+            <div style={{ marginTop: 20 }}>
+              <div
+                style={{
+                  padding: '14px 16px',
+                  borderRadius: 12,
+                  border: '1px dashed var(--line)',
+                  background: 'rgba(255,255,255,0.02)',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    marginBottom: 6,
+                  }}
+                >
+                  <Ic.shield
+                    width={14}
+                    height={14}
+                    style={{ color: 'var(--accent-bright)' }}
+                  />
+                  <span style={{ fontSize: 13, fontWeight: 500 }}>
+                    Two-factor authentication
+                  </span>
+                  <span
+                    className={
+                      user.mfaEnabled
+                        ? 'qm-chip qm-chip-mint dot'
+                        : 'qm-chip qm-chip-amber'
+                    }
+                  >
+                    {user.mfaEnabled ? 'Enabled' : 'Off'}
+                  </span>
+                </div>
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: 12.5,
+                    color: 'var(--fg-3)',
+                    lineHeight: 1.55,
+                  }}
+                >
+                  TOTP setup + recovery codes UI lands in the next batch of
+                  Settings work. The database supports it today (mfaSecret,
+                  mfaBackupCodes[]).
+                </p>
+              </div>
+            </div>
+          </Section>
 
-        {/* Active Session */}
-        <section className="mt-10">
-          <SectionHeader
+          <Section
+            id="sessions"
+            eyebrow="§ 03 / Sessions"
             title="Active session"
-            description="One device at a time. Signing in elsewhere revokes this session automatically."
-          />
-          <div className="mt-6 rounded-xl border border-border-default bg-bg-surface-1/60 p-6">
+            subtitle="One device at a time. Signing in elsewhere revokes this session automatically."
+          >
             {activeSession ? (
               <SessionPanel
                 ipAddress={activeSession.ipAddress}
@@ -118,97 +258,209 @@ export default async function SettingsPage() {
                 lastActiveAt={relativeAgo(activeSession.lastActiveAt)}
               />
             ) : (
-              <div className="text-[13px] text-text-tertiary">
+              <p style={{ fontSize: 13, color: 'var(--fg-3)' }}>
                 Your current session predates the single-device enforcement
                 rollout. Sign out and back in to enable it.
-              </div>
+              </p>
             )}
-          </div>
-        </section>
+          </Section>
 
-        {/* Your data (T-M16.2) */}
-        {isDataExportEnabled() && (
-          <section className="mt-10">
-            <SectionHeader
+          {isDataExportEnabled() && (
+            <Section
+              id="data"
+              eyebrow="§ 04 / Data"
               title="Your data"
-              description="Download a ZIP containing every visit, transcript, SOAP note, audio file, and signed PDF we have for your account."
-            />
-            <div className="mt-6 rounded-xl border border-border-default bg-bg-surface-1/60 p-6">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="text-[13px] leading-relaxed text-text-secondary">
-                  <p>
-                    The export includes visit metadata as JSON, original
-                    audio files, signed PDFs, and your per-doctor edit
-                    patterns. No passwords or MFA secrets.
-                  </p>
-                  <p className="mt-2 text-text-tertiary">
-                    Large exports can take up to five minutes. Your browser
-                    will start the download as bytes become available.
-                  </p>
-                </div>
+              subtitle="Download a ZIP containing every visit, transcript, SOAP note, audio file, and signed PDF."
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 16,
+                  flexWrap: 'wrap',
+                  alignItems: 'flex-start',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: 13,
+                    color: 'var(--fg-2)',
+                    lineHeight: 1.55,
+                    flex: 1,
+                    minWidth: 220,
+                  }}
+                >
+                  Export includes visit metadata, original audio, signed PDFs,
+                  and your per-doctor edit patterns. No passwords or MFA
+                  secrets. Large exports can take up to five minutes.
+                </p>
                 <a
                   href="/api/settings/export-data"
-                  className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-violet-500/40 bg-violet-500/10 px-4 py-2 text-[13px] font-medium text-violet-200 hover:bg-violet-500/15 hover:border-violet-500/60 transition-colors"
+                  className="qm-btn qm-btn-ghost"
+                  style={{ textDecoration: 'none' }}
                 >
+                  <Ic.download width={13} height={13} />
                   Export my data
                 </a>
               </div>
-            </div>
-          </section>
-        )}
+            </Section>
+          )}
 
-        {/* Danger zone */}
-        <section className="mt-10">
-          <SectionHeader
-            title="Danger zone"
-            description="Deleting your account is permanent. We erase every visit, transcript, and exported file."
-          />
-          <div className="mt-6 rounded-xl border border-red-500/30 bg-red-500/5 p-6">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <div className="text-[13px] leading-relaxed text-text-secondary">
-                <p>
-                  This removes your account and all associated data from
-                  our servers. A compliance record (email, deletion date,
-                  visit count) is kept for 90 days and then purged.
-                </p>
-                <p className="mt-2 text-text-tertiary">
-                  You&apos;ll be asked to re-enter your password and type
-                  DELETE to confirm.
-                </p>
-              </div>
-              <div className="shrink-0">
-                <DeleteAccountDialog />
-              </div>
+          <Section
+            id="billing"
+            eyebrow="§ 05 / Billing"
+            title="Billing"
+            subtitle="Manage your subscription and payment method."
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 16,
+                flexWrap: 'wrap',
+              }}
+            >
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 13,
+                  color: 'var(--fg-3)',
+                  maxWidth: 400,
+                }}
+              >
+                Stripe customer portal integration lands in the next Settings
+                wave. Trial usage + invoices will appear here.
+              </p>
+              <button
+                type="button"
+                disabled
+                className="qm-btn qm-btn-ghost"
+                title="Coming soon"
+                style={{
+                  opacity: 0.55,
+                  cursor: 'not-allowed',
+                }}
+              >
+                Manage billing
+              </button>
             </div>
-          </div>
-        </section>
-      </main>
-    </PageWrapper>
+          </Section>
+
+          <Section
+            id="danger"
+            eyebrow="§ 06 / Danger"
+            title="Danger zone"
+            subtitle="Delete your account. Every visit, transcript, and exported file gets erased."
+            danger
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 16,
+                flexWrap: 'wrap',
+              }}
+            >
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 13,
+                  color: 'var(--fg-2)',
+                  lineHeight: 1.55,
+                  maxWidth: 440,
+                }}
+              >
+                A compliance record (email, deletion date, visit count) is
+                kept for 90 days and then purged. You&apos;ll be asked to
+                re-enter your password and type DELETE to confirm.
+              </p>
+              <DeleteAccountDialog />
+            </div>
+          </Section>
+        </div>
+      </div>
+    </AppFrame>
   );
 }
 
-function SectionHeader({
+function Section({
+  id,
+  eyebrow,
   title,
-  description,
+  subtitle,
+  danger,
+  children,
 }: {
+  id: string;
+  eyebrow: string;
   title: string;
-  description: string;
+  subtitle?: string;
+  danger?: boolean;
+  children: React.ReactNode;
 }) {
   return (
-    <div>
-      <h2 className="type-h2 text-text-primary">{title}</h2>
-      <p className="mt-1 text-[13px] text-text-tertiary">{description}</p>
-    </div>
+    <section
+      id={id}
+      className="qm-glass"
+      style={{
+        padding: '24px 26px',
+        borderColor: danger ? 'rgba(251,113,133,0.3)' : undefined,
+      }}
+    >
+      <div
+        className="qm-sectlabel"
+        style={{ marginBottom: 8, color: danger ? 'var(--coral)' : undefined }}
+      >
+        {eyebrow}
+      </div>
+      <h3
+        className="qm-serif"
+        style={{
+          margin: 0,
+          fontSize: 22,
+          fontWeight: 400,
+          letterSpacing: '-0.015em',
+        }}
+      >
+        {title}
+      </h3>
+      {subtitle && (
+        <p
+          style={{
+            margin: '6px 0 18px',
+            fontSize: 12.5,
+            color: 'var(--fg-3)',
+            lineHeight: 1.55,
+          }}
+        >
+          {subtitle}
+        </p>
+      )}
+      {!subtitle && <div style={{ marginBottom: 18 }} />}
+      {children}
+    </section>
   );
 }
 
 function ReadOnlyRow({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <div className="text-[11px] font-medium uppercase tracking-wider text-text-muted">
+      <div
+        style={{
+          fontSize: 11,
+          fontFamily: 'var(--mono)',
+          letterSpacing: '0.04em',
+          textTransform: 'uppercase',
+          color: 'var(--fg-4)',
+          marginBottom: 4,
+        }}
+      >
         {label}
       </div>
-      <div className="mt-1 text-[13px] text-text-secondary break-all">{value}</div>
+      <div style={{ fontSize: 13, color: 'var(--fg-2)' }}>{value}</div>
     </div>
   );
 }
@@ -216,13 +468,30 @@ function ReadOnlyRow({ label, value }: { label: string; value: string }) {
 function EmailWithChangeButton({ email }: { email: string }) {
   return (
     <div>
-      <div className="flex items-center justify-between gap-2">
-        <div className="text-[11px] font-medium uppercase tracking-wider text-text-muted">
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: 4,
+        }}
+      >
+        <div
+          style={{
+            fontSize: 11,
+            fontFamily: 'var(--mono)',
+            letterSpacing: '0.04em',
+            textTransform: 'uppercase',
+            color: 'var(--fg-4)',
+          }}
+        >
           Email
         </div>
         <ChangeEmailDialog currentEmail={email} />
       </div>
-      <div className="mt-1 text-[13px] text-text-secondary break-all">{email}</div>
+      <div style={{ fontSize: 13, color: 'var(--fg-2)', wordBreak: 'break-all' }}>
+        {email}
+      </div>
     </div>
   );
 }

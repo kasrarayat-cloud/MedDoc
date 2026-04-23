@@ -33,6 +33,8 @@ interface Props {
    *  before passing this in so the client doesn't juggle Date objects. */
   initialDob: string | null;
   initialExternalId: string | null;
+  initialMrn: string | null;
+  initialInsurance: string | null;
 }
 
 interface UpdateResponse {
@@ -41,6 +43,8 @@ interface UpdateResponse {
     name: string;
     dateOfBirth: string | null;
     externalId: string | null;
+    mrn: string | null;
+    insurance: string | null;
     updatedAt: string;
   };
   error?: string;
@@ -52,6 +56,8 @@ export function EditPatientDialog({
   initialName,
   initialDob,
   initialExternalId,
+  initialMrn,
+  initialInsurance,
 }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -59,6 +65,8 @@ export function EditPatientDialog({
   const [name, setName] = useState(initialName);
   const [dob, setDob] = useState(initialDob ?? '');
   const [externalId, setExternalId] = useState(initialExternalId ?? '');
+  const [mrn, setMrn] = useState(initialMrn ?? '');
+  const [insurance, setInsurance] = useState(initialInsurance ?? '');
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,10 +77,15 @@ export function EditPatientDialog({
   const normalizedCurrentDob = dob.trim() === '' ? null : dob.trim();
   const normalizedCurrentExternalId =
     externalId.trim() === '' ? null : externalId.trim();
+  const normalizedCurrentMrn = mrn.trim() === '' ? null : mrn.trim();
+  const normalizedCurrentInsurance =
+    insurance.trim() === '' ? null : insurance.trim();
   const hasChanged =
     name.trim() !== initialName ||
     normalizedCurrentDob !== initialDob ||
-    normalizedCurrentExternalId !== initialExternalId;
+    normalizedCurrentExternalId !== initialExternalId ||
+    normalizedCurrentMrn !== initialMrn ||
+    normalizedCurrentInsurance !== initialInsurance;
 
   const nameOk = name.trim().length > 0 && name.trim().length <= 200;
   const dobIsEmptyOrValid =
@@ -84,6 +97,8 @@ export function EditPatientDialog({
     setName(initialName);
     setDob(initialDob ?? '');
     setExternalId(initialExternalId ?? '');
+    setMrn(initialMrn ?? '');
+    setInsurance(initialInsurance ?? '');
     setError(null);
     setSubmitting(false);
   }
@@ -107,6 +122,8 @@ export function EditPatientDialog({
       name?: string;
       dateOfBirth?: string | null;
       externalId?: string | null;
+      mrn?: string | null;
+      insurance?: string | null;
     } = {};
     if (trimmedName !== initialName) body.name = trimmedName;
     if (normalizedCurrentDob !== initialDob) {
@@ -123,6 +140,12 @@ export function EditPatientDialog({
     }
     if (normalizedCurrentExternalId !== initialExternalId) {
       body.externalId = normalizedCurrentExternalId;
+    }
+    if (normalizedCurrentMrn !== initialMrn) {
+      body.mrn = normalizedCurrentMrn;
+    }
+    if (normalizedCurrentInsurance !== initialInsurance) {
+      body.insurance = normalizedCurrentInsurance;
     }
 
     setSubmitting(true);
@@ -232,11 +255,51 @@ export function EditPatientDialog({
 
             <div>
               <label
+                htmlFor="edit-patient-mrn"
+                className="mb-1 block text-[12px] font-medium tracking-tight text-text-tertiary"
+              >
+                MRN{' '}
+                <span className="font-normal text-text-muted">(optional)</span>
+              </label>
+              <input
+                id="edit-patient-mrn"
+                type="text"
+                value={mrn}
+                onChange={(e) => setMrn(e.target.value)}
+                maxLength={50}
+                placeholder="Medical record number"
+                className="block w-full rounded-lg border border-border-default bg-bg-surface-1/80 px-3 py-2 text-[14px] text-text-primary placeholder:text-text-muted outline-none transition-colors focus:border-violet-500 focus:ring-2 focus:ring-violet-500/30"
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="edit-patient-ins"
+                className="mb-1 block text-[12px] font-medium tracking-tight text-text-tertiary"
+              >
+                Insurance{' '}
+                <span className="font-normal text-text-muted">(optional)</span>
+              </label>
+              <input
+                id="edit-patient-ins"
+                type="text"
+                value={insurance}
+                onChange={(e) => setInsurance(e.target.value)}
+                maxLength={200}
+                placeholder="Aetna PPO, Medicare, Self-pay…"
+                className="block w-full rounded-lg border border-border-default bg-bg-surface-1/80 px-3 py-2 text-[14px] text-text-primary placeholder:text-text-muted outline-none transition-colors focus:border-violet-500 focus:ring-2 focus:ring-violet-500/30"
+              />
+            </div>
+
+            <div>
+              <label
                 htmlFor="edit-patient-ext"
                 className="mb-1 block text-[12px] font-medium tracking-tight text-text-tertiary"
               >
                 External ID{' '}
-                <span className="font-normal text-text-muted">(optional)</span>
+                <span className="font-normal text-text-muted">
+                  (optional; separate from MRN)
+                </span>
               </label>
               <input
                 id="edit-patient-ext"
@@ -244,7 +307,7 @@ export function EditPatientDialog({
                 value={externalId}
                 onChange={(e) => setExternalId(e.target.value)}
                 maxLength={100}
-                placeholder="EMR chart number or MRN"
+                placeholder="EMR chart number"
                 className="block w-full rounded-lg border border-border-default bg-bg-surface-1/80 px-3 py-2 text-[14px] text-text-primary placeholder:text-text-muted outline-none transition-colors focus:border-violet-500 focus:ring-2 focus:ring-violet-500/30"
               />
             </div>
