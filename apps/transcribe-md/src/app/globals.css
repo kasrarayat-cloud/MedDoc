@@ -57,6 +57,46 @@
   --duration-base: 300ms;
   --duration-slow: 500ms;
   --duration-lazy: 800ms;
+
+  /* ──────────────────────────────────────────────────────────────
+     App-redesign-v1 tokens (HANDOFF §1, ported 1:1 from
+     /tmp/design_handoff_quillmd_app/app/tokens.css).
+
+     Named under Tailwind's --color-* convention so the redesign
+     gets utilities like `bg-bg`, `bg-bg-1`, `text-fg-2`, `border-line`,
+     `bg-accent`, `text-mint`, etc. out of the box.
+
+     Short bare-name aliases (--bg, --fg, --accent, …) for the ported
+     .qm-* CSS live in the :root block below. Radii + shadows whose
+     handoff names would collide with Tailwind defaults (--radius-sm/
+     --radius-lg/--shadow-*) are scoped to .qm-app instead.
+     ────────────────────────────────────────────────────────────── */
+  --color-bg: #07060C;
+  --color-bg-1: #0C0A16;
+  --color-bg-2: #14111F;
+  --color-bg-3: #1C1828;
+  --color-bg-4: #221C30;
+
+  --color-line: #26222F;
+  --color-line-soft: #191524;
+  --color-line-strong: #3A3445;
+
+  --color-fg: #F5F2FA;
+  --color-fg-2: #B9B2C9;
+  --color-fg-3: #7E7791;
+  --color-fg-4: #4B4558;
+
+  --color-accent: #8B5CFF;
+  --color-accent-bright: #A87CFF;
+  --color-accent-deep: #6B3FD9;
+  --color-accent-ink: #2A1560;
+  --color-accent-a: #D1B5FF;
+  --color-accent-b: #D946EF;
+  --color-accent-c: #60A5FA;
+
+  --color-mint: #6EE7B7;
+  --color-amber: #FBBF24;
+  --color-coral: #FB7185;
 }
 
 /* ============================================================================
@@ -64,6 +104,59 @@
    ========================================================================== */
 :root {
   color-scheme: dark;
+
+  /* ── App-redesign-v1 bare-name colour aliases (HANDOFF §1) ──
+     Mirrors the --color-* slots in @theme so the ported .qm-* CSS
+     can reference var(--bg), var(--fg), var(--accent) directly while
+     Tailwind utilities (bg-bg, text-fg, border-line …) also work. */
+  --bg: var(--color-bg);
+  --bg-1: var(--color-bg-1);
+  --bg-2: var(--color-bg-2);
+  --bg-3: var(--color-bg-3);
+  --bg-4: var(--color-bg-4);
+
+  --line: var(--color-line);
+  --line-soft: var(--color-line-soft);
+  --line-strong: var(--color-line-strong);
+
+  --fg: var(--color-fg);
+  --fg-2: var(--color-fg-2);
+  --fg-3: var(--color-fg-3);
+  --fg-4: var(--color-fg-4);
+
+  --accent: var(--color-accent);
+  --accent-bright: var(--color-accent-bright);
+  --accent-deep: var(--color-accent-deep);
+  --accent-ink: var(--color-accent-ink);
+  --accent-a: var(--color-accent-a);
+  --accent-b: var(--color-accent-b);
+  --accent-c: var(--color-accent-c);
+
+  --mint: var(--color-mint);
+  --amber: var(--color-amber);
+  --coral: var(--color-coral);
+}
+
+/* ── App-redesign-v1 scoped tokens (HANDOFF §1) ──
+   Radii + shadows whose handoff names (--radius-sm, --radius-lg,
+   --shadow-1, --glow-accent) would override Tailwind's defaults
+   globally live here. Any Tailwind `rounded-*` / `shadow-*`
+   utility INSIDE .qm-app picks up these values; outside the scope
+   (landing, marketing) Tailwind's defaults are untouched. Every
+   redesigned app / auth screen wraps its tree in .qm-app so the
+   ported .qm-btn / .qm-glass / .qm-input rules resolve correctly. */
+.qm-app {
+  --radius-sm: 6px;
+  --radius: 12px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+
+  --shadow-1: 0 1px 0 rgba(255, 255, 255, 0.04) inset,
+    0 10px 30px rgba(0, 0, 0, 0.35);
+  --shadow-2: 0 1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 20px 60px rgba(0, 0, 0, 0.55);
+  --glow-accent: 0 0 0 1px rgba(139, 92, 255, 0.35),
+    0 10px 40px rgba(139, 92, 255, 0.18);
 }
 
 html,
