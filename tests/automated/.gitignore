@@ -1,0 +1,5 @@
+.env.test
+reports/*.html
+reports/*.json
+reports/screenshots/
+!reports/.gitkeep
