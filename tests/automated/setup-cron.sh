@@ -30,17 +30,30 @@ done
 START_MARK='# MEDDOC-TESTS-START'
 END_MARK='# MEDDOC-TESTS-END'
 
+# Pick a log path the crontab user can actually write to. If /var/log
+# is open to this uid we use it; otherwise fall back to a dotfile under
+# $HOME. Cron's `>>` redirection opens the path BEFORE the command
+# runs, so a permission error there silently kills the whole job —
+# this check prevents the foot-gun.
+if touch /var/log/meddoc-cron.log 2>/dev/null; then
+  CRON_LOG=/var/log/meddoc-cron.log
+else
+  CRON_LOG="$HOME/.meddoc-cron.log"
+  touch "$CRON_LOG" 2>/dev/null || true
+fi
+
 # Build the block. PATH is explicit so cron finds node/npx/docker even
 # when the login shell isn't sourced.
 read -r -d '' BLOCK <<EOF || true
 $START_MARK
 # Managed by tests/automated/setup-cron.sh — do not edit manually.
 # Remove with: bash $HERE/setup-cron.sh --remove
+# Log sink picked at install time based on what this user can write to.
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-*/5  *   * * *   bash $HERE/monitoring/uptime-check.sh      >> /var/log/meddoc-cron.log 2>&1
-0    *   * * *   bash $HERE/monitoring/disk-monitor.sh      >> /var/log/meddoc-cron.log 2>&1
-*/10 *   * * *   bash $HERE/monitoring/container-health.sh  >> /var/log/meddoc-cron.log 2>&1
-0    2   * * *   cd $REPO_ROOT && bash $HERE/run-all.sh --smoke --e2e >> /var/log/meddoc-cron.log 2>&1
+*/5  *   * * *   bash $HERE/monitoring/uptime-check.sh      >> $CRON_LOG 2>&1
+0    *   * * *   bash $HERE/monitoring/disk-monitor.sh      >> $CRON_LOG 2>&1
+*/10 *   * * *   bash $HERE/monitoring/container-health.sh  >> $CRON_LOG 2>&1
+0    2   * * *   cd $REPO_ROOT && bash $HERE/run-all.sh --smoke --e2e >> $CRON_LOG 2>&1
 $END_MARK
 EOF
 
