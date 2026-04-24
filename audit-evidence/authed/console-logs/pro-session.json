@@ -1,0 +1,355 @@
+[
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/settings?_rsc=18t7j",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:29.856Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/patients?_rsc=18t7j",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:29.863Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/doc-editor?_rsc=18t7j",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:31.058Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/patients?_rsc=15moa",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:35.263Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/audit?_rsc=15moa",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:35.263Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard?_rsc=15moa",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:35.263Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/settings?_rsc=15moa",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:35.263Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/history?_rsc=15moa",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:35.263Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard?_rsc=1t1xb",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:36.106Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/audit?_rsc=1c9xt",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:36.777Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/history?_rsc=1c9xt",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:36.791Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/schedule?_rsc=1c9xt",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:36.791Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/doc-editor?_rsc=1c9xt",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:36.791Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/patients?_rsc=1c9xt",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:36.844Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard?_rsc=1c9xt",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:36.846Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/audit?_rsc=1r8oa",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:36.850Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/settings?_rsc=1r8oa",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:36.850Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/history?_rsc=1r8oa",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:36.907Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/doc-editor?_rsc=1r8oa",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:36.909Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/schedule?_rsc=1r8oa",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:36.909Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/patients?_rsc=1r8oa",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:36.910Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard?_rsc=1r8oa",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:36.932Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/settings?_rsc=1c9xt",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:38.064Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/audit?_rsc=1c9xt",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:38.091Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/history?_rsc=1c9xt",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:38.092Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/doc-editor?_rsc=1c9xt",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:38.092Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/schedule?_rsc=1c9xt",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:38.115Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/patients?_rsc=1c9xt",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:38.150Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard?_rsc=1c9xt",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:38.152Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/audit?_rsc=1r8oa",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:38.153Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/history?_rsc=1r8oa",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:38.197Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/schedule?_rsc=1r8oa",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:38.226Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/patients?_rsc=1r8oa",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:38.228Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/doc-editor?_rsc=1r8oa",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:38.228Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard?_rsc=1r8oa",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:38.238Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/history?_rsc=18t7j",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:39.977Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/doc-editor?_rsc=15moa",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:39.996Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/schedule?_rsc=15moa",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:40.020Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/patients?_rsc=15moa",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:40.020Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/doc-editor?_rsc=18t7j",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:41.191Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/schedule?_rsc=18t7j",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:41.192Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/patients?_rsc=18t7j",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:41.192Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/settings?_rsc=18t7j",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:41.192Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/history?_rsc=1e36u",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:41.563Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/settings?_rsc=1e36u",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:41.563Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/doc-editor?_rsc=1e36u",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:41.563Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/audit?_rsc=1e36u",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:41.563Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/audit?_rsc=1wixx",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:42.126Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/settings?_rsc=1wixx",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:42.140Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/history?_rsc=1wixx",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:42.140Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/doc-editor?_rsc=1wixx",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:42.140Z"
+  },
+  {
+    "type": "pageerror",
+    "text": "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+    "when": "2026-04-24T07:04:42.383Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/audit?_rsc=1c9xt",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:43.036Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/schedule?_rsc=1c9xt",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:43.036Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/history?_rsc=1c9xt",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:43.036Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/doc-editor?_rsc=1c9xt",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:43.036Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/patients?_rsc=1c9xt",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:43.129Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard?_rsc=1c9xt",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:43.129Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://pro.quillmd.com/dashboard/settings?_rsc=1r8oa",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T07:04:43.129Z"
+  }
+]

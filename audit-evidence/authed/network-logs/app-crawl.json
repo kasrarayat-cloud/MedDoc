@@ -1,0 +1,26 @@
+[
+  {
+    "url": "https://app.quillmd.com/dashboard",
+    "status": 200
+  },
+  {
+    "url": "https://app.quillmd.com/patients",
+    "status": 200
+  },
+  {
+    "url": "https://app.quillmd.com/visits",
+    "status": 200
+  },
+  {
+    "url": "https://app.quillmd.com/visits/new",
+    "status": 200
+  },
+  {
+    "url": "https://app.quillmd.com/settings",
+    "status": 200
+  },
+  {
+    "url": "https://app.quillmd.com/dashboard?tab=all",
+    "status": 200
+  }
+]

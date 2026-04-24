@@ -1,0 +1,30 @@
+[
+  {
+    "url": "https://pro.quillmd.com/dashboard",
+    "status": 200
+  },
+  {
+    "url": "https://pro.quillmd.com/dashboard/patients",
+    "status": 200
+  },
+  {
+    "url": "https://pro.quillmd.com/dashboard/schedule",
+    "status": 200
+  },
+  {
+    "url": "https://pro.quillmd.com/dashboard/doc-editor",
+    "status": 200
+  },
+  {
+    "url": "https://pro.quillmd.com/dashboard/history",
+    "status": 200
+  },
+  {
+    "url": "https://pro.quillmd.com/dashboard/audit",
+    "status": 200
+  },
+  {
+    "url": "https://pro.quillmd.com/dashboard/settings",
+    "status": 200
+  }
+]

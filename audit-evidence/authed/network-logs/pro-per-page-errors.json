@@ -1,0 +1,39 @@
+[
+  {
+    "page": "/dashboard",
+    "pageerrors": [],
+    "consoleerrors": []
+  },
+  {
+    "page": "/dashboard/patients",
+    "pageerrors": [],
+    "consoleerrors": []
+  },
+  {
+    "page": "/dashboard/schedule",
+    "pageerrors": [],
+    "consoleerrors": []
+  },
+  {
+    "page": "/dashboard/doc-editor",
+    "pageerrors": [
+      "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+    ],
+    "consoleerrors": []
+  },
+  {
+    "page": "/dashboard/history",
+    "pageerrors": [],
+    "consoleerrors": []
+  },
+  {
+    "page": "/dashboard/audit",
+    "pageerrors": [],
+    "consoleerrors": []
+  },
+  {
+    "page": "/dashboard/settings",
+    "pageerrors": [],
+    "consoleerrors": []
+  }
+]

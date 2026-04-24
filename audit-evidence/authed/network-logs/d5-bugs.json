@@ -1,0 +1,35 @@
+[
+  {
+    "when": "2026-04-24T07:11:52.762Z",
+    "kind": "404-api",
+    "text": "GET",
+    "url": "https://app.quillmd.com/api/patients/cmabcdef000000abcd"
+  },
+  {
+    "when": "2026-04-24T07:11:52.794Z",
+    "kind": "console",
+    "text": "Failed to load resource: the server responded with a status of 404 ()"
+  },
+  {
+    "when": "2026-04-24T07:11:52.862Z",
+    "kind": "405-api",
+    "text": "GET",
+    "url": "https://app.quillmd.com/api/visits/cmabcdef000000abcd"
+  },
+  {
+    "when": "2026-04-24T07:11:52.862Z",
+    "kind": "console",
+    "text": "Failed to load resource: the server responded with a status of 405 ()"
+  },
+  {
+    "when": "2026-04-24T07:11:52.961Z",
+    "kind": "404-api",
+    "text": "GET",
+    "url": "https://app.quillmd.com/api/visits/cmabcdef000000abcd/export/pdf"
+  },
+  {
+    "when": "2026-04-24T07:11:52.961Z",
+    "kind": "console",
+    "text": "Failed to load resource: the server responded with a status of 404 ()"
+  }
+]
