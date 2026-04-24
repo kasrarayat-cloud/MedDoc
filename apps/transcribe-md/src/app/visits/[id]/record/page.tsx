@@ -6,11 +6,6 @@
 // pipeline runs unchanged. The scribe-ws live-transcript integration is
 // a follow-up — the right rail shows a "listening…" placeholder until
 // the worker produces a transcript.
-//
-// Mark Moment button stores timestampMs offsets locally and flushes
-// them into TranscribeVisit.markedMoments on stop via a PATCH-style
-// POST so the Transcript tab can render glyph markers on the timeline
-// after the visit lands in READY.
 // ============================================================================
 
 import type { Metadata } from 'next';

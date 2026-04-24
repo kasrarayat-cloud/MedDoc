@@ -21,9 +21,6 @@ interface SoapEditorProps {
   /** Readonly when the visit is SIGNED. The signed copy lives in
    *  signedSoap; the client passes that value as initialText. */
   readonly?: boolean;
-  needsReview: boolean;
-  reviewReason: string | null;
-  overallQuality?: 'high' | 'medium' | 'low' | null;
 }
 
 export function SoapEditor({
@@ -32,9 +29,6 @@ export function SoapEditor({
   emailEnabled,
   initialText,
   readonly = false,
-  needsReview,
-  reviewReason,
-  overallQuality,
 }: SoapEditorProps) {
   const [text, setText] = useState(initialText);
   const [editing, setEditing] = useState(false);
@@ -54,26 +48,6 @@ export function SoapEditor({
 
   return (
     <div className="space-y-4">
-      {needsReview && !readonly && (
-        <div
-          role="alert"
-          className="flex items-start gap-3 rounded-xl border border-warning/40 bg-warning/5 px-4 py-3 text-[13px] text-text-secondary"
-        >
-          <span className="mt-0.5 inline-block h-1.5 w-1.5 flex-none rounded-full bg-warning" />
-          <div>
-            <div className="font-medium text-text-primary">Needs review</div>
-            <div className="mt-1 text-text-tertiary">
-              {reviewReason ??
-                'Our auditor flagged issues worth a quick review before signing.'}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {overallQuality && !readonly && (
-        <QualityStrip quality={overallQuality} />
-      )}
-
       {editing && !readonly ? (
         <textarea
           value={text}
@@ -161,47 +135,7 @@ export function SoapEditor({
             triggerVariant="secondary"
           />
         )}
-
-        {readonly && (
-          <div className="inline-flex items-center gap-2 rounded-full border border-success/40 bg-success/10 px-3 py-1 text-[12px] font-medium text-success">
-            <Lock className="h-3 w-3" aria-hidden />
-            Signed and locked
-          </div>
-        )}
       </div>
-    </div>
-  );
-}
-
-function QualityStrip({ quality }: { quality: 'high' | 'medium' | 'low' }) {
-  const meta =
-    quality === 'high'
-      ? {
-          label: 'High confidence',
-          color: 'text-success',
-          dot: 'bg-success',
-        }
-      : quality === 'medium'
-        ? {
-            label: 'Medium confidence — skim before signing',
-            color: 'text-warning',
-            dot: 'bg-warning',
-          }
-        : {
-            label: 'Low confidence — read carefully before signing',
-            color: 'text-danger',
-            dot: 'bg-danger',
-          };
-  return (
-    <div
-      className={cn(
-        'inline-flex items-center gap-2 rounded-full border border-border-subtle bg-bg-surface-2/60 px-3 py-1',
-        'text-[11px] font-medium',
-        meta.color
-      )}
-    >
-      <span className={cn('inline-block h-1.5 w-1.5 rounded-full', meta.dot)} />
-      {meta.label}
     </div>
   );
 }

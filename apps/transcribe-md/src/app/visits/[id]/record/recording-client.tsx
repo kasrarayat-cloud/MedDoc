@@ -53,7 +53,6 @@ export function RecordingClient({
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>('idle');
   const [elapsed, setElapsed] = useState(0);
-  const [marks, setMarks] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [reducedMotion, setReducedMotion] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
@@ -109,23 +108,6 @@ export function RecordingClient({
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error ?? `Upload failed (${res.status})`);
       }
-      // Persist marked moments alongside the upload. The PATCH route
-      // lives on /api/visits/[id] in a later gate — for now we POST
-      // onto a side helper via the same dictation route if markedMoments
-      // are present. If the endpoint doesn't know the field yet it's
-      // ignored; payload stays small.
-      if (marks.length > 0) {
-        const momentsPayload = marks.map((t) => ({ timestampMs: t }));
-        try {
-          await fetch(`/api/visits/${visitId}/dictation/upload`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ markedMoments: momentsPayload }),
-          });
-        } catch {
-          /* best-effort — don't block the happy path */
-        }
-      }
       toast.success('Recording uploaded', {
         description: 'Drafting your note now.',
       });
@@ -138,7 +120,7 @@ export function RecordingClient({
       setPhase('error');
       toast.error('Upload failed', { description: msg });
     }
-  }, [visitId, marks, router]);
+  }, [visitId, router]);
 
   const start = useCallback(async () => {
     setError(null);
@@ -184,12 +166,6 @@ export function RecordingClient({
         /* ignore */
       }
     }
-  }
-
-  function markMoment() {
-    if (phase !== 'recording') return;
-    const t = Date.now() - startTsRef.current;
-    setMarks((prev) => [...prev, t]);
   }
 
   const isRecording = phase === 'recording';
@@ -291,37 +267,15 @@ export function RecordingClient({
               Requesting mic…
             </button>
           ) : isRecording ? (
-            <>
-              <button
-                type="button"
-                onClick={markMoment}
-                className="qm-btn qm-btn-ghost"
-              >
-                <Ic.star width={14} height={14} />
-                Mark moment
-                {marks.length > 0 && (
-                  <span
-                    style={{
-                      fontSize: 10,
-                      fontFamily: 'var(--mono)',
-                      color: 'var(--accent-bright)',
-                      marginLeft: 4,
-                    }}
-                  >
-                    {marks.length}
-                  </span>
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={stop}
-                className="qm-btn qm-btn-primary"
-                style={{ padding: '10px 18px' }}
-              >
-                <Ic.stop width={14} height={14} />
-                Stop & transcribe
-              </button>
-            </>
+            <button
+              type="button"
+              onClick={stop}
+              className="qm-btn qm-btn-primary"
+              style={{ padding: '10px 18px' }}
+            >
+              <Ic.stop width={14} height={14} />
+              Stop & transcribe
+            </button>
           ) : isUploading ? (
             <button type="button" disabled className="qm-btn qm-btn-ghost">
               <span className="qm-spin" style={{ display: 'inline-block' }}>
@@ -392,31 +346,6 @@ export function RecordingClient({
             }}
           >
             Transcript will appear here once recording starts.
-          </div>
-        )}
-        {marks.length > 0 && (
-          <div style={{ marginTop: 28 }}>
-            <div className="qm-sectlabel" style={{ marginBottom: 10 }}>
-              § Marked moments
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {marks.map((ms, i) => (
-                <div
-                  key={i}
-                  style={{
-                    fontFamily: 'var(--mono)',
-                    fontSize: 12,
-                    color: 'var(--fg-2)',
-                    padding: '6px 10px',
-                    borderRadius: 8,
-                    background: 'rgba(139,92,255,0.06)',
-                    border: '1px solid rgba(139,92,255,0.15)',
-                  }}
-                >
-                  ★ {formatElapsed(Math.floor(ms / 1000))}
-                </div>
-              ))}
-            </div>
           </div>
         )}
       </aside>

@@ -64,9 +64,6 @@ export interface VisitReadyViewProps {
    *  when SIGNED. The caller picks. */
   soapText: string;
   readonly: boolean;
-  needsReview: boolean;
-  reviewReason: string | null;
-  overallQuality: 'high' | 'medium' | 'low' | null;
   /** audio_upload only — full diarized utterance list from Deepgram. */
   utterances: Utterance[];
   /** audio_upload only — per-speaker role assignments from Layer 2. */
@@ -172,9 +169,6 @@ export function VisitReadyView(props: VisitReadyViewProps) {
               emailEnabled={props.emailEnabled}
               initialText={props.soapText}
               readonly={props.readonly}
-              needsReview={props.needsReview}
-              reviewReason={props.reviewReason}
-              overallQuality={props.overallQuality}
             />
           </div>
         )}
@@ -676,6 +670,7 @@ function CollapsibleSection({
 // ---------------------------------------------------------------------------
 // Dictation transcript view (T-M5) — single-speaker block + audio replay.
 // ---------------------------------------------------------------------------
+
 function DictationTranscriptView({
   visitId,
   transcript,
@@ -683,8 +678,6 @@ function DictationTranscriptView({
   visitId: string;
   transcript: string | null;
 }) {
-  // Audio is fetched from our own route — keeps the object private
-  // behind the session cookie rather than handing out a MinIO presign.
   const audioSrc = `/api/visits/${visitId}/dictation/audio`;
 
   return (

@@ -58,6 +58,14 @@ export interface DeepgramBatchArgs extends AiLogContext {
   /** T-M5 opt-outs for single-speaker dictation. Undefined = current
    *  Layer 1 conversation defaults (diarize+utterances on). */
   options?: DeepgramBatchOptions;
+  /** Phase-2 voice batch 1 — Nova-3 `keyterm` prompting. Raises the
+   *  prior on these tokens so near-homophone medications decode as
+   *  the drug name instead of an invented word ("abirrobing" →
+   *  "ibuprofen"). Passed as repeated ?keyterm= URL params. Callers
+   *  (e.g. the TranscribeMD worker) supply the medication lexicon
+   *  from apps/transcribe-md/src/lib/deepgram-vocabulary.ts.
+   *  SDK @4.11.3 docs: https://developers.deepgram.com/docs/keyterm */
+  keyterms?: readonly string[];
 }
 
 export interface DeepgramWord {
@@ -158,6 +166,13 @@ export async function deepgramBatchTranscribe(
     filler_words: 'false',
     detect_language: 'false',
   });
+  // Phase-2 voice: append one ?keyterm= per entry. Deepgram accepts
+  // the repeated-param form; URLSearchParams.append preserves order.
+  // No-op when the caller omits keyterms.
+  for (const term of args.keyterms ?? []) {
+    const trimmed = term.trim();
+    if (trimmed.length > 0) params.append('keyterm', trimmed);
+  }
   const url = `${DEEPGRAM_BATCH_URL}?${params.toString()}`;
   const started = Date.now();
 
