@@ -186,6 +186,52 @@ export async function loginAction(
     }
   }
 
+  // F9-1: Pre-check product entitlement so the form surfaces a
+  // specific "no access" message instead of the generic "invalid
+  // credentials" returned by the authorize callback when products[]
+  // is missing TRANSCRIBE_MD. Authorize remains the authoritative
+  // security gate; this block is purely UX. Always runs (not gated
+  // on email delivery) so the message is consistent across envs.
+  const entitlementUser = await prisma.user.findUnique({
+    where: { email: parsed.data.email.trim().toLowerCase() },
+    select: {
+      passwordHash: true,
+      products: true,
+      isActive: true,
+      lockedUntil: true,
+    },
+  });
+  const isEntitlementCandidate =
+    !!entitlementUser?.isActive &&
+    (!entitlementUser.lockedUntil ||
+      entitlementUser.lockedUntil < new Date()) &&
+    !entitlementUser.products.includes(Product.TRANSCRIBE_MD);
+  if (isEntitlementCandidate && entitlementUser) {
+    const pwOk = await bcrypt.compare(
+      parsed.data.password,
+      entitlementUser.passwordHash
+    );
+    if (pwOk) {
+      return {
+        ok: false,
+        errors: {
+          _form:
+            'Your account does not have access to TranscribeMD. Contact your practice admin to enable it.',
+        },
+        values: { email: parsed.data.email },
+      };
+    }
+    // Wrong password — fall through to the generic error so we don't
+    // leak whether the email exists but lacks the product.
+  } else {
+    // Mirror the timing equalizer pattern from the email-verify block
+    // so an attacker can't distinguish "account missing entitlement"
+    // from "no such account" by response latency.
+    await bcrypt
+      .compare(parsed.data.password, DUMMY_PASSWORD_HASH)
+      .catch(() => false);
+  }
+
   try {
     await nextAuthSignIn('credentials', {
       redirect: false,

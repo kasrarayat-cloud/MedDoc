@@ -129,11 +129,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null;
         }
 
-        // Successful login — clear counters + grant TranscribeMD product
-        // access to pre-existing MedDoc Pro users who are signing in here
-        // for the first time. The update is awaited so products[] is
-        // reflected on the next read.
-        const hasTranscribeMd = user.products.includes(Product.TRANSCRIBE_MD);
+        // F9-1: Entitlement gate. Pre-fix this branch silently granted
+        // TRANSCRIBE_MD to any MEDDOC_PRO user who logged in here, which
+        // was an entitlement bypass — any valid account could promote
+        // itself. Now we require the product to already be on the user
+        // before issuing a session. Granting must go through an admin
+        // surface or billing webhook (not auto on first login).
+        if (!user.products.includes(Product.TRANSCRIBE_MD)) {
+          return null;
+        }
+
+        // Successful login — clear lockout + brute-force counters.
         await prisma.user
           .update({
             where: { id: user.id },
@@ -141,9 +147,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               lastLogin: new Date(),
               failedLoginCount: 0,
               lockedUntil: null,
-              ...(hasTranscribeMd
-                ? {}
-                : { products: { push: Product.TRANSCRIBE_MD } }),
             },
           })
           .catch((err: unknown) => {
