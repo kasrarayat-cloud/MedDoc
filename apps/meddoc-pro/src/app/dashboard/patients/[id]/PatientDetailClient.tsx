@@ -128,7 +128,10 @@ export default function PatientDetailClient({
   medications,
   noKnownAllergies,
 }: PatientDetailClientProps) {
-  const age = new Date().getFullYear() - patient.birthYear;
+  // C1: age is only derivable when DOB is recorded.
+  const age = patient.birthYear
+    ? new Date().getFullYear() - patient.birthYear
+    : null;
   const initials = `${patient.firstName[0]}${patient.lastName[0]}`;
   const router = useRouter();
   const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
@@ -436,7 +439,9 @@ export default function PatientDetailClient({
                 <div className="flex items-center gap-4 text-sm text-slate-400 flex-wrap">
                   <span className="flex items-center gap-1.5">
                     <Calendar className="w-3.5 h-3.5" />
-                    Born {patient.birthYear} ({age} y.o.)
+                    {patient.birthYear
+                      ? `Born ${patient.birthYear} (${age} y.o.)`
+                      : 'DOB not recorded'}
                   </span>
                   {patient.sex && patient.sex !== 'UNKNOWN' && (
                     <span className="flex items-center gap-1.5 capitalize">

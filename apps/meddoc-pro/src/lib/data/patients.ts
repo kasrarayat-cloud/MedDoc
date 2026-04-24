@@ -319,7 +319,7 @@ export async function createPatient(
     drChronoId: input.drChronoId ?? undefined,
     firstName: input.firstName,
     lastName: input.lastName,
-    birthYear: input.birthYear ?? new Date().getFullYear() - 30,
+    birthYear: input.birthYear ?? null,
     mrn: input.mrn ?? `MRN-${Math.floor(Math.random() * 900000 + 100000)}`,
     chartId: manualChartId ?? nextChartIdFromValues(Array.from(memoryStore.values()).map((p) => p.chartId)),
     email: input.email ?? undefined,
@@ -480,7 +480,11 @@ function prismaToView(row: any): PatientView {
     drChronoId: row.drChronoId ?? undefined,
     firstName: row.firstName,
     lastName: row.lastName,
-    birthYear: row.birthYear ?? new Date().getFullYear() - 30,
+    // Patient-safety: audit C1 — never fabricate an age. A NULL DOB
+    // flows through as `null` and every consumer (UI, LLM prompt
+    // builder, letter generator) is responsible for showing
+    // "Unknown" / "Not recorded" rather than inventing a number.
+    birthYear: row.birthYear ?? null,
     mrn: row.mrn ?? '',
     chartId: row.chartId ?? undefined,
     email: row.email ?? undefined,

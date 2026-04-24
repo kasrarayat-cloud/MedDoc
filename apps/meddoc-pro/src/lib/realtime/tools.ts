@@ -669,7 +669,7 @@ CURRENT_DATE: ${currentDateIso}
 
 PATIENT:
   name: ${patient.firstName} ${patient.lastName}
-  born: ${patient.birthYear}
+  born: ${patient.birthYear ?? 'not recorded'}
   status: ${patient.status}
 
 PROFILE (current values — preserve unless the doctor asks to change):

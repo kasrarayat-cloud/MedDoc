@@ -94,8 +94,16 @@ body {
   background: var(--bg);
   color: var(--fg);
 }
+/* `overflow-x: clip` on both html and body together — the previous
+   rule only set it on body, which lets documentElement.scrollWidth
+   still see past-viewport content (112px bleed on /pricing at 393px
+   per the audit). `clip` over `hidden` because it doesn't create a
+   new formatting context, so sticky/fixed descendants still work.
+   Pair with the body rule below so older browsers fall through
+   gracefully. */
 html {
   scroll-behavior: smooth;
+  overflow-x: clip;
 }
 body {
   font-family: var(--serif);
@@ -103,7 +111,7 @@ body {
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  overflow-x: hidden;
+  overflow-x: clip;
   position: relative;
   transition:
     background 0.4s ease,

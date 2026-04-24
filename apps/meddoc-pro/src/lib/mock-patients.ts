@@ -35,7 +35,12 @@ export interface MockPatient {
   drChronoId?: string;
   firstName: string;
   lastName: string;
-  birthYear: number;
+  /** Null = DOB not recorded. NEVER substitute a default here — the
+   *  caller (UI / LLM prompt) is responsible for saying "Unknown" or
+   *  "Not recorded" explicitly. Faking an age (30, whatever) to keep
+   *  this non-nullable silently corrupts AI-generated clinical
+   *  content and is a patient-safety defect. See audit C1. */
+  birthYear: number | null;
   /** MRN (for insurance filings). */
   mrn: string;
   /** Practice-internal chart number (separate from MRN). */

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import {
   Document,
   Packer,
@@ -8,6 +9,20 @@ import {
   TabStopType,
 } from 'docx';
 import { getSession } from '@/lib/auth';
+
+// Audit H4 — reject oversized content before building docx. 100 KB
+// is ~50 pages of plain text; comfortably more than any real doctor
+// note, while keeping the docx generator out of OOM territory.
+const MAX_CONTENT_BYTES = 100_000;
+
+const SaveBodySchema = z.object({
+  content: z
+    .string()
+    .min(1, 'No content provided')
+    .max(MAX_CONTENT_BYTES, `Content exceeds ${MAX_CONTENT_BYTES} byte limit`),
+  format: z.enum(['docx', 'pdf']).optional(),
+  fileName: z.string().max(255).optional(),
+});
 
 // ========================================
 // Save Document API - Export as Word / PDF
@@ -93,12 +108,21 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = await request.json();
-    const { content, format, fileName } = body;
-
-    if (!content) {
-      return NextResponse.json({ error: 'No content provided' }, { status: 400 });
+    const raw = await request.json().catch(() => null);
+    const parsed = SaveBodySchema.safeParse(raw);
+    if (!parsed.success) {
+      return NextResponse.json(
+        {
+          error: 'Invalid request body',
+          issues: parsed.error.issues.map((i) => ({
+            path: i.path.join('.'),
+            message: i.message,
+          })),
+        },
+        { status: 400 }
+      );
     }
+    const { content, format, fileName } = parsed.data;
 
     // Clean the content - remove markdown artifacts that AI might add
     const cleanContent = content
@@ -166,9 +190,12 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('Save error:', error);
+    // Don't leak internal error details to the client — log server-side
+    // and return an opaque failure. Matches the pattern transcribe-md
+    // uses via withApiHandler.
+    console.error('[api:doc-editor:save] failed:', error);
     return NextResponse.json(
-      { error: 'Failed to save document', details: String(error) },
+      { error: 'Failed to save document' },
       { status: 500 }
     );
   }

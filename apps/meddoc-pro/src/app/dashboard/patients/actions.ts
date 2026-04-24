@@ -757,7 +757,11 @@ export async function generateDocumentAction(
     )
     .join('\n\n');
 
-  const age = new Date().getFullYear() - patient.birthYear;
+  // C1: never fabricate an age. If DOB missing, say so explicitly so
+  // the LLM can't pattern-match "age 30" content into the draft.
+  const ageLine = patient.birthYear
+    ? `age ${new Date().getFullYear() - patient.birthYear}`
+    : 'date of birth not recorded';
 
   // 5. Call GPT-4o-mini
   const openai = getOpenAI();
@@ -772,7 +776,7 @@ export async function generateDocumentAction(
         { role: 'system', content: docConfig.systemPrompt },
         {
           role: 'user',
-          content: `Patient: ${patient.firstName} ${patient.lastName} (age ${age})\nPhysician: Dr. Bakhtiar Moussazadeh\nPractice: MedDoc Pro Pain Management\n\n${notesContext}`,
+          content: `Patient: ${patient.firstName} ${patient.lastName} (${ageLine})\nPhysician: Dr. Bakhtiar Moussazadeh\nPractice: MedDoc Pro Pain Management\n\n${notesContext}`,
         },
       ],
     });
@@ -1189,8 +1193,10 @@ export async function dispatchCreateNote(
         { role: 'system', content: SOAP_SYSTEM_PROMPT },
         {
           role: 'user',
-          content: `Patient: ${patient.firstName} ${patient.lastName[0]}. (age ${
-            new Date().getFullYear() - patient.birthYear
+          content: `Patient: ${patient.firstName} ${patient.lastName[0]}. (${
+            patient.birthYear
+              ? `age ${new Date().getFullYear() - patient.birthYear}`
+              : 'date of birth not recorded'
           }).\n\nDictation:\n${dictation}`,
         },
       ],

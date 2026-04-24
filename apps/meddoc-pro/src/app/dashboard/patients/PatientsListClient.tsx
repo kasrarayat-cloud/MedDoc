@@ -423,9 +423,11 @@ export default function PatientsListClient({ initialPatients }: PatientsListClie
                       </p>
                     </div>
 
-                    {/* Birth year (de-identified) */}
+                    {/* Birth year (de-identified) — "—" when not recorded */}
                     <div className="col-span-1">
-                      <p className="text-sm text-slate-300">{patient.birthYear}</p>
+                      <p className="text-sm text-slate-300">
+                        {patient.birthYear ?? '—'}
+                      </p>
                     </div>
 
                     {/* Last visit */}
