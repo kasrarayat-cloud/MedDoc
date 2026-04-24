@@ -1,0 +1,118 @@
+{
+  "findings": [
+    {
+      "when": "2026-04-24T23:28:02.691Z",
+      "severity": "INFO",
+      "area": "/api/visits/cmocm9jki000601kwxf575d00/text",
+      "title": "text on SIGNED 409",
+      "detail": "{\"error\":\"text has already been submitted for this visit\"}"
+    },
+    {
+      "when": "2026-04-24T23:28:02.732Z",
+      "severity": "INFO",
+      "area": "/api/visits/cmocm9jki000601kwxf575d00/upload",
+      "title": "upload on SIGNED 400",
+      "detail": "{\"error\":\"this visit does not accept audio uploads\"}"
+    },
+    {
+      "when": "2026-04-24T23:28:02.797Z",
+      "severity": "INFO",
+      "area": "/api/visits/cmocm9jki000601kwxf575d00/dictation/upload",
+      "title": "dictation upload on SIGNED 400",
+      "detail": "{\"error\":\"this visit is not a voice-dictation visit\"}"
+    },
+    {
+      "when": "2026-04-24T23:28:02.871Z",
+      "severity": "INFO",
+      "area": "/api/patients/cmo5z4ly2000d01s35ld71uvm",
+      "title": "cross-practice PATCH 404",
+      "detail": "{\"error\":\"not found\"}"
+    },
+    {
+      "when": "2026-04-24T23:28:03.063Z",
+      "severity": "INFO",
+      "area": "/api/visits/cmocm9jki000601kwxf575d00",
+      "title": "PATCH SIGNED 400",
+      "detail": "{\"error\":\"Only draft visits (queued with no input uploaded) can be edited. Delete it instead.\",\"code\":\"VISIT_NOT_DRAFT\"}"
+    },
+    {
+      "when": "2026-04-24T23:28:03.155Z",
+      "severity": "INFO",
+      "area": "/api/visits/cmocm9jki000601kwxf575d00/export/email",
+      "title": "email-exfil on SIGNED 403",
+      "detail": "{\"error\":\"Email destination must match your account email.\",\"code\":\"INVALID_DESTINATION\",\"retry\":false}"
+    },
+    {
+      "when": "2026-04-24T23:28:04.343Z",
+      "severity": "INFO",
+      "area": "/visits/new",
+      "title": "visit-create flood",
+      "detail": "[500,500,500,500,500,500,500,500]"
+    },
+    {
+      "when": "2026-04-24T23:28:04.394Z",
+      "severity": "INFO",
+      "area": "/api/visits/cmocm9jki000601kwxf575d00/sign",
+      "title": "re-sign+headers 200",
+      "detail": "[[\"content-type\",\"application/json\"]]"
+    }
+  ],
+  "consoleErrs": [
+    {
+      "url": "https://app.quillmd.com/visits/cmocm9jki000601kwxf575d00",
+      "text": "Failed to load resource: the server responded with a status of 409 ()"
+    },
+    {
+      "url": "https://app.quillmd.com/visits/cmocm9jki000601kwxf575d00",
+      "text": "Failed to load resource: the server responded with a status of 400 ()"
+    },
+    {
+      "url": "https://app.quillmd.com/visits/cmocm9jki000601kwxf575d00",
+      "text": "Failed to load resource: the server responded with a status of 400 ()"
+    },
+    {
+      "url": "https://app.quillmd.com/visits/cmocm9jki000601kwxf575d00",
+      "text": "Failed to load resource: the server responded with a status of 404 ()"
+    },
+    {
+      "url": "https://app.quillmd.com/visits/cmocm9jki000601kwxf575d00",
+      "text": "Failed to load resource: the server responded with a status of 400 ()"
+    },
+    {
+      "url": "https://app.quillmd.com/visits/cmocm9jki000601kwxf575d00",
+      "text": "Failed to load resource: the server responded with a status of 403 ()"
+    },
+    {
+      "url": "https://app.quillmd.com/visits/cmocm9jki000601kwxf575d00",
+      "text": "Failed to load resource: the server responded with a status of 500 ()"
+    },
+    {
+      "url": "https://app.quillmd.com/visits/cmocm9jki000601kwxf575d00",
+      "text": "Failed to load resource: the server responded with a status of 500 ()"
+    },
+    {
+      "url": "https://app.quillmd.com/visits/cmocm9jki000601kwxf575d00",
+      "text": "Failed to load resource: the server responded with a status of 500 ()"
+    },
+    {
+      "url": "https://app.quillmd.com/visits/cmocm9jki000601kwxf575d00",
+      "text": "Failed to load resource: the server responded with a status of 500 ()"
+    },
+    {
+      "url": "https://app.quillmd.com/visits/cmocm9jki000601kwxf575d00",
+      "text": "Failed to load resource: the server responded with a status of 500 ()"
+    },
+    {
+      "url": "https://app.quillmd.com/visits/cmocm9jki000601kwxf575d00",
+      "text": "Failed to load resource: the server responded with a status of 500 ()"
+    },
+    {
+      "url": "https://app.quillmd.com/visits/cmocm9jki000601kwxf575d00",
+      "text": "Failed to load resource: the server responded with a status of 500 ()"
+    },
+    {
+      "url": "https://app.quillmd.com/visits/cmocm9jki000601kwxf575d00",
+      "text": "Failed to load resource: the server responded with a status of 500 ()"
+    }
+  ]
+}

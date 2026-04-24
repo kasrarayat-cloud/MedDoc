@@ -1,0 +1,46 @@
+{
+  "findings": [
+    {
+      "when": "2026-04-24T23:16:13.744Z",
+      "severity": "INFO",
+      "area": "/visits/cmodivx6o000201mqi5whp7d5",
+      "title": "tab inventory",
+      "detail": "SOAP Note | Input | Codes | Rx | Extras"
+    },
+    {
+      "when": "2026-04-24T23:16:21.676Z",
+      "severity": "INFO",
+      "area": "/visits/cmodivx6o000201mqi5whp7d5",
+      "title": "SOAP edit button visible",
+      "detail": "false"
+    },
+    {
+      "when": "2026-04-24T23:16:26.304Z",
+      "severity": "INFO",
+      "area": "/visits/cmodivx6o000201mqi5whp7d5",
+      "title": "direct-API after-sign probes",
+      "detail": "[{\"method\":\"PATCH\",\"url\":\"/api/visits/cmodivx6o000201mqi5whp7d5\",\"status\":400,\"body\":\"{\\\"error\\\":\\\"Only draft visits (queued with no input uploaded) can be edited. Delete it instead.\\\",\\\"code\\\":\\\"VISIT_NOT_DRAFT\\\"}\"},{\"method\":\"POST\",\"url\":\"/api/visits/cmodivx6o000201mqi5whp7d5/text\",\"status\":409,\"body\":\"{\\\"error\\\":\\\"text has already been submitted for this visit\\\"}\"},{\"method\":\"POST\",\"url\":\"/api/visits/cmodivx6o000201mqi5whp7d5/upload\",\"status\":400,\"body\":\"{\\\"error\\\":\\\"this visit does not accept audio uploads\\\"}\"}]"
+    },
+    {
+      "when": "2026-04-24T23:16:26.411Z",
+      "severity": "INFO",
+      "area": "/visits/cmodivx6o000201mqi5whp7d5",
+      "title": "retry on SIGNED visit",
+      "detail": "{\"status\":200,\"body\":\"{\\\"ok\\\":true}\"}"
+    }
+  ],
+  "consoleErrs": [
+    {
+      "url": "https://app.quillmd.com/visits/cmodivx6o000201mqi5whp7d5",
+      "text": "Failed to load resource: the server responded with a status of 400 ()"
+    },
+    {
+      "url": "https://app.quillmd.com/visits/cmodivx6o000201mqi5whp7d5",
+      "text": "Failed to load resource: the server responded with a status of 409 ()"
+    },
+    {
+      "url": "https://app.quillmd.com/visits/cmodivx6o000201mqi5whp7d5",
+      "text": "Failed to load resource: the server responded with a status of 400 ()"
+    }
+  ]
+}

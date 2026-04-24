@@ -1,0 +1,63 @@
+{
+  "findings": [
+    {
+      "when": "2026-04-24T23:22:40.403Z",
+      "severity": "INFO",
+      "area": "/visits/cmodivx6o000201mqi5whp7d5",
+      "title": "soap edit trigger visible",
+      "detail": "true"
+    },
+    {
+      "when": "2026-04-24T23:22:46.143Z",
+      "severity": "INFO",
+      "area": "/visits/cmodivx6o000201mqi5whp7d5",
+      "title": "SOAP edit persisted across refresh",
+      "detail": ""
+    },
+    {
+      "when": "2026-04-24T23:22:46.247Z",
+      "severity": "INFO",
+      "area": "/visits/cmodivx6o000201mqi5whp7d5",
+      "title": "re-submit text status 409",
+      "detail": "{\"error\":\"text has already been submitted for this visit\"}"
+    },
+    {
+      "when": "2026-04-24T23:22:46.297Z",
+      "severity": "INFO",
+      "area": "/visits/cmodivx6o000201mqi5whp7d5",
+      "title": "audio upload to text visit 400",
+      "detail": "{\"error\":\"this visit does not accept audio uploads\"}"
+    },
+    {
+      "when": "2026-04-24T23:22:48.489Z",
+      "severity": "INFO",
+      "area": "/settings",
+      "title": "field inventory",
+      "detail": "{\"inputs\":7,\"textareas\":0,\"selects\":1,\"buttons\":9}"
+    },
+    {
+      "when": "2026-04-24T23:22:50.422Z",
+      "severity": "INFO",
+      "area": "/settings",
+      "title": "delete-account modal opened + cancelled",
+      "detail": ""
+    },
+    {
+      "when": "2026-04-24T23:22:50.732Z",
+      "severity": "INFO",
+      "area": "/api/auth/forgot-password",
+      "title": "status 200",
+      "detail": "{\"ok\":true,\"message\":\"If an account exists for that email, we've sent a reset link. Check your inbox.\"}"
+    }
+  ],
+  "consoleErrs": [
+    {
+      "url": "https://app.quillmd.com/visits/cmodivx6o000201mqi5whp7d5",
+      "text": "Failed to load resource: the server responded with a status of 409 ()"
+    },
+    {
+      "url": "https://app.quillmd.com/visits/cmodivx6o000201mqi5whp7d5",
+      "text": "Failed to load resource: the server responded with a status of 400 ()"
+    }
+  ]
+}

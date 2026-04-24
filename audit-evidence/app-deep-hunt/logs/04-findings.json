@@ -1,0 +1,454 @@
+{
+  "findings": [
+    {
+      "when": "2026-04-24T23:20:12.866Z",
+      "severity": "LOW",
+      "area": "https://app.quillmd.com/visits/cmodivx6o000201mqi5whp7d5",
+      "title": "console error",
+      "detail": "Failed to load resource: the server responded with a status of 405 ()"
+    },
+    {
+      "when": "2026-04-24T23:20:12.901Z",
+      "severity": "LOW",
+      "area": "https://app.quillmd.com/visits/cmodivx6o000201mqi5whp7d5",
+      "title": "console error",
+      "detail": "Failed to load resource: the server responded with a status of 404 ()"
+    },
+    {
+      "when": "2026-04-24T23:20:12.969Z",
+      "severity": "LOW",
+      "area": "https://app.quillmd.com/visits/cmodivx6o000201mqi5whp7d5",
+      "title": "console error",
+      "detail": "Failed to load resource: the server responded with a status of 404 ()"
+    },
+    {
+      "when": "2026-04-24T23:20:13.006Z",
+      "severity": "LOW",
+      "area": "https://app.quillmd.com/visits/cmodivx6o000201mqi5whp7d5",
+      "title": "console error",
+      "detail": "Failed to load resource: the server responded with a status of 405 ()"
+    },
+    {
+      "when": "2026-04-24T23:20:13.042Z",
+      "severity": "LOW",
+      "area": "https://app.quillmd.com/visits/cmodivx6o000201mqi5whp7d5",
+      "title": "console error",
+      "detail": "Failed to load resource: the server responded with a status of 404 ()"
+    },
+    {
+      "when": "2026-04-24T23:20:13.079Z",
+      "severity": "LOW",
+      "area": "https://app.quillmd.com/visits/cmodivx6o000201mqi5whp7d5",
+      "title": "console error",
+      "detail": "Failed to load resource: the server responded with a status of 404 ()"
+    },
+    {
+      "when": "2026-04-24T23:20:13.114Z",
+      "severity": "LOW",
+      "area": "https://app.quillmd.com/visits/cmodivx6o000201mqi5whp7d5",
+      "title": "console error",
+      "detail": "Failed to load resource: the server responded with a status of 404 ()"
+    },
+    {
+      "when": "2026-04-24T23:20:13.116Z",
+      "severity": "MEDIUM",
+      "area": "/api/visits/cmo8asvl4000001mu0pgives2",
+      "title": "unexpected 405",
+      "detail": "{\"path\":\"/api/visits/cmo8asvl4000001mu0pgives2\",\"status\":405,\"sample\":\"(non-json, ? bytes)\"}"
+    },
+    {
+      "when": "2026-04-24T23:20:13.117Z",
+      "severity": "INFO",
+      "area": "/api/visits/cmo8asvl4000001mu0pgives2/status",
+      "title": "404 on another user",
+      "detail": ""
+    },
+    {
+      "when": "2026-04-24T23:20:13.117Z",
+      "severity": "INFO",
+      "area": "/api/visits/cmo8asvl4000001mu0pgives2/progress",
+      "title": "404 on another user",
+      "detail": ""
+    },
+    {
+      "when": "2026-04-24T23:20:13.117Z",
+      "severity": "MEDIUM",
+      "area": "/api/visits/cmo8asvl4000001mu0pgives2/export/clipboard?format=epic",
+      "title": "unexpected 405",
+      "detail": "{\"path\":\"/api/visits/cmo8asvl4000001mu0pgives2/export/clipboard?format=epic\",\"status\":405,\"sample\":\"(non-json, ? bytes)\"}"
+    },
+    {
+      "when": "2026-04-24T23:20:13.117Z",
+      "severity": "INFO",
+      "area": "/api/visits/cmo8asvl4000001mu0pgives2/export/pdf",
+      "title": "404 on another user",
+      "detail": ""
+    },
+    {
+      "when": "2026-04-24T23:20:13.117Z",
+      "severity": "INFO",
+      "area": "/api/visits/cmo8asvl4000001mu0pgives2/export/docx",
+      "title": "404 on another user",
+      "detail": ""
+    },
+    {
+      "when": "2026-04-24T23:20:13.117Z",
+      "severity": "INFO",
+      "area": "/api/visits/cmo8asvl4000001mu0pgives2/dictation/audio",
+      "title": "404 on another user",
+      "detail": ""
+    },
+    {
+      "when": "2026-04-24T23:20:13.152Z",
+      "severity": "LOW",
+      "area": "https://app.quillmd.com/visits/cmodivx6o000201mqi5whp7d5",
+      "title": "console error",
+      "detail": "Failed to load resource: the server responded with a status of 405 ()"
+    },
+    {
+      "when": "2026-04-24T23:20:13.177Z",
+      "severity": "LOW",
+      "area": "https://app.quillmd.com/visits/cmodivx6o000201mqi5whp7d5",
+      "title": "console error",
+      "detail": "Failed to load resource: the server responded with a status of 404 ()"
+    },
+    {
+      "when": "2026-04-24T23:20:13.209Z",
+      "severity": "LOW",
+      "area": "https://app.quillmd.com/visits/cmodivx6o000201mqi5whp7d5",
+      "title": "console error",
+      "detail": "Failed to load resource: the server responded with a status of 404 ()"
+    },
+    {
+      "when": "2026-04-24T23:20:13.215Z",
+      "severity": "LOW",
+      "area": "https://app.quillmd.com/visits/cmodivx6o000201mqi5whp7d5",
+      "title": "console error",
+      "detail": "Failed to load resource: the server responded with a status of 405 ()"
+    },
+    {
+      "when": "2026-04-24T23:20:13.244Z",
+      "severity": "LOW",
+      "area": "https://app.quillmd.com/visits/cmodivx6o000201mqi5whp7d5",
+      "title": "console error",
+      "detail": "Failed to load resource: the server responded with a status of 404 ()"
+    },
+    {
+      "when": "2026-04-24T23:20:13.275Z",
+      "severity": "LOW",
+      "area": "https://app.quillmd.com/visits/cmodivx6o000201mqi5whp7d5",
+      "title": "console error",
+      "detail": "Failed to load resource: the server responded with a status of 404 ()"
+    },
+    {
+      "when": "2026-04-24T23:20:13.311Z",
+      "severity": "LOW",
+      "area": "https://app.quillmd.com/visits/cmodivx6o000201mqi5whp7d5",
+      "title": "console error",
+      "detail": "Failed to load resource: the server responded with a status of 404 ()"
+    },
+    {
+      "when": "2026-04-24T23:20:13.312Z",
+      "severity": "MEDIUM",
+      "area": "/api/visits/cmo61e0os000001qlh5w5mdhh",
+      "title": "unexpected 405",
+      "detail": "{\"path\":\"/api/visits/cmo61e0os000001qlh5w5mdhh\",\"status\":405,\"sample\":\"(non-json, ? bytes)\"}"
+    },
+    {
+      "when": "2026-04-24T23:20:13.312Z",
+      "severity": "INFO",
+      "area": "/api/visits/cmo61e0os000001qlh5w5mdhh/status",
+      "title": "404 on another user",
+      "detail": ""
+    },
+    {
+      "when": "2026-04-24T23:20:13.312Z",
+      "severity": "INFO",
+      "area": "/api/visits/cmo61e0os000001qlh5w5mdhh/progress",
+      "title": "404 on another user",
+      "detail": ""
+    },
+    {
+      "when": "2026-04-24T23:20:13.312Z",
+      "severity": "MEDIUM",
+      "area": "/api/visits/cmo61e0os000001qlh5w5mdhh/export/clipboard?format=epic",
+      "title": "unexpected 405",
+      "detail": "{\"path\":\"/api/visits/cmo61e0os000001qlh5w5mdhh/export/clipboard?format=epic\",\"status\":405,\"sample\":\"(non-json, ? bytes)\"}"
+    },
+    {
+      "when": "2026-04-24T23:20:13.312Z",
+      "severity": "INFO",
+      "area": "/api/visits/cmo61e0os000001qlh5w5mdhh/export/pdf",
+      "title": "404 on another user",
+      "detail": ""
+    },
+    {
+      "when": "2026-04-24T23:20:13.312Z",
+      "severity": "INFO",
+      "area": "/api/visits/cmo61e0os000001qlh5w5mdhh/export/docx",
+      "title": "404 on another user",
+      "detail": ""
+    },
+    {
+      "when": "2026-04-24T23:20:13.313Z",
+      "severity": "INFO",
+      "area": "/api/visits/cmo61e0os000001qlh5w5mdhh/dictation/audio",
+      "title": "404 on another user",
+      "detail": ""
+    },
+    {
+      "when": "2026-04-24T23:20:13.371Z",
+      "severity": "LOW",
+      "area": "https://app.quillmd.com/visits/cmodivx6o000201mqi5whp7d5",
+      "title": "console error",
+      "detail": "Failed to load resource: the server responded with a status of 405 ()"
+    },
+    {
+      "when": "2026-04-24T23:20:13.404Z",
+      "severity": "LOW",
+      "area": "https://app.quillmd.com/visits/cmodivx6o000201mqi5whp7d5",
+      "title": "console error",
+      "detail": "Failed to load resource: the server responded with a status of 404 ()"
+    },
+    {
+      "when": "2026-04-24T23:20:13.438Z",
+      "severity": "LOW",
+      "area": "https://app.quillmd.com/visits/cmodivx6o000201mqi5whp7d5",
+      "title": "console error",
+      "detail": "Failed to load resource: the server responded with a status of 404 ()"
+    },
+    {
+      "when": "2026-04-24T23:20:13.446Z",
+      "severity": "LOW",
+      "area": "https://app.quillmd.com/visits/cmodivx6o000201mqi5whp7d5",
+      "title": "console error",
+      "detail": "Failed to load resource: the server responded with a status of 405 ()"
+    },
+    {
+      "when": "2026-04-24T23:20:13.472Z",
+      "severity": "LOW",
+      "area": "https://app.quillmd.com/visits/cmodivx6o000201mqi5whp7d5",
+      "title": "console error",
+      "detail": "Failed to load resource: the server responded with a status of 404 ()"
+    },
+    {
+      "when": "2026-04-24T23:20:13.502Z",
+      "severity": "LOW",
+      "area": "https://app.quillmd.com/visits/cmodivx6o000201mqi5whp7d5",
+      "title": "console error",
+      "detail": "Failed to load resource: the server responded with a status of 404 ()"
+    },
+    {
+      "when": "2026-04-24T23:20:13.541Z",
+      "severity": "LOW",
+      "area": "https://app.quillmd.com/visits/cmodivx6o000201mqi5whp7d5",
+      "title": "console error",
+      "detail": "Failed to load resource: the server responded with a status of 404 ()"
+    },
+    {
+      "when": "2026-04-24T23:20:13.542Z",
+      "severity": "MEDIUM",
+      "area": "/api/visits/cmo8tfejv000301mtnxkx640p",
+      "title": "unexpected 405",
+      "detail": "{\"path\":\"/api/visits/cmo8tfejv000301mtnxkx640p\",\"status\":405,\"sample\":\"(non-json, ? bytes)\"}"
+    },
+    {
+      "when": "2026-04-24T23:20:13.542Z",
+      "severity": "INFO",
+      "area": "/api/visits/cmo8tfejv000301mtnxkx640p/status",
+      "title": "404 on another user",
+      "detail": ""
+    },
+    {
+      "when": "2026-04-24T23:20:13.542Z",
+      "severity": "INFO",
+      "area": "/api/visits/cmo8tfejv000301mtnxkx640p/progress",
+      "title": "404 on another user",
+      "detail": ""
+    },
+    {
+      "when": "2026-04-24T23:20:13.542Z",
+      "severity": "MEDIUM",
+      "area": "/api/visits/cmo8tfejv000301mtnxkx640p/export/clipboard?format=epic",
+      "title": "unexpected 405",
+      "detail": "{\"path\":\"/api/visits/cmo8tfejv000301mtnxkx640p/export/clipboard?format=epic\",\"status\":405,\"sample\":\"(non-json, ? bytes)\"}"
+    },
+    {
+      "when": "2026-04-24T23:20:13.542Z",
+      "severity": "INFO",
+      "area": "/api/visits/cmo8tfejv000301mtnxkx640p/export/pdf",
+      "title": "404 on another user",
+      "detail": ""
+    },
+    {
+      "when": "2026-04-24T23:20:13.542Z",
+      "severity": "INFO",
+      "area": "/api/visits/cmo8tfejv000301mtnxkx640p/export/docx",
+      "title": "404 on another user",
+      "detail": ""
+    },
+    {
+      "when": "2026-04-24T23:20:13.542Z",
+      "severity": "INFO",
+      "area": "/api/visits/cmo8tfejv000301mtnxkx640p/dictation/audio",
+      "title": "404 on another user",
+      "detail": ""
+    },
+    {
+      "when": "2026-04-24T23:20:15.444Z",
+      "severity": "LOW",
+      "area": "https://app.quillmd.com/visits/cmodivx6o000201mqi5whp7d5",
+      "title": "console error",
+      "detail": "Failed to load resource: the server responded with a status of 405 ()"
+    },
+    {
+      "when": "2026-04-24T23:20:15.445Z",
+      "severity": "INFO",
+      "area": "/api/visits/cmodivx6o000201mqi5whp7d5/export/pdf",
+      "title": "unsigned-export status 200",
+      "detail": "{\"path\":\"/api/visits/cmodivx6o000201mqi5whp7d5/export/pdf\",\"status\":200,\"sample\":\"(application/pdf, 41636 bytes)\"}"
+    },
+    {
+      "when": "2026-04-24T23:20:15.445Z",
+      "severity": "INFO",
+      "area": "/api/visits/cmodivx6o000201mqi5whp7d5/export/docx",
+      "title": "unsigned-export status 200",
+      "detail": "{\"path\":\"/api/visits/cmodivx6o000201mqi5whp7d5/export/docx\",\"status\":200,\"sample\":\"(application/vnd.openxmlformats-officedocument.wordprocessingml.document, 13873 bytes)\"}"
+    },
+    {
+      "when": "2026-04-24T23:20:15.445Z",
+      "severity": "INFO",
+      "area": "/api/visits/cmodivx6o000201mqi5whp7d5/export/clipboard?format=epic",
+      "title": "unsigned-export status 405",
+      "detail": "{\"path\":\"/api/visits/cmodivx6o000201mqi5whp7d5/export/clipboard?format=epic\",\"status\":405,\"sample\":\"(, ? bytes)\"}"
+    }
+  ],
+  "apiCalls": [
+    {
+      "method": "GET",
+      "url": "/api/visits/cmo8asvl4000001mu0pgives2",
+      "status": 405,
+      "bytes": 0
+    },
+    {
+      "method": "GET",
+      "url": "/api/visits/cmo8asvl4000001mu0pgives2/status",
+      "status": 404,
+      "bytes": 21
+    },
+    {
+      "method": "GET",
+      "url": "/api/visits/cmo8asvl4000001mu0pgives2/progress",
+      "status": 404,
+      "bytes": 21
+    },
+    {
+      "method": "GET",
+      "url": "/api/visits/cmo8asvl4000001mu0pgives2/export/clipboard?format=epic",
+      "status": 405,
+      "bytes": 0
+    },
+    {
+      "method": "GET",
+      "url": "/api/visits/cmo8asvl4000001mu0pgives2/export/pdf",
+      "status": 404,
+      "bytes": 21
+    },
+    {
+      "method": "GET",
+      "url": "/api/visits/cmo8asvl4000001mu0pgives2/export/docx",
+      "status": 404,
+      "bytes": 21
+    },
+    {
+      "method": "GET",
+      "url": "/api/visits/cmo8asvl4000001mu0pgives2/dictation/audio",
+      "status": 404,
+      "bytes": 21
+    },
+    {
+      "method": "GET",
+      "url": "/api/visits/cmo61e0os000001qlh5w5mdhh",
+      "status": 405,
+      "bytes": 0
+    },
+    {
+      "method": "GET",
+      "url": "/api/visits/cmo61e0os000001qlh5w5mdhh/status",
+      "status": 404,
+      "bytes": 21
+    },
+    {
+      "method": "GET",
+      "url": "/api/visits/cmo61e0os000001qlh5w5mdhh/progress",
+      "status": 404,
+      "bytes": 21
+    },
+    {
+      "method": "GET",
+      "url": "/api/visits/cmo61e0os000001qlh5w5mdhh/export/clipboard?format=epic",
+      "status": 405,
+      "bytes": 0
+    },
+    {
+      "method": "GET",
+      "url": "/api/visits/cmo61e0os000001qlh5w5mdhh/export/pdf",
+      "status": 404,
+      "bytes": 21
+    },
+    {
+      "method": "GET",
+      "url": "/api/visits/cmo61e0os000001qlh5w5mdhh/export/docx",
+      "status": 404,
+      "bytes": 21
+    },
+    {
+      "method": "GET",
+      "url": "/api/visits/cmo61e0os000001qlh5w5mdhh/dictation/audio",
+      "status": 404,
+      "bytes": 21
+    },
+    {
+      "method": "GET",
+      "url": "/api/visits/cmo8tfejv000301mtnxkx640p",
+      "status": 405,
+      "bytes": 0
+    },
+    {
+      "method": "GET",
+      "url": "/api/visits/cmo8tfejv000301mtnxkx640p/status",
+      "status": 404,
+      "bytes": 21
+    },
+    {
+      "method": "GET",
+      "url": "/api/visits/cmo8tfejv000301mtnxkx640p/progress",
+      "status": 404,
+      "bytes": 21
+    },
+    {
+      "method": "GET",
+      "url": "/api/visits/cmo8tfejv000301mtnxkx640p/export/clipboard?format=epic",
+      "status": 405,
+      "bytes": 0
+    },
+    {
+      "method": "GET",
+      "url": "/api/visits/cmo8tfejv000301mtnxkx640p/export/pdf",
+      "status": 404,
+      "bytes": 21
+    },
+    {
+      "method": "GET",
+      "url": "/api/visits/cmo8tfejv000301mtnxkx640p/export/docx",
+      "status": 404,
+      "bytes": 21
+    },
+    {
+      "method": "GET",
+      "url": "/api/visits/cmo8tfejv000301mtnxkx640p/dictation/audio",
+      "status": 404,
+      "bytes": 21
+    }
+  ]
+}

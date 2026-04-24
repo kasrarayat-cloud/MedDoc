@@ -1,0 +1,149 @@
+{
+  "findings": [
+    {
+      "when": "2026-04-24T23:24:36.785Z",
+      "severity": "INFO",
+      "area": "/api/patients",
+      "title": "create '?script?alert?1???sc' status 201",
+      "detail": "{\"patient\":{\"id\":\"cmodjfdnl000b01mq9oipifot\",\"name\":\"<script>alert(1)</script>\",\"dateOfBirth\":\"1990-01-01T00:00:00.000Z\",\"externalId\":null,\"createdAt\""
+    },
+    {
+      "when": "2026-04-24T23:24:36.838Z",
+      "severity": "INFO",
+      "area": "/api/patients",
+      "title": "create 'Bobby???DROP?TABLE?p' status 201",
+      "detail": "{\"patient\":{\"id\":\"cmodjfdqc000c01mqs4qc465l\",\"name\":\"Bobby\\\"; DROP TABLE patients;--\",\"dateOfBirth\":\"1990-02-02T00:00:00.000Z\",\"externalId\":null,\"crea"
+    },
+    {
+      "when": "2026-04-24T23:24:36.875Z",
+      "severity": "INFO",
+      "area": "/api/patients",
+      "title": "create '???Emoji?Patient???' status 201",
+      "detail": "{\"patient\":{\"id\":\"cmodjfdrp000d01mqwh1pabxv\",\"name\":\"🔥 Emoji Patient 🩺\",\"dateOfBirth\":\"1990-03-03T00:00:00.000Z\",\"externalId\":null,\"createdAt\":\"2026"
+    },
+    {
+      "when": "2026-04-24T23:24:36.910Z",
+      "severity": "INFO",
+      "area": "/api/patients",
+      "title": "create '???????????' status 201",
+      "detail": "{\"patient\":{\"id\":\"cmodjfdso000e01mqm2xdry4w\",\"name\":\"محمد العربي\",\"dateOfBirth\":\"1990-04-04T00:00:00.000Z\",\"externalId\":null,\"createdAt\":\"2026-04-24T2"
+    },
+    {
+      "when": "2026-04-24T23:24:36.947Z",
+      "severity": "INFO",
+      "area": "/api/patients",
+      "title": "create 'AAAAAAAAAAAAAAAAAAAA' status 400",
+      "detail": "{\"error\":\"Too big: expected string to have <=200 characters\",\"field\":\"name\"}"
+    },
+    {
+      "when": "2026-04-24T23:24:37.151Z",
+      "severity": "HIGH",
+      "area": "https://app.quillmd.com/patients",
+      "title": "page error",
+      "detail": "Minified React error #418; visit https://react.dev/errors/418?args[]=text&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+    },
+    {
+      "when": "2026-04-24T23:24:39.485Z",
+      "severity": "CRITICAL",
+      "area": "/patients",
+      "title": "XSS — script tag injected in patient name rendered!",
+      "detail": ""
+    },
+    {
+      "when": "2026-04-24T23:24:39.532Z",
+      "severity": "INFO",
+      "area": "/api/visits/cmocm9jki…/sign",
+      "title": "re-sign already-SIGNED status 200",
+      "detail": "{\"signedAt\":\"2026-04-24T22:50:02.400Z\",\"clipboardTexts\":{},\"emailQueued\":false}"
+    },
+    {
+      "when": "2026-04-24T23:24:39.577Z",
+      "severity": "INFO",
+      "area": "/api/visits/cmodivx6o000201mqi5whp7d5/archive",
+      "title": "archive READY status 400",
+      "detail": "{\"error\":\"Only signed visits can be archived. Use Delete for draft or in-progress visits.\",\"code\":\"VISIT_NOT_SIGNED\"}"
+    },
+    {
+      "when": "2026-04-24T23:24:39.635Z",
+      "severity": "INFO",
+      "area": "/api/visits/cmodivx6o000201mqi5whp7d5/restore",
+      "title": "restore non-trashed status 200",
+      "detail": "{\"ok\":true,\"alreadyActive\":true}"
+    },
+    {
+      "when": "2026-04-24T23:24:39.671Z",
+      "severity": "MEDIUM",
+      "area": "/api/visits/cmodivx6o000201mqi5whp7d5/retry",
+      "title": "retry on READY status 200",
+      "detail": "{\"ok\":true}"
+    },
+    {
+      "when": "2026-04-24T23:24:39.724Z",
+      "severity": "INFO",
+      "area": "/api/visits/cmodivx6o000201mqi5whp7d5/text",
+      "title": "concurrent #1 status 409",
+      "detail": "{\"error\":\"text has already been submitted for this visit\"}"
+    },
+    {
+      "when": "2026-04-24T23:24:39.724Z",
+      "severity": "INFO",
+      "area": "/api/visits/cmodivx6o000201mqi5whp7d5/text",
+      "title": "concurrent #2 status 409",
+      "detail": "{\"error\":\"text has already been submitted for this visit\"}"
+    },
+    {
+      "when": "2026-04-24T23:24:39.724Z",
+      "severity": "INFO",
+      "area": "/api/visits/cmodivx6o000201mqi5whp7d5/text",
+      "title": "concurrent #3 status 409",
+      "detail": "{\"error\":\"text has already been submitted for this visit\"}"
+    },
+    {
+      "when": "2026-04-24T23:24:39.770Z",
+      "severity": "INFO",
+      "area": "/api/visits/cmodivx6o000201mqi5whp7d5/progress",
+      "title": "progress status 200",
+      "detail": "{\"visitId\":\"cmodivx6o000201mqi5whp7d5\",\"status\":\"QUEUED\",\"progressHint\":\"Queued — waiting for a worker\",\"needsReview\":false,\"reviewReason\":null,\"audioDurationSec\":null,\"deletedAt\":null,\"archivedAt\":null}"
+    }
+  ],
+  "consoleErrs": [
+    {
+      "url": "https://app.quillmd.com/patients/cmodiv79y000101mqsmtbry8v",
+      "text": "Failed to load resource: the server responded with a status of 400 ()"
+    },
+    {
+      "url": "https://app.quillmd.com/patients",
+      "text": "Failed to load resource: the server responded with a status of 400 ()"
+    },
+    {
+      "url": "https://app.quillmd.com/patients",
+      "text": "Failed to load resource: the server responded with a status of 409 ()"
+    },
+    {
+      "url": "https://app.quillmd.com/patients",
+      "text": "Failed to load resource: the server responded with a status of 409 ()"
+    },
+    {
+      "url": "https://app.quillmd.com/patients",
+      "text": "Failed to load resource: the server responded with a status of 409 ()"
+    }
+  ],
+  "createdIds": [
+    {
+      "id": "cmodjfdnl000b01mq9oipifot",
+      "name": "<script>alert(1)</script>"
+    },
+    {
+      "id": "cmodjfdqc000c01mqs4qc465l",
+      "name": "Bobby\"; DROP TABLE patients;--"
+    },
+    {
+      "id": "cmodjfdrp000d01mqwh1pabxv",
+      "name": "🔥 Emoji Patient 🩺"
+    },
+    {
+      "id": "cmodjfdso000e01mqm2xdry4w",
+      "name": "محمد العربي"
+    }
+  ]
+}

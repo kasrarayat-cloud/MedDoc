@@ -1,0 +1,29 @@
+{
+  "findings": [
+    {
+      "when": "2026-04-24T23:12:00.880Z",
+      "severity": "HIGH",
+      "area": "/visits/cmodivx6o000201mqi5whp7d5",
+      "title": "did not reach READY in 120s",
+      "detail": "final status: queued"
+    }
+  ],
+  "netLog": [
+    {
+      "method": "GET",
+      "url": "https://app.quillmd.com/api/patients?search=Deep%20Hunt%20Patient%20modiv5tv",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "url": "https://app.quillmd.com/api/patients/fuzzy-match",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "url": "https://app.quillmd.com/api/patients",
+      "status": 201
+    }
+  ],
+  "consoleLog": []
+}

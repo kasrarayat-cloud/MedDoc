@@ -1,0 +1,107 @@
+{
+  "findings": [
+    {
+      "when": "2026-04-24T23:06:51.472Z",
+      "severity": "INFO",
+      "area": "/dashboard",
+      "title": "element count",
+      "detail": "buttons=2, links=18"
+    },
+    {
+      "when": "2026-04-24T23:06:53.881Z",
+      "severity": "INFO",
+      "area": "/visits",
+      "title": "element count",
+      "detail": "buttons=2, links=19"
+    },
+    {
+      "when": "2026-04-24T23:06:56.034Z",
+      "severity": "INFO",
+      "area": "/patients",
+      "title": "element count",
+      "detail": "buttons=2, links=16"
+    },
+    {
+      "when": "2026-04-24T23:06:58.044Z",
+      "severity": "INFO",
+      "area": "/visits/new",
+      "title": "element count",
+      "detail": "buttons=3, links=10"
+    },
+    {
+      "when": "2026-04-24T23:07:00.396Z",
+      "severity": "INFO",
+      "area": "/settings",
+      "title": "element count",
+      "detail": "buttons=9, links=16"
+    },
+    {
+      "when": "2026-04-24T23:07:01.652Z",
+      "severity": "INFO",
+      "area": "/visits/nonexistent-id",
+      "title": "404 as expected",
+      "detail": "404\nVisit not found\n\nThis visit doesn't exist or you don't have access to it.\n\nBack to dashboard"
+    },
+    {
+      "when": "2026-04-24T23:07:01.707Z",
+      "severity": "LOW",
+      "area": "https://app.quillmd.com/patients/nonexistent-id",
+      "title": "console error",
+      "detail": "Failed to load resource: the server responded with a status of 404 ()"
+    },
+    {
+      "when": "2026-04-24T23:07:02.916Z",
+      "severity": "INFO",
+      "area": "/patients/nonexistent-id",
+      "title": "404 as expected",
+      "detail": "404\nNot here.\n\nWe couldn't find that page. It may have moved, or you may not have access.\n\nGo to das"
+    },
+    {
+      "when": "2026-04-24T23:07:02.968Z",
+      "severity": "LOW",
+      "area": "https://app.quillmd.com/dashboard/no-such-section",
+      "title": "console error",
+      "detail": "Failed to load resource: the server responded with a status of 404 ()"
+    },
+    {
+      "when": "2026-04-24T23:07:04.135Z",
+      "severity": "INFO",
+      "area": "/dashboard/no-such-section",
+      "title": "404 as expected",
+      "detail": "404\nNot here.\n\nWe couldn't find that page. It may have moved, or you may not have access.\n\nGo to das"
+    },
+    {
+      "when": "2026-04-24T23:07:05.338Z",
+      "severity": "INFO",
+      "area": "/visits/caaaaaaaaaaaaaaaaaaaaaaaa",
+      "title": "404 as expected",
+      "detail": "404\nVisit not found\n\nThis visit doesn't exist or you don't have access to it.\n\nBack to dashboard"
+    },
+    {
+      "when": "2026-04-24T23:07:06.551Z",
+      "severity": "INFO",
+      "area": "/visits/' OR 1=1 --",
+      "title": "404 as expected",
+      "detail": "404\nVisit not found\n\nThis visit doesn't exist or you don't have access to it.\n\nBack to dashboard"
+    },
+    {
+      "when": "2026-04-24T23:07:08.910Z",
+      "severity": "INFO",
+      "area": "/dashboard",
+      "title": "command palette opened",
+      "detail": "palette visible"
+    }
+  ],
+  "errors": [
+    {
+      "type": "console",
+      "url": "https://app.quillmd.com/patients/nonexistent-id",
+      "text": "Failed to load resource: the server responded with a status of 404 ()"
+    },
+    {
+      "type": "console",
+      "url": "https://app.quillmd.com/dashboard/no-such-section",
+      "text": "Failed to load resource: the server responded with a status of 404 ()"
+    }
+  ]
+}
