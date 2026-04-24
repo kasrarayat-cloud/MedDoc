@@ -1,0 +1,8 @@
+[
+  {
+    "when": "2026-04-24T07:58:57.527Z",
+    "sev": "HIGH",
+    "title": "email export accepts arbitrary external address",
+    "detail": "SOAP PDF can be exfiltrated via email"
+  }
+]

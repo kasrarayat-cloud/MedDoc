@@ -21,6 +21,7 @@ import { logDelivery } from '@/lib/deliveries';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { redactPhi } from '@meddoc/ai';
+import { log } from '@/lib/log';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -49,7 +50,27 @@ export const POST = withApiHandler<{ id: string }>(
     const parsed = BodySchema.safeParse(body);
     if (!parsed.success) return apiError('invalid email address', 400);
 
-    const toEmail = parsed.data.to ?? sessionEmail;
+    // ── PHI exfiltration guard ─────────────────────────────────────
+    // Pre-fix, `body.to` was accepted as-is and passed straight to
+    // Resend — letting any session holder mail every signed SOAP to
+    // an arbitrary external inbox. Enforce: the destination MUST
+    // equal the caller's own account email (case-insensitive). If a
+    // future feature wants colleague delivery, register the
+    // destination on the Practice and match against that list.
+    const toEmail = (parsed.data.to ?? sessionEmail).toLowerCase().trim();
+    if (toEmail !== sessionEmail.toLowerCase().trim()) {
+      log.warn('api:visits:export:email', 'destination blocked', {
+        userId,
+        visitId,
+        requestedDomain: toEmail.split('@')[1] ?? 'unknown',
+        sessionDomain: sessionEmail.split('@')[1] ?? 'unknown',
+      });
+      return apiError(
+        'Email destination must match your account email.',
+        403,
+        { code: 'INVALID_DESTINATION', retry: false }
+      );
+    }
 
     const data = await loadVisitExportData(visitId, userId);
     if (!data) return apiError('not found', 404);
