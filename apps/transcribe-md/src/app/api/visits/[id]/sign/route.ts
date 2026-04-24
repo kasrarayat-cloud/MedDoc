@@ -129,6 +129,7 @@ export const POST = withApiHandler<{ id: string }>(
         userId: true,
         status: true,
         soapFinal: true,
+        rxDrafts: true,
         signedAt: true,
         deletedAt: true,
         archivedAt: true,
@@ -155,6 +156,52 @@ export const POST = withApiHandler<{ id: string }>(
     }
     if (!visit.soapFinal?.trim()) {
       return apiError('visit has no SOAP to sign', 409);
+    }
+
+    // F5-1: Critical Rx warnings require an override audit row before
+    // sign. Pre-fix the sign endpoint accepted the transition without
+    // checking — the override modal was UI-only enforcement and direct
+    // API callers (or scripted clients) bypassed the audit completely.
+    // Already-SIGNED visits skip this guard; the gate fires on the
+    // READY → SIGNED transition only.
+    if (visit.status === TranscribeVisitStatus.READY) {
+      const rxBlob = visit.rxDrafts as
+        | {
+            warnings?: Array<{
+              severity?: string;
+              rx_drug?: string;
+              message?: string;
+            }>;
+          }
+        | null;
+      const criticalWarnings = (rxBlob?.warnings ?? []).filter(
+        (w) => w?.severity === 'critical'
+      );
+      if (criticalWarnings.length > 0) {
+        const overrideCount = await prisma.rxWarningOverride.count({
+          where: { visitId, severity: 'critical' },
+        });
+        if (overrideCount < criticalWarnings.length) {
+          log.warn('api:visits:sign', 'override required', {
+            userId,
+            visitId,
+            criticalCount: criticalWarnings.length,
+            overrideCount,
+          });
+          return NextResponse.json(
+            {
+              error: 'Critical Rx warnings require an override before signing.',
+              code: 'OVERRIDE_REQUIRED',
+              warnings: criticalWarnings.map((w) => ({
+                severity: w.severity ?? 'critical',
+                drug: w.rx_drug ?? '',
+                message: w.message ?? '',
+              })),
+            },
+            { status: 422 }
+          );
+        }
+      }
     }
 
     let signedAt = visit.signedAt;
