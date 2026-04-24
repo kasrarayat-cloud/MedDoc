@@ -86,6 +86,15 @@ export interface FormErrorState {
    *  "resend verification email" affordance when this is set. Holds
    *  the attempted email so the resend button knows what to ship. */
   needsVerificationFor?: string;
+  /** Symmetric of CRM's `NO_MEDDOC_PRO_HAS_TRANSCRIBE` UX: when the
+   *  user has MEDDOC_PRO but not TRANSCRIBE_MD, the form surfaces a
+   *  one-click button to the CRM app instead of just saying "no
+   *  access". Only set when the password was verified. */
+  crossAppRedirect?: {
+    message: string;
+    url: string;
+    buttonLabel: string;
+  };
 }
 export interface FormOkState {
   ok: true;
@@ -186,12 +195,13 @@ export async function loginAction(
     }
   }
 
-  // F9-1: Pre-check product entitlement so the form surfaces a
-  // specific "no access" message instead of the generic "invalid
-  // credentials" returned by the authorize callback when products[]
-  // is missing TRANSCRIBE_MD. Authorize remains the authoritative
-  // security gate; this block is purely UX. Always runs (not gated
-  // on email delivery) so the message is consistent across envs.
+  // F9-1 + product-separation: Pre-check product entitlement so the
+  // form surfaces a specific "no access" message (and, if the user
+  // has MEDDOC_PRO, a one-click cross-app redirect) instead of the
+  // generic "invalid credentials" the authorize callback returns.
+  // Authorize remains the authoritative security gate; this block is
+  // purely UX. Always runs (not gated on email delivery) so the
+  // message is consistent across envs.
   const entitlementUser = await prisma.user.findUnique({
     where: { email: parsed.data.email.trim().toLowerCase() },
     select: {
@@ -212,6 +222,28 @@ export async function loginAction(
       entitlementUser.passwordHash
     );
     if (pwOk) {
+      // Cross-app: if the user has MEDDOC_PRO but is missing
+      // TRANSCRIBE_MD, send them to the CRM login. Symmetric with the
+      // /api/auth/check-entitlement flow on the meddoc-pro side.
+      if (entitlementUser.products.includes(Product.MEDDOC_PRO)) {
+        const meddocProUrl =
+          process.env.NEXT_PUBLIC_MEDDOC_PRO_APP_URL ??
+          'https://pro.quillmd.com';
+        return {
+          ok: false,
+          errors: {
+            _form:
+              'This account is for MedDoc Pro, not TranscribeMD. Continue to the right app:',
+          },
+          values: { email: parsed.data.email },
+          crossAppRedirect: {
+            message:
+              'This account is for MedDoc Pro, not TranscribeMD. Continue to the right app:',
+            url: `${meddocProUrl}/login`,
+            buttonLabel: 'Go to MedDoc Pro',
+          },
+        };
+      }
       return {
         ok: false,
         errors: {

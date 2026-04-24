@@ -27,7 +27,8 @@ export function LoginForm() {
       state &&
       !state.ok &&
       state.errors._form &&
-      !state.needsVerificationFor
+      !state.needsVerificationFor &&
+      !state.crossAppRedirect
     ) {
       toast.error('Sign-in failed', { description: state.errors._form });
     }
@@ -37,6 +38,8 @@ export function LoginForm() {
   const values = state && !state.ok ? state.values ?? {} : {};
   const needsVerificationFor =
     state && !state.ok ? state.needsVerificationFor : undefined;
+  const crossAppRedirect =
+    state && !state.ok ? state.crossAppRedirect : undefined;
 
   async function resendVerification() {
     if (!needsVerificationFor) return;
@@ -108,7 +111,45 @@ export function LoginForm() {
         <AuthFieldError message={errors.password} />
       </div>
 
-      <AuthFieldError message={errors._form} />
+      {!crossAppRedirect && <AuthFieldError message={errors._form} />}
+
+      {crossAppRedirect && (
+        <div
+          style={{
+            marginTop: 14,
+            padding: 12,
+            borderRadius: 10,
+            border: '1px solid rgba(96, 165, 250, 0.35)',
+            background: 'rgba(96, 165, 250, 0.08)',
+            color: 'var(--accent-bright)',
+            fontSize: 12,
+            lineHeight: 1.5,
+          }}
+        >
+          <p style={{ margin: 0, color: 'var(--fg-1)' }}>
+            {crossAppRedirect.message}
+          </p>
+          <a
+            href={crossAppRedirect.url}
+            style={{
+              marginTop: 10,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '8px 14px',
+              borderRadius: 8,
+              background: 'rgba(96, 165, 250, 0.18)',
+              color: 'var(--accent-bright)',
+              fontSize: 12,
+              fontWeight: 600,
+              textDecoration: 'none',
+            }}
+          >
+            {crossAppRedirect.buttonLabel}
+            <Ic.arrowRight width={12} height={12} />
+          </a>
+        </div>
+      )}
 
       {needsVerificationFor && (
         <div

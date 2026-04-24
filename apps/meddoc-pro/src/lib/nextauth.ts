@@ -20,6 +20,7 @@ import { headers } from 'next/headers';
 
 import authConfig from '@/lib/auth.config';
 import prisma from '@meddoc/db';
+import { Product } from '@prisma/client';
 import type { UserRole } from '@meddoc/auth';
 import { recordLoginIp } from '@/lib/session-log';
 import { logAudit } from '@/lib/audit';
@@ -209,7 +210,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null;
         }
 
-        // 5. Update last login (best-effort). Clear lockedUntil too — a
+        // 5. Product entitlement gate. Mirror of F9-1 (#59) on the
+        //    transcribe-md side: the CRM app rejects logins from users
+        //    without MEDDOC_PRO in products[]. The cross-app redirect
+        //    UX surfaces via /api/auth/check-entitlement before signIn —
+        //    this branch is the authoritative deny-by-default. Note we
+        //    run BEFORE the lastLogin/lockout reset so a wrong-product
+        //    login doesn't reset the brute-force counter for the
+        //    rightful product login.
+        if (!user.products.includes(Product.MEDDOC_PRO)) {
+          await logAudit({
+            action: 'LOGIN_FAILED',
+            success: false,
+            errorCode: 'NO_MEDDOC_PRO_ENTITLEMENT',
+            userId: user.id,
+            userEmail: user.email,
+            practiceId: user.practiceId,
+          });
+          return null;
+        }
+
+        // 6. Update last login (best-effort). Clear lockedUntil too — a
         //    successful login means whoever was trying got in, so the
         //    cool-down is moot.
         prisma.user
@@ -225,7 +246,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             console.error('[auth] lastLogin update failed:', err);
           });
 
-        // 6. Return user shape that matches our augmented `next-auth` User type.
+        // 7. Return user shape that matches our augmented `next-auth` User type.
         //    LOGIN_SUCCESS audit + IP capture happen in events.signIn above —
         //    don't duplicate them here.
         return {
