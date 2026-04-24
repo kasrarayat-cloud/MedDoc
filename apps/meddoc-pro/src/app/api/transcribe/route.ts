@@ -9,6 +9,23 @@ import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 // Accepts audio blob, returns transcribed text
 // ========================================
 
+// Whisper-supported formats. Reject anything outside this list before
+// bytes traverse the stack — avoids spending the round-trip to OpenAI
+// on audio the API will bounce back anyway, and closes the audit H4
+// "no MIME whitelist on uploaded audio" finding.
+const ALLOWED_MIME = new Set([
+  'audio/webm',
+  'audio/ogg',
+  'audio/wav',
+  'audio/x-wav',
+  'audio/mp4',
+  'audio/mpeg',
+  'audio/mp3',
+  'audio/flac',
+  'audio/m4a',
+  'audio/x-m4a',
+]);
+
 let openaiClient: OpenAI | null = null;
 
 function getClient(): OpenAI {
@@ -57,6 +74,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'No audio file provided' },
         { status: 400 }
+      );
+    }
+
+    // MIME whitelist — see ALLOWED_MIME at top of file.
+    const mime = (audioFile.type ?? '').split(';')[0]!.trim();
+    if (!ALLOWED_MIME.has(mime)) {
+      return NextResponse.json(
+        {
+          error: `Unsupported audio format: ${mime || '(missing)'}. Expected webm/ogg/wav/mp4/mpeg/flac/m4a.`,
+        },
+        { status: 415 }
       );
     }
 
@@ -111,23 +139,12 @@ export async function POST(request: NextRequest) {
       text: transcription.text || '',
     });
   } catch (error: unknown) {
-    console.error('Transcription error:', error);
-
-    const errorMessage =
-      error instanceof Error ? error.message : 'Unknown error';
-
-    if (errorMessage.includes('OPENAI_API_KEY')) {
-      return NextResponse.json(
-        {
-          error: 'OpenAI API key not configured',
-          details: 'Please set OPENAI_API_KEY in .env.local',
-        },
-        { status: 500 }
-      );
-    }
-
+    // Log server-side (scrub once we adopt redactPhi across meddoc-pro).
+    // Don't leak OpenAI error text to the client — it can echo prompt
+    // fragments containing PHI.
+    console.error('[api:transcribe] failed:', error);
     return NextResponse.json(
-      { error: 'Transcription failed', details: errorMessage },
+      { error: 'Transcription failed' },
       { status: 500 }
     );
   }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
+import { z } from 'zod';
 import { getSession } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
 import { archivePatient as dataArchivePatient } from '@/lib/data/patients';
@@ -61,11 +62,18 @@ function getOpenAI(): OpenAI {
   return openaiClient;
 }
 
-interface ToolRequest {
-  patientId?: string;
-  toolName?: string;
-  args?: Record<string, unknown>;
-}
+// Outer body shape. args is intentionally `unknown` — each tool
+// branch inside the dispatcher below does its own shape check. Audit
+// H4 flagged the lack of zod here; this gate is a coarse first pass
+// (correct top-level shape + string-ish patientId/toolName) that lets
+// the existing per-tool narrowing stay as the source of truth for
+// per-tool argument contracts.
+const ToolRequestSchema = z.object({
+  patientId: z.string().trim().min(1).max(64).optional(),
+  toolName: z.string().trim().min(1).max(64).optional(),
+  args: z.record(z.string(), z.unknown()).optional(),
+});
+type ToolRequest = z.infer<typeof ToolRequestSchema>;
 
 // Result shape returned to the browser. `output` is the string the browser
 // ships back to the Realtime model via the data channel — keep it short and
@@ -96,7 +104,15 @@ export async function POST(request: NextRequest) {
 
   let body: ToolRequest;
   try {
-    body = (await request.json()) as ToolRequest;
+    const raw = await request.json();
+    const parsed = ToolRequestSchema.safeParse(raw);
+    if (!parsed.success) {
+      return NextResponse.json<ToolResponse>(
+        { ok: false, output: 'Invalid request shape.' },
+        { status: 400 }
+      );
+    }
+    body = parsed.data;
   } catch {
     return NextResponse.json<ToolResponse>(
       { ok: false, output: 'Invalid JSON body.' },
@@ -104,8 +120,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const patientId = body.patientId?.trim();
-  const toolName = body.toolName?.trim();
+  const patientId = body.patientId;
+  const toolName = body.toolName;
   const args = body.args ?? {};
 
   if (!patientId || !toolName) {
@@ -672,10 +688,12 @@ export async function POST(request: NextRequest) {
         );
     }
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Tool execution failed';
+    // H4: the unhandled error message may echo DB / Prisma internals
+    // or (in OpenAI paths) fragments of the prompt, which can include
+    // PHI. Log the real error server-side; return an opaque string.
     console.error('[assistant-tool] dispatch error:', err);
     return NextResponse.json<ToolResponse>(
-      { ok: false, output: message },
+      { ok: false, output: 'Tool execution failed.' },
       { status: 500 }
     );
   }
