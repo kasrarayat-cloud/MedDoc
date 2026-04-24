@@ -1,0 +1,101 @@
+name: nightly-tests
+
+# Runs once a day against the live production surfaces. Uploads the
+# generated HTML report as an artefact so you can download it from the
+# workflow run, and opens a GitHub issue whenever any test fails so
+# nothing drops on the floor when you're not watching.
+#
+# Manual trigger is supported via workflow_dispatch — useful right
+# after a deploy when you want the full nightly assurance early.
+
+on:
+  schedule:
+    - cron: '0 2 * * *'        # 02:00 UTC daily
+  workflow_dispatch:
+
+concurrency:
+  group: nightly-tests
+  cancel-in-progress: false
+
+jobs:
+  run:
+    name: smoke + e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install workspace deps (transcribe-md + its playwright)
+        run: |
+          cd apps/transcribe-md
+          npm ci --no-audit --no-fund
+
+      - name: Install Playwright browsers
+        run: cd apps/transcribe-md && npx playwright install --with-deps chromium
+
+      - name: Seed .env.test from secrets
+        # Secrets live in the repository settings. Missing secrets just
+        # mean specs that depend on them skip — tests don't hard-fail.
+        env:
+          TEST_APP_EMAIL:    ${{ secrets.TEST_APP_EMAIL }}
+          TEST_APP_PASSWORD: ${{ secrets.TEST_APP_PASSWORD }}
+          TEST_PRO_EMAIL:    ${{ secrets.TEST_PRO_EMAIL }}
+          TEST_PRO_PASSWORD: ${{ secrets.TEST_PRO_PASSWORD }}
+        run: |
+          cat > tests/automated/.env.test <<EOF
+          TEST_MARKETING_URL=https://quillmd.com
+          TEST_APP_URL=https://app.quillmd.com
+          TEST_PRO_URL=https://pro.quillmd.com
+          TEST_APP_EMAIL=${TEST_APP_EMAIL}
+          TEST_APP_PASSWORD=${TEST_APP_PASSWORD}
+          TEST_PRO_EMAIL=${TEST_PRO_EMAIL}
+          TEST_PRO_PASSWORD=${TEST_PRO_PASSWORD}
+          E2E_READ_ONLY=true
+          EOF
+
+      - name: Run smoke + e2e
+        id: run
+        run: bash tests/automated/run-all.sh --smoke --e2e
+        continue-on-error: true
+
+      - name: Upload report artefact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: meddoc-report-${{ github.run_id }}
+          path: tests/automated/reports/
+          retention-days: 14
+
+      - name: Open issue on failure
+        if: steps.run.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Nightly tests failed — ${new Date().toISOString().slice(0,10)}`,
+              body: [
+                'The nightly test suite reported failures.',
+                '',
+                `Run: ${runUrl}`,
+                '',
+                'The HTML report is attached to this run as an artefact.',
+                'Download \`meddoc-report-${{ github.run_id }}\` and open',
+                'the \`*.html\` file in the archive for per-test details.',
+              ].join('\n'),
+              labels: ['nightly-tests', 'failure'],
+            });
+
+      - name: Fail the job if any suite failed
+        if: steps.run.outcome == 'failure'
+        run: exit 1
