@@ -1,0 +1,13 @@
+[
+  {
+    "type": "requestfailed",
+    "url": "https://app.quillmd.com/login?_rsc=8rpmc",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T06:05:28.504Z"
+  },
+  {
+    "type": "console",
+    "text": "[error] Failed to load resource: the server responded with a status of 429 ()",
+    "when": "2026-04-24T06:05:28.800Z"
+  }
+]

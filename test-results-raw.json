@@ -1,0 +1,1170 @@
+{
+  "config": {
+    "configFile": "/opt/meddoc-pro/audit-evidence/probe.config.ts",
+    "rootDir": "/opt/meddoc-pro/audit-evidence",
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/opt/meddoc-pro/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium",
+        "name": "chromium",
+        "testDir": "/opt/meddoc-pro/audit-evidence",
+        "testIgnore": [],
+        "testMatch": [
+          "dynamic-probe.ts"
+        ],
+        "timeout": 60000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "/opt/meddoc-pro/audit-evidence/test-results-raw.json"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.59.1",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "dynamic-probe.ts",
+      "file": "dynamic-probe.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "audit / public page sweep",
+          "file": "dynamic-probe.ts",
+          "line": 130,
+          "column": 6,
+          "specs": [
+            {
+              "title": "marketing marketing-home",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 7819,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-04-24T06:04:04.780Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "495f8db22129130dd61a-460ec4b4b2cf04ab8b32",
+              "file": "dynamic-probe.ts",
+              "line": 132,
+              "column": 9
+            },
+            {
+              "title": "marketing marketing-pricing",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2650,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-04-24T06:04:13.100Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "495f8db22129130dd61a-6f4051efa2bbaaa90c02",
+              "file": "dynamic-probe.ts",
+              "line": 132,
+              "column": 9
+            },
+            {
+              "title": "marketing marketing-security",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2025,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-04-24T06:04:15.772Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "495f8db22129130dd61a-aeae26c52cd11874f419",
+              "file": "dynamic-probe.ts",
+              "line": 132,
+              "column": 9
+            },
+            {
+              "title": "marketing marketing-hipaa",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1957,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-04-24T06:04:17.813Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "495f8db22129130dd61a-b1165daf48d1fc48661d",
+              "file": "dynamic-probe.ts",
+              "line": 132,
+              "column": 9
+            },
+            {
+              "title": "marketing marketing-privacy",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1827,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-04-24T06:04:19.787Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "495f8db22129130dd61a-35547c71e1f466470172",
+              "file": "dynamic-probe.ts",
+              "line": 132,
+              "column": 9
+            },
+            {
+              "title": "marketing marketing-terms",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1824,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-04-24T06:04:21.629Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "495f8db22129130dd61a-b47c9d4eb1c0af5a0a95",
+              "file": "dynamic-probe.ts",
+              "line": 132,
+              "column": 9
+            },
+            {
+              "title": "marketing marketing-about",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2007,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-04-24T06:04:23.474Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "495f8db22129130dd61a-f09dc965eb2fb68ad42a",
+              "file": "dynamic-probe.ts",
+              "line": 132,
+              "column": 9
+            },
+            {
+              "title": "marketing marketing-contact",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1882,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-04-24T06:04:25.497Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "495f8db22129130dd61a-52fd67383f558fa9bf7b",
+              "file": "dynamic-probe.ts",
+              "line": 132,
+              "column": 9
+            },
+            {
+              "title": "marketing marketing-demo",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2158,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-04-24T06:04:27.393Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "495f8db22129130dd61a-3fdcc0d31e225856144a",
+              "file": "dynamic-probe.ts",
+              "line": 132,
+              "column": 9
+            },
+            {
+              "title": "marketing marketing-signup",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2043,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-04-24T06:04:29.571Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "495f8db22129130dd61a-d10fa6a23c9f13cb7441",
+              "file": "dynamic-probe.ts",
+              "line": 132,
+              "column": 9
+            },
+            {
+              "title": "app app-login",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2677,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-04-24T06:04:31.629Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "495f8db22129130dd61a-e8d20a045b89af76b380",
+              "file": "dynamic-probe.ts",
+              "line": 144,
+              "column": 9
+            },
+            {
+              "title": "app app-signup",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2436,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-04-24T06:04:34.329Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "495f8db22129130dd61a-b2faab3759b61b2136d1",
+              "file": "dynamic-probe.ts",
+              "line": 144,
+              "column": 9
+            },
+            {
+              "title": "app app-forgot",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2548,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-04-24T06:04:36.782Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "495f8db22129130dd61a-85044eaa77d77c52700f",
+              "file": "dynamic-probe.ts",
+              "line": 144,
+              "column": 9
+            },
+            {
+              "title": "app app-check-email",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2540,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-04-24T06:04:39.347Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "495f8db22129130dd61a-79350d691c83ab47995b",
+              "file": "dynamic-probe.ts",
+              "line": 144,
+              "column": 9
+            },
+            {
+              "title": "pro pro-root",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 4698,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-04-24T06:04:41.902Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "495f8db22129130dd61a-03ed302738c49fcb3d9f",
+              "file": "dynamic-probe.ts",
+              "line": 156,
+              "column": 9
+            },
+            {
+              "title": "pro pro-login",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1867,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-04-24T06:04:46.619Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "495f8db22129130dd61a-672394574059c2423f68",
+              "file": "dynamic-probe.ts",
+              "line": 156,
+              "column": 9
+            },
+            {
+              "title": "pro pro-register",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2196,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-04-24T06:04:48.502Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "495f8db22129130dd61a-75407d49c385674f4337",
+              "file": "dynamic-probe.ts",
+              "line": 156,
+              "column": 9
+            }
+          ]
+        },
+        {
+          "title": "audit / form edge cases",
+          "file": "dynamic-probe.ts",
+          "line": 170,
+          "column": 6,
+          "specs": [
+            {
+              "title": "signup — empty submit",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 3324,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-04-24T06:04:50.718Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "495f8db22129130dd61a-04d69a8b96c9854fbbb1",
+              "file": "dynamic-probe.ts",
+              "line": 171,
+              "column": 7
+            },
+            {
+              "title": "signup — XSS attempt in name field",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 4411,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-04-24T06:04:54.087Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "495f8db22129130dd61a-c80c20de87d51689cc1d",
+              "file": "dynamic-probe.ts",
+              "line": 182,
+              "column": 7
+            },
+            {
+              "title": "signup — very long inputs (1000 chars)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 4130,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-04-24T06:04:58.516Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "495f8db22129130dd61a-6715f273f87b5529e211",
+              "file": "dynamic-probe.ts",
+              "line": 201,
+              "column": 7
+            },
+            {
+              "title": "signup — mismatched passwords",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 16729,
+                      "error": {
+                        "message": "TimeoutError: locator.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: /create account|sign up/i })\u001b[22m\n\u001b[2m    - locator resolved to <button disabled type=\"submit\" class=\"qm-btn qm-btn-primary\">…</button>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is not enabled\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m    - waiting 20ms\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is not enabled\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m      - waiting 100ms\u001b[22m\n\u001b[2m    24 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m       - element is not enabled\u001b[22m\n\u001b[2m     - retrying click action\u001b[22m\n\u001b[2m       - waiting 500ms\u001b[22m\n",
+                        "stack": "TimeoutError: locator.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: /create account|sign up/i })\u001b[22m\n\u001b[2m    - locator resolved to <button disabled type=\"submit\" class=\"qm-btn qm-btn-primary\">…</button>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is not enabled\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m    - waiting 20ms\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is not enabled\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m      - waiting 100ms\u001b[22m\n\u001b[2m    24 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m       - element is not enabled\u001b[22m\n\u001b[2m     - retrying click action\u001b[22m\n\u001b[2m       - waiting 500ms\u001b[22m\n\n    at /opt/meddoc-pro/audit-evidence/dynamic-probe.ts:226:73",
+                        "location": {
+                          "file": "/opt/meddoc-pro/audit-evidence/dynamic-probe.ts",
+                          "column": 73,
+                          "line": 226
+                        },
+                        "snippet": "  224 |     const terms = page.getByRole('checkbox', { name: /terms|agree|accept/i });\n  225 |     if (await terms.isVisible().catch(() => false)) await terms.check();\n> 226 |     await page.getByRole('button', { name: /create account|sign up/i }).click();\n      |                                                                         ^\n  227 |     await page.waitForTimeout(1500);\n  228 |     await page.screenshot({ path: path.join(SHOTS, 'signup-mismatch.png') });\n  229 |     saveCapture('signup-mismatch', errs);"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/opt/meddoc-pro/audit-evidence/dynamic-probe.ts",
+                            "column": 73,
+                            "line": 226
+                          },
+                          "message": "TimeoutError: locator.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: /create account|sign up/i })\u001b[22m\n\u001b[2m    - locator resolved to <button disabled type=\"submit\" class=\"qm-btn qm-btn-primary\">…</button>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is not enabled\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m    - waiting 20ms\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is not enabled\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m      - waiting 100ms\u001b[22m\n\u001b[2m    24 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m       - element is not enabled\u001b[22m\n\u001b[2m     - retrying click action\u001b[22m\n\u001b[2m       - waiting 500ms\u001b[22m\n\n\n  224 |     const terms = page.getByRole('checkbox', { name: /terms|agree|accept/i });\n  225 |     if (await terms.isVisible().catch(() => false)) await terms.check();\n> 226 |     await page.getByRole('button', { name: /create account|sign up/i }).click();\n      |                                                                         ^\n  227 |     await page.waitForTimeout(1500);\n  228 |     await page.screenshot({ path: path.join(SHOTS, 'signup-mismatch.png') });\n  229 |     saveCapture('signup-mismatch', errs);\n    at /opt/meddoc-pro/audit-evidence/dynamic-probe.ts:226:73"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-04-24T06:05:02.660Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/opt/meddoc-pro/test-results/dynamic-probe.ts-audit-for-3d9c1-gnup-—-mismatched-passwords-chromium/test-failed-1.png"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/opt/meddoc-pro/test-results/dynamic-probe.ts-audit-for-3d9c1-gnup-—-mismatched-passwords-chromium/error-context.md"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "/opt/meddoc-pro/test-results/dynamic-probe.ts-audit-for-3d9c1-gnup-—-mismatched-passwords-chromium/trace.zip"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/opt/meddoc-pro/audit-evidence/dynamic-probe.ts",
+                        "column": 73,
+                        "line": 226
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "495f8db22129130dd61a-0952785522258c6714c1",
+              "file": "dynamic-probe.ts",
+              "line": 217,
+              "column": 7
+            },
+            {
+              "title": "login — empty submit",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 3308,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-04-24T06:05:21.283Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "495f8db22129130dd61a-c827c404b77f94f8d761",
+              "file": "dynamic-probe.ts",
+              "line": 233,
+              "column": 7
+            },
+            {
+              "title": "login — malformed email",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 3095,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-04-24T06:05:24.828Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "495f8db22129130dd61a-d32840c9b0fed6345fd8",
+              "file": "dynamic-probe.ts",
+              "line": 242,
+              "column": 7
+            },
+            {
+              "title": "forgot-password — valid email surface",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 3049,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-04-24T06:05:27.962Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "495f8db22129130dd61a-5a9f490317dde3902486",
+              "file": "dynamic-probe.ts",
+              "line": 253,
+              "column": 7
+            }
+          ]
+        },
+        {
+          "title": "audit / mobile viewport",
+          "file": "dynamic-probe.ts",
+          "line": 265,
+          "column": 6,
+          "specs": [
+            {
+              "title": "mobile-marketing-home",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 3950,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-04-24T06:05:31.036Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "495f8db22129130dd61a-dc903d84c564d1e2e1ae",
+              "file": "dynamic-probe.ts",
+              "line": 275,
+              "column": 9
+            },
+            {
+              "title": "mobile-marketing-pricing",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 2044,
+                      "error": {
+                        "message": "Error: mobile-marketing-pricing: horizontal overflow (505px vs 393px client)\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32mtrue\u001b[39m\nReceived: \u001b[31mfalse\u001b[39m",
+                        "stack": "Error: mobile-marketing-pricing: horizontal overflow (505px vs 393px client)\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32mtrue\u001b[39m\nReceived: \u001b[31mfalse\u001b[39m\n    at /opt/meddoc-pro/audit-evidence/dynamic-probe.ts:292:9",
+                        "location": {
+                          "file": "/opt/meddoc-pro/audit-evidence/dynamic-probe.ts",
+                          "column": 9,
+                          "line": 292
+                        },
+                        "snippet": "  290 |         overflow.scroll <= overflow.client + 1,\n  291 |         `${label}: horizontal overflow (${overflow.scroll}px vs ${overflow.client}px client)`\n> 292 |       ).toBe(true);\n      |         ^\n  293 |     });\n  294 |   }\n  295 | });"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/opt/meddoc-pro/audit-evidence/dynamic-probe.ts",
+                            "column": 9,
+                            "line": 292
+                          },
+                          "message": "Error: mobile-marketing-pricing: horizontal overflow (505px vs 393px client)\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32mtrue\u001b[39m\nReceived: \u001b[31mfalse\u001b[39m\n\n  290 |         overflow.scroll <= overflow.client + 1,\n  291 |         `${label}: horizontal overflow (${overflow.scroll}px vs ${overflow.client}px client)`\n> 292 |       ).toBe(true);\n      |         ^\n  293 |     });\n  294 |   }\n  295 | });\n    at /opt/meddoc-pro/audit-evidence/dynamic-probe.ts:292:9"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-04-24T06:05:35.006Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/opt/meddoc-pro/test-results/dynamic-probe.ts-audit-mob-1768f-rt-mobile-marketing-pricing-chromium/test-failed-1.png"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/opt/meddoc-pro/test-results/dynamic-probe.ts-audit-mob-1768f-rt-mobile-marketing-pricing-chromium/error-context.md"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "/opt/meddoc-pro/test-results/dynamic-probe.ts-audit-mob-1768f-rt-mobile-marketing-pricing-chromium/trace.zip"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/opt/meddoc-pro/audit-evidence/dynamic-probe.ts",
+                        "column": 9,
+                        "line": 292
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "495f8db22129130dd61a-228429cda9a48a718887",
+              "file": "dynamic-probe.ts",
+              "line": 275,
+              "column": 9
+            },
+            {
+              "title": "mobile-app-login",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 2,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2205,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-04-24T06:05:38.509Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "495f8db22129130dd61a-e7ccb5d16b00c22841d8",
+              "file": "dynamic-probe.ts",
+              "line": 275,
+              "column": 9
+            },
+            {
+              "title": "mobile-app-signup",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 2,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2193,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-04-24T06:05:40.944Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "495f8db22129130dd61a-67a0097f7da161dfab24",
+              "file": "dynamic-probe.ts",
+              "line": 275,
+              "column": 9
+            },
+            {
+              "title": "mobile-pro-login",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 2,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2266,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-04-24T06:05:43.184Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "495f8db22129130dd61a-fb0f9d5e2ba3909b1f71",
+              "file": "dynamic-probe.ts",
+              "line": 275,
+              "column": 9
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-04-24T06:04:03.575Z",
+    "duration": 102233.89600000001,
+    "expected": 27,
+    "skipped": 0,
+    "unexpected": 2,
+    "flaky": 0
+  }
+}

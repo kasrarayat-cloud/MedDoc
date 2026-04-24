@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MedDoc audit — summary dashboard</title>
+<style>
+  :root {
+    --bg: #0b0f19; --surface: #111827; --border: #1f2937;
+    --text: #e5e7eb; --muted: #94a3b8;
+    --red: #dc2626; --amber: #d97706; --green: #16a34a; --slate: #64748b;
+    --accent: #8b5cf6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    margin: 0; padding: 32px;
+    background: var(--bg); color: var(--text); line-height: 1.5;
+  }
+  h1 { font-size: 22px; margin: 0 0 8px; letter-spacing: -0.01em; }
+  .subtitle { color: var(--muted); font-size: 14px; margin-bottom: 32px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 32px; }
+  .stat {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px;
+  }
+  .stat .n { font-size: 28px; font-weight: 600; letter-spacing: -0.02em; }
+  .stat .l { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .stat.crit .n { color: var(--red); }
+  .stat.high .n { color: var(--amber); }
+  .stat.med .n { color: #eab308; }
+  .stat.low .n { color: var(--slate); }
+  .stat.good .n { color: var(--green); }
+  section { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+  section h2 { margin: 0 0 12px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 600; }
+  .findings .finding { padding: 12px 0; border-top: 1px solid var(--border); }
+  .findings .finding:first-child { border-top: none; }
+  .findings .title { font-weight: 500; }
+  .findings .title .id { font-family: ui-monospace, monospace; font-size: 12px; background: rgba(255,255,255,0.04); padding: 2px 7px; border-radius: 4px; margin-right: 8px; color: var(--muted); }
+  .findings .title.crit .id { color: var(--red); background: rgba(220,38,38,0.1); }
+  .findings .title.high .id { color: var(--amber); background: rgba(217,119,6,0.1); }
+  .findings .where { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .findings .desc { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  footer { margin-top: 32px; color: var(--muted); font-size: 12px; text-align: center; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; margin-top: 6px; }
+  .bar-fill { height: 100%; background: linear-gradient(90deg, var(--green) 0%, var(--green) var(--pct), var(--red) var(--pct), var(--red) 100%); }
+  .pill {
+    display: inline-block; padding: 2px 8px; border-radius: 999px;
+    font-family: ui-monospace, monospace; font-size: 11px; letter-spacing: 0.05em;
+    font-weight: 500;
+  }
+  .pill.green { background: rgba(22,163,74,0.15); color: var(--green); border: 1px solid rgba(22,163,74,0.3); }
+  .pill.red { background: rgba(220,38,38,0.15); color: var(--red); border: 1px solid rgba(220,38,38,0.3); }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 700px) { .two-col { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+  <h1>MedDoc / QuillMD — logic + functionality audit</h1>
+  <div class="subtitle">
+    Branch <code>audit/logic-functionality</code> · generated 2026-04-24 ·
+    45 checks across 3 apps, 44 API routes, 18 pages, 5 mobile viewports
+  </div>
+
+  <!-- Summary stats -->
+  <div class="grid">
+    <div class="stat crit"><div class="n">1</div><div class="l">Critical</div></div>
+    <div class="stat high"><div class="n">4</div><div class="l">High</div></div>
+    <div class="stat med"><div class="n">10</div><div class="l">Medium</div></div>
+    <div class="stat low"><div class="n">8</div><div class="l">Low</div></div>
+    <div class="stat good"><div class="n">10</div><div class="l">Positives</div></div>
+  </div>
+
+  <!-- Critical -->
+  <section class="findings">
+    <h2>Critical (blocks launch)</h2>
+    <div class="finding">
+      <div class="title crit"><span class="id">C1</span>Patient <code>birthYear</code> defaults to age 30 when missing</div>
+      <div class="where">apps/meddoc-pro/src/lib/data/patients.ts:483</div>
+      <div class="desc">
+        <code>birthYear: row.birthYear ?? new Date().getFullYear() - 30</code>
+        — any patient with a NULL DOB silently becomes a 30-year-old in SOAP notes, letters,
+        referrals, and realtime voice context. Medical safety issue.
+      </div>
+    </div>
+  </section>
+
+  <!-- High -->
+  <section class="findings">
+    <h2>High (fix this week)</h2>
+    <div class="finding">
+      <div class="title high"><span class="id">H1</span>Stale-closure latent risk on <code>recorder.onstop</code></div>
+      <div class="where">apps/transcribe-md/src/app/visits/[id]/record/recording-client.tsx:135</div>
+      <div class="desc">Same pattern that broke the reverted mark-moments feature. Safe today (only stable refs captured); add a comment + ref pattern before someone reintroduces a state dependency.</div>
+    </div>
+    <div class="finding">
+      <div class="title high"><span class="id">H2</span>Pricing page horizontal overflow on mobile (393px)</div>
+      <div class="where">apps/marketing/src/app/pricing/page.tsx · evidence: mobile-marketing-pricing.png</div>
+      <div class="desc">scrollWidth 505 vs clientWidth 393 — 112px of horizontal scroll. Users on iPhone/Pixel will see bleed.</div>
+    </div>
+    <div class="finding">
+      <div class="title high"><span class="id">H3</span>Submit hangs on /signup when passwords mismatch</div>
+      <div class="where">app.quillmd.com/signup · evidence: signup-mismatch.png</div>
+      <div class="desc">Click timeout &gt; 15s. Either the <code>pending</code> state never resolves or the submit button is never re-enabled. User perceives the app as frozen.</div>
+    </div>
+    <div class="finding">
+      <div class="title high"><span class="id">H4</span>10 meddoc-pro API routes have no zod on body</div>
+      <div class="where">apps/meddoc-pro/src/app/api/**/route.ts (all 11 files)</div>
+      <div class="desc">All auth-gated + rate-limited, so not an auth bypass. But doc-editor/save has no content cap (docx OOM), assistant-tool uses 540 lines of hand-rolled typeof narrowing, transcribe/extract-from-voice have no MIME whitelist.</div>
+    </div>
+  </section>
+
+  <!-- Positives -->
+  <section class="findings">
+    <h2>Security posture — positives</h2>
+    <div class="finding">
+      <div class="title"><span class="pill green">OK</span> Session isolation between app.quillmd.com ↔ pro.quillmd.com</div>
+      <div class="desc">Both use <code>__Host-authjs.csrf-token</code> with exact-host scoping. No cross-subdomain cookie bleed possible. HSTS preload set.</div>
+    </div>
+    <div class="finding">
+      <div class="title"><span class="pill green">OK</span> Auth gating universal across 44 API routes</div>
+      <div class="desc">41/41 unauth probes returned 401 (3 GET 404s were wrong-method probes). /api/health intentionally public.</div>
+    </div>
+    <div class="finding">
+      <div class="title"><span class="pill green">OK</span> Tenant scope universal</div>
+      <div class="desc">transcribe-md: <code>visit.userId !== userId</code> guard on all 18 visit routes. meddoc-pro: <code>patientAccessWhere(session)</code> composes into every patient/appointment/note query.</div>
+    </div>
+    <div class="finding">
+      <div class="title"><span class="pill green">OK</span> XSS on signup name field → not executed</div>
+      <div class="desc">POST <code>&lt;script&gt;window.__xss_fired=true&lt;/script&gt;</code> → React escaped + server-side rendered. No window property set.</div>
+    </div>
+    <div class="finding">
+      <div class="title"><span class="pill green">OK</span> No 5xx observed</div>
+      <div class="desc">0 pageerror, 0 5xx across 18 pages probed. Only noise: 1 expected 429 (forgot-password rate limit during self-probing).</div>
+    </div>
+  </section>
+
+  <!-- Coverage -->
+  <section>
+    <h2>Test coverage</h2>
+    <div class="two-col">
+      <div>
+        <strong>Covered</strong>
+        <ul>
+          <li>18/18 public pages loaded (0 errors)</li>
+          <li>5/5 mobile viewports (1 overflow: pricing)</li>
+          <li>7 form edge-cases (1 hang: signup-mismatch)</li>
+          <li>41 unauth API probes (all 401 as expected)</li>
+          <li>Cross-subdomain cookie inspection (isolated)</li>
+        </ul>
+      </div>
+      <div>
+        <strong>Not covered (requires test account)</strong>
+        <ul>
+          <li>Authenticated dashboard / patient CRUD / visit wizard</li>
+          <li>Sign visit + PDF export + email</li>
+          <li>Realtime voice assistant (pro.quillmd.com)</li>
+          <li>Worker pipeline under load</li>
+          <li>Resend email deliverability</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- Performance -->
+  <section>
+    <h2>Performance snapshot</h2>
+    <table style="width:100%; font-size: 13px; border-collapse: collapse;">
+      <thead style="color: var(--muted); font-size: 11px; text-transform: uppercase;">
+        <tr><th style="text-align:left;padding:6px 0">Page</th><th style="text-align:right">TTFB (ms)</th><th style="text-align:right">DCL</th><th style="text-align:right">Load</th></tr>
+      </thead>
+      <tbody style="font-family: ui-monospace, monospace;">
+        <tr><td style="padding:4px 0">marketing-home</td><td style="text-align:right">162</td><td style="text-align:right">1030</td><td style="text-align:right">1031</td></tr>
+        <tr><td style="padding:4px 0">pro-root</td><td style="text-align:right">122</td><td style="text-align:right">448</td><td style="text-align:right">862</td></tr>
+        <tr><td style="padding:4px 0">app-login</td><td style="text-align:right">402</td><td style="text-align:right">494</td><td style="text-align:right">661</td></tr>
+        <tr><td style="padding:4px 0">marketing-pricing</td><td style="text-align:right">202</td><td style="text-align:right">292</td><td style="text-align:right">518</td></tr>
+        <tr><td style="padding:4px 0" colspan="4" style="color: var(--muted); font-style: italic; padding-top: 8px">(14 more pages — all &lt; 500ms DCL; see audit-report.md)</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <footer>
+    Full findings: <a href="audit-report.md">audit-report.md</a> · interactive inventory: <a href="audit-inventory.md">audit-inventory.md</a> · raw evidence in <code>audit-evidence/</code>
+  </footer>
+</body>
+</html>

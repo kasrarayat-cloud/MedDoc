@@ -1,0 +1,26 @@
+[
+  {
+    "type": "requestfailed",
+    "url": "https://app.quillmd.com/signup?_rsc=17yrj",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T06:05:25.344Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://app.quillmd.com/forgot-password?_rsc=17yrj",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T06:05:25.345Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://app.quillmd.com/signup?_rsc=to9i9",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T06:05:25.373Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://app.quillmd.com/forgot-password?_rsc=to9i9",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T06:05:25.383Z"
+  }
+]

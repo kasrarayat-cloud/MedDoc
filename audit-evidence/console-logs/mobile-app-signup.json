@@ -1,0 +1,14 @@
+[
+  {
+    "type": "requestfailed",
+    "url": "https://app.quillmd.com/login?_rsc=ynvfz",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T06:05:41.584Z"
+  },
+  {
+    "type": "requestfailed",
+    "url": "https://app.quillmd.com/login?_rsc=1o94a",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T06:05:41.614Z"
+  }
+]

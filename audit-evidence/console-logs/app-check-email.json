@@ -1,0 +1,13 @@
+[
+  {
+    "type": "requestfailed",
+    "url": "https://app.quillmd.com/login?_rsc=1vo8d",
+    "text": "net::ERR_ABORTED",
+    "when": "2026-04-24T06:04:39.956Z"
+  },
+  {
+    "type": "console",
+    "text": "[warning] Deprecated API for given entry type.",
+    "when": "2026-04-24T06:04:41.526Z"
+  }
+]
