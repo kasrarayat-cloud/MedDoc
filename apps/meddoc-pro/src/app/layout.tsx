@@ -21,6 +21,10 @@ export const metadata: Metadata = {
     "epidural",
     "automated",
   ],
+  // pro.quillmd.com is the CRM/admin surface — everything behind this
+  // layout sits behind session auth. The public-facing site is
+  // quillmd.com; this one should not be indexed.
+  robots: { index: false, follow: false },
 };
 
 export default function RootLayout({
