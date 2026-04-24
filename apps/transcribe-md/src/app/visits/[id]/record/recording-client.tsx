@@ -53,13 +53,6 @@ export function RecordingClient({
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>('idle');
   const [elapsed, setElapsed] = useState(0);
-  const [marks, setMarks] = useState<number[]>([]);
-  // Mirror of `marks` for stable access from the MediaRecorder.onstop
-  // handler, which is registered once inside `start()` and captures a
-  // stale finalizeAndUpload closure otherwise. Writing here in
-  // markMoment() keeps the ref current so the post-stop PATCH sees
-  // every mark the doctor tagged.
-  const marksRef = useRef<number[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [reducedMotion, setReducedMotion] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
@@ -114,26 +107,6 @@ export function RecordingClient({
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error ?? `Upload failed (${res.status})`);
-      }
-      // Persist marked moments alongside the upload. Read from
-      // marksRef (not the `marks` state) because this callback runs
-      // from the MediaRecorder.onstop handler registered inside
-      // start(), which captured the finalizeAndUpload closure when
-      // marks was still []. The ref is mutated by markMoment() on
-      // every click so the post-stop payload always reflects the
-      // latest tagged moments.
-      const currentMarks = marksRef.current;
-      if (currentMarks.length > 0) {
-        const momentsPayload = currentMarks.map((t) => ({ timestampMs: t }));
-        try {
-          await fetch(`/api/visits/${visitId}/dictation/upload`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ markedMoments: momentsPayload }),
-          });
-        } catch {
-          /* best-effort — don't block the happy path */
-        }
       }
       toast.success('Recording uploaded', {
         description: 'Drafting your note now.',
@@ -193,13 +166,6 @@ export function RecordingClient({
         /* ignore */
       }
     }
-  }
-
-  function markMoment() {
-    if (phase !== 'recording') return;
-    const t = Date.now() - startTsRef.current;
-    marksRef.current = [...marksRef.current, t];
-    setMarks((prev) => [...prev, t]);
   }
 
   const isRecording = phase === 'recording';
@@ -301,37 +267,15 @@ export function RecordingClient({
               Requesting mic…
             </button>
           ) : isRecording ? (
-            <>
-              <button
-                type="button"
-                onClick={markMoment}
-                className="qm-btn qm-btn-ghost"
-              >
-                <Ic.star width={14} height={14} />
-                Mark moment
-                {marks.length > 0 && (
-                  <span
-                    style={{
-                      fontSize: 10,
-                      fontFamily: 'var(--mono)',
-                      color: 'var(--accent-bright)',
-                      marginLeft: 4,
-                    }}
-                  >
-                    {marks.length}
-                  </span>
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={stop}
-                className="qm-btn qm-btn-primary"
-                style={{ padding: '10px 18px' }}
-              >
-                <Ic.stop width={14} height={14} />
-                Stop & transcribe
-              </button>
-            </>
+            <button
+              type="button"
+              onClick={stop}
+              className="qm-btn qm-btn-primary"
+              style={{ padding: '10px 18px' }}
+            >
+              <Ic.stop width={14} height={14} />
+              Stop & transcribe
+            </button>
           ) : isUploading ? (
             <button type="button" disabled className="qm-btn qm-btn-ghost">
               <span className="qm-spin" style={{ display: 'inline-block' }}>
@@ -402,31 +346,6 @@ export function RecordingClient({
             }}
           >
             Transcript will appear here once recording starts.
-          </div>
-        )}
-        {marks.length > 0 && (
-          <div style={{ marginTop: 28 }}>
-            <div className="qm-sectlabel" style={{ marginBottom: 10 }}>
-              § Marked moments
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {marks.map((ms, i) => (
-                <div
-                  key={i}
-                  style={{
-                    fontFamily: 'var(--mono)',
-                    fontSize: 12,
-                    color: 'var(--fg-2)',
-                    padding: '6px 10px',
-                    borderRadius: 8,
-                    background: 'rgba(139,92,255,0.06)',
-                    border: '1px solid rgba(139,92,255,0.15)',
-                  }}
-                >
-                  ★ {formatElapsed(Math.floor(ms / 1000))}
-                </div>
-              ))}
-            </div>
           </div>
         )}
       </aside>

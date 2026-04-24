@@ -14,7 +14,6 @@
 
 import { NextResponse } from 'next/server';
 import { Readable } from 'node:stream';
-import { z } from 'zod';
 
 import { auth } from '@/lib/nextauth';
 import prisma from '@meddoc/db';
@@ -187,80 +186,5 @@ export const POST = withApiHandler<{ id: string }>(
     }
 
     return NextResponse.json({ visitId, status: 'QUEUED' }, { status: 202 });
-  }
-);
-
-// ============================================================================
-// PATCH /api/visits/[id]/dictation/upload — marked moments
-// ----------------------------------------------------------------------------
-// Phase-2 voice batch 1. The live-recording client (/visits/[id]/record)
-// collects user-tagged moments as elapsed-milliseconds while recording;
-// after the audio POST resolves, it fires a PATCH here with the array.
-// Separate from the audio upload so a slow metadata write can't block
-// the worker pipeline — if this PATCH fails, the audio + pipeline still
-// advance, and the doctor just doesn't see mark chips on the Transcript
-// tab.
-//
-// Shape matches the schema doc-comment on TranscribeVisit.markedMoments
-// (Gate 1): `[{ timestampMs: number, label?: string }]`.
-// ============================================================================
-
-const MarkedMomentSchema = z.object({
-  timestampMs: z.number().int().nonnegative().max(24 * 60 * 60 * 1000),
-  label: z.string().trim().max(120).optional(),
-});
-
-const MarkedMomentsBodySchema = z.object({
-  markedMoments: z.array(MarkedMomentSchema).max(200),
-});
-
-export const PATCH = withApiHandler<{ id: string }>(
-  'api:visits:dictation:upload:patch',
-  async (req, { params }) => {
-    const { id: visitId } = await params;
-
-    const session = await auth();
-    const userId = session?.user?.id;
-    if (!userId) return apiError('unauthorized', 401);
-
-    const blocked = rateLimitOr429(RATE_LIMITS.SETTINGS, userId);
-    if (blocked) return blocked;
-
-    const visit = await prisma.transcribeVisit.findUnique({
-      where: { id: visitId },
-      select: { id: true, userId: true, deletedAt: true },
-    });
-    if (!visit || visit.userId !== userId) return apiError('not found', 404);
-    if (visit.deletedAt !== null) {
-      return apiError('visit is deleted', 400, { code: 'VISIT_NOT_ACTIVE' });
-    }
-
-    let body: unknown;
-    try {
-      body = await req.json();
-    } catch {
-      return apiError('invalid JSON body', 400);
-    }
-    const parsed = MarkedMomentsBodySchema.safeParse(body);
-    if (!parsed.success) {
-      const first = parsed.error.issues[0];
-      return NextResponse.json(
-        {
-          error: first?.message ?? 'invalid payload',
-          field: first?.path.join('.') || '_form',
-        },
-        { status: 400 }
-      );
-    }
-
-    await prisma.transcribeVisit.update({
-      where: { id: visitId },
-      data: { markedMoments: parsed.data.markedMoments },
-    });
-
-    return NextResponse.json({
-      visitId,
-      markedMoments: parsed.data.markedMoments.length,
-    });
   }
 );

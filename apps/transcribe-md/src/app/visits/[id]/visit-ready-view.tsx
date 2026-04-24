@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState, useTransition } from 'react';
+import { useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import {
@@ -73,11 +73,6 @@ export interface VisitReadyViewProps {
   speakerMap: Record<string, SpeakerInfo>;
   /** voice_dictation only — flat transcript of the doctor's dictation. */
   dictationTranscript: string | null;
-  /** voice_dictation only — marked moments the doctor tagged during
-   *  live recording. Shape `[{ timestampMs, label? }]` per the Gate 1
-   *  schema doc-comment. Rendered as seek chips above the audio
-   *  player in the Transcript tab. Empty / missing = no chips. */
-  markedMoments: unknown;
   /** text_notes only — the raw shorthand the doctor typed. */
   rawTextInput: string | null;
   entities: unknown;
@@ -195,7 +190,6 @@ export function VisitReadyView(props: VisitReadyViewProps) {
             <DictationTranscriptView
               visitId={props.visitId}
               transcript={props.dictationTranscript}
-              markedMoments={props.markedMoments}
             />
           ) : (
             <RawTextInputView text={props.rawTextInput} />
@@ -681,94 +675,21 @@ function CollapsibleSection({
 
 // ---------------------------------------------------------------------------
 // Dictation transcript view (T-M5) — single-speaker block + audio replay.
-// Phase-2 voice batch 1: render doctor-tagged mark chips above the
-// player; clicking a chip seeks the audio to that timestamp. Chips
-// only render when dictation has markedMoments attached (live-record
-// visits typically do; file-upload dictations don't).
 // ---------------------------------------------------------------------------
-
-interface MarkedMoment {
-  timestampMs: number;
-  label?: string;
-}
-
-function parseMarkedMoments(raw: unknown): MarkedMoment[] {
-  if (!Array.isArray(raw)) return [];
-  const out: MarkedMoment[] = [];
-  for (const m of raw as unknown[]) {
-    if (
-      m &&
-      typeof m === 'object' &&
-      'timestampMs' in m &&
-      typeof (m as { timestampMs: unknown }).timestampMs === 'number'
-    ) {
-      const row = m as { timestampMs: number; label?: unknown };
-      out.push({
-        timestampMs: row.timestampMs,
-        label: typeof row.label === 'string' ? row.label : undefined,
-      });
-    }
-  }
-  return out.sort((a, b) => a.timestampMs - b.timestampMs);
-}
-
-function formatMmSs(ms: number): string {
-  const totalSec = Math.max(0, Math.floor(ms / 1000));
-  const m = Math.floor(totalSec / 60);
-  const s = totalSec % 60;
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
 
 function DictationTranscriptView({
   visitId,
   transcript,
-  markedMoments,
 }: {
   visitId: string;
   transcript: string | null;
-  markedMoments: unknown;
 }) {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const marks = useMemo(() => parseMarkedMoments(markedMoments), [markedMoments]);
   const audioSrc = `/api/visits/${visitId}/dictation/audio`;
-
-  const seekTo = (ms: number) => {
-    const el = audioRef.current;
-    if (!el) return;
-    el.currentTime = ms / 1000;
-    // Best-effort playback resume — ignore autoplay-policy failures.
-    el.play().catch(() => {});
-  };
 
   return (
     <div className="space-y-4">
-      {marks.length > 0 && (
-        <div
-          className="flex flex-wrap items-center gap-2"
-          aria-label="Marked moments from the recording"
-        >
-          <span className="text-[11px] font-medium uppercase tracking-wider text-text-muted">
-            ★ Marked moments · {marks.length}
-          </span>
-          {marks.map((m, i) => (
-            <button
-              key={`${m.timestampMs}-${i}`}
-              type="button"
-              onClick={() => seekTo(m.timestampMs)}
-              className="inline-flex items-center gap-1.5 rounded-full border border-violet-500/40 bg-violet-500/10 px-2.5 py-1 text-[11.5px] font-medium text-violet-300 transition-colors hover:border-violet-500/70 hover:bg-violet-500/15 hover:text-violet-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
-              aria-label={`Seek to ${formatMmSs(m.timestampMs)}${m.label ? ` · ${m.label}` : ''}`}
-            >
-              <span aria-hidden>★</span>
-              <span className="font-mono">{formatMmSs(m.timestampMs)}</span>
-              {m.label && <span className="text-text-secondary">{m.label}</span>}
-            </button>
-          ))}
-        </div>
-      )}
-
       <div className="rounded-xl border border-border-default bg-bg-surface-1/60 p-3">
         <audio
-          ref={audioRef}
           src={audioSrc}
           controls
           preload="metadata"

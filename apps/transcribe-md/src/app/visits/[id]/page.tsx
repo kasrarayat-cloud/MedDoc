@@ -107,7 +107,6 @@ export default async function VisitPage({
     referrals: unknown;
     patientSummary: string | null;
     confidenceScores: unknown;
-    markedMoments: unknown;
   };
 
   const [user, visit] = (await Promise.all([
@@ -159,7 +158,6 @@ export default async function VisitPage({
         referrals: true,
         patientSummary: true,
         confidenceScores: true,
-        markedMoments: true,
       },
     }),
   ])) as [UserRow | null, VisitRow | null];
@@ -309,7 +307,6 @@ export default async function VisitPage({
           referrals={visit.referrals}
           patientSummary={visit.patientSummary}
           confidenceScores={visit.confidenceScores}
-          markedMoments={visit.markedMoments}
         />
       </div>
     </AppFrame>
@@ -429,7 +426,6 @@ interface VisitBodyProps {
   referrals: unknown;
   patientSummary: string | null;
   confidenceScores: unknown;
-  markedMoments: unknown;
 }
 
 function VisitBody(props: VisitBodyProps) {
@@ -523,7 +519,6 @@ function VisitBody(props: VisitBodyProps) {
       utterances={utterances}
       speakerMap={speakerMap}
       dictationTranscript={props.transcriptText}
-      markedMoments={props.markedMoments}
       rawTextInput={props.rawTextInput}
       entities={props.entities}
       critique={critique}
