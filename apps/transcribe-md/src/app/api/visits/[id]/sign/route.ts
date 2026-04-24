@@ -43,6 +43,7 @@ import { captureEditPattern } from '@/lib/edit-tracking';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { redactPhi } from '@meddoc/ai';
+import { log } from '@/lib/log';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -92,6 +93,31 @@ export const POST = withApiHandler<{ id: string }>(
     }
     const parsed = BodySchema.safeParse(body);
     if (!parsed.success) return apiError('invalid destinations payload', 400);
+
+    // ── PHI exfiltration guard ─────────────────────────────────────
+    // If an 'email' destination is requested, `emailTo` MUST match
+    // the caller's own account email (case-insensitive). Same guard
+    // as /api/visits/[id]/export/email — prevents a session holder
+    // from co-delivering every signed SOAP to any external inbox in
+    // the same click that signs the visit.
+    if (parsed.data.destinations.includes('email')) {
+      const requestedTo = (parsed.data.emailTo ?? sessionEmail)
+        .toLowerCase()
+        .trim();
+      if (requestedTo !== sessionEmail.toLowerCase().trim()) {
+        log.warn('api:visits:sign', 'email destination blocked', {
+          userId,
+          visitId,
+          requestedDomain: requestedTo.split('@')[1] ?? 'unknown',
+          sessionDomain: sessionEmail.split('@')[1] ?? 'unknown',
+        });
+        return apiError(
+          'Email destination must match your account email.',
+          403,
+          { code: 'INVALID_DESTINATION', retry: false }
+        );
+      }
+    }
 
     // ── Sign ────────────────────────────────────────────────────────
     // Use an atomic updateMany with a status guard so two concurrent
@@ -202,7 +228,10 @@ export const POST = withApiHandler<{ id: string }>(
               'email delivery is not configured on this environment';
             continue;
           }
-          const to = parsed.data.emailTo ?? sessionEmail;
+          // Guard above already enforced emailTo === sessionEmail
+          // when present. Resolve to sessionEmail explicitly to
+          // close the loop for any future refactor of the guard.
+          const to = sessionEmail;
           const pdf = await generateVisitPdf(data);
           await sendVisitPdfEmail({
             toEmail: to,
