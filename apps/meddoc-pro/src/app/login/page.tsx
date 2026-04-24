@@ -14,11 +14,20 @@
 import { useState, useTransition, FormEvent } from 'react';
 import { signIn, getSession } from 'next-auth/react';
 import Link from 'next/link';
-import { Stethoscope, Mail, Lock, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
+import { Stethoscope, Mail, Lock, ArrowRight, Loader2, AlertCircle, ExternalLink } from 'lucide-react';
+
+interface CrossAppRedirect {
+  message: string;
+  url: string;
+  /** Plain-text linked label for the button. Kept short. */
+  buttonLabel: string;
+}
 
 export default function LoginPage() {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [crossAppRedirect, setCrossAppRedirect] =
+    useState<CrossAppRedirect | null>(null);
   const [success, setSuccess] = useState(false);
 
   // Button keeps the spinner visible from the moment credentials are accepted
@@ -28,6 +37,7 @@ export default function LoginPage() {
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
+    setCrossAppRedirect(null);
 
     const fd = new FormData(e.currentTarget);
     const email = String(fd.get('email') ?? '').trim().toLowerCase();
@@ -39,6 +49,63 @@ export default function LoginPage() {
     }
 
     startTransition(async () => {
+      // Pre-check entitlement BEFORE signIn so we can branch the form
+      // UX on a cross-app redirect (TRANSCRIBE_MD-only user landed
+      // here by mistake). The endpoint is rate-limited and returns
+      // generic for wrong-password / no-account, so this doesn't
+      // weaken the anti-enumeration posture of the form. The
+      // authorize() callback in nextauth.ts is still the security
+      // boundary; this branch is purely UX.
+      try {
+        const preCheck = await fetch('/api/auth/check-entitlement', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        });
+        if (preCheck.ok || preCheck.status === 429) {
+          const data: {
+            ok: boolean;
+            code?: string;
+            redirectTo?: string;
+            retryAfterSeconds?: number;
+          } = await preCheck.json();
+
+          if (!data.ok) {
+            if (data.code === 'NO_MEDDOC_PRO_HAS_TRANSCRIBE' && data.redirectTo) {
+              setCrossAppRedirect({
+                message:
+                  'This account is for TranscribeMD, not MedDoc Pro. Continue to the right app:',
+                url: data.redirectTo,
+                buttonLabel: 'Go to TranscribeMD',
+              });
+              return;
+            }
+            if (data.code === 'ACCOUNT_LOCKED') {
+              const mins = Math.ceil((data.retryAfterSeconds ?? 900) / 60);
+              setError(
+                `Account temporarily locked. Try again in ${mins} minute${mins === 1 ? '' : 's'}.`
+              );
+              return;
+            }
+            if (data.code === 'RATE_LIMITED') {
+              const mins = Math.ceil((data.retryAfterSeconds ?? 900) / 60);
+              setError(
+                `Too many attempts. Try again in ${mins} minute${mins === 1 ? '' : 's'}.`
+              );
+              return;
+            }
+            // INVALID_CREDENTIALS or anything else → generic.
+            setError('Invalid email or password.');
+            return;
+          }
+        }
+        // pre-check unreachable (5xx) → fall through to signIn so the
+        // user isn't blocked by a flaky pre-check; signIn enforces the
+        // gate authoritatively anyway.
+      } catch {
+        // Network error → fall through to signIn for the same reason.
+      }
+
       // Sign in without letting NextAuth navigate. We do the role-based
       // fan-out client-side: ADMINs → /system-admin, everyone else →
       // /dashboard. window.location.assign forces a full page load so
@@ -131,6 +198,23 @@ export default function LoginPage() {
             <div className="mb-5 flex items-start gap-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
               <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
               <span>{error}</span>
+            </div>
+          )}
+
+          {/* Cross-app redirect — TRANSCRIBE_MD user landed on the wrong door. */}
+          {crossAppRedirect && (
+            <div className="mb-5 rounded-xl border border-blue-400/30 bg-blue-500/10 p-4 text-sm text-blue-100">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-blue-300" />
+                <span>{crossAppRedirect.message}</span>
+              </div>
+              <a
+                href={crossAppRedirect.url}
+                className="mt-3 inline-flex items-center gap-2 rounded-lg bg-blue-500/20 px-4 py-2 text-sm font-semibold text-blue-100 transition-colors hover:bg-blue-500/30 focus:outline-none focus:ring-2 focus:ring-blue-400/40"
+              >
+                {crossAppRedirect.buttonLabel}
+                <ExternalLink className="h-4 w-4" aria-hidden="true" />
+              </a>
             </div>
           )}
 
