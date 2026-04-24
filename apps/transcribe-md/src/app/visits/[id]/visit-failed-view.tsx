@@ -1,7 +1,10 @@
 'use client';
 
-import { RefreshCw } from 'lucide-react';
+import { useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
+import { Loader2, RefreshCw } from 'lucide-react';
 import dynamic from 'next/dynamic';
+import { toast } from 'sonner';
 
 import { SpecularButton } from '@/components/specular-button';
 import { cn } from '@/lib/cn';
@@ -16,12 +19,50 @@ interface Props {
   reason: string | null;
 }
 
-/** Terminal failure screen. The "Try again" CTA just refreshes the
- *  route — the server will render the uploader again because audioKey
- *  stays set BUT the next upload PUT replaces it and re-enqueues. For
- *  a "re-run without re-upload" recovery, we'd need a separate button
- *  + API route; deferred until T-M4.5. */
+/** Terminal failure screen. The "Try again" CTA POSTs to
+ *  /api/visits/[id]/retry, which re-enqueues the worker against the
+ *  already-uploaded audio (no re-record needed) and resets status to
+ *  QUEUED. router.refresh() then swaps the server-rendered view to
+ *  ProcessingState because the fresh server read sees QUEUED again. */
 export function VisitFailedView({ visitId, reason }: Props) {
+  const router = useRouter();
+  const [submitting, startTransition] = useTransition();
+  const [pending, setPending] = useState(false);
+
+  const onRetry = () => {
+    setPending(true);
+    startTransition(async () => {
+      try {
+        const r = await fetch(`/api/visits/${visitId}/retry`, {
+          method: 'POST',
+        });
+        if (r.ok) {
+          // Server-component refresh — visit row now reads QUEUED, so
+          // page.tsx swaps VisitFailedView for ProcessingState.
+          router.refresh();
+          return;
+        }
+        // Surface the API's structured error to the user.
+        let detail = `Retry failed (${r.status}).`;
+        try {
+          const body = (await r.json()) as { error?: string; code?: string };
+          if (body.error) detail = body.error;
+        } catch {
+          /* response wasn't JSON; keep the generic detail */
+        }
+        toast.error('Could not retry', { description: detail });
+        setPending(false);
+      } catch {
+        toast.error('Network error', {
+          description: 'Check your connection and try again.',
+        });
+        setPending(false);
+      }
+    });
+  };
+
+  const isRetrying = pending || submitting;
+
   return (
     <div className="mx-auto flex max-w-xl flex-col items-center py-16 text-center sm:py-24">
       <div className="relative mb-10 h-56 w-56">
@@ -48,12 +89,22 @@ export function VisitFailedView({ visitId, reason }: Props) {
 
       <div className="mt-10 flex items-center justify-center gap-3">
         <SpecularButton
-          href={`/visits/${visitId}`}
           variant="primary"
           size="md"
+          onClick={onRetry}
+          disabled={isRetrying}
         >
-          <RefreshCw className="h-3.5 w-3.5" aria-hidden />
-          Try again
+          {isRetrying ? (
+            <>
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+              Retrying…
+            </>
+          ) : (
+            <>
+              <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+              Try again
+            </>
+          )}
         </SpecularButton>
         <SpecularButton
           href="/dashboard"
