@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 
 import { resetUserPasswordAction } from './actions';
+import { validatePassword } from '@/lib/password-schema';
 
 export interface ResetPasswordTarget {
   id: string;
@@ -44,18 +45,26 @@ interface Props {
 }
 
 function randomPassword(): string {
-  // 16 chars, alnum + limited symbols. Not cryptographically strong enough
-  // for long-term secrets, but fine for a throwaway reset the user will
-  // change on first login. crypto.getRandomValues is browser-available.
+  // 16 chars. Resample once if the draw happens to miss a required
+  // class — with 16 chars over a 60-char alphabet this is effectively
+  // never hit, but the guard means we never hand back a value that
+  // fails validatePassword on submit.
   const alphabet =
     'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%';
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  let out = '';
-  for (let i = 0; i < bytes.length; i++) {
-    out += alphabet[bytes[i] % alphabet.length];
+  const draw = () => {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    let out = '';
+    for (let i = 0; i < bytes.length; i++) {
+      out += alphabet[bytes[i] % alphabet.length];
+    }
+    return out;
+  };
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const candidate = draw();
+    if (validatePassword(candidate).ok) return candidate;
   }
-  return out;
+  return draw();
 }
 
 // Outer wrapper: AnimatePresence owns open/close. Inner content holds
@@ -111,8 +120,9 @@ function ResetPasswordModalContent({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
-    if (password.length < 8) {
-      onError('Password must be at least 8 characters.');
+    const policy = validatePassword(password);
+    if (!policy.ok) {
+      onError(policy.error);
       return;
     }
     const attempted = password;
@@ -273,11 +283,9 @@ function ResetPasswordModalContent({
                     <p className="mt-1.5 text-[10px] font-mono text-slate-600">
                       {password.length === 0
                         ? 'Type a password or click Generate'
-                        : password.length < 8
-                        ? `${8 - password.length} more character${
-                            8 - password.length === 1 ? '' : 's'
-                          } needed`
-                        : `${password.length} characters · strong enough`}
+                        : validatePassword(password).ok
+                        ? `${password.length} characters · strong enough`
+                        : `${password.length} chars · need 10+ with upper, lower, digit`}
                     </p>
                   </div>
 
@@ -292,7 +300,7 @@ function ResetPasswordModalContent({
                     </button>
                     <button
                       type="submit"
-                      disabled={isPending || password.length < 8}
+                      disabled={isPending || !validatePassword(password).ok}
                       className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-orange-500/15 border border-orange-500/30 text-xs font-mono font-bold text-orange-300 hover:bg-orange-500/25 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {isPending ? (

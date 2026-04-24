@@ -45,6 +45,9 @@ export interface AnthropicCompleteArgs<T> extends AiLogContext {
   user: string;
   schema: z.ZodType<T>;
   maxTokens?: number;
+  /** Sampling temperature 0-1. Undefined = SDK/provider default (≈1).
+   *  Medical layers should pass low values for determinism. */
+  temperature?: number;
   /** Extra messages appended for retry — e.g. the prior invalid response + error. */
   retryContext?: string;
 }
@@ -62,6 +65,7 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
     const response = await client.messages.create({
       model: args.model,
       max_tokens: args.maxTokens ?? 4096,
+      ...(args.temperature !== undefined && { temperature: args.temperature }),
       system: args.system,
       messages: [{ role: 'user', content: userContent }],
     });
@@ -178,6 +182,8 @@ export interface AnthropicCompleteTextArgs extends AiLogContext {
   system: string;
   user: string;
   maxTokens?: number;
+  /** Sampling temperature 0-1. Undefined = SDK/provider default (≈1). */
+  temperature?: number;
   /** How many text tokens we want the model to be willing to produce.
    *  SOAP notes can run long — default 8192 rather than 4096. */
 }
@@ -199,6 +205,7 @@ export async function anthropicCompleteText(
     const response = await client.messages.create({
       model: args.model,
       max_tokens: args.maxTokens ?? 8192,
+      ...(args.temperature !== undefined && { temperature: args.temperature }),
       system: args.system,
       messages: [{ role: 'user', content: args.user }],
     });

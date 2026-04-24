@@ -17,10 +17,40 @@ const { PrismaPg } = require('@prisma/adapter-pg') as { PrismaPg: any };
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const globalForPrisma = globalThis as unknown as { prisma?: any };
 
+// Pool + statement timeout defaults. Any of these can be overridden
+// via env. Rationale:
+//   - PRISMA_POOL_MAX=10 — enough for a single Next instance (one
+//     per request, with default Next concurrency) without exhausting
+//     postgres' max_connections (100 by default on the VPS image).
+//   - PRISMA_POOL_TIMEOUT_MS=20000 — how long to wait for a free
+//     connection before throwing. Long enough to ride out a warm-up
+//     burst, short enough that a saturated pool fails loudly.
+//   - PRISMA_STATEMENT_TIMEOUT_MS=30000 — Postgres-side guard so a
+//     rogue query can't hold a connection indefinitely.
+const POOL_MAX = Number(process.env.PRISMA_POOL_MAX ?? 10);
+const POOL_TIMEOUT_MS = Number(process.env.PRISMA_POOL_TIMEOUT_MS ?? 20_000);
+const STATEMENT_TIMEOUT_MS = Number(
+  process.env.PRISMA_STATEMENT_TIMEOUT_MS ?? 30_000
+);
+
+function buildConnectionString(): string {
+  const raw =
+    process.env.DATABASE_URL ??
+    'postgresql://placeholder@localhost:5432/meddoc';
+  // Append `options=-c statement_timeout=<ms>` so Postgres kills any
+  // statement that outlives the limit. Preserves any existing query
+  // string the caller may have set; we never overwrite.
+  const hasQuery = raw.includes('?');
+  if (raw.includes('statement_timeout')) return raw;
+  const encoded = encodeURIComponent(`-c statement_timeout=${STATEMENT_TIMEOUT_MS}`);
+  return `${raw}${hasQuery ? '&' : '?'}options=${encoded}`;
+}
+
 function buildPrisma() {
   const adapter = new PrismaPg({
-    connectionString:
-      process.env.DATABASE_URL ?? 'postgresql://placeholder@localhost:5432/meddoc',
+    connectionString: buildConnectionString(),
+    max: POOL_MAX,
+    connectionTimeoutMillis: POOL_TIMEOUT_MS,
   });
   return new PrismaClient({
     adapter,

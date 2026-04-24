@@ -79,6 +79,7 @@ export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output>
       system,
       user,
       maxTokens: 8192,
+      temperature: 0.2,
     });
     soapFinal = text;
   }

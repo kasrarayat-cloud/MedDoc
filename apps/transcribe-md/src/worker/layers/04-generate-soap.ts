@@ -98,6 +98,7 @@ export async function runLayer4GenerateSoap(
     system,
     user,
     maxTokens: 8192,
+    temperature: 0.2,
   });
 
   await prisma.transcribeVisit.update({

@@ -7,7 +7,12 @@ import { AuthShell } from '@/components/ui/auth-shell';
 import { LoginForm } from './login-form';
 import { VerifyToast } from './verify-toast';
 
-export const metadata: Metadata = { title: 'Sign in' };
+// Root layout noindexes all of app.quillmd.com; re-enable for /login
+// so the public entry page can be surfaced via search.
+export const metadata: Metadata = {
+  title: 'Sign in',
+  robots: { index: true, follow: true },
+};
 
 export default async function LoginPage() {
   const session = await auth();

@@ -80,6 +80,7 @@ export async function runLayer7dReferrals(
     user,
     schema: ReferralsResult,
     maxTokens: 2048,
+    temperature: 0.3,
   });
 
   await prisma.transcribeVisit.update({

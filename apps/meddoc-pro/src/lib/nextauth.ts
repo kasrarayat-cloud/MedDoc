@@ -16,11 +16,14 @@ import Credentials from 'next-auth/providers/credentials';
 import { PrismaAdapter } from '@auth/prisma-adapter';
 import bcrypt from 'bcryptjs';
 
+import { headers } from 'next/headers';
+
 import authConfig from '@/lib/auth.config';
 import prisma from '@meddoc/db';
 import type { UserRole } from '@meddoc/auth';
 import { recordLoginIp } from '@/lib/session-log';
 import { logAudit } from '@/lib/audit';
+import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
@@ -76,6 +79,36 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           typeof credentials?.email === 'string' ? credentials.email.trim().toLowerCase() : '';
         const password = typeof credentials?.password === 'string' ? credentials.password : '';
         if (!email || !password) return null;
+
+        // 1a. Rate-limit credentials attempts. Two buckets — per-IP and
+        //     per-email — fire independently. Per-IP closes credential
+        //     stuffing (one attacker, many emails); per-email slows a
+        //     per-account spray. Per-account lockout below still handles
+        //     the single-account brute-force case.
+        const hdrs = await headers();
+        const xff = hdrs.get('x-forwarded-for') ?? '';
+        const realIp = hdrs.get('x-real-ip') ?? '';
+        const callerIp =
+          xff.split(',')[0]?.trim() || realIp || 'unknown';
+        const ipGate = checkRateLimit(callerIp, RATE_LIMITS.loginIp);
+        const emailGate = checkRateLimit(email, RATE_LIMITS.loginEmail);
+        if (!ipGate.ok || !emailGate.ok) {
+          await logAudit({
+            action: 'LOGIN_FAILED',
+            success: false,
+            errorCode: 'RATE_LIMITED',
+            userEmail: email,
+            metadata: {
+              ipOk: ipGate.ok,
+              emailOk: emailGate.ok,
+              retryAfterSeconds: Math.max(
+                ipGate.retryAfterSeconds,
+                emailGate.retryAfterSeconds
+              ),
+            },
+          });
+          return null;
+        }
 
         // 2. Look up user
         let user;

@@ -112,6 +112,7 @@ export async function runLayer5SelfCritique(
     user,
     schema: CritiqueReport,
     maxTokens: 4096,
+    temperature: 0.2,
   });
 
   await prisma.transcribeVisit.update({

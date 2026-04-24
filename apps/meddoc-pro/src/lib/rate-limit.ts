@@ -102,6 +102,11 @@ export function checkRateLimit(
 //
 // DOC_EDITOR: text-completion is cheaper than audio but can still burn
 // tokens; 60/min is generous for normal interactive editing.
+//
+// LOGIN_IP / LOGIN_EMAIL: 5 attempts per 15 minutes. Per-account lockout
+// in nextauth.ts covers the single-account brute-force case; these two
+// buckets close the credential-stuffing gap (one attacker, many emails)
+// and slow down per-email spray attacks.
 export const RATE_LIMITS = {
   transcribe: { bucket: 'transcribe', limit: 30, windowSeconds: 60 },
   docEditor: { bucket: 'doc-editor', limit: 60, windowSeconds: 60 },
@@ -109,4 +114,6 @@ export const RATE_LIMITS = {
   // covers an animated multi-turn dialogue with headroom; abusive loops
   // (each call costs $0.015/min of audio) trip quickly.
   tts: { bucket: 'tts', limit: 60, windowSeconds: 60 },
+  loginIp: { bucket: 'login-ip', limit: 5, windowSeconds: 15 * 60 },
+  loginEmail: { bucket: 'login-email', limit: 5, windowSeconds: 15 * 60 },
 } satisfies Record<string, RateLimitRule>;

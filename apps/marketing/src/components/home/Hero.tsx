@@ -18,18 +18,30 @@ function Staggered({
   stepMs?: number;
 }) {
   const parts = text.split(/(\s+)/);
-  let delay = startMs;
+  // Pre-compute animation delays so the render path doesn't reassign a
+  // closure-scoped `let` (react-hooks/immutability). Delay advances
+  // only for non-whitespace parts to keep the visual cadence tied to
+  // word count rather than whitespace count.
+  const delays: number[] = [];
+  let running = startMs;
+  for (const part of parts) {
+    if (part && !/^\s+$/.test(part)) {
+      running += stepMs;
+      delays.push(running);
+    } else {
+      delays.push(running);
+    }
+  }
   return (
     <>
       {parts.map((part, i) => {
         if (!part) return null;
         if (/^\s+$/.test(part)) return <span key={i}>{part}</span>;
-        delay += stepMs;
         return (
           <span
             key={i}
             className="word-anim"
-            style={{ animationDelay: `${delay}ms` }}
+            style={{ animationDelay: `${delays[i]}ms` }}
           >
             {part}
           </span>

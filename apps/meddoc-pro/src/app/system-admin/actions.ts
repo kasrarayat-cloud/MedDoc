@@ -11,6 +11,7 @@ import prisma, { isDatabaseHealthy } from '@meddoc/db';
 import { requireRole } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
 import { assertSamePracticeUser, TenantScopeError } from '@/lib/tenancy';
+import { validatePassword } from '@/lib/password-schema';
 import { addMockUser, updateMockUser, deleteMockUser } from './mock-users';
 
 type ActionResult = { ok: true; message: string } | { ok: false; error: string };
@@ -189,8 +190,9 @@ export async function createUserAction(formData: FormData): Promise<ActionResult
     if (!name || !email || !password) {
       return { ok: false, error: 'Name, email, and password are required.' };
     }
-    if (password.length < 8) {
-      return { ok: false, error: 'Password must be at least 8 characters.' };
+    const policy = validatePassword(password);
+    if (!policy.ok) {
+      return { ok: false, error: policy.error };
     }
     if (!['DOCTOR', 'ADMIN', 'STAFF'].includes(role)) {
       return { ok: false, error: 'Invalid role.' };
@@ -302,8 +304,9 @@ export async function resetUserPasswordAction(
     const guardErr = await guardSameTenant(session, userId);
     if (guardErr) return guardErr;
 
-    if (!newPassword || newPassword.length < 8) {
-      return { ok: false, error: 'Password must be at least 8 characters.' };
+    const policy = validatePassword(newPassword);
+    if (!policy.ok) {
+      return { ok: false, error: policy.error };
     }
 
     if (!(await isDatabaseHealthy())) {

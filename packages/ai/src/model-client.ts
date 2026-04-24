@@ -39,6 +39,9 @@ export interface CompleteArgs<T> extends AiLogContext {
   user: string;
   schema: z.ZodType<T>;
   maxTokens?: number;
+  /** Sampling temperature 0-1. Medical layers pin this low for
+   *  determinism; undefined = provider default. */
+  temperature?: number;
   /** Retry on schema-fail or JSON-parse-fail with the prior output + error
    *  appended. Default true. Up to MAX_RETRIES attempts after the initial. */
   retryOnSchemaFail?: boolean;
@@ -50,6 +53,8 @@ export interface CompleteTextArgs extends AiLogContext {
   system: string;
   user: string;
   maxTokens?: number;
+  /** Sampling temperature 0-1. Undefined = provider default. */
+  temperature?: number;
 }
 
 export const modelClient = {
@@ -117,6 +122,7 @@ export const modelClient = {
       system: args.system,
       user: args.user,
       maxTokens: args.maxTokens,
+      temperature: args.temperature,
     });
   },
 };
