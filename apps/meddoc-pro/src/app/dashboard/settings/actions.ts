@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import prisma from '@meddoc/db';
 import { getSession } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
+import { validatePassword } from '@/lib/password-schema';
 
 export interface ActionResult {
   ok: boolean;
@@ -48,8 +49,9 @@ export async function updatePassword(formData: FormData): Promise<ActionResult> 
   if (typeof newPassword !== 'string' || !newPassword) {
     return { ok: false, error: 'New password is required.' };
   }
-  if (newPassword.length < 6) {
-    return { ok: false, error: 'New password must be at least 6 characters.' };
+  const policy = validatePassword(newPassword);
+  if (!policy.ok) {
+    return { ok: false, error: policy.error };
   }
   if (newPassword !== String(confirmNewPassword ?? '')) {
     return { ok: false, error: 'New passwords do not match.' };
