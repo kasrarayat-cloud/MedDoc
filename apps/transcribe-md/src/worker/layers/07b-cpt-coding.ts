@@ -141,6 +141,7 @@ export async function runLayer7bCptCoding(
     user,
     schema: CptResult,
     maxTokens: 3072,
+    temperature: 0.1,
   });
 
   await prisma.transcribeVisit.update({

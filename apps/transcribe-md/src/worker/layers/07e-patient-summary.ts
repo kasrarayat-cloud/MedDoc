@@ -100,6 +100,7 @@ export async function runLayer7ePatientSummary(
     user,
     schema: PatientSummaryResult,
     maxTokens: 2048,
+    temperature: 0.3,
   });
 
   const grade = fleschKincaidGrade(result.summary);

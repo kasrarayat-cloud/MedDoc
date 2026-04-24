@@ -45,7 +45,9 @@ test('scenario 2: fresh signup → voice dictation → READY → sign clipboard'
   await page.waitForURL(/\/visits\/c[a-z0-9]{10,}/, { timeout: 15_000 });
   const visitIdMatch = page.url().match(/\/visits\/(c[a-z0-9]+)/);
   const visitId = visitIdMatch?.[1];
-  expect(visitId, `couldn't parse visitId from ${page.url()}`).toBeTruthy();
+  if (!visitId) {
+    throw new Error(`couldn't parse visitId from ${page.url()}`);
+  }
 
   // Bypass MediaRecorder UI. Send the audio bytes straight to the
   // dictation upload route — same contract the recorder uses after

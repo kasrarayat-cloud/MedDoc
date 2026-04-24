@@ -43,6 +43,11 @@ export const metadata: Metadata = {
   },
   description:
     'AI medical transcription for solo doctors. Send audio, get a signed note.',
+  // app.quillmd.com is the authenticated surface. The marketing site
+  // (quillmd.com) carries the public-facing content and should be
+  // indexed; everything behind this layout sits behind session auth,
+  // so block crawlers from following URLs they shouldn't fingerprint.
+  robots: { index: false, follow: false },
 };
 
 export const viewport: Viewport = {

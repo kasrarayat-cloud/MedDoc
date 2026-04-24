@@ -387,6 +387,7 @@ export async function runLayer3ExtractEntities(
     user,
     schema: ExtractedEntities,
     maxTokens: 6144,
+    temperature: 0.2,
   });
 
   await prisma.transcribeVisit.update({
