@@ -487,13 +487,6 @@ function VisitBody(props: VisitBodyProps) {
       }
     | null;
 
-  const overallQuality =
-    critique?.overall_quality === 'high' ||
-    critique?.overall_quality === 'medium' ||
-    critique?.overall_quality === 'low'
-      ? (critique.overall_quality as 'high' | 'medium' | 'low')
-      : null;
-
   const soapText =
     props.status === TranscribeVisitStatus.SIGNED
       ? (props.signedSoap ?? props.soapFinal ?? '')
@@ -513,9 +506,6 @@ function VisitBody(props: VisitBodyProps) {
       inputMode={props.inputMode}
       soapText={soapText}
       readonly={props.status === TranscribeVisitStatus.SIGNED}
-      needsReview={props.needsReview}
-      reviewReason={props.reviewReason}
-      overallQuality={overallQuality}
       utterances={utterances}
       speakerMap={speakerMap}
       dictationTranscript={props.transcriptText}
