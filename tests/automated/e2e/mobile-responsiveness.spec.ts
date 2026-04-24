@@ -4,9 +4,11 @@ import * as path from 'node:path';
 import { requireTestCreds } from './helpers/env';
 import { loginApp } from './helpers/auth';
 
-// Viewport: 375 × 812 (iPhone 13). This spec is assigned the `mobile`
-// project in playwright.config.ts so the iPhone 13 device descriptor
-// applies automatically — no manual page.setViewportSize needed.
+// Viewport: Pixel 5 (393 × 851). This spec is assigned the `mobile`
+// project in playwright.config.ts so the device descriptor applies
+// automatically — no manual page.setViewportSize needed. We use
+// Pixel 5 (Chromium-based) rather than iPhone 13 (WebKit) to avoid a
+// separate playwright browser install.
 //
 // What we check:
 //   1. No horizontal scroll on public pages (login + marketing).
@@ -40,7 +42,7 @@ async function assertNoHorizontalScroll(
   ).toBe(true);
 }
 
-test.describe('mobile responsiveness @ 375x812', () => {
+test.describe('mobile responsiveness @ ~393x851', () => {
   test('login page is usable and scroll-clean', async ({ page }) => {
     await page.goto('/login');
     await screenshot(page, 'mobile-login');
@@ -68,7 +70,11 @@ test.describe('mobile responsiveness @ 375x812', () => {
     const primaryCta = page.getByRole('button', { name: /create|continue|next/i }).first();
     if (await primaryCta.isVisible().catch(() => false)) {
       const box = await primaryCta.boundingBox();
-      expect(box && box.x >= 0 && box.x + box.width <= 375).toBe(true);
+      const viewport = page.viewportSize();
+      expect(
+        !!(box && viewport && box.x >= 0 && box.x + box.width <= viewport.width),
+        'CTA should be fully within viewport horizontally'
+      ).toBe(true);
     }
   });
 });

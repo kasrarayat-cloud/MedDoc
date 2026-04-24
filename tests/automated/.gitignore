@@ -2,6 +2,7 @@
 reports/*.html
 reports/*.json
 reports/screenshots/
+reports/playwright-html/
 !reports/.gitkeep
 # The template is source, not an artefact — keep it in-tree.
 !reports/template.html

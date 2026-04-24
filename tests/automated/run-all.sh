@@ -79,11 +79,13 @@ run_shell_suite() {
 run_playwright_suite() {
   echo "${C_BLUE}▶ e2e (Playwright)${C_RESET}"
   # Playwright runs from the transcribe-md workspace (where the package
-  # is installed) but uses our config under tests/automated/e2e/.
+  # is installed) but uses our config under tests/automated/e2e/. No
+  # --reporter override on the CLI: that would replace the config's
+  # reporter list and the json file with outputFile would never be
+  # written. Config-level reporters include list, json (our file), html.
   (
     cd /opt/meddoc-pro/apps/transcribe-md
     npx playwright test --config="$HERE/e2e/playwright.config.ts" \
-      --reporter=list,json \
       >/dev/null 2>&1
   ) || FAIL=1
 

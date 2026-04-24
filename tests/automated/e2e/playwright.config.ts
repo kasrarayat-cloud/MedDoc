@@ -74,8 +74,12 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
     {
+      // iPhone 13 would be ideal, but its device descriptor ships WebKit
+      // which needs an extra `playwright install webkit` (~60 MB) that
+      // blows up cold-start on the VPS. Chromium-based Pixel 5 matches
+      // the same 393×851 viewport closely enough for layout checks.
       name: 'mobile',
-      use: { ...devices['iPhone 13'] },
+      use: { ...devices['Pixel 5'] },
       testMatch: /mobile.*\.spec\.ts$/,
     },
   ],

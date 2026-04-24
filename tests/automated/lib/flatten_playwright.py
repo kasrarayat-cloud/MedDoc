@@ -16,25 +16,29 @@ from pathlib import Path
 
 def walk(suites: list, results: list) -> None:
     for s in suites:
-        for t in s.get("specs", []):
-            for result in t.get("tests", []):
-                # Each "test" has a list of "results" (per-retry).
-                last = result.get("results", [])[-1] if result.get("results") else {}
-                status = last.get("status", "unknown")
-                # Map Playwright statuses to our canonical set.
+        for spec in s.get("specs", []):
+            for t in spec.get("tests", []):
+                # Each "test" has a list of "results" (per-retry), plus
+                # a top-level "status" that captures the outcome even
+                # when the results array is empty (happens for skips).
+                rs = t.get("results", []) or []
+                last = rs[-1] if rs else {}
+                raw_status = last.get("status") or t.get("status") or "unknown"
                 mapped = {
                     "passed": "pass",
+                    "expected": "pass",
                     "failed": "fail",
                     "timedOut": "fail",
+                    "unexpected": "fail",
                     "skipped": "skip",
                     "interrupted": "fail",
-                }.get(status, "warn")
-                name = f"{t.get('title','?')} — {result.get('projectName','?')}"
+                    "flaky": "warn",
+                }.get(raw_status, "warn")
+                name = f"{spec.get('title','?')} — {t.get('projectName','?')}"
                 details = ""
                 if mapped == "fail":
                     err = last.get("error", {}) or {}
-                    details = err.get("message", "") or ""
-                    details = details.split("\n")[0][:400]
+                    details = (err.get("message", "") or "").split("\n")[0][:400]
                 results.append(
                     {
                         "name": name,
