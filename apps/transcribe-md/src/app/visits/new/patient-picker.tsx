@@ -101,16 +101,16 @@ export function PatientPickerCore({ onSelect }: CoreProps) {
   } | null>(null);
 
   // --- debounced search ---
+  // When the term is empty we skip the fetch entirely; the results
+  // container below is gated on `query.trim().length > 0` so stale
+  // state doesn't render. Clearing state synchronously inside the
+  // effect triggered react-hooks/set-state-in-effect.
+  const term = query.trim();
   useEffect(() => {
-    const term = query.trim();
-    if (term === '') {
-      setResults([]);
-      setSearching(false);
-      return;
-    }
-    setSearching(true);
+    if (term === '') return;
     const controller = new AbortController();
     const timer = setTimeout(async () => {
+      setSearching(true);
       try {
         const res = await fetch(
           `/api/patients?search=${encodeURIComponent(term)}`,
@@ -130,7 +130,7 @@ export function PatientPickerCore({ onSelect }: CoreProps) {
       controller.abort();
       clearTimeout(timer);
     };
-  }, [query]);
+  }, [term]);
 
   const selectExisting = useCallback(
     (p: PatientListApiRow) => {
