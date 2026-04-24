@@ -95,6 +95,7 @@ export async function runLayer7aIcdCoding(
     user,
     schema: IcdResult,
     maxTokens: 3072,
+    temperature: 0.1,
   });
 
   await prisma.transcribeVisit.update({
