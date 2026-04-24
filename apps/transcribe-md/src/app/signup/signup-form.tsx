@@ -40,16 +40,30 @@ export function SignupForm() {
   const errors = state && !state.ok ? state.errors : {};
   const values = state && !state.ok ? state.values ?? {} : {};
 
-  // Client-side confirm-password check. The server schema doesn't carry
-  // a confirmPassword field — mismatches simply block submit with a
-  // local message; the useActionState path never sees confirmPassword.
+  // Client-side confirm-password check. The server schema doesn't
+  // validate confirmPassword, so we MUST block submission here —
+  // otherwise a user with mismatched inputs would unknowingly create
+  // an account using the first password field. We intercept in the
+  // onSubmit handler below (toast + field focus) instead of silently
+  // disabling the button, which tested poorly (users clicked the
+  // disabled button, nothing happened, they got confused — audit H3).
   const mismatchMessage =
     confirmPassword.length > 0 && confirmPassword !== password
       ? 'Passwords do not match'
       : undefined;
 
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    if (confirmPassword !== password) {
+      e.preventDefault();
+      toast.error('Passwords do not match', {
+        description: 'Retype your password in the Confirm field.',
+      });
+      document.getElementById('confirmPassword')?.focus();
+    }
+  };
+
   return (
-    <form action={formAction}>
+    <form action={formAction} onSubmit={handleSubmit}>
       <div style={{ marginTop: 14 }}>
         <AuthFieldLabel htmlFor="name">Full name</AuthFieldLabel>
         <input
@@ -171,16 +185,16 @@ export function SignupForm() {
 
       <button
         type="submit"
-        disabled={pending || Boolean(mismatchMessage)}
+        disabled={pending}
+        aria-disabled={pending || Boolean(mismatchMessage)}
         className="qm-btn qm-btn-primary"
         style={{
           width: '100%',
           justifyContent: 'center',
           padding: 12,
           marginTop: 22,
-          opacity: pending || mismatchMessage ? 0.6 : 1,
-          cursor:
-            pending || mismatchMessage ? 'not-allowed' : 'pointer',
+          opacity: pending ? 0.6 : 1,
+          cursor: pending ? 'not-allowed' : 'pointer',
         }}
       >
         {pending ? 'Creating account…' : 'Create account'}

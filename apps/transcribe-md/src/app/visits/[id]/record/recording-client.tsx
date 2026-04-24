@@ -65,6 +65,14 @@ export function RecordingClient({
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTsRef = useRef<number>(0);
   const finalizingRef = useRef(false);
+  // Audit H1 — preventive guard. The MediaRecorder's onstop handler is
+  // registered once (inside `start`) and lives until the recording
+  // ends. If anything in `finalizeAndUpload` ever starts closing over
+  // a state value, onstop would fire with stale state (same class of
+  // bug as the reverted mark-moments PATCH). Route the latest
+  // finalizeAndUpload through this ref so future additions don't
+  // re-introduce the pattern — onstop reads finalizeRef.current().
+  const finalizeRef = useRef<() => Promise<void>>(async () => {});
 
   // Reduced-motion subscription (§8.9). Initial value is read by the
   // lazy useState initializer above; this effect only subscribes to
@@ -96,6 +104,10 @@ export function RecordingClient({
     if (finalizingRef.current) return;
     finalizingRef.current = true;
     setPhase('uploading');
+    // NOTE: if you add a dependency on component state to this
+    // function, ensure the MediaRecorder.onstop handler below still
+    // reads the LATEST version via finalizeRef.current() — see the
+    // H1 preventive note where finalizeRef is declared.
     const blob = new Blob(chunksRef.current, { type: MIME });
     chunksRef.current = [];
     try {
@@ -122,6 +134,13 @@ export function RecordingClient({
     }
   }, [visitId, router]);
 
+  // Keep finalizeRef pointed at the current closure. `recorder.onstop`
+  // reads from the ref rather than capturing `finalizeAndUpload`
+  // directly, so swapping in a newer version — e.g. after a deps
+  // change — doesn't leave a stale handler attached to an in-flight
+  // MediaRecorder.
+  finalizeRef.current = finalizeAndUpload;
+
   const start = useCallback(async () => {
     setError(null);
     setPhase('requesting');
@@ -137,7 +156,9 @@ export function RecordingClient({
         streamRef.current = null;
         if (tickRef.current) clearInterval(tickRef.current);
         tickRef.current = null;
-        finalizeAndUpload();
+        // Route through the ref so we always invoke the latest
+        // finalizeAndUpload — preventive fix for audit H1.
+        finalizeRef.current();
       };
       recorderRef.current = recorder;
       recorder.start(CHUNK_MS);
@@ -156,7 +177,10 @@ export function RecordingClient({
       setPhase('error');
       toast.error('Could not start recording', { description: msg });
     }
-  }, [finalizeAndUpload]);
+    // `finalizeAndUpload` is invoked via finalizeRef.current inside
+    // recorder.onstop — no direct dependency needed, and including it
+    // would re-render `start` unnecessarily.
+  }, []);
 
   function stop() {
     if (recorderRef.current?.state === 'recording') {
