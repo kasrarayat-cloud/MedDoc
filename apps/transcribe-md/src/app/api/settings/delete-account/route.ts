@@ -42,6 +42,7 @@ import { sendAccountDeletedConfirmation } from '@/lib/email';
 import { MARKETING_URL } from '@/lib/constants';
 import { redactPhi } from '@meddoc/ai';
 import { log } from '@/lib/log';
+import { logAudit } from '@/lib/audit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -155,6 +156,19 @@ export const POST = withApiHandler('api:settings:delete-account', async (req) =>
   log.info('api:settings:delete-account', 'user purged', {
     userId: user.id,
     visitCount,
+  });
+  // Pass explicit userId + userEmail + practiceId — the session has
+  // just been invalidated via the transaction's cascade, so a fresh
+  // auth() inside logAudit would see no session. The audit row still
+  // needs the actor for the compliance export.
+  void logAudit({
+    action: 'ACCOUNT_DELETED',
+    targetType: 'User',
+    targetId: user.id,
+    userId: user.id,
+    userEmail: user.email,
+    practiceId: user.practiceId,
+    metadata: { visitCount },
   });
 
   // ── Best-effort post-transaction cleanup ────────────────────────

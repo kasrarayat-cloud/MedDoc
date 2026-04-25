@@ -35,6 +35,7 @@ import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 import { deleteAudioObject } from '@/lib/minio';
 import { redactPhi } from '@meddoc/ai';
 import { log } from '@/lib/log';
+import { logAudit } from '@/lib/audit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -109,6 +110,12 @@ export const POST = withApiHandler<{ id: string }>(
         visitId,
         prevStatus: visit.status,
       });
+      void logAudit({
+        action: 'VISIT_DELETED',
+        targetType: 'TranscribeVisit',
+        targetId: visitId,
+        metadata: { mode: 'permanent', prevStatus: visit.status },
+      });
       return NextResponse.json({ ok: true, mode: 'permanent' });
     }
 
@@ -166,6 +173,12 @@ export const POST = withApiHandler<{ id: string }>(
         visitId,
         prevStatus: visit.status,
       });
+      void logAudit({
+        action: 'VISIT_DELETED',
+        targetType: 'TranscribeVisit',
+        targetId: visitId,
+        metadata: { mode: 'hard', prevStatus: visit.status },
+      });
       return NextResponse.json({ ok: true, mode: 'hard' });
     }
 
@@ -179,6 +192,12 @@ export const POST = withApiHandler<{ id: string }>(
       userId,
       visitId,
       prevStatus: visit.status,
+    });
+    void logAudit({
+      action: 'VISIT_DELETED',
+      targetType: 'TranscribeVisit',
+      targetId: visitId,
+      metadata: { mode: 'soft', prevStatus: visit.status },
     });
     return NextResponse.json({ ok: true, mode: 'soft' });
   }

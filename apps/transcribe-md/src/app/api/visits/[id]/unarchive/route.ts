@@ -17,6 +17,7 @@ import { apiError, withApiHandler } from '@/lib/api-error';
 import { auth } from '@/lib/nextauth';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 import { log } from '@/lib/log';
+import { logAudit } from '@/lib/audit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -63,6 +64,11 @@ export const POST = withApiHandler<{ id: string }>(
       data: { archivedAt: null },
     });
     log.info('api:visits:unarchive', 'unarchived', { userId, visitId });
+    void logAudit({
+      action: 'VISIT_UNARCHIVED',
+      targetType: 'TranscribeVisit',
+      targetId: visitId,
+    });
     return NextResponse.json({ ok: true });
   }
 );

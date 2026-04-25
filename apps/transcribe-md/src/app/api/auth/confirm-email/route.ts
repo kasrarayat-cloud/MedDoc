@@ -36,6 +36,7 @@ import { sendEmailChangedNotification } from '@/lib/email';
 import { APP_URL } from '@/lib/constants';
 import { redactPhi } from '@meddoc/ai';
 import { log } from '@/lib/log';
+import { logAudit } from '@/lib/audit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -107,6 +108,20 @@ export const GET = withApiHandler('api:auth:confirm-email', async (req) => {
 
     log.info('api:auth:confirm-email', 'email updated', {
       userId: consumed.userId,
+    });
+    // The confirm endpoint runs from the NEW email's click — there's
+    // typically no active session yet, so override the userId/email
+    // explicitly from the consumed token.
+    void logAudit({
+      action: 'EMAIL_CHANGE_CONFIRMED',
+      targetType: 'User',
+      targetId: consumed.userId,
+      userId: consumed.userId,
+      userEmail: newEmail,
+      metadata: {
+        newEmailDomain: newEmail.split('@')[1] ?? 'unknown',
+        oldEmailDomain: oldEmail?.split('@')[1] ?? 'unknown',
+      },
     });
 
     // Fire-and-forget notification to the old address. Never fail the

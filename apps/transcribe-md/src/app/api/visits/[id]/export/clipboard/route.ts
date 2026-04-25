@@ -14,6 +14,7 @@ import { formatForEhr } from '@/lib/ehr-formatters';
 import { logDelivery, type DeliveryChannel } from '@/lib/deliveries';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
+import { logAudit } from '@/lib/audit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -67,6 +68,16 @@ export const POST = withApiHandler<{ id: string }>(
       visitId,
       channel: CHANNEL_BY_FORMAT[parsed.data.format],
       sizeBytes: Buffer.byteLength(text, 'utf8'),
+    });
+    void logAudit({
+      action: 'EXPORT_CLIPBOARD_COPIED',
+      targetType: 'TranscribeVisit',
+      targetId: visitId,
+      metadata: {
+        format: parsed.data.format,
+        sizeBytes: Buffer.byteLength(text, 'utf8'),
+        isSigned: data.signedAt !== null,
+      },
     });
 
     return NextResponse.json({ text }, { status: 200 });
