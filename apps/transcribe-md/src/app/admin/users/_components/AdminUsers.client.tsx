@@ -218,7 +218,7 @@ export default function AdminUsers({
               onChange={(v) => pushUrl({ product: v as ProductFilter, page: 1 })}
               options={[
                 { value: 'all', label: 'All products' },
-                { value: 'transcribe', label: 'Transcribe-MD only' },
+                { value: 'transcribe', label: 'QuillMD only' },
                 { value: 'meddoc', label: 'MedDoc Pro only' },
                 { value: 'both', label: 'Both products' },
               ]}
@@ -498,7 +498,7 @@ function ProductCell({ products }: { products: string[] }) {
     <div className="flex flex-wrap items-center gap-1">
       {hasTm && (
         <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-teal-50 text-teal-800 ring-1 ring-teal-200">
-          Transcribe-MD
+          QuillMD
         </span>
       )}
       {hasMp && (
