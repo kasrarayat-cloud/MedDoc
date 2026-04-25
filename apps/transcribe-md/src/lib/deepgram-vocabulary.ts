@@ -7,142 +7,46 @@
 // raises the prior on these tokens so near-homophones decode the drug
 // name instead of an invented word.
 //
-// Two exports:
-//   MEDICATION_KEYTERMS       — curated ~150-term working set (default wire).
-//   MEDICATION_KEYTERMS_FULL  — full ~450-term reference list. Use for
-//                               specialty-scoped calls where the worker
-//                               has narrowed the domain.
+// HARD LIMIT: Deepgram caps keyterms at 500 SUBWORD tokens TOTAL, not
+// keyterms-as-strings. Medical names tokenize aggressively — e.g.
+// "trimethoprim-sulfamethoxazole" is ~9 tokens on its own — so a list
+// of even 150 short generics can blow the budget. We saw this in prod:
+// a doctor's 7-min recording 400'd from Deepgram with "Keyterm limit
+// exceeded" because the previous 180-entry working set was estimated
+// at ~588 tokens.
 //
-// Deepgram recommends 30-50 keyterms per request for best boost; their
-// hard cap is ~100. We ship ~150 in the default wire — slightly over
-// the guidance but well under the cap, and empirically the boost stays
-// strong across the top 100-ish even when the tail is present.
+// Today's list aims for ~75 entries / under 450 tokens (10% headroom
+// below the 500 cap). The tail array below preserves the long form
+// for any future per-specialty caller that has narrowed the domain
+// enough to send a smaller subset; the working set wired to
+// 01-transcribe.ts stays defensively trimmed.
 //
-// Maintenance: when a transcription error slips past review, add the
-// canonical medication name here. Keep entries lower-cased; Deepgram
-// is case-insensitive for matching but lowercase keeps the file clean.
+// A unit test in deepgram-vocabulary.test.ts asserts the working set
+// stays under 450 estimated tokens — break the budget and the test
+// fails before the transcription path silently regresses.
+//
+// Trim policy (in priority order):
+//   1. Keep all controlled substances (clinical-safety + spelling).
+//   2. Keep pain / NSAID / opioids (pilot is pain-management focused).
+//   3. Keep Iranian / ME brand spellings (pilot context).
+//   4. Keep common cardiac, antibiotics, anticoagulants.
+//   5. Drop tail-of-the-distribution generics that nova-3-medical
+//      recognises out of the box.
 // ============================================================================
 
-/** Working set — sent on every nova-3-medical call. */
+/** Working set — sent on every nova-3-medical call. Stays under
+ *  ~450 estimated subword tokens (10% headroom below Deepgram's 500
+ *  cap). Order is by clinical priority, not alphabetical. */
 export const MEDICATION_KEYTERMS: readonly string[] = [
-  // ── Top US Rx generics (high volume) ──
-  'atorvastatin',
-  'lisinopril',
-  'metformin',
-  'amlodipine',
-  'metoprolol',
-  'omeprazole',
-  'levothyroxine',
-  'albuterol',
-  'gabapentin',
-  'hydrochlorothiazide',
-  'losartan',
-  'simvastatin',
-  'sertraline',
-  'escitalopram',
-  'rosuvastatin',
-  'montelukast',
-  'pantoprazole',
-  'furosemide',
-  'citalopram',
-  'tamsulosin',
-  'fluoxetine',
-  'trazodone',
-  'bupropion',
-  'duloxetine',
-  'carvedilol',
-  'atenolol',
-  'pravastatin',
-  'warfarin',
-  'clopidogrel',
-  'apixaban',
-  'rivaroxaban',
-  'finasteride',
-  'ranitidine',
-  'famotidine',
-  'insulin glargine',
-  'insulin aspart',
-  'empagliflozin',
-  'liraglutide',
-  'sitagliptin',
-  'semaglutide',
-  'glipizide',
-  'glyburide',
-  'pioglitazone',
-  'spironolactone',
-  'digoxin',
-  // ── Top brand names ──
-  'lipitor',
-  'crestor',
-  'synthroid',
-  'lantus',
-  'humalog',
-  'ventolin',
-  'proair',
-  'advair',
-  'symbicort',
-  'nexium',
-  'prilosec',
-  'prevacid',
-  'zantac',
-  'zithromax',
-  'augmentin',
-  'keflex',
-  'flonase',
-  'cipro',
-  'xanax',
-  'zoloft',
-  'lexapro',
-  'prozac',
-  'wellbutrin',
-  'cymbalta',
-  'effexor',
-  'ambien',
-  'trazodone',
-  'seroquel',
-  'abilify',
-  'adderall',
-  'ritalin',
-  'concerta',
-  'eliquis',
-  'xarelto',
-  'jardiance',
-  'ozempic',
-  'mounjaro',
-  'trulicity',
-  'farxiga',
-  'januvia',
-  // ── Iranian / Middle-East common brand spellings ──
-  'brufen',
-  'profen',
-  'voltaren',
-  'panadol',
-  'diclofenac',
-  'paracetamol',
-  'naproxen',
-  'aspirin',
-  // ── Anti-infectives ──
-  'amoxicillin',
-  'azithromycin',
-  'doxycycline',
-  'ciprofloxacin',
-  'levofloxacin',
-  'cephalexin',
-  'clindamycin',
-  'metronidazole',
-  'nitrofurantoin',
-  'penicillin',
-  'trimethoprim-sulfamethoxazole',
-  'fluconazole',
-  'acyclovir',
-  'valacyclovir',
-  'oseltamivir',
-  // ── Pain / NSAID / opioids ──
+  // ── Pain / NSAID / opioids — pilot focus + controlled substances ──
   'ibuprofen',
   'acetaminophen',
+  'naproxen',
   'meloxicam',
   'celecoxib',
   'ketorolac',
+  'diclofenac',
+  'gabapentin',
   'tramadol',
   'morphine',
   'oxycodone',
@@ -151,71 +55,65 @@ export const MEDICATION_KEYTERMS: readonly string[] = [
   'fentanyl',
   'buprenorphine',
   'naloxone',
-  // ── Respiratory ──
-  'fluticasone',
-  'budesonide',
-  'salmeterol',
-  'formoterol',
-  'tiotropium',
-  'ipratropium',
-  'prednisone',
-  'methylprednisolone',
-  // ── Cardiology — anticoagulants + rhythm + heart-failure ──
-  'nebivolol',
-  'bisoprolol',
-  'enalapril',
-  'ramipril',
-  'valsartan',
-  'olmesartan',
-  'telmisartan',
-  'amiodarone',
-  'flecainide',
-  'dofetilide',
-  'hydralazine',
-  'isosorbide',
-  'sacubitril-valsartan',
-  'dabigatran',
-  'edoxaban',
-  // ── Diabetes — beyond the top list above ──
-  'dapagliflozin',
-  'canagliflozin',
-  'dulaglutide',
-  'glimepiride',
-  'repaglinide',
-  'acarbose',
-  'linagliptin',
-  'saxagliptin',
-  // ── Mental health — beyond the top list ──
+  // ── Iranian / Middle-East common brand spellings (pilot context) ──
+  'brufen',
+  'profen',
+  'voltaren',
+  'panadol',
+  'paracetamol',
+  // ── Common controlled / behavioral-health (commonly spoken by brand) ──
   'alprazolam',
   'lorazepam',
   'clonazepam',
   'diazepam',
-  'buspirone',
-  'venlafaxine',
-  'mirtazapine',
-  'paroxetine',
-  'quetiapine',
-  'olanzapine',
-  'risperidone',
-  'aripiprazole',
-  'lamotrigine',
-  'lithium',
-  'valproate',
-  // ── Endocrine / thyroid / bone ──
-  'liothyronine',
-  'methimazole',
-  'propylthiouracil',
-  'alendronate',
-  'risedronate',
-  'denosumab',
-  // ── GI ──
-  'esomeprazole',
-  'lansoprazole',
-  'dexlansoprazole',
+  'sertraline',
+  'fluoxetine',
+  'duloxetine',
+  'xanax',
+  'ambien',
+  'adderall',
+  // ── Top cardiac generics (high prescription volume) ──
+  'atorvastatin',
+  'lisinopril',
+  'amlodipine',
+  'metoprolol',
+  'losartan',
+  'carvedilol',
+  'spironolactone',
+  // ── Anticoagulants — safety-critical, easy to mis-transcribe ──
+  'warfarin',
+  'apixaban',
+  'rivaroxaban',
+  'clopidogrel',
+  'eliquis',
+  'xarelto',
+  // ── Diabetes essentials (high volume + newer GLP-1s mis-spell) ──
+  'metformin',
+  'semaglutide',
+  'liraglutide',
+  'insulin glargine',
+  'insulin aspart',
+  'ozempic',
+  // ── Common antibiotics ──
+  'amoxicillin',
+  'azithromycin',
+  'doxycycline',
+  'ciprofloxacin',
+  'cephalexin',
+  'clindamycin',
+  'metronidazole',
+  'penicillin',
+  // ── Respiratory ──
+  'albuterol',
+  'fluticasone',
+  'prednisone',
+  // ── Endocrine / GI / diuretics — high-volume essentials ──
+  'levothyroxine',
+  'omeprazole',
+  'pantoprazole',
   'ondansetron',
-  'promethazine',
-  'metoclopramide',
-  'loperamide',
+  'furosemide',
+  'hydrochlorothiazide',
 ];
 
 /** Reference tail — specialty-scoped callers can opt into this. */
