@@ -82,8 +82,17 @@ export async function recordSessionLogin(input: RecordSessionLoginInput) {
  * the session to flap between valid/invalid.
  */
 export async function validateSession(sessionToken: string) {
+  // Phase 6: include the user's lifecycle fields so we can invalidate
+  // sessions for suspended / soft-deleted / inactive accounts AND for
+  // sessions issued before the latest forceLogoutAt (suspend / soft-
+  // delete / revoke-admin all bump that timestamp). One JOIN keeps
+  // the per-request cost the same as the original single-row lookup.
   const row = await prisma.userSession.findUnique({
     where: { sessionToken },
+    include: {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      user: { select: { isActive: true, suspendedAt: true, softDeletedAt: true, forceLogoutAt: true } as any },
+    },
   });
   if (!row) return null;
   if (row.expiresAt <= new Date()) {
@@ -94,6 +103,35 @@ export async function validateSession(sessionToken: string) {
       .catch(() => {});
     return null;
   }
+
+  // Phase 6 lifecycle gates. The Prisma client's typing for `user` here
+  // is the strict User shape and may not yet include the new admin
+  // fields (depending on regen state in CI), so we read them via an
+  // `any`-cast and treat missing values as "not set". The actual columns
+  // are NULL by default for accounts that have never been touched by an
+  // admin action, so the fast path is unchanged.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const user = (row as any).user as
+    | {
+        isActive?: boolean;
+        suspendedAt?: Date | null;
+        softDeletedAt?: Date | null;
+        forceLogoutAt?: Date | null;
+      }
+    | undefined;
+  if (user) {
+    if (user.isActive === false) return null;
+    if (user.suspendedAt) return null;
+    if (user.softDeletedAt) return null;
+    if (user.forceLogoutAt && user.forceLogoutAt > row.createdAt) {
+      // Session predates the latest force-logout marker — treat as
+      // revoked. Don't delete the row (keep the audit trail of when
+      // the session existed); the next login will overwrite it via
+      // recordSessionLogin's delete-then-create transaction.
+      return null;
+    }
+  }
+
   prisma.userSession
     .update({
       where: { id: row.id },

@@ -30,7 +30,7 @@ export const GET = adminApi('users:detail', async (req) => {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const userRow: any = await prisma.user.findUnique({
+  const userRow: any = await (prisma.user as any).findUnique({
     where: { id },
     select: {
       id: true,
@@ -49,13 +49,27 @@ export const GET = adminApi('users:detail', async (req) => {
       specialty: true,
       npi: true,
       timeZone: true,
+      // Phase 6 — admin lifecycle flags
+      suspendedAt: true,
+      suspendedBy: true,
+      suspendedReason: true,
+      softDeletedAt: true,
+      softDeletedBy: true,
+      forceLogoutAt: true,
     },
   });
   if (!userRow) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  const [recentActivityRaw, ipHistoryRaw, activeSessionsCount] =
+  // Phase 6 — current calendar-month API spend for this user, computed
+  // alongside the other rollups so the User detail drawer renders in
+  // a single round-trip.
+  const monthStart = new Date(
+    Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)
+  );
+
+  const [recentActivityRaw, ipHistoryRaw, activeSessionsCount, monthSpendRows] =
     await Promise.all([
       prisma.auditLog.findMany({
         where: { userId: id },
@@ -96,6 +110,14 @@ export const GET = adminApi('users:detail', async (req) => {
         FROM user_sessions
         WHERE "userId" = ${id} AND "revokedAt" IS NULL
       `.catch(() => [{ n: BigInt(0) }] as { n: bigint }[]),
+      prisma.$queryRaw<{ provider: string; total: number }[]>`
+        SELECT provider, SUM("totalCostUsd")::float AS total
+        FROM api_usage_events
+        WHERE "userId" = ${id} AND timestamp >= ${monthStart}
+        GROUP BY provider
+      `.catch(
+        () => [] as { provider: string; total: number }[]
+      ),
     ]);
 
   const user = {
@@ -115,6 +137,13 @@ export const GET = adminApi('users:detail', async (req) => {
     specialty: userRow.specialty ?? null,
     npi: userRow.npi ?? null,
     timeZone: userRow.timeZone ?? null,
+    // Phase 6 — admin lifecycle state
+    suspendedAt: userRow.suspendedAt?.toISOString() ?? null,
+    suspendedBy: userRow.suspendedBy ?? null,
+    suspendedReason: userRow.suspendedReason ?? null,
+    softDeletedAt: userRow.softDeletedAt?.toISOString() ?? null,
+    softDeletedBy: userRow.softDeletedBy ?? null,
+    forceLogoutAt: userRow.forceLogoutAt?.toISOString() ?? null,
   };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -139,10 +168,27 @@ export const GET = adminApi('users:detail', async (req) => {
 
   const activeSessions = Number(activeSessionsCount[0]?.n ?? 0);
 
+  const monthSpend = {
+    totalCostUsd: 0,
+    byProvider: {} as Record<string, number>,
+  };
+  for (const row of monthSpendRows) {
+    const cost = Number(row.total ?? 0);
+    monthSpend.totalCostUsd += cost;
+    monthSpend.byProvider[row.provider] = cost;
+  }
+  monthSpend.totalCostUsd =
+    Math.round(monthSpend.totalCostUsd * 10_000) / 10_000;
+  for (const k of Object.keys(monthSpend.byProvider)) {
+    monthSpend.byProvider[k] =
+      Math.round(monthSpend.byProvider[k]! * 10_000) / 10_000;
+  }
+
   return NextResponse.json({
     user,
     recentActivity,
     ipHistory,
     activeSessions,
+    monthSpend,
   });
 });

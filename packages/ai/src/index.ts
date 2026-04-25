@@ -27,3 +27,16 @@ export {
 } from './pricing';
 export { hashPrompt } from './prompt-hash';
 export { logAiCall, redactPhi } from './log';
+// Phase 6 — per-call usage events (separate table from ai_calls; this
+// one carries the cost rollups for the admin usage dashboard).
+export {
+  PRICING,
+  logApiUsage,
+  buildDeepgramUsage,
+  buildWhisperUsage,
+  buildAnthropicUsage,
+  buildOpenAIEmbedUsage,
+  buildResendUsage,
+  type Provider as ApiUsageProvider,
+  type UsageEvent as ApiUsageEvent,
+} from './api-usage';
