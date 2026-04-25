@@ -20,6 +20,7 @@ import { apiError, withApiHandler } from '@/lib/api-error';
 import { getSession } from '@/lib/auth';
 import { ProblemListSchema } from '@/lib/problem-list';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
+import { logAudit } from '@/lib/audit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -217,6 +218,15 @@ export const PATCH = withApiHandler<{ id: string }>(
       },
     });
 
+    void logAudit({
+      action: 'TM_PATIENT_UPDATED',
+      targetType: 'TranscribeMdPatient',
+      targetId: updated.id,
+      metadata: {
+        changedFields: Object.keys(data),
+      },
+    });
+
     return NextResponse.json({ patient: updated });
   }
 );
@@ -245,6 +255,13 @@ export const DELETE = withApiHandler<{ id: string }>(
     await prisma.transcribeMdPatient.update({
       where: { id: existing.id },
       data: { deletedAt: new Date() },
+    });
+
+    void logAudit({
+      action: 'TM_PATIENT_DELETED',
+      targetType: 'TranscribeMdPatient',
+      targetId: existing.id,
+      metadata: { mode: 'soft' },
     });
 
     return NextResponse.json({ ok: true });

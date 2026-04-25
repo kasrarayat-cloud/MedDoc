@@ -218,7 +218,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         //    run BEFORE the lastLogin/lockout reset so a wrong-product
         //    login doesn't reset the brute-force counter for the
         //    rightful product login.
-        if (!user.products.includes(Product.MEDDOC_PRO)) {
+        //
+        //    SUPER_ADMIN bypass (Phase 1A): a user with SUPER_ADMIN in
+        //    products[] can log into either app regardless of whether
+        //    the MEDDOC_PRO / TRANSCRIBE_MD entitlement is set. The
+        //    product-entitlement gates are business gates (billing,
+        //    license); SUPER_ADMIN is a platform-admin role and
+        //    therefore supersedes them. Granting is out-of-band (DB
+        //    update by a human); no self-service path.
+        const hasMeddocPro = user.products.includes(Product.MEDDOC_PRO);
+        const hasSuperAdmin = user.products.includes(Product.SUPER_ADMIN);
+        if (!hasMeddocPro && !hasSuperAdmin) {
           await logAudit({
             action: 'LOGIN_FAILED',
             success: false,

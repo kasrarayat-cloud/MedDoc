@@ -22,6 +22,7 @@ import { logDelivery } from '@/lib/deliveries';
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { redactPhi } from '@meddoc/ai';
 import { log } from '@/lib/log';
+import { logAudit } from '@/lib/audit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -65,6 +66,18 @@ export const POST = withApiHandler<{ id: string }>(
         requestedDomain: toEmail.split('@')[1] ?? 'unknown',
         sessionDomain: sessionEmail.split('@')[1] ?? 'unknown',
       });
+      void logAudit({
+        action: 'EXPORT_EMAIL_BLOCKED_DESTINATION',
+        targetType: 'TranscribeVisit',
+        targetId: visitId,
+        success: false,
+        errorCode: 'INVALID_DESTINATION',
+        metadata: {
+          via: 'export/email',
+          requestedDomain: toEmail.split('@')[1] ?? 'unknown',
+          sessionDomain: sessionEmail.split('@')[1] ?? 'unknown',
+        },
+      });
       return apiError(
         'Email destination must match your account email.',
         403,
@@ -100,6 +113,17 @@ export const POST = withApiHandler<{ id: string }>(
         channel: 'email',
         destination: toEmail,
         sizeBytes: pdf.byteLength,
+      });
+      void logAudit({
+        action: 'EXPORT_EMAIL_SENT',
+        targetType: 'TranscribeVisit',
+        targetId: visitId,
+        metadata: {
+          sizeBytes: pdf.byteLength,
+          // Destination is the session's own email (gated above); OK
+          // to record it verbatim since it's already in the users row.
+          destinationDomain: toEmail.split('@')[1] ?? 'unknown',
+        },
       });
       return NextResponse.json(
         { ok: true, messageId: result.id },

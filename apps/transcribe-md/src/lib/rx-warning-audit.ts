@@ -19,6 +19,7 @@
 
 import prisma from '@meddoc/db';
 import { getSession } from '@/lib/auth';
+import { logAudit } from '@/lib/audit';
 
 export interface RecordOverrideInput {
   visitId: string;
@@ -98,6 +99,26 @@ export async function recordOverride(
         overriddenBy: session.user.id,
       },
       select: { id: true },
+    });
+
+    // HIPAA audit row. The domain-specific `rx_warning_overrides`
+    // table is the clinical-safety record; `audit_logs` is the
+    // platform-wide record. Both are written — compliance tooling
+    // can query either.
+    void logAudit({
+      action: 'RX_OVERRIDE_RECORDED',
+      targetType: 'TranscribeVisit',
+      targetId: input.visitId,
+      metadata: {
+        warningId: input.warningId,
+        rxLineNumber: input.rxLineNumber,
+        severity: input.severity,
+        // headline + reason are doctor-authored and pass the 10-char
+        // minimum; they're PHI-adjacent (may quote drug names) —
+        // record their LENGTHS only, not their contents.
+        headlineLength: input.headline.length,
+        reasonLength: trimmedReason.length,
+      },
     });
 
     return { ok: true, auditId: created.id };

@@ -21,6 +21,7 @@ import prisma from '@meddoc/db';
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { getSession } from '@/lib/auth';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
+import { logAudit } from '@/lib/audit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -165,6 +166,16 @@ export const POST = withApiHandler('api:patients:create', async (req) => {
       dateOfBirth: true,
       externalId: true,
       createdAt: true,
+    },
+  });
+
+  void logAudit({
+    action: 'TM_PATIENT_CREATED',
+    targetType: 'TranscribeMdPatient',
+    targetId: patient.id,
+    metadata: {
+      hasDob: patient.dateOfBirth !== null,
+      hasExternalId: patient.externalId !== null,
     },
   });
 

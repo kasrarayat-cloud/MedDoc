@@ -25,6 +25,7 @@ import type { UserRole } from '@meddoc/auth';
 import { Product } from '@prisma/client';
 import { redactPhi } from '@meddoc/ai';
 import { isEmailDeliveryEnabled } from '@/lib/email-enabled';
+import { logAudit } from '@/lib/audit';
 
 /** 7 days. Longer than meddoc-pro (8hr) because TranscribeMD is a solo
  *  consumer surface, not a PHI-heavy clinical tool. */
@@ -126,6 +127,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 redactPhi(err instanceof Error ? err.message : err)
               );
             });
+          void logAudit({
+            action: 'LOGIN_FAILED',
+            userId: user.id,
+            userEmail: user.email,
+            practiceId: user.practiceId,
+            success: false,
+            errorCode: shouldLock ? 'ACCOUNT_LOCKED_NOW' : 'CREDENTIALS_MISMATCH',
+            metadata: {
+              failedLoginCount: nextCount,
+              lockedUntil: lockUntil?.toISOString() ?? null,
+            },
+          });
           return null;
         }
 
@@ -135,7 +148,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // itself. Now we require the product to already be on the user
         // before issuing a session. Granting must go through an admin
         // surface or billing webhook (not auto on first login).
-        if (!user.products.includes(Product.TRANSCRIBE_MD)) {
+        //
+        // Phase 1A: SUPER_ADMIN bypasses the entitlement check —
+        // platform admins need access to the scribe surface to
+        // debug incidents for customer tickets. Symmetric with the
+        // meddoc-pro side.
+        const tmHasTranscribe = user.products.includes(Product.TRANSCRIBE_MD);
+        const tmHasSuperAdmin = user.products.includes(Product.SUPER_ADMIN);
+        if (!tmHasTranscribe && !tmHasSuperAdmin) {
+          void logAudit({
+            action: 'LOGIN_FAILED',
+            userId: user.id,
+            userEmail: user.email,
+            practiceId: user.practiceId,
+            success: false,
+            errorCode: 'NO_TRANSCRIBE_MD_ENTITLEMENT',
+          });
           return null;
         }
 
@@ -166,4 +194,35 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
     }),
   ],
+
+  events: {
+    async signIn({ user }) {
+      if (!user?.id) return;
+      // user.practiceId comes from authorize()'s returned shape. We
+      // pass it through explicitly because auth() inside logAudit
+      // returns null here — the session cookie isn't on the outgoing
+      // response yet. Same pattern as apps/meddoc-pro/src/lib/nextauth.ts.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const practiceId = (user as any).practiceId as string | undefined;
+      void logAudit({
+        action: 'LOGIN_SUCCESS',
+        userId: user.id,
+        userEmail: user.email ?? null,
+        practiceId: practiceId ?? null,
+      });
+    },
+    async signOut(message) {
+      // next-auth v5's signOut event fires with a discriminated union.
+      // Pull userId when it's available; tolerate the other shapes.
+      const token =
+        'token' in message ? message.token : null;
+      const userId =
+        token && typeof token === 'object' && 'sub' in token
+          ? ((token as { sub?: string }).sub ?? null)
+          : null;
+      if (userId) {
+        void logAudit({ action: 'LOGOUT', userId });
+      }
+    },
+  },
 });

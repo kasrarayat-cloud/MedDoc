@@ -215,7 +215,12 @@ export async function loginAction(
     !!entitlementUser?.isActive &&
     (!entitlementUser.lockedUntil ||
       entitlementUser.lockedUntil < new Date()) &&
-    !entitlementUser.products.includes(Product.TRANSCRIBE_MD);
+    !entitlementUser.products.includes(Product.TRANSCRIBE_MD) &&
+    // Phase 1A: SUPER_ADMIN bypass — skip the "no entitlement" UX
+    // message because the authorize() gate allows them through, and
+    // the cross-app-redirect message would send them to the wrong
+    // surface.
+    !entitlementUser.products.includes(Product.SUPER_ADMIN);
   if (isEntitlementCandidate && entitlementUser) {
     const pwOk = await bcrypt.compare(
       parsed.data.password,

@@ -35,6 +35,7 @@ import { sendEmailChangeRequestEmail } from '@/lib/email';
 import { APP_URL } from '@/lib/constants';
 import { redactPhi } from '@meddoc/ai';
 import { log } from '@/lib/log';
+import { logAudit } from '@/lib/audit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -158,6 +159,14 @@ export const POST = withApiHandler(
 
     log.info('api:settings:change-email', 'request started', {
       userId: user.id,
+    });
+    void logAudit({
+      action: 'EMAIL_CHANGE_REQUESTED',
+      targetType: 'User',
+      targetId: user.id,
+      // newEmail domain only — full address is PHI-adjacent for audit
+      // aggregation and would noise the compliance export.
+      metadata: { newEmailDomain: newEmail.split('@')[1] ?? 'unknown' },
     });
     return NextResponse.json(GENERIC_OK_BODY, { status: 200 });
   }

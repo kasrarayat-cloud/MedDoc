@@ -14,6 +14,7 @@ import { logDelivery } from '@/lib/deliveries';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { redactPhi } from '@meddoc/ai';
+import { logAudit } from '@/lib/audit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -49,6 +50,15 @@ export const GET = withApiHandler<{ id: string }>(
       visitId,
       channel: 'docx',
       sizeBytes: docx.byteLength,
+    });
+    void logAudit({
+      action: 'EXPORT_DOCX_DOWNLOADED',
+      targetType: 'TranscribeVisit',
+      targetId: visitId,
+      metadata: {
+        sizeBytes: docx.byteLength,
+        isSigned: data.signedAt !== null,
+      },
     });
 
     const filename = `visit-${filenameSlug(data.patientName)}-${formatVisitDate(

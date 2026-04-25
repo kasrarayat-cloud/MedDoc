@@ -20,6 +20,7 @@ import { apiError, withApiHandler } from '@/lib/api-error';
 import { auth } from '@/lib/nextauth';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 import { log } from '@/lib/log';
+import { logAudit } from '@/lib/audit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -67,6 +68,11 @@ export const POST = withApiHandler<{ id: string }>(
       data: { archivedAt: new Date() },
     });
     log.info('api:visits:archive', 'archived', { userId, visitId });
+    void logAudit({
+      action: 'VISIT_ARCHIVED',
+      targetType: 'TranscribeVisit',
+      targetId: visitId,
+    });
     return NextResponse.json({ ok: true });
   }
 );

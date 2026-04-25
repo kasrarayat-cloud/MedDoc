@@ -157,7 +157,11 @@ export async function POST(req: Request): Promise<NextResponse> {
     return NextResponse.json(body);
   }
 
-  if (!user.products.includes(Product.MEDDOC_PRO)) {
+  // SUPER_ADMIN bypasses both the entitlement gate AND the
+  // cross-app-redirect UX — they'd see the platform-admin dashboard
+  // next, not the TranscribeMD login.
+  const hasSuperAdmin = user.products.includes(Product.SUPER_ADMIN);
+  if (!user.products.includes(Product.MEDDOC_PRO) && !hasSuperAdmin) {
     if (user.products.includes(Product.TRANSCRIBE_MD)) {
       const body: EntitlementResponse = {
         ok: false,

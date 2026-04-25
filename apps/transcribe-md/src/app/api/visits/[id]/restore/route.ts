@@ -22,6 +22,7 @@ import { apiError, withApiHandler } from '@/lib/api-error';
 import { auth } from '@/lib/nextauth';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 import { log } from '@/lib/log';
+import { logAudit } from '@/lib/audit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -69,6 +70,11 @@ export const POST = withApiHandler<{ id: string }>(
       data: { deletedAt: null },
     });
     log.info('api:visits:restore', 'restored', { userId, visitId });
+    void logAudit({
+      action: 'VISIT_RESTORED',
+      targetType: 'TranscribeVisit',
+      targetId: visitId,
+    });
     return NextResponse.json({ ok: true });
   }
 );
