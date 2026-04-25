@@ -1387,6 +1387,21 @@ model TranscribeVisit {
   /// Human-readable explanation surfaced in the UI banner.
   reviewReason String? @db.Text
 
+  // ── voice-retry-robustness: failure categorization + manual-retry budget ──
+  /// Classification of the most-recent terminal failure, written by the
+  /// worker's catch block alongside reviewReason. Drives the
+  /// VisitFailedView UI variant + admin-notify throttling. Null until
+  /// the visit hits FAILED for the first time, and reset to null on
+  /// the next successful run. One of: 'transient' | 'permanent' |
+  /// 'provider_down'. Stored as text so we don't have to migrate an
+  /// enum every time we add a category.
+  failureCategory String? @db.Text
+  /// How many times the doctor has manually clicked "Try again" on
+  /// this visit via /api/visits/[id]/retry. Hard-capped at
+  /// MANUAL_RETRY_BUDGET in the route handler so a stuck-button
+  /// loop can't drive runaway Anthropic / Deepgram spend.
+  manualRetryCount Int @default(0)
+
   // ── T-M4: pipeline telemetry ──
   processingStartedAt  DateTime?
   processingFinishedAt DateTime?

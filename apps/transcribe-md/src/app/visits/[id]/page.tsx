@@ -98,6 +98,7 @@ export default async function VisitPage({
     signedSoap: string | null;
     needsReview: boolean;
     reviewReason: string | null;
+    failureCategory: string | null;
     processingStartedAt: Date | null;
     processingFinishedAt: Date | null;
     processingCostCents: number | null;
@@ -149,6 +150,7 @@ export default async function VisitPage({
         signedSoap: true,
         needsReview: true,
         reviewReason: true,
+        failureCategory: true,
         processingStartedAt: true,
         processingFinishedAt: true,
         processingCostCents: true,
@@ -298,6 +300,7 @@ export default async function VisitPage({
           signedSoap={visit.signedSoap}
           needsReview={visit.needsReview}
           reviewReason={visit.reviewReason}
+          failureCategory={visit.failureCategory}
           processingStartedAt={visit.processingStartedAt}
           processingFinishedAt={visit.processingFinishedAt}
           processingCostCents={visit.processingCostCents}
@@ -417,6 +420,7 @@ interface VisitBodyProps {
   signedSoap: string | null;
   needsReview: boolean;
   reviewReason: string | null;
+  failureCategory: string | null;
   processingStartedAt: Date | null;
   processingFinishedAt: Date | null;
   processingCostCents: number | null;
@@ -462,7 +466,11 @@ function VisitBody(props: VisitBodyProps) {
 
   if (props.status === TranscribeVisitStatus.FAILED) {
     return (
-      <VisitFailedView visitId={props.visitId} reason={props.reviewReason} />
+      <VisitFailedView
+        visitId={props.visitId}
+        reason={props.reviewReason}
+        failureCategory={props.failureCategory}
+      />
     );
   }
 
