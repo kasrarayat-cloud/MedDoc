@@ -1,26 +1,55 @@
 // ============================================================================
-// Platform-admin home — Phase 1A placeholder
+// Platform-admin overview — server entry
 // ----------------------------------------------------------------------------
-// The SUPER_ADMIN gate lives in layout.tsx. This page exists purely to
-// prove end-to-end that the gate resolves: kasra → sees this text;
-// qa-bundle / logged-out → 404.
-// Phase 1B will replace this with the real admin dashboard shell.
+// SUPER_ADMIN gate + access audit log live in `layout.tsx` (defense-in-
+// depth). This page assumes both have already run.
+//
+// Initial data is fetched server-side in parallel via the helpers in
+// `_lib/dashboard-data.ts` so the page renders fully populated on first
+// paint — no client-side loading flash. The only client fetch is the
+// SSE subscription, which the client component opens against
+// `/api/admin/stream/activity`.
 // ============================================================================
 
 import type { Metadata } from 'next';
 
-export const metadata: Metadata = { title: 'Admin' };
+import { auth } from '@/lib/nextauth';
 
-export default function AdminHomePage() {
+import AdminOverview from './_components/AdminOverview.client';
+import {
+  getSystemHealth,
+  getRecentActivity,
+  getThreats,
+  getTimeline,
+  getPipelineMetrics,
+  getHipaaState,
+} from './_lib/dashboard-data';
+
+export const metadata: Metadata = { title: 'Admin · QuillMD' };
+
+// Inherit force-dynamic from the layout. Repeating it here is belt-and-
+// braces — a future refactor that drops it from the layout shouldn't
+// silently turn this page into a stale static one.
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+export default async function AdminHomePage() {
+  const [session, systemHealth, activity, threats, timeline, pipeline, hipaa] = await Promise.all([
+    auth().catch(() => null),
+    getSystemHealth(),
+    getRecentActivity(30),
+    getThreats(),
+    getTimeline(),
+    getPipelineMetrics(),
+    getHipaaState(),
+  ]);
+
+  const userEmail = session?.user?.email ?? 'admin';
+
   return (
-    <div className="mx-auto max-w-3xl px-6 py-24 text-center">
-      <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-slate-400">
-        § Admin / home
-      </p>
-      <h1 className="text-3xl font-bold">Admin Dashboard</h1>
-      <p className="mt-4 text-[14px] text-slate-400">
-        Phase 1B APIs coming soon.
-      </p>
-    </div>
+    <AdminOverview
+      initial={{ systemHealth, activity, threats, timeline, pipeline, hipaa }}
+      userEmail={userEmail}
+    />
   );
 }
