@@ -60,7 +60,9 @@ export type AuditAction =
   | 'USER_DELETED'
   | 'EXPORTED_AUDIT_LOG'
   // Phase 1A — platform admin
-  | 'ADMIN_DASHBOARD_ACCESS';
+  | 'ADMIN_DASHBOARD_ACCESS'
+  // Phase 1B — admin API hits
+  | 'ADMIN_API_ACCESS';
 
 export interface AuditLogInput {
   action: AuditAction;
