@@ -1,0 +1,156 @@
+{
+  "findings": [
+    {
+      "when": "2026-04-25T01:40:23.811Z",
+      "severity": "INFO",
+      "area": "/api/patients create",
+      "title": "sql-classic → 201",
+      "detail": ""
+    },
+    {
+      "when": "2026-04-25T01:40:24.372Z",
+      "severity": "INFO",
+      "area": "/api/patients create",
+      "title": "sql-or → 201",
+      "detail": ""
+    },
+    {
+      "when": "2026-04-25T01:40:24.455Z",
+      "severity": "HIGH",
+      "area": "/api/patients create",
+      "title": "xss-script → 201",
+      "detail": "payload reflected unescaped in response!"
+    },
+    {
+      "when": "2026-04-25T01:40:24.487Z",
+      "severity": "HIGH",
+      "area": "/api/patients create",
+      "title": "xss-img → 201",
+      "detail": "payload reflected unescaped in response!"
+    },
+    {
+      "when": "2026-04-25T01:40:24.556Z",
+      "severity": "INFO",
+      "area": "/api/patients create",
+      "title": "xss-iframe → 201",
+      "detail": ""
+    },
+    {
+      "when": "2026-04-25T01:40:24.600Z",
+      "severity": "INFO",
+      "area": "/api/patients create",
+      "title": "xss-js-uri → 201",
+      "detail": ""
+    },
+    {
+      "when": "2026-04-25T01:40:24.626Z",
+      "severity": "INFO",
+      "area": "/api/patients create",
+      "title": "template → 201",
+      "detail": ""
+    },
+    {
+      "when": "2026-04-25T01:40:24.650Z",
+      "severity": "INFO",
+      "area": "/api/patients create",
+      "title": "handlebars → 201",
+      "detail": ""
+    },
+    {
+      "when": "2026-04-25T01:40:24.725Z",
+      "severity": "INFO",
+      "area": "/api/patients create",
+      "title": "null-byte → 500",
+      "detail": ""
+    },
+    {
+      "when": "2026-04-25T01:40:24.761Z",
+      "severity": "INFO",
+      "area": "/api/patients create",
+      "title": "path-traversal → 201",
+      "detail": ""
+    },
+    {
+      "when": "2026-04-25T01:40:24.803Z",
+      "severity": "INFO",
+      "area": "/api/patients create",
+      "title": "crlf-email-header → 429",
+      "detail": ""
+    },
+    {
+      "when": "2026-04-25T01:40:27.532Z",
+      "severity": "INFO",
+      "area": "/patients",
+      "title": "XSS execution on render",
+      "detail": "img_set=false, dialog=false"
+    },
+    {
+      "when": "2026-04-25T01:40:27.544Z",
+      "severity": "INFO",
+      "area": "/patients",
+      "title": "raw <script> in HTML",
+      "detail": "false"
+    },
+    {
+      "when": "2026-04-25T01:40:27.544Z",
+      "severity": "INFO",
+      "area": "/patients",
+      "title": "raw <iframe> in HTML",
+      "detail": "false"
+    },
+    {
+      "when": "2026-04-25T01:40:27.590Z",
+      "severity": "INFO",
+      "area": "/api/auth/forgot-password CRLF",
+      "title": "status 400",
+      "detail": "{\"error\":\"invalid email\"}"
+    }
+  ],
+  "createdIds": [
+    {
+      "id": "cmodo9zyi000101p7tybmwaxw",
+      "tag": "sql-classic",
+      "name": "'; DROP TABLE users; --"
+    },
+    {
+      "id": "cmodoa0cg000201p7mz2ux7vm",
+      "tag": "sql-or",
+      "name": "x' OR '1'='1"
+    },
+    {
+      "id": "cmodoa0hr000301p7jihokdmc",
+      "tag": "xss-script",
+      "name": "<script>window.__xss=true</script>"
+    },
+    {
+      "id": "cmodoa0iq000401p7zluiw0pj",
+      "tag": "xss-img",
+      "name": "<img src=x onerror=window.__xss=true>"
+    },
+    {
+      "id": "cmodoa0k3000501p7rqzfyhqc",
+      "tag": "xss-iframe",
+      "name": "<iframe src=javascript:alert(1)>"
+    },
+    {
+      "id": "cmodoa0lp000601p7fi9rit6d",
+      "tag": "xss-js-uri",
+      "name": "javascript:alert(1)"
+    },
+    {
+      "id": "cmodoa0mj000701p7qs2a4hrh",
+      "tag": "template",
+      "name": "${{7*7}}"
+    },
+    {
+      "id": "cmodoa0n7000801p75q2kr2yv",
+      "tag": "handlebars",
+      "name": "{{7*7}}"
+    },
+    {
+      "id": "cmodoa0q0000a01p7jz6zwcad",
+      "tag": "path-traversal",
+      "name": "../../../etc/passwd"
+    }
+  ]
+}

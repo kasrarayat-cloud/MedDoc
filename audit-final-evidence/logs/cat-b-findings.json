@@ -1,0 +1,30 @@
+[
+  {
+    "when": "2026-04-25T01:38:57.563Z",
+    "severity": "INFO",
+    "area": "/api/patients",
+    "title": "mangled session cookie → 401",
+    "detail": "{\"error\":\"unauthorized\"}"
+  },
+  {
+    "when": "2026-04-25T01:38:57.585Z",
+    "severity": "INFO",
+    "area": "/api/patients",
+    "title": "empty session cookie → 401",
+    "detail": ""
+  },
+  {
+    "when": "2026-04-25T01:38:57.695Z",
+    "severity": "INFO",
+    "area": "pro.quillmd.com/api/health cross-app",
+    "title": "status 0",
+    "detail": "{\"status\":0,\"e\":\"TypeError: Failed to fetch\"}"
+  },
+  {
+    "when": "2026-04-25T01:38:57.695Z",
+    "severity": "INFO",
+    "area": "session-token shape",
+    "title": "parts=5, length=649",
+    "detail": "name=__Secure-authjs.session-token, first20=eyJhbGciOiJkaXIiLCJl, sameSite=Lax, httpOnly=true, secure=true"
+  }
+]

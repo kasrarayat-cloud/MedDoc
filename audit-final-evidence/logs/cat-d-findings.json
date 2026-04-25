@@ -1,0 +1,386 @@
+{
+  "findings": [
+    {
+      "when": "2026-04-25T01:37:16.228Z",
+      "severity": "MEDIUM",
+      "area": "POST /api/settings/change-email",
+      "title": "malformed body status 429",
+      "detail": "expected 400"
+    },
+    {
+      "when": "2026-04-25T01:37:16.304Z",
+      "severity": "MEDIUM",
+      "area": "POST /api/settings/delete-account",
+      "title": "malformed body status 429",
+      "detail": "expected 400"
+    }
+  ],
+  "matrix": [
+    {
+      "phase": "unauth",
+      "method": "GET",
+      "path": "/api/health",
+      "status": 200
+    },
+    {
+      "phase": "unauth",
+      "method": "GET",
+      "path": "/api/patients",
+      "status": 401
+    },
+    {
+      "phase": "unauth",
+      "method": "POST",
+      "path": "/api/patients",
+      "status": 401
+    },
+    {
+      "phase": "unauth",
+      "method": "GET",
+      "path": "/api/patients/nonexistent-id",
+      "status": 401
+    },
+    {
+      "phase": "unauth",
+      "method": "POST",
+      "path": "/api/patients/fuzzy-match",
+      "status": 401
+    },
+    {
+      "phase": "unauth",
+      "method": "GET",
+      "path": "/api/settings/export-data",
+      "status": 401
+    },
+    {
+      "phase": "unauth",
+      "method": "POST",
+      "path": "/api/settings/change-password",
+      "status": 401
+    },
+    {
+      "phase": "unauth",
+      "method": "POST",
+      "path": "/api/settings/change-email",
+      "status": 401
+    },
+    {
+      "phase": "unauth",
+      "method": "POST",
+      "path": "/api/settings/delete-account",
+      "status": 401
+    },
+    {
+      "phase": "unauth",
+      "method": "POST",
+      "path": "/api/visits/fake-visit-id/sign",
+      "status": 401
+    },
+    {
+      "phase": "unauth",
+      "method": "POST",
+      "path": "/api/visits/fake-visit-id/retry",
+      "status": 401
+    },
+    {
+      "phase": "unauth",
+      "method": "POST",
+      "path": "/api/visits/fake-visit-id/text",
+      "status": 401
+    },
+    {
+      "phase": "unauth",
+      "method": "POST",
+      "path": "/api/visits/fake-visit-id/delete",
+      "status": 401
+    },
+    {
+      "phase": "unauth",
+      "method": "POST",
+      "path": "/api/visits/fake-visit-id/archive",
+      "status": 401
+    },
+    {
+      "phase": "unauth",
+      "method": "POST",
+      "path": "/api/visits/fake-visit-id/restore",
+      "status": 401
+    },
+    {
+      "phase": "unauth",
+      "method": "POST",
+      "path": "/api/visits/fake-visit-id/unarchive",
+      "status": 401
+    },
+    {
+      "phase": "unauth",
+      "method": "GET",
+      "path": "/api/visits/fake-visit-id/status",
+      "status": 401
+    },
+    {
+      "phase": "unauth",
+      "method": "GET",
+      "path": "/api/visits/fake-visit-id/progress",
+      "status": 401
+    },
+    {
+      "phase": "unauth",
+      "method": "GET",
+      "path": "/api/visits/fake-visit-id/export/pdf",
+      "status": 401
+    },
+    {
+      "phase": "unauth",
+      "method": "GET",
+      "path": "/api/visits/fake-visit-id/export/docx",
+      "status": 401
+    },
+    {
+      "phase": "unauth",
+      "method": "GET",
+      "path": "/api/visits/fake-visit-id/dictation/audio",
+      "status": 401
+    },
+    {
+      "phase": "unauth",
+      "method": "POST",
+      "path": "/api/visits/fake-visit-id/export/email",
+      "status": 401
+    },
+    {
+      "phase": "unauth",
+      "method": "PUT",
+      "path": "/api/visits/fake-visit-id/sign",
+      "status": 405
+    },
+    {
+      "phase": "unauth",
+      "method": "DELETE",
+      "path": "/api/visits/fake-visit-id/sign",
+      "status": 405
+    },
+    {
+      "phase": "unauth",
+      "method": "PUT",
+      "path": "/api/patients",
+      "status": 405
+    },
+    {
+      "phase": "authed",
+      "method": "GET",
+      "path": "/api/patients",
+      "status": 200,
+      "body": "{\"patients\":[{\"id\":\"cmodiv79y000101mqsmtbry8v\",\"name\":\"Deep Hunt Patient modiv5tv\",\"dateOfBirth\":\"1980-01-01T00:00:00.00"
+    },
+    {
+      "phase": "authed",
+      "method": "POST",
+      "path": "/api/patients",
+      "status": 400,
+      "body": "{\"error\":\"Invalid input: expected string, received undefined\",\"field\":\"name\"}"
+    },
+    {
+      "phase": "malformed",
+      "method": "POST",
+      "path": "/api/patients",
+      "status": 400
+    },
+    {
+      "phase": "authed",
+      "method": "GET",
+      "path": "/api/patients/nonexistent-id",
+      "status": 404,
+      "body": "{\"error\":\"not found\"}"
+    },
+    {
+      "phase": "authed",
+      "method": "POST",
+      "path": "/api/patients/fuzzy-match",
+      "status": 400,
+      "body": "{\"error\":\"Invalid input: expected string, received undefined\",\"field\":\"name\"}"
+    },
+    {
+      "phase": "malformed",
+      "method": "POST",
+      "path": "/api/patients/fuzzy-match",
+      "status": 400
+    },
+    {
+      "phase": "authed",
+      "method": "GET",
+      "path": "/api/settings/export-data",
+      "status": 200,
+      "body": "PK\u0003\u0004\u0014\u0000\b\u0000\b\u0000�\f�\\\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\n\u0000\u0000\u0000README.txt�UMo\u001b7\u0010��W\fr�\u0010�ZV��0� �\u0015\u0007.\u0010ى�\u0016�%\u0018��Z\u0016�\u001c����[O�\u0001Ea~IA�����ny�囏��\f�u�i�.��o�AA�;"
+    },
+    {
+      "phase": "authed",
+      "method": "POST",
+      "path": "/api/settings/change-password",
+      "status": 400,
+      "body": "{\"error\":\"Invalid input: expected string, received undefined\",\"field\":\"currentPassword\"}"
+    },
+    {
+      "phase": "malformed",
+      "method": "POST",
+      "path": "/api/settings/change-password",
+      "status": 400
+    },
+    {
+      "phase": "authed",
+      "method": "POST",
+      "path": "/api/settings/change-email",
+      "status": 400,
+      "body": "{\"error\":\"Invalid input: expected string, received undefined\",\"field\":\"newEmail\"}"
+    },
+    {
+      "phase": "malformed",
+      "method": "POST",
+      "path": "/api/settings/change-email",
+      "status": 429
+    },
+    {
+      "phase": "authed",
+      "method": "POST",
+      "path": "/api/settings/delete-account",
+      "status": 429,
+      "body": "{\"error\":\"Too many requests. Try again later.\"}"
+    },
+    {
+      "phase": "malformed",
+      "method": "POST",
+      "path": "/api/settings/delete-account",
+      "status": 429
+    },
+    {
+      "phase": "authed",
+      "method": "POST",
+      "path": "/api/visits/fake-visit-id/sign",
+      "status": 404,
+      "body": "{\"error\":\"not found\"}"
+    },
+    {
+      "phase": "malformed",
+      "method": "POST",
+      "path": "/api/visits/fake-visit-id/sign",
+      "status": 400
+    },
+    {
+      "phase": "authed",
+      "method": "POST",
+      "path": "/api/visits/fake-visit-id/retry",
+      "status": 404,
+      "body": "{\"error\":\"not found\"}"
+    },
+    {
+      "phase": "authed",
+      "method": "POST",
+      "path": "/api/visits/fake-visit-id/text",
+      "status": 400,
+      "body": "{\"error\":\"text must be 30-5000 characters\"}"
+    },
+    {
+      "phase": "malformed",
+      "method": "POST",
+      "path": "/api/visits/fake-visit-id/text",
+      "status": 400
+    },
+    {
+      "phase": "authed",
+      "method": "POST",
+      "path": "/api/visits/fake-visit-id/delete",
+      "status": 404,
+      "body": "{\"error\":\"not found\"}"
+    },
+    {
+      "phase": "authed",
+      "method": "POST",
+      "path": "/api/visits/fake-visit-id/archive",
+      "status": 404,
+      "body": "{\"error\":\"not found\"}"
+    },
+    {
+      "phase": "authed",
+      "method": "POST",
+      "path": "/api/visits/fake-visit-id/restore",
+      "status": 404,
+      "body": "{\"error\":\"not found\"}"
+    },
+    {
+      "phase": "authed",
+      "method": "POST",
+      "path": "/api/visits/fake-visit-id/unarchive",
+      "status": 404,
+      "body": "{\"error\":\"not found\"}"
+    },
+    {
+      "phase": "authed",
+      "method": "GET",
+      "path": "/api/visits/fake-visit-id/status",
+      "status": 404,
+      "body": "{\"error\":\"not found\"}"
+    },
+    {
+      "phase": "authed",
+      "method": "GET",
+      "path": "/api/visits/fake-visit-id/progress",
+      "status": 404,
+      "body": "{\"error\":\"not found\"}"
+    },
+    {
+      "phase": "authed",
+      "method": "GET",
+      "path": "/api/visits/fake-visit-id/export/pdf",
+      "status": 404,
+      "body": "{\"error\":\"not found\"}"
+    },
+    {
+      "phase": "authed",
+      "method": "GET",
+      "path": "/api/visits/fake-visit-id/export/docx",
+      "status": 404,
+      "body": "{\"error\":\"not found\"}"
+    },
+    {
+      "phase": "authed",
+      "method": "GET",
+      "path": "/api/visits/fake-visit-id/dictation/audio",
+      "status": 404,
+      "body": "{\"error\":\"not found\"}"
+    },
+    {
+      "phase": "authed",
+      "method": "POST",
+      "path": "/api/visits/fake-visit-id/export/email",
+      "status": 404,
+      "body": "{\"error\":\"not found\"}"
+    },
+    {
+      "phase": "malformed",
+      "method": "POST",
+      "path": "/api/visits/fake-visit-id/export/email",
+      "status": 400
+    },
+    {
+      "phase": "authed",
+      "method": "PUT",
+      "path": "/api/visits/fake-visit-id/sign",
+      "status": 405,
+      "body": ""
+    },
+    {
+      "phase": "authed",
+      "method": "DELETE",
+      "path": "/api/visits/fake-visit-id/sign",
+      "status": 405,
+      "body": ""
+    },
+    {
+      "phase": "authed",
+      "method": "PUT",
+      "path": "/api/patients",
+      "status": 405,
+      "body": ""
+    }
+  ]
+}
