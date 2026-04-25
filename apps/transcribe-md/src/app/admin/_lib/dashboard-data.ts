@@ -293,14 +293,29 @@ interface RawExportExternal {
   lastSeen: Date;
 }
 
+interface RawPrivilegeEsc {
+  id: string;
+  timestamp: Date;
+  actorEmail: string | null;
+  targetEmail: string | null;
+  targetId: string | null;
+}
+
 const FAILED_LOGIN_BURST_THRESHOLD = 5;
 const FAILED_LOGIN_BURST_WINDOW_MIN = 5;
 const BULK_PHI_THRESHOLD = 50;
+/** Privilege-escalation detector window. 7 days matches the prompt
+ *  spec — long enough that a sudden grant gets reviewed, short enough
+ *  that the panel doesn't permanently carry historical noise. */
+const PRIVILEGE_ESCALATION_WINDOW_DAYS = 7;
 
 export async function getThreats(): Promise<Threat[]> {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const sincePriv = new Date(
+    Date.now() - PRIVILEGE_ESCALATION_WINDOW_DAYS * 24 * 60 * 60 * 1000
+  );
 
-  const [bursts, cross, bulk, exportExt] = await Promise.all([
+  const [bursts, cross, bulk, exportExt, privEsc] = await Promise.all([
     prisma.$queryRaw<RawFailedLoginBurst[]>`
       WITH windowed AS (
         SELECT
@@ -398,6 +413,24 @@ export async function getThreats(): Promise<Threat[]> {
       ORDER BY "lastSeen" DESC
       LIMIT 20
     `.catch(() => [] as RawExportExternal[]),
+
+    // Phase 6G — Detector 3: privilege escalation. Each
+    // USER_GRANTED_SUPER_ADMIN row in the last 7 days is its own threat
+    // (no aggregation — granting admin is rare enough that every
+    // instance deserves an explicit "is this still expected?" review).
+    prisma.$queryRaw<RawPrivilegeEsc[]>`
+      SELECT
+        id,
+        timestamp,
+        "userEmailSnapshot" AS "actorEmail",
+        (metadata->>'targetEmail')::text AS "targetEmail",
+        "targetId"
+      FROM audit_logs
+      WHERE "timestamp" >= ${sincePriv}
+        AND action = 'USER_GRANTED_SUPER_ADMIN'
+      ORDER BY "timestamp" DESC
+      LIMIT 20
+    `.catch(() => [] as RawPrivilegeEsc[]),
   ]);
 
   const threats: Threat[] = [];
@@ -441,6 +474,21 @@ export async function getThreats(): Promise<Threat[]> {
       severity: 'amber',
       summary: `Email export to ${e.externalDomain} blocked`,
       detail: `${e.attemptCount} attempt${e.attemptCount === 1 ? '' : 's'} by ${e.userId}`,
+    });
+  }
+
+  for (const p of privEsc) {
+    const target = p.targetEmail ?? p.targetId ?? 'unknown user';
+    const actor = p.actorEmail ?? 'unknown actor';
+    threats.push({
+      id: `grant-admin:${p.id}`,
+      type: 'privilege_escalation',
+      // Privilege grants are review-worthy but not active attacks —
+      // amber by default. A real compromise would also produce
+      // failed-login bursts (red) which sort to the top.
+      severity: 'amber',
+      summary: `Admin privileges granted to ${target}`,
+      detail: `By ${actor} · ${p.timestamp.toISOString().slice(0, 10)}`,
     });
   }
 
