@@ -36,6 +36,7 @@ export type CritiqueReport = z.infer<typeof CritiqueReport>;
 export interface Layer5Input {
   visitId: string;
   practiceId: string;
+  userId: string | null;
   specialty: string;
   soapDraft: string;
   roleLabeledTranscript: string;
@@ -105,6 +106,7 @@ export async function runLayer5SelfCritique(
   const report = await modelClient.complete({
     practiceId: input.practiceId,
     visitId: input.visitId,
+    userId: input.userId,
     purpose: 'tm_critique',
     provider: 'anthropic',
     model: MODEL,
