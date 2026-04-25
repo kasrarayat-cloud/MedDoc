@@ -112,7 +112,15 @@ function getProvider(err: unknown): Provider {
 
 /** Match patterns that mean "this input will never process correctly,
  *  no matter how many times we retry". Conservative on purpose — when
- *  in doubt, treat as transient. */
+ *  in doubt, treat as transient.
+ *
+ *  Deepgram-specific note: a 400 from Deepgram with a config error
+ *  ("Keyterm limit exceeded", "Invalid model", etc.) is permanent —
+ *  the same audio + same wire config will fail identically on every
+ *  retry. We pattern-match those explicitly because the generic
+ *  "isLikelyTransient" path treats most non-5xx as transient by
+ *  default, and burning 3 BullMQ attempts on a config bug just
+ *  triples the noise. */
 function isPermanentInputError(msg: string, err: unknown): boolean {
   if (err instanceof Error && err.constructor?.name === 'ZodError') return true;
   const lower = msg.toLowerCase();
@@ -126,6 +134,18 @@ function isPermanentInputError(msg: string, err: unknown): boolean {
     /empty audio/.test(lower) ||
     /could not (decode|parse) audio/.test(lower) ||
     /zero[- ]?byte/.test(lower)
+  ) {
+    return true;
+  }
+  // Deepgram 4xx config errors — permanent because they're driven by
+  // wire-config (keyterm budget, model name, sample rate) rather than
+  // the audio itself.
+  if (
+    /keyterm (limit )?exceeded/.test(lower) ||
+    /maximum number of (tokens|keyterms)/.test(lower) ||
+    /invalid keyterm/.test(lower) ||
+    /invalid model/.test(lower) ||
+    /unsupported (codec|encoding|sample[- ]?rate)/.test(lower)
   ) {
     return true;
   }
