@@ -42,6 +42,7 @@ import type {
   Threat,
   TimelineBucket,
 } from '../_types';
+import AdminNav from './AdminNav.client';
 
 // ---------------------------------------------------------------------------
 // Top-level component
@@ -128,6 +129,7 @@ export default function AdminOverview({ initial, userEmail }: Props) {
       <style>{`@keyframes qm-fade-in { from { opacity: 0; transform: translateY(-2px); } to { opacity: 1; transform: none; } }`}</style>
 
       <DashboardHeader userEmail={userEmail} lastUpdated={lastUpdated} />
+      <AdminNav />
 
       <main className="mx-auto max-w-[1440px] space-y-4 px-6 py-5">
         <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
