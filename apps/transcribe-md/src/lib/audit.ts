@@ -21,6 +21,13 @@ import { headers } from 'next/headers';
 
 import prisma from '@meddoc/db';
 import { auth } from '@/lib/nextauth';
+import { getSharedRedisConnection } from './queue';
+
+// Phase 1B v2 — fan out audit rows to the meddoc-pro admin SSE
+// stream. Channel name hard-coded to keep the two apps from sharing
+// a workspace package for one constant; meddoc-pro's `lib/redis.ts`
+// is the source of truth for the value.
+const ADMIN_AUDIT_STREAM_CHANNEL = 'admin:audit-stream';
 
 // AuditAction is a Prisma enum — we mirror the relevant slice for
 // transcribe-md-side call sites. Keeping this as a union rather than
@@ -133,6 +140,28 @@ export async function logAudit(input: AuditLogInput): Promise<void> {
     // any through the rest of the file.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await prisma.auditLog.create({ data: entry as any });
+
+    // Phase 1B v2 — symmetric SSE fan-out (mirrors meddoc-pro/audit.ts).
+    // Gated by setImmediate + connection.status check + 100ms race
+    // for the same reason: the shared BullMQ connection here uses
+    // `maxRetriesPerRequest:null` so an awaited publish on a
+    // disconnected broker would block the calling request path. The
+    // audit row is the durable source of truth — losing one fan-out
+    // event is acceptable.
+    setImmediate(() => {
+      const conn = getSharedRedisConnection();
+      if (conn.status !== 'ready') return;
+      const publishPromise = conn.publish(
+        ADMIN_AUDIT_STREAM_CHANNEL,
+        JSON.stringify(entry)
+      );
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('publish timeout')), 100)
+      );
+      Promise.race([publishPromise, timeout]).catch(() => {
+        // Silent — best-effort, row is durable.
+      });
+    });
   } catch (err) {
     // Audit logging must never break the calling request. A Prisma
     // failure here likely means the audit_logs table is unreachable —

@@ -6,10 +6,14 @@
 // `getSharedRedisConnection()` shape so both apps end up on the same
 // pattern when they need bare Redis (no BullMQ).
 //
-// Connection options match the BullMQ-side requirements
-// (maxRetriesPerRequest: null, enableReadyCheck: false) so this single
-// client can be reused as a BullMQ connection later without
-// re-architecting.
+// Phase 1B v2 — fail-fast options. The original v1 used
+// `maxRetriesPerRequest: null` which caused publishes to queue
+// indefinitely while the singleton was reconnecting; combined with the
+// fire-and-forget chain in logAudit() this held NextAuth's response
+// open ~60s after a successful sign-in. The new options drop commands
+// the moment the connection isn't ready, so an unreachable Redis
+// degrades to "no live SSE fan-out" rather than blocking the request
+// path. The audit_logs row is the durable source of truth either way.
 // ============================================================================
 
 import IORedis, { type RedisOptions } from 'ioredis';
@@ -17,18 +21,24 @@ import IORedis, { type RedisOptions } from 'ioredis';
 let connection: IORedis | null = null;
 
 function buildConnection(): IORedis {
+  // Default points at the docker-compose `redis` service hostname.
+  // Override via REDIS_URL when running outside Docker.
   const redisUrl =
-    process.env.REDIS_URL?.trim() || 'redis://localhost:6379';
+    process.env.REDIS_URL?.trim() || 'redis://redis:6379';
   const opts: RedisOptions = {
-    maxRetriesPerRequest: null,
+    maxRetriesPerRequest: 0,
     enableReadyCheck: false,
+    enableOfflineQueue: false,
+    retryStrategy: () => null,
+    lazyConnect: true,
   };
   const client = new IORedis(redisUrl, opts);
   client.on('error', (err) => {
-    // Avoid stack-trace spam — Redis errors are common transient
-    // states. Retain ONE log per error message so a flapping
-    // connection doesn't poison stdout.
-    console.error('[redis] connection error:', err.message);
+    // err.message can be empty on socket-level errors — fall back to
+    // err.code so we don't emit naked colons into stdout.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const detail = err.message || (err as any).code || 'unknown';
+    console.error('[redis] connection error:', detail);
   });
   return client;
 }
@@ -39,6 +49,14 @@ function buildConnection(): IORedis {
 export function getRedis(): IORedis {
   if (!connection) connection = buildConnection();
   return connection;
+}
+
+/** True when the singleton has a live connection that's accepting
+ *  commands. Callers in the request path should gate their publishes
+ *  on this — a degraded Redis must never delay the response. */
+export function isRedisReady(): boolean {
+  if (!connection) return false;
+  return connection.status === 'ready';
 }
 
 /** Channel used for admin-dashboard SSE streaming. Both apps

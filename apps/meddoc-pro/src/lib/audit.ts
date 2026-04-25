@@ -13,6 +13,11 @@
 import prisma, { isDatabaseHealthy } from '@meddoc/db';
 import { getSession, getRequestContext, type Session } from './auth';
 import { tenantScope } from './tenancy';
+import {
+  getRedis,
+  isRedisReady,
+  ADMIN_AUDIT_STREAM_CHANNEL,
+} from './redis';
 
 // Mirror Prisma enum (kept here so client/server tools can import w/o full Prisma)
 export type AuditAction =
@@ -128,6 +133,36 @@ export async function logAudit(input: AuditLogInput): Promise<void> {
       // Real DB write
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await prisma.auditLog.create({ data: entry as any });
+
+      // Phase 1B v2 — fan out to admins watching the SSE stream.
+      // Defer to the next tick of the event loop with setImmediate so
+      // the publish never sits on the same micro-task chain as the
+      // current request response. This is the part that broke v1 (PR
+      // #64): a queued ioredis publish with maxRetriesPerRequest:null
+      // held NextAuth's response open ~60s when the broker was
+      // briefly unreachable.
+      //
+      // Belt-and-suspenders:
+      //   1. Skip silently if the singleton isn't `ready`. Combined
+      //      with `enableOfflineQueue:false` on the client, this means
+      //      we drop SSE events on a degraded broker rather than
+      //      letting them queue.
+      //   2. Race the publish against a 100ms timeout. The
+      //      audit_logs row is the durable source of truth — losing
+      //      the live fan-out for one event is fine.
+      setImmediate(() => {
+        if (!isRedisReady()) return;
+        const publishPromise = getRedis().publish(
+          ADMIN_AUDIT_STREAM_CHANNEL,
+          JSON.stringify(entry)
+        );
+        const timeout = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('publish timeout')), 100)
+        );
+        Promise.race([publishPromise, timeout]).catch(() => {
+          // Silent — best-effort fan-out, row is durable.
+        });
+      });
     } else {
       // Memory fallback — also mirror to console for visibility
       memoryAuditLog.push(entry);
