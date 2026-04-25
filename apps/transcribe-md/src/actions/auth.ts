@@ -283,7 +283,29 @@ export async function loginAction(
     };
   }
 
-  return { ok: true, redirect: '/dashboard' };
+  return { ok: true, redirect: await postLoginRedirectFor() };
+}
+
+/** Computes the post-login destination based on the request host. The
+ *  app.quillmd.com flow lands on `/dashboard` (clinician home);
+ *  admin.quillmd.com lands on `/admin` (the platform-admin overview).
+ *  Without this branch a SUPER_ADMIN signing in via admin.quillmd.com
+ *  would be sent to `/dashboard`, which the strict Caddy block on the
+ *  admin host returns 404 for — leaving the user stuck on a blank
+ *  page after a successful sign-in. */
+async function postLoginRedirectFor(): Promise<string> {
+  try {
+    const h = await headers();
+    const host = (h.get('x-forwarded-host') ?? h.get('host') ?? '')
+      .toLowerCase()
+      .split(':')[0];
+    if (host === 'admin.quillmd.com' || host?.startsWith('admin.')) {
+      return '/admin';
+    }
+  } catch {
+    // headers() outside a request context — fall through to the default
+  }
+  return '/dashboard';
 }
 
 /** Signup: creates a synthetic Practice + User atomically, grants

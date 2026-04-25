@@ -30,7 +30,12 @@ function buildConnection(): IORedis {
     enableReadyCheck: false,
     enableOfflineQueue: false,
     retryStrategy: () => null,
-    lazyConnect: true,
+    // Eager connect — `lazyConnect: true` (PR #65) deadlocked with the
+    // `isRedisReady()` publish gate: the singleton would never reach
+    // `'ready'` because nothing in the request path triggers a command
+    // (the gate skips calls when status !== 'ready'). Eager connect
+    // means the singleton is hot from process start; the other
+    // fail-fast options keep a degraded broker from blocking requests.
   };
   const client = new IORedis(redisUrl, opts);
   client.on('error', (err) => {
@@ -53,10 +58,17 @@ export function getRedis(): IORedis {
 
 /** True when the singleton has a live connection that's accepting
  *  commands. Callers in the request path should gate their publishes
- *  on this — a degraded Redis must never delay the response. */
+ *  on this — a degraded Redis must never delay the response.
+ *
+ *  Side effect: ensures the singleton exists. Without this, a process
+ *  whose only Redis callers are gated on `isRedisReady()` would create
+ *  a deadlock — the singleton is never built, status never reaches
+ *  'ready', and every publish is silently skipped. We pay the eager
+ *  construction cost the first time anyone asks "is it ready?" so the
+ *  TCP handshake can start. */
 export function isRedisReady(): boolean {
-  if (!connection) return false;
-  return connection.status === 'ready';
+  const c = getRedis();
+  return c.status === 'ready';
 }
 
 /** Channel used for admin-dashboard SSE streaming. Both apps
