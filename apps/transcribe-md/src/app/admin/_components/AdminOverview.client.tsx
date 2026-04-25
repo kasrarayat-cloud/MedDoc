@@ -365,7 +365,29 @@ function ThreatsBar({
   threats: Threat[];
   onViewAll: () => void;
 }) {
-  if (threats.length === 0) return null;
+  // Phase 6G — render a calm empty state instead of vanishing the
+  // whole bar. The previous behaviour (hide on empty) made admins
+  // wonder whether the panel had broken vs. genuinely had nothing
+  // to show. Silence-as-absence is bad signal here; an explicit
+  // "no active threats" with a green check is better.
+  if (threats.length === 0) {
+    return (
+      <div className="flex items-center gap-3 rounded-md border border-emerald-200 bg-emerald-50/60 px-4 py-3">
+        <CheckCircle2
+          className="h-4 w-4 shrink-0 text-emerald-700"
+          strokeWidth={2.25}
+        />
+        <div className="min-w-0 flex-1 text-sm">
+          <span className="font-medium text-emerald-900">No active threats</span>
+          <span className="mx-2 text-emerald-700/40">·</span>
+          <span className="text-emerald-800">
+            last 24h failed-login bursts · last 24h cross-tenant attempts · last 24h
+            blocked external email exports · last 7d privilege escalations
+          </span>
+        </div>
+      </div>
+    );
+  }
   const headline = threats[0]!;
   return (
     <div className="flex items-center gap-3 rounded-md border border-amber-300 bg-amber-50 px-4 py-3">
