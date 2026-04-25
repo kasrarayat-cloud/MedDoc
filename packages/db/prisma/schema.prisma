@@ -48,6 +48,10 @@ enum UserRole {
 enum Product {
   MEDDOC_PRO
   TRANSCRIBE_MD
+  /// Platform-admin role. Gates /admin/* surfaces on both apps.
+  /// Grant manually via DB (no self-service). Never auto-granted on
+  /// login — F9-1 removed that path on MEDDOC_PRO/TRANSCRIBE_MD too.
+  SUPER_ADMIN
 }
 
 /// Actions we audit. Extend as new workflows are added.
@@ -110,6 +114,39 @@ enum AuditAction {
   USER_DEACTIVATED
   USER_DELETED
   EXPORTED_AUDIT_LOG
+  ADMIN_DASHBOARD_ACCESS
+
+  // transcribe-md — visit lifecycle (Phase 1A, closes H2)
+  VISIT_SIGNED
+  VISIT_DELETED
+  VISIT_ARCHIVED
+  VISIT_UNARCHIVED
+  VISIT_RESTORED
+  VISIT_RETRY
+  VISIT_RETRY_BUDGET_EXHAUSTED
+
+  // transcribe-md — exports
+  EXPORT_EMAIL_SENT
+  EXPORT_EMAIL_BLOCKED_DESTINATION
+  EXPORT_PDF_DOWNLOADED
+  EXPORT_DOCX_DOWNLOADED
+  EXPORT_CLIPBOARD_COPIED
+
+  // transcribe-md — patient CRUD (TranscribeMdPatient; CRM patient
+  // events use CREATED_PATIENT / UPDATED_PATIENT / ARCHIVED_PATIENT
+  // already)
+  TM_PATIENT_CREATED
+  TM_PATIENT_UPDATED
+  TM_PATIENT_DELETED
+
+  // transcribe-md — settings + account
+  EMAIL_CHANGE_REQUESTED
+  EMAIL_CHANGE_CONFIRMED
+  ACCOUNT_DELETED
+
+  // transcribe-md — Rx safety audit
+  RX_OVERRIDE_RECORDED
+  RX_SIGN_BLOCKED_NO_OVERRIDE
 }
 
 /// Document lifecycle status

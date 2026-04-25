@@ -19,6 +19,7 @@ import { auth } from '@/lib/nextauth';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 import { redactPhi } from '@meddoc/ai';
 import { log } from '@/lib/log';
+import { logAudit } from '@/lib/audit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -127,6 +128,12 @@ export const POST = withApiHandler(
     log.info('api:settings:change-password', 'password updated', {
       userId,
       keptCurrentSession: Boolean(currentSessionToken),
+    });
+    void logAudit({
+      action: 'PASSWORD_CHANGED',
+      targetType: 'User',
+      targetId: userId,
+      metadata: { keptCurrentSession: Boolean(currentSessionToken) },
     });
     return NextResponse.json({ ok: true }, { status: 200 });
   }

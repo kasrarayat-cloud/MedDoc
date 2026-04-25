@@ -44,6 +44,7 @@ import { captureEditPattern } from '@/lib/edit-tracking';
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { redactPhi } from '@meddoc/ai';
 import { log } from '@/lib/log';
+import { logAudit } from '@/lib/audit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -110,6 +111,18 @@ export const POST = withApiHandler<{ id: string }>(
           visitId,
           requestedDomain: requestedTo.split('@')[1] ?? 'unknown',
           sessionDomain: sessionEmail.split('@')[1] ?? 'unknown',
+        });
+        void logAudit({
+          action: 'EXPORT_EMAIL_BLOCKED_DESTINATION',
+          targetType: 'TranscribeVisit',
+          targetId: visitId,
+          success: false,
+          errorCode: 'INVALID_DESTINATION',
+          metadata: {
+            via: 'sign',
+            requestedDomain: requestedTo.split('@')[1] ?? 'unknown',
+            sessionDomain: sessionEmail.split('@')[1] ?? 'unknown',
+          },
         });
         return apiError(
           'Email destination must match your account email.',
@@ -188,6 +201,17 @@ export const POST = withApiHandler<{ id: string }>(
             criticalCount: criticalWarnings.length,
             overrideCount,
           });
+          void logAudit({
+            action: 'RX_SIGN_BLOCKED_NO_OVERRIDE',
+            targetType: 'TranscribeVisit',
+            targetId: visitId,
+            success: false,
+            errorCode: 'OVERRIDE_REQUIRED',
+            metadata: {
+              criticalCount: criticalWarnings.length,
+              overrideCount,
+            },
+          });
           return NextResponse.json(
             {
               error: 'Critical Rx warnings require an override before signing.',
@@ -238,6 +262,17 @@ export const POST = withApiHandler<{ id: string }>(
         // flight from the winner's handler, and the @unique visitId
         // constraint would reject a second insert anyway.
         void captureEditPattern({ visitId, doctorId: userId });
+        // HIPAA audit — one row per successful READY→SIGNED transition.
+        // Race losers (updated.count===0) don't re-write; the winner
+        // already covered them.
+        void logAudit({
+          action: 'VISIT_SIGNED',
+          targetType: 'TranscribeVisit',
+          targetId: visitId,
+          metadata: {
+            destinations: parsed.data.destinations,
+          },
+        });
       }
     }
 

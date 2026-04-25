@@ -33,6 +33,7 @@ import { enqueueProcessVisit } from '@/lib/queue';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 import { redactPhi } from '@meddoc/ai';
 import { log } from '@/lib/log';
+import { logAudit } from '@/lib/audit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -102,6 +103,14 @@ export const POST = withApiHandler<{ id: string }>(
         visitId,
         count: visit.manualRetryCount,
       });
+      void logAudit({
+        action: 'VISIT_RETRY_BUDGET_EXHAUSTED',
+        targetType: 'TranscribeVisit',
+        targetId: visitId,
+        success: false,
+        errorCode: 'RETRY_BUDGET_EXHAUSTED',
+        metadata: { count: visit.manualRetryCount },
+      });
       return NextResponse.json(
         {
           error:
@@ -161,6 +170,12 @@ export const POST = withApiHandler<{ id: string }>(
         },
       });
       await enqueueProcessVisit(visitId, userId, { retry: true });
+      void logAudit({
+        action: 'VISIT_RETRY',
+        targetType: 'TranscribeVisit',
+        targetId: visitId,
+        metadata: { prevStatus: visit.status },
+      });
       log.info('api:visits:retry', 're-enqueued', {
         userId,
         visitId,
