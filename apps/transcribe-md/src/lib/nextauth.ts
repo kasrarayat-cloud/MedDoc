@@ -148,7 +148,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // itself. Now we require the product to already be on the user
         // before issuing a session. Granting must go through an admin
         // surface or billing webhook (not auto on first login).
-        if (!user.products.includes(Product.TRANSCRIBE_MD)) {
+        //
+        // Phase 1A: SUPER_ADMIN bypasses the entitlement check —
+        // platform admins need access to the scribe surface to
+        // debug incidents for customer tickets. Symmetric with the
+        // meddoc-pro side.
+        const tmHasTranscribe = user.products.includes(Product.TRANSCRIBE_MD);
+        const tmHasSuperAdmin = user.products.includes(Product.SUPER_ADMIN);
+        if (!tmHasTranscribe && !tmHasSuperAdmin) {
+          void logAudit({
+            action: 'LOGIN_FAILED',
+            userId: user.id,
+            userEmail: user.email,
+            practiceId: user.practiceId,
+            success: false,
+            errorCode: 'NO_TRANSCRIBE_MD_ENTITLEMENT',
+          });
           return null;
         }
 
