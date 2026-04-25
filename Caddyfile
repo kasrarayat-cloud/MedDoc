@@ -118,19 +118,94 @@ admin.quillmd.com {
 
     import security_headers_mode_b
 
-    # Root → /admin so admin.quillmd.com/ shows the dashboard without
-    # the user having to type /admin. We deliberately do NOT rewrite
-    # /api/* → /api/admin/* even though the original plan suggested it:
-    # NextAuth's /api/auth/* lives at the bare /api/auth path on the
-    # transcribe-md upstream and that rewrite would break sign-in.
-    @root path /
-    rewrite @root /admin
+    # ── Allowlist: only the routes a SUPER_ADMIN actually needs ──────
+    # The first version of this block proxied EVERY path to the
+    # transcribe-md upstream and only rewrote `/`. That meant a logged-
+    # in clinician on admin.quillmd.com could navigate to /dashboard,
+    # /patients, /visits, /settings, etc. and see the regular Transcribe-MD
+    # UI on the admin host — wrong, and a privacy footgun. We now match
+    # explicit allowlisted paths and 404 everything else.
 
-    reverse_proxy transcribe-md:3011 {
-        header_up Host {host}
-        header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-For {remote_host}
-        header_up X-Forwarded-Proto {scheme}
+    # NextAuth (csrf, session, callback) — pass through verbatim. This
+    # MUST come before /api/admin/* because Caddy evaluates handle
+    # matchers in declaration order; if /api/auth/* fell into the
+    # /api/admin/* bucket it would 404.
+    @auth path /api/auth/*
+    handle @auth {
+        reverse_proxy transcribe-md:3011 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # Admin REST + SSE
+    @adminApi path /api/admin/*
+    handle @adminApi {
+        reverse_proxy transcribe-md:3011 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # Next.js asset bundles + static files (icons, fonts). Without
+    # these the admin page would render unstyled.
+    @nextStatic path /_next/* /favicon.ico /favicon.svg /robots.txt /manifest.webmanifest
+    handle @nextStatic {
+        reverse_proxy transcribe-md:3011 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # Auth-flow pages a SUPER_ADMIN might genuinely use (sign-in,
+    # password recovery). /signup is intentionally not allowed —
+    # super-admins are provisioned out-of-band, never via self-service.
+    @authPages path /login /forgot-password /reset-password /check-email
+    handle @authPages {
+        reverse_proxy transcribe-md:3011 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # Admin pages — `/admin` itself + everything under it
+    @adminPath path /admin /admin/*
+    handle @adminPath {
+        reverse_proxy transcribe-md:3011 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # Root → /admin (the bare host serves the dashboard).
+    @root path /
+    handle @root {
+        rewrite * /admin
+        reverse_proxy transcribe-md:3011 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # Anything else (e.g. /dashboard, /patients, /visits, /settings,
+    # /signup) — 404 at the edge. Belt-and-braces alongside the strict
+    # allowlist above; the catch-all guarantees that adding a new
+    # transcribe-md route doesn't accidentally surface it on the
+    # admin host.
+    handle {
+        respond "Not Found" 404
     }
 }
 

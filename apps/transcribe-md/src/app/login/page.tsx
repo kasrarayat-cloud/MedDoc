@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
+import { headers } from 'next/headers';
 
 import { auth } from '@/lib/nextauth';
 import { AuthShell } from '@/components/ui/auth-shell';
@@ -17,7 +18,18 @@ export const metadata: Metadata = {
 export default async function LoginPage() {
   const session = await auth();
   if (session?.user?.id) {
-    redirect('/dashboard');
+    // Host-aware redirect: a SUPER_ADMIN landing on admin.quillmd.com/login
+    // while already signed in goes to `/admin`, not the clinician
+    // `/dashboard`. The strict Caddy block on admin.quillmd.com returns
+    // 404 for `/dashboard`, so without this branch the user would land
+    // on a blank page after a refresh.
+    const h = await headers();
+    const host = (h.get('x-forwarded-host') ?? h.get('host') ?? '')
+      .toLowerCase()
+      .split(':')[0];
+    const isAdminHost =
+      host === 'admin.quillmd.com' || host.startsWith('admin.');
+    redirect(isAdminHost ? '/admin' : '/dashboard');
   }
 
   return (
