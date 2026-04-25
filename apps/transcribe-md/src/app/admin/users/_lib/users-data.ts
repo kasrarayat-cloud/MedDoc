@@ -105,6 +105,20 @@ export async function fetchUserListPage(p: ListParams): Promise<UserListPage> {
     where.push(`NOT ('SUPER_ADMIN' = ANY(u.products))`);
   }
 
+  // Phase 6D — product filter. Default 'all' shows the union of both
+  // products (kasra is super-admin of both); explicit selectors scope
+  // down. 'both' = users entitled to BOTH products simultaneously.
+  if (p.product === 'transcribe') {
+    where.push(`'TRANSCRIBE_MD' = ANY(u.products)`);
+    where.push(`NOT ('MEDDOC_PRO' = ANY(u.products))`);
+  } else if (p.product === 'meddoc') {
+    where.push(`'MEDDOC_PRO' = ANY(u.products)`);
+    where.push(`NOT ('TRANSCRIBE_MD' = ANY(u.products))`);
+  } else if (p.product === 'both') {
+    where.push(`'TRANSCRIBE_MD' = ANY(u.products)`);
+    where.push(`'MEDDOC_PRO' = ANY(u.products)`);
+  }
+
   if (p.search.trim()) {
     const q = `%${p.search.trim()}%`;
     params.push(q, q, q);
