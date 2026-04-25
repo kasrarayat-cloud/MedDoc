@@ -47,6 +47,47 @@ describe('categorizeError — permanent', () => {
       categorizeError(new Error('Could not decode audio: invalid header'))
     ).toBe('permanent');
   });
+
+  it('flags Deepgram "Keyterm limit exceeded" 400 as permanent', () => {
+    // Real prod failure from the kasra 7-min retry — the categorizer
+    // in commit 2 of #61 mis-classified this as transient because 400
+    // wasn't in the transient status list. Now it pattern-matches the
+    // message body and returns permanent so we don't burn 3 BullMQ
+    // attempts on the same config bug.
+    const err = Object.assign(
+      new Error(
+        'Deepgram batch failed: HTTP 400 Bad Request {"err_msg":"Bad Request: Keyterm limit exceeded. The maximum number of tokens across all keyterms is 500.","request_id":"019dc210"}'
+      ),
+      { status: 400 }
+    );
+    expect(categorizeError(err)).toBe('permanent');
+  });
+
+  it('flags "Maximum number of keyterms" as permanent', () => {
+    expect(
+      categorizeError(new Error('Maximum number of keyterms allowed is 500'))
+    ).toBe('permanent');
+  });
+
+  it('flags "Invalid model" as permanent', () => {
+    expect(
+      categorizeError(
+        Object.assign(new Error('Invalid model: nova-99-medical'), {
+          status: 400,
+        })
+      )
+    ).toBe('permanent');
+  });
+
+  it('flags "Unsupported sample rate" as permanent', () => {
+    expect(
+      categorizeError(
+        Object.assign(new Error('Unsupported sample-rate: 96000'), {
+          status: 400,
+        })
+      )
+    ).toBe('permanent');
+  });
 });
 
 describe('categorizeError — transient', () => {
