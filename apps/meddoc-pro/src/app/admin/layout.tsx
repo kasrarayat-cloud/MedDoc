@@ -18,10 +18,12 @@
 // request. No cached-layout bypass is possible.
 // ============================================================================
 
+import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 
 import { Product } from '@prisma/client';
 import { auth } from '@/lib/nextauth';
+import { logAudit } from '@/lib/audit';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -55,6 +57,28 @@ export default async function AdminLayout({
   if (!hasSuperAdmin) {
     notFound();
   }
+
+  // "Who watched the watcher" audit — every /admin/* render by a
+  // SUPER_ADMIN gets a row. Path resolves from the Next-URL header
+  // (populated by the Next.js runtime on every RSC request); falls
+  // back to the bare `/admin` when that header isn't set (shouldn't
+  // happen in production but keeps the audit call best-effort).
+  const h = await headers();
+  const nextUrlHeader =
+    h.get('next-url') ??
+    h.get('x-invoke-path') ??
+    h.get('x-pathname') ??
+    '/admin';
+  // Some Next.js versions embed query string + segment trees in the
+  // `next-url` header. Slice to the first space / newline / query
+  // marker so we record only the path.
+  const path = nextUrlHeader.split(/[\s?#]/)[0];
+  void logAudit({
+    action: 'ADMIN_DASHBOARD_ACCESS',
+    targetType: 'AdminDashboard',
+    targetId: path,
+    metadata: { path },
+  });
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100">

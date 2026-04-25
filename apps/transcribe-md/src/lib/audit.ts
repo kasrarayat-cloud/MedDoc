@@ -138,7 +138,6 @@ export async function logAudit(input: AuditLogInput): Promise<void> {
     // failure here likely means the audit_logs table is unreachable —
     // fall back to a single-line stderr so the event isn't lost in
     // a downstream log-parse.
-    // eslint-disable-next-line no-console
     console.error(
       `[audit] write failed action=${input.action} target=${input.targetType ?? '-'}:${input.targetId ?? '-'}`,
       err instanceof Error ? err.message : err
