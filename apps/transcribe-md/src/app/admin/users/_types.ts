@@ -55,11 +55,17 @@ export interface UserStats {
 
 export type StatusFilter = 'all' | 'active' | 'suspended' | 'deleted';
 export type RoleFilter = 'all' | 'doctor' | 'admin';
+/** Phase 6D — kasra is the founder of both products and needs to see
+ *  both populations by default. The dashboard table also surfaces a
+ *  Product column so it's obvious at a glance which app each user
+ *  belongs to. */
+export type ProductFilter = 'all' | 'transcribe' | 'meddoc' | 'both';
 
 export interface ListParams {
   search: string;
   status: StatusFilter;
   role: RoleFilter;
+  product: ProductFilter;
   page: number;
 }
 

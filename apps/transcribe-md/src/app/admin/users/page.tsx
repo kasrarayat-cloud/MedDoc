@@ -16,7 +16,7 @@ import {
   fetchUserListPage,
   fetchUserStats,
 } from './_lib/users-data';
-import type { ListParams, RoleFilter, StatusFilter } from './_types';
+import type { ListParams, ProductFilter, RoleFilter, StatusFilter } from './_types';
 
 export const metadata: Metadata = {
   title: 'Users · QuillMD Admin',
@@ -36,6 +36,7 @@ export default async function UsersPage({ searchParams }: Props) {
     search: typeof sp.search === 'string' ? sp.search : '',
     status: parseStatus(sp.status),
     role: parseRole(sp.role),
+    product: parseProduct(sp.product),
     page: parsePage(sp.page),
   };
 
@@ -64,6 +65,11 @@ function parseStatus(v: string | string[] | undefined): StatusFilter {
 function parseRole(v: string | string[] | undefined): RoleFilter {
   const s = typeof v === 'string' ? v : '';
   if (s === 'doctor' || s === 'admin') return s;
+  return 'all';
+}
+function parseProduct(v: string | string[] | undefined): ProductFilter {
+  const s = typeof v === 'string' ? v : '';
+  if (s === 'transcribe' || s === 'meddoc' || s === 'both') return s;
   return 'all';
 }
 function parsePage(v: string | string[] | undefined): number {

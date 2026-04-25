@@ -41,6 +41,7 @@ import AdminNav from '../../_components/AdminNav.client';
 import type {
   ConfirmKind,
   ListParams,
+  ProductFilter,
   RoleFilter,
   StatusFilter,
   UserListPage,
@@ -101,6 +102,7 @@ export default function AdminUsers({
     set('search', patch.search ?? params.search);
     set('status', patch.status ?? params.status);
     set('role', patch.role ?? params.role);
+    set('product', patch.product ?? params.product);
     set('page', patch.page ?? params.page);
     startTransition(() => {
       router.push(`/admin/users?${next.toString()}`);
@@ -211,6 +213,16 @@ export default function AdminUsers({
                 { value: 'admin', label: 'Admins only' },
               ]}
             />
+            <SelectChip
+              value={params.product}
+              onChange={(v) => pushUrl({ product: v as ProductFilter, page: 1 })}
+              options={[
+                { value: 'all', label: 'All products' },
+                { value: 'transcribe', label: 'Transcribe-MD only' },
+                { value: 'meddoc', label: 'MedDoc Pro only' },
+                { value: 'both', label: 'Both products' },
+              ]}
+            />
             <button
               type="button"
               className="inline-flex h-8 items-center rounded-md px-2 text-xs text-slate-500 hover:bg-slate-100"
@@ -251,6 +263,9 @@ export default function AdminUsers({
                   </th>
                   <th className="bg-slate-50/60 py-2 pr-3 text-[10px] font-medium uppercase tracking-wider text-slate-500">
                     Role
+                  </th>
+                  <th className="bg-slate-50/60 py-2 pr-3 text-[10px] font-medium uppercase tracking-wider text-slate-500">
+                    Product
                   </th>
                   <th className="bg-slate-50/60 py-2 pr-3 text-[10px] font-medium uppercase tracking-wider text-slate-500">
                     Status
@@ -386,6 +401,9 @@ function UserRow({
         {roleLabel}
       </td>
       <td className="py-2.5 pr-3">
+        <ProductCell products={user.products} />
+      </td>
+      <td className="py-2.5 pr-3">
         <StatusCell user={user} />
       </td>
       <td className="py-2.5 pr-3">
@@ -469,6 +487,26 @@ function StatusCell({ user }: { user: UserListRow }) {
       <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
       Deleted
     </span>
+  );
+}
+
+function ProductCell({ products }: { products: string[] }) {
+  const hasTm = products.includes('TRANSCRIBE_MD');
+  const hasMp = products.includes('MEDDOC_PRO');
+  if (!hasTm && !hasMp) return <span className="text-[11px] text-slate-400">—</span>;
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      {hasTm && (
+        <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-teal-50 text-teal-800 ring-1 ring-teal-200">
+          Transcribe-MD
+        </span>
+      )}
+      {hasMp && (
+        <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-blue-50 text-blue-800 ring-1 ring-blue-200">
+          MedDoc Pro
+        </span>
+      )}
+    </div>
   );
 }
 
