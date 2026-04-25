@@ -115,6 +115,7 @@ enum AuditAction {
   USER_DELETED
   EXPORTED_AUDIT_LOG
   ADMIN_DASHBOARD_ACCESS
+  ADMIN_API_ACCESS
 
   // transcribe-md — visit lifecycle (Phase 1A, closes H2)
   VISIT_SIGNED

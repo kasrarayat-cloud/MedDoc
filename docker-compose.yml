@@ -67,10 +67,24 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      # Phase 1B v2 — meddoc-pro publishes to Redis from logAudit() for
+      # the admin SSE stream. We don't gate on `service_healthy` here
+      # (the publish path is fire-and-forget and skipped when the
+      # client isn't `ready`), but `service_started` keeps the
+      # dependency explicit so a fresh `docker compose up` brings
+      # redis up first.
+      redis:
+        condition: service_started
     env_file:
       - .env
     environment:
       DATABASE_URL: postgresql://meddoc:${DB_PASSWORD:-changeme_in_production}@postgres:5432/meddoc?schema=public
+      # Phase 1B v2 — explicit Redis URL for the audit-stream publish
+      # path and the /api/admin/stream/activity subscriber. Same value
+      # the singleton in lib/redis.ts defaults to, but spelled out so
+      # the next person reading the compose file doesn't have to grep
+      # for it.
+      REDIS_URL: redis://redis:6379
       # Canonical external URL NextAuth uses to build callbacks. Override
       # via PUBLIC_URL in .env once you move to a real domain (e.g.,
       # https://meddoc.example.com). Must match exactly what users see in
