@@ -47,6 +47,16 @@ const STILL_PROCESSING_WINDOW_MS = 10 * 60 * 1000;
 /** Statuses that mean "the worker might be running this right now".
  *  Any other status (FAILED, QUEUED) doesn't need the staleness check
  *  — FAILED is an explicit failure, QUEUED means nothing is running. */
+/** Hard cap on how many manual /retry POSTs the doctor can issue
+ *  against a single visit before the route refuses with 429. Each
+ *  retry burns Anthropic + (when relevant) Deepgram tokens; without
+ *  a budget a stuck-button loop turns into a serious cost incident.
+ *  5 is generous — the BullMQ auto-retry already covered the
+ *  transient case 3x before the visit ever hit FAILED, so a doctor
+ *  legitimately clicking Try again should usually succeed inside
+ *  this budget. */
+const MANUAL_RETRY_BUDGET = 5;
+
 const IN_FLIGHT_STATUSES: TranscribeVisitStatus[] = [
   TranscribeVisitStatus.TRANSCRIBING,
   TranscribeVisitStatus.EXTRACTING,
@@ -81,9 +91,26 @@ export const POST = withApiHandler<{ id: string }>(
         updatedAt: true,
         deletedAt: true,
         archivedAt: true,
+        manualRetryCount: true,
       },
     });
     if (!visit || visit.userId !== userId) return apiError('not found', 404);
+
+    if (visit.manualRetryCount >= MANUAL_RETRY_BUDGET) {
+      log.warn('api:visits:retry', 'budget exhausted', {
+        userId,
+        visitId,
+        count: visit.manualRetryCount,
+      });
+      return NextResponse.json(
+        {
+          error:
+            'This visit has been retried multiple times. Please contact support if the issue persists.',
+          code: 'RETRY_BUDGET_EXHAUSTED',
+        },
+        { status: 429 }
+      );
+    }
 
     if (visit.deletedAt !== null || visit.archivedAt !== null) {
       return NextResponse.json(
@@ -128,7 +155,9 @@ export const POST = withApiHandler<{ id: string }>(
           status: TranscribeVisitStatus.QUEUED,
           needsReview: false,
           reviewReason: null,
+          failureCategory: null,
           processingFinishedAt: null,
+          manualRetryCount: { increment: 1 },
         },
       });
       await enqueueProcessVisit(visitId, userId, { retry: true });

@@ -31,6 +31,7 @@ import {
   categorizeError,
   type ErrorCategory,
 } from './worker/error-categorize';
+import { notifyAdminOnFailure } from './lib/admin-notifications';
 
 import {
   QUEUE_NAME,
@@ -786,6 +787,36 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
           redactPhi(writeErr instanceof Error ? writeErr.message : writeErr)
         );
       });
+
+    // Best-effort admin alert. notifyAdminOnFailure swallows every
+    // failure path internally — a misconfigured Resend account must
+    // never mask the underlying pipeline error in Sentry.
+    void prisma.user
+      .findUnique({
+        where: { id: visit.userId },
+        select: { email: true },
+      })
+      .then((u: { email: string } | null) =>
+        notifyAdminOnFailure({
+          visitId,
+          userId: visit.userId,
+          userEmail: u?.email ?? null,
+          practiceId: visit.user?.practiceId ?? null,
+          layer: currentLayer,
+          category,
+          scrubbedError: redactPhi(
+            err instanceof Error ? err.message : String(err ?? '')
+          ),
+          audioDurationSec: null,
+        })
+      )
+      .catch((notifyErr: unknown) => {
+        console.error(
+          '[transcribe-md-worker] admin-notify outer catch:',
+          redactPhi(notifyErr instanceof Error ? notifyErr.message : notifyErr)
+        );
+      });
+
     throw err;
   }
 }
