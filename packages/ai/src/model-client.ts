@@ -117,6 +117,10 @@ export const modelClient = {
     return anthropicCompleteText({
       practiceId: args.practiceId,
       visitId: args.visitId,
+      // Phase 6F — userId was being silently dropped here, which made
+      // every api_usage_events row for completeText carry NULL userId
+      // even after the worker started passing userId in.
+      userId: args.userId ?? null,
       purpose: args.purpose,
       model: args.model,
       system: args.system,

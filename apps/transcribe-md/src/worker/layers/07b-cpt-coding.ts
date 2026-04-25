@@ -57,6 +57,7 @@ export type CptResult = z.infer<typeof CptResult>;
 export interface Layer7bInput {
   visitId: string;
   practiceId: string;
+  userId: string | null;
   specialty: string;
   soapFinal: string;
   entitiesJson: string;
@@ -134,6 +135,7 @@ export async function runLayer7bCptCoding(
   const result = await modelClient.complete({
     practiceId: input.practiceId,
     visitId: input.visitId,
+    userId: input.userId,
     purpose: 'tm_cpt_coding',
     provider: 'anthropic',
     model: MODEL,

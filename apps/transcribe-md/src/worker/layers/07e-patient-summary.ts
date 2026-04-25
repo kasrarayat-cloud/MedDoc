@@ -28,6 +28,7 @@ type PatientSummaryResult = z.infer<typeof PatientSummaryResult>;
 export interface Layer7eInput {
   visitId: string;
   practiceId: string;
+  userId: string | null;
   specialty: string;
   soapFinal: string;
   entitiesJson: string;
@@ -93,6 +94,7 @@ export async function runLayer7ePatientSummary(
   const result = await modelClient.complete<PatientSummaryResult>({
     practiceId: input.practiceId,
     visitId: input.visitId,
+    userId: input.userId,
     purpose: 'tm_patient_summary',
     provider: 'anthropic',
     model: MODEL,

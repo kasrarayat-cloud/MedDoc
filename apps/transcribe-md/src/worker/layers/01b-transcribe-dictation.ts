@@ -19,6 +19,7 @@ import { statAudio, streamAudio } from '@/lib/minio';
 export interface Layer1bInput {
   visitId: string;
   practiceId: string;
+  userId: string | null;
   dictationAudioKey: string;
   dictationMimeType: string;
 }
@@ -46,6 +47,7 @@ export async function runLayer1bTranscribeDictation(
     return deepgramBatchTranscribe({
       practiceId: input.practiceId,
       visitId: input.visitId,
+      userId: input.userId,
       purpose: 'tm_transcribe',
       audio: { stream: webStream, sizeBytes: stat.size },
       mimeType: input.dictationMimeType,

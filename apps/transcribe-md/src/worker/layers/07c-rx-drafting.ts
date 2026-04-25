@@ -52,6 +52,7 @@ export type RxResult = z.infer<typeof RxResult>;
 export interface Layer7cInput {
   visitId: string;
   practiceId: string;
+  userId: string | null;
   soapFinal: string;
   entitiesJson: string;
 }
@@ -142,6 +143,7 @@ export async function runLayer7cRxDrafting(
   const result = await modelClient.complete({
     practiceId: input.practiceId,
     visitId: input.visitId,
+    userId: input.userId,
     purpose: 'tm_rx_drafting',
     provider: 'anthropic',
     model: MODEL,
