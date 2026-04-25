@@ -13,6 +13,7 @@
 import prisma, { isDatabaseHealthy } from '@meddoc/db';
 import { getSession, getRequestContext, type Session } from './auth';
 import { tenantScope } from './tenancy';
+import { getRedis, ADMIN_AUDIT_STREAM_CHANNEL } from './redis';
 
 // Mirror Prisma enum (kept here so client/server tools can import w/o full Prisma)
 export type AuditAction =
@@ -128,6 +129,22 @@ export async function logAudit(input: AuditLogInput): Promise<void> {
       // Real DB write
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await prisma.auditLog.create({ data: entry as any });
+      // Phase 1B — fan out to admins watching the SSE stream. The
+      // publish is FIRE-AND-FORGET: even with `maxRetriesPerRequest:
+      // null` the ioredis publish queue can stall an `await` for tens
+      // of seconds when Redis is briefly unreachable. Awaiting that
+      // would block whatever caller awaited logAudit (e.g.,
+      // events.signIn → entire login latency). Detach with `.catch()`
+      // and let the row stay in audit_logs as the durable source of
+      // truth.
+      void getRedis()
+        .publish(ADMIN_AUDIT_STREAM_CHANNEL, JSON.stringify(entry))
+        .catch((pubErr) => {
+          console.warn(
+            '[audit] redis publish failed (audit row still saved):',
+            pubErr instanceof Error ? pubErr.message : pubErr
+          );
+        });
     } else {
       // Memory fallback — also mirror to console for visibility
       memoryAuditLog.push(entry);

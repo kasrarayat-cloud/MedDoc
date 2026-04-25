@@ -21,6 +21,12 @@ import { headers } from 'next/headers';
 
 import prisma from '@meddoc/db';
 import { auth } from '@/lib/nextauth';
+import { getSharedRedisConnection } from './queue';
+
+/** Channel name shared with apps/meddoc-pro/src/lib/redis.ts. Hard-
+ *  coded here rather than imported because the two apps don't share a
+ *  workspace package for Redis primitives. Keep them in sync. */
+const ADMIN_AUDIT_STREAM_CHANNEL = 'admin:audit-stream';
 
 // AuditAction is a Prisma enum — we mirror the relevant slice for
 // transcribe-md-side call sites. Keeping this as a union rather than
@@ -133,6 +139,18 @@ export async function logAudit(input: AuditLogInput): Promise<void> {
     // any through the rest of the file.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await prisma.auditLog.create({ data: entry as any });
+    // Phase 1B — fire-and-forget pub/sub. Awaiting publish() with the
+    // BullMQ-style maxRetriesPerRequest:null connection can stall for
+    // tens of seconds when Redis is briefly unreachable, blocking
+    // whatever caller awaited logAudit (e.g., signing). Detach.
+    void getSharedRedisConnection()
+      .publish(ADMIN_AUDIT_STREAM_CHANNEL, JSON.stringify(entry))
+      .catch((pubErr) => {
+        console.warn(
+          '[audit] redis publish failed (audit row still saved):',
+          pubErr instanceof Error ? pubErr.message : pubErr
+        );
+      });
   } catch (err) {
     // Audit logging must never break the calling request. A Prisma
     // failure here likely means the audit_logs table is unreachable —

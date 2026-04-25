@@ -53,7 +53,7 @@ export interface AdminContext {
 type AdminHandler = (
   req: NextRequest,
   ctx: AdminContext
-) => Promise<NextResponse> | NextResponse;
+) => Promise<NextResponse | Response> | NextResponse | Response;
 
 /** 404 response, identical body across all admin routes so a probing
  *  attacker can't distinguish "wrong-method" from "not-admin" from
@@ -65,7 +65,7 @@ function notFoundResponse(): NextResponse {
 export function adminApi(
   routeKey: string,
   handler: AdminHandler
-): (req: NextRequest) => Promise<NextResponse> {
+): (req: NextRequest) => Promise<NextResponse | Response> {
   return async (req: NextRequest) => {
     const sessionOrNull = await auth().catch(() => null);
     if (!sessionOrNull?.user?.id) return notFoundResponse();

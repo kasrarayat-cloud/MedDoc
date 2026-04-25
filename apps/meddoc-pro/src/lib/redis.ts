@@ -17,8 +17,12 @@ import IORedis, { type RedisOptions } from 'ioredis';
 let connection: IORedis | null = null;
 
 function buildConnection(): IORedis {
+  // Default points at the docker-compose `redis` service hostname,
+  // not localhost. The container env doesn't set REDIS_URL by default;
+  // hardcoding the service name keeps this self-healing without a
+  // compose edit. Override via REDIS_URL when running outside Docker.
   const redisUrl =
-    process.env.REDIS_URL?.trim() || 'redis://localhost:6379';
+    process.env.REDIS_URL?.trim() || 'redis://redis:6379';
   const opts: RedisOptions = {
     maxRetriesPerRequest: null,
     enableReadyCheck: false,
