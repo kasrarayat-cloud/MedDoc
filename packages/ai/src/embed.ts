@@ -21,6 +21,7 @@ import { isMockEnabled, mockEmbed } from './mock';
 import { openaiEmbedSmallCostCents } from './pricing';
 import { hashPrompt } from './prompt-hash';
 import type { AiLogContext } from './types';
+import { logApiUsage, buildOpenAIEmbedUsage } from './api-usage';
 
 /** Dimension of text-embedding-3-small. Must match vector(1536) in
  *  the doctor_edit_patterns.embedding column. Changing the model
@@ -123,6 +124,19 @@ export async function embedText(args: EmbedTextArgs): Promise<EmbedTextResult> {
       costUsdCents: costCents,
       success: true,
     });
+
+    logApiUsage(
+      buildOpenAIEmbedUsage(
+        {
+          userId: args.userId ?? null,
+          practiceId: args.practiceId,
+          visitId: args.visitId ?? null,
+          metadata: { purpose: args.purpose, latencyMs },
+        },
+        inputTokens,
+        model
+      )
+    );
 
     return { embedding, inputTokens, costCents };
   } catch (err) {

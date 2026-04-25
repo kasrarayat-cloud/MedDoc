@@ -41,4 +41,9 @@ export interface AiLogContext {
   practiceId: string;
   visitId?: string | null;
   purpose: ModelCallPurpose;
+  /** Phase 6 — owner of the call for per-user cost rollups. Optional
+   *  for back-compat: legacy callers that didn't plumb a user (e.g.,
+   *  background sweeps) still type-check. The api_usage_events row
+   *  records null `userId` in that case, attributed only by practice. */
+  userId?: string | null;
 }
