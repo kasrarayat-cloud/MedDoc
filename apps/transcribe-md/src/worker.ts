@@ -27,6 +27,10 @@ import type { DeepgramBatchResponse, DeepgramUtterance } from '@meddoc/ai';
 import { redactPhi } from '@meddoc/ai';
 import { log } from '@/lib/log';
 import { shouldMarkVisitFailed } from './worker/retry-decision';
+import {
+  categorizeError,
+  type ErrorCategory,
+} from './worker/error-categorize';
 
 import {
   QUEUE_NAME,
@@ -726,27 +730,38 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
     // filter errors by failure point without reading the stack trace.
     captureWorkerException(err, { visitId, layer: currentLayer });
 
-    // T-M23.A: only persist FAILED on the final BullMQ attempt. A
-    // non-final throw leaves visit.status at whatever the current
-    // layer wrote (EXTRACTING, DRAFTING, etc.) — the UI keeps
-    // showing the processing spinner through the exp-backoff window
-    // and the user never sees a "Processing failed" banner that
-    // auto-resolves 5 seconds later. Re-throw either way so BullMQ
-    // either schedules the next retry or records the final failure.
+    // T-M23.A: only persist FAILED on the final BullMQ attempt …
+    // *unless* this fix-pass classifies the error as `permanent`. A
+    // permanent error (Zod, "unsupported format", zero-byte audio,
+    // etc.) will fail the same way on every retry — burning two more
+    // BullMQ attempts is just two more Anthropic / Deepgram calls
+    // for the same outcome. Fail-fast in that case so the doctor
+    // sees the actionable banner ~5s instead of ~25s after submit.
+    const category: ErrorCategory = categorizeError(err);
     const attemptsMade = job.attemptsMade ?? 0;
     const attempts = job.opts.attempts ?? 1;
-    if (!shouldMarkVisitFailed(attemptsMade, attempts)) {
+    const isFinalAttempt = shouldMarkVisitFailed(attemptsMade, attempts);
+    const shouldFailNow = isFinalAttempt || category === 'permanent';
+    if (!shouldFailNow) {
       log.info(
         'transcribe-md-worker',
         'transient failure, awaiting BullMQ retry',
         {
           visitId,
           layer: currentLayer,
+          category,
           attemptsMade,
           attempts,
         }
       );
       throw err;
+    }
+    if (category === 'permanent' && !isFinalAttempt) {
+      log.info(
+        'transcribe-md-worker',
+        'permanent failure, fail-fast (skipping BullMQ retries)',
+        { visitId, layer: currentLayer, attemptsMade, attempts }
+      );
     }
 
     await prisma.transcribeVisit
@@ -761,7 +776,8 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
           // Prisma/Deepgram/Anthropic error can quote patient content
           // (PHI in the DB + UI). Instead, write a phase-tagged
           // user-friendly string derived only from currentLayer.
-          reviewReason: buildUserFacingFailureReason(currentLayer),
+          reviewReason: buildUserFacingFailureReason(currentLayer, category),
+          failureCategory: category,
         },
       })
       .catch((writeErr: unknown) => {
@@ -778,8 +794,17 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
  *  'automation', etc.) to a human-readable phrase used in the
  *  FAILED-state banner. Never includes any content from the thrown
  *  error, so PHI can't bleed into the UI. Doctors see a layer name,
- *  ops + Sentry see the full scrubbed error + stack. */
-function buildUserFacingFailureReason(currentLayer: string): string {
+ *  ops + Sentry see the full scrubbed error + stack.
+ *
+ *  The `category` argument tunes the call-to-action sentence so a
+ *  permanent / provider-down failure says something more useful
+ *  than a generic "try retrying". Falls back to the original copy
+ *  for unknown / transient cases so existing UI snapshots still
+ *  match. */
+function buildUserFacingFailureReason(
+  currentLayer: string,
+  category: ErrorCategory = 'transient'
+): string {
   const phraseByLayer: Record<string, string> = {
     init: 'setup',
     L1: 'transcription',
@@ -793,6 +818,12 @@ function buildUserFacingFailureReason(currentLayer: string): string {
     finalize: 'finalization',
   };
   const phrase = phraseByLayer[currentLayer] ?? 'processing';
+  if (category === 'permanent') {
+    return `Processing failed during ${phrase}. The audio file may be corrupt or in an unsupported format — please re-upload to try again.`;
+  }
+  if (category === 'provider_down') {
+    return `Processing failed during ${phrase}. Our transcription provider is temporarily unavailable; please try again in a few minutes.`;
+  }
   return `Processing failed during ${phrase}. Try retrying this visit, or contact support if it keeps failing.`;
 }
 
