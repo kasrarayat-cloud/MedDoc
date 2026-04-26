@@ -101,14 +101,17 @@ export const GET = adminApi('users:detail', async (req) => {
         ORDER BY last_seen DESC
         LIMIT 25
       `,
-      // UserSession rows that are still active = revokedAt IS NULL.
-      // The schema lives in the @meddoc/auth package; not all
-      // workspaces have a Prisma type for it, so we count via the
-      // user_sessions table directly.
+      // Phase 6Z fix: the original query referenced a non-existent
+      // `revokedAt` column on user_sessions (the schema only has
+      // expiresAt — sessions are deleted, not flagged). The .catch()
+      // silently swallowed the column-doesn't-exist error so this
+      // count was always 0 in the API response (and therefore always
+      // 0 in the User detail drawer). Now matches users-data.ts which
+      // already uses the correct `expiresAt > NOW()` predicate.
       prisma.$queryRaw<{ n: bigint }[]>`
         SELECT COUNT(*)::bigint AS n
         FROM user_sessions
-        WHERE "userId" = ${id} AND "revokedAt" IS NULL
+        WHERE "userId" = ${id} AND "expiresAt" > NOW()
       `.catch(() => [{ n: BigInt(0) }] as { n: bigint }[]),
       prisma.$queryRaw<{ provider: string; total: number }[]>`
         SELECT provider, SUM("totalCostUsd")::float AS total

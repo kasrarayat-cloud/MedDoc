@@ -248,25 +248,34 @@ async function loadAuditAround(
 }
 
 async function loadUserProfile(userId: string): Promise<UserProfile | null> {
+  // Phase 6Z fix: the prior version selected `fullName` and `lastLoginAt`
+  // — neither exists on the User model (display name is `name` and the
+  // last-login timestamp is `lastLogin` per packages/db/prisma/
+  // schema.prisma). Prisma threw, the outer try/catch in the handler
+  // swallowed the error, and the InvestigateDrawer silently rendered
+  // without the actor profile for every user-related threat (cross,
+  // bulk, xdom, grant-admin). The interface fields stay named
+  // `fullName`/`lastLoginAt` because the UI consumer expects those
+  // names; we just map from the actual schema columns.
   const u = await prisma.user.findUnique({
     where: { id: userId },
     select: {
       id: true,
       email: true,
-      fullName: true,
+      name: true,
       practiceId: true,
       isActive: true,
-      lastLoginAt: true,
+      lastLogin: true,
     },
   });
   if (!u) return null;
   return {
     id: u.id,
     email: u.email,
-    fullName: u.fullName,
+    fullName: u.name,
     practiceId: u.practiceId,
     isActive: u.isActive,
-    lastLoginAt: u.lastLoginAt ? u.lastLoginAt.toISOString() : null,
+    lastLoginAt: u.lastLogin ? u.lastLogin.toISOString() : null,
   };
 }
 
