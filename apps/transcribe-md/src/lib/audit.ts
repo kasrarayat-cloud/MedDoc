@@ -53,6 +53,9 @@ export type AuditAction =
   | 'THREAT_INVESTIGATED'
   | 'THREAT_RESOLVED'
   | 'THREAT_DISMISSED_FALSE_POSITIVE'
+  // Phase 7B — HIPAA-finding workflow on /admin/hipaa
+  | 'HIPAA_FINDING_RESOLVED'
+  | 'HIPAA_FINDING_REOPENED'
   // Visit lifecycle
   | 'VISIT_SIGNED'
   | 'VISIT_DELETED'
