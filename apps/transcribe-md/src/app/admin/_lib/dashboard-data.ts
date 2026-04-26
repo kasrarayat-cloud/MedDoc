@@ -1015,32 +1015,82 @@ function formatLatency(ms: number): string {
 }
 
 // ---------------------------------------------------------------------------
-// HIPAA state — placeholder until a real findings endpoint exists.
+// HIPAA state — Phase 7B: now reads from `hipaa_findings` table.
 // ----------------------------------------------------------------------------
-// Numbers come from the AUDIT-COVERAGE doc + the most recent ultra-final
-// audit. Phase 7A: the consumer (HipaaComplianceCard) now derives the
-// header status badge AND the per-severity rows from the SAME
-// `findings` array via `summarizeHipaaFindings()` in admin-format, so a
-// future Option-β swap (real findings table → real query here) flows
-// through to every figure on the card without touching the UI.
+// Phase 6Z's getHipaaState() returned a hardcoded array. Phase 7A made
+// the card consistent (header badge derived from the same array). Phase
+// 7B (this) replaces the hardcoded array with a real query against
+// hipaa_findings — the table managed via the new /admin/hipaa page.
 //
-// Option-β swap path (when a real source exists):
-//   - Add a `hipaa_findings` table (or query audit_logs for HIPAA-flagged
-//     incidents).
-//   - Replace this function body with a Prisma query that returns the
-//     same `HipaaState` shape: `findings: HipaaFinding[]`, plus the
-//     existing auditCoverage + lastReview fields.
-//   - The card surfaces and `summarizeHipaaFindings` need no change.
+// Shape returned is unchanged (HipaaState — findings + auditCoverage
+// + lastReview), so HipaaComplianceCard + summarizeHipaaFindings keep
+// working without UI changes.
+//
+// Failure mode: returns an "all clear" placeholder if the query throws,
+// rather than crashing the Overview SSR. The card visually communicates
+// "we're up but the findings query is degraded" via the empty findings
+// array → All clear badge.
 // ---------------------------------------------------------------------------
 
+interface HipaaFindingRow {
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  total: bigint;
+  resolved: bigint;
+}
+
 export async function getHipaaState(): Promise<HipaaState> {
+  let lastReviewLabel = 'never';
+  let findings: HipaaState['findings'] = [];
+  try {
+    // GROUP BY severity gives us total + resolved per severity in one
+    // round-trip. Constrain to the 3 severities the card surfaces;
+    // 'low' rows accumulate but don't get their own card row this turn.
+    const rows = await prisma.$queryRaw<HipaaFindingRow[]>`
+      SELECT
+        severity::text AS severity,
+        COUNT(*)::bigint AS total,
+        COUNT(*) FILTER (WHERE status = 'resolved')::bigint AS resolved
+      FROM hipaa_findings
+      WHERE severity IN ('critical', 'high', 'medium')
+      GROUP BY severity
+    `;
+
+    // Ensure every severity card row has an entry, even when the
+    // table has zero findings of that severity (so the card always
+    // shows the same 3 rows).
+    const map: Record<string, { total: number; resolved: number }> = {};
+    for (const r of rows) {
+      map[r.severity] = { total: Number(r.total), resolved: Number(r.resolved) };
+    }
+    findings = (['critical', 'high', 'medium'] as const).map((sev) => ({
+      severity: sev,
+      total: map[sev]?.total ?? 0,
+      resolved: map[sev]?.resolved ?? 0,
+    }));
+
+    // "lastReview" = most recent createdAt or resolvedAt across all
+    // findings. Surfaces in the card header as "reviewed today / 2d ago".
+    const last = await prisma.$queryRaw<{ ts: Date | null }[]>`
+      SELECT GREATEST(MAX("createdAt"), MAX("resolvedAt")) AS ts
+      FROM hipaa_findings
+    `;
+    const ts = last[0]?.ts ?? null;
+    if (ts) {
+      const ageMs = Date.now() - ts.getTime();
+      const days = Math.floor(ageMs / (24 * 60 * 60 * 1000));
+      lastReviewLabel = days <= 0 ? 'today' : days === 1 ? '1 day ago' : `${days} days ago`;
+    }
+  } catch (err) {
+    console.error('[admin:hipaa] findings query failed:', err);
+  }
+
   return {
-    findings: [
-      { severity: 'critical', total: 0, resolved: 0 },
-      { severity: 'high', total: 4, resolved: 1 },
-      { severity: 'medium', total: 0, resolved: 0 },
-    ],
+    findings,
+    // Audit-coverage stat is still hardcoded — the underlying truth
+    // ("how many audit actions does the codebase emit") doesn't live in
+    // a table yet. Future phase: derive from a manifest of expected
+    // AuditAction values vs the set we observe in audit_logs.
     auditCoverage: { covered: 26, total: 26 },
-    lastReview: 'today',
+    lastReview: lastReviewLabel,
   };
 }

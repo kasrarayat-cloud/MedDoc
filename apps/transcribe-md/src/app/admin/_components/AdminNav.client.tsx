@@ -19,6 +19,7 @@ const ITEMS = [
   { href: '/admin/users', label: 'Users' },
   { href: '/admin/usage', label: 'API Usage' },
   { href: '/admin/threats', label: 'Threats' },
+  { href: '/admin/hipaa', label: 'HIPAA' },
 ] as const;
 
 export default function AdminNav() {
