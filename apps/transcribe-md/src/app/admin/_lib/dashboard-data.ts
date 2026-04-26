@@ -304,6 +304,15 @@ interface RawPrivilegeEsc {
   targetId: string | null;
 }
 
+interface RawVolumeSpike {
+  userId: string;
+  userEmail: string | null;
+  today: number;
+  baseline: number;
+  multiple: number;
+  day: Date;
+}
+
 const FAILED_LOGIN_BURST_THRESHOLD = 5;
 const FAILED_LOGIN_BURST_WINDOW_MIN = 5;
 const BULK_PHI_THRESHOLD = 50;
@@ -311,6 +320,23 @@ const BULK_PHI_THRESHOLD = 50;
  *  spec — long enough that a sudden grant gets reviewed, short enough
  *  that the panel doesn't permanently carry historical noise. */
 const PRIVILEGE_ESCALATION_WINDOW_DAYS = 7;
+
+// Phase 8 — Detector 4: PHI export volume spike. Closes
+// hipaa_findings.h7b-detector4 (Phase 6Z-09 follow-up).
+//   Baseline: per-user mean export count per calendar day over the
+//   prior 14 days, requiring at least 7 days of history (so we don't
+//   flag a brand-new doctor on day 2).
+//   Trigger:  today's count >= 3x baseline AND today's count >= 5
+//             absolute (so a baseline of 0.3 doesn't pop on a single
+//             export).
+//   Severity: amber when multiple is 3..10x; red when >10x — mirrors
+//             the failed-login-burst severity ladder so a serious
+//             exfiltration sorts above noisier amber items.
+const VOLUME_SPIKE_HISTORY_DAYS = 14;
+const VOLUME_SPIKE_MIN_HISTORY_DAYS = 7;
+const VOLUME_SPIKE_MULTIPLE_THRESHOLD = 3;
+const VOLUME_SPIKE_RED_MULTIPLE = 10;
+const VOLUME_SPIKE_MIN_TODAY = 5;
 
 /**
  * Phase 6H — silence-pattern matcher.
@@ -382,6 +408,16 @@ function matchesSilencePattern(
     case 'privilege_escalation':
       // No useful sub-key; we just rely on per-row exact-id resolution.
       return false;
+    case 'volume_spike': {
+      // volume-spike:<userId>:<YYYY-MM-DD>
+      // Phase 8: silence per-user (rare — covers "this user has a
+      // legitimately high baseline"); silencing all volume spikes
+      // platform-wide is the kind of footgun the per-type guard
+      // exists to prevent.
+      if (pattern.userId == null) return false;
+      const userId = parts[1];
+      return pattern.userId === userId;
+    }
     default:
       return false;
   }
@@ -437,7 +473,7 @@ export async function getThreats(): Promise<Threat[]> {
     Date.now() - PRIVILEGE_ESCALATION_WINDOW_DAYS * 24 * 60 * 60 * 1000
   );
 
-  const [bursts, cross, bulk, exportExt, privEsc, resolutions] = await Promise.all([
+  const [bursts, cross, bulk, exportExt, privEsc, volumeSpikes, resolutions] = await Promise.all([
     prisma.$queryRaw<RawFailedLoginBurst[]>`
       WITH windowed AS (
         SELECT
@@ -554,6 +590,55 @@ export async function getThreats(): Promise<Threat[]> {
       LIMIT 20
     `.catch(() => [] as RawPrivilegeEsc[]),
 
+    // Phase 8 — Detector 4: PHI export volume spike. CTE pattern:
+    //   per_day  : count of EXPORT_* per (userId, day) over last 14d
+    //   baseline : per-user mean of those daily counts EXCLUDING today,
+    //              gated on >=7 days of history so brand-new doctors
+    //              don't get flagged on day-2.
+    //   today    : same per-day count for today.
+    // Trigger when today >= 3x baseline AND today >= 5 absolute.
+    prisma.$queryRaw<RawVolumeSpike[]>`
+      WITH per_day AS (
+        SELECT
+          "userId",
+          DATE_TRUNC('day', "timestamp") AS day,
+          COUNT(*)::int AS exports
+        FROM audit_logs
+        WHERE "timestamp" >= NOW() - (${VOLUME_SPIKE_HISTORY_DAYS} || ' days')::interval
+          AND action LIKE 'EXPORT_%'
+          AND "userId" IS NOT NULL
+        GROUP BY "userId", day
+      ),
+      baseline AS (
+        SELECT
+          "userId",
+          AVG(exports)::float AS avg_per_day
+        FROM per_day
+        WHERE day < DATE_TRUNC('day', NOW())
+        GROUP BY "userId"
+        HAVING COUNT(*) >= ${VOLUME_SPIKE_MIN_HISTORY_DAYS}
+      ),
+      today AS (
+        SELECT "userId", exports AS today_count
+        FROM per_day
+        WHERE day = DATE_TRUNC('day', NOW())
+      )
+      SELECT
+        t."userId",
+        u.email AS "userEmail",
+        t.today_count::int AS today,
+        b.avg_per_day::float AS baseline,
+        (t.today_count::float / NULLIF(b.avg_per_day, 0))::float AS multiple,
+        DATE_TRUNC('day', NOW()) AS day
+      FROM today t
+      JOIN baseline b ON b."userId" = t."userId"
+      LEFT JOIN users u ON u.id = t."userId"
+      WHERE t.today_count >= b.avg_per_day * ${VOLUME_SPIKE_MULTIPLE_THRESHOLD}
+        AND t.today_count >= ${VOLUME_SPIKE_MIN_TODAY}
+      ORDER BY multiple DESC
+      LIMIT 20
+    `.catch(() => [] as RawVolumeSpike[]),
+
     loadActiveResolutions(),
   ]);
 
@@ -613,6 +698,23 @@ export async function getThreats(): Promise<Threat[]> {
       severity: 'amber',
       summary: `Admin privileges granted to ${target}`,
       detail: `By ${actor} · ${p.timestamp.toISOString().slice(0, 10)}`,
+    });
+  }
+
+  for (const v of volumeSpikes) {
+    // Stable id per spec: volume-spike:<userId>:<YYYY-MM-DD>. The day
+    // suffix means a fresh threat appears each day the spike repeats
+    // — admins resolve today's, then tomorrow's reappears if the
+    // anomaly continues.
+    const dayKey = v.day.toISOString().slice(0, 10);
+    const who = v.userEmail ?? v.userId;
+    const mult = Number(v.multiple ?? 0);
+    threats.push({
+      id: `volume-spike:${v.userId}:${dayKey}`,
+      type: 'volume_spike',
+      severity: mult > VOLUME_SPIKE_RED_MULTIPLE ? 'red' : 'amber',
+      summary: `Export volume spike — ${who}`,
+      detail: `${v.today} exports today (${mult.toFixed(1)}x baseline of ${v.baseline.toFixed(1)}/day)`,
     });
   }
 
@@ -685,7 +787,7 @@ export async function getResolvedThreats(
   // still find their source row.
   const sinceDetect = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
-  const [bursts, cross, bulk, exportExt, privEsc] = await Promise.all([
+  const [bursts, cross, bulk, exportExt, privEsc, volumeSpikes] = await Promise.all([
     prisma.$queryRaw<RawFailedLoginBurst[]>`
       WITH windowed AS (
         SELECT
@@ -787,6 +889,44 @@ export async function getResolvedThreats(
       WHERE "timestamp" >= ${sinceDetect}
         AND action = 'USER_GRANTED_SUPER_ADMIN'
     `.catch(() => [] as RawPrivilegeEsc[]),
+
+    // Phase 8 — Detector 4 mirror in the historical view. Same CTE
+    // shape as the live getThreats() detector; widening to the history
+    // window means a resolved volume_spike threat from N days ago can
+    // still find its source row when re-derived.
+    prisma.$queryRaw<RawVolumeSpike[]>`
+      WITH per_day AS (
+        SELECT
+          "userId",
+          DATE_TRUNC('day', "timestamp") AS day,
+          COUNT(*)::int AS exports
+        FROM audit_logs
+        WHERE "timestamp" >= ${sinceDetect}
+          AND action LIKE 'EXPORT_%'
+          AND "userId" IS NOT NULL
+        GROUP BY "userId", day
+      ),
+      baseline AS (
+        SELECT
+          "userId",
+          AVG(exports)::float AS avg_per_day
+        FROM per_day
+        GROUP BY "userId"
+        HAVING COUNT(*) >= ${VOLUME_SPIKE_MIN_HISTORY_DAYS}
+      )
+      SELECT
+        p."userId",
+        u.email AS "userEmail",
+        p.exports AS today,
+        b.avg_per_day AS baseline,
+        (p.exports::float / NULLIF(b.avg_per_day, 0))::float AS multiple,
+        p.day AS day
+      FROM per_day p
+      JOIN baseline b ON b."userId" = p."userId"
+      LEFT JOIN users u ON u.id = p."userId"
+      WHERE p.exports >= b.avg_per_day * ${VOLUME_SPIKE_MULTIPLE_THRESHOLD}
+        AND p.exports >= ${VOLUME_SPIKE_MIN_TODAY}
+    `.catch(() => [] as RawVolumeSpike[]),
   ]);
 
   // Index every potential threat by its deterministic id so we can
@@ -844,6 +984,19 @@ export async function getResolvedThreats(
       severity: 'amber',
       summary: `Admin privileges granted to ${target}`,
       detail: `By ${actor} · ${p.timestamp.toISOString().slice(0, 10)}`,
+    };
+    byId.set(t.id, t);
+  }
+  for (const v of volumeSpikes) {
+    const dayKey = v.day.toISOString().slice(0, 10);
+    const who = v.userEmail ?? v.userId;
+    const mult = Number(v.multiple ?? 0);
+    const t: Threat = {
+      id: `volume-spike:${v.userId}:${dayKey}`,
+      type: 'volume_spike',
+      severity: mult > VOLUME_SPIKE_RED_MULTIPLE ? 'red' : 'amber',
+      summary: `Export volume spike — ${who}`,
+      detail: `${v.today} exports today (${mult.toFixed(1)}x baseline of ${v.baseline.toFixed(1)}/day)`,
     };
     byId.set(t.id, t);
   }

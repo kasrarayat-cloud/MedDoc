@@ -126,6 +126,14 @@ function derivePatternFromId(threatId: string): Record<string, unknown> | null {
       // Privilege grants can't be silenced by class — every grant is
       // its own review-worthy event. Pattern stays null.
       return null;
+    case 'volume-spike':
+      // Phase 8 — Detector 4. Silence per-user (covers a doctor with
+      // a legitimately high baseline). Today's daily key isn't
+      // useful in the silence pattern — the goal is "this user is
+      // expected to spike again tomorrow", not "this exact day".
+      return parts[1]
+        ? { type: 'volume_spike', userId: parts[1] }
+        : null;
     default:
       return null;
   }
