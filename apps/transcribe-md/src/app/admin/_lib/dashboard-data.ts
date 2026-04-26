@@ -342,31 +342,40 @@ function matchesSilencePattern(
   // Decode the threat's ID back into its identifying parts. IDs are
   // built up in the loops below as `<kind>:<part1>:<part2>`.
   const parts = threat.id.split(':');
+  // Phase 6Z hardening: every type-specific case requires its
+  // identifying subkey to be present on the pattern. Without this,
+  // a pattern like { type: 'failed_login_burst' } (no ipAddress) would
+  // silence EVERY future failed-login burst — a footgun for an admin
+  // who hand-crafts a silencePattern via the dismiss API. The xdom
+  // case already had this guard; mirroring it everywhere now.
   switch (threat.type) {
     case 'failed_login_burst': {
       // burst:<ip>:<isoTimestamp>
+      if (pattern.ipAddress == null) return false;
       const ip = parts[1];
-      return pattern.ipAddress == null || pattern.ipAddress === ip;
+      return pattern.ipAddress === ip;
     }
     case 'cross_tenant_attempts': {
       // cross:<userId>:<isoTimestamp>
+      if (pattern.userId == null) return false;
       const userId = parts[1];
-      return pattern.userId == null || pattern.userId === userId;
+      return pattern.userId === userId;
     }
     case 'bulk_phi_access': {
       // bulk:<userId>:<isoTimestamp>
+      if (pattern.userId == null) return false;
       const userId = parts[1];
-      return pattern.userId == null || pattern.userId === userId;
+      return pattern.userId === userId;
     }
     case 'export_to_external_domain': {
       // xdom:<userId>:<domain>
+      // At least one of userId/domain must be specified — otherwise the
+      // pattern would silence all xdom threats globally.
+      if (pattern.userId == null && pattern.domain == null) return false;
       const userId = parts[1];
       const domain = parts.slice(2).join(':');
       const userOk = pattern.userId == null || pattern.userId === userId;
       const domainOk = pattern.domain == null || pattern.domain === domain;
-      // At least one of userId/domain must be specified — otherwise the
-      // pattern would silence all xdom threats globally.
-      if (pattern.userId == null && pattern.domain == null) return false;
       return userOk && domainOk;
     }
     case 'privilege_escalation':
