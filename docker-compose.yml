@@ -124,6 +124,11 @@ services:
   minio:
     image: minio/minio:latest
     restart: unless-stopped
+    # Phase 8 — H4: non-root containers. MinIO writes to its data dir
+    # at runtime (object writes, leveldb metadata). Volume contents
+    # were chowned to 1000:1000 once before this user directive
+    # landed; subsequent restarts inherit ownership.
+    user: "1000:1000"
     mem_limit: 256m
     cpus: '0.5'
     # T-M16.4: MinIO holds many open sockets under concurrent uploads;
