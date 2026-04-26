@@ -27,6 +27,8 @@ import type {
   ActivityCategory,
   HealthStatus,
   Threat,
+  ResolvedThreat,
+  ThreatResolutionKind,
   TimelineBucket,
   PipelineMetrics,
   HipaaState,
@@ -309,13 +311,111 @@ const BULK_PHI_THRESHOLD = 50;
  *  that the panel doesn't permanently carry historical noise. */
 const PRIVILEGE_ESCALATION_WINDOW_DAYS = 7;
 
+/**
+ * Phase 6H — silence-pattern matcher.
+ *
+ * A `ThreatResolution` row may carry a `silencePattern` JSON object that
+ * tells future detector runs to suppress similar threats (e.g. "always
+ * dismiss exports to test-pattern.invalid"). We re-derive each candidate
+ * threat's identifying tuple here and check it against every stored
+ * pattern.
+ *
+ * The supported pattern keys per threat type match what the detector
+ * SQL above produces — keeping them parallel makes the matcher trivial:
+ *
+ *   failed_login_burst        { type, ipAddress }
+ *   cross_tenant_attempts     { type, userId }
+ *   bulk_phi_access           { type, userId }
+ *   export_to_external_domain { type, userId?, domain? }   (either or both)
+ *   privilege_escalation      { type }                     (silences ALL grants — rarely useful)
+ *
+ * `type` is required on every pattern; a pattern without it would be a
+ * footgun (would silence everything).
+ */
+function matchesSilencePattern(
+  threat: Threat,
+  pattern: Record<string, unknown>
+): boolean {
+  if (typeof pattern.type !== 'string' || pattern.type !== threat.type) {
+    return false;
+  }
+  // Decode the threat's ID back into its identifying parts. IDs are
+  // built up in the loops below as `<kind>:<part1>:<part2>`.
+  const parts = threat.id.split(':');
+  switch (threat.type) {
+    case 'failed_login_burst': {
+      // burst:<ip>:<isoTimestamp>
+      const ip = parts[1];
+      return pattern.ipAddress == null || pattern.ipAddress === ip;
+    }
+    case 'cross_tenant_attempts': {
+      // cross:<userId>:<isoTimestamp>
+      const userId = parts[1];
+      return pattern.userId == null || pattern.userId === userId;
+    }
+    case 'bulk_phi_access': {
+      // bulk:<userId>:<isoTimestamp>
+      const userId = parts[1];
+      return pattern.userId == null || pattern.userId === userId;
+    }
+    case 'export_to_external_domain': {
+      // xdom:<userId>:<domain>
+      const userId = parts[1];
+      const domain = parts.slice(2).join(':');
+      const userOk = pattern.userId == null || pattern.userId === userId;
+      const domainOk = pattern.domain == null || pattern.domain === domain;
+      // At least one of userId/domain must be specified — otherwise the
+      // pattern would silence all xdom threats globally.
+      if (pattern.userId == null && pattern.domain == null) return false;
+      return userOk && domainOk;
+    }
+    case 'privilege_escalation':
+      // No useful sub-key; we just rely on per-row exact-id resolution.
+      return false;
+    default:
+      return false;
+  }
+}
+
+interface ResolutionRow {
+  threatId: string;
+  resolutionKind: string;
+  silencePattern: unknown;
+}
+
+async function loadActiveResolutions(): Promise<{
+  byThreatId: Set<string>;
+  silencePatterns: Record<string, unknown>[];
+}> {
+  try {
+    const rows = (await prisma.threatResolution.findMany({
+      select: { threatId: true, resolutionKind: true, silencePattern: true },
+    })) as unknown as ResolutionRow[];
+    const byThreatId = new Set<string>();
+    const silencePatterns: Record<string, unknown>[] = [];
+    for (const r of rows) {
+      byThreatId.add(r.threatId);
+      if (
+        r.silencePattern &&
+        typeof r.silencePattern === 'object' &&
+        !Array.isArray(r.silencePattern)
+      ) {
+        silencePatterns.push(r.silencePattern as Record<string, unknown>);
+      }
+    }
+    return { byThreatId, silencePatterns };
+  } catch {
+    return { byThreatId: new Set(), silencePatterns: [] };
+  }
+}
+
 export async function getThreats(): Promise<Threat[]> {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const sincePriv = new Date(
     Date.now() - PRIVILEGE_ESCALATION_WINDOW_DAYS * 24 * 60 * 60 * 1000
   );
 
-  const [bursts, cross, bulk, exportExt, privEsc] = await Promise.all([
+  const [bursts, cross, bulk, exportExt, privEsc, resolutions] = await Promise.all([
     prisma.$queryRaw<RawFailedLoginBurst[]>`
       WITH windowed AS (
         SELECT
@@ -431,6 +531,8 @@ export async function getThreats(): Promise<Threat[]> {
       ORDER BY "timestamp" DESC
       LIMIT 20
     `.catch(() => [] as RawPrivilegeEsc[]),
+
+    loadActiveResolutions(),
   ]);
 
   const threats: Threat[] = [];
@@ -492,14 +594,267 @@ export async function getThreats(): Promise<Threat[]> {
     });
   }
 
+  // Phase 6H — drop anything an admin already resolved or dismissed,
+  // then drop anything that matches a stored silencePattern.
+  const filtered = threats.filter((t) => {
+    if (resolutions.byThreatId.has(t.id)) return false;
+    for (const p of resolutions.silencePatterns) {
+      if (matchesSilencePattern(t, p)) return false;
+    }
+    return true;
+  });
+
   // Sort: red first, then amber, then by detail length so the most
   // descriptive item floats to the top within each severity tier.
-  threats.sort((a, b) => {
+  filtered.sort((a, b) => {
     if (a.severity !== b.severity) return a.severity === 'red' ? -1 : 1;
     return b.detail.length - a.detail.length;
   });
 
-  return threats;
+  return filtered;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 6H — resolved-threats history. Re-derives the active threat list
+// for the requested window then keeps only those an admin acted on,
+// stitching in resolution metadata so the UI can render the audit trail.
+//
+// Why the re-derivation? Detector queries are cheap (every WHERE is on
+// an indexed timestamp) and this keeps the source of truth in one
+// place — we don't need a parallel "historical threat" table.
+// ---------------------------------------------------------------------------
+
+interface ResolvedRow {
+  threatId: string;
+  resolutionKind: ThreatResolutionKind;
+  resolvedAt: Date;
+  resolvedByEmail: string | null;
+  note: string | null;
+}
+
+export async function getResolvedThreats(
+  window: '7d' | '30d' = '7d'
+): Promise<ResolvedThreat[]> {
+  const days = window === '30d' ? 30 : 7;
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+  // Pull resolution rows up front — they bound everything else.
+  let resolutions: ResolvedRow[];
+  try {
+    resolutions = (await prisma.threatResolution.findMany({
+      where: { resolvedAt: { gte: since } },
+      orderBy: { resolvedAt: 'desc' },
+      select: {
+        threatId: true,
+        resolutionKind: true,
+        resolvedAt: true,
+        resolvedByEmail: true,
+        note: true,
+      },
+    })) as unknown as ResolvedRow[];
+  } catch {
+    return [];
+  }
+  if (resolutions.length === 0) return [];
+
+  // Re-derive the *active threat universe* for the same window, then
+  // join. Detectors run with their own per-type lookbacks (24h or 7d);
+  // for the history view we widen those windows so old resolutions can
+  // still find their source row.
+  const sinceDetect = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+  const [bursts, cross, bulk, exportExt, privEsc] = await Promise.all([
+    prisma.$queryRaw<RawFailedLoginBurst[]>`
+      WITH windowed AS (
+        SELECT
+          "ipAddress"::text AS ip,
+          DATE_TRUNC('minute', "timestamp")
+            - (EXTRACT(MINUTE FROM "timestamp")::int % ${FAILED_LOGIN_BURST_WINDOW_MIN}) * INTERVAL '1 minute'
+            AS bucket_start,
+          "userEmailSnapshot" AS email
+        FROM audit_logs
+        WHERE "timestamp" >= ${sinceDetect}
+          AND action = 'LOGIN_FAILED'
+          AND "ipAddress" IS NOT NULL
+      )
+      SELECT
+        ip AS "ipAddress",
+        COUNT(*)::int AS count,
+        MIN(bucket_start)::timestamptz AS "firstSeen",
+        MAX(bucket_start)::timestamptz AS "lastSeen",
+        ARRAY_AGG(DISTINCT email) FILTER (WHERE email IS NOT NULL) AS "targetEmails"
+      FROM windowed
+      GROUP BY ip, bucket_start
+      HAVING COUNT(*) >= ${FAILED_LOGIN_BURST_THRESHOLD}
+    `.catch(() => [] as RawFailedLoginBurst[]),
+
+    prisma.$queryRaw<RawCrossTenant[]>`
+      SELECT
+        "userId",
+        COUNT(*)::int AS "attemptCount",
+        MAX("timestamp")::timestamptz AS "lastSeen"
+      FROM audit_logs
+      WHERE "timestamp" >= ${sinceDetect}
+        AND success = false
+        AND "errorCode" IN (
+          'NO_MEDDOC_PRO_ENTITLEMENT',
+          'NO_TRANSCRIBE_MD_ENTITLEMENT'
+        )
+        AND "userId" IS NOT NULL
+      GROUP BY "userId"
+      HAVING COUNT(*) >= 3
+    `.catch(() => [] as RawCrossTenant[]),
+
+    prisma.$queryRaw<RawBulkPhi[]>`
+      WITH bucketed AS (
+        SELECT
+          "userId",
+          "userEmailSnapshot" AS email,
+          DATE_TRUNC('hour', "timestamp") AS hour,
+          COUNT(DISTINCT "targetId") FILTER (
+            WHERE "targetType" IN ('TranscribeMdPatient', 'TranscribeVisit')
+          )::int AS patient_count,
+          COUNT(*) FILTER (
+            WHERE action IN (
+              'EXPORT_PDF_DOWNLOADED',
+              'EXPORT_DOCX_DOWNLOADED',
+              'EXPORT_CLIPBOARD_COPIED',
+              'EXPORT_EMAIL_SENT'
+            )
+          )::int AS export_count
+        FROM audit_logs
+        WHERE "timestamp" >= ${sinceDetect}
+          AND "userId" IS NOT NULL
+        GROUP BY "userId", email, hour
+      )
+      SELECT
+        "userId",
+        email AS "userEmail",
+        patient_count AS "patientCount",
+        export_count AS "exportCount",
+        hour::timestamptz AS "windowStart",
+        (hour + INTERVAL '1 hour')::timestamptz AS "windowEnd"
+      FROM bucketed
+      WHERE patient_count >= ${BULK_PHI_THRESHOLD}
+         OR export_count >= ${BULK_PHI_THRESHOLD}
+    `.catch(() => [] as RawBulkPhi[]),
+
+    prisma.$queryRaw<RawExportExternal[]>`
+      SELECT
+        "userId",
+        (metadata->>'requestedDomain')::text AS "externalDomain",
+        COUNT(*)::int AS "attemptCount",
+        MAX("timestamp")::timestamptz AS "lastSeen"
+      FROM audit_logs
+      WHERE "timestamp" >= ${sinceDetect}
+        AND action = 'EXPORT_EMAIL_BLOCKED_DESTINATION'
+        AND "userId" IS NOT NULL
+        AND metadata->>'requestedDomain' IS NOT NULL
+      GROUP BY "userId", "externalDomain"
+      HAVING COUNT(*) >= 1
+    `.catch(() => [] as RawExportExternal[]),
+
+    prisma.$queryRaw<RawPrivilegeEsc[]>`
+      SELECT
+        id,
+        timestamp,
+        "userEmailSnapshot" AS "actorEmail",
+        (metadata->>'targetEmail')::text AS "targetEmail",
+        "targetId"
+      FROM audit_logs
+      WHERE "timestamp" >= ${sinceDetect}
+        AND action = 'USER_GRANTED_SUPER_ADMIN'
+    `.catch(() => [] as RawPrivilegeEsc[]),
+  ]);
+
+  // Index every potential threat by its deterministic id so we can
+  // look them up by the resolution.threatId join key.
+  const byId = new Map<string, Threat>();
+
+  for (const b of bursts) {
+    const t: Threat = {
+      id: `burst:${b.ipAddress}:${b.firstSeen.toISOString()}`,
+      type: 'failed_login_burst',
+      severity: b.count > 10 ? 'red' : 'amber',
+      summary: `Failed login burst from ${b.ipAddress}`,
+      detail: `${b.count} attempts in ${FAILED_LOGIN_BURST_WINDOW_MIN} min · ${
+        (b.targetEmails ?? []).slice(0, 2).join(', ') || 'no email captured'
+      }`,
+    };
+    byId.set(t.id, t);
+  }
+  for (const c of cross) {
+    const t: Threat = {
+      id: `cross:${c.userId}:${c.lastSeen.toISOString()}`,
+      type: 'cross_tenant_attempts',
+      severity: 'red',
+      summary: `Cross-tenant access attempts by ${c.userId}`,
+      detail: `${c.attemptCount} blocked attempts · last ${c.lastSeen.toISOString()}`,
+    };
+    byId.set(t.id, t);
+  }
+  for (const p of bulk) {
+    const t: Threat = {
+      id: `bulk:${p.userId}:${p.windowStart.toISOString()}`,
+      type: 'bulk_phi_access',
+      severity: 'amber',
+      summary: `Bulk PHI access by ${p.userEmail ?? p.userId}`,
+      detail: `${p.patientCount} patients · ${p.exportCount} exports in 1 hour`,
+    };
+    byId.set(t.id, t);
+  }
+  for (const e of exportExt) {
+    const t: Threat = {
+      id: `xdom:${e.userId}:${e.externalDomain}`,
+      type: 'export_to_external_domain',
+      severity: 'amber',
+      summary: `Email export to ${e.externalDomain} blocked`,
+      detail: `${e.attemptCount} attempt${e.attemptCount === 1 ? '' : 's'} by ${e.userId}`,
+    };
+    byId.set(t.id, t);
+  }
+  for (const p of privEsc) {
+    const target = p.targetEmail ?? p.targetId ?? 'unknown user';
+    const actor = p.actorEmail ?? 'unknown actor';
+    const t: Threat = {
+      id: `grant-admin:${p.id}`,
+      type: 'privilege_escalation',
+      severity: 'amber',
+      summary: `Admin privileges granted to ${target}`,
+      detail: `By ${actor} · ${p.timestamp.toISOString().slice(0, 10)}`,
+    };
+    byId.set(t.id, t);
+  }
+
+  // Stitch resolution metadata onto each matching threat. If the source
+  // audit row has aged out of the detector window we still surface a
+  // skeletal entry so the resolution itself isn't invisible.
+  const out: ResolvedThreat[] = [];
+  for (const r of resolutions) {
+    const base = byId.get(r.threatId);
+    if (base) {
+      out.push({
+        ...base,
+        resolutionKind: r.resolutionKind,
+        resolvedAt: r.resolvedAt.toISOString(),
+        resolvedByEmail: r.resolvedByEmail,
+        note: r.note,
+      });
+    } else {
+      out.push({
+        id: r.threatId,
+        type: r.threatId.split(':')[0] ?? 'unknown',
+        severity: 'amber',
+        summary: r.threatId,
+        detail: '(source audit row outside current detector window)',
+        resolutionKind: r.resolutionKind,
+        resolvedAt: r.resolvedAt.toISOString(),
+        resolvedByEmail: r.resolvedByEmail,
+        note: r.note,
+      });
+    }
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------

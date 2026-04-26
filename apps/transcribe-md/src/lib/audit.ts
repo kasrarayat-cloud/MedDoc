@@ -49,6 +49,10 @@ export type AuditAction =
   | 'USER_PASSWORD_RESET_TRIGGERED'
   | 'USER_GRANTED_SUPER_ADMIN'
   | 'USER_REVOKED_SUPER_ADMIN'
+  // Phase 6H — threat-management actions on /admin/threats
+  | 'THREAT_INVESTIGATED'
+  | 'THREAT_RESOLVED'
+  | 'THREAT_DISMISSED_FALSE_POSITIVE'
   // Visit lifecycle
   | 'VISIT_SIGNED'
   | 'VISIT_DELETED'

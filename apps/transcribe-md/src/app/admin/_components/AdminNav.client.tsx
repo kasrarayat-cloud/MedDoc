@@ -18,6 +18,7 @@ const ITEMS = [
   { href: '/admin', label: 'Overview' },
   { href: '/admin/users', label: 'Users' },
   { href: '/admin/usage', label: 'API Usage' },
+  { href: '/admin/threats', label: 'Threats' },
 ] as const;
 
 export default function AdminNav() {
