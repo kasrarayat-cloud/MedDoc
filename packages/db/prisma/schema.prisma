@@ -169,6 +169,13 @@ enum AuditAction {
   THREAT_INVESTIGATED
   THREAT_RESOLVED
   THREAT_DISMISSED_FALSE_POSITIVE
+
+  // Phase 7B — HIPAA-finding workflow on the /admin/hipaa page. The
+  // HipaaFinding rows are the canonical "what's open against our
+  // compliance posture" — Resolve closes a finding once the underlying
+  // gap is fixed; Reopen reverses that if the fix doesn't hold.
+  HIPAA_FINDING_RESOLVED
+  HIPAA_FINDING_REOPENED
 }
 
 /// Document lifecycle status
@@ -448,6 +455,9 @@ model User {
   // Phase 6H — threats this user resolved/dismissed via the admin
   // dashboard. Reverse side of ThreatResolution.resolvedBy.
   threatResolutions      ThreatResolution[]
+  // Phase 7B — HIPAA findings this user closed via /admin/hipaa.
+  // Reverse side of HipaaFinding.resolvedBy.
+  hipaaFindings          HipaaFinding[]
 
   @@index([practiceId])
   @@index([role])
@@ -1887,4 +1897,69 @@ model ThreatResolution {
   @@index([resolvedById])
   @@index([resolutionKind])
   @@map("threat_resolutions")
+}
+
+// ============================================================================
+// HIPAA FINDING — manual checklist surfaced on /admin/hipaa (Phase 7B)
+// ----------------------------------------------------------------------------
+// Phase 6Z's getHipaaState() returned a hardcoded "4 high · 1 resolved · 3
+// pending" array. Kasra hit the natural follow-up: the card promised "3
+// open" with no click-through. This table is the click-through.
+//
+// Findings here are SHAPE 1 (manual checklist items — H3 disk encryption,
+// H4 non-root containers, etc) created by the audit team and resolved
+// when the team fixes the underlying issue. The threat detectors keep
+// being SHAPE 2 (live-derived from audit_logs); both surfaces coexist.
+//
+// Lifecycle:
+//   open                                  - default, needs work
+//   in_progress                           - someone's actively on it
+//                                           (UI doesn't surface this yet
+//                                           but the column lets us extend
+//                                           without a schema change)
+//   resolved                              - closed; resolvedAt +
+//                                           resolvedById +
+//                                           resolutionNote populated
+//
+// Reopen reverses a resolution by clearing those fields and writing
+// HIPAA_FINDING_REOPENED to audit_logs. The original resolution audit
+// row remains as the trail of "we thought this was closed".
+// ============================================================================
+
+model HipaaFinding {
+  id String @id @default(cuid())
+
+  /// HIPAA control reference — e.g. "§164.312(b)" for audit controls,
+  /// "H3" for the project's internal launch-prep tags. Free-form so
+  /// custom internal-policy tags ("internal-policy-1") slot in too.
+  control String
+
+  /// 'critical' | 'high' | 'medium' | 'low'. Kept as text not enum so
+  /// future severity additions don't need a migration.
+  severity String
+
+  /// Short, specific headline — e.g. "Disk encryption at rest".
+  title String
+
+  /// Longer explanation — what the gap is + why it matters. Markdown
+  /// allowed; the page renders as plain text for now.
+  detail String? @db.Text
+
+  /// Workflow state. 'open' | 'in_progress' | 'resolved'.
+  status String @default("open")
+
+  resolvedAt        DateTime? @db.Timestamptz(6)
+  resolvedById      String?
+  resolvedBy        User?     @relation(fields: [resolvedById], references: [id], onDelete: SetNull)
+  /// Snapshot of the resolver's email at resolve time — survives a
+  /// later soft-delete of that admin. Same pattern as ThreatResolution.
+  resolvedByEmail   String?
+  resolutionNote    String?   @db.Text
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([status, severity])
+  @@index([resolvedAt])
+  @@map("hipaa_findings")
 }
