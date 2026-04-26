@@ -20,6 +20,7 @@ import { MEDICATION_KEYTERMS } from '@/lib/deepgram-vocabulary';
 export interface Layer1Input {
   visitId: string;
   practiceId: string;
+  userId: string | null;
   audioKey: string;
   audioMimeType: string | null;
 }
@@ -57,6 +58,7 @@ export async function runLayer1Transcribe(
     return deepgramBatchTranscribe({
       practiceId: input.practiceId,
       visitId: input.visitId,
+      userId: input.userId,
       purpose: 'tm_transcribe',
       audio: { stream: webStream, sizeBytes: stat.size },
       mimeType: input.audioMimeType!,

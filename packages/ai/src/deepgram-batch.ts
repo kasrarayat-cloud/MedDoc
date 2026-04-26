@@ -16,6 +16,7 @@ import { logAiCall } from './log';
 import { isMockEnabled, mockDeepgramBatch } from './mock';
 import { deepgramBatchCostCents } from './pricing';
 import type { AiLogContext } from './types';
+import { logApiUsage, buildDeepgramUsage } from './api-usage';
 
 const DEEPGRAM_BATCH_URL = 'https://api.deepgram.com/v1/listen';
 export const DEFAULT_BATCH_MODEL = 'nova-3-medical';
@@ -282,6 +283,18 @@ export async function deepgramBatchTranscribe(
     costUsdCents: deepgramBatchCostCents(durationSec),
     success: true,
   });
+
+  logApiUsage(
+    buildDeepgramUsage(
+      {
+        userId: args.userId ?? null,
+        practiceId: args.practiceId,
+        visitId: args.visitId ?? null,
+        metadata: { purpose: args.purpose, latencyMs, model },
+      },
+      durationSec
+    )
+  );
 
   return {
     raw,

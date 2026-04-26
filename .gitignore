@@ -59,3 +59,4 @@ test-results/
 # pg_dump snapshots taken before schema migrations. Contains live PHI
 # and production user data — MUST NOT be committed under any circumstances.
 backups/
+.design-preview-phase-6.html
