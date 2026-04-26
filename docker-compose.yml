@@ -105,6 +105,11 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    # Phase 13 — H4: non-root containers. The official redis image
+    # ships a `redis` user at uid 999. Volume contents were chowned
+    # to 999:999 once before this directive landed; subsequent
+    # restarts inherit ownership.
+    user: "999:999"
     mem_limit: 128m
     cpus: '0.5'
     volumes:
