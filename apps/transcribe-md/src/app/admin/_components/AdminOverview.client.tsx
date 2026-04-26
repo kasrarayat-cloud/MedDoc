@@ -16,6 +16,7 @@
 // ============================================================================
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import {
@@ -725,6 +726,8 @@ function HipaaComplianceCard({ data }: { data: HipaaState }) {
   // card could read "Clear" while showing 3 pending high issues right
   // below — Kasra's drift bug. The header status, the per-severity row
   // counts, and the chart bars all read from `summary` now.
+  // Phase 7B: card now click-throughs to /admin/hipaa where each
+  // finding can be opened + resolved.
   const summary = summarizeHipaaFindings(data.findings);
   const critical = summary.bySeverity.critical;
   const high = summary.bySeverity.high;
@@ -732,7 +735,11 @@ function HipaaComplianceCard({ data }: { data: HipaaState }) {
   const cov = data.auditCoverage;
   const covPct = cov.total > 0 ? (cov.covered / cov.total) * 100 : 0;
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4" data-testid="hipaa-card">
+    <Link
+      href="/admin/hipaa"
+      data-testid="hipaa-card"
+      className="block rounded-lg border border-slate-200 bg-white p-4 transition-colors hover:border-slate-300"
+    >
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <ShieldCheck className="h-4 w-4 text-slate-600" />
@@ -804,9 +811,12 @@ function HipaaComplianceCard({ data }: { data: HipaaState }) {
               {cov.covered}/{cov.total} actions
             </span>
           </span>
+          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500">
+            View all <ArrowUpRight className="h-3 w-3" />
+          </span>
         </li>
       </ul>
-    </div>
+    </Link>
   );
 }
 
