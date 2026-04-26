@@ -24,6 +24,17 @@ export const POST = adminApi('users:suspend', async (req, ctx) => {
   const id = segs[segs.indexOf('users') + 1];
   if (!id) return NextResponse.json({ error: 'Bad path' }, { status: 400 });
 
+  // Phase 6Z — server-side self-action block. The UI already disables the
+  // chip when isSelf, but a direct POST (curl, replay, browser console)
+  // would otherwise lock the actor out of /admin/* and nuke their
+  // session via forceLogoutAt. Defense in depth: refuse here too.
+  if (id === ctx.session.user.id) {
+    return NextResponse.json(
+      { error: 'Cannot suspend your own account — ask a peer.' },
+      { status: 403 }
+    );
+  }
+
   const raw = await req.json().catch(() => ({}));
   const parsed = Body.safeParse(raw);
   if (!parsed.success) {

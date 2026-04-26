@@ -27,6 +27,17 @@ export const POST = adminApi('users:soft-delete', async (req, ctx) => {
   const id = segs[segs.indexOf('users') + 1];
   if (!id) return NextResponse.json({ error: 'Bad path' }, { status: 400 });
 
+  // Phase 6Z — server-side self-action block, matching revoke-admin and
+  // suspend. Without this an admin can soft-delete themselves via a
+  // direct POST and lose access to /admin/*; the UI guard alone isn't
+  // enough.
+  if (id === ctx.session.user.id) {
+    return NextResponse.json(
+      { error: 'Cannot soft-delete your own account — ask a peer.' },
+      { status: 403 }
+    );
+  }
+
   const raw = await req.json().catch(() => null);
   const parsed = Body.safeParse(raw);
   if (!parsed.success) {
