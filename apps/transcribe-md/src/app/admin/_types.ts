@@ -46,6 +46,15 @@ export interface Threat {
   detail: string;
 }
 
+export type ThreatResolutionKind = 'RESOLVED' | 'FALSE_POSITIVE';
+
+export interface ResolvedThreat extends Threat {
+  resolutionKind: ThreatResolutionKind;
+  resolvedAt: string;
+  resolvedByEmail: string | null;
+  note: string | null;
+}
+
 export interface TimelineBucket {
   /** Local hour 0..23. */
   hour: number;

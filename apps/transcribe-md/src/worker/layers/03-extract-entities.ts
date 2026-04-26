@@ -190,6 +190,7 @@ export function buildRoleLabeledTranscript(
 export interface Layer3ConversationInput {
   visitId: string;
   practiceId: string;
+  userId: string | null;
   mode: 'conversation';
   utterances: DeepgramUtterance[];
   speakerMap: SpeakerMap;
@@ -197,6 +198,7 @@ export interface Layer3ConversationInput {
 export interface Layer3DictationInput {
   visitId: string;
   practiceId: string;
+  userId: string | null;
   mode: 'dictation';
   /** Full text from Layer 1' (single-speaker Deepgram). */
   dictationText: string;
@@ -204,6 +206,7 @@ export interface Layer3DictationInput {
 export interface Layer3TextInput {
   visitId: string;
   practiceId: string;
+  userId: string | null;
   mode: 'text';
   /** Raw bullet-point / prose the doctor typed in the TextComposer UI. */
   rawText: string;
@@ -380,6 +383,7 @@ export async function runLayer3ExtractEntities(
   const entities = await modelClient.complete({
     practiceId: input.practiceId,
     visitId: input.visitId,
+    userId: input.userId,
     purpose: 'tm_entities',
     provider: 'anthropic',
     model: MODEL,

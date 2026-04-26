@@ -41,6 +41,18 @@ export type AuditAction =
   // Admin
   | 'ADMIN_DASHBOARD_ACCESS'
   | 'ADMIN_API_ACCESS'
+  // Phase 6 — admin user-management actions
+  | 'USER_SUSPENDED'
+  | 'USER_UNSUSPENDED'
+  | 'USER_SOFT_DELETED'
+  | 'USER_FORCE_LOGOUT'
+  | 'USER_PASSWORD_RESET_TRIGGERED'
+  | 'USER_GRANTED_SUPER_ADMIN'
+  | 'USER_REVOKED_SUPER_ADMIN'
+  // Phase 6H — threat-management actions on /admin/threats
+  | 'THREAT_INVESTIGATED'
+  | 'THREAT_RESOLVED'
+  | 'THREAT_DISMISSED_FALSE_POSITIVE'
   // Visit lifecycle
   | 'VISIT_SIGNED'
   | 'VISIT_DELETED'

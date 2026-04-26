@@ -20,6 +20,7 @@ const MODEL = 'claude-sonnet-4-6';
 export interface Layer6Input {
   visitId: string;
   practiceId: string;
+  userId: string | null;
   soapDraft: string;
   critique: CritiqueReport;
 }
@@ -73,6 +74,7 @@ export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output>
     const { text } = await modelClient.completeText({
       practiceId: input.practiceId,
       visitId: input.visitId,
+      userId: input.userId,
       purpose: 'tm_polish',
       provider: 'anthropic',
       model: MODEL,

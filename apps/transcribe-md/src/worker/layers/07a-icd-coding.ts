@@ -32,6 +32,7 @@ export type IcdResult = z.infer<typeof IcdResult>;
 export interface Layer7aInput {
   visitId: string;
   practiceId: string;
+  userId: string | null;
   specialty: string;
   soapFinal: string;
   entitiesJson: string;
@@ -88,6 +89,7 @@ export async function runLayer7aIcdCoding(
   const result = await modelClient.complete({
     practiceId: input.practiceId,
     visitId: input.visitId,
+    userId: input.userId,
     purpose: 'tm_icd_coding',
     provider: 'anthropic',
     model: MODEL,

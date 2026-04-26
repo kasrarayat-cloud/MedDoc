@@ -1,0 +1,233 @@
+// ============================================================================
+// API Usage Logger (Phase 6)
+// ----------------------------------------------------------------------------
+// Records every external-API call (Deepgram / Anthropic / Whisper / OpenAI /
+// Resend) with cost calculation. Called from each provider wrapper AFTER
+// the call completes — successful or failed (failed calls often still cost
+// money: a Deepgram socket that ran for 30s before erroring is still 30s
+// of billed audio).
+//
+// Fire-and-forget pattern (mirrors `lib/audit.ts`): never blocks the
+// calling request. A failed log write goes to console.warn and is dropped.
+// The `setImmediate` defers past the response flush so a slow Postgres
+// write can't extend request latency.
+//
+// ── Pricing constants ──
+// Snapshot of provider pricing at the time of this commit. The TOTAL cost
+// is computed at log time and stored on the row (`totalCostUsd`), so
+// historical billing rollups always reflect the rate that was charged at
+// the time of the call. Update PRICING when the provider changes pricing —
+// do NOT back-rewrite historical rows.
+// ============================================================================
+
+import { randomUUID } from 'node:crypto';
+
+import prisma from '@meddoc/db';
+
+export const PRICING = {
+  // Deepgram Nova-3 Medical — per minute
+  deepgram_nova3_medical: 0.0043,
+  // OpenAI Whisper API — per minute
+  whisper: 0.006,
+  // Anthropic Sonnet — per 1M tokens
+  anthropic_sonnet_input: 3.0,
+  anthropic_sonnet_output: 15.0,
+  // Anthropic Haiku — per 1M tokens
+  anthropic_haiku_input: 0.25,
+  anthropic_haiku_output: 1.25,
+  // OpenAI text-embedding-3-small — per 1M tokens
+  openai_embedding: 0.13,
+  // OpenAI GPT-4o — per 1M tokens (kept for completeness; not currently
+  // a primary provider on this stack)
+  openai_gpt4_input: 2.5,
+  openai_gpt4_output: 10.0,
+  // Resend transactional — per email
+  resend_email: 0.001,
+} as const;
+
+export type Provider =
+  | 'deepgram'
+  | 'anthropic'
+  | 'whisper'
+  | 'openai'
+  | 'resend';
+
+export type UnitType = 'minutes' | 'tokens_in' | 'tokens_out' | 'emails';
+
+export interface UsageEvent {
+  userId?: string | null;
+  practiceId?: string | null;
+  provider: Provider;
+  operation: string;
+  audioSeconds?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  emailCount?: number;
+  unitCount: number;
+  unitType: UnitType;
+  unitCostUsd: number;
+  totalCostUsd: number;
+  visitId?: string | null;
+  requestId: string;
+  modelName?: string;
+  metadata?: Record<string, unknown> | null;
+}
+
+/** Fire-and-forget: schedules the row write via setImmediate so the
+ *  caller's promise chain never waits on it. Errors are caught and
+ *  logged at warn — the audit story for usage is "best-effort". */
+export function logApiUsage(event: UsageEvent): void {
+  setImmediate(async () => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (prisma as any).apiUsageEvent.create({
+        data: {
+          userId: event.userId ?? null,
+          practiceId: event.practiceId ?? null,
+          provider: event.provider,
+          operation: event.operation,
+          audioSeconds: event.audioSeconds ?? null,
+          inputTokens: event.inputTokens ?? null,
+          outputTokens: event.outputTokens ?? null,
+          emailCount: event.emailCount ?? null,
+          unitCount: event.unitCount,
+          unitType: event.unitType,
+          unitCostUsd: event.unitCostUsd,
+          totalCostUsd: event.totalCostUsd,
+          visitId: event.visitId ?? null,
+          requestId: event.requestId,
+          modelName: event.modelName ?? null,
+          metadata: event.metadata ?? null,
+        },
+      });
+    } catch (err) {
+      console.warn(
+        '[api-usage] failed to log:',
+        err instanceof Error ? err.message : err
+      );
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Builders — one per provider, return a fully-populated UsageEvent. Wrappers
+// call `logApiUsage(buildXxx(...))` at the end of their happy/sad path.
+// ---------------------------------------------------------------------------
+
+interface BaseCtx {
+  userId?: string | null;
+  practiceId?: string | null;
+  visitId?: string | null;
+  requestId?: string;
+  metadata?: Record<string, unknown> | null;
+}
+
+export function buildDeepgramUsage(
+  ctx: BaseCtx,
+  audioSeconds: number
+): UsageEvent {
+  const minutes = audioSeconds / 60;
+  return {
+    ...ctx,
+    requestId: ctx.requestId ?? randomUUID(),
+    provider: 'deepgram',
+    operation: 'transcribe_realtime',
+    audioSeconds,
+    unitCount: minutes,
+    unitType: 'minutes',
+    unitCostUsd: PRICING.deepgram_nova3_medical,
+    totalCostUsd: minutes * PRICING.deepgram_nova3_medical,
+    modelName: 'nova-3-medical',
+  };
+}
+
+export function buildWhisperUsage(
+  ctx: BaseCtx,
+  audioSeconds: number
+): UsageEvent {
+  const minutes = audioSeconds / 60;
+  return {
+    ...ctx,
+    requestId: ctx.requestId ?? randomUUID(),
+    provider: 'whisper',
+    operation: 'transcribe_batch',
+    audioSeconds,
+    unitCount: minutes,
+    unitType: 'minutes',
+    unitCostUsd: PRICING.whisper,
+    totalCostUsd: minutes * PRICING.whisper,
+    modelName: 'whisper-1',
+  };
+}
+
+export function buildAnthropicUsage(
+  ctx: BaseCtx,
+  inputTokens: number,
+  outputTokens: number,
+  modelName: string,
+  operation = 'soap_generate'
+): UsageEvent {
+  const isHaiku = modelName.toLowerCase().includes('haiku');
+  const inputRate = isHaiku
+    ? PRICING.anthropic_haiku_input
+    : PRICING.anthropic_sonnet_input;
+  const outputRate = isHaiku
+    ? PRICING.anthropic_haiku_output
+    : PRICING.anthropic_sonnet_output;
+  const totalCostUsd =
+    (inputTokens / 1_000_000) * inputRate +
+    (outputTokens / 1_000_000) * outputRate;
+  return {
+    ...ctx,
+    requestId: ctx.requestId ?? randomUUID(),
+    provider: 'anthropic',
+    operation,
+    inputTokens,
+    outputTokens,
+    // For Anthropic we record total tokens as `unitCount` and the input
+    // rate as `unitCostUsd` for a coarse-but-honest single-figure
+    // representation. The accurate per-call cost lives in `totalCostUsd`
+    // (which already accounts for input + output at separate rates).
+    unitCount: inputTokens + outputTokens,
+    unitType: 'tokens_in',
+    unitCostUsd: inputRate / 1_000_000,
+    totalCostUsd,
+    modelName,
+  };
+}
+
+export function buildOpenAIEmbedUsage(
+  ctx: BaseCtx,
+  tokens: number,
+  modelName: string
+): UsageEvent {
+  return {
+    ...ctx,
+    requestId: ctx.requestId ?? randomUUID(),
+    provider: 'openai',
+    operation: 'embed',
+    inputTokens: tokens,
+    unitCount: tokens,
+    unitType: 'tokens_in',
+    unitCostUsd: PRICING.openai_embedding / 1_000_000,
+    totalCostUsd: (tokens / 1_000_000) * PRICING.openai_embedding,
+    modelName,
+  };
+}
+
+export function buildResendUsage(
+  ctx: BaseCtx,
+  emailCount = 1
+): UsageEvent {
+  return {
+    ...ctx,
+    requestId: ctx.requestId ?? randomUUID(),
+    provider: 'resend',
+    operation: 'email_send',
+    emailCount,
+    unitCount: emailCount,
+    unitType: 'emails',
+    unitCostUsd: PRICING.resend_email,
+    totalCostUsd: emailCount * PRICING.resend_email,
+  };
+}

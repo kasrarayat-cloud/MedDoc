@@ -13,6 +13,7 @@ import { hashPrompt } from './prompt-hash';
 import { logAiCall } from './log';
 import { claudeSonnet46CostCents } from './pricing';
 import type { AiLogContext } from './types';
+import { logApiUsage, buildAnthropicUsage } from './api-usage';
 
 let clientSingleton: Anthropic | null = null;
 function getClient(): Anthropic {
@@ -151,6 +152,21 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
       success: true,
     });
 
+    logApiUsage(
+      buildAnthropicUsage(
+        {
+          userId: args.userId ?? null,
+          practiceId: args.practiceId,
+          visitId: args.visitId ?? null,
+          metadata: { purpose: args.purpose, latencyMs },
+        },
+        response.usage.input_tokens,
+        response.usage.output_tokens,
+        args.model,
+        args.purpose
+      )
+    );
+
     return schemaResult.data;
   } catch (err) {
     // Re-throw after logging — schema fails and JSON parse fails already
@@ -231,6 +247,21 @@ export async function anthropicCompleteText(
       ),
       success: true,
     });
+
+    logApiUsage(
+      buildAnthropicUsage(
+        {
+          userId: args.userId ?? null,
+          practiceId: args.practiceId,
+          visitId: args.visitId ?? null,
+          metadata: { purpose: args.purpose, latencyMs },
+        },
+        response.usage.input_tokens,
+        response.usage.output_tokens,
+        args.model,
+        args.purpose
+      )
+    );
 
     return {
       text,

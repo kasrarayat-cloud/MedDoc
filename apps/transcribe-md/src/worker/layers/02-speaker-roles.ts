@@ -50,6 +50,7 @@ export type SpeakerMap = z.infer<typeof SpeakerMap>;
 export interface Layer2Input {
   visitId: string;
   practiceId: string;
+  userId: string | null;
   utterances: DeepgramUtterance[];
 }
 
@@ -137,6 +138,7 @@ export async function runLayer2SpeakerRoles(
   const speakerMap = await modelClient.complete({
     practiceId: input.practiceId,
     visitId: input.visitId,
+    userId: input.userId,
     purpose: 'tm_speaker_roles',
     provider: 'anthropic',
     model: MODEL,
