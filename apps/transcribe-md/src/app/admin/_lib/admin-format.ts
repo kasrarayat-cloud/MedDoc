@@ -150,3 +150,52 @@ export function defaultUnitLabel(provider: string): string {
   if (provider === 'resend') return 'emails';
   return '';
 }
+
+// ---------------------------------------------------------------------------
+// HIPAA findings — single source of truth for the per-card derivations
+// ----------------------------------------------------------------------------
+// Phase 7A consistency sweep. The HIPAA card had a real drift bug: the
+// status badge derived "Clear" from `critical.total === 0` while the
+// per-severity rows below showed 3 pending high-severity issues. Anyone
+// glancing at the card saw a green check + "Clear" and thought they
+// were done.
+//
+// Centralising the derivation here means BOTH the header badge AND every
+// per-severity row read the same numbers. A future Option-β swap (real
+// findings table replacing the hardcoded list in dashboard-data.ts
+// :getHipaaState) flows through here without touching the consumers.
+// ---------------------------------------------------------------------------
+
+import type { HipaaFinding } from '../_types';
+
+export interface HipaaFindingsSummary {
+  /** total findings across all severities (open + resolved). */
+  totalCount: number;
+  /** total open findings — i.e. (total - resolved) summed across severities.
+   *  This is the number that drives "All clear" vs "N open" on the header. */
+  totalOpen: number;
+  /** total resolved findings, summed across severities. */
+  totalResolved: number;
+  /** per-severity breakdown with the same open/resolved math applied,
+   *  so the chart rows can read from this object instead of recomputing. */
+  bySeverity: Record<HipaaFinding['severity'], { total: number; open: number; resolved: number }>;
+}
+
+export function summarizeHipaaFindings(findings: HipaaFinding[]): HipaaFindingsSummary {
+  const bySeverity: HipaaFindingsSummary['bySeverity'] = {
+    critical: { total: 0, open: 0, resolved: 0 },
+    high: { total: 0, open: 0, resolved: 0 },
+    medium: { total: 0, open: 0, resolved: 0 },
+  };
+  let totalCount = 0;
+  let totalOpen = 0;
+  let totalResolved = 0;
+  for (const f of findings) {
+    const open = Math.max(0, f.total - f.resolved);
+    bySeverity[f.severity] = { total: f.total, open, resolved: f.resolved };
+    totalCount += f.total;
+    totalOpen += open;
+    totalResolved += f.resolved;
+  }
+  return { totalCount, totalOpen, totalResolved, bySeverity };
+}

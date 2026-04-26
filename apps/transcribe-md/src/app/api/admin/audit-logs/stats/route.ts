@@ -18,13 +18,18 @@ import { NextResponse } from 'next/server';
 import prisma from '@meddoc/db';
 
 import { adminApi } from '@/lib/admin-api-gate';
+import { resolveAuditWindow } from '../../_audit-window';
 
 const WINDOW_HOURS = 24;
 
 export const dynamic = 'force-dynamic';
 
 export const GET = adminApi('audit-logs:stats', async () => {
-  const since = new Date(Date.now() - WINDOW_HOURS * 60 * 60 * 1000);
+  // Phase 7A: shared window so totalEvents here equals the sum of
+  // buckets returned by /audit-logs/timeline. Both endpoints anchor on
+  // floor(now)-(N-1)h so the rightmost timeline bucket is the current
+  // partial hour, and stats counts the same events.
+  const since = resolveAuditWindow(WINDOW_HOURS).since;
 
   const [byAction, bySuccessGroup, uniqueUsersResult, totalEvents] =
     await Promise.all([
