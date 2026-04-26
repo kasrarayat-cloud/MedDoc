@@ -16,6 +16,7 @@
 // ============================================================================
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import {
   Database,
@@ -58,10 +59,12 @@ interface Props {
 }
 
 export default function AdminOverview({ initial, userEmail }: Props) {
+  const router = useRouter();
   const [filter, setFilter] = useState<FilterKey>('all');
   const [rows, setRows] = useState<ActivityRow[]>(initial.activity);
   const [connected, setConnected] = useState(false);
   // Phase 6E — ref so ThreatsBar's "View all" can scroll the feed into view.
+  // Phase 6H — superseded by /admin/threats; kept for layout anchoring only.
   const activityFeedRef = useRef<HTMLDivElement>(null);
 
   // Cosmetic ticker — shows "last updated Ns ago" on the header. Kept
@@ -145,17 +148,7 @@ export default function AdminOverview({ initial, userEmail }: Props) {
 
         <ThreatsBar
           threats={initial.threats}
-          onViewAll={() => {
-            setFilter('admin');
-            // Scroll the feed into view; defer one tick so the filter
-            // re-render completes before the scroll.
-            window.requestAnimationFrame(() => {
-              activityFeedRef.current?.scrollIntoView({
-                behavior: 'smooth',
-                block: 'start',
-              });
-            });
-          }}
+          onViewAll={() => router.push('/admin/threats')}
         />
 
         <section className="grid grid-cols-1 gap-4 lg:grid-cols-5">
@@ -394,9 +387,13 @@ function ThreatsBar({
       <AlertTriangle className="h-4 w-4 shrink-0 text-amber-700" strokeWidth={2.25} />
       <div className="min-w-0 flex-1">
         <div className="text-sm">
-          <span className="font-semibold text-amber-900">
+          <button
+            type="button"
+            onClick={onViewAll}
+            className="font-semibold text-amber-900 underline decoration-amber-700/30 underline-offset-2 hover:decoration-amber-700"
+          >
             {threats.length} active threat{threats.length === 1 ? '' : 's'}
-          </span>
+          </button>
           <span className="mx-2 text-amber-700/40">·</span>
           <span className="text-amber-900">{headline.summary}</span>
         </div>
