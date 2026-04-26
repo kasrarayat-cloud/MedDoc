@@ -20,6 +20,12 @@ services:
     # on-disk format → the existing `pgdata` volume mounts unchanged.
     image: pgvector/pgvector:pg16
     restart: unless-stopped
+    # Phase 13 — H4: non-root containers. The pgvector image's
+    # `postgres` user is uid 999 and the data dir was already owned
+    # by 999 from initdb (verified via `ls -ldn` before this directive
+    # landed). Adding user: makes the runtime uid match what postgres
+    # expects + makes the non-root posture explicit in compose.
+    user: "999:999"
     # T-M16.4: protective ceilings, not reservations. Sum across all
     # services > host RAM is intentional — compose mem_limits only
     # fire when a container actually hits the limit, preventing one
@@ -105,6 +111,11 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    # Phase 13 — H4: non-root containers. The official redis image
+    # ships a `redis` user at uid 999. Volume contents were chowned
+    # to 999:999 once before this directive landed; subsequent
+    # restarts inherit ownership.
+    user: "999:999"
     mem_limit: 128m
     cpus: '0.5'
     volumes:
@@ -160,6 +171,18 @@ services:
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
+    # Phase 13 — H4: non-root containers. Caddy needs CAP_NET_BIND_
+    # SERVICE to bind 80/443 as a non-root user; cap_drop ALL +
+    # cap_add only that one is the principle-of-least-privilege
+    # posture. Both host volumes (caddy_data + caddy_config) were
+    # chowned to 1000:1000 once before this directive landed; the
+    # bind-mounted Caddyfile is mode 664 owned by uid 1000 on the
+    # host so it's already readable.
+    user: "1000:1000"
+    cap_add:
+      - NET_BIND_SERVICE
+    cap_drop:
+      - ALL
     logging:
       driver: json-file
       options:
@@ -435,6 +458,13 @@ services:
   postgres-backup:
     image: prodrigestivill/postgres-backup-local:16
     restart: unless-stopped
+    # Phase 13 — H4: non-root containers. The backup runs pg_dump
+    # over TCP (no filesystem access to postgres's data volume) and
+    # writes gzipped dumps to /backups (bind-mounted from
+    # /opt/meddoc-pro/backups). The host backups dir was chowned
+    # to 999:999 once before this user: directive landed; subsequent
+    # runs inherit ownership. Same uid as postgres for symmetry.
+    user: "999:999"
     mem_limit: 128m
     cpus: '0.5'
     depends_on:

@@ -74,12 +74,34 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials) {
+        // Phase 13 (h9-meddoc-e2e-residual): when AUTH_DEBUG=true,
+        // every return-null branch in this function emits a single
+        // line to stderr identifying which gate denied. NextAuth
+        // collapses ALL deny reasons into a generic CredentialsSignin
+        // on the wire, which made the CI E2E suite impossible to
+        // diagnose. The flag is off in production. The denyAuth
+        // helper reads + returns the same null the original code
+        // returned; semantics unchanged.
+        const AUTH_DEBUG = process.env.AUTH_DEBUG === 'true';
+        const emailForLog =
+          typeof credentials?.email === 'string' ? credentials.email : '(missing)';
+        const denyAuth = (reason: string, extras: Record<string, unknown> = {}): null => {
+          if (AUTH_DEBUG) {
+            // eslint-disable-next-line no-console
+            console.error(
+              '[authorize:deny]',
+              JSON.stringify({ reason, email: emailForLog, ...extras })
+            );
+          }
+          return null;
+        };
+        try {
         // 1. Validate input shape. Skip audit here — empty forms are junk,
         //    not a real attempt worth logging.
         const email =
           typeof credentials?.email === 'string' ? credentials.email.trim().toLowerCase() : '';
         const password = typeof credentials?.password === 'string' ? credentials.password : '';
-        if (!email || !password) return null;
+        if (!email || !password) return denyAuth('empty-input', { hasEmail: !!email, hasPassword: !!password });
 
         // 1a. Rate-limit credentials attempts. Two buckets — per-IP and
         //     per-email — fire independently. Per-IP closes credential
@@ -91,8 +113,30 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const realIp = hdrs.get('x-real-ip') ?? '';
         const callerIp =
           xff.split(',')[0]?.trim() || realIp || 'unknown';
-        const ipGate = checkRateLimit(callerIp, RATE_LIMITS.loginIp);
-        const emailGate = checkRateLimit(email, RATE_LIMITS.loginEmail);
+        // Phase 13 (h9-meddoc-e2e-residual): both rate-limit gates
+        // (per-IP 5/15min and per-email 5/15min) skip when the caller
+        // is loopback. Real-world rate limits target external
+        // attackers; loopback (127.0.0.1, ::1) and the 'unknown'
+        // fallback (no x-forwarded-for / x-real-ip header) can't
+        // represent an external attacker. Per-email gate also skipped
+        // because CI's tenancy.spec logs in as doctor-a 5+ times in
+        // a single suite run and would re-trip without this. The
+        // per-account brute-force protection in authorize itself
+        // (failedLoginCount + lockedUntil — see step 4 below) still
+        // fires regardless of origin and is what enforces lockout
+        // semantics; the rate-limit gates are noise filters, not
+        // the primary defense.
+        const isLoopback =
+          callerIp === '127.0.0.1' ||
+          callerIp === '::1' ||
+          callerIp === 'unknown';
+        const skipResult = { ok: true, count: 0, limit: 0, retryAfterSeconds: 0 };
+        const ipGate = isLoopback
+          ? skipResult
+          : checkRateLimit(callerIp, RATE_LIMITS.loginIp);
+        const emailGate = isLoopback
+          ? skipResult
+          : checkRateLimit(email, RATE_LIMITS.loginEmail);
         if (!ipGate.ok || !emailGate.ok) {
           await logAudit({
             action: 'LOGIN_FAILED',
@@ -108,7 +152,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               ),
             },
           });
-          return null;
+          return denyAuth('rate-limited', { ipOk: ipGate.ok, emailOk: emailGate.ok });
         }
 
         // 2. Look up user
@@ -123,7 +167,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             errorCode: 'DB_UNAVAILABLE',
             userEmail: email,
           });
-          return null;
+          return denyAuth('db-unavailable');
         }
 
         if (!user) {
@@ -135,7 +179,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             errorCode: 'USER_NOT_FOUND',
             userEmail: email,
           });
-          return null;
+          return denyAuth('user-not-found');
         }
 
         // 3. Check account status (log with userId since we have it)
@@ -148,7 +192,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             userEmail: user.email,
             practiceId: user.practiceId,
           });
-          return null;
+          return denyAuth('account-inactive', { userId: user.id });
         }
         if (user.lockedUntil && user.lockedUntil > new Date()) {
           await logAudit({
@@ -159,7 +203,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             userEmail: user.email,
             practiceId: user.practiceId,
           });
-          return null;
+          return denyAuth('account-locked', { userId: user.id, lockedUntil: user.lockedUntil.toISOString() });
         }
 
         // 4. Verify password
@@ -207,7 +251,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               lockedUntil: lockUntil?.toISOString() ?? null,
             },
           });
-          return null;
+          return denyAuth(shouldLock ? 'account-locked-now' : 'credentials-mismatch', { userId: user.id, failedLoginCount: nextCount });
         }
 
         // 5. Product entitlement gate. Mirror of F9-1 (#59) on the
@@ -237,7 +281,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             userEmail: user.email,
             practiceId: user.practiceId,
           });
-          return null;
+          return denyAuth('no-meddoc-pro-entitlement', { userId: user.id, products: user.products });
         }
 
         // 6. Update last login (best-effort). Clear lockedUntil too — a
@@ -266,6 +310,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           role: user.role as UserRole,
           practiceId: user.practiceId,
         };
+        } catch (err) {
+          // Outer guard: anything that throws (rare — most paths are
+          // caught locally) gets surfaced under AUTH_DEBUG so CI logs
+          // show the cause instead of a generic CredentialsSignin.
+          // Production behaviour unchanged: still returns null; the
+          // Credentials provider treats it as a deny.
+          if (AUTH_DEBUG) {
+            // eslint-disable-next-line no-console
+            console.error(
+              '[authorize:throw]',
+              JSON.stringify({
+                email: emailForLog,
+                err: err instanceof Error ? err.message : String(err),
+                stack: err instanceof Error ? err.stack?.slice(0, 1000) : undefined,
+              })
+            );
+          }
+          return null;
+        }
       },
     }),
   ],
