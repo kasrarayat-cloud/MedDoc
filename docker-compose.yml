@@ -162,12 +162,15 @@ services:
         max-file: "3"
     mem_limit: 128m
     cpus: '0.5'
-    # T-M16.3: wget the internal reverse-proxy port. --spider sends HEAD
-    # so the proxied app doesn't do real work on every health tick.
-    # We accept any response (2xx/3xx/4xx) because caddy responding at
-    # all proves the process is up — upstream 5xx would fail it naturally.
+    # T-M16.3 / Phase-6Z prep: hit Caddy's admin API on :2019. The
+    # previous probe wget'd port 80 and got a 308 → https://127.0.0.1/,
+    # then failed the TLS handshake because Caddy can't pick a cert
+    # from a bare-IP SNI — busybox wget has no --max-redirect, so we
+    # can't suppress the follow. The admin endpoint serves the running
+    # config over plain HTTP on localhost only and is the canonical
+    # "is Caddy alive?" signal. External traffic is unaffected.
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "--spider", "http://127.0.0.1:80/"]
+      test: ["CMD", "wget", "-qO-", "--spider", "http://127.0.0.1:2019/config/"]
       interval: 30s
       timeout: 5s
       retries: 3

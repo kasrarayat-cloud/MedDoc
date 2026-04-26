@@ -101,6 +101,7 @@ export async function captureEditPattern(args: {
       const { embedding } = await embedText({
         text: original,
         practiceId: doctor.practiceId,
+        userId: args.doctorId,
         visitId: args.visitId,
         purpose: 'tm_embed',
       });

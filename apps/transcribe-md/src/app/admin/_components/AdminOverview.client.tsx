@@ -16,6 +16,8 @@
 // ============================================================================
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { signOut } from 'next-auth/react';
 import {
   Database,
   Server,
@@ -27,6 +29,7 @@ import {
   ShieldCheck,
   Activity,
   ArrowUpRight,
+  LogOut,
   Search,
 } from 'lucide-react';
 
@@ -42,6 +45,7 @@ import type {
   Threat,
   TimelineBucket,
 } from '../_types';
+import AdminNav from './AdminNav.client';
 
 // ---------------------------------------------------------------------------
 // Top-level component
@@ -55,9 +59,13 @@ interface Props {
 }
 
 export default function AdminOverview({ initial, userEmail }: Props) {
+  const router = useRouter();
   const [filter, setFilter] = useState<FilterKey>('all');
   const [rows, setRows] = useState<ActivityRow[]>(initial.activity);
   const [connected, setConnected] = useState(false);
+  // Phase 6E — ref so ThreatsBar's "View all" can scroll the feed into view.
+  // Phase 6H — superseded by /admin/threats; kept for layout anchoring only.
+  const activityFeedRef = useRef<HTMLDivElement>(null);
 
   // Cosmetic ticker — shows "last updated Ns ago" on the header. Kept
   // bounded to 0..59 so the header text stays narrow.
@@ -128,6 +136,7 @@ export default function AdminOverview({ initial, userEmail }: Props) {
       <style>{`@keyframes qm-fade-in { from { opacity: 0; transform: translateY(-2px); } to { opacity: 1; transform: none; } }`}</style>
 
       <DashboardHeader userEmail={userEmail} lastUpdated={lastUpdated} />
+      <AdminNav />
 
       <main className="mx-auto max-w-[1440px] space-y-4 px-6 py-5">
         <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -137,10 +146,13 @@ export default function AdminOverview({ initial, userEmail }: Props) {
           <StatusCard icon={Cloud} label="External APIs" health={initial.systemHealth.externalAPIs} />
         </section>
 
-        <ThreatsBar threats={initial.threats} />
+        <ThreatsBar
+          threats={initial.threats}
+          onViewAll={() => router.push('/admin/threats')}
+        />
 
         <section className="grid grid-cols-1 gap-4 lg:grid-cols-5">
-          <div className="lg:col-span-3">
+          <div className="lg:col-span-3" ref={activityFeedRef}>
             <ActivityFeed rows={rows} filter={filter} onFilter={setFilter} connected={connected} />
           </div>
           <div className="space-y-4 lg:col-span-2">
@@ -169,7 +181,6 @@ function DashboardHeader({
   userEmail: string;
   lastUpdated: string;
 }) {
-  const initial = userEmail.slice(0, 1).toUpperCase();
   return (
     <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/85">
       <div className="mx-auto flex max-w-[1440px] items-center justify-between px-6 py-3">
@@ -189,19 +200,91 @@ function DashboardHeader({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className="ml-1 flex items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs hover:bg-slate-50"
-          >
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-900 text-[10px] font-semibold text-white">
-              {initial}
-            </span>
-            <span className="hidden font-medium text-slate-800 sm:inline">{userEmail}</span>
-            <ChevronDown className="h-3 w-3 text-slate-500" />
-          </button>
+          <UserMenu userEmail={userEmail} />
         </div>
       </div>
     </header>
+  );
+}
+
+/** Phase 6E — header user chip with a working dropdown. The previous
+ *  version was a static `<button>` with no onClick; clicks did nothing.
+ *  Hand-rolled instead of pulling in a popover primitive — consistent
+ *  with the rest of the admin surface (no Radix / no headlessui). */
+function UserMenu({ userEmail }: { userEmail: string }) {
+  const [open, setOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const initial = userEmail.slice(0, 1).toUpperCase();
+
+  // Click-outside + Escape to close.
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (!wrapperRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  async function handleSignOut() {
+    if (signingOut) return;
+    setSigningOut(true);
+    try {
+      // signOut from next-auth/react clears the JWT cookie + redirects.
+      // callbackUrl is host-relative on purpose: an admin signing out
+      // from admin.quillmd.com should land on admin.quillmd.com/login,
+      // not on app.quillmd.com (cookies are host-only).
+      await signOut({ callbackUrl: '/login', redirect: true });
+    } finally {
+      setSigningOut(false);
+    }
+  }
+
+  return (
+    <div className="relative" ref={wrapperRef}>
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className="ml-1 flex items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs hover:bg-slate-50"
+      >
+        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-900 text-[10px] font-semibold text-white">
+          {initial}
+        </span>
+        <span className="hidden font-medium text-slate-800 sm:inline">{userEmail}</span>
+        <ChevronDown className="h-3 w-3 text-slate-500" />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-full z-30 mt-1.5 w-56 overflow-hidden rounded-md border border-slate-200 bg-white shadow-lg"
+        >
+          <div className="border-b border-slate-100 px-3 py-2">
+            <div className="text-[11px] uppercase tracking-wide text-slate-500">Signed in as</div>
+            <div className="mt-0.5 truncate text-xs font-mono text-slate-700">{userEmail}</div>
+          </div>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={handleSignOut}
+            disabled={signingOut}
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-60"
+          >
+            <LogOut className="h-3.5 w-3.5 text-slate-500" />
+            {signingOut ? 'Signing out…' : 'Sign out'}
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -268,17 +351,49 @@ function StatusCard({
 // Threats bar
 // ---------------------------------------------------------------------------
 
-function ThreatsBar({ threats }: { threats: Threat[] }) {
-  if (threats.length === 0) return null;
+function ThreatsBar({
+  threats,
+  onViewAll,
+}: {
+  threats: Threat[];
+  onViewAll: () => void;
+}) {
+  // Phase 6G — render a calm empty state instead of vanishing the
+  // whole bar. The previous behaviour (hide on empty) made admins
+  // wonder whether the panel had broken vs. genuinely had nothing
+  // to show. Silence-as-absence is bad signal here; an explicit
+  // "no active threats" with a green check is better.
+  if (threats.length === 0) {
+    return (
+      <div className="flex items-center gap-3 rounded-md border border-emerald-200 bg-emerald-50/60 px-4 py-3">
+        <CheckCircle2
+          className="h-4 w-4 shrink-0 text-emerald-700"
+          strokeWidth={2.25}
+        />
+        <div className="min-w-0 flex-1 text-sm">
+          <span className="font-medium text-emerald-900">No active threats</span>
+          <span className="mx-2 text-emerald-700/40">·</span>
+          <span className="text-emerald-800">
+            last 24h failed-login bursts · last 24h cross-tenant attempts · last 24h
+            blocked external email exports · last 7d privilege escalations
+          </span>
+        </div>
+      </div>
+    );
+  }
   const headline = threats[0]!;
   return (
     <div className="flex items-center gap-3 rounded-md border border-amber-300 bg-amber-50 px-4 py-3">
       <AlertTriangle className="h-4 w-4 shrink-0 text-amber-700" strokeWidth={2.25} />
       <div className="min-w-0 flex-1">
         <div className="text-sm">
-          <span className="font-semibold text-amber-900">
+          <button
+            type="button"
+            onClick={onViewAll}
+            className="font-semibold text-amber-900 underline decoration-amber-700/30 underline-offset-2 hover:decoration-amber-700"
+          >
             {threats.length} active threat{threats.length === 1 ? '' : 's'}
-          </span>
+          </button>
           <span className="mx-2 text-amber-700/40">·</span>
           <span className="text-amber-900">{headline.summary}</span>
         </div>
@@ -286,6 +401,7 @@ function ThreatsBar({ threats }: { threats: Threat[] }) {
       </div>
       <button
         type="button"
+        onClick={onViewAll}
         className="inline-flex h-7 items-center rounded-md border border-amber-300 bg-white px-2.5 text-xs font-medium text-amber-900 hover:bg-amber-100"
       >
         View all <ArrowUpRight className="ml-1 h-3 w-3" />

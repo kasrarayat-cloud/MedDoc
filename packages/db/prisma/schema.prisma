@@ -148,6 +148,27 @@ enum AuditAction {
   // transcribe-md — Rx safety audit
   RX_OVERRIDE_RECORDED
   RX_SIGN_BLOCKED_NO_OVERRIDE
+
+  // Phase 6 — admin user-management actions (all audit-logged from
+  // /api/admin/users/[id]/* endpoints). Distinct from the older
+  // USER_DEACTIVATED/USER_DELETED actions because suspension/soft-
+  // delete are reversible-or-recoverable concepts that the admin
+  // dashboard cares about as separate workflows.
+  USER_SUSPENDED
+  USER_UNSUSPENDED
+  USER_SOFT_DELETED
+  USER_FORCE_LOGOUT
+  USER_PASSWORD_RESET_TRIGGERED
+  USER_GRANTED_SUPER_ADMIN
+  USER_REVOKED_SUPER_ADMIN
+
+  // Phase 6H — threat-management actions on the /admin/threats page.
+  // Every administrative action on a security event is itself a
+  // security event; logged so an auditor can walk back through who
+  // looked at what and what disposition they chose.
+  THREAT_INVESTIGATED
+  THREAT_RESOLVED
+  THREAT_DISMISSED_FALSE_POSITIVE
 }
 
 /// Document lifecycle status
@@ -268,6 +289,9 @@ model Practice {
   // privacy posture (TranscribeMdPatient stores full DOB; CRM Patient
   // stores birthYear only per Safe Harbor).
   transcribeMdPatients TranscribeMdPatient[]
+  // Phase 6 — per-call external API spend; rolled up in the admin
+  // usage endpoints.
+  apiUsageEvents       ApiUsageEvent[]
 
   @@index([slug])
   @@map("practices")
@@ -332,6 +356,32 @@ model User {
   /// User who deactivated this account (for audit trail)
   deactivatedBy String?
 
+  // === Phase 6 — admin-driven account state ===
+  /// Suspension is a SOFT pause: the user can't log in but the row
+  /// stays intact and is reversible by `unsuspend`. Distinct from
+  /// `isActive=false` (deactivated) which is a one-way deboarding.
+  suspendedAt     DateTime? @db.Timestamptz(6)
+  /// Admin who suspended (User.id). Kept separate from `deactivatedBy`
+  /// so suspension/deactivation provenance don't overwrite each other.
+  suspendedBy     String?
+  /// Free-text reason captured at suspension time. Surfaced in the
+  /// User detail drawer.
+  suspendedReason String?
+
+  /// Soft delete: the user vanishes from admin lists + the audit feed
+  /// renders the email as "[deleted]", but the row + every related
+  /// audit_logs row stays intact for the HIPAA 7-year retention
+  /// window. A real DELETE only happens after that window via a
+  /// separate sweep job (not in this phase).
+  softDeletedAt DateTime? @db.Timestamptz(6)
+  softDeletedBy String?
+
+  /// Sessions issued before this timestamp are invalid. Set by the
+  /// `force-logout` admin action AND implicitly by suspend / soft-
+  /// delete / revoke-admin (they all imply revocation of in-flight
+  /// sessions). Honoured in the shared `jwt()` callback.
+  forceLogoutAt DateTime? @db.Timestamptz(6)
+
   // === Tenant ===
   // Every user belongs to exactly one Practice. Queries filter by this.
   // A future SUPER_ADMIN role may bypass the filter; for now, everyone
@@ -392,6 +442,12 @@ model User {
   // `rx_warning_overrides` with the reason. Audit trail for sign-
   // anyway decisions.
   rxWarningOverrides     RxWarningOverride[]
+  // Phase 6 — per-user external-API spend events (one row per
+  // call to Deepgram / Anthropic / Whisper / OpenAI / Resend).
+  apiUsageEvents         ApiUsageEvent[]
+  // Phase 6H — threats this user resolved/dismissed via the admin
+  // dashboard. Reverse side of ThreatResolution.resolvedBy.
+  threatResolutions      ThreatResolution[]
 
   @@index([practiceId])
   @@index([role])
@@ -1707,4 +1763,128 @@ model RxWarningOverride {
   @@index([visitId])
   @@index([overriddenBy])
   @@map("rx_warning_overrides")
+}
+
+// ============================================================================
+// API USAGE EVENT — per-call cost record (Phase 6)
+// ----------------------------------------------------------------------------
+// One row per external-API call (Deepgram / Anthropic / Whisper / OpenAI /
+// Resend). Distinct from `ai_calls` (which is the older liveness/error-rate
+// table the system-health endpoint queries) — this one is purpose-built for
+// per-user / per-practice cost rollups in the admin dashboard.
+//
+// Cost is computed at log time using `PRICING` constants in the app code so
+// historical rows preserve the rate that was charged at the time of the
+// call. Update PRICING when providers change pricing — never back-rewrite
+// these rows.
+//
+// userId/practiceId are nullable + ON DELETE SET NULL. We never want a
+// real DELETE on a user (HIPAA 7-yr retention applies) so this should
+// effectively never fire, but the SetNull keeps the cost record alive for
+// historical billing rollups even if a row is hard-deleted by a future
+// cleanup sweep.
+// ============================================================================
+
+model ApiUsageEvent {
+  id        String   @id @default(cuid())
+  timestamp DateTime @default(now()) @db.Timestamptz(6)
+
+  userId     String?
+  practiceId String?
+  user       User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  practice   Practice? @relation(fields: [practiceId], references: [id], onDelete: SetNull)
+
+  /// Provider identifier — kept as text (not enum) so we can add new
+  /// providers without a migration. Allowed values today:
+  /// "deepgram" | "anthropic" | "whisper" | "openai" | "resend"
+  provider String
+
+  /// Operation within the provider — e.g. "transcribe_realtime",
+  /// "transcribe_batch", "soap_generate", "embed", "email_send".
+  operation String
+
+  // ── Per-modality metrics (all nullable; populated based on provider) ──
+  audioSeconds Int?
+  inputTokens  Int?
+  outputTokens Int?
+  emailCount   Int?
+
+  // ── Cost ──
+  /// Generic count for cost calculation (minutes / tokens / emails).
+  unitCount    Float
+  /// "minutes" | "tokens_in" | "tokens_out" | "emails"
+  unitType     String
+  /// Cost per unit at time of call (snapshot of PRICING).
+  unitCostUsd  Float
+  /// unitCount * unitCostUsd. Pre-computed so the rollups are a SUM,
+  /// not a product, and historical billing-tier changes don't move
+  /// historical numbers.
+  totalCostUsd Float
+
+  // ── Context ──
+  visitId   String?
+  /// Correlation ID — matches X-Request-Id headers / job IDs so a
+  /// single user action can be traced across multiple usage events.
+  requestId String
+
+  // ── Provider metadata ──
+  /// Concrete model name — "claude-sonnet-4-6", "nova-3-medical",
+  /// "whisper-1", "text-embedding-3-small", etc.
+  modelName String?
+  /// Free-form provider response details (latency, request size,
+  /// stop reason). Kept as JSON so we don't grow columns for every
+  /// new field a provider exposes.
+  metadata  Json?
+
+  @@index([userId, timestamp])
+  @@index([practiceId, timestamp])
+  @@index([provider, timestamp])
+  @@index([timestamp])
+  @@map("api_usage_events")
+}
+
+// ============================================================================
+// THREAT RESOLUTION — admin disposition for live-detected threats (Phase 6H)
+// ----------------------------------------------------------------------------
+// Threats themselves stay LIVE-COMPUTED in `getThreats()` from audit_logs —
+// no materialized threat table. This overlay records the admin disposition
+// (acknowledged / dismissed-as-false-positive) keyed on the deterministic
+// threat id `getThreats()` already emits (e.g. "grant-admin:<auditLogId>",
+// "xdom:<userId>:<domain>"). The active list LEFT-JOINs this table and
+// excludes any threat with a row here.
+//
+// `silencePattern` is the false-positive learning hook: when an admin
+// dismisses "Admin privileges granted to ash@meddoc.com" as a false
+// positive, we can store `{ "kind": "grant_admin_target", "value":
+// "ash@meddoc.com" }` and future grants to that email get auto-suppressed.
+// JSON instead of a structured column because the silence shape varies by
+// detector and this is plumbing-level, not a query target.
+// ============================================================================
+
+model ThreatResolution {
+  id              String   @id @default(cuid())
+
+  /// The deterministic threat id from getThreats(). Unique because a
+  /// single threat can only be resolved once; subsequent resolve calls
+  /// 409 at the API layer.
+  threatId        String   @unique
+
+  /// "RESOLVED" | "FALSE_POSITIVE". String not enum because the set
+  /// can grow without a migration.
+  resolutionKind  String
+
+  resolvedAt      DateTime @default(now()) @db.Timestamptz(6)
+  resolvedById    String?
+  resolvedBy      User?    @relation(fields: [resolvedById], references: [id], onDelete: SetNull)
+  /// Snapshot — survives soft-delete of the resolving admin.
+  resolvedByEmail String?
+
+  note            String?  @db.Text
+
+  silencePattern  Json?
+
+  @@index([resolvedAt])
+  @@index([resolvedById])
+  @@index([resolutionKind])
+  @@map("threat_resolutions")
 }

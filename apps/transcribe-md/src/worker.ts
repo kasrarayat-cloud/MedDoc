@@ -321,6 +321,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         await runLayer1Transcribe({
           visitId,
           practiceId,
+          userId: visit.userId,
           audioKey: visit.audioKey!,
           audioMimeType: visit.audioMimeType!,
         });
@@ -353,6 +354,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         const r = await runLayer2SpeakerRoles({
           visitId,
           practiceId,
+          userId: visit.userId,
           utterances,
         });
         speakerMap = r.speakerMap;
@@ -371,6 +373,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         const l3 = await runLayer3ExtractEntities({
           visitId,
           practiceId,
+          userId: visit.userId,
           mode: 'conversation',
           utterances,
           speakerMap,
@@ -390,6 +393,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         const r = await runLayer1bTranscribeDictation({
           visitId,
           practiceId,
+          userId: visit.userId,
           dictationAudioKey: visit.dictationAudioKey!,
           // Dictations come from browser MediaRecorder → webm/opus.
           // Deepgram auto-detects encoding from the Content-Type header.
@@ -414,6 +418,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         const l3 = await runLayer3ExtractEntities({
           visitId,
           practiceId,
+          userId: visit.userId,
           mode: 'dictation',
           dictationText,
         });
@@ -432,6 +437,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         const l3 = await runLayer3ExtractEntities({
           visitId,
           practiceId,
+          userId: visit.userId,
           mode: 'text',
           rawText: visit.rawTextInput!,
         });
@@ -457,6 +463,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       soapDraft = await runLayer4GenerateSoap({
         visitId,
         practiceId,
+        userId: visit.userId,
         specialty: visit.specialty,
         roleLabeledTranscript: contextText,
         entities,
@@ -477,6 +484,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       critique = await runLayer5SelfCritique({
         visitId,
         practiceId,
+        userId: visit.userId,
         specialty: visit.specialty,
         soapDraft,
         roleLabeledTranscript: contextText,
@@ -498,6 +506,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       polished = await runLayer6Polish({
         visitId,
         practiceId,
+        userId: visit.userId,
         soapDraft,
         critique,
       });
@@ -547,6 +556,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
           runLayer7aIcdCoding({
             visitId,
             practiceId,
+            userId: visit.userId,
             specialty: visit.specialty,
             soapFinal: soapFinalForFanout,
             entitiesJson,
@@ -559,6 +569,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
           runLayer7bCptCoding({
             visitId,
             practiceId,
+            userId: visit.userId,
             specialty: visit.specialty,
             soapFinal: soapFinalForFanout,
             entitiesJson,
@@ -571,6 +582,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
           runLayer7cRxDrafting({
             visitId,
             practiceId,
+            userId: visit.userId,
             soapFinal: soapFinalForFanout,
             entitiesJson,
           }),
@@ -582,6 +594,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
           runLayer7dReferrals({
             visitId,
             practiceId,
+            userId: visit.userId,
             soapFinal: soapFinalForFanout,
             entitiesJson,
           }),
@@ -593,6 +606,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
           runLayer7ePatientSummary({
             visitId,
             practiceId,
+            userId: visit.userId,
             specialty: visit.specialty,
             soapFinal: soapFinalForFanout,
             entitiesJson,

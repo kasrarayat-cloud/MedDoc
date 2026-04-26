@@ -29,6 +29,7 @@ export type ReferralsResult = z.infer<typeof ReferralsResult>;
 export interface Layer7dInput {
   visitId: string;
   practiceId: string;
+  userId: string | null;
   soapFinal: string;
   entitiesJson: string;
 }
@@ -73,6 +74,7 @@ export async function runLayer7dReferrals(
   const result = await modelClient.complete({
     practiceId: input.practiceId,
     visitId: input.visitId,
+    userId: input.userId,
     purpose: 'tm_referrals',
     provider: 'anthropic',
     model: MODEL,

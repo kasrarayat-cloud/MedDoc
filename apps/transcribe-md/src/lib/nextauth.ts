@@ -82,6 +82,35 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
         if (!user) return null;
         if (!user.isActive) return null;
+        // Phase 6Z (PHASE-6Z-08): reject suspended/soft-deleted users at the
+        // login form rather than letting them complete authorize() and then
+        // having validateSession reject their first authenticated request.
+        // The fields exist on the User row already (no extra select needed —
+        // findUnique above selects everything by default).
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if ((user as any).suspendedAt) {
+          void logAudit({
+            action: 'LOGIN_FAILED',
+            userId: user.id,
+            userEmail: user.email,
+            practiceId: user.practiceId,
+            success: false,
+            errorCode: 'ACCOUNT_SUSPENDED',
+          });
+          return null;
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if ((user as any).softDeletedAt) {
+          void logAudit({
+            action: 'LOGIN_FAILED',
+            userId: user.id,
+            userEmail: user.email,
+            practiceId: user.practiceId,
+            success: false,
+            errorCode: 'ACCOUNT_SOFT_DELETED',
+          });
+          return null;
+        }
         if (user.lockedUntil && user.lockedUntil > new Date()) return null;
 
         // T-M16.2 defense-in-depth: the email-verification gate is
