@@ -15,8 +15,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@meddoc/db';
 
 import { adminApi } from '@/lib/admin-api-gate';
-
-const WINDOW_HOURS = 24;
+import { resolveAuditWindow } from '../../_audit-window';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,13 +26,10 @@ interface BucketRow {
 }
 
 export const GET = adminApi('audit-logs:timeline', async () => {
-  const since = new Date(Date.now() - WINDOW_HOURS * 60 * 60 * 1000);
-
-  // Snap `since` down to the start of the hour so the bucket bounds line
-  // up cleanly. The end is "now" — we don't pad to the next full hour
-  // because the in-progress bucket is meaningful (it shows current rate).
-  const sinceFloor = new Date(since);
-  sinceFloor.setMinutes(0, 0, 0);
+  // Phase 7A: shared window so this endpoint + /audit-logs/stats agree
+  // on what "last 24 hours" means. The bucket loop below ends at the
+  // current partial hour (rightmost bucket = "this hour so far").
+  const w = resolveAuditWindow(24);
 
   const rows = await prisma.$queryRaw<BucketRow[]>`
     SELECT
@@ -41,12 +37,12 @@ export const GET = adminApi('audit-logs:timeline', async () => {
       COUNT(*)::bigint AS total,
       SUM(CASE WHEN success = false THEN 1 ELSE 0 END)::bigint AS failed
     FROM audit_logs
-    WHERE "timestamp" >= ${sinceFloor}
+    WHERE "timestamp" >= ${w.since}
     GROUP BY 1
     ORDER BY 1 ASC
   `;
 
-  // Build a 24-element array with zero-fills for gap hours. Client
+  // Build an N-element array with zero-fills for gap hours. Client
   // never has to think about empty buckets.
   const byHourIso = new Map<string, { total: number; failed: number }>();
   for (const r of rows) {
@@ -57,8 +53,8 @@ export const GET = adminApi('audit-logs:timeline', async () => {
   }
 
   const buckets: { hour: string; total: number; failed: number }[] = [];
-  for (let i = 0; i < WINDOW_HOURS; i++) {
-    const t = new Date(sinceFloor.getTime() + i * 60 * 60 * 1000);
+  for (let i = 0; i < w.hours; i++) {
+    const t = new Date(w.since.getTime() + i * 60 * 60 * 1000);
     const iso = t.toISOString();
     const hit = byHourIso.get(iso);
     buckets.push({
