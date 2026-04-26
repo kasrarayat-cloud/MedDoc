@@ -11,6 +11,12 @@
 
 import { Resend } from 'resend';
 
+// Phase 6Z (PHASE-6Z-07): Resend wraps were never wired to logApiUsage,
+// so api_usage_events had no `provider='resend'` rows and the /admin/usage
+// breakdown silently undercounted total spend. Wired below at the two
+// success-path return points (sendOne + sendVisitPdfEmail).
+import { logApiUsage, buildResendUsage } from '@meddoc/ai';
+
 /** Thrown when Resend rejects the send because the deployment isn't
  *  set up correctly (domain not verified, API key revoked, etc.) —
  *  i.e., a CONFIG error the ops team needs to fix, not a per-message
@@ -145,6 +151,16 @@ export async function sendVisitPdfEmail(
     }
     throw new Error(`Resend rejected the message: ${message}`);
   }
+  // Phase 6Z (PHASE-6Z-07): one usage row per successful send. We don't
+  // know userId/practiceId at this layer (callers don't pass them),
+  // so the row attributes only by provider. Fire-and-forget — the
+  // logApiUsage internals never throw.
+  logApiUsage(
+    buildResendUsage(
+      { metadata: { kind: 'visit_pdf', visitId: args.visitId } },
+      1
+    )
+  );
   return { id, toEmail: args.toEmail };
 }
 
@@ -210,6 +226,16 @@ async function sendOne(args: {
     }
     throw new Error(`Resend rejected the message: ${message}`);
   }
+  // Phase 6Z (PHASE-6Z-07): track the auth/account email send in
+  // api_usage_events. Same caveat as sendVisitPdfEmail — no userId
+  // attribution from this layer. Subject is captured in metadata for
+  // operator-facing diagnostics.
+  logApiUsage(
+    buildResendUsage(
+      { metadata: { kind: 'transactional', subject: args.subject } },
+      1
+    )
+  );
   return { id, toEmail: args.to };
 }
 

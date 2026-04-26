@@ -18,6 +18,7 @@ const MODEL = 'claude-sonnet-4-6';
 export interface Layer4Input {
   visitId: string;
   practiceId: string;
+  userId: string | null;
   specialty: string;
   roleLabeledTranscript: string;
   entities: ExtractedEntities;
@@ -92,6 +93,7 @@ export async function runLayer4GenerateSoap(
   const { text } = await modelClient.completeText({
     practiceId: input.practiceId,
     visitId: input.visitId,
+    userId: input.userId,
     purpose: 'tm_soap_draft',
     provider: 'anthropic',
     model: MODEL,
