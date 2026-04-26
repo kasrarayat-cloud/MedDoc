@@ -20,6 +20,12 @@ services:
     # on-disk format → the existing `pgdata` volume mounts unchanged.
     image: pgvector/pgvector:pg16
     restart: unless-stopped
+    # Phase 13 — H4: non-root containers. The pgvector image's
+    # `postgres` user is uid 999 and the data dir was already owned
+    # by 999 from initdb (verified via `ls -ldn` before this directive
+    # landed). Adding user: makes the runtime uid match what postgres
+    # expects + makes the non-root posture explicit in compose.
+    user: "999:999"
     # T-M16.4: protective ceilings, not reservations. Sum across all
     # services > host RAM is intentional — compose mem_limits only
     # fire when a container actually hits the limit, preventing one
@@ -452,6 +458,13 @@ services:
   postgres-backup:
     image: prodrigestivill/postgres-backup-local:16
     restart: unless-stopped
+    # Phase 13 — H4: non-root containers. The backup runs pg_dump
+    # over TCP (no filesystem access to postgres's data volume) and
+    # writes gzipped dumps to /backups (bind-mounted from
+    # /opt/meddoc-pro/backups). The host backups dir was chowned
+    # to 999:999 once before this user: directive landed; subsequent
+    # runs inherit ownership. Same uid as postgres for symmetry.
+    user: "999:999"
     mem_limit: 128m
     cpus: '0.5'
     depends_on:
