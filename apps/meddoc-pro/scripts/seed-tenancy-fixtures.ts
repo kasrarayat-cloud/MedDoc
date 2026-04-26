@@ -78,6 +78,46 @@ async function main() {
     await upsertUser(u);
   }
 
+  // Phase 8 fix: when AUTH_USE_MOCK=true (CI sets this so the middleware
+  // lets pre-authenticated requests through), `getMockSession()` in
+  // src/lib/auth.ts returns a session with id='mock_user_doctor_01'.
+  // logAudit() inside the credentials authorize() flow then resolves
+  // userId from that mock session and tries to INSERT into audit_logs —
+  // hitting `audit_logs_userId_fkey` because the mock user didn't exist
+  // in the DB. The audit-write failed silently (caught), but the noise
+  // polluted the WebServer log and (per Playwright runs) tracked back
+  // to the same login flow that 8 E2E tests blocked on.
+  //
+  // Seeding the mock user against the same `clinic_main` practice
+  // satisfies the FK without changing any auth semantics. The mock is
+  // still only used when AUTH_USE_MOCK=true AND no real session cookie
+  // exists; once the test logs in for real, getSession() returns the
+  // real session.
+  const MOCK_DEV_USER_ID = 'mock_user_doctor_01';
+  const MOCK_DEV_USER_EMAIL = 'doctor@meddoc.local';
+  await prisma.user.upsert({
+    where: { id: MOCK_DEV_USER_ID },
+    update: {
+      email: MOCK_DEV_USER_EMAIL,
+      name: 'Dr. Bakhtiar Moussazadeh',
+      passwordHash,
+      role: 'DOCTOR',
+      practiceId: PRACTICE_A_ID,
+      isActive: true,
+      lockedUntil: null,
+      failedLoginCount: 0,
+    },
+    create: {
+      id: MOCK_DEV_USER_ID,
+      email: MOCK_DEV_USER_EMAIL,
+      name: 'Dr. Bakhtiar Moussazadeh',
+      passwordHash,
+      role: 'DOCTOR',
+      practiceId: PRACTICE_A_ID,
+      isActive: true,
+    },
+  });
+
   // --- Patients ---
   for (const p of Object.values(PATIENTS)) {
     await prisma.patient.upsert({
