@@ -86,9 +86,14 @@ export const GET = adminApi('users:list', async (req) => {
       { name: { contains: q.search, mode: 'insensitive' } },
     ];
   }
+  // Phase 6Z fix: previously this set `where.OR = where.OR ?? []` which
+  // produced an empty-OR-array predicate when no search was supplied —
+  // Prisma treats `OR: []` as "match no rows", so `?status=active`
+  // (no search, no cursor) silently returned an empty page even though
+  // the DB had matching active users. The lock-state condition needs
+  // to be combined as AND only.
   if (q.status === 'active') {
     where.isActive = true;
-    where.OR = where.OR ?? [];
     where.AND = [
       { OR: [{ lockedUntil: null }, { lockedUntil: { lt: new Date() } }] },
     ];
@@ -98,12 +103,19 @@ export const GET = adminApi('users:list', async (req) => {
     where.lockedUntil = { gt: new Date() };
   }
 
+  // Cursor predicate is added as a separate AND clause rather than
+  // overwriting `where.OR`. The previous version stomped on the search
+  // OR-predicate from above, causing pagination to lose the search
+  // filter on the second page.
   const cur = parseCursor(q.cursor);
   if (cur) {
-    where.OR = [
-      { createdAt: { lt: cur.createdAt } },
-      { createdAt: cur.createdAt, id: { lt: cur.id } },
-    ];
+    const cursorOr = {
+      OR: [
+        { createdAt: { lt: cur.createdAt } },
+        { createdAt: cur.createdAt, id: { lt: cur.id } },
+      ],
+    };
+    where.AND = where.AND ? [...where.AND, cursorOr] : [cursorOr];
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
