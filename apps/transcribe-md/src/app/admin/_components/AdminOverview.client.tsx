@@ -46,6 +46,7 @@ import type {
   TimelineBucket,
 } from '../_types';
 import AdminNav from './AdminNav.client';
+import { cls, summarizeHipaaFindings } from '../_lib/admin-format';
 
 // ---------------------------------------------------------------------------
 // Top-level component
@@ -718,53 +719,78 @@ function TimelineChartCard({ data }: { data: TimelineBucket[] }) {
 // ---------------------------------------------------------------------------
 
 function HipaaComplianceCard({ data }: { data: HipaaState }) {
-  const critical = data.findings.find((f) => f.severity === 'critical') ?? { severity: 'critical', total: 0, resolved: 0 };
-  const high = data.findings.find((f) => f.severity === 'high') ?? { severity: 'high', total: 0, resolved: 0 };
-  const medium = data.findings.find((f) => f.severity === 'medium') ?? { severity: 'medium', total: 0, resolved: 0 };
+  // Phase 7A consistency fix: every figure on this card now flows from a
+  // single derivation. Previously the "Clear" status badge looked at
+  // critical.total alone and missed pending high/medium findings, so the
+  // card could read "Clear" while showing 3 pending high issues right
+  // below — Kasra's drift bug. The header status, the per-severity row
+  // counts, and the chart bars all read from `summary` now.
+  const summary = summarizeHipaaFindings(data.findings);
+  const critical = summary.bySeverity.critical;
+  const high = summary.bySeverity.high;
+  const medium = summary.bySeverity.medium;
   const cov = data.auditCoverage;
   const covPct = cov.total > 0 ? (cov.covered / cov.total) * 100 : 0;
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4">
+    <div className="rounded-lg border border-slate-200 bg-white p-4" data-testid="hipaa-card">
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <ShieldCheck className="h-4 w-4 text-slate-600" />
           <h2 className="text-sm font-semibold text-slate-900">HIPAA compliance</h2>
         </div>
-        <span className="text-[11px] text-slate-500">reviewed {data.lastReview}</span>
+        <div className="flex items-center gap-2">
+          <HipaaStatusBadge totalOpen={summary.totalOpen} />
+          <span className="text-[11px] text-slate-500">reviewed {data.lastReview}</span>
+        </div>
       </div>
 
       <ul className="space-y-2.5 text-sm">
-        <li className="flex items-center justify-between">
+        <li className="flex items-center justify-between" data-testid="hipaa-row-critical">
           <span className="inline-flex items-center gap-2 text-slate-800">
-            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-            <span className="font-mono tabular-nums">{critical.total}</span> critical findings
+            <CheckCircle2
+              className={cls(
+                'h-4 w-4',
+                critical.open === 0 ? 'text-emerald-600' : 'text-rose-600'
+              )}
+            />
+            <span className="font-mono tabular-nums" data-testid="hipaa-critical-total">{critical.total}</span>
+            critical
+            <span className="text-slate-400">·</span>
+            <span className="text-slate-500">
+              <span data-testid="hipaa-critical-resolved">{critical.resolved}</span> resolved,{' '}
+              <span data-testid="hipaa-critical-pending">{critical.open}</span> pending
+            </span>
           </span>
-          <span className="text-[11px] font-medium text-emerald-700">{critical.total === 0 ? 'Clear' : 'Open'}</span>
         </li>
 
-        <li>
+        <li data-testid="hipaa-row-high">
           <div className="flex items-center justify-between">
             <span className="inline-flex items-center gap-2 text-slate-800">
               <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-amber-100 text-[10px] font-bold text-amber-800">!</span>
-              <span className="font-mono tabular-nums">{high.total}</span> high
+              <span className="font-mono tabular-nums" data-testid="hipaa-high-total">{high.total}</span> high
               <span className="text-slate-400">·</span>
               <span className="text-slate-500">
-                {high.resolved} resolved, {high.total - high.resolved} pending
+                <span data-testid="hipaa-high-resolved">{high.resolved}</span> resolved,{' '}
+                <span data-testid="hipaa-high-pending">{high.open}</span> pending
               </span>
             </span>
           </div>
           <div className="mt-1.5 ml-6 h-1 w-full overflow-hidden rounded-full bg-amber-100">
-            <div className="h-full bg-amber-500" style={{ width: `${(high.resolved / Math.max(1, high.total)) * 100}%` }} />
+            <div
+              className="h-full bg-amber-500"
+              style={{ width: `${(high.resolved / Math.max(1, high.total)) * 100}%` }}
+            />
           </div>
         </li>
 
-        <li className="flex items-center justify-between">
+        <li className="flex items-center justify-between" data-testid="hipaa-row-medium">
           <span className="inline-flex items-center gap-2 text-slate-800">
             <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-slate-100 text-[10px] font-bold text-slate-600">·</span>
-            <span className="font-mono tabular-nums">{medium.total}</span> medium
+            <span className="font-mono tabular-nums" data-testid="hipaa-medium-total">{medium.total}</span> medium
             <span className="text-slate-400">·</span>
             <span className="text-slate-500">
-              {medium.resolved} resolved, {medium.total - medium.resolved} pending
+              <span data-testid="hipaa-medium-resolved">{medium.resolved}</span> resolved,{' '}
+              <span data-testid="hipaa-medium-pending">{medium.open}</span> pending
             </span>
           </span>
         </li>
@@ -781,6 +807,33 @@ function HipaaComplianceCard({ data }: { data: HipaaState }) {
         </li>
       </ul>
     </div>
+  );
+}
+
+/** Phase 7A: card-header status pill. Derived from totalOpen so it
+ *  CAN'T disagree with the per-severity rows below. */
+function HipaaStatusBadge({ totalOpen }: { totalOpen: number }) {
+  if (totalOpen === 0) {
+    return (
+      <span
+        data-testid="hipaa-status-badge"
+        data-open-count={0}
+        className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700 ring-1 ring-emerald-600/20"
+      >
+        <CheckCircle2 className="h-3 w-3" />
+        All clear
+      </span>
+    );
+  }
+  return (
+    <span
+      data-testid="hipaa-status-badge"
+      data-open-count={totalOpen}
+      className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-800 ring-1 ring-amber-600/30"
+    >
+      <AlertTriangle className="h-3 w-3" />
+      {totalOpen} open
+    </span>
   );
 }
 
