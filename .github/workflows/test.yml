@@ -44,11 +44,32 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      # Phase 13 (h9-meddoc-e2e-residual): the dev server tries to
+      # connect to redis at startup (audit-log SSE pubsub singleton).
+      # Without this service the EAI_AGAIN noise pollutes the WebServer
+      # log on every CI run and removes one variable when diagnosing
+      # the residual signIn() failure.
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     env:
       DATABASE_URL: postgresql://meddoc:meddoc@localhost:5432/meddoc?schema=public
+      REDIS_URL: redis://localhost:6379
       AUTH_SECRET: ci-dummy-auth-secret-not-for-production
       AUTH_USE_MOCK: "true"
+      # Phase 13 (h9-meddoc-e2e-residual): turn on the surgical deny-
+      # reason console.error in apps/meddoc-pro/src/lib/nextauth.ts
+      # so the next CI run captures the specific authorize() return-
+      # null branch that's currently swallowed under a generic
+      # CredentialsSignin.
+      AUTH_DEBUG: "true"
       NEXTAUTH_URL: http://localhost:3000
       OPENAI_API_KEY: ci-dummy-openai-key
       CI: "true"
