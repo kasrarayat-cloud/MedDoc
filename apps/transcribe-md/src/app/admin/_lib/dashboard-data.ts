@@ -392,12 +392,24 @@ interface ResolutionRow {
   silencePattern: unknown;
 }
 
+/** Phase 6Z (PHASE-6Z-11): bound the resolution scan to the last 90 days.
+ *  Pre-launch scale doesn't strictly need this (3 rows today; even 10K
+ *  is fine in-memory), but it costs nothing and keeps the Overview SSR
+ *  cheap as the table grows. The detector windows are 24h or 7d, so a
+ *  90d resolution row covers every still-relevant detector hit by a
+ *  comfortable margin. Older resolutions remain in the table for the
+ *  audit trail; they just stop being applied as live filters. */
+const RESOLUTION_LOOKBACK_DAYS = 90;
 async function loadActiveResolutions(): Promise<{
   byThreatId: Set<string>;
   silencePatterns: Record<string, unknown>[];
 }> {
   try {
+    const since = new Date(
+      Date.now() - RESOLUTION_LOOKBACK_DAYS * 24 * 60 * 60 * 1000
+    );
     const rows = (await prisma.threatResolution.findMany({
+      where: { resolvedAt: { gte: since } },
       select: { threatId: true, resolutionKind: true, silencePattern: true },
     })) as unknown as ResolutionRow[];
     const byThreatId = new Set<string>();
