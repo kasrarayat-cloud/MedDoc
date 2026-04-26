@@ -20,6 +20,7 @@ import 'server-only';
 
 import prisma from '@meddoc/db';
 import { getRedis, isRedisReady } from '@/lib/redis';
+import { resolveAuditWindow } from '../../api/admin/_audit-window';
 
 import type {
   SystemHealth,
@@ -892,8 +893,11 @@ const TIMELINE_HOURS = 24;
 
 export async function getTimeline(): Promise<TimelineBucket[]> {
   try {
-    const sinceFloor = new Date(Date.now() - TIMELINE_HOURS * 60 * 60 * 1000);
-    sinceFloor.setMinutes(0, 0, 0);
+    // Phase 7A: shared anchor with /api/admin/audit-logs/{timeline,stats}
+    // so the Overview's TimelineChartCard, the API's bucket array, and
+    // the API's totalEvents stat all reference the same 24-hour window.
+    // The rightmost bucket is the current partial hour.
+    const w = resolveAuditWindow(TIMELINE_HOURS);
 
     const rows = await prisma.$queryRaw<RawBucket[]>`
       SELECT
@@ -901,7 +905,7 @@ export async function getTimeline(): Promise<TimelineBucket[]> {
         COUNT(*)::bigint AS total,
         SUM(CASE WHEN success = false THEN 1 ELSE 0 END)::bigint AS failed
       FROM audit_logs
-      WHERE "timestamp" >= ${sinceFloor}
+      WHERE "timestamp" >= ${w.since}
       GROUP BY 1
       ORDER BY 1 ASC
     `;
@@ -915,8 +919,8 @@ export async function getTimeline(): Promise<TimelineBucket[]> {
     }
 
     const buckets: TimelineBucket[] = [];
-    for (let i = 0; i < TIMELINE_HOURS; i++) {
-      const t = new Date(sinceFloor.getTime() + i * 60 * 60 * 1000);
+    for (let i = 0; i < w.hours; i++) {
+      const t = new Date(w.since.getTime() + i * 60 * 60 * 1000);
       const hit = byHourIso.get(t.toISOString());
       buckets.push({
         hour: t.getHours(),
@@ -1011,9 +1015,22 @@ function formatLatency(ms: number): string {
 }
 
 // ---------------------------------------------------------------------------
-// HIPAA state — placeholder until a real findings endpoint exists. The
-// numbers come from the AUDIT-COVERAGE doc and the most recent ultra-final
-// audit; a real API replaces this in a later phase.
+// HIPAA state — placeholder until a real findings endpoint exists.
+// ----------------------------------------------------------------------------
+// Numbers come from the AUDIT-COVERAGE doc + the most recent ultra-final
+// audit. Phase 7A: the consumer (HipaaComplianceCard) now derives the
+// header status badge AND the per-severity rows from the SAME
+// `findings` array via `summarizeHipaaFindings()` in admin-format, so a
+// future Option-β swap (real findings table → real query here) flows
+// through to every figure on the card without touching the UI.
+//
+// Option-β swap path (when a real source exists):
+//   - Add a `hipaa_findings` table (or query audit_logs for HIPAA-flagged
+//     incidents).
+//   - Replace this function body with a Prisma query that returns the
+//     same `HipaaState` shape: `findings: HipaaFinding[]`, plus the
+//     existing auditCoverage + lastReview fields.
+//   - The card surfaces and `summarizeHipaaFindings` need no change.
 // ---------------------------------------------------------------------------
 
 export async function getHipaaState(): Promise<HipaaState> {
