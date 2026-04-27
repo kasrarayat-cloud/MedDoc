@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { processWithAI, AIAction } from '@/lib/ai-service';
 import { getSession } from '@/lib/auth';
 import { logApiUsage } from '@/lib/usage';
+import { logAudit } from '@/lib/audit';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
 // ========================================
@@ -173,6 +174,21 @@ export async function POST(request: NextRequest) {
         console.error('[doc-editor] logApiUsage rejected unexpectedly:', err);
       });
 
+      void logAudit({
+        action: 'DOC_EDITOR_AI_SUGGESTED',
+        targetType: 'doc_editor',
+        targetId: null,
+        metadata: {
+          mode: 'upload',
+          aiAction: action,
+          documentBytes: documentContent.length,
+          messageBytes: message.length,
+          historyTurns: conversationHistory.length,
+          suggestionBytes: ai.text.length,
+          totalTokens: ai.usage?.totalTokens ?? null,
+        },
+      });
+
       // Keep client-facing shape identical to before the ai-service
       // refactor: `aiResponse` is the text string. Usage goes to the
       // metrics logger only, not down the wire.
@@ -210,6 +226,21 @@ export async function POST(request: NextRequest) {
       tokens: ai.usage?.totalTokens ?? null,
     }).catch((err) => {
       console.error('[doc-editor] logApiUsage rejected unexpectedly:', err);
+    });
+
+    void logAudit({
+      action: 'DOC_EDITOR_AI_SUGGESTED',
+      targetType: 'doc_editor',
+      targetId: null,
+      metadata: {
+        mode: 'follow_up',
+        aiAction: action || 'chat',
+        documentBytes: typeof documentContent === 'string' ? documentContent.length : 0,
+        messageBytes: typeof message === 'string' ? message.length : 0,
+        historyTurns: Array.isArray(conversationHistory) ? conversationHistory.length : 0,
+        suggestionBytes: ai.text.length,
+        totalTokens: ai.usage?.totalTokens ?? null,
+      },
     });
 
     return NextResponse.json({

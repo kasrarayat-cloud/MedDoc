@@ -176,6 +176,14 @@ enum AuditAction {
   // gap is fixed; Reopen reverses that if the fix doesn't hold.
   HIPAA_FINDING_RESOLVED
   HIPAA_FINDING_REOPENED
+
+  // Phase 17 — close the §164.312(b) audit-completeness gaps surfaced
+  // by the Phase 16 deep audit. Each PHI-touching mutation now writes
+  // an audit row with field NAMES + sizes (never raw values).
+  AUDIO_UPLOADED
+  DOC_EDITOR_SAVED
+  DOC_EDITOR_AI_SUGGESTED
+  PHI_EXTRACTED_FROM_VOICE
 }
 
 /// Document lifecycle status

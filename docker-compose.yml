@@ -481,8 +481,19 @@ services:
       BACKUP_KEEP_WEEKS: "4"
       BACKUP_KEEP_MONTHS: "6"
       HEALTHCHECK_PORT: "8080"
+      # Phase 17 (h16-offsite-backup): postscript no-ops when these
+      # are unset, so it's safe to land before the bucket is
+      # provisioned. Runbook: docs/H16_OFFSITE_BACKUP_PROCEDURE.md
+      POST_BACKUP_COMMAND: "/scripts/postscript.sh"
+      REMOTE_BACKUP_S3_ENDPOINT: "${REMOTE_BACKUP_S3_ENDPOINT:-}"
+      REMOTE_BACKUP_S3_BUCKET: "${REMOTE_BACKUP_S3_BUCKET:-}"
+      REMOTE_BACKUP_S3_ACCESS_KEY: "${REMOTE_BACKUP_S3_ACCESS_KEY:-}"
+      REMOTE_BACKUP_S3_SECRET_KEY: "${REMOTE_BACKUP_S3_SECRET_KEY:-}"
+      REMOTE_BACKUP_S3_REGION: "${REMOTE_BACKUP_S3_REGION:-us-east-1}"
+      REMOTE_BACKUP_PREFIX: "${REMOTE_BACKUP_PREFIX:-}"
     volumes:
       - ./backups:/backups
+      - ./infra/postgres-backup/postscript.sh:/scripts/postscript.sh:ro
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080"]
       interval: 60s
