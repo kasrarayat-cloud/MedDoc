@@ -35,10 +35,12 @@
 }
 
 # ─── Shared header snippet — MODE B (HTTPS-only) ──────────────────────────
-# Imported from every active domain block below. Adds HSTS + CSP
-# Report-Only on top of the MODE A subset. CSP stays Report-Only for now
-# — observe violations, tighten later; 'unsafe-inline' + 'unsafe-eval' are
-# both required today for Next 16 + Tailwind inline emission.
+# Imported from every active domain block below. Adds HSTS + enforced CSP
+# on top of the MODE A subset. Phase 19 (h16-csp-report-only): switched
+# from Content-Security-Policy-Report-Only to enforced after the burn-in
+# window from Phases 13-17 produced zero CSP violation reports.
+# 'unsafe-inline' + 'unsafe-eval' are both required by Next 16 + Tailwind
+# inline emission.
 (security_headers_mode_b) {
     header {
         Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
@@ -46,7 +48,8 @@
         X-Frame-Options "SAMEORIGIN"
         Referrer-Policy "strict-origin-when-cross-origin"
         Permissions-Policy "microphone=(self), camera=(self), geolocation=()"
-        Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://*.ingest.sentry.io; frame-ancestors 'self'; form-action 'self'; base-uri 'self'; object-src 'none';"
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://*.ingest.sentry.io; frame-ancestors 'self'; form-action 'self'; base-uri 'self'; object-src 'none';"
+        -Content-Security-Policy-Report-Only
         -Server
     }
 }
