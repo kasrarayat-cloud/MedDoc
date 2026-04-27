@@ -24,6 +24,7 @@ import { notFound } from 'next/navigation';
 import { Product } from '@prisma/client';
 import { auth } from '@/lib/nextauth';
 import { logAudit } from '@/lib/audit';
+import { isAdminSessionStale } from '@/lib/admin-session-freshness';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -55,6 +56,16 @@ export default async function AdminLayout({
   }
 
   if (!hasSuperAdmin) {
+    notFound();
+  }
+
+  // Phase 19 — h16-admin-session-7day. Cookie itself stays 7 days
+  // (so app.quillmd.com doesn't bounce doctors hourly), but admin
+  // pages enforce a 12-h freshness ceiling on top of the SUPER_ADMIN
+  // gate. Stale → notFound (same disclosure-minimising posture).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sessionId = (session?.user as any)?.sessionId as string | undefined;
+  if (await isAdminSessionStale(sessionId)) {
     notFound();
   }
 
