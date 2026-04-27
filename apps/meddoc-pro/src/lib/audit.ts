@@ -71,7 +71,10 @@ export type AuditAction =
   // Phase 17 — §164.312(b) audit-completeness fixes
   | 'DOC_EDITOR_SAVED'
   | 'DOC_EDITOR_AI_SUGGESTED'
-  | 'PHI_EXTRACTED_FROM_VOICE';
+  | 'PHI_EXTRACTED_FROM_VOICE'
+  // Phase 19 — h16-audit-gap-realtime
+  | 'REALTIME_SESSION_STARTED'
+  | 'REALTIME_SESSION_ENDED';
 
 export interface AuditLogInput {
   action: AuditAction;
