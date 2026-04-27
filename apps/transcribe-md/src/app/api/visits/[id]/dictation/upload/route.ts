@@ -24,6 +24,7 @@ import { enqueueProcessVisit } from '@/lib/queue';
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 import { redactPhi } from '@meddoc/ai';
+import { logAudit } from '@/lib/audit';
 
 export const runtime = 'nodejs';
 export const maxDuration = 120;
@@ -168,6 +169,17 @@ export const POST = withApiHandler<{ id: string }>(
         processingStartedAt: null,
         processingFinishedAt: null,
         processingCostCents: null,
+      },
+    });
+
+    void logAudit({
+      action: 'AUDIO_UPLOADED',
+      targetType: 'transcribe_visit',
+      targetId: visitId,
+      metadata: {
+        sizeBytes: contentLength,
+        mimeType,
+        inputMode: 'voice_dictation',
       },
     });
 
