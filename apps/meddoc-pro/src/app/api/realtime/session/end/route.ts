@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { logApiUsage } from '@/lib/usage';
+import { logAudit } from '@/lib/audit';
 import { recordVoiceMinutes } from '@/lib/realtime/usage-cap';
 
 // ============================================================================
@@ -55,6 +56,20 @@ export async function POST(request: NextRequest) {
     durationSeconds,
   }).catch((err) => {
     console.error('[realtime/session/end] logApiUsage rejected:', err);
+  });
+
+  // Phase 19 — h16-audit-gap-realtime. The clamped duration is what
+  // we trust; raw + clamped both go into metadata so an auditor can
+  // see whether the client over-claimed.
+  void logAudit({
+    action: 'REALTIME_SESSION_ENDED',
+    targetType: 'realtime_session',
+    targetId: null,
+    metadata: {
+      durationSeconds,
+      rawDurationSeconds: Math.round(raw),
+      clamped: durationSeconds < Math.round(raw),
+    },
   });
 
   return NextResponse.json({ ok: true, durationSeconds });

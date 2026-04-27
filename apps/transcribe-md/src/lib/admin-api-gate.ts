@@ -29,6 +29,7 @@ import { Product } from '@prisma/client';
 
 import { auth } from '@/lib/nextauth';
 import { logAudit } from '@/lib/audit';
+import { isAdminSessionStale } from '@/lib/admin-session-freshness';
 
 /** What admin handlers actually need — slim subset of the next-auth
  *  session. The full app `Session` from @meddoc/auth requires
@@ -80,6 +81,14 @@ export function adminApi(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const products = (userRow.products as any[] | undefined) ?? [];
     if (!products.includes(Product.SUPER_ADMIN)) return notFoundResponse();
+
+    // Phase 19 — h16-admin-session-7day. Reject admin API calls on
+    // sessions older than 12 h even though the cookie stays valid
+    // for the consumer-doctor flow. Forces a fresh re-auth on this
+    // surface specifically.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sessionId = (sessionOrNull.user as any).sessionId as string | undefined;
+    if (await isAdminSessionStale(sessionId)) return notFoundResponse();
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const u = sessionOrNull.user as any;
