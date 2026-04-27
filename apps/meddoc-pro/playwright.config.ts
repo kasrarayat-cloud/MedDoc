@@ -10,6 +10,11 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests/e2e',
+  // Phase 19 (h13-meddoc-e2e-tenancy-residual): pre-warm Turbopack
+  // routes after webServer is ready but before tests start, so the
+  // first cross-tenant page.goto() doesn't time out waiting for a
+  // cold-compile of /dashboard subtrees.
+  globalSetup: './tests/e2e/global-setup.ts',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,

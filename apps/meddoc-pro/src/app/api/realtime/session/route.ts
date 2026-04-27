@@ -253,6 +253,21 @@ export async function POST(request: NextRequest) {
     },
   });
 
+  // Phase 19 — h16-audit-gap-realtime. Explicit lifecycle marker so
+  // the audit timeline shows session-start without having to infer
+  // it from VIEWED_PATIENT_FILE + via=realtime-session metadata.
+  void logAudit({
+    action: 'REALTIME_SESSION_STARTED',
+    targetType: 'realtime_session',
+    targetId: sessionPayload.id ?? null,
+    metadata: {
+      patientId,
+      model: REALTIME_MODEL,
+      voice: REALTIME_VOICE,
+      capRemainingMin: cap.remaining,
+    },
+  });
+
   return NextResponse.json({
     clientSecret: sessionPayload.client_secret.value,
     expiresAt: sessionPayload.client_secret.expires_at ?? null,
