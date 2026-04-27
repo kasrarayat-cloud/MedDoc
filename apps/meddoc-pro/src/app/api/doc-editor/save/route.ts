@@ -9,6 +9,7 @@ import {
   TabStopType,
 } from 'docx';
 import { getSession } from '@/lib/auth';
+import { logAudit } from '@/lib/audit';
 
 // Audit H4 — reject oversized content before building docx. 100 KB
 // is ~50 pages of plain text; comfortably more than any real doctor
@@ -158,6 +159,18 @@ export async function POST(request: NextRequest) {
     });
 
     const buffer = await Packer.toBuffer(doc);
+
+    void logAudit({
+      action: 'DOC_EDITOR_SAVED',
+      targetType: 'doc_editor',
+      targetId: null,
+      metadata: {
+        format: format ?? 'docx',
+        contentBytes: content.length,
+        outputBytes: buffer.byteLength,
+        paragraphCount: paragraphs.length,
+      },
+    });
 
     if (format === 'pdf') {
       // For PDF: return a note that server-side PDF needs LibreOffice

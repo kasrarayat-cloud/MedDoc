@@ -67,7 +67,11 @@ export type AuditAction =
   // Phase 1A — platform admin
   | 'ADMIN_DASHBOARD_ACCESS'
   // Phase 1B — admin API hits
-  | 'ADMIN_API_ACCESS';
+  | 'ADMIN_API_ACCESS'
+  // Phase 17 — §164.312(b) audit-completeness fixes
+  | 'DOC_EDITOR_SAVED'
+  | 'DOC_EDITOR_AI_SUGGESTED'
+  | 'PHI_EXTRACTED_FROM_VOICE';
 
 export interface AuditLogInput {
   action: AuditAction;

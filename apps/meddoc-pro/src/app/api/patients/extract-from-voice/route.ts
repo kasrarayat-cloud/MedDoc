@@ -22,6 +22,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { getSession } from '@/lib/auth';
 import { logApiUsage } from '@/lib/usage';
+import { logAudit } from '@/lib/audit';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
 let openaiClient: OpenAI | null = null;
@@ -384,6 +385,26 @@ export async function POST(request: NextRequest) {
     tokens: extractionTokens,
   }).catch((err) => {
     console.error('[extract-from-voice] logApiUsage GPT_TOOL rejected:', err);
+  });
+
+  // Field NAMES only — never values. The audit row records that PHI
+  // ingest happened, the duration, and which fields the model populated.
+  // The actual transcript + values stay in the response, never the row.
+  const populatedFields = (Object.entries(fields) as [string, unknown][])
+    .filter(([, v]) => v !== null && v !== undefined)
+    .map(([k]) => k);
+  void logAudit({
+    action: 'PHI_EXTRACTED_FROM_VOICE',
+    targetType: 'patient',
+    targetId: null,
+    metadata: {
+      audioBytes: audioFile.size,
+      whisperDurationSeconds,
+      transcriptBytes: transcript.length,
+      populatedFields,
+      populatedFieldCount: populatedFields.length,
+      gptTokens: extractionTokens,
+    },
   });
 
   return NextResponse.json<SuccessResponse>({ ok: true, transcript, fields });
