@@ -80,7 +80,12 @@ export type AuditAction =
   | 'ACCOUNT_DELETED'
   // Rx safety
   | 'RX_OVERRIDE_RECORDED'
-  | 'RX_SIGN_BLOCKED_NO_OVERRIDE';
+  | 'RX_SIGN_BLOCKED_NO_OVERRIDE'
+  // Phase 17 — §164.312(b) audit-completeness fixes
+  | 'AUDIO_UPLOADED'
+  | 'DOC_EDITOR_SAVED'
+  | 'DOC_EDITOR_AI_SUGGESTED'
+  | 'PHI_EXTRACTED_FROM_VOICE';
 
 export interface AuditLogInput {
   action: AuditAction;

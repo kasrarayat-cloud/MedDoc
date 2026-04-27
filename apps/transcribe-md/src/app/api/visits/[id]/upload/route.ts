@@ -28,6 +28,7 @@ import { enqueueProcessVisit } from '@/lib/queue';
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 import { redactPhi } from '@meddoc/ai';
+import { logAudit } from '@/lib/audit';
 
 export const runtime = 'nodejs';
 // Next's default body-size limit on route handlers is 1 MB — we need
@@ -203,6 +204,18 @@ export const POST = withApiHandler<{ id: string }>(
         );
       });
     }
+
+    void logAudit({
+      action: 'AUDIO_UPLOADED',
+      targetType: 'transcribe_visit',
+      targetId: visitId,
+      metadata: {
+        sizeBytes: contentLength,
+        mimeType: mimeType.split(';')[0]!.trim(),
+        inputMode: 'audio_upload',
+        reupload: visit.audioKey !== null && visit.audioKey !== objectKey,
+      },
+    });
 
     try {
       await enqueueProcessVisit(visitId, userId);
