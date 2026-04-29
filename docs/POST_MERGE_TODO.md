@@ -16,7 +16,11 @@ QA Layer 3b's 404 on this route during Strategy A (production build) is therefor
 
 ---
 
-## 2. Typo: `processing-state.tsx:426` literal `’` in JSX text
+## 2. ✅ Fixed: typo `processing-state.tsx:426` literal `’` in JSX text
+
+**Status:** fixed during merge prep, commit `87340e0`. Replaced the 8-character literal escape with the actual U+2019 character.
+
+**Original notes (kept for archival):**
 
 **Severity:** trivial; not Clinician-scope.
 
