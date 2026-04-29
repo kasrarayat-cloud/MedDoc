@@ -32,7 +32,7 @@ export function ResetPasswordForm({ token }: Props) {
     return (
       <div
         style={{
-          marginTop: 20,
+          marginTop: 22,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
@@ -40,13 +40,27 @@ export function ResetPasswordForm({ token }: Props) {
           textAlign: 'center',
         }}
       >
-        <p style={{ margin: 0, fontSize: 13.5, color: 'var(--fg-2)' }}>
+        <p
+          className="qm-cl-serif"
+          style={{
+            margin: 0,
+            fontSize: 15,
+            color: 'var(--ink-2)',
+            lineHeight: 1.6,
+            fontStyle: 'italic',
+          }}
+        >
           This reset link is missing its token. Open the link from the email we
           sent — or request a fresh one.
         </p>
         <Link
           href="/forgot-password"
-          style={{ fontSize: 12.5, color: 'var(--accent-bright)' }}
+          style={{
+            fontSize: 12.5,
+            color: 'var(--sage-deep)',
+            fontFamily: 'var(--sans)',
+            fontWeight: 500,
+          }}
         >
           Send a new reset link →
         </Link>
@@ -87,11 +101,14 @@ export function ResetPasswordForm({ token }: Props) {
   if (done) {
     return (
       <p
+        className="qm-cl-serif"
         style={{
-          marginTop: 20,
+          marginTop: 22,
           textAlign: 'center',
-          fontSize: 13.5,
-          color: 'var(--fg-2)',
+          fontSize: 15,
+          color: 'var(--ink-2)',
+          fontStyle: 'italic',
+          lineHeight: 1.6,
         }}
       >
         Password updated. Redirecting to sign in…
@@ -104,7 +121,7 @@ export function ResetPasswordForm({ token }: Props) {
 
   return (
     <form onSubmit={onSubmit} noValidate>
-      <div style={{ marginTop: 14 }}>
+      <div style={{ marginTop: 18 }}>
         <AuthFieldLabel htmlFor="password">New password</AuthFieldLabel>
         <input
           id="password"
@@ -115,15 +132,16 @@ export function ResetPasswordForm({ token }: Props) {
           minLength={10}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="qm-input"
+          className="qm-cl-input"
           style={{ marginTop: 6 }}
         />
         <p
           style={{
             marginTop: 6,
-            fontSize: 11,
-            color: 'var(--fg-4)',
+            fontSize: 11.5,
+            color: 'var(--ink-3)',
             lineHeight: 1.4,
+            fontFamily: 'var(--sans)',
           }}
         >
           At least 10 characters, with upper + lowercase letters and a digit.
@@ -144,7 +162,7 @@ export function ResetPasswordForm({ token }: Props) {
           minLength={10}
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
-          className="qm-input"
+          className="qm-cl-input"
           style={{ marginTop: 6 }}
         />
         {fieldError === 'confirmPassword' && (
@@ -157,11 +175,10 @@ export function ResetPasswordForm({ token }: Props) {
       <button
         type="submit"
         disabled={pending || !password || !confirmPassword}
-        className="qm-btn qm-btn-primary"
+        className="qm-cl-btn qm-cl-btn-primary qm-cl-btn-lg"
         style={{
           width: '100%',
           justifyContent: 'center',
-          padding: 12,
           marginTop: 22,
           opacity: pending || !password || !confirmPassword ? 0.6 : 1,
           cursor:
@@ -175,12 +192,13 @@ export function ResetPasswordForm({ token }: Props) {
       <div
         style={{
           textAlign: 'center',
-          color: 'var(--fg-3)',
+          color: 'var(--ink-3)',
           fontSize: 12.5,
           marginTop: 18,
+          fontFamily: 'var(--sans)',
         }}
       >
-        <Link href="/login" style={{ color: 'var(--accent-bright)' }}>
+        <Link href="/login" style={{ color: 'var(--sage-deep)', fontWeight: 500 }}>
           Back to sign in →
         </Link>
       </div>
