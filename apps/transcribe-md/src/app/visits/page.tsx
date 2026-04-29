@@ -6,6 +6,12 @@
 // bookmark or middle-click preserves the selection. Matches the
 // pattern used elsewhere in the redesign (Dashboard ?tab=, Patient
 // ?tab=, Visit ?tab=).
+//
+// Phase 2 (Clinician remodel) — this route opts in to the Clinician
+// chrome via `<AppFrame theme="clinician">` and threads
+// `theme="clinician"` to PageHeader, EmptyState, and VisitList. The
+// inline FilterBar + empty-message JSX is restyled in place rather
+// than extracted (it's route-only, no other call sites).
 // ============================================================================
 
 import type { Metadata } from 'next';
@@ -144,12 +150,21 @@ export default async function VisitsPage({
   const hasAny = totalCount > 0;
 
   return (
-    <AppFrame>
+    <AppFrame theme="clinician">
       <PageHeader
-        eyebrow="§ Visits"
+        theme="clinician"
+        eyebrow="Visits"
         title={
           <>
-            All <em style={{ color: 'var(--accent-bright)' }}>visits</em>
+            All{' '}
+            <em
+              style={{
+                color: 'var(--sage-deep, #2F5040)',
+                fontStyle: 'italic',
+              }}
+            >
+              visits
+            </em>
           </>
         }
         subtitle={
@@ -160,7 +175,7 @@ export default async function VisitsPage({
         actions={
           <Link
             href="/visits/new"
-            className="qm-btn qm-btn-primary"
+            className="qm-cl-btn qm-cl-btn-primary"
             style={{ textDecoration: 'none' }}
           >
             <Ic.plus width={14} height={14} />
@@ -171,18 +186,27 @@ export default async function VisitsPage({
 
       {!hasAny ? (
         <EmptyState
+          theme="clinician"
           kind="stethoscope"
-          eyebrow="§ No visits"
+          eyebrow="No visits"
           title={
             <>
-              No visits <em style={{ color: 'var(--accent-bright)' }}>yet</em>
+              No visits{' '}
+              <em
+                style={{
+                  color: 'var(--sage-deep, #2F5040)',
+                  fontStyle: 'italic',
+                }}
+              >
+                yet
+              </em>
             </>
           }
           body="Capture your first encounter — live recording, audio upload, or text."
           cta={
             <Link
               href="/visits/new"
-              className="qm-btn qm-btn-primary"
+              className="qm-cl-btn qm-cl-btn-primary"
               style={{ textDecoration: 'none' }}
             >
               <Ic.plus width={14} height={14} />
@@ -200,13 +224,17 @@ export default async function VisitsPage({
                 maxWidth: 420,
                 textAlign: 'center',
                 fontSize: 13,
-                color: 'var(--fg-3)',
+                color: 'var(--ink-3, #8A8278)',
               }}
             >
-              No visits match <strong style={{ color: 'var(--fg-2)' }}>{FILTER_LABEL[filter]}</strong>.
+              No visits match{' '}
+              <strong style={{ color: 'var(--ink, #2B2620)' }}>
+                {FILTER_LABEL[filter]}
+              </strong>
+              .
             </div>
           ) : (
-            <VisitList visits={visits} />
+            <VisitList visits={visits} theme="clinician" />
           )}
         </>
       )}
@@ -226,37 +254,44 @@ function FilterBar({ active }: { active: Filter }) {
       href: '/visits?filter=processing',
     },
   ];
+  // Filter chips render as `.qm-cl-tab-row` + `.qm-cl-tab` chips so the
+  // active filter mirrors the visit-detail tab idiom (cream-card on
+  // cream-2, sage-deep ink, paper button shadow).
   return (
     <div
       style={{
         padding: '4px 32px 0',
         display: 'flex',
-        gap: 6,
+        gap: 12,
         flexWrap: 'wrap',
         alignItems: 'center',
       }}
     >
-      <span className="qm-sectlabel" style={{ marginRight: 8 }}>
-        § Filter
+      <span className="qm-cl-eyebrow" style={{ marginRight: 8 }}>
+        Filter
       </span>
-      {chips.map((c) => {
-        const isActive = c.id === active;
-        return (
-          <Link
-            key={c.id}
-            href={c.href}
-            scroll={false}
-            className={`qm-chip${isActive ? ' qm-chip-accent' : ''}`}
-            aria-current={isActive ? 'page' : undefined}
-            style={{
-              textDecoration: 'none',
-              cursor: 'pointer',
-            }}
-          >
-            {c.label}
-          </Link>
-        );
-      })}
+      <div className="qm-cl-tab-row">
+        {chips.map((c) => {
+          const isActive = c.id === active;
+          return (
+            <Link
+              key={c.id}
+              href={c.href}
+              scroll={false}
+              className={`qm-cl-tab${isActive ? ' qm-cl-active' : ''}`}
+              aria-current={isActive ? 'page' : undefined}
+              style={{
+                textDecoration: 'none',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+              }}
+            >
+              {c.label}
+            </Link>
+          );
+        })}
+      </div>
     </div>
   );
 }
