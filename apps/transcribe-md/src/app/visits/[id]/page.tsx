@@ -464,22 +464,20 @@ interface VisitBodyProps {
 
 function VisitBody(props: VisitBodyProps) {
   if (props.status === TranscribeVisitStatus.QUEUED) {
-    // The visit-creation primitives (AudioUploader, VoiceDictator,
-    // TextComposer) are reserved for Batch E. Until that batch lands
-    // they render in their legacy dark chrome even when this route
-    // mounts the Clinician shell — that's a temporary mismatch the
-    // user expects (Batch E will resolve it).
+    // Batch E (Phase 2 Clinician remodel) — the visit-creation
+    // primitives now accept a theme prop, so we thread "clinician"
+    // through to match the surrounding `<AppFrame theme="clinician">`.
     if (props.inputMode === 'audio_upload' && !props.audioKey) {
-      return <AudioUploader visitId={props.visitId} />;
+      return <AudioUploader visitId={props.visitId} theme="clinician" />;
     }
     if (
       props.inputMode === 'voice_dictation' &&
       !props.dictationAudioKey
     ) {
-      return <VoiceDictator visitId={props.visitId} />;
+      return <VoiceDictator visitId={props.visitId} theme="clinician" />;
     }
     if (props.inputMode === 'text_notes' && !props.rawTextInput) {
-      return <TextComposer visitId={props.visitId} />;
+      return <TextComposer visitId={props.visitId} theme="clinician" />;
     }
   }
 
