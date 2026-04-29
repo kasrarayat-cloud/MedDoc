@@ -81,6 +81,26 @@ After A + F land cleanly + user signs off, **Phase 2 — Stage 4** will run Batc
 
 ---
 
+## Automatic QA after every batch (no human review burden)
+
+After ANY Component Builder subagent completes a batch, the lead agent MUST invoke the `qa-clinician-remodel` skill (installed at `~/.claude/skills/qa-clinician-remodel/`) BEFORE asking the user to sign off. The skill produces a unified report at `docs/qa-reports/batch-<X>-<timestamp>.md` covering:
+
+1. TypeScript (`tsc --noEmit`)
+2. Unit tests (`vitest run`)
+3. E2E smoke (Playwright MCP against a temporary `next start` on port 8766; falls back to source-code class-name verification if build fails on the RAM-constrained VPS)
+4. Visual regression vs `docs/design-directions-v3/clinician/*.html` mockups (identity-match score 0–10 + per-criterion table)
+5. HIPAA + protected-zone diff scan (verifies no `PROTECTED_CONTRACTS.md` files were touched + no new PHI exposure surfaces)
+6. A11y smoke (axe-core via Playwright MCP — only if Layer 3 succeeded)
+
+**Verdict-driven user contact:**
+- 🟢 PASS — lead agent posts the report path + a one-line summary, asks "ship next batch?", proceeds on yes.
+- 🟡 PASS-WITH-FLAGS — lead agent surfaces the warnings; user decides per-warning. Distinguish:
+  - **User-judgment** ("sage too saturated vs mockup") → user calls it
+  - **Fix-and-retry** ("TS error in line 42") → lead spawns a fixup subagent silently, never reaches user
+- 🔴 FAIL — lead agent blocks, lists failures, asks user to approve fix-and-retry path.
+
+The user's review burden drops to zero on green batches. The user only sees red/yellow.
+
 ## Workflow rules for every Component Builder subagent
 
 These are the rules every subagent must follow. Repeated here so no one has to dig through this doc.
