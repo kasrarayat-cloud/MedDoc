@@ -18,6 +18,13 @@
 // admin, suspend / soft-delete / revoke-admin chips are visibly disabled.
 // The server already 403s self-revoke and self-suspend would just lock
 // the admin out; this is defense in depth + better UX.
+//
+// Phase 2 (Clinician remodel) — Strategy A dual-theme via additive
+// `theme` prop. Default `'legacy'` keeps the slate-on-white drawer.
+// Clinician branch swaps the canvas to cream-card, ink-toned text,
+// and recolors the AlertTriangle/CheckCircle accents to the soft
+// sage/amber/coral palette. State machine + server-action calls are
+// unchanged.
 // ============================================================================
 
 import { useEffect, useMemo, useState } from 'react';
@@ -45,6 +52,8 @@ import {
 } from '../../_lib/admin-format';
 import type { ConfirmKind, UserDetail, UserListRow } from '../_types';
 
+type UserDetailDrawerTheme = 'legacy' | 'clinician';
+
 interface Props {
   user: UserListRow;
   currentUserId: string;
@@ -54,6 +63,7 @@ interface Props {
   refetchKey: number;
   /** Parent calls this after a non-confirm action so the list re-renders. */
   onActed: () => void;
+  theme?: UserDetailDrawerTheme;
 }
 
 export default function UserDetailDrawer({
@@ -63,6 +73,7 @@ export default function UserDetailDrawer({
   onConfirm,
   refetchKey,
   onActed,
+  theme = 'legacy',
 }: Props) {
   const [detail, setDetail] = useState<UserDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -159,33 +170,96 @@ export default function UserDetailDrawer({
     }
   }
 
+  const isClinician = theme === 'clinician';
+
   return (
     <>
       <div
         onClick={onClose}
-        className="fixed inset-0 z-30 bg-slate-900/20 backdrop-blur-[2px]"
+        className={
+          isClinician
+            ? 'fixed inset-0 z-30'
+            : 'fixed inset-0 z-30 bg-slate-900/20 backdrop-blur-[2px]'
+        }
+        style={
+          isClinician
+            ? {
+                background: 'rgba(43, 38, 32, 0.20)',
+                backdropFilter: 'blur(2px)',
+              }
+            : undefined
+        }
         aria-hidden
       />
       <aside
         role="dialog"
         aria-label={`User detail: ${user.fullName}`}
-        className="fixed right-0 top-0 z-40 flex h-full w-full max-w-[480px] flex-col border-l border-slate-200 bg-white shadow-xl"
+        className={
+          isClinician
+            ? 'fixed right-0 top-0 z-40 flex h-full w-full max-w-[480px] flex-col'
+            : 'fixed right-0 top-0 z-40 flex h-full w-full max-w-[480px] flex-col border-l border-slate-200 bg-white shadow-xl'
+        }
+        style={
+          isClinician
+            ? {
+                background: 'var(--cream-card)',
+                borderLeft: '1px solid var(--line)',
+                boxShadow: '-12px 0 32px rgba(43, 38, 32, 0.08)',
+                color: 'var(--ink)',
+              }
+            : undefined
+        }
       >
         {/* Header */}
-        <div className="flex items-start justify-between border-b border-slate-200 px-5 py-4">
+        <div
+          className={
+            isClinician
+              ? 'flex items-start justify-between px-5 py-4'
+              : 'flex items-start justify-between border-b border-slate-200 px-5 py-4'
+          }
+          style={isClinician ? { borderBottom: '1px solid var(--line)' } : undefined}
+        >
           <div className="flex items-start gap-3">
             <Avatar user={user} size={40} />
             <div className="min-w-0">
-              <div className="truncate text-base font-semibold text-slate-900">
-                {user.fullName}
+              <div
+                className="truncate"
+                style={
+                  isClinician
+                    ? { fontSize: 16, fontWeight: 600, color: 'var(--ink)' }
+                    : undefined
+                }
+              >
+                <span
+                  className={
+                    isClinician
+                      ? 'qm-cl-serif'
+                      : 'text-base font-semibold text-slate-900'
+                  }
+                  style={isClinician ? { fontSize: 18, color: 'var(--ink)' } : undefined}
+                >
+                  {user.fullName}
+                </span>
               </div>
-              <div className="truncate text-xs text-slate-500">{user.email}</div>
-              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-slate-600">
+              <div
+                className={isClinician ? 'truncate text-xs' : 'truncate text-xs text-slate-500'}
+                style={isClinician ? { color: 'var(--ink-3)' } : undefined}
+              >
+                {user.email}
+              </div>
+              <div
+                className={
+                  isClinician
+                    ? 'mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5'
+                    : 'mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-slate-600'
+                }
+                style={isClinician ? { fontSize: 11, color: 'var(--ink-2)' } : undefined}
+              >
                 <span className="font-medium uppercase tracking-wide">{user.role}</span>
-                <span className="text-slate-300">·</span>
+                <span style={isClinician ? { color: 'var(--ink-4)' } : undefined} className={isClinician ? '' : 'text-slate-300'}>·</span>
                 <StatusInline user={user} />
-                <span className="text-slate-300">·</span>
-                <span className="text-slate-500">{user.practiceName}</span>
+                <span style={isClinician ? { color: 'var(--ink-4)' } : undefined} className={isClinician ? '' : 'text-slate-300'}>·</span>
+                <span style={isClinician ? { color: 'var(--ink-3)' } : undefined} className={isClinician ? '' : 'text-slate-500'}>{user.practiceName}</span>
               </div>
             </div>
           </div>
@@ -193,7 +267,12 @@ export default function UserDetailDrawer({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+            className={
+              isClinician
+                ? 'rounded p-1'
+                : 'rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700'
+            }
+            style={isClinician ? { color: 'var(--ink-3)', background: 'transparent' } : undefined}
           >
             <X className="h-4 w-4" />
           </button>
