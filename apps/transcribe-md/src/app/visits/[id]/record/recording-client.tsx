@@ -4,16 +4,29 @@
 // with timer; right rail shows a placeholder transcript. MediaRecorder
 // captures audio in 250ms webm/opus chunks (same cadence as the
 // existing VoiceDictator) and uploads on stop.
+//
+// Phase 2 (Clinician remodel) — Strategy A dual-theme via additive
+// `theme` prop. Default `'legacy'` keeps the LiveOrb + dark cinematic
+// scene byte-for-byte. `theme="clinician"` replaces the Three.js
+// LiveOrb with the calm class-driven chrome from
+// landing-and-recording.html (.qm-cl-halo + sage .qm-cl-mic-dot +
+// .qm-cl-wave-bar + .qm-cl-pill-sage timer + .qm-cl-transcript-line).
+//
+// 🔴 PROTECTED: All MediaRecorder lifecycle code (start, stop, onstop,
+// ondataavailable, finalizeAndUpload, finalizeRef trampoline,
+// streamRef cleanup, max-seconds tick) is preserved byte-for-byte.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
+import { cn } from '@/lib/cn';
 import { Ic } from '@/components/ui/icon';
 import { SpecChip, type SpecialtyKind } from '@/components/ui/spec-chip';
 import { LiveOrb } from '@/components/recording/live-orb';
 
 type Phase = 'idle' | 'requesting' | 'recording' | 'uploading' | 'error';
+type RecordingClientTheme = 'legacy' | 'clinician';
 
 const MIME = 'audio/webm;codecs=opus';
 const CHUNK_MS = 250;
@@ -45,10 +58,13 @@ export function RecordingClient({
   visitId,
   patientName,
   specialty,
+  theme = 'legacy',
 }: {
   visitId: string;
   patientName: string;
   specialty: string;
+  /** Phase 2 (Clinician remodel) — additive theme prop. */
+  theme?: RecordingClientTheme;
 }) {
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>('idle');
@@ -194,6 +210,20 @@ export function RecordingClient({
 
   const isRecording = phase === 'recording';
   const isUploading = phase === 'uploading';
+
+  if (theme === 'clinician') {
+    return (
+      <ClinicianRecordingView
+        phase={phase}
+        elapsed={elapsed}
+        error={error}
+        patientName={patientName}
+        specialty={specialty}
+        onStart={start}
+        onStop={stop}
+      />
+    );
+  }
 
   return (
     <div
@@ -373,6 +403,408 @@ export function RecordingClient({
           </div>
         )}
       </aside>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------------
+// Clinician variant — calm halo + sage mic-dot + class-driven waveform.
+// Mirrors the visit-recording widget in landing-and-recording.html. Per
+// CL-5: no Three.js orbs in Clinician, no springs, no bounces. The
+// initials avatar replaces SpecChip for the doctor's social-cue visual
+// identity (per the mockup's "EL — Mrs. Lopez" pattern).
+// ----------------------------------------------------------------------------
+
+function ClinicianRecordingView({
+  phase,
+  elapsed,
+  error,
+  patientName,
+  specialty,
+  onStart,
+  onStop,
+}: {
+  phase: Phase;
+  elapsed: number;
+  error: string | null;
+  patientName: string;
+  specialty: string;
+  onStart: () => void;
+  onStop: () => void;
+}) {
+  const isRecording = phase === 'recording';
+  const isUploading = phase === 'uploading';
+  const isError = phase === 'error';
+
+  // Twelve waveform bars, hand-tuned peaks per the mockup so the meter
+  // reads as alive rather than uniform.
+  const peaks = [12, 18, 14, 20, 16, 22, 12, 18, 14, 10, 17, 13];
+  const delays = [0, 0.1, 0.2, 0.3, 0.05, 0.15, 0.25, 0.4, 0.5, 0.35, 0.6, 0.55];
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'center',
+        padding: '32px 24px 56px',
+        minHeight: '100%',
+      }}
+    >
+      <div
+        className="qm-cl-card"
+        style={{
+          width: '100%',
+          maxWidth: 760,
+          padding: 40,
+          borderRadius: 20,
+        }}
+      >
+        {/* Patient header row: avatar + name + status pill */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: 28,
+            gap: 16,
+            flexWrap: 'wrap',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 14,
+              minWidth: 0,
+            }}
+          >
+            <div
+              className="qm-cl-avatar qm-cl-avatar-sage"
+              aria-hidden
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: 14,
+                fontSize: 18,
+              }}
+            >
+              {patientName.charAt(0).toUpperCase()}
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <div
+                className="qm-cl-serif"
+                style={{
+                  fontSize: 22,
+                  fontWeight: 500,
+                  color: 'var(--ink)',
+                  lineHeight: 1.2,
+                  letterSpacing: '-0.005em',
+                }}
+              >
+                Recording with {patientName}
+              </div>
+              <div
+                style={{
+                  fontSize: 13,
+                  color: 'var(--ink-3)',
+                  marginTop: 4,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                }}
+              >
+                <span style={{ textTransform: 'capitalize' }}>{specialty}</span>
+              </div>
+            </div>
+          </div>
+
+          {isRecording && (
+            <span
+              className="qm-cl-pill qm-cl-pill-sage"
+              style={{ padding: '6px 14px', fontSize: 13 }}
+            >
+              <span className="qm-cl-pill-dot" />
+              Recording · {formatElapsed(elapsed)}
+            </span>
+          )}
+          {isUploading && (
+            <span
+              className="qm-cl-pill qm-cl-pill-teal"
+              style={{ padding: '6px 14px', fontSize: 13 }}
+            >
+              <span className="qm-cl-pill-dot" />
+              Uploading
+            </span>
+          )}
+          {isError && (
+            <span
+              className="qm-cl-pill qm-cl-pill-coral"
+              style={{ padding: '6px 14px', fontSize: 13 }}
+            >
+              <span className="qm-cl-pill-dot" />
+              Error
+            </span>
+          )}
+        </div>
+
+        {/* Halo + mic centerpiece */}
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '32px 0 12px',
+          }}
+        >
+          <div
+            style={{
+              position: 'relative',
+              width: 160,
+              height: 160,
+            }}
+          >
+            {(isRecording || isUploading) && (
+              <>
+                <div className="qm-cl-halo" aria-hidden />
+                <div className="qm-cl-halo qm-cl-halo-delayed" aria-hidden />
+              </>
+            )}
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <div
+                className={cn(isRecording && 'qm-cl-mic-dot')}
+                style={{
+                  width: 78,
+                  height: 78,
+                  borderRadius: 999,
+                  background: 'var(--cream-card)',
+                  border: `1.5px solid ${
+                    isError ? 'var(--coral)' : 'var(--sage)'
+                  }`,
+                  boxShadow: 'var(--shadow-card)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+                aria-hidden
+              >
+                <svg
+                  width="32"
+                  height="32"
+                  viewBox="0 0 32 32"
+                  fill="none"
+                  aria-hidden
+                >
+                  <rect
+                    x="12"
+                    y="6"
+                    width="8"
+                    height="14"
+                    rx="4"
+                    fill={isError ? 'var(--coral)' : 'var(--sage)'}
+                  />
+                  <path
+                    d="M8 17 q0 8 8 8 q8 0 8 -8"
+                    stroke={isError ? 'var(--coral)' : 'var(--sage)'}
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                    fill="none"
+                  />
+                  <line
+                    x1="16"
+                    y1="25"
+                    x2="16"
+                    y2="29"
+                    stroke={isError ? 'var(--coral)' : 'var(--sage)'}
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          {/* Subtle waveform — present but quiet */}
+          {isRecording && (
+            <div
+              className="flex items-end gap-[3px]"
+              style={{ height: 22, marginTop: 24 }}
+              aria-hidden
+            >
+              {peaks.map((p, i) => (
+                <span
+                  key={i}
+                  className="qm-cl-wave-bar"
+                  style={
+                    {
+                      '--peak': `${p}px`,
+                      animationDelay: `${delays[i]}s`,
+                    } as React.CSSProperties
+                  }
+                />
+              ))}
+            </div>
+          )}
+
+          <div
+            className="qm-cl-serif"
+            style={{
+              marginTop: 18,
+              fontSize: 14,
+              fontStyle: 'italic',
+              color: 'var(--ink-3)',
+              textAlign: 'center',
+              maxWidth: 460,
+            }}
+          >
+            {phase === 'idle'
+              ? 'Press start when you’re ready. You can stop whenever the visit ends.'
+              : phase === 'requesting'
+                ? 'Asking your browser for the microphone…'
+                : isRecording
+                  ? 'Listening. You can speak as you would in any other visit.'
+                  : isUploading
+                    ? 'Uploading and queuing the draft…'
+                    : 'Something went wrong. Please try again.'}
+          </div>
+        </div>
+
+        {error && (
+          <p
+            role="alert"
+            style={{
+              margin: '12px 0 0',
+              fontSize: 13,
+              color: 'var(--coral-deep)',
+              textAlign: 'center',
+            }}
+          >
+            {error}
+          </p>
+        )}
+
+        {/* Live transcript placeholder — quiet, italic */}
+        <div style={{ marginTop: 28 }}>
+          <div className="qm-cl-section-label" style={{ marginBottom: 12 }}>
+            Live transcript
+          </div>
+          {isRecording ? (
+            <div
+              className="qm-cl-serif"
+              style={{
+                fontSize: 15,
+                lineHeight: 1.7,
+                color: 'var(--ink-3)',
+                fontStyle: 'italic',
+                padding: '14px 16px',
+                borderRadius: 12,
+                background: 'var(--cream-2)',
+                border: '1px dashed var(--line-strong)',
+              }}
+            >
+              Streaming transcription lands in a follow-up pass. Your audio
+              is being captured in 250 ms chunks and will be transcribed the
+              moment you stop.
+            </div>
+          ) : (
+            <div
+              className="qm-cl-serif"
+              style={{
+                fontSize: 14,
+                fontStyle: 'italic',
+                color: 'var(--ink-4)',
+                padding: '14px 16px',
+              }}
+            >
+              Transcript will appear here once recording starts.
+            </div>
+          )}
+        </div>
+
+        {/* Footer controls */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingTop: 28,
+            marginTop: 28,
+            borderTop: '1px solid var(--line)',
+            gap: 12,
+            flexWrap: 'wrap',
+          }}
+        >
+          {phase === 'idle' || phase === 'error' ? (
+            <>
+              <span style={{ flex: 1 }} />
+              <button
+                type="button"
+                onClick={onStart}
+                className="qm-cl-btn qm-cl-btn-primary"
+              >
+                <span
+                  aria-hidden
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: 999,
+                    background: 'var(--coral)',
+                    boxShadow: '0 0 0 3px var(--coral-tint)',
+                  }}
+                />
+                Start recording
+              </button>
+            </>
+          ) : phase === 'requesting' ? (
+            <>
+              <span style={{ flex: 1 }} />
+              <button
+                type="button"
+                disabled
+                className="qm-cl-btn qm-cl-btn-ghost"
+                style={{ opacity: 0.6 }}
+              >
+                Requesting mic…
+              </button>
+            </>
+          ) : isRecording ? (
+            <>
+              <span style={{ flex: 1 }} />
+              <button
+                type="button"
+                onClick={onStop}
+                className="qm-cl-btn qm-cl-btn-primary"
+              >
+                <Ic.stop width={14} height={14} />
+                End visit & draft note
+              </button>
+            </>
+          ) : isUploading ? (
+            <>
+              <span style={{ flex: 1 }} />
+              <button
+                type="button"
+                disabled
+                className="qm-cl-btn qm-cl-btn-ghost"
+                style={{ opacity: 0.6 }}
+              >
+                <span className="qm-spin" style={{ display: 'inline-block' }}>
+                  <Ic.sparkle width={14} height={14} />
+                </span>
+                Uploading…
+              </button>
+            </>
+          ) : null}
+        </div>
+      </div>
     </div>
   );
 }
