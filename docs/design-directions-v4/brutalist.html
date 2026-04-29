@@ -1,0 +1,957 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>QuillMD / V4 / DIRECTION 01 — BRUTALIST</title>
+
+<!--
+================================================================================
+  QuillMD V4 Design Exploration / DIRECTION 01 / BRUTALIST
+  ----------------------------------------------------------------------------
+  IDENTITY     Swiss International Typographic Style + brutalist web.
+               Helvetica (with Inter Tight 800/900 as a Google Fonts substitute,
+               declared in the manifesto). JetBrains Mono for codes & IDs.
+  PALETTE      Black #000 / White #FFF / Construction Yellow #F5D000.
+               That is the entire palette. No greys outside #FFF and #000
+               except a single hairline-weight sub-black (#111) used only when
+               two black blocks abut and need a 1px tonal seam.
+  GEOMETRY     border-radius: 0 everywhere. Always. Forever.
+               2px solid #000 borders. 12-column grid with explicit gutters.
+  SHADOW       None. Anywhere. Ever.
+  GRADIENT     None. Anywhere. Ever.
+  MOTION       Hover state colour-flips only. No easing curves. No springs.
+               No fade. No slide. Reduced-motion safe by construction.
+  REFERENCES   Müller-Brockmann grid posters, Hofmann, Ruder, Akkurat type
+               specimen, stark.com, read.cv, are.na, brutalistwebsites.com,
+               architecture-firm web (e.g. Caruso St John, David Chipperfield).
+               No copy-paste; only the discipline.
+================================================================================
+-->
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  // Tailwind: turn off rounded corners globally. Brutalist commits.
+  tailwind.config = {
+    theme: {
+      extend: {
+        borderRadius: { DEFAULT: '0', sm: '0', md: '0', lg: '0', xl: '0', '2xl': '0', '3xl': '0', full: '0' },
+        boxShadow:    { DEFAULT: 'none', sm: 'none', md: 'none', lg: 'none', xl: 'none', '2xl': 'none' },
+        colors: {
+          ink: '#000000',
+          paper: '#FFFFFF',
+          yellow: { DEFAULT: '#F5D000', deep: '#E5C100' },
+        },
+        fontFamily: {
+          sans: ['Helvetica Neue','Helvetica','Arial','Inter Tight','sans-serif'],
+          mono: ['JetBrains Mono','ui-monospace','SFMono-Regular','Menlo','monospace'],
+        },
+      },
+    },
+  };
+</script>
+
+<style>
+  /* ---------------------------------------------------------------------------
+     RESET-STYLE OVERRIDES — brutalism is opinionated about defaults.
+     --------------------------------------------------------------------------- */
+  *, *::before, *::after { border-radius: 0 !important; box-shadow: none !important; }
+  html, body { background: #FFFFFF; color: #000000; }
+  body {
+    font-family: 'Helvetica Neue', Helvetica, Arial, 'Inter Tight', sans-serif;
+    font-feature-settings: 'kern' 1, 'liga' 0; /* no decorative ligatures */
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    font-weight: 400;
+    line-height: 1.45;
+  }
+
+  :root {
+    --ink: #000000;
+    --paper: #FFFFFF;
+    --yellow: #F5D000;
+    --yellow-deep: #E5C100;
+    --line: 2px;       /* THE line. */
+    --col-gap: 24px;
+  }
+
+  ::selection { background: var(--yellow); color: var(--ink); }
+
+  /* ---------------------------------------------------------------------------
+     TYPOGRAPHY
+     Helvetica is the default; we set Inter Tight 800/900 as the *substitute*
+     for users without Helvetica Neue installed (declared in the manifesto).
+     --------------------------------------------------------------------------- */
+  .mono       { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+  .smallcaps  { text-transform: uppercase; letter-spacing: 0.08em; }
+  .smallcaps-tight { text-transform: uppercase; letter-spacing: 0.04em; }
+
+  /* Display sizes — Helvetica Bold for hero / posters */
+  .t-mega   { font-weight: 900; font-size: clamp(64px, 12vw, 160px); line-height: 0.88; letter-spacing: -0.045em; }
+  .t-display{ font-weight: 900; font-size: clamp(56px, 9vw, 120px);  line-height: 0.92; letter-spacing: -0.04em; }
+  .t-band   { font-weight: 900; font-size: clamp(48px, 8vw, 96px);   line-height: 0.95; letter-spacing: -0.035em; }
+  .t-h1     { font-weight: 800; font-size: clamp(32px, 4vw, 56px);   line-height: 1.02; letter-spacing: -0.025em; }
+  .t-h2     { font-weight: 800; font-size: 28px; line-height: 1.05; letter-spacing: -0.018em; }
+  .t-h3     { font-weight: 700; font-size: 18px; line-height: 1.15; letter-spacing: -0.005em; }
+  .t-body   { font-weight: 400; font-size: 16px; line-height: 1.5; }
+  .t-small  { font-weight: 500; font-size: 13px; line-height: 1.4; }
+  .t-micro  { font-weight: 500; font-size: 11px; line-height: 1.3; }
+
+  /* Numbered section heads — the "01 / RECORDING" idiom */
+  .sec-num {
+    font-weight: 900;
+    font-size: clamp(48px, 8vw, 96px);
+    line-height: 0.9;
+    letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---------------------------------------------------------------------------
+     THE LINE
+     --------------------------------------------------------------------------- */
+  .line-t  { border-top:    var(--line) solid var(--ink); }
+  .line-b  { border-bottom: var(--line) solid var(--ink); }
+  .line-l  { border-left:   var(--line) solid var(--ink); }
+  .line-r  { border-right:  var(--line) solid var(--ink); }
+  .line-a  { border:        var(--line) solid var(--ink); }
+  .line-tb { border-top:    var(--line) solid var(--ink); border-bottom: var(--line) solid var(--ink); }
+  .line-soft-l { border-left: 1px solid #000; }   /* internal hairlines inside black blocks only */
+
+  /* ---------------------------------------------------------------------------
+     INVERSION BLOCKS — white on black for emphasis (recording bar, signed band)
+     --------------------------------------------------------------------------- */
+  .invert    { background: var(--ink); color: var(--paper); }
+  .invert *  { border-color: var(--paper) !important; }
+
+  /* ---------------------------------------------------------------------------
+     12-COLUMN GRID — visible & explicit. Not flexbox-bento.
+     --------------------------------------------------------------------------- */
+  .g12 {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    column-gap: var(--col-gap);
+  }
+  .g12-tight { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: 0; }
+
+  /* Grid overlay (for the dashboard hero block — exposes the column system) */
+  .grid-overlay {
+    position: absolute; inset: 0; pointer-events: none;
+    background-image: repeating-linear-gradient(
+      to right,
+      transparent 0,
+      transparent calc((100% - 11 * var(--col-gap)) / 12),
+      rgba(0,0,0,0.06) calc((100% - 11 * var(--col-gap)) / 12),
+      rgba(0,0,0,0.06) calc((100% - 11 * var(--col-gap)) / 12 + 1px),
+      transparent calc((100% - 11 * var(--col-gap)) / 12 + 1px),
+      transparent calc((100% - 11 * var(--col-gap)) / 12 + var(--col-gap))
+    );
+    z-index: 0;
+  }
+
+  /* ---------------------------------------------------------------------------
+     BUTTONS
+     One CTA style: black text on yellow, hard 2px black border, hover-flips
+     to all-black on white. No transitions beyond colour.
+     --------------------------------------------------------------------------- */
+  .btn {
+    display: inline-flex; align-items: center; gap: 14px;
+    padding: 18px 28px;
+    border: var(--line) solid var(--ink);
+    background: var(--yellow);
+    color: var(--ink);
+    font-weight: 700; font-size: 14px;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    cursor: pointer;
+    transition: none;
+  }
+  .btn:hover { background: var(--ink); color: var(--paper); }
+  .btn:active { background: var(--yellow-deep); color: var(--ink); }
+  .btn .arrow { font-family: 'JetBrains Mono', monospace; font-weight: 500; }
+
+  .btn-ghost {
+    display: inline-flex; align-items: center; gap: 14px;
+    padding: 18px 28px;
+    border: var(--line) solid var(--ink);
+    background: var(--paper); color: var(--ink);
+    font-weight: 700; font-size: 14px;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    cursor: pointer; transition: none;
+  }
+  .btn-ghost:hover { background: var(--ink); color: var(--paper); }
+
+  .btn-sm { padding: 10px 16px; font-size: 11px; letter-spacing: 0.1em; }
+
+  /* ---------------------------------------------------------------------------
+     STATUS PILLS — square, mono, all-caps, bracketed
+     --------------------------------------------------------------------------- */
+  .pill {
+    display: inline-block;
+    padding: 4px 10px;
+    border: 2px solid var(--ink);
+    background: var(--paper); color: var(--ink);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    line-height: 1.2;
+  }
+  .pill-yellow { background: var(--yellow); }
+  .pill-invert { background: var(--ink); color: var(--paper); }
+
+  /* ---------------------------------------------------------------------------
+     VU METER — yellow on black, square segments, no easing
+     --------------------------------------------------------------------------- */
+  .vu { display: inline-flex; gap: 3px; align-items: end; height: 26px; }
+  .vu i {
+    display: block; width: 6px; background: var(--yellow);
+    /* deterministic heights — no animation, just a static "captured-moment" meter */
+  }
+  .vu i:nth-child(1)  { height: 10%; }
+  .vu i:nth-child(2)  { height: 35%; }
+  .vu i:nth-child(3)  { height: 60%; }
+  .vu i:nth-child(4)  { height: 85%; }
+  .vu i:nth-child(5)  { height: 100%; }
+  .vu i:nth-child(6)  { height: 90%; }
+  .vu i:nth-child(7)  { height: 70%; }
+  .vu i:nth-child(8)  { height: 50%; }
+  .vu i:nth-child(9)  { height: 30%; }
+  .vu i:nth-child(10) { height: 15%; }
+  .vu i:nth-child(11) { height: 40%; }
+  .vu i:nth-child(12) { height: 65%; }
+  .vu i:nth-child(13) { height: 80%; }
+  .vu i:nth-child(14) { height: 55%; }
+  .vu i:nth-child(15) { height: 25%; }
+
+  /* ---------------------------------------------------------------------------
+     TABLES — 2px black row dividers, no zebra stripe, all-caps headers
+     --------------------------------------------------------------------------- */
+  .b-table { width: 100%; border-collapse: collapse; }
+  .b-table th, .b-table td {
+    border-top: 2px solid var(--ink);
+    padding: 18px 16px;
+    text-align: left;
+    vertical-align: middle;
+  }
+  .b-table thead th {
+    border-top: 2px solid var(--ink);
+    border-bottom: 2px solid var(--ink);
+    background: var(--paper);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.1em;
+  }
+  .b-table tbody tr:last-child td { border-bottom: 2px solid var(--ink); }
+  .b-table tbody tr.row-active td {
+    background: var(--ink); color: var(--paper);
+  }
+  .b-table tbody tr.row-active td .pill { border-color: var(--paper); background: var(--ink); color: var(--paper); }
+  .b-table tbody tr.row-active td .pill.pill-yellow { background: var(--yellow); color: var(--ink); border-color: var(--paper); }
+
+  .b-table tbody tr:hover td { background: var(--yellow); }
+  .b-table tbody tr.row-active:hover td { background: var(--ink); color: var(--paper); }
+
+  /* ---------------------------------------------------------------------------
+     BIG-NUMBER STAT CARDS — column-shaped, "01 VISITS · 12" idiom
+     --------------------------------------------------------------------------- */
+  .stat {
+    border: var(--line) solid var(--ink);
+    padding: 24px 22px 26px;
+    background: var(--paper);
+    display: flex; flex-direction: column; gap: 12px;
+    min-height: 168px;
+    transition: none;
+  }
+  .stat:hover { background: var(--yellow); }
+  .stat .stat-num { font-weight: 900; font-size: 64px; line-height: 0.95; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+  .stat .stat-label { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+  .stat .stat-idx { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: 0.1em; }
+  .stat .stat-trend { font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+
+  /* ---------------------------------------------------------------------------
+     SECTION-LABEL IDIOM (the "§ 01 / RECORDING" thing)
+     --------------------------------------------------------------------------- */
+  .seclabel {
+    display: flex; align-items: baseline; gap: 18px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; font-weight: 700;
+    letter-spacing: 0.12em; text-transform: uppercase;
+  }
+  .seclabel .num { font-weight: 700; }
+  .seclabel .bar { display: inline-block; width: 16px; height: 2px; background: var(--ink); }
+
+  /* ---------------------------------------------------------------------------
+     MEASURE — never let body text run past 72ch
+     --------------------------------------------------------------------------- */
+  .measure { max-width: 64ch; }
+
+  /* ---------------------------------------------------------------------------
+     RECORDING-BAR — full-bleed white-on-black inversion strip
+     --------------------------------------------------------------------------- */
+  .rec-bar {
+    background: var(--ink); color: var(--paper);
+    border-top: 2px solid var(--ink); border-bottom: 2px solid var(--ink);
+  }
+
+  /* hover/focus */
+  a, button { transition: none; }
+  a:focus-visible, button:focus-visible {
+    outline: 3px solid var(--yellow);
+    outline-offset: 2px;
+  }
+
+  /* reduced motion: no-op (we have no motion to begin with) */
+
+  /* utility — no-bg, no-border helpers we need */
+  .bg-paper { background: var(--paper); }
+  .bg-ink   { background: var(--ink); }
+  .bg-yellow{ background: var(--yellow); }
+  .text-ink   { color: var(--ink); }
+  .text-paper { color: var(--paper); }
+  .text-yellow{ color: var(--yellow); }
+</style>
+</head>
+
+<body class="bg-paper text-ink">
+
+<!-- ============================================================================
+     MANIFESTO
+     ========================================================================= -->
+<section class="line-tb">
+  <div class="g12 px-8 md:px-12 py-10">
+    <div class="col-span-12 md:col-span-2 mono smallcaps t-micro">
+      § 00 / Manifesto
+    </div>
+    <div class="col-span-12 md:col-span-7 mono smallcaps t-small">
+      <p style="font-size:13px; line-height:1.7;">
+        THIS IS BRUTALIST. WE BELIEVE THE GRID IS THE GENTLENESS. WE REFUSE
+        ROUNDED CORNERS, DROP SHADOWS, AND THE SOFT TYRANNY OF FRIENDLY UI.
+        TYPE IS HELVETICA. ACCENT IS CONSTRUCTION YELLOW. RULES ARE 2 PIXELS,
+        SOLID, BLACK. STATUS IS A SQUARE LABEL IN BRACKETS. A PATIENT IS A
+        SURNAME, A SEX MARKER, AN AGE. A VISIT IS A NUMBER. SIGNING TAKES
+        SEVEN MINUTES. THE INTERFACE DOES NOT APOLOGISE FOR EXISTING.
+      </p>
+    </div>
+    <div class="col-span-12 md:col-span-3 mono t-micro" style="text-align:right;">
+      <div>QUILLMD / V4 / DIRECTION 01</div>
+      <div>BRUTALIST · SWISS · HELVETICA</div>
+      <div>SET IN HELVETICA NEUE.<br>FALLBACK: INTER TIGHT 800/900<br>(GOOGLE FONTS) + JETBRAINS MONO.</div>
+      <div style="margin-top:10px;">2026-04-29 / SHEET 01 of 02</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================================
+     TOPNAV — single 2px black bar, wordmark left, mono nav right
+     ========================================================================= -->
+<header class="line-b">
+  <div class="g12 px-8 md:px-12 items-center" style="min-height: 78px;">
+    <div class="col-span-3 flex items-center gap-4">
+      <!-- Wordmark — heavy Helvetica, no graphic flourish -->
+      <div class="t-h2" style="font-weight:900; letter-spacing:-0.04em;">QUILLMD<span class="text-yellow">.</span></div>
+      <div class="mono t-micro smallcaps" style="border-left:2px solid #000; padding-left:14px; line-height:1;">
+        TRANSCRIBE-MD<br>v4.0 / 2026
+      </div>
+    </div>
+    <nav class="col-span-6 flex items-center justify-center gap-0">
+      <a class="mono smallcaps t-micro px-5 py-3 line-r" href="#">01 / DASHBOARD</a>
+      <a class="mono smallcaps t-micro px-5 py-3 line-r bg-yellow" href="#">02 / VISITS</a>
+      <a class="mono smallcaps t-micro px-5 py-3 line-r" href="#">03 / PATIENTS</a>
+      <a class="mono smallcaps t-micro px-5 py-3" href="#">04 / SETTINGS</a>
+    </nav>
+    <div class="col-span-3 flex items-center justify-end gap-3">
+      <span class="pill">⌘K · SEARCH</span>
+      <div class="mono t-micro smallcaps" style="text-align:right;">
+        DR. WHITAKER<br>NPI 1538291047
+      </div>
+      <div class="line-a" style="width:42px; height:42px; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:14px;">EW</div>
+    </div>
+  </div>
+</header>
+
+<!-- ============================================================================
+     SECTION 01 — LANDING / RECORDING
+     ========================================================================= -->
+<section class="line-b">
+  <div class="g12 px-8 md:px-12 pt-14 pb-6">
+    <div class="col-span-12 md:col-span-2 seclabel">
+      <span class="num">01</span><span class="bar"></span><span>HERO</span>
+    </div>
+    <div class="col-span-12 md:col-span-10 mono t-micro smallcaps" style="text-align:right;">
+      MUELLER-BROCKMANN GRID · 12 COLS · 24PX GUTTER · HELVETICA 900
+    </div>
+  </div>
+
+  <!-- HERO HEADLINE -->
+  <div class="g12 px-8 md:px-12 pb-10 relative">
+    <div class="col-span-12 md:col-span-9">
+      <h1 class="t-mega">SOAP&nbsp;NOTES /<br>SIGNED&nbsp;IN&nbsp;7&nbsp;<span class="bg-yellow" style="padding:0 0.06em;">MINUTES</span>.</h1>
+    </div>
+    <div class="col-span-12 md:col-span-3 mono t-micro smallcaps line-l" style="padding-left:18px;">
+      <div style="margin-bottom:6px;">FIG. 01</div>
+      <div>HEADLINE SET<br>IN HELVETICA NEUE 95<br>BLACK / 160PX / -4.5%</div>
+      <div style="margin-top:14px; border-top:2px solid #000; padding-top:10px;">
+        AVG. SIGN-OFF ACROSS<br>1,284 VISITS / Q1 2026.<br>SOURCE: PIPELINE LOGS.
+      </div>
+    </div>
+  </div>
+
+  <!-- HERO BODY + CTA ROW -->
+  <div class="g12 px-8 md:px-12 pb-14 line-t pt-10">
+    <div class="col-span-12 md:col-span-5">
+      <p class="t-body measure">
+        QuillMD captures the visit, runs a 7-layer AI pipeline, and returns
+        a structured SOAP note ready for your signature. Audio in. Note out.
+        No theming, no ceremony, no marketing voice. The interface refuses
+        to do anything it does not have to do.
+      </p>
+      <div class="mt-8 flex items-center gap-4 flex-wrap">
+        <a class="btn" href="#">START A VISIT <span class="arrow">→</span></a>
+        <a class="btn-ghost" href="#">OPEN DASHBOARD <span class="arrow">→</span></a>
+      </div>
+      <div class="mono t-micro smallcaps mt-6" style="opacity:0.7;">
+        <span class="line-r" style="padding-right:14px; margin-right:14px;">HIPAA · SOC 2 TYPE II</span>
+        <span class="line-r" style="padding-right:14px; margin-right:14px;">DEEPGRAM · CLAUDE SONNET 4.6</span>
+        <span>POSTGRES + MINIO</span>
+      </div>
+    </div>
+
+    <div class="col-span-12 md:col-span-7">
+      <div class="g12-tight" style="grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 0;">
+        <!-- Three "feature" cells, no rounding, no shadow, divided by 2px lines -->
+        <div class="line-a p-6" style="min-height: 220px;">
+          <div class="mono smallcaps t-micro" style="margin-bottom:10px;">A · TRANSCRIBE</div>
+          <div class="t-h2" style="line-height:0.95;">DEEPGRAM<br>NOVA-3</div>
+          <div class="t-small mt-4">Streaming + batch. Specialty vocabulary boosted for cardiology, ortho, pain, derm, IM.</div>
+        </div>
+        <div class="line-tb line-r p-6" style="min-height: 220px;">
+          <div class="mono smallcaps t-micro" style="margin-bottom:10px;">B · STRUCTURE</div>
+          <div class="t-h2" style="line-height:0.95;">CLAUDE<br>SONNET 4.6</div>
+          <div class="t-small mt-4">SOAP. Self-critique. Polish. ICD-10 + CPT. Rx safety. Patient summary.</div>
+        </div>
+        <div class="line-tb line-r p-6" style="min-height: 220px;">
+          <div class="mono smallcaps t-micro" style="margin-bottom:10px;">C · SIGN</div>
+          <div class="t-h2" style="line-height:0.95;">7&nbsp;MIN<br>MEDIAN</div>
+          <div class="t-small mt-4">Edits tracked. Signature freezes the note. Exports to clipboard, DOCX, PDF, email.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- RECORDING-ACTIVE STATE — full-bleed inversion strip -->
+<section class="rec-bar">
+  <div class="g12 px-8 md:px-12 items-center" style="min-height: 96px;">
+    <div class="col-span-12 md:col-span-2 mono smallcaps t-micro">
+      <span class="text-yellow">●&nbsp;LIVE</span>&nbsp;/&nbsp;01 / RECORDING
+    </div>
+    <div class="col-span-12 md:col-span-3 flex items-center gap-3">
+      <span class="vu">
+        <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+      </span>
+      <span class="mono t-h3 text-paper" style="font-weight:700; letter-spacing:0.04em; font-variant-numeric: tabular-nums;">00:42</span>
+    </div>
+    <div class="col-span-12 md:col-span-4 mono smallcaps text-paper" style="font-size:12px; letter-spacing:0.1em;">
+      <span style="border-left:2px solid #fff; padding-left:14px;">LOPEZ, MARIA · F · 58 · CARDIOLOGY · F/U HTN + DYSLIPIDEMIA</span>
+    </div>
+    <div class="col-span-12 md:col-span-3 flex items-center justify-end gap-2">
+      <span class="pill pill-invert" style="border-color:#fff; color:#fff;">[ENC. END-TO-END]</span>
+      <button class="btn btn-sm" style="padding:10px 16px;">STOP <span class="arrow">■</span></button>
+    </div>
+  </div>
+</section>
+
+<!-- Sub-meta strip beneath recording bar -->
+<section class="line-b bg-paper">
+  <div class="g12 px-8 md:px-12 py-3 mono smallcaps t-micro" style="opacity:0.85;">
+    <div class="col-span-12 md:col-span-3">CHANNEL · MIC.A / 48KHZ / OPUS</div>
+    <div class="col-span-12 md:col-span-3">DEVICE · MACBOOK INTERNAL</div>
+    <div class="col-span-12 md:col-span-3">SPEAKERS · 2 / DIARIZED LIVE</div>
+    <div class="col-span-12 md:col-span-3" style="text-align:right;">VISIT.ID · TVS-2026-04-29-0418</div>
+  </div>
+</section>
+
+<!-- ============================================================================
+     FULL-WIDTH SEPARATOR BAND — 02 — DASHBOARD
+     ========================================================================= -->
+<section class="invert" style="border-top: 2px solid #000;">
+  <div class="g12 px-8 md:px-12" style="padding-top:64px; padding-bottom:64px;">
+    <div class="col-span-12 md:col-span-2 mono smallcaps t-micro" style="opacity:0.7;">
+      § 02 / DASHBOARD
+    </div>
+    <div class="col-span-12 md:col-span-8">
+      <div class="t-band text-paper">02&nbsp;—&nbsp;DASHBOARD</div>
+      <div class="mono smallcaps t-small text-paper" style="margin-top:14px; opacity:0.8; letter-spacing:0.12em;">
+        TODAY · TUE 29 APR 2026 · WEEK 18 · CLINIC · WHITAKER CARDIOLOGY ASSOC.
+      </div>
+    </div>
+    <div class="col-span-12 md:col-span-2 mono smallcaps t-micro" style="text-align:right; opacity:0.7;">
+      SHEET 02<br>OF 02
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================================
+     SECTION 02 — DASHBOARD
+     ========================================================================= -->
+<section class="bg-paper">
+  <!-- Sub-header strip -->
+  <div class="g12 px-8 md:px-12 py-5 line-b items-center">
+    <div class="col-span-12 md:col-span-6 seclabel">
+      <span class="num">02.A</span><span class="bar"></span><span>VOLUME / TODAY</span>
+    </div>
+    <div class="col-span-12 md:col-span-6 flex items-center justify-end gap-2">
+      <span class="pill">VIEW · TODAY</span>
+      <span class="pill">VIEW · WEEK</span>
+      <span class="pill pill-yellow">VIEW · MONTH</span>
+      <span class="pill">EXPORT · CSV</span>
+    </div>
+  </div>
+
+  <!-- STAT CARDS — 4 columns × 3 spans = 12 -->
+  <div class="g12 px-8 md:px-12 py-10 relative">
+    <div class="col-span-12 md:col-span-3">
+      <div class="stat">
+        <div class="flex items-baseline justify-between">
+          <span class="stat-idx">01</span>
+          <span class="stat-label">VISITS</span>
+        </div>
+        <div class="stat-num">12</div>
+        <div class="stat-trend">+3 VS. YESTERDAY · ▲ 33%</div>
+        <div class="line-t pt-3 mono t-micro smallcaps">SCHEDULED · 14 / SEEN · 12</div>
+      </div>
+    </div>
+    <div class="col-span-12 md:col-span-3">
+      <div class="stat">
+        <div class="flex items-baseline justify-between">
+          <span class="stat-idx">02</span>
+          <span class="stat-label">SIGNED</span>
+        </div>
+        <div class="stat-num">9</div>
+        <div class="stat-trend">75% SIGN-RATE · 7.4 MIN MEDIAN</div>
+        <div class="line-t pt-3 mono t-micro smallcaps">UNSIGNED · 3</div>
+      </div>
+    </div>
+    <div class="col-span-12 md:col-span-3">
+      <div class="stat" style="background: var(--yellow);">
+        <div class="flex items-baseline justify-between">
+          <span class="stat-idx">03</span>
+          <span class="stat-label">PENDING</span>
+        </div>
+        <div class="stat-num">3</div>
+        <div class="stat-trend">2 READY · 1 PROCESSING</div>
+        <div class="line-t pt-3 mono t-micro smallcaps">OLDEST · 11 MIN</div>
+      </div>
+    </div>
+    <div class="col-span-12 md:col-span-3">
+      <div class="stat">
+        <div class="flex items-baseline justify-between">
+          <span class="stat-idx">04</span>
+          <span class="stat-label">REVENUE</span>
+        </div>
+        <div class="stat-num">$2,140</div>
+        <div class="stat-trend">CPT MIX · 99213 / 99214 / 99215</div>
+        <div class="line-t pt-3 mono t-micro smallcaps">PROJ. WEEK · $11.6K</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- VISIT TABLE -->
+  <div class="g12 px-8 md:px-12 line-t pt-8">
+    <div class="col-span-12 flex items-baseline justify-between line-b pb-5">
+      <div class="seclabel">
+        <span class="num">02.B</span><span class="bar"></span><span>VISITS / 29 APR 2026</span>
+      </div>
+      <div class="mono smallcaps t-micro" style="opacity:0.7;">SORT · TIME ↓ &nbsp;·&nbsp; FILTER · ALL &nbsp;·&nbsp; 12 OF 12</div>
+    </div>
+  </div>
+
+  <div class="px-8 md:px-12 pb-12">
+    <table class="b-table">
+      <thead>
+        <tr>
+          <th style="width:5%;">№</th>
+          <th style="width:10%;">TIME</th>
+          <th style="width:24%;">PATIENT</th>
+          <th style="width:13%;">SPECIALTY</th>
+          <th style="width:14%;">VISIT.ID</th>
+          <th style="width:10%;">DURATION</th>
+          <th style="width:14%;">STATUS</th>
+          <th style="width:10%; text-align:right;">ACTION</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="row-active">
+          <td class="mono">01</td>
+          <td class="mono">09:14</td>
+          <td><strong>SMITH, JOHN</strong> · M · 64 · MRN 1029</td>
+          <td class="mono smallcaps">CARDIOLOGY</td>
+          <td class="mono">TVS-0411</td>
+          <td class="mono">14:22</td>
+          <td><span class="pill pill-yellow">[RECORDING]</span></td>
+          <td style="text-align:right;"><span class="mono smallcaps">OPEN →</span></td>
+        </tr>
+        <tr>
+          <td class="mono">02</td>
+          <td class="mono">09:38</td>
+          <td><strong>LOPEZ, MARIA</strong> · F · 58 · MRN 1042</td>
+          <td class="mono smallcaps">CARDIOLOGY</td>
+          <td class="mono">TVS-0412</td>
+          <td class="mono">12:08</td>
+          <td><span class="pill">[READY]</span></td>
+          <td style="text-align:right;"><span class="mono smallcaps">REVIEW →</span></td>
+        </tr>
+        <tr>
+          <td class="mono">03</td>
+          <td class="mono">10:02</td>
+          <td><strong>CHEN, ROBERT</strong> · M · 47 · MRN 1058</td>
+          <td class="mono smallcaps">ORTHOPEDICS</td>
+          <td class="mono">TVS-0413</td>
+          <td class="mono">17:51</td>
+          <td><span class="pill">[READY]</span></td>
+          <td style="text-align:right;"><span class="mono smallcaps">REVIEW →</span></td>
+        </tr>
+        <tr>
+          <td class="mono">04</td>
+          <td class="mono">10:30</td>
+          <td><strong>WALKER, HELEN</strong> · F · 72 · MRN 1063</td>
+          <td class="mono smallcaps">PAIN MGMT</td>
+          <td class="mono">TVS-0414</td>
+          <td class="mono">09:44</td>
+          <td><span class="pill pill-invert">[PROCESSING]</span></td>
+          <td style="text-align:right;"><span class="mono smallcaps">WAIT —</span></td>
+        </tr>
+        <tr>
+          <td class="mono">05</td>
+          <td class="mono">10:55</td>
+          <td><strong>NGUYEN, ANH</strong> · F · 41 · MRN 1071</td>
+          <td class="mono smallcaps">INT. MED.</td>
+          <td class="mono">TVS-0415</td>
+          <td class="mono">10:13</td>
+          <td><span class="pill">[SIGNED]</span></td>
+          <td style="text-align:right;"><span class="mono smallcaps">VIEW →</span></td>
+        </tr>
+        <tr>
+          <td class="mono">06</td>
+          <td class="mono">11:18</td>
+          <td><strong>OKONKWO, IFE</strong> · F · 35 · MRN 1080</td>
+          <td class="mono smallcaps">DERMATOLOGY</td>
+          <td class="mono">TVS-0416</td>
+          <td class="mono">07:55</td>
+          <td><span class="pill">[SIGNED]</span></td>
+          <td style="text-align:right;"><span class="mono smallcaps">VIEW →</span></td>
+        </tr>
+        <tr>
+          <td class="mono">07</td>
+          <td class="mono">11:45</td>
+          <td><strong>HARRIS, DAVID</strong> · M · 53 · MRN 1099</td>
+          <td class="mono smallcaps">CARDIOLOGY</td>
+          <td class="mono">TVS-0417</td>
+          <td class="mono">15:02</td>
+          <td><span class="pill">[SIGNED]</span></td>
+          <td style="text-align:right;"><span class="mono smallcaps">VIEW →</span></td>
+        </tr>
+        <tr>
+          <td class="mono">08</td>
+          <td class="mono">13:10</td>
+          <td><strong>PATEL, RAJESH</strong> · M · 62 · MRN 1104</td>
+          <td class="mono smallcaps">CARDIOLOGY</td>
+          <td class="mono">TVS-0418</td>
+          <td class="mono">11:38</td>
+          <td><span class="pill">[SIGNED]</span></td>
+          <td style="text-align:right;"><span class="mono smallcaps">VIEW →</span></td>
+        </tr>
+        <tr>
+          <td class="mono">09</td>
+          <td class="mono">13:36</td>
+          <td><strong>O'BRIEN, MEGAN</strong> · F · 29 · MRN 1112</td>
+          <td class="mono smallcaps">PAIN MGMT</td>
+          <td class="mono">TVS-0419</td>
+          <td class="mono">08:21</td>
+          <td><span class="pill">[SIGNED]</span></td>
+          <td style="text-align:right;"><span class="mono smallcaps">VIEW →</span></td>
+        </tr>
+        <tr>
+          <td class="mono">10</td>
+          <td class="mono">14:05</td>
+          <td><strong>RODRIGUEZ, CARLOS</strong> · M · 57 · MRN 1120</td>
+          <td class="mono smallcaps">ORTHOPEDICS</td>
+          <td class="mono">TVS-0420</td>
+          <td class="mono">13:45</td>
+          <td><span class="pill">[SIGNED]</span></td>
+          <td style="text-align:right;"><span class="mono smallcaps">VIEW →</span></td>
+        </tr>
+        <tr>
+          <td class="mono">11</td>
+          <td class="mono">14:48</td>
+          <td><strong>KOWALSKI, ANNA</strong> · F · 66 · MRN 1131</td>
+          <td class="mono smallcaps">CARDIOLOGY</td>
+          <td class="mono">TVS-0421</td>
+          <td class="mono">12:54</td>
+          <td><span class="pill">[SIGNED]</span></td>
+          <td style="text-align:right;"><span class="mono smallcaps">VIEW →</span></td>
+        </tr>
+        <tr>
+          <td class="mono">12</td>
+          <td class="mono">15:22</td>
+          <td><strong>JOHNSON, KEVIN</strong> · M · 38 · MRN 1138</td>
+          <td class="mono smallcaps">INT. MED.</td>
+          <td class="mono">TVS-0422</td>
+          <td class="mono">06:48</td>
+          <td><span class="pill">[SIGNED]</span></td>
+          <td style="text-align:right;"><span class="mono smallcaps">VIEW →</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============================================================================
+     SECTION 02.C — ACTIVE VISIT DETAIL (the white-on-black inverted active-row,
+     expanded as a panel below the table — shows the SOAP excerpt + Rx warning
+     in brutalist treatment, with real Transcribe-MD content.)
+     ========================================================================= -->
+<section class="line-tb invert">
+  <div class="g12 px-8 md:px-12 py-12">
+    <div class="col-span-12 md:col-span-2 mono smallcaps t-micro" style="opacity:0.75;">
+      § 02.C / ACTIVE
+    </div>
+    <div class="col-span-12 md:col-span-10">
+      <div class="t-band text-paper">SMITH,&nbsp;JOHN&nbsp;/&nbsp;<span class="text-yellow">[RECORDING]</span></div>
+      <div class="mono smallcaps t-small" style="margin-top:14px; opacity:0.85; letter-spacing:0.12em;">
+        M · 64 · MRN 1029 · CARDIOLOGY · F/U POST-MI · STARTED 09:14 · DURATION 14:22 · DR. WHITAKER
+      </div>
+    </div>
+  </div>
+
+  <!-- Live transcript + SOAP draft + Rx warning, on the inverted panel -->
+  <div class="g12 px-8 md:px-12 pb-12 line-t" style="border-top-color:#fff;">
+    <!-- COL 1 — Live transcript -->
+    <div class="col-span-12 md:col-span-5" style="padding-top:32px; padding-right:24px; border-right:2px solid #fff;">
+      <div class="seclabel" style="color:#fff;">
+        <span class="num">A</span><span class="bar" style="background:#fff;"></span><span>LIVE TRANSCRIPT · DEEPGRAM NOVA-3</span>
+      </div>
+      <div class="mt-6 mono t-small" style="line-height:1.7;">
+        <div><span class="text-yellow">[DR]</span> &nbsp;Hi John, how have things been since the stent?</div>
+        <div style="margin-top:10px;"><span class="text-yellow">[PT]</span> &nbsp;Better, but I get this tightness when I walk uphill.</div>
+        <div style="margin-top:10px;"><span class="text-yellow">[DR]</span> &nbsp;How many blocks before it starts?</div>
+        <div style="margin-top:10px;"><span class="text-yellow">[PT]</span> &nbsp;Maybe two. It eases when I stop. No sweating, no shortness of breath at rest.</div>
+        <div style="margin-top:10px;"><span class="text-yellow">[DR]</span> &nbsp;Are you taking the metoprolol every morning?</div>
+        <div style="margin-top:10px;"><span class="text-yellow">[PT]</span> &nbsp;Yes. Atorvastatin too. I stopped the aspirin a week ago — my dentist asked me to before the extraction.</div>
+        <div style="margin-top:10px; opacity:0.6;"><span class="text-yellow">[DR]</span> &nbsp;Right, that's important. We should…</div>
+        <div style="margin-top:18px; padding-top:14px; border-top:1px solid #fff;" class="mono smallcaps t-micro" >
+          ─── 14:22 / 11 UTTERANCES / 2 SPEAKERS DIARIZED
+        </div>
+      </div>
+    </div>
+
+    <!-- COL 2 — SOAP draft -->
+    <div class="col-span-12 md:col-span-4" style="padding-top:32px; padding-right:24px; padding-left:24px; border-right:2px solid #fff;">
+      <div class="seclabel" style="color:#fff;">
+        <span class="num">B</span><span class="bar" style="background:#fff;"></span><span>SOAP DRAFT · LAYER 04 · POLISHED</span>
+      </div>
+      <div class="mt-6 t-small" style="line-height:1.65;">
+        <div class="mono smallcaps t-micro text-yellow">S — SUBJECTIVE</div>
+        <p style="margin-top:6px;">64-y/o M, 11 weeks s/p LAD stent, presents for follow-up. Reports new exertional chest tightness onset ~3 weeks ago, stable pattern, ~2 blocks of walking, relieved by rest. Denies rest pain, dyspnea, syncope, orthopnea. Self-discontinued ASA 81 mg one week ago at dental request prior to extraction.</p>
+
+        <div class="mono smallcaps t-micro text-yellow" style="margin-top:14px;">O — OBJECTIVE</div>
+        <p style="margin-top:6px;">BP 138/82 · HR 64 reg · SpO2 98% · BMI 28.4. Lungs clear. S1S2 normal, no murmur. No JVD, no edema. ECG sinus rhythm, no acute ST changes vs. prior 2026-02-11.</p>
+
+        <div class="mono smallcaps t-micro text-yellow" style="margin-top:14px;">A — ASSESSMENT</div>
+        <p style="margin-top:6px;">1) Stable angina, possibly progressive — exertional pattern in s/p LAD PCI patient now off ASA. 2) Antiplatelet gap secondary to dental procedure. 3) Hyperlipidemia — on atorvastatin 40 mg.</p>
+
+        <div class="mono smallcaps t-micro text-yellow" style="margin-top:14px;">P — PLAN</div>
+        <p style="margin-top:6px;">Resume ASA 81 mg daily today. Continue metoprolol succinate 50 mg QD, atorvastatin 40 mg QHS. Order stress echo, lipid panel, hsCRP. Return 2 weeks; sooner for any rest pain, dyspnea, or syncope.</p>
+      </div>
+    </div>
+
+    <!-- COL 3 — Rx warning + codes -->
+    <div class="col-span-12 md:col-span-3" style="padding-top:32px; padding-left:24px;">
+      <!-- Rx Warning Card — brutalist treatment -->
+      <div class="line-a" style="border-color:#fff; padding:18px;">
+        <div class="mono smallcaps t-micro" style="background:#F5D000; color:#000; display:inline-block; padding:4px 8px; font-weight:700;">
+          ⚠ RX WARN · CRITICAL
+        </div>
+        <div class="t-h3" style="margin-top:10px; font-weight:800; line-height:1.1;">
+          ANTIPLATELET GAP &gt; 7 DAYS POST-PCI.
+        </div>
+        <p class="t-small" style="margin-top:10px;">
+          Patient self-discontinued aspirin 81 mg seven days post-routine cardiology visit, eleven weeks post-LAD stent. Window exceeds DAPT guidance (AHA/ACC 2016 §5.2).
+        </p>
+        <div class="line-t pt-3 mt-3 mono t-micro smallcaps" style="border-color:#fff;">
+          ACTIONS
+        </div>
+        <div style="margin-top:10px; display:flex; flex-direction:column; gap:6px;">
+          <button class="btn btn-sm" style="justify-content:space-between; width:100%;">RESUME ASA 81 MG <span class="arrow">↵</span></button>
+          <button class="btn-ghost btn-sm" style="justify-content:space-between; width:100%; background:#000; color:#fff; border-color:#fff;">OVERRIDE WITH REASON <span class="arrow">→</span></button>
+        </div>
+      </div>
+
+      <!-- Codes -->
+      <div class="line-a mt-6" style="border-color:#fff; padding:14px 18px;">
+        <div class="mono smallcaps t-micro" style="opacity:0.7;">CODES · 07A / 07B</div>
+        <div class="mono t-small" style="margin-top:8px; line-height:1.7;">
+          <div><span class="text-yellow">ICD-10</span>&nbsp;&nbsp;I20.9 &nbsp; ANGINA, UNSPEC.</div>
+          <div><span class="text-yellow">ICD-10</span>&nbsp;&nbsp;Z95.5 &nbsp; PRESENCE CORONARY STENT</div>
+          <div><span class="text-yellow">ICD-10</span>&nbsp;&nbsp;E78.5 &nbsp; HYPERLIPIDEMIA</div>
+          <div style="margin-top:6px;"><span class="text-yellow">CPT</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;99214 &nbsp; EST. PT. LVL 4</div>
+          <div><span class="text-yellow">CPT</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;93306 &nbsp; STRESS ECHO (ORDERED)</div>
+        </div>
+      </div>
+
+      <!-- Sign block -->
+      <div style="margin-top:16px;">
+        <button class="btn" style="width:100%; justify-content:space-between;">
+          SIGN &amp; CLOSE <span class="arrow">⌘ + ↵</span>
+        </button>
+        <div class="mono smallcaps t-micro" style="margin-top:8px; opacity:0.7;">
+          SIGNATURE FREEZES SOAP. AUDIT-LOGGED.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================================
+     SECTION 02.D — DASHBOARD SECONDARY GRID (patients + queue)
+     ========================================================================= -->
+<section class="bg-paper">
+  <div class="g12 px-8 md:px-12 py-5 line-b items-center">
+    <div class="col-span-12 md:col-span-6 seclabel">
+      <span class="num">02.D</span><span class="bar"></span><span>QUEUE / PATIENTS</span>
+    </div>
+    <div class="col-span-12 md:col-span-6 mono smallcaps t-micro" style="text-align:right; opacity:0.75;">
+      LAST PIPELINE TICK · 09:38:14 LOCAL · QUEUE DEPTH · 1
+    </div>
+  </div>
+
+  <div class="g12 px-8 md:px-12 py-10">
+    <!-- Pipeline status — left -->
+    <div class="col-span-12 md:col-span-7">
+      <div class="line-a">
+        <div class="line-b mono smallcaps t-micro" style="padding:14px 18px; display:flex; justify-content:space-between;">
+          <span>PIPELINE / TVS-0414 / WALKER, HELEN</span>
+          <span>LAYER 04 / 07</span>
+        </div>
+        <table class="b-table">
+          <thead>
+            <tr><th style="width:8%;">№</th><th>LAYER</th><th>STATE</th><th>LATENCY</th><th>MODEL</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="mono">01</td><td>TRANSCRIBE</td><td><span class="pill">[DONE]</span></td><td class="mono">8.2s</td><td class="mono">DEEPGRAM</td></tr>
+            <tr><td class="mono">02</td><td>SPEAKER ROLES</td><td><span class="pill">[DONE]</span></td><td class="mono">3.1s</td><td class="mono">CLAUDE</td></tr>
+            <tr><td class="mono">03</td><td>EXTRACT ENTITIES</td><td><span class="pill">[DONE]</span></td><td class="mono">4.7s</td><td class="mono">CLAUDE</td></tr>
+            <tr class="row-active"><td class="mono">04</td><td>GENERATE SOAP</td><td><span class="pill pill-yellow">[RUNNING]</span></td><td class="mono">2.4s</td><td class="mono">SONNET 4.6</td></tr>
+            <tr><td class="mono">05</td><td>SELF-CRITIQUE</td><td><span class="pill">[QUEUED]</span></td><td class="mono">—</td><td class="mono">SONNET 4.6</td></tr>
+            <tr><td class="mono">06</td><td>POLISH</td><td><span class="pill">[QUEUED]</span></td><td class="mono">—</td><td class="mono">SONNET 4.6</td></tr>
+            <tr><td class="mono">07</td><td>CODES + RX + SUMMARY</td><td><span class="pill">[QUEUED]</span></td><td class="mono">—</td><td class="mono">SONNET 4.6</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Patients — right -->
+    <div class="col-span-12 md:col-span-5">
+      <div class="line-a">
+        <div class="line-b mono smallcaps t-micro" style="padding:14px 18px; display:flex; justify-content:space-between;">
+          <span>RECENT PATIENTS</span>
+          <span>4 OF 1,284</span>
+        </div>
+        <ul style="list-style:none; padding:0; margin:0;">
+          <li class="line-b" style="padding:18px;">
+            <div class="flex items-baseline justify-between">
+              <strong>SMITH, JOHN</strong>
+              <span class="mono t-micro smallcaps">M · 64 · MRN 1029</span>
+            </div>
+            <div class="mono t-micro smallcaps" style="margin-top:6px; opacity:0.75;">
+              CARDIOLOGY · 4 VISITS · LAST 09:14 TODAY
+            </div>
+          </li>
+          <li class="line-b" style="padding:18px;">
+            <div class="flex items-baseline justify-between">
+              <strong>LOPEZ, MARIA</strong>
+              <span class="mono t-micro smallcaps">F · 58 · MRN 1042</span>
+            </div>
+            <div class="mono t-micro smallcaps" style="margin-top:6px; opacity:0.75;">
+              CARDIOLOGY · 7 VISITS · LAST 09:38 TODAY
+            </div>
+          </li>
+          <li class="line-b" style="padding:18px;">
+            <div class="flex items-baseline justify-between">
+              <strong>CHEN, ROBERT</strong>
+              <span class="mono t-micro smallcaps">M · 47 · MRN 1058</span>
+            </div>
+            <div class="mono t-micro smallcaps" style="margin-top:6px; opacity:0.75;">
+              ORTHOPEDICS · 2 VISITS · LAST 10:02 TODAY
+            </div>
+          </li>
+          <li style="padding:18px;">
+            <div class="flex items-baseline justify-between">
+              <strong>WALKER, HELEN</strong>
+              <span class="mono t-micro smallcaps">F · 72 · MRN 1063</span>
+            </div>
+            <div class="mono t-micro smallcaps" style="margin-top:6px; opacity:0.75;">
+              PAIN MGMT · 12 VISITS · LAST 10:30 TODAY
+            </div>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================================
+     COLOPHON / FOOTER — restating the discipline
+     ========================================================================= -->
+<footer class="line-t bg-ink text-paper">
+  <div class="g12 px-8 md:px-12 py-12">
+    <div class="col-span-12 md:col-span-3">
+      <div class="t-h2 text-paper">QUILLMD<span class="text-yellow">.</span></div>
+      <div class="mono smallcaps t-micro" style="margin-top:10px; opacity:0.7; letter-spacing:0.12em;">
+        TRANSCRIBE-MD · v4.0 · 2026
+      </div>
+    </div>
+
+    <div class="col-span-12 md:col-span-3 mono smallcaps t-micro" style="line-height:1.9;">
+      <div style="opacity:0.5;">DIRECTION</div>
+      <div>01 / BRUTALIST</div>
+      <div style="opacity:0.5; margin-top:14px;">TYPEFACE</div>
+      <div>HELVETICA NEUE 95 BLACK<br>FALLBACK INTER TIGHT 900</div>
+      <div style="opacity:0.5; margin-top:14px;">MONO</div>
+      <div>JETBRAINS MONO 700</div>
+    </div>
+
+    <div class="col-span-12 md:col-span-3 mono smallcaps t-micro" style="line-height:1.9;">
+      <div style="opacity:0.5;">PALETTE</div>
+      <div>INK · #000000</div>
+      <div>PAPER · #FFFFFF</div>
+      <div>YELLOW · #F5D000 (CONSTRUCTION)</div>
+      <div style="opacity:0.5; margin-top:14px;">RULE</div>
+      <div>2PX SOLID · BLACK ALWAYS</div>
+      <div style="opacity:0.5; margin-top:14px;">RADIUS</div>
+      <div>0 · NEVER</div>
+    </div>
+
+    <div class="col-span-12 md:col-span-3 mono smallcaps t-micro" style="line-height:1.9;">
+      <div style="opacity:0.5;">REJECTED</div>
+      <div>SHADOW · GRADIENT · SPRING<br>ROUNDED CORNER · GLASS BLUR<br>NEUTRAL ACCENT · TASTEFUL VOICE</div>
+      <div style="opacity:0.5; margin-top:14px;">SIGNED</div>
+      <div>QUILLMD DESIGN OFFICE<br>2026-04-29 · WHITAKER CARDIOLOGY ASSOC.</div>
+    </div>
+  </div>
+
+  <!-- Final inversion strip / running foot -->
+  <div class="line-t" style="border-color:#fff;">
+    <div class="g12 px-8 md:px-12 py-4 mono smallcaps t-micro" style="opacity:0.55; letter-spacing:0.12em;">
+      <div class="col-span-4">THE GRID IS THE GENTLENESS.</div>
+      <div class="col-span-4" style="text-align:center;">END OF SHEET 02 / 02</div>
+      <div class="col-span-4" style="text-align:right;">QUILLMD · V4 · DIRECTION 01 / BRUTALIST · 2026-04-29</div>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

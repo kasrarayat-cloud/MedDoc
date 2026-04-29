@@ -1,0 +1,1287 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Nocturne · Visit Detail — Transcribe-MD</title>
+<meta name="viewport" content="width=1600" />
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;1,8..60,300;1,8..60,400&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg:          #0A0E1A;
+    --bg-1:        #0E1320;
+    --bg-2:        #121828;
+    --bg-3:        #171E30;
+    --line-soft:   #1A2235;
+    --line:        #212B42;
+    --line-strong: #2F3B57;
+    --fg:          #E8ECF3;
+    --fg-2:        #A3ADC2;
+    --fg-3:        #6B7388;
+    --fg-4:        #3F4659;
+    --accent:        #3B82F6;
+    --accent-bright: #60A5FA;
+    --accent-deep:   #1D4ED8;
+    --accent-glow:   rgba(59, 130, 246, 0.18);
+    --danger:    #A83244;
+    --review:    #B07A29;
+    --serif: 'Source Serif 4', ui-serif, Georgia, serif;
+    --sans:  'Inter Tight', ui-sans-serif, system-ui, sans-serif;
+    --mono:  'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    --ease-cinema: cubic-bezier(0.32, 0.72, 0.18, 1);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  html { background: var(--bg); }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--sans);
+    font-size: 13px;
+    line-height: 1.5;
+    letter-spacing: -0.005em;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+
+  /* ── grain ──────────────────────────────────────────────────── */
+  .grain {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 100;
+    opacity: 0.05;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.55 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+    background-size: 240px 240px;
+    animation: grain-drift 7s steps(8) infinite;
+  }
+  @keyframes grain-drift {
+    0%   { transform: translate(0, 0); }
+    25%  { transform: translate(-10px, 6px); }
+    50%  { transform: translate(8px, -10px); }
+    75%  { transform: translate(-4px, 14px); }
+    100% { transform: translate(0, 0); }
+  }
+  .vignette {
+    position: fixed; inset: 0;
+    pointer-events: none;
+    z-index: 50;
+    background: radial-gradient(ellipse 90% 70% at 50% 30%, transparent 50%, rgba(0,0,0,0.4) 100%);
+  }
+
+  /* ── shell ──────────────────────────────────────────────────── */
+  .shell {
+    display: grid;
+    grid-template-columns: 56px 1fr;
+    min-height: 100vh;
+  }
+  .rail {
+    border-right: 1px solid var(--line-soft);
+    background: var(--bg-1);
+    padding: 18px 0;
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+    position: relative; z-index: 10;
+  }
+  .rail .logo {
+    width: 28px; height: 28px;
+    border: 1px solid var(--accent);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--serif); font-style: italic;
+    font-size: 14px; color: var(--accent-bright);
+    margin-bottom: 18px;
+    box-shadow: inset 0 0 12px var(--accent-glow);
+  }
+  .rail .ic {
+    width: 36px; height: 36px;
+    border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--fg-3); cursor: pointer;
+    transition: color 200ms var(--ease-cinema);
+    position: relative;
+  }
+  .rail .ic.active { color: var(--accent-bright); background: rgba(59,130,246,0.06); }
+  .rail .ic.active::before {
+    content: ""; position: absolute;
+    left: -1px; top: 8px; width: 2px; height: 20px;
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent-glow);
+  }
+  .rail svg { width: 18px; height: 18px; }
+  .rail .spacer { flex: 1; }
+
+  .main { display: flex; flex-direction: column; min-width: 0; position: relative; z-index: 5; }
+
+  .topnav {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 32px;
+    border-bottom: 1px solid var(--line-soft);
+    background: rgba(10,14,26,0.65);
+    backdrop-filter: blur(8px);
+    position: sticky; top: 0; z-index: 20;
+  }
+  .crumb {
+    display: flex; align-items: center; gap: 14px;
+    font-family: var(--mono); font-size: 11px;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--fg-3);
+  }
+  .crumb .ws-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px var(--accent-glow); }
+  .crumb .here { color: var(--fg); }
+  .crumb .sep { color: var(--line-strong); }
+  .crumb a { color: var(--fg-3); text-decoration: none; }
+
+  .topnav-actions {
+    display: flex; gap: 12px; align-items: center;
+  }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 8px 16px;
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--fg-2);
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: border-color 220ms var(--ease-cinema), color 220ms var(--ease-cinema), box-shadow 220ms var(--ease-cinema);
+  }
+  .btn:hover {
+    border-color: var(--line-strong);
+    color: var(--fg);
+  }
+  .btn-primary {
+    border-color: var(--accent);
+    color: var(--accent-bright);
+    box-shadow: inset 0 0 14px var(--accent-glow);
+  }
+  .btn-primary:hover {
+    box-shadow: inset 0 0 22px rgba(59,130,246,0.28), 0 0 0 1px var(--accent-bright);
+    color: var(--accent-bright);
+  }
+
+  /* ── header ────────────────────────────────────────────────── */
+  .visit-head {
+    padding: 44px 56px 32px;
+    border-bottom: 1px solid var(--line-soft);
+    position: relative;
+  }
+  .visit-eyebrow {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--fg-3);
+    margin-bottom: 14px;
+    display: flex; gap: 14px; align-items: center;
+  }
+  .visit-eyebrow .accent-rule {
+    width: 16px; height: 1px; background: var(--accent); box-shadow: 0 0 6px var(--accent-glow);
+  }
+  .visit-head-row {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    gap: 32px;
+  }
+  .visit-h-left { flex: 1; }
+  .visit-name {
+    font-family: var(--serif);
+    font-style: italic;
+    font-weight: 300;
+    font-size: 44px;
+    color: var(--fg);
+    letter-spacing: -0.022em;
+    margin: 0 0 12px;
+    line-height: 1.05;
+  }
+  .visit-meta {
+    display: flex;
+    gap: 0;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--fg-3);
+    align-items: center;
+  }
+  .visit-meta .item { padding: 0 14px; border-left: 1px solid var(--line); }
+  .visit-meta .item:first-child { padding-left: 0; border-left: none; }
+  .visit-meta .item.accent { color: var(--accent-bright); }
+
+  .visit-h-right {
+    display: flex; flex-direction: column; align-items: flex-end; gap: 12px;
+  }
+  .visit-status-pill {
+    display: inline-flex; align-items: center; gap: 9px;
+    padding: 6px 12px;
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--fg-2);
+  }
+  .visit-status-pill .dot {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+  }
+  .visit-actions { display: flex; gap: 10px; }
+
+  /* ── tabs ──────────────────────────────────────────────────── */
+  .tabs {
+    padding: 0 56px;
+    border-bottom: 1px solid var(--line-soft);
+    display: flex;
+    gap: 0;
+    background: var(--bg);
+    align-items: center;
+    height: 52px;
+  }
+  .tab {
+    padding: 0 22px;
+    height: 52px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--fg-3);
+    cursor: pointer;
+    position: relative;
+    border-right: 1px solid var(--line-soft);
+    transition: color 200ms var(--ease-cinema);
+  }
+  .tab:first-child { border-left: 1px solid var(--line-soft); }
+  .tab:hover { color: var(--fg-2); }
+  .tab.active { color: var(--accent-bright); }
+  .tab.active::after {
+    content: "";
+    position: absolute;
+    bottom: -1px;
+    left: 0; right: 0;
+    height: 1px;
+    background: var(--accent);
+    box-shadow: 0 0 6px var(--accent-glow);
+  }
+  .tab .count {
+    color: var(--fg-4);
+    font-size: 9.5px;
+  }
+  .tab.active .count { color: var(--accent); }
+
+  /* ── content layout ────────────────────────────────────────── */
+  .visit-body {
+    display: grid;
+    grid-template-columns: 1fr 360px;
+    min-height: calc(100vh - 320px);
+  }
+
+  /* SOAP column */
+  .soap-col {
+    padding: 56px 56px 96px;
+    border-right: 1px solid var(--line-soft);
+  }
+
+  /* AI regen banner */
+  .ai-strip {
+    margin-bottom: 36px;
+    padding: 18px 22px;
+    border: 1px solid var(--line);
+    background: var(--bg-1);
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    position: relative;
+    overflow: hidden;
+  }
+  .ai-strip::after {
+    content: "";
+    position: absolute;
+    top: 0; left: -30%;
+    width: 30%; height: 100%;
+    background: linear-gradient(90deg, transparent, var(--accent-glow), transparent);
+    animation: sweep 5s var(--ease-cinema) infinite;
+    pointer-events: none;
+  }
+  @keyframes sweep { from { left: -30%; } to { left: 100%; } }
+  .ai-strip .accent-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 12px var(--accent);
+    flex-shrink: 0;
+    animation: live-pulse 2s var(--ease-cinema) infinite;
+  }
+  @keyframes live-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+  .ai-strip .label {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--fg-3);
+  }
+  .ai-strip .live-text {
+    flex: 1;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--fg);
+    letter-spacing: 0.005em;
+  }
+  .ai-strip .live-text .text { display: inline; }
+  .ai-strip .live-text .cursor {
+    display: inline-block;
+    width: 8px; height: 14px;
+    background: var(--accent);
+    margin-left: 2px;
+    vertical-align: -2px;
+    animation: cursor-blink 0.95s steps(1) infinite;
+  }
+  @keyframes cursor-blink { 50% { background: transparent; } }
+
+  .ai-strip .stage-meta {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--fg-3);
+  }
+  .ai-strip .stage-meta .accent { color: var(--accent-bright); }
+
+  /* SOAP body — long-form serif */
+  .soap-doc {
+    max-width: 720px;
+    margin: 0 auto;
+  }
+  .soap-section {
+    margin-bottom: 44px;
+    position: relative;
+  }
+  .soap-section.regenerating {
+    background: rgba(59,130,246,0.04);
+    border-left: 1px solid var(--accent);
+    margin-left: -22px;
+    padding-left: 22px;
+    box-shadow: -2px 0 8px rgba(59,130,246,0.05);
+  }
+  .soap-h {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: var(--fg-3);
+    margin: 0 0 16px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+  .soap-h .num {
+    color: var(--accent);
+  }
+  .soap-h .rule {
+    flex: 1;
+    height: 1px;
+    background: var(--line-soft);
+  }
+  .soap-h .meta {
+    color: var(--fg-4);
+    font-size: 9.5px;
+  }
+  .soap-body {
+    font-family: var(--serif);
+    font-weight: 300;
+    font-size: 16px;
+    line-height: 1.65;
+    color: var(--fg);
+    letter-spacing: -0.005em;
+  }
+  .soap-body p { margin: 0 0 14px; }
+  .soap-body em { color: var(--fg-2); font-style: italic; }
+  .soap-body .typewriter {
+    display: inline-block;
+    width: 6px; height: 16px;
+    background: var(--accent);
+    margin-left: 1px;
+    vertical-align: -2px;
+    animation: cursor-blink 0.95s steps(1) infinite;
+  }
+  .soap-body ul {
+    margin: 0 0 14px;
+    padding-left: 22px;
+  }
+  .soap-body li { margin-bottom: 6px; }
+  .soap-body strong { font-weight: 500; color: var(--fg); }
+
+  /* Vital lozenge */
+  .vitals {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 0;
+    border: 1px solid var(--line-soft);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 18px;
+    background: var(--bg-1);
+  }
+  .vital {
+    padding: 14px 16px;
+    border-right: 1px solid var(--line-soft);
+  }
+  .vital:last-child { border-right: none; }
+  .vital .lab {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--fg-3);
+    margin-bottom: 6px;
+  }
+  .vital .v {
+    font-family: var(--mono);
+    font-size: 18px;
+    color: var(--fg);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.005em;
+  }
+  .vital .v .unit {
+    color: var(--fg-3);
+    font-size: 11px;
+    margin-left: 3px;
+  }
+  .vital .delta {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    color: var(--fg-4);
+    letter-spacing: 0.06em;
+  }
+  .vital.flag .v { color: var(--review); }
+  .vital.flag .delta { color: var(--review); }
+
+  /* Codes block (assessment/plan often has ICD chips) */
+  .icd-row {
+    display: flex; gap: 8px; flex-wrap: wrap;
+    margin-top: 10px;
+  }
+  .icd {
+    padding: 4px 9px;
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    color: var(--fg-2);
+    background: rgba(14,19,32,0.6);
+  }
+  .icd .code { color: var(--accent-bright); margin-right: 6px; }
+  .icd .conf {
+    margin-left: 8px;
+    color: var(--fg-4);
+    font-size: 9.5px;
+  }
+
+  /* ── transcript snippet (shown in same page for design demo) ── */
+  .transcript-block {
+    margin-top: 36px;
+    padding: 28px 32px;
+    border: 1px solid var(--line-soft);
+    background: rgba(14,19,32,0.5);
+    border-radius: 3px;
+  }
+  .transcript-block .h {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 22px;
+  }
+  .transcript-block .eyebrow {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--fg-3);
+  }
+  .transcript-block .meta {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--fg-4);
+    letter-spacing: 0.1em;
+  }
+
+  .turn {
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    gap: 24px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .turn:last-child { border-bottom: none; }
+  .turn .who {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--fg-3);
+    padding-top: 4px;
+  }
+  .turn .who .ts {
+    display: block;
+    color: var(--fg-4);
+    font-size: 9.5px;
+    margin-top: 4px;
+  }
+  .turn .said {
+    font-family: var(--serif);
+    font-size: 15px;
+    line-height: 1.55;
+    color: var(--fg);
+    letter-spacing: -0.005em;
+  }
+  .turn.patient .said {
+    font-style: italic;
+    color: var(--fg);
+  }
+  .turn.doctor .said {
+    color: var(--fg-2);
+  }
+
+  /* ── right rail ────────────────────────────────────────────── */
+  .right-rail {
+    padding: 56px 32px 96px;
+    background: var(--bg-1);
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .rr-card {
+    border: 1px solid var(--line-soft);
+    border-radius: 3px;
+    background: var(--bg);
+    overflow: hidden;
+  }
+  .rr-card .h {
+    padding: 14px 18px 12px;
+    border-bottom: 1px solid var(--line-soft);
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--fg-3);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .rr-card .h .accent-text { color: var(--accent-bright); }
+  .rr-card .body { padding: 16px 18px; }
+
+  .kv {
+    display: grid;
+    grid-template-columns: 100px 1fr;
+    gap: 8px 18px;
+    font-family: var(--mono);
+    font-size: 11px;
+    line-height: 1.65;
+  }
+  .kv dt { color: var(--fg-3); letter-spacing: 0.08em; text-transform: uppercase; font-size: 9.5px; padding-top: 3px; }
+  .kv dd { margin: 0; color: var(--fg); }
+  .kv dd em { font-family: var(--serif); font-style: italic; color: var(--fg); font-size: 13px; }
+
+  /* layer trace */
+  .layer {
+    display: grid;
+    grid-template-columns: 14px 1fr 60px;
+    gap: 14px;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .layer:last-child { border-bottom: none; }
+  .layer .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--fg-4);
+    margin: 0 auto;
+  }
+  .layer.done .dot { background: var(--fg-2); }
+  .layer.active .dot { background: var(--accent); box-shadow: 0 0 8px var(--accent); animation: live-pulse 1.6s var(--ease-cinema) infinite; }
+  .layer .name {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    color: var(--fg-2);
+  }
+  .layer .ms {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--fg-3);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .layer.active .name { color: var(--accent-bright); }
+
+  /* audit */
+  .audit-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 7px 0;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--fg-2);
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .audit-row:last-child { border-bottom: none; }
+  .audit-row .who { color: var(--fg-3); }
+  .audit-row .accent { color: var(--accent-bright); }
+
+  /* ── Rx warning card (re-skinned outer frame, internals preserved structurally) ── */
+  .rx-warn-frame {
+    margin-top: 36px;
+    border: 1px solid var(--danger);
+    border-radius: 4px;
+    background: linear-gradient(180deg, rgba(168,50,68,0.06) 0%, var(--bg-1) 60%);
+    box-shadow:
+      inset 0 0 60px rgba(168,50,68,0.08),
+      0 0 0 1px rgba(168,50,68,0.4);
+    overflow: hidden;
+    position: relative;
+  }
+  .rx-warn-frame::before {
+    content: "";
+    position: absolute; inset: 0;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='1.05' numOctaves='2'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.55 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+    opacity: 0.05;
+    mix-blend-mode: overlay;
+    pointer-events: none;
+  }
+  .rx-h {
+    padding: 16px 22px;
+    border-bottom: 1px solid rgba(168,50,68,0.4);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(168,50,68,0.04);
+    position: relative;
+  }
+  .rx-h .left {
+    display: flex; gap: 14px; align-items: center;
+  }
+  .rx-h .icon {
+    width: 28px; height: 28px;
+    border: 1px solid var(--danger);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(168,50,68,0.1);
+  }
+  .rx-h .icon::before {
+    content: "!";
+    font-family: var(--serif);
+    color: var(--danger);
+    font-size: 16px;
+    font-style: italic;
+  }
+  .rx-h .severity {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 4px 10px;
+    border: 1px solid var(--danger);
+    border-radius: 2px;
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--danger);
+    background: rgba(168,50,68,0.08);
+  }
+  .rx-h .severity .dot {
+    width: 5px; height: 5px; border-radius: 50%;
+    background: var(--danger);
+  }
+  .rx-h .right-meta {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--fg-3);
+  }
+  .rx-headline {
+    padding: 18px 22px 6px;
+    font-family: var(--serif);
+    font-style: italic;
+    font-weight: 300;
+    font-size: 22px;
+    color: var(--fg);
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+    position: relative;
+  }
+  .rx-sub {
+    padding: 0 22px 18px;
+    font-family: var(--serif);
+    font-size: 14px;
+    color: var(--fg-2);
+    line-height: 1.55;
+    border-bottom: 1px solid rgba(168,50,68,0.3);
+    position: relative;
+  }
+  .rx-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    border-bottom: 1px solid rgba(168,50,68,0.3);
+    background: rgba(0,0,0,0.18);
+    position: relative;
+  }
+  .rx-cell {
+    padding: 16px 22px;
+    border-right: 1px solid rgba(168,50,68,0.3);
+  }
+  .rx-cell:last-child { border-right: none; }
+  .rx-cell .lab {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--fg-3);
+    margin-bottom: 6px;
+  }
+  .rx-cell .val {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--fg);
+  }
+  .rx-cell .val em {
+    color: var(--fg-3);
+    font-style: normal;
+  }
+  .rx-cell .val strong {
+    color: var(--accent-bright);
+    font-weight: 500;
+  }
+
+  .rx-risks {
+    padding: 18px 22px;
+    border-bottom: 1px solid rgba(168,50,68,0.3);
+    position: relative;
+  }
+  .rx-risks .lab {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--fg-3);
+    margin-bottom: 12px;
+  }
+  .rx-risks ul {
+    margin: 0; padding: 0; list-style: none;
+  }
+  .rx-risks li {
+    display: grid;
+    grid-template-columns: 16px 1fr;
+    gap: 14px;
+    align-items: flex-start;
+    padding: 8px 0;
+    font-family: var(--serif);
+    font-size: 14px;
+    color: var(--fg-2);
+    line-height: 1.55;
+  }
+  .rx-risks li .rdot {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: var(--danger);
+    margin-top: 8px;
+  }
+  .rx-risks li strong { color: var(--fg); font-weight: 500; }
+  .rx-risks li em { color: var(--fg); font-style: italic; }
+
+  .rx-actions {
+    padding: 16px 22px;
+    display: flex;
+    gap: 10px;
+    background: rgba(168,50,68,0.04);
+    position: relative;
+  }
+  .rx-btn {
+    padding: 10px 18px;
+    border: 1px solid var(--danger);
+    background: rgba(168,50,68,0.12);
+    color: var(--fg);
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: background 200ms var(--ease-cinema);
+  }
+  .rx-btn:hover { background: rgba(168,50,68,0.22); }
+  .rx-btn.ghost {
+    background: transparent;
+    border-color: var(--line);
+    color: var(--fg-3);
+  }
+  .rx-btn.ghost:hover { color: var(--fg); border-color: var(--line-strong); }
+  .rx-actions .kbd {
+    margin-left: auto;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--fg-4);
+    align-self: center;
+  }
+  .rx-actions .kbd .key {
+    padding: 2px 6px;
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    color: var(--fg-2);
+    margin: 0 2px;
+  }
+
+  footer {
+    padding: 32px 56px;
+    border-top: 1px solid var(--line-soft);
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--fg-4);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .grain, .ai-strip::after, .ai-strip .accent-dot, .ai-strip .live-text .cursor,
+    .layer.active .dot, .soap-body .typewriter { animation: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="grain"></div>
+<div class="vignette"></div>
+
+<div class="shell">
+  <aside class="rail">
+    <div class="logo">Q</div>
+    <div class="ic" title="Dashboard">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+    </div>
+    <div class="ic active" title="Visits">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 3v4a1 1 0 001 1h4"/><path d="M17 21H7a2 2 0 01-2-2V5a2 2 0 012-2h7l5 5v11a2 2 0 01-2 2z"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>
+    </div>
+    <div class="ic" title="Patients">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0116 0"/></svg>
+    </div>
+    <div class="ic" title="Templates">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="14" y2="18"/></svg>
+    </div>
+    <div class="spacer"></div>
+    <div class="ic" title="Settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="9"/></svg>
+    </div>
+  </aside>
+
+  <div class="main">
+
+    <div class="topnav">
+      <div class="crumb">
+        <span class="ws-dot"></span>
+        <a href="#">Dr. Mehta</a>
+        <span class="sep">/</span>
+        <a href="#">Visits</a>
+        <span class="sep">/</span>
+        <span class="here">Lopez · Apr 29 · 19:48</span>
+      </div>
+      <div class="topnav-actions">
+        <button class="btn">Copy SOAP</button>
+        <button class="btn">Send to EHR</button>
+        <button class="btn btn-primary">Sign &amp; close</button>
+      </div>
+    </div>
+
+    <!-- ── header ────────────────────────────────────────────── -->
+    <section class="visit-head">
+      <div class="visit-eyebrow">
+        <span class="accent-rule"></span>
+        <span>VISIT · 4019822-A · WED · APR 29 · 19:48</span>
+      </div>
+      <div class="visit-head-row">
+        <div class="visit-h-left">
+          <h1 class="visit-name">Maria <em>Lopez</em></h1>
+          <div class="visit-meta">
+            <span class="item accent">CARDIOLOGY</span>
+            <span class="item">F · 67</span>
+            <span class="item">MRN 4019822</span>
+            <span class="item">FOLLOW-UP · 14:22 AUDIO</span>
+            <span class="item">DRAFTED 19:42 · 12 SEC AGO</span>
+          </div>
+        </div>
+        <div class="visit-h-right">
+          <span class="visit-status-pill">
+            <span class="dot"></span>
+            <span>READY · AWAITING SIGN-OFF</span>
+          </span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── tabs ──────────────────────────────────────────────── -->
+    <nav class="tabs">
+      <span class="tab active">SOAP <span class="count">7 SEC</span></span>
+      <span class="tab">Transcript <span class="count">14:22</span></span>
+      <span class="tab">ICD-10 <span class="count">04</span></span>
+      <span class="tab">Rx · Safety <span class="count">01</span></span>
+      <span class="tab">Patient summary</span>
+      <span class="tab">Audit</span>
+    </nav>
+
+    <!-- ── body ──────────────────────────────────────────────── -->
+    <div class="visit-body">
+
+      <!-- left: SOAP doc -->
+      <section class="soap-col">
+
+        <!-- AI regenerate strip (active) -->
+        <div class="ai-strip">
+          <span class="accent-dot"></span>
+          <span class="label">REGENERATING</span>
+          <span class="live-text">
+            <span class="text" id="ai-live-text">Drafting subjective</span>…<span class="cursor"></span>
+          </span>
+          <span class="stage-meta"><span class="accent">3</span> / 5 stages</span>
+        </div>
+
+        <article class="soap-doc">
+
+          <!-- regenerating section -->
+          <div class="soap-section regenerating">
+            <h2 class="soap-h">
+              <span class="num">§ 01</span>
+              <span>SUBJECTIVE</span>
+              <span class="rule"></span>
+              <span class="meta">REGENERATING · STARTED 19:48:02</span>
+            </h2>
+            <div class="soap-body">
+              <p>
+                Mrs. Lopez is a <strong>67-year-old woman</strong> with a history of <strong>HFpEF (NYHA II)</strong>, <strong>hypertension</strong>, and <strong>type 2 diabetes</strong>, who returns for routine cardiology follow-up. She reports that since her last visit on <em>March 4</em> she has been <em>"a little more out of breath, especially climbing the stairs at my daughter's house"</em> — quantifies as 2-flight dyspnea, previously 4-flight. Denies orthopnea, PND, or chest pain.<span class="typewriter"></span>
+              </p>
+            </div>
+          </div>
+
+          <!-- Objective -->
+          <div class="soap-section">
+            <h2 class="soap-h">
+              <span class="num">§ 02</span>
+              <span>OBJECTIVE</span>
+              <span class="rule"></span>
+              <span class="meta">DRAFTED 19:42:18</span>
+            </h2>
+
+            <div class="vitals">
+              <div class="vital">
+                <div class="lab">BP</div>
+                <div class="v">142/88<span class="unit">mmHg</span></div>
+                <div class="delta">prev · 138/84</div>
+              </div>
+              <div class="vital flag">
+                <div class="lab">HR</div>
+                <div class="v">94<span class="unit">bpm</span></div>
+                <div class="delta">↑ 8 · review</div>
+              </div>
+              <div class="vital">
+                <div class="lab">RR</div>
+                <div class="v">18<span class="unit">/min</span></div>
+                <div class="delta">prev · 16</div>
+              </div>
+              <div class="vital">
+                <div class="lab">SpO₂</div>
+                <div class="v">96<span class="unit">%</span></div>
+                <div class="delta">RA</div>
+              </div>
+              <div class="vital">
+                <div class="lab">WEIGHT</div>
+                <div class="v">73.8<span class="unit">kg</span></div>
+                <div class="delta">+1.2 since 03/04</div>
+              </div>
+            </div>
+
+            <div class="soap-body">
+              <p>
+                Patient appears comfortable, no acute distress. Heart sounds: regular rate and rhythm, S1 and S2 normal, soft S3 audible at apex (<em>persistent finding</em>). No murmurs, rubs, or gallops otherwise. Lungs: clear to auscultation bilaterally, no crackles, no wheezing. <strong>Mild bilateral pitting edema</strong> at ankles, 1+, symmetric.
+              </p>
+              <p>
+                JVP: 7&nbsp;cm at 30°. Carotids: 2+ symmetric, no bruits. Abdomen: soft, non-tender, no hepatomegaly. Extremities: warm, well-perfused. Pulses: 2+ throughout.
+              </p>
+            </div>
+          </div>
+
+          <!-- Assessment -->
+          <div class="soap-section">
+            <h2 class="soap-h">
+              <span class="num">§ 03</span>
+              <span>ASSESSMENT</span>
+              <span class="rule"></span>
+              <span class="meta">DRAFTED 19:43:07</span>
+            </h2>
+
+            <div class="soap-body">
+              <p>
+                <strong>1. HFpEF, NYHA Class II — mild progression.</strong> Reduced exertional tolerance from 4-flight to 2-flight dyspnea, mild weight gain, new bilateral ankle edema. No frank decompensation.
+              </p>
+              <p>
+                <strong>2. Hypertension — suboptimally controlled.</strong> Today's BP 142/88, trending up since March. Patient reports good adherence to lisinopril 20&nbsp;mg.
+              </p>
+              <p>
+                <strong>3. Type 2 diabetes — stable.</strong> A1c 6.8% (last drawn 02/14). On metformin 1000&nbsp;mg BID, no hypoglycemic episodes.
+              </p>
+
+              <div class="icd-row">
+                <span class="icd"><span class="code">I50.32</span>HFpEF, chronic<span class="conf">96%</span></span>
+                <span class="icd"><span class="code">I10</span>Essential HTN<span class="conf">99%</span></span>
+                <span class="icd"><span class="code">E11.9</span>T2DM, no comp<span class="conf">98%</span></span>
+                <span class="icd"><span class="code">R06.02</span>SOB on exertion<span class="conf">91%</span></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Plan -->
+          <div class="soap-section">
+            <h2 class="soap-h">
+              <span class="num">§ 04</span>
+              <span>PLAN</span>
+              <span class="rule"></span>
+              <span class="meta">DRAFTED 19:44:21</span>
+            </h2>
+
+            <div class="soap-body">
+              <ul>
+                <li><strong>HFpEF.</strong> Add <em>spironolactone 25&nbsp;mg PO daily</em>. Reinforce 2&nbsp;g sodium daily, daily morning weights with 2-lb threshold for call. Consider repeat echo in 6 months if symptoms persist.</li>
+                <li><strong>HTN.</strong> Increase <em>lisinopril to 40&nbsp;mg daily</em> from 20&nbsp;mg. Recheck BP in 4 weeks.</li>
+                <li><strong>T2DM.</strong> Continue metformin 1000&nbsp;mg BID. A1c due in May.</li>
+                <li><strong>Labs.</strong> BMP + BNP at next visit; lipid panel if not within 12 months.</li>
+                <li><strong>Follow-up.</strong> 6 weeks with vitals + symptom check. Sooner if 2-lb / 24 h weight gain or worsening dyspnea.</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- ── Rx warning card (re-skinned outer frame) ───── -->
+          <div class="rx-warn-frame">
+            <div class="rx-h">
+              <div class="left">
+                <div class="icon"></div>
+                <div>
+                  <div style="font-family: var(--mono); font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--fg-3);">RX SAFETY · LAYER 4 OF 5</div>
+                  <div style="font-family: var(--mono); font-size: 10px; color: var(--fg-4); margin-top: 4px; letter-spacing: 0.06em;">Flag raised by lisinopril-spironolactone interaction</div>
+                </div>
+              </div>
+              <div class="severity">
+                <span class="dot"></span>
+                <span>CRITICAL</span>
+              </div>
+              <span class="right-meta">REQUIRES OVERRIDE TO SIGN</span>
+            </div>
+
+            <div class="rx-headline">
+              You're doubling the potassium load on a patient with eGFR 52.
+            </div>
+            <div class="rx-sub">
+              Lisinopril 40&nbsp;mg + spironolactone 25&nbsp;mg + eGFR 52 is the classic three-strike pattern for hyperkalemia. Mrs. Lopez's last K⁺ was 4.6 on 02/14.
+            </div>
+
+            <div class="rx-grid">
+              <div class="rx-cell">
+                <div class="lab">HEARD ON RECORDING</div>
+                <div class="val">
+                  <em>"Let's add the spironolactone, twenty-five a day, and bump the lisinopril to forty."</em>
+                </div>
+                <div style="font-family: var(--mono); font-size: 10px; color: var(--fg-4); margin-top: 8px; letter-spacing: 0.06em;">CONF · 0.97 &nbsp;·&nbsp; 11:42 INTO RECORDING</div>
+              </div>
+              <div class="rx-cell">
+                <div class="lab">DRAFTED IN PLAN</div>
+                <div class="val">
+                  <strong>Spironolactone</strong> 25&nbsp;mg PO daily<br/>
+                  <strong>Lisinopril</strong> ↑ 20&nbsp;mg → 40&nbsp;mg
+                </div>
+                <div style="font-family: var(--mono); font-size: 10px; color: var(--fg-4); margin-top: 8px; letter-spacing: 0.06em;">DRAFTED 19:44:21 · LAYER 3</div>
+              </div>
+            </div>
+
+            <div class="rx-risks">
+              <div class="lab">RISK SURFACE</div>
+              <ul>
+                <li>
+                  <span class="rdot"></span>
+                  <div><strong>Hyperkalemia</strong> — RAAS-double + reduced eGFR. <em>Outcome:</em> arrhythmia, ED visit, K⁺ check at 1 week required.</div>
+                </li>
+                <li>
+                  <span class="rdot"></span>
+                  <div><strong>Acute kidney injury</strong> — same combination, additive nephrotoxic risk in elderly with HFpEF. <em>Outcome:</em> creatinine check at 1 week, hold both if Δ &gt; 30%.</div>
+                </li>
+                <li>
+                  <span class="rdot"></span>
+                  <div><strong>Symptomatic hypotension</strong> — additive on already-borderline 142/88 with autonomic responsiveness. <em>Outcome:</em> dizziness, falls in ≥65 cohort.</div>
+                </li>
+              </ul>
+            </div>
+
+            <div class="rx-actions">
+              <button class="rx-btn">Open override flow</button>
+              <button class="rx-btn ghost">Edit plan</button>
+              <button class="rx-btn ghost">Dismiss for this visit</button>
+              <span class="kbd"><span class="key">⌘</span> <span class="key">⇧</span> <span class="key">O</span> · OVERRIDE</span>
+            </div>
+          </div>
+
+          <!-- ── transcript snippet inside same page for design demo ── -->
+          <div class="transcript-block">
+            <div class="h">
+              <span class="eyebrow">§ TRANSCRIPT · ANCHOR · 11:42</span>
+              <span class="meta">2-COLUMN · SPEAKER · ITALIC FOR PATIENT</span>
+            </div>
+
+            <div class="turn doctor">
+              <div class="who">DR. MEHTA <span class="ts">11:38</span></div>
+              <div class="said">So how have the stairs been since we last met? Same as before, or different?</div>
+            </div>
+            <div class="turn patient">
+              <div class="who">PATIENT <span class="ts">11:41</span></div>
+              <div class="said">Different. I have to stop, just halfway up to the landing now. I used to make it all the way up to my daughter's bedroom without thinking. So that bothered me.</div>
+            </div>
+            <div class="turn doctor">
+              <div class="who">DR. MEHTA <span class="ts">11:48</span></div>
+              <div class="said">And the swelling — you mentioned a little around your ankles in the morning?</div>
+            </div>
+            <div class="turn patient">
+              <div class="who">PATIENT <span class="ts">11:52</span></div>
+              <div class="said">By the end of the day, mostly. I noticed my socks left a little dent.</div>
+            </div>
+            <div class="turn doctor">
+              <div class="who">DR. MEHTA <span class="ts">11:42 · ★</span></div>
+              <div class="said">Okay. Let's add the spironolactone, twenty-five a day, and bump the lisinopril to forty. We'll get a basic metabolic panel in a week to keep an eye on the potassium.</div>
+            </div>
+          </div>
+
+        </article>
+      </section>
+
+      <!-- right rail -->
+      <aside class="right-rail">
+
+        <div class="rr-card">
+          <div class="h">
+            <span>§ VISIT</span>
+            <span class="accent-text">14:22</span>
+          </div>
+          <div class="body">
+            <dl class="kv">
+              <dt>Patient</dt><dd><em>Maria Lopez</em></dd>
+              <dt>MRN</dt><dd>4019822</dd>
+              <dt>Specialty</dt><dd>Cardiology</dd>
+              <dt>Type</dt><dd>Follow-up</dd>
+              <dt>Captured</dt><dd>Apr 29 · 19:33</dd>
+              <dt>Audio</dt><dd>14:22 · 96kHz</dd>
+              <dt>Drafted</dt><dd>19:42 · 7 sec</dd>
+            </dl>
+          </div>
+        </div>
+
+        <div class="rr-card">
+          <div class="h">
+            <span>§ PIPELINE TRACE</span>
+            <span class="accent-text">3 OF 5 LIVE</span>
+          </div>
+          <div class="body" style="padding: 6px 18px 10px;">
+            <div class="layer done"><span class="dot"></span><span class="name">L1 · TRANSCRIPTION</span><span class="ms">2.1 s</span></div>
+            <div class="layer done"><span class="dot"></span><span class="name">L2 · SPEAKER DIARIZATION</span><span class="ms">0.6 s</span></div>
+            <div class="layer active"><span class="dot"></span><span class="name">L3 · SUBJECTIVE DRAFT</span><span class="ms">live</span></div>
+            <div class="layer"><span class="dot"></span><span class="name">L4 · RX SAFETY</span><span class="ms">queued</span></div>
+            <div class="layer"><span class="dot"></span><span class="name">L5 · PT SUMMARY</span><span class="ms">queued</span></div>
+          </div>
+        </div>
+
+        <div class="rr-card">
+          <div class="h">
+            <span>§ AUDIT</span>
+            <span class="accent-text">7 EVENTS</span>
+          </div>
+          <div class="body" style="padding: 6px 18px 14px;">
+            <div class="audit-row"><span class="who">19:33:08</span><span>UPLOAD · SUCCESS</span></div>
+            <div class="audit-row"><span class="who">19:33:14</span><span class="accent">L1 · STARTED</span></div>
+            <div class="audit-row"><span class="who">19:35:22</span><span>L1 · COMPLETE</span></div>
+            <div class="audit-row"><span class="who">19:35:24</span><span>L2 · COMPLETE</span></div>
+            <div class="audit-row"><span class="who">19:42:18</span><span>L3 · DRAFT v1</span></div>
+            <div class="audit-row"><span class="who">19:48:02</span><span class="accent">REGEN · USER</span></div>
+            <div class="audit-row"><span class="who">19:48:06</span><span>L3 · DRAFT v2 · LIVE</span></div>
+          </div>
+        </div>
+
+        <div class="rr-card">
+          <div class="h">
+            <span>§ MEDICATIONS · CURRENT</span>
+            <span>5</span>
+          </div>
+          <div class="body" style="font-family: var(--mono); font-size: 11px; color: var(--fg-2);">
+            <div style="padding: 7px 0; border-bottom: 1px solid var(--line-soft); display: flex; justify-content: space-between;"><span>LISINOPRIL</span><span style="color: var(--fg-3)">20 → 40 MG</span></div>
+            <div style="padding: 7px 0; border-bottom: 1px solid var(--line-soft); display: flex; justify-content: space-between;"><span>METFORMIN</span><span style="color: var(--fg-3)">1000 MG BID</span></div>
+            <div style="padding: 7px 0; border-bottom: 1px solid var(--line-soft); display: flex; justify-content: space-between;"><span style="color: var(--accent-bright)">SPIRONOLACTONE</span><span style="color: var(--accent-bright)">+ 25 MG QD</span></div>
+            <div style="padding: 7px 0; border-bottom: 1px solid var(--line-soft); display: flex; justify-content: space-between;"><span>ATORVASTATIN</span><span style="color: var(--fg-3)">40 MG QHS</span></div>
+            <div style="padding: 7px 0; display: flex; justify-content: space-between;"><span>ASPIRIN</span><span style="color: var(--fg-3)">81 MG QD</span></div>
+          </div>
+        </div>
+
+        <div class="rr-card">
+          <div class="h">
+            <span>§ NOTES · PRIVATE</span>
+            <span class="accent-text">+ ADD</span>
+          </div>
+          <div class="body" style="padding: 16px 18px;">
+            <div style="font-family: var(--serif); font-style: italic; font-size: 13px; color: var(--fg-3); line-height: 1.55;">
+              No private notes. Press <span style="font-family: var(--mono); font-style: normal; color: var(--fg);">⌘ Ø</span> to add a memo only you will see.
+            </div>
+          </div>
+        </div>
+
+      </aside>
+    </div>
+
+    <footer>
+      <span>QuillMD · v0.1.0-beta</span>
+      <span><span style="color: var(--accent)">●</span> &nbsp;LIVE · LATENCY 412 MS · LAST EVENT 19:48:06</span>
+    </footer>
+
+  </div>
+</div>
+
+<script>
+  // typewriter for the AI live text
+  (function () {
+    var el = document.getElementById('ai-live-text');
+    if (!el) return;
+    var stages = ["Drafting subjective", "Refining HPI", "Cross-referencing prior visit", "Drafting subjective"];
+    var i = 0;
+    function tick() {
+      var s = stages[i % stages.length];
+      el.textContent = "";
+      var p = 0;
+      var typ = setInterval(function () {
+        if (p > s.length) { clearInterval(typ); return; }
+        el.textContent = s.slice(0, p);
+        p++;
+      }, 38);
+      i++;
+    }
+    tick();
+    setInterval(tick, 3200);
+  })();
+</script>
+
+</body>
+</html>

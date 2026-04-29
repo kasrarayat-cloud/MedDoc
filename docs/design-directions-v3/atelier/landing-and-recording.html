@@ -1,0 +1,768 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QuillMD — Atelier · Landing & Recording</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,300..700;1,8..60,300..700&family=Inter+Tight:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root {
+    --cream:        #FAF7F0;
+    --cream-2:      #F2EDE3;
+    --cream-3:      #EAE3D5;
+    --ink-15:       #E5DED1;
+    --ink-25:       #C9C0AF;
+    --ink-40:       #9C958A;
+    --ink-55:       #6E685E;
+    --ink-70:       #3F3A33;
+    --ink:          #1A1714;
+    --oxblood:      #7B1F2D;
+    --oxblood-deep: #5A1721;
+
+    --serif: "Source Serif 4", "Source Serif Pro", Georgia, serif;
+    --sans:  "Inter Tight", system-ui, -apple-system, sans-serif;
+    --mono:  "JetBrains Mono", ui-monospace, Menlo, monospace;
+  }
+
+  html, body { background: var(--cream); color: var(--ink-70); }
+  body {
+    font-family: var(--serif);
+    font-size: 17px;
+    line-height: 1.7;
+    font-feature-settings: "kern", "liga", "onum";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  ::selection { background: var(--oxblood); color: var(--cream); }
+
+  /* The atlas of Atelier — every primitive lives here. */
+
+  .atl-display {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: clamp(36px, 4.4vw, 56px);
+    line-height: 1.04;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+  .atl-h1 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: 32px;
+    line-height: 1.1;
+    letter-spacing: -0.018em;
+    color: var(--ink);
+  }
+  .atl-h2 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: 21px;
+    line-height: 1.25;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+  }
+  .atl-prose {
+    font-family: var(--serif);
+    font-size: 18px;
+    line-height: 1.72;
+    color: var(--ink-70);
+    max-width: 64ch;
+  }
+  .atl-prose p + p { margin-top: 1em; text-indent: 1.2em; }
+  .atl-prose p:first-of-type { text-indent: 0; }
+  .atl-prose em { font-style: italic; color: var(--ink); }
+
+  .atl-dropcap::first-letter {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 4.6em;
+    line-height: 0.86;
+    float: left;
+    margin: 0.06em 0.08em -0.04em 0;
+    color: var(--ink);
+    font-feature-settings: "lnum";
+  }
+
+  .atl-smallcaps {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-55);
+  }
+  .atl-mono {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    letter-spacing: 0.01em;
+    color: var(--ink-55);
+    font-feature-settings: "tnum";
+  }
+
+  .atl-byline {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 14.5px;
+    color: var(--ink-55);
+    line-height: 1.55;
+  }
+
+  .atl-rule { height: 1px; background: var(--ink-15); border: 0; margin: 0; }
+  .atl-rule-strong { height: 1px; background: var(--ink-25); border: 0; margin: 0; }
+  .atl-rule-vert { width: 1px; align-self: stretch; background: var(--ink-15); }
+
+  /* Links — never underlined by default; oxblood on hover. */
+  a.atl-link {
+    color: inherit;
+    text-decoration: none;
+    transition: color 140ms ease;
+    border-bottom: 1px solid transparent;
+  }
+  a.atl-link:hover { color: var(--oxblood); }
+
+  a.atl-link-ul {
+    color: inherit;
+    text-decoration: none;
+    background-image: linear-gradient(var(--ink-25), var(--ink-25));
+    background-position: 0 100%;
+    background-size: 100% 1px;
+    background-repeat: no-repeat;
+    transition: background-image 180ms ease, color 140ms ease;
+    padding-bottom: 2px;
+  }
+  a.atl-link-ul:hover {
+    color: var(--oxblood);
+    background-image: linear-gradient(var(--oxblood), var(--oxblood));
+  }
+
+  /* Buttons. Two only: primary and ghost. */
+  .atl-btn {
+    font-family: var(--sans);
+    font-weight: 500;
+    font-size: 14px;
+    letter-spacing: 0.005em;
+    line-height: 1;
+    padding: 12px 22px;
+    border: 1px solid var(--ink);
+    background: var(--ink);
+    color: var(--cream);
+    cursor: pointer;
+    transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
+  }
+  .atl-btn:hover {
+    background: var(--oxblood-deep);
+    border-color: var(--oxblood-deep);
+  }
+  .atl-btn-ghost {
+    background: transparent;
+    color: var(--ink);
+    border: 1px solid var(--ink-25);
+  }
+  .atl-btn-ghost:hover {
+    background: transparent;
+    color: var(--oxblood);
+    border-color: var(--ink-40);
+  }
+
+  /* Pill — flat, 1px border, all-caps mono. No fill. No gradient. */
+  .atl-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-70);
+    border: 1px solid var(--ink-25);
+    padding: 4px 9px 3px;
+    line-height: 1;
+    background: transparent;
+  }
+  .atl-pill .dot {
+    width: 4px; height: 4px; border-radius: 50%;
+    background: var(--ink-40);
+  }
+  .atl-pill.is-critical .dot { background: var(--oxblood); }
+
+  /* Editorial input — flat, hairline border, no shadow. */
+  .atl-input {
+    font-family: var(--serif);
+    font-size: 16px;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid var(--ink-25);
+    color: var(--ink);
+    padding: 8px 0;
+    width: 100%;
+    transition: border-color 140ms ease;
+  }
+  .atl-input:focus { outline: none; border-bottom-color: var(--ink); }
+
+  /* Recording widget — a typographic moment. */
+  .atl-rec {
+    position: relative;
+    padding: 36px 40px 40px;
+    border-top: 1px solid var(--ink-15);
+    border-bottom: 1px solid var(--ink-15);
+    background: var(--cream);
+  }
+  .atl-rec-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--oxblood);
+    box-shadow: 0 0 0 0 rgba(123, 31, 45, 0.0);
+    animation: atl-dot-pulse 2.4s ease-in-out infinite;
+  }
+  @keyframes atl-dot-pulse {
+    0%, 100% { opacity: 1.0; box-shadow: 0 0 0 0 rgba(123, 31, 45, 0.45); }
+    50%      { opacity: 0.55; box-shadow: 0 0 0 6px rgba(123, 31, 45, 0); }
+  }
+  /* Patient name underline — slow drawing accent rule. */
+  .atl-rec-name-rule {
+    height: 2px;
+    width: 0;
+    background: var(--oxblood);
+    animation: atl-rule-draw 2.6s ease-out forwards;
+    margin-top: 4px;
+  }
+  @keyframes atl-rule-draw {
+    0%   { width: 0; }
+    100% { width: 100%; }
+  }
+
+  /* The thought line — ONE italic serif line that crossfades through phases. */
+  .atl-thought {
+    position: relative;
+    height: 28px;
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 16.5px;
+    color: var(--ink-55);
+    line-height: 28px;
+  }
+  .atl-thought span {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 600ms ease;
+  }
+  .atl-thought span.is-on { opacity: 1; }
+
+  /* VU breath — a single paragraph-rule that contracts gently. NO bars. */
+  .atl-breath {
+    height: 1px;
+    background: linear-gradient(90deg,
+      transparent 0%,
+      var(--ink-40) 14%,
+      var(--ink-40) 86%,
+      transparent 100%);
+    transform-origin: 50% 50%;
+    animation: atl-breath 4s ease-in-out infinite;
+    opacity: 0.6;
+  }
+  @keyframes atl-breath {
+    0%, 100% { transform: scaleX(0.62); opacity: 0.6; }
+    50%      { transform: scaleX(1.0);  opacity: 0.85; }
+  }
+
+  /* Mic glyph — line-art only. */
+  .atl-mic {
+    width: 16px; height: 16px;
+    stroke: var(--ink-70); stroke-width: 1.25;
+    fill: none;
+  }
+
+  /* Top nav — thin line of links, single accent dot. */
+  .atl-topnav {
+    border-bottom: 1px solid var(--ink-15);
+    background: var(--cream);
+  }
+  .atl-topnav a:hover { color: var(--oxblood); }
+
+  .atl-wordmark {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: 19.5px;
+    letter-spacing: -0.012em;
+    color: var(--ink);
+    line-height: 1;
+  }
+  .atl-wordmark .amp {
+    font-style: italic;
+    color: var(--ink-55);
+    font-weight: 400;
+  }
+
+  /* Drop-shadow REMOVED from vocabulary. Keep this empty. */
+
+  .atl-card-flat {
+    background: transparent;
+    border: 1px solid var(--ink-15);
+    padding: 28px 32px;
+  }
+
+  .atl-quiet-illust {
+    width: 220px; height: 130px;
+    stroke: var(--ink-25); stroke-width: 1; fill: none;
+  }
+
+  /* Faint grain — paper, not noise. Optional. */
+  .atl-paper::before {
+    content: "";
+    position: fixed; inset: 0;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.10  0 0 0 0 0.09  0 0 0 0 0.07  0 0 0 0.045 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+    opacity: 0.45;
+    mix-blend-mode: multiply;
+    z-index: 1;
+  }
+
+  /* Stage / scene container is z-indexed above grain. */
+  .atl-z { position: relative; z-index: 2; }
+
+  /* Folio line at the foot of major sections — like the bottom of a magazine page. */
+  .atl-folio {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--ink-40);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+
+  /* Scene: success lockup. Patient name + accent rule + signed lockup. */
+  .atl-success {
+    border-top: 1px solid var(--ink-15);
+    border-bottom: 1px solid var(--ink-15);
+    padding: 40px 0 36px;
+  }
+
+  /* Footnote rule — like a 3em hairline above editor's notes. */
+  .atl-footrule {
+    width: 64px; height: 1px; background: var(--ink-25); margin: 32px 0 18px;
+  }
+</style>
+</head>
+<body class="atl-paper">
+
+<div class="atl-z">
+
+<!-- =========================================== -->
+<!-- TOP NAV                                     -->
+<!-- =========================================== -->
+<header class="atl-topnav">
+  <div class="max-w-[1200px] mx-auto px-12 py-5 flex items-center justify-between">
+    <a href="#" class="atl-wordmark atl-link">Quill<span class="amp">&amp;</span>MD</a>
+    <nav class="hidden md:flex items-center gap-9">
+      <a href="#" class="atl-link" style="font-family:var(--sans); font-size:13.5px;">For physicians</a>
+      <a href="#" class="atl-link" style="font-family:var(--sans); font-size:13.5px;">Practices</a>
+      <a href="#" class="atl-link" style="font-family:var(--sans); font-size:13.5px;">Method</a>
+      <a href="#" class="atl-link" style="font-family:var(--sans); font-size:13.5px;">Journal</a>
+      <a href="#" class="atl-link" style="font-family:var(--sans); font-size:13.5px;">Pricing</a>
+    </nav>
+    <div class="flex items-center gap-7">
+      <a href="#" class="atl-link" style="font-family:var(--sans); font-size:13.5px; color: var(--ink-55);">Sign in</a>
+      <a href="#" class="atl-btn" style="padding: 9px 16px; font-size: 13px;">Begin a visit &nbsp;→</a>
+    </div>
+  </div>
+</header>
+
+<!-- =========================================== -->
+<!-- HERO — the editorial landing                -->
+<!-- =========================================== -->
+<section>
+  <div class="max-w-[1200px] mx-auto px-12 pt-24 pb-12">
+
+    <!-- Top dateline — small caps mono, like a magazine masthead -->
+    <div class="atl-smallcaps mb-8">Vol. I &nbsp;·&nbsp; No. 04 &nbsp;·&nbsp; The Clinical Encounter</div>
+
+    <!-- The display headline — single column, ~720px max -->
+    <div class="max-w-[760px]">
+      <h1 class="atl-display mb-7">
+        Listen to the patient.
+        <br>
+        <span style="color: var(--ink-55); font-style: italic; font-weight: 400;">We will keep the record.</span>
+      </h1>
+      <div class="atl-byline mb-1">
+        An ambient documentation tool, written for the physician who reads carefully.
+      </div>
+    </div>
+
+    <hr class="atl-rule" style="margin: 56px 0 48px;">
+
+    <!-- Two-column body (deck + lede), but lede dominates -->
+    <div class="grid grid-cols-12 gap-12 max-w-[1080px]">
+
+      <!-- Left: small department label + meta -->
+      <aside class="col-span-3 pt-1">
+        <div class="atl-smallcaps mb-3" style="color: var(--ink-40);">A note from the editor</div>
+        <p class="atl-mono" style="line-height: 1.6; color: var(--ink-55);">
+          Built for cardiology, internal medicine, family practice, and the next physician who is tired of typing past 8 PM.
+        </p>
+        <div class="atl-footrule"></div>
+        <div class="atl-byline">
+          — Caroline Hsu, MD<br>
+          <span class="atl-mono" style="font-size: 11.5px; color: var(--ink-40);">Founder &amp; chief medical officer</span>
+        </div>
+      </aside>
+
+      <!-- Lede — the dropcap paragraph -->
+      <article class="col-span-9 atl-prose atl-dropcap">
+        <p>
+          The chart is not the visit. The chart is what remains of the visit, written down,
+          after the room has emptied and the patient has gone home and you, the physician,
+          are alone with a keyboard. <em>Quill&amp;MD listens to the visit while you conduct it</em>,
+          and writes the chart for you in the room's own language &mdash; the patient's words,
+          your assessment, your plan &mdash; rendered in the format your service requires,
+          ready for your review and your signature, and nothing more.
+        </p>
+        <p>
+          We do not animate the AI for you. We do not show you orbs. We have decided
+          that a doctor scanning a chart at 7:45 PM on a Tuesday does not require theater.
+          We will, instead, show you the words. Whether they are correct is the only
+          question that matters, and the only question we have built this product to help
+          you answer.
+        </p>
+      </article>
+    </div>
+
+    <!-- CTA row — restrained -->
+    <div class="flex items-center gap-6 mt-14 max-w-[760px]">
+      <a href="#" class="atl-btn">Begin a visit &nbsp;→</a>
+      <a href="#" class="atl-link-ul" style="font-family: var(--sans); font-size: 14px;">Read the method &nbsp;→</a>
+      <span class="atl-mono" style="margin-left: auto; color: var(--ink-40);">No card required · 14-day trial</span>
+    </div>
+
+  </div>
+</section>
+
+<!-- =========================================== -->
+<!-- THE RECORDING MOMENT — typographic only     -->
+<!-- =========================================== -->
+<section>
+  <div class="max-w-[1200px] mx-auto px-12 pt-8">
+
+    <div class="atl-smallcaps mb-3" style="color: var(--ink-40);">§ I. &nbsp; In session</div>
+    <h2 class="atl-h1 mb-2 max-w-[740px]">
+      A visit, recording.
+    </h2>
+    <p class="atl-byline mb-10 max-w-[640px]">
+      Below: the recording widget as it appears during a live encounter. No orb.
+      No spotlight. A single dot, a thin rule under the patient's name, a line
+      of italic prose that names what the model is doing, in plain English.
+    </p>
+
+  </div>
+
+  <!-- Recording widget — bordered above and below by hairline rules, full-bleed within max-width -->
+  <div class="max-w-[1200px] mx-auto px-12">
+    <div class="atl-rec">
+      <div class="grid grid-cols-12 gap-10 items-start">
+
+        <!-- Left: the dot + state label + breath -->
+        <div class="col-span-3">
+          <div class="flex items-center gap-3 mb-4">
+            <span class="atl-rec-dot"></span>
+            <span class="atl-smallcaps" style="color: var(--oxblood);">Now recording</span>
+          </div>
+          <div class="atl-breath" style="max-width: 220px;"></div>
+          <div class="atl-mono mt-5" style="color: var(--ink-55);">
+            <span style="display:inline-block; min-width: 60px; color: var(--ink);">14:32</span>
+            <span style="color: var(--ink-25);">/</span>
+            <span style="margin-left: 6px;">elapsed</span>
+          </div>
+
+          <hr class="atl-rule" style="margin: 22px 0 18px;">
+
+          <div class="flex items-center gap-3">
+            <svg class="atl-mic" viewBox="0 0 16 16">
+              <rect x="6" y="2" width="4" height="8" rx="2"></rect>
+              <path d="M3.5 7.5 v0.5 a4.5 4.5 0 0 0 9 0 v-0.5"></path>
+              <path d="M8 12.5 v1.5"></path>
+              <path d="M5.5 14 h5"></path>
+            </svg>
+            <span class="atl-mono" style="color: var(--ink-55);">MacBook · Built-in</span>
+          </div>
+        </div>
+
+        <!-- Center: patient lockup + accent rule + thought line -->
+        <div class="col-span-6">
+          <div class="atl-smallcaps mb-2" style="color: var(--ink-40);">Patient</div>
+          <div class="atl-h1" style="font-size: 30px; line-height: 1.15;">
+            John Smith
+            <span style="font-family: var(--serif); font-style: italic; font-weight: 400; color: var(--ink-55); font-size: 18px; letter-spacing: 0;">
+              &nbsp; b. 1967 &middot; M
+            </span>
+          </div>
+          <div class="atl-rec-name-rule"></div>
+
+          <div class="mt-6 atl-mono" style="color: var(--ink-55);">
+            Cardiology &nbsp;·&nbsp; Follow-up &nbsp;·&nbsp; SOAP (full)
+          </div>
+
+          <hr class="atl-rule" style="margin: 22px 0;">
+
+          <!-- The thought line — ONE italic line, crossfading through three messages -->
+          <div class="atl-thought" id="thoughtLine">
+            <span class="is-on" data-i="0">Listening &mdash; the patient is describing chest tightness on exertion.</span>
+            <span data-i="1">Recognising clinical terms. <em>R07.9, dyspnea, palpitations.</em></span>
+            <span data-i="2">Holding the transcript &mdash; ready to draft when you stop.</span>
+          </div>
+        </div>
+
+        <!-- Right: controls, all line-art and small caps -->
+        <div class="col-span-3 flex flex-col items-end gap-4">
+          <button class="atl-btn-ghost atl-btn" style="padding: 10px 18px; font-size: 13px; min-width: 132px;">
+            Pause
+          </button>
+          <button class="atl-btn" style="padding: 10px 18px; font-size: 13px; min-width: 132px;">
+            End &amp; draft &nbsp;→
+          </button>
+          <hr class="atl-rule" style="width: 100%; margin: 6px 0 4px;">
+          <div class="atl-mono text-right" style="color: var(--ink-40); font-size: 11.5px;">
+            ⌘ + ↵ &nbsp; end visit<br>
+            ⌘ + space &nbsp; pause
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- =========================================== -->
+<!-- AI PROCESSING — italic crossfade only       -->
+<!-- =========================================== -->
+<section>
+  <div class="max-w-[1200px] mx-auto px-12 pt-24">
+
+    <div class="atl-smallcaps mb-3" style="color: var(--ink-40);">§ II. &nbsp; While the model writes</div>
+    <h2 class="atl-h1 mb-3 max-w-[740px]">
+      We do not pretend the chart writes itself.
+    </h2>
+    <p class="atl-byline mb-10 max-w-[680px]">
+      A pipeline diagram would be dishonest. The model does several things in
+      sequence. We tell you which, in one line, and then we get out of the way.
+    </p>
+
+    <!-- The processing card — flat, hairline border, NO orb, NO beam -->
+    <div class="atl-card-flat" style="max-width: 880px;">
+      <div class="grid grid-cols-12 gap-8 items-center">
+        <div class="col-span-4">
+          <div class="atl-smallcaps mb-2" style="color: var(--ink-40);">Drafting · John Smith</div>
+          <div class="atl-h2" style="font-family: var(--serif); font-size: 18px;">
+            14 minutes of audio
+          </div>
+          <div class="atl-mono mt-1" style="color: var(--ink-55);">2,840 words · 2 speakers</div>
+        </div>
+
+        <div class="col-span-1">
+          <div class="atl-rule-vert" style="height: 56px; margin: 0 auto;"></div>
+        </div>
+
+        <!-- The italic crossfade — 4 lines, 800ms each -->
+        <div class="col-span-7">
+          <div class="atl-smallcaps mb-2" style="color: var(--ink-40);">Now</div>
+          <div class="atl-thought" id="thoughtLine2" style="height: 32px; font-size: 17px; line-height: 32px; color: var(--ink-70);">
+            <span class="is-on" data-i="0">Reviewing transcript &mdash; 14 minutes, two speakers identified.</span>
+            <span data-i="1">Separating physician dialogue from patient dialogue.</span>
+            <span data-i="2">Drafting <em>subjective</em> &mdash; chief complaint, history, review of systems.</span>
+            <span data-i="3">Polishing &mdash; readable English, your idiom, clinical accuracy.</span>
+          </div>
+        </div>
+      </div>
+
+      <hr class="atl-rule" style="margin: 22px 0 18px;">
+      <div class="atl-mono" style="color: var(--ink-40); font-size: 11.5px;">
+        <span style="color: var(--oxblood);">●</span> &nbsp; Model: gpt-4o-medical-v3 &nbsp;·&nbsp; HIPAA · BAA on file &nbsp;·&nbsp; Encrypted in transit &amp; at rest
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- =========================================== -->
+<!-- SUCCESS — patient name lockup + signed line -->
+<!-- =========================================== -->
+<section>
+  <div class="max-w-[1200px] mx-auto px-12 pt-24">
+
+    <div class="atl-smallcaps mb-3" style="color: var(--ink-40);">§ III. &nbsp; The completion is the reward</div>
+    <h2 class="atl-h1 mb-3 max-w-[740px]">
+      Signed.
+    </h2>
+    <p class="atl-byline mb-10 max-w-[680px]">
+      No confetti. No animation. The chart, finished, is the reward; we mark
+      the moment with a single rule and a timestamp set in small-caps mono.
+    </p>
+
+    <div class="atl-success" style="max-width: 760px;">
+      <div class="flex items-baseline gap-6">
+        <div>
+          <div class="atl-display" style="font-size: 44px; line-height: 1.05;">
+            John Smith
+          </div>
+          <div style="height: 3px; width: 96px; background: var(--oxblood); margin-top: 10px;"></div>
+        </div>
+        <div style="margin-left: auto;" class="text-right">
+          <div class="atl-smallcaps" style="color: var(--ink-70);">Signed &nbsp;·&nbsp; 2:14 PM</div>
+          <div class="atl-mono mt-1" style="color: var(--ink-40); font-size: 11.5px;">
+            Apr 29, 2026 &nbsp;·&nbsp; Dr. Caroline Hsu
+          </div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-3 gap-10 mt-10">
+        <div>
+          <div class="atl-smallcaps mb-2" style="color: var(--ink-40);">Encounter</div>
+          <div class="atl-byline" style="color: var(--ink-70);">Cardiology follow-up · 14 min</div>
+        </div>
+        <div>
+          <div class="atl-smallcaps mb-2" style="color: var(--ink-40);">Diagnoses</div>
+          <div class="atl-byline" style="color: var(--ink-70);">R07.9 &middot; I10 &middot; E78.5</div>
+        </div>
+        <div>
+          <div class="atl-smallcaps mb-2" style="color: var(--ink-40);">Format</div>
+          <div class="atl-byline" style="color: var(--ink-70);">SOAP (full) · attested</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-6 mt-10" style="max-width: 760px;">
+      <a href="#" class="atl-btn">Open chart &nbsp;→</a>
+      <a href="#" class="atl-link-ul" style="font-family: var(--sans); font-size: 14px;">Send to EHR</a>
+      <a href="#" class="atl-link-ul" style="font-family: var(--sans); font-size: 14px;">Print</a>
+      <span class="atl-mono" style="margin-left: auto; color: var(--ink-40);">Audit log: 7 entries</span>
+    </div>
+
+  </div>
+</section>
+
+<!-- =========================================== -->
+<!-- EMPTY STATE — quiet                         -->
+<!-- =========================================== -->
+<section>
+  <div class="max-w-[1200px] mx-auto px-12 pt-24">
+
+    <div class="atl-smallcaps mb-3" style="color: var(--ink-40);">§ IV. &nbsp; Before the first visit</div>
+    <h2 class="atl-h1 mb-3 max-w-[740px]">
+      Nothing here yet.
+    </h2>
+
+    <div style="max-width: 720px; padding: 56px 0 64px; text-align: left; border-top: 1px solid var(--ink-15); border-bottom: 1px solid var(--ink-15);">
+
+      <!-- Quiet illustration: a single line-art quill on paper -->
+      <svg class="atl-quiet-illust" viewBox="0 0 220 130" style="margin: 8px 0 32px;">
+        <!-- the page -->
+        <rect x="20" y="22" width="120" height="92" rx="1" stroke="var(--ink-25)" />
+        <line x1="36" y1="44" x2="124" y2="44" stroke="var(--ink-25)" />
+        <line x1="36" y1="56" x2="118" y2="56" stroke="var(--ink-25)" />
+        <line x1="36" y1="68" x2="124" y2="68" stroke="var(--ink-25)" />
+        <line x1="36" y1="80" x2="100" y2="80" stroke="var(--ink-25)" />
+        <line x1="36" y1="92" x2="116" y2="92" stroke="var(--ink-25)" />
+        <!-- the quill -->
+        <path d="M150 18 L196 64 L186 70 L142 24 Z" stroke="var(--ink-40)" stroke-linejoin="miter" />
+        <line x1="142" y1="24" x2="155" y2="40" stroke="var(--ink-40)" />
+        <line x1="148" y1="20" x2="160" y2="34" stroke="var(--ink-40)" />
+        <!-- the inkwell hint -->
+        <circle cx="178" cy="100" r="8" stroke="var(--ink-25)" />
+        <circle cx="178" cy="100" r="2.4" fill="var(--oxblood)" stroke="none" />
+      </svg>
+
+      <p class="atl-prose" style="max-width: 560px;">
+        You haven't recorded a visit yet. When you begin one, we will listen,
+        take down what is said, and draft a chart in the format you choose.
+        The first time takes a moment to set up; every visit after takes none.
+      </p>
+
+      <div class="flex items-center gap-6 mt-8">
+        <a href="#" class="atl-btn">Begin first visit &nbsp;→</a>
+        <a href="#" class="atl-link-ul" style="font-family: var(--sans); font-size: 14px;">Watch a 90-second walk-through</a>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- =========================================== -->
+<!-- FOOTER — masthead-style                     -->
+<!-- =========================================== -->
+<footer>
+  <div class="max-w-[1200px] mx-auto px-12 pt-24 pb-16">
+    <hr class="atl-rule-strong">
+    <div class="grid grid-cols-12 gap-10 pt-10">
+      <div class="col-span-4">
+        <a href="#" class="atl-wordmark atl-link" style="font-size: 22px;">Quill<span class="amp">&amp;</span>MD</a>
+        <p class="atl-byline mt-3" style="max-width: 320px;">
+          Ambient documentation, made for the physician who reads. Founded 2024 in
+          Boston. Independent. Privately held. We do not sell data.
+        </p>
+      </div>
+      <div class="col-span-2">
+        <div class="atl-smallcaps mb-3" style="color: var(--ink-40);">Product</div>
+        <ul class="space-y-1.5" style="font-family: var(--sans); font-size: 13.5px;">
+          <li><a class="atl-link" href="#">For physicians</a></li>
+          <li><a class="atl-link" href="#">For practices</a></li>
+          <li><a class="atl-link" href="#">Specialties</a></li>
+          <li><a class="atl-link" href="#">Pricing</a></li>
+        </ul>
+      </div>
+      <div class="col-span-2">
+        <div class="atl-smallcaps mb-3" style="color: var(--ink-40);">Method</div>
+        <ul class="space-y-1.5" style="font-family: var(--sans); font-size: 13.5px;">
+          <li><a class="atl-link" href="#">How it works</a></li>
+          <li><a class="atl-link" href="#">Security &amp; HIPAA</a></li>
+          <li><a class="atl-link" href="#">Clinical accuracy</a></li>
+          <li><a class="atl-link" href="#">Validation studies</a></li>
+        </ul>
+      </div>
+      <div class="col-span-2">
+        <div class="atl-smallcaps mb-3" style="color: var(--ink-40);">Journal</div>
+        <ul class="space-y-1.5" style="font-family: var(--sans); font-size: 13.5px;">
+          <li><a class="atl-link" href="#">Field notes</a></li>
+          <li><a class="atl-link" href="#">Changelog</a></li>
+          <li><a class="atl-link" href="#">For developers</a></li>
+        </ul>
+      </div>
+      <div class="col-span-2">
+        <div class="atl-smallcaps mb-3" style="color: var(--ink-40);">Office</div>
+        <p class="atl-byline" style="font-size: 13.5px;">
+          1 Charles St., Suite 4B<br>
+          Boston, MA 02114<br>
+          <a class="atl-link" href="#">hello@quillmd.com</a>
+        </p>
+      </div>
+    </div>
+
+    <hr class="atl-rule" style="margin: 36px 0 18px;">
+    <div class="flex items-center justify-between">
+      <div class="atl-folio">Vol. I &nbsp;·&nbsp; No. 04 &nbsp;·&nbsp; April MMXXVI</div>
+      <div class="atl-folio" style="color: var(--ink-40);">© Quill&amp;MD &nbsp;·&nbsp; All rights reserved</div>
+    </div>
+  </div>
+</footer>
+
+</div><!-- /atl-z -->
+
+<script>
+  // Crossfade through the italic thought lines.
+  // Single property animation (opacity), <200ms transitions, 800ms dwell.
+  function rotateThought(rootId, dwellMs = 2400) {
+    const root = document.getElementById(rootId);
+    if (!root) return;
+    const items = root.querySelectorAll("span");
+    let i = 0;
+    setInterval(() => {
+      items.forEach(s => s.classList.remove("is-on"));
+      i = (i + 1) % items.length;
+      items[i].classList.add("is-on");
+    }, dwellMs);
+  }
+  rotateThought("thoughtLine", 3000);  // recording — slower
+  rotateThought("thoughtLine2", 1600); // processing — faster, like the model is working
+</script>
+
+</body>
+</html>
