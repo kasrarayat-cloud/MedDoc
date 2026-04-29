@@ -53,6 +53,7 @@ export default async function UsersPage({ searchParams }: Props) {
       params={params}
       currentUserId={session?.user?.id ?? ''}
       currentUserEmail={session?.user?.email ?? 'admin'}
+      theme="clinician"
     />
   );
 }
