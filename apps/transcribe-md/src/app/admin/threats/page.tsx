@@ -22,5 +22,5 @@ export const revalidate = 0;
 
 export default async function ThreatsPage() {
   const initial = await getThreatsPageData();
-  return <AdminThreats initial={initial} />;
+  return <AdminThreats initial={initial} theme="clinician" />;
 }
