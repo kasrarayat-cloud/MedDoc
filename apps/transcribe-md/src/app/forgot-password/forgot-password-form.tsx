@@ -47,7 +47,7 @@ export function ForgotPasswordForm() {
     return (
       <div
         style={{
-          marginTop: 20,
+          marginTop: 22,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
@@ -55,11 +55,28 @@ export function ForgotPasswordForm() {
           textAlign: 'center',
         }}
       >
-        <p style={{ margin: 0, fontSize: 13.5, color: 'var(--fg-2)' }}>
-          If an account exists for <strong style={{ color: 'var(--fg)' }}>{email}</strong>,
+        <p
+          className="qm-cl-serif"
+          style={{
+            margin: 0,
+            fontSize: 15,
+            color: 'var(--ink-2)',
+            lineHeight: 1.6,
+            fontStyle: 'italic',
+          }}
+        >
+          If an account exists for{' '}
+          <strong style={{ color: 'var(--ink)', fontStyle: 'normal' }}>{email}</strong>,
           we&apos;ve sent a reset link. It expires in 1 hour.
         </p>
-        <p style={{ margin: 0, fontSize: 12.5, color: 'var(--fg-3)' }}>
+        <p
+          style={{
+            margin: 0,
+            fontSize: 12.5,
+            color: 'var(--ink-3)',
+            fontFamily: 'var(--sans)',
+          }}
+        >
           Check your inbox — and your spam folder too.
         </p>
         <Link
@@ -67,7 +84,9 @@ export function ForgotPasswordForm() {
           style={{
             marginTop: 6,
             fontSize: 12.5,
-            color: 'var(--accent-bright)',
+            color: 'var(--sage-deep)',
+            fontFamily: 'var(--sans)',
+            fontWeight: 500,
           }}
         >
           ← Back to sign in
@@ -78,7 +97,7 @@ export function ForgotPasswordForm() {
 
   return (
     <form onSubmit={onSubmit} noValidate>
-      <div style={{ marginTop: 14 }}>
+      <div style={{ marginTop: 18 }}>
         <AuthFieldLabel htmlFor="email">Email</AuthFieldLabel>
         <input
           id="email"
@@ -88,7 +107,7 @@ export function ForgotPasswordForm() {
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="qm-input"
+          className="qm-cl-input"
           style={{ marginTop: 6 }}
         />
       </div>
@@ -98,11 +117,10 @@ export function ForgotPasswordForm() {
       <button
         type="submit"
         disabled={pending || !email.trim()}
-        className="qm-btn qm-btn-primary"
+        className="qm-cl-btn qm-cl-btn-primary qm-cl-btn-lg"
         style={{
           width: '100%',
           justifyContent: 'center',
-          padding: 12,
           marginTop: 22,
           opacity: pending || !email.trim() ? 0.6 : 1,
           cursor: pending || !email.trim() ? 'not-allowed' : 'pointer',
@@ -115,13 +133,14 @@ export function ForgotPasswordForm() {
       <div
         style={{
           textAlign: 'center',
-          color: 'var(--fg-3)',
+          color: 'var(--ink-3)',
           fontSize: 12.5,
           marginTop: 18,
+          fontFamily: 'var(--sans)',
         }}
       >
         Remembered it?{' '}
-        <Link href="/login" style={{ color: 'var(--accent-bright)' }}>
+        <Link href="/login" style={{ color: 'var(--sage-deep)', fontWeight: 500 }}>
           Back to sign in →
         </Link>
       </div>
