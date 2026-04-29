@@ -1,5 +1,17 @@
 'use client';
 
+// ============================================================================
+// AudioUploader — drop-zone + XHR upload to /api/visits/[id]/upload.
+// ----------------------------------------------------------------------------
+// Phase 2 (Clinician remodel) — Strategy A dual-theme via additive
+// `theme` prop. Default `'legacy'` keeps the dark glass + violet
+// gradient chrome verbatim. `theme="clinician"` swaps to a soft cream
+// `.qm-cl-card` drop-zone, sage line-art icon chip, Source Serif 4
+// title, and a primary `qm-cl-btn`. The XHR upload pipeline (URL,
+// progress events, error categorization, 202 success path) is preserved
+// byte-for-byte — only JSX/className surfaces change.
+// ============================================================================
+
 import { useCallback, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { UploadCloud, Mic, File as FileIcon, X, ArrowRight } from 'lucide-react';
@@ -14,17 +26,22 @@ const ACCEPT_ATTR = '.mp3,.m4a,.wav,.ogg,.webm,.flac,audio/*';
 
 const MAX_BYTES = 500 * 1024 * 1024;
 
+type AudioUploaderTheme = 'legacy' | 'clinician';
+
 interface AudioUploaderProps {
   visitId: string;
+  /** Phase 2 (Clinician remodel) — additive theme prop. */
+  theme?: AudioUploaderTheme;
 }
 
-export function AudioUploader({ visitId }: AudioUploaderProps) {
+export function AudioUploader({ visitId, theme = 'legacy' }: AudioUploaderProps) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const isClinician = theme === 'clinician';
 
   const pickFile = useCallback((f: File | null) => {
     if (!f) return;
@@ -151,8 +168,40 @@ export function AudioUploader({ visitId }: AudioUploaderProps) {
   return (
     <div className="mx-auto w-full max-w-2xl">
       <div className="mb-6 text-center">
-        <h2 className="type-h1 text-text-primary">Upload your visit audio</h2>
-        <p className="mt-2 text-[14px] text-text-tertiary">
+        <h2
+          className={
+            isClinician
+              ? 'qm-cl-serif'
+              : 'type-h1 text-text-primary'
+          }
+          style={
+            isClinician
+              ? {
+                  fontSize: 32,
+                  fontWeight: 400,
+                  lineHeight: 1.15,
+                  letterSpacing: '-0.015em',
+                  color: 'var(--ink)',
+                  margin: 0,
+                }
+              : undefined
+          }
+        >
+          Upload your visit audio
+        </h2>
+        <p
+          className={cn(
+            'mt-2',
+            isClinician
+              ? 'qm-cl-serif text-clinician-ink-2'
+              : 'text-[14px] text-text-tertiary'
+          )}
+          style={
+            isClinician
+              ? { fontSize: 15, fontStyle: 'italic', lineHeight: 1.55 }
+              : undefined
+          }
+        >
           MP3, M4A, WAV, OGG, WebM, or FLAC — up to 500 MB.
         </p>
       </div>
@@ -178,22 +227,64 @@ export function AudioUploader({ visitId }: AudioUploaderProps) {
           'relative flex cursor-pointer flex-col items-center justify-center',
           'rounded-2xl border-2 border-dashed px-6 py-14 text-center',
           'transition-colors duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base',
-          dragging
-            ? 'border-violet-400 bg-violet-500/8'
-            : 'border-border-default hover:border-violet-500/50 hover:bg-bg-surface-1/40'
+          isClinician
+            ? cn(
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinician-sage focus-visible:ring-offset-2 focus-visible:ring-offset-clinician-cream',
+                dragging
+                  ? 'border-clinician-sage bg-clinician-cream-card'
+                  : 'border-clinician-line-strong bg-clinician-cream-card hover:border-clinician-sage/60 hover:bg-clinician-cream-2/50'
+              )
+            : cn(
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base',
+                dragging
+                  ? 'border-violet-400 bg-violet-500/8'
+                  : 'border-border-default hover:border-violet-500/50 hover:bg-bg-surface-1/40'
+              )
         )}
       >
         <div
           aria-hidden
-          className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[linear-gradient(135deg,#4C1D95_0%,#7C3AED_100%)] shadow-[0_0_0_1px_rgba(167,139,250,0.3)]"
+          className={cn(
+            'mb-4 flex h-14 w-14 items-center justify-center rounded-full'
+          )}
+          style={
+            isClinician
+              ? {
+                  background: 'var(--sage-tint-strong)',
+                  color: 'var(--sage-deep)',
+                }
+              : {
+                  backgroundImage:
+                    'linear-gradient(135deg,#4C1D95 0%,#7C3AED 100%)',
+                  boxShadow: '0 0 0 1px rgba(167,139,250,0.3)',
+                }
+          }
         >
-          <UploadCloud className="h-6 w-6 text-white" aria-hidden />
+          <UploadCloud
+            className={cn('h-6 w-6', isClinician ? '' : 'text-white')}
+            aria-hidden
+          />
         </div>
-        <div className="text-[15px] font-medium text-text-primary">
+        <div
+          className={cn(
+            isClinician
+              ? 'qm-cl-serif text-clinician-ink'
+              : 'text-[15px] font-medium text-text-primary'
+          )}
+          style={
+            isClinician
+              ? { fontSize: 17, fontWeight: 500, letterSpacing: '-0.005em' }
+              : undefined
+          }
+        >
           Drop an audio file here, or click to browse
         </div>
-        <div className="mt-1.5 text-[12px] text-text-muted">
+        <div
+          className={cn(
+            'mt-1.5 text-[12px]',
+            isClinician ? 'text-clinician-ink-3' : 'text-text-muted'
+          )}
+        >
           Your recording stays private — uploaded directly to your workspace.
         </div>
         <input
@@ -206,30 +297,82 @@ export function AudioUploader({ visitId }: AudioUploaderProps) {
       </div>
 
       {file && (
-        <div className="mt-5 rounded-xl border border-border-default bg-bg-surface-1/60 p-4">
+        <div
+          className={cn(
+            'mt-5 rounded-xl p-4',
+            isClinician
+              ? 'qm-cl-card'
+              : 'border border-border-default bg-bg-surface-1/60'
+          )}
+        >
           <div className="flex items-start gap-3">
             <div
               aria-hidden
-              className="flex h-9 w-9 flex-none items-center justify-center rounded-lg bg-bg-surface-3"
+              className={cn(
+                'flex h-9 w-9 flex-none items-center justify-center rounded-lg',
+                isClinician
+                  ? 'bg-clinician-cream-2 text-clinician-ink-2'
+                  : 'bg-bg-surface-3'
+              )}
             >
-              <FileIcon className="h-4 w-4 text-text-tertiary" aria-hidden />
+              <FileIcon
+                className={cn(
+                  'h-4 w-4',
+                  isClinician ? '' : 'text-text-tertiary'
+                )}
+                aria-hidden
+              />
             </div>
             <div className="min-w-0 flex-1">
-              <div className="truncate text-[13px] font-medium text-text-primary">
+              <div
+                className={cn(
+                  'truncate text-[13px] font-medium',
+                  isClinician
+                    ? 'qm-cl-serif text-clinician-ink'
+                    : 'text-text-primary'
+                )}
+                style={isClinician ? { fontSize: 15 } : undefined}
+              >
                 {file.name}
               </div>
-              <div className="mt-0.5 text-[11px] text-text-muted">
+              <div
+                className={cn(
+                  'mt-0.5 text-[11px]',
+                  isClinician ? 'text-clinician-ink-3' : 'text-text-muted'
+                )}
+              >
                 {(file.size / 1024 / 1024).toFixed(1)} MB · {file.type || 'audio'}
               </div>
               {progress !== null && (
                 <div className="mt-3 space-y-1.5">
-                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-bg-surface-3">
+                  <div
+                    className={cn(
+                      'h-1.5 w-full overflow-hidden rounded-full',
+                      isClinician ? 'bg-clinician-cream-2' : 'bg-bg-surface-3'
+                    )}
+                  >
                     <div
-                      className="h-full rounded-full bg-[linear-gradient(90deg,#7C3AED,#A855F7)] transition-[width]"
-                      style={{ width: `${progress}%` }}
+                      className="h-full rounded-full transition-[width]"
+                      style={
+                        isClinician
+                          ? {
+                              width: `${progress}%`,
+                              background: 'var(--sage)',
+                            }
+                          : {
+                              width: `${progress}%`,
+                              backgroundImage:
+                                'linear-gradient(90deg,#7C3AED,#A855F7)',
+                            }
+                      }
                     />
                   </div>
-                  <div className="text-[11px] text-text-muted">
+                  <div
+                    className={cn(
+                      'text-[11px]',
+                      isClinician ? 'text-clinician-ink-3' : 'text-text-muted'
+                    )}
+                  >
                     {progress < 100
                       ? `Uploading… ${progress}%`
                       : 'Upload complete. Queuing for transcription…'}
@@ -242,7 +385,12 @@ export function AudioUploader({ visitId }: AudioUploaderProps) {
                 type="button"
                 onClick={clearFile}
                 aria-label="Remove file"
-                className="flex-none rounded-md p-1 text-text-muted transition-colors hover:bg-bg-surface-2 hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base"
+                className={cn(
+                  'flex-none rounded-md p-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
+                  isClinician
+                    ? 'text-clinician-ink-3 hover:bg-clinician-cream-2 hover:text-clinician-ink-2 focus-visible:ring-clinician-sage focus-visible:ring-offset-clinician-cream'
+                    : 'text-text-muted hover:bg-bg-surface-2 hover:text-text-primary focus-visible:ring-violet-500 focus-visible:ring-offset-bg-base'
+                )}
               >
                 <X className="h-4 w-4" aria-hidden />
               </button>
@@ -252,7 +400,14 @@ export function AudioUploader({ visitId }: AudioUploaderProps) {
       )}
 
       {uploadError && (
-        <p role="alert" className="mt-3 text-[13px] text-danger">
+        <p
+          role="alert"
+          className={cn(
+            'mt-3 text-[13px]',
+            isClinician ? 'text-clinician-coral-deep' : 'text-danger'
+          )}
+          style={isClinician ? { color: 'var(--coral-deep)' } : undefined}
+        >
           {uploadError}
         </p>
       )}
@@ -263,6 +418,7 @@ export function AudioUploader({ visitId }: AudioUploaderProps) {
           variant="primary"
           size="lg"
           disabled={!file || uploading}
+          theme={theme}
         >
           <Mic className="h-4 w-4" aria-hidden />
           {uploading ? 'Uploading…' : 'Upload & transcribe'}
