@@ -1,0 +1,1159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Direction A — Clinical / Professional (Linear-meets-Epic)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&display=swap" rel="stylesheet" />
+<style>
+  /* =========================================================
+     Direction A — Clinical / Professional
+     Foundation: App-redesign-v1 token palette, evolved to
+     prioritize information density, hierarchy, audited feel.
+     ========================================================= */
+  :root {
+    --bg:        #07060C;
+    --bg-1:      #0C0A16;
+    --bg-2:      #14111F;
+    --bg-3:      #1C1828;
+    --bg-4:      #221C30;
+
+    --line-soft: #191524;
+    --line:      #26222F;
+    --line-strong: #3A3445;
+
+    --fg:        #F5F2FA;
+    --fg-2:      #B9B2C9;
+    --fg-3:      #7E7791;
+    --fg-4:      #4B4558;
+
+    --accent:        #8B5CFF;
+    --accent-bright: #A87CFF;
+    --accent-deep:   #6B3FD9;
+    --accent-ink:    #2A1560;
+    --accent-c:      #60A5FA;
+
+    --mint:  #6EE7B7;
+    --amber: #FBBF24;
+    --coral: #FB7185;
+
+    --sans:  'Inter Tight', system-ui, sans-serif;
+    --serif: 'Source Serif 4', Georgia, serif;
+    --mono:  'JetBrains Mono', ui-monospace, monospace;
+
+    /* A-specific: tighter radii, less ornament */
+    --r-xs: 3px;
+    --r-sm: 6px;
+    --r-md: 8px;
+    --r-lg: 10px;
+
+    --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--sans);
+    font-size: 13.5px;
+    line-height: 1.5;
+    letter-spacing: -0.005em;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Direction-A page intro strip */
+  .intro {
+    border-bottom: 1px solid var(--line);
+    background: var(--bg-1);
+    padding: 22px 32px;
+  }
+  .intro h1 {
+    margin: 0 0 6px;
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    color: var(--fg);
+  }
+  .intro h1 .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    margin-left: 10px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-xs);
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--fg-3);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    vertical-align: middle;
+  }
+  .intro p {
+    margin: 0;
+    font-size: 13px;
+    color: var(--fg-2);
+    max-width: 1080px;
+    line-height: 1.55;
+  }
+  .intro p .em { color: var(--fg); font-weight: 500; }
+  .intro .orb-note {
+    margin-top: 10px;
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--fg-3);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    border-left: 2px solid var(--coral);
+    padding-left: 9px;
+  }
+
+  /* Two-pane layout */
+  .stage {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    min-height: 100vh;
+  }
+  .pane {
+    border-right: 1px solid var(--line);
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .pane:last-child { border-right: none; }
+
+  .pane-label {
+    padding: 10px 18px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--fg-3);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--line);
+    background: var(--bg-1);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .pane-label .crumb { color: var(--fg-4); }
+  .pane-label .crumb b { color: var(--fg-2); font-weight: 500; }
+
+  /* ========= Shared chrome ========= */
+  .topbar {
+    display: flex;
+    align-items: center;
+    height: 44px;
+    padding: 0 14px;
+    border-bottom: 1px solid var(--line);
+    background: var(--bg-1);
+    gap: 12px;
+    flex-shrink: 0;
+  }
+  .logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--fg);
+    letter-spacing: -0.015em;
+  }
+  .logo .mark {
+    width: 16px; height: 16px;
+    border-radius: 3px;
+    background: linear-gradient(135deg, var(--accent-bright), var(--accent-deep));
+    box-shadow: 0 0 0 1px rgba(139,92,255,.35), inset 0 1px 0 rgba(255,255,255,.2);
+  }
+  .topbar nav {
+    display: flex; gap: 1px; margin-left: 18px;
+  }
+  .topbar nav a {
+    font-size: 12px;
+    color: var(--fg-3);
+    text-decoration: none;
+    padding: 6px 9px;
+    border-radius: var(--r-xs);
+  }
+  .topbar nav a.active {
+    color: var(--fg);
+    background: var(--bg-3);
+  }
+  .topbar nav a:hover { color: var(--fg); }
+  .topbar .spacer { flex: 1; }
+  .topbar .meta {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--fg-3);
+    letter-spacing: 0.04em;
+  }
+  .kbd {
+    display: inline-flex;
+    align-items: center;
+    height: 18px;
+    padding: 0 5px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--fg-2);
+    background: var(--bg-3);
+    border: 1px solid var(--line);
+    border-bottom-width: 2px;
+    border-radius: 3px;
+  }
+
+  .iconrail {
+    width: 44px;
+    border-right: 1px solid var(--line);
+    background: var(--bg-1);
+    display: flex; flex-direction: column; align-items: center;
+    padding: 8px 0;
+    gap: 2px;
+    flex-shrink: 0;
+  }
+  .iconrail .item {
+    width: 30px; height: 30px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--fg-3);
+    border-radius: var(--r-xs);
+    cursor: pointer;
+    font-size: 14px;
+  }
+  .iconrail .item.active {
+    color: var(--accent-bright);
+    background: rgba(139,92,255,.1);
+    box-shadow: inset 0 0 0 1px rgba(139,92,255,.2);
+  }
+  .iconrail .item:hover { color: var(--fg); }
+
+  .body-row {
+    display: flex; flex: 1; min-height: 0;
+  }
+  .main {
+    flex: 1; min-width: 0; overflow: hidden;
+  }
+
+  /* ========= Section labels (mono-heavy) ========= */
+  .sectlabel {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--fg-3);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .sectlabel .count {
+    color: var(--fg-4);
+    font-weight: 500;
+  }
+
+  /* ========= Buttons (flat, sharp) ========= */
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 10px;
+    border-radius: var(--r-sm);
+    border: 1px solid var(--line-strong);
+    background: var(--bg-2);
+    color: var(--fg);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: var(--sans);
+    letter-spacing: -0.005em;
+    transition: background .12s var(--ease), border-color .12s var(--ease);
+  }
+  .btn:hover { background: var(--bg-3); border-color: var(--line-strong); }
+  .btn-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .btn-primary:hover { background: var(--accent-bright); }
+  .btn .kbd {
+    background: rgba(255,255,255,.06);
+    border-color: rgba(255,255,255,.08);
+    color: var(--fg-2);
+  }
+
+  /* ========= Page header (small, dense) ========= */
+  .pageheader {
+    padding: 18px 20px 14px;
+    border-bottom: 1px solid var(--line);
+    background: var(--bg);
+  }
+  .pageheader .eyebrow {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--fg-3);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .pageheader h2 {
+    margin: 0;
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 22px;
+    letter-spacing: -0.022em;
+    color: var(--fg);
+  }
+  .pageheader .sub {
+    margin-top: 4px;
+    font-size: 12.5px;
+    color: var(--fg-3);
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+  .pageheader .sub b { color: var(--fg-2); font-weight: 500; }
+  .pageheader .right {
+    float: right;
+    display: flex; gap: 6px;
+  }
+  .clear { clear: both; }
+
+  /* ========= Stat strip (4-up, dense, mono numbers) ========= */
+  .statstrip {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    border-bottom: 1px solid var(--line);
+  }
+  .stat {
+    padding: 14px 16px;
+    border-right: 1px solid var(--line);
+    background: var(--bg-1);
+  }
+  .stat:last-child { border-right: none; }
+  .stat .label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--fg-3);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .stat .value {
+    font-family: var(--mono);
+    font-size: 26px;
+    font-weight: 500;
+    color: var(--fg);
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }
+  .stat .unit {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--fg-3);
+    margin-left: 6px;
+  }
+  .stat .delta {
+    margin-top: 6px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--mint);
+  }
+  .stat .delta.amber { color: var(--amber); }
+  .stat .delta.muted { color: var(--fg-4); }
+
+  /* ========= Tabs (dense, flat) ========= */
+  .tabs {
+    display: flex;
+    border-bottom: 1px solid var(--line);
+    padding: 0 20px;
+    background: var(--bg);
+    gap: 0;
+  }
+  .tab {
+    padding: 10px 14px;
+    font-size: 12px;
+    color: var(--fg-3);
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    font-family: var(--sans);
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin-bottom: -1px;
+  }
+  .tab.active { color: var(--fg); border-bottom-color: var(--accent); }
+  .tab .count {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--fg-4);
+  }
+
+  /* ========= Tabular visit list ========= */
+  .visit-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .visit-table thead th {
+    text-align: left;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--fg-3);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+    font-weight: 500;
+    background: var(--bg-1);
+  }
+  .visit-table td {
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--line-soft);
+    font-size: 12.5px;
+    color: var(--fg-2);
+    vertical-align: middle;
+  }
+  .visit-table tbody tr:hover td {
+    background: var(--bg-2);
+    color: var(--fg);
+  }
+  .visit-table .mono {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--fg-3);
+  }
+  .visit-table .name {
+    color: var(--fg);
+    font-weight: 500;
+  }
+  .visit-table .id {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--fg-4);
+  }
+
+  /* Status pills — flat, no gradients (A's commitment) */
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 7px;
+    border-radius: var(--r-xs);
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    border: 1px solid var(--line);
+    color: var(--fg-2);
+    background: transparent;
+  }
+  .pill::before {
+    content: '';
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+  .pill.mint   { color: var(--mint);  border-color: rgba(110,231,183,.35); }
+  .pill.amber  { color: var(--amber); border-color: rgba(251,191,36,.35); }
+  .pill.coral  { color: var(--coral); border-color: rgba(251,113,133,.35); }
+  .pill.accent { color: var(--accent-bright); border-color: rgba(139,92,255,.35); }
+  .pill.muted  { color: var(--fg-3); }
+
+  .spec {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 7px;
+    border-radius: var(--r-xs);
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    color: var(--fg-3);
+    border: 1px solid var(--line);
+    background: var(--bg-2);
+  }
+  .spec::before {
+    content: '';
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+  .spec.cardiology { color: #FF7A95; }
+  .spec.pain { color: #FFA471; }
+  .spec.ortho { color: #75C1FF; }
+  .spec.primary { color: var(--accent-bright); }
+
+  /* Avatar */
+  .av {
+    display: inline-flex;
+    width: 22px; height: 22px;
+    border-radius: 3px;
+    background: var(--bg-3);
+    border: 1px solid var(--line);
+    align-items: center; justify-content: center;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--fg-2);
+    margin-right: 7px;
+    vertical-align: middle;
+  }
+
+  /* ========= Visit detail right pane ========= */
+  .vd-header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--line);
+    background: var(--bg-1);
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 12px;
+    align-items: center;
+  }
+  .vd-header .id-line {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--fg-3);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .vd-header .name {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--fg);
+    letter-spacing: -0.018em;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .vd-header .meta {
+    margin-top: 6px;
+    display: flex;
+    gap: 14px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--fg-3);
+  }
+  .vd-header .meta b { color: var(--fg-2); font-weight: 500; }
+  .vd-header .actions { display: flex; gap: 6px; }
+
+  /* Sub-tabs row */
+  .vd-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--line);
+    background: var(--bg);
+    padding: 0 20px;
+  }
+  .vd-tabs .tab.active { border-bottom-color: var(--mint); }
+
+  .vd-cols {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    min-height: 0;
+  }
+  .vd-soap {
+    padding: 18px 20px;
+    border-right: 1px solid var(--line);
+    overflow: auto;
+  }
+  .vd-side {
+    background: var(--bg-1);
+    border-left: 1px solid var(--line-soft);
+    overflow: auto;
+  }
+
+  .soap-section {
+    margin-bottom: 22px;
+  }
+  .soap-section .head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .soap-section h3 {
+    margin: 0;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent-bright);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+  .soap-section h3 .num {
+    color: var(--fg-4);
+    margin-right: 6px;
+  }
+  .soap-section .body {
+    font-size: 13px;
+    color: var(--fg);
+    line-height: 1.6;
+    border-left: 2px solid var(--line);
+    padding: 0 0 0 12px;
+  }
+  .soap-section .body em {
+    color: var(--fg-2);
+    font-style: normal;
+    background: rgba(139,92,255,.08);
+    padding: 0 3px;
+    border-radius: 2px;
+  }
+
+  /* ICD candidate panel */
+  .icd-panel {
+    padding: 14px;
+    border-bottom: 1px solid var(--line);
+  }
+  .icd-row {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line-soft);
+    align-items: center;
+  }
+  .icd-row:last-child { border-bottom: none; }
+  .icd-code {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--accent-bright);
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    background: rgba(139,92,255,.1);
+    padding: 2px 6px;
+    border-radius: var(--r-xs);
+    border: 1px solid rgba(139,92,255,.25);
+  }
+  .icd-desc {
+    font-size: 12px;
+    color: var(--fg);
+    line-height: 1.4;
+  }
+  .icd-desc .ev {
+    display: block;
+    margin-top: 3px;
+    font-size: 11px;
+    color: var(--fg-3);
+    font-style: italic;
+  }
+  .icd-conf {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--mint);
+  }
+  .icd-conf.amber { color: var(--amber); }
+
+  /* Transcript snippet */
+  .transcript {
+    padding: 14px;
+  }
+  .turn {
+    display: grid;
+    grid-template-columns: 64px 1fr;
+    gap: 10px;
+    margin-bottom: 12px;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .turn .who {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--fg-3);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .turn .who .role {
+    color: var(--fg-2);
+    font-weight: 500;
+  }
+  .turn .who.dr .role { color: var(--accent-bright); }
+  .turn .who.pt .role { color: var(--accent-c); }
+  .turn .who .ts {
+    color: var(--fg-4);
+  }
+  .turn .text {
+    color: var(--fg);
+    border-left: 2px solid var(--line);
+    padding-left: 10px;
+  }
+
+  /* Side rail (right of SOAP) */
+  .side-block {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--line);
+  }
+  .side-block .h {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--fg-3);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .side-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--fg-2);
+    padding: 4px 0;
+  }
+  .side-row .k { color: var(--fg-3); }
+  .side-row .v { color: var(--fg); }
+
+  /* Status banner above tabs */
+  .status-banner {
+    padding: 9px 20px;
+    border-bottom: 1px solid var(--line);
+    background: var(--bg-1);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--fg-3);
+    letter-spacing: 0.04em;
+  }
+  .status-banner .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--mint);
+    box-shadow: 0 0 0 3px rgba(110,231,183,.18);
+  }
+
+  /* Footnote / audit row */
+  .audit {
+    padding: 8px 14px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--fg-4);
+    letter-spacing: 0.04em;
+    background: var(--bg-1);
+    border-top: 1px solid var(--line-soft);
+  }
+  .audit .item { margin-right: 14px; }
+
+  /* Subtle scroll containers — keep scrollbars visible (clinical feel) */
+  .vd-soap::-webkit-scrollbar,
+  .vd-side::-webkit-scrollbar { width: 8px; }
+  .vd-soap::-webkit-scrollbar-thumb,
+  .vd-side::-webkit-scrollbar-thumb { background: var(--bg-3); border-radius: 4px; }
+
+  /* Confidence inline marker */
+  .conf-inline {
+    display: inline-block;
+    width: 38px;
+    height: 4px;
+    background: var(--bg-3);
+    border-radius: 2px;
+    margin-right: 6px;
+    vertical-align: middle;
+    position: relative;
+  }
+  .conf-inline > i {
+    position: absolute;
+    inset: 0 auto 0 0;
+    background: var(--mint);
+    border-radius: 2px;
+    display: block;
+  }
+  .conf-inline.amber > i { background: var(--amber); }
+</style>
+</head>
+<body>
+
+<header class="intro">
+  <h1>Direction A — Clinical / Professional <span class="badge">Linear-meets-Epic</span></h1>
+  <p>
+    A reads as <span class="em">audited, sober, fast</span> — a tool that respects a doctor's time and survives a malpractice review. We commit to high information density, mono-labeled meta everywhere, sharp 6&ndash;8px corners, and flat status pills with no gradient theatre. We explicitly reject ambient orbs, the WebGL shader background, the specular shine on buttons, generous radii, and any soft "Notion warmth" — those moves earn doubt in a clinical context. The chrome stays violet-on-deep-black, but every other ornament is pulled back so the data wins.
+  </p>
+  <span class="orb-note">Orbs / shader / specular: DROP. Replace shader-bg with the page-level radial; replace specular-button with .btn flat.</span>
+</header>
+
+<div class="stage">
+
+  <!-- ============================================
+       LEFT: DASHBOARD
+       ============================================ -->
+  <section class="pane">
+    <div class="pane-label">
+      <span>VIEW · DASHBOARD</span>
+      <span class="crumb">app.quillmd.com / <b>dashboard</b></span>
+    </div>
+
+    <div class="topbar">
+      <span class="logo"><span class="mark"></span>QuillMD</span>
+      <nav>
+        <a href="#" class="active">Dashboard</a>
+        <a href="#">Visits</a>
+        <a href="#">Patients</a>
+        <a href="#">Settings</a>
+      </nav>
+      <span class="spacer"></span>
+      <span class="meta">DR. KERR · TUE 14:41</span>
+      <span class="kbd">⌘K</span>
+    </div>
+
+    <div class="body-row">
+      <aside class="iconrail">
+        <div class="item active">◧</div>
+        <div class="item">▤</div>
+        <div class="item">◔</div>
+        <div class="item">⊟</div>
+        <div class="item">⚙</div>
+      </aside>
+
+      <div class="main">
+        <div class="pageheader">
+          <div class="right">
+            <button class="btn"><span>Filter</span><span class="kbd">F</span></button>
+            <button class="btn-primary btn">＋ New visit <span class="kbd">N</span></button>
+          </div>
+          <div class="eyebrow">§ HOME / TODAY</div>
+          <h2>Workspace</h2>
+          <div class="sub">
+            <span><b>184</b> patients</span>
+            <span>·</span>
+            <span><b>312</b> total visits</span>
+            <span>·</span>
+            <span style="color:var(--amber)">3 awaiting your review</span>
+          </div>
+          <div class="clear"></div>
+        </div>
+
+        <div class="statstrip">
+          <div class="stat">
+            <div class="label">§ VISITS / APR</div>
+            <div><span class="value">12</span><span class="unit">this week</span></div>
+            <div class="delta">▲ 4 vs prior week</div>
+          </div>
+          <div class="stat">
+            <div class="label">§ AVG DRAFTED IN</div>
+            <div><span class="value">7</span><span class="unit">min / visit</span></div>
+            <div class="delta muted">— stable</div>
+          </div>
+          <div class="stat">
+            <div class="label">§ PENDING REVIEW</div>
+            <div><span class="value">3</span><span class="unit">visits</span></div>
+            <div class="delta amber">▲ 2 since 09:00</div>
+          </div>
+          <div class="stat">
+            <div class="label">§ SIGNED &lt;24h</div>
+            <div><span class="value">94</span><span class="unit">%</span></div>
+            <div class="delta">▲ 1.2pp</div>
+          </div>
+        </div>
+
+        <div class="tabs">
+          <div class="tab">Patients <span class="count">184</span></div>
+          <div class="tab active">All visits <span class="count">312</span></div>
+          <div class="tab">Awaiting review <span class="count" style="color:var(--amber)">3</span></div>
+        </div>
+
+        <div style="padding:0;">
+          <div style="padding:14px 20px 6px;">
+            <span class="sectlabel">Today <span class="count">5</span></span>
+          </div>
+          <table class="visit-table">
+            <thead>
+              <tr>
+                <th style="width:78px">Time</th>
+                <th>Patient</th>
+                <th style="width:104px">Specialty</th>
+                <th style="width:54px">Dur.</th>
+                <th style="width:118px">Status</th>
+                <th style="width:78px">Visit ID</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="mono">14:32</td>
+                <td><span class="av">JS</span><span class="name">John Smith</span></td>
+                <td><span class="spec cardiology">Cardiology</span></td>
+                <td class="mono">11:42</td>
+                <td><span class="pill mint">Ready</span></td>
+                <td class="id">v_1f4a</td>
+              </tr>
+              <tr>
+                <td class="mono">11:08</td>
+                <td><span class="av">ML</span><span class="name">Maria Lopez</span></td>
+                <td><span class="spec pain">Pain</span></td>
+                <td class="mono">14:21</td>
+                <td><span class="pill accent">Processing · L4</span></td>
+                <td class="id">v_1f49</td>
+              </tr>
+              <tr>
+                <td class="mono">10:14</td>
+                <td><span class="av">EN</span><span class="name">Eleanor Nakamura</span></td>
+                <td><span class="spec primary">Primary</span></td>
+                <td class="mono">08:55</td>
+                <td><span class="pill amber">Needs review</span></td>
+                <td class="id">v_1f48</td>
+              </tr>
+              <tr>
+                <td class="mono">09:42</td>
+                <td><span class="av">DK</span><span class="name">Daniel Kim</span></td>
+                <td><span class="spec primary">Primary</span></td>
+                <td class="mono">06:18</td>
+                <td><span class="pill mint">Signed</span></td>
+                <td class="id">v_1f47</td>
+              </tr>
+              <tr>
+                <td class="mono">08:55</td>
+                <td><span class="av">PA</span><span class="name">Priya Anand</span></td>
+                <td><span class="spec primary">Primary</span></td>
+                <td class="mono">09:01</td>
+                <td><span class="pill mint">Signed</span></td>
+                <td class="id">v_1f46</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div style="padding:14px 20px 6px;">
+            <span class="sectlabel">Yesterday <span class="count">7</span></span>
+          </div>
+          <table class="visit-table">
+            <thead>
+              <tr>
+                <th style="width:78px">Time</th>
+                <th>Patient</th>
+                <th style="width:104px">Specialty</th>
+                <th style="width:54px">Dur.</th>
+                <th style="width:118px">Status</th>
+                <th style="width:78px">Visit ID</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="mono">16:20</td>
+                <td><span class="av">RC</span><span class="name">Robert Chen</span></td>
+                <td><span class="spec ortho">Ortho</span></td>
+                <td class="mono">13:08</td>
+                <td><span class="pill mint">Signed</span></td>
+                <td class="id">v_1f3f</td>
+              </tr>
+              <tr>
+                <td class="mono">15:02</td>
+                <td><span class="av">AT</span><span class="name">Aisha Touré</span></td>
+                <td><span class="spec primary">Primary</span></td>
+                <td class="mono">07:44</td>
+                <td><span class="pill mint">Signed</span></td>
+                <td class="id">v_1f3e</td>
+              </tr>
+              <tr>
+                <td class="mono">13:55</td>
+                <td><span class="av">MO</span><span class="name">Marcus Olsen</span></td>
+                <td><span class="spec cardiology">Cardiology</span></td>
+                <td class="mono">12:15</td>
+                <td><span class="pill mint">Signed</span></td>
+                <td class="id">v_1f3d</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="audit">
+          <span class="item">last_sync = 14:41:08 UTC</span>
+          <span class="item">queue = 0 / w_3</span>
+          <span class="item">fetched = 12 of 312</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================
+       RIGHT: VISIT DETAIL — READY
+       ============================================ -->
+  <section class="pane">
+    <div class="pane-label">
+      <span>VIEW · VISIT DETAIL — READY</span>
+      <span class="crumb">/ visits / <b>v_1f4a</b></span>
+    </div>
+
+    <div class="topbar">
+      <span class="logo"><span class="mark"></span>QuillMD</span>
+      <nav>
+        <a href="#">Dashboard</a>
+        <a href="#" class="active">Visits</a>
+        <a href="#">Patients</a>
+        <a href="#">Settings</a>
+      </nav>
+      <span class="spacer"></span>
+      <span class="meta">DRAFTED 7:12 · OFFLINE-SAFE</span>
+      <span class="kbd">⌘K</span>
+    </div>
+
+    <div class="body-row">
+      <aside class="iconrail">
+        <div class="item">◧</div>
+        <div class="item active">▤</div>
+        <div class="item">◔</div>
+        <div class="item">⊟</div>
+        <div class="item">⚙</div>
+      </aside>
+
+      <div class="main" style="display:flex; flex-direction:column;">
+        <!-- Header -->
+        <div class="vd-header">
+          <div>
+            <div class="id-line">VISIT v_1f4a · 47M · DOB 1979-03-04</div>
+            <div class="name">
+              John Smith
+              <span class="pill mint">Ready</span>
+            </div>
+            <div class="meta">
+              <span><b>Specialty</b> Cardiology</span>
+              <span><b>Captured</b> 14:32 EDT</span>
+              <span><b>Audio</b> 11:42</span>
+              <span><b>Mode</b> audio_upload</span>
+            </div>
+          </div>
+          <div class="actions">
+            <button class="btn">Copy SOAP <span class="kbd">⌘⇧C</span></button>
+            <button class="btn">Export</button>
+            <button class="btn btn-primary">Sign & send <span class="kbd">⌘↵</span></button>
+          </div>
+        </div>
+
+        <!-- Status banner -->
+        <div class="status-banner">
+          <span class="dot"></span>
+          <span>PIPELINE COMPLETE · L1–L7 · 00:07:12 wall · $0.184 cost · safe_to_sign=true</span>
+        </div>
+
+        <!-- Sub tabs -->
+        <div class="vd-tabs">
+          <div class="tab active">SOAP</div>
+          <div class="tab">Transcript <span class="count">142</span></div>
+          <div class="tab">Codes <span class="count">4</span></div>
+          <div class="tab">Rx <span class="count" style="color:var(--mint)">0 warn</span></div>
+          <div class="tab">Extras</div>
+          <div class="tab">Pipeline</div>
+        </div>
+
+        <!-- Two cols: SOAP + side rail -->
+        <div class="vd-cols" style="flex:1;">
+          <div class="vd-soap">
+
+            <div class="soap-section">
+              <div class="head">
+                <h3><span class="num">01</span>Subjective · CC + HPI</h3>
+                <span class="sectlabel"><span style="color:var(--fg-4)">edits=0</span></span>
+              </div>
+              <div class="body">
+                <p><b>CC:</b> 47M presenting with retrosternal chest pain, onset 2 days ago.</p>
+                <p><b>HPI:</b> Patient describes <em>pressure-like, intermittent</em> chest pain radiating to the left arm, worse with exertion, partially relieved by rest. Denies SOB, diaphoresis, nausea. No prior cardiac history. Positive family history (father MI age 58). Currently on no cardiac medications.</p>
+                <p><b>ROS:</b> CV — see HPI. Resp — denies cough, wheeze. GI — denies nausea, vomiting. Constitutional — denies fever, weight loss.</p>
+              </div>
+            </div>
+
+            <div class="soap-section">
+              <div class="head">
+                <h3><span class="num">02</span>Objective</h3>
+              </div>
+              <div class="body">
+                <p><b>Vitals:</b> BP 138/86 · HR 78 · RR 14 · SpO2 98% RA · T 37.0°C</p>
+                <p><b>Exam:</b> Alert, NAD. CV — RRR, no m/r/g. Lungs CTA b/l. Abd — soft, NT, ND. Neuro — A&amp;Ox3, no focal deficit.</p>
+              </div>
+            </div>
+
+            <div class="soap-section">
+              <div class="head">
+                <h3><span class="num">03</span>Assessment</h3>
+              </div>
+              <div class="body">
+                <p>1. <b>Atypical chest pain, low-intermediate risk.</b> HEART score 3 (age 1, hx 1, EKG 0, troponin 1, RF 0). Differential: stable angina, GERD, MSK.</p>
+                <p>2. <b>HTN, uncontrolled at this visit</b> — BP 138/86, will trend.</p>
+              </div>
+            </div>
+
+            <div class="soap-section">
+              <div class="head">
+                <h3><span class="num">04</span>Plan</h3>
+              </div>
+              <div class="body">
+                <p>1. EKG today (in-clinic, attached). 2. Outpatient stress echo within 1 wk. 3. Lipid panel + HbA1c. 4. Aspirin 81 mg PO daily. 5. Return precautions for crushing pain, diaphoresis, syncope.</p>
+              </div>
+            </div>
+
+          </div><!-- /.vd-soap -->
+
+          <aside class="vd-side">
+            <div class="side-block">
+              <div class="h">ICD CANDIDATES <span style="color:var(--fg-4)">L7a</span></div>
+
+              <div class="icd-row">
+                <span class="icd-code">R07.9</span>
+                <div class="icd-desc">
+                  Chest pain, unspecified
+                  <span class="ev">"retrosternal chest pain, onset 2 days ago"</span>
+                </div>
+                <span class="icd-conf"><span class="conf-inline"><i style="width:78%"></i></span>78%</span>
+              </div>
+
+              <div class="icd-row">
+                <span class="icd-code">I10</span>
+                <div class="icd-desc">
+                  Essential (primary) hypertension
+                  <span class="ev">"BP 138/86 ... HTN, uncontrolled at this visit"</span>
+                </div>
+                <span class="icd-conf"><span class="conf-inline"><i style="width:91%"></i></span>91%</span>
+              </div>
+
+              <div class="icd-row">
+                <span class="icd-code">Z82.49</span>
+                <div class="icd-desc">
+                  Family hx of ischemic heart dz
+                  <span class="ev">"father MI age 58"</span>
+                </div>
+                <span class="icd-conf amber"><span class="conf-inline amber"><i style="width:62%"></i></span>62%</span>
+              </div>
+            </div>
+
+            <div class="side-block">
+              <div class="h">TRANSCRIPT · L1 <span style="color:var(--fg-4)">142 turns</span></div>
+              <div class="transcript" style="padding:0;">
+                <div class="turn">
+                  <div class="who dr"><span class="role">DOCTOR</span><span class="ts">14:32:14</span></div>
+                  <div class="text">"Take me back to two days ago — what were you doing when this started?"</div>
+                </div>
+                <div class="turn">
+                  <div class="who pt"><span class="role">PATIENT</span><span class="ts">14:32:21</span></div>
+                  <div class="text">"I was carrying groceries up the stairs. Felt this <em>pressure</em>, right here. It went down my left arm."</div>
+                </div>
+                <div class="turn">
+                  <div class="who dr"><span class="role">DOCTOR</span><span class="ts">14:32:38</span></div>
+                  <div class="text">"How long did it last? Did anything make it better?"</div>
+                </div>
+                <div class="turn">
+                  <div class="who pt"><span class="role">PATIENT</span><span class="ts">14:32:46</span></div>
+                  <div class="text">"Maybe ten minutes. I sat down and it eased off. But it's come back twice since then."</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="side-block">
+              <div class="h">PIPELINE METADATA</div>
+              <div class="side-row"><span class="k">model</span><span class="v">claude-sonnet-4.6</span></div>
+              <div class="side-row"><span class="k">tokens_in / out</span><span class="v">4,812 / 1,366</span></div>
+              <div class="side-row"><span class="k">cost</span><span class="v">$0.184</span></div>
+              <div class="side-row"><span class="k">layers</span><span class="v">L1·L2·L3·L4·L5·L6·L7a–e</span></div>
+              <div class="side-row"><span class="k">prompt_hash</span><span class="v" style="color:var(--fg-3)">8a31f0…</span></div>
+            </div>
+
+            <div class="audit">
+              <span class="item">audit_log = 18 events</span>
+              <span class="item">phi_redactor = OK</span>
+            </div>
+          </aside>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+</div>
+
+</body>
+</html>

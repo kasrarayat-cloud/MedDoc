@@ -1,0 +1,1604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>QuillMD v0.1 — TERMINAL — design direction</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,700;1,400;1,700&family=VT323&display=swap" rel="stylesheet" />
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  /* ================================================================
+     QuillMD v0.1 — TERMINAL
+     phosphor green on pure black. mono only. CRT artifacts present.
+     ================================================================ */
+
+  :root {
+    --bg-void:       #000000;        /* pure black */
+    --bg-bleed:      #050a05;        /* faint green bleed */
+    --bg-panel:      #02060a;        /* slightly cool panel for dashboard */
+    --phosphor:      #39ff14;        /* primary phosphor green */
+    --phosphor-dim:  #1f8f0c;        /* dimmer green for inactive rows */
+    --phosphor-fade: #0f4406;        /* very dim — comments, scaffolding */
+    --phosphor-hot:  #aaff8a;        /* highlights / hot keys */
+    --amber-warn:    #ffb000;        /* used ONLY for [!!] flags */
+    --red-err:       #ff2a2a;        /* used ONLY for [ERR] / interaction_critical */
+    --cyan-ghost:    #00ffff;        /* chromatic aberration cyan */
+    --mag-ghost:     #ff00ff;        /* chromatic aberration magenta */
+    --line:          #14430a;        /* ASCII rule color */
+    --line-soft:     #0a2606;
+    --mono:          'JetBrains Mono', 'VT323', ui-monospace, SFMono-Regular, Menlo, monospace;
+    --crt:           'VT323', 'JetBrains Mono', monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    background: var(--bg-void);
+    color: var(--phosphor);
+    font-family: var(--mono);
+    font-weight: 400;
+    font-size: 14px;
+    line-height: 1.45;
+    letter-spacing: 0.01em;
+    margin: 0;
+    padding: 0;
+    -webkit-font-smoothing: none;
+    -moz-osx-font-smoothing: auto;
+    text-rendering: geometricPrecision;
+  }
+
+  /* selection looks like a phosphor block cursor */
+  ::selection { background: var(--phosphor); color: var(--bg-void); }
+  ::-moz-selection { background: var(--phosphor); color: var(--bg-void); }
+
+  /* ----------------------------------------------------------------
+     CRT OVERLAY STACK — scanlines + chromatic aberration + flicker
+     ---------------------------------------------------------------- */
+
+  /* scanlines: 2px hairline dark every 4px — persistent */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9998;
+    background: repeating-linear-gradient(
+      180deg,
+      rgba(0,0,0,0)   0,
+      rgba(0,0,0,0)   2px,
+      rgba(0,0,0,0.32) 2px,
+      rgba(0,0,0,0.32) 4px
+    );
+    mix-blend-mode: multiply;
+  }
+
+  /* CRT flicker — pulses at ~0.5Hz, low opacity */
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9999;
+    background: rgba(57, 255, 20, 0.04);
+    animation: crt-flicker 2s steps(2) infinite;
+  }
+
+  @keyframes crt-flicker {
+    0%   { opacity: 0.0; }
+    45%  { opacity: 0.0; }
+    50%  { opacity: 0.6; }
+    55%  { opacity: 0.0; }
+    100% { opacity: 0.0; }
+  }
+
+  /* phosphor curvature vignette — subtle radial darkening at corners */
+  .crt-vignette {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9997;
+    background: radial-gradient(
+      ellipse at center,
+      rgba(0,0,0,0) 55%,
+      rgba(0,0,0,0.55) 100%
+    );
+  }
+
+  /* chromatic aberration — applied to any element that opts in */
+  .ca {
+    text-shadow:
+      -0.5px 0 0 var(--mag-ghost),
+       0.5px 0 0 var(--cyan-ghost);
+  }
+  .ca-strong {
+    text-shadow:
+      -1px 0 0 var(--mag-ghost),
+       1px 0 0 var(--cyan-ghost),
+       0 0 6px rgba(57,255,20,0.35);
+  }
+
+  /* phosphor glow on key text */
+  .phosphor-glow {
+    text-shadow:
+      0 0 1px rgba(57,255,20,0.85),
+      0 0 5px rgba(57,255,20,0.55),
+      0 0 12px rgba(57,255,20,0.30);
+  }
+
+  /* ----------------------------------------------------------------
+     BLINKING CURSOR
+     ---------------------------------------------------------------- */
+  .cursor {
+    display: inline-block;
+    width: 0.6em;
+    height: 1em;
+    background: var(--phosphor);
+    margin-left: 2px;
+    vertical-align: text-bottom;
+    animation: cursor-blink 1.05s steps(2) infinite;
+    box-shadow: 0 0 6px rgba(57,255,20,0.9);
+  }
+  .cursor-thin {
+    display: inline-block;
+    width: 0.45em;
+    height: 1.05em;
+    background: var(--phosphor);
+    margin-left: 1px;
+    vertical-align: text-bottom;
+    animation: cursor-blink 1.05s steps(2) infinite;
+  }
+  @keyframes cursor-blink {
+    0%, 49%   { opacity: 1; }
+    50%, 100% { opacity: 0; }
+  }
+
+  /* ----------------------------------------------------------------
+     ASCII / box decoration helpers
+     ---------------------------------------------------------------- */
+  .rule-double { color: var(--line); white-space: pre; }
+  .rule-single { color: var(--line-soft); white-space: pre; }
+  .ascii { white-space: pre; font-family: var(--mono); }
+  .dim   { color: var(--phosphor-dim); }
+  .fade  { color: var(--phosphor-fade); }
+  .hot   { color: var(--phosphor-hot); }
+  .warn  { color: var(--amber-warn); }
+  .err   { color: var(--red-err); }
+  .speak { color: var(--phosphor-hot); font-style: italic; font-weight: 700; }
+
+  /* a "card" is just an ASCII box made of borders */
+  .ascii-box {
+    border: 1px solid var(--line);
+    padding: 0 12px;
+    background: var(--bg-bleed);
+    position: relative;
+  }
+  .ascii-box::before, .ascii-box::after {
+    content: "";
+    position: absolute;
+    border-color: var(--phosphor-dim);
+  }
+  /* corner accents */
+  .corners::before {
+    content: "┌";
+    position: absolute;
+    top: -1px; left: -1px;
+    color: var(--phosphor-dim);
+    background: var(--bg-void);
+    padding: 0 2px;
+    line-height: 1;
+  }
+  .corners::after {
+    content: "┐";
+    position: absolute;
+    top: -1px; right: -1px;
+    color: var(--phosphor-dim);
+    background: var(--bg-void);
+    padding: 0 2px;
+    line-height: 1;
+  }
+  .corners-bottom::before {
+    content: "└";
+    position: absolute;
+    bottom: -1px; left: -1px;
+    color: var(--phosphor-dim);
+    background: var(--bg-void);
+    padding: 0 2px;
+    line-height: 1;
+  }
+  .corners-bottom::after {
+    content: "┘";
+    position: absolute;
+    bottom: -1px; right: -1px;
+    color: var(--phosphor-dim);
+    background: var(--bg-void);
+    padding: 0 2px;
+    line-height: 1;
+  }
+
+  /* selectable / hovered row mimics a vim visual selection */
+  .row {
+    padding: 2px 8px;
+    color: var(--phosphor-dim);
+    border-left: 2px solid transparent;
+  }
+  .row:hover {
+    color: var(--phosphor);
+    background: rgba(57,255,20,0.05);
+    border-left-color: var(--phosphor);
+  }
+  .row.active {
+    color: var(--phosphor);
+    background: rgba(57,255,20,0.10);
+    border-left-color: var(--phosphor);
+  }
+
+  /* keyboard hint — shown like vim help */
+  .kbd {
+    border: 1px solid var(--phosphor-dim);
+    padding: 0 4px;
+    color: var(--phosphor-hot);
+    font-size: 0.85em;
+    background: rgba(57,255,20,0.06);
+  }
+
+  /* status flag tokens — character-based, NOT pill chips */
+  .flag       { font-weight: 700; }
+  .flag-ok    { color: var(--phosphor-hot); }
+  .flag-warn  { color: var(--amber-warn); }
+  .flag-err   { color: var(--red-err); }
+  .flag-pend  { color: var(--phosphor-dim); }
+  .flag-info  { color: var(--phosphor); }
+
+  /* VU meter ASCII */
+  .vu {
+    letter-spacing: 0.05em;
+    font-family: var(--mono);
+  }
+
+  /* the "modeline" at bottom of dashboard, vim-like */
+  .modeline {
+    background: var(--phosphor);
+    color: var(--bg-void);
+    font-weight: 700;
+    padding: 2px 12px;
+    letter-spacing: 0.04em;
+  }
+
+  /* ----------------------------------------------------------------
+     TYPEWRITER ANIMATIONS
+     ---------------------------------------------------------------- */
+  .typewriter {
+    display: inline-block;
+    overflow: hidden;
+    white-space: nowrap;
+    border-right: 0.6em solid var(--phosphor);
+    animation:
+      typewriter 2.6s steps(46, end) 0.4s 1 normal both,
+      cursor-blink 1.05s steps(2) infinite;
+    width: 0;
+  }
+  @keyframes typewriter {
+    from { width: 0; }
+    to   { width: 100%; }
+  }
+
+  /* staged typewriter for the layer pipeline */
+  .layer-line {
+    opacity: 0;
+    animation: layer-appear 0.001s linear forwards;
+  }
+  @keyframes layer-appear {
+    to { opacity: 1; }
+  }
+  .layer-line.l1 { animation-delay: 0.5s; }
+  .layer-line.l2 { animation-delay: 1.4s; }
+  .layer-line.l3 { animation-delay: 2.3s; }
+  .layer-line.l4 { animation-delay: 3.2s; }
+  .layer-line.l5 { animation-delay: 4.1s; }
+  .layer-line.l6 { animation-delay: 5.0s; }
+  .layer-line.l7 { animation-delay: 5.9s; }
+
+  /* VU bar pulse — fakes audio level */
+  .vu-bar {
+    display: inline-block;
+    color: var(--phosphor);
+    animation: vu-pulse 0.85s steps(8) infinite;
+  }
+  @keyframes vu-pulse {
+    0%   { content: "▮▮▮▮░░░░░░░░░░"; }
+    25%  { content: "▮▮▮▮▮▮▮░░░░░░░"; }
+    50%  { content: "▮▮▮▮▮▮▮▮▮▮░░░░"; }
+    75%  { content: "▮▮▮▮▮▮▮░░░░░░░"; }
+    100% { content: "▮▮▮▮░░░░░░░░░░"; }
+  }
+  .vu-bar::before {
+    content: "▮▮▮▮▮▮░░░░░░░░";
+    animation: vu-pulse-text 0.85s steps(8) infinite;
+  }
+  @keyframes vu-pulse-text {
+    0%   { content: "▮▮▮░░░░░░░░░░░"; }
+    20%  { content: "▮▮▮▮▮▮░░░░░░░░"; }
+    40%  { content: "▮▮▮▮▮▮▮▮▮░░░░░"; }
+    55%  { content: "▮▮▮▮▮▮▮▮▮▮▮▮░░"; }
+    70%  { content: "▮▮▮▮▮▮▮▮▮░░░░░"; }
+    85%  { content: "▮▮▮▮▮▮░░░░░░░░"; }
+    100% { content: "▮▮▮░░░░░░░░░░░"; }
+  }
+
+  /* timer counter (purely cosmetic) */
+  .timer-count::after {
+    content: "00:42";
+    animation: timer 1s steps(1) infinite;
+  }
+  @keyframes timer {
+    0%   { content: "00:42"; }
+    25%  { content: "00:43"; }
+    50%  { content: "00:44"; }
+    75%  { content: "00:45"; }
+    100% { content: "00:46"; }
+  }
+
+  /* generic page padding container */
+  .term-page {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 24px 28px 64px;
+  }
+
+  /* anchor reset */
+  a { color: var(--phosphor-hot); text-decoration: none; }
+  a:hover { color: var(--phosphor); text-shadow: 0 0 6px rgba(57,255,20,0.7); }
+
+  /* utility: tight grid for tables of rows */
+  .term-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .term-table td, .term-table th {
+    padding: 2px 8px;
+    text-align: left;
+    vertical-align: top;
+    border-bottom: 1px dashed var(--line-soft);
+  }
+  .term-table th {
+    color: var(--phosphor-fade);
+    font-weight: 400;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 11px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  /* buf grid for the dashboard 2-column layout */
+  .dash-grid {
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    gap: 0;
+    border: 1px solid var(--line);
+    background: var(--bg-bleed);
+  }
+  .dash-grid .nerdtree {
+    border-right: 1px solid var(--line);
+    padding: 14px 12px;
+    background: var(--bg-panel);
+    min-height: 720px;
+  }
+  .dash-grid .pane {
+    padding: 14px 18px;
+  }
+
+  /* a man-page row — used for visit list and patient list */
+  .man-row {
+    display: grid;
+    grid-template-columns: 152px 220px 90px 88px 1fr 140px;
+    gap: 8px;
+    padding: 4px 6px;
+    border-left: 2px solid transparent;
+    color: var(--phosphor-dim);
+    font-size: 13px;
+  }
+  .man-row:hover, .man-row.active {
+    color: var(--phosphor);
+    background: rgba(57,255,20,0.06);
+    border-left-color: var(--phosphor);
+  }
+  .man-row.urgent {
+    border-left-color: var(--red-err);
+  }
+
+  /* the recording-state full block */
+  .rec-block {
+    border: 1px solid var(--phosphor);
+    padding: 14px 18px;
+    background:
+      linear-gradient(180deg, rgba(57,255,20,0.05), rgba(57,255,20,0.0));
+    box-shadow:
+      inset 0 0 24px rgba(57,255,20,0.10),
+      0 0 18px rgba(57,255,20,0.18);
+  }
+
+  /* live transcript stream */
+  .transcript {
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.55;
+  }
+  .transcript .line { display: block; padding: 1px 0; }
+  .transcript .ts   { color: var(--phosphor-fade); }
+  .transcript .who  { color: var(--phosphor-hot); font-style: italic; font-weight: 700; }
+  .transcript .said { color: var(--phosphor); }
+
+  /* bevel for command bar input */
+  .cmdbar {
+    border-top: 1px solid var(--line);
+    background: var(--bg-bleed);
+    padding: 6px 14px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+
+  /* SECTION header BAND — full-width ASCII */
+  .section-band {
+    text-align: center;
+    color: var(--phosphor-dim);
+    margin: 56px 0 28px;
+    font-family: var(--mono);
+    letter-spacing: 0.06em;
+    white-space: pre;
+    overflow: hidden;
+  }
+  .section-band b {
+    color: var(--phosphor);
+    font-weight: 700;
+  }
+
+  /* ASCII rule */
+  .hr-ascii {
+    color: var(--line);
+    white-space: pre;
+    overflow: hidden;
+    margin: 12px 0;
+  }
+  .hr-double {
+    color: var(--line);
+    white-space: pre;
+    overflow: hidden;
+    margin: 14px 0;
+  }
+
+  /* small caps-ish label using uppercase */
+  .label-eyebrow {
+    color: var(--phosphor-fade);
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    font-size: 11px;
+  }
+
+  /* hero headline */
+  .hero-headline {
+    font-family: var(--mono);
+    color: var(--phosphor);
+    font-size: 44px;
+    line-height: 1.05;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  @media (max-width: 720px) {
+    .hero-headline { font-size: 28px; }
+  }
+
+  /* sub-headline */
+  .hero-sub {
+    color: var(--phosphor-dim);
+    font-size: 15px;
+    line-height: 1.55;
+    max-width: 64ch;
+  }
+
+  /* prompt prefix style */
+  .prompt {
+    color: var(--phosphor-hot);
+    font-weight: 700;
+  }
+  .prompt-dim { color: var(--phosphor-dim); }
+
+  /* hot key highlight inside row */
+  .hk {
+    color: var(--phosphor-hot);
+    font-weight: 700;
+  }
+
+  /* remove ANY rounded corners from anything that snuck in */
+  *, *::before, *::after { border-radius: 0 !important; }
+
+  /* progress bar ASCII */
+  .progress {
+    display: inline-block;
+    color: var(--phosphor-hot);
+    letter-spacing: 0.05em;
+  }
+
+  /* nerd-tree-like pane */
+  .tree { color: var(--phosphor-dim); font-size: 13px; line-height: 1.55; }
+  .tree .node { display: block; padding: 1px 0; cursor: default; }
+  .tree .node:hover { color: var(--phosphor); }
+  .tree .node.open { color: var(--phosphor); }
+  .tree .node.sel  { color: var(--phosphor-hot); background: rgba(57,255,20,0.08); }
+
+  /* ASCII "card" used for stat/manpage entries */
+  .stat-card {
+    border: 1px solid var(--line);
+    padding: 10px 14px;
+    background: rgba(57,255,20,0.02);
+  }
+  .stat-card .num {
+    font-size: 28px;
+    color: var(--phosphor);
+    font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+  .stat-card .label {
+    color: var(--phosphor-fade);
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    font-size: 11px;
+  }
+</style>
+</head>
+<body>
+
+<div class="crt-vignette" aria-hidden="true"></div>
+
+<!-- ===========================================================
+     PAGE START — main terminal canvas
+     =========================================================== -->
+<div class="term-page">
+
+  <!-- ===========================================================
+       MANIFESTO BLOCK
+       =========================================================== -->
+  <div class="ascii rule-double" aria-hidden="true">═══════════════════════════════════════════════════════════════════════════════════════</div>
+  <div class="ca" style="padding: 6px 0; color: var(--phosphor); font-weight: 700;">
+    <span class="prompt">TERMINAL</span> <span class="dim">·</span>
+    <span>v0.1</span> <span class="dim">·</span>
+    <span class="hot">we believe medicine is text. we refuse rounded corners</span>
+    <span class="dim">/</span>
+    <span class="hot">drop shadows / glass / the false comfort of UI chrome.</span>
+    <span class="dim">/</span>
+    <span class="hot">the doctor is the operator. the chart is a buffer.</span>
+    <span class="dim">/</span>
+    <span class="hot">phosphor over polish. density over decoration.</span>
+    <span class="cursor-thin"></span>
+  </div>
+  <div class="ascii rule-double" aria-hidden="true">═══════════════════════════════════════════════════════════════════════════════════════</div>
+
+  <!-- meta line under manifesto -->
+  <div class="fade" style="margin-top: 8px; font-size: 12px;">
+    <span>~/QuillMD/design-directions-v4/terminal.html</span>
+    <span class="dim"> · </span>
+    <span>build: phosphor-green / amber-fallback OFF</span>
+    <span class="dim"> · </span>
+    <span>vt100 emulation enabled</span>
+    <span class="dim"> · </span>
+    <span>scanlines: ON</span>
+    <span class="dim"> · </span>
+    <span>chromatic_aberration: 0.5px</span>
+    <span class="dim"> · </span>
+    <span>refresh: 0.5Hz</span>
+  </div>
+
+  <!-- ===========================================================
+       SECTION 1 — LANDING + RECORDING
+       =========================================================== -->
+  <section style="margin-top: 42px;">
+
+    <!-- terminal hero pseudo-window -->
+    <div class="ascii-box corners corners-bottom" style="padding: 18px 22px 22px;">
+      <!-- pseudo title bar -->
+      <div style="display:flex; justify-content: space-between; align-items: baseline; margin-bottom: 16px;">
+        <div class="prompt ca">quillmd@v0.1</div>
+        <div class="fade" style="font-size: 12px;">tty/0  ·  80×24  ·  ─── doctor:dr_chen ─── pid:8731</div>
+      </div>
+
+      <!-- prompt line -->
+      <div style="font-size: 13px;">
+        <span class="prompt">quillmd@v0.1</span><span class="dim">:</span><span class="hot">~/clinic</span><span class="dim">$</span>
+        <span class="dim"> # signed in. session ttl=14d. queue=23. unsaved=0.</span>
+      </div>
+
+      <!-- HERO HEADLINE -->
+      <div style="margin-top: 26px; margin-bottom: 8px;">
+        <div class="label-eyebrow">&gt;&gt;&gt; mission_brief</div>
+      </div>
+
+      <h1 class="hero-headline ca-strong phosphor-glow" style="margin: 0;">
+        &gt; SIGNED IN UNDER 7 MINUTES_<span class="cursor"></span>
+      </h1>
+
+      <p class="hero-sub" style="margin-top: 18px;">
+        no rich-text editor. no toolbar. no autosave dialog. the visit is
+        a stream and the chart is the diff. you talk; the pipeline parses;
+        you sign; the buffer flushes. seven layers, stdout-only, no whitespace
+        as a value.
+      </p>
+
+      <!-- quick stats / "uname -a" -->
+      <div style="margin-top: 26px;">
+        <div class="rule-single">─────────────────────────────────────────────────────────────────────────────────────</div>
+        <pre class="ascii fade" style="margin: 4px 0 8px; font-size: 12px;">
+quillmd 0.1.0  build 2026.04.29-T-M17.2  next/16.2.4  prisma/7  bullmq/lit  postgres/16  caddy/2
+ai_pipeline=L1..L7  redact_phi=on  hipaa_mode=enforced  worker_concurrency=4  queue=transcribe-md</pre>
+        <div class="rule-single">─────────────────────────────────────────────────────────────────────────────────────</div>
+      </div>
+
+      <!-- CALL-TO-ACTIONS as commands -->
+      <div style="margin-top: 22px; display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 8px;">
+        <div class="ascii-box" style="padding: 10px 12px;">
+          <div class="label-eyebrow">$ start</div>
+          <div style="margin-top: 4px;"><span class="prompt">&gt; ./record_visit.sh</span></div>
+          <div class="dim" style="font-size: 12px; margin-top: 2px;">begin a new visit. mic open. layers warm.</div>
+          <div style="margin-top: 6px;"><span class="kbd">n</span> <span class="dim">new</span></div>
+        </div>
+        <div class="ascii-box" style="padding: 10px 12px;">
+          <div class="label-eyebrow">$ search</div>
+          <div style="margin-top: 4px;"><span class="prompt">&gt; grep -r "lopez" ./patients/</span></div>
+          <div class="dim" style="font-size: 12px; margin-top: 2px;">find a patient. fuzzy / phonetic / mrn.</div>
+          <div style="margin-top: 6px;"><span class="kbd">/</span> <span class="dim">find</span></div>
+        </div>
+        <div class="ascii-box" style="padding: 10px 12px;">
+          <div class="label-eyebrow">$ help</div>
+          <div style="margin-top: 4px;"><span class="prompt">&gt; man quillmd</span></div>
+          <div class="dim" style="font-size: 12px; margin-top: 2px;">keybinds, layer reference, error codes.</div>
+          <div style="margin-top: 6px;"><span class="kbd">?</span> <span class="dim">help</span></div>
+        </div>
+      </div>
+
+      <!-- typewriter command -->
+      <div style="margin-top: 28px;">
+        <div class="label-eyebrow">&gt;&gt;&gt; live_invocation</div>
+        <div style="margin-top: 8px; font-size: 14px;">
+          <span class="prompt">quillmd@v0.1</span><span class="dim">:</span><span class="hot">~/clinic</span><span class="dim">$</span>
+          <span class="typewriter ca">./record_visit.sh --patient="Maria Lopez" --specialty=cardio --mode=ambient</span>
+        </div>
+        <div class="dim" style="font-size: 12px; margin-top: 6px;">
+          # parsed. patient_id=tm_pat_8a31. specialty=cardio_v2. mic_perm=granted. spawning child(rec-recording-active).
+        </div>
+      </div>
+    </div>
+
+    <!-- ===========================================================
+         RECORDING-ACTIVE STATE
+         =========================================================== -->
+
+    <div class="hr-ascii">════════════════════════════════════════════════════════════════════════════════════════</div>
+
+    <div class="rec-block ca" style="margin-top: 8px;">
+      <!-- top header -->
+      <div style="display:flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px;">
+        <div class="phosphor-glow" style="font-weight: 700; font-size: 18px;">
+          &gt; [RECORDING] <span class="timer-count"></span>
+          <span class="cursor"></span>
+        </div>
+        <div class="fade" style="font-size: 12px;">
+          buffer=ring/2GB · codec=opus@48k · sr=48000 · ch=1 · vad=on · diarize=true
+        </div>
+      </div>
+
+      <!-- VU bar -->
+      <div style="margin-top: 10px; display:flex; align-items: center; gap: 14px; font-size: 14px;">
+        <span class="dim">VU</span>
+        <span class="vu-bar phosphor-glow" aria-hidden="true"></span>
+        <span class="dim">−18dBFS</span>
+        <span class="dim">|</span>
+        <span class="hot">[OK] noise_floor=−54dBFS</span>
+        <span class="dim">|</span>
+        <span class="dim">[..] silence_pad=2.4s</span>
+      </div>
+
+      <!-- patient/visit meta strip -->
+      <div class="rule-single" style="margin: 14px 0 6px;">─────────────────────────────────────────────────────────────────────────────────────</div>
+      <div style="display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 0; font-size: 13px;">
+        <div>
+          <div class="label-eyebrow">patient</div>
+          <div class="hot" style="font-weight: 700; margin-top: 2px;">LOPEZ, MARIA</div>
+          <div class="dim" style="font-size: 12px;">DOB 1971-08-14 · F · MRN tm-08831</div>
+        </div>
+        <div>
+          <div class="label-eyebrow">visit</div>
+          <div class="hot" style="font-weight: 700; margin-top: 2px;">tm_v_2026_04_29_0914</div>
+          <div class="dim" style="font-size: 12px;">specialty=cardio · ambient · room 04</div>
+        </div>
+        <div>
+          <div class="label-eyebrow">vitals</div>
+          <div style="margin-top: 2px;">BP <span class="hot">148/92</span> · HR <span class="hot">88</span> · O2 <span class="hot">97%</span></div>
+          <div class="dim" style="font-size: 12px;">last_taken=09:11 · 3m ago</div>
+        </div>
+        <div>
+          <div class="label-eyebrow">flags</div>
+          <div style="margin-top: 2px;"><span class="warn flag">[!!]</span> <span class="warn">warfarin↔ibuprofen</span></div>
+          <div class="dim" style="font-size: 12px;">L7c will recheck post-extract</div>
+        </div>
+      </div>
+      <div class="rule-single" style="margin: 8px 0 14px;">─────────────────────────────────────────────────────────────────────────────────────</div>
+
+      <!-- live transcript -->
+      <div class="label-eyebrow">&gt;&gt;&gt; transcript_stream  &nbsp; <span class="dim">tail -f /tmp/visit/0914.log</span></div>
+      <div class="transcript" style="margin-top: 8px;">
+<span class="line"><span class="ts">00:03</span>  <span class="who">[DR.]</span>     <span class="said">all right Maria, how have you been since last visit?</span></span>
+<span class="line"><span class="ts">00:09</span>  <span class="who">[PATIENT]</span> <span class="said">honestly the chest tightness — it’s been waking me up around three a.m.,</span></span>
+<span class="line"><span class="ts">00:14</span>  <span class="who">[PATIENT]</span> <span class="said">maybe four nights this week. lasts ten minutes, no radiation to the arm.</span></span>
+<span class="line"><span class="ts">00:19</span>  <span class="who">[DR.]</span>     <span class="said">any shortness of breath with it?</span></span>
+<span class="line"><span class="ts">00:22</span>  <span class="who">[PATIENT]</span> <span class="said">a little. and i'm still on the warfarin from the AFib.</span></span>
+<span class="line"><span class="ts">00:28</span>  <span class="who">[DR.]</span>     <span class="said">any new meds? did the urgent care give you anything for the back?</span></span>
+<span class="line"><span class="ts">00:33</span>  <span class="who">[PATIENT]</span> <span class="said">yeah they gave me ibuprofen — eight hundred. i've been taking it twice a day.</span></span>
+<span class="line"><span class="ts">00:39</span>  <span class="who">[DR.]</span>     <span class="said">okay — we need to stop the ibuprofen today. that's a problem with the warfarin.</span></span>
+<span class="line"><span class="ts">00:45</span>  <span class="who">[PATIENT]</span> <span class="said">oh — they didn't mention that.</span></span>
+<span class="line"><span class="ts">00:46</span>  <span class="dim">▌  &lt;dictation continuing…&gt;</span><span class="cursor-thin"></span></span>
+      </div>
+
+      <!-- pipeline preview (typewriter staged) -->
+      <div style="margin-top: 22px;">
+        <div class="label-eyebrow">&gt;&gt;&gt; pipeline_preflight</div>
+        <pre class="ascii" style="margin: 6px 0 0; font-size: 13px; color: var(--phosphor); line-height: 1.6;">
+<span class="layer-line l1">[L1] transcribe_audio        deepgram/nova-3-medical    .................... <span class="hot">ok</span></span>
+<span class="layer-line l2">[L2] speaker_roles           claude-sonnet-4.6           ................... <span class="hot">ok</span></span>
+<span class="layer-line l3">[L3] extract_entities        claude-sonnet-4.6 / icd10  .................... <span class="hot">ok</span></span>
+<span class="layer-line l4">[L4] generate_soap           claude-sonnet-4.6           ................. <span class="dim">running ▌</span></span>
+<span class="layer-line l5">[L5] self_critique           claude-opus-4.7             ................... <span class="fade">queued</span></span>
+<span class="layer-line l6">[L6] polish                  claude-sonnet-4.6           ................... <span class="fade">queued</span></span>
+<span class="layer-line l7">[L7] coding+rx+referrals     claude-sonnet-4.6 × 5       ................... <span class="fade">queued</span></span>
+        </pre>
+      </div>
+
+      <!-- ACTIONS row -->
+      <div style="margin-top: 18px; display:flex; flex-wrap: wrap; gap: 22px; font-size: 13px;">
+        <div><span class="kbd">space</span> <span class="dim">pause</span></div>
+        <div><span class="kbd">m</span> <span class="dim">marker</span></div>
+        <div><span class="kbd">w</span> <span class="dim">whisper-correction</span></div>
+        <div><span class="kbd">s</span> <span class="dim">stop &amp; finalize</span></div>
+        <div><span class="kbd">x</span> <span class="dim">discard buffer (confirmed)</span></div>
+        <div style="margin-left: auto;"><span class="dim">last_save_to_disk: <span class="hot">3.2s ago</span></span></div>
+      </div>
+    </div>
+
+    <!-- post-recording panel: SOAP draft preview as terminal output -->
+    <div class="hr-ascii" style="margin-top: 26px;">────────────────────────────────────────────────────────────────────────────────────────</div>
+
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+      <!-- LEFT: SOAP draft as text -->
+      <div>
+        <div class="label-eyebrow">&gt;&gt;&gt; soap_draft.txt  <span class="dim">·  L4 output  ·  unsaved</span></div>
+        <pre class="ascii" style="margin: 8px 0; font-size: 13px; line-height: 1.55; color: var(--phosphor);">
+<span class="dim">┌─ SUBJECTIVE ─────────────────────────────────────────────────────────┐</span>
+<span class="dim">│</span> Pt is 54F, established cardio, presents w/ recurrent nocturnal
+<span class="dim">│</span> chest tightness × 4 episodes this wk, ~10 min, no radiation. Mild
+<span class="dim">│</span> SOB on episode. h/o paroxysmal AFib (on warfarin 5 mg PO daily).
+<span class="dim">│</span> Recently started ibuprofen 800 mg PO BID per outside urgent-care
+<span class="dim">│</span> for low-back strain — pt unaware of contraindication.
+<span class="dim">└──────────────────────────────────────────────────────────────────────┘</span>
+
+<span class="dim">┌─ OBJECTIVE ──────────────────────────────────────────────────────────┐</span>
+<span class="dim">│</span> BP 148/92 (R, seated)   HR 88 reg   SpO2 97% RA   T 98.4°F
+<span class="dim">│</span> Cardio: RRR, no m/r/g.  Lungs CTA b/l.  Ext: no edema, 2+ pulses.
+<span class="dim">└──────────────────────────────────────────────────────────────────────┘</span>
+
+<span class="dim">┌─ ASSESSMENT ─────────────────────────────────────────────────────────┐</span>
+<span class="dim">│</span> 1. Unstable angina r/o, intermediate pre-test prob.  <span class="hot">[I20.0]</span>
+<span class="dim">│</span> 2. AFib, paroxysmal, anticoagulated.                <span class="hot">[I48.0]</span>
+<span class="dim">│</span> 3. <span class="warn">Drug-drug interaction: warfarin × ibuprofen.</span>     <span class="warn">[T45.515A]</span>
+<span class="dim">└──────────────────────────────────────────────────────────────────────┘</span>
+
+<span class="dim">┌─ PLAN ───────────────────────────────────────────────────────────────┐</span>
+<span class="dim">│</span> [01] STAT 12-lead ECG · trop-T ×3 (q3h) · CBC · INR
+<span class="dim">│</span> [02] DC ibuprofen <span class="warn flag">[!!]</span>; recommend acetaminophen 650 mg q6h prn
+<span class="dim">│</span> [03] Outpatient stress echo within 7d
+<span class="dim">│</span> [04] Pt education: red-flag symptoms; ER if &gt; 20 min CP or syncope
+<span class="dim">│</span> [05] F/U cardio clinic 1wk; INR recheck 3d
+<span class="dim">└──────────────────────────────────────────────────────────────────────┘</span>
+        </pre>
+      </div>
+
+      <!-- RIGHT: warning + checks -->
+      <div>
+        <div class="label-eyebrow">&gt;&gt;&gt; rx_safety_check  <span class="dim">·  L7c output</span></div>
+
+        <div class="ascii-box" style="margin-top: 8px; padding: 12px 14px; border-color: var(--amber-warn);">
+          <div style="display:flex; align-items: baseline; gap: 8px;">
+            <span class="warn flag" style="font-size: 18px;">[!!]</span>
+            <span class="warn" style="font-weight: 700; letter-spacing: 0.04em;">Rx interaction · CRITICAL</span>
+            <span class="dim" style="font-size: 12px; margin-left: auto;">severity=4/4 · src=ddi/2026-q1</span>
+          </div>
+          <pre class="ascii" style="margin: 10px 0 4px; font-size: 13px; color: var(--phosphor); line-height: 1.55;">
+warfarin × ibuprofen     [!!]  bleeding_risk_critical
+  ↳ NSAIDs increase bleed risk &gt;3× when combined with anticoagulants;
+    additive antiplatelet effect; potential GI ulceration.
+  ↳ pt is currently INR-supratherapeutic risk.
+          </pre>
+          <div style="margin-top: 6px; font-size: 13px;">
+            <span class="hot">action.recommended</span> <span class="dim">=</span> <span class="hot">DC ibuprofen → acetaminophen 650 mg q6h prn</span>
+          </div>
+          <div style="margin-top: 4px; font-size: 13px;">
+            <span class="dim">action.alternate</span> <span class="dim">=</span> <span class="dim">PPI cover + INR q3d if continued (NOT recommended)</span>
+          </div>
+
+          <div class="rule-single" style="margin: 12px 0 8px;">───────────────────────────────────────────────────────────────</div>
+          <div style="display:flex; gap: 18px; font-size: 12px;">
+            <div><span class="kbd">a</span> <span class="dim">accept advice</span></div>
+            <div><span class="kbd">o</span> <span class="dim">override (typed reason req.)</span></div>
+            <div><span class="kbd">d</span> <span class="dim">defer to pharmacist</span></div>
+          </div>
+        </div>
+
+        <div class="label-eyebrow" style="margin-top: 22px;">&gt;&gt;&gt; coding_pass  <span class="dim">·  L7a / L7b</span></div>
+        <pre class="ascii" style="margin: 8px 0; font-size: 13px; line-height: 1.55; color: var(--phosphor);">
+<span class="dim">─</span> ICD-10 ────────────────────────────────────────────────────────
+   I20.0   Unstable angina                                  <span class="flag-ok">[OK]</span>
+   I48.0   Paroxysmal atrial fibrillation                   <span class="flag-ok">[OK]</span>
+   T45.515A Adverse effect of anticoagulants, init. encntr. <span class="flag-warn">[??]</span>
+            <span class="dim">L5 self_critique flagged dual-coding ambiguity</span>
+<span class="dim">─</span> CPT ───────────────────────────────────────────────────────────
+   99214   Office visit, established, mod-complexity        <span class="flag-ok">[OK]</span>
+   93000   Electrocardiogram, complete                      <span class="flag-ok">[OK]</span>
+   84484   Troponin                                         <span class="flag-ok">[OK]</span>
+        </pre>
+
+        <div class="label-eyebrow" style="margin-top: 18px;">&gt;&gt;&gt; signoff_state</div>
+        <div style="margin-top: 8px; font-size: 13px;">
+          <span class="prompt">quillmd@v0.1</span><span class="dim">:</span><span class="hot">/visits/tm_v_2026_04_29_0914</span><span class="dim">$</span>
+          <span class="hot">./sign --as=dr_chen --note="reviewed,attest" --send-to=ehr</span>
+          <span class="cursor-thin"></span>
+        </div>
+        <div class="dim" style="font-size: 12px; margin-top: 4px;">
+          # signing locks the note. audit_log emits SIGN event. visit_state → READY.
+        </div>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ===========================================================
+       FULL-WIDTH SEPARATOR — DASHBOARD BAND
+       =========================================================== -->
+  <div class="section-band">
+══════════════════════════════════════ <b>DASHBOARD</b> ══════════════════════════════════════
+  </div>
+
+  <!-- ===========================================================
+       SECTION 2 — DASHBOARD
+       =========================================================== -->
+  <section>
+
+    <!-- TOP STATUSBAR (the system header) -->
+    <div class="ascii-box" style="padding: 6px 14px; display:flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; background: var(--bg-panel);">
+      <div style="font-size: 13px;">
+        <span class="prompt phosphor-glow ca">quillmd@v0.1</span>
+        <span class="dim"> · </span>
+        <span>[Dr. Chen / Practice 47]</span>
+        <span class="dim"> ─────── </span>
+        <span>Apr 29 2026</span>
+        <span class="dim"> · </span>
+        <span>09:14 PST</span>
+        <span class="dim"> · </span>
+        <span>tty/0</span>
+      </div>
+      <div style="font-size: 12px;" class="dim">
+        load <span class="hot">0.42</span> · queue <span class="hot">23</span> · workers <span class="hot">4/4</span> · sse <span class="hot">●</span> · sign-cert <span class="hot">valid</span> · hipaa <span class="hot">enforced</span>
+      </div>
+    </div>
+
+    <!-- 2-pane grid: tree + main -->
+    <div class="dash-grid" style="margin-top: 14px;">
+
+      <!-- LEFT: NerdTree-style file pane -->
+      <aside class="nerdtree">
+        <div class="label-eyebrow">~/clinic</div>
+        <div class="dim" style="font-size: 12px; margin-bottom: 6px;">─── tree ────────────</div>
+        <div class="tree">
+          <span class="node open">▾ visits/</span>
+          <span class="node" style="padding-left: 14px;">├── ready/        <span class="dim">(184)</span></span>
+          <span class="node" style="padding-left: 14px;">├── signed/       <span class="dim">(2,041)</span></span>
+          <span class="node sel" style="padding-left: 14px;">├── pending/      <span class="hot">(23)</span></span>
+          <span class="node" style="padding-left: 14px;">├── failed/       <span class="warn">(2)</span></span>
+          <span class="node" style="padding-left: 14px;">└── archived/     <span class="dim">(891)</span></span>
+
+          <span class="node open" style="margin-top: 8px;">▾ patients/</span>
+          <span class="node" style="padding-left: 14px;">├── all/          <span class="dim">(1,472)</span></span>
+          <span class="node" style="padding-left: 14px;">├── recent/       <span class="dim">(47)</span></span>
+          <span class="node" style="padding-left: 14px;">└── flagged/      <span class="warn">(6)</span></span>
+
+          <span class="node open" style="margin-top: 8px;">▾ specialties/</span>
+          <span class="node" style="padding-left: 14px;">├── cardio/       <span class="dim">(312)</span></span>
+          <span class="node" style="padding-left: 14px;">├── psych/        <span class="dim">(118)</span></span>
+          <span class="node" style="padding-left: 14px;">├── peds/         <span class="dim">(204)</span></span>
+          <span class="node" style="padding-left: 14px;">├── derm/         <span class="dim">(89)</span></span>
+          <span class="node" style="padding-left: 14px;">├── ortho/        <span class="dim">(143)</span></span>
+          <span class="node" style="padding-left: 14px;">└── primary/      <span class="dim">(606)</span></span>
+
+          <span class="node open" style="margin-top: 8px;">▾ pipeline/</span>
+          <span class="node" style="padding-left: 14px;">├── L1.transcribe/</span>
+          <span class="node" style="padding-left: 14px;">├── L2.speakers/</span>
+          <span class="node" style="padding-left: 14px;">├── L3.extract/</span>
+          <span class="node" style="padding-left: 14px;">├── L4.soap/</span>
+          <span class="node" style="padding-left: 14px;">├── L5.critique/</span>
+          <span class="node" style="padding-left: 14px;">├── L6.polish/</span>
+          <span class="node" style="padding-left: 14px;">└── L7.codes-rx-refs/</span>
+
+          <span class="node" style="margin-top: 8px;">▸ admin/         <span class="dim">(super)</span></span>
+          <span class="node">▸ settings/</span>
+          <span class="node">▸ exports/       <span class="dim">(.docx .pdf)</span></span>
+        </div>
+
+        <div class="rule-single" style="margin: 18px 0 8px;">─── status ──────────</div>
+        <div style="font-size: 12px; line-height: 1.7;">
+          <div><span class="dim">postgres</span>  <span class="flag-ok">[OK]</span></div>
+          <div><span class="dim">redis</span>     <span class="flag-ok">[OK]</span></div>
+          <div><span class="dim">minio</span>     <span class="flag-ok">[OK]</span></div>
+          <div><span class="dim">deepgram</span>  <span class="flag-ok">[OK]</span> <span class="fade">12ms</span></div>
+          <div><span class="dim">claude</span>    <span class="flag-ok">[OK]</span> <span class="fade">88ms</span></div>
+          <div><span class="dim">openai</span>    <span class="flag-warn">[..]</span> <span class="fade">degraded</span></div>
+          <div><span class="dim">caddy</span>     <span class="flag-ok">[OK]</span></div>
+          <div><span class="dim">backups</span>   <span class="flag-ok">[OK]</span> <span class="fade">02:14 UTC</span></div>
+        </div>
+
+        <div class="rule-single" style="margin: 18px 0 8px;">─── shortcuts ───────</div>
+        <div style="font-size: 12px; line-height: 1.85;">
+          <div><span class="kbd">n</span> new visit</div>
+          <div><span class="kbd">/</span> fuzzy search</div>
+          <div><span class="kbd">g</span><span class="kbd">d</span> go: dashboard</div>
+          <div><span class="kbd">g</span><span class="kbd">v</span> go: visits</div>
+          <div><span class="kbd">g</span><span class="kbd">p</span> go: patients</div>
+          <div><span class="kbd">:</span> command-mode</div>
+          <div><span class="kbd">?</span> man page</div>
+          <div><span class="kbd">q</span> sign-out</div>
+        </div>
+      </aside>
+
+      <!-- RIGHT: main pane -->
+      <main class="pane">
+
+        <!-- Top tabs as breadcrumb path -->
+        <div style="display:flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+          <div style="font-size: 13px;">
+            <span class="prompt">quillmd@v0.1</span><span class="dim">:</span><span class="hot ca">/dashboard</span><span class="dim">$</span>
+            <span class="dim"> ls -lah --sort=time visits/pending/</span>
+          </div>
+          <div style="font-size: 12px;" class="dim">
+            view=visits  ·  range=last_24h  ·  group=specialty  ·  sort=arrived_desc
+          </div>
+        </div>
+
+        <!-- KPI strip — stats as raw numbers -->
+        <div style="margin-top: 18px; display:grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 0; border: 1px solid var(--line); background: var(--bg-bleed);">
+          <div class="stat-card" style="border:none; border-right: 1px solid var(--line);">
+            <div class="num phosphor-glow">23</div>
+            <div class="label">pending</div>
+            <div class="dim" style="font-size: 11px; margin-top: 2px;">→ 2 ready · 21 processing</div>
+          </div>
+          <div class="stat-card" style="border:none; border-right: 1px solid var(--line);">
+            <div class="num">7</div>
+            <div class="label">today_signed</div>
+            <div class="dim" style="font-size: 11px; margin-top: 2px;">avg_sign_time 06m 41s</div>
+          </div>
+          <div class="stat-card" style="border:none; border-right: 1px solid var(--line);">
+            <div class="num warn">2</div>
+            <div class="label">failed_q</div>
+            <div class="dim" style="font-size: 11px; margin-top: 2px;">retryable in 00:44</div>
+          </div>
+          <div class="stat-card" style="border:none; border-right: 1px solid var(--line);">
+            <div class="num">147</div>
+            <div class="label">patients_active</div>
+            <div class="dim" style="font-size: 11px; margin-top: 2px;">+3 vs yesterday</div>
+          </div>
+          <div class="stat-card" style="border:none;">
+            <div class="num">$0.41</div>
+            <div class="label">cost_per_visit</div>
+            <div class="dim" style="font-size: 11px; margin-top: 2px;">L1+L4+L7 dominant</div>
+          </div>
+        </div>
+
+        <!-- Banner: throughput sparkline as ASCII -->
+        <div class="rule-single" style="margin: 18px 0 6px;">─── throughput ─ last_24h ─ visits/hr ──────────────────────────────────────</div>
+        <pre class="ascii" style="margin: 4px 0 12px; font-size: 12px; line-height: 1.45; color: var(--phosphor); letter-spacing: 0.06em;">
+ 12 │            ▂      ▄        ▅
+ 10 │      ▂  ▄ █▆ ▃   ██     ▂  █  ▃
+  8 │   ▂  ██ █ ██ █ ▃ ██  ▂ ▆█▂ ██▄█  ▆
+  6 │ ▂ █▄ ██▆█ ██ █ █▅██▃▆█ ███ ████  █▂  ▃
+  4 │ █▅██ ██████ █████████ ██████████  ███  █
+  2 │ ██████████████████████████████████  █████████
+  0 └────────────────────────────────────────────────────────────────────
+       00  02  04  06  08  10  12  14  16  18  20  22   <span class="dim">(now: 09)</span>
+        </pre>
+
+        <!-- VISITS LIST AS MAN-PAGE ROWS -->
+        <div class="hr-ascii">─── visits/pending/ ─ press &lt;j&gt;/&lt;k&gt; to navigate ─ &lt;↵&gt; to open ────────────</div>
+
+        <div style="font-size: 12px; color: var(--phosphor-fade); padding: 0 6px; display:grid; grid-template-columns: 152px 220px 90px 88px 1fr 140px; gap: 8px; text-transform: uppercase; letter-spacing: 0.12em; border-bottom: 1px solid var(--line); padding-bottom: 4px;">
+          <div>arrived</div>
+          <div>patient</div>
+          <div>spec</div>
+          <div>state</div>
+          <div>note</div>
+          <div>action</div>
+        </div>
+
+        <div class="man-row active urgent">
+          <div>2026-04-29 09:14</div>
+          <div><span class="hot">LOPEZ, MARIA</span> <span class="dim">tm-08831</span></div>
+          <div>cardio</div>
+          <div><span class="flag-warn">[!!]</span> <span class="warn">RX_FLAG</span></div>
+          <div class="dim">unstable angina r/o · warfarin↔ibuprofen interaction · L7c flagged</div>
+          <div><span class="kbd">↵</span> open · <span class="kbd">r</span> retry</div>
+        </div>
+
+        <div class="man-row">
+          <div>2026-04-29 09:08</div>
+          <div>PATEL, RAJ <span class="dim">tm-08824</span></div>
+          <div>cardio</div>
+          <div><span class="flag-ok">[OK]</span> READY</div>
+          <div class="dim">f/u HTN · BP 132/84 · ARB titration · sign-pending</div>
+          <div><span class="kbd">↵</span> sign · <span class="kbd">e</span> edit</div>
+        </div>
+
+        <div class="man-row">
+          <div>2026-04-29 09:01</div>
+          <div>NGUYEN, ANH <span class="dim">tm-08819</span></div>
+          <div>peds</div>
+          <div><span class="flag-pend">[..]</span> L4_run</div>
+          <div class="dim">otitis media (R) · 4yo · amoxicillin per wt · L4 generating SOAP…</div>
+          <div><span class="dim">— wait —</span></div>
+        </div>
+
+        <div class="man-row">
+          <div>2026-04-29 08:54</div>
+          <div>OKONKWO, ADA <span class="dim">tm-08810</span></div>
+          <div>psych</div>
+          <div><span class="flag-pend">[..]</span> L2_run</div>
+          <div class="dim">established f/u depression · PHQ-9 14 → 9 · SSRI tolerated</div>
+          <div><span class="dim">— wait —</span></div>
+        </div>
+
+        <div class="man-row">
+          <div>2026-04-29 08:47</div>
+          <div>JOHNSON, MARCUS <span class="dim">tm-08805</span></div>
+          <div>ortho</div>
+          <div><span class="flag-ok">[OK]</span> READY</div>
+          <div class="dim">post-op POD-14 ACL · ROM 0–110° · PT progression · sign-pending</div>
+          <div><span class="kbd">↵</span> sign · <span class="kbd">e</span> edit</div>
+        </div>
+
+        <div class="man-row">
+          <div>2026-04-29 08:33</div>
+          <div>CHO, EUNHA <span class="dim">tm-08792</span></div>
+          <div>derm</div>
+          <div><span class="flag-pend">[..]</span> L3_run</div>
+          <div class="dim">new patient · SK lesion vs AK · biopsy plan · L3 entity_extract running…</div>
+          <div><span class="dim">— wait —</span></div>
+        </div>
+
+        <div class="man-row">
+          <div>2026-04-29 08:21</div>
+          <div>RIVERA, JOSE <span class="dim">tm-08784</span></div>
+          <div>primary</div>
+          <div><span class="flag-err">[ERR]</span> failed</div>
+          <div class="dim warn">L1 deepgram: 502 upstream · audio re-uploaded · auto-retry in 00:44</div>
+          <div><span class="kbd">r</span> retry now · <span class="kbd">x</span> abort</div>
+        </div>
+
+        <div class="man-row">
+          <div>2026-04-29 08:17</div>
+          <div>HARRINGTON, ELLA <span class="dim">tm-08778</span></div>
+          <div>cardio</div>
+          <div><span class="flag-ok">[OK]</span> READY</div>
+          <div class="dim">post-MI 6mo f/u · echo EF 48 → 54 · statin titrated · sign-pending</div>
+          <div><span class="kbd">↵</span> sign · <span class="kbd">e</span> edit</div>
+        </div>
+
+        <div class="man-row">
+          <div>2026-04-29 08:02</div>
+          <div>YAMAMOTO, KEN <span class="dim">tm-08763</span></div>
+          <div>primary</div>
+          <div><span class="flag-pend">[..]</span> L5_run</div>
+          <div class="dim">annual physical · LDL 142 · A1c 6.1 · self-critique pass running…</div>
+          <div><span class="dim">— wait —</span></div>
+        </div>
+
+        <div class="man-row">
+          <div>2026-04-29 07:55</div>
+          <div>BENNETT, GRACE <span class="dim">tm-08750</span></div>
+          <div>psych</div>
+          <div><span class="flag-warn">[??]</span> CRIT_LOW</div>
+          <div class="dim warn">L5 self_critique: assessment confidence 0.42 — review before sign</div>
+          <div><span class="kbd">↵</span> review</div>
+        </div>
+
+        <div class="man-row">
+          <div>2026-04-29 07:48</div>
+          <div>DELACROIX, PIERRE <span class="dim">tm-08741</span></div>
+          <div>derm</div>
+          <div><span class="flag-pend">[..]</span> L7_run</div>
+          <div class="dim">eczema flare · steroid ladder · L7c rx_drafting…</div>
+          <div><span class="dim">— wait —</span></div>
+        </div>
+
+        <div class="man-row">
+          <div>2026-04-29 07:33</div>
+          <div>SOTO, ISABEL <span class="dim">tm-08729</span></div>
+          <div>peds</div>
+          <div><span class="flag-ok">[OK]</span> READY</div>
+          <div class="dim">12mo well-child · MMR/Varicella admin · growth 70th%ile · sign-pending</div>
+          <div><span class="kbd">↵</span> sign · <span class="kbd">e</span> edit</div>
+        </div>
+
+        <div class="man-row">
+          <div>2026-04-29 07:14</div>
+          <div>WALKER, JAMES <span class="dim">tm-08711</span></div>
+          <div>ortho</div>
+          <div><span class="flag-pend">[..]</span> L1_run</div>
+          <div class="dim">low back pain × 6wk · MRI plan · L1 transcribing 14m audio…</div>
+          <div><span class="dim">— wait —</span></div>
+        </div>
+
+        <div class="hr-ascii" style="margin-top: 8px;">─── 13 of 23 shown · &lt;G&gt; jump to bottom · &lt;j&gt; next · &lt;k&gt; prev · &lt;d&gt; archive ──</div>
+
+        <!-- side-by-side: patients summary + ai pipeline live -->
+        <div style="margin-top: 24px; display:grid; grid-template-columns: 1.1fr 1fr; gap: 18px;">
+
+          <!-- left: patients-recent table -->
+          <div>
+            <div class="label-eyebrow">&gt;&gt;&gt; patients/recent  <span class="dim">·  cat ./patients/recent.txt | head</span></div>
+            <table class="term-table" style="margin-top: 8px;">
+              <thead>
+                <tr>
+                  <th>mrn</th>
+                  <th>name</th>
+                  <th>age/sex</th>
+                  <th>last_visit</th>
+                  <th>open_flags</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="dim">tm-08831</td>
+                  <td><a href="#" class="ca">LOPEZ, MARIA</a></td>
+                  <td>54F</td>
+                  <td class="dim">today 09:14</td>
+                  <td><span class="warn flag">[!!]</span> rx_ddi</td>
+                </tr>
+                <tr>
+                  <td class="dim">tm-08824</td>
+                  <td>PATEL, RAJ</td>
+                  <td>62M</td>
+                  <td class="dim">today 09:08</td>
+                  <td><span class="dim">—</span></td>
+                </tr>
+                <tr>
+                  <td class="dim">tm-08819</td>
+                  <td>NGUYEN, ANH</td>
+                  <td>4F</td>
+                  <td class="dim">today 09:01</td>
+                  <td><span class="dim">—</span></td>
+                </tr>
+                <tr>
+                  <td class="dim">tm-08750</td>
+                  <td>BENNETT, GRACE</td>
+                  <td>33F</td>
+                  <td class="dim">today 07:55</td>
+                  <td><span class="warn flag">[??]</span> crit_low</td>
+                </tr>
+                <tr>
+                  <td class="dim">tm-08711</td>
+                  <td>WALKER, JAMES</td>
+                  <td>58M</td>
+                  <td class="dim">today 07:14</td>
+                  <td><span class="dim">—</span></td>
+                </tr>
+                <tr>
+                  <td class="dim">tm-08642</td>
+                  <td>DOAN, MINH</td>
+                  <td>71M</td>
+                  <td class="dim">yesterday 16:42</td>
+                  <td><span class="dim">—</span></td>
+                </tr>
+                <tr>
+                  <td class="dim">tm-08611</td>
+                  <td>OYELARAN, FUNMI</td>
+                  <td>29F</td>
+                  <td class="dim">yesterday 14:18</td>
+                  <td><span class="dim">—</span></td>
+                </tr>
+                <tr>
+                  <td class="dim">tm-08583</td>
+                  <td>WEBER, HANS</td>
+                  <td>67M</td>
+                  <td class="dim">2d 11:01</td>
+                  <td><span class="warn flag">[!!]</span> rx_ddi</td>
+                </tr>
+                <tr>
+                  <td class="dim">tm-08540</td>
+                  <td>SHAH, MEERA</td>
+                  <td>45F</td>
+                  <td class="dim">3d 09:48</td>
+                  <td><span class="dim">—</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- right: pipeline live monitor -->
+          <div>
+            <div class="label-eyebrow">&gt;&gt;&gt; pipeline.live  <span class="dim">·  bullmq · queue=transcribe-md</span></div>
+            <pre class="ascii" style="margin: 8px 0; font-size: 13px; line-height: 1.55;">
+<span class="dim">┌──────────────────────────────────────────────────────────────────────┐</span>
+<span class="dim">│</span> <span class="hot">[L1]</span> transcribe_audio       <span class="progress">█████████████████░░░░  78%</span>  4 jobs
+<span class="dim">│</span> <span class="hot">[L2]</span> speaker_roles          <span class="progress">██████░░░░░░░░░░░░░░░  29%</span>  2 jobs
+<span class="dim">│</span> <span class="hot">[L3]</span> extract_entities       <span class="progress">██████████░░░░░░░░░░░  47%</span>  3 jobs
+<span class="dim">│</span> <span class="hot">[L4]</span> generate_soap          <span class="progress">██████████████░░░░░░░  66%</span>  4 jobs
+<span class="dim">│</span> <span class="hot">[L5]</span> self_critique          <span class="progress">████░░░░░░░░░░░░░░░░░  18%</span>  2 jobs
+<span class="dim">│</span> <span class="hot">[L6]</span> polish                 <span class="progress">█████████░░░░░░░░░░░░  41%</span>  3 jobs
+<span class="dim">│</span> <span class="hot">[L7]</span> coding+rx+referrals    <span class="progress">████████████░░░░░░░░░  57%</span>  5 jobs
+<span class="dim">└──────────────────────────────────────────────────────────────────────┘</span>
+            </pre>
+
+            <div class="rule-single" style="margin: 8px 0;">─── recent_pipeline_events  · stream sse:/api/admin/stream/activity ──</div>
+            <pre class="ascii" style="margin: 4px 0; font-size: 12px; line-height: 1.55;">
+<span class="dim">09:14:02</span> <span class="hot">[L4]</span> tm_v_…0914  generate_soap  <span class="flag-ok">started</span>
+<span class="dim">09:13:58</span> <span class="hot">[L3]</span> tm_v_…0914  extract        <span class="flag-ok">ok 1.2s</span>
+<span class="dim">09:13:52</span> <span class="hot">[L2]</span> tm_v_…0914  speaker_roles  <span class="flag-ok">ok 0.8s</span>
+<span class="dim">09:13:46</span> <span class="hot">[L1]</span> tm_v_…0914  transcribe     <span class="flag-ok">ok 4.4s</span>
+<span class="dim">09:13:39</span> <span class="warn">[L5]</span> tm_v_…0750  critique       <span class="flag-warn">low_conf 0.42</span>
+<span class="dim">09:13:21</span> <span class="hot">[L7]</span> tm_v_…0805  rx_drafting    <span class="flag-ok">ok 2.1s</span>
+<span class="dim">09:12:08</span> <span class="err">[L1]</span> tm_v_…0784  transcribe     <span class="flag-err">ERR 502</span>
+<span class="dim">09:12:09</span> <span class="dim">[ retry queued in 00:44 ]</span>
+<span class="dim">09:11:54</span> <span class="hot">[L6]</span> tm_v_…0763  polish         <span class="flag-ok">ok 0.9s</span>
+<span class="dim">09:11:32</span> <span class="hot">[L4]</span> tm_v_…0792  generate_soap  <span class="flag-ok">ok 3.6s</span>
+<span class="dim">09:11:14</span> <span class="hot">[L7]</span> tm_v_…0750  rx_drafting    <span class="flag-ok">ok 1.8s</span>
+<span class="dim">09:10:47</span> <span class="hot">[L7]</span> tm_v_…0750  icd_coding     <span class="flag-ok">ok 0.7s</span>
+            </pre>
+          </div>
+        </div>
+
+        <!-- AUDIT LOG / ACTIVITY -->
+        <div style="margin-top: 24px;">
+          <div class="label-eyebrow">&gt;&gt;&gt; audit_tail  <span class="dim">·  /var/log/quillmd/audit.log  ·  HIPAA-required</span></div>
+          <pre class="ascii" style="margin: 8px 0; font-size: 12px; line-height: 1.55;">
+<span class="dim">2026-04-29T09:13:51Z</span> <span class="hot">SIGN</span>     dr_chen   tm_v_…0750   ip=10.0.4.21   reason="reviewed,attest"
+<span class="dim">2026-04-29T09:11:02Z</span> <span class="hot">VIEW</span>     dr_chen   pat_tm-08831 ip=10.0.4.21   field=full_chart
+<span class="dim">2026-04-29T09:08:18Z</span> <span class="hot">CREATE</span>   dr_chen   tm_v_…0824   ip=10.0.4.21   specialty=cardio
+<span class="dim">2026-04-29T09:04:44Z</span> <span class="warn">OVERRIDE</span> dr_chen   pat_tm-08583 ip=10.0.4.21   reason="benefit&gt;risk: 5d ppi cover"
+<span class="dim">2026-04-29T08:21:09Z</span> <span class="err">RETRY</span>    sys_worker tm_v_…0784  ip=container   layer=L1
+<span class="dim">2026-04-29T08:12:01Z</span> <span class="hot">LOGIN</span>    dr_chen   --           ip=10.0.4.21   factor=totp
+          </pre>
+        </div>
+
+      </main>
+    </div>
+
+    <!-- ===========================================================
+         BOTTOM MODELINE — vim-style statusbar
+         =========================================================== -->
+    <div class="modeline" style="margin-top: 0; display:flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+      <div>
+        :NORMAL  <span style="opacity: 0.7;">|</span>  buf=23/40  <span style="opacity: 0.7;">|</span>  patients=147  <span style="opacity: 0.7;">|</span>  unsaved=0  <span style="opacity: 0.7;">|</span>  signed=7  <span style="opacity: 0.7;">|</span>  pipeline=4/4  <span style="opacity: 0.7;">|</span>  cost_today=$0.41
+      </div>
+      <div style="opacity: 0.85;">
+        UTF-8  <span style="opacity: 0.7;">|</span>  unix  <span style="opacity: 0.7;">|</span>  &lt;quillmd-0.1.0&gt;  <span style="opacity: 0.7;">|</span>  09:14:38 PST
+      </div>
+    </div>
+
+    <!-- COMMAND BAR — bottom invocation prompt -->
+    <div class="cmdbar">
+      <div style="font-size: 13px;">
+        <span class="prompt">quillmd@v0.1</span><span class="dim">&gt;</span>
+        <span class="dim">&nbsp;:</span><span class="hot">find</span>
+        <span> patient="</span><span class="hot">lopez</span><span>"</span>
+        <span class="cursor"></span>
+      </div>
+      <div style="margin-left: auto; font-size: 12px;" class="dim">
+        <span class="kbd">tab</span> autocomplete &nbsp; <span class="kbd">↑/↓</span> history &nbsp; <span class="kbd">esc</span> abort
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ===========================================================
+       SECTION 3 — VISIT DETAIL VIEW (man-page entry)
+       =========================================================== -->
+  <div class="section-band">
+══════════════════════════════════════ <b>VISIT(1)</b> ══════════════════════════════════════
+  </div>
+
+  <section>
+    <div class="ascii-box corners corners-bottom" style="padding: 22px 26px;">
+
+      <!-- man-page header -->
+      <div style="display:flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 12px;">
+        <div style="font-size: 14px;">
+          <span class="prompt ca">VISIT(1)</span>
+          <span class="dim">  ·  </span>
+          <span>QuillMD Doctor Manual</span>
+          <span class="dim">  ·  </span>
+          <span>VISIT(1)</span>
+        </div>
+        <div class="dim" style="font-size: 12px;">
+          path: /visits/tm_v_2026_04_29_0914  ·  state=READY  ·  written=09:14  ·  signed=—
+        </div>
+      </div>
+
+      <div class="rule-double" style="margin: 14px 0;">════════════════════════════════════════════════════════════════════════════════</div>
+
+      <!-- NAME / SYNOPSIS / DESCRIPTION -->
+      <div style="display:grid; grid-template-columns: 140px 1fr; row-gap: 14px; column-gap: 28px; font-size: 13px; line-height: 1.6;">
+        <div class="label-eyebrow">name</div>
+        <div>
+          <span class="hot phosphor-glow ca">tm_v_2026_04_29_0914</span> <span class="dim">—</span>
+          established cardio f/u; chief complaint nocturnal chest tightness ×4 episodes/wk
+        </div>
+
+        <div class="label-eyebrow">synopsis</div>
+        <div>
+          <span class="prompt">visit</span>
+          <span> [<span class="hot">--patient</span>=<span class="ca">LOPEZ,MARIA</span>]</span>
+          <span> [<span class="hot">--specialty</span>=cardio]</span>
+          <span> [<span class="hot">--mode</span>=ambient]</span>
+          <span> [<span class="hot">--duration</span>=11m04s]</span>
+          <span> [<span class="hot">--signed</span>=false]</span>
+        </div>
+
+        <div class="label-eyebrow">description</div>
+        <div>
+          54F established Pt, recurrent nocturnal chest tightness, h/o paroxysmal AFib on
+          warfarin 5 mg PO daily. Recently self-administering ibuprofen 800 mg PO BID via
+          outside urgent-care. Exam unremarkable, BP elevated 148/92. Plan: STAT ECG,
+          troponin q3h, INR, outpatient stress echo &lt;7d, immediate ibuprofen DC,
+          acetaminophen substitution, F/U cardio clinic 1wk.
+        </div>
+
+        <div class="label-eyebrow">options</div>
+        <div>
+          <pre class="ascii" style="margin:0; font-size: 13px; line-height: 1.55;">
+   <span class="hot">-r, --record</span>            re-open mic; appends to existing buffer
+   <span class="hot">-e, --edit</span>              open SOAP draft in $EDITOR (vim by default)
+   <span class="hot">-s, --sign</span>              attest &amp; lock; emits SIGN audit event
+   <span class="hot">-x, --export</span>=&lt;fmt&gt;      docx | pdf | clipboard | email
+   <span class="hot">-d, --delete</span>            soft-delete; preserves audit trail
+   <span class="hot">    --share</span>=&lt;dest&gt;       deliver to ehr | patient_portal | fax
+   <span class="hot">    --rerun</span>=&lt;layer&gt;      rerun a single pipeline layer (L1..L7)
+          </pre>
+        </div>
+
+        <div class="label-eyebrow">files</div>
+        <div>
+          <pre class="ascii" style="margin: 0; font-size: 13px; line-height: 1.55;">
+   /storage/audio/tm_v_…0914/audio.opus           <span class="dim">2.7 MB · 11m04s · sha256 d9f3…</span>
+   /storage/transcripts/tm_v_…0914/raw.json       <span class="dim">128 KB · diarized · 312 turns</span>
+   /storage/notes/tm_v_…0914/soap.draft.txt       <span class="dim">3.4 KB · L4 output</span>
+   /storage/notes/tm_v_…0914/soap.signed.pdf      <span class="dim">— pending --sign —</span>
+          </pre>
+        </div>
+
+        <div class="label-eyebrow">flags</div>
+        <div>
+          <span class="warn flag">[!!]</span> <span class="warn">RX_DDI / warfarin × ibuprofen / severity 4 of 4</span>
+          <span class="dim"> · </span>
+          <span class="flag-ok">[OK]</span> ICD coding complete
+          <span class="dim"> · </span>
+          <span class="flag-ok">[OK]</span> CPT coding complete
+          <span class="dim"> · </span>
+          <span class="flag-warn">[??]</span> <span>L5 confidence 0.71 (acceptable)</span>
+        </div>
+
+        <div class="label-eyebrow">history</div>
+        <div>
+          <pre class="ascii" style="margin: 0; font-size: 12px; line-height: 1.6;">
+   2026-04-29 09:14:02  <span class="hot">CREATE</span>   dr_chen  visit_started
+   2026-04-29 09:14:38  <span class="hot">L1</span>       sys      transcribe ok 4.4s
+   2026-04-29 09:14:39  <span class="hot">L2</span>       sys      speakers ok 0.8s
+   2026-04-29 09:14:40  <span class="hot">L3</span>       sys      extract ok 1.2s
+   2026-04-29 09:14:43  <span class="hot">L4</span>       sys      soap ok 3.6s
+   2026-04-29 09:14:44  <span class="hot">L5</span>       sys      critique ok 1.0s (conf 0.71)
+   2026-04-29 09:14:44  <span class="hot">L6</span>       sys      polish ok 0.6s
+   2026-04-29 09:14:46  <span class="hot">L7a</span>      sys      icd ok
+   2026-04-29 09:14:47  <span class="hot">L7b</span>      sys      cpt ok
+   2026-04-29 09:14:48  <span class="warn">L7c</span>      sys      rx <span class="warn">FLAG warfarin×ibuprofen</span>
+   2026-04-29 09:14:49  <span class="hot">L7d</span>      sys      referrals ok
+          </pre>
+        </div>
+
+        <div class="label-eyebrow">see also</div>
+        <div>
+          <a href="#" class="ca">PATIENT(1)</a>,
+          <a href="#" class="ca">PIPELINE(7)</a>,
+          <a href="#" class="ca">RX-DDI(8)</a>,
+          <a href="#" class="ca">SIGN(1)</a>,
+          <a href="#" class="ca">EXPORT(1)</a>,
+          <a href="#" class="ca">AUDIT(7)</a>
+        </div>
+      </div>
+
+      <div class="rule-double" style="margin: 22px 0 6px;">════════════════════════════════════════════════════════════════════════════════</div>
+      <div class="dim" style="font-size: 12px; display:flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+        <span>QuillMD 0.1.0 · 2026-04-29</span>
+        <span>(press <span class="kbd">q</span> to quit, <span class="kbd">/</span> to search, <span class="kbd">n/N</span> next/prev match)</span>
+        <span>VISIT(1)</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===========================================================
+       SECTION 4 — KEYBINDS REFERENCE  (because this is a terminal)
+       =========================================================== -->
+  <div class="section-band">
+══════════════════════════════════════ <b>KEYBINDS</b> ══════════════════════════════════════
+  </div>
+
+  <section>
+    <div class="ascii-box" style="padding: 18px 22px;">
+      <div class="label-eyebrow">&gt;&gt;&gt; man quillmd-keys</div>
+
+      <div style="margin-top: 12px; display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; font-size: 13px;">
+
+        <div>
+          <div class="hot" style="font-weight: 700;">NAVIGATION</div>
+          <div class="rule-single" style="margin: 4px 0 8px;">─────────────────────────</div>
+          <div><span class="kbd">j</span> <span class="kbd">k</span> <span class="dim">row down / up</span></div>
+          <div><span class="kbd">h</span> <span class="kbd">l</span> <span class="dim">collapse / expand tree</span></div>
+          <div><span class="kbd">g</span><span class="kbd">g</span> <span class="dim">top of buffer</span></div>
+          <div><span class="kbd">G</span> <span class="dim">bottom of buffer</span></div>
+          <div><span class="kbd">↵</span> <span class="dim">open at cursor</span></div>
+          <div><span class="kbd">esc</span> <span class="dim">cancel · back</span></div>
+        </div>
+
+        <div>
+          <div class="hot" style="font-weight: 700;">VISIT</div>
+          <div class="rule-single" style="margin: 4px 0 8px;">─────────────────────────</div>
+          <div><span class="kbd">n</span> <span class="dim">new visit (record)</span></div>
+          <div><span class="kbd">space</span> <span class="dim">pause / resume mic</span></div>
+          <div><span class="kbd">m</span> <span class="dim">drop a marker</span></div>
+          <div><span class="kbd">e</span> <span class="dim">edit SOAP draft</span></div>
+          <div><span class="kbd">s</span> <span class="dim">sign &amp; finalize</span></div>
+          <div><span class="kbd">r</span> <span class="dim">retry failed layer</span></div>
+        </div>
+
+        <div>
+          <div class="hot" style="font-weight: 700;">COMMAND</div>
+          <div class="rule-single" style="margin: 4px 0 8px;">─────────────────────────</div>
+          <div><span class="kbd">:</span> <span class="dim">command-mode (ex)</span></div>
+          <div><span class="kbd">/</span> <span class="dim">fuzzy find</span></div>
+          <div><span class="kbd">?</span> <span class="dim">man page (this)</span></div>
+          <div><span class="kbd">:</span><span class="hot">w</span> <span class="dim">save draft</span></div>
+          <div><span class="kbd">:</span><span class="hot">x</span> <span class="dim">save and sign</span></div>
+          <div><span class="kbd">:</span><span class="hot">q!</span> <span class="dim">discard buffer</span></div>
+        </div>
+
+      </div>
+
+      <div class="rule-single" style="margin: 18px 0 10px;">─────────────────────────────────────────────────────────────────────────────</div>
+      <div class="dim" style="font-size: 12px;">
+        # philosophy: <span class="hot">if you have to lift your hands off the home row, we failed.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===========================================================
+       SECTION 5 — STATE MACHINE FOR A VISIT (ASCII diagram)
+       =========================================================== -->
+  <div class="section-band">
+══════════════════════════════════════ <b>STATE</b> ══════════════════════════════════════
+  </div>
+
+  <section>
+    <div class="ascii-box" style="padding: 18px 22px;">
+      <div class="label-eyebrow">&gt;&gt;&gt; visit_state_machine.dot</div>
+      <pre class="ascii ca" style="margin: 12px 0; font-size: 13px; line-height: 1.55; color: var(--phosphor);">
+                              ┌──────────────┐
+                  CREATE  ───►│   <span class="hot">PENDING</span>    │
+                              └───────┬──────┘
+                                      │ L1 transcribe
+                                      ▼
+                              ┌──────────────┐
+                              │ <span class="hot">PROCESSING</span>   │ ◄──── L2/L3/L4/L5/L6/L7
+                              └───┬────────┬─┘
+                                  │        │
+                       failure    │        │   success
+                                  ▼        ▼
+                          ┌────────────┐ ┌──────────────┐
+                          │  <span class="err">FAILED</span>    │ │    <span class="hot">READY</span>     │
+                          └─────┬──────┘ └───────┬──────┘
+                                │ retry          │ doctor signs
+                                │                ▼
+                                │        ┌──────────────┐
+                                └───────►│   <span class="hot">SIGNED</span>     │
+                                         └───────┬──────┘
+                                                 │ deliver
+                                                 ▼
+                                         ┌──────────────┐
+                                         │  <span class="hot">DELIVERED</span>   │
+                                         └──────────────┘
+      </pre>
+      <div class="dim" style="font-size: 12px;">
+        # flow source-of-truth: BullMQ job state + visit.state column. monotonic. retry never skips backwards.
+      </div>
+    </div>
+  </section>
+
+  <!-- ===========================================================
+       FOOTER — boot motd
+       =========================================================== -->
+  <div class="hr-double" style="margin-top: 56px;">════════════════════════════════════════════════════════════════════════════════════════</div>
+
+  <pre class="ascii fade" style="margin: 6px 0; font-size: 12px; line-height: 1.6;">
++------------------------------------------------------------------------------+
+|  the doctor IS the operator. medicine is text. the chart is a buffer.        |
+|  no rounded corners. no drop shadows. no glass. no gradients beyond phosphor.|
+|  every interactive moment ends in a blinking cursor. the cursor is the UI.   |
+|                                                                              |
+|  if you find yourself loading Inter Tight, stop. if you reach for an icon    |
+|  that isn't a glyph from the BMP, stop. ASCII is not nostalgia — it is a     |
+|  contract with the keyboard.                                                 |
++------------------------------------------------------------------------------+
+  </pre>
+  <div class="dim" style="font-size: 12px;">
+    <span class="prompt">quillmd@v0.1</span><span class="dim">:</span><span class="hot">~</span><span class="dim">$</span>
+    <span class="dim">  # eof. press </span><span class="kbd">q</span><span class="dim"> to detach session.</span>
+    <span class="cursor-thin"></span>
+  </div>
+  <div class="hr-double" style="margin: 12px 0 0;">════════════════════════════════════════════════════════════════════════════════════════</div>
+
+</div><!-- /.term-page -->
+
+<!-- minor JS for the typewriter to retrigger on resize/visibility, and to keep the layer pipeline animating in a loop -->
+<script>
+  (function(){
+    // re-run the layer pipeline animation periodically so the page is never "static"
+    const lines = document.querySelectorAll('.layer-line');
+    let cycle = 0;
+    function pulse() {
+      lines.forEach((el, i) => {
+        el.style.animation = 'none';
+        // force reflow
+        // eslint-disable-next-line no-unused-expressions
+        el.offsetHeight;
+        el.style.animation = 'layer-appear 0.001s linear forwards';
+        el.style.animationDelay = (0.5 + i * 0.9) + 's';
+      });
+      cycle += 1;
+      // loop forever; ~7s cadence
+      setTimeout(pulse, 8000);
+    }
+    pulse();
+
+    // VU bar — swap content frames
+    const vuFrames = [
+      "▮▮▮░░░░░░░░░░░",
+      "▮▮▮▮▮▮░░░░░░░░",
+      "▮▮▮▮▮▮▮▮▮░░░░░",
+      "▮▮▮▮▮▮▮▮▮▮▮▮░░",
+      "▮▮▮▮▮▮▮▮▮░░░░░",
+      "▮▮▮▮▮▮░░░░░░░░"
+    ];
+    const vuEls = document.querySelectorAll('.vu-bar');
+    let f = 0;
+    setInterval(() => {
+      f = (f + 1) % vuFrames.length;
+      vuEls.forEach(el => { el.textContent = vuFrames[f]; });
+    }, 130);
+
+    // timer — increment seconds in the recording header
+    const timerEls = document.querySelectorAll('.timer-count');
+    let secs = 42;
+    setInterval(() => {
+      secs += 1;
+      const m = String(Math.floor(secs / 60)).padStart(2, '0');
+      const s = String(secs % 60).padStart(2, '0');
+      timerEls.forEach(el => { el.textContent = m + ':' + s; });
+    }, 1000);
+  })();
+</script>
+
+</body>
+</html>
