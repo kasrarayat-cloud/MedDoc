@@ -1324,6 +1324,222 @@ body {
 }
 
 /* ============================================================================
+   Rx warning card — CLINICIAN palette overrides (Batch D, REVIEWABLE)
+   ----------------------------------------------------------------------------
+   The .qm-warn-* family above is the canonical Rx warning design grammar
+   (DESIGN_SPEC.md, docs/design/rx_warning_handoff/). Every structural class
+   stays. ARIA attributes stay. data-testid attributes stay. The 8-region
+   architecture stays. Only the COLOR TOKENS change to the Clinician palette
+   when the card mounts inside `.qm-cl-app` (visit-detail Rx tab + Rx rail).
+
+   Per CL-6 / docs/REMODEL_PHASE2_PLAN.md the severity pills move from the
+   raycast-violet-saturated rgb triplets to soft warm equivalents:
+     critical (red)   → coral  (#C97B6E)
+     warning (amber)  → amber  (#D4A574)  — same warm amber as the legacy
+                                            map; only the deep tone changes
+     info (blue)      → sky    (#7BA8C4)
+   The deep "fg-2" (sev-fg-2) contrast pair maps to the Clinician *-deep
+   tokens so risk-pill ink reads on a soft tint rather than a glow.
+
+   Body color tokens swap legacy fg/line to ink/line tokens so the card
+   reads correctly on cream:
+     --fg     → --ink         --line        → --line (clinician scope)
+     --fg-2   → --ink-2        --line-strong → --line-strong (clinician)
+     --fg-3   → --ink-3        --line-soft   → --line (no soft variant
+     --fg-4   → --ink-4                          inside .qm-cl-app)
+     --amber  → --amber (clinician already defines a warm amber)
+
+   Hover overlays that were designed against a black canvas (rgba(255,255,255,
+   0.02-0.06)) flip to warm cream tints (cream-2 / cream-3) so the chrome
+   reads as a paper card, not a glass card.
+   ========================================================================== */
+
+/* Severity tone variables — remap the rgb triplets used by all
+   .qm-warn-* rules to the Clinician palette equivalents. The
+   structural rules (background, border, dot, etc.) all reference
+   var(--sev-hue-r/g/b) so a single override at the .qm-warn level
+   re-tints every region uniformly. */
+.qm-cl-app .qm-warn {
+  /* critical default — coral */
+  --sev-hue-r: 201;
+  --sev-hue-g: 123;
+  --sev-hue-b: 110;
+  /* sev-fg-2 (ink tone for risk pills + action tile copy + outcome
+     bold) → coral-deep */
+  --sev-fg-2: rgb(122, 51, 41);
+}
+.qm-cl-app .qm-warn-sev-warning {
+  /* warm amber */
+  --sev-hue-r: 212;
+  --sev-hue-g: 165;
+  --sev-hue-b: 116;
+  /* amber-deep */
+  --sev-fg-2: rgb(122, 79, 31);
+}
+.qm-cl-app .qm-warn-sev-info {
+  /* sky */
+  --sev-hue-r: 123;
+  --sev-hue-g: 168;
+  --sev-hue-b: 196;
+  /* sky-deep */
+  --sev-fg-2: rgb(44, 79, 102);
+}
+
+/* Card surface — paper on cream desk, not glass on void. */
+.qm-cl-app .qm-warn {
+  /* The .qm-warn rule above sets background: var(--sev-bg) which is a
+     4% rgba of the severity hue. Override to the cream-card so the
+     card reads as paper; the severity rail (::before) + the soft
+     sev-tint borders carry the tone. */
+  background: var(--cream-card);
+  color: var(--ink-2);
+  box-shadow: var(--shadow-card);
+}
+
+/* Region 1 — Header */
+.qm-cl-app .qm-warn-icon {
+  /* Sev-tinted soft chip on cream — replaces the dark glass icon
+     well. */
+  background: rgba(
+    var(--sev-hue-r),
+    var(--sev-hue-g),
+    var(--sev-hue-b),
+    0.12
+  );
+}
+.qm-cl-app .qm-warn-badge {
+  /* Solid sev color with inset highlight + soft shadow. The inset
+     highlight reads against the colored fill; lighten the shadow on
+     cream so it doesn't punch a hole. */
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    0 1px 2px rgba(43, 38, 32, 0.16);
+}
+.qm-cl-app .qm-warn-field {
+  color: var(--ink-3);
+}
+.qm-cl-app .qm-warn-headline {
+  color: var(--ink);
+}
+.qm-cl-app .qm-warn-dismiss {
+  color: var(--ink-3);
+}
+.qm-cl-app .qm-warn-dismiss:hover {
+  /* Warm cream-2 hover on cream — replaces rgba(255,255,255,0.03). */
+  background: var(--cream-2);
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+/* Region 4 — Transcribed (heard + guess) */
+.qm-cl-app .qm-warn-field-label {
+  color: var(--ink-3);
+}
+.qm-cl-app .qm-warn-field-value {
+  color: var(--ink);
+}
+.qm-cl-app .qm-warn-transcribed-arrow {
+  color: var(--ink-4);
+}
+.qm-cl-app .qm-warn-confidence {
+  /* Map the legacy fbbf24-ish amber chip onto the Clinician amber.
+     Both represent "low transcriber confidence" — the warm amber
+     reads quieter on cream than the neon. */
+  color: var(--amber-deep);
+  border-color: rgba(212, 165, 116, 0.34);
+  background: var(--amber-tint);
+}
+
+/* Region 5 — Risks */
+.qm-cl-app .qm-warn-mini-label {
+  color: var(--ink-4);
+}
+.qm-cl-app .qm-warn-risk-primary {
+  color: var(--ink);
+}
+.qm-cl-app .qm-warn-risk-outcome {
+  color: var(--ink-3);
+}
+
+/* Region 6 — Next step */
+.qm-cl-app .qm-warn-next {
+  border-color: var(--line-strong);
+  /* Replace rgba(255,255,255,0.015) with cream-2 wash. */
+  background: var(--cream-2);
+  color: var(--ink-2);
+}
+.qm-cl-app .qm-warn-next-icon {
+  color: var(--ink-3);
+}
+.qm-cl-app .qm-warn-next-label {
+  color: var(--ink-3);
+}
+
+/* Region 7 — Details toggle + body */
+.qm-cl-app .qm-warn-details-toggle {
+  /* The base rule uses --line-soft which doesn't exist inside
+     .qm-cl-app; map to the regular --line. */
+  border-top-color: var(--line);
+  color: var(--ink-3);
+}
+.qm-cl-app .qm-warn-details-toggle:hover {
+  /* Replace rgba(255,255,255,0.02) with cream-2. */
+  color: var(--ink-2);
+  background: var(--cream-2);
+}
+.qm-cl-app .qm-warn-details-chev {
+  color: var(--ink-3);
+}
+.qm-cl-app .qm-warn-details-source {
+  color: var(--ink-4);
+}
+.qm-cl-app .qm-warn-details-body {
+  border-top-color: var(--line);
+  color: var(--ink-2);
+}
+.qm-cl-app .qm-warn-details-cite {
+  color: var(--ink-4);
+}
+
+/* Region 8 — Actions */
+.qm-cl-app .qm-warn-actions {
+  border-top-color: var(--line);
+}
+.qm-cl-app .qm-warn-btn {
+  /* Replace rgba(255,255,255,0.02) glass surface with a cream-card
+     paper chip. */
+  border-color: var(--line);
+  background: var(--cream-card);
+  color: var(--ink-2);
+}
+.qm-cl-app .qm-warn-btn:hover {
+  background: var(--cream-2);
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+.qm-cl-app .qm-warn-btn:active {
+  background: var(--cream-3);
+}
+.qm-cl-app .qm-warn-btn-primary {
+  /* The primary button (Edit medication on critical) keeps the
+     severity-tinted gradient — the rgb triplets are already remapped
+     to the Clinician palette via the override at the top of this
+     section, so the gradient resolves to a soft sev-tint on cream
+     instead of a saturated raycast wash. */
+  color: var(--sev-fg-2);
+}
+.qm-cl-app .qm-warn-btn-primary:hover {
+  color: var(--ink);
+}
+
+/* Keyboard hint chip — replace the dark inset (rgba(0,0,0,0.2)) with
+   a cream-2 / line bordered chip that reads on cream. */
+.qm-cl-app .qm-warn-kbd {
+  background: var(--cream-2);
+  border-color: var(--line);
+  color: var(--ink-3);
+}
+
+/* ============================================================================
    CLINICIAN — Phase 2 design direction (humane medical, light-mode-first)
    ----------------------------------------------------------------------------
    Source of truth: docs/design-directions-v3/clinician/{landing-and-recording,
