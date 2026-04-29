@@ -29,6 +29,13 @@ import { isAdminSessionStale } from '@/lib/admin-session-freshness';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
+// Phase 2 (Clinician remodel) — Batch G — admin chrome opts in to the
+// Clinician token scope by wrapping the rendered subtree in `.qm-cl-app`.
+// The SUPER_ADMIN gate, the freshness check, the `notFound()` posture,
+// and the access audit log above are unchanged — only the JSX shell
+// flips. Every admin page below already gets `theme="clinician"`
+// threaded through its own Strategy A branch.
+
 export default async function AdminLayout({
   children,
 }: {
@@ -91,9 +98,13 @@ export default async function AdminLayout({
     metadata: { path },
   });
 
+  // The Clinician chrome lives at the layout boundary so every admin
+  // page resolves `.qm-cl-*` class lookups against the warm cream
+  // token scope without each page wrapping itself. Mirror of how
+  // /dashboard layouts opt in via <AppFrame theme="clinician">.
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100">
-      {children}
-    </main>
+    <div className="qm-cl-app min-h-screen">
+      <main className="min-h-screen text-clinician-ink">{children}</main>
+    </div>
   );
 }
