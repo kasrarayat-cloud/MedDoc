@@ -1,5 +1,22 @@
 'use client';
 
+// ============================================================================
+// VoiceDictator — live mic capture with MediaRecorder + AudioContext analyser.
+// ----------------------------------------------------------------------------
+// Phase 2 (Clinician remodel) — Strategy A dual-theme via additive
+// `theme` prop. Default `'legacy'` keeps the dark cinematic VioletOrb +
+// violet halo background byte-for-byte. `theme="clinician"` replaces
+// the Three.js orb with the calm class-driven chrome from
+// landing-and-recording.html: `.qm-cl-halo` breathing rings + sage
+// `.qm-cl-mic-dot` mic chip + `.qm-cl-wave-bar` VU meter (per CL-5: no
+// theatrical motion, no Three.js orbs in Clinician).
+//
+// 🔴 PROTECTED: All MediaRecorder / AudioContext / analyser /
+// streamRef / chunksRef / finalizeAndUpload / stopRecording /
+// startRecording lifecycle code is preserved byte-for-byte. Only the
+// JSX rendered surface (and props/imports needed to wire it) changes.
+// ============================================================================
+
 import {
   useCallback,
   useEffect,
@@ -21,6 +38,7 @@ const VioletOrb = dynamic(
 );
 
 type Phase = 'idle' | 'requesting' | 'listening' | 'uploading' | 'error';
+type VoiceDictatorTheme = 'legacy' | 'clinician';
 
 const MIME = 'audio/webm;codecs=opus';
 // 250 ms chunks, same cadence scribe's live path uses — keeps memory
@@ -30,9 +48,11 @@ const MAX_SECONDS = 10 * 60; // 10 minutes
 
 interface VoiceDictatorProps {
   visitId: string;
+  /** Phase 2 (Clinician remodel) — additive theme prop. */
+  theme?: VoiceDictatorTheme;
 }
 
-export function VoiceDictator({ visitId }: VoiceDictatorProps) {
+export function VoiceDictator({ visitId, theme = 'legacy' }: VoiceDictatorProps) {
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>('idle');
   const [elapsed, setElapsed] = useState(0);
@@ -226,6 +246,25 @@ export function VoiceDictator({ visitId }: VoiceDictatorProps) {
   const mm = Math.floor(elapsed / 60);
   const ss = (elapsed % 60).toString().padStart(2, '0');
 
+  if (theme === 'clinician') {
+    return (
+      <ClinicianVoiceDictatorView
+        phase={phase}
+        elapsed={elapsed}
+        mm={mm}
+        ss={ss}
+        level={level}
+        error={error}
+        onStart={startRecording}
+        onStop={stopRecording}
+        onRetry={() => {
+          setError(null);
+          setPhase('idle');
+        }}
+      />
+    );
+  }
+
   return (
     <div className="mx-auto flex max-w-xl flex-col items-center py-12 text-center sm:py-20">
       <div className="relative mb-10 h-72 w-72">
@@ -331,6 +370,285 @@ export function VoiceDictator({ visitId }: VoiceDictatorProps) {
               }}
               variant="primary"
               size="md"
+            >
+              Try again
+            </SpecularButton>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------------
+// Clinician variant — calm halo + sage mic-dot + class-driven waveform.
+// Replaces the Three.js VioletOrb with the landing-and-recording.html
+// idiom (per CL-5: no theatrical motion). The level [0-1] from the
+// AudioContext analyser drives a per-bar height multiplier so the
+// waveform breathes with the doctor's voice.
+// ----------------------------------------------------------------------------
+
+function ClinicianVoiceDictatorView({
+  phase,
+  elapsed: _elapsed,
+  mm,
+  ss,
+  level,
+  error,
+  onStart,
+  onStop,
+  onRetry,
+}: {
+  phase: Phase;
+  elapsed: number;
+  mm: number;
+  ss: string;
+  level: number;
+  error: string | null;
+  onStart: () => void;
+  onStop: () => void;
+  onRetry: () => void;
+}) {
+  const isListening = phase === 'listening';
+  const isUploading = phase === 'uploading';
+  const isError = phase === 'error';
+
+  // Twelve bars with hand-tuned peaks so the waveform reads as alive
+  // rather than uniform. The `level` ref scales the peak so quiet
+  // moments collapse the meter and louder moments push it up.
+  const peaks = [12, 18, 14, 20, 16, 22, 12, 18, 14, 10, 17, 13];
+  const delays = [0, 0.1, 0.2, 0.3, 0.05, 0.15, 0.25, 0.4, 0.5, 0.35, 0.6, 0.55];
+  const livePeak = (basePeak: number) =>
+    isListening
+      ? Math.max(8, basePeak * (0.6 + level * 0.8))
+      : basePeak * 0.5;
+
+  return (
+    <div className="mx-auto flex max-w-xl flex-col items-center py-12 text-center sm:py-20">
+      {/* Halo + mic centerpiece */}
+      <div
+        style={{
+          position: 'relative',
+          width: 220,
+          height: 220,
+          marginBottom: 24,
+        }}
+      >
+        {(isListening || isUploading) && (
+          <>
+            <div className="qm-cl-halo" aria-hidden />
+            <div className="qm-cl-halo qm-cl-halo-delayed" aria-hidden />
+          </>
+        )}
+        <div
+          className={cn(isListening && 'qm-cl-mic-dot')}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <div
+            style={{
+              width: 96,
+              height: 96,
+              borderRadius: 999,
+              background: 'var(--cream-card)',
+              border: `1.5px solid ${isError ? 'var(--coral)' : 'var(--sage)'}`,
+              boxShadow: 'var(--shadow-card)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            {isUploading ? (
+              <Loader2
+                className="h-9 w-9 animate-spin"
+                style={{ color: 'var(--sage)' }}
+                aria-hidden
+              />
+            ) : (
+              <Mic
+                className="h-9 w-9"
+                style={{
+                  color: isError ? 'var(--coral)' : 'var(--sage)',
+                }}
+                aria-hidden
+              />
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Waveform — quiet, present, sage-tinted */}
+      {isListening && (
+        <div
+          className="flex items-end gap-[3px]"
+          style={{ height: 24, marginBottom: 18 }}
+          aria-hidden
+        >
+          {peaks.map((p, i) => (
+            <span
+              key={i}
+              className="qm-cl-wave-bar"
+              style={
+                {
+                  '--peak': `${livePeak(p)}px`,
+                  animationDelay: `${delays[i]}s`,
+                } as React.CSSProperties
+              }
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Phase-specific copy + controls */}
+      {phase === 'idle' || phase === 'requesting' ? (
+        <>
+          <h2
+            className="qm-cl-serif"
+            style={{
+              fontSize: 32,
+              fontWeight: 400,
+              lineHeight: 1.15,
+              letterSpacing: '-0.015em',
+              color: 'var(--ink)',
+              margin: 0,
+            }}
+          >
+            Dictate a quick summary
+          </h2>
+          <p
+            className="qm-cl-serif"
+            style={{
+              marginTop: 12,
+              maxWidth: 460,
+              fontSize: 16,
+              lineHeight: 1.65,
+              color: 'var(--ink-2)',
+              fontStyle: 'italic',
+            }}
+          >
+            Tap below and speak. Keep it natural — we&apos;ll turn your
+            dictation into a structured SOAP note.
+          </p>
+          <div className="mt-8">
+            <SpecularButton
+              onClick={onStart}
+              variant="primary"
+              size="lg"
+              disabled={phase === 'requesting'}
+              theme="clinician"
+            >
+              <Mic className="h-4 w-4" aria-hidden />
+              {phase === 'requesting' ? 'Getting mic ready…' : 'Start dictating'}
+            </SpecularButton>
+          </div>
+          <p
+            className="mt-6 text-[12px]"
+            style={{ color: 'var(--ink-3)' }}
+          >
+            Up to 10 minutes. WebM/Opus — stays private.
+          </p>
+        </>
+      ) : isListening ? (
+        <>
+          <div
+            className="qm-cl-pill qm-cl-pill-sage"
+            style={{
+              padding: '6px 14px',
+              fontSize: 13,
+              marginBottom: 10,
+            }}
+          >
+            <span className="qm-cl-pill-dot" />
+            Recording · {mm}:{ss}
+          </div>
+          <p
+            className="qm-cl-serif"
+            style={{
+              marginTop: 4,
+              fontSize: 15,
+              fontStyle: 'italic',
+              color: 'var(--ink-3)',
+            }}
+          >
+            Listening. You can speak as you would in any other visit.
+          </p>
+          <div className="mt-8">
+            <SpecularButton
+              onClick={onStop}
+              variant="secondary"
+              size="lg"
+              sweep={false}
+              theme="clinician"
+            >
+              <Square className="h-3.5 w-3.5 fill-current" aria-hidden />
+              Stop &amp; process
+            </SpecularButton>
+          </div>
+          <p
+            className="mt-6 text-[12px]"
+            style={{ color: 'var(--ink-3)' }}
+          >
+            Auto-stops at 10:00.
+          </p>
+        </>
+      ) : isUploading ? (
+        <>
+          <h2
+            className="qm-cl-serif"
+            style={{
+              fontSize: 28,
+              fontWeight: 400,
+              lineHeight: 1.2,
+              letterSpacing: '-0.01em',
+              color: 'var(--ink)',
+              margin: 0,
+            }}
+          >
+            Processing your dictation
+          </h2>
+          <p
+            className="qm-cl-serif mt-3"
+            style={{
+              fontSize: 15,
+              fontStyle: 'italic',
+              color: 'var(--ink-2)',
+            }}
+          >
+            Uploading and queuing for SOAP generation…
+          </p>
+        </>
+      ) : (
+        <>
+          <h2
+            className="qm-cl-serif"
+            style={{
+              fontSize: 28,
+              fontWeight: 400,
+              lineHeight: 1.2,
+              letterSpacing: '-0.01em',
+              color: 'var(--ink)',
+              margin: 0,
+            }}
+          >
+            Something went wrong
+          </h2>
+          <p
+            className="mt-3 max-w-md text-[14px]"
+            style={{ color: 'var(--coral-deep)' }}
+          >
+            {error ?? 'Unknown error.'}
+          </p>
+          <div className="mt-8">
+            <SpecularButton
+              onClick={onRetry}
+              variant="primary"
+              size="md"
+              theme="clinician"
             >
               Try again
             </SpecularButton>
