@@ -14,9 +14,17 @@ import { cn } from '@/lib/cn';
  *
  * Renders as an <a> via next/link when `href` is given, otherwise a
  * <button>. Keyboard focus ring is violet, offset from the surface.
+ *
+ * Theme — `'legacy'` (violet gradient + specular sweep) or `'clinician'`
+ * (sage `.qm-cl-btn-primary` / cream `.qm-cl-btn-soft` / transparent
+ * `.qm-cl-btn-ghost`, gentle 240 ms ease, no sweep). When
+ * `theme="clinician"` and `sweep` is true, a `data-shine` attribute is
+ * emitted so future CSS can opt in to a Clinician-toned shine without
+ * changing the JS contract.
  */
 type Variant = 'primary' | 'secondary' | 'ghost';
 type Size = 'sm' | 'md' | 'lg';
+type ButtonTheme = 'legacy' | 'clinician';
 
 interface BaseProps {
   children: React.ReactNode;
@@ -24,6 +32,7 @@ interface BaseProps {
   size?: Size;
   className?: string;
   sweep?: boolean;
+  theme?: ButtonTheme;
 }
 
 type SpecularButtonProps =
@@ -72,6 +81,23 @@ const VARIANT_CLASSES: Record<Variant, string> = {
   ].join(' '),
 };
 
+/* Clinician — pill-shaped, sage primary / cream soft / transparent
+   ghost, focus ring built into the .qm-cl-* CSS family above. We keep
+   the size modifiers minimal: `lg` adds `.qm-cl-btn-lg`; `sm` and `md`
+   are visually identical (the .qm-cl-btn baseline is sized for `md`,
+   `sm` is rare in the Clinician mockups). */
+const CLINICIAN_VARIANT_CLASSES: Record<Variant, string> = {
+  primary: 'qm-cl-btn qm-cl-btn-primary',
+  secondary: 'qm-cl-btn qm-cl-btn-soft',
+  ghost: 'qm-cl-btn qm-cl-btn-ghost',
+};
+
+const CLINICIAN_SIZE_CLASSES: Record<Size, string> = {
+  sm: '',
+  md: '',
+  lg: 'qm-cl-btn-lg',
+};
+
 export function SpecularButton(props: SpecularButtonProps) {
   const {
     children,
@@ -79,19 +105,32 @@ export function SpecularButton(props: SpecularButtonProps) {
     size = 'md',
     className,
     sweep = true,
+    theme = 'legacy',
   } = props;
 
-  const classes = cn(
-    BASE,
-    SIZE_CLASSES[size],
-    VARIANT_CLASSES[variant],
-    sweep && 'specular-button',
-    className
-  );
+  const isClinician = theme === 'clinician';
+
+  const classes = isClinician
+    ? cn(
+        CLINICIAN_VARIANT_CLASSES[variant],
+        CLINICIAN_SIZE_CLASSES[size],
+        className
+      )
+    : cn(
+        BASE,
+        SIZE_CLASSES[size],
+        VARIANT_CLASSES[variant],
+        sweep && 'specular-button',
+        className
+      );
+
+  // In Clinician, expose `data-shine` so future CSS can opt in to a
+  // restrained sage-tinted shine without altering the JS API.
+  const dataShine = isClinician && sweep ? '' : undefined;
 
   if ('href' in props && props.href) {
     return (
-      <Link href={props.href} className={classes}>
+      <Link href={props.href} className={classes} data-shine={dataShine}>
         {children}
       </Link>
     );
@@ -105,6 +144,7 @@ export function SpecularButton(props: SpecularButtonProps) {
       type={btnProps.type ?? 'button'}
       onClick={btnProps.onClick}
       disabled={btnProps.disabled}
+      data-shine={dataShine}
       className={cn(classes, 'disabled:opacity-50 disabled:pointer-events-none')}
     >
       {children}
