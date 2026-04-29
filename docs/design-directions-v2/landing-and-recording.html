@@ -1,0 +1,1096 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1600, initial-scale=1">
+<title>QuillMD — Apothecary · HIGH-ENERGY (landing + recording)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,500;0,8..60,600;0,8..60,700;1,8..60,400;1,8..60,600&family=Inter+Tight:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* ---------- App-redesign-v1 / HANDOFF tokens (verbatim, the foundation) ---------- */
+  :root {
+    --bg: #07060C;
+    --bg-1: #0C0A16;
+    --bg-2: #14111F;
+    --bg-3: #1C1828;
+    --bg-4: #221C30;
+    --line-soft: #191524;
+    --line: #26222F;
+    --line-strong: #3A3445;
+    --fg: #F5F2FA;
+    --fg-2: #B9B2C9;
+    --fg-3: #7E7791;
+    --fg-4: #4B4558;
+    --accent: #8B5CFF;
+    --accent-bright: #A87CFF;
+    --accent-deep: #6B3FD9;
+    --accent-ink: #2A1560;
+    --accent-a: #D1B5FF;
+    --accent-b: #D946EF;
+    --accent-c: #60A5FA;
+    --mint: #6EE7B7;
+    --amber: #FBBF24;
+    --coral: #FB7185;
+
+    /* Apothecary extends with TWO new accents anchored to violet */
+    --copper: #E8A872;        /* warm — for "earned moments", success, ICD/Rx tags */
+    --copper-deep: #B5793D;   /* warm pressed */
+    --aqua: #7DD3FC;          /* cool — for AI thought-chain, transcript-side */
+    --aqua-deep: #38BDF8;
+
+    --serif: 'Source Serif 4', Georgia, serif;
+    --sans: 'Inter Tight', system-ui, sans-serif;
+    --mono: 'JetBrains Mono', ui-monospace, monospace;
+
+    --ease-out-premium: cubic-bezier(0.4, 0, 0.2, 1);
+    --ease-out-back:    cubic-bezier(0.34, 1.56, 0.64, 1);
+    --ease-soft:        cubic-bezier(0.65, 0, 0.35, 1);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: var(--sans);
+    color: var(--fg);
+    background: var(--bg);
+    font-size: 14px;
+    line-height: 1.5;
+    letter-spacing: -0.01em;
+    overflow-x: hidden;
+  }
+
+  /* ---------- HIGH-ENERGY only utilities (lazy-loaded in app build) ---------- */
+
+  /* Aurora gradient mesh — only ships in landing/recording/onboarding bundle */
+  .qm-aurora {
+    position: absolute; inset: 0; pointer-events: none; overflow: hidden;
+    z-index: 0;
+    --c1: var(--accent);
+    --c2: var(--aqua);
+    --c3: var(--copper);
+  }
+  .qm-aurora::before, .qm-aurora::after {
+    content: ''; position: absolute; border-radius: 50%;
+    filter: blur(110px); opacity: 0.55;
+    will-change: transform, opacity;
+  }
+  .qm-aurora::before {
+    width: 800px; height: 800px; left: -10%; top: -20%;
+    background: radial-gradient(circle, var(--c1) 0%, transparent 60%);
+    animation: auroraDrift 22s var(--ease-soft) infinite alternate;
+  }
+  .qm-aurora::after {
+    width: 720px; height: 720px; right: -8%; top: 10%;
+    background: radial-gradient(circle, var(--c2) 0%, transparent 60%);
+    animation: auroraDrift2 28s var(--ease-soft) infinite alternate;
+  }
+  .qm-aurora .aurora-third {
+    position: absolute; width: 540px; height: 540px;
+    left: 28%; top: 35%; border-radius: 50%; pointer-events: none;
+    background: radial-gradient(circle, var(--c3) 0%, transparent 65%);
+    filter: blur(110px); opacity: 0.32;
+    animation: auroraDrift3 34s var(--ease-soft) infinite alternate;
+  }
+  @keyframes auroraDrift  { from {transform: translate(0,0) scale(1);} to {transform: translate(80px,40px) scale(1.05);} }
+  @keyframes auroraDrift2 { from {transform: translate(0,0) scale(1);} to {transform: translate(-100px,80px) scale(1.08);} }
+  @keyframes auroraDrift3 { from {transform: translate(0,0) scale(1);} to {transform: translate(40px,-90px) scale(1.06);} }
+
+  /* Grain — adds physicality. SVG fractal noise. */
+  .qm-grain::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='0.45'/></svg>");
+    mix-blend-mode: overlay;
+    opacity: 0.35;
+    z-index: 1;
+  }
+
+  /* Spotlight (Aceternity-inspired). Pure SVG + radial mask. */
+  .qm-spotlight {
+    position: absolute; inset: 0; pointer-events: none;
+    background:
+      radial-gradient(circle 600px at 50% 20%, rgba(139,92,255,0.16), transparent 70%),
+      radial-gradient(circle 460px at 18% 8%,  rgba(125,211,252,0.10), transparent 60%);
+    animation: spotlightFade 2.4s var(--ease-soft) both;
+  }
+  @keyframes spotlightFade {
+    from { opacity: 0; transform: scale(0.9) translateY(-30px); }
+    to   { opacity: 1; transform: scale(1)   translateY(0);   }
+  }
+
+  /* Border-beam (Magic UI inspired). A conic-gradient ring that spins under mask. */
+  .qm-beam-frame { position: relative; isolation: isolate; }
+  .qm-beam-frame::before {
+    content: ''; position: absolute; inset: -1px; z-index: -1;
+    border-radius: inherit;
+    background: conic-gradient(from 0deg,
+      transparent 0%,
+      transparent 60%,
+      var(--accent-bright) 75%,
+      var(--accent-a) 80%,
+      var(--aqua) 85%,
+      transparent 100%);
+    animation: beamSpin 4.2s linear infinite;
+  }
+  .qm-beam-frame::after {
+    /* solid inner hides middle so only the rim glows */
+    content: ''; position: absolute; inset: 1px; z-index: -1;
+    border-radius: inherit;
+    background: var(--bg-2);
+  }
+  @keyframes beamSpin { to { transform: rotate(360deg); } }
+
+  /* Magnetic CTA */
+  .qm-magnet {
+    transition: transform 220ms var(--ease-out-back);
+    will-change: transform;
+  }
+
+  /* Type styles (Apothecary) */
+  .qm-display {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: clamp(56px, 7.4vw, 124px);
+    line-height: 0.94;
+    letter-spacing: -0.035em;
+    font-feature-settings: 'ss01','liga','dlig';
+  }
+  .qm-display em {
+    font-style: italic;
+    font-weight: 300;
+    color: var(--accent-bright);
+  }
+  .qm-eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--fg-3);
+  }
+  .qm-eyebrow .ink { color: var(--accent-bright); }
+  .qm-h2 {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: clamp(34px, 4vw, 56px);
+    line-height: 1.04;
+    letter-spacing: -0.025em;
+  }
+  .qm-prose { font-family: var(--serif); font-size: 19px; line-height: 1.65; color: var(--fg-2); }
+
+  /* Section layout */
+  .qm-section { position: relative; min-height: 100vh; padding: 110px 8vw; }
+  .qm-section.tall { min-height: 140vh; }
+
+  /* Pipeline node (animated AI flow) */
+  .qm-node {
+    position: relative;
+    width: 110px; height: 110px;
+    border-radius: 24px;
+    background: linear-gradient(160deg, var(--bg-2), var(--bg-3));
+    border: 1px solid var(--line);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.04),
+      0 18px 40px -16px rgba(0,0,0,0.55);
+  }
+  .qm-node.live::after {
+    content: ''; position: absolute; inset: -2px;
+    border-radius: 26px;
+    background: conic-gradient(from 0deg, transparent, var(--accent), var(--accent-a), transparent 50%);
+    animation: beamSpin 3s linear infinite;
+    z-index: -1;
+    filter: blur(0.5px);
+  }
+  .qm-node.live::before {
+    content: ''; position: absolute; inset: 1px;
+    border-radius: 23px;
+    background: linear-gradient(160deg, var(--bg-2), var(--bg-3));
+    z-index: -1;
+  }
+  .qm-node-glyph { font-size: 22px; color: var(--accent-bright); }
+  .qm-node-label { margin-top: 8px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--fg-3); }
+  .qm-node-tick  { position: absolute; top: -8px; right: -8px; width: 22px; height: 22px; border-radius: 50%; background: var(--mint); color: #08120D; display: grid; place-items: center; font-size: 12px; font-weight: 700; }
+
+  /* SVG trail between nodes — animated dasharray plus glow */
+  .qm-trail-path {
+    fill: none; stroke-width: 2; stroke-linecap: round;
+    stroke-dasharray: 8 14;
+    animation: trailDash 1.6s linear infinite;
+  }
+  @keyframes trailDash { to { stroke-dashoffset: -88; } }
+
+  /* Scroll-jacked transcript-becoming-SOAP track */
+  .qm-stack { position: relative; }
+  .qm-card-glass {
+    position: relative;
+    background: linear-gradient(180deg, rgba(28,24,40,0.7), rgba(20,17,31,0.7));
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.04),
+      0 28px 60px -28px rgba(0,0,0,0.6);
+  }
+  .qm-card-glass.glow {
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.05),
+      0 0 0 1px var(--accent-deep),
+      0 30px 70px -20px rgba(139,92,255,0.32);
+  }
+
+  /* Recording widget — the "magic moment" */
+  .qm-rec-ring {
+    position: relative; width: 220px; height: 220px;
+    border-radius: 50%; display: grid; place-items: center;
+  }
+  .qm-rec-ring .pulse {
+    position: absolute; inset: 0; border-radius: 50%;
+    border: 1px solid var(--accent);
+    animation: ringPulse 2.4s var(--ease-soft) infinite;
+  }
+  .qm-rec-ring .pulse.b { animation-delay: 0.6s; }
+  .qm-rec-ring .pulse.c { animation-delay: 1.2s; }
+  @keyframes ringPulse {
+    0%   { transform: scale(0.7); opacity: 0.0; }
+    20%  { opacity: 0.65; }
+    100% { transform: scale(1.55); opacity: 0; }
+  }
+  .qm-rec-core {
+    position: relative;
+    width: 130px; height: 130px; border-radius: 50%;
+    background:
+      radial-gradient(circle at 35% 30%, var(--accent-a) 0%, transparent 40%),
+      radial-gradient(circle at 65% 70%, var(--accent-b) 0%, transparent 50%),
+      radial-gradient(circle at 50% 50%, var(--accent) 10%, var(--accent-deep) 60%, var(--accent-ink) 100%);
+    box-shadow:
+      inset 0 0 30px rgba(0,0,0,0.4),
+      inset 0 -10px 30px rgba(0,0,0,0.5),
+      0 0 60px var(--accent),
+      0 0 120px var(--accent-deep);
+    animation: coreBreathe 3.2s var(--ease-soft) infinite;
+  }
+  @keyframes coreBreathe {
+    0%, 100% { transform: scale(1); }
+    50%      { transform: scale(1.04); }
+  }
+  .qm-vu {
+    position: absolute; bottom: -38px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 3px; align-items: end; height: 28px;
+  }
+  .qm-vu i {
+    display: block; width: 4px; background: var(--accent-bright); border-radius: 2px;
+    animation: vu 0.9s ease-in-out infinite;
+  }
+  .qm-vu i:nth-child(1) { animation-delay: 0.0s; height: 14px; }
+  .qm-vu i:nth-child(2) { animation-delay: 0.1s; height: 22px; }
+  .qm-vu i:nth-child(3) { animation-delay: 0.2s; height: 18px; }
+  .qm-vu i:nth-child(4) { animation-delay: 0.3s; height: 26px; }
+  .qm-vu i:nth-child(5) { animation-delay: 0.4s; height: 12px; }
+  .qm-vu i:nth-child(6) { animation-delay: 0.5s; height: 24px; }
+  .qm-vu i:nth-child(7) { animation-delay: 0.6s; height: 16px; }
+  .qm-vu i:nth-child(8) { animation-delay: 0.7s; height: 20px; }
+  .qm-vu i:nth-child(9) { animation-delay: 0.8s; height: 14px; }
+  @keyframes vu { 0%,100% { transform: scaleY(0.4);} 50% { transform: scaleY(1.6);} }
+
+  /* Thought-chain (the magic moment) */
+  .qm-thought-line {
+    display: grid; grid-template-columns: 22px 1fr auto; gap: 14px;
+    align-items: center; padding: 14px 18px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: rgba(20,17,31,0.6);
+    font-family: var(--mono); font-size: 12.5px;
+    color: var(--fg-2);
+    transition: all 320ms var(--ease-out-premium);
+  }
+  .qm-thought-line .dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--fg-4);
+    transition: background 320ms var(--ease-out-premium);
+    margin-left: 6px;
+  }
+  .qm-thought-line .ms { color: var(--fg-3); font-variant-numeric: tabular-nums; }
+  .qm-thought-line.live { border-color: var(--accent-deep); background: linear-gradient(90deg, rgba(139,92,255,0.10), rgba(125,211,252,0.06)); color: var(--fg); }
+  .qm-thought-line.live .dot { background: var(--aqua); box-shadow: 0 0 12px var(--aqua); animation: thoughtBlink 0.9s ease-in-out infinite; }
+  .qm-thought-line.done { color: var(--fg-3); }
+  .qm-thought-line.done .dot { background: var(--mint); }
+  @keyframes thoughtBlink { 0%,100% {opacity: 0.6;} 50% {opacity: 1;} }
+
+  /* Status pills */
+  .qm-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px; border-radius: 999px;
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase;
+    border: 1px solid var(--line-strong);
+  }
+  .qm-pill.mint   { color: var(--mint);   border-color: rgba(110,231,183,0.35); background: rgba(110,231,183,0.08); }
+  .qm-pill.amber  { color: var(--amber);  border-color: rgba(251,191,36,0.35);  background: rgba(251,191,36,0.08); }
+  .qm-pill.coral  { color: var(--coral);  border-color: rgba(251,113,133,0.35); background: rgba(251,113,133,0.08); }
+  .qm-pill.copper { color: var(--copper); border-color: rgba(232,168,114,0.4);  background: rgba(232,168,114,0.08); }
+  .qm-pill.aqua   { color: var(--aqua);   border-color: rgba(125,211,252,0.4);  background: rgba(125,211,252,0.08); }
+  .qm-pill.violet { color: var(--accent-bright); border-color: rgba(168,124,255,0.4); background: rgba(139,92,255,0.10); }
+
+  /* Buttons */
+  .qm-btn {
+    font-family: var(--sans);
+    font-weight: 500; font-size: 14px; letter-spacing: -0.005em;
+    height: 44px; padding: 0 22px; border-radius: 12px;
+    display: inline-flex; align-items: center; gap: 10px;
+    border: 1px solid transparent; cursor: pointer;
+    transition: transform 220ms var(--ease-out-back), box-shadow 220ms var(--ease-out-premium);
+  }
+  .qm-btn-primary {
+    color: white;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0) 40%),
+      linear-gradient(180deg, var(--accent-bright), var(--accent-deep));
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.18) inset,
+      0 -8px 18px rgba(43,21,96,0.6) inset,
+      0 18px 36px -10px rgba(139,92,255,0.6);
+    position: relative; overflow: hidden;
+  }
+  .qm-btn-primary::after {
+    content: ''; position: absolute; top: 0; left: -60%; width: 50%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent);
+    transform: skewX(-20deg);
+    animation: shine 3.6s ease-in-out infinite;
+  }
+  @keyframes shine { 0% {left: -60%;} 60% {left: 130%;} 100% {left: 130%;} }
+  .qm-btn-ghost {
+    color: var(--fg-2);
+    background: rgba(20,17,31,0.5);
+    border-color: var(--line);
+  }
+  .qm-btn-ghost:hover { color: var(--fg); border-color: var(--line-strong); }
+  .qm-kbd {
+    display: inline-block; padding: 2px 7px;
+    border: 1px solid var(--line); border-bottom-width: 2px;
+    border-radius: 5px; font-family: var(--mono); font-size: 11px; color: var(--fg-3);
+    background: rgba(0,0,0,0.25);
+  }
+
+  /* Specialty chip */
+  .qm-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px; border-radius: 999px;
+    font-family: var(--mono); font-size: 11px;
+    color: var(--fg-2); background: var(--bg-3); border: 1px solid var(--line);
+  }
+  .qm-chip .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+
+  /* Diagonal scroll-section divider */
+  .qm-divider-rule {
+    height: 1px; background: linear-gradient(90deg, transparent, var(--line-strong), transparent);
+    margin: 60px 0;
+  }
+
+  /* Sectioned label / mono numbering */
+  .qm-sectlabel { font-family: var(--mono); font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--fg-3); }
+  .qm-sectlabel .num { color: var(--accent-bright); margin-right: 8px; }
+
+  /* Scroll indicator */
+  .qm-scroll-progress { position: fixed; top: 0; left: 0; right: 0; height: 2px; background: transparent; z-index: 100; }
+  .qm-scroll-progress > i {
+    display: block; height: 100%; width: 0%;
+    background: linear-gradient(90deg, var(--accent), var(--aqua), var(--copper));
+  }
+
+  /* Top nav (minimal — landing) */
+  .qm-topnav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+    padding: 18px 6vw; display: flex; align-items: center; justify-content: space-between;
+    background: linear-gradient(180deg, rgba(7,6,12,0.85), rgba(7,6,12,0));
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  .qm-logo {
+    display: inline-flex; align-items: baseline; gap: 8px;
+    font-family: var(--serif); font-size: 22px; letter-spacing: -0.01em;
+  }
+  .qm-logo .marker { width: 10px; height: 10px; border-radius: 3px; background: linear-gradient(135deg, var(--accent), var(--accent-b)); transform: rotate(45deg); }
+  .qm-logo em { font-style: italic; color: var(--accent-bright); font-weight: 300; }
+
+  /* Reveal-on-view */
+  .reveal { opacity: 0; transform: translateY(28px); transition: opacity 0.9s var(--ease-out-premium), transform 0.9s var(--ease-out-premium); }
+  .reveal.in { opacity: 1; transform: none; }
+  .reveal.fast { transition-duration: 0.55s; }
+  .reveal.delay-1 { transition-delay: 0.10s; }
+  .reveal.delay-2 { transition-delay: 0.22s; }
+  .reveal.delay-3 { transition-delay: 0.34s; }
+  .reveal.delay-4 { transition-delay: 0.46s; }
+
+  /* Transcript line styling for scroll-jack */
+  .qm-tx-line { padding: 6px 0; display: grid; grid-template-columns: 78px 24px 1fr; gap: 14px; align-items: baseline; }
+  .qm-tx-line .who { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.1em; color: var(--fg-3); padding-top: 4px; }
+  .qm-tx-line .who.dr  { color: var(--accent-bright); }
+  .qm-tx-line .who.pt  { color: var(--copper); }
+  .qm-tx-line .ts { font-family: var(--mono); font-size: 10.5px; color: var(--fg-4); padding-top: 4px; }
+  .qm-tx-line .text { font-family: var(--serif); font-size: 18px; line-height: 1.55; color: var(--fg); }
+
+  /* SOAP block */
+  .qm-soap-section { padding: 16px 0; border-top: 1px solid var(--line-soft); }
+  .qm-soap-section:first-child { border-top: 0; padding-top: 0; }
+  .qm-soap-h { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--fg-3); margin-bottom: 10px; }
+  .qm-soap-body { font-family: var(--serif); font-size: 16px; line-height: 1.7; color: var(--fg); }
+
+  /* Empty-state for first-time user */
+  .qm-emptystate {
+    position: relative; padding: 60px;
+    border-radius: 28px;
+    background:
+      radial-gradient(circle at 30% 20%, rgba(139,92,255,0.18), transparent 60%),
+      radial-gradient(circle at 70% 80%, rgba(232,168,114,0.10), transparent 60%),
+      linear-gradient(180deg, var(--bg-2), var(--bg-1));
+    border: 1px solid var(--line);
+  }
+
+  /* Misc */
+  .qm-monoid { font-family: var(--mono); font-size: 11px; color: var(--fg-3); letter-spacing: 0.04em; }
+  .qm-tag-row { display: flex; flex-wrap: wrap; gap: 6px; }
+  .focus-ring:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
+
+  /* Cost pill & success rays */
+  .qm-success-burst {
+    position: absolute; inset: 0; pointer-events: none;
+  }
+  .qm-success-burst i {
+    position: absolute; left: 50%; top: 50%;
+    width: 1px; height: 60px;
+    background: linear-gradient(180deg, var(--copper), transparent);
+    transform-origin: top center; opacity: 0;
+    animation: rayFly 1.6s ease-out forwards;
+  }
+  @keyframes rayFly { 0% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--r)) translateY(0) scaleY(0.4); } 30% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--r)) translateY(-180px) scaleY(1); } }
+
+  /* Particles inside aurora — drifting wisps */
+  .qm-wisps { position: absolute; inset: 0; pointer-events: none; z-index: 1; overflow: hidden; }
+  .qm-wisp { position: absolute; width: 4px; height: 4px; border-radius: 50%; background: var(--aqua); box-shadow: 0 0 12px var(--aqua); opacity: 0.6; animation: wispDrift linear infinite; }
+  @keyframes wispDrift {
+    0%   { transform: translate(0, 100vh); opacity: 0; }
+    10%  { opacity: 0.9; }
+    100% { transform: translate(120px, -10vh); opacity: 0; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     SCROLL PROGRESS BAR
+     ============================================================ -->
+<div class="qm-scroll-progress"><i id="scroll-progress-bar"></i></div>
+
+<!-- ============================================================
+     TOP NAV
+     ============================================================ -->
+<nav class="qm-topnav">
+  <a class="qm-logo" href="#">
+    <span class="marker"></span>
+    <span>quill<em>md</em></span>
+  </a>
+  <div class="flex items-center gap-7">
+    <a class="qm-eyebrow hover:text-[var(--fg)] transition" href="#magic">The Magic</a>
+    <a class="qm-eyebrow hover:text-[var(--fg)] transition" href="#record">Recording</a>
+    <a class="qm-eyebrow hover:text-[var(--fg)] transition" href="#empty">First Visit</a>
+    <a class="qm-eyebrow hover:text-[var(--fg)] transition" href="#">Pricing</a>
+    <a class="qm-eyebrow hover:text-[var(--fg)] transition" href="#">Sign in</a>
+  </div>
+  <div class="flex items-center gap-3">
+    <button class="qm-btn qm-btn-ghost focus-ring">Watch demo</button>
+    <button class="qm-btn qm-btn-primary qm-magnet focus-ring" data-magnet>
+      Start free
+      <span style="opacity:.7;font-family:var(--mono);font-size:11px">↗</span>
+    </button>
+  </div>
+</nav>
+
+<!-- ============================================================
+     SECTION 01 — HERO  (full immersive)
+     ============================================================ -->
+<section class="qm-section tall qm-grain" id="hero" style="padding-top: 160px; padding-bottom: 60px;">
+  <div class="qm-aurora">
+    <div class="aurora-third"></div>
+  </div>
+  <div class="qm-spotlight"></div>
+  <div class="qm-wisps" id="wisps"></div>
+
+  <div class="relative" style="z-index: 5; max-width: 1280px; margin: 0 auto;">
+    <p class="qm-eyebrow reveal in"><span class="ink">§ 01 — APOTHECARY</span> &nbsp;·&nbsp; AN AI MEDICAL SCRIBE FOR PEOPLE WHO TAKE NOTES SERIOUSLY</p>
+    <h1 class="qm-display reveal in delay-1" style="margin-top: 28px; max-width: 1100px;">
+      The visit ends.<br>
+      <em>The note</em> is already<br>
+      written.
+    </h1>
+    <p class="qm-prose reveal in delay-2" style="margin-top: 36px; max-width: 640px;">
+      QuillMD listens to a full clinical encounter, separates the doctor from the patient, drafts a complete SOAP, drafts ICD-10 candidates, drafts the prescription, and surfaces the drug interactions you would have caught on a perfect day &mdash; in 7 minutes, on average, for $0.18 per visit.
+    </p>
+
+    <div class="reveal in delay-3 flex items-center gap-4" style="margin-top: 44px;">
+      <button class="qm-btn qm-btn-primary qm-magnet focus-ring" data-magnet style="height: 56px; padding: 0 32px; font-size: 16px; border-radius: 14px;">
+        Record your first visit
+        <span class="qm-kbd" style="background: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.3); color: #fff;">⇧R</span>
+      </button>
+      <button class="qm-btn qm-btn-ghost focus-ring" style="height: 56px; padding: 0 24px; font-size: 15px; border-radius: 14px;">
+        <span style="color: var(--mint)">●</span> Watch a real visit get scribed (3:42)
+      </button>
+    </div>
+
+    <div class="reveal in delay-4" style="margin-top: 64px;">
+      <div class="qm-tag-row">
+        <span class="qm-pill aqua">HIPAA · BAA</span>
+        <span class="qm-pill mint">SOC 2 · TYPE II</span>
+        <span class="qm-pill copper">PHI &nbsp;⟶&nbsp; redacted before logs</span>
+        <span class="qm-pill violet">98.4% speaker accuracy</span>
+        <span class="qm-pill" style="color: var(--fg-3);">~ 7 min avg draft</span>
+        <span class="qm-pill" style="color: var(--fg-3);">$0.184 / visit · all-in</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hero "demo card" — sits at the bottom of hero, becomes the focal point on scroll -->
+  <div class="relative reveal in delay-4" style="z-index: 5; margin: 100px auto 0; max-width: 1180px;">
+    <div class="qm-beam-frame qm-card-glass" style="border-radius: 22px; padding: 28px 32px;">
+      <div class="flex items-center justify-between" style="border-bottom: 1px solid var(--line-soft); padding-bottom: 16px; margin-bottom: 20px;">
+        <div class="flex items-center gap-3">
+          <span class="qm-pill mint">● LIVE</span>
+          <span class="qm-monoid">visit_id&nbsp;·&nbsp;v_ck82h4</span>
+          <span class="qm-monoid">·</span>
+          <span class="qm-monoid">john smith · 58M · est patient</span>
+          <span class="qm-chip"><span class="dot"></span>cardiology</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="qm-monoid">elapsed</span>
+          <span class="qm-monoid" style="color: var(--fg); font-size: 13px;">02:14</span>
+          <span class="qm-monoid" style="color: var(--fg-4)">·</span>
+          <span class="qm-monoid">avg 7:08</span>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-10">
+        <!-- Live transcript side (cool aqua) -->
+        <div>
+          <p class="qm-sectlabel"><span class="num">01</span>LIVE TRANSCRIPT &nbsp;<span style="color: var(--aqua)">●</span></p>
+          <div style="margin-top: 14px;">
+            <div class="qm-tx-line"><span class="who dr">DR.</span><span class="ts">00:14</span><span class="text">So what brings you in today, Mr. Smith?</span></div>
+            <div class="qm-tx-line"><span class="who pt">PT.</span><span class="ts">00:18</span><span class="text">The chest, doc &mdash; it's been tight when I climb the stairs for about three weeks now, sometimes a pinch on the left side.</span></div>
+            <div class="qm-tx-line"><span class="who dr">DR.</span><span class="ts">00:34</span><span class="text">Any shortness of breath with it? Radiation to the arm or jaw?</span></div>
+            <div class="qm-tx-line"><span class="who pt">PT.</span><span class="ts">00:42</span><span class="text">A little short, yeah. No arm. No sweats either.</span></div>
+            <div class="qm-tx-line"><span class="who dr">DR.</span><span class="ts">01:08</span><span class="text">Still on the metoprolol &mdash; 25 twice a day?</span></div>
+            <div class="qm-tx-line"><span class="who pt">PT.</span><span class="ts">01:12</span><span class="text">Yes sir. Every morning and night.</span></div>
+          </div>
+        </div>
+        <!-- SOAP forming side (warm copper) -->
+        <div>
+          <p class="qm-sectlabel"><span class="num">02</span>SOAP &nbsp;FORMING &nbsp;<span style="color: var(--copper)">●</span></p>
+          <div style="margin-top: 14px;">
+            <div class="qm-soap-section">
+              <div class="qm-soap-h">Subjective</div>
+              <div class="qm-soap-body"><span style="color: var(--fg-3); border-left: 2px solid var(--copper); padding-left: 8px;">58&#8209;year&#8209;old male, established patient,</span> presents with a 3&#8209;week history of exertional <em style="font-style: italic; color: var(--copper);">chest tightness</em>, occasional left&#8209;sided pinching pain, and mild associated dyspnea. <span style="color: var(--fg-3)">Denies arm/jaw radiation, denies diaphoresis. Currently on metoprolol 25 mg BID&hellip;</span></div>
+            </div>
+            <div class="qm-soap-section">
+              <div class="qm-soap-h">Objective &nbsp;<span style="color: var(--accent-bright); font-size: 9px;">DRAFTING&hellip;</span></div>
+              <div class="qm-soap-body" style="color: var(--fg-3)">vitals · cardiac exam · pulm&hellip; <span class="qm-shimmer" style="display:inline-block; width: 80px; height: 12px; background: linear-gradient(90deg, var(--bg-3), var(--accent-deep), var(--bg-3)); background-size: 200% 100%; animation: shineBar 1.4s linear infinite; border-radius: 3px; vertical-align: middle;"></span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- Caption underneath -->
+    <p class="qm-eyebrow" style="text-align: center; margin-top: 24px;">SCROLL <span style="color: var(--accent-bright)">↓</span> TO WATCH IT FINISH</p>
+  </div>
+</section>
+
+<style>
+  @keyframes shineBar { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+</style>
+
+<!-- ============================================================
+     SECTION 02 — SCROLL-JACKED MAGIC MOMENT
+     The transcript rolls in, then SOAP slides over, then thought-chain reveals.
+     ============================================================ -->
+<section class="qm-section tall qm-grain" id="magic">
+  <div class="qm-aurora" style="opacity: 0.6;">
+    <div class="aurora-third"></div>
+  </div>
+
+  <div class="relative" style="z-index: 5; max-width: 1280px; margin: 0 auto;">
+    <p class="qm-eyebrow reveal"><span class="ink">§ 02 / THE MAGIC</span> &nbsp;·&nbsp; WHAT THE MODEL IS THINKING WHILE YOU TALK</p>
+    <h2 class="qm-h2 reveal delay-1" style="margin-top: 18px; max-width: 880px;">
+      Most scribes show you a <em style="font-style: italic; color: var(--fg-3); font-weight: 300;">spinner</em>.<br>
+      We show you the <em style="font-style: italic; color: var(--accent-bright); font-weight: 300;">apothecary at work</em>.
+    </h2>
+
+    <div class="grid gap-10" style="grid-template-columns: 1.2fr 1fr; margin-top: 80px; align-items: start;">
+      <!-- Left: pipeline visualization with nodes -->
+      <div class="reveal delay-2">
+        <p class="qm-sectlabel" style="margin-bottom: 20px;"><span class="num">01</span>SEVEN&#8209;LAYER PIPELINE (LIVE)</p>
+
+        <!-- nodes -->
+        <div style="position: relative;">
+          <svg width="100%" height="240" viewBox="0 0 700 240" style="display:block;">
+            <defs>
+              <linearGradient id="trail-grad" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%"  stop-color="#7DD3FC" stop-opacity="0.0"/>
+                <stop offset="40%" stop-color="#7DD3FC" stop-opacity="0.85"/>
+                <stop offset="60%" stop-color="#A87CFF" stop-opacity="0.85"/>
+                <stop offset="100%" stop-color="#E8A872" stop-opacity="0"/>
+              </linearGradient>
+              <filter id="trail-glow"><feGaussianBlur stdDeviation="2"/></filter>
+            </defs>
+            <!-- top trail -->
+            <path d="M70,60 C220,20 400,20 630,60" class="qm-trail-path" stroke="url(#trail-grad)" filter="url(#trail-glow)"/>
+            <path d="M70,60 C220,20 400,20 630,60" class="qm-trail-path" stroke="url(#trail-grad)"/>
+            <!-- bottom trail -->
+            <path d="M70,180 C220,220 400,220 630,180" class="qm-trail-path" stroke="url(#trail-grad)" filter="url(#trail-glow)" style="animation-delay: 0.4s;"/>
+            <path d="M70,180 C220,220 400,220 630,180" class="qm-trail-path" stroke="url(#trail-grad)" style="animation-delay: 0.4s;"/>
+          </svg>
+
+          <div style="position: absolute; inset: 0; display: grid; grid-template-columns: repeat(7, 1fr); align-items: center; padding: 0 6px;">
+            <div class="qm-node" style="margin: 0 auto;">
+              <div class="qm-node-tick">✓</div>
+              <span class="qm-node-glyph">⏵</span>
+              <span class="qm-node-label">L1 · audio</span>
+            </div>
+            <div class="qm-node" style="margin: 0 auto;">
+              <div class="qm-node-tick">✓</div>
+              <span class="qm-node-glyph" style="font-family: var(--mono);">∿</span>
+              <span class="qm-node-label">L2 · diariz.</span>
+            </div>
+            <div class="qm-node" style="margin: 0 auto;">
+              <div class="qm-node-tick">✓</div>
+              <span class="qm-node-glyph">✦</span>
+              <span class="qm-node-label">L3 · entities</span>
+            </div>
+            <div class="qm-node live" style="margin: 0 auto;">
+              <span class="qm-node-glyph" style="color: var(--accent-a)">§</span>
+              <span class="qm-node-label" style="color: var(--accent-bright);">L4 · soap</span>
+            </div>
+            <div class="qm-node" style="margin: 0 auto;">
+              <span class="qm-node-glyph" style="color: var(--fg-4)">⌖</span>
+              <span class="qm-node-label">L5 · critique</span>
+            </div>
+            <div class="qm-node" style="margin: 0 auto;">
+              <span class="qm-node-glyph" style="color: var(--fg-4)">℞</span>
+              <span class="qm-node-label">L7 · rx</span>
+            </div>
+            <div class="qm-node" style="margin: 0 auto;">
+              <span class="qm-node-glyph" style="color: var(--fg-4)">∎</span>
+              <span class="qm-node-label">L7 · icd</span>
+            </div>
+          </div>
+        </div>
+
+        <p class="qm-eyebrow" style="margin-top: 30px;">VOICE  ⟶  TRANSCRIPT  ⟶  SOAP  ⟶  CODES  ⟶  RX  ⟶  REVIEWED &nbsp;<span style="color: var(--mint)">●</span></p>
+      </div>
+
+      <!-- Right: thought chain — the model's reasoning -->
+      <div class="reveal delay-3">
+        <p class="qm-sectlabel" style="margin-bottom: 20px;"><span class="num">02</span>WHAT &nbsp;CLAUDE &nbsp;IS &nbsp;THINKING</p>
+
+        <div class="qm-card-glass" style="padding: 22px;">
+          <div class="flex items-center gap-3" style="margin-bottom: 18px;">
+            <span class="qm-pill aqua">claude · sonnet 4.6</span>
+            <span class="qm-monoid">L4 · drafting subjective</span>
+            <span class="qm-monoid" style="color: var(--mint); margin-left: auto;">●&nbsp; 2.4 s elapsed</span>
+          </div>
+
+          <div style="display: grid; gap: 8px;" id="thought-chain">
+            <div class="qm-thought-line done"><span class="dot"></span><span>identifying speakers · 2 voices · DR / PT</span><span class="ms">+0.41s</span></div>
+            <div class="qm-thought-line done"><span class="dot"></span><span>extracting medications · metoprolol tartrate 25 mg BID</span><span class="ms">+0.68s</span></div>
+            <div class="qm-thought-line done"><span class="dot"></span><span>extracting symptoms · chest tightness, exertional dyspnea, no diaphoresis</span><span class="ms">+1.02s</span></div>
+            <div class="qm-thought-line done"><span class="dot"></span><span>matching ICD candidates · R07.9, I20.9 (under review)</span><span class="ms">+1.19s</span></div>
+            <div class="qm-thought-line live"><span class="dot"></span><span>drafting subjective · "58yo male presents with 3-week h/o exertional&hellip;"</span><span class="ms">+2.40s</span></div>
+            <div class="qm-thought-line"><span class="dot"></span><span>drafting objective</span><span class="ms">queued</span></div>
+            <div class="qm-thought-line"><span class="dot"></span><span>self-critique pass · readability · safety</span><span class="ms">queued</span></div>
+            <div class="qm-thought-line"><span class="dot"></span><span>polish · drug-interaction sweep · sign-ready</span><span class="ms">queued</span></div>
+          </div>
+
+          <div class="flex items-center justify-between" style="margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--line-soft);">
+            <span class="qm-monoid">prompt_hash &nbsp;<span style="color: var(--fg-2)">9a7c·e4f1</span></span>
+            <span class="qm-monoid">cost &nbsp;<span style="color: var(--copper)">$0.142</span> &nbsp; · &nbsp; in 18,402t · out 1,204t</span>
+          </div>
+        </div>
+
+        <p class="qm-eyebrow" style="margin-top: 22px;">EVERY THOUGHT IS LOGGED. EVERY COST IS EXPOSED. NO BLACK BOX.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="qm-divider-rule"></div>
+
+<!-- ============================================================
+     SECTION 03 — RECORDING WIDGET (the active state)
+     ============================================================ -->
+<section class="qm-section qm-grain" id="record" style="padding-top: 80px;">
+  <div class="qm-aurora" style="opacity: 0.5;"></div>
+
+  <div class="relative" style="z-index: 5; max-width: 1280px; margin: 0 auto;">
+    <p class="qm-eyebrow reveal"><span class="ink">§ 03 / THE RECORDING ROOM</span> &nbsp;·&nbsp; HIT THE BUTTON. TALK TO YOUR PATIENT. WALK OUT.</p>
+    <h2 class="qm-h2 reveal delay-1" style="margin-top: 18px; max-width: 880px;">
+      One button.<br>
+      <em style="font-style: italic; color: var(--accent-bright); font-weight: 300;">No interface to learn.</em>
+    </h2>
+
+    <div class="grid gap-12 reveal delay-2" style="grid-template-columns: 1fr 1fr; margin-top: 80px; align-items: center;">
+
+      <!-- Left: live recording widget -->
+      <div class="qm-beam-frame qm-card-glass glow" style="border-radius: 28px; padding: 60px 48px; position: relative;">
+        <div class="flex items-center justify-between" style="margin-bottom: 34px;">
+          <div>
+            <p class="qm-eyebrow" style="margin-bottom: 6px;"><span class="ink">RECORDING</span></p>
+            <p style="font-family: var(--serif); font-size: 28px; line-height: 1.1; letter-spacing: -0.02em;">
+              Maria Lopez<br>
+              <span style="color: var(--fg-3); font-size: 18px; font-style: italic; font-weight: 300;">est. patient · pain mgmt</span>
+            </p>
+          </div>
+          <div style="text-align: right;">
+            <p class="qm-monoid" style="color: var(--fg-3);">ELAPSED</p>
+            <p class="qm-mono" style="font-family: var(--mono); font-size: 38px; color: var(--fg); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; margin-top: 2px;">04:21</p>
+            <p class="qm-monoid" style="color: var(--fg-4);">cap 60:00</p>
+          </div>
+        </div>
+
+        <!-- the orb -->
+        <div class="flex justify-center" style="padding: 26px 0;">
+          <div class="qm-rec-ring">
+            <div class="pulse"></div>
+            <div class="pulse b"></div>
+            <div class="pulse c"></div>
+            <div class="qm-rec-core"></div>
+            <div class="qm-vu" aria-hidden="true">
+              <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top: 64px; display: flex; gap: 12px; justify-content: center; align-items: center;">
+          <button class="qm-btn qm-btn-ghost focus-ring" style="height: 48px;">
+            <span style="color: var(--amber)">⏸</span> Pause
+            <span class="qm-kbd">SPACE</span>
+          </button>
+          <button class="qm-btn qm-btn-primary focus-ring" style="height: 56px; padding: 0 32px; border-radius: 14px;">
+            <span style="color: #fff">■</span> End &amp; scribe
+            <span class="qm-kbd" style="background: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.3); color: #fff;">⇧E</span>
+          </button>
+        </div>
+
+        <div class="flex items-center justify-between" style="margin-top: 36px; padding-top: 22px; border-top: 1px solid var(--line-soft);">
+          <span class="qm-pill mint">● PHI redacted before logs</span>
+          <span class="qm-monoid">deepgram · nova-2 · en&#8209;us</span>
+          <span class="qm-monoid" style="color: var(--fg-3)">queued ~ <span style="color: var(--copper)">$0.018</span></span>
+        </div>
+      </div>
+
+      <!-- Right: explanation strip -->
+      <div>
+        <h3 style="font-family: var(--serif); font-size: 32px; line-height: 1.15; letter-spacing: -0.025em; max-width: 480px;">
+          The widget glows when it hears you. It hums when it doesn't. It pauses if you pause. It never <em style="font-style: italic; color: var(--coral); font-weight: 400;">interrupts</em>.
+        </h3>
+
+        <div style="margin-top: 36px; display: grid; gap: 20px;">
+          <div class="flex gap-4 items-start">
+            <span class="qm-pill aqua" style="margin-top: 4px;">A</span>
+            <div>
+              <p style="font-weight: 600; color: var(--fg);">VAD-aware silence handling.</p>
+              <p style="color: var(--fg-2); font-size: 14.5px; line-height: 1.6;">If you and the patient go quiet for &gt;90s, we trim the silence on the upload &mdash; you don't pay to transcribe nothing.</p>
+            </div>
+          </div>
+          <div class="flex gap-4 items-start">
+            <span class="qm-pill copper" style="margin-top: 4px;">B</span>
+            <div>
+              <p style="font-weight: 600; color: var(--fg);">No cloud streaming during the visit.</p>
+              <p style="color: var(--fg-2); font-size: 14.5px; line-height: 1.6;">Audio buffers locally in the browser, encrypted with the session key. Only the final blob hits MinIO over TLS.</p>
+            </div>
+          </div>
+          <div class="flex gap-4 items-start">
+            <span class="qm-pill violet" style="margin-top: 4px;">C</span>
+            <div>
+              <p style="font-weight: 600; color: var(--fg);">If the network blips, the visit doesn't.</p>
+              <p style="color: var(--fg-2); font-size: 14.5px; line-height: 1.6;">IndexedDB-backed resumable uploads. Close the tab; we'll pick up where you left off.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     SECTION 04 — SUCCESS STATE
+     "SOAP ready · 7 min · $0.184"
+     ============================================================ -->
+<section class="qm-section qm-grain" id="ready" style="padding-top: 80px;">
+  <div class="qm-aurora" style="opacity: 0.4;"></div>
+
+  <div class="relative" style="z-index: 5; max-width: 1100px; margin: 0 auto;">
+    <p class="qm-eyebrow reveal"><span class="ink">§ 04 / THE PAYOFF</span> &nbsp;·&nbsp; FOUR MINUTES BEFORE YOUR NEXT PATIENT WALKS IN</p>
+
+    <div class="reveal delay-1 qm-card-glass glow" style="margin-top: 50px; padding: 56px; border-radius: 28px; position: relative; overflow: hidden;">
+      <!-- copper rays burst on reveal -->
+      <div class="qm-success-burst" id="rayburst" aria-hidden="true"></div>
+
+      <div class="flex items-center gap-4" style="margin-bottom: 34px;">
+        <div style="width: 56px; height: 56px; border-radius: 18px; background: linear-gradient(135deg, var(--mint), #34D399); display: grid; place-items: center; color: #042814; font-size: 26px; font-weight: 700; box-shadow: 0 16px 40px -10px rgba(110,231,183,0.5);">
+          ✓
+        </div>
+        <div>
+          <p class="qm-eyebrow" style="margin-bottom: 4px;"><span style="color: var(--mint)">SOAP READY</span> &nbsp;·&nbsp; AWAITING YOUR REVIEW</p>
+          <p style="font-family: var(--serif); font-size: 36px; letter-spacing: -0.025em;">
+            Maria Lopez &middot; <em style="font-style: italic; color: var(--copper); font-weight: 300;">drafted in 7&#x202F;min&#x202F;12&#x202F;s</em>
+          </p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-4 gap-4" style="margin-top: 30px;">
+        <div style="padding: 18px; border-radius: 16px; background: rgba(28,24,40,0.5); border: 1px solid var(--line);">
+          <p class="qm-monoid" style="color: var(--fg-3);">SUBJECTIVE</p>
+          <p style="font-family: var(--mono); font-size: 22px; color: var(--fg); margin-top: 6px;">312 <span style="color: var(--fg-3); font-size: 12px;">words</span></p>
+          <p class="qm-monoid" style="color: var(--mint); margin-top: 4px;">grade 8.4 · readable</p>
+        </div>
+        <div style="padding: 18px; border-radius: 16px; background: rgba(28,24,40,0.5); border: 1px solid var(--line);">
+          <p class="qm-monoid" style="color: var(--fg-3);">ICD-10 CANDIDATES</p>
+          <p style="font-family: var(--mono); font-size: 22px; color: var(--fg); margin-top: 6px;">M54.5 · M79.7</p>
+          <p class="qm-monoid" style="color: var(--copper); margin-top: 4px;">2 candidates · 1 to confirm</p>
+        </div>
+        <div style="padding: 18px; border-radius: 16px; background: rgba(28,24,40,0.5); border: 1px solid var(--line);">
+          <p class="qm-monoid" style="color: var(--fg-3);">RX SAFETY</p>
+          <p style="font-family: var(--mono); font-size: 22px; color: var(--mint); margin-top: 6px;">CLEAR</p>
+          <p class="qm-monoid" style="color: var(--fg-3); margin-top: 4px;">0 warnings · 2 meds checked</p>
+        </div>
+        <div style="padding: 18px; border-radius: 16px; background: rgba(28,24,40,0.5); border: 1px solid var(--line);">
+          <p class="qm-monoid" style="color: var(--fg-3);">COST</p>
+          <p style="font-family: var(--mono); font-size: 22px; color: var(--copper); margin-top: 6px;">$0.184</p>
+          <p class="qm-monoid" style="color: var(--fg-3); margin-top: 4px;">deepgram + claude all-in</p>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between" style="margin-top: 38px; padding-top: 24px; border-top: 1px solid var(--line-soft);">
+        <div class="flex items-center gap-3">
+          <span class="qm-pill mint">● ready</span>
+          <span class="qm-pill aqua">7 layers passed</span>
+          <span class="qm-pill copper">2 ICD &nbsp;·&nbsp; 1 Rx &nbsp;·&nbsp; 0 warnings</span>
+          <span class="qm-monoid">L1 0.4s · L2 1.1s · L3 0.8s · L4 2.3s · L5 0.9s · L6 1.0s · L7 0.7s</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <button class="qm-btn qm-btn-ghost focus-ring">Open transcript <span class="qm-kbd">T</span></button>
+          <button class="qm-btn qm-btn-primary qm-magnet focus-ring" data-magnet>Review &amp; sign <span class="qm-kbd" style="background: rgba(255,255,255,0.2); color: #fff; border-color: rgba(255,255,255,0.3);">↵</span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     SECTION 05 — EMPTY STATE for first-time user
+     ============================================================ -->
+<section class="qm-section qm-grain" id="empty" style="padding: 80px 8vw 160px;">
+  <div class="qm-aurora" style="opacity: 0.35;"></div>
+
+  <div class="relative" style="z-index: 5; max-width: 1280px; margin: 0 auto;">
+    <p class="qm-eyebrow reveal"><span class="ink">§ 05 / FIRST DAY</span> &nbsp;·&nbsp; BEFORE THE FIRST VISIT — THE EMPTY STATE</p>
+
+    <div class="reveal delay-1 qm-emptystate" style="margin-top: 50px;">
+      <div class="grid gap-10" style="grid-template-columns: 1.4fr 1fr; align-items: center;">
+        <div>
+          <p class="qm-eyebrow" style="color: var(--copper)">0 &nbsp;VISITS &nbsp;· &nbsp; LET'S CHANGE THAT</p>
+          <h2 style="font-family: var(--serif); font-weight: 400; font-size: clamp(40px, 4.4vw, 60px); line-height: 1.04; letter-spacing: -0.025em; margin-top: 16px; max-width: 540px;">
+            Your <em style="font-style: italic; color: var(--accent-bright); font-weight: 300;">workspace</em> is empty.<br>
+            That's about to feel <em style="font-style: italic; color: var(--copper); font-weight: 300;">very strange</em>, very fast.
+          </h2>
+          <p class="qm-prose" style="margin-top: 24px; max-width: 520px;">
+            Most doctors record their first visit within 6 minutes of signing in. The transcript shows up live in the right pane. The SOAP appears 4&ndash;9 minutes after you stop talking. Your only job is to read it, edit anything that's off, and sign.
+          </p>
+          <div style="margin-top: 32px; display: flex; gap: 12px;">
+            <button class="qm-btn qm-btn-primary qm-magnet focus-ring" data-magnet style="height: 52px; padding: 0 28px;">
+              Record first visit
+              <span class="qm-kbd" style="background: rgba(255,255,255,0.2); color: #fff; border-color: rgba(255,255,255,0.3);">⇧R</span>
+            </button>
+            <button class="qm-btn qm-btn-ghost focus-ring" style="height: 52px;">Upload an existing audio file</button>
+          </div>
+          <div style="margin-top: 36px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; max-width: 580px;">
+            <div>
+              <p style="font-family: var(--mono); font-size: 22px; color: var(--accent-bright); font-variant-numeric: tabular-nums;">7 min</p>
+              <p class="qm-monoid" style="color: var(--fg-3); margin-top: 2px;">avg drafting time</p>
+            </div>
+            <div>
+              <p style="font-family: var(--mono); font-size: 22px; color: var(--copper); font-variant-numeric: tabular-nums;">$0.18</p>
+              <p class="qm-monoid" style="color: var(--fg-3); margin-top: 2px;">all-in per visit</p>
+            </div>
+            <div>
+              <p style="font-family: var(--mono); font-size: 22px; color: var(--mint); font-variant-numeric: tabular-nums;">98.4%</p>
+              <p class="qm-monoid" style="color: var(--fg-3); margin-top: 2px;">speaker accuracy</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- The "spirit orb" — quiet companion -->
+        <div style="position: relative; height: 360px; display: grid; place-items: center;">
+          <div style="position: relative; width: 240px; height: 240px;">
+            <!-- concentric rings (svg) -->
+            <svg width="240" height="240" viewBox="0 0 240 240" style="position:absolute; inset:0;">
+              <defs>
+                <radialGradient id="orb-grad" cx="50%" cy="40%" r="60%">
+                  <stop offset="0%" stop-color="#D1B5FF" stop-opacity="1"/>
+                  <stop offset="35%" stop-color="#8B5CFF" stop-opacity="0.95"/>
+                  <stop offset="65%" stop-color="#6B3FD9" stop-opacity="0.7"/>
+                  <stop offset="100%" stop-color="#2A1560" stop-opacity="0"/>
+                </radialGradient>
+                <radialGradient id="orb-glow" cx="50%" cy="50%" r="60%">
+                  <stop offset="0%" stop-color="#8B5CFF" stop-opacity="0.6"/>
+                  <stop offset="100%" stop-color="#8B5CFF" stop-opacity="0"/>
+                </radialGradient>
+              </defs>
+              <circle cx="120" cy="120" r="118" fill="url(#orb-glow)"/>
+              <circle cx="120" cy="120" r="80" fill="url(#orb-grad)"/>
+              <!-- inner ring -->
+              <circle cx="120" cy="120" r="100" fill="none" stroke="#3A3445" stroke-width="1" stroke-dasharray="2 4" opacity="0.5"/>
+              <circle cx="120" cy="120" r="115" fill="none" stroke="#3A3445" stroke-width="1" opacity="0.3"/>
+            </svg>
+            <p style="position:absolute; left: 50%; bottom: -50px; transform: translateX(-50%); white-space: nowrap;" class="qm-eyebrow"><span style="color: var(--accent-bright)">●</span> &nbsp; WAITING &nbsp; · &nbsp; LISTENING</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Steps row beneath -->
+      <div style="margin-top: 60px; padding-top: 30px; border-top: 1px solid var(--line); display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px;">
+        <div>
+          <p class="qm-monoid" style="color: var(--accent-bright)">01 / THE BUTTON</p>
+          <p style="font-family: var(--serif); font-size: 17px; line-height: 1.5; margin-top: 6px;">Press <span class="qm-kbd">⇧R</span> or hit the orb in the top-right of the dashboard.</p>
+        </div>
+        <div>
+          <p class="qm-monoid" style="color: var(--copper)">02 / THE VISIT</p>
+          <p style="font-family: var(--serif); font-size: 17px; line-height: 1.5; margin-top: 6px;">Talk to your patient like you would on any other day. We listen.</p>
+        </div>
+        <div>
+          <p class="qm-monoid" style="color: var(--aqua)">03 / THE WAIT</p>
+          <p style="font-family: var(--serif); font-size: 17px; line-height: 1.5; margin-top: 6px;">~7 minutes for the SOAP, ICD candidates, and Rx safety pass.</p>
+        </div>
+        <div>
+          <p class="qm-monoid" style="color: var(--mint)">04 / THE SIGN</p>
+          <p style="font-family: var(--serif); font-size: 17px; line-height: 1.5; margin-top: 6px;">Read, edit anything off, sign. Note is timestamped &amp; immutable.</p>
+        </div>
+      </div>
+    </div>
+
+    <p class="qm-eyebrow reveal" style="text-align: center; margin-top: 80px;">
+      ↓ &nbsp;NEXT&nbsp; · &nbsp;<span style="color: var(--accent-bright)">DASHBOARD (calm mode)</span>&nbsp; · &nbsp;<a href="dashboard.html" style="color: var(--fg-2); text-decoration: underline; text-underline-offset: 4px;">open dashboard.html</a>
+    </p>
+  </div>
+</section>
+
+<!-- ============================================================
+     JS — reveal-on-view, magnetic CTAs, scroll progress, particles
+     ============================================================ -->
+<script>
+  // Scroll progress bar
+  const bar = document.getElementById('scroll-progress-bar');
+  function updateScroll() {
+    const h = document.documentElement;
+    const max = h.scrollHeight - h.clientHeight;
+    const p = max > 0 ? (h.scrollTop / max) * 100 : 0;
+    bar.style.width = p + '%';
+  }
+  document.addEventListener('scroll', updateScroll, { passive: true });
+  updateScroll();
+
+  // Reveal-on-view (IntersectionObserver). Respect prefers-reduced-motion.
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduced) {
+    document.querySelectorAll('.reveal').forEach(el => el.classList.add('in'));
+  } else {
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }});
+    }, { threshold: 0.12 });
+    document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+  }
+
+  // Magnetic CTA — translates the button toward the cursor (subtle)
+  const magnets = document.querySelectorAll('[data-magnet]');
+  magnets.forEach(btn => {
+    btn.addEventListener('mousemove', (ev) => {
+      if (reduced) return;
+      const r = btn.getBoundingClientRect();
+      const x = ev.clientX - (r.left + r.width / 2);
+      const y = ev.clientY - (r.top  + r.height / 2);
+      btn.style.transform = `translate(${x * 0.2}px, ${y * 0.25}px)`;
+    });
+    btn.addEventListener('mouseleave', () => { btn.style.transform = ''; });
+  });
+
+  // Aurora wisps — drift particles at random
+  const wisps = document.getElementById('wisps');
+  if (wisps && !reduced) {
+    for (let i = 0; i < 16; i++) {
+      const w = document.createElement('span');
+      w.className = 'qm-wisp';
+      w.style.left = Math.random() * 100 + '%';
+      w.style.animationDuration = (12 + Math.random() * 12) + 's';
+      w.style.animationDelay = (-Math.random() * 12) + 's';
+      w.style.background = ['#8B5CFF', '#7DD3FC', '#E8A872'][i % 3];
+      w.style.boxShadow = `0 0 12px ${w.style.background}`;
+      wisps.appendChild(w);
+    }
+  }
+
+  // Thought-chain — auto-advance the "live" line every ~1.4s for demo
+  const tc = document.getElementById('thought-chain');
+  if (tc && !reduced) {
+    const lines = Array.from(tc.querySelectorAll('.qm-thought-line'));
+    let idx = lines.findIndex(l => l.classList.contains('live'));
+    setInterval(() => {
+      if (idx < 0 || idx >= lines.length - 1) {
+        // reset
+        lines.forEach((l, i) => {
+          l.classList.remove('live'); l.classList.remove('done');
+          if (i < 4) l.classList.add('done');
+          if (i === 4) l.classList.add('live');
+        });
+        // restore default times
+        lines.forEach(l => {
+          const ms = l.querySelector('.ms');
+          if (l.classList.contains('done')) ms.textContent = '+' + (Math.random() * 1.2 + 0.3).toFixed(2) + 's';
+          else if (l.classList.contains('live')) ms.textContent = '+' + (Math.random() * 0.6 + 2.0).toFixed(2) + 's';
+          else ms.textContent = 'queued';
+        });
+        idx = 4;
+        return;
+      }
+      lines[idx].classList.remove('live'); lines[idx].classList.add('done');
+      lines[idx].querySelector('.ms').textContent = '+' + ((idx + 1) * 0.6 + Math.random() * 0.5).toFixed(2) + 's';
+      idx++;
+      lines[idx].classList.add('live');
+      lines[idx].querySelector('.ms').textContent = 'now…';
+    }, 1700);
+  }
+
+  // Success burst rays
+  const burst = document.getElementById('rayburst');
+  if (burst && !reduced) {
+    const rays = 18;
+    for (let i = 0; i < rays; i++) {
+      const r = document.createElement('i');
+      const angle = (360 / rays) * i;
+      r.style.setProperty('--r', angle + 'deg');
+      r.style.animationDelay = (i * 0.04) + 's';
+      burst.appendChild(r);
+    }
+    // re-trigger when scrolled into view
+    const ob = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          burst.querySelectorAll('i').forEach((node, i) => {
+            node.style.animation = 'none';
+            void node.offsetWidth;
+            node.style.animation = '';
+          });
+        }
+      });
+    }, { threshold: 0.4 });
+    ob.observe(burst.parentElement);
+  }
+</script>
+</body>
+</html>

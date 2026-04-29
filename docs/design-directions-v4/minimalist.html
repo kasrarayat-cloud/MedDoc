@@ -1,0 +1,738 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>QuillMD — Minimalist (v4 / wabi-sabi)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+  <style>
+    /* ---------------------------------------------------------------
+       MINIMALIST EXTREME — Kenya Hara / MUJI / Dieter Rams / Ghibli
+       Off-white canvas. Warm-charcoal ink. ONE hairline accent.
+       Tiny chrome (10-11px). Large content (24-32px).
+       Asymmetric. Opacity-only motion. No shadows. No borders beyond hairlines.
+       --------------------------------------------------------------- */
+
+    :root {
+      /* canvas — slight warm undertone, not pure white, not cream */
+      --paper:        #FAF8F5;
+      --paper-deep:   #F5F2ED;   /* used at most once, for a barely-visible recess */
+      /* ink — warm-charcoal, never #000 */
+      --ink:          #1F1A14;
+      --ink-2:        #4A3F33;   /* secondary copy */
+      --ink-3:        #8A7E70;   /* tertiary, captions */
+      --ink-4:        #B8AFA3;   /* muted, placeholders, hairline annotations */
+
+      /* THE one hairline accent — muted rust, used only at low opacity */
+      --accent:       #A85C30;
+
+      /* hairline opacities (used as borders, not fills) */
+      --hairline:     rgba(31, 26, 20, 0.10);
+      --hairline-2:   rgba(31, 26, 20, 0.18);
+      --accent-line:  rgba(168, 92, 48, 0.60);  /* 1px, the only chromatic moment */
+
+      --serif:        'DM Sans', ui-sans-serif, system-ui, sans-serif;
+      --mono:         'JetBrains Mono', ui-monospace, 'Menlo', monospace;
+    }
+
+    html, body {
+      background: var(--paper);
+      color: var(--ink);
+      font-family: var(--serif);
+      font-weight: 300;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      letter-spacing: -0.005em;
+    }
+
+    body {
+      font-size: 14px;
+      line-height: 1.65;
+      font-feature-settings: "ss01", "liga";
+    }
+
+    /* CHROME = 10-11px mono, small caps, generous tracking */
+    .chrome {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 400;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--ink-3);
+    }
+    .chrome-tight {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 400;
+      letter-spacing: 0.06em;
+      color: var(--ink-3);
+    }
+    .chrome-10 {
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 400;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--ink-4);
+    }
+
+    /* CONTENT typography */
+    .display-name { font-size: 28px; line-height: 1.2; font-weight: 400; letter-spacing: -0.02em; }
+    .name { font-size: 24px; line-height: 1.25; font-weight: 400; letter-spacing: -0.018em; }
+    .row-name { font-size: 18px; line-height: 1.4; font-weight: 400; letter-spacing: -0.01em; }
+    .body-soap { font-size: 18px; line-height: 1.8; font-weight: 300; }
+
+    /* the ONE hairline rule — used everywhere */
+    .hr {
+      border: 0;
+      height: 1px;
+      background: var(--hairline);
+    }
+    .hr-strong {
+      border: 0;
+      height: 1px;
+      background: var(--hairline-2);
+    }
+
+    /* the ONE accented hairline — only the active visit underline + recording dot ring */
+    .accent-underline {
+      position: relative;
+    }
+    .accent-underline::after {
+      content: "";
+      position: absolute;
+      left: 0; right: 0; bottom: -6px;
+      height: 1px;
+      background: var(--accent-line);
+    }
+
+    /* recording dot — single 6px solid circle, no halo, no pulse */
+    .rec-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+      opacity: 0.85;
+      display: inline-block;
+    }
+    .rec-dot.lg { width: 8px; height: 8px; }
+
+    /* opacity-only motion */
+    .fade-line {
+      opacity: 0;
+      animation: fade-in 600ms ease-out forwards;
+    }
+    .fade-line.d1  { animation-delay: 200ms; }
+    .fade-line.d2  { animation-delay: 800ms; }
+    .fade-line.d3  { animation-delay: 1400ms; }
+    .fade-line.d4  { animation-delay: 2000ms; }
+    .fade-line.d5  { animation-delay: 2600ms; }
+    .fade-line.d6  { animation-delay: 3200ms; }
+    .fade-line.d7  { animation-delay: 3800ms; }
+    .fade-line.d8  { animation-delay: 4400ms; }
+    @keyframes fade-in {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+
+    /* recording timer — 11px mono, no animation, just present */
+    .timer { font-family: var(--mono); font-size: 11px; letter-spacing: 0.10em; color: var(--ink-3); }
+
+    /* the only "interactive" rule — hover is opacity only */
+    a, .link {
+      color: inherit;
+      text-decoration: none;
+      transition: opacity 220ms linear;
+      opacity: 0.72;
+    }
+    a:hover, .link:hover {
+      opacity: 1.0;
+    }
+
+    .link-underline {
+      position: relative;
+      padding-bottom: 4px;
+      font-size: 12px;
+      font-family: var(--serif);
+      letter-spacing: 0.01em;
+      color: var(--ink);
+      opacity: 0.9;
+    }
+    .link-underline::after {
+      content: "";
+      position: absolute;
+      left: 0; right: 0; bottom: 0;
+      height: 1px;
+      background: var(--accent-line);
+    }
+    .link-underline:hover { opacity: 1.0; }
+
+    /* chrome nav — 11px text links across the top */
+    nav.tnav a {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--ink-3);
+      opacity: 0.9;
+    }
+    nav.tnav a.is-active {
+      color: var(--ink);
+      opacity: 1;
+    }
+
+    /* SOAP body has slight column constraint */
+    .col-prose { max-width: 56ch; }
+
+    /* asymmetric grid — content placed off-center */
+    .asym {
+      display: grid;
+      grid-template-columns: minmax(48px, 1fr) minmax(320px, 480px) minmax(48px, 3fr);
+    }
+    .asym-wide {
+      display: grid;
+      grid-template-columns: minmax(48px, 1fr) minmax(320px, 720px) minmax(48px, 2fr);
+    }
+
+    /* the "drafting…" label crossfades, no spinner */
+    .label-fade {
+      animation: label-cycle 4.8s linear infinite;
+    }
+    @keyframes label-cycle {
+      0%, 28%   { opacity: 1; }
+      33%, 61%  { opacity: 0.4; }
+      66%, 94%  { opacity: 0.2; }
+      100%      { opacity: 1; }
+    }
+
+    /* visible-only-on-print marker for section labels */
+    .sect-mark {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--ink-4);
+    }
+
+    /* selection — the only color moment beyond the hairline */
+    ::selection { background: rgba(168, 92, 48, 0.18); color: var(--ink); }
+
+    /* override Tailwind's font-bold so nothing screams */
+    .font-bold, b, strong { font-weight: 500; }
+
+    /* tiny structural reset — no shadows, no border-radius beyond pure circles */
+    * { box-shadow: none !important; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .fade-line, .label-fade { animation: none !important; opacity: 1 !important; }
+    }
+  </style>
+</head>
+<body class="min-h-screen">
+
+<!-- =============================================================
+     M A N I F E S T O
+     14px humanist body, asymmetric column ~480px, generous
+     whitespace right.
+     ============================================================= -->
+<section class="asym pt-20 pb-28">
+  <div></div>
+  <div>
+    <div class="chrome-10 mb-10">QuillMD &nbsp;·&nbsp; design direction &nbsp;·&nbsp; m i n i m a l i s t</div>
+
+    <p style="font-size:14px; line-height:1.85; font-weight:300; color:var(--ink); max-width: 480px;">
+      This is <span style="font-weight:500;">Minimalist</span>. We believe medical software should disappear. We refuse hierarchy that demands attention, decoration that adds nothing, and the false productivity of dense chrome. The page is mostly empty on purpose. The accent is a single muted rust hairline that asks for nothing. Patient names are large because they matter. Buttons are text. Status is a word. Motion is a fade. The magic is the absence of magic.
+    </p>
+
+    <div class="mt-12 chrome-tight" style="opacity:0.6;">
+      <span style="color:var(--ink-3)">paper</span>&nbsp; #FAF8F5
+      &nbsp;&nbsp;<span style="color:var(--ink-4)">·</span>&nbsp;&nbsp;
+      <span style="color:var(--ink-3)">ink</span>&nbsp; #1F1A14
+      &nbsp;&nbsp;<span style="color:var(--ink-4)">·</span>&nbsp;&nbsp;
+      <span style="color:var(--ink-3)">accent</span>&nbsp; #A85C30 / 60%
+      &nbsp;&nbsp;<span style="color:var(--ink-4)">·</span>&nbsp;&nbsp;
+      <span style="color:var(--ink-3)">type</span>&nbsp; DM Sans / JetBrains Mono
+    </div>
+  </div>
+  <div></div>
+</section>
+
+<hr class="hr" />
+
+
+<!-- =============================================================
+     S E C T I O N   1
+     L A N D I N G   +   R E C O R D I N G
+     ============================================================= -->
+
+<!-- Top wordmark + chrome nav -->
+<header class="px-12 pt-10">
+  <div class="flex items-baseline justify-between">
+    <div style="font-size:16px; font-weight:500; letter-spacing:-0.01em;">
+      QuillMD<span style="color:var(--ink-4); font-weight:300;">.</span>
+    </div>
+    <nav class="tnav flex gap-8">
+      <a href="#" class="is-active">scribe</a>
+      <a href="#">patients</a>
+      <a href="#">visits</a>
+      <a href="#">settings</a>
+    </nav>
+  </div>
+</header>
+
+<!-- Asymmetric landing block -->
+<section class="asym pt-24 pb-16">
+  <div></div>
+  <div>
+    <div class="chrome-10 mb-8">§ &nbsp;01 &nbsp;/ &nbsp;new visit</div>
+
+    <h1 class="display-name mb-4" style="color:var(--ink);">
+      A blank page<br/>and a quiet&nbsp;room.
+    </h1>
+
+    <p class="chrome-tight mt-6" style="text-transform:none; letter-spacing:0; font-family:var(--serif); font-size:11px; color:var(--ink-3); max-width: 420px; line-height:1.6;">
+      Open a visit. Speak. The note writes itself underneath.<br/>
+      It will not interrupt you.
+    </p>
+
+    <div class="mt-10 flex items-center gap-10">
+      <a href="#record" class="link-underline">begin a visit</a>
+      <span class="chrome-10" style="opacity:0.6;">⌘ &nbsp;N</span>
+    </div>
+  </div>
+  <div></div>
+</section>
+
+<!-- soft horizontal pause -->
+<div class="asym pb-16">
+  <div></div>
+  <div><hr class="hr" /></div>
+  <div></div>
+</div>
+
+<!-- Recording active state — center of viewport -->
+<section id="record" class="px-12 pt-16 pb-32">
+  <div class="flex flex-col items-center" style="min-height: 520px;">
+
+    <!-- the dot -->
+    <div class="rec-dot lg mb-10" aria-label="recording"></div>
+
+    <!-- patient name in 24px -->
+    <div class="name mb-3" style="text-align:center;">Maria Lopez</div>
+
+    <!-- 11px mono beneath -->
+    <div class="chrome-tight mb-16" style="text-align:center;">
+      00:42&nbsp;&nbsp;<span style="color:var(--ink-4);">·</span>&nbsp;&nbsp;cardiology &nbsp;<span style="color:var(--ink-4);">·</span>&nbsp; visit&nbsp;#TM-9381
+    </div>
+
+    <!-- live transcript fading in line by line -->
+    <div class="col-prose" style="max-width: 540px; width: 100%;">
+      <div class="chrome-10 mb-6" style="text-align:left;">transcript &nbsp;·&nbsp; live</div>
+
+      <div class="space-y-5" style="font-size:14px; line-height:1.8; color:var(--ink-2); font-weight:300;">
+
+        <p class="fade-line d1">
+          <span class="chrome-tight" style="display:inline-block; width:64px; color:var(--ink-4);">dr.&nbsp;ruiz</span>
+          <span style="color:var(--ink);">Good morning, Maria. How have you been feeling since we adjusted the metoprolol?</span>
+        </p>
+
+        <p class="fade-line d2">
+          <span class="chrome-tight" style="display:inline-block; width:64px; color:var(--ink-4);">patient</span>
+          <span>Better, mostly. The dizziness in the mornings is gone. But I still get short of breath walking up the stairs to my apartment.</span>
+        </p>
+
+        <p class="fade-line d3">
+          <span class="chrome-tight" style="display:inline-block; width:64px; color:var(--ink-4);">dr.&nbsp;ruiz</span>
+          <span style="color:var(--ink);">How many flights?</span>
+        </p>
+
+        <p class="fade-line d4">
+          <span class="chrome-tight" style="display:inline-block; width:64px; color:var(--ink-4);">patient</span>
+          <span>Two. I have to stop on the landing now. Six months ago I could go straight up.</span>
+        </p>
+
+        <p class="fade-line d5">
+          <span class="chrome-tight" style="display:inline-block; width:64px; color:var(--ink-4);">dr.&nbsp;ruiz</span>
+          <span style="color:var(--ink);">Any chest discomfort with that? Pressure, tightness?</span>
+        </p>
+
+        <p class="fade-line d6">
+          <span class="chrome-tight" style="display:inline-block; width:64px; color:var(--ink-4);">patient</span>
+          <span>No pressure. Just I can't get a full breath. And my ankles look swollen at the end of the day. My husband noticed first.</span>
+        </p>
+
+        <p class="fade-line d7">
+          <span class="chrome-tight" style="display:inline-block; width:64px; color:var(--ink-4);">dr.&nbsp;ruiz</span>
+          <span style="color:var(--ink);">Let me listen to your lungs and check the edema.</span>
+        </p>
+
+        <p class="fade-line d8" style="opacity:0; color:var(--ink-4); font-style:italic;">
+          <span class="chrome-tight" style="display:inline-block; width:64px;">&nbsp;</span>
+          listening …
+        </p>
+
+      </div>
+    </div>
+
+    <!-- one quiet end-action -->
+    <div class="mt-20 flex items-center gap-12" style="opacity:0.85;">
+      <span class="chrome-10">⎵ &nbsp;pause</span>
+      <span class="chrome-10">⌘ &nbsp;⏎ &nbsp;&nbsp;end visit</span>
+    </div>
+
+  </div>
+</section>
+
+
+<!-- =============================================================
+     F U L L - W I D T H   S E P A R A T O R
+     "dashboard"
+     ============================================================= -->
+<section class="pt-12 pb-12">
+  <hr class="hr-strong" />
+  <div style="text-align:center; margin-top: 18px;">
+    <span class="sect-mark">d a s h b o a r d</span>
+  </div>
+</section>
+
+
+<!-- =============================================================
+     S E C T I O N   2
+     D A S H B O A R D
+     ============================================================= -->
+
+<!-- top: chrome nav (4 small text links) — minimalist version -->
+<header class="px-12 pt-10 pb-8">
+  <div class="flex items-baseline justify-between">
+    <div style="font-size:16px; font-weight:500; letter-spacing:-0.01em;">
+      QuillMD<span style="color:var(--ink-4); font-weight:300;">.</span>
+    </div>
+    <nav class="tnav flex gap-8">
+      <a href="#" class="is-active">today</a>
+      <a href="#">patients</a>
+      <a href="#">archive</a>
+      <a href="#">settings</a>
+    </nav>
+  </div>
+</header>
+
+<!-- single-line stats -->
+<section class="px-12 pt-20 pb-6">
+  <div class="asym-wide">
+    <div></div>
+    <div>
+      <div class="chrome-10 mb-6">monday &nbsp;·&nbsp; 29 april 2026</div>
+      <div style="font-size:14px; font-weight:300; color:var(--ink);">
+        <span style="font-weight:500;">12</span><span style="color:var(--ink-4);"> today</span>
+        &nbsp;&nbsp;<span style="color:var(--ink-4);">/</span>&nbsp;&nbsp;
+        <span style="font-weight:500;">9</span><span style="color:var(--ink-4);"> signed</span>
+        &nbsp;&nbsp;<span style="color:var(--ink-4);">/</span>&nbsp;&nbsp;
+        <span style="font-weight:500;">3</span><span style="color:var(--ink-4);"> pending</span>
+      </div>
+    </div>
+    <div></div>
+  </div>
+</section>
+
+<!-- patient/visit list — rows of names in 18px humanist with 11px time+status on right -->
+<section class="px-12 pt-12 pb-32">
+  <div class="asym-wide">
+    <div></div>
+    <div>
+
+      <div class="chrome-10 mb-8" style="display:flex; justify-content:space-between;">
+        <span>visits</span>
+        <span style="opacity:0.6;">12 &nbsp;/&nbsp; today</span>
+      </div>
+
+      <hr class="hr" />
+
+      <!-- ROW : ACTIVE / RECORDING -->
+      <div style="display:grid; grid-template-columns: 1fr auto; align-items: baseline; padding: 22px 0;">
+        <div style="display:flex; align-items:baseline; gap:14px;">
+          <span class="rec-dot" style="position:relative; top:-2px;"></span>
+          <span class="row-name accent-underline" style="color:var(--ink);">Maria Lopez</span>
+          <span class="chrome-tight" style="color:var(--ink-4);">cardiology</span>
+        </div>
+        <div class="chrome-tight" style="color:var(--ink-3);">
+          09:42 &nbsp;&nbsp; <span style="color:var(--accent); opacity:0.75;">recording</span>
+        </div>
+      </div>
+
+      <hr class="hr" />
+
+      <!-- ROW : PROCESSING -->
+      <div style="display:grid; grid-template-columns: 1fr auto; align-items: baseline; padding: 22px 0;">
+        <div style="display:flex; align-items:baseline; gap:14px;">
+          <span class="row-name" style="color:var(--ink);">James Okonkwo</span>
+          <span class="chrome-tight" style="color:var(--ink-4);">internal medicine</span>
+        </div>
+        <div class="chrome-tight" style="color:var(--ink-3);">
+          09:14 &nbsp;&nbsp; <span class="label-fade">processing</span>
+        </div>
+      </div>
+
+      <hr class="hr" />
+
+      <!-- ROW : READY -->
+      <div style="display:grid; grid-template-columns: 1fr auto; align-items: baseline; padding: 22px 0;">
+        <div style="display:flex; align-items:baseline; gap:14px;">
+          <span class="row-name" style="color:var(--ink);">Hannah Bergström</span>
+          <span class="chrome-tight" style="color:var(--ink-4);">family practice</span>
+        </div>
+        <div class="chrome-tight" style="color:var(--ink-3);">
+          08:51 &nbsp;&nbsp; <span style="color:var(--ink);">ready</span>
+        </div>
+      </div>
+
+      <hr class="hr" />
+
+      <!-- ROW : SIGNED -->
+      <div style="display:grid; grid-template-columns: 1fr auto; align-items: baseline; padding: 22px 0;">
+        <div style="display:flex; align-items:baseline; gap:14px;">
+          <span class="row-name" style="color:var(--ink-2);">Daniel Alvaro</span>
+          <span class="chrome-tight" style="color:var(--ink-4);">cardiology</span>
+        </div>
+        <div class="chrome-tight" style="color:var(--ink-4);">
+          08:30 &nbsp;&nbsp; signed
+        </div>
+      </div>
+
+      <hr class="hr" />
+
+      <!-- ROW : SIGNED -->
+      <div style="display:grid; grid-template-columns: 1fr auto; align-items: baseline; padding: 22px 0;">
+        <div style="display:flex; align-items:baseline; gap:14px;">
+          <span class="row-name" style="color:var(--ink-2);">Priya Raman</span>
+          <span class="chrome-tight" style="color:var(--ink-4);">internal medicine</span>
+        </div>
+        <div class="chrome-tight" style="color:var(--ink-4);">
+          08:08 &nbsp;&nbsp; signed
+        </div>
+      </div>
+
+      <hr class="hr" />
+
+      <!-- ROW : READY (review) -->
+      <div style="display:grid; grid-template-columns: 1fr auto; align-items: baseline; padding: 22px 0;">
+        <div style="display:flex; align-items:baseline; gap:14px;">
+          <span class="row-name" style="color:var(--ink);">Eleanor Whittaker</span>
+          <span class="chrome-tight" style="color:var(--ink-4);">geriatrics</span>
+        </div>
+        <div class="chrome-tight" style="color:var(--ink-3);">
+          07:46 &nbsp;&nbsp; <span style="color:var(--ink);">ready</span>
+        </div>
+      </div>
+
+      <hr class="hr" />
+
+      <!-- ROW : SIGNED -->
+      <div style="display:grid; grid-template-columns: 1fr auto; align-items: baseline; padding: 22px 0;">
+        <div style="display:flex; align-items:baseline; gap:14px;">
+          <span class="row-name" style="color:var(--ink-2);">Tomás Iglesias</span>
+          <span class="chrome-tight" style="color:var(--ink-4);">family practice</span>
+        </div>
+        <div class="chrome-tight" style="color:var(--ink-4);">
+          07:22 &nbsp;&nbsp; signed
+        </div>
+      </div>
+
+      <hr class="hr" />
+
+      <!-- ROW : SIGNED -->
+      <div style="display:grid; grid-template-columns: 1fr auto; align-items: baseline; padding: 22px 0;">
+        <div style="display:flex; align-items:baseline; gap:14px;">
+          <span class="row-name" style="color:var(--ink-2);">Naomi Castellanos</span>
+          <span class="chrome-tight" style="color:var(--ink-4);">cardiology</span>
+        </div>
+        <div class="chrome-tight" style="color:var(--ink-4);">
+          07:00 &nbsp;&nbsp; signed
+        </div>
+      </div>
+
+      <hr class="hr" />
+
+      <!-- a deliberate breath -->
+      <div style="height: 96px;"></div>
+
+      <!-- end-of-list note, off-center -->
+      <div class="chrome-10" style="opacity:0.55;">
+        — &nbsp;older visits archive automatically after 14 days
+      </div>
+
+    </div>
+    <div></div>
+  </div>
+</section>
+
+
+<!-- =============================================================
+     S E C T I O N   3 (bonus)
+     S O A P   D R A F T   /   T H E   M A G I C   M O M E N T
+     The "drafting…" → "polishing…" → blank crossfade
+     ============================================================= -->
+<section class="pt-8 pb-12">
+  <hr class="hr-strong" />
+  <div style="text-align:center; margin-top: 18px;">
+    <span class="sect-mark">n o t e &nbsp; · &nbsp; m a r i a &nbsp; l o p e z</span>
+  </div>
+</section>
+
+<section class="asym-wide pt-16 pb-32">
+  <div></div>
+  <div>
+
+    <div class="chrome-10 mb-3">visit &nbsp;TM-9381 &nbsp;·&nbsp; 09:42 &nbsp;·&nbsp; 14 min</div>
+    <h2 class="display-name mb-2" style="color:var(--ink);">Maria Lopez</h2>
+    <div class="chrome-tight mb-16" style="color:var(--ink-3);">
+      62F &nbsp;·&nbsp; HFrEF, HTN, CKD st.&nbsp;3 &nbsp;·&nbsp; metoprolol succinate, lisinopril, atorvastatin
+      &nbsp;<span style="color:var(--ink-4);">·</span>&nbsp;
+      <span class="label-fade" style="font-style:italic; color:var(--ink-3);">drafting&hellip;</span>
+    </div>
+
+    <hr class="hr" />
+
+    <!-- SUBJECTIVE -->
+    <div class="grid grid-cols-12 gap-8 py-12">
+      <div class="col-span-2">
+        <div class="chrome-10" style="padding-top:6px;">s</div>
+      </div>
+      <div class="col-span-10 col-prose">
+        <p class="body-soap" style="color:var(--ink);">
+          62-year-old woman with known HFrEF (LVEF 35% on 2025-11 echo), hypertension, and CKD stage&nbsp;3
+          returns for follow-up two weeks after dose increase of metoprolol succinate to 50&nbsp;mg daily.
+          She reports resolution of morning lightheadedness but new exertional dyspnea on climbing two
+          flights of stairs, with subjective bilateral lower-extremity edema noted by her husband.
+          Denies chest pain, pressure, palpitations, orthopnea, or PND. No medication changes since last visit.
+          Adherent to fluid restriction (1.5&nbsp;L/day) and low-sodium diet.
+        </p>
+      </div>
+    </div>
+
+    <hr class="hr" />
+
+    <!-- OBJECTIVE -->
+    <div class="grid grid-cols-12 gap-8 py-12">
+      <div class="col-span-2">
+        <div class="chrome-10" style="padding-top:6px;">o</div>
+      </div>
+      <div class="col-span-10 col-prose">
+        <p class="body-soap" style="color:var(--ink);">
+          BP 132/84, HR 68 reg, RR 16, SpO<sub>2</sub> 97% on room air, weight 71.2&nbsp;kg
+          (up 1.4&nbsp;kg from prior visit).
+        </p>
+        <p class="body-soap mt-6" style="color:var(--ink);">
+          General — well-appearing, in no acute distress.
+          CV — regular rate and rhythm, soft S3 at apex, no murmurs.
+          Pulm — bibasilar fine crackles, clearing with cough.
+          Ext — trace bilateral pitting edema to mid-shin.
+          JVP estimated at 8&nbsp;cm.
+        </p>
+      </div>
+    </div>
+
+    <hr class="hr" />
+
+    <!-- ASSESSMENT -->
+    <div class="grid grid-cols-12 gap-8 py-12">
+      <div class="col-span-2">
+        <div class="chrome-10" style="padding-top:6px;">a</div>
+      </div>
+      <div class="col-span-10 col-prose">
+        <p class="body-soap" style="color:var(--ink);">
+          1. <span style="font-weight:500;">HFrEF, mildly decompensated.</span>
+          Volume overload signs (weight gain, S3, crackles, edema) without acute distress.
+          Likely related to dietary indiscretion vs. progression; consider diuretic up-titration.
+        </p>
+        <p class="body-soap mt-6" style="color:var(--ink);">
+          2. <span style="font-weight:500;">HTN, controlled.</span> BP at goal on current regimen.
+        </p>
+        <p class="body-soap mt-6" style="color:var(--ink);">
+          3. <span style="font-weight:500;">CKD&nbsp;st.&nbsp;3.</span> Stable; last eGFR 47 (2026-03-08).
+        </p>
+      </div>
+    </div>
+
+    <hr class="hr" />
+
+    <!-- PLAN -->
+    <div class="grid grid-cols-12 gap-8 py-12">
+      <div class="col-span-2">
+        <div class="chrome-10" style="padding-top:6px;">p</div>
+      </div>
+      <div class="col-span-10 col-prose">
+        <p class="body-soap" style="color:var(--ink);">
+          — Increase furosemide from 20&nbsp;mg to 40&nbsp;mg PO daily &times; 5 days, then reassess.
+          Continue metoprolol succinate 50&nbsp;mg daily and lisinopril 10&nbsp;mg daily.
+        </p>
+        <p class="body-soap mt-5" style="color:var(--ink);">
+          — Daily morning weights; call office if gain&nbsp;&gt;&nbsp;1&nbsp;kg in 48&nbsp;h or new orthopnea.
+        </p>
+        <p class="body-soap mt-5" style="color:var(--ink);">
+          — Basic metabolic panel in 5–7 days to monitor potassium and creatinine.
+        </p>
+        <p class="body-soap mt-5" style="color:var(--ink);">
+          — Reinforce 1.5&nbsp;L fluid restriction and 2&nbsp;g sodium diet.
+        </p>
+        <p class="body-soap mt-5" style="color:var(--ink);">
+          — Follow-up in 2 weeks; sooner if symptoms worsen.
+        </p>
+      </div>
+    </div>
+
+    <hr class="hr" />
+
+    <!-- coding strip — chrome only -->
+    <div class="grid grid-cols-12 gap-8 py-10">
+      <div class="col-span-2">
+        <div class="chrome-10" style="padding-top:6px;">codes</div>
+      </div>
+      <div class="col-span-10">
+        <div class="chrome-tight" style="color:var(--ink-2); line-height:2;">
+          <span style="color:var(--ink);">I50.22</span>&nbsp;&nbsp;chronic systolic heart failure<br/>
+          <span style="color:var(--ink);">I10</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;essential hypertension<br/>
+          <span style="color:var(--ink);">N18.30</span>&nbsp;&nbsp;chronic kidney disease, st.&nbsp;3 unspecified<br/>
+          <span style="color:var(--ink-3);">99214</span>&nbsp;&nbsp;est. patient, moderate complexity
+        </div>
+      </div>
+    </div>
+
+    <hr class="hr" />
+
+    <!-- final actions — text links only -->
+    <div class="pt-12 pb-4 flex items-center gap-12">
+      <a href="#" class="link-underline">sign &amp; lock</a>
+      <span class="chrome-10" style="opacity:0.55;">⌘ &nbsp;S</span>
+
+      <span style="flex:1;"></span>
+
+      <a href="#" class="chrome-10" style="opacity:0.7;">copy &nbsp;to &nbsp;ehr</a>
+      <a href="#" class="chrome-10" style="opacity:0.7;">export &nbsp;pdf</a>
+      <a href="#" class="chrome-10" style="opacity:0.7;">edit</a>
+    </div>
+
+  </div>
+  <div></div>
+</section>
+
+
+<!-- =============================================================
+     F O O T E R
+     a single line, 10px, 60% opacity, asymmetric
+     ============================================================= -->
+<footer class="asym-wide pb-24 pt-16">
+  <div></div>
+  <div>
+    <hr class="hr" style="margin-bottom: 28px;" />
+    <div class="chrome-10" style="display:flex; justify-content:space-between; opacity:0.55;">
+      <span>QuillMD &nbsp;·&nbsp; v4 &nbsp;·&nbsp; minimalist direction</span>
+      <span>2026 &nbsp;·&nbsp; the magic is the absence of magic</span>
+    </div>
+  </div>
+  <div></div>
+</footer>
+
+</body>
+</html>
