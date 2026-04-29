@@ -1,5 +1,21 @@
 'use client';
 
+// ============================================================================
+// RxTab — prescriptions panel for the visit-detail Rx tab. Hosts the
+// RxWarningCard family.
+// ----------------------------------------------------------------------------
+// Phase 2 (Clinician remodel) — Strategy A dual-theme via additive
+// `theme` prop. Default `'legacy'` keeps the existing dark cards
+// verbatim. Migrated surfaces (visit-detail) pass `theme="clinician"`
+// to render the .qm-cl-card prescription rows + soft action chips
+// matching the visit-detail mockup's Rx panel.
+//
+// IMPORTANT: rx-warning-card.tsx is not threaded a theme here — it
+// owns its own dual-theme branching internally (the .qm-warn-* family
+// retains the same structure but resolves to clinician color tokens
+// when wrapped in .qm-cl-app, per the §H.6 reskin policy).
+// ============================================================================
+
 import { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/cn';
@@ -8,6 +24,8 @@ import {
   type RxWarning as RxWarningCardData,
   type Severity as RxWarningSeverity,
 } from '@/components/rx/rx-warning-card';
+
+type RxTabTheme = 'legacy' | 'clinician';
 
 // ---------------------------------------------------------------------------
 // Wire types — mirror Layer 7c output.
@@ -44,18 +62,44 @@ export interface RxBlob {
   warnings?: RxWarning[];
 }
 
-export function RxTab({ rx, visitId }: { rx: unknown; visitId: string }) {
+export function RxTab({
+  rx,
+  visitId,
+  theme = 'legacy',
+}: {
+  rx: unknown;
+  visitId: string;
+  theme?: RxTabTheme;
+}) {
   const blob = (rx as RxBlob | null) ?? null;
   const prescriptions = blob?.prescriptions ?? [];
   const warnings = blob?.warnings ?? [];
+  const isClinician = theme === 'clinician';
 
   if (prescriptions.length === 0 && warnings.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-border-subtle bg-bg-surface-1/30 p-8 text-center">
-        <div className="text-[14px] font-medium text-text-primary">
+      <div
+        className={cn(
+          'rounded-xl p-8 text-center',
+          isClinician
+            ? 'border border-dashed border-clinician-line bg-clinician-cream-card'
+            : 'border border-dashed border-border-subtle bg-bg-surface-1/30'
+        )}
+      >
+        <div
+          className={cn(
+            'text-[14px] font-medium',
+            isClinician ? 'text-clinician-ink' : 'text-text-primary'
+          )}
+        >
           No prescriptions from this visit
         </div>
-        <div className="mt-2 text-[13px] text-text-tertiary">
+        <div
+          className={cn(
+            'mt-2 text-[13px]',
+            isClinician ? 'text-clinician-ink-2' : 'text-text-tertiary'
+          )}
+        >
           The plan didn’t document any medication changes. You can still add
           prescriptions in your EHR after signing.
         </div>
@@ -89,12 +133,21 @@ export function RxTab({ rx, visitId }: { rx: unknown; visitId: string }) {
       )}
 
       <section>
-        <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+        <h3
+          className={cn(
+            'mb-3 text-[11px] font-semibold uppercase tracking-wider',
+            isClinician ? 'text-clinician-ink-3' : 'text-text-muted'
+          )}
+        >
           Prescriptions
         </h3>
         <div className="space-y-3">
           {prescriptions.map((p, i) => (
-            <PrescriptionCard key={`${p.drug}-${i}`} rx={p} />
+            <PrescriptionCard
+              key={`${p.drug}-${i}`}
+              rx={p}
+              theme={theme}
+            />
           ))}
         </div>
       </section>
@@ -136,37 +189,73 @@ function mapWorkerWarning(
   };
 }
 
-function PrescriptionCard({ rx }: { rx: Prescription }) {
+function PrescriptionCard({
+  rx,
+  theme,
+}: {
+  rx: Prescription;
+  theme: RxTabTheme;
+}) {
   const [showEvidence, setShowEvidence] = useState(false);
+  const isClinician = theme === 'clinician';
   return (
-    <div className="rounded-xl border border-border-default bg-bg-surface-1/60 p-5">
+    <div
+      className={cn(
+        'p-5',
+        isClinician
+          ? 'qm-cl-card'
+          : 'rounded-xl border border-border-default bg-bg-surface-1/60'
+      )}
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="text-[17px] font-semibold text-text-primary">
+          <div
+            className={cn(
+              'text-[17px] font-semibold',
+              isClinician ? 'text-clinician-ink' : 'text-text-primary'
+            )}
+          >
             {rx.drug}
             {rx.strength && (
-              <span className="ml-2 text-[14px] text-text-tertiary">
+              <span
+                className={cn(
+                  'ml-2 text-[14px]',
+                  isClinician ? 'text-clinician-ink-3' : 'text-text-tertiary'
+                )}
+              >
                 {rx.strength}
               </span>
             )}
           </div>
           {rx.form && (
-            <div className="mt-0.5 text-[12px] text-text-muted">{rx.form}</div>
+            <div
+              className={cn(
+                'mt-0.5 text-[12px]',
+                isClinician ? 'text-clinician-ink-3' : 'text-text-muted'
+              )}
+            >
+              {rx.form}
+            </div>
           )}
         </div>
-        <ActionChip action={rx.action} />
+        <ActionChip action={rx.action} theme={theme} />
       </div>
 
       <dl className="mt-4 grid grid-cols-1 gap-2 text-[13px] sm:grid-cols-3">
-        <DetailRow label="Sig" value={rx.sig} />
-        <DetailRow label="Quantity" value={rx.quantity} />
-        <DetailRow label="Refills" value={rx.refills} />
+        <DetailRow label="Sig" value={rx.sig} theme={theme} />
+        <DetailRow label="Quantity" value={rx.quantity} theme={theme} />
+        <DetailRow label="Refills" value={rx.refills} theme={theme} />
       </dl>
 
       <button
         type="button"
         onClick={() => setShowEvidence((v) => !v)}
-        className="mt-3 inline-flex items-center gap-1.5 text-[11px] text-text-muted hover:text-text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base rounded-md"
+        className={cn(
+          'mt-3 inline-flex items-center gap-1.5 rounded-md text-[11px]',
+          isClinician
+            ? 'text-clinician-ink-3 hover:text-clinician-ink-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinician-sage focus-visible:ring-offset-2 focus-visible:ring-offset-clinician-cream'
+            : 'text-text-muted hover:text-text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base'
+        )}
       >
         {showEvidence ? 'Hide evidence' : 'Show evidence'}
         <ChevronDown
@@ -178,7 +267,14 @@ function PrescriptionCard({ rx }: { rx: Prescription }) {
         />
       </button>
       {showEvidence && (
-        <div className="mt-2 rounded-lg border border-border-subtle bg-bg-surface-2/40 p-2.5 text-[12px] italic text-text-tertiary">
+        <div
+          className={cn(
+            'mt-2 rounded-lg p-2.5 text-[12px] italic',
+            isClinician
+              ? 'border border-clinician-line bg-clinician-cream-2 text-clinician-ink-3'
+              : 'border border-border-subtle bg-bg-surface-2/40 text-text-tertiary'
+          )}
+        >
           “{rx.evidence_quote}”
         </div>
       )}
@@ -186,16 +282,36 @@ function PrescriptionCard({ rx }: { rx: Prescription }) {
   );
 }
 
-function DetailRow({ label, value }: { label: string; value?: string | null }) {
+function DetailRow({
+  label,
+  value,
+  theme,
+}: {
+  label: string;
+  value?: string | null;
+  theme: RxTabTheme;
+}) {
+  const isClinician = theme === 'clinician';
   return (
     <div>
-      <dt className="text-[10px] font-medium uppercase tracking-wider text-text-muted">
+      <dt
+        className={cn(
+          'text-[10px] font-medium uppercase tracking-wider',
+          isClinician ? 'text-clinician-ink-3' : 'text-text-muted'
+        )}
+      >
         {label}
       </dt>
       <dd
         className={cn(
           'mt-0.5 text-[13px]',
-          value ? 'text-text-secondary' : 'text-text-muted italic'
+          value
+            ? isClinician
+              ? 'text-clinician-ink-2'
+              : 'text-text-secondary'
+            : isClinician
+              ? 'text-clinician-ink-4 italic'
+              : 'text-text-muted italic'
         )}
       >
         {value ?? 'not specified'}
@@ -204,7 +320,42 @@ function DetailRow({ label, value }: { label: string; value?: string | null }) {
   );
 }
 
-function ActionChip({ action }: { action: RxAction }) {
+function ActionChip({
+  action,
+  theme,
+}: {
+  action: RxAction;
+  theme: RxTabTheme;
+}) {
+  const isClinician = theme === 'clinician';
+  // Clinician maps the legacy success/cyan/warning/danger triad to
+  // .qm-cl-pill-* tones — sage = new, soft = continue, sky = increase,
+  // amber = decrease, coral = discontinue/unclear. Same semantic
+  // ordering, soft palette.
+  if (isClinician) {
+    const meta: Record<RxAction, { label: string; cls: string }> = {
+      new: { label: 'NEW', cls: 'qm-cl-pill qm-cl-pill-sage' },
+      continue: { label: 'CONTINUE', cls: 'qm-cl-pill qm-cl-pill-soft' },
+      increase: { label: 'INCREASE', cls: 'qm-cl-pill qm-cl-pill-sky' },
+      decrease: { label: 'DECREASE', cls: 'qm-cl-pill qm-cl-pill-amber' },
+      discontinue: { label: 'DISCONTINUE', cls: 'qm-cl-pill qm-cl-pill-coral' },
+      unclear: { label: 'UNCLEAR', cls: 'qm-cl-pill qm-cl-pill-coral' },
+    };
+    const m = meta[action];
+    return (
+      <span
+        className={m.cls}
+        style={{
+          fontSize: 10,
+          letterSpacing: '0.04em',
+          textTransform: 'uppercase',
+        }}
+      >
+        {m.label}
+      </span>
+    );
+  }
+
   const meta: Record<RxAction, { label: string; cls: string }> = {
     new: { label: 'NEW', cls: 'bg-success/15 text-success border-success/40' },
     continue: {
