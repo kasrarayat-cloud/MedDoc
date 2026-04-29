@@ -38,10 +38,11 @@ export default async function LoginPage() {
         <VerifyToast />
       </Suspense>
       <AuthShell
+        theme="clinician"
         eyebrow="Welcome back"
         title={
           <>
-            Sign <em style={{ color: 'var(--accent-bright)' }}>in</em>
+            Sign <em style={{ color: 'var(--sage-deep)', fontStyle: 'italic' }}>in</em>
           </>
         }
         subtitle="Continue to your clinical workspace."
