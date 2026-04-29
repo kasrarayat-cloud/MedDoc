@@ -14,6 +14,13 @@
 // On any successful action we re-fetch from /api/admin/threats and
 // /api/admin/threats/history so a resolved row immediately moves
 // between tabs without an SSR round-trip.
+//
+// Phase 2 (Clinician remodel) — Strategy A dual-theme via additive
+// `theme` prop. Default `'legacy'` keeps the slate-on-white rendering
+// verbatim. Clinician branch renders the same data using `.qm-cl-card`,
+// `.qm-cl-pill-{coral,amber,sage}` for severity badges, and the
+// cream/sage/ink palette. Refetch logic + URL state sync are
+// unchanged. Drawer + modals receive `theme="clinician"`.
 // ============================================================================
 
 import { useEffect, useState, useTransition } from 'react';
@@ -39,8 +46,11 @@ import type {
   ThreatTab,
 } from '../_types';
 
+type AdminThreatsTheme = 'legacy' | 'clinician';
+
 interface Props {
   initial: AdminThreatsInitialData;
+  theme?: AdminThreatsTheme;
 }
 
 const TAB_OPTIONS: { key: ThreatTab; label: string }[] = [
@@ -49,7 +59,7 @@ const TAB_OPTIONS: { key: ThreatTab; label: string }[] = [
   { key: 'false_positive', label: 'False positives' },
 ];
 
-export default function AdminThreats({ initial }: Props) {
+export default function AdminThreats({ initial, theme = 'legacy' }: Props) {
   const router = useRouter();
   const params = useSearchParams();
   const [, startTransition] = useTransition();
@@ -142,52 +152,109 @@ export default function AdminThreats({ initial }: Props) {
     false_positive: resolved.filter((r) => r.resolutionKind === 'FALSE_POSITIVE').length,
   };
 
+  const isClinician = theme === 'clinician';
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
-      <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/85">
-        <div className="mx-auto flex max-w-[1440px] items-center justify-between px-6 py-3">
+    <div
+      className={isClinician ? '' : 'min-h-screen bg-slate-50 text-slate-900'}
+      style={isClinician ? { minHeight: '100vh', color: 'var(--ink)' } : undefined}
+    >
+      <header
+        className={
+          isClinician
+            ? ''
+            : 'sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/85'
+        }
+        style={
+          isClinician
+            ? {
+                position: 'sticky',
+                top: 0,
+                zIndex: 20,
+                borderBottom: '1px solid var(--line)',
+                background: 'var(--cream-card)',
+              }
+            : undefined
+        }
+      >
+        <div className="mx-auto flex max-w-[1440px] items-center justify-between px-6 py-4">
           <div>
-            <h1 className="text-xl font-semibold tracking-tight text-slate-900">
-              Threats
-            </h1>
-            <div className="mt-0.5 text-[11px] text-slate-500">
-              <span className="font-mono tabular-nums text-slate-700">
-                {counts.active}
-              </span>{' '}
-              active
-              <span className="mx-1.5 text-slate-300">·</span>
-              <span className="font-mono tabular-nums text-slate-700">
-                {counts.resolved}
-              </span>{' '}
-              resolved
-              <span className="mx-1.5 text-slate-300">·</span>
-              <span className="font-mono tabular-nums text-slate-700">
-                {counts.false_positive}
-              </span>{' '}
-              dismissed
-            </div>
+            {isClinician ? (
+              <>
+                <div className="qm-cl-eyebrow" style={{ marginBottom: 4 }}>
+                  Admin · Security
+                </div>
+                <h1
+                  className="qm-cl-serif"
+                  style={{
+                    fontSize: 28,
+                    fontWeight: 400,
+                    letterSpacing: '-0.01em',
+                    color: 'var(--ink)',
+                    lineHeight: 1.15,
+                  }}
+                >
+                  Threats
+                </h1>
+                <div style={{ marginTop: 6, fontSize: 12, color: 'var(--ink-3)' }}>
+                  <span className="qm-cl-mono" style={{ color: 'var(--ink-2)', fontVariantNumeric: 'tabular-nums' }}>
+                    {counts.active}
+                  </span>{' '}
+                  active
+                  <span style={{ margin: '0 8px', color: 'var(--ink-4)' }}>·</span>
+                  <span className="qm-cl-mono" style={{ color: 'var(--ink-2)', fontVariantNumeric: 'tabular-nums' }}>
+                    {counts.resolved}
+                  </span>{' '}
+                  resolved
+                  <span style={{ margin: '0 8px', color: 'var(--ink-4)' }}>·</span>
+                  <span className="qm-cl-mono" style={{ color: 'var(--ink-2)', fontVariantNumeric: 'tabular-nums' }}>
+                    {counts.false_positive}
+                  </span>{' '}
+                  dismissed
+                </div>
+              </>
+            ) : (
+              <>
+                <h1 className="text-xl font-semibold tracking-tight text-slate-900">Threats</h1>
+                <div className="mt-0.5 text-[11px] text-slate-500">
+                  <span className="font-mono tabular-nums text-slate-700">{counts.active}</span> active
+                  <span className="mx-1.5 text-slate-300">·</span>
+                  <span className="font-mono tabular-nums text-slate-700">{counts.resolved}</span> resolved
+                  <span className="mx-1.5 text-slate-300">·</span>
+                  <span className="font-mono tabular-nums text-slate-700">{counts.false_positive}</span> dismissed
+                </div>
+              </>
+            )}
           </div>
           <div className="flex items-center gap-2">
             {tab !== 'active' && (
-              <WindowSelector value={window} onChange={setWindow} />
+              <WindowSelector value={window} onChange={setWindow} theme={theme} />
             )}
             <button
               type="button"
               onClick={() => void refreshAll()}
               disabled={busy}
-              className="inline-flex items-center gap-1.5 rounded border border-slate-300 bg-white px-2.5 py-1.5 text-[12px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              className={
+                isClinician
+                  ? 'qm-cl-btn qm-cl-btn-soft'
+                  : 'inline-flex items-center gap-1.5 rounded border border-slate-300 bg-white px-2.5 py-1.5 text-[12px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50'
+              }
+              style={isClinician ? { height: 32, padding: '0 12px', fontSize: 12, opacity: busy ? 0.5 : 1 } : undefined}
             >
-              <RefreshCw className={'h-3.5 w-3.5 ' + (busy ? 'animate-spin' : '')} />
+              <RefreshCw
+                className={busy ? 'animate-spin' : ''}
+                style={isClinician ? { width: 14, height: 14 } : undefined}
+              />
               Refresh
             </button>
           </div>
         </div>
       </header>
 
-      <AdminNav />
+      <AdminNav theme={theme} />
 
       <main className="mx-auto max-w-[1440px] px-6 py-6">
-        <Tabs tab={tab} onChange={setTab} counts={counts} />
+        <Tabs tab={tab} onChange={setTab} counts={counts} theme={theme} />
 
         {tab === 'active' && (
           <ActiveList
@@ -195,18 +262,21 @@ export default function AdminThreats({ initial }: Props) {
             onInvestigate={(t) => setInvestigating(t)}
             onResolve={(t) => setResolveOf(t)}
             onDismiss={(t) => setDismissOf(t)}
+            theme={theme}
           />
         )}
         {tab === 'resolved' && (
           <ResolvedList
             rows={resolved.filter((r) => r.resolutionKind === 'RESOLVED')}
             kind="resolved"
+            theme={theme}
           />
         )}
         {tab === 'false_positive' && (
           <ResolvedList
             rows={resolved.filter((r) => r.resolutionKind === 'FALSE_POSITIVE')}
             kind="false_positive"
+            theme={theme}
           />
         )}
       </main>
@@ -221,6 +291,7 @@ export default function AdminThreats({ initial }: Props) {
           onDismiss={() => {
             setDismissOf(investigating);
           }}
+          theme={theme}
         />
       )}
       {resolveOf && (
@@ -228,6 +299,7 @@ export default function AdminThreats({ initial }: Props) {
           threat={resolveOf}
           onClose={() => setResolveOf(null)}
           onResolved={onResolved}
+          theme={theme}
         />
       )}
       {dismissOf && (
@@ -235,6 +307,7 @@ export default function AdminThreats({ initial }: Props) {
           threat={dismissOf}
           onClose={() => setDismissOf(null)}
           onDismissed={onDismissed}
+          theme={theme}
         />
       )}
     </div>
@@ -249,11 +322,73 @@ function Tabs({
   tab,
   onChange,
   counts,
+  theme = 'legacy',
 }: {
   tab: ThreatTab;
   onChange: (t: ThreatTab) => void;
   counts: Record<ThreatTab, number>;
+  theme?: AdminThreatsTheme;
 }) {
+  if (theme === 'clinician') {
+    return (
+      <nav
+        style={{
+          marginBottom: 20,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 4,
+          borderBottom: '1px solid var(--line)',
+        }}
+      >
+        {TAB_OPTIONS.map((o) => {
+          const active = tab === o.key;
+          return (
+            <button
+              key={o.key}
+              type="button"
+              onClick={() => onChange(o.key)}
+              style={{
+                marginBottom: -1,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '8px 12px',
+                fontSize: 12,
+                fontWeight: 500,
+                color: active ? 'var(--ink)' : 'var(--ink-3)',
+                background: 'transparent',
+                border: 0,
+                borderBottomWidth: 2,
+                borderBottomStyle: 'solid',
+                borderBottomColor: active ? 'var(--sage-deep)' : 'transparent',
+                cursor: 'pointer',
+                transition: 'color 240ms var(--ease-clinician), border-color 240ms var(--ease-clinician)',
+              }}
+            >
+              {o.label}
+              <span
+                style={{
+                  display: 'inline-flex',
+                  minWidth: 20,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: 999,
+                  padding: '2px 6px',
+                  fontFamily: 'var(--mono)',
+                  fontSize: 10,
+                  fontVariantNumeric: 'tabular-nums',
+                  background: active ? 'var(--sage-tint-strong)' : 'var(--cream-2)',
+                  color: active ? 'var(--sage-deep)' : 'var(--ink-2)',
+                }}
+              >
+                {counts[o.key]}
+              </span>
+            </button>
+          );
+        })}
+      </nav>
+    );
+  }
   return (
     <nav className="mb-5 flex items-center gap-1 border-b border-slate-200">
       {TAB_OPTIONS.map((o) => {
@@ -295,18 +430,131 @@ function ActiveList({
   onInvestigate,
   onResolve,
   onDismiss,
+  theme = 'legacy',
 }: {
   rows: Threat[];
   onInvestigate: (t: Threat) => void;
   onResolve: (t: Threat) => void;
   onDismiss: (t: Threat) => void;
+  theme?: AdminThreatsTheme;
 }) {
   if (rows.length === 0) {
     return (
       <EmptyState
         title="No active threats"
         body="The detectors are clean over the last 24 hours. Nice."
+        theme={theme}
       />
+    );
+  }
+  if (theme === 'clinician') {
+    return (
+      <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {rows.map((t) => {
+          const isRed = t.severity === 'red';
+          const accentBg = isRed ? 'var(--coral-tint)' : 'var(--amber-tint)';
+          const accentFg = isRed ? 'var(--coral-deep)' : 'var(--amber-deep)';
+          return (
+            <li
+              key={t.id}
+              className="qm-cl-card"
+              style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                justifyContent: 'space-between',
+                gap: 16,
+                padding: 16,
+                borderColor: isRed ? 'var(--coral-tint)' : 'var(--amber-tint-strong, rgba(212,165,116,0.32))',
+              }}
+            >
+              <div style={{ display: 'flex', minWidth: 0, alignItems: 'flex-start', gap: 12 }}>
+                <span
+                  style={{
+                    marginTop: 2,
+                    display: 'inline-flex',
+                    width: 28,
+                    height: 28,
+                    flexShrink: 0,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: 999,
+                    background: accentBg,
+                    color: accentFg,
+                  }}
+                >
+                  <AlertTriangle style={{ width: 14, height: 14 }} />
+                </span>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span
+                      className={`qm-cl-pill ${isRed ? 'qm-cl-pill-coral' : 'qm-cl-pill-amber'}`}
+                      style={{ fontSize: 10, padding: '2px 8px', textTransform: 'uppercase', letterSpacing: '0.04em' }}
+                    >
+                      {t.severity}
+                    </span>
+                    <span className="qm-cl-mono" style={{ fontSize: 10, color: 'var(--ink-3)' }}>
+                      {t.type}
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      marginTop: 4,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      fontSize: 13,
+                      fontWeight: 500,
+                      color: 'var(--ink)',
+                    }}
+                  >
+                    {t.summary}
+                  </div>
+                  <div style={{ marginTop: 2, fontSize: 12, color: 'var(--ink-2)' }}>{t.detail}</div>
+                  <div className="qm-cl-mono" style={{ marginTop: 4, fontSize: 10, color: 'var(--ink-4)' }}>
+                    {t.id}
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexShrink: 0, alignItems: 'center', gap: 6 }}>
+                <button
+                  type="button"
+                  onClick={() => onInvestigate(t)}
+                  className="qm-cl-btn qm-cl-btn-soft"
+                  style={{ height: 30, padding: '0 12px', fontSize: 11, gap: 6 }}
+                >
+                  <Eye style={{ width: 12, height: 12 }} />
+                  Investigate
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onResolve(t)}
+                  className="qm-cl-btn qm-cl-btn-primary"
+                  style={{ height: 30, padding: '0 12px', fontSize: 11, gap: 6 }}
+                >
+                  <CheckCircle2 style={{ width: 12, height: 12 }} />
+                  Resolve
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDismiss(t)}
+                  className="qm-cl-btn qm-cl-btn-soft"
+                  style={{
+                    height: 30,
+                    padding: '0 12px',
+                    fontSize: 11,
+                    gap: 6,
+                    color: 'var(--amber-deep)',
+                    background: 'var(--amber-tint)',
+                  }}
+                >
+                  <ShieldOff style={{ width: 12, height: 12 }} />
+                  Dismiss
+                </button>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
     );
   }
   return (
@@ -392,9 +640,11 @@ function ActiveList({
 function ResolvedList({
   rows,
   kind,
+  theme = 'legacy',
 }: {
   rows: ResolvedThreat[];
   kind: 'resolved' | 'false_positive';
+  theme?: AdminThreatsTheme;
 }) {
   if (rows.length === 0) {
     return (
@@ -405,7 +655,95 @@ function ResolvedList({
             ? 'Resolved actions will show up here with the admin and timestamp.'
             : 'Threats marked as false positive will show up here.'
         }
+        theme={theme}
       />
+    );
+  }
+  if (theme === 'clinician') {
+    return (
+      <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {rows.map((r) => (
+          <li
+            key={r.id}
+            className="qm-cl-card"
+            style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              justifyContent: 'space-between',
+              gap: 16,
+              padding: 16,
+            }}
+          >
+            <div style={{ display: 'flex', minWidth: 0, alignItems: 'flex-start', gap: 12 }}>
+              <span
+                style={{
+                  marginTop: 2,
+                  display: 'inline-flex',
+                  width: 28,
+                  height: 28,
+                  flexShrink: 0,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: 999,
+                  background:
+                    kind === 'resolved' ? 'var(--sage-tint-strong)' : 'var(--amber-tint)',
+                  color: kind === 'resolved' ? 'var(--sage-deep)' : 'var(--amber-deep)',
+                }}
+              >
+                {kind === 'resolved' ? (
+                  <CheckCircle2 style={{ width: 14, height: 14 }} />
+                ) : (
+                  <ShieldOff style={{ width: 14, height: 14 }} />
+                )}
+              </span>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span className="qm-cl-mono" style={{ fontSize: 10, color: 'var(--ink-3)' }}>
+                    {r.type}
+                  </span>
+                </div>
+                <div
+                  style={{
+                    marginTop: 4,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    fontSize: 13,
+                    fontWeight: 500,
+                    color: 'var(--ink)',
+                  }}
+                >
+                  {r.summary}
+                </div>
+                <div style={{ marginTop: 2, fontSize: 12, color: 'var(--ink-2)' }}>{r.detail}</div>
+                {r.note && (
+                  <blockquote
+                    style={{
+                      marginTop: 8,
+                      borderRadius: 8,
+                      borderLeft: '2px solid var(--cream-3)',
+                      background: 'var(--cream-2)',
+                      padding: '6px 10px',
+                      fontSize: 12,
+                      fontStyle: 'italic',
+                      color: 'var(--ink-2)',
+                    }}
+                  >
+                    {r.note}
+                  </blockquote>
+                )}
+                <div className="qm-cl-mono" style={{ marginTop: 4, fontSize: 10, color: 'var(--ink-4)' }}>
+                  {r.id}
+                </div>
+              </div>
+            </div>
+            <div style={{ flexShrink: 0, textAlign: 'right', fontSize: 11, color: 'var(--ink-3)' }}>
+              <div className="qm-cl-mono">{formatLocal(r.resolvedAt)}</div>
+              <div style={{ marginTop: 2, color: 'var(--ink-2)' }}>{r.resolvedByEmail ?? 'system'}</div>
+            </div>
+          </li>
+        ))}
+      </ul>
     );
   }
   return (
@@ -460,7 +798,24 @@ function ResolvedList({
 // Misc
 // --------------------------------------------------------------------------
 
-function EmptyState({ title, body }: { title: string; body: string }) {
+function EmptyState({ title, body, theme = 'legacy' }: { title: string; body: string; theme?: AdminThreatsTheme }) {
+  if (theme === 'clinician') {
+    return (
+      <div
+        style={{
+          borderRadius: 12,
+          border: '1px solid var(--sage-tint-strong)',
+          background: 'var(--sage-tint)',
+          padding: 32,
+          textAlign: 'center',
+        }}
+      >
+        <CheckCircle2 style={{ margin: '0 auto', width: 32, height: 32, color: 'var(--sage-deep)' }} />
+        <h3 style={{ marginTop: 8, fontSize: 14, fontWeight: 600, color: 'var(--sage-deep)' }}>{title}</h3>
+        <p style={{ marginTop: 4, fontSize: 12, color: 'var(--sage-deep)', opacity: 0.85 }}>{body}</p>
+      </div>
+    );
+  }
   return (
     <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-8 text-center">
       <CheckCircle2 className="mx-auto h-8 w-8 text-emerald-600" />
@@ -473,10 +828,46 @@ function EmptyState({ title, body }: { title: string; body: string }) {
 function WindowSelector({
   value,
   onChange,
+  theme = 'legacy',
 }: {
   value: HistoryWindow;
   onChange: (w: HistoryWindow) => void;
+  theme?: AdminThreatsTheme;
 }) {
+  if (theme === 'clinician') {
+    return (
+      <label style={{ position: 'relative' }}>
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value as HistoryWindow)}
+          className="qm-cl-input"
+          style={{
+            height: 32,
+            fontSize: 12,
+            fontWeight: 500,
+            padding: '0 28px 0 12px',
+            appearance: 'none',
+            cursor: 'pointer',
+          }}
+        >
+          <option value="7d">Last 7 days</option>
+          <option value="30d">Last 30 days</option>
+        </select>
+        <ChevronDown
+          style={{
+            pointerEvents: 'none',
+            position: 'absolute',
+            right: 8,
+            top: '50%',
+            width: 12,
+            height: 12,
+            transform: 'translateY(-50%)',
+            color: 'var(--ink-3)',
+          }}
+        />
+      </label>
+    );
+  }
   return (
     <label className="relative">
       <select
