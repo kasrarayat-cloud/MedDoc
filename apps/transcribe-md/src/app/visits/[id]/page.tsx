@@ -180,20 +180,28 @@ export default async function VisitPage({
   const nameLast = nameSpaceIdx >= 0 ? nameTrim.slice(nameSpaceIdx + 1) : '';
 
   return (
-    <AppFrame>
+    // Phase 2 (Clinician remodel) — visit-detail opts in to the
+    // Clinician chrome via `theme="clinician"`. Every visible child
+    // below is also threaded with theme="clinician" so the entire
+    // tree resolves against the warm cream / sage / serif token
+    // namespace.
+    <AppFrame theme="clinician">
       <div
         style={{
           padding: '18px 32px 0',
           display: 'flex',
           alignItems: 'center',
           gap: 8,
-          fontSize: 12.5,
-          color: 'var(--fg-3)',
+          fontSize: 13,
+          color: 'var(--ink-3, #8A8278)',
         }}
       >
         <Link
           href="/dashboard"
-          style={{ color: 'var(--fg-3)', textDecoration: 'none' }}
+          style={{
+            color: 'var(--ink-3, #8A8278)',
+            textDecoration: 'none',
+          }}
         >
           Dashboard
         </Link>
@@ -202,14 +210,20 @@ export default async function VisitPage({
           <>
             <Link
               href={`/patients/${visit.patient.id}`}
-              style={{ color: 'var(--fg-3)', textDecoration: 'none' }}
+              style={{
+                color: 'var(--ink-3, #8A8278)',
+                textDecoration: 'none',
+              }}
             >
               {visit.patient.name}
             </Link>
             <Ic.chevRight width={12} height={12} />
           </>
         ) : null}
-        <span style={{ color: 'var(--fg)' }}>
+        <span
+          className="qm-cl-serif"
+          style={{ color: 'var(--ink, #2B2620)' }}
+        >
           Visit · {visit.status.toLowerCase()}
         </span>
       </div>
@@ -222,7 +236,14 @@ export default async function VisitPage({
               {nameLast && (
                 <>
                   {' '}
-                  <em style={{ color: 'var(--accent-bright)' }}>{nameLast}</em>
+                  <em
+                    style={{
+                      color: 'var(--sage-deep, #2F5040)',
+                      fontStyle: 'italic',
+                    }}
+                  >
+                    {nameLast}
+                  </em>
                 </>
               )}
             </>
@@ -247,6 +268,7 @@ export default async function VisitPage({
             visit.dictationAudioKey !== null ||
             (visit.rawTextInput !== null && visit.rawTextInput.length > 0)
           }
+          theme="clinician"
           editSlot={
             visit.status === TranscribeVisitStatus.QUEUED &&
             visit.audioKey === null &&
@@ -273,6 +295,7 @@ export default async function VisitPage({
                     | 'voice_dictation'
                     | 'text_notes'
                 }
+                theme="clinician"
               />
             ) : null
           }
@@ -331,11 +354,14 @@ function VisitReadyHeader({
 }) {
   const signed = status === TranscribeVisitStatus.SIGNED;
   const statusLabel = signed ? 'Signed' : needsReview ? 'Needs review' : 'Ready';
-  const statusClass = signed
-    ? 'qm-status qm-status-signed'
+  // Clinician status pill mapping: signed → sage-deep, ready → sage,
+  // needs-review → amber. Same semantic ordering as the dashboard
+  // patient-row pills.
+  const statusPillCls = signed
+    ? 'qm-cl-pill qm-cl-pill-soft'
     : needsReview
-      ? 'qm-status qm-status-review'
-      : 'qm-status qm-status-ready';
+      ? 'qm-cl-pill qm-cl-pill-amber'
+      : 'qm-cl-pill qm-cl-pill-sage';
   return (
     <div
       style={{
@@ -343,7 +369,7 @@ function VisitReadyHeader({
         display: 'flex',
         alignItems: 'flex-end',
         gap: 20,
-        borderBottom: '1px solid var(--line)',
+        borderBottom: '1px solid var(--line, rgba(43, 38, 32, 0.08))',
         flexWrap: 'wrap',
       }}
     >
@@ -357,16 +383,20 @@ function VisitReadyHeader({
           }}
         >
           <SpecChip kind={toSpecKind(specialty)} size="md" />
-          <span className={statusClass}>{statusLabel}</span>
+          <span className={statusPillCls}>
+            <span className="qm-cl-pill-dot" />
+            {statusLabel}
+          </span>
         </div>
         <h1
-          className="qm-serif"
+          className="qm-cl-serif"
           style={{
             margin: 0,
             fontSize: 34,
-            fontWeight: 400,
-            letterSpacing: '-0.02em',
+            fontWeight: 500,
+            letterSpacing: '-0.015em',
             lineHeight: 1.1,
+            color: 'var(--ink, #2B2620)',
           }}
         >
           {title}
@@ -376,17 +406,17 @@ function VisitReadyHeader({
             style={{
               margin: '8px 0 0',
               fontSize: 13.5,
-              color: 'var(--fg-3)',
+              color: 'var(--ink-3, #8A8278)',
               lineHeight: 1.5,
             }}
           >
             <span
               style={{
-                fontFamily: 'var(--mono)',
+                fontFamily: 'var(--mono, ui-monospace)',
                 fontSize: 11.5,
                 letterSpacing: '0.04em',
                 textTransform: 'uppercase',
-                color: 'var(--fg-4)',
+                color: 'var(--ink-4, #B5AE9F)',
                 marginRight: 8,
               }}
             >
@@ -434,6 +464,11 @@ interface VisitBodyProps {
 
 function VisitBody(props: VisitBodyProps) {
   if (props.status === TranscribeVisitStatus.QUEUED) {
+    // The visit-creation primitives (AudioUploader, VoiceDictator,
+    // TextComposer) are reserved for Batch E. Until that batch lands
+    // they render in their legacy dark chrome even when this route
+    // mounts the Clinician shell — that's a temporary mismatch the
+    // user expects (Batch E will resolve it).
     if (props.inputMode === 'audio_upload' && !props.audioKey) {
       return <AudioUploader visitId={props.visitId} />;
     }
@@ -460,6 +495,7 @@ function VisitBody(props: VisitBodyProps) {
         visitId={props.visitId}
         initialStatus={props.status}
         initialHint={PROGRESS_HINT[props.status]}
+        theme="clinician"
       />
     );
   }
@@ -470,6 +506,7 @@ function VisitBody(props: VisitBodyProps) {
         visitId={props.visitId}
         reason={props.reviewReason}
         failureCategory={props.failureCategory}
+        theme="clinician"
       />
     );
   }
@@ -541,6 +578,7 @@ function VisitBody(props: VisitBodyProps) {
       doctorEmail={props.doctorEmail}
       emailEnabled={props.emailEnabled}
       showPipelineTab={showPipelineTab}
+      theme="clinician"
     />
   );
 }
