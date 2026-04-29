@@ -119,6 +119,19 @@ These are the rules every subagent must follow. Repeated here so no one has to d
 
 ---
 
+## Strategy A exception: rx-warning-card.tsx
+
+The Rx warning card was migrated CSS-only (commit `d129fd4`) rather than via Strategy A theme prop. This is a deliberate architectural exception:
+
+- **Severity is invariant.** Rx warnings always express their severity grammar (red = critical, amber = warning, blue = info) regardless of app theme. The `.qm-warn-*` class family encodes severity, not surface palette.
+- **Scope-based color override** (`.qm-cl-app .qm-warn-*`) cleanly separates "severity grammar" (the component) from "surface palette" (the consumer scope).
+- **518-LOC clinical-trust component preserved byte-for-byte**; 28/28 tests green; zero structural risk.
+- **Future-proof.** When a non-Clinician scope (e.g., admin tree) eventually adopts a different theme, its own `.qm-{theme}-app .qm-warn-*` override block can be added without touching the `.tsx`.
+
+Acceptance signed-off by user on 2026-04-29.
+
+---
+
 ## Test posture for Phase 2
 
 | Layer | What to run during migration |
