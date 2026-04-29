@@ -423,7 +423,7 @@ export function ProcessingState({
               textTransform: 'uppercase',
             }}
           >
-            Elapsed {elapsedMin} min · leave the page and we\u2019ll finish in the background
+            Elapsed {elapsedMin} min · leave the page and we’ll finish in the background
           </p>
         </div>
 
