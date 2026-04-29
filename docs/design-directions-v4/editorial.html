@@ -1,0 +1,1825 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>QuillMD — Editorial Direction (v4)</title>
+
+<!-- Tailwind CDN (mockup-only) -->
+<script src="https://cdn.tailwindcss.com"></script>
+
+<!-- Google Fonts: news-serif headline, sans for chrome, mono for kicker small-caps -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link
+  href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;0,8..60,700;0,8..60,800;0,8..60,900;1,8..60,400;1,8..60,500;1,8..60,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap"
+  rel="stylesheet"
+/>
+
+<style>
+  /* ============================================================
+     EDITORIAL — design tokens
+     ============================================================ */
+  :root {
+    /* Newsprint palette */
+    --paper:        #FBFAF7;       /* Cream newspaper stock */
+    --paper-2:      #F4F1E8;       /* Inset / sidebar tint */
+    --paper-3:      #ECE7D8;       /* Photo caption strip */
+    --ink:          #0A0A0A;       /* Near-black headlines */
+    --ink-2:        #1F1B16;       /* Warm-charcoal body */
+    --ink-3:        #5A5249;       /* Tertiary body, bylines */
+    --ink-4:        #8C8478;       /* Muted, captions */
+
+    /* Editorial accent — NYT red */
+    --red:          #C8102E;
+    --red-deep:     #8E0820;
+    --red-ink:      #4A0512;
+
+    /* Hairline rules */
+    --rule:         #0A0A0A;
+    --rule-soft:    rgba(10,10,10,0.18);
+    --rule-faint:   rgba(10,10,10,0.10);
+
+    /* Typography */
+    --serif:  'Source Serif 4', 'Times New Roman', Georgia, serif;
+    --sans:   'Inter', system-ui, sans-serif;
+    --mono:   'JetBrains Mono', ui-monospace, monospace;
+  }
+
+  html, body {
+    background: var(--paper);
+    color: var(--ink-2);
+    font-family: var(--serif);
+    font-size: 17px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: "kern" 1, "liga" 1, "onum" 1;
+  }
+
+  /* ============================================================
+     Type system — editorial scale
+     ============================================================ */
+  .ed-kicker {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--red);
+  }
+  .ed-kicker-ink {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink);
+  }
+  .ed-kicker-mute {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+
+  .ed-deck {
+    font-family: var(--serif);
+    font-style: italic;
+    font-weight: 400;
+    color: var(--ink-3);
+    font-size: 19px;
+    line-height: 1.4;
+    max-width: 60ch;
+  }
+
+  .ed-byline {
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .ed-byline em {
+    font-family: var(--serif);
+    font-style: italic;
+    text-transform: none;
+    letter-spacing: 0;
+    font-weight: 400;
+    color: var(--ink-2);
+  }
+
+  /* Headline ramp */
+  .ed-h-mega   { font: 900 144px/0.92 var(--serif); letter-spacing: -0.035em; color: var(--ink); }
+  .ed-h-hero   { font: 900 112px/0.93 var(--serif); letter-spacing: -0.032em; color: var(--ink); }
+  .ed-h-1      { font: 900 88px/0.95  var(--serif); letter-spacing: -0.028em; color: var(--ink); }
+  .ed-h-2      { font: 800 64px/0.98  var(--serif); letter-spacing: -0.024em; color: var(--ink); }
+  .ed-h-3      { font: 800 44px/1.02  var(--serif); letter-spacing: -0.018em; color: var(--ink); }
+  .ed-h-4      { font: 700 30px/1.10  var(--serif); letter-spacing: -0.012em; color: var(--ink); }
+  .ed-h-5      { font: 700 22px/1.18  var(--serif); letter-spacing: -0.008em; color: var(--ink); }
+
+  .ed-italic   { font-family: var(--serif); font-style: italic; font-weight: 400; }
+  .ed-italic-b { font-family: var(--serif); font-style: italic; font-weight: 700; }
+
+  /* Body */
+  .ed-body {
+    font-family: var(--serif);
+    font-size: 17px;
+    line-height: 1.62;
+    color: var(--ink-2);
+    font-feature-settings: "kern" 1, "liga" 1, "onum" 1;
+  }
+  .ed-body-sm { font-family: var(--serif); font-size: 15px; line-height: 1.55; color: var(--ink-2); }
+  .ed-caption { font-family: var(--sans); font-size: 12px; line-height: 1.4; color: var(--ink-3); letter-spacing: 0.01em; }
+
+  /* Drop cap — patient names + lead stories */
+  .ed-dropcap::first-letter {
+    font-family: var(--serif);
+    font-weight: 900;
+    font-size: 84px;
+    line-height: 0.82;
+    float: left;
+    padding: 6px 10px 0 0;
+    color: var(--ink);
+  }
+  .ed-dropcap-red::first-letter {
+    color: var(--red);
+  }
+
+  /* Multi-column body for lead stories */
+  .ed-cols-2 { columns: 2; column-gap: 32px; column-rule: 1px solid var(--rule-faint); }
+  .ed-cols-2 p { break-inside: avoid; margin-bottom: 12px; }
+
+  /* Hairline rules — newspaper borders */
+  .ed-rule-thick    { border-top: 4px solid var(--rule); }
+  .ed-rule-medium   { border-top: 2px solid var(--rule); }
+  .ed-rule-thin     { border-top: 1px solid var(--rule); }
+  .ed-rule-hair     { border-top: 1px solid var(--rule-soft); }
+  .ed-rule-faint    { border-top: 1px solid var(--rule-faint); }
+
+  .ed-rule-double {
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+    padding: 14px 0;
+  }
+  .ed-rule-triple {
+    border-top: 4px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+    padding: 18px 0 14px;
+  }
+
+  /* LIVE badge — NYT-style red blink */
+  .ed-live-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--red);
+    color: #fff;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    padding: 5px 10px 4px;
+    text-transform: uppercase;
+    border-radius: 1px;
+  }
+  .ed-live-badge::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 0 0 rgba(255,255,255,0.8);
+    animation: ed-live-pulse 1.4s ease-out infinite;
+  }
+  @keyframes ed-live-pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(255,255,255,0.95); }
+    70%  { box-shadow: 0 0 0 9px rgba(255,255,255,0); }
+    100% { box-shadow: 0 0 0 0 rgba(255,255,255,0); }
+  }
+
+  .ed-developing {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid var(--ink);
+    color: var(--ink);
+    background: var(--paper);
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    padding: 4px 9px 3px;
+    text-transform: uppercase;
+  }
+
+  .ed-tag {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    border: 1px solid var(--rule-soft);
+    padding: 3px 7px;
+    background: var(--paper);
+  }
+
+  /* Photographic hero block */
+  .ed-photo-hero {
+    position: relative;
+    background:
+      linear-gradient(180deg, rgba(10,10,10,0.05) 0%, rgba(10,10,10,0.55) 65%, rgba(10,10,10,0.85) 100%),
+      url('https://images.unsplash.com/photo-1581595220892-b0739db3ba8c?auto=format&fit=crop&w=1800&q=80');
+    background-size: cover;
+    background-position: center 40%;
+    color: #fff;
+  }
+  .ed-photo-secondary {
+    background:
+      linear-gradient(180deg, rgba(10,10,10,0.10) 0%, rgba(10,10,10,0.55) 100%),
+      url('https://images.unsplash.com/photo-1576091160550-2173dba999ef?auto=format&fit=crop&w=1200&q=80');
+    background-size: cover;
+    background-position: center;
+  }
+  .ed-photo-strip {
+    background:
+      url('https://images.unsplash.com/photo-1530026405186-ed1f139313f8?auto=format&fit=crop&w=1200&q=80');
+    background-size: cover;
+    background-position: center;
+  }
+  .ed-photo-portrait {
+    background:
+      url('https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?auto=format&fit=crop&w=600&q=80');
+    background-size: cover;
+    background-position: center;
+  }
+
+  /* Page-number / nav */
+  .ed-pagenum {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.20em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+
+  .ed-section-marker {
+    font-family: var(--serif);
+    font-style: italic;
+    font-weight: 700;
+    font-size: 56px;
+    line-height: 1;
+    color: var(--ink);
+    letter-spacing: -0.02em;
+  }
+
+  /* Filing status bar — newsroom budget meeting */
+  .ed-filing-bar {
+    background: var(--ink);
+    color: var(--paper);
+  }
+  .ed-filing-step {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+  .ed-filing-step .ed-filing-state {
+    color: var(--red);
+  }
+  .ed-filing-step.is-done .ed-filing-state {
+    color: #6EE7B7;
+  }
+
+  /* Live blog feed */
+  .ed-feed-turn {
+    border-top: 1px solid var(--rule-soft);
+    padding: 18px 0;
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    gap: 28px;
+  }
+  .ed-feed-turn:first-child { border-top: 0; }
+  .ed-feed-time {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--ink-3);
+  }
+  .ed-feed-speaker {
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    color: var(--red);
+  }
+  .ed-feed-speaker.is-patient {
+    color: var(--ink);
+  }
+  .ed-feed-text {
+    font-family: var(--serif);
+    font-size: 18px;
+    line-height: 1.5;
+    color: var(--ink);
+    margin-top: 4px;
+  }
+
+  /* Stat-strip serif numbers */
+  .ed-stat-num {
+    font-family: var(--serif);
+    font-weight: 800;
+    font-size: 56px;
+    line-height: 1;
+    color: var(--ink);
+    letter-spacing: -0.02em;
+    font-feature-settings: "lnum" 1, "tnum" 0;
+  }
+  .ed-stat-num-sm {
+    font-family: var(--serif);
+    font-weight: 800;
+    font-size: 36px;
+    line-height: 1;
+    color: var(--ink);
+    letter-spacing: -0.02em;
+  }
+
+  /* SOAP article block */
+  .ed-soap-section {
+    border-top: 1px solid var(--rule-soft);
+    padding-top: 14px;
+    margin-top: 18px;
+  }
+  .ed-soap-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.20em;
+    text-transform: uppercase;
+    color: var(--red);
+    margin-bottom: 6px;
+  }
+
+  /* Code chips (ICD/CPT) — set in mono, restrained */
+  .ed-code-chip {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--ink);
+    background: var(--paper-3);
+    padding: 2px 6px;
+    border: 1px solid var(--rule-soft);
+    letter-spacing: 0.04em;
+  }
+
+  /* Buttons — flat, editorial */
+  .ed-btn {
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 12px 22px;
+    border: 1px solid var(--ink);
+    background: var(--paper);
+    color: var(--ink);
+    border-radius: 2px;
+    cursor: pointer;
+    transition: background .15s ease, color .15s ease;
+  }
+  .ed-btn:hover { background: var(--ink); color: var(--paper); }
+  .ed-btn-red {
+    background: var(--red);
+    color: #fff;
+    border-color: var(--red);
+  }
+  .ed-btn-red:hover { background: var(--red-deep); border-color: var(--red-deep); color: #fff; }
+  .ed-btn-ghost {
+    background: transparent;
+    border: 1px solid var(--rule-soft);
+    color: var(--ink-2);
+  }
+  .ed-btn-ghost:hover { border-color: var(--ink); color: var(--ink); background: var(--paper); }
+
+  /* Link treatment — underline always, red on hover */
+  a.ed-link {
+    color: var(--ink);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+    transition: color .15s ease, text-decoration-color .15s ease;
+  }
+  a.ed-link:hover { color: var(--red); text-decoration-color: var(--red); }
+
+  /* Avatar circle */
+  .ed-avatar {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: var(--paper-3);
+    color: var(--ink);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-family: var(--serif);
+    font-weight: 700;
+    font-size: 14px;
+    border: 1px solid var(--rule-soft);
+  }
+
+  /* Status pill — minimal, mono */
+  .ed-status {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 1px;
+  }
+  .ed-status-ready    { background: #0F4F30; color: #C7F3D7; }
+  .ed-status-signed   { background: var(--ink); color: var(--paper); }
+  .ed-status-review   { background: #B45309; color: #FFE3B3; }
+  .ed-status-queued   { background: var(--paper-3); color: var(--ink); border: 1px solid var(--rule-soft); }
+  .ed-status-live     { background: var(--red); color: #fff; }
+
+  /* Severity dots */
+  .ed-dot {
+    display: inline-block;
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    margin-right: 8px;
+    vertical-align: -1px;
+  }
+  .ed-dot-red    { background: var(--red); }
+  .ed-dot-amber  { background: #B45309; }
+  .ed-dot-ink    { background: var(--ink); }
+  .ed-dot-mint   { background: #0F7B4A; }
+
+  /* Manifesto block */
+  .ed-manifesto {
+    font-family: var(--serif);
+    font-style: italic;
+    font-weight: 400;
+    font-size: 21px;
+    line-height: 1.55;
+    color: var(--ink-2);
+    max-width: 78ch;
+    margin: 0 auto;
+    text-align: center;
+    letter-spacing: -0.005em;
+  }
+  .ed-manifesto strong {
+    font-style: normal;
+    font-weight: 800;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+  }
+
+  /* Section break — newspaper-style */
+  .ed-section-break {
+    text-align: center;
+  }
+
+  /* Pull quote */
+  .ed-pullquote {
+    font-family: var(--serif);
+    font-style: italic;
+    font-weight: 700;
+    font-size: 32px;
+    line-height: 1.2;
+    color: var(--ink);
+    letter-spacing: -0.014em;
+    border-top: 4px solid var(--ink);
+    border-bottom: 1px solid var(--ink);
+    padding: 20px 0;
+    text-align: left;
+  }
+  .ed-pullquote::before {
+    content: '"';
+    font-style: normal;
+    font-weight: 900;
+    font-size: 64px;
+    line-height: 0;
+    margin-right: 6px;
+    vertical-align: -10px;
+    color: var(--red);
+  }
+
+  /* Photo caption */
+  .ed-photo-caption {
+    font-family: var(--sans);
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--ink-3);
+    padding-top: 6px;
+    border-top: 1px solid var(--rule-soft);
+    margin-top: 8px;
+  }
+  .ed-photo-caption strong {
+    color: var(--ink);
+    font-weight: 700;
+  }
+
+  /* Chip row spacing */
+  .ed-chip-row > * + * { margin-left: 6px; }
+
+  /* Big article column tweaks */
+  .ed-lead-body p { margin-bottom: 14px; }
+
+  /* Hover lift on article cards */
+  .ed-article-card { transition: background .15s ease; }
+  .ed-article-card:hover { background: var(--paper-2); }
+
+  /* Mono numbers for tabular alignment */
+  .ed-tnum { font-feature-settings: "tnum" 1, "lnum" 1; }
+
+  /* Vertical rule between columns */
+  .ed-vrule { border-left: 1px solid var(--rule-soft); }
+  .ed-vrule-thick { border-left: 2px solid var(--ink); }
+
+  /* Filing timeline node */
+  .ed-filing-node {
+    width: 8px; height: 8px;
+    border: 1.5px solid currentColor;
+    border-radius: 50%;
+    display: inline-block;
+    vertical-align: 1px;
+  }
+  .ed-filing-node.is-active {
+    background: var(--red);
+    border-color: var(--red);
+    box-shadow: 0 0 0 0 rgba(200,16,46,0.6);
+    animation: ed-live-pulse 1.4s ease-out infinite;
+  }
+  .ed-filing-node.is-done {
+    background: #6EE7B7;
+    border-color: #6EE7B7;
+  }
+
+  /* Headline link hover */
+  .ed-headline-link { color: var(--ink); text-decoration: none; transition: color .15s ease; }
+  .ed-headline-link:hover { color: var(--red); }
+
+  /* Recording controls bar */
+  .ed-controls {
+    background: var(--ink);
+    color: var(--paper);
+  }
+
+  /* Hide bullets */
+  ul.ed-list { list-style: none; padding: 0; margin: 0; }
+
+  /* Selection */
+  ::selection { background: var(--red); color: #fff; }
+
+  /* Filing chips */
+  .ed-filing-chip {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    padding: 4px 8px 3px;
+    border: 1px solid currentColor;
+    color: var(--paper);
+    background: transparent;
+  }
+  .ed-filing-chip.is-active {
+    background: var(--red);
+    border-color: var(--red);
+    color: #fff;
+  }
+  .ed-filing-chip.is-done {
+    color: #6EE7B7;
+    border-color: #6EE7B7;
+  }
+
+  /* Volume meter for recording */
+  .ed-meter {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 3px;
+    height: 22px;
+  }
+  .ed-meter span {
+    width: 3px;
+    background: #fff;
+    animation: ed-meter 1.2s ease-in-out infinite;
+  }
+  .ed-meter span:nth-child(1) { height: 30%; animation-delay: 0.0s; }
+  .ed-meter span:nth-child(2) { height: 60%; animation-delay: 0.1s; }
+  .ed-meter span:nth-child(3) { height: 90%; animation-delay: 0.2s; }
+  .ed-meter span:nth-child(4) { height: 70%; animation-delay: 0.3s; }
+  .ed-meter span:nth-child(5) { height: 45%; animation-delay: 0.4s; }
+  .ed-meter span:nth-child(6) { height: 80%; animation-delay: 0.5s; }
+  .ed-meter span:nth-child(7) { height: 55%; animation-delay: 0.6s; }
+  @keyframes ed-meter {
+    0%, 100% { transform: scaleY(0.5); transform-origin: bottom; }
+    50%      { transform: scaleY(1.0); transform-origin: bottom; }
+  }
+</style>
+</head>
+
+<body>
+
+<!-- ==============================================================
+     GLOBAL TOP STRIP — newspaper page-number bar
+     ============================================================== -->
+<div class="border-b" style="border-color: var(--rule-soft); background: var(--paper-2);">
+  <div class="max-w-[1380px] mx-auto px-8 py-2 flex items-center justify-between">
+    <div class="ed-pagenum">Weekend Edition &middot; Vol. 1 &middot; No. 47</div>
+    <div class="ed-pagenum flex items-center gap-6">
+      <span>Tue. April 29, 2026</span>
+      <span style="color: var(--rule-soft);">|</span>
+      <span>Today's High <span style="color: var(--red);">&uarr;</span> 22 Visits</span>
+      <span style="color: var(--rule-soft);">|</span>
+      <a href="#dashboard" class="ed-link ed-pagenum" style="color: var(--ink-3);">Jump to Dashboard &rarr;</a>
+    </div>
+  </div>
+</div>
+
+<!-- ==============================================================
+     MASTHEAD — QUILLMD wordmark
+     ============================================================== -->
+<header class="border-b-4" style="border-color: var(--ink);">
+  <div class="max-w-[1380px] mx-auto px-8 pt-10 pb-6">
+    <div class="grid grid-cols-12 items-end gap-6">
+      <div class="col-span-3 ed-pagenum" style="color: var(--ink-3);">
+        <div>EST. 2026 &middot; ISSUE 47</div>
+        <div class="mt-1">"All the SOAP that's fit to print."</div>
+      </div>
+      <div class="col-span-6 text-center">
+        <div class="ed-h-mega" style="font-weight: 900; letter-spacing: -0.04em;">QuillMD</div>
+        <div class="ed-italic mt-1" style="color: var(--ink-3); font-size: 14px;">
+          The Daily Note &middot; Internal Medicine, Cardiology &amp; Allied Specialties
+        </div>
+      </div>
+      <div class="col-span-3 text-right ed-pagenum" style="color: var(--ink-3);">
+        <div class="flex justify-end gap-5">
+          <a href="#" class="ed-link ed-pagenum">Today</a>
+          <a href="#" class="ed-link ed-pagenum">Visits</a>
+          <a href="#" class="ed-link ed-pagenum">Patients</a>
+          <a href="#" class="ed-link ed-pagenum">Settings</a>
+        </div>
+        <div class="mt-2">Dr. Nina Chen &middot; Internal Medicine</div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ==============================================================
+     MANIFESTO — italic between thick rules
+     ============================================================== -->
+<section class="border-b-4 border-t-4 mt-0" style="border-color: var(--ink); background: var(--paper-2);">
+  <div class="max-w-[1100px] mx-auto px-8 py-12">
+    <div class="ed-kicker text-center mb-5">The Editorial Direction &middot; A Manifesto</div>
+    <p class="ed-manifesto">
+      This is <strong>EDITORIAL</strong>. We believe a patient's note is a story.
+      We refuse the silent gravity of tech UI &mdash; the cold gradient, the smug glass blur, the apologetic lowercase.
+      Headlines belong on top. Bylines belong beneath. Every visit is a piece of reporting:
+      filed, edited, fact-checked, signed. Type can be loud and dignified at once.
+      A doctor's record deserves the front page.
+    </p>
+    <div class="text-center mt-6 ed-byline" style="color: var(--ink-3);">
+      &mdash; <em>The Editors</em>, QuillMD
+    </div>
+  </div>
+</section>
+
+<!-- ==============================================================
+     SECTION 1 — LANDING / RECORDING (NYT FRONT-PAGE HERO)
+     ============================================================== -->
+
+<!-- HERO with photographic background -->
+<section class="ed-photo-hero">
+  <div class="max-w-[1380px] mx-auto px-8 pt-20 pb-24 grid grid-cols-12 gap-10">
+    <div class="col-span-8">
+      <div class="flex items-center gap-4 mb-8">
+        <span class="ed-kicker" style="color: #FF6E78;">Live Today &middot; Recording in Progress</span>
+        <span class="ed-pagenum" style="color: rgba(255,255,255,0.65);">Updated 14:07 EDT</span>
+      </div>
+
+      <h1 class="ed-h-hero" style="color: #fff; max-width: 14ch;">
+        A morning in clinic, recorded as it happens.
+      </h1>
+
+      <p class="ed-deck mt-7" style="color: rgba(255,255,255,0.86); font-size: 22px; max-width: 50ch;">
+        QuillMD listens, transcribes, and files your note as you speak.
+        The dictation becomes a draft. The draft becomes a signed record.
+        You speak. We do the typing.
+      </p>
+
+      <div class="flex items-center gap-4 mt-10">
+        <button class="ed-btn ed-btn-red" style="font-size: 13px; padding: 16px 28px;">
+          &#9679; &nbsp; Begin Recording
+        </button>
+        <button class="ed-btn" style="background: transparent; color: #fff; border-color: #fff;">
+          Upload Audio
+        </button>
+        <button class="ed-btn" style="background: transparent; color: #fff; border-color: rgba(255,255,255,0.5);">
+          Type the Note
+        </button>
+      </div>
+
+      <div class="mt-12 ed-byline" style="color: rgba(255,255,255,0.7);">
+        Filed by <em>Dr. Nina Chen</em> &middot; <em>Internal Medicine</em> &middot; April 29, 2026
+      </div>
+    </div>
+
+    <div class="col-span-4 flex flex-col justify-end">
+      <div class="ed-pagenum mb-3" style="color: rgba(255,255,255,0.6);">In This Issue</div>
+      <ul class="ed-list space-y-3" style="color: #fff;">
+        <li class="border-t pt-3" style="border-color: rgba(255,255,255,0.25);">
+          <div class="ed-kicker" style="color: #FF6E78;">Recording</div>
+          <a href="#recording" class="ed-h-5 ed-headline-link" style="color: #fff;">A live visit unfolds with M. Lopez, 58.</a>
+        </li>
+        <li class="border-t pt-3" style="border-color: rgba(255,255,255,0.25);">
+          <div class="ed-kicker-mute" style="color: rgba(255,255,255,0.6);">Dashboard</div>
+          <a href="#dashboard" class="ed-h-5 ed-headline-link" style="color: #fff;">Today's lead: Atrial fibrillation, age 72.</a>
+        </li>
+        <li class="border-t pt-3" style="border-color: rgba(255,255,255,0.25);">
+          <div class="ed-kicker-mute" style="color: rgba(255,255,255,0.6);">Opinion</div>
+          <a href="#opinion" class="ed-h-5 ed-headline-link" style="color: #fff;">Three Rx warnings demand a reread.</a>
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- photo caption strip -->
+  <div class="border-t" style="border-color: rgba(255,255,255,0.25);">
+    <div class="max-w-[1380px] mx-auto px-8 py-3 flex items-center justify-between">
+      <div class="ed-caption" style="color: rgba(255,255,255,0.78);">
+        <strong style="color:#fff;">Above:</strong> A stethoscope on hospital paperwork.
+        Audio is captured locally and uploaded encrypted at rest.
+      </div>
+      <div class="ed-pagenum" style="color: rgba(255,255,255,0.6);">Photo &mdash; Unsplash &middot; QM-2026-LIVE-047</div>
+    </div>
+  </div>
+</section>
+
+<!-- ==============================================================
+     RECORDING ACTIVE — Live blog feed
+     ============================================================== -->
+<section id="recording" class="border-b" style="border-color: var(--rule-soft);">
+  <div class="max-w-[1380px] mx-auto px-8 pt-14 pb-16">
+
+    <!-- Header strip -->
+    <div class="flex items-end justify-between mb-8">
+      <div>
+        <div class="flex items-center gap-3 mb-3">
+          <span class="ed-live-badge">LIVE</span>
+          <span class="ed-kicker">Now &middot; Cardiology Follow-up &middot; Room 3</span>
+          <span class="ed-pagenum">14 min &middot; 03 sec elapsed</span>
+        </div>
+        <h2 class="ed-h-1 mt-2" style="max-width: 18ch;">
+          Maria Lopez, 58, returns with palpitations.
+        </h2>
+        <p class="ed-deck mt-4">
+          A 14-minute conversation between patient and physician, transcribed in real time.
+          Editors will polish, flag, and code before noon. The record will be signed by 14:30.
+        </p>
+        <div class="mt-5 ed-byline">
+          By <em>Dr. Nina Chen</em> &middot; Internal Medicine &middot; <em>14 min into recording</em> &middot;
+          <a href="#" class="ed-link" style="color: var(--ink-3);">Pause</a> /
+          <a href="#" class="ed-link" style="color: var(--ink-3);">Stop &amp; File</a>
+        </div>
+      </div>
+
+      <div class="text-right">
+        <div class="ed-pagenum" style="color: var(--ink-3);">Visit &middot; QM-V-7811</div>
+        <div class="ed-stat-num-sm mt-1" style="color: var(--red);">14:03</div>
+        <div class="ed-pagenum" style="color: var(--ink-3);">Elapsed &middot; mm:ss</div>
+      </div>
+    </div>
+
+    <!-- Recording controls dock -->
+    <div class="ed-controls grid grid-cols-12 gap-6 px-7 py-5 mb-10" style="border-radius: 2px;">
+      <div class="col-span-3 flex items-center gap-4">
+        <span class="ed-live-badge">REC</span>
+        <div class="ed-meter"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+      </div>
+      <div class="col-span-3 ed-byline" style="color: rgba(251,250,247,0.6);">
+        Speaker &middot; <em style="color: var(--paper);">Two voices &middot; Dr. Chen, Maria Lopez</em>
+      </div>
+      <div class="col-span-3 ed-byline" style="color: rgba(251,250,247,0.6);">
+        Source &middot; <em style="color: var(--paper);">Microphone &middot; 48 kHz</em>
+      </div>
+      <div class="col-span-3 flex justify-end gap-3 items-center">
+        <button class="ed-btn ed-btn-ghost" style="background: transparent; border-color: rgba(251,250,247,0.4); color: var(--paper);">Pause</button>
+        <button class="ed-btn ed-btn-red">Stop &amp; File</button>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-12 gap-12">
+      <!-- Live blog feed -->
+      <div class="col-span-8">
+        <div class="flex items-end justify-between mb-5 ed-rule-thick pt-4">
+          <div>
+            <div class="ed-kicker">Live Transcript &middot; A Visit Unfolds</div>
+            <h3 class="ed-h-3 mt-1">The Conversation</h3>
+          </div>
+          <div class="ed-pagenum" style="color: var(--ink-3);">Auto-saved 14:07:12 EDT</div>
+        </div>
+
+        <!-- Live blog turn 1 -->
+        <article class="ed-feed-turn">
+          <div>
+            <div class="ed-feed-time">14:01:04</div>
+            <div class="ed-pagenum mt-1" style="color: var(--ink-4);">Opening</div>
+          </div>
+          <div>
+            <div class="ed-feed-speaker">Dr. Chen &middot; Physician</div>
+            <p class="ed-feed-text">
+              Maria, good to see you back. The chart says you've been having those flutter-like
+              feelings again &mdash; tell me what's been happening this past week.
+            </p>
+          </div>
+        </article>
+
+        <article class="ed-feed-turn">
+          <div>
+            <div class="ed-feed-time">14:01:32</div>
+            <div class="ed-pagenum mt-1" style="color: var(--ink-4);">HPI</div>
+          </div>
+          <div>
+            <div class="ed-feed-speaker is-patient">Maria Lopez &middot; Patient</div>
+            <p class="ed-feed-text">
+              They started Tuesday, after I climbed the stairs at the train station.
+              Felt like a hummingbird in my chest. Maybe four times this week, each one a minute or two.
+              No pain, just &mdash; it scares me. I sit down and it stops.
+            </p>
+          </div>
+        </article>
+
+        <article class="ed-feed-turn">
+          <div>
+            <div class="ed-feed-time">14:02:18</div>
+            <div class="ed-pagenum mt-1" style="color: var(--ink-4);">HPI</div>
+          </div>
+          <div>
+            <div class="ed-feed-speaker">Dr. Chen &middot; Physician</div>
+            <p class="ed-feed-text">
+              Any shortness of breath when it happens? Lightheadedness, or feeling like you might pass out?
+            </p>
+          </div>
+        </article>
+
+        <article class="ed-feed-turn">
+          <div>
+            <div class="ed-feed-time">14:02:44</div>
+            <div class="ed-pagenum mt-1" style="color: var(--ink-4);">HPI</div>
+          </div>
+          <div>
+            <div class="ed-feed-speaker is-patient">Maria Lopez &middot; Patient</div>
+            <p class="ed-feed-text">
+              A little out of breath. Not lightheaded. I checked my pulse with my watch &mdash; it said 142 once.
+              Usually I'm in the 70s. My husband made me come in.
+            </p>
+          </div>
+        </article>
+
+        <article class="ed-feed-turn">
+          <div>
+            <div class="ed-feed-time">14:03:21</div>
+            <div class="ed-pagenum mt-1" style="color: var(--ink-4);">PMH</div>
+          </div>
+          <div>
+            <div class="ed-feed-speaker">Dr. Chen &middot; Physician</div>
+            <p class="ed-feed-text">
+              Your blood pressure today is 142 over 88, pulse 96 and irregular. Let's get an EKG before you leave.
+              I want to talk about what we're hearing &mdash; and about whether we should start a thinner.
+            </p>
+          </div>
+        </article>
+
+        <article class="ed-feed-turn">
+          <div>
+            <div class="ed-feed-time">14:04:09</div>
+            <div class="ed-pagenum mt-1" style="color: var(--ink-4);">Plan</div>
+          </div>
+          <div>
+            <div class="ed-feed-speaker">Dr. Chen &middot; Physician</div>
+            <p class="ed-feed-text">
+              We'll order a 12-lead today, a 48-hour Holter, and labs for thyroid and electrolytes.
+              I'm going to start you on metoprolol succinate 25 milligrams once daily for rate.
+              We'll discuss anticoagulation when we have the EKG.
+            </p>
+          </div>
+        </article>
+
+        <article class="ed-feed-turn">
+          <div>
+            <div class="ed-feed-time">14:04:58</div>
+            <div class="ed-pagenum mt-1" style="color: var(--ink-4);">Plan</div>
+          </div>
+          <div>
+            <div class="ed-feed-speaker is-patient">Maria Lopez &middot; Patient</div>
+            <p class="ed-feed-text">
+              The blood thinner &mdash; my mother had bleeding from one. Is it the same?
+            </p>
+          </div>
+        </article>
+
+        <article class="ed-feed-turn">
+          <div>
+            <div class="ed-feed-time">14:05:40</div>
+            <div class="ed-pagenum mt-1" style="color: var(--ink-4);">Plan</div>
+          </div>
+          <div>
+            <div class="ed-feed-speaker">Dr. Chen &middot; Physician</div>
+            <p class="ed-feed-text">
+              We've got safer options now &mdash; apixaban, for instance. Bleeding risk is real but smaller than warfarin.
+              We'll talk through it. The transcript will catch this for the record.
+            </p>
+          </div>
+        </article>
+
+        <!-- Continuing indicator -->
+        <div class="ed-feed-turn" style="opacity: .55;">
+          <div>
+            <div class="ed-feed-time">14:06:11</div>
+            <div class="ed-pagenum mt-1" style="color: var(--ink-4);">&mdash;</div>
+          </div>
+          <div>
+            <div class="ed-feed-speaker is-patient" style="color: var(--ink-4);">Awaiting next turn&hellip;</div>
+            <p class="ed-feed-text" style="color: var(--ink-4); font-style: italic;">
+              The conversation continues. Editors will publish the SOAP draft once Stop is pressed.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sidebar — Filing Status (newsroom budget) + Vitals + Pull-quote -->
+      <aside class="col-span-4 ed-vrule pl-12">
+
+        <!-- Filing pipeline status -->
+        <div>
+          <div class="ed-kicker">The Newsroom Budget</div>
+          <h4 class="ed-h-4 mt-1 mb-3">Filing Status</h4>
+          <p class="ed-deck mb-5" style="font-size: 16px;">
+            What the editors are doing while the doctor talks.
+          </p>
+
+          <ul class="ed-list space-y-3 ed-rule-thin pt-4">
+            <li class="flex items-start gap-3">
+              <span class="ed-filing-node is-done"></span>
+              <div>
+                <div class="ed-kicker-ink" style="color: #0F7B4A;">Filed</div>
+                <div class="ed-h-5 mt-0.5" style="font-size: 18px;">Audio captured &middot; 14:01 &mdash; 14:07</div>
+                <div class="ed-byline mt-1">By <em>Microphone</em> &middot; 48 kHz</div>
+              </div>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="ed-filing-node is-done"></span>
+              <div>
+                <div class="ed-kicker-ink" style="color: #0F7B4A;">Filed</div>
+                <div class="ed-h-5 mt-0.5" style="font-size: 18px;">Speakers identified &middot; Two voices</div>
+                <div class="ed-byline mt-1">By <em>Layer 02</em> &middot; Diarization</div>
+              </div>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="ed-filing-node is-active"></span>
+              <div>
+                <div class="ed-kicker">Drafting now</div>
+                <div class="ed-h-5 mt-0.5" style="font-size: 18px;">Subjective &amp; History</div>
+                <div class="ed-byline mt-1">By <em>Layer 04</em> &middot; Sonnet 4.6</div>
+              </div>
+            </li>
+            <li class="flex items-start gap-3" style="opacity: .55;">
+              <span class="ed-filing-node"></span>
+              <div>
+                <div class="ed-kicker-mute">Queued</div>
+                <div class="ed-h-5 mt-0.5" style="font-size: 18px;">Self-critique &middot; Polish</div>
+                <div class="ed-byline mt-1">By <em>Layers 05–06</em></div>
+              </div>
+            </li>
+            <li class="flex items-start gap-3" style="opacity: .55;">
+              <span class="ed-filing-node"></span>
+              <div>
+                <div class="ed-kicker-mute">Queued</div>
+                <div class="ed-h-5 mt-0.5" style="font-size: 18px;">ICD &middot; CPT &middot; Rx safety</div>
+                <div class="ed-byline mt-1">By <em>Layers 07a–c</em></div>
+              </div>
+            </li>
+            <li class="flex items-start gap-3" style="opacity: .55;">
+              <span class="ed-filing-node"></span>
+              <div>
+                <div class="ed-kicker-mute">Queued</div>
+                <div class="ed-h-5 mt-0.5" style="font-size: 18px;">Doctor signs the record</div>
+                <div class="ed-byline mt-1">By <em>You</em> &middot; Manual</div>
+              </div>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Vitals box -->
+        <div class="mt-12 ed-rule-thick pt-5" style="background: var(--paper-2); padding: 22px;">
+          <div class="ed-kicker mb-2">By the Vitals</div>
+          <h4 class="ed-h-4 mb-4">Today, in numbers.</h4>
+          <div class="grid grid-cols-3 gap-4">
+            <div>
+              <div class="ed-stat-num-sm">142</div>
+              <div class="ed-byline mt-1">BP Systolic</div>
+            </div>
+            <div>
+              <div class="ed-stat-num-sm">96</div>
+              <div class="ed-byline mt-1">Pulse, irreg.</div>
+            </div>
+            <div>
+              <div class="ed-stat-num-sm">98<span style="font-size: 22px; color: var(--ink-3);">.4</span></div>
+              <div class="ed-byline mt-1">Temp &deg;F</div>
+            </div>
+          </div>
+          <div class="ed-pagenum mt-4" style="color: var(--ink-3);">
+            Captured at intake &middot; 13:54 EDT &middot; Recorded by MA Olivia Park
+          </div>
+        </div>
+
+        <!-- Pull quote -->
+        <div class="mt-12">
+          <div class="ed-pullquote">
+            Felt like a hummingbird in my chest.
+          </div>
+          <div class="ed-byline mt-3">&mdash; <em>Maria Lopez</em>, on the palpitations</div>
+        </div>
+
+      </aside>
+    </div>
+  </div>
+</section>
+
+<!-- ==============================================================
+     "FILING THE STORY" — newsroom budget meeting strip
+     ============================================================== -->
+<section class="ed-filing-bar">
+  <div class="max-w-[1380px] mx-auto px-8 py-4 flex items-center gap-4 overflow-x-auto">
+    <span class="ed-pagenum" style="color: rgba(251,250,247,0.7);">The Wire &middot; Filing Status</span>
+    <span class="ed-filing-chip is-done">&checkmark; Transcribed</span>
+    <span class="ed-filing-chip is-done">&checkmark; Speakers</span>
+    <span class="ed-filing-chip is-done">&checkmark; Entities</span>
+    <span class="ed-filing-chip is-active">Filing Subjective&hellip;</span>
+    <span class="ed-filing-chip" style="color: rgba(251,250,247,0.45); border-color: rgba(251,250,247,0.45);">Drafting Assessment</span>
+    <span class="ed-filing-chip" style="color: rgba(251,250,247,0.45); border-color: rgba(251,250,247,0.45);">Editing</span>
+    <span class="ed-filing-chip" style="color: rgba(251,250,247,0.45); border-color: rgba(251,250,247,0.45);">Coding ICD/CPT</span>
+    <span class="ed-filing-chip" style="color: rgba(251,250,247,0.45); border-color: rgba(251,250,247,0.45);">Rx Safety Check</span>
+    <span class="ed-filing-chip" style="color: rgba(251,250,247,0.45); border-color: rgba(251,250,247,0.45);">To Press</span>
+    <span class="ml-auto ed-pagenum" style="color: rgba(251,250,247,0.6);">Updated 14:07:12 &middot; ~38s to next status</span>
+  </div>
+</section>
+
+<!-- ==============================================================
+     SECTION BREAK — DASHBOARD
+     ============================================================== -->
+<section class="ed-section-break border-b" style="border-color: var(--ink); padding: 70px 0 56px;">
+  <div class="max-w-[1380px] mx-auto px-8">
+    <div class="border-t" style="border-color: var(--ink); border-width: 1px;"></div>
+    <div class="ed-section-marker mt-5 mb-5" style="font-size: 80px;">
+      <span class="ed-italic-b">The Dashboard</span>
+    </div>
+    <div class="ed-pagenum" style="color: var(--ink-3);">
+      A daily front page of the practice &middot; Tuesday, April 29, 2026
+    </div>
+    <div class="border-t mt-6" style="border-color: var(--ink); border-width: 1px;"></div>
+  </div>
+</section>
+
+<!-- ==============================================================
+     SECTION 2 — DASHBOARD (NEWSPAPER FRONT-PAGE LAYOUT)
+     ============================================================== -->
+<section id="dashboard">
+  <div class="max-w-[1380px] mx-auto px-8 pt-12 pb-16">
+
+    <!-- Above-the-fold lead headers -->
+    <div class="grid grid-cols-12 gap-10 mb-10">
+      <!-- Lead column header -->
+      <div class="col-span-7">
+        <div class="ed-kicker">Today's Lead &middot; Cardiology &middot; Signed</div>
+      </div>
+      <div class="col-span-3">
+        <div class="ed-kicker-ink">National &middot; Recent Visits</div>
+      </div>
+      <div class="col-span-2">
+        <div class="ed-kicker-ink">The Sidebar</div>
+      </div>
+    </div>
+
+    <!-- THREE-COLUMN FRONT PAGE -->
+    <div class="grid grid-cols-12 gap-10">
+
+      <!-- ========================================================
+           LEAD COLUMN (col-span-7)
+           ======================================================== -->
+      <div class="col-span-7 ed-vrule-thick pl-0" style="border-left: 0;">
+
+        <!-- Lead patient card with drop cap -->
+        <article class="border-t pb-10 pt-6" style="border-color: var(--ink); border-top-width: 4px;">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="ed-status ed-status-signed">Signed &middot; 11:52</span>
+            <span class="ed-tag">ICD I48.0</span>
+            <span class="ed-tag">CPT 99214</span>
+            <span class="ed-pagenum" style="color: var(--ink-3);">Visit QM-V-7807</span>
+          </div>
+
+          <h3 class="ed-h-1 ed-dropcap ed-dropcap-red">
+            Eleanor R. Whitfield, 72, returns with a quickening rhythm.
+          </h3>
+
+          <p class="ed-deck mt-5" style="font-size: 22px;">
+            Three days of palpitations and a single near-syncope at the post office.
+            EKG confirms paroxysmal atrial fibrillation. The patient leaves with apixaban,
+            a Holter, and a follow-up in two weeks.
+          </p>
+
+          <div class="ed-byline mt-5">
+            By <em>Dr. Nina Chen</em> &middot; Internal Medicine &middot;
+            <em>14 min read</em> &middot; Filed 11:47 &middot; Signed 11:52 &middot; April 29, 2026
+          </div>
+
+          <!-- Photo -->
+          <figure class="mt-7">
+            <div class="ed-photo-secondary" style="aspect-ratio: 16/7;"></div>
+            <figcaption class="ed-photo-caption flex justify-between">
+              <span><strong>Above:</strong> A 12-lead electrocardiogram captures the moment of conversion.</span>
+              <span class="ed-pagenum">QM &middot; 2026-04-29 &middot; #042</span>
+            </figcaption>
+          </figure>
+
+          <!-- Lead body — multi-column SOAP excerpt -->
+          <div class="ed-cols-2 mt-9 ed-body ed-lead-body">
+            <p>
+              The patient, a retired English professor, presented today after three episodes of palpitations
+              and one near-syncopal event in line at the post office. She rates the sensation as
+              "a sudden tide that comes and goes," lasting two to ten minutes, without chest pain or radiation.
+            </p>
+            <p>
+              On examination, blood pressure was 138/82, pulse irregularly irregular at 104, lungs clear,
+              no jugular venous distension. A 12-lead EKG performed in the room demonstrated atrial fibrillation
+              with rapid ventricular response, no acute ischemic changes. Bedside echocardiogram by point-of-care
+              ultrasound was unremarkable for pericardial effusion.
+            </p>
+            <p>
+              Plan: Initiated apixaban 5 mg twice daily after CHA<sub>2</sub>DS<sub>2</sub>-VASc scoring of 4
+              (age, female, hypertension, diabetes). Started metoprolol succinate 25 mg daily for rate control.
+              Holter monitor placed for 48 hours. Cardiology referral within seven days for rhythm-control discussion.
+              Patient educated on bleeding precautions; agreed and signed the informed-consent addendum.
+            </p>
+            <p>
+              Follow-up in two weeks with INR-irrelevant DOAC labs (creatinine, complete blood count) and a
+              repeat 12-lead. The patient was advised to seek emergency care for any chest pain, severe shortness
+              of breath, slurred speech, or one-sided weakness.
+            </p>
+          </div>
+
+          <!-- Codes & Rx readout -->
+          <div class="grid grid-cols-3 gap-6 mt-9 ed-rule-thin pt-5">
+            <div>
+              <div class="ed-soap-label">Diagnosis Codes</div>
+              <div class="space-y-1 ed-body-sm">
+                <div><span class="ed-code-chip">I48.0</span> Paroxysmal atrial fibrillation</div>
+                <div><span class="ed-code-chip">I10</span> Essential hypertension</div>
+                <div><span class="ed-code-chip">E11.9</span> Type 2 diabetes mellitus</div>
+              </div>
+            </div>
+            <div>
+              <div class="ed-soap-label">Procedure Codes</div>
+              <div class="space-y-1 ed-body-sm">
+                <div><span class="ed-code-chip">99214</span> E&amp;M, established pt, mod.</div>
+                <div><span class="ed-code-chip">93000</span> EKG, 12-lead</div>
+              </div>
+            </div>
+            <div>
+              <div class="ed-soap-label">Prescriptions Drafted</div>
+              <div class="space-y-1 ed-body-sm">
+                <div><span class="ed-code-chip" style="background: #FFE3B3;">!</span> Apixaban 5 mg PO BID</div>
+                <div>Metoprolol succinate 25 mg PO daily</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between mt-8 pt-5 ed-rule-thick">
+            <div class="flex gap-3">
+              <button class="ed-btn">Open the Record</button>
+              <button class="ed-btn ed-btn-ghost">Copy SOAP</button>
+              <button class="ed-btn ed-btn-ghost">Email to Cardiology</button>
+            </div>
+            <div class="ed-byline" style="color: var(--ink-3);">
+              Edited <em>twice</em> &middot; Latest 11:51 &middot; 142 words changed
+            </div>
+          </div>
+        </article>
+
+        <!-- Below the fold — secondary lead -->
+        <article class="ed-rule-medium pt-7 pb-10 ed-article-card -mx-3 px-3">
+          <div class="flex items-center gap-3 mb-2">
+            <span class="ed-developing">Developing</span>
+            <span class="ed-kicker-ink">Endocrinology &middot; New Patient</span>
+            <span class="ed-pagenum" style="color: var(--ink-3);">Visit QM-V-7809</span>
+          </div>
+
+          <h3 class="ed-h-2 ed-dropcap mt-3">
+            Daniel Okafor, 41, arrives newly diagnosed with Type 2.
+          </h3>
+
+          <p class="ed-deck mt-4">
+            A1C of 9.2%, no symptoms beyond fatigue. The discussion turns to lifestyle, metformin,
+            and the long story of insulin resistance.
+          </p>
+
+          <div class="ed-byline mt-3">
+            By <em>Dr. Nina Chen</em> &middot; <em>9 min read</em> &middot; Drafting since 13:22 &middot;
+            Status <strong style="color: var(--red);">Awaiting Sign</strong>
+          </div>
+
+          <div class="grid grid-cols-12 gap-6 mt-5">
+            <div class="col-span-7 ed-body">
+              <p>
+                Mr. Okafor presented for results review of recent labs ordered through the company physical.
+                Hemoglobin A1C 9.2%, fasting glucose 198, lipid panel notable for triglycerides 312.
+                He reports increased thirst, mild blurred vision, and a 12-pound weight gain over six months.
+                Family history includes a father with Type 2 diabetes diagnosed at 53.
+              </p>
+              <p>
+                Plan: Started metformin 500 mg twice daily, titrating up over four weeks. Referred to a
+                certified diabetes educator and a registered dietitian. Ordered urine microalbumin and
+                ophthalmology referral for retinal screening. Discussed warning signs of hypoglycemia.
+              </p>
+            </div>
+            <div class="col-span-5">
+              <div class="ed-photo-strip" style="aspect-ratio: 4/3;"></div>
+              <div class="ed-photo-caption">
+                <strong>Above:</strong> Glucometer reading captured at the bedside.
+              </div>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2 mt-5">
+            <span class="ed-code-chip">E11.9</span>
+            <span class="ed-code-chip">E78.1</span>
+            <span class="ed-code-chip">99203</span>
+            <span class="ml-auto ed-byline" style="color: var(--ink-3);">3 of 7 layers complete &middot; 41% drafted</span>
+          </div>
+        </article>
+
+        <!-- Tertiary lead -->
+        <article class="ed-rule-thin pt-7 pb-2 ed-article-card -mx-3 px-3">
+          <div class="grid grid-cols-12 gap-6">
+            <div class="col-span-8">
+              <div class="flex items-center gap-3 mb-2">
+                <span class="ed-status ed-status-review">In Review</span>
+                <span class="ed-kicker-ink">Pediatrics &middot; Sick Visit</span>
+              </div>
+              <h3 class="ed-h-3 ed-dropcap">
+                Amelia Chen, 6, three days of cough.
+              </h3>
+              <p class="ed-deck mt-3" style="font-size: 18px;">
+                A barking cough with low-grade fever; mother brought her in this afternoon. RSV swab pending.
+              </p>
+              <div class="ed-byline mt-3">
+                By <em>Dr. James Park</em> (cross-coverage) &middot; <em>5 min read</em> &middot; 13:48
+              </div>
+              <div class="flex gap-2 mt-3">
+                <span class="ed-code-chip">J20.9</span>
+                <span class="ed-code-chip">99213</span>
+              </div>
+            </div>
+            <div class="col-span-4 flex flex-col justify-end">
+              <div class="ed-photo-portrait" style="aspect-ratio: 3/4;"></div>
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <!-- ========================================================
+           MIDDLE COLUMN (col-span-3) — Recent visits
+           ======================================================== -->
+      <div class="col-span-3 ed-vrule pl-8">
+        <!-- Visit 1 -->
+        <article class="border-t pt-5 pb-7 ed-article-card" style="border-color: var(--ink); border-top-width: 2px;">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="ed-status ed-status-ready">Ready</span>
+            <span class="ed-pagenum" style="color: var(--ink-3);">10:14</span>
+          </div>
+          <h4 class="ed-h-4">
+            <a href="#" class="ed-headline-link">Hassan Reyes, 34, follows up after a cycling accident.</a>
+          </h4>
+          <p class="ed-deck mt-2" style="font-size: 15px;">
+            Right shoulder is healing; the question turns to physical therapy.
+          </p>
+          <div class="ed-byline mt-3">
+            By <em>Dr. Chen</em> &middot; Internal Medicine &middot; <em>6 min read</em>
+          </div>
+          <div class="flex gap-1.5 mt-2">
+            <span class="ed-code-chip">M25.511</span>
+            <span class="ed-code-chip">99213</span>
+          </div>
+        </article>
+
+        <!-- Visit 2 -->
+        <article class="border-t pt-5 pb-7 ed-article-card" style="border-color: var(--rule-soft);">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="ed-status ed-status-ready">Ready</span>
+            <span class="ed-pagenum" style="color: var(--ink-3);">09:42</span>
+          </div>
+          <h4 class="ed-h-4">
+            <a href="#" class="ed-headline-link">Priya Vasudevan, 29, prenatal &mdash; first visit.</a>
+          </h4>
+          <p class="ed-deck mt-2" style="font-size: 15px;">
+            The first ultrasound, the first questions, the first long list of supplements.
+          </p>
+          <div class="ed-byline mt-3">
+            By <em>Dr. Chen</em> &middot; <em>8 min read</em>
+          </div>
+          <div class="flex gap-1.5 mt-2">
+            <span class="ed-code-chip">Z34.01</span>
+            <span class="ed-code-chip">99204</span>
+          </div>
+        </article>
+
+        <!-- Visit 3 -->
+        <article class="border-t pt-5 pb-7 ed-article-card" style="border-color: var(--rule-soft);">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="ed-status ed-status-signed">Signed</span>
+            <span class="ed-pagenum" style="color: var(--ink-3);">09:08</span>
+          </div>
+          <h4 class="ed-h-4">
+            <a href="#" class="ed-headline-link">Robert Calloway, 67, three-month diabetes check.</a>
+          </h4>
+          <p class="ed-deck mt-2" style="font-size: 15px;">
+            A1C is down to 6.9. The metformin holds; the patient does not.
+          </p>
+          <div class="ed-byline mt-3">
+            By <em>Dr. Chen</em> &middot; <em>4 min read</em>
+          </div>
+          <div class="flex gap-1.5 mt-2">
+            <span class="ed-code-chip">E11.9</span>
+            <span class="ed-code-chip">99214</span>
+          </div>
+        </article>
+
+        <!-- Visit 4 -->
+        <article class="border-t pt-5 pb-7 ed-article-card" style="border-color: var(--rule-soft);">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="ed-status ed-status-queued">Queued</span>
+            <span class="ed-pagenum" style="color: var(--ink-3);">14:35</span>
+          </div>
+          <h4 class="ed-h-4">
+            <a href="#" class="ed-headline-link">Sophia Nakamura, 51, annual physical &mdash; awaiting check-in.</a>
+          </h4>
+          <p class="ed-deck mt-2" style="font-size: 15px;">
+            Scheduled this afternoon; the chart is ready.
+          </p>
+          <div class="ed-byline mt-3">
+            <em>Not yet recorded</em> &middot; Room 2
+          </div>
+          <div class="flex gap-1.5 mt-2">
+            <span class="ed-code-chip">Z00.00</span>
+          </div>
+        </article>
+
+        <!-- Visit 5 -->
+        <article class="border-t pt-5 pb-7 ed-article-card" style="border-color: var(--rule-soft);">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="ed-status ed-status-signed">Signed</span>
+            <span class="ed-pagenum" style="color: var(--ink-3);">Yesterday</span>
+          </div>
+          <h4 class="ed-h-4">
+            <a href="#" class="ed-headline-link">William Onyango, 78, post-op knee, week six.</a>
+          </h4>
+          <p class="ed-deck mt-2" style="font-size: 15px;">
+            Pain is controlled; he asks if he can dance again at his grandson's wedding.
+          </p>
+          <div class="ed-byline mt-3">
+            By <em>Dr. Park</em> &middot; <em>5 min read</em>
+          </div>
+          <div class="flex gap-1.5 mt-2">
+            <span class="ed-code-chip">M17.11</span>
+            <span class="ed-code-chip">99213</span>
+          </div>
+        </article>
+
+        <a href="#" class="ed-link ed-byline mt-3 inline-block">More visits &rarr;</a>
+      </div>
+
+      <!-- ========================================================
+           RIGHT SIDEBAR (col-span-2)
+           ======================================================== -->
+      <aside class="col-span-2 ed-vrule pl-6">
+
+        <!-- MOST READ -->
+        <div class="border-t pt-4 pb-7" style="border-color: var(--ink); border-top-width: 2px;">
+          <div class="ed-kicker mb-2">Most Read &middot; Today</div>
+          <h5 class="ed-h-5 mb-4">High-acuity flags.</h5>
+          <ol class="space-y-4 ed-list">
+            <li class="flex gap-3">
+              <span class="ed-stat-num-sm" style="font-size: 28px; color: var(--red);">1.</span>
+              <div>
+                <div class="ed-h-5" style="font-size: 16px; line-height: 1.18;">
+                  <a href="#" class="ed-headline-link">A new AFib, 72&mdash;and an apixaban prescription.</a>
+                </div>
+                <div class="ed-byline mt-1" style="font-size: 10px;">E. Whitfield &middot; <em>11:52</em></div>
+              </div>
+            </li>
+            <li class="flex gap-3">
+              <span class="ed-stat-num-sm" style="font-size: 28px; color: var(--red);">2.</span>
+              <div>
+                <div class="ed-h-5" style="font-size: 16px; line-height: 1.18;">
+                  <a href="#" class="ed-headline-link">Newly diagnosed Type 2, age 41.</a>
+                </div>
+                <div class="ed-byline mt-1" style="font-size: 10px;">D. Okafor &middot; <em>13:22</em></div>
+              </div>
+            </li>
+            <li class="flex gap-3">
+              <span class="ed-stat-num-sm" style="font-size: 28px; color: var(--red);">3.</span>
+              <div>
+                <div class="ed-h-5" style="font-size: 16px; line-height: 1.18;">
+                  <a href="#" class="ed-headline-link">Pediatric cough, RSV swab pending.</a>
+                </div>
+                <div class="ed-byline mt-1" style="font-size: 10px;">A. Chen, 6 &middot; <em>13:48</em></div>
+              </div>
+            </li>
+            <li class="flex gap-3">
+              <span class="ed-stat-num-sm" style="font-size: 28px; color: var(--red);">4.</span>
+              <div>
+                <div class="ed-h-5" style="font-size: 16px; line-height: 1.18;">
+                  <a href="#" class="ed-headline-link">First prenatal visit, 8w4d gestation.</a>
+                </div>
+                <div class="ed-byline mt-1" style="font-size: 10px;">P. Vasudevan &middot; <em>09:42</em></div>
+              </div>
+            </li>
+          </ol>
+        </div>
+
+        <!-- OPINION — Rx warnings -->
+        <div class="border-t pt-4 pb-7" style="border-color: var(--ink); border-top-width: 2px; background: var(--paper-2); padding: 16px;">
+          <div class="ed-kicker mb-2">Opinion &middot; The Editors</div>
+          <h5 class="ed-h-4 mb-3" style="font-size: 24px;">Three warnings demand a reread.</h5>
+
+          <article class="border-t pt-3 mb-4" style="border-color: var(--rule-soft);">
+            <div class="ed-byline" style="color: var(--red);">
+              <span class="ed-dot ed-dot-red"></span>Critical
+            </div>
+            <p class="ed-body-sm mt-1" style="font-size: 14px;">
+              <strong>Apixaban + ibuprofen.</strong> Eleanor Whitfield's home med list still shows ibuprofen 600 mg PRN.
+              Risk of major bleeding multiplies. <a href="#" class="ed-link">Address before sign &rarr;</a>
+            </p>
+          </article>
+
+          <article class="border-t pt-3 mb-4" style="border-color: var(--rule-soft);">
+            <div class="ed-byline" style="color: #B45309;">
+              <span class="ed-dot ed-dot-amber"></span>Warning
+            </div>
+            <p class="ed-body-sm mt-1" style="font-size: 14px;">
+              <strong>Metformin + eGFR 42.</strong> Dose review recommended for Daniel Okafor.
+              Consider 500 mg daily vs. titrating up. <a href="#" class="ed-link">Review &rarr;</a>
+            </p>
+          </article>
+
+          <article class="border-t pt-3" style="border-color: var(--rule-soft);">
+            <div class="ed-byline" style="color: #B45309;">
+              <span class="ed-dot ed-dot-amber"></span>Allergy
+            </div>
+            <p class="ed-body-sm mt-1" style="font-size: 14px;">
+              <strong>Sulfa noted.</strong> Hassan Reyes' chart lists a sulfa allergy; the discharge plan mentions
+              TMP-SMX prophylaxis. Confirm or substitute. <a href="#" class="ed-link">Confirm &rarr;</a>
+            </p>
+          </article>
+        </div>
+
+        <!-- BY THE NUMBERS -->
+        <div class="border-t pt-4 pb-7" style="border-color: var(--ink); border-top-width: 2px;">
+          <div class="ed-kicker mb-2">By the Numbers &middot; Today</div>
+          <h5 class="ed-h-5 mb-4">A clinic in figures.</h5>
+          <div class="space-y-5">
+            <div>
+              <div class="ed-stat-num">22</div>
+              <div class="ed-byline mt-1">Visits filed</div>
+              <div class="ed-pagenum mt-0.5" style="color: var(--ink-3);">+3 vs Mon</div>
+            </div>
+            <div>
+              <div class="ed-stat-num">18</div>
+              <div class="ed-byline mt-1">Notes signed</div>
+              <div class="ed-pagenum mt-0.5" style="color: var(--ink-3);">82% same-day</div>
+            </div>
+            <div>
+              <div class="ed-stat-num" style="color: var(--red);">3</div>
+              <div class="ed-byline mt-1">Rx warnings open</div>
+              <div class="ed-pagenum mt-0.5" style="color: var(--ink-3);">1 critical</div>
+            </div>
+            <div>
+              <div class="ed-stat-num">4<span style="font-size: 28px; color: var(--ink-3);">.7</span></div>
+              <div class="ed-byline mt-1">Avg. min to draft</div>
+              <div class="ed-pagenum mt-0.5" style="color: var(--ink-3);">Industry: 8.2</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- WEATHER / OPS -->
+        <div class="border-t pt-4 pb-7" style="border-color: var(--ink); border-top-width: 2px;">
+          <div class="ed-kicker mb-2">The Wire</div>
+          <h5 class="ed-h-5 mb-3">Operations.</h5>
+          <ul class="space-y-3 ed-body-sm" style="font-size: 14px;">
+            <li class="flex items-start gap-2">
+              <span class="ed-dot ed-dot-mint" style="margin-top: 7px;"></span>
+              <div>
+                <strong>All systems normal.</strong>
+                <div class="ed-pagenum" style="color: var(--ink-3);">Anthropic, Deepgram, Resend &mdash; healthy.</div>
+              </div>
+            </li>
+            <li class="flex items-start gap-2">
+              <span class="ed-dot ed-dot-ink" style="margin-top: 7px;"></span>
+              <div>
+                <strong>Worker queue: 2 jobs in flight.</strong>
+                <div class="ed-pagenum" style="color: var(--ink-3);">Avg latency 41s.</div>
+              </div>
+            </li>
+            <li class="flex items-start gap-2">
+              <span class="ed-dot ed-dot-amber" style="margin-top: 7px;"></span>
+              <div>
+                <strong>Backup window in 22 min.</strong>
+                <div class="ed-pagenum" style="color: var(--ink-3);">Postgres-backup runs 15:00 EDT.</div>
+              </div>
+            </li>
+          </ul>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<!-- ==============================================================
+     SECTION BREAK — THE LATE EDITION
+     ============================================================== -->
+<section class="ed-section-break border-y" style="border-color: var(--ink); padding: 56px 0; background: var(--paper-2);">
+  <div class="max-w-[1380px] mx-auto px-8">
+    <div class="border-t" style="border-color: var(--ink);"></div>
+    <div class="ed-section-marker mt-5 mb-5" style="font-size: 64px;">
+      <span class="ed-italic-b">The Late Edition</span>
+    </div>
+    <div class="ed-pagenum" style="color: var(--ink-3);">
+      Visits closed since 12:00 EDT &middot; Re-runs &amp; corrections
+    </div>
+    <div class="border-t mt-6" style="border-color: var(--ink);"></div>
+  </div>
+</section>
+
+<!-- ==============================================================
+     LATE EDITION — patient list as articles
+     ============================================================== -->
+<section>
+  <div class="max-w-[1380px] mx-auto px-8 py-12 grid grid-cols-12 gap-10">
+
+    <!-- Patient gallery -->
+    <div class="col-span-9">
+      <div class="grid grid-cols-3 gap-7">
+
+        <!-- Patient card 1 -->
+        <article class="border-t pt-4 pb-6" style="border-color: var(--ink); border-top-width: 2px;">
+          <div class="flex items-center justify-between mb-3">
+            <span class="ed-avatar">EW</span>
+            <span class="ed-pagenum" style="color: var(--ink-3);">MRN 28431</span>
+          </div>
+          <div class="ed-kicker-ink mb-1">Patient</div>
+          <h4 class="ed-h-3 ed-dropcap" style="font-size: 32px;">Eleanor R. Whitfield</h4>
+          <div class="ed-byline mt-2">DOB 1953-08-14 &middot; <em>Female &middot; 72</em></div>
+          <p class="ed-body-sm mt-3" style="font-size: 14px;">
+            <strong>Active problems:</strong> Atrial fibrillation, hypertension, Type 2 diabetes.
+          </p>
+          <div class="ed-rule-thin mt-4 pt-3 ed-byline" style="color: var(--ink-3);">
+            Last visit <em>Today, 11:47</em> &middot; <em>4</em> visits this year
+          </div>
+        </article>
+
+        <!-- Patient card 2 -->
+        <article class="border-t pt-4 pb-6" style="border-color: var(--ink); border-top-width: 2px;">
+          <div class="flex items-center justify-between mb-3">
+            <span class="ed-avatar">DO</span>
+            <span class="ed-pagenum" style="color: var(--ink-3);">MRN 29104</span>
+          </div>
+          <div class="ed-kicker-ink mb-1">Patient &middot; New</div>
+          <h4 class="ed-h-3 ed-dropcap" style="font-size: 32px;">Daniel S. Okafor</h4>
+          <div class="ed-byline mt-2">DOB 1984-03-22 &middot; <em>Male &middot; 41</em></div>
+          <p class="ed-body-sm mt-3" style="font-size: 14px;">
+            <strong>Active problems:</strong> Newly diagnosed Type 2 diabetes, hyperlipidemia.
+          </p>
+          <div class="ed-rule-thin mt-4 pt-3 ed-byline" style="color: var(--ink-3);">
+            Last visit <em>Today, 13:22</em> &middot; First visit
+          </div>
+        </article>
+
+        <!-- Patient card 3 -->
+        <article class="border-t pt-4 pb-6" style="border-color: var(--ink); border-top-width: 2px;">
+          <div class="flex items-center justify-between mb-3">
+            <span class="ed-avatar">ML</span>
+            <span class="ed-pagenum" style="color: var(--ink-3);">MRN 22091</span>
+          </div>
+          <div class="ed-kicker mb-1">Live &middot; In Room</div>
+          <h4 class="ed-h-3 ed-dropcap ed-dropcap-red" style="font-size: 32px;">Maria F. Lopez</h4>
+          <div class="ed-byline mt-2">DOB 1967-11-04 &middot; <em>Female &middot; 58</em></div>
+          <p class="ed-body-sm mt-3" style="font-size: 14px;">
+            <strong>Active problems:</strong> New-onset palpitations, hypertension, dyslipidemia.
+          </p>
+          <div class="ed-rule-thin mt-4 pt-3 ed-byline" style="color: var(--red);">
+            <strong>Recording now</strong> &middot; <em>14:03 elapsed</em>
+          </div>
+        </article>
+
+        <!-- Patient card 4 -->
+        <article class="border-t pt-4 pb-6" style="border-color: var(--rule-soft);">
+          <div class="flex items-center justify-between mb-3">
+            <span class="ed-avatar">HR</span>
+            <span class="ed-pagenum" style="color: var(--ink-3);">MRN 24512</span>
+          </div>
+          <div class="ed-kicker-ink mb-1">Patient</div>
+          <h4 class="ed-h-3 ed-dropcap" style="font-size: 32px;">Hassan A. Reyes</h4>
+          <div class="ed-byline mt-2">DOB 1990-06-19 &middot; <em>Male &middot; 34</em></div>
+          <p class="ed-body-sm mt-3" style="font-size: 14px;">
+            <strong>Active problems:</strong> Right shoulder strain (recovering), seasonal allergies.
+          </p>
+          <div class="ed-rule-thin mt-4 pt-3 ed-byline" style="color: var(--ink-3);">
+            Last visit <em>Today, 10:14</em> &middot; <em>2</em> visits this year
+          </div>
+        </article>
+
+        <!-- Patient card 5 -->
+        <article class="border-t pt-4 pb-6" style="border-color: var(--rule-soft);">
+          <div class="flex items-center justify-between mb-3">
+            <span class="ed-avatar">PV</span>
+            <span class="ed-pagenum" style="color: var(--ink-3);">MRN 30887</span>
+          </div>
+          <div class="ed-kicker-ink mb-1">Patient &middot; Prenatal</div>
+          <h4 class="ed-h-3 ed-dropcap" style="font-size: 32px;">Priya R. Vasudevan</h4>
+          <div class="ed-byline mt-2">DOB 1996-01-30 &middot; <em>Female &middot; 29</em></div>
+          <p class="ed-body-sm mt-3" style="font-size: 14px;">
+            <strong>Active problems:</strong> First-trimester pregnancy, mild iron-deficiency anemia.
+          </p>
+          <div class="ed-rule-thin mt-4 pt-3 ed-byline" style="color: var(--ink-3);">
+            Last visit <em>Today, 09:42</em> &middot; First visit
+          </div>
+        </article>
+
+        <!-- Patient card 6 -->
+        <article class="border-t pt-4 pb-6" style="border-color: var(--rule-soft);">
+          <div class="flex items-center justify-between mb-3">
+            <span class="ed-avatar">RC</span>
+            <span class="ed-pagenum" style="color: var(--ink-3);">MRN 19044</span>
+          </div>
+          <div class="ed-kicker-ink mb-1">Patient</div>
+          <h4 class="ed-h-3 ed-dropcap" style="font-size: 32px;">Robert J. Calloway</h4>
+          <div class="ed-byline mt-2">DOB 1958-04-02 &middot; <em>Male &middot; 67</em></div>
+          <p class="ed-body-sm mt-3" style="font-size: 14px;">
+            <strong>Active problems:</strong> Type 2 diabetes (controlled), hyperlipidemia, BPH.
+          </p>
+          <div class="ed-rule-thin mt-4 pt-3 ed-byline" style="color: var(--ink-3);">
+            Last visit <em>Today, 09:08</em> &middot; <em>5</em> visits this year
+          </div>
+        </article>
+
+      </div>
+    </div>
+
+    <!-- Right rail — corrections + tips -->
+    <aside class="col-span-3 ed-vrule pl-8">
+      <div class="border-t pt-4 pb-7" style="border-color: var(--ink); border-top-width: 2px;">
+        <div class="ed-kicker-ink mb-2">Corrections &middot; April 28</div>
+        <h5 class="ed-h-5 mb-3">A note on yesterday.</h5>
+        <p class="ed-body-sm" style="font-size: 14px;">
+          The signed note for <strong>R. Calloway</strong> initially showed an A1C of 7.9%; the value was
+          subsequently corrected to <strong>6.9%</strong> following a re-pull from LabCorp.
+          The amended note has been re-filed and re-signed.
+        </p>
+        <a href="#" class="ed-link ed-byline mt-3 inline-block">Read the amended note &rarr;</a>
+      </div>
+
+      <div class="border-t pt-4 pb-7" style="border-color: var(--ink); border-top-width: 2px; background: var(--paper-2); padding: 16px;">
+        <div class="ed-kicker mb-2">Letter from the Editor</div>
+        <h5 class="ed-h-4 mb-3" style="font-size: 24px;">On the dignity of dictation.</h5>
+        <p class="ed-italic" style="font-size: 15px; line-height: 1.55;">
+          A clinic note is not a form. It is the shortest form of biography ever written:
+          one person's body, on one day, observed by another. We owe it the typography of the things
+          we read on purpose.
+        </p>
+        <div class="ed-byline mt-4">&mdash; <em>The Editors</em></div>
+      </div>
+
+      <div class="border-t pt-4 pb-7" style="border-color: var(--ink); border-top-width: 2px;">
+        <div class="ed-kicker-ink mb-2">Today's Wire</div>
+        <h5 class="ed-h-5 mb-3">Coming this afternoon.</h5>
+        <ul class="space-y-3 ed-body-sm" style="font-size: 14px;">
+          <li><strong>14:35</strong> &middot; S. Nakamura &middot; Annual physical</li>
+          <li><strong>15:00</strong> &middot; Postgres backup window</li>
+          <li><strong>15:15</strong> &middot; J. Patel &middot; Lipid follow-up</li>
+          <li><strong>16:00</strong> &middot; Daily admin briefing</li>
+          <li><strong>17:30</strong> &middot; End-of-day sign-out</li>
+        </ul>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ==============================================================
+     PULL QUOTE BREAK
+     ============================================================== -->
+<section style="background: var(--paper-2);" class="border-y-4" >
+  <div class="max-w-[1100px] mx-auto px-8 py-16 text-center">
+    <div class="ed-kicker mb-5">From Today's Lead</div>
+    <blockquote class="ed-italic-b" style="font-size: 56px; line-height: 1.1; color: var(--ink); letter-spacing: -0.022em; max-width: 22ch; margin: 0 auto;">
+      "It felt like a sudden tide that comes and goes."
+    </blockquote>
+    <div class="ed-byline mt-7">&mdash; <em>Eleanor R. Whitfield</em>, on her palpitations &middot;
+      filed as quotation in the chief-complaint section</div>
+  </div>
+</section>
+
+<!-- ==============================================================
+     OPS / SECURITY STRIP — 'inside the masthead'
+     ============================================================== -->
+<section style="background: var(--ink); color: var(--paper);">
+  <div class="max-w-[1380px] mx-auto px-8 py-10 grid grid-cols-12 gap-8">
+    <div class="col-span-3">
+      <div class="ed-kicker" style="color: #FF6E78;">Inside the Newsroom</div>
+      <h4 class="ed-h-3 mt-2" style="color: #fff; font-size: 36px;">The presses run on policy.</h4>
+    </div>
+    <div class="col-span-3 border-l pl-6" style="border-color: rgba(251,250,247,0.25);">
+      <div class="ed-kicker-ink" style="color: rgba(251,250,247,0.6);">Compliance</div>
+      <p class="ed-italic mt-2" style="color: rgba(251,250,247,0.85);">
+        HIPAA-aligned, BAA-ready, audit-logged. Every render under <code class="font-mono text-[12px]">/admin/*</code>
+        writes a row.
+      </p>
+    </div>
+    <div class="col-span-3 border-l pl-6" style="border-color: rgba(251,250,247,0.25);">
+      <div class="ed-kicker-ink" style="color: rgba(251,250,247,0.6);">Storage</div>
+      <p class="ed-italic mt-2" style="color: rgba(251,250,247,0.85);">
+        Audio at rest in MinIO with 30-day orphan sweeps. SOAP signed text becomes immutable.
+      </p>
+    </div>
+    <div class="col-span-3 border-l pl-6" style="border-color: rgba(251,250,247,0.25);">
+      <div class="ed-kicker-ink" style="color: rgba(251,250,247,0.6);">Auth</div>
+      <p class="ed-italic mt-2" style="color: rgba(251,250,247,0.85);">
+        Single concurrent session per doctor. Forced sign-out flushes all devices. <em>No exceptions.</em>
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ==============================================================
+     EDITORIAL FOOTER / COLOPHON
+     ============================================================== -->
+<footer style="background: var(--paper-2);" class="border-t-4" style="border-color: var(--ink);">
+  <div class="max-w-[1380px] mx-auto px-8 pt-12 pb-10 grid grid-cols-12 gap-8">
+    <div class="col-span-4">
+      <div class="ed-h-2" style="font-size: 56px; font-weight: 900; letter-spacing: -0.03em;">QuillMD</div>
+      <div class="ed-italic mt-2" style="color: var(--ink-3);">
+        The Daily Note &middot; "All the SOAP that's fit to print."
+      </div>
+    </div>
+    <div class="col-span-2">
+      <div class="ed-kicker-ink mb-3">Sections</div>
+      <ul class="space-y-1 ed-body-sm">
+        <li><a href="#" class="ed-link">Today</a></li>
+        <li><a href="#" class="ed-link">Visits</a></li>
+        <li><a href="#" class="ed-link">Patients</a></li>
+        <li><a href="#" class="ed-link">Drafts</a></li>
+        <li><a href="#" class="ed-link">Archive</a></li>
+      </ul>
+    </div>
+    <div class="col-span-2">
+      <div class="ed-kicker-ink mb-3">Filing</div>
+      <ul class="space-y-1 ed-body-sm">
+        <li><a href="#" class="ed-link">Begin Recording</a></li>
+        <li><a href="#" class="ed-link">Upload Audio</a></li>
+        <li><a href="#" class="ed-link">Type the Note</a></li>
+        <li><a href="#" class="ed-link">Re-run a Visit</a></li>
+      </ul>
+    </div>
+    <div class="col-span-2">
+      <div class="ed-kicker-ink mb-3">Operations</div>
+      <ul class="space-y-1 ed-body-sm">
+        <li><a href="#" class="ed-link">System Health</a></li>
+        <li><a href="#" class="ed-link">Audit Log</a></li>
+        <li><a href="#" class="ed-link">Threat Detector</a></li>
+        <li><a href="#" class="ed-link">HIPAA Findings</a></li>
+      </ul>
+    </div>
+    <div class="col-span-2">
+      <div class="ed-kicker-ink mb-3">Colophon</div>
+      <p class="ed-body-sm" style="font-size: 13px; color: var(--ink-3);">
+        Set in <em>Source Serif 4</em>, with kicker labels in <em>JetBrains Mono</em>.
+        Body type at 17 pt over 27.4 pt of leading. The masthead red is <code class="font-mono">#C8102E</code>.
+      </p>
+    </div>
+  </div>
+  <div class="border-t" style="border-color: var(--rule-soft);">
+    <div class="max-w-[1380px] mx-auto px-8 py-4 flex items-center justify-between ed-pagenum" style="color: var(--ink-3);">
+      <span>&copy; 2026 QuillMD &middot; Edited in good faith</span>
+      <span>Vol. 1 &middot; No. 47 &middot; Tue. April 29, 2026 &middot; <em style="color: var(--red);">Late Edition</em></span>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

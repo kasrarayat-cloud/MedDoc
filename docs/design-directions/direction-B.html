@@ -1,0 +1,1356 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Direction B — Warm / Human (Notion-meets-medical)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,300;8..60,400;8..60,500;8..60,600&display=swap" rel="stylesheet" />
+<style>
+  /* =========================================================
+     Direction B — Warm / Human (Notion-meets-medical)
+     Foundation: App-redesign-v1 tokens with a warmer fg, more
+     breathing room, generous radii, soft gradients, Source
+     Serif 4 prominent. The dark/violet canvas remains.
+     ========================================================= */
+  :root {
+    --bg:        #07060C;
+    --bg-1:      #0C0A16;
+    --bg-2:      #14111F;
+    --bg-3:      #1C1828;
+    --bg-4:      #221C30;
+
+    --line-soft: #1B1726;
+    --line:      #2A2535;
+    --line-strong: #3F3850;
+
+    /* B nudges fg slightly warmer (a hint of cream) */
+    --fg:        #F7F1E8;
+    --fg-2:      #C4BBC9;
+    --fg-3:      #8C8499;
+    --fg-4:      #564F62;
+
+    --accent:        #8B5CFF;
+    --accent-bright: #B391FF;
+    --accent-deep:   #6B3FD9;
+    --accent-ink:    #2A1560;
+    --accent-a:      #D1B5FF;
+    --accent-c:      #75BBFF;
+
+    --mint:  #7FE8C0;
+    --amber: #FFCB58;
+    --coral: #FF8FA1;
+
+    --sans:  'Inter Tight', system-ui, sans-serif;
+    --serif: 'Source Serif 4', Georgia, serif;
+    --mono:  'JetBrains Mono', ui-monospace, monospace;
+
+    /* B-specific: generous radii */
+    --r-sm: 10px;
+    --r-md: 16px;
+    --r-lg: 22px;
+    --r-xl: 28px;
+
+    --ease-back: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --ease-soft: cubic-bezier(0.65, 0, 0.35, 1);
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background:
+      radial-gradient(900px 540px at 78% -120px, rgba(179,145,255,0.10), transparent 60%),
+      radial-gradient(800px 500px at -120px 60%, rgba(255,203,88,0.05), transparent 60%),
+      var(--bg);
+    color: var(--fg);
+    font-family: var(--sans);
+    font-size: 14.5px;
+    line-height: 1.55;
+    letter-spacing: -0.005em;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Intro strip */
+  .intro {
+    border-bottom: 1px solid var(--line-soft);
+    padding: 26px 36px 24px;
+    background: rgba(12,10,22,.6);
+    backdrop-filter: blur(10px);
+  }
+  .intro h1 {
+    margin: 0 0 8px;
+    font-family: var(--serif);
+    font-size: 28px;
+    font-weight: 400;
+    letter-spacing: -0.02em;
+    color: var(--fg);
+  }
+  .intro h1 em { color: var(--accent-bright); font-style: italic; font-weight: 400; }
+  .intro h1 .badge {
+    display: inline-block;
+    padding: 3px 10px;
+    margin-left: 12px;
+    background: rgba(139,92,255,0.10);
+    border: 1px solid rgba(139,92,255,0.28);
+    border-radius: 999px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--accent-bright);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    vertical-align: middle;
+  }
+  .intro p {
+    margin: 0;
+    font-family: var(--serif);
+    font-size: 15px;
+    color: var(--fg-2);
+    max-width: 1100px;
+    line-height: 1.65;
+    font-weight: 400;
+  }
+  .intro p .em { color: var(--fg); }
+  .intro .orb-note {
+    margin-top: 12px;
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--fg-3);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    background: rgba(127,232,192,0.06);
+    border: 1px solid rgba(127,232,192,0.2);
+    color: var(--mint);
+    padding: 4px 10px;
+    border-radius: 999px;
+  }
+
+  /* Two-pane layout */
+  .stage {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    min-height: 100vh;
+  }
+  .pane {
+    border-right: 1px solid var(--line-soft);
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .pane:last-child { border-right: none; }
+
+  .pane-label {
+    padding: 12px 22px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--fg-3);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--line-soft);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .pane-label .crumb { color: var(--fg-4); }
+  .pane-label .crumb b { color: var(--fg-2); font-weight: 500; }
+
+  /* Top bar — softer, more white-space */
+  .topbar {
+    display: flex;
+    align-items: center;
+    height: 56px;
+    padding: 0 22px;
+    border-bottom: 1px solid var(--line-soft);
+    gap: 14px;
+    flex-shrink: 0;
+    background: rgba(12,10,22,.4);
+  }
+  .logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 17px;
+    color: var(--fg);
+    letter-spacing: -0.015em;
+  }
+  .logo .mark {
+    width: 22px; height: 22px;
+    border-radius: 8px;
+    background: linear-gradient(140deg, var(--accent-bright), var(--accent-deep) 70%);
+    box-shadow:
+      0 0 0 1px rgba(139,92,255,.35),
+      0 4px 14px rgba(139,92,255,.25),
+      inset 0 1px 0 rgba(255,255,255,.25);
+    position: relative;
+  }
+  .logo .mark::after {
+    content: '';
+    position: absolute; inset: 0;
+    border-radius: 8px;
+    background: radial-gradient(circle at 32% 28%, rgba(255,255,255,.4), transparent 55%);
+  }
+  .topbar nav { display: flex; gap: 4px; margin-left: 22px; }
+  .topbar nav a {
+    font-size: 13.5px;
+    color: var(--fg-3);
+    text-decoration: none;
+    padding: 8px 14px;
+    border-radius: 999px;
+    transition: all .15s var(--ease-soft);
+  }
+  .topbar nav a.active {
+    color: var(--fg);
+    background: rgba(255,255,255,0.04);
+  }
+  .topbar nav a:hover { color: var(--fg); }
+  .topbar .spacer { flex: 1; }
+  .topbar .search {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 280px;
+    height: 36px;
+    padding: 0 14px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--line-soft);
+    color: var(--fg-3);
+    font-size: 13px;
+    font-family: var(--sans);
+  }
+  .topbar .search .kbd { margin-left: auto; }
+  .kbd {
+    display: inline-flex;
+    align-items: center;
+    height: 20px;
+    padding: 0 7px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--fg-3);
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--line-soft);
+    border-radius: 6px;
+  }
+
+  .iconrail {
+    width: 64px;
+    border-right: 1px solid var(--line-soft);
+    display: flex; flex-direction: column; align-items: center;
+    padding: 14px 0;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .iconrail .item {
+    width: 38px; height: 38px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--fg-3);
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: all .15s var(--ease-back);
+  }
+  .iconrail .item.active {
+    color: var(--accent-bright);
+    background: linear-gradient(180deg, rgba(179,145,255,.16), rgba(139,92,255,.06));
+    box-shadow: inset 0 0 0 1px rgba(179,145,255,.25), 0 6px 18px rgba(139,92,255,.22);
+  }
+  .iconrail .item:hover { color: var(--fg); }
+  .iconrail .item .dot {
+    position: absolute;
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--mint);
+    transform: translate(11px, -10px);
+    box-shadow: 0 0 0 3px rgba(127,232,192,.18);
+  }
+
+  .body-row {
+    display: flex; flex: 1; min-height: 0;
+  }
+  .main {
+    flex: 1; min-width: 0; overflow: hidden;
+  }
+
+  /* Soft animated dot — replaces orb (B's commitment) */
+  @keyframes ambient {
+    0%, 100% { transform: scale(1); opacity: .85; }
+    50%      { transform: scale(1.12); opacity: 1; }
+  }
+  .ambient-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--accent-bright);
+    box-shadow: 0 0 0 4px rgba(179,145,255,.18), 0 0 24px rgba(179,145,255,.45);
+    animation: ambient 3.5s var(--ease-soft) infinite;
+    display: inline-block;
+  }
+
+  /* ========= Page header — serif headline, generous spacing ========= */
+  .pageheader {
+    padding: 36px 36px 24px;
+    position: relative;
+  }
+  .pageheader .eyebrow {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--fg-3);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .pageheader h2 {
+    margin: 0;
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: 36px;
+    letter-spacing: -0.022em;
+    color: var(--fg);
+    line-height: 1.15;
+  }
+  .pageheader h2 em {
+    font-style: italic;
+    color: var(--accent-bright);
+    font-weight: 400;
+  }
+  .pageheader .sub {
+    margin-top: 12px;
+    font-size: 14px;
+    color: var(--fg-2);
+    line-height: 1.55;
+    font-family: var(--serif);
+    font-weight: 400;
+    max-width: 560px;
+  }
+  .pageheader .sub b { color: var(--fg); font-weight: 500; }
+  .pageheader .right {
+    position: absolute;
+    top: 36px;
+    right: 36px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+
+  /* ========= Buttons — soft, gradient kept on primary ========= */
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 18px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: rgba(255,255,255,0.025);
+    color: var(--fg);
+    font-size: 13.5px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: var(--sans);
+    letter-spacing: -0.005em;
+    transition: all .18s var(--ease-back);
+  }
+  .btn:hover {
+    background: rgba(255,255,255,0.045);
+    border-color: var(--line-strong);
+    transform: translateY(-1px);
+  }
+  .btn-primary {
+    background: linear-gradient(180deg, #B391FF 0%, #7B4BF0 50%, #5A2FCC 100%);
+    border-color: rgba(179,145,255,.45);
+    color: white;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.3),
+      inset 0 -1px 0 rgba(0,0,0,.25),
+      0 8px 24px rgba(139,92,255,.32);
+  }
+  .btn-primary:hover { filter: brightness(1.08); }
+  .btn-soft {
+    background: rgba(179,145,255,0.10);
+    border-color: rgba(179,145,255,0.25);
+    color: var(--accent-bright);
+  }
+  .btn-soft:hover { background: rgba(179,145,255,0.16); }
+
+  /* ========= Stat cards — rounded, two columns max info, serif numbers ========= */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    padding: 0 36px 28px;
+  }
+  .stat {
+    padding: 22px 22px 20px;
+    border-radius: var(--r-md);
+    border: 1px solid var(--line-soft);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.005));
+    backdrop-filter: blur(10px);
+    transition: all .2s var(--ease-back);
+  }
+  .stat:hover {
+    border-color: rgba(179,145,255,.3);
+    transform: translateY(-2px);
+    box-shadow: 0 14px 30px rgba(0,0,0,.3), 0 0 0 1px rgba(179,145,255,.12);
+  }
+  .stat .label {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--fg-3);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+  }
+  .stat .value-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .stat .value {
+    font-family: var(--serif);
+    font-size: 44px;
+    font-weight: 400;
+    color: var(--fg);
+    letter-spacing: -0.03em;
+    line-height: 1;
+  }
+  .stat .unit {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--fg-3);
+  }
+  .stat .delta {
+    margin-top: 12px;
+    font-size: 12px;
+    color: var(--mint);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .stat .delta.amber { color: var(--amber); }
+  .stat .delta.muted { color: var(--fg-3); }
+
+  /* Section labels — mixed mono + serif */
+  .sectlabel {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-family: var(--serif);
+    font-size: 14px;
+    color: var(--fg-2);
+    font-weight: 500;
+    letter-spacing: -0.005em;
+  }
+  .sectlabel::before {
+    content: '';
+    width: 4px; height: 4px;
+    border-radius: 50%;
+    background: var(--accent-bright);
+    box-shadow: 0 0 0 3px rgba(179,145,255,.2);
+  }
+  .sectlabel .count {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--fg-4);
+    margin-left: 4px;
+  }
+
+  /* Tabs — pill-styled */
+  .tabs {
+    padding: 0 36px;
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .tab {
+    padding: 12px 18px;
+    font-size: 13.5px;
+    color: var(--fg-3);
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: -1px;
+    transition: color .15s var(--ease-soft);
+  }
+  .tab:hover { color: var(--fg-2); }
+  .tab.active {
+    color: var(--fg);
+    border-bottom-color: var(--accent-bright);
+  }
+  .tab .count {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--fg-4);
+    background: rgba(255,255,255,0.04);
+    padding: 2px 7px;
+    border-radius: 999px;
+  }
+  .tab.active .count { color: var(--accent-bright); background: rgba(179,145,255,.12); }
+
+  /* Patient cards — bigger radius, more breathing room */
+  .patient-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+    padding: 28px 36px 36px;
+  }
+  .patient-card {
+    padding: 22px 22px 18px;
+    border-radius: var(--r-md);
+    border: 1px solid var(--line-soft);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.005));
+    backdrop-filter: blur(10px);
+    cursor: pointer;
+    transition: all .2s var(--ease-back);
+  }
+  .patient-card:hover {
+    border-color: rgba(179,145,255,.3);
+    transform: translateY(-3px);
+    box-shadow: 0 16px 36px rgba(0,0,0,.36), 0 0 0 1px rgba(179,145,255,.12);
+  }
+  .patient-card .row {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+  }
+  .av {
+    flex-shrink: 0;
+    width: 44px; height: 44px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, rgba(179,145,255,.25), rgba(139,92,255,.1));
+    border: 1px solid rgba(179,145,255,.2);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--serif);
+    font-size: 16px;
+    color: var(--fg);
+    font-weight: 500;
+  }
+  .av.sm { width: 28px; height: 28px; border-radius: 9px; font-size: 11px; }
+  .patient-card .name {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 17px;
+    color: var(--fg);
+    letter-spacing: -0.012em;
+    line-height: 1.2;
+  }
+  .patient-card .meta {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--fg-3);
+    margin-top: 4px;
+    letter-spacing: 0.02em;
+  }
+  .patient-card .footer {
+    margin-top: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .patient-card .last {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--fg-4);
+  }
+
+  /* Status pills — keep gradient (B's commitment) */
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 11px;
+    border-radius: 999px;
+    font-family: var(--sans);
+    font-size: 11.5px;
+    font-weight: 500;
+    letter-spacing: 0.005em;
+    border: 1px solid transparent;
+    line-height: 1;
+  }
+  .pill.mint {
+    color: #052E1E;
+    background: linear-gradient(180deg, #C1F4DC, #7FE8C0);
+    border-color: rgba(127,232,192,.5);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.3);
+  }
+  .pill.amber {
+    color: #2A1D02;
+    background: linear-gradient(180deg, #FFE2A0, #FFCB58);
+    border-color: rgba(255,203,88,.5);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.3);
+  }
+  .pill.coral {
+    color: #2A0710;
+    background: linear-gradient(180deg, #FFC1CB, #FF8FA1);
+    border-color: rgba(255,143,161,.5);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.3);
+  }
+  .pill.accent {
+    color: #0E0A1D;
+    background: linear-gradient(180deg, #D1B5FF, #B391FF);
+    border-color: rgba(179,145,255,.55);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.3);
+  }
+  .pill.outline {
+    background: transparent;
+    color: var(--fg-2);
+    border-color: var(--line);
+    font-family: var(--mono);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  /* Specialty chip */
+  .spec {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.04em;
+    color: var(--fg-2);
+    border: 1px solid var(--line);
+    background: rgba(255,255,255,0.02);
+  }
+  .spec::before {
+    content: '';
+    width: 6px; height: 6px; border-radius: 50%;
+    background: currentColor;
+  }
+  .spec.cardiology { color: #FF9DAE; }
+  .spec.pain       { color: #FFB182; }
+  .spec.ortho      { color: #95CCFF; }
+  .spec.primary    { color: var(--accent-bright); }
+
+  /* ============================================
+     RIGHT: VISIT DETAIL
+     ============================================ */
+  .vd-header {
+    padding: 32px 36px 22px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .vd-header .eyebrow {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--fg-3);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .vd-header .name {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 32px;
+    color: var(--fg);
+    letter-spacing: -0.02em;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    line-height: 1.15;
+  }
+  .vd-header .meta {
+    margin-top: 14px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--fg-3);
+  }
+  .vd-header .meta b { color: var(--fg-2); font-weight: 500; }
+  .vd-header .actions {
+    margin-top: 18px;
+    display: flex; gap: 10px; flex-wrap: wrap;
+  }
+
+  /* Sub-tabs */
+  .vd-tabs {
+    padding: 0 36px;
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .vd-tabs .tab.active { border-bottom-color: var(--mint); }
+
+  .vd-cols {
+    display: grid;
+    grid-template-columns: 1fr 350px;
+    min-height: 0;
+    flex: 1;
+  }
+  .vd-soap {
+    padding: 28px 36px 40px;
+    overflow: auto;
+    border-right: 1px solid var(--line-soft);
+  }
+  .vd-side { overflow: auto; padding: 0; }
+
+  .soap-section { margin-bottom: 32px; }
+  .soap-section h3 {
+    margin: 0 0 14px;
+    font-family: var(--serif);
+    font-size: 22px;
+    font-weight: 500;
+    letter-spacing: -0.018em;
+    color: var(--fg);
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+  .soap-section h3 .num {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent-bright);
+    background: rgba(179,145,255,.10);
+    padding: 3px 8px;
+    border-radius: 999px;
+    letter-spacing: 0.08em;
+  }
+  .soap-section .body {
+    font-family: var(--serif);
+    font-size: 15.5px;
+    color: var(--fg);
+    line-height: 1.7;
+    font-weight: 400;
+  }
+  .soap-section .body p { margin: 0 0 12px; }
+  .soap-section .body b {
+    color: var(--fg);
+    font-family: var(--sans);
+    font-size: 12.5px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--fg-3);
+    margin-right: 6px;
+  }
+  .soap-section .body em {
+    background: linear-gradient(180deg, transparent 60%, rgba(179,145,255,.18) 60%);
+    padding: 0 2px;
+    font-style: italic;
+    color: var(--fg);
+  }
+
+  /* Side panel blocks */
+  .side-block {
+    padding: 20px 22px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .side-block .h {
+    font-family: var(--serif);
+    font-size: 14.5px;
+    font-weight: 500;
+    color: var(--fg);
+    margin-bottom: 12px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .side-block .h .meta {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--fg-3);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  /* ICD candidate */
+  .icd {
+    border-radius: var(--r-md);
+    padding: 14px 14px 14px;
+    background: rgba(179,145,255,.06);
+    border: 1px solid rgba(179,145,255,.18);
+    margin-bottom: 12px;
+  }
+  .icd .top {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; margin-bottom: 6px;
+  }
+  .icd .code {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--accent-bright);
+    font-weight: 600;
+  }
+  .icd .desc {
+    font-family: var(--serif);
+    font-size: 14px;
+    color: var(--fg);
+    line-height: 1.4;
+  }
+  .icd .ev {
+    font-family: var(--serif);
+    margin-top: 8px;
+    font-size: 13px;
+    color: var(--fg-3);
+    font-style: italic;
+    border-left: 2px solid rgba(179,145,255,.32);
+    padding-left: 10px;
+  }
+  .icd .conf-row {
+    display: flex; align-items: center; gap: 10px;
+    margin-top: 12px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--mint);
+  }
+  .icd .conf-bar {
+    flex: 1;
+    height: 4px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .icd .conf-bar > i {
+    display: block;
+    height: 100%;
+    background: linear-gradient(90deg, var(--mint), #C1F4DC);
+    border-radius: 2px;
+  }
+
+  /* Transcript turns */
+  .transcript-list { padding: 0 4px; }
+  .turn {
+    padding: 12px 18px;
+    border-radius: var(--r-md);
+    margin-bottom: 8px;
+    background: rgba(255,255,255,0.015);
+    border: 1px solid var(--line-soft);
+  }
+  .turn .who-row {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 6px;
+  }
+  .turn .role {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent-bright);
+    font-weight: 500;
+  }
+  .turn.pt .role { color: var(--accent-c); }
+  .turn .ts {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--fg-4);
+  }
+  .turn .text {
+    font-family: var(--serif);
+    font-size: 14px;
+    color: var(--fg);
+    line-height: 1.55;
+  }
+  .turn .text em {
+    background: linear-gradient(180deg, transparent 60%, rgba(179,145,255,.22) 60%);
+    padding: 0 2px;
+    font-style: italic;
+  }
+
+  .scroll::-webkit-scrollbar { width: 6px; }
+  .scroll::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+
+  /* Visit list rows on left */
+  .vlist {
+    padding: 12px 36px 28px;
+  }
+  .vlist .group {
+    margin-bottom: 22px;
+  }
+  .vlist .group-head {
+    font-family: var(--serif);
+    font-size: 14px;
+    color: var(--fg-2);
+    font-weight: 500;
+    margin-bottom: 12px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .vlist .group-head .line {
+    flex: 1;
+    height: 1px;
+    background: var(--line-soft);
+  }
+  .vlist .group-head .count {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--fg-4);
+  }
+  .vrow {
+    display: grid;
+    grid-template-columns: 70px 1fr 110px 70px 110px;
+    gap: 16px;
+    align-items: center;
+    padding: 12px 16px;
+    border-radius: var(--r-md);
+    border: 1px solid transparent;
+    background: rgba(255,255,255,0.015);
+    margin-bottom: 6px;
+    cursor: pointer;
+    transition: all .15s var(--ease-soft);
+  }
+  .vrow:hover {
+    background: rgba(255,255,255,0.035);
+    border-color: rgba(179,145,255,.18);
+  }
+  .vrow .time {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--fg-3);
+  }
+  .vrow .who {
+    display: flex; align-items: center; gap: 10px;
+    min-width: 0;
+  }
+  .vrow .who .nm {
+    font-family: var(--serif);
+    font-size: 15px;
+    color: var(--fg);
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .vrow .dur {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--fg-3);
+  }
+</style>
+</head>
+<body>
+
+<header class="intro">
+  <h1>Direction B — Warm / <em>Human</em> <span class="badge">Notion-meets-medical</span></h1>
+  <p>
+    B treats the app as <span class="em">a thoughtful instrument</span>, not a hospital terminal. We commit to Source Serif 4 in headlines and body prose, generous 16&ndash;28px radii, soft warm-cream foreground, gradient status pills that feel alive, and a single quiet ambient dot in place of the orb. We explicitly reject mono-everything, sharp 4&ndash;6px corners, dense tabular dashboards, and the kind of "audited" coldness that makes good doctors close the laptop. The dark/violet identity stays — we just let it breathe.
+  </p>
+  <span class="orb-note">Orbs / shader / specular: SIMPLIFY. Replace orb with a 8px ambient pulse-dot; keep specular sweep on the primary CTA only; keep the page-radial background.</span>
+</header>
+
+<div class="stage">
+
+  <!-- =============================================
+       LEFT: DASHBOARD
+       ============================================= -->
+  <section class="pane">
+    <div class="pane-label">
+      <span>VIEW · DASHBOARD</span>
+      <span class="crumb">app.quillmd.com / <b>dashboard</b></span>
+    </div>
+
+    <div class="topbar">
+      <span class="logo"><span class="mark"></span>QuillMD</span>
+      <nav>
+        <a href="#" class="active">Today</a>
+        <a href="#">Visits</a>
+        <a href="#">Patients</a>
+        <a href="#">Settings</a>
+      </nav>
+      <span class="spacer"></span>
+      <div class="search">
+        <span style="color:var(--fg-4)">⌕</span>
+        <span>Search patients, visits…</span>
+        <span class="kbd">⌘K</span>
+      </div>
+      <span class="ambient-dot" title="Live"></span>
+    </div>
+
+    <div class="body-row">
+      <aside class="iconrail">
+        <div class="item active">◧</div>
+        <div class="item" style="position:relative">▤<span class="dot"></span></div>
+        <div class="item">◔</div>
+        <div class="item">⊟</div>
+        <div class="item" style="margin-top:auto">⚙</div>
+      </aside>
+
+      <div class="main scroll" style="overflow:auto;">
+
+        <div class="pageheader">
+          <div class="eyebrow">
+            <span>§ Home / Tuesday, April 29</span>
+          </div>
+          <h2>Good afternoon, <em>Dr. Kerr</em>.</h2>
+          <p class="sub">
+            <b>184 patients</b> in your panel ·
+            <b>3 visits</b> waiting on your review this morning.
+            Take your time — none are urgent.
+          </p>
+          <div class="right">
+            <button class="btn">Filter</button>
+            <button class="btn btn-primary">＋ New visit</button>
+          </div>
+        </div>
+
+        <div class="stats">
+          <div class="stat">
+            <div class="label">§ Visits / Apr</div>
+            <div class="value-row">
+              <span class="value">12</span>
+              <span class="unit">this week</span>
+            </div>
+            <div class="delta">↗ +4 vs last week</div>
+          </div>
+          <div class="stat">
+            <div class="label">§ Avg drafted in</div>
+            <div class="value-row">
+              <span class="value">7</span>
+              <span class="unit">min / visit</span>
+            </div>
+            <div class="delta muted">— stable</div>
+          </div>
+          <div class="stat">
+            <div class="label">§ Pending review</div>
+            <div class="value-row">
+              <span class="value">3</span>
+              <span class="unit">awaiting you</span>
+            </div>
+            <div class="delta amber">↗ +2 since 09:00</div>
+          </div>
+          <div class="stat">
+            <div class="label">§ Signed &lt; 24h</div>
+            <div class="value-row">
+              <span class="value">94</span>
+              <span class="unit">%</span>
+            </div>
+            <div class="delta">↗ +1.2pp</div>
+          </div>
+        </div>
+
+        <div class="tabs">
+          <div class="tab active">Patients <span class="count">184</span></div>
+          <div class="tab">All visits <span class="count">312</span></div>
+          <div class="tab">Awaiting review <span class="count" style="color:var(--amber); background:rgba(255,203,88,.12)">3</span></div>
+        </div>
+
+        <div class="patient-grid">
+          <div class="patient-card">
+            <div class="row">
+              <div class="av">JS</div>
+              <div style="flex:1; min-width:0;">
+                <div class="name">John Smith</div>
+                <div class="meta">b. 1979 · 4 visits</div>
+              </div>
+              <span class="pill mint">Ready</span>
+            </div>
+            <div class="footer">
+              <span class="spec cardiology">Cardiology</span>
+              <span class="last">Last: 2h ago</span>
+            </div>
+          </div>
+
+          <div class="patient-card">
+            <div class="row">
+              <div class="av">ML</div>
+              <div style="flex:1; min-width:0;">
+                <div class="name">Maria Lopez</div>
+                <div class="meta">b. 1962 · 11 visits</div>
+              </div>
+              <span class="pill accent">Drafting</span>
+            </div>
+            <div class="footer">
+              <span class="spec pain">Pain</span>
+              <span class="last">Last: 3h ago</span>
+            </div>
+          </div>
+
+          <div class="patient-card">
+            <div class="row">
+              <div class="av">RC</div>
+              <div style="flex:1; min-width:0;">
+                <div class="name">Robert Chen</div>
+                <div class="meta">b. 1988 · 2 visits</div>
+              </div>
+              <span class="pill mint">Signed</span>
+            </div>
+            <div class="footer">
+              <span class="spec ortho">Ortho</span>
+              <span class="last">Last: yesterday</span>
+            </div>
+          </div>
+
+          <div class="patient-card">
+            <div class="row">
+              <div class="av">EN</div>
+              <div style="flex:1; min-width:0;">
+                <div class="name">Eleanor Nakamura</div>
+                <div class="meta">b. 1948 · 27 visits</div>
+              </div>
+              <span class="pill amber">Needs review</span>
+            </div>
+            <div class="footer">
+              <span class="spec primary">Primary</span>
+              <span class="last">Last: 4h ago</span>
+            </div>
+          </div>
+
+          <div class="patient-card">
+            <div class="row">
+              <div class="av">PA</div>
+              <div style="flex:1; min-width:0;">
+                <div class="name">Priya Anand</div>
+                <div class="meta">b. 1991 · 6 visits</div>
+              </div>
+              <span class="pill mint">Signed</span>
+            </div>
+            <div class="footer">
+              <span class="spec primary">Primary</span>
+              <span class="last">Last: 5h ago</span>
+            </div>
+          </div>
+
+          <div class="patient-card">
+            <div class="row">
+              <div class="av">DK</div>
+              <div style="flex:1; min-width:0;">
+                <div class="name">Daniel Kim</div>
+                <div class="meta">b. 1973 · 9 visits</div>
+              </div>
+              <span class="pill mint">Signed</span>
+            </div>
+            <div class="footer">
+              <span class="spec primary">Primary</span>
+              <span class="last">Last: 5h ago</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="vlist">
+          <div class="group-head">
+            <span class="sectlabel">Today</span>
+            <span class="line"></span>
+            <span class="count">5 visits</span>
+          </div>
+          <div class="vrow">
+            <span class="time">14:32</span>
+            <span class="who"><span class="av sm">JS</span><span class="nm">John Smith</span></span>
+            <span class="spec cardiology">Cardiology</span>
+            <span class="dur">11:42</span>
+            <span class="pill mint">Ready</span>
+          </div>
+          <div class="vrow">
+            <span class="time">11:08</span>
+            <span class="who"><span class="av sm">ML</span><span class="nm">Maria Lopez</span></span>
+            <span class="spec pain">Pain</span>
+            <span class="dur">14:21</span>
+            <span class="pill accent">Drafting</span>
+          </div>
+          <div class="vrow">
+            <span class="time">10:14</span>
+            <span class="who"><span class="av sm">EN</span><span class="nm">Eleanor Nakamura</span></span>
+            <span class="spec primary">Primary</span>
+            <span class="dur">08:55</span>
+            <span class="pill amber">Needs review</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- =============================================
+       RIGHT: VISIT DETAIL
+       ============================================= -->
+  <section class="pane">
+    <div class="pane-label">
+      <span>VIEW · VISIT DETAIL — READY</span>
+      <span class="crumb">/ visits / <b>v_1f4a</b></span>
+    </div>
+
+    <div class="topbar">
+      <span class="logo"><span class="mark"></span>QuillMD</span>
+      <nav>
+        <a href="#">Today</a>
+        <a href="#" class="active">Visits</a>
+        <a href="#">Patients</a>
+        <a href="#">Settings</a>
+      </nav>
+      <span class="spacer"></span>
+      <div class="search">
+        <span style="color:var(--fg-4)">⌕</span>
+        <span>Search…</span>
+        <span class="kbd">⌘K</span>
+      </div>
+      <span class="ambient-dot"></span>
+    </div>
+
+    <div class="body-row">
+      <aside class="iconrail">
+        <div class="item">◧</div>
+        <div class="item active">▤</div>
+        <div class="item">◔</div>
+        <div class="item">⊟</div>
+        <div class="item" style="margin-top:auto">⚙</div>
+      </aside>
+
+      <div class="main scroll" style="overflow:auto; display:flex; flex-direction:column;">
+
+        <div class="vd-header">
+          <div class="eyebrow">
+            <span>§ Visit / Cardiology · 47M · DOB 1979-03-04</span>
+            <span style="color:var(--mint); display:inline-flex; align-items:center; gap:6px;">
+              <span class="ambient-dot" style="width:6px; height:6px; background: var(--mint); box-shadow: 0 0 0 3px rgba(127,232,192,.18);"></span>
+              Drafted in 7:12 · ready for your review
+            </span>
+          </div>
+          <div class="name">
+            John Smith
+            <span class="pill mint">Ready</span>
+          </div>
+          <div class="meta">
+            <span><b>Captured</b> Tuesday, 14:32</span>
+            <span><b>Audio</b> 11:42</span>
+            <span><b>Mode</b> audio_upload</span>
+            <span><b>Visit ID</b> v_1f4a</span>
+          </div>
+          <div class="actions">
+            <button class="btn">Copy SOAP <span class="kbd">⌘⇧C</span></button>
+            <button class="btn">Export</button>
+            <button class="btn btn-soft">Re-process</button>
+            <button class="btn btn-primary">Sign &amp; send <span class="kbd">⌘↵</span></button>
+          </div>
+        </div>
+
+        <div class="vd-tabs">
+          <div class="tab active">SOAP</div>
+          <div class="tab">Transcript <span class="count">142</span></div>
+          <div class="tab">Codes <span class="count">4</span></div>
+          <div class="tab">Rx <span class="count" style="color:var(--mint); background: rgba(127,232,192,.12)">clear</span></div>
+          <div class="tab">Extras</div>
+        </div>
+
+        <div class="vd-cols">
+
+          <div class="vd-soap scroll">
+
+            <div class="soap-section">
+              <h3><span class="num">01</span> Subjective</h3>
+              <div class="body">
+                <p><b>CC</b>47M presenting with retrosternal chest pain, onset 2 days ago.</p>
+                <p><b>HPI</b>Patient describes <em>pressure-like, intermittent</em> chest pain radiating to the left arm, worse with exertion and partially relieved by rest. He denies shortness of breath, diaphoresis, or nausea. There is no prior cardiac history. Family history is positive — his father had a myocardial infarction at age 58. He is currently on no cardiac medications.</p>
+                <p><b>ROS</b>CV: see HPI. Resp: denies cough or wheeze. GI: denies nausea or vomiting. Constitutional: denies fever or weight loss.</p>
+              </div>
+            </div>
+
+            <div class="soap-section">
+              <h3><span class="num">02</span> Objective</h3>
+              <div class="body">
+                <p><b>Vitals</b>BP 138/86 · HR 78 · RR 14 · SpO₂ 98% RA · T 37.0 °C</p>
+                <p><b>Exam</b>Alert, no acute distress. CV — regular rate and rhythm, no murmurs, rubs, or gallops. Lungs clear to auscultation bilaterally. Abdomen soft, non-tender, non-distended. Neuro — alert and oriented ×3, no focal deficits.</p>
+              </div>
+            </div>
+
+            <div class="soap-section">
+              <h3><span class="num">03</span> Assessment</h3>
+              <div class="body">
+                <p><b>1.</b><em>Atypical chest pain, low-intermediate risk.</em> HEART score 3 (age 1, history 1, EKG 0, troponin 1, risk factors 0). Differential includes stable angina, GERD, and musculoskeletal pain.</p>
+                <p><b>2.</b><em>Hypertension, uncontrolled at this visit.</em> BP 138/86 — will trend over the next two visits.</p>
+              </div>
+            </div>
+
+            <div class="soap-section">
+              <h3><span class="num">04</span> Plan</h3>
+              <div class="body">
+                <p><b>1.</b>EKG today (in-clinic, attached to chart).</p>
+                <p><b>2.</b>Outpatient stress echo within one week.</p>
+                <p><b>3.</b>Lipid panel and HbA1c.</p>
+                <p><b>4.</b>Aspirin 81 mg PO daily — discussed risk/benefit.</p>
+                <p><b>5.</b>Return precautions reviewed: crushing chest pain, diaphoresis, syncope, or pain unrelieved by rest → ED.</p>
+              </div>
+            </div>
+
+          </div>
+
+          <aside class="vd-side scroll">
+
+            <div class="side-block">
+              <div class="h">
+                Suggested codes
+                <span class="meta">L7a · ICD-10</span>
+              </div>
+
+              <div class="icd">
+                <div class="top">
+                  <span class="code">R07.9</span>
+                  <span class="pill outline">unspecified</span>
+                </div>
+                <div class="desc">Chest pain, unspecified</div>
+                <div class="ev">"retrosternal chest pain, onset 2 days ago, radiating to left arm"</div>
+                <div class="conf-row">
+                  <span class="conf-bar"><i style="width:78%"></i></span>
+                  <span>78%</span>
+                </div>
+              </div>
+
+              <div class="icd">
+                <div class="top">
+                  <span class="code">I10</span>
+                  <span class="pill outline">primary</span>
+                </div>
+                <div class="desc">Essential (primary) hypertension</div>
+                <div class="ev">"BP 138/86 ... HTN, uncontrolled at this visit"</div>
+                <div class="conf-row">
+                  <span class="conf-bar"><i style="width:91%"></i></span>
+                  <span>91%</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="side-block">
+              <div class="h">
+                Transcript
+                <span class="meta">L1 · 142 turns</span>
+              </div>
+              <div class="transcript-list">
+                <div class="turn">
+                  <div class="who-row">
+                    <span class="role">Doctor</span>
+                    <span class="ts">14:32:14</span>
+                  </div>
+                  <div class="text">"Take me back to two days ago — what were you doing when this started?"</div>
+                </div>
+                <div class="turn pt">
+                  <div class="who-row">
+                    <span class="role">Patient</span>
+                    <span class="ts">14:32:21</span>
+                  </div>
+                  <div class="text">"I was carrying groceries up the stairs. Felt this <em>pressure</em>, right here. It went down my left arm."</div>
+                </div>
+                <div class="turn">
+                  <div class="who-row">
+                    <span class="role">Doctor</span>
+                    <span class="ts">14:32:38</span>
+                  </div>
+                  <div class="text">"How long did it last? Did anything make it better?"</div>
+                </div>
+                <div class="turn pt">
+                  <div class="who-row">
+                    <span class="role">Patient</span>
+                    <span class="ts">14:32:46</span>
+                  </div>
+                  <div class="text">"Maybe ten minutes. I sat down and it eased off. But it's come back twice since then."</div>
+                </div>
+              </div>
+            </div>
+
+          </aside>
+
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+</div>
+
+</body>
+</html>

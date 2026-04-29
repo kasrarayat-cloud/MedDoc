@@ -1,0 +1,910 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QuillMD — Atelier · Visit · John Smith</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,300..700;1,8..60,300..700&family=Inter+Tight:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root {
+    --cream:        #FAF7F0;
+    --cream-2:      #F2EDE3;
+    --cream-3:      #EAE3D5;
+    --ink-15:       #E5DED1;
+    --ink-25:       #C9C0AF;
+    --ink-40:       #9C958A;
+    --ink-55:       #6E685E;
+    --ink-70:       #3F3A33;
+    --ink:          #1A1714;
+    --oxblood:      #7B1F2D;
+    --oxblood-deep: #5A1721;
+
+    --serif: "Source Serif 4", "Source Serif Pro", Georgia, serif;
+    --sans:  "Inter Tight", system-ui, -apple-system, sans-serif;
+    --mono:  "JetBrains Mono", ui-monospace, Menlo, monospace;
+  }
+
+  html, body { background: var(--cream); color: var(--ink-70); }
+  body {
+    font-family: var(--serif);
+    font-size: 16px;
+    line-height: 1.6;
+    font-feature-settings: "kern", "liga", "onum";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  ::selection { background: var(--oxblood); color: var(--cream); }
+
+  .atl-display {
+    font-family: var(--serif); font-weight: 600;
+    font-size: clamp(40px, 4.6vw, 52px);
+    line-height: 1.04; letter-spacing: -0.022em;
+    color: var(--ink);
+  }
+  .atl-h1 { font-family: var(--serif); font-weight: 600; font-size: 28px; line-height: 1.1; letter-spacing: -0.018em; color: var(--ink); }
+  .atl-h2 { font-family: var(--serif); font-weight: 600; font-size: 19px; line-height: 1.25; letter-spacing: -0.01em; color: var(--ink); }
+  .atl-byline { font-family: var(--serif); font-style: italic; font-size: 14.5px; color: var(--ink-55); line-height: 1.55; }
+  .atl-smallcaps { font-family: var(--mono); font-size: 10.5px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-55); }
+  .atl-mono { font-family: var(--mono); font-size: 12px; color: var(--ink-55); font-feature-settings: "tnum"; }
+
+  .atl-rule { height: 1px; background: var(--ink-15); border: 0; margin: 0; }
+  .atl-rule-strong { height: 1px; background: var(--ink-25); border: 0; margin: 0; }
+  .atl-rule-vert { width: 1px; align-self: stretch; background: var(--ink-15); }
+
+  a.atl-link { color: inherit; text-decoration: none; transition: color 140ms ease; }
+  a.atl-link:hover { color: var(--oxblood); }
+  a.atl-link-ul {
+    color: inherit; text-decoration: none;
+    background-image: linear-gradient(var(--ink-25), var(--ink-25));
+    background-position: 0 100%; background-size: 100% 1px;
+    background-repeat: no-repeat;
+    transition: background-image 180ms ease, color 140ms ease;
+    padding-bottom: 2px;
+  }
+  a.atl-link-ul:hover { color: var(--oxblood); background-image: linear-gradient(var(--oxblood), var(--oxblood)); }
+
+  .atl-btn {
+    font-family: var(--sans); font-weight: 500;
+    font-size: 13.5px; letter-spacing: 0.005em; line-height: 1;
+    padding: 11px 18px;
+    border: 1px solid var(--ink); background: var(--ink); color: var(--cream);
+    cursor: pointer;
+    transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
+  }
+  .atl-btn:hover { background: var(--oxblood-deep); border-color: var(--oxblood-deep); }
+  .atl-btn-ghost {
+    background: transparent; color: var(--ink); border: 1px solid var(--ink-25);
+  }
+  .atl-btn-ghost:hover { color: var(--oxblood); border-color: var(--ink-40); }
+
+  .atl-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: var(--mono); font-size: 9.5px;
+    letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--ink-70);
+    border: 1px solid var(--ink-25);
+    padding: 3px 8px 2px; line-height: 1;
+    background: transparent;
+  }
+  .atl-pill .dot { width: 4px; height: 4px; border-radius: 50%; background: var(--ink-40); }
+  .atl-pill.is-critical .dot { background: var(--oxblood); }
+
+  .atl-chip {
+    font-family: var(--mono); font-size: 9.5px;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--ink-55); border: 1px solid var(--ink-25);
+    padding: 2px 7px 1px;
+  }
+
+  .atl-topnav { border-bottom: 1px solid var(--ink-15); background: var(--cream); }
+  .atl-wordmark { font-family: var(--serif); font-weight: 600; font-size: 19.5px; letter-spacing: -0.012em; color: var(--ink); line-height: 1; }
+  .atl-wordmark .amp { font-style: italic; color: var(--ink-55); font-weight: 400; }
+  .atl-user-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--oxblood); display: inline-block; }
+
+  /* Tabs — text links separated by vertical rules; active = oxblood underline */
+  .atl-tabs {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    border-bottom: 1px solid var(--ink-15);
+  }
+  .atl-tabs a {
+    font-family: var(--sans);
+    font-size: 14px;
+    color: var(--ink-55);
+    padding: 14px 22px 14px;
+    text-decoration: none;
+    position: relative;
+    transition: color 140ms ease;
+    border-right: 1px solid var(--ink-15);
+  }
+  .atl-tabs a:first-child { padding-left: 0; }
+  .atl-tabs a:last-child { border-right: 0; }
+  .atl-tabs a:hover { color: var(--ink); }
+  .atl-tabs a.is-active {
+    color: var(--ink);
+    box-shadow: inset 0 -2px 0 0 var(--oxblood);
+  }
+  .atl-tabs a .count {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--ink-40);
+    margin-left: 6px;
+    letter-spacing: 0.05em;
+  }
+
+  /* SOAP article — read like a magazine. */
+  .atl-article {
+    font-family: var(--serif);
+    font-size: 17.5px;
+    line-height: 1.72;
+    color: var(--ink-70);
+    max-width: 680px;
+  }
+  .atl-article h3 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: 22px;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+    margin: 36px 0 8px;
+    line-height: 1.2;
+  }
+  .atl-article h3:first-child { margin-top: 0; }
+  .atl-article .label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 10.5px; font-weight: 500;
+    letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--ink-40);
+    margin-bottom: 14px;
+  }
+  .atl-article p { margin-bottom: 1em; }
+  .atl-article p + p { text-indent: 1.2em; }
+  .atl-article ul { padding-left: 1.4em; margin-bottom: 1em; }
+  .atl-article ul li { margin-bottom: 0.4em; list-style-type: '— '; padding-left: 4px; }
+  .atl-article em { font-style: italic; color: var(--ink); }
+  .atl-article strong { font-weight: 600; color: var(--ink); }
+  .atl-article .codeword {
+    font-family: var(--mono);
+    font-size: 13.5px;
+    letter-spacing: 0.02em;
+    color: var(--ink);
+    background: var(--cream-2);
+    padding: 1px 6px;
+    border: 1px solid var(--ink-15);
+  }
+
+  /* Side rail of metadata. */
+  .atl-side h4 {
+    font-family: var(--mono);
+    font-size: 10.5px; font-weight: 500;
+    letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--ink-40);
+    margin-bottom: 8px;
+  }
+  .atl-kv { display: grid; grid-template-columns: 110px 1fr; gap: 8px 12px; padding: 8px 0; border-bottom: 1px solid var(--ink-15); font-size: 14px; }
+  .atl-kv:last-child { border-bottom: 0; }
+  .atl-kv .k { font-family: var(--mono); color: var(--ink-40); font-size: 11.5px; letter-spacing: 0.06em; padding-top: 2px; }
+  .atl-kv .v { font-family: var(--serif); color: var(--ink-70); font-size: 14.5px; line-height: 1.5; }
+  .atl-kv .v strong { color: var(--ink); font-weight: 500; }
+
+  /* AI processing italic crossfade — within the SOAP body. */
+  .atl-thought {
+    position: relative; height: 28px;
+    font-family: var(--serif); font-style: italic;
+    font-size: 16.5px; color: var(--ink-55); line-height: 28px;
+  }
+  .atl-thought span { position: absolute; inset: 0; opacity: 0; transition: opacity 600ms ease; }
+  .atl-thought span.is-on { opacity: 1; }
+
+  /* The "regenerate" panel — flat, hairline, oxblood dot only when active. */
+  .atl-regen {
+    border: 1px solid var(--ink-15);
+    padding: 18px 22px;
+    background: var(--cream);
+    display: flex; align-items: center; gap: 18px;
+  }
+  .atl-regen .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--oxblood);
+    animation: atl-dot-pulse 2.4s ease-in-out infinite;
+    flex: 0 0 auto;
+  }
+  @keyframes atl-dot-pulse {
+    0%, 100% { opacity: 1.0; box-shadow: 0 0 0 0 rgba(123, 31, 45, 0.4); }
+    50%      { opacity: 0.55; box-shadow: 0 0 0 5px rgba(123, 31, 45, 0); }
+  }
+
+  /* Transcript two-column: speaker + line. */
+  .atl-transcript {
+    font-family: var(--serif);
+    font-size: 16px;
+    line-height: 1.65;
+    max-width: 760px;
+  }
+  .atl-transcript .row {
+    display: grid;
+    grid-template-columns: 130px 1fr;
+    gap: 18px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--ink-15);
+  }
+  .atl-transcript .row:last-child { border-bottom: 0; }
+  .atl-transcript .speaker {
+    font-family: var(--mono);
+    font-size: 10.5px; font-weight: 500;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--ink-55);
+    padding-top: 3px;
+  }
+  .atl-transcript .speaker.is-doc { color: var(--ink); }
+  .atl-transcript .speaker .ts {
+    display: block;
+    font-size: 10px;
+    color: var(--ink-40);
+    margin-top: 3px;
+    letter-spacing: 0.04em;
+  }
+  .atl-transcript .line { color: var(--ink-70); }
+  .atl-transcript .line em { font-style: italic; color: var(--ink); }
+  .atl-transcript mark {
+    background: var(--cream-2);
+    color: var(--ink);
+    padding: 0 3px;
+    border-bottom: 1px solid var(--oxblood);
+  }
+
+  /* Faint paper grain. */
+  .atl-paper::before {
+    content: "";
+    position: fixed; inset: 0;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.10  0 0 0 0 0.09  0 0 0 0 0.07  0 0 0 0.045 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+    opacity: 0.45;
+    mix-blend-mode: multiply;
+    z-index: 1;
+  }
+  .atl-z { position: relative; z-index: 2; }
+
+  /* Folio. */
+  .atl-folio {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--ink-40);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+
+  /* Restrained Rx warning — flat, hairline, no gradient.
+     This is the Atelier translation of qm-warn-* family. */
+  .atl-rx {
+    border: 1px solid var(--ink-25);
+    background: var(--cream);
+    margin-top: 24px;
+  }
+  .atl-rx .head {
+    display: flex; align-items: baseline; gap: 14px;
+    padding: 16px 22px 14px;
+    border-bottom: 1px solid var(--ink-15);
+  }
+  .atl-rx .head .sev {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    border: 1px solid var(--ink-25);
+    padding: 3px 8px 2px;
+    color: var(--ink);
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .atl-rx .head .sev .dot {
+    width: 5px; height: 5px; border-radius: 50%;
+    background: var(--oxblood);
+  }
+  /* Atelier rule: ONLY critical gets the oxblood dot. Warning / info don't. */
+  .atl-rx[data-sev="warning"] .head .sev .dot { background: var(--ink-40); }
+  .atl-rx[data-sev="info"] .head .sev .dot { display: none; }
+
+  .atl-rx .headline {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: 18.5px;
+    color: var(--ink);
+    line-height: 1.3;
+    flex: 1 1 auto;
+  }
+  .atl-rx .ts {
+    font-family: var(--mono); font-size: 11px; color: var(--ink-40);
+    letter-spacing: 0.04em;
+  }
+  .atl-rx .body {
+    padding: 18px 22px;
+    font-family: var(--serif);
+    font-size: 15.5px;
+    line-height: 1.65;
+    color: var(--ink-70);
+  }
+  .atl-rx .body strong { color: var(--ink); font-weight: 600; }
+  .atl-rx .field-block {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    border-top: 1px solid var(--ink-15);
+    border-bottom: 1px solid var(--ink-15);
+    margin: 16px 0 6px;
+  }
+  .atl-rx .field-block > div {
+    padding: 14px 18px;
+  }
+  .atl-rx .field-block > div + div {
+    border-left: 1px solid var(--ink-15);
+  }
+  .atl-rx .field-block .lbl {
+    font-family: var(--mono); font-size: 10px;
+    letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--ink-40);
+    margin-bottom: 6px;
+  }
+  .atl-rx .field-block .val {
+    font-family: var(--serif); font-size: 16.5px; color: var(--ink); font-weight: 500;
+    line-height: 1.4;
+  }
+  .atl-rx .field-block .val .annot {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 13.5px;
+    font-weight: 400;
+    color: var(--ink-55);
+    margin-left: 8px;
+  }
+  .atl-rx .actions {
+    border-top: 1px solid var(--ink-15);
+    padding: 14px 22px;
+    display: flex; align-items: center; gap: 14px;
+  }
+  .atl-rx .actions .keep-typing {
+    margin-left: auto;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-40);
+    letter-spacing: 0.04em;
+  }
+</style>
+</head>
+<body class="atl-paper">
+
+<div class="atl-z">
+
+<!-- =========================================== -->
+<!-- TOP NAV                                     -->
+<!-- =========================================== -->
+<header class="atl-topnav sticky top-0 z-30">
+  <div class="max-w-[1200px] mx-auto px-12 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-9">
+      <a href="#" class="atl-wordmark atl-link">Quill<span class="amp">&amp;</span>MD</a>
+      <span class="atl-rule-vert" style="height: 22px;"></span>
+      <nav class="flex items-center gap-7" style="font-family: var(--sans); font-size: 13.5px;">
+        <a href="#" class="atl-link" style="color: var(--ink-55);">Dashboard</a>
+        <a href="#" class="atl-link" style="color: var(--ink); border-bottom: 1px solid var(--oxblood); padding-bottom: 6px;">Visits</a>
+        <a href="#" class="atl-link" style="color: var(--ink-55);">Patients</a>
+        <a href="#" class="atl-link" style="color: var(--ink-55);">Templates</a>
+        <a href="#" class="atl-link" style="color: var(--ink-55);">Settings</a>
+      </nav>
+    </div>
+    <div class="flex items-center gap-7">
+      <div class="atl-mono" style="color: var(--ink-40); border: 1px solid var(--ink-15); padding: 4px 10px;">
+        ⌘K &nbsp; Search patients, visits
+      </div>
+      <a href="#" class="flex items-center gap-2 atl-link" style="font-family: var(--sans); font-size: 13.5px;">
+        <span class="atl-user-dot"></span>
+        Caroline Hsu, MD
+      </a>
+    </div>
+  </div>
+</header>
+
+<!-- =========================================== -->
+<!-- BREADCRUMB                                  -->
+<!-- =========================================== -->
+<div class="max-w-[1200px] mx-auto px-12 pt-8">
+  <div class="atl-mono" style="color: var(--ink-40);">
+    <a href="#" class="atl-link">Dashboard</a> &nbsp;·&nbsp;
+    <a href="#" class="atl-link">Visits</a> &nbsp;·&nbsp;
+    <a href="#" class="atl-link">Today</a> &nbsp;·&nbsp;
+    <span style="color: var(--ink-70);">John Smith</span>
+  </div>
+</div>
+
+<!-- =========================================== -->
+<!-- VISIT HEADER — serif display + accent rule  -->
+<!-- =========================================== -->
+<section>
+  <div class="max-w-[1200px] mx-auto px-12 pt-8 pb-3">
+
+    <div class="flex items-end justify-between gap-12">
+      <div>
+        <div class="atl-display">
+          John Smith
+        </div>
+        <!-- Accent underline — 3px, oxblood, 96px wide -->
+        <div style="height: 3px; width: 96px; background: var(--oxblood); margin-top: 14px;"></div>
+        <div class="atl-smallcaps mt-5" style="color: var(--ink-55);">
+          Cardiology &nbsp;·&nbsp; 14 min &nbsp;·&nbsp; Signed by Dr. Hsu &nbsp;·&nbsp; 2:14 PM &nbsp;·&nbsp; Apr 29, 2026
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3 mb-2">
+        <a href="#" class="atl-btn-ghost atl-btn">Print chart</a>
+        <a href="#" class="atl-btn-ghost atl-btn">Send to EHR</a>
+        <a href="#" class="atl-btn">Open in editor &nbsp;→</a>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Tabs -->
+  <div class="max-w-[1200px] mx-auto px-12">
+    <nav class="atl-tabs">
+      <a href="#" class="is-active">Chart <span class="count">SOAP</span></a>
+      <a href="#">Transcript <span class="count">2,840 w</span></a>
+      <a href="#">Audit <span class="count">7</span></a>
+      <a href="#">Diagnoses <span class="count">3</span></a>
+      <a href="#">Rx</a>
+      <a href="#">Files</a>
+    </nav>
+  </div>
+</section>
+
+<!-- =========================================== -->
+<!-- BODY — 2 col: SOAP article + side rail      -->
+<!-- =========================================== -->
+<section>
+  <div class="max-w-[1200px] mx-auto px-12 pt-12 pb-20">
+
+    <div class="grid grid-cols-12 gap-16">
+
+      <!-- LEFT — SOAP as article ============== -->
+      <article class="col-span-8">
+
+        <!-- Editor's note / dateline -->
+        <div class="atl-smallcaps mb-2" style="color: var(--ink-40);">From the encounter</div>
+        <h2 class="atl-h1 mb-3">Cardiology follow-up.</h2>
+        <p class="atl-byline mb-12 max-w-[640px]">
+          Drafted from a 14-minute visit. Reviewed by you. Signed at 2:14 PM.
+          Below: the chart, written in your idiom, in the format you set.
+        </p>
+
+        <!-- ============== SUBJECTIVE ============== -->
+        <div class="atl-article">
+          <h3>
+            <span class="label">§ Subjective</span>
+            Chief complaint &amp; history.
+          </h3>
+          <p>
+            <strong>Mr. Smith</strong> is a <span class="codeword">59-year-old male</span> who returns
+            today, three weeks after his last visit, with a complaint of
+            <em>chest tightness on exertion</em>. He reports the discomfort began
+            approximately ten days ago, occurs predominantly when he climbs the
+            two flights of stairs to his apartment, and resolves within several
+            minutes of rest. He denies radiation of pain, diaphoresis, nausea,
+            or syncope. He has not experienced symptoms at rest.
+          </p>
+          <p>
+            Review of systems is otherwise non-contributory. He continues to
+            tolerate his current regimen of <span class="codeword">lisinopril 20 mg daily</span>
+            and <span class="codeword">atorvastatin 40 mg nightly</span> without
+            adverse effect. He has been adherent to the dietary recommendations
+            we discussed at the previous visit.
+          </p>
+        </div>
+
+        <!-- ============== AI REGENERATE — italic crossfade ============== -->
+        <!--
+          When the user clicks "Regenerate Subjective", the article fades to 0.4 opacity,
+          and the panel below appears in its place. The italic crossfade rotates through
+          three phrases, each ~800ms with a 600ms opacity transition, then the new
+          subjective text fades in over the old.
+        -->
+        <div class="atl-regen mt-6" style="max-width: 680px;">
+          <span class="dot"></span>
+          <div class="flex-1">
+            <div class="atl-smallcaps" style="color: var(--ink-40); margin-bottom: 4px;">
+              Regenerating subjective
+            </div>
+            <div class="atl-thought" id="thoughtRegen">
+              <span class="is-on" data-i="0">Reviewing transcript &mdash; 14 minutes, two speakers.</span>
+              <span data-i="1">Identifying onset, frequency, character, relieving factors.</span>
+              <span data-i="2">Drafting in your idiom &mdash; concise, third-person, present tense.</span>
+            </div>
+          </div>
+          <span class="atl-mono" style="color: var(--ink-40); flex: 0 0 auto;">~3s</span>
+        </div>
+
+        <!-- Action row beneath subjective -->
+        <div class="flex items-center gap-5 mt-5" style="max-width: 680px;">
+          <a href="#" class="atl-link-ul" style="font-family: var(--sans); font-size: 13.5px;">Regenerate subjective</a>
+          <span style="color: var(--ink-25);">|</span>
+          <a href="#" class="atl-link-ul" style="font-family: var(--sans); font-size: 13.5px;">Edit by hand</a>
+          <span style="color: var(--ink-25);">|</span>
+          <a href="#" class="atl-link-ul" style="font-family: var(--sans); font-size: 13.5px;">View source quotes</a>
+          <span class="atl-mono" style="margin-left: auto; color: var(--ink-40);">v3 · drafted 1:48 PM</span>
+        </div>
+
+        <hr class="atl-rule" style="margin: 40px 0;">
+
+        <!-- ============== OBJECTIVE ============== -->
+        <div class="atl-article">
+          <h3>
+            <span class="label">§ Objective</span>
+            Vitals &amp; exam.
+          </h3>
+          <p>
+            <strong>Vitals:</strong> blood pressure 138/86 (left arm, seated, after five minutes' rest),
+            heart rate 72 and regular, respiratory rate 14, oxygen saturation 98% on room air,
+            BMI 27.4. Patient is afebrile and in no acute distress.
+          </p>
+          <p>
+            <strong>Cardiovascular:</strong> regular rate and rhythm. S1 and S2 are normal. No murmurs, rubs, or gallops appreciated.
+            Carotid pulses are 2+ bilaterally without bruits. Peripheral pulses are intact and symmetric.
+          </p>
+          <p>
+            <strong>Pulmonary:</strong> lungs clear to auscultation bilaterally. No wheezing, rales, or rhonchi.
+          </p>
+          <p>
+            <strong>EKG (in office):</strong> normal sinus rhythm at 70. No acute ST or T-wave changes.
+            Compared to prior tracing of <em>March 8, 2026</em>, no significant change.
+          </p>
+        </div>
+
+        <hr class="atl-rule" style="margin: 40px 0;">
+
+        <!-- ============== ASSESSMENT ============== -->
+        <div class="atl-article">
+          <h3>
+            <span class="label">§ Assessment</span>
+            Clinical impression.
+          </h3>
+          <p>
+            <strong>Mr. Smith presents with new-onset exertional chest discomfort</strong> that, by
+            history, is suggestive of stable angina. His cardiovascular risk profile &mdash;
+            hypertension, hyperlipidemia, and a 22-pack-year tobacco history &mdash; raises
+            the pre-test probability of obstructive coronary artery disease. Today's
+            in-office EKG is unchanged, and he is hemodynamically stable.
+          </p>
+          <ul>
+            <li><strong>R07.9</strong> &mdash; Chest pain, unspecified <em>(primary)</em></li>
+            <li><strong>I10</strong> &mdash; Essential hypertension <em>(controlled)</em></li>
+            <li><strong>E78.5</strong> &mdash; Hyperlipidemia, unspecified <em>(controlled)</em></li>
+          </ul>
+        </div>
+
+        <hr class="atl-rule" style="margin: 40px 0;">
+
+        <!-- ============== PLAN ============== -->
+        <div class="atl-article">
+          <h3>
+            <span class="label">§ Plan</span>
+            Next steps.
+          </h3>
+          <ul>
+            <li>
+              Order <span class="codeword">exercise stress echocardiogram</span> within the next two weeks,
+              with attention to wall-motion abnormalities at peak exercise.
+            </li>
+            <li>
+              Begin <span class="codeword">aspirin 81 mg daily</span> for primary prevention, given
+              cardiovascular risk profile.
+            </li>
+            <li>
+              Continue <span class="codeword">lisinopril 20 mg daily</span> and
+              <span class="codeword">atorvastatin 40 mg nightly</span>; lab panel including lipid
+              profile and basic metabolic panel ordered for in two weeks.
+            </li>
+            <li>
+              Counseled at length on smoking cessation; patient receptive. Referred to
+              Tobacco Cessation Program; nicotine replacement initiated.
+            </li>
+            <li>
+              <em>Follow-up in office</em> after stress echo results, sooner if symptoms progress.
+              Patient instructed to call our office or proceed to the emergency department
+              for chest pain at rest, prolonged episodes, or any associated dyspnea, diaphoresis,
+              or syncope.
+            </li>
+          </ul>
+        </div>
+
+        <!-- ============== Rx WARNING — restrained ============== -->
+        <div style="max-width: 720px; margin-top: 56px;">
+          <div class="atl-smallcaps mb-3" style="color: var(--ink-40);">A held prescription &mdash; review required</div>
+
+          <!-- The Atelier translation of qm-warn-critical:
+               flat 1px ink-25 border, hairline-divided sections, oxblood dot
+               only on the CRITICAL severity pill. -->
+          <div class="atl-rx" data-sev="critical">
+
+            <div class="head">
+              <div class="sev"><span class="dot"></span> Critical</div>
+              <div class="headline">
+                Heard "<em>metformin five hundred</em>" but drafted <em>1,000 mg</em> &mdash;
+                please verify the dose with the patient.
+              </div>
+              <div class="ts">held 1:48 PM</div>
+            </div>
+
+            <div class="body">
+
+              We held this prescription before drafting it into the plan because the
+              transcript audio &mdash; specifically <em>1:11:08–1:11:14</em> &mdash; sounds to the model
+              like a 500&nbsp;mg dose, but Mr. Smith's chart history shows a chronic
+              maintenance dose of 1,000&nbsp;mg twice daily. Confirm before you sign.
+
+              <div class="field-block">
+                <div>
+                  <div class="lbl">Heard in the room</div>
+                  <div class="val">
+                    metformin 500 mg
+                    <span class="annot">— transcript, 1:11:08</span>
+                  </div>
+                </div>
+                <div>
+                  <div class="lbl">Patient's prior chart</div>
+                  <div class="val">
+                    metformin 1,000 mg
+                    <span class="annot">— prescribed Mar 8, 2026</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="atl-byline" style="font-size: 13.5px; margin-top: 8px;">
+                If you confirm the new lower dose, the model will redraft the plan.
+                If the prior dose stands, we will leave the plan as written and not
+                reissue the prescription.
+              </div>
+            </div>
+
+            <div class="actions">
+              <a href="#" class="atl-btn">Confirm 500 mg &mdash; redraft</a>
+              <a href="#" class="atl-btn-ghost atl-btn">Keep 1,000 mg</a>
+              <a href="#" class="atl-link-ul" style="font-family: var(--sans); font-size: 13.5px;">Listen to clip</a>
+              <span class="keep-typing">⌘ + ↵ &nbsp; confirm</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ============== TRANSCRIPT EXCERPT ============== -->
+        <div style="max-width: 760px; margin-top: 64px;">
+          <div class="atl-smallcaps mb-2" style="color: var(--ink-40);">Excerpt &mdash; transcript view</div>
+          <h2 class="atl-h1 mb-2">From the recording.</h2>
+          <p class="atl-byline mb-6 max-w-[640px]">
+            The same exchange that produced the held prescription, in two columns,
+            speaker on the left, dialogue on the right. The phrase the model heard is
+            highlighted.
+          </p>
+
+          <div class="atl-transcript">
+
+            <div class="row">
+              <div class="speaker is-doc">
+                Dr. Hsu
+                <span class="ts">1:10:42</span>
+              </div>
+              <div class="line">
+                And how is the metformin going? Any side effects you'd like to talk about?
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="speaker">
+                Mr. Smith
+                <span class="ts">1:10:52</span>
+              </div>
+              <div class="line">
+                It's been all right. The stomach thing went away after a week or so. I'm taking, uh
+                <em>&hellip;</em> I think it's the bigger one, the one I take twice a day with food.
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="speaker is-doc">
+                Dr. Hsu
+                <span class="ts">1:11:04</span>
+              </div>
+              <div class="line">
+                Right, the thousand. Good. And we're staying on that.
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="speaker">
+                Mr. Smith
+                <span class="ts">1:11:08</span>
+              </div>
+              <div class="line">
+                Yeah, we're staying on the <mark>metformin five hundred</mark> &mdash;
+                I mean, twice a day, like you said.
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="speaker is-doc">
+                Dr. Hsu
+                <span class="ts">1:11:18</span>
+              </div>
+              <div class="line">
+                Mm-hmm. Twice a day with food. Good.
+              </div>
+            </div>
+
+          </div>
+
+          <div class="atl-mono mt-6" style="color: var(--ink-40);">
+            <a href="#" class="atl-link-ul">View full transcript</a>
+            <span style="margin: 0 12px; color: var(--ink-25);">|</span>
+            <a href="#" class="atl-link-ul">Listen to recording</a>
+            <span style="margin-left: 24px;">2,840 words · 14:32</span>
+          </div>
+        </div>
+
+      </article>
+
+      <!-- RIGHT — SIDE RAIL =================== -->
+      <aside class="col-span-4 atl-side">
+
+        <!-- Patient block -->
+        <div>
+          <h4>Patient</h4>
+          <div class="atl-kv">
+            <div class="k">Name</div>
+            <div class="v"><strong>John Smith</strong></div>
+          </div>
+          <div class="atl-kv">
+            <div class="k">DOB</div>
+            <div class="v">
+              <span style="font-family: var(--mono); font-size: 13px; color: var(--ink);">Jun 14, 1967</span>
+              <span style="font-family: var(--serif); font-style: italic; color: var(--ink-55); font-size: 13.5px;">&nbsp; (58)</span>
+            </div>
+          </div>
+          <div class="atl-kv">
+            <div class="k">Sex</div>
+            <div class="v">Male</div>
+          </div>
+          <div class="atl-kv">
+            <div class="k">MRN</div>
+            <div class="v"><span style="font-family: var(--mono); font-size: 13px;">QM-100482</span></div>
+          </div>
+          <div class="atl-kv">
+            <div class="k">Insurance</div>
+            <div class="v">BCBS &mdash; <span style="font-family: var(--mono); font-size: 12.5px; color: var(--ink-55);">PPO #4419</span></div>
+          </div>
+          <div class="atl-kv">
+            <div class="k">Allergies</div>
+            <div class="v">
+              <strong>Sulfa</strong> &mdash; <em>rash</em><br>
+              <strong>Penicillin</strong> &mdash; <em>per patient, mild</em>
+            </div>
+          </div>
+        </div>
+
+        <!-- Active medications -->
+        <div style="margin-top: 36px;">
+          <h4>Medications &nbsp; <span style="color: var(--ink-25); font-weight: 400;">/</span> &nbsp; Active</h4>
+          <div class="atl-kv">
+            <div class="k">Lisinopril</div>
+            <div class="v">
+              <strong>20 mg</strong>
+              <span style="font-family: var(--serif); font-style: italic; color: var(--ink-55);">daily</span>
+            </div>
+          </div>
+          <div class="atl-kv">
+            <div class="k">Atorvastatin</div>
+            <div class="v">
+              <strong>40 mg</strong>
+              <span style="font-family: var(--serif); font-style: italic; color: var(--ink-55);">at bedtime</span>
+            </div>
+          </div>
+          <div class="atl-kv">
+            <div class="k">Metformin</div>
+            <div class="v">
+              <strong>1,000 mg</strong>
+              <span style="font-family: var(--serif); font-style: italic; color: var(--ink-55);">twice daily &mdash; under review</span>
+            </div>
+          </div>
+          <div class="atl-kv">
+            <div class="k">Aspirin</div>
+            <div class="v">
+              <strong>81 mg</strong>
+              <span style="font-family: var(--serif); font-style: italic; color: var(--ink-55);">daily &mdash; new this visit</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Audit trail -->
+        <div style="margin-top: 36px;">
+          <h4>Audit</h4>
+          <div class="atl-transcript" style="font-size: 13.5px;">
+            <div class="row" style="grid-template-columns: 64px 1fr; padding: 8px 0;">
+              <div class="speaker" style="font-size: 9.5px;">2:14 PM</div>
+              <div class="line">Chart signed by <em>Dr. C. Hsu</em>.</div>
+            </div>
+            <div class="row" style="grid-template-columns: 64px 1fr; padding: 8px 0;">
+              <div class="speaker" style="font-size: 9.5px;">2:11 PM</div>
+              <div class="line">Plan edited by hand &mdash; aspirin dose confirmed.</div>
+            </div>
+            <div class="row" style="grid-template-columns: 64px 1fr; padding: 8px 0;">
+              <div class="speaker" style="font-size: 9.5px;">2:08 PM</div>
+              <div class="line">Subjective regenerated by <em>model v3</em>.</div>
+            </div>
+            <div class="row" style="grid-template-columns: 64px 1fr; padding: 8px 0;">
+              <div class="speaker" style="font-size: 9.5px;">1:48 PM</div>
+              <div class="line">Rx warning held &mdash; metformin dose verification.</div>
+            </div>
+            <div class="row" style="grid-template-columns: 64px 1fr; padding: 8px 0;">
+              <div class="speaker" style="font-size: 9.5px;">1:46 PM</div>
+              <div class="line">Draft chart created by <em>model v3</em>.</div>
+            </div>
+            <div class="row" style="grid-template-columns: 64px 1fr; padding: 8px 0;">
+              <div class="speaker" style="font-size: 9.5px;">1:45 PM</div>
+              <div class="line">Recording ended &mdash; 14:32.</div>
+            </div>
+            <div class="row" style="grid-template-columns: 64px 1fr; padding: 8px 0;">
+              <div class="speaker" style="font-size: 9.5px;">8:30 AM</div>
+              <div class="line">Recording started &mdash; cardiology follow-up.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quiet pull-quote sidebar -->
+        <div style="margin-top: 48px; padding: 22px 0 0; border-top: 1px solid var(--ink-25);">
+          <div class="atl-smallcaps mb-2" style="color: var(--ink-40);">From the style guide</div>
+          <blockquote style="font-family: var(--serif); font-size: 17px; line-height: 1.5; color: var(--ink); letter-spacing: -0.005em;">
+            &ldquo;Write what was said. Identify what was inferred. Hold what was misheard.&rdquo;
+          </blockquote>
+          <div class="atl-byline mt-2">
+            — QuillMD style guide, §1
+          </div>
+        </div>
+
+      </aside>
+
+    </div>
+
+  </div>
+</section>
+
+<!-- =========================================== -->
+<!-- FOOTER (folio)                              -->
+<!-- =========================================== -->
+<footer>
+  <div class="max-w-[1200px] mx-auto px-12 pb-12">
+    <hr class="atl-rule" style="margin-bottom: 18px;">
+    <div class="flex items-center justify-between">
+      <div class="atl-folio">QuillMD &nbsp;·&nbsp; Visit · John Smith &nbsp;·&nbsp; v3.atelier</div>
+      <div class="atl-folio" style="color: var(--ink-40);">Saved &nbsp;·&nbsp; 2:14 PM &nbsp;·&nbsp; Apr 29, 2026</div>
+    </div>
+  </div>
+</footer>
+
+</div><!-- /atl-z -->
+
+<script>
+  // Italic crossfade for the regenerate panel.
+  function rotateThought(rootId, dwellMs = 1700) {
+    const root = document.getElementById(rootId);
+    if (!root) return;
+    const items = root.querySelectorAll("span");
+    let i = 0;
+    setInterval(() => {
+      items.forEach(s => s.classList.remove("is-on"));
+      i = (i + 1) % items.length;
+      items[i].classList.add("is-on");
+    }, dwellMs);
+  }
+  rotateThought("thoughtRegen", 1700);
+</script>
+
+</body>
+</html>

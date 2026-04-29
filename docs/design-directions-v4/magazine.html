@@ -1,0 +1,1756 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QuillMD — MAGAZINE — V4 Design Direction</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400;0,6..96,500;0,6..96,700;0,6..96,800;0,6..96,900;1,6..96,400;1,6..96,500;1,6..96,700;1,6..96,800&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,300;1,400;1,500;1,600;1,700&family=Inter+Tight:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,500;1,700;1,900&display=swap"
+  rel="stylesheet"
+/>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  /* ---------------------------------------------------------------
+     QUILLMD — MAGAZINE
+     A Wallpaper*/Apartamento/IDEA-style art-direction layout.
+     Print-on-paper. Asymmetric grid. Mixed type. Pull-quotes.
+     --------------------------------------------------------------- */
+
+  :root {
+    /* Paper + Ink (the editorial substrate) */
+    --paper:        #FBFAF7;     /* warm cream */
+    --paper-deep:   #F4F1E9;     /* deeper newsprint cream */
+    --paper-fold:   #ECE7DA;     /* a fold of paper, used for rules */
+    --ink:          #1A1814;     /* deep ink */
+    --ink-soft:     #2F2A22;
+    --ink-mute:     #6E665A;     /* secondary text, gutters */
+    --ink-faint:    #A89F8E;     /* page numbers, marginalia secondary */
+    --ink-thread:   #C8BFAA;     /* very faint hairlines */
+
+    /* The single editorial accent — Burnt Orange. Pick one. Commit. */
+    --accent:       #C76B33;
+    --accent-deep:  #9F4F1E;
+    --accent-tint:  #ECD9C8;
+
+    /* Magazine type stack */
+    --serif-display: "Bodoni Moda", "Playfair Display", "Times New Roman", serif;
+    --serif-italic:  "Cormorant Garamond", "Bodoni Moda", Georgia, serif;
+    --sans-body:     "Inter Tight", "Helvetica Neue", Arial, sans-serif;
+    --mono-kicker:   "JetBrains Mono", ui-monospace, monospace;
+
+    /* Type ratios — these are meant to FIGHT. */
+    --display-mega: clamp(72px, 9vw, 144px);
+    --display-xl:   clamp(48px, 6vw, 96px);
+    --display-lg:   clamp(36px, 4.4vw, 64px);
+    --display-md:   clamp(28px, 3vw, 44px);
+    --pullquote:    clamp(28px, 3vw, 48px);
+    --deck:         clamp(18px, 1.6vw, 24px);
+    --body:         15px;
+    --caption:      12px;
+    --kicker:       11px;
+
+    /* Magazine column system */
+    --col-gap: 28px;
+    --row-gap: 36px;
+    --rule-w:  1px;
+  }
+
+  html, body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans-body);
+    font-size: var(--body);
+    line-height: 1.55;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: "kern", "liga", "onum";
+  }
+
+  /* Faint paper texture (CSS-only — no asset). */
+  body {
+    background-image:
+      radial-gradient(1200px 600px at 80% -100px, rgba(199,107,51,0.05), transparent 60%),
+      radial-gradient(900px 480px at -10% 110%, rgba(26,24,20,0.04), transparent 60%);
+    background-attachment: fixed;
+  }
+
+  /* ----------- TYPE PRIMITIVES ----------- */
+  .serif        { font-family: var(--serif-display); font-feature-settings: "lnum","kern","liga"; }
+  .italic-serif { font-family: var(--serif-italic); font-style: italic; }
+  .sans         { font-family: var(--sans-body); }
+  .mono         { font-family: var(--mono-kicker); }
+
+  .display-mega { font-family: var(--serif-display); font-size: var(--display-mega); line-height: 0.86; letter-spacing: -0.02em; font-weight: 800; }
+  .display-xl   { font-family: var(--serif-display); font-size: var(--display-xl);   line-height: 0.92; letter-spacing: -0.018em; font-weight: 700; }
+  .display-lg   { font-family: var(--serif-display); font-size: var(--display-lg);   line-height: 0.96; letter-spacing: -0.015em; font-weight: 700; }
+  .display-md   { font-family: var(--serif-display); font-size: var(--display-md);   line-height: 1.02; letter-spacing: -0.012em; font-weight: 600; }
+  .deck         { font-family: var(--serif-italic); font-style: italic; font-size: var(--deck); line-height: 1.35; color: var(--ink-soft); }
+  .pullquote    { font-family: var(--serif-italic); font-style: italic; font-size: var(--pullquote); line-height: 1.18; color: var(--ink); letter-spacing: -0.005em; }
+  .caption      { font-family: var(--serif-italic); font-style: italic; font-size: var(--caption); line-height: 1.4; color: var(--ink-mute); }
+  .kicker {
+    font-family: var(--mono-kicker);
+    font-size: var(--kicker);
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--accent-deep);
+    font-weight: 500;
+  }
+  .kicker--ink   { color: var(--ink-soft); }
+  .kicker--faint { color: var(--ink-faint); }
+
+  /* Drop cap — used at the start of major body blocks */
+  .dropcap::first-letter {
+    font-family: var(--serif-display);
+    color: var(--accent);
+    font-weight: 800;
+    font-size: 5.6em;
+    line-height: 0.85;
+    float: left;
+    padding: 0.06em 0.12em 0 0;
+    margin-right: 0.04em;
+    margin-top: 0.02em;
+  }
+
+  /* Folio numerals — magazine-style page numbers in margins */
+  .folio {
+    font-family: var(--serif-display);
+    font-style: italic;
+    font-size: 14px;
+    color: var(--ink-mute);
+    letter-spacing: 0.02em;
+  }
+
+  /* Hairlines */
+  .hr-thin { border: 0; border-top: var(--rule-w) solid var(--ink); }
+  .hr-mute { border: 0; border-top: var(--rule-w) solid var(--ink-thread); }
+  .hr-thick{ border: 0; border-top: 3px solid var(--ink); }
+  .hr-double { border: 0; border-top: 1px solid var(--ink); border-bottom: 1px solid var(--ink); height: 5px; }
+
+  /* ----------- LAYOUT — THE GRID ----------- */
+  /* We use two grids: a 12-col foundation and a 6-col magazine grid.
+     Most spreads use the 6-col grid; certain marginalia sit in the 12. */
+  .mag-shell {
+    max-width: 1480px;
+    margin: 0 auto;
+    padding: 0 40px;
+  }
+  .grid-12 { display: grid; grid-template-columns: repeat(12, 1fr); column-gap: var(--col-gap); row-gap: var(--row-gap); }
+  .grid-6  { display: grid; grid-template-columns: repeat(6, 1fr);  column-gap: var(--col-gap); row-gap: var(--row-gap); }
+  .grid-4  { display: grid; grid-template-columns: repeat(4, 1fr);  column-gap: var(--col-gap); row-gap: var(--row-gap); }
+
+  /* Body text columns — actual CSS multi-column flow, like real magazines. */
+  .columns-2 { column-count: 2; column-gap: 28px; column-rule: 1px solid var(--ink-thread); }
+  .columns-3 { column-count: 3; column-gap: 24px; column-rule: 1px solid var(--ink-thread); }
+  .columns-4 { column-count: 4; column-gap: 20px; column-rule: 1px solid var(--ink-thread); }
+  .columns-2 p, .columns-3 p, .columns-4 p { break-inside: avoid-column; orphans: 3; widows: 3; }
+  .body-prose { font-size: 15px; line-height: 1.62; color: var(--ink-soft); hyphens: auto; text-align: justify; }
+  .body-prose p { margin-bottom: 0.85em; }
+
+  /* ----------- MASTHEAD ----------- */
+  .masthead {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    padding: 18px 0 14px;
+    border-top: 3px solid var(--ink);
+    border-bottom: 1px solid var(--ink);
+  }
+  .masthead-left  { font-family: var(--mono-kicker); font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--ink-soft); }
+  .masthead-right { font-family: var(--mono-kicker); font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--ink-soft); text-align: right; }
+  .masthead-mark  { font-family: var(--serif-display); font-weight: 800; font-size: 28px; letter-spacing: -0.01em; }
+  .masthead-mark .amp { font-style: italic; color: var(--accent); font-weight: 500; }
+
+  /* The under-masthead strip — horizontal "Inside this issue" run */
+  .strip {
+    display: flex;
+    gap: 32px;
+    flex-wrap: wrap;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--ink-thread);
+    font-family: var(--mono-kicker);
+    font-size: 10.5px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+  }
+  .strip span b { color: var(--accent-deep); font-weight: 500; margin-right: 6px; }
+
+  /* ----------- COVER ----------- */
+  .cover {
+    position: relative;
+    margin-top: 28px;
+    border: 1px solid var(--ink);
+    background: var(--ink);
+    overflow: hidden;
+  }
+  .cover-img {
+    width: 100%;
+    height: clamp(540px, 78vh, 820px);
+    object-fit: cover;
+    filter: contrast(1.04) saturate(0.9) brightness(0.78);
+    display: block;
+  }
+  .cover-shade {
+    position: absolute; inset: 0;
+    background:
+      linear-gradient(180deg, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0.15) 35%, rgba(0,0,0,0.55) 100%),
+      linear-gradient(90deg, rgba(0,0,0,0.45), rgba(0,0,0,0.05) 50%, rgba(0,0,0,0));
+    pointer-events: none;
+  }
+  .cover-grid {
+    position: absolute; inset: 0;
+    display: grid; grid-template-columns: repeat(12, 1fr); gap: var(--col-gap);
+    padding: 36px 40px;
+  }
+  .cover-flag {
+    grid-column: 1 / span 12;
+    display: flex; align-items: baseline; justify-content: space-between;
+    color: var(--paper);
+    font-family: var(--mono-kicker);
+    font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase;
+  }
+  .cover-flag .lhs b { color: var(--accent-tint); margin-right: 8px; }
+  .cover-headline {
+    grid-column: 1 / span 9;
+    align-self: end;
+    color: var(--paper);
+  }
+  .cover-headline .kicker { color: var(--accent-tint); }
+  .cover-headline h1 {
+    font-family: var(--serif-display);
+    font-weight: 800;
+    font-size: clamp(64px, 8.4vw, 132px);
+    line-height: 0.86;
+    letter-spacing: -0.022em;
+    margin-top: 12px;
+    text-wrap: balance;
+  }
+  .cover-headline .word-italic { font-style: italic; font-weight: 500; color: var(--accent-tint); }
+  .cover-headline .deck {
+    color: rgba(255,253,247,0.86);
+    font-size: clamp(18px, 1.6vw, 22px);
+    margin-top: 16px;
+    max-width: 56ch;
+  }
+  .cover-blurbs {
+    grid-column: 10 / span 3;
+    align-self: end;
+    color: var(--paper);
+    border-left: 1px solid rgba(255,253,247,0.4);
+    padding-left: 18px;
+  }
+  .cover-blurbs .item + .item { margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(255,253,247,0.25); }
+  .cover-blurbs .pageref { font-family: var(--mono-kicker); font-size: 10.5px; letter-spacing: 0.2em; color: var(--accent-tint); }
+  .cover-blurbs .ttl { font-family: var(--serif-display); font-weight: 600; font-size: 17px; line-height: 1.18; margin-top: 4px; }
+
+  /* Issue spine — the vertical text on the cover edge */
+  .cover-spine {
+    position: absolute;
+    left: 16px; top: 50%;
+    transform: translateY(-50%) rotate(-90deg);
+    transform-origin: left center;
+    color: var(--paper);
+    font-family: var(--mono-kicker);
+    font-size: 10.5px;
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+    opacity: 0.85;
+  }
+
+  /* ----------- THE RECORDING SPREAD ----------- */
+  .spread {
+    margin-top: 60px;
+    padding-top: 36px;
+    border-top: 1px solid var(--ink);
+  }
+  .spread-flag {
+    display: flex; justify-content: space-between; align-items: baseline;
+    border-bottom: 1px solid var(--ink-thread);
+    padding-bottom: 10px; margin-bottom: 24px;
+  }
+  .live-dot {
+    display: inline-block; width: 9px; height: 9px; border-radius: 50%;
+    background: var(--accent); margin-right: 8px;
+    box-shadow: 0 0 0 0 rgba(199,107,51,0.6);
+    animation: pulse 1.6s ease-out infinite;
+    vertical-align: 1px;
+  }
+  @keyframes pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(199,107,51,0.55); }
+    70%  { box-shadow: 0 0 0 12px rgba(199,107,51,0); }
+    100% { box-shadow: 0 0 0 0 rgba(199,107,51,0); }
+  }
+
+  /* The asymmetric photo block + content split */
+  .recording-spread { display: grid; grid-template-columns: 7fr 5fr; gap: 32px; }
+  .photo-block { position: relative; overflow: hidden; background: var(--paper-deep); border: 1px solid var(--ink-thread); }
+  .photo-block img { display: block; width: 100%; height: 100%; object-fit: cover; filter: contrast(1.06) saturate(0.88); }
+  .photo-block figcaption {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    padding: 14px 18px; background: linear-gradient(180deg, transparent, rgba(0,0,0,0.6));
+    color: var(--paper);
+    font-family: var(--serif-italic); font-style: italic; font-size: 13px; line-height: 1.4;
+  }
+  .photo-block figcaption b { font-family: var(--mono-kicker); font-style: normal; letter-spacing: 0.18em; font-size: 10.5px; color: var(--accent-tint); margin-right: 8px; text-transform: uppercase; font-weight: 500; }
+
+  /* The right column — title + body + marginalia stack */
+  .recording-meta { display: flex; flex-direction: column; gap: 22px; }
+  .recording-title h2 {
+    font-family: var(--serif-display);
+    font-weight: 700;
+    font-size: clamp(44px, 5vw, 72px);
+    line-height: 0.92;
+    letter-spacing: -0.018em;
+    margin-top: 8px;
+  }
+  .recording-title .name-italic { font-style: italic; color: var(--accent-deep); font-weight: 500; }
+  .recording-title .sub {
+    font-family: var(--serif-italic); font-style: italic; font-size: 18px; color: var(--ink-soft);
+    margin-top: 14px; line-height: 1.45;
+  }
+
+  /* The transcript — an actual 2-column flow with a pull-quote nesting in the gutter */
+  .transcript {
+    position: relative;
+    border-top: 1px solid var(--ink);
+    padding-top: 18px;
+    margin-top: 8px;
+  }
+  .transcript .speaker-line {
+    margin-bottom: 0.55em;
+    break-inside: avoid;
+  }
+  .transcript .speaker {
+    font-family: var(--mono-kicker);
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent-deep);
+    font-weight: 600;
+    margin-right: 8px;
+  }
+  .transcript .speaker--patient { color: var(--ink); }
+  .transcript .speaker--doctor  { color: var(--accent-deep); }
+
+  /* Pull-quote that breaks the column flow as a "cut-out" element */
+  .pullquote-box {
+    margin: 1.2em 0 1.4em;
+    padding: 18px 0 18px;
+    border-top: 3px solid var(--accent);
+    border-bottom: 1px solid var(--ink);
+    break-inside: avoid;
+  }
+  .pullquote-box q { quotes: "\201C" "\201D"; }
+  .pullquote-box q::before { content: open-quote; color: var(--accent); margin-right: 0.04em; }
+  .pullquote-box q::after  { content: close-quote; color: var(--accent); margin-left: 0.04em; }
+  .pullquote-box .attr {
+    margin-top: 10px;
+    font-family: var(--mono-kicker);
+    font-size: 10.5px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+  }
+
+  /* Marginalia — italic notes with a small printed-margin look */
+  .marginalia {
+    border-left: 2px solid var(--accent);
+    padding: 6px 14px;
+    color: var(--ink-soft);
+    font-family: var(--serif-italic);
+    font-style: italic;
+    font-size: 14.5px;
+    line-height: 1.45;
+  }
+  .marginalia b {
+    display: block;
+    font-family: var(--mono-kicker);
+    font-style: normal;
+    letter-spacing: 0.2em;
+    font-size: 10px;
+    text-transform: uppercase;
+    color: var(--accent-deep);
+    font-weight: 500;
+    margin-bottom: 6px;
+  }
+
+  /* ----------- DASHBOARD SEPARATOR ----------- */
+  .section-rule {
+    margin-top: 96px;
+    margin-bottom: 60px;
+    display: flex;
+    align-items: center;
+    gap: 28px;
+  }
+  .section-rule .line { flex: 1; border-top: 3px solid var(--ink); border-bottom: 1px solid var(--ink); height: 4px; }
+  .section-rule .word {
+    font-family: var(--serif-italic);
+    font-style: italic;
+    font-size: clamp(36px, 4.4vw, 56px);
+    color: var(--ink);
+    letter-spacing: 0.02em;
+    line-height: 1;
+    padding: 0 18px;
+    white-space: nowrap;
+  }
+  .section-rule .ornament {
+    font-family: var(--serif-display);
+    color: var(--accent);
+    font-size: 28px;
+    line-height: 1;
+  }
+
+  /* ----------- DASHBOARD SPREAD (asymmetric) ----------- */
+  .dash-grid {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    column-gap: var(--col-gap);
+    row-gap: 48px;
+  }
+  .dash-flag {
+    grid-column: 1 / -1;
+    display: flex; justify-content: space-between; align-items: baseline;
+    border-top: 3px solid var(--ink);
+    border-bottom: 1px solid var(--ink);
+    padding: 14px 0 10px;
+  }
+  .dash-flag .feat { font-family: var(--mono-kicker); font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--ink-soft); }
+  .dash-flag .feat b { color: var(--accent-deep); margin-right: 10px; font-weight: 500; }
+  .dash-flag .right { font-family: var(--serif-italic); font-style: italic; font-size: 16px; color: var(--ink-mute); }
+
+  /* Lead spread (top, spans 8 columns) */
+  .lead-feature { grid-column: 1 / span 8; }
+  .lead-feature .photo { aspect-ratio: 16/9; overflow: hidden; border: 1px solid var(--ink-thread); }
+  .lead-feature .photo img { width: 100%; height: 100%; object-fit: cover; filter: contrast(1.05) saturate(0.9); }
+  .lead-feature .body { display: grid; grid-template-columns: 7fr 5fr; gap: 28px; margin-top: 22px; }
+  .lead-feature .lead-title { font-family: var(--serif-display); font-weight: 800; font-size: clamp(40px, 4.4vw, 64px); line-height: 0.92; letter-spacing: -0.018em; }
+  .lead-feature .lead-title em { font-family: var(--serif-italic); color: var(--accent-deep); font-weight: 500; }
+  .lead-feature .lead-deck { font-family: var(--serif-italic); font-style: italic; color: var(--ink-soft); font-size: 19px; line-height: 1.4; margin-top: 14px; }
+  .lead-feature .byline { font-family: var(--mono-kicker); font-size: 10.5px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--ink-mute); margin-top: 18px; }
+
+  /* Sidebar (right, 4 cols) — "On the desk" classified-ad list */
+  .sidebar { grid-column: 9 / span 4; border-left: 1px solid var(--ink); padding-left: 22px; }
+  .sidebar h3 {
+    font-family: var(--serif-display);
+    font-weight: 700;
+    font-size: 28px;
+    letter-spacing: -0.01em;
+    border-bottom: 3px solid var(--ink);
+    padding-bottom: 10px;
+    margin-bottom: 14px;
+  }
+  .sidebar h3 .em { font-family: var(--serif-italic); font-style: italic; color: var(--accent-deep); font-weight: 500; }
+  .sidebar .desk-meta {
+    font-family: var(--mono-kicker); font-size: 10.5px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink-mute);
+    display: flex; justify-content: space-between; padding-bottom: 8px; margin-bottom: 12px;
+    border-bottom: 1px solid var(--ink-thread);
+  }
+  .classifieds {
+    column-count: 2;
+    column-gap: 14px;
+    column-rule: 1px solid var(--ink-thread);
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  .classified {
+    break-inside: avoid;
+    margin-bottom: 14px;
+    padding-bottom: 10px;
+    border-bottom: 1px dotted var(--ink-thread);
+  }
+  .classified:last-child { border-bottom: none; }
+  .classified .ad-time { font-family: var(--mono-kicker); font-size: 10.5px; letter-spacing: 0.16em; color: var(--accent-deep); font-weight: 600; }
+  .classified .ad-name { font-family: var(--serif-display); font-weight: 700; font-size: 15px; line-height: 1.1; margin: 2px 0 1px; }
+  .classified .ad-spec { font-family: var(--serif-italic); font-style: italic; color: var(--ink-soft); font-size: 13px; }
+  .classified .ad-tag  { font-family: var(--mono-kicker); font-size: 9.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-mute); margin-top: 3px; }
+  .classified.ad-flag .ad-tag { color: var(--accent-deep); }
+  .classified.ad-done .ad-name { color: var(--ink-mute); text-decoration: line-through; text-decoration-thickness: 1px; }
+
+  /* "From the Transcript" pull-quotes block (mid spread) */
+  .from-transcript { grid-column: 1 / span 7; }
+  .from-transcript .heading {
+    display: flex; justify-content: space-between; align-items: baseline;
+    border-top: 3px solid var(--ink); border-bottom: 1px solid var(--ink);
+    padding: 12px 0; margin-bottom: 22px;
+  }
+  .from-transcript .heading .ttl {
+    font-family: var(--serif-italic); font-style: italic; font-weight: 600; font-size: 24px; letter-spacing: 0.005em;
+  }
+  .from-transcript .pq-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  .pq-card {
+    border-top: 1px solid var(--ink);
+    padding-top: 14px;
+  }
+  .pq-card .q {
+    font-family: var(--serif-italic); font-style: italic;
+    font-size: clamp(22px, 2.4vw, 32px); line-height: 1.16;
+    color: var(--ink);
+  }
+  .pq-card .q::before { content: "\201C"; color: var(--accent); margin-right: 0.04em; }
+  .pq-card .q::after  { content: "\201D"; color: var(--accent); margin-left: 0.04em; }
+  .pq-card .attr { font-family: var(--mono-kicker); font-size: 10.5px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--ink-mute); margin-top: 10px; }
+  .pq-card .attr b { color: var(--accent-deep); font-weight: 500; }
+
+  /* Stats column */
+  .by-numbers { grid-column: 8 / span 5; }
+  .by-numbers .heading {
+    display: flex; justify-content: space-between; align-items: baseline;
+    border-top: 3px solid var(--ink); border-bottom: 1px solid var(--ink);
+    padding: 12px 0; margin-bottom: 18px;
+  }
+  .by-numbers .heading .ttl { font-family: var(--serif-italic); font-style: italic; font-weight: 600; font-size: 24px; }
+  .by-numbers .heading .badge { font-family: var(--mono-kicker); font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent-deep); }
+  .stat-row { display: grid; grid-template-columns: 4fr 5fr; gap: 18px; align-items: end; padding: 14px 0; border-bottom: 1px solid var(--ink-thread); }
+  .stat-row:last-of-type { border-bottom: none; }
+  .stat-row .num { font-family: var(--serif-display); font-weight: 800; font-size: clamp(48px, 5vw, 80px); line-height: 0.9; letter-spacing: -0.02em; }
+  .stat-row .num small { font-family: var(--serif-italic); font-style: italic; font-weight: 500; font-size: 0.42em; color: var(--ink-mute); margin-left: 4px; letter-spacing: 0; }
+  .stat-row .lbl { padding-bottom: 8px; }
+  .stat-row .lbl .ttl { font-family: var(--serif-italic); font-style: italic; font-size: 17px; color: var(--ink); }
+  .stat-row .lbl .sub { font-family: var(--mono-kicker); font-size: 10.5px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink-mute); margin-top: 4px; }
+
+  /* Warnings (italic-serif marginalia note) */
+  .warnings { grid-column: 1 / span 5; padding: 22px 26px; border: 1px solid var(--ink); background: var(--paper-deep); position: relative; }
+  .warnings::before {
+    content: "\00A7"; /* section sign — nice editorial flourish */
+    position: absolute; top: 14px; right: 16px;
+    font-family: var(--serif-display);
+    color: var(--accent); font-size: 28px; font-style: italic;
+  }
+  .warnings .heading { font-family: var(--mono-kicker); font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent-deep); }
+  .warnings .lede { font-family: var(--serif-italic); font-style: italic; font-size: 19px; line-height: 1.45; color: var(--ink); margin-top: 10px; }
+  .warnings ol { list-style: none; counter-reset: warn; margin-top: 14px; padding: 0; }
+  .warnings ol li {
+    counter-increment: warn;
+    padding: 10px 0 10px 36px;
+    border-top: 1px solid var(--ink-thread);
+    position: relative;
+    font-family: var(--serif-italic);
+    font-style: italic;
+    font-size: 15px;
+    line-height: 1.5;
+    color: var(--ink-soft);
+  }
+  .warnings ol li::before {
+    content: counter(warn, decimal-leading-zero);
+    position: absolute; left: 0; top: 12px;
+    font-family: var(--mono-kicker);
+    font-style: normal;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    color: var(--accent-deep);
+  }
+  .warnings ol li b { font-family: var(--serif-display); font-style: normal; font-weight: 700; color: var(--ink); }
+
+  /* "Recently filed" feature list (under lead spread) */
+  .recently-filed { grid-column: 1 / span 8; }
+  .recently-filed .heading {
+    display: flex; justify-content: space-between; align-items: baseline;
+    border-top: 3px solid var(--ink); border-bottom: 1px solid var(--ink);
+    padding: 12px 0; margin-bottom: 18px;
+  }
+  .recently-filed .heading .ttl { font-family: var(--serif-display); font-weight: 700; font-size: 28px; letter-spacing: -0.01em; }
+  .filed-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 26px; }
+  .filed-card { border-top: 1px solid var(--ink); padding-top: 12px; }
+  .filed-card .ph { aspect-ratio: 4/3; background: var(--paper-deep); margin-bottom: 12px; overflow: hidden; }
+  .filed-card .ph img { width: 100%; height: 100%; object-fit: cover; filter: contrast(1.05) saturate(0.85); }
+  .filed-card .kr { font-family: var(--mono-kicker); font-size: 10.5px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent-deep); }
+  .filed-card .ttl { font-family: var(--serif-display); font-weight: 700; font-size: 22px; line-height: 1.05; letter-spacing: -0.01em; margin: 6px 0 8px; }
+  .filed-card .ttl em { font-family: var(--serif-italic); color: var(--accent-deep); font-weight: 500; }
+  .filed-card .deck { font-family: var(--serif-italic); font-style: italic; font-size: 14px; color: var(--ink-soft); }
+  .filed-card .meta { display: flex; gap: 12px; margin-top: 10px; font-family: var(--mono-kicker); font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink-mute); }
+  .filed-card .meta b { color: var(--ink); font-weight: 500; }
+
+  /* The wide week strip */
+  .week-strip { grid-column: 1 / -1; padding: 22px 0; border-top: 1px solid var(--ink); border-bottom: 1px solid var(--ink); display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 22px; }
+  .week-cell .day { font-family: var(--mono-kicker); font-size: 10.5px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent-deep); }
+  .week-cell .num { font-family: var(--serif-display); font-weight: 800; font-size: 56px; line-height: 1; letter-spacing: -0.02em; margin: 4px 0; }
+  .week-cell .num small { font-family: var(--serif-italic); font-style: italic; font-weight: 400; font-size: 0.32em; color: var(--ink-mute); margin-left: 4px; letter-spacing: 0; }
+  .week-cell .lbl { font-family: var(--serif-italic); font-style: italic; font-size: 14px; color: var(--ink-soft); }
+
+  /* Footer / colophon */
+  .colophon {
+    margin-top: 80px;
+    padding: 30px 0 40px;
+    border-top: 3px solid var(--ink);
+    display: grid;
+    grid-template-columns: 4fr 4fr 4fr;
+    gap: 28px;
+  }
+  .colophon h4 { font-family: var(--mono-kicker); font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent-deep); margin-bottom: 10px; }
+  .colophon p { font-family: var(--serif-italic); font-style: italic; font-size: 14px; color: var(--ink-soft); line-height: 1.55; }
+  .colophon .pgnum { font-family: var(--serif-display); font-weight: 800; font-size: 56px; letter-spacing: -0.02em; line-height: 1; }
+  .colophon .pgnum small { font-family: var(--serif-italic); font-style: italic; font-weight: 400; font-size: 0.32em; color: var(--ink-mute); margin-left: 6px; letter-spacing: 0; }
+
+  /* From-the-editor (the manifesto) */
+  .editor-note {
+    margin: 28px 0 12px;
+    padding: 26px 0;
+    border-top: 1px solid var(--ink);
+    border-bottom: 1px solid var(--ink);
+    display: grid;
+    grid-template-columns: 4fr 8fr;
+    gap: 32px;
+  }
+  .editor-note .left .kicker { display: block; }
+  .editor-note .left .by {
+    font-family: var(--serif-italic); font-style: italic; font-size: 14px; color: var(--ink-mute); margin-top: 14px;
+  }
+  .editor-note .left .by b { color: var(--ink); font-weight: 500; }
+  .editor-note .right p {
+    font-family: var(--serif-italic); font-style: italic;
+    font-size: clamp(20px, 2vw, 26px);
+    line-height: 1.45;
+    color: var(--ink);
+    text-wrap: pretty;
+  }
+  .editor-note .right .signature {
+    margin-top: 18px;
+    font-family: var(--serif-italic);
+    font-style: italic;
+    font-size: 16px;
+    color: var(--ink-mute);
+  }
+
+  /* Tiny niceties */
+  .smallcaps { font-variant: small-caps; letter-spacing: 0.06em; }
+  .ornament-line {
+    text-align: center;
+    color: var(--accent);
+    margin: 8px 0;
+    font-family: var(--serif-display);
+    font-size: 18px;
+    letter-spacing: 0.5em;
+  }
+
+  /* The bottom-of-page run-folio */
+  .runfoot {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 14px 0;
+    border-top: 1px solid var(--ink);
+    font-family: var(--mono-kicker);
+    font-size: 10.5px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+  }
+  .runfoot .center { font-family: var(--serif-italic); font-style: italic; text-transform: none; letter-spacing: 0; color: var(--ink-faint); font-size: 13px; }
+
+  /* Responsive — magazines collapse, but never to a single column. */
+  @media (max-width: 1100px) {
+    .lead-feature { grid-column: 1 / -1; }
+    .sidebar      { grid-column: 1 / -1; border-left: none; border-top: 3px solid var(--ink); padding-left: 0; padding-top: 18px; }
+    .from-transcript { grid-column: 1 / -1; }
+    .by-numbers      { grid-column: 1 / -1; }
+    .warnings        { grid-column: 1 / -1; }
+    .recording-spread { grid-template-columns: 1fr; }
+    .recording-spread .photo-block { aspect-ratio: 16/10; }
+    .week-strip { grid-template-columns: 1fr 1fr; }
+    .lead-feature .body { grid-template-columns: 1fr; }
+    .filed-grid { grid-template-columns: 1fr 1fr; }
+    .editor-note { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 720px) {
+    .mag-shell { padding: 0 22px; }
+    .columns-2, .columns-3, .columns-4, .classifieds { column-count: 2; }
+    .from-transcript .pq-grid { grid-template-columns: 1fr; }
+    .filed-grid { grid-template-columns: 1fr; }
+    .week-strip { grid-template-columns: 1fr 1fr; }
+    .colophon { grid-template-columns: 1fr; }
+    .cover-blurbs { grid-column: 1 / -1; border-left: none; border-top: 1px solid rgba(255,253,247,0.4); padding-left: 0; padding-top: 14px; margin-top: 14px; }
+    .cover-headline { grid-column: 1 / -1; }
+  }
+
+  /* Print? Yes, why not. It's a magazine. */
+  @media print {
+    .live-dot { animation: none; }
+    .cover-img { filter: contrast(1.04) saturate(0.9); }
+    body { background: white; }
+  }
+</style>
+</head>
+
+<body>
+<div class="mag-shell">
+
+  <!-- ============================================================
+       MASTHEAD — VOL 1 ISSUE 47 · APR 2026
+       ============================================================ -->
+  <header class="masthead" role="banner">
+    <div class="masthead-left">
+      <span>Vol. I &middot; Issue 47</span>
+      <span style="margin-left:14px; color: var(--accent-deep);">Apr 2026</span>
+    </div>
+    <div class="masthead-mark">Quill<span class="amp">&amp;</span>Med</div>
+    <div class="masthead-right">
+      <span style="margin-right:14px;">Page A1 &mdash; A12</span>
+      <span>$0.00 &middot; print on screen</span>
+    </div>
+  </header>
+
+  <!-- Inside-this-issue strip -->
+  <nav class="strip" aria-label="In this issue">
+    <span><b>A2</b>The recording, in 4/4 time</span>
+    <span><b>A4</b>Maria Lopez, in her own words</span>
+    <span><b>A6</b>The desk, this Tuesday</span>
+    <span><b>A7</b>From the transcript</span>
+    <span><b>A8</b>By the numbers</span>
+    <span><b>A9</b>This week&rsquo;s warnings</span>
+    <span><b>A11</b>Recently filed</span>
+    <span style="margin-left:auto; color: var(--accent-deep);">Tue 29 Apr &middot; 14:32 PST</span>
+  </nav>
+
+  <!-- ============================================================
+       FROM THE EDITOR — the manifesto
+       ============================================================ -->
+  <section class="editor-note" aria-label="From the Editor">
+    <div class="left">
+      <span class="kicker">From the Editor</span>
+      <span class="kicker kicker--faint" style="display:block; margin-top:6px;">Issue 47 &middot; April 2026</span>
+      <div class="by">A note by <b>The Art Direction</b>, set in the margin, where notes belong.</div>
+    </div>
+    <div class="right">
+      <p>
+        This is <span class="smallcaps" style="font-style:normal; color: var(--accent-deep); font-family: var(--mono-kicker); letter-spacing: 0.18em; font-size: 0.72em;">Magazine</span>. We believe a patient encounter is a story worth designing &mdash; not a row in a database. We refuse the visual flatness of <span class="smallcaps" style="font-style:normal; font-family: var(--mono-kicker); letter-spacing: 0.16em; font-size: 0.7em;">CRUD</span> apps and the false equality of grid-based dashboards. A clinic is a place of attention, of breath caught in a stairwell, of a voice trailing off mid-sentence; we lay it out the way a printer lays out a feature &mdash; with hierarchy, with margins, with pull-quotes, with the page-number running quietly at the foot.
+      </p>
+      <p style="margin-top: 14px; font-size: 0.86em; color: var(--ink-soft);">
+        We want a chart that reads like a feature article. We want a dashboard that reads like a contents page. We want every visit to feel like it has been <em>edited</em>, not merely <em>filed</em>. Welcome to issue forty-seven.
+      </p>
+      <div class="signature">&mdash; <b>The Editorial Desk</b>, set in italic 12&thinsp;pt Cormorant.</div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       SECTION 1 — THE COVER + THE RECORDING SPREAD
+       ============================================================ -->
+
+  <!-- Cover hero: photographic block, masthead overlay, serif headline -->
+  <section class="cover" aria-label="Cover">
+    <span class="cover-spine">QuillMD &middot; Vol I &middot; Issue 47 &middot; The Listening Issue &middot; Apr&thinsp;2026</span>
+    <img
+      class="cover-img"
+      src="https://images.unsplash.com/photo-1584820927498-cfe5211fd8bf?auto=format&fit=crop&w=2400&q=70"
+      alt="A doctor in a quiet exam room, golden afternoon light from a high window."
+      loading="eager"
+    />
+    <div class="cover-shade" aria-hidden="true"></div>
+
+    <div class="cover-grid">
+      <div class="cover-flag">
+        <div class="lhs">
+          <b>QUILLMD</b>The Listening Issue &middot; Spring 2026
+        </div>
+        <div class="rhs">
+          Vol. 1 &middot; Issue 47 &middot; A1
+        </div>
+      </div>
+
+      <div class="cover-headline">
+        <span class="kicker" style="color: var(--accent-tint);">Cover Story &middot; The Visit, Reframed</span>
+        <h1>
+          A patient<br/>
+          said <span class="word-italic">&ldquo;just&rdquo;</span><br/>
+          fourteen times<br/>
+          in eleven minutes.
+        </h1>
+        <p class="deck">
+          The shape of an encounter, if you stop typing and start listening &mdash; a feature on QuillMD&rsquo;s
+          ambient scribe and the small grammar of cardiac follow-up. With photographs, transcripts, and one
+          cup of waiting-room coffee.
+        </p>
+      </div>
+
+      <aside class="cover-blurbs" aria-label="Inside this issue">
+        <div class="item">
+          <div class="pageref">Page A2 &mdash; Reportage</div>
+          <div class="ttl">A live recording, set in two columns and one minor key.</div>
+        </div>
+        <div class="item">
+          <div class="pageref">Page A6 &mdash; The Desk</div>
+          <div class="ttl">Eleven visits, classified style, in mono.</div>
+        </div>
+        <div class="item">
+          <div class="pageref">Page A8 &mdash; Numerals</div>
+          <div class="ttl">By the numbers: 312 visits, 1,486 minutes, two refills.</div>
+        </div>
+        <div class="item">
+          <div class="pageref">Page A9 &mdash; Errata</div>
+          <div class="ttl">Six warnings worth setting in italic.</div>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       THE RECORDING SPREAD — A2/A3
+       ============================================================ -->
+  <section class="spread" aria-label="The Recording — Live Spread">
+    <div class="spread-flag">
+      <div class="kicker">
+        <span class="live-dot" aria-hidden="true"></span>
+        Live Recording &middot; <span style="color:var(--ink-soft);">A2 &mdash; A3</span>
+      </div>
+      <div class="kicker kicker--faint">14:32 PST &middot; Tue 29 Apr &middot; Room 3 &middot; Office hours</div>
+    </div>
+
+    <div class="recording-spread">
+
+      <!-- LEFT: photographic block — stethoscope on linen -->
+      <figure class="photo-block" aria-label="A stethoscope resting on a linen napkin, daylight from the side.">
+        <img
+          src="https://images.unsplash.com/photo-1576091160550-2173dba999ef?auto=format&fit=crop&w=1800&q=70"
+          alt="A stethoscope resting on a linen napkin in a softly lit exam room."
+          loading="lazy"
+          width="1200" height="1500"
+        />
+        <figcaption>
+          <b>Plate I</b>
+          A stethoscope resting between examinations &mdash; Office of Dr.&thinsp;Aanya Rao, Cardiology, Suite 314. Photograph: <span style="font-style:normal;">QuillMD&nbsp;Editorial</span>.
+        </figcaption>
+      </figure>
+
+      <!-- RIGHT: meta + transcript + marginalia -->
+      <div class="recording-meta">
+
+        <header class="recording-title">
+          <div class="kicker">
+            <span class="live-dot" aria-hidden="true" style="margin-right:6px;"></span>
+            Live &middot; 14:32 PST &middot; 04:11 elapsed
+          </div>
+          <h2>
+            <span class="name-italic">Maria Lopez,</span><br/>
+            58, Cardiology<br/>
+            Follow-up.
+          </h2>
+          <p class="sub">
+            A four-minute discussion of stairs, of sleep, of a generic substitute for atorvastatin &mdash; and
+            of the patient&rsquo;s own quietly favoured word: <em>just</em>. Recorded with consent under
+            <span class="smallcaps">HIPAA</span>&nbsp;&sect;&thinsp;164.508.
+          </p>
+        </header>
+
+        <div class="grid-12" style="row-gap: 14px;">
+          <div style="grid-column: 1 / span 6;">
+            <div class="kicker kicker--ink">Patient</div>
+            <div class="serif" style="font-weight:700; font-size: 18px; margin-top:4px;">Maria Lopez</div>
+            <div class="italic-serif" style="color: var(--ink-soft); font-size: 14px;">DOB 1968&middot;03&middot;14 &middot; MRN 4023&middot;7711</div>
+          </div>
+          <div style="grid-column: 7 / span 6;">
+            <div class="kicker kicker--ink">Clinician</div>
+            <div class="serif" style="font-weight:700; font-size: 18px; margin-top:4px;">Aanya Rao, MD</div>
+            <div class="italic-serif" style="color: var(--ink-soft); font-size: 14px;">Cardiology &middot; Bay Cardio Group</div>
+          </div>
+          <div style="grid-column: 1 / span 4;">
+            <div class="kicker kicker--ink">Specialty</div>
+            <div class="serif" style="font-size: 16px; margin-top:4px;">Cardiology</div>
+          </div>
+          <div style="grid-column: 5 / span 4;">
+            <div class="kicker kicker--ink">Encounter</div>
+            <div class="serif" style="font-size: 16px; margin-top:4px;">Follow-up &middot; 99213</div>
+          </div>
+          <div style="grid-column: 9 / span 4;">
+            <div class="kicker kicker--ink">Audio</div>
+            <div class="mono" style="font-size: 13px; margin-top:4px; color:var(--accent-deep);">04:11 / running</div>
+          </div>
+        </div>
+
+        <!-- THE TRANSCRIPT — flows in 2 columns with an inline pull-quote -->
+        <div class="transcript">
+          <div class="kicker" style="margin-bottom: 10px;">From the transcript &middot; columns set in 11pt Inter Tight</div>
+
+          <div class="columns-2 body-prose">
+            <p class="speaker-line">
+              <span class="speaker speaker--doctor">Rao</span>
+              Maria, good to see you. How have the last six weeks been &mdash; same as before, or has anything shifted?
+            </p>
+            <p class="speaker-line">
+              <span class="speaker speaker--patient">Lopez</span>
+              They&rsquo;ve been fine, mostly. I&rsquo;ve been walking more, like you said. But I will say &mdash; I just notice, when I climb the stairs to my apartment, my chest still does this little squeeze. Not bad, just&hellip; there.
+            </p>
+
+            <div class="pullquote-box">
+              <q class="pullquote">My chest still does this little squeeze. Not bad, just &mdash; there.</q>
+              <div class="attr">Maria Lopez &middot; Patient &middot; 14:33 PST &middot; turn 04 of 28</div>
+            </div>
+
+            <p class="speaker-line">
+              <span class="speaker speaker--doctor">Rao</span>
+              Tell me more about the squeeze. How long does it last? Does it stop when you stop?
+            </p>
+            <p class="speaker-line">
+              <span class="speaker speaker--patient">Lopez</span>
+              Maybe ten seconds. Yeah, it goes away when I&rsquo;m on the landing. I sit a second and it&rsquo;s gone.
+              I just thought I should mention it, since you said to.
+            </p>
+            <p class="speaker-line">
+              <span class="speaker speaker--doctor">Rao</span>
+              That&rsquo;s good you mentioned it. Any sweating, any nausea, any pain in your jaw or your left arm
+              when it happens?
+            </p>
+            <p class="speaker-line">
+              <span class="speaker speaker--patient">Lopez</span>
+              No. None of that. Just the squeeze.
+            </p>
+            <p class="speaker-line">
+              <span class="speaker speaker--doctor">Rao</span>
+              Okay. And the atorvastatin &mdash; you&rsquo;re still taking it, no muscle aches?
+            </p>
+            <p class="speaker-line">
+              <span class="speaker speaker--patient">Lopez</span>
+              About the atorvastatin. The pharmacy switched me to a generic last month and it&rsquo;s a bigger
+              pill. I have a hard time swallowing it. I tried breaking it but it tastes&hellip; chalky. I just take it with
+              applesauce now.
+            </p>
+            <p class="speaker-line">
+              <span class="speaker speaker--doctor">Rao</span>
+              That&rsquo;s clever. The generic is bioequivalent &mdash; the chalk is the binder, not the medicine. We
+              can ask for a smaller-tablet brand if applesauce stops working. How&rsquo;s sleep?
+            </p>
+            <p class="speaker-line">
+              <span class="speaker speaker--patient">Lopez</span>
+              Sleep is okay. I get up once or twice. I just blame the coffee.
+            </p>
+            <p class="speaker-line">
+              <span class="speaker speaker--doctor">Rao</span>
+              And the home blood pressure cuff &mdash; any readings stand out?
+            </p>
+            <p class="speaker-line">
+              <span class="speaker speaker--patient">Lopez</span>
+              Mostly one-thirties over eighties. I had one one-fifty after my daughter called. <em>(laughs)</em>
+            </p>
+            <p class="speaker-line">
+              <span class="speaker speaker--doctor">Rao</span>
+              Family history is the strongest medicine and the worst, sometimes. Let&rsquo;s do an EKG today and
+              talk about a stress test. The squeeze is small, but it&rsquo;s a thread we should follow.
+            </p>
+            <p class="speaker-line">
+              <span class="speaker speaker--patient">Lopez</span>
+              Okay. I appreciate you taking it seriously. I just don&rsquo;t want to make a big thing.
+            </p>
+            <p class="speaker-line">
+              <span class="speaker speaker--doctor">Rao</span>
+              You&rsquo;re not making a big thing. You&rsquo;re telling me a small thing very precisely &mdash; that&rsquo;s
+              exactly what we want.
+            </p>
+          </div>
+        </div>
+
+        <!-- MARGINALIA STACK -->
+        <aside aria-label="Editorial marginalia" style="display: grid; grid-template-columns: 1fr 1fr; gap: 18px;">
+          <div class="marginalia">
+            <b>Editor&rsquo;s note</b>
+            The patient&rsquo;s use of the word <em>&ldquo;just&rdquo;</em> appears fourteen times in the first
+            eleven minutes of recording. The scribe flags it as a <span class="smallcaps">minimisation marker</span>
+            &mdash; common in cardiology follow-up. We have left it in.
+          </div>
+          <div class="marginalia">
+            <b>Captured Rx</b>
+            <em>Atorvastatin 20&thinsp;mg PO QHS</em> &mdash; generic substitute, swallowing difficulty noted. Consider
+            re-issuing as small-tablet brand if adherence falls.
+          </div>
+          <div class="marginalia">
+            <b>Vital sign aside</b>
+            Home blood pressure self-report: <em>~130/80, with one isolated 150/90 &mdash; emotional context.</em>
+            Trending downward over six weeks; we will graph it on Page A8.
+          </div>
+          <div class="marginalia">
+            <b>Order &mdash; pending</b>
+            <em>EKG today; stress test within 14 days.</em> The clinician will sign on the next page.
+          </div>
+        </aside>
+
+      </div><!-- /recording-meta -->
+    </div><!-- /recording-spread -->
+
+    <!-- A foot-of-page run -->
+    <div class="runfoot" style="margin-top: 36px;">
+      <div>QuillMD &middot; A2 &mdash; A3</div>
+      <div class="center">&laquo; The squeeze is small, but it&rsquo;s a thread we should follow. &raquo;</div>
+      <div>The Listening Issue &middot; Spring 2026</div>
+    </div>
+  </section>
+
+
+  <!-- ============================================================
+       FULL-WIDTH SECTION RULE — DASHBOARD
+       ============================================================ -->
+  <div class="section-rule" role="separator" aria-label="Section: Dashboard">
+    <span class="line" aria-hidden="true"></span>
+    <span class="ornament" aria-hidden="true">&sect;</span>
+    <span class="word">Dashboard</span>
+    <span class="ornament" aria-hidden="true">&bull;</span>
+    <span class="line" aria-hidden="true"></span>
+  </div>
+
+
+  <!-- ============================================================
+       SECTION 2 — DASHBOARD AS A MAGAZINE SPREAD
+       ============================================================ -->
+  <section class="dash-grid" aria-label="Dashboard">
+
+    <!-- DASH FLAG -->
+    <div class="dash-flag">
+      <div class="feat">
+        <b>Feature</b>
+        Today on the desk &middot; Tuesday 29 April 2026 &middot; A4 &mdash; A11
+      </div>
+      <div class="right">
+        Last filed at <span class="serif" style="font-weight:600; font-style:normal; color: var(--ink);">14:18 PST</span>, the desk has been quiet since.
+      </div>
+    </div>
+
+    <!-- LEAD FEATURE — most recent visit, magazine-feature treatment, spans 8 columns -->
+    <article class="lead-feature">
+      <div class="kicker">Lead Feature &middot; Most Recent Visit &middot; A4</div>
+      <div class="photo" aria-label="A clinician&rsquo;s hand writing in a paper chart on a wooden desk">
+        <img
+          src="https://images.unsplash.com/photo-1631815587646-b85a1bb027e1?auto=format&fit=crop&w=2200&q=70"
+          alt="A clinician's hand writing in a paper chart on a wooden desk; warm overhead light."
+          loading="lazy"
+          width="2200" height="1238"
+        />
+      </div>
+      <div class="body">
+        <div class="left">
+          <h2 class="lead-title">
+            Maria Lopez:<br/>
+            a small <em>squeeze,</em><br/>
+            and four<br/>
+            careful pages.
+          </h2>
+          <div class="byline">By <b>The Scribe</b> &middot; Cardiology Follow-up &middot; 04:11 of audio &middot; 28 turns</div>
+        </div>
+        <div class="right">
+          <p class="lead-deck">
+            A six-week return for hypertension and dyslipidaemia, complicated by a new exertional chest tightness
+            on stairs. Plan: <span class="smallcaps">EKG today</span>, stress within fourteen days, atorvastatin
+            continued with a note on tablet size.
+          </p>
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px;">
+            <div>
+              <div class="kicker kicker--ink">SOAP Status</div>
+              <div class="italic-serif" style="font-size: 17px; color: var(--ink); margin-top:4px;">Drafted &middot; awaiting signature</div>
+            </div>
+            <div>
+              <div class="kicker kicker--ink">Confidence</div>
+              <div class="italic-serif" style="font-size: 17px; color: var(--ink); margin-top:4px;">High &middot; 0.92</div>
+            </div>
+            <div>
+              <div class="kicker kicker--ink">CPT</div>
+              <div class="serif" style="font-weight:700; font-size: 17px; margin-top:4px;">99213</div>
+            </div>
+            <div>
+              <div class="kicker kicker--ink">ICD-10</div>
+              <div class="serif" style="font-weight:700; font-size: 17px; margin-top:4px;">I10, E78.5, R07.89</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <!-- SIDEBAR — "On the Desk" — classified-ad-style multi-column today's visits -->
+    <aside class="sidebar" aria-label="On the Desk — today's visits">
+      <h3>On the <span class="em">Desk</span></h3>
+      <div class="desk-meta">
+        <span>Tue 29 Apr &middot; 11 visits</span>
+        <span style="color: var(--accent-deep);">7 filed &middot; 4 to come</span>
+      </div>
+
+      <div class="classifieds">
+        <div class="classified ad-flag">
+          <div class="ad-time">14:32 &middot; in&nbsp;room</div>
+          <div class="ad-name">Maria Lopez</div>
+          <div class="ad-spec">cardiology &middot; follow-up</div>
+          <div class="ad-tag">recording &mdash; live</div>
+        </div>
+        <div class="classified ad-done">
+          <div class="ad-time">13:45 &middot; signed</div>
+          <div class="ad-name">Daniel Okafor</div>
+          <div class="ad-spec">cardiology &middot; new</div>
+          <div class="ad-tag">filed by Rao</div>
+        </div>
+        <div class="classified ad-done">
+          <div class="ad-time">13:10 &middot; signed</div>
+          <div class="ad-name">Priya Subramanian</div>
+          <div class="ad-spec">cardiology &middot; refill</div>
+          <div class="ad-tag">filed by Rao</div>
+        </div>
+        <div class="classified">
+          <div class="ad-time">12:30 &middot; drafted</div>
+          <div class="ad-name">Wendell Park</div>
+          <div class="ad-spec">cardiology &middot; post-op</div>
+          <div class="ad-tag">awaiting sig</div>
+        </div>
+        <div class="classified ad-done">
+          <div class="ad-time">11:50 &middot; signed</div>
+          <div class="ad-name">Sofia Aguilar</div>
+          <div class="ad-spec">cardiology &middot; pre-op</div>
+          <div class="ad-tag">filed by Rao</div>
+        </div>
+        <div class="classified ad-done">
+          <div class="ad-time">11:15 &middot; signed</div>
+          <div class="ad-name">Ahmed Halabi</div>
+          <div class="ad-spec">cardiology &middot; follow-up</div>
+          <div class="ad-tag">filed by Rao</div>
+        </div>
+        <div class="classified ad-flag">
+          <div class="ad-time">10:30 &middot; flagged</div>
+          <div class="ad-name">Janet Whitfield</div>
+          <div class="ad-spec">cardiology &middot; follow-up</div>
+          <div class="ad-tag">rx warning &mdash; warfarin</div>
+        </div>
+        <div class="classified ad-done">
+          <div class="ad-time">09:45 &middot; signed</div>
+          <div class="ad-name">Henry Boateng</div>
+          <div class="ad-spec">cardiology &middot; follow-up</div>
+          <div class="ad-tag">filed by Rao</div>
+        </div>
+        <div class="classified">
+          <div class="ad-time">15:00 &middot; up next</div>
+          <div class="ad-name">Linda Chen</div>
+          <div class="ad-spec">cardiology &middot; new</div>
+          <div class="ad-tag">arrived &mdash; waiting</div>
+        </div>
+        <div class="classified">
+          <div class="ad-time">15:30 &middot; up next</div>
+          <div class="ad-name">Marcus DeLeon</div>
+          <div class="ad-spec">cardiology &middot; follow-up</div>
+          <div class="ad-tag">scheduled</div>
+        </div>
+        <div class="classified">
+          <div class="ad-time">16:15 &middot; up next</div>
+          <div class="ad-name">Rachel Sternberg</div>
+          <div class="ad-spec">cardiology &middot; follow-up</div>
+          <div class="ad-tag">scheduled</div>
+        </div>
+        <div class="classified">
+          <div class="ad-time">16:45 &middot; up next</div>
+          <div class="ad-name">Yusuf Ndiaye</div>
+          <div class="ad-spec">cardiology &middot; new</div>
+          <div class="ad-tag">scheduled</div>
+        </div>
+      </div>
+
+      <div class="ornament-line">&bull; &middot; &sect; &middot; &bull;</div>
+
+      <div style="font-family: var(--serif-italic); font-style: italic; font-size: 13px; color: var(--ink-mute); text-align: center;">
+        Continued, in mono, on Page&thinsp;A6 of <em>Wednesday</em>&rsquo;s issue.
+      </div>
+    </aside>
+
+    <!-- "FROM THE TRANSCRIPT" — pull-quotes block as a 2-up grid -->
+    <article class="from-transcript">
+      <div class="heading">
+        <div class="ttl">From the <span style="font-style:normal; font-family: var(--serif-display); font-weight:700; color: var(--accent-deep);">Transcript</span></div>
+        <div class="kicker">A7 &middot; pull-quotes &middot; today</div>
+      </div>
+      <div class="pq-grid">
+        <div class="pq-card">
+          <div class="q">My chest still does this little squeeze. Not bad, just &mdash; there.</div>
+          <div class="attr"><b>Maria Lopez</b> &middot; Cardiology Follow-up &middot; 14:33</div>
+        </div>
+        <div class="pq-card">
+          <div class="q">I just take it with applesauce now.</div>
+          <div class="attr"><b>Maria Lopez</b> &middot; on the generic statin &middot; 14:36</div>
+        </div>
+        <div class="pq-card">
+          <div class="q">I had one one-fifty after my daughter called.</div>
+          <div class="attr"><b>Maria Lopez</b> &middot; on home blood-pressure readings &middot; 14:38</div>
+        </div>
+        <div class="pq-card">
+          <div class="q">You&rsquo;re telling me a small thing very precisely &mdash; that&rsquo;s exactly what we want.</div>
+          <div class="attr"><b>Aanya Rao, MD</b> &middot; closing the visit &middot; 14:41</div>
+        </div>
+        <div class="pq-card">
+          <div class="q">I haven&rsquo;t had a cigarette in eighty-six days. Not that anyone&rsquo;s counting.</div>
+          <div class="attr"><b>Daniel Okafor</b> &middot; Cardiology, New &middot; 13:32</div>
+        </div>
+        <div class="pq-card">
+          <div class="q">My A-fib is loud at three in the morning. Quiet at noon.</div>
+          <div class="attr"><b>Janet Whitfield</b> &middot; Cardiology, Follow-up &middot; 10:21</div>
+        </div>
+      </div>
+    </article>
+
+    <!-- BY THE NUMBERS — stat strip with serif numerals -->
+    <aside class="by-numbers" aria-label="By the numbers">
+      <div class="heading">
+        <div class="ttl">By the <span style="font-style:normal; font-family: var(--serif-display); font-weight:800; color: var(--accent-deep);">Numbers</span></div>
+        <div class="badge">A8 &middot; metrics</div>
+      </div>
+
+      <div class="stat-row">
+        <div class="num">312<small>&nbsp;visits</small></div>
+        <div class="lbl">
+          <div class="ttl">filed this month</div>
+          <div class="sub">Apr 1&mdash;29 &middot; up 18% vs. March</div>
+        </div>
+      </div>
+      <div class="stat-row">
+        <div class="num">1,486<small>&nbsp;min</small></div>
+        <div class="lbl">
+          <div class="ttl">of audio transcribed</div>
+          <div class="sub">avg. 4&thinsp;min&nbsp;46&thinsp;sec per visit</div>
+        </div>
+      </div>
+      <div class="stat-row">
+        <div class="num">0.92<small>&nbsp;avg.</small></div>
+        <div class="lbl">
+          <div class="ttl">SOAP confidence</div>
+          <div class="sub">layer 5 self-critique &middot; high tier</div>
+        </div>
+      </div>
+      <div class="stat-row">
+        <div class="num">7<small>&nbsp;Rx flags</small></div>
+        <div class="lbl">
+          <div class="ttl">warnings raised, two overridden</div>
+          <div class="sub">all logged &sect; <span class="smallcaps">RxWarningOverride</span></div>
+        </div>
+      </div>
+      <div class="stat-row">
+        <div class="num">128<small>&nbsp;sec</small></div>
+        <div class="lbl">
+          <div class="ttl">median time-to-draft</div>
+          <div class="sub">from end-of-recording to ready</div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- THIS WEEK'S WARNINGS — italic-serif marginalia note as a boxed errata -->
+    <aside class="warnings" aria-label="This week's warnings">
+      <div class="heading">This week&rsquo;s warnings &middot; A9</div>
+      <p class="lede">
+        Six items the scribe flagged for human eyes between Monday and Tuesday afternoon. Set in italic, with
+        a section sign in the upper right corner, in the manner of an errata.
+      </p>
+      <ol>
+        <li>
+          <b>Janet Whitfield &middot; warfarin &times; ibuprofen.</b> The scribe captured an ibuprofen self-prescription
+          for back pain; warfarin INR last drawn at 2.4. Recommend acetaminophen substitution.
+        </li>
+        <li>
+          <b>Daniel Okafor &middot; sildenafil &times; isosorbide.</b> Patient mentioned an old prescription. Worth a
+          medication reconciliation pass before discharge.
+        </li>
+        <li>
+          <b>Henry Boateng &middot; metformin in stage&nbsp;3b CKD.</b> eGFR 38; flagged for dose reduction or
+          alternative.
+        </li>
+        <li>
+          <b>Sofia Aguilar &middot; surgical clearance pending.</b> Cardiac risk stratified moderate &mdash; the consult
+          letter is drafted but unsigned at press time.
+        </li>
+        <li>
+          <b>Wendell Park &middot; post-op draft.</b> Layer&nbsp;5 self-critique flagged a missing follow-up timeline;
+          the scribe filled it from the discharge summary.
+        </li>
+        <li>
+          <b>Maria Lopez &middot; new exertional chest tightness.</b> Not yet escalated. Stress test ordered, in the
+          order queue.
+        </li>
+      </ol>
+    </aside>
+
+    <!-- WEEK-AT-A-GLANCE STRIP -->
+    <section class="week-strip" aria-label="The week, at a glance">
+      <div class="week-cell">
+        <div class="day">Mon 28 Apr</div>
+        <div class="num">14<small>&nbsp;visits</small></div>
+        <div class="lbl">eight follow-ups, six new &mdash; one Rx flag, signed by 18:02.</div>
+      </div>
+      <div class="week-cell">
+        <div class="day">Tue 29 Apr</div>
+        <div class="num">11<small>&nbsp;visits</small></div>
+        <div class="lbl">seven filed by 14:18; four still on the desk this afternoon.</div>
+      </div>
+      <div class="week-cell">
+        <div class="day">Wed 30 Apr</div>
+        <div class="num">16<small>&nbsp;visits</small></div>
+        <div class="lbl">scheduled &mdash; two pre-ops, the rest follow-ups.</div>
+      </div>
+      <div class="week-cell">
+        <div class="day">Thu 01 May</div>
+        <div class="num">12<small>&nbsp;visits</small></div>
+        <div class="lbl">scheduled &mdash; including the pre-pollen-season asthma cohort.</div>
+      </div>
+    </section>
+
+    <!-- RECENTLY FILED — three feature-card-style filings -->
+    <article class="recently-filed">
+      <div class="heading">
+        <div class="ttl">Recently <span style="font-family: var(--serif-italic); font-weight:500; font-style:italic; color:var(--accent-deep);">Filed</span></div>
+        <div class="kicker">A11 &middot; this week, in print</div>
+      </div>
+      <div class="filed-grid">
+        <article class="filed-card">
+          <div class="ph">
+            <img
+              src="https://images.unsplash.com/photo-1530497610245-94d3c16cda28?auto=format&fit=crop&w=1400&q=70"
+              alt="Empty exam room with morning light, a folded paper gown on the table."
+              loading="lazy"
+              width="1200" height="900"
+            />
+          </div>
+          <div class="kr">Cardiology &middot; New</div>
+          <h3 class="ttl">Daniel Okafor: <em>eighty-six days</em>, no cigarettes.</h3>
+          <p class="deck">
+            Forty-six, otherwise well; family history is the headline. We started him on lisinopril and a
+            statin, with a note about his strict definition of <em>&ldquo;not counting.&rdquo;</em>
+          </p>
+          <div class="meta"><b>Filed 13:45</b><span>&middot;</span><span>0.94 conf.</span><span>&middot;</span><span>3 ICD</span></div>
+        </article>
+
+        <article class="filed-card">
+          <div class="ph">
+            <img
+              src="https://images.unsplash.com/photo-1581595220892-b0739db3ba8c?auto=format&fit=crop&w=1400&q=70"
+              alt="A clean lab bench with two glass beakers and a notebook."
+              loading="lazy"
+              width="1200" height="900"
+            />
+          </div>
+          <div class="kr">Cardiology &middot; Refill</div>
+          <h3 class="ttl">Priya Subramanian: <em>three months</em>, three medications, one pharmacy.</h3>
+          <p class="deck">
+            A model patient: amlodipine, atorvastatin, aspirin. Asked us to switch the time of one tablet to
+            the morning &mdash; we obliged, and put it in italic.
+          </p>
+          <div class="meta"><b>Filed 13:10</b><span>&middot;</span><span>0.96 conf.</span><span>&middot;</span><span>2 ICD</span></div>
+        </article>
+
+        <article class="filed-card">
+          <div class="ph">
+            <img
+              src="https://images.unsplash.com/photo-1551601651-2a8555f1a136?auto=format&fit=crop&w=1400&q=70"
+              alt="A row of patient charts, fanned out on a wooden surface, soft lighting."
+              loading="lazy"
+              width="1200" height="900"
+            />
+          </div>
+          <div class="kr">Cardiology &middot; Pre-op</div>
+          <h3 class="ttl">Sofia Aguilar: a <em>moderate-risk</em> letter, awaiting signature.</h3>
+          <p class="deck">
+            Pre-op clearance for elective laparoscopic cholecystectomy. Functional capacity adequate, no
+            unstable symptoms. The letter is drafted; the editor&rsquo;s pen is uncapped.
+          </p>
+          <div class="meta"><b>Filed 11:50</b><span>&middot;</span><span>0.89 conf.</span><span>&middot;</span><span>4 ICD</span></div>
+        </article>
+      </div>
+    </article>
+
+    <!-- A second photographic block — clinic / lab feel -->
+    <article style="grid-column: 1 / -1;">
+      <div class="kicker" style="margin-bottom: 8px;">Photo Essay &middot; A12 &middot; The Quiet Hour</div>
+      <div style="display:grid; grid-template-columns: 7fr 5fr; gap: 28px;">
+        <figure class="photo-block" style="aspect-ratio: 16/9;">
+          <img
+            src="https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&w=2200&q=70"
+            alt="A bright, plant-filled clinic waiting area, late afternoon."
+            loading="lazy"
+            width="2200" height="1238"
+          />
+          <figcaption>
+            <b>Plate II</b>
+            The waiting area at Bay Cardio Group, Suite 314 &mdash; mid-afternoon, between the 14:32 and the
+            15:00. Photograph: <span style="font-style:normal;">QuillMD&nbsp;Editorial</span>.
+          </figcaption>
+        </figure>
+        <div>
+          <h3 class="display-md" style="margin-bottom: 12px;">
+            The hour <em style="font-family: var(--serif-italic); color: var(--accent-deep); font-weight:500;">between</em> visits
+          </h3>
+          <p class="body-prose dropcap">
+            We don&rsquo;t document the hour between visits, but the scribe does. It listens for the squeak of a
+            chair in the next room, the long exhale of a clinician between charts, the second drawer of the
+            refrigerator opening for a lukewarm coffee. The hour between visits is when the day is composed
+            into something a doctor can sign with a clear hand. It is the hour we set aside for the magazine
+            to do its work: lay out the next page, choose the pull-quote, set the page numbers in the lower
+            margin, and quietly pass the issue back to the desk.
+          </p>
+          <p class="body-prose" style="margin-top: 0.6em;">
+            The visit just past becomes a feature; the visit just ahead becomes a deadline. The scribe waits
+            with the photographer in the lobby, both of them watching the door.
+          </p>
+          <div class="kicker" style="margin-top: 14px;">&mdash; Editor&rsquo;s caption, 14:55 PST</div>
+        </div>
+      </div>
+    </article>
+
+  </section>
+
+  <!-- ============================================================
+       MARGINALIA SPREAD — A glossary aside, a contributor strip,
+       and a backmatter index, in the manner of a real magazine.
+       ============================================================ -->
+  <section class="dash-grid" aria-label="Marginalia and back-matter" style="margin-top: 56px;">
+
+    <!-- A flag bar -->
+    <div class="dash-flag">
+      <div class="feat">
+        <b>Back of the Book</b>
+        Marginalia &middot; Glossary &middot; Contributors &middot; Index &middot; Errata
+      </div>
+      <div class="right">
+        Pages A13 &mdash; A16 &middot; set in 9&thinsp;pt with kickers in 10.5&thinsp;pt mono.
+      </div>
+    </div>
+
+    <!-- GLOSSARY — a 4-column dense aside, like the back of Wallpaper -->
+    <article style="grid-column: 1 / span 8;">
+      <div class="kicker" style="margin-bottom: 8px;">Glossary &middot; A13 &middot; for readers new to the issue</div>
+      <h3 class="display-md" style="margin-bottom: 14px;">
+        A short <em style="font-family: var(--serif-italic); color: var(--accent-deep); font-weight:500;">lexicon</em>, set in four columns.
+      </h3>
+      <hr class="hr-thick" />
+      <div class="columns-4 body-prose" style="margin-top: 18px; font-size: 13.5px; line-height: 1.55;">
+        <p>
+          <b style="font-family: var(--serif-display); font-weight:700; color: var(--ink);">SOAP.</b>
+          The four-part structure of a clinical note &mdash; <em>Subjective, Objective, Assessment, Plan</em>. The scribe
+          drafts each part as a separate column, then composites them into a single page. We treat it as a quartet.
+        </p>
+        <p>
+          <b style="font-family: var(--serif-display); font-weight:700;">Layer.</b>
+          One of seven processing stages between the raw audio and a signed note. Layers are numbered 01&mdash;07,
+          with 07 split into a, b, c, d, e for coding, prescribing, referral and patient summary.
+        </p>
+        <p>
+          <b style="font-family: var(--serif-display); font-weight:700;">Confidence.</b>
+          A 0&mdash;1 score the scribe assigns to itself, after self-critique in Layer&nbsp;05. Anything below 0.80 we
+          flag in italic in the margin and ask a human to read.
+        </p>
+        <p>
+          <b style="font-family: var(--serif-display); font-weight:700;">Specialty.</b>
+          The lens through which the scribe listens &mdash; <em>cardiology</em>, <em>endocrinology</em>, <em>orthopaedics</em>.
+          The same audio yields different notes through different lenses. We let the doctor choose the lens.
+        </p>
+        <p>
+          <b style="font-family: var(--serif-display); font-weight:700;">Diarisation.</b>
+          The act of telling the patient&rsquo;s voice apart from the doctor&rsquo;s. The scribe uses speaker turns
+          (<em>SPK 0</em>, <em>SPK 1</em>) and lets the editor reassign with a click if the diariser misheard.
+        </p>
+        <p>
+          <b style="font-family: var(--serif-display); font-weight:700;">Pull-quote.</b>
+          A line from the patient (or sometimes the doctor) that the scribe sets in 32&thinsp;pt italic to mark
+          something worth remembering. It is, in our editorial opinion, the heart of the visit.
+        </p>
+        <p>
+          <b style="font-family: var(--serif-display); font-weight:700;">Marginalia.</b>
+          A note set in italic in the gutter, beside the running text. We use it for clinical context the doctor
+          might want a beat to read, but not interrupt the visit for.
+        </p>
+        <p>
+          <b style="font-family: var(--serif-display); font-weight:700;">Errata.</b>
+          A formal correction. We collect them on Page&nbsp;A9 each issue, set in italic with leading numerals.
+        </p>
+        <p>
+          <b style="font-family: var(--serif-display); font-weight:700;">Folio.</b>
+          The page number, set in italic in the margin. We never set it in bold; we feel that&rsquo;s undignified.
+        </p>
+        <p>
+          <b style="font-family: var(--serif-display); font-weight:700;">Kicker.</b>
+          The short tagline above a headline, set in 10.5&thinsp;pt mono with letterspacing. We use it the way an
+          editor uses a tag.
+        </p>
+        <p>
+          <b style="font-family: var(--serif-display); font-weight:700;">Drop cap.</b>
+          The first letter of a major body block, enlarged. We set it in burnt orange. Apartamento sets it in
+          mossy green. We deferred to our own colour.
+        </p>
+        <p>
+          <b style="font-family: var(--serif-display); font-weight:700;">Spread.</b>
+          Two facing pages designed as one. The recording on Page A2&mdash;A3 is a spread. The dashboard,
+          arguably, is a four-page spread.
+        </p>
+      </div>
+    </article>
+
+    <!-- CONTRIBUTORS — a tiny photo grid with serif names + italic blurbs -->
+    <aside style="grid-column: 9 / span 4;" aria-label="Contributors">
+      <div class="kicker" style="margin-bottom: 8px;">Contributors &middot; A14</div>
+      <h3 class="display-md" style="margin-bottom: 14px;">The <em style="font-family: var(--serif-italic); color: var(--accent-deep); font-weight:500;">desk</em>, this issue.</h3>
+      <hr class="hr-thick" />
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 18px;">
+        <div>
+          <div style="aspect-ratio: 1/1; background: var(--paper-deep); border: 1px solid var(--ink-thread); overflow:hidden;">
+            <img
+              src="https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&w=600&q=70"
+              alt="A clinician with grey hair, photographed in a sunlit office."
+              loading="lazy"
+              width="600" height="600"
+              style="width:100%; height:100%; object-fit:cover; filter: contrast(1.05) saturate(0.85);"
+            />
+          </div>
+          <div class="serif" style="font-weight: 700; font-size: 16px; margin-top: 8px;">Aanya Rao, MD</div>
+          <div class="italic-serif" style="color: var(--ink-soft); font-size: 13px;">Cardiologist &middot; this week&rsquo;s lead clinician</div>
+        </div>
+        <div>
+          <div style="aspect-ratio: 1/1; background: var(--paper-deep); border: 1px solid var(--ink-thread); overflow:hidden;">
+            <img
+              src="https://images.unsplash.com/photo-1607746882042-944635dfe10e?auto=format&fit=crop&w=600&q=70"
+              alt="A reporter at a wooden desk, taking notes longhand."
+              loading="lazy"
+              width="600" height="600"
+              style="width:100%; height:100%; object-fit:cover; filter: contrast(1.05) saturate(0.85);"
+            />
+          </div>
+          <div class="serif" style="font-weight: 700; font-size: 16px; margin-top: 8px;">The Scribe</div>
+          <div class="italic-serif" style="color: var(--ink-soft); font-size: 13px;">Reporter at large &middot; ambient throughout</div>
+        </div>
+        <div>
+          <div style="aspect-ratio: 1/1; background: var(--paper-deep); border: 1px solid var(--ink-thread); overflow:hidden;">
+            <img
+              src="https://images.unsplash.com/photo-1582213782179-e0d53f98f2ca?auto=format&fit=crop&w=600&q=70"
+              alt="A patient seated by a window, photographed in available light."
+              loading="lazy"
+              width="600" height="600"
+              style="width:100%; height:100%; object-fit:cover; filter: contrast(1.05) saturate(0.85);"
+            />
+          </div>
+          <div class="serif" style="font-weight: 700; font-size: 16px; margin-top: 8px;">Maria Lopez</div>
+          <div class="italic-serif" style="color: var(--ink-soft); font-size: 13px;">Subject &middot; this issue&rsquo;s pull-quotes</div>
+        </div>
+        <div>
+          <div style="aspect-ratio: 1/1; background: var(--paper-deep); border: 1px solid var(--ink-thread); overflow:hidden;">
+            <img
+              src="https://images.unsplash.com/photo-1559526324-c1f275fbfa32?auto=format&fit=crop&w=600&q=70"
+              alt="A photographer&rsquo;s hands holding a manual film camera."
+              loading="lazy"
+              width="600" height="600"
+              style="width:100%; height:100%; object-fit:cover; filter: contrast(1.05) saturate(0.85);"
+            />
+          </div>
+          <div class="serif" style="font-weight: 700; font-size: 16px; margin-top: 8px;">QuillMD Editorial</div>
+          <div class="italic-serif" style="color: var(--ink-soft); font-size: 13px;">Photography &middot; on assignment in Suite&nbsp;314</div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- INDEX — a magazine-back-page index, in mono, four columns -->
+    <article style="grid-column: 1 / -1;">
+      <div class="dash-flag" style="margin-bottom: 14px;">
+        <div class="feat"><b>Index</b>By patient, by code, by quote, by hour &middot; A15</div>
+        <div class="right">A back-of-the-book index, set in mono, after the manner of <em>The Atlantic</em>&rsquo;s.</div>
+      </div>
+      <div style="display:grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 28px;">
+
+        <div>
+          <div class="kicker" style="margin-bottom: 8px;">By patient</div>
+          <ul class="mono" style="font-size: 12px; line-height: 1.85; color: var(--ink-soft); list-style: none; padding-left: 0; border-top: 1px solid var(--ink); padding-top: 8px;">
+            <li>Aguilar, Sofia &mdash; A11</li>
+            <li>Boateng, Henry &mdash; A6</li>
+            <li>Chen, Linda &mdash; A6</li>
+            <li>DeLeon, Marcus &mdash; A6</li>
+            <li>Halabi, Ahmed &mdash; A6</li>
+            <li>Lopez, Maria &mdash; A2, A4, A7</li>
+            <li>Ndiaye, Yusuf &mdash; A6</li>
+            <li>Okafor, Daniel &mdash; A7, A11</li>
+            <li>Park, Wendell &mdash; A6, A9</li>
+            <li>Sternberg, Rachel &mdash; A6</li>
+            <li>Subramanian, Priya &mdash; A11</li>
+            <li>Whitfield, Janet &mdash; A6, A7, A9</li>
+          </ul>
+        </div>
+
+        <div>
+          <div class="kicker" style="margin-bottom: 8px;">By code</div>
+          <ul class="mono" style="font-size: 12px; line-height: 1.85; color: var(--ink-soft); list-style: none; padding-left: 0; border-top: 1px solid var(--ink); padding-top: 8px;">
+            <li>I10 &mdash; Hypertension &middot; A4, A11</li>
+            <li>I25.10 &mdash; Stable angina &middot; A4</li>
+            <li>I48.91 &mdash; Atrial fibrillation &middot; A6, A9</li>
+            <li>E78.5 &mdash; Hyperlipidaemia &middot; A4, A11</li>
+            <li>E11.9 &mdash; Type-2 diabetes &middot; A6</li>
+            <li>N18.32 &mdash; CKD stage 3b &middot; A9</li>
+            <li>R07.89 &mdash; Other chest pain &middot; A4</li>
+            <li>Z79.01 &mdash; Long-term anti-coag &middot; A9</li>
+            <li>Z51.81 &mdash; Therapeutic drug monitoring &middot; A9</li>
+            <li>F17.210 &mdash; Tobacco use &middot; A11</li>
+            <li>99213 &mdash; E&amp;M, established &middot; A4</li>
+            <li>99214 &mdash; E&amp;M, moderate &middot; A6</li>
+          </ul>
+        </div>
+
+        <div>
+          <div class="kicker" style="margin-bottom: 8px;">By quote</div>
+          <ul class="italic-serif" style="font-size: 13.5px; line-height: 1.6; color: var(--ink-soft); list-style: none; padding-left: 0; border-top: 1px solid var(--ink); padding-top: 8px;">
+            <li>&ldquo;Just the squeeze.&rdquo; &mdash; A2</li>
+            <li>&ldquo;I just take it with applesauce.&rdquo; &mdash; A2</li>
+            <li>&ldquo;After my daughter called.&rdquo; &mdash; A7</li>
+            <li>&ldquo;A small thing very precisely.&rdquo; &mdash; A2</li>
+            <li>&ldquo;Eighty-six days.&rdquo; &mdash; A11</li>
+            <li>&ldquo;Loud at three in the morning.&rdquo; &mdash; A7</li>
+            <li>&ldquo;Quiet at noon.&rdquo; &mdash; A7</li>
+            <li>&ldquo;Not that anyone&rsquo;s counting.&rdquo; &mdash; A11</li>
+          </ul>
+        </div>
+
+        <div>
+          <div class="kicker" style="margin-bottom: 8px;">By hour</div>
+          <ul class="mono" style="font-size: 12px; line-height: 1.85; color: var(--ink-soft); list-style: none; padding-left: 0; border-top: 1px solid var(--ink); padding-top: 8px;">
+            <li>09:45 &mdash; Boateng, signed</li>
+            <li>10:30 &mdash; Whitfield, flagged</li>
+            <li>11:15 &mdash; Halabi, signed</li>
+            <li>11:50 &mdash; Aguilar, signed</li>
+            <li>12:30 &mdash; Park, drafted</li>
+            <li>13:10 &mdash; Subramanian, signed</li>
+            <li>13:45 &mdash; Okafor, signed</li>
+            <li>14:32 &mdash; Lopez, in room</li>
+            <li>15:00 &mdash; Chen, up next</li>
+            <li>15:30 &mdash; DeLeon, scheduled</li>
+            <li>16:15 &mdash; Sternberg, scheduled</li>
+            <li>16:45 &mdash; Ndiaye, scheduled</li>
+          </ul>
+        </div>
+      </div>
+    </article>
+
+    <!-- A SECONDARY EDITORIAL — a long-read column with drop cap, spans 8 cols -->
+    <article style="grid-column: 1 / span 8;">
+      <div class="kicker" style="margin-bottom: 8px;">Long Read &middot; A16 &middot; an essay on the verb to listen</div>
+      <h3 class="display-lg" style="margin-bottom: 14px;">
+        The verb <em style="font-family: var(--serif-italic); color: var(--accent-deep); font-weight: 500;">to listen,</em><br/>
+        in twelve tenses.
+      </h3>
+      <p class="italic-serif" style="font-size: 19px; line-height: 1.4; color: var(--ink-soft); margin-bottom: 18px;">
+        On the small, often-skipped grammar of paying attention &mdash; what changes when a clinic stops typing
+        and starts hearing.
+      </p>
+      <hr class="hr-thick" style="margin-bottom: 18px;" />
+      <div class="columns-2 body-prose">
+        <p class="dropcap">
+          A patient says <em>just</em> fourteen times in eleven minutes, and a doctor &mdash; if she is the kind we
+          like to be &mdash; hears it as a softening. The word <em>just</em> appears in the margin of half a sentence;
+          it is what people say when they are trying to make their pain smaller for the listener. We have known
+          this for centuries; it is in Aristotle, somewhere; it is certainly in nursing school. What is new is
+          that a machine can hear it too.
+        </p>
+        <p>
+          The scribe does not interrupt; it does not even, strictly speaking, <em>type</em>. It listens. After the
+          visit, it composes &mdash; in the way a magazine composes &mdash; a feature out of what was said. It is
+          tempting to say the scribe is a stenographer, but a stenographer transcribes; the scribe edits. It
+          chooses the pull-quote. It sets the chest tightness in italic. It puts the home blood-pressure
+          reading in the margin, beside a small graph.
+        </p>
+        <p>
+          We design QuillMD for the editing, not the typing. The visit is a story. The note is the spread. The
+          doctor is the editor &mdash; she signs the page only when she has read it, and we feel strongly that the
+          page should be worth reading. A SOAP note designed in a database table is a SOAP note nobody reads
+          twice. A SOAP note laid out as a feature is one a colleague might pick up and work from.
+        </p>
+        <p>
+          This issue is the first to commit fully to the page metaphor. The recording is a spread. The
+          dashboard is a contents page. The patient list is a classifieds back-page in mono. The footnotes are
+          marginalia. The numbers are set in eighty-point Bodoni, because numbers in a magazine are themselves
+          a design element. We are not trying to be precious; we are trying to be <em>read</em>.
+        </p>
+        <p>
+          A machine that can hear is one thing. A machine that can lay it out is another. The two together,
+          we hope, are something a clinic can use without becoming, itself, a database.
+        </p>
+        <p>
+          On the next page, on Page A17 of next week&rsquo;s issue, we will publish the order set Dr. Rao signed
+          at 14:42 PST &mdash; an EKG today, a stress test within fourteen days, a follow-up call from the front
+          desk on Friday. We will also publish a short piece on why we do not use red, the colour, in this
+          issue. (We use burnt orange. We mixed it once. We have committed.)
+        </p>
+        <p>
+          Until then: a small <em>thank-you</em>, set in italic, to every patient who has let the scribe listen.
+          Without you, there is no story. There is only a database.
+        </p>
+      </div>
+      <div class="kicker" style="margin-top: 22px; color: var(--ink-faint);">
+        Continued in next month&rsquo;s issue, with photographs and a stress-test footnote &middot; Page A17.
+      </div>
+    </article>
+
+    <!-- ERRATA / SUBSCRIPTIONS — a smaller right column with stamp ornaments -->
+    <aside style="grid-column: 9 / span 4;" aria-label="Errata and subscriptions">
+      <div class="kicker" style="margin-bottom: 8px;">Errata &amp; Subscriptions &middot; A16</div>
+      <h3 class="display-md" style="margin-bottom: 14px;">
+        Small <em style="font-family: var(--serif-italic); color: var(--accent-deep); font-weight: 500;">corrections,</em><br/>
+        graciously offered.
+      </h3>
+      <hr class="hr-thick" />
+      <ol class="italic-serif" style="font-size: 14.5px; line-height: 1.55; color: var(--ink-soft); list-style: none; padding-left: 0; margin-top: 14px;">
+        <li style="padding: 10px 0; border-bottom: 1px solid var(--ink-thread);">
+          <b class="serif" style="font-style: normal; color: var(--ink); font-weight:700;">Issue 46, A8.</b>
+          We mis-transcribed <em>diltiazem</em> as <em>diltiazam</em>. The pharmacy noticed; the patient was unaffected.
+          We have apologised in italic.
+        </li>
+        <li style="padding: 10px 0; border-bottom: 1px solid var(--ink-thread);">
+          <b class="serif" style="font-style: normal; color: var(--ink); font-weight:700;">Issue 45, A2.</b>
+          A pull-quote was attributed to a clinician when it was, in fact, a patient&rsquo;s. We have re-set it.
+        </li>
+        <li style="padding: 10px 0; border-bottom: 1px solid var(--ink-thread);">
+          <b class="serif" style="font-style: normal; color: var(--ink); font-weight:700;">Issue 44, A11.</b>
+          A photograph was credited to <em>Stock</em>; it was, in fact, taken by Dr.&thinsp;Rao with her phone.
+          The credit has been corrected.
+        </li>
+        <li style="padding: 10px 0;">
+          <b class="serif" style="font-style: normal; color: var(--ink); font-weight:700;">Issue 43, A6.</b>
+          A classified ad listed a patient as <em>up next</em> after she had already left the clinic. We have
+          updated the desk in real time since.
+        </li>
+      </ol>
+
+      <div class="ornament-line" style="margin-top: 22px;">&bull; &middot; &bull; &middot; &bull;</div>
+
+      <div class="marginalia" style="margin-top: 22px;">
+        <b>Subscribe</b>
+        Every visit you record is a subscription. We file a new issue at the end of each clinic day; we never
+        send you an email at 6&thinsp;a.m. Cancel any time, in <em>Settings &rsaquo; Account &rsaquo; Data export</em>,
+        and we will print one final issue and hand you the back catalogue, in <span class="smallcaps">PDF</span>
+        and <span class="smallcaps">DOCX</span>.
+      </div>
+    </aside>
+
+  </section>
+
+  <!-- ============================================================
+       COLOPHON / FOOTER
+       ============================================================ -->
+  <footer class="colophon" role="contentinfo">
+    <div>
+      <h4>Colophon</h4>
+      <p>
+        Set in <em>Bodoni Moda</em> for display, <em>Cormorant Garamond</em> for italic body and marginalia,
+        <em>Inter Tight</em> for running prose, and <em>JetBrains Mono</em> for kickers and folios. Printed on
+        warm-cream stock at 96&thinsp;lpi. The accent is a single burnt orange, mixed once and committed.
+      </p>
+      <p style="margin-top: 10px;">
+        QuillMD &middot; Vol. 1, Issue 47 &middot; The Listening Issue &middot; April 2026 &middot; PHI redacted
+        per <span class="smallcaps">HIPAA</span>&nbsp;&sect;&thinsp;164.514. All transcripts fictional, set
+        for design purposes only.
+      </p>
+    </div>
+    <div>
+      <h4>The Desk</h4>
+      <p>
+        Editor &middot; <em>The Editorial Desk</em>. Art Direction &middot; <em>Magazine, V4</em>. Reportage &middot;
+        <em>The Scribe</em>. Photography &middot; <em>QuillMD&nbsp;Editorial</em>, with permission. Type &middot;
+        <em>Bodoni, Cormorant, Inter Tight, JetBrains Mono</em>. Paper &middot; <em>warm cream, &thinsp;#FBFAF7</em>.
+      </p>
+      <p style="margin-top: 10px;">
+        Subscriptions: every visit you record, automatically. Cancel any time, in <em>Settings &rsaquo; Account</em>.
+      </p>
+    </div>
+    <div style="text-align: right;">
+      <h4 style="text-align:right;">Page</h4>
+      <div class="pgnum" style="text-align:right;">A12<small>&nbsp;of A12</small></div>
+      <p style="text-align:right;">
+        &copy; 2026 QuillMD Editorial. The pull-quotes are the patients&rsquo;. The marginalia are the
+        editor&rsquo;s. The signature, when it comes, is the doctor&rsquo;s.
+      </p>
+    </div>
+  </footer>
+
+  <!-- A run-folio at the very foot, like the last page of an issue -->
+  <div class="runfoot">
+    <div>QuillMD &middot; The Listening Issue</div>
+    <div class="center">&laquo; A patient encounter is a story worth designing. &raquo;</div>
+    <div>End of Volume I, Issue 47</div>
+  </div>
+
+</div>
+</body>
+</html>
