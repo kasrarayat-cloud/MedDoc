@@ -1,10 +1,16 @@
 // ============================================================================
-// /visits/new — app-redesign-v1 shell (Gate 8, HANDOFF §2.3 NewVisitScreen).
+// /visits/new — Clinician shell (Phase 2 Batch E, was Gate 8 / HANDOFF §2.3).
 // ----------------------------------------------------------------------------
 // The underlying flow (PatientPicker → VisitFormStep2 → createVisitAction)
 // is preserved end-to-end — we wrap it in AppFrame + stepper + visit-summary
 // rail. Step state is driven by the selected patient (absent → step 1,
 // present → step 2). Full three-step URL routing lands in a later pass.
+//
+// Phase 2 (Clinician remodel) — this route opts in to the Clinician
+// chrome via `<AppFrame theme="clinician">`. PageHeader + NewVisitClient
+// are threaded with `theme="clinician"` so the full visual chain — top
+// nav, page header, stepper, picker, form, summary rail — resolves
+// against the warm cream + sage palette.
 // ============================================================================
 
 import type { Metadata } from 'next';
@@ -102,12 +108,12 @@ export default async function NewVisitPage({
     mostRecentVisit?.specialty ?? SPECIALTIES[0]?.displayName ?? '';
 
   return (
-    <AppFrame>
+    <AppFrame theme="clinician">
       <PageHeader
-        eyebrow="§ New / Visit"
+        eyebrow="New visit"
         title={
           <>
-            Start a <em style={{ color: 'var(--accent-bright)' }}>new visit</em>
+            Start a <em>new visit</em>
           </>
         }
         subtitle={
@@ -118,13 +124,18 @@ export default async function NewVisitPage({
         actions={
           <a
             href="/dashboard"
-            className="qm-btn qm-btn-ghost"
-            style={{ textDecoration: 'none' }}
+            className="qm-cl-btn qm-cl-btn-ghost"
+            style={{
+              textDecoration: 'none',
+              padding: '10px 18px',
+              fontSize: 13.5,
+            }}
           >
             <Ic.close width={13} height={13} />
             Cancel
           </a>
         }
+        theme="clinician"
       />
 
       <div style={{ padding: '0 32px 48px', maxWidth: 1280 }}>
@@ -132,6 +143,7 @@ export default async function NewVisitPage({
           initialPatient={initialPatient}
           specialties={SPECIALTIES}
           defaultSpecialty={defaultSpecialty}
+          theme="clinician"
         />
       </div>
     </AppFrame>
