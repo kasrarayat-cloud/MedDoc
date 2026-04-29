@@ -64,7 +64,7 @@ export function SignupForm() {
 
   return (
     <form action={formAction} onSubmit={handleSubmit}>
-      <div style={{ marginTop: 14 }}>
+      <div style={{ marginTop: 18 }}>
         <AuthFieldLabel htmlFor="name">Full name</AuthFieldLabel>
         <input
           id="name"
@@ -73,7 +73,7 @@ export function SignupForm() {
           autoComplete="name"
           defaultValue={values.name ?? ''}
           required
-          className="qm-input"
+          className="qm-cl-input"
           style={{ marginTop: 6 }}
         />
         <AuthFieldError message={errors.name} />
@@ -88,7 +88,7 @@ export function SignupForm() {
           autoComplete="email"
           defaultValue={values.email ?? ''}
           required
-          className="qm-input"
+          className="qm-cl-input"
           style={{ marginTop: 6 }}
         />
         <AuthFieldError message={errors.email} />
@@ -104,15 +104,16 @@ export function SignupForm() {
           required
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="qm-input"
+          className="qm-cl-input"
           style={{ marginTop: 6 }}
         />
         <p
           style={{
             marginTop: 6,
-            fontSize: 11,
-            color: 'var(--fg-4)',
+            fontSize: 11.5,
+            color: 'var(--ink-3)',
             lineHeight: 1.4,
+            fontFamily: 'var(--sans)',
           }}
         >
           At least 10 characters, with upper + lowercase letters and a digit.
@@ -130,7 +131,7 @@ export function SignupForm() {
           required
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
-          className="qm-input"
+          className="qm-cl-input"
           style={{ marginTop: 6 }}
         />
         <AuthFieldError message={mismatchMessage} />
@@ -142,9 +143,10 @@ export function SignupForm() {
           alignItems: 'flex-start',
           gap: 10,
           marginTop: 18,
-          fontSize: 12,
-          color: 'var(--fg-3)',
+          fontSize: 12.5,
+          color: 'var(--ink-2)',
           lineHeight: 1.5,
+          fontFamily: 'var(--sans)',
         }}
       >
         <input
@@ -155,7 +157,7 @@ export function SignupForm() {
             marginTop: 3,
             width: 14,
             height: 14,
-            accentColor: 'var(--accent)',
+            accentColor: 'var(--sage)',
           }}
         />
         <span>
@@ -164,7 +166,7 @@ export function SignupForm() {
             href={`${MARKETING_URL}/terms`}
             target="_blank"
             rel="noopener noreferrer"
-            style={{ color: 'var(--accent-bright)' }}
+            style={{ color: 'var(--sage-deep)', fontWeight: 500 }}
           >
             terms of service
           </a>{' '}
@@ -173,7 +175,7 @@ export function SignupForm() {
             href={`${MARKETING_URL}/privacy`}
             target="_blank"
             rel="noopener noreferrer"
-            style={{ color: 'var(--accent-bright)' }}
+            style={{ color: 'var(--sage-deep)', fontWeight: 500 }}
           >
             privacy policy
           </a>
@@ -187,11 +189,10 @@ export function SignupForm() {
         type="submit"
         disabled={pending}
         aria-disabled={pending || Boolean(mismatchMessage)}
-        className="qm-btn qm-btn-primary"
+        className="qm-cl-btn qm-cl-btn-primary qm-cl-btn-lg"
         style={{
           width: '100%',
           justifyContent: 'center',
-          padding: 12,
           marginTop: 22,
           opacity: pending ? 0.6 : 1,
           cursor: pending ? 'not-allowed' : 'pointer',
@@ -204,13 +205,14 @@ export function SignupForm() {
       <div
         style={{
           textAlign: 'center',
-          color: 'var(--fg-3)',
+          color: 'var(--ink-3)',
           fontSize: 12.5,
           marginTop: 18,
+          fontFamily: 'var(--sans)',
         }}
       >
         Have an account?{' '}
-        <Link href="/login" style={{ color: 'var(--accent-bright)' }}>
+        <Link href="/login" style={{ color: 'var(--sage-deep)', fontWeight: 500 }}>
           Sign in →
         </Link>
       </div>
