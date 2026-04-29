@@ -22,5 +22,5 @@ export const revalidate = 0;
 
 export default async function HipaaPage() {
   const findings = await getAllFindings();
-  return <AdminHipaa initial={{ findings }} />;
+  return <AdminHipaa initial={{ findings }} theme="clinician" />;
 }
