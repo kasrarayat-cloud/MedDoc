@@ -1,5 +1,5 @@
 // ============================================================================
-// Playwright config (T-M10) — E2E regression suite
+// Playwright config (T-M10) — E2E regression suite + Phase 3 a11y CI
 // ----------------------------------------------------------------------------
 // Tests run against a LIVE transcribe-md stack (real app, real Prisma, real
 // MinIO). The transcribe-md-worker container must be running with
@@ -14,6 +14,14 @@
 // Browsers: Chromium only. Firefox/WebKit would triple CI time for no
 // useful coverage — the TranscribeMD UI is a standard-library React app
 // with no browser-specific quirks.
+//
+// Projects:
+//   - chromium  → existing scenario suite (excludes a11y.spec.ts)
+//   - a11y      → opt-in a11y CI gate; runs ONLY a11y.spec.ts. Triggered
+//                 from .github/workflows/a11y.yml via
+//                 `playwright test --project=a11y`. The default
+//                 `playwright test` invocation (no --project) runs only
+//                 chromium so the existing CI doesn't double-run a11y.
 // ============================================================================
 
 import { defineConfig, devices } from '@playwright/test';
@@ -55,7 +63,25 @@ export default defineConfig({
 
   projects: [
     {
+      // Default project — existing scenario suite. Excludes a11y.spec.ts
+      // so the a11y gate doesn't run twice (once here, once under the
+      // a11y project below).
       name: 'chromium',
+      testIgnore: '**/a11y.spec.ts',
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      // A11y CI gate — Phase 3 Wave 1 (Subagent 5). Runs the axe-core
+      // sweep against every Clinician-migrated route at desktop +
+      // mobile viewports. The spec itself instantiates per-test
+      // contexts at the right size (1440×900 / 390×844), so the
+      // project-level viewport is just a default.
+      //
+      // Triggered explicitly in .github/workflows/a11y.yml via
+      // `npx playwright test --project=a11y`. NOT included in the
+      // default `playwright test` run.
+      name: 'a11y',
+      testMatch: '**/a11y.spec.ts',
       use: { ...devices['Desktop Chrome'] },
     },
   ],

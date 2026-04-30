@@ -1,0 +1,208 @@
+# ============================================================================
+# A11y CI — Phase 3 Wave 1 (Subagent 5)
+# ----------------------------------------------------------------------------
+# Drives Chromium through every Clinician-migrated route at desktop +
+# mobile viewports, injects axe-core 4.10.0, and FAILS the workflow if
+# any axe violation has impact === 'critical' or 'serious'. This is a
+# REQUIRED check on PRs to main — see docs/A11Y_TESTING.md.
+#
+# What this workflow does NOT depend on:
+#   - The live VPS (this runs on a fresh ubuntu-latest runner)
+#   - Docker compose (postgres + redis come from GitHub services)
+#   - Anthropic / Deepgram / Resend / MinIO (production build boots
+#     without them; visit-state seeding writes rows directly via psql)
+#
+# Why pgvector/pgvector:pg16 (not postgres:16):
+#   The 20260417030632_add_scribe_foundations migration runs
+#   CREATE EXTENSION "vector"; the stock postgres image doesn't ship
+#   pgvector. Same image as .github/workflows/test.yml.
+# ============================================================================
+
+name: a11y-ci
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: a11y-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  axe:
+    name: axe-core sweep (chromium x desktop+mobile)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: meddoc
+          POSTGRES_PASSWORD: meddoc
+          POSTGRES_DB: meddoc
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U meddoc -d meddoc"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # ---- DB / Redis ------------------------------------------------------
+      DATABASE_URL: postgresql://meddoc:meddoc@localhost:5432/meddoc?schema=public
+      REDIS_URL: redis://localhost:6379
+      # ---- NextAuth + dummy keys ------------------------------------------
+      AUTH_SECRET: ci-dummy-auth-secret-not-for-production
+      NEXTAUTH_URL: http://localhost:9020
+      NEXTAUTH_SECRET: ci-dummy-auth-secret-not-for-production
+      # Email-delivery flag stays off (RESEND_FROM_VERIFIED unset) — the
+      # signup flow logs the verification link instead of mailing it,
+      # which is fine for a11y scans (we don't need the link).
+      RESEND_API_KEY: ci-dummy-resend-key
+      ANTHROPIC_API_KEY: ci-dummy-anthropic-key
+      DEEPGRAM_API_KEY: ci-dummy-deepgram-key
+      OPENAI_API_KEY: ci-dummy-openai-key
+      # ---- MinIO (a11y doesn't upload, but the client constructs at
+      # request time; pointing at localhost keeps the lazy connection
+      # from blowing up on a DNS lookup). -----------------------------------
+      MINIO_ENDPOINT: localhost
+      MINIO_PORT: '9000'
+      MINIO_ACCESS_KEY: meddoc
+      MINIO_SECRET_KEY: meddoc
+      MINIO_USE_SSL: 'false'
+      TRANSCRIBE_MD_MINIO_BUCKET: transcribe-md-audio
+      # ---- App boot config -------------------------------------------------
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: '1'
+      PORT: '9020'
+      # ---- Spec config -----------------------------------------------------
+      PW_BASE_URL: http://localhost:9020
+      # PSQL_BIN switches helpers/seedVisitStates.ts off the docker-
+      # compose channel onto a direct psql so visit-state seeding works
+      # without docker on the runner.
+      PSQL_BIN: psql "postgresql://meddoc:meddoc@localhost:5432/meddoc"
+      CI: 'true'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install workspace deps
+        run: npm ci --no-audit --no-fund
+
+      - name: Generate Prisma client
+        run: npm run db:generate
+
+      - name: Apply database migrations
+        run: npm run db:migrate:deploy
+
+      # Cache Playwright browsers across runs. The cache key includes the
+      # @playwright/test version so a Playwright bump invalidates the
+      # cache cleanly.
+      - name: Resolve Playwright version (for cache key)
+        id: pw-version
+        run: |
+          ver=$(node -p "require('./apps/transcribe-md/package.json').devDependencies['@playwright/test']")
+          echo "version=${ver}" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
+
+      - name: Install Playwright Chromium (with system deps)
+        run: npx playwright install --with-deps chromium
+        working-directory: apps/transcribe-md
+
+      - name: Install psql client (for seedVisitStates)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+
+      - name: Build transcribe-md (production)
+        run: npm run build -w transcribe-md
+        env:
+          # Build-time NEXT_PUBLIC_* — point at the runner's loopback so
+          # client bundles don't try to talk to a remote VPS.
+          NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL: http://localhost:9020
+          NEXT_PUBLIC_MARKETING_URL: http://localhost:9010
+          NEXT_PUBLIC_SHOW_PIPELINE_TAB: 'false'
+
+      - name: Start transcribe-md in background
+        # Production `next start` listens on $PORT (9020 from env above).
+        # The standalone server is at .next/standalone/apps/transcribe-md/server.js
+        # but `next start` works just as well and keeps this CI step
+        # readable.
+        run: |
+          npm run start -w transcribe-md -- -p 9020 > /tmp/transcribe-md.log 2>&1 &
+          echo "$!" > /tmp/transcribe-md.pid
+
+      - name: Wait for app to accept requests
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sSf -o /dev/null --max-time 2 http://localhost:9020/login; then
+              echo "[a11y-ci] app is up after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "[a11y-ci] app failed to start within 60s"
+          tail -200 /tmp/transcribe-md.log || true
+          exit 1
+
+      - name: Run axe-core a11y suite
+        id: axe
+        run: |
+          npx playwright test --project=a11y --reporter=list
+        working-directory: apps/transcribe-md
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a11y-playwright-report
+          path: apps/transcribe-md/playwright-report/
+          retention-days: 14
+
+      - name: Upload Playwright traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a11y-playwright-traces
+          path: apps/transcribe-md/test-results/
+          retention-days: 14
+
+      - name: Tail app log on failure
+        if: failure()
+        run: |
+          echo "----- /tmp/transcribe-md.log (last 300 lines) -----"
+          tail -300 /tmp/transcribe-md.log || true
+
+      - name: Stop transcribe-md
+        if: always()
+        run: |
+          if [ -f /tmp/transcribe-md.pid ]; then
+            kill "$(cat /tmp/transcribe-md.pid)" 2>/dev/null || true
+          fi
