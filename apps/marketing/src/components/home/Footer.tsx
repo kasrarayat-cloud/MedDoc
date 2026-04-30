@@ -50,9 +50,7 @@ export function Footer() {
               <span className="brand-quill">
                 <QuillMark gradientId="footerQuill" />
               </span>
-              <span>
-                Quill<em>MD</em>
-              </span>
+              <span>Quill</span>
             </Link>
             <p className="blurb">
               AI medical scribe for US doctors. Real‑time notes, codes, and Rx for $49 a month.

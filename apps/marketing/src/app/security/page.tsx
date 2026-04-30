@@ -26,8 +26,11 @@ export default function SecurityPage() {
               Last updated: {LAST_UPDATED}
             </p>
 
-            <div className="mt-8 rounded-lg border border-amber-500/40 bg-amber-500/5 p-4 text-[13px] leading-relaxed text-amber-200">
-              <strong className="font-semibold">
+            <div
+              className="mt-8 rounded-xl border border-[rgba(212,165,116,0.35)] bg-[rgba(212,165,116,0.10)] p-4 text-[13.5px] leading-relaxed text-[#7A4F1F]"
+              style={{ fontFamily: 'var(--font-serif), Georgia, serif' }}
+            >
+              <strong className="font-medium">
                 [DRAFT — PENDING LEGAL REVIEW]
               </strong>
               <p className="mt-1.5">
@@ -157,7 +160,7 @@ export default function SecurityPage() {
                 HIPAA posture is covered by{' '}
                 <a
                   href="/hipaa"
-                  className="text-violet-400 hover:text-violet-300"
+                  className="text-[#2F5040] underline decoration-[rgba(122,166,140,0.35)] hover:text-[#7AA68C]"
                 >
                   BAAs and operational controls
                 </a>{' '}

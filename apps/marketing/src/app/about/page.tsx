@@ -21,16 +21,16 @@ export default function AboutPage() {
             className="pointer-events-none absolute inset-x-0 top-0 h-[500px]"
             style={{
               background:
-                'radial-gradient(ellipse 70% 50% at 50% 0%, rgba(139,92,246,0.18) 0%, transparent 65%)',
+                'radial-gradient(ellipse 70% 50% at 50% 0%, rgba(122,166,140,0.18) 0%, transparent 65%)',
             }}
           />
           <div className="relative mx-auto max-w-3xl px-6 lg:px-8">
             <Badge dot="violet">About us</Badge>
-            <h1 className="mt-6 type-h1 text-text-primary">
+            <h1 className="mt-6 type-h1">
               Built for the <GradientText>doctor at the desk</GradientText> at
               7 p.m.
             </h1>
-            <p className="mt-6 type-body text-text-tertiary">
+            <p className="mt-6 type-body">
               The one who stayed late to finish their charts. Again.
             </p>
           </div>

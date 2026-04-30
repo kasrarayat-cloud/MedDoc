@@ -64,10 +64,10 @@ export function TiltCard({
       {spotlight && (
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-0 rounded-[inherit] opacity-40"
+          className="pointer-events-none absolute inset-0 rounded-[inherit] opacity-50"
           style={{
-            background: `radial-gradient(circle at ${spotlight.x}% ${spotlight.y}%, rgba(167,139,250,0.25), transparent 55%)`,
-            mixBlendMode: 'screen',
+            background: `radial-gradient(circle at ${spotlight.x}% ${spotlight.y}%, rgba(122,166,140,0.18), transparent 55%)`,
+            mixBlendMode: 'multiply',
           }}
         />
       )}
