@@ -100,6 +100,7 @@ export default async function VisitsPage({
     status: TranscribeVisitStatus;
     needsReview: boolean;
     createdAt: Date;
+    signedAt: Date | null;
     audioDurationSec: number | null;
     patient: { name: string } | null;
   };
@@ -121,6 +122,7 @@ export default async function VisitsPage({
         status: true,
         needsReview: true,
         createdAt: true,
+        signedAt: true,
         audioDurationSec: true,
         patient: { select: { name: true } },
       },
@@ -143,6 +145,8 @@ export default async function VisitsPage({
       status: v.status,
       needsReview: v.needsReview,
       createdAt: v.createdAt.toISOString(),
+      // Batch H: surfaces "Signed · {date}" pill on the visit-list row.
+      signedAt: v.signedAt ? v.signedAt.toISOString() : null,
       audioDurationSec: v.audioDurationSec,
     })
   );

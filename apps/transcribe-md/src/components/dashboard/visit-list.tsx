@@ -23,7 +23,11 @@ import { Avatar } from '@/components/ui/avatar';
 import { Ic } from '@/components/ui/icon';
 import { LocalTime } from '@/components/ui/local-time';
 import { SpecChip, type SpecialtyKind } from '@/components/ui/spec-chip';
-import { bucketForLocalDay, type DayBucket } from '@/lib/format-time';
+import {
+  bucketForLocalDay,
+  formatLocalDate,
+  type DayBucket,
+} from '@/lib/format-time';
 
 type VisitListTheme = 'legacy' | 'clinician';
 
@@ -36,6 +40,11 @@ export type DashboardVisit = {
   needsReview: boolean;
   /** ISO 8601 UTC — `createdAt.toISOString()` from the server. */
   createdAt: string;
+  /** ISO 8601 UTC for the moment the doctor signed the note, or null
+   *  if the visit is still unsigned. Batch H: drives the "Signed +
+   *  date" pill regardless of the lifecycle `status` enum so a
+   *  signed row can never re-render as "Ready" by accident. */
+  signedAt: string | null;
   audioDurationSec: number | null;
 };
 
@@ -56,8 +65,16 @@ function toSpecKind(raw: string | null | undefined): SpecialtyKind {
 type StatusTone = 'mint' | 'amber' | 'coral' | 'accent';
 function chipFor(
   status: TranscribeVisitStatus,
-  needsReview: boolean
-): { label: string; tone: StatusTone } {
+  needsReview: boolean,
+  signedAt: string | null
+): { label: string; tone: StatusTone; suffix?: string } {
+  // Batch H: signedAt overrides every other lifecycle signal. A note
+  // that has been signed must read "Signed" regardless of the status
+  // enum — there is no path back from SIGNED, so any other label on a
+  // signed row would be a clinical-safety bug.
+  if (signedAt !== null) {
+    return { label: 'Signed', tone: 'mint', suffix: formatLocalDate(signedAt) };
+  }
   if (status === 'SIGNED') return { label: 'Signed', tone: 'mint' };
   if (status === 'READY') {
     return needsReview
@@ -68,15 +85,27 @@ function chipFor(
   return { label: 'Drafting', tone: 'accent' };
 }
 
-/** Clinician status pill — same status/needsReview signals → the
- *  .qm-cl-pill-* catalog. SIGNED → sage-deep, READY clean → sage,
- *  READY+needsReview → amber, FAILED → coral, else (DRAFT/PROCESSING)
- *  → teal. Labels match the legacy chip. */
+/** Clinician status pill — same status/needsReview/signedAt signals →
+ *  the .qm-cl-pill-* catalog. signedAt set → 'sage-deep' (a darker
+ *  sage tone — see ClinicianStatusPill below for the inline override
+ *  since the catalog has no `qm-cl-pill-sage-deep` utility yet),
+ *  READY clean → sage, READY+needsReview → amber, FAILED → coral,
+ *  else (DRAFT/PROCESSING) → teal. */
 type ClinicianPillTone = 'sage' | 'sage-deep' | 'amber' | 'coral' | 'teal';
 function clinicianPillFor(
   status: TranscribeVisitStatus,
-  needsReview: boolean
-): { label: string; tone: ClinicianPillTone } {
+  needsReview: boolean,
+  signedAt: string | null
+): { label: string; tone: ClinicianPillTone; suffix?: string } {
+  // Batch H: signedAt drives "Signed + date" regardless of status —
+  // see the legacy chipFor comment for the safety rationale.
+  if (signedAt !== null) {
+    return {
+      label: 'Signed',
+      tone: 'sage-deep',
+      suffix: formatLocalDate(signedAt),
+    };
+  }
   if (status === 'SIGNED') return { label: 'Signed', tone: 'sage-deep' };
   if (status === 'READY') {
     return needsReview
@@ -175,7 +204,7 @@ function LegacyVisitList({ visits }: { visits: DashboardVisit[] }) {
           </div>
           <div className="qm-glass" style={{ overflow: 'hidden' }}>
             {group.rows.map((v, i) => {
-              const chip = chipFor(v.status, v.needsReview);
+              const chip = chipFor(v.status, v.needsReview, v.signedAt);
               const displayName = v.patientName ?? v.patientFallback ?? 'Patient';
               return (
                 <Link
@@ -247,6 +276,11 @@ function LegacyVisitList({ visits }: { visits: DashboardVisit[] }) {
                     style={{ justifySelf: 'start' }}
                   >
                     {chip.label}
+                    {chip.suffix && (
+                      <span style={{ marginLeft: 6, opacity: 0.7 }}>
+                        · {chip.suffix}
+                      </span>
+                    )}
                   </span>
                   <Ic.chevRight
                     width={14}
@@ -291,7 +325,11 @@ function ClinicianVisitList({ visits }: { visits: DashboardVisit[] }) {
              only to add a duration column the mockup doesn't show. */}
           <div className="qm-cl-card" style={{ overflow: 'hidden', padding: 8 }}>
             {group.rows.map((v) => {
-              const pill = clinicianPillFor(v.status, v.needsReview);
+              const pill = clinicianPillFor(
+                v.status,
+                v.needsReview,
+                v.signedAt
+              );
               const displayName =
                 v.patientName ?? v.patientFallback ?? 'Patient';
               const avatarTone = pickClinicianAvatarTone(displayName);
@@ -366,12 +404,41 @@ function ClinicianVisitList({ visits }: { visits: DashboardVisit[] }) {
                   >
                     {formatDuration(v.audioDurationSec)}
                   </div>
+                  {/* Batch H: when the row has signedAt set, render a
+                      deeper-sage pill carrying "Signed · {date}" so a
+                      doctor never sees a signed visit labelled "Ready".
+                      The CSS catalog has no `qm-cl-pill-sage-deep`
+                      utility yet (only sage / teal / amber / coral /
+                      sky / soft), so we ride the closest existing
+                      class — `qm-cl-pill-sage` — and bump its bg to
+                      `--sage-tint-strong` inline (a token already
+                      defined in globals.css for the doctor turn-card
+                      and avatar deep-sage variant). This stays inside
+                      the existing token vocabulary instead of inventing
+                      a new class, per the Batch H brief. */}
                   <span
-                    className={`qm-cl-pill qm-cl-pill-${pill.tone}`}
-                    style={{ justifySelf: 'start' }}
+                    className={`qm-cl-pill ${
+                      pill.tone === 'sage-deep'
+                        ? 'qm-cl-pill-sage'
+                        : `qm-cl-pill-${pill.tone}`
+                    }`}
+                    style={{
+                      justifySelf: 'start',
+                      ...(pill.tone === 'sage-deep'
+                        ? {
+                            background: 'var(--sage-tint-strong)',
+                            color: 'var(--sage-deep)',
+                          }
+                        : null),
+                    }}
                   >
                     <span className="qm-cl-pill-dot" />
                     {pill.label}
+                    {pill.suffix && (
+                      <span style={{ marginLeft: 4, opacity: 0.75 }}>
+                        · {pill.suffix}
+                      </span>
+                    )}
                   </span>
                   <Ic.chevRight
                     width={16}

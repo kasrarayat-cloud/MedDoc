@@ -423,6 +423,7 @@ async function AllVisitsTab({
     status: import('@prisma/client').TranscribeVisitStatus;
     needsReview: boolean;
     createdAt: Date;
+    signedAt: Date | null;
     audioDurationSec: number | null;
     patient: { name: string } | null;
   };
@@ -437,6 +438,7 @@ async function AllVisitsTab({
       status: true,
       needsReview: true,
       createdAt: true,
+      signedAt: true,
       audioDurationSec: true,
       patient: { select: { name: true } },
     },
@@ -452,6 +454,8 @@ async function AllVisitsTab({
       needsReview: v.needsReview,
       // ISO UTC — <VisitList> formats + buckets in viewer's local TZ.
       createdAt: v.createdAt.toISOString(),
+      // Batch H: surfaces "Signed · {date}" pill on the visit-list row.
+      signedAt: v.signedAt ? v.signedAt.toISOString() : null,
       audioDurationSec: v.audioDurationSec,
     })
   );
