@@ -1,0 +1,1597 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QuillMD — SPATIAL — v4 design direction</title>
+
+<!-- Tailwind via CDN -->
+<script src="https://cdn.tailwindcss.com"></script>
+
+<!-- Google Fonts: Inter Tight for chrome, Instrument Serif for the headlines, JetBrains Mono for clinical data -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+
+<!-- Three.js via importmap -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.169/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169/examples/jsm/"
+  }
+}
+</script>
+
+<style>
+  :root {
+    /* SPATIAL palette — deep cosmos / nebula. Refuses neutral gray. */
+    --void: #05060c;
+    --void-2: #0a0c1a;
+    --indigo-deep: #1b1450;
+    --plasma: #6e3cff;
+    --plasma-bright: #a276ff;
+    --aurora: #4ee2c4;
+    --rose: #ff4d8d;
+    --amber: #ffb547;
+    --critical: #ff3b3b;
+    --ink: #f4f1ff;
+    --ink-dim: #b6b0d6;
+    --glass-tint: rgba(160, 130, 255, 0.06);
+    --glass-edge: rgba(220, 200, 255, 0.18);
+    --sans: 'Inter Tight', system-ui, sans-serif;
+    --serif: 'Instrument Serif', Georgia, serif;
+    --mono: 'JetBrains Mono', monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--void);
+    color: var(--ink);
+    font-family: var(--sans);
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  /* Hide scrollbars in fullbleed sections but keep scroll */
+  body::-webkit-scrollbar { width: 8px; }
+  body::-webkit-scrollbar-track { background: var(--void); }
+  body::-webkit-scrollbar-thumb { background: rgba(110, 60, 255, 0.3); border-radius: 4px; }
+
+  /* The hero canvas occupies the entire first section as a real background */
+  .scene-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  /* Glass panels — real backdrop-filter, layered with z-translation cues */
+  .glass {
+    background: linear-gradient(135deg, rgba(110, 60, 255, 0.08) 0%, rgba(78, 226, 196, 0.04) 100%);
+    backdrop-filter: blur(18px) saturate(140%);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    border: 1px solid var(--glass-edge);
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.08) inset,
+      0 30px 60px -20px rgba(0, 0, 0, 0.6),
+      0 0 0 1px rgba(110, 60, 255, 0.04);
+    border-radius: 18px;
+  }
+
+  .glass-deep {
+    background: linear-gradient(135deg, rgba(20, 12, 50, 0.55) 0%, rgba(10, 12, 26, 0.6) 100%);
+    backdrop-filter: blur(28px) saturate(160%);
+    -webkit-backdrop-filter: blur(28px) saturate(160%);
+    border: 1px solid var(--glass-edge);
+    border-radius: 22px;
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.1) inset,
+      0 60px 100px -30px rgba(0, 0, 0, 0.8);
+  }
+
+  /* Z-depth blur cues on dashboard floating cards (not faking 3D — these are HTML overlays
+     anchored to 3D mesh world-positions projected into screen space; depth is real). */
+  .depth-far { filter: blur(3.5px) saturate(0.85); opacity: 0.62; }
+  .depth-mid { filter: blur(1.4px) saturate(0.95); opacity: 0.85; }
+  .depth-near { filter: none; opacity: 1; }
+  .depth-front { filter: none; opacity: 1; }
+
+  .serif { font-family: var(--serif); font-weight: 400; letter-spacing: -0.01em; }
+  .mono  { font-family: var(--mono); }
+
+  .headline-display {
+    font-family: var(--serif);
+    font-size: clamp(56px, 9vw, 152px);
+    line-height: 0.92;
+    letter-spacing: -0.035em;
+    font-weight: 400;
+  }
+  .headline-display em {
+    font-style: italic;
+    background: linear-gradient(120deg, var(--plasma-bright) 0%, var(--aurora) 50%, var(--rose) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+  }
+
+  /* Top-nav glass — closest to camera (z = +50 in spatial intent) */
+  .topnav-glass {
+    background: linear-gradient(180deg, rgba(8, 4, 26, 0.7) 0%, rgba(8, 4, 26, 0.45) 100%);
+    backdrop-filter: blur(32px) saturate(180%);
+    -webkit-backdrop-filter: blur(32px) saturate(180%);
+    border-bottom: 1px solid rgba(110, 60, 255, 0.18);
+  }
+
+  .pill {
+    border: 1px solid var(--glass-edge);
+    border-radius: 999px;
+    padding: 4px 12px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+    background: rgba(110, 60, 255, 0.06);
+  }
+  .pill-live {
+    border-color: rgba(255, 59, 59, 0.4);
+    background: rgba(255, 59, 59, 0.08);
+    color: #ffb6b6;
+  }
+  .pill-live::before {
+    content: '';
+    display: inline-block;
+    width: 6px; height: 6px;
+    background: var(--critical);
+    border-radius: 50%;
+    margin-right: 8px;
+    box-shadow: 0 0 8px var(--critical);
+    animation: pulse-dot 1.4s ease-in-out infinite;
+  }
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.8); }
+  }
+
+  /* Scanning line for transcript */
+  @keyframes scan {
+    0% { transform: translateY(-2px); opacity: 0; }
+    20% { opacity: 1; }
+    80% { opacity: 1; }
+    100% { transform: translateY(120%); opacity: 0; }
+  }
+  .scan-line {
+    position: absolute;
+    left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent 0%, var(--plasma-bright) 50%, transparent 100%);
+    animation: scan 3s linear infinite;
+  }
+
+  /* Floating animation for HTML overlays — subtle drift, augments the 3D parallax */
+  @keyframes float-a { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+  @keyframes float-b { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
+  @keyframes float-c { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+  .float-a { animation: float-a 7s ease-in-out infinite; }
+  .float-b { animation: float-b 9s ease-in-out infinite; }
+  .float-c { animation: float-c 11s ease-in-out infinite; }
+
+  /* Manifesto */
+  .manifesto-block {
+    font-family: var(--serif);
+    font-size: clamp(20px, 1.6vw, 26px);
+    line-height: 1.45;
+    color: var(--ink);
+    letter-spacing: -0.005em;
+  }
+  .manifesto-block strong {
+    font-style: italic;
+    background: linear-gradient(120deg, var(--plasma-bright), var(--aurora));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    font-weight: 400;
+  }
+
+  /* Hard rule between sections */
+  .horizon {
+    height: 1px;
+    width: 100%;
+    background: linear-gradient(90deg, transparent 0%, rgba(162, 118, 255, 0.4) 50%, transparent 100%);
+  }
+
+  /* Spatial cards on dashboard — real depth via perspective container holding HTML
+     while Three.js drives the world behind. Each card has a `data-depth` we read into z. */
+  .spatial-stage {
+    position: relative;
+    transform-style: preserve-3d;
+    perspective: 1600px;
+  }
+
+  .stat-card {
+    position: relative;
+    border-radius: 20px;
+    padding: 22px 24px;
+    transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1), filter 0.5s ease, box-shadow 0.5s ease;
+    will-change: transform, filter;
+  }
+  .stat-card .label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+    margin-bottom: 10px;
+  }
+  .stat-card .value {
+    font-family: var(--serif);
+    font-size: 56px;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    color: var(--ink);
+  }
+  .stat-card .delta {
+    margin-top: 10px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--aurora);
+  }
+
+  .visit-row {
+    transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), filter 0.4s ease;
+  }
+  .visit-row:hover {
+    transform: translateZ(40px) translateY(-2px) !important;
+    filter: none !important;
+  }
+
+  /* Glow ring around the recording sphere region */
+  .sphere-aura {
+    position: absolute;
+    inset: -10%;
+    background: radial-gradient(circle at 50% 50%, rgba(110, 60, 255, 0.35) 0%, transparent 55%);
+    pointer-events: none;
+    filter: blur(40px);
+  }
+
+  /* HUD ticks for transcript timeline */
+  .tick { width: 1px; background: rgba(255, 255, 255, 0.12); }
+  .tick.tall { background: rgba(162, 118, 255, 0.45); }
+
+  /* Sidebar rail on dashboard — closest plane */
+  .icon-rail-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+    color: var(--ink-dim);
+    transition: all 0.25s ease;
+    background: rgba(110, 60, 255, 0.04);
+  }
+  .icon-rail-btn:hover {
+    border-color: var(--glass-edge);
+    background: rgba(110, 60, 255, 0.12);
+    color: var(--ink);
+    transform: translateX(-2px);
+  }
+  .icon-rail-btn.active {
+    background: linear-gradient(135deg, rgba(110, 60, 255, 0.3), rgba(78, 226, 196, 0.18));
+    border-color: rgba(162, 118, 255, 0.5);
+    color: var(--ink);
+    box-shadow: 0 0 24px rgba(110, 60, 255, 0.35);
+  }
+
+  /* Critical Rx warning card — high-contrast, breaks the calm */
+  .rx-critical {
+    background: linear-gradient(135deg, rgba(255, 59, 59, 0.18) 0%, rgba(255, 77, 141, 0.12) 100%);
+    border: 1px solid rgba(255, 77, 141, 0.5);
+    box-shadow:
+      0 0 0 1px rgba(255, 77, 141, 0.2) inset,
+      0 0 60px -10px rgba(255, 59, 59, 0.4);
+  }
+
+  /* Reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    .float-a, .float-b, .float-c, .scan-line, .pill-live::before { animation: none !important; }
+  }
+
+  /* SVG soft glow filter helpers (for HUD rings) */
+  .glow-svg { filter: drop-shadow(0 0 8px rgba(162, 118, 255, 0.6)); }
+
+  /* Typography for sub-text on glass */
+  .body-text { color: var(--ink-dim); font-size: 14px; line-height: 1.55; }
+
+  /* Section frame container max-width */
+  .stage-pad { padding-left: clamp(24px, 4vw, 64px); padding-right: clamp(24px, 4vw, 64px); }
+
+  /* Section tagline band */
+  .horizon-band {
+    background: linear-gradient(90deg, rgba(110, 60, 255, 0.12) 0%, rgba(78, 226, 196, 0.08) 50%, rgba(255, 77, 141, 0.10) 100%);
+    border-top: 1px solid rgba(162, 118, 255, 0.25);
+    border-bottom: 1px solid rgba(162, 118, 255, 0.25);
+  }
+</style>
+</head>
+
+<body class="text-[15px]">
+
+<!-- ==================================================================
+     MANIFESTO — top of file, inline so it shows when opened
+     ================================================================== -->
+<header class="relative z-30 stage-pad pt-10 pb-12 max-w-[1400px] mx-auto">
+  <div class="flex items-center gap-3 mb-7">
+    <svg width="22" height="22" viewBox="0 0 22 22" class="glow-svg">
+      <defs>
+        <radialGradient id="qlogo" cx="0.5" cy="0.5" r="0.5">
+          <stop offset="0%" stop-color="#a276ff"/>
+          <stop offset="60%" stop-color="#6e3cff"/>
+          <stop offset="100%" stop-color="#1b1450" stop-opacity="0.3"/>
+        </radialGradient>
+      </defs>
+      <circle cx="11" cy="11" r="10" fill="url(#qlogo)"/>
+      <circle cx="14" cy="14" r="3" fill="#4ee2c4" opacity="0.85"/>
+    </svg>
+    <span class="serif text-[22px] tracking-tight">QuillMD</span>
+    <span class="pill ml-2">v4 / direction · spatial</span>
+    <span class="ml-auto eyebrow hidden md:block">Design Direction 1 of 1 · Three.js substrate</span>
+  </div>
+
+  <div class="grid grid-cols-12 gap-8 items-start">
+    <div class="col-span-12 lg:col-span-3">
+      <div class="eyebrow mb-3">Manifesto</div>
+      <div class="serif italic text-[28px] leading-tight text-[#a276ff]">The room is the product.</div>
+    </div>
+    <div class="col-span-12 lg:col-span-9">
+      <p class="manifesto-block">
+        This is <strong>SPATIAL</strong>. We believe medical software should be a <em>place</em>, not a screen — a quiet, dimly-lit room where a patient's chart drifts toward you and the rest of the practice recedes into focus-pull blur. We refuse flat layouts, gridded cards, and 2D chrome. Every visit lives at a real depth in a real scene; the recording is not a button-with-a-waveform but a luminous sphere that breathes with the doctor's voice; the dashboard is not a table but a constellation of cards you walk through. We commit to WebGL as the substrate, parallax as the language of attention, and depth-of-field as the tool that says <em>this</em> patient, right now, in front of you. Linear, Vercel, Stripe — they built screens. We are building a room.
+      </p>
+    </div>
+  </div>
+</header>
+
+<!-- ==================================================================
+     SECTION 1 — LANDING / RECORDING
+     Full-viewport hero with Three.js scene as background.
+     Lower portion: recording-active state with the morphing sphere centerpiece,
+     surrounded by floating glass panels (patient + transcript snippet).
+     ================================================================== -->
+<section id="hero" class="relative w-full" style="min-height: 200vh;">
+  <!-- The hero scene canvas covers the entire section -->
+  <div class="absolute inset-0 z-0">
+    <canvas id="hero-canvas" class="scene-canvas"></canvas>
+    <!-- Subtle vignette overlay so HTML text remains readable on bright nebula -->
+    <div class="absolute inset-0 pointer-events-none" style="background: radial-gradient(ellipse at 50% 30%, transparent 0%, rgba(5,6,12,0.55) 70%, rgba(5,6,12,0.85) 100%);"></div>
+  </div>
+
+  <!-- HERO copy block (top of section) -->
+  <div class="relative z-10 stage-pad pt-24 pb-16 max-w-[1400px] mx-auto" style="min-height: 100vh; display: flex; flex-direction: column; justify-content: center;">
+    <div class="grid grid-cols-12 gap-8 items-end">
+      <div class="col-span-12 lg:col-span-9">
+        <div class="eyebrow mb-6">Section 01 · The room you walk into</div>
+        <h1 class="headline-display">
+          A chart is not a <em>tab</em>.<br/>
+          A patient is not a <em>row</em>.<br/>
+          They are <em>here</em>, with you.
+        </h1>
+        <p class="mt-10 max-w-xl body-text text-[16px]" style="color: var(--ink-dim);">
+          QuillMD is the AI scribe that occupies a place in your day. The recording sphere drifts at z = 0; your last patient's note hangs over your left shoulder, slightly blurred. Move the camera, and the room moves with you.
+        </p>
+      </div>
+      <div class="col-span-12 lg:col-span-3 flex flex-col gap-3">
+        <div class="glass p-5">
+          <div class="eyebrow mb-2">Idle drift</div>
+          <div class="serif text-[22px] leading-tight">Camera drifts 0.5°/s</div>
+          <div class="body-text mt-2">The room is alive even when you are not.</div>
+        </div>
+        <div class="glass p-5">
+          <div class="eyebrow mb-2">Mouse parallax</div>
+          <div class="serif text-[22px] leading-tight">±8° on each axis</div>
+          <div class="body-text mt-2">Move your cursor. The world tilts.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- bottom prompt to scroll -->
+    <div class="mt-20 flex items-center gap-4 text-[var(--ink-dim)]">
+      <div class="h-px w-16 bg-[var(--glass-edge)]"></div>
+      <span class="eyebrow">Scroll into the recording</span>
+    </div>
+  </div>
+
+  <!-- RECORDING ACTIVE STATE — second viewport of the section -->
+  <div class="relative z-10 stage-pad max-w-[1400px] mx-auto" style="min-height: 100vh; display: flex; align-items: center; padding-top: 80px; padding-bottom: 80px;">
+    <div class="w-full grid grid-cols-12 gap-6 items-center">
+
+      <!-- LEFT FLOATING PANEL — patient context (depth-mid, far from camera) -->
+      <div class="col-span-12 lg:col-span-3 flex flex-col gap-5">
+        <div class="glass p-5 float-a depth-mid" style="transform: translateZ(-30px);">
+          <div class="flex items-center gap-3 mb-3">
+            <div class="w-10 h-10 rounded-full flex items-center justify-center serif text-[18px]"
+                 style="background: linear-gradient(135deg, #6e3cff, #4ee2c4);">JS</div>
+            <div>
+              <div class="serif text-[18px] leading-tight">John Smith</div>
+              <div class="mono text-[10px] tracking-[0.2em] uppercase text-[var(--ink-dim)]">M · 58 · CARDIOLOGY</div>
+            </div>
+          </div>
+          <div class="body-text">
+            <div class="flex justify-between"><span class="text-[var(--ink-dim)]">MRN</span><span class="mono">QM-784112</span></div>
+            <div class="flex justify-between"><span class="text-[var(--ink-dim)]">Last visit</span><span class="mono">2026-03-14</span></div>
+            <div class="flex justify-between"><span class="text-[var(--ink-dim)]">Allergies</span><span class="mono text-[#ffb547]">PCN, Sulfa</span></div>
+          </div>
+        </div>
+
+        <div class="glass p-5 float-c depth-near" style="transform: translateZ(-10px);">
+          <div class="eyebrow mb-2">Active meds</div>
+          <ul class="body-text space-y-1.5">
+            <li class="flex justify-between"><span>Warfarin 5 mg</span><span class="mono text-[var(--ink-dim)]">QD</span></li>
+            <li class="flex justify-between"><span>Atorvastatin 40</span><span class="mono text-[var(--ink-dim)]">QHS</span></li>
+            <li class="flex justify-between"><span>Metoprolol XL 50</span><span class="mono text-[var(--ink-dim)]">QD</span></li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- CENTER — RECORDING SPHERE -->
+      <div class="col-span-12 lg:col-span-6 relative" style="min-height: 560px;">
+        <div class="sphere-aura"></div>
+        <div class="relative flex flex-col items-center justify-center text-center" style="min-height: 560px;">
+          <!-- The actual 3D sphere is rendered in the hero canvas behind this region.
+               This HTML overlay houses labels & timecodes, NOT the sphere itself. -->
+          <div class="pill pill-live mb-6 z-20 relative">REC · 04:18</div>
+          <div class="serif italic text-[28px] mb-3 z-20 relative" style="color: var(--ink-dim);">"...substernal pressure radiating to the left arm,</div>
+          <div class="serif italic text-[28px] mb-6 z-20 relative">worse with exertion, relieved by rest..."</div>
+
+          <!-- HUD ring markers — drawn in HTML so labels can stay sharp -->
+          <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <svg viewBox="0 0 600 600" class="w-full h-full max-w-[600px] max-h-[600px] glow-svg" style="opacity: 0.75;">
+              <defs>
+                <linearGradient id="ringG" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stop-color="#a276ff" stop-opacity="0.7"/>
+                  <stop offset="100%" stop-color="#4ee2c4" stop-opacity="0.3"/>
+                </linearGradient>
+              </defs>
+              <circle cx="300" cy="300" r="240" fill="none" stroke="url(#ringG)" stroke-width="0.6" stroke-dasharray="2 6"/>
+              <circle cx="300" cy="300" r="280" fill="none" stroke="rgba(162,118,255,0.18)" stroke-width="0.4"/>
+              <!-- Tick marks -->
+              <g stroke="rgba(220,200,255,0.4)" stroke-width="0.6">
+                <line x1="300" y1="58" x2="300" y2="68"/>
+                <line x1="300" y1="532" x2="300" y2="542"/>
+                <line x1="58" y1="300" x2="68" y2="300"/>
+                <line x1="532" y1="300" x2="542" y2="300"/>
+              </g>
+              <!-- Tiny telemetry markers -->
+              <text x="300" y="42" font-family="JetBrains Mono" font-size="9" fill="#b6b0d6" text-anchor="middle" letter-spacing="2">N · LISTEN</text>
+              <text x="300" y="566" font-family="JetBrains Mono" font-size="9" fill="#b6b0d6" text-anchor="middle" letter-spacing="2">S · RMS 0.43</text>
+              <text x="42" y="304" font-family="JetBrains Mono" font-size="9" fill="#b6b0d6" text-anchor="middle" letter-spacing="2">W</text>
+              <text x="558" y="304" font-family="JetBrains Mono" font-size="9" fill="#b6b0d6" text-anchor="middle" letter-spacing="2">E</text>
+            </svg>
+          </div>
+
+          <!-- Audio amplitude bars below sphere -->
+          <div class="z-20 relative mt-12 flex items-end gap-1 h-12">
+            <span class="w-1 bg-[var(--plasma-bright)] rounded-full" style="height: 30%; animation: float-a 0.6s ease-in-out infinite;"></span>
+            <span class="w-1 bg-[var(--plasma-bright)] rounded-full" style="height: 70%; animation: float-b 0.7s ease-in-out infinite;"></span>
+            <span class="w-1 bg-[var(--aurora)] rounded-full" style="height: 90%; animation: float-c 0.5s ease-in-out infinite;"></span>
+            <span class="w-1 bg-[var(--plasma-bright)] rounded-full" style="height: 60%; animation: float-a 0.55s ease-in-out infinite;"></span>
+            <span class="w-1 bg-[var(--aurora)] rounded-full" style="height: 100%; animation: float-b 0.4s ease-in-out infinite;"></span>
+            <span class="w-1 bg-[var(--plasma-bright)] rounded-full" style="height: 45%; animation: float-c 0.65s ease-in-out infinite;"></span>
+            <span class="w-1 bg-[var(--rose)] rounded-full" style="height: 80%; animation: float-a 0.5s ease-in-out infinite;"></span>
+            <span class="w-1 bg-[var(--plasma-bright)] rounded-full" style="height: 55%; animation: float-b 0.6s ease-in-out infinite;"></span>
+            <span class="w-1 bg-[var(--aurora)] rounded-full" style="height: 75%; animation: float-c 0.5s ease-in-out infinite;"></span>
+            <span class="w-1 bg-[var(--plasma-bright)] rounded-full" style="height: 35%; animation: float-a 0.55s ease-in-out infinite;"></span>
+            <span class="w-1 bg-[var(--plasma-bright)] rounded-full" style="height: 65%; animation: float-b 0.6s ease-in-out infinite;"></span>
+            <span class="w-1 bg-[var(--aurora)] rounded-full" style="height: 85%; animation: float-c 0.5s ease-in-out infinite;"></span>
+          </div>
+          <div class="z-20 relative mt-3 mono text-[10px] tracking-[0.24em] uppercase text-[var(--ink-dim)]">
+            DEEPGRAM · STREAMING · 22 KHZ
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT FLOATING PANELS — live transcript & emerging SOAP -->
+      <div class="col-span-12 lg:col-span-3 flex flex-col gap-5">
+        <div class="glass p-5 float-b depth-near relative overflow-hidden" style="transform: translateZ(-5px);">
+          <div class="flex items-center justify-between mb-3">
+            <div class="eyebrow">Live transcript</div>
+            <div class="mono text-[10px] text-[var(--aurora)]">+0.2s</div>
+          </div>
+          <div class="body-text" style="color: var(--ink);">
+            <span class="text-[var(--ink-dim)]">Pt reports</span> chest pain
+            <span class="text-[var(--ink-dim)]">x 3 days, substernal,</span>
+            <span style="background: linear-gradient(120deg, rgba(162,118,255,0.4), transparent); padding: 0 2px;">radiates to L arm</span>,
+            <span class="text-[var(--ink-dim)]">worse with exertion. Denies</span>
+            SOB<span class="text-[var(--ink-dim)]">,</span> diaphoresis<span class="text-[var(--ink-dim)]">,</span>
+            <span class="mono text-[var(--plasma-bright)]">|</span>
+          </div>
+          <div class="scan-line" style="top: 30%;"></div>
+        </div>
+
+        <div class="glass p-5 float-a depth-mid" style="transform: translateZ(-25px);">
+          <div class="flex items-center justify-between mb-3">
+            <div class="eyebrow">SOAP forming</div>
+            <div class="mono text-[10px] text-[var(--ink-dim)]">draft 3</div>
+          </div>
+          <div class="space-y-2 text-[13px]">
+            <div><span class="serif text-[var(--plasma-bright)] mr-1">S</span><span class="text-[var(--ink-dim)]">— substernal CP, exertional, R07.9 likely</span></div>
+            <div><span class="serif text-[var(--plasma-bright)] mr-1">O</span><span class="text-[var(--ink-dim)]">— pending vitals capture</span></div>
+            <div><span class="serif text-[var(--plasma-bright)] mr-1">A</span><span class="text-[var(--ink-dim)]">— ACS rule-out, atypical CP</span></div>
+            <div><span class="serif text-[var(--plasma-bright)] mr-1">P</span><span class="text-[var(--ink-dim)]">— ECG, troponin, CXR</span></div>
+          </div>
+        </div>
+
+        <!-- Critical Rx alert hovering nearer -->
+        <div class="rx-critical p-4 rounded-2xl float-c depth-front" style="transform: translateZ(15px);">
+          <div class="flex items-center gap-2 mb-2">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M7 1L13 12H1L7 1Z" stroke="#ff4d8d" stroke-width="1.4" fill="rgba(255,77,141,0.2)"/>
+              <path d="M7 5.5V8" stroke="#ff4d8d" stroke-width="1.4" stroke-linecap="round"/>
+              <circle cx="7" cy="10" r="0.6" fill="#ff4d8d"/>
+            </svg>
+            <span class="mono text-[10px] tracking-[0.24em] uppercase" style="color: #ffb6b6;">CRITICAL · Rx interaction</span>
+          </div>
+          <div class="serif text-[18px] leading-tight" style="color: #ffe2e2;">Warfarin × Ibuprofen</div>
+          <div class="body-text mt-1" style="color: #ffd0d0;">
+            Major bleeding risk. Suggested: acetaminophen 650 mg PRN. Override requires acknowledgment.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================================================================
+     HORIZON BAND — direction nameplate
+     ================================================================== -->
+<section class="horizon-band relative z-10">
+  <div class="stage-pad max-w-[1400px] mx-auto py-12">
+    <div class="grid grid-cols-12 gap-6 items-baseline">
+      <div class="col-span-12 lg:col-span-6">
+        <div class="eyebrow mb-2">Direction · v4</div>
+        <div class="serif text-[clamp(48px,7vw,108px)] leading-[0.92] tracking-tight">
+          SPATIAL<span class="text-[var(--plasma-bright)]">.</span>
+        </div>
+      </div>
+      <div class="col-span-12 lg:col-span-6">
+        <div class="serif italic text-[clamp(20px,2vw,30px)] leading-snug" style="color: var(--ink-dim);">
+          The room your patients live in.
+        </div>
+        <div class="mt-4 grid grid-cols-3 gap-4 text-[12px]">
+          <div>
+            <div class="eyebrow mb-1">Substrate</div>
+            <div class="mono">three.js 0.169</div>
+          </div>
+          <div>
+            <div class="eyebrow mb-1">Camera</div>
+            <div class="mono">parallax + drift</div>
+          </div>
+          <div>
+            <div class="eyebrow mb-1">Focus</div>
+            <div class="mono">DOF on hover</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================================================================
+     SECTION 2 — DASHBOARD
+     3D floating cards. Real Three.js scene behind. Sidebar/topnav glass at z=+50.
+     Cards have data-depth which is animated in z; HTML overlays anchored to projected
+     world-positions of helper meshes in the dashboard scene.
+     ================================================================== -->
+<section id="dashboard" class="relative w-full" style="min-height: 140vh;">
+  <!-- Dashboard scene canvas -->
+  <div class="absolute inset-0 z-0">
+    <canvas id="dash-canvas" class="scene-canvas"></canvas>
+    <div class="absolute inset-0 pointer-events-none" style="background: radial-gradient(ellipse at 60% 40%, transparent 0%, rgba(5,6,12,0.45) 75%, rgba(5,6,12,0.9) 100%);"></div>
+  </div>
+
+  <!-- TOP NAV — glass panel at z=+50 (closest plane) -->
+  <div class="topnav-glass relative z-30">
+    <div class="stage-pad max-w-[1400px] mx-auto py-4 flex items-center gap-6">
+      <div class="flex items-center gap-2">
+        <svg width="20" height="20" viewBox="0 0 22 22" class="glow-svg">
+          <circle cx="11" cy="11" r="10" fill="url(#qlogo)"/>
+          <circle cx="14" cy="14" r="3" fill="#4ee2c4" opacity="0.85"/>
+        </svg>
+        <span class="serif text-[18px]">QuillMD</span>
+      </div>
+
+      <div class="flex items-center gap-1 ml-6 text-[13px]">
+        <a class="px-3 py-1.5 rounded-lg" style="background: rgba(110,60,255,0.18); color: var(--ink); border: 1px solid rgba(162,118,255,0.4);">Today</a>
+        <a class="px-3 py-1.5 rounded-lg text-[var(--ink-dim)] hover:text-white">Patients</a>
+        <a class="px-3 py-1.5 rounded-lg text-[var(--ink-dim)] hover:text-white">Visits</a>
+        <a class="px-3 py-1.5 rounded-lg text-[var(--ink-dim)] hover:text-white">Inbox</a>
+        <a class="px-3 py-1.5 rounded-lg text-[var(--ink-dim)] hover:text-white">Admin</a>
+      </div>
+
+      <div class="ml-auto flex items-center gap-3">
+        <div class="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg" style="background: rgba(110,60,255,0.06); border: 1px solid var(--glass-edge);">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="5" cy="5" r="3.5" stroke="#b6b0d6" stroke-width="1"/><line x1="8" y1="8" x2="11" y2="11" stroke="#b6b0d6" stroke-width="1"/></svg>
+          <span class="text-[var(--ink-dim)] text-[12px]">Walk to a patient</span>
+          <span class="mono text-[10px] text-[var(--ink-dim)] ml-2 px-1.5 py-0.5 rounded" style="background: rgba(255,255,255,0.06);">⌘K</span>
+        </div>
+        <button class="px-3 py-1.5 rounded-lg text-[12px] mono uppercase tracking-[0.2em]" style="background: linear-gradient(135deg, var(--plasma), var(--rose)); color: white; border: 1px solid rgba(255,255,255,0.2);">+ Visit</button>
+        <div class="w-9 h-9 rounded-full flex items-center justify-center serif text-[14px]" style="background: linear-gradient(135deg, #6e3cff, #4ee2c4);">DR</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DASHBOARD GRID — spatial-stage with HTML overlays and 3D depth -->
+  <div class="relative z-20 stage-pad max-w-[1400px] mx-auto py-12 spatial-stage" id="spatial-stage">
+
+    <!-- Welcome / context strip -->
+    <div class="grid grid-cols-12 gap-6 mb-10">
+      <div class="col-span-12 lg:col-span-7">
+        <div class="eyebrow mb-3">Wednesday · April 29 · 2026</div>
+        <div class="serif text-[clamp(36px,5vw,72px)] leading-[0.95] tracking-tight">
+          Good morning, <em class="italic" style="background: linear-gradient(120deg, var(--plasma-bright), var(--aurora)); -webkit-background-clip: text; background-clip: text; color: transparent;">Dr. Chen</em>.<br/>
+          <span class="text-[var(--ink-dim)] text-[0.6em]">Seven patients are in the room.</span>
+        </div>
+      </div>
+      <div class="col-span-12 lg:col-span-5 flex items-end justify-end gap-3">
+        <div class="pill">PARALLAX · LIVE</div>
+        <div class="pill">CAMERA · DRIFT 0.5°/S</div>
+        <div class="pill pill-live">WORKER · OK</div>
+      </div>
+    </div>
+
+    <!-- STAT CARDS — different z-depths -->
+    <div class="grid grid-cols-12 gap-5 mb-12">
+      <div class="col-span-12 sm:col-span-6 lg:col-span-3">
+        <div class="stat-card glass-deep depth-near float-a" data-depth="20" style="transform: translateZ(20px);">
+          <div class="label">Visits today</div>
+          <div class="value">7</div>
+          <div class="delta">↑ 2 vs yesterday</div>
+        </div>
+      </div>
+      <div class="col-span-12 sm:col-span-6 lg:col-span-3">
+        <div class="stat-card glass-deep depth-mid float-b" data-depth="-10" style="transform: translateZ(-10px);">
+          <div class="label">Avg note time</div>
+          <div class="value">2:14</div>
+          <div class="delta" style="color: var(--aurora);">−38s saved</div>
+        </div>
+      </div>
+      <div class="col-span-12 sm:col-span-6 lg:col-span-3">
+        <div class="stat-card glass-deep depth-far float-c" data-depth="-40" style="transform: translateZ(-40px);">
+          <div class="label">Pending review</div>
+          <div class="value">3</div>
+          <div class="delta" style="color: var(--amber);">SOAP draft</div>
+        </div>
+      </div>
+      <div class="col-span-12 sm:col-span-6 lg:col-span-3">
+        <div class="stat-card glass-deep depth-front float-a" data-depth="40" style="transform: translateZ(40px); border-color: rgba(255,77,141,0.4);">
+          <div class="label" style="color: #ffb6b6;">Rx alerts open</div>
+          <div class="value" style="color: #ffe2e2;">1</div>
+          <div class="delta" style="color: var(--rose);">CRITICAL</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VISIT LIST + RIGHT COLUMN -->
+    <div class="grid grid-cols-12 gap-6">
+
+      <!-- LEFT — visit list, stack of cards in 3D space -->
+      <div class="col-span-12 lg:col-span-8">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <div class="eyebrow mb-1">In the room</div>
+            <div class="serif text-[28px] leading-tight">Today's visits</div>
+          </div>
+          <div class="flex gap-2 text-[12px]">
+            <button class="px-3 py-1.5 rounded-lg" style="background: rgba(110,60,255,0.18); border: 1px solid rgba(162,118,255,0.4);">All</button>
+            <button class="px-3 py-1.5 rounded-lg text-[var(--ink-dim)]">In progress</button>
+            <button class="px-3 py-1.5 rounded-lg text-[var(--ink-dim)]">Awaiting sign</button>
+            <button class="px-3 py-1.5 rounded-lg text-[var(--ink-dim)]">Signed</button>
+          </div>
+        </div>
+
+        <div class="space-y-3">
+          <!-- Visit 1 — Live recording (z=+30, sharp) -->
+          <div class="visit-row glass p-5 depth-near" style="transform: translateZ(30px); border-color: rgba(255,77,141,0.4);">
+            <div class="grid grid-cols-12 gap-4 items-center">
+              <div class="col-span-12 sm:col-span-3 flex items-center gap-3">
+                <div class="w-11 h-11 rounded-full flex items-center justify-center serif text-[16px]" style="background: linear-gradient(135deg, #6e3cff, #4ee2c4);">JS</div>
+                <div>
+                  <div class="serif text-[17px] leading-tight">John Smith</div>
+                  <div class="mono text-[10px] tracking-[0.18em] uppercase text-[var(--ink-dim)]">M · 58 · CARDIO</div>
+                </div>
+              </div>
+              <div class="col-span-12 sm:col-span-3">
+                <div class="eyebrow mb-1">Reason</div>
+                <div class="text-[14px]">Substernal CP <span class="mono text-[10px] text-[var(--ink-dim)]">R07.9</span></div>
+              </div>
+              <div class="col-span-12 sm:col-span-3">
+                <div class="eyebrow mb-1">State</div>
+                <div class="pill pill-live">RECORDING · 04:18</div>
+              </div>
+              <div class="col-span-12 sm:col-span-3 text-right">
+                <div class="mono text-[10px] tracking-[0.18em] uppercase text-[var(--ink-dim)] mb-1">10:14</div>
+                <div class="serif italic text-[14px]" style="color: var(--rose);">Rx flag · warfarin</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Visit 2 — Awaiting sign (z=+10) -->
+          <div class="visit-row glass p-5 depth-near" style="transform: translateZ(10px);">
+            <div class="grid grid-cols-12 gap-4 items-center">
+              <div class="col-span-12 sm:col-span-3 flex items-center gap-3">
+                <div class="w-11 h-11 rounded-full flex items-center justify-center serif text-[16px]" style="background: linear-gradient(135deg, #ff4d8d, #ffb547);">ML</div>
+                <div>
+                  <div class="serif text-[17px] leading-tight">Maria Lopez</div>
+                  <div class="mono text-[10px] tracking-[0.18em] uppercase text-[var(--ink-dim)]">F · 42 · PAIN MGMT</div>
+                </div>
+              </div>
+              <div class="col-span-12 sm:col-span-3">
+                <div class="eyebrow mb-1">Reason</div>
+                <div class="text-[14px]">Lower back pain f/u <span class="mono text-[10px] text-[var(--ink-dim)]">M54.5</span></div>
+              </div>
+              <div class="col-span-12 sm:col-span-3">
+                <div class="eyebrow mb-1">State</div>
+                <div class="pill" style="background: rgba(255,181,71,0.12); border-color: rgba(255,181,71,0.4); color: #ffd9a3;">SOAP DRAFT · REVIEW</div>
+              </div>
+              <div class="col-span-12 sm:col-span-3 text-right">
+                <div class="mono text-[10px] tracking-[0.18em] uppercase text-[var(--ink-dim)] mb-1">09:42</div>
+                <div class="serif italic text-[14px]" style="color: var(--ink-dim);">2 amendments suggested</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Visit 3 — Signed (z=-10) -->
+          <div class="visit-row glass p-5 depth-mid" style="transform: translateZ(-10px);">
+            <div class="grid grid-cols-12 gap-4 items-center">
+              <div class="col-span-12 sm:col-span-3 flex items-center gap-3">
+                <div class="w-11 h-11 rounded-full flex items-center justify-center serif text-[16px]" style="background: linear-gradient(135deg, #4ee2c4, #6e3cff);">RC</div>
+                <div>
+                  <div class="serif text-[17px] leading-tight">Robert Chen</div>
+                  <div class="mono text-[10px] tracking-[0.18em] uppercase text-[var(--ink-dim)]">M · 67 · ORTHO</div>
+                </div>
+              </div>
+              <div class="col-span-12 sm:col-span-3">
+                <div class="eyebrow mb-1">Reason</div>
+                <div class="text-[14px]">R knee OA, post-inj <span class="mono text-[10px] text-[var(--ink-dim)]">M17.11</span></div>
+              </div>
+              <div class="col-span-12 sm:col-span-3">
+                <div class="eyebrow mb-1">State</div>
+                <div class="pill" style="background: rgba(78,226,196,0.10); border-color: rgba(78,226,196,0.35); color: var(--aurora);">SIGNED · 09:08</div>
+              </div>
+              <div class="col-span-12 sm:col-span-3 text-right">
+                <div class="mono text-[10px] tracking-[0.18em] uppercase text-[var(--ink-dim)] mb-1">08:55</div>
+                <div class="serif italic text-[14px]" style="color: var(--ink-dim);">Sent to Epic</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Visit 4 — far (blurred, z=-30) -->
+          <div class="visit-row glass p-5 depth-mid" style="transform: translateZ(-25px);">
+            <div class="grid grid-cols-12 gap-4 items-center">
+              <div class="col-span-12 sm:col-span-3 flex items-center gap-3">
+                <div class="w-11 h-11 rounded-full flex items-center justify-center serif text-[16px]" style="background: linear-gradient(135deg, #a276ff, #ff4d8d);">AP</div>
+                <div>
+                  <div class="serif text-[17px] leading-tight">Aisha Patel</div>
+                  <div class="mono text-[10px] tracking-[0.18em] uppercase text-[var(--ink-dim)]">F · 31 · IM</div>
+                </div>
+              </div>
+              <div class="col-span-12 sm:col-span-3">
+                <div class="eyebrow mb-1">Reason</div>
+                <div class="text-[14px]">Annual physical <span class="mono text-[10px] text-[var(--ink-dim)]">Z00.00</span></div>
+              </div>
+              <div class="col-span-12 sm:col-span-3">
+                <div class="eyebrow mb-1">State</div>
+                <div class="pill">SCHEDULED · 11:00</div>
+              </div>
+              <div class="col-span-12 sm:col-span-3 text-right">
+                <div class="mono text-[10px] tracking-[0.18em] uppercase text-[var(--ink-dim)] mb-1">11:00</div>
+                <div class="serif italic text-[14px]" style="color: var(--ink-dim);">Pre-loaded chart</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Visit 5 — far (z=-50) -->
+          <div class="visit-row glass p-5 depth-far" style="transform: translateZ(-50px);">
+            <div class="grid grid-cols-12 gap-4 items-center">
+              <div class="col-span-12 sm:col-span-3 flex items-center gap-3">
+                <div class="w-11 h-11 rounded-full flex items-center justify-center serif text-[16px]" style="background: linear-gradient(135deg, #6e3cff, #ff4d8d);">DK</div>
+                <div>
+                  <div class="serif text-[17px] leading-tight">David Kim</div>
+                  <div class="mono text-[10px] tracking-[0.18em] uppercase text-[var(--ink-dim)]">M · 49 · ENDO</div>
+                </div>
+              </div>
+              <div class="col-span-12 sm:col-span-3">
+                <div class="eyebrow mb-1">Reason</div>
+                <div class="text-[14px]">DM2 management <span class="mono text-[10px] text-[var(--ink-dim)]">E11.9</span></div>
+              </div>
+              <div class="col-span-12 sm:col-span-3">
+                <div class="eyebrow mb-1">State</div>
+                <div class="pill">SCHEDULED · 11:30</div>
+              </div>
+              <div class="col-span-12 sm:col-span-3 text-right">
+                <div class="mono text-[10px] tracking-[0.18em] uppercase text-[var(--ink-dim)] mb-1">11:30</div>
+                <div class="serif italic text-[14px]" style="color: var(--ink-dim);">A1c due</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Visit 6 — far (z=-70) -->
+          <div class="visit-row glass p-5 depth-far" style="transform: translateZ(-70px);">
+            <div class="grid grid-cols-12 gap-4 items-center">
+              <div class="col-span-12 sm:col-span-3 flex items-center gap-3">
+                <div class="w-11 h-11 rounded-full flex items-center justify-center serif text-[16px]" style="background: linear-gradient(135deg, #4ee2c4, #ffb547);">EL</div>
+                <div>
+                  <div class="serif text-[17px] leading-tight">Eleanor Lee</div>
+                  <div class="mono text-[10px] tracking-[0.18em] uppercase text-[var(--ink-dim)]">F · 73 · GERIATRICS</div>
+                </div>
+              </div>
+              <div class="col-span-12 sm:col-span-3">
+                <div class="eyebrow mb-1">Reason</div>
+                <div class="text-[14px]">HTN review <span class="mono text-[10px] text-[var(--ink-dim)]">I10</span></div>
+              </div>
+              <div class="col-span-12 sm:col-span-3">
+                <div class="eyebrow mb-1">State</div>
+                <div class="pill">SCHEDULED · 13:00</div>
+              </div>
+              <div class="col-span-12 sm:col-span-3 text-right">
+                <div class="mono text-[10px] tracking-[0.18em] uppercase text-[var(--ink-dim)] mb-1">13:00</div>
+                <div class="serif italic text-[14px]" style="color: var(--ink-dim);">BP log loaded</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- RIGHT — context column with floating cards at varied depths -->
+      <div class="col-span-12 lg:col-span-4 space-y-5">
+
+        <!-- SOAP excerpt (the moment) -->
+        <div class="glass-deep p-5 depth-near float-b" style="transform: translateZ(15px);">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <div class="eyebrow">Last signed · Robert Chen</div>
+              <div class="serif text-[20px] leading-tight">SOAP excerpt</div>
+            </div>
+            <div class="mono text-[10px] text-[var(--ink-dim)]">conf 94%</div>
+          </div>
+          <div class="space-y-3 text-[13px]">
+            <div>
+              <span class="serif text-[var(--plasma-bright)] mr-1.5">S</span>
+              <span class="text-[var(--ink-dim)]">67M, R knee OA, post-corticosteroid injection 6 weeks ago, reports 60% pain relief, ambulating 1 mile/day.</span>
+            </div>
+            <div>
+              <span class="serif text-[var(--plasma-bright)] mr-1.5">O</span>
+              <span class="text-[var(--ink-dim)]">VS stable. R knee: mild crepitus, ROM 5–115°, no effusion, neg McMurray.</span>
+            </div>
+            <div>
+              <span class="serif text-[var(--plasma-bright)] mr-1.5">A</span>
+              <span class="text-[var(--ink-dim)]">R knee OA, partial response to intra-articular steroid.</span>
+            </div>
+            <div>
+              <span class="serif text-[var(--plasma-bright)] mr-1.5">P</span>
+              <span class="text-[var(--ink-dim)]">Continue PT, acetaminophen 1 g BID PRN, f/u 8 wks, consider repeat inj if pain returns.</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Rx warning critical card (z=+25, closest) -->
+        <div class="rx-critical p-5 rounded-2xl depth-front float-c" style="transform: translateZ(25px);">
+          <div class="flex items-center gap-2 mb-3">
+            <svg width="16" height="16" viewBox="0 0 14 14" fill="none">
+              <path d="M7 1L13 12H1L7 1Z" stroke="#ff4d8d" stroke-width="1.4" fill="rgba(255,77,141,0.2)"/>
+              <path d="M7 5.5V8" stroke="#ff4d8d" stroke-width="1.4" stroke-linecap="round"/>
+              <circle cx="7" cy="10" r="0.6" fill="#ff4d8d"/>
+            </svg>
+            <span class="mono text-[10px] tracking-[0.24em] uppercase" style="color: #ffb6b6;">CRITICAL · Rx interaction</span>
+            <span class="ml-auto mono text-[10px] text-[var(--ink-dim)]">jsmith</span>
+          </div>
+          <div class="serif text-[22px] leading-tight" style="color: #ffe2e2;">
+            Warfarin <span style="color: #ffb6b6;">×</span> Ibuprofen
+          </div>
+          <div class="body-text mt-2" style="color: #ffd0d0;">
+            Major bleeding risk via additive antiplatelet & GI mucosal effect. INR may rise unpredictably.
+          </div>
+          <div class="mt-3 p-2.5 rounded-lg" style="background: rgba(78,226,196,0.08); border: 1px solid rgba(78,226,196,0.3);">
+            <div class="mono text-[10px] tracking-[0.18em] uppercase" style="color: var(--aurora);">SUGGESTED</div>
+            <div class="text-[13px] mt-0.5" style="color: var(--ink);">Acetaminophen 650 mg PO q6h PRN, max 3 g/24h.</div>
+          </div>
+          <div class="flex gap-2 mt-3">
+            <button class="flex-1 py-2 rounded-lg mono text-[11px] tracking-[0.18em] uppercase" style="background: linear-gradient(135deg, var(--plasma), var(--rose)); color: white;">Accept</button>
+            <button class="flex-1 py-2 rounded-lg mono text-[11px] tracking-[0.18em] uppercase" style="background: rgba(255,255,255,0.04); border: 1px solid var(--glass-edge); color: var(--ink-dim);">Override...</button>
+          </div>
+        </div>
+
+        <!-- Pending review queue (z=-15) -->
+        <div class="glass p-5 depth-mid float-a" style="transform: translateZ(-15px);">
+          <div class="eyebrow mb-3">Awaiting your signature</div>
+          <ul class="space-y-2.5 text-[13px]">
+            <li class="flex items-center justify-between">
+              <span><span class="serif">Maria Lopez</span> <span class="text-[var(--ink-dim)]">· lower back f/u</span></span>
+              <span class="mono text-[10px] text-[var(--amber)]">2 sug</span>
+            </li>
+            <li class="flex items-center justify-between">
+              <span><span class="serif">Tomás García</span> <span class="text-[var(--ink-dim)]">· asthma f/u</span></span>
+              <span class="mono text-[10px] text-[var(--ink-dim)]">draft</span>
+            </li>
+            <li class="flex items-center justify-between">
+              <span><span class="serif">Priya Shah</span> <span class="text-[var(--ink-dim)]">· thyroid lab review</span></span>
+              <span class="mono text-[10px] text-[var(--ink-dim)]">draft</span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Idle telemetry — far -->
+        <div class="glass p-5 depth-far float-b" style="transform: translateZ(-45px);">
+          <div class="eyebrow mb-3">Worker telemetry</div>
+          <div class="grid grid-cols-2 gap-3 text-[12px]">
+            <div>
+              <div class="text-[var(--ink-dim)]">Queue depth</div>
+              <div class="mono text-[18px] text-[var(--ink)]">0</div>
+            </div>
+            <div>
+              <div class="text-[var(--ink-dim)]">7-layer p95</div>
+              <div class="mono text-[18px] text-[var(--ink)]">11.4s</div>
+            </div>
+            <div>
+              <div class="text-[var(--ink-dim)]">PHI redactions</div>
+              <div class="mono text-[18px] text-[var(--ink)]">214</div>
+            </div>
+            <div>
+              <div class="text-[var(--ink-dim)]">Cost / visit</div>
+              <div class="mono text-[18px] text-[var(--aurora)]">$0.41</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Bottom horizon: instructions for the spatial UX -->
+    <div class="mt-16 glass-deep p-6 grid grid-cols-12 gap-6 items-center depth-near" style="transform: translateZ(10px);">
+      <div class="col-span-12 lg:col-span-4">
+        <div class="eyebrow mb-2">Spatial UX laws</div>
+        <div class="serif italic text-[24px] leading-tight">Three commitments we never break.</div>
+      </div>
+      <div class="col-span-12 lg:col-span-8 grid grid-cols-3 gap-5">
+        <div>
+          <div class="mono text-[10px] tracking-[0.24em] uppercase mb-1" style="color: var(--plasma-bright);">01 · Depth = focus</div>
+          <div class="text-[13px]" style="color: var(--ink-dim);">The card you care about right now is sharp at z=0. Everything else blurs out.</div>
+        </div>
+        <div>
+          <div class="mono text-[10px] tracking-[0.24em] uppercase mb-1" style="color: var(--aurora);">02 · Camera = attention</div>
+          <div class="text-[13px]" style="color: var(--ink-dim);">Mouse drives parallax. Hover lifts a card 30 units toward the lens.</div>
+        </div>
+        <div>
+          <div class="mono text-[10px] tracking-[0.24em] uppercase mb-1" style="color: var(--rose);">03 · Stillness ≠ death</div>
+          <div class="text-[13px]" style="color: var(--ink-dim);">Even at idle, the room drifts 0.5°/s. The clinic is breathing.</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Side icon-rail — closest plane (z=+50) -->
+  <aside class="hidden lg:flex flex-col gap-2 absolute z-30 top-32 right-6 p-2 rounded-2xl glass-deep">
+    <button class="icon-rail-btn active" title="Today">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="7" stroke="currentColor" stroke-width="1.4"/><path d="M9 5v4l2.5 1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+    </button>
+    <button class="icon-rail-btn" title="Patients">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="6.5" r="2.8" stroke="currentColor" stroke-width="1.4"/><path d="M3 16c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+    </button>
+    <button class="icon-rail-btn" title="Visits">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="3" y="3" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.4"/><line x1="3" y1="7" x2="15" y2="7" stroke="currentColor" stroke-width="1.4"/></svg>
+    </button>
+    <button class="icon-rail-btn" title="Inbox">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M2 4h14l-1.5 7H3.5L2 4z" stroke="currentColor" stroke-width="1.4"/><path d="M2 4l7 6 7-6" stroke="currentColor" stroke-width="1.4"/></svg>
+    </button>
+    <div class="h-px w-full bg-[var(--glass-edge)] my-1"></div>
+    <button class="icon-rail-btn" title="Admin">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="2" stroke="currentColor" stroke-width="1.4"/><path d="M9 1.5v2M9 14.5v2M16.5 9h-2M3.5 9h-2M14 4l-1.4 1.4M5.4 12.6L4 14M14 14l-1.4-1.4M5.4 5.4L4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+    </button>
+  </aside>
+</section>
+
+<!-- ==================================================================
+     FOOTER — final horizon
+     ================================================================== -->
+<footer class="relative z-20 horizon-band">
+  <div class="stage-pad max-w-[1400px] mx-auto py-10 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <svg width="18" height="18" viewBox="0 0 22 22" class="glow-svg">
+        <circle cx="11" cy="11" r="10" fill="url(#qlogo)"/>
+      </svg>
+      <span class="serif text-[16px]">QuillMD</span>
+      <span class="mono text-[10px] tracking-[0.2em] uppercase text-[var(--ink-dim)] ml-3">v4 · spatial</span>
+    </div>
+    <div class="serif italic text-[18px]" style="color: var(--ink-dim);">The room is the product.</div>
+    <div class="flex gap-4 text-[12px] text-[var(--ink-dim)] mono uppercase tracking-[0.2em]">
+      <span>Three.js 0.169</span>
+      <span>·</span>
+      <span>WebGL 2</span>
+      <span>·</span>
+      <span>HIPAA-shaped</span>
+    </div>
+  </div>
+</footer>
+
+<!-- ==================================================================
+     THREE.JS SCENES
+     - hero-canvas: particle nebula + recording sphere + glass card meshes
+     - dash-canvas: floating depth-card meshes + slower particle field
+     Both have:
+       - real Scene + PerspectiveCamera + WebGLRenderer
+       - >= 3 distinct meshes
+       - render loop with rAF
+       - mouse parallax (camera offset) + idle drift
+     ================================================================== -->
+<script type="module">
+  import * as THREE from 'three';
+
+  // ----------------------------------------------------------------
+  // SHARED — mouse target (-1..1) updated by listener; both scenes read it.
+  // ----------------------------------------------------------------
+  const mouse = { x: 0, y: 0, tx: 0, ty: 0 };
+  window.addEventListener('mousemove', (e) => {
+    mouse.tx = (e.clientX / window.innerWidth) * 2 - 1;
+    mouse.ty = -((e.clientY / window.innerHeight) * 2 - 1);
+  });
+  // touch fallback
+  window.addEventListener('touchmove', (e) => {
+    if (!e.touches[0]) return;
+    mouse.tx = (e.touches[0].clientX / window.innerWidth) * 2 - 1;
+    mouse.ty = -((e.touches[0].clientY / window.innerHeight) * 2 - 1);
+  }, { passive: true });
+
+  const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // ================================================================
+  // SCENE 1 — HERO (landing + recording)
+  // ================================================================
+  function buildHeroScene() {
+    const canvas = document.getElementById('hero-canvas');
+    if (!canvas) return;
+
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setClearColor(0x05060c, 1);
+
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x05060c, 0.006);
+
+    const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 2000);
+    camera.position.set(0, 0, 180);
+
+    function resize() {
+      const rect = canvas.getBoundingClientRect();
+      const w = rect.width;
+      const h = rect.height;
+      renderer.setSize(w, h, false);
+      camera.aspect = w / Math.max(h, 1);
+      camera.updateProjectionMatrix();
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    // --- Lighting ---
+    const ambient = new THREE.AmbientLight(0x6e3cff, 0.55);
+    scene.add(ambient);
+
+    const keyLight = new THREE.DirectionalLight(0xa276ff, 1.3);
+    keyLight.position.set(60, 80, 120);
+    scene.add(keyLight);
+
+    const rimLight = new THREE.DirectionalLight(0x4ee2c4, 0.7);
+    rimLight.position.set(-100, -40, 60);
+    scene.add(rimLight);
+
+    const accentLight = new THREE.PointLight(0xff4d8d, 1.2, 400);
+    accentLight.position.set(40, -30, 60);
+    scene.add(accentLight);
+
+    // --- Mesh 1: PARTICLE NEBULA (background field) ---
+    const particleCount = 1800;
+    const positions = new Float32Array(particleCount * 3);
+    const colors = new Float32Array(particleCount * 3);
+    const baseColor = new THREE.Color();
+    for (let i = 0; i < particleCount; i++) {
+      // Distribute in a thick shell ranging far behind to in front of the camera
+      const r = 200 + Math.random() * 600;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      positions[i * 3 + 0] = r * Math.sin(phi) * Math.cos(theta);
+      positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta) * 0.6; // flatten a bit
+      positions[i * 3 + 2] = r * Math.cos(phi) - 100;
+
+      // colour mix between plasma + aurora + rose
+      const t = Math.random();
+      if (t < 0.55) baseColor.setHSL(0.72, 0.85, 0.55 + Math.random() * 0.2); // violet
+      else if (t < 0.85) baseColor.setHSL(0.46, 0.8, 0.55 + Math.random() * 0.2); // teal
+      else baseColor.setHSL(0.95, 0.75, 0.6 + Math.random() * 0.2); // rose
+      colors[i * 3 + 0] = baseColor.r;
+      colors[i * 3 + 1] = baseColor.g;
+      colors[i * 3 + 2] = baseColor.b;
+    }
+    const pGeo = new THREE.BufferGeometry();
+    pGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    pGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    // soft round sprite
+    const spriteCanvas = document.createElement('canvas');
+    spriteCanvas.width = spriteCanvas.height = 64;
+    const sctx = spriteCanvas.getContext('2d');
+    const grad = sctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, 'rgba(255,255,255,1)');
+    grad.addColorStop(0.4, 'rgba(255,255,255,0.6)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    sctx.fillStyle = grad;
+    sctx.fillRect(0, 0, 64, 64);
+    const spriteTex = new THREE.CanvasTexture(spriteCanvas);
+
+    const pMat = new THREE.PointsMaterial({
+      size: 2.6,
+      map: spriteTex,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.9,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      sizeAttenuation: true,
+    });
+    const particles = new THREE.Points(pGeo, pMat);
+    scene.add(particles);
+
+    // --- Mesh 2: RECORDING SPHERE (the heart of the recording moment) ---
+    // We use an icosahedron geometry whose vertices we displace per-frame using a noise-like
+    // sin/cos combination based on the original vertex position — this gives a real,
+    // organically-morphing surface (the audio amplitude proxy).
+    const sphereGeo = new THREE.IcosahedronGeometry(28, 6);
+    // Cache original positions for displacement reference
+    sphereGeo.userData.basePositions = sphereGeo.attributes.position.array.slice();
+
+    const sphereMat = new THREE.MeshPhysicalMaterial({
+      color: 0x6e3cff,
+      emissive: 0x4ee2c4,
+      emissiveIntensity: 0.4,
+      roughness: 0.18,
+      metalness: 0.35,
+      clearcoat: 0.8,
+      clearcoatRoughness: 0.2,
+      transmission: 0.25,
+      ior: 1.4,
+      thickness: 4,
+      transparent: true,
+      opacity: 0.95,
+    });
+    const sphere = new THREE.Mesh(sphereGeo, sphereMat);
+    sphere.position.set(0, -90, 0); // anchored to the lower (recording) viewport
+    scene.add(sphere);
+
+    // Inner glow halo behind sphere
+    const haloGeo = new THREE.SphereGeometry(50, 32, 32);
+    const haloMat = new THREE.MeshBasicMaterial({
+      color: 0x6e3cff,
+      transparent: true,
+      opacity: 0.08,
+      blending: THREE.AdditiveBlending,
+      side: THREE.BackSide,
+      depthWrite: false,
+    });
+    const halo = new THREE.Mesh(haloGeo, haloMat);
+    halo.position.copy(sphere.position);
+    scene.add(halo);
+
+    // Outer ring orbiting the sphere
+    const ringGeo = new THREE.TorusGeometry(40, 0.4, 12, 128);
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0xa276ff, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending });
+    const ring1 = new THREE.Mesh(ringGeo, ringMat);
+    ring1.position.copy(sphere.position);
+    ring1.rotation.x = Math.PI / 3;
+    scene.add(ring1);
+    const ring2 = ring1.clone();
+    ring2.material = ringMat.clone();
+    ring2.material.color = new THREE.Color(0x4ee2c4);
+    ring2.material.opacity = 0.25;
+    ring2.scale.set(1.25, 1.25, 1.25);
+    ring2.rotation.x = -Math.PI / 4;
+    ring2.rotation.z = Math.PI / 6;
+    scene.add(ring2);
+
+    // --- Mesh 3+: FLOATING GLASS CARD MESHES (in the upper hero region) ---
+    // These are real meshes that sit behind the HTML overlay, providing volumetric
+    // depth cues + light interaction. They're not the cards themselves — those are HTML —
+    // but they are spatial markers that scatter light.
+    const cardGeo = new THREE.BoxGeometry(40, 26, 1.2);
+    const cardMat = new THREE.MeshPhysicalMaterial({
+      color: 0x1b1450,
+      roughness: 0.3,
+      metalness: 0.1,
+      transmission: 0.6,
+      ior: 1.45,
+      thickness: 1,
+      clearcoat: 1,
+      clearcoatRoughness: 0.2,
+      transparent: true,
+      opacity: 0.55,
+    });
+
+    const cards = [];
+    const cardSeeds = [
+      { x: -110, y: 50, z: -40, rot: 0.12 },
+      { x: -85, y: 90, z: 10, rot: -0.18 },
+      { x: 95, y: 70, z: -30, rot: 0.22 },
+      { x: 130, y: 30, z: -10, rot: -0.1 },
+      { x: -130, y: -10, z: 0, rot: 0.05 },
+      { x: 115, y: -20, z: 30, rot: -0.25 },
+    ];
+    for (const s of cardSeeds) {
+      const c = new THREE.Mesh(cardGeo, cardMat.clone());
+      c.position.set(s.x, s.y, s.z);
+      c.rotation.y = s.rot;
+      c.rotation.x = (Math.random() - 0.5) * 0.1;
+      c.userData.seed = Math.random() * Math.PI * 2;
+      c.userData.basePos = c.position.clone();
+      cards.push(c);
+      scene.add(c);
+    }
+
+    // --- Render loop ---
+    const clock = new THREE.Clock();
+    function tick() {
+      const t = clock.getElapsedTime();
+
+      // Smooth mouse easing
+      mouse.x += (mouse.tx - mouse.x) * 0.05;
+      mouse.y += (mouse.ty - mouse.y) * 0.05;
+
+      // CAMERA — parallax + idle drift
+      const driftAmp = prefersReducedMotion ? 0 : 1;
+      const driftX = Math.sin(t * 0.12) * 8 * driftAmp;
+      const driftY = Math.cos(t * 0.08) * 4 * driftAmp;
+      camera.position.x = mouse.x * 22 + driftX;
+      camera.position.y = mouse.y * 14 + driftY;
+      camera.lookAt(0, mouse.y * 6 - 30, 0);
+
+      // PARTICLES — slow rotation
+      particles.rotation.y = t * 0.02;
+      particles.rotation.x = t * 0.01;
+
+      // SPHERE — vertex displacement (the audio-amplitude proxy)
+      const posAttr = sphere.geometry.attributes.position;
+      const base = sphere.geometry.userData.basePositions;
+      for (let i = 0; i < posAttr.count; i++) {
+        const ix = i * 3;
+        const bx = base[ix], by = base[ix + 1], bz = base[ix + 2];
+        const len = Math.sqrt(bx * bx + by * by + bz * bz);
+        const nx = bx / len, ny = by / len, nz = bz / len;
+
+        // Multi-frequency noise — three sin layers at different scales
+        const n =
+          Math.sin(nx * 2.2 + t * 1.3) * 0.6 +
+          Math.sin(ny * 3.1 - t * 1.7) * 0.4 +
+          Math.sin(nz * 4.5 + t * 2.1) * 0.25;
+
+        // Faux audio amplitude — bursts to simulate speech
+        const amp = 1.6 + Math.sin(t * 5.5) * 0.3 + Math.sin(t * 11.3) * 0.15;
+        const disp = n * amp;
+
+        posAttr.array[ix + 0] = bx + nx * disp;
+        posAttr.array[ix + 1] = by + ny * disp;
+        posAttr.array[ix + 2] = bz + nz * disp;
+      }
+      posAttr.needsUpdate = true;
+      sphere.geometry.computeVertexNormals();
+
+      sphere.rotation.y = t * 0.15;
+      sphere.rotation.x = Math.sin(t * 0.4) * 0.1;
+
+      // Halo pulse
+      const haloPulse = 1 + Math.sin(t * 2.5) * 0.06;
+      halo.scale.set(haloPulse, haloPulse, haloPulse);
+      halo.material.opacity = 0.05 + Math.sin(t * 2.5) * 0.03;
+
+      // Rings
+      ring1.rotation.z = t * 0.4;
+      ring2.rotation.z = -t * 0.25;
+      ring2.rotation.y = t * 0.18;
+
+      // CARDS — gentle bob + slight follow of mouse
+      for (const c of cards) {
+        const s = c.userData.seed;
+        c.position.y = c.userData.basePos.y + Math.sin(t * 0.7 + s) * 4;
+        c.position.x = c.userData.basePos.x + Math.cos(t * 0.5 + s) * 2;
+        c.rotation.z = Math.sin(t * 0.4 + s) * 0.04;
+        // Subtle z-translation toward camera based on mouse — adds depth response
+        c.position.z = c.userData.basePos.z + mouse.x * 4;
+      }
+
+      // Accent light orbit
+      accentLight.position.x = Math.cos(t * 0.6) * 80;
+      accentLight.position.y = Math.sin(t * 0.4) * 40 - 10;
+
+      renderer.render(scene, camera);
+      requestAnimationFrame(tick);
+    }
+    tick();
+  }
+
+  // ================================================================
+  // SCENE 2 — DASHBOARD (slower, deeper, more "room"-like)
+  // ================================================================
+  function buildDashScene() {
+    const canvas = document.getElementById('dash-canvas');
+    if (!canvas) return;
+
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setClearColor(0x05060c, 1);
+
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x05060c, 0.0045);
+
+    const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 2000);
+    camera.position.set(0, 10, 220);
+
+    function resize() {
+      const rect = canvas.getBoundingClientRect();
+      const w = rect.width;
+      const h = rect.height;
+      renderer.setSize(w, h, false);
+      camera.aspect = w / Math.max(h, 1);
+      camera.updateProjectionMatrix();
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    // Lighting — dimmer, room-like
+    const ambient = new THREE.AmbientLight(0x1b1450, 0.7);
+    scene.add(ambient);
+
+    const key = new THREE.DirectionalLight(0xa276ff, 0.9);
+    key.position.set(40, 100, 120);
+    scene.add(key);
+
+    const rim = new THREE.DirectionalLight(0x4ee2c4, 0.5);
+    rim.position.set(-120, 40, 40);
+    scene.add(rim);
+
+    // ROOM: a giant gradient sphere as the interior backdrop (inverted normals)
+    const roomGeo = new THREE.SphereGeometry(900, 48, 48);
+    const roomMat = new THREE.ShaderMaterial({
+      side: THREE.BackSide,
+      depthWrite: false,
+      uniforms: {
+        uTime: { value: 0 },
+      },
+      vertexShader: `
+        varying vec3 vPos;
+        void main() {
+          vPos = position;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        varying vec3 vPos;
+        uniform float uTime;
+        void main() {
+          vec3 dir = normalize(vPos);
+          float vy = dir.y * 0.5 + 0.5;
+          // Aurora/plasma vertical gradient + subtle breathing tint
+          vec3 lo = vec3(0.02, 0.02, 0.05);
+          vec3 mid = vec3(0.10, 0.05, 0.28) + vec3(0.04, 0.0, 0.0) * sin(uTime * 0.2);
+          vec3 hi = vec3(0.20, 0.12, 0.45);
+          vec3 col = mix(lo, mid, smoothstep(0.0, 0.55, vy));
+          col = mix(col, hi, smoothstep(0.55, 1.0, vy));
+          // soft horizon glow
+          float horizon = 1.0 - abs(dir.y);
+          col += vec3(0.16, 0.05, 0.30) * pow(horizon, 6.0) * 0.6;
+          gl_FragColor = vec4(col, 1.0);
+        }
+      `,
+    });
+    const room = new THREE.Mesh(roomGeo, roomMat);
+    scene.add(room);
+
+    // PARTICLE FIELD — slower, more dust-like, populates the volume
+    const dustCount = 900;
+    const dPos = new Float32Array(dustCount * 3);
+    const dCol = new Float32Array(dustCount * 3);
+    const tmpC = new THREE.Color();
+    for (let i = 0; i < dustCount; i++) {
+      dPos[i * 3 + 0] = (Math.random() - 0.5) * 700;
+      dPos[i * 3 + 1] = (Math.random() - 0.5) * 400;
+      dPos[i * 3 + 2] = (Math.random() - 0.5) * 600 - 50;
+      const t = Math.random();
+      if (t < 0.6) tmpC.setHSL(0.72, 0.7, 0.6 + Math.random() * 0.15);
+      else if (t < 0.9) tmpC.setHSL(0.46, 0.7, 0.55 + Math.random() * 0.15);
+      else tmpC.setHSL(0.96, 0.65, 0.6);
+      dCol[i * 3 + 0] = tmpC.r;
+      dCol[i * 3 + 1] = tmpC.g;
+      dCol[i * 3 + 2] = tmpC.b;
+    }
+    const dGeo = new THREE.BufferGeometry();
+    dGeo.setAttribute('position', new THREE.BufferAttribute(dPos, 3));
+    dGeo.setAttribute('color', new THREE.BufferAttribute(dCol, 3));
+
+    const spriteCanvas = document.createElement('canvas');
+    spriteCanvas.width = spriteCanvas.height = 64;
+    const sctx = spriteCanvas.getContext('2d');
+    const grad = sctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, 'rgba(255,255,255,1)');
+    grad.addColorStop(0.4, 'rgba(255,255,255,0.5)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    sctx.fillStyle = grad;
+    sctx.fillRect(0, 0, 64, 64);
+    const dustTex = new THREE.CanvasTexture(spriteCanvas);
+
+    const dMat = new THREE.PointsMaterial({
+      size: 1.8,
+      map: dustTex,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.7,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      sizeAttenuation: true,
+    });
+    const dust = new THREE.Points(dGeo, dMat);
+    scene.add(dust);
+
+    // FLOATING DEPTH-CARD MESHES — scattered through the volume.
+    // These are spatial markers behind the HTML cards, providing real WebGL depth.
+    const depthCardGeo = new THREE.BoxGeometry(60, 36, 1.5);
+    const depthCardMat = new THREE.MeshPhysicalMaterial({
+      color: 0x2a1f6a,
+      roughness: 0.25,
+      metalness: 0.15,
+      transmission: 0.55,
+      ior: 1.45,
+      thickness: 1.5,
+      clearcoat: 0.9,
+      transparent: true,
+      opacity: 0.5,
+    });
+    const altCardMat = depthCardMat.clone();
+    altCardMat.color = new THREE.Color(0x3a2a4a);
+    altCardMat.emissive = new THREE.Color(0x4ee2c4);
+    altCardMat.emissiveIntensity = 0.07;
+
+    const dCards = [];
+    const dSeeds = [
+      { x: -180, y: 60, z: -80, rot: 0.15, mat: depthCardMat },
+      { x: -150, y: -30, z: -40, rot: -0.1, mat: altCardMat },
+      { x: 200, y: 80, z: -120, rot: -0.2, mat: depthCardMat },
+      { x: 180, y: -50, z: -60, rot: 0.25, mat: altCardMat },
+      { x: -220, y: 0, z: -160, rot: 0.05, mat: depthCardMat },
+      { x: 230, y: 20, z: -200, rot: -0.3, mat: depthCardMat },
+      { x: 0, y: 140, z: -240, rot: 0, mat: altCardMat },
+      { x: -50, y: -140, z: -180, rot: 0.18, mat: depthCardMat },
+    ];
+    for (const s of dSeeds) {
+      const c = new THREE.Mesh(depthCardGeo, s.mat);
+      c.position.set(s.x, s.y, s.z);
+      c.rotation.y = s.rot;
+      c.rotation.x = (Math.random() - 0.5) * 0.15;
+      c.userData.seed = Math.random() * Math.PI * 2;
+      c.userData.basePos = c.position.clone();
+      dCards.push(c);
+      scene.add(c);
+    }
+
+    // ICOSAHEDRON ROOM CENTERPIECE — a larger crystal sitting behind the dashboard
+    // (it appears as a soft jewel between the right-column cards)
+    const jewelGeo = new THREE.IcosahedronGeometry(20, 1);
+    const jewelMat = new THREE.MeshPhysicalMaterial({
+      color: 0xa276ff,
+      roughness: 0.2,
+      metalness: 0.3,
+      transmission: 0.7,
+      ior: 1.5,
+      thickness: 4,
+      clearcoat: 1,
+      transparent: true,
+      opacity: 0.85,
+    });
+    const jewel = new THREE.Mesh(jewelGeo, jewelMat);
+    jewel.position.set(160, 0, -50);
+    scene.add(jewel);
+
+    // Render loop
+    const clock = new THREE.Clock();
+    function tick() {
+      const t = clock.getElapsedTime();
+
+      // Mouse smoothing (shared with hero — already updated by listener)
+      // Use a separate smoother for dash so it lags slightly differently
+      const driftAmp = prefersReducedMotion ? 0 : 1;
+      const driftX = Math.sin(t * 0.07) * 6 * driftAmp;
+      const driftY = Math.cos(t * 0.05) * 3 * driftAmp;
+
+      camera.position.x = mouse.x * 30 + driftX;
+      camera.position.y = 10 + mouse.y * 16 + driftY;
+      camera.lookAt(mouse.x * 8, mouse.y * 4, 0);
+
+      // Room shader time
+      roomMat.uniforms.uTime.value = t;
+
+      // Particle dust drift
+      dust.rotation.y = t * 0.015;
+      dust.rotation.x = Math.sin(t * 0.04) * 0.05;
+
+      // Cards — slow bob + parallax-aware z-shift
+      for (const c of dCards) {
+        const s = c.userData.seed;
+        c.position.y = c.userData.basePos.y + Math.sin(t * 0.45 + s) * 5;
+        c.position.x = c.userData.basePos.x + Math.cos(t * 0.3 + s) * 3 + mouse.x * 5;
+        c.rotation.y = c.userData.basePos.x > 0 ? -0.2 + Math.sin(t * 0.2 + s) * 0.05 : 0.2 + Math.sin(t * 0.2 + s) * 0.05;
+      }
+
+      // Jewel — slow rotation
+      jewel.rotation.y = t * 0.3;
+      jewel.rotation.x = Math.sin(t * 0.4) * 0.3;
+      jewel.position.y = Math.sin(t * 0.5) * 6;
+
+      renderer.render(scene, camera);
+      requestAnimationFrame(tick);
+    }
+    tick();
+  }
+
+  // ================================================================
+  // HTML CARD PARALLAX — augments the WebGL parallax with screen-space
+  // depth response on the spatial-stage. Each .stat-card / .visit-row has
+  // its baseline transform (translateZ + Y bob), and we layer a small
+  // mouse-driven X/Y rotation on the parent stage so the whole grid tilts.
+  // ================================================================
+  function bindStageParallax() {
+    const stage = document.getElementById('spatial-stage');
+    if (!stage) return;
+
+    function update() {
+      const rx = mouse.y * 4; // tilt around X by mouse Y
+      const ry = mouse.x * 6; // tilt around Y by mouse X
+      stage.style.transform = `rotateX(${rx}deg) rotateY(${ry}deg)`;
+      requestAnimationFrame(update);
+    }
+    update();
+
+    // Hover lift — translateZ +30 on hover
+    stage.querySelectorAll('.visit-row, .stat-card').forEach((el) => {
+      const baseTransform = el.style.transform;
+      el.addEventListener('mouseenter', () => {
+        el.dataset.baseTransform = el.style.transform;
+        // Append translateZ(40px) in addition to whatever it had
+        el.style.transform = `translateZ(40px)`;
+        el.style.filter = 'none';
+        el.style.opacity = '1';
+        el.style.boxShadow = '0 50px 90px -20px rgba(110,60,255,0.5), 0 0 0 1px rgba(162,118,255,0.4) inset';
+      });
+      el.addEventListener('mouseleave', () => {
+        el.style.transform = el.dataset.baseTransform || baseTransform;
+        el.style.filter = '';
+        el.style.opacity = '';
+        el.style.boxShadow = '';
+      });
+    });
+  }
+
+  // Init all
+  buildHeroScene();
+  buildDashScene();
+  bindStageParallax();
+</script>
+
+</body>
+</html>

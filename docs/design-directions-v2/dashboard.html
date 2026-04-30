@@ -1,0 +1,834 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1600, initial-scale=1">
+<title>QuillMD — Apothecary · CALM (dashboard)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;1,8..60,400&family=Inter+Tight:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #07060C;
+    --bg-1: #0C0A16;
+    --bg-2: #14111F;
+    --bg-3: #1C1828;
+    --bg-4: #221C30;
+    --line-soft: #191524;
+    --line: #26222F;
+    --line-strong: #3A3445;
+    --fg: #F5F2FA;
+    --fg-2: #B9B2C9;
+    --fg-3: #7E7791;
+    --fg-4: #4B4558;
+    --accent: #8B5CFF;
+    --accent-bright: #A87CFF;
+    --accent-deep: #6B3FD9;
+    --accent-a: #D1B5FF;
+    --copper: #E8A872;
+    --aqua: #7DD3FC;
+    --mint: #6EE7B7;
+    --amber: #FBBF24;
+    --coral: #FB7185;
+    --serif: 'Source Serif 4', Georgia, serif;
+    --sans: 'Inter Tight', system-ui, sans-serif;
+    --mono: 'JetBrains Mono', ui-monospace, monospace;
+    --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--fg);
+    font-size: 14px;
+    line-height: 1.5;
+    letter-spacing: -0.005em;
+    /* Subtle, intentionally non-animated. The base is just dark. */
+    background-image:
+      radial-gradient(ellipse 1200px 600px at 50% -200px, rgba(139,92,255,0.05), transparent 70%);
+    background-attachment: fixed;
+  }
+
+  /* CALM zone has zero ambient motion. No aurora, no grain animation, no orbs. */
+
+  /* ---------- Layout ---------- */
+  .qm-app { display: grid; grid-template-columns: 64px 1fr; min-height: 100vh; }
+
+  /* Icon rail */
+  .qm-rail {
+    background: var(--bg-1);
+    border-right: 1px solid var(--line-soft);
+    padding: 16px 0;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    position: sticky; top: 0; height: 100vh;
+  }
+  .qm-rail .logo {
+    width: 36px; height: 36px; border-radius: 10px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-b, #D946EF));
+    display: grid; place-items: center;
+    color: white; font-family: var(--serif); font-size: 18px;
+    box-shadow: 0 8px 22px -6px rgba(139,92,255,0.5);
+    margin-bottom: 12px;
+  }
+  .qm-rail-item {
+    width: 40px; height: 40px; border-radius: 10px;
+    display: grid; place-items: center; cursor: pointer;
+    color: var(--fg-3);
+    transition: color 120ms var(--ease), background 120ms var(--ease);
+  }
+  .qm-rail-item:hover { color: var(--fg-2); background: var(--bg-2); }
+  .qm-rail-item.active { color: var(--fg); background: var(--bg-3); box-shadow: inset 0 0 0 1px var(--line-strong); }
+  .qm-rail-item svg { width: 18px; height: 18px; }
+
+  /* Top nav */
+  .qm-topbar {
+    height: 56px; padding: 0 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--bg);
+    border-bottom: 1px solid var(--line-soft);
+    position: sticky; top: 0; z-index: 30;
+  }
+  .qm-search {
+    display: flex; align-items: center; gap: 10px;
+    height: 34px; padding: 0 12px;
+    border-radius: 8px;
+    background: var(--bg-2); border: 1px solid var(--line);
+    color: var(--fg-3); font-size: 13px;
+    width: 360px;
+    cursor: pointer;
+    transition: border-color 120ms var(--ease);
+  }
+  .qm-search:hover { border-color: var(--line-strong); }
+  .qm-kbd {
+    display: inline-block; padding: 1px 6px;
+    border: 1px solid var(--line-strong);
+    border-radius: 4px; font-family: var(--mono); font-size: 10.5px; color: var(--fg-3);
+    background: rgba(0,0,0,0.25);
+  }
+  .qm-search .qm-kbd { margin-left: auto; }
+
+  /* Main grid */
+  .qm-main { padding: 28px 32px 60px; max-width: 1600px; }
+
+  /* Page header */
+  .qm-page-h {
+    display: flex; align-items: end; justify-content: space-between;
+    margin-bottom: 28px;
+  }
+  .qm-page-h h1 {
+    font-family: var(--serif); font-weight: 400;
+    font-size: 38px; line-height: 1.05; letter-spacing: -0.025em;
+  }
+  .qm-page-h h1 em { font-style: italic; color: var(--fg-3); font-weight: 300; }
+  .qm-page-h p { color: var(--fg-3); font-size: 13.5px; margin-top: 4px; }
+  .qm-page-h p strong { color: var(--fg-2); font-weight: 500; }
+
+  /* Bento grid */
+  .qm-bento {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    grid-auto-rows: minmax(140px, auto);
+    gap: 16px;
+  }
+  .qm-tile {
+    background: var(--bg-1);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 22px;
+    position: relative;
+    transition: border-color 140ms var(--ease);
+  }
+  .qm-tile:hover { border-color: var(--line-strong); }
+  .qm-tile-h {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .qm-tile-h .label {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.16em;
+    text-transform: uppercase; color: var(--fg-3);
+  }
+  .qm-tile-h .label .num { color: var(--accent-bright); margin-right: 6px; }
+
+  /* Bento spans */
+  .span-3 { grid-column: span 3; }
+  .span-4 { grid-column: span 4; }
+  .span-5 { grid-column: span 5; }
+  .span-6 { grid-column: span 6; }
+  .span-7 { grid-column: span 7; }
+  .span-8 { grid-column: span 8; }
+  .span-12 { grid-column: span 12; }
+  .row-2 { grid-row: span 2; }
+
+  /* Buttons */
+  .qm-btn {
+    font-family: var(--sans);
+    font-weight: 500; font-size: 13px; letter-spacing: -0.005em;
+    height: 34px; padding: 0 14px;
+    border-radius: 8px;
+    display: inline-flex; align-items: center; gap: 8px;
+    border: 1px solid var(--line);
+    background: var(--bg-2);
+    color: var(--fg-2);
+    cursor: pointer;
+    transition: color 120ms var(--ease), border-color 120ms var(--ease), background 120ms var(--ease);
+  }
+  .qm-btn:hover { color: var(--fg); border-color: var(--line-strong); background: var(--bg-3); }
+  .qm-btn-primary {
+    color: white;
+    background: linear-gradient(180deg, var(--accent-bright), var(--accent-deep));
+    border-color: var(--accent-deep);
+    box-shadow: 0 6px 18px -6px rgba(139,92,255,0.5), inset 0 1px 0 rgba(255,255,255,0.18);
+  }
+  .qm-btn-primary:hover { filter: brightness(1.06); }
+
+  /* Pills */
+  .qm-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 2px 8px; border-radius: 999px;
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+    border: 1px solid var(--line);
+    background: var(--bg-2);
+    color: var(--fg-3);
+  }
+  .qm-pill .dot { width: 6px; height: 6px; border-radius: 50%; }
+  .qm-pill.mint   { color: var(--mint);   border-color: rgba(110,231,183,0.3); background: rgba(110,231,183,0.05); }
+  .qm-pill.mint .dot { background: var(--mint); }
+  .qm-pill.amber  { color: var(--amber);  border-color: rgba(251,191,36,0.3);  background: rgba(251,191,36,0.05); }
+  .qm-pill.amber .dot { background: var(--amber); }
+  .qm-pill.coral  { color: var(--coral);  border-color: rgba(251,113,133,0.3); background: rgba(251,113,133,0.05); }
+  .qm-pill.coral .dot { background: var(--coral); }
+  .qm-pill.copper { color: var(--copper); border-color: rgba(232,168,114,0.3); background: rgba(232,168,114,0.05); }
+  .qm-pill.copper .dot { background: var(--copper); }
+  .qm-pill.aqua   { color: var(--aqua);   border-color: rgba(125,211,252,0.3); background: rgba(125,211,252,0.05); }
+  .qm-pill.aqua .dot { background: var(--aqua); }
+  .qm-pill.violet { color: var(--accent-bright); border-color: rgba(168,124,255,0.3); background: rgba(139,92,255,0.06); }
+  .qm-pill.violet .dot { background: var(--accent); }
+
+  /* Stat layouts */
+  .qm-stat-num {
+    font-family: var(--serif); font-weight: 400;
+    font-size: 56px; line-height: 1; letter-spacing: -0.035em;
+    font-variant-numeric: tabular-nums;
+  }
+  .qm-stat-num em { font-style: italic; color: var(--fg-3); font-weight: 300; font-size: 0.45em; vertical-align: super; letter-spacing: 0; }
+  .qm-stat-delta {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.04em;
+    color: var(--mint);
+  }
+  .qm-stat-delta.down { color: var(--coral); }
+  .qm-stat-sub { color: var(--fg-3); font-size: 12.5px; }
+
+  /* Hero stat tile (Today's pulse) */
+  .qm-pulse-tile {
+    grid-column: span 5;
+    grid-row: span 2;
+    background:
+      radial-gradient(circle 280px at 100% 0%, rgba(139,92,255,0.10), transparent 70%),
+      var(--bg-1);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 26px;
+    position: relative;
+    overflow: hidden;
+  }
+  .qm-pulse-tile::after {
+    content: ''; position: absolute; right: -40px; bottom: -40px;
+    width: 240px; height: 240px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(232,168,114,0.06), transparent 70%);
+  }
+
+  /* Mini sparkline bars */
+  .qm-spark { display: flex; align-items: end; gap: 3px; height: 38px; }
+  .qm-spark i { display: block; width: 8px; background: var(--line-strong); border-radius: 2px 2px 0 0; }
+  .qm-spark i.peak { background: var(--accent-bright); }
+  .qm-spark i.warm { background: var(--copper); }
+
+  /* Activity feed */
+  .qm-feed-row {
+    display: grid; grid-template-columns: 24px 1fr auto;
+    gap: 12px; padding: 10px 0;
+    border-top: 1px solid var(--line-soft);
+    align-items: center;
+  }
+  .qm-feed-row:first-child { border-top: 0; }
+  .qm-feed-icon {
+    width: 22px; height: 22px; border-radius: 6px;
+    display: grid; place-items: center;
+    font-size: 11px;
+    background: var(--bg-3); color: var(--fg-3);
+    border: 1px solid var(--line);
+  }
+  .qm-feed-icon.copper { color: var(--copper); border-color: rgba(232,168,114,0.3); background: rgba(232,168,114,0.06); }
+  .qm-feed-icon.mint   { color: var(--mint);   border-color: rgba(110,231,183,0.3); background: rgba(110,231,183,0.05); }
+  .qm-feed-icon.coral  { color: var(--coral);  border-color: rgba(251,113,133,0.3); background: rgba(251,113,133,0.05); }
+  .qm-feed-icon.amber  { color: var(--amber);  border-color: rgba(251,191,36,0.3);  background: rgba(251,191,36,0.05); }
+  .qm-feed-icon.violet { color: var(--accent-bright); border-color: rgba(139,92,255,0.3); background: rgba(139,92,255,0.06); }
+  .qm-feed-row .text { font-size: 13px; color: var(--fg-2); line-height: 1.5; }
+  .qm-feed-row .text strong { color: var(--fg); font-weight: 500; }
+  .qm-feed-row .text .pn { color: var(--accent-bright); font-family: var(--serif); font-style: italic; }
+  .qm-feed-row .ts { font-family: var(--mono); font-size: 10.5px; color: var(--fg-4); white-space: nowrap; }
+
+  /* Visit table */
+  .qm-table-wrap {
+    background: var(--bg-1);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  .qm-table-h {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 20px 14px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .qm-table-h h3 {
+    font-family: var(--serif); font-weight: 400; font-size: 22px; letter-spacing: -0.02em;
+  }
+  .qm-table-h h3 em { font-style: italic; color: var(--fg-3); font-weight: 300; }
+  .qm-tabs { display: flex; gap: 2px; padding: 4px; background: var(--bg-2); border: 1px solid var(--line); border-radius: 9px; }
+  .qm-tab {
+    padding: 5px 12px; font-size: 12px; color: var(--fg-3);
+    border-radius: 6px; cursor: pointer; font-weight: 500;
+    transition: color 120ms var(--ease), background 120ms var(--ease);
+  }
+  .qm-tab:hover { color: var(--fg-2); }
+  .qm-tab.active { color: var(--fg); background: var(--bg-3); box-shadow: inset 0 0 0 1px var(--line-strong); }
+
+  table.qm-table {
+    width: 100%; border-collapse: collapse;
+    font-size: 13.5px;
+  }
+  .qm-table thead th {
+    text-align: left; padding: 10px 20px;
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--fg-3); font-weight: 500;
+    border-bottom: 1px solid var(--line-soft);
+    background: var(--bg);
+  }
+  .qm-table tbody tr {
+    border-bottom: 1px solid var(--line-soft);
+    transition: background 120ms var(--ease);
+  }
+  .qm-table tbody tr:hover { background: var(--bg-2); }
+  .qm-table tbody tr:last-child { border-bottom: 0; }
+  .qm-table tbody td { padding: 14px 20px; vertical-align: middle; }
+  .qm-table .pname { font-family: var(--serif); font-size: 16.5px; letter-spacing: -0.015em; }
+  .qm-table .pname .dob { color: var(--fg-3); font-style: italic; font-weight: 300; font-size: 14px; margin-left: 8px; }
+  .qm-table .meta { font-family: var(--mono); color: var(--fg-3); font-size: 11.5px; }
+  .qm-table .vid { font-family: var(--mono); font-size: 11px; color: var(--fg-4); }
+  .qm-table .specialty { color: var(--fg-2); font-size: 13px; }
+  .qm-table .duration { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--fg-2); font-size: 12.5px; }
+  .qm-table .cost { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--copper); font-size: 12.5px; }
+  .qm-table .actions { text-align: right; }
+  .qm-icon-btn {
+    width: 28px; height: 28px; border-radius: 6px;
+    display: inline-grid; place-items: center;
+    color: var(--fg-3); cursor: pointer;
+    transition: color 120ms var(--ease), background 120ms var(--ease);
+  }
+  .qm-icon-btn:hover { color: var(--fg); background: var(--bg-3); }
+
+  /* Hover row indicator (left bar) */
+  .qm-table tbody tr td:first-child {
+    border-left: 2px solid transparent;
+    transition: border-color 120ms var(--ease);
+  }
+  .qm-table tbody tr:hover td:first-child {
+    border-left-color: var(--accent);
+  }
+
+  /* Donut */
+  .qm-donut { width: 90px; height: 90px; }
+  .qm-donut .ring { stroke-width: 10; fill: none; }
+
+  /* Footer note */
+  .qm-foot {
+    margin-top: 30px; padding: 16px 4px;
+    display: flex; align-items: center; justify-content: space-between;
+    color: var(--fg-3); font-size: 12px;
+  }
+  .qm-foot .qm-pill { font-size: 9.5px; }
+
+  /* ----- Reduced motion ----- */
+  @media (prefers-reduced-motion: reduce) {
+    * { transition-duration: 0.01ms !important; }
+  }
+
+  /* tab/focus indicators (the only motion in calm mode) */
+  *:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+  /* svg icon helpers */
+  .ic { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     APP SHELL — icon rail + topbar + main
+     ============================================================ -->
+<div class="qm-app">
+
+  <!-- Icon rail -->
+  <aside class="qm-rail">
+    <div class="logo">q</div>
+    <a class="qm-rail-item active" title="Dashboard"><svg class="ic" viewBox="0 0 24 24"><path d="M3 12 12 4l9 8M5 10v10h14V10"/></svg></a>
+    <a class="qm-rail-item" title="Visits"><svg class="ic" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 3v4M16 3v4M4 11h16"/></svg></a>
+    <a class="qm-rail-item" title="Patients"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a6 6 0 0 1 16 0v2"/></svg></a>
+    <a class="qm-rail-item" title="Recordings"><svg class="ic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></a>
+    <a class="qm-rail-item" title="Reports"><svg class="ic" viewBox="0 0 24 24"><path d="M4 19V5a2 2 0 0 1 2-2h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><path d="M14 3v5h5M8 13h8M8 17h6"/></svg></a>
+    <div style="flex: 1"></div>
+    <a class="qm-rail-item" title="Settings"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06A2 2 0 1 1 4.27 16.96l.06-.06A1.65 1.65 0 0 0 4.66 15 1.65 1.65 0 0 0 3.15 14H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg></a>
+    <div class="qm-rail-item" style="width: 36px; height: 36px; border-radius: 50%; background: var(--bg-3); border: 1px solid var(--line); color: var(--accent-bright); font-family: var(--serif); font-size: 14px; cursor: default;">JR</div>
+  </aside>
+
+  <!-- Right column -->
+  <div>
+    <!-- Top bar -->
+    <header class="qm-topbar">
+      <div class="flex items-center gap-4">
+        <div class="qm-search">
+          <svg class="ic" style="width:14px;height:14px" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <span>Search visits, patients, codes&hellip;</span>
+          <span class="qm-kbd">⌘K</span>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <button class="qm-btn">
+          <svg class="ic" style="width:14px;height:14px" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+          New visit
+          <span class="qm-kbd">⇧N</span>
+        </button>
+        <button class="qm-btn qm-btn-primary">
+          <svg class="ic" style="width:14px;height:14px;stroke:white;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="9"/></svg>
+          Record
+          <span class="qm-kbd" style="border-color: rgba(255,255,255,0.3); color: rgba(255,255,255,0.85);">⇧R</span>
+        </button>
+        <span style="height: 22px; width: 1px; background: var(--line); margin: 0 4px;"></span>
+        <button class="qm-icon-btn"><svg class="ic" style="width:16px;height:16px" viewBox="0 0 24 24"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9z"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></button>
+        <button class="qm-icon-btn"><svg class="ic" style="width:16px;height:16px" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/></svg></button>
+      </div>
+    </header>
+
+    <main class="qm-main">
+
+      <!-- Page header -->
+      <div class="qm-page-h">
+        <div>
+          <h1>Good morning, <em>Dr. Reyes</em>.</h1>
+          <p>Wednesday, April 29 &middot; <strong>3 visits</strong> on the schedule today &middot; last review <strong>14 minutes ago</strong></p>
+        </div>
+        <div class="flex items-center gap-3">
+          <span class="qm-pill mint"><span class="dot"></span>workspace healthy</span>
+          <span class="qm-pill aqua">apr 23 &ndash; apr 29</span>
+          <button class="qm-btn">
+            Export week
+            <svg class="ic" style="width:14px;height:14px" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Bento grid -->
+      <div class="qm-bento">
+
+        <!-- Today's pulse — large hero stat (5 cols × 2 rows) -->
+        <div class="qm-pulse-tile">
+          <div class="qm-tile-h">
+            <span class="label"><span class="num">01</span>TODAY · APR 29</span>
+            <span class="qm-pill copper"><span class="dot"></span>3 ahead of schedule</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 8px;">
+            <div>
+              <p class="qm-stat-sub">Visits drafted</p>
+              <p class="qm-stat-num" style="margin-top: 6px;">12</p>
+              <p class="qm-stat-delta" style="margin-top: 8px;">▲ 3 vs yesterday · 7 min avg</p>
+            </div>
+            <div>
+              <p class="qm-stat-sub">Awaiting your sign-off</p>
+              <p class="qm-stat-num" style="margin-top: 6px; color: var(--copper);">3</p>
+              <p class="qm-stat-delta" style="margin-top: 8px; color: var(--fg-3);">oldest 28 min · none stale</p>
+            </div>
+          </div>
+          <!-- Hourly draft histogram -->
+          <div style="margin-top: 30px;">
+            <p class="qm-stat-sub" style="margin-bottom: 10px;">Drafts by hour &middot; today</p>
+            <div class="qm-spark" style="height: 56px; gap: 4px;">
+              <i style="height: 10%"></i><i style="height: 22%"></i><i style="height: 38%"></i><i style="height: 64%"></i><i class="peak" style="height: 88%"></i><i style="height: 60%"></i><i style="height: 44%"></i><i class="warm" style="height: 56%"></i><i style="height: 30%"></i><i style="height: 18%"></i><i style="height: 12%"></i><i style="height: 8%"></i>
+            </div>
+            <p class="qm-stat-sub" style="margin-top: 8px; font-family: var(--mono); font-size: 10px;">8a · 9a · 10a · 11a · 12p · 1p · 2p · 3p · 4p · 5p · 6p · 7p</p>
+          </div>
+        </div>
+
+        <!-- Sign-off rate -->
+        <div class="qm-tile span-3">
+          <div class="qm-tile-h">
+            <span class="label"><span class="num">02</span>SIGN-OFF &nbsp; &lt; 24H</span>
+            <span class="qm-pill mint"><span class="dot"></span>healthy</span>
+          </div>
+          <div class="flex items-center justify-between" style="margin-top: 12px;">
+            <div>
+              <p class="qm-stat-num">94<em>%</em></p>
+              <p class="qm-stat-delta" style="margin-top: 6px;">▲ 2 pts wow</p>
+            </div>
+            <svg class="qm-donut" viewBox="0 0 100 100">
+              <circle class="ring" cx="50" cy="50" r="40" stroke="var(--bg-3)"/>
+              <circle class="ring" cx="50" cy="50" r="40" stroke="var(--mint)" stroke-dasharray="251.3" stroke-dashoffset="15" stroke-linecap="round" transform="rotate(-90 50 50)"/>
+            </svg>
+          </div>
+          <p class="qm-stat-sub" style="margin-top: 12px;">target 90% · 28 of 30 signed within 24h</p>
+        </div>
+
+        <!-- Avg visit time -->
+        <div class="qm-tile span-2" style="grid-column: span 2;">
+          <div class="qm-tile-h">
+            <span class="label"><span class="num">03</span>AVG DRAFT</span>
+          </div>
+          <p class="qm-stat-num">7:08</p>
+          <p class="qm-stat-delta" style="margin-top: 6px;">▼ 24s vs last wk</p>
+          <div style="margin-top: 14px;">
+            <div class="qm-spark" style="height: 24px;">
+              <i style="height: 60%"></i><i style="height: 70%"></i><i style="height: 50%"></i><i style="height: 40%"></i><i style="height: 30%"></i><i style="height: 50%"></i><i class="peak" style="height: 35%"></i>
+            </div>
+          </div>
+        </div>
+
+        <!-- Cost this week -->
+        <div class="qm-tile span-2" style="grid-column: span 2;">
+          <div class="qm-tile-h">
+            <span class="label"><span class="num">04</span>SPEND · WEEK</span>
+          </div>
+          <p class="qm-stat-num" style="color: var(--copper);">$8.46</p>
+          <p class="qm-stat-delta" style="margin-top: 6px; color: var(--fg-3);">$0.184 / visit avg</p>
+          <p class="qm-stat-sub" style="margin-top: 14px; font-size: 11.5px;">deepgram $3.12 · claude $5.34</p>
+        </div>
+
+        <!-- Activity feed (4 cols) -->
+        <div class="qm-tile span-4 row-2">
+          <div class="qm-tile-h">
+            <span class="label"><span class="num">05</span>ACTIVITY · TODAY</span>
+            <a class="qm-stat-sub" href="#" style="font-size: 11.5px;">view audit log →</a>
+          </div>
+          <div>
+            <div class="qm-feed-row">
+              <span class="qm-feed-icon mint">✓</span>
+              <p class="text"><strong>Maria Lopez</strong> &middot; SOAP <strong>signed</strong> &middot; <span class="pn">pain mgmt</span></p>
+              <span class="ts">14m</span>
+            </div>
+            <div class="qm-feed-row">
+              <span class="qm-feed-icon copper">℞</span>
+              <p class="text"><strong>John Smith</strong> &middot; ICD <span style="color: var(--copper)">R07.9</span>, <span style="color: var(--copper)">I20.9</span> needs your confirmation &middot; <span class="pn">cardiology</span></p>
+              <span class="ts">22m</span>
+            </div>
+            <div class="qm-feed-row">
+              <span class="qm-feed-icon violet">∿</span>
+              <p class="text"><strong>Robert Chen</strong> &middot; visit drafted in <strong>6:18</strong> &middot; ready for review &middot; <span class="pn">orthopedics</span></p>
+              <span class="ts">38m</span>
+            </div>
+            <div class="qm-feed-row">
+              <span class="qm-feed-icon coral">!</span>
+              <p class="text"><strong>Aisha Patel</strong> &middot; Rx warning hit: <strong style="color: var(--coral)">apixaban + ibuprofen</strong> &middot; <span class="pn">internal med</span></p>
+              <span class="ts">1h</span>
+            </div>
+            <div class="qm-feed-row">
+              <span class="qm-feed-icon mint">✓</span>
+              <p class="text"><strong>Eleanor Nakamura</strong> &middot; SOAP <strong>signed</strong> &middot; <span class="pn">geriatrics</span></p>
+              <span class="ts">2h</span>
+            </div>
+            <div class="qm-feed-row">
+              <span class="qm-feed-icon amber">↻</span>
+              <p class="text"><strong>Diego Alvarez</strong> &middot; pipeline retried at L4 (transient deepgram blip) &middot; succeeded</p>
+              <span class="ts">2h</span>
+            </div>
+            <div class="qm-feed-row">
+              <span class="qm-feed-icon copper">℞</span>
+              <p class="text"><strong>Kim Phan</strong> &middot; ICD <span style="color: var(--copper)">M54.5</span> confirmed &middot; <span class="pn">PT/OT</span></p>
+              <span class="ts">3h</span>
+            </div>
+            <div class="qm-feed-row">
+              <span class="qm-feed-icon violet">∿</span>
+              <p class="text"><strong>James O'Brien</strong> &middot; recording uploaded &middot; pipeline started</p>
+              <span class="ts">3h</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ICD candidates pending (4 cols) -->
+        <div class="qm-tile" style="grid-column: span 3;">
+          <div class="qm-tile-h">
+            <span class="label"><span class="num">06</span>ICD &middot; AWAITING</span>
+            <span class="qm-pill copper">5 to review</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 6px;">
+            <div class="flex items-center justify-between" style="padding: 6px 0; border-bottom: 1px solid var(--line-soft);">
+              <span><span style="font-family: var(--mono); color: var(--copper); font-size: 13px;">R07.9</span> <span style="color: var(--fg-3); font-size: 12.5px;">chest pain unspec.</span></span>
+              <span class="qm-pill copper" style="font-size: 9px;">2</span>
+            </div>
+            <div class="flex items-center justify-between" style="padding: 6px 0; border-bottom: 1px solid var(--line-soft);">
+              <span><span style="font-family: var(--mono); color: var(--copper); font-size: 13px;">M54.5</span> <span style="color: var(--fg-3); font-size: 12.5px;">low back pain</span></span>
+              <span class="qm-pill copper" style="font-size: 9px;">1</span>
+            </div>
+            <div class="flex items-center justify-between" style="padding: 6px 0; border-bottom: 1px solid var(--line-soft);">
+              <span><span style="font-family: var(--mono); color: var(--copper); font-size: 13px;">I10</span> <span style="color: var(--fg-3); font-size: 12.5px;">essential htn</span></span>
+              <span class="qm-pill copper" style="font-size: 9px;">1</span>
+            </div>
+            <div class="flex items-center justify-between" style="padding: 6px 0;">
+              <span><span style="font-family: var(--mono); color: var(--copper); font-size: 13px;">J45.909</span> <span style="color: var(--fg-3); font-size: 12.5px;">asthma unspec.</span></span>
+              <span class="qm-pill copper" style="font-size: 9px;">1</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Visit list table — full width (12 cols) -->
+        <div class="qm-table-wrap span-12">
+          <div class="qm-table-h">
+            <h3>Recent visits <em>this week</em></h3>
+            <div class="flex items-center gap-3">
+              <div class="qm-tabs">
+                <span class="qm-tab active">All <span style="color: var(--fg-4); font-family: var(--mono); font-size: 10.5px; margin-left: 4px;">30</span></span>
+                <span class="qm-tab">Awaiting <span style="color: var(--copper); font-family: var(--mono); font-size: 10.5px; margin-left: 4px;">3</span></span>
+                <span class="qm-tab">Signed</span>
+                <span class="qm-tab">Failed</span>
+                <span class="qm-tab">Archived</span>
+              </div>
+              <button class="qm-btn">
+                <svg class="ic" style="width:14px;height:14px" viewBox="0 0 24 24"><path d="M3 6h18M6 12h12M10 18h4"/></svg>
+                Filter
+              </button>
+            </div>
+          </div>
+          <table class="qm-table">
+            <thead>
+              <tr>
+                <th style="width: 28%;">Patient</th>
+                <th style="width: 14%;">Specialty</th>
+                <th style="width: 10%;">Status</th>
+                <th style="width: 10%;">Duration</th>
+                <th style="width: 10%;">Cost</th>
+                <th style="width: 14%;">When</th>
+                <th style="width: 8%;">ID</th>
+                <th style="width: 6%;"></th>
+              </tr>
+            </thead>
+            <tbody>
+
+              <tr>
+                <td>
+                  <div class="pname">John Smith <span class="dob">b. 1967 · M</span></div>
+                  <div class="meta">est patient · 4 prior visits</div>
+                </td>
+                <td><span class="specialty">Cardiology</span></td>
+                <td><span class="qm-pill copper"><span class="dot"></span>awaiting</span></td>
+                <td class="duration">12:08</td>
+                <td class="cost">$0.214</td>
+                <td>
+                  <div style="font-size: 12.5px;">Today &middot; 09:42</div>
+                  <div class="meta">22 min ago</div>
+                </td>
+                <td class="vid">v_ck82h4</td>
+                <td class="actions"><span class="qm-icon-btn">⋯</span></td>
+              </tr>
+
+              <tr>
+                <td>
+                  <div class="pname">Maria Lopez <span class="dob">b. 1981 · F</span></div>
+                  <div class="meta">est patient · 12 prior visits</div>
+                </td>
+                <td><span class="specialty">Pain management</span></td>
+                <td><span class="qm-pill mint"><span class="dot"></span>signed</span></td>
+                <td class="duration">07:12</td>
+                <td class="cost">$0.184</td>
+                <td>
+                  <div style="font-size: 12.5px;">Today &middot; 09:14</div>
+                  <div class="meta">14 min ago</div>
+                </td>
+                <td class="vid">v_ck82g7</td>
+                <td class="actions"><span class="qm-icon-btn">⋯</span></td>
+              </tr>
+
+              <tr>
+                <td>
+                  <div class="pname">Robert Chen <span class="dob">b. 1992 · M</span></div>
+                  <div class="meta">new patient · self-pay</div>
+                </td>
+                <td><span class="specialty">Orthopedics</span></td>
+                <td><span class="qm-pill copper"><span class="dot"></span>awaiting</span></td>
+                <td class="duration">06:18</td>
+                <td class="cost">$0.166</td>
+                <td>
+                  <div style="font-size: 12.5px;">Today &middot; 08:38</div>
+                  <div class="meta">38 min ago</div>
+                </td>
+                <td class="vid">v_ck82f2</td>
+                <td class="actions"><span class="qm-icon-btn">⋯</span></td>
+              </tr>
+
+              <tr>
+                <td>
+                  <div class="pname">Aisha Patel <span class="dob">b. 1976 · F</span></div>
+                  <div class="meta">est patient · 8 prior visits</div>
+                </td>
+                <td><span class="specialty">Internal medicine</span></td>
+                <td><span class="qm-pill coral"><span class="dot"></span>rx warn</span></td>
+                <td class="duration">14:03</td>
+                <td class="cost">$0.241</td>
+                <td>
+                  <div style="font-size: 12.5px;">Today &middot; 08:02</div>
+                  <div class="meta">1h ago</div>
+                </td>
+                <td class="vid">v_ck82dx</td>
+                <td class="actions"><span class="qm-icon-btn">⋯</span></td>
+              </tr>
+
+              <tr>
+                <td>
+                  <div class="pname">Eleanor Nakamura <span class="dob">b. 1949 · F</span></div>
+                  <div class="meta">est patient · 21 prior visits</div>
+                </td>
+                <td><span class="specialty">Geriatrics</span></td>
+                <td><span class="qm-pill mint"><span class="dot"></span>signed</span></td>
+                <td class="duration">11:34</td>
+                <td class="cost">$0.227</td>
+                <td>
+                  <div style="font-size: 12.5px;">Today &middot; 07:30</div>
+                  <div class="meta">2h ago</div>
+                </td>
+                <td class="vid">v_ck82c9</td>
+                <td class="actions"><span class="qm-icon-btn">⋯</span></td>
+              </tr>
+
+              <tr>
+                <td>
+                  <div class="pname">Diego Alvarez <span class="dob">b. 1988 · M</span></div>
+                  <div class="meta">est patient · 3 prior visits</div>
+                </td>
+                <td><span class="specialty">Family medicine</span></td>
+                <td><span class="qm-pill amber"><span class="dot"></span>retried</span></td>
+                <td class="duration">08:46</td>
+                <td class="cost">$0.198</td>
+                <td>
+                  <div style="font-size: 12.5px;">Today &middot; 07:00</div>
+                  <div class="meta">2h ago</div>
+                </td>
+                <td class="vid">v_ck82b1</td>
+                <td class="actions"><span class="qm-icon-btn">⋯</span></td>
+              </tr>
+
+              <tr>
+                <td>
+                  <div class="pname">Kim Phan <span class="dob">b. 1995 · F</span></div>
+                  <div class="meta">est patient · 5 prior visits</div>
+                </td>
+                <td><span class="specialty">PT / OT</span></td>
+                <td><span class="qm-pill mint"><span class="dot"></span>signed</span></td>
+                <td class="duration">05:48</td>
+                <td class="cost">$0.142</td>
+                <td>
+                  <div style="font-size: 12.5px;">Today &middot; 06:24</div>
+                  <div class="meta">3h ago</div>
+                </td>
+                <td class="vid">v_ck829k</td>
+                <td class="actions"><span class="qm-icon-btn">⋯</span></td>
+              </tr>
+
+              <tr>
+                <td>
+                  <div class="pname">James O'Brien <span class="dob">b. 1971 · M</span></div>
+                  <div class="meta">new patient · referred</div>
+                </td>
+                <td><span class="specialty">Cardiology</span></td>
+                <td><span class="qm-pill violet"><span class="dot"></span>processing</span></td>
+                <td class="duration">— : —</td>
+                <td class="cost">~ $0.20</td>
+                <td>
+                  <div style="font-size: 12.5px;">Today &middot; 06:00</div>
+                  <div class="meta">3h ago</div>
+                </td>
+                <td class="vid">v_ck828p</td>
+                <td class="actions"><span class="qm-icon-btn">⋯</span></td>
+              </tr>
+
+              <tr>
+                <td>
+                  <div class="pname">Sarah Whitfield <span class="dob">b. 1958 · F</span></div>
+                  <div class="meta">est patient · 16 prior visits</div>
+                </td>
+                <td><span class="specialty">Endocrinology</span></td>
+                <td><span class="qm-pill mint"><span class="dot"></span>signed</span></td>
+                <td class="duration">09:51</td>
+                <td class="cost">$0.196</td>
+                <td>
+                  <div style="font-size: 12.5px;">Yesterday &middot; 16:24</div>
+                  <div class="meta">17h ago</div>
+                </td>
+                <td class="vid">v_ck811m</td>
+                <td class="actions"><span class="qm-icon-btn">⋯</span></td>
+              </tr>
+
+              <tr>
+                <td>
+                  <div class="pname">Marcus Lewis <span class="dob">b. 1984 · M</span></div>
+                  <div class="meta">est patient · 2 prior visits</div>
+                </td>
+                <td><span class="specialty">Dermatology</span></td>
+                <td><span class="qm-pill mint"><span class="dot"></span>signed</span></td>
+                <td class="duration">04:32</td>
+                <td class="cost">$0.118</td>
+                <td>
+                  <div style="font-size: 12.5px;">Yesterday &middot; 15:48</div>
+                  <div class="meta">18h ago</div>
+                </td>
+                <td class="vid">v_ck810e</td>
+                <td class="actions"><span class="qm-icon-btn">⋯</span></td>
+              </tr>
+
+              <tr>
+                <td>
+                  <div class="pname">Hannah Berg <span class="dob">b. 1990 · F</span></div>
+                  <div class="meta">est patient · 4 prior visits</div>
+                </td>
+                <td><span class="specialty">Mental health</span></td>
+                <td><span class="qm-pill mint"><span class="dot"></span>signed</span></td>
+                <td class="duration">19:22</td>
+                <td class="cost">$0.318</td>
+                <td>
+                  <div style="font-size: 12.5px;">Yesterday &middot; 14:00</div>
+                  <div class="meta">19h ago</div>
+                </td>
+                <td class="vid">v_ck80z3</td>
+                <td class="actions"><span class="qm-icon-btn">⋯</span></td>
+              </tr>
+            </tbody>
+          </table>
+          <div style="padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--line-soft); color: var(--fg-3); font-size: 12px;">
+            <span>Showing 11 of 30 this week</span>
+            <span>
+              <button class="qm-btn" style="height: 28px; padding: 0 10px; font-size: 12px;">Load more <span class="qm-kbd">↓</span></button>
+            </span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Footer note -->
+      <div class="qm-foot">
+        <div class="flex items-center gap-3">
+          <span>Apothecary v1 · Calm</span>
+          <span class="qm-pill mint"><span class="dot"></span>workspace healthy</span>
+          <span class="qm-pill aqua">PHI redacted before logs</span>
+        </div>
+        <div class="flex items-center gap-3" style="font-family: var(--mono); font-size: 11px;">
+          <span>30 visits · $8.46 wow · 7:08 avg</span>
+          <span style="color: var(--fg-4)">·</span>
+          <span>practice · Reyes Family Medicine</span>
+          <span style="color: var(--fg-4)">·</span>
+          <span><a href="visit-detail-with-magic.html" style="color: var(--accent-bright); text-decoration: underline; text-underline-offset: 3px;">open a visit →</a></span>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+</body>
+</html>

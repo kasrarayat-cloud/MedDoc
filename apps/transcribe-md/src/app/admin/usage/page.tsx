@@ -35,6 +35,7 @@ export default async function UsagePage() {
   return (
     <AdminUsage
       initial={{ summary, timeline, topUsers, anomalies }}
+      theme="clinician"
     />
   );
 }

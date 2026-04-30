@@ -10,6 +10,7 @@ import type { ReactNode } from 'react';
 import { Ic } from './icon';
 
 export type EmptyStateKind = 'sparkle' | 'stethoscope' | 'search' | 'folder';
+type EmptyStateTheme = 'legacy' | 'clinician';
 
 const ICON_MAP = {
   sparkle: Ic.sparkle,
@@ -24,14 +25,82 @@ export function EmptyState({
   title,
   body,
   cta,
+  illustration,
+  theme = 'legacy',
 }: {
   kind?: EmptyStateKind;
   eyebrow?: string;
   title: ReactNode;
   body?: ReactNode;
   cta?: ReactNode;
+  /** Optional render slot for a custom line-art illustration. When
+   *  passed, it replaces the default `Ic[kind]` glyph entirely — used
+   *  by Clinician routes that ship the IlloQuill / IlloStethoscope /
+   *  IlloSearch family from the design handoff. */
+  illustration?: ReactNode;
+  theme?: EmptyStateTheme;
 }) {
   const Illo = ICON_MAP[kind];
+
+  if (theme === 'clinician') {
+    return (
+      <div
+        style={{
+          margin: '60px auto',
+          maxWidth: 440,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          textAlign: 'center',
+        }}
+      >
+        <div
+          aria-hidden
+          style={{
+            width: 96,
+            height: 96,
+            borderRadius: 24,
+            marginBottom: 22,
+            background: 'var(--sage-tint, rgba(122, 166, 140, 0.14))',
+            border: '1px solid var(--line, rgba(43, 38, 32, 0.08))',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'var(--sage-deep, #2F5040)',
+          }}
+        >
+          {illustration ?? <Illo width={38} height={38} />}
+        </div>
+        {eyebrow && (
+          <div className="qm-cl-eyebrow" style={{ marginBottom: 10 }}>
+            {eyebrow}
+          </div>
+        )}
+        <h2
+          style={{
+            margin: 0,
+            fontFamily: 'var(--serif, "Source Serif 4", Georgia, serif)',
+            fontSize: 24,
+            fontWeight: 400,
+            letterSpacing: '-0.015em',
+            color: 'var(--ink, #2B2620)',
+          }}
+        >
+          {title}
+        </h2>
+        {body && (
+          <div
+            className="qm-cl-prose"
+            style={{ marginTop: 10, maxWidth: 360 }}
+          >
+            {typeof body === 'string' ? <p>{body}</p> : body}
+          </div>
+        )}
+        {cta && <div style={{ marginTop: 20 }}>{cta}</div>}
+      </div>
+    );
+  }
+
   return (
     <div
       style={{
@@ -59,7 +128,7 @@ export function EmptyState({
           color: 'var(--accent-bright)',
         }}
       >
-        <Illo width={38} height={38} />
+        {illustration ?? <Illo width={38} height={38} />}
       </div>
       {eyebrow && (
         <div className="qm-sectlabel" style={{ marginBottom: 10 }}>

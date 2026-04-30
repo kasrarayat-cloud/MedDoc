@@ -1,0 +1,1211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Nocturne · Dashboard — Transcribe-MD</title>
+<meta name="viewport" content="width=1600" />
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;1,8..60,300;1,8..60,400&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg:          #0A0E1A;
+    --bg-1:        #0E1320;
+    --bg-2:        #121828;
+    --bg-3:        #171E30;
+    --line-soft:   #1A2235;
+    --line:        #212B42;
+    --line-strong: #2F3B57;
+    --fg:          #E8ECF3;
+    --fg-2:        #A3ADC2;
+    --fg-3:        #6B7388;
+    --fg-4:        #3F4659;
+    --accent:        #3B82F6;
+    --accent-bright: #60A5FA;
+    --accent-deep:   #1D4ED8;
+    --accent-glow:   rgba(59, 130, 246, 0.18);
+    --danger:    #A83244;
+    --review:    #B07A29;
+    --serif: 'Source Serif 4', ui-serif, Georgia, serif;
+    --sans:  'Inter Tight', ui-sans-serif, system-ui, sans-serif;
+    --mono:  'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    --ease-cinema: cubic-bezier(0.32, 0.72, 0.18, 1);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  html { background: var(--bg); }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--sans);
+    font-size: 13px;
+    line-height: 1.5;
+    letter-spacing: -0.005em;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+
+  /* ── film grain (calm version, lower amplitude) ─────────────── */
+  .grain {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 100;
+    opacity: 0.045;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.92' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.55 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+    background-size: 240px 240px;
+    animation: grain-drift 7.8s steps(8) infinite;
+  }
+  @keyframes grain-drift {
+    0%   { transform: translate(0, 0); }
+    25%  { transform: translate(-10px, 6px); }
+    50%  { transform: translate(8px, -10px); }
+    75%  { transform: translate(-4px, 14px); }
+    100% { transform: translate(0, 0); }
+  }
+  .vignette {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 50;
+    background: radial-gradient(ellipse 80% 60% at 50% 30%, transparent 50%, rgba(0,0,0,0.45) 100%);
+  }
+
+  /* ── shell ─────────────────────────────────────────────────── */
+  .shell {
+    display: grid;
+    grid-template-columns: 56px 1fr;
+    min-height: 100vh;
+  }
+  .rail {
+    border-right: 1px solid var(--line-soft);
+    background: var(--bg-1);
+    padding: 18px 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    position: relative;
+    z-index: 10;
+  }
+  .rail .logo {
+    width: 28px; height: 28px;
+    border: 1px solid var(--accent);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 14px;
+    color: var(--accent-bright);
+    margin-bottom: 18px;
+    box-shadow: inset 0 0 12px var(--accent-glow);
+  }
+  .rail .ic {
+    width: 36px; height: 36px;
+    border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--fg-3);
+    cursor: pointer;
+    transition: color 200ms var(--ease-cinema), background 200ms var(--ease-cinema);
+    position: relative;
+  }
+  .rail .ic.active {
+    color: var(--accent-bright);
+    background: rgba(59,130,246,0.06);
+  }
+  .rail .ic.active::before {
+    content: "";
+    position: absolute;
+    left: -1px; top: 8px;
+    width: 2px; height: 20px;
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent-glow);
+  }
+  .rail .ic:hover { color: var(--fg); }
+  .rail svg { width: 18px; height: 18px; }
+  .rail .spacer { flex: 1; }
+
+  .main { display: flex; flex-direction: column; min-width: 0; position: relative; z-index: 5; }
+
+  .topnav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 32px;
+    border-bottom: 1px solid var(--line-soft);
+    background: rgba(10,14,26,0.65);
+    backdrop-filter: blur(8px);
+    position: sticky;
+    top: 0;
+    z-index: 20;
+  }
+  .crumb {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--fg-3);
+  }
+  .crumb .ws-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 10px var(--accent-glow);
+  }
+  .crumb .here {
+    color: var(--fg);
+  }
+  .crumb .sep { color: var(--line-strong); }
+
+  .topnav-search {
+    flex: 1;
+    max-width: 480px;
+    margin: 0 32px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    background: rgba(14,19,32,0.6);
+    color: var(--fg-3);
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.04em;
+    transition: border-color 200ms var(--ease-cinema);
+  }
+  .topnav-search:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent-glow);
+  }
+  .topnav-search input {
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--fg);
+    flex: 1;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  .topnav-search .kbd {
+    padding: 2px 6px;
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    font-size: 10px;
+    color: var(--fg-3);
+  }
+  .topnav-right {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--fg-3);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .topnav-right .accent-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+  }
+  .topnav-right .av {
+    width: 28px; height: 28px;
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--fg);
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 13px;
+    background: var(--bg-2);
+  }
+
+  /* ── page ──────────────────────────────────────────────────── */
+  .page {
+    padding: 48px 56px 80px;
+    max-width: 1600px;
+    width: 100%;
+    margin: 0 auto;
+  }
+
+  .page-eyebrow {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--fg-3);
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .page-eyebrow .accent-rule {
+    width: 18px; height: 1px; background: var(--accent);
+    box-shadow: 0 0 6px var(--accent-glow);
+  }
+  .page-title {
+    font-family: var(--serif);
+    font-style: italic;
+    font-weight: 300;
+    font-size: 44px;
+    letter-spacing: -0.02em;
+    margin: 0 0 8px;
+  }
+  .page-sub {
+    font-family: var(--serif);
+    font-style: italic;
+    font-weight: 300;
+    font-size: 16px;
+    color: var(--fg-3);
+    margin-bottom: 56px;
+  }
+
+  /* ── stat strip ────────────────────────────────────────────── */
+  .stat-strip {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0;
+    border: 1px solid var(--line-soft);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 56px;
+  }
+  .stat {
+    padding: 28px 32px 24px;
+    border-right: 1px solid var(--line-soft);
+    background: var(--bg-1);
+    position: relative;
+  }
+  .stat:last-child { border-right: none; }
+  .stat-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--fg-3);
+    margin-bottom: 16px;
+  }
+  .stat-num {
+    font-family: var(--mono);
+    font-size: 38px;
+    font-weight: 400;
+    color: var(--fg);
+    line-height: 1;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat-num .frac {
+    color: var(--fg-3);
+    font-size: 22px;
+  }
+  .stat-rule {
+    position: absolute;
+    bottom: -1px;
+    left: 32px;
+    width: 28px;
+    height: 1px;
+    background: transparent;
+    transition: background 320ms var(--ease-cinema);
+  }
+  .stat.active .stat-rule {
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent-glow);
+  }
+  .stat-meta {
+    margin-top: 14px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--fg-3);
+    letter-spacing: 0.06em;
+    display: flex; gap: 8px;
+  }
+  .stat-meta .delta-up { color: var(--fg-2); }
+  .stat-meta .delta-flat { color: var(--fg-4); }
+
+  /* ── filter bar ────────────────────────────────────────────── */
+  .filter-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 18px;
+  }
+  .filter-tabs {
+    display: flex;
+    gap: 0;
+    align-items: center;
+  }
+  .filter-tab {
+    padding: 8px 16px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--fg-3);
+    cursor: pointer;
+    border-bottom: 1px solid transparent;
+    transition: color 200ms var(--ease-cinema), border-color 200ms var(--ease-cinema);
+  }
+  .filter-tab.active {
+    color: var(--accent-bright);
+    border-bottom-color: var(--accent);
+  }
+  .filter-tab .count {
+    margin-left: 6px;
+    color: var(--fg-4);
+    font-size: 9.5px;
+  }
+  .filter-tab.active .count {
+    color: var(--accent);
+  }
+  .filter-tab + .filter-tab::before {
+    content: "";
+    display: inline-block;
+    width: 1px; height: 12px;
+    background: var(--line);
+    margin: 0 6px 0 0;
+    vertical-align: middle;
+  }
+
+  .filter-meta {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--fg-3);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .filter-meta .accent-text { color: var(--fg-2); }
+
+  /* ── visit table ───────────────────────────────────────────── */
+  .visit-table {
+    border: 1px solid var(--line-soft);
+    border-radius: 3px;
+    overflow: hidden;
+    background: var(--bg-1);
+  }
+  .visit-thead {
+    display: grid;
+    grid-template-columns: 32px 2.4fr 1.2fr 0.8fr 1fr 1fr 0.8fr 0.6fr;
+    align-items: center;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--line);
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--fg-3);
+    background: rgba(14,19,32,0.5);
+  }
+  .visit-row {
+    display: grid;
+    grid-template-columns: 32px 2.4fr 1.2fr 0.8fr 1fr 1fr 0.8fr 0.6fr;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--line-soft);
+    position: relative;
+    cursor: pointer;
+    transition: background 220ms var(--ease-cinema);
+  }
+  .visit-row:last-child { border-bottom: none; }
+  .visit-row::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 0;
+    background: var(--accent);
+    transition: width 220ms var(--ease-cinema);
+    box-shadow: 0 0 8px var(--accent-glow);
+  }
+  .visit-row:hover {
+    background: rgba(59,130,246,0.025);
+  }
+  .visit-row.active::before {
+    width: 2px;
+  }
+  .visit-row.active {
+    background: rgba(59,130,246,0.04);
+  }
+
+  .v-time {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--fg-3);
+    letter-spacing: 0.04em;
+    font-variant-numeric: tabular-nums;
+  }
+  .v-patient {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .v-name {
+    font-family: var(--serif);
+    font-style: italic;
+    font-weight: 400;
+    font-size: 16.5px;
+    color: var(--fg);
+    letter-spacing: -0.005em;
+  }
+  .v-dob {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--fg-4);
+    letter-spacing: 0.06em;
+  }
+  .v-spec {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--fg-2);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+  .v-type {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--fg-3);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+  .v-dur {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--fg-3);
+    font-variant-numeric: tabular-nums;
+  }
+  .v-meta {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--fg-3);
+    letter-spacing: 0.06em;
+  }
+
+  /* status pills — flat, desaturated */
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 4px 10px;
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--fg-3);
+    background: transparent;
+  }
+  .pill .dot {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: var(--fg-4);
+  }
+  .pill.ready  { color: #7E8AA4; border-color: #2A3550; }
+  .pill.ready  .dot { background: #7E8AA4; }
+  .pill.signed { color: #6B7388; border-color: #2A3550; }
+  .pill.signed .dot { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+  .pill.review { color: var(--review); border-color: #3B2F1A; }
+  .pill.review .dot { background: var(--review); }
+  .pill.recording { color: var(--accent-bright); border-color: var(--accent); }
+  .pill.recording .dot { background: var(--accent); box-shadow: 0 0 8px var(--accent); animation: live-pulse 2s var(--ease-cinema) infinite; }
+  .pill.error { color: var(--danger); border-color: #4A1F2A; }
+  .pill.error .dot { background: var(--danger); }
+  .pill.processing { color: var(--fg-2); border-color: var(--line-strong); }
+  .pill.processing .dot { background: var(--accent-bright); animation: live-pulse 1.6s var(--ease-cinema) infinite; }
+  @keyframes live-pulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.4; }
+  }
+
+  .v-action {
+    text-align: right;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--fg-4);
+    letter-spacing: 0.14em;
+  }
+  .visit-row:hover .v-action { color: var(--accent-bright); }
+
+  /* ── below: two-up ─────────────────────────────────────────── */
+  .row-2up {
+    margin-top: 56px;
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 32px;
+  }
+
+  .panel {
+    border: 1px solid var(--line-soft);
+    border-radius: 3px;
+    background: var(--bg-1);
+    overflow: hidden;
+  }
+  .panel-h {
+    padding: 16px 22px 14px;
+    border-bottom: 1px solid var(--line-soft);
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+  .panel-h .left {
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .panel-h .eyebrow {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--fg-4);
+  }
+  .panel-h .title {
+    font-family: var(--serif);
+    font-style: italic;
+    font-weight: 300;
+    font-size: 18px;
+    color: var(--fg);
+    letter-spacing: -0.01em;
+  }
+  .panel-h .right {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--fg-3);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  /* feed */
+  .feed-row {
+    display: grid;
+    grid-template-columns: 90px 28px 1fr auto;
+    align-items: center;
+    padding: 14px 22px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .feed-row:last-child { border-bottom: none; }
+  .feed-row .t {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--fg-3);
+    letter-spacing: 0.06em;
+    font-variant-numeric: tabular-nums;
+  }
+  .feed-row .ic {
+    width: 22px; height: 22px;
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--fg-2);
+  }
+  .feed-row.accent .ic { color: var(--accent-bright); border-color: var(--accent); }
+  .feed-row .body {
+    color: var(--fg-2);
+    font-size: 13px;
+  }
+  .feed-row .body em {
+    font-family: var(--serif);
+    font-style: italic;
+    color: var(--fg);
+    margin-right: 4px;
+  }
+  .feed-row .body .who {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--fg-3);
+    letter-spacing: 0.06em;
+  }
+  .feed-row .meta {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--fg-4);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  /* recent patients */
+  .pat-row {
+    display: grid;
+    grid-template-columns: 32px 1fr auto;
+    gap: 14px;
+    align-items: center;
+    padding: 12px 22px;
+    border-bottom: 1px solid var(--line-soft);
+    cursor: pointer;
+    transition: background 200ms var(--ease-cinema);
+  }
+  .pat-row:hover { background: rgba(59,130,246,0.03); }
+  .pat-row:last-child { border-bottom: none; }
+  .pat-av {
+    width: 32px; height: 32px;
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 13px;
+    color: var(--fg-2);
+    background: var(--bg-2);
+  }
+  .pat-info { display: flex; flex-direction: column; gap: 2px; }
+  .pat-name {
+    font-family: var(--serif);
+    font-style: italic;
+    font-weight: 400;
+    font-size: 15px;
+    color: var(--fg);
+    letter-spacing: -0.005em;
+  }
+  .pat-sub {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--fg-3);
+    letter-spacing: 0.08em;
+  }
+  .pat-last {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--fg-4);
+    letter-spacing: 0.04em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── empty list state (collapsed; rendered as small chip) ── */
+  .empty-section {
+    margin-top: 56px;
+    padding: 64px 32px;
+    border: 1px solid var(--line-soft);
+    background: rgba(14,19,32,0.3);
+    border-radius: 3px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .empty-section::before {
+    content: "";
+    position: absolute; inset: 0;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='1.05' numOctaves='2'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.6 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+    opacity: 0.04;
+    mix-blend-mode: overlay;
+    pointer-events: none;
+  }
+  .empty-section .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 12px var(--accent);
+    margin: 0 auto 18px;
+  }
+  .empty-section .line {
+    font-family: var(--serif);
+    font-style: italic;
+    font-weight: 300;
+    font-size: 18px;
+    color: var(--fg-2);
+    letter-spacing: -0.005em;
+  }
+
+  footer {
+    padding: 36px 56px;
+    border-top: 1px solid var(--line-soft);
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--fg-4);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .grain, .pill .dot { animation: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="grain"></div>
+<div class="vignette"></div>
+
+<div class="shell">
+
+  <!-- ── rail ─────────────────────────────────────────────── -->
+  <aside class="rail">
+    <div class="logo">Q</div>
+    <div class="ic active" title="Dashboard">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+    </div>
+    <div class="ic" title="Visits">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 3v4a1 1 0 001 1h4"/><path d="M17 21H7a2 2 0 01-2-2V5a2 2 0 012-2h7l5 5v11a2 2 0 01-2 2z"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>
+    </div>
+    <div class="ic" title="Patients">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0116 0"/></svg>
+    </div>
+    <div class="ic" title="Templates">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="14" y2="18"/></svg>
+    </div>
+    <div class="spacer"></div>
+    <div class="ic" title="Settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+    </div>
+  </aside>
+
+  <!-- ── main ─────────────────────────────────────────────── -->
+  <div class="main">
+
+    <div class="topnav">
+      <div class="crumb">
+        <span class="ws-dot"></span>
+        <span>Dr. Avani Mehta · Solo Practice</span>
+        <span class="sep">/</span>
+        <span class="here">Dashboard</span>
+      </div>
+
+      <div class="topnav-search">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input placeholder="Find a patient · jump to a visit · run a command" />
+        <span class="kbd">⌘ K</span>
+      </div>
+
+      <div class="topnav-right">
+        <span><span class="accent-dot" style="display:inline-block;vertical-align:middle;margin-right:6px"></span>2 RECORDING</span>
+        <span style="color: var(--line-strong)">·</span>
+        <span>WED · APR 29 · 20:14</span>
+        <div class="av">A</div>
+      </div>
+    </div>
+
+    <main class="page">
+
+      <div class="page-eyebrow">
+        <span class="accent-rule"></span>
+        <span>Wednesday · April 29 · evening</span>
+      </div>
+      <h1 class="page-title">Good evening, <em>Dr. Mehta</em>.</h1>
+      <p class="page-sub">Four notes are waiting for your sign-off. The clinic is quiet.</p>
+
+      <!-- stat strip -->
+      <div class="stat-strip">
+        <div class="stat active">
+          <div class="stat-label">Awaiting sign-off</div>
+          <div class="stat-num">04</div>
+          <div class="stat-meta">
+            <span class="delta-up">+1 since 18:00</span>
+          </div>
+          <div class="stat-rule"></div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Visits today</div>
+          <div class="stat-num">12</div>
+          <div class="stat-meta">
+            <span class="delta-flat">7-day avg · 11.4</span>
+          </div>
+          <div class="stat-rule"></div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Time saved · today</div>
+          <div class="stat-num">2:38<span class="frac">  hr</span></div>
+          <div class="stat-meta">
+            <span class="delta-up">vs avg · +12 min</span>
+          </div>
+          <div class="stat-rule"></div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Rx flags · this week</div>
+          <div class="stat-num">03</div>
+          <div class="stat-meta">
+            <span class="delta-flat">2 critical · 1 review</span>
+          </div>
+          <div class="stat-rule"></div>
+        </div>
+      </div>
+
+      <!-- filter bar -->
+      <div class="filter-bar">
+        <div class="filter-tabs">
+          <span class="filter-tab active">All <span class="count">12</span></span>
+          <span class="filter-tab">Awaiting <span class="count">04</span></span>
+          <span class="filter-tab">Recording <span class="count">02</span></span>
+          <span class="filter-tab">Processing <span class="count">01</span></span>
+          <span class="filter-tab">Signed <span class="count">05</span></span>
+          <span class="filter-tab">Failed <span class="count">00</span></span>
+        </div>
+        <div class="filter-meta">
+          <span>SORT · <span class="accent-text">RECENT FIRST</span></span>
+          <span style="color: var(--line-strong)">·</span>
+          <span>WED · APR 29</span>
+        </div>
+      </div>
+
+      <!-- table -->
+      <div class="visit-table">
+        <div class="visit-thead">
+          <span></span>
+          <span>Patient</span>
+          <span>Specialty</span>
+          <span>Type</span>
+          <span>Duration</span>
+          <span>Status</span>
+          <span>Captured</span>
+          <span style="text-align: right">Open</span>
+        </div>
+
+        <div class="visit-row active">
+          <span class="v-time">19:48</span>
+          <div class="v-patient">
+            <span class="v-name">Lopez, Maria</span>
+            <span class="v-dob">B. 1959 · F · MRN 4019822</span>
+          </div>
+          <span class="v-spec">CARDIOLOGY</span>
+          <span class="v-type">FOLLOW-UP</span>
+          <span class="v-dur">14:22</span>
+          <span><span class="pill recording"><span class="dot"></span>RECORDING</span></span>
+          <span class="v-meta">Audio · live</span>
+          <span class="v-action">→</span>
+        </div>
+
+        <div class="visit-row">
+          <span class="v-time">19:12</span>
+          <div class="v-patient">
+            <span class="v-name">Okafor, Daniel</span>
+            <span class="v-dob">B. 1981 · M · MRN 4011930</span>
+          </div>
+          <span class="v-spec">INT. MEDICINE</span>
+          <span class="v-type">NEW PATIENT</span>
+          <span class="v-dur">22:08</span>
+          <span><span class="pill processing"><span class="dot"></span>DRAFTING SOAP</span></span>
+          <span class="v-meta">3 of 5 stages</span>
+          <span class="v-action">→</span>
+        </div>
+
+        <div class="visit-row">
+          <span class="v-time">18:34</span>
+          <div class="v-patient">
+            <span class="v-name">Schwartz, Eli</span>
+            <span class="v-dob">B. 1948 · M · MRN 4007711</span>
+          </div>
+          <span class="v-spec">CARDIOLOGY</span>
+          <span class="v-type">FOLLOW-UP</span>
+          <span class="v-dur">11:54</span>
+          <span><span class="pill ready"><span class="dot"></span>READY</span></span>
+          <span class="v-meta">Drafted · 18:51</span>
+          <span class="v-action">→</span>
+        </div>
+
+        <div class="visit-row">
+          <span class="v-time">17:58</span>
+          <div class="v-patient">
+            <span class="v-name">Washington, Tianna</span>
+            <span class="v-dob">B. 1992 · F · MRN 4022104</span>
+          </div>
+          <span class="v-spec">INT. MEDICINE</span>
+          <span class="v-type">ANNUAL</span>
+          <span class="v-dur">29:04</span>
+          <span><span class="pill review"><span class="dot"></span>REVIEW · RX</span></span>
+          <span class="v-meta">Lisinopril flag</span>
+          <span class="v-action">→</span>
+        </div>
+
+        <div class="visit-row">
+          <span class="v-time">17:21</span>
+          <div class="v-patient">
+            <span class="v-name">Park, Hyun-woo</span>
+            <span class="v-dob">B. 1973 · M · MRN 4015582</span>
+          </div>
+          <span class="v-spec">CARDIOLOGY</span>
+          <span class="v-type">URGENT</span>
+          <span class="v-dur">18:37</span>
+          <span><span class="pill ready"><span class="dot"></span>READY</span></span>
+          <span class="v-meta">Drafted · 17:42</span>
+          <span class="v-action">→</span>
+        </div>
+
+        <div class="visit-row">
+          <span class="v-time">16:45</span>
+          <div class="v-patient">
+            <span class="v-name">Almeida, Rafael</span>
+            <span class="v-dob">B. 1965 · M · MRN 4018273</span>
+          </div>
+          <span class="v-spec">INT. MEDICINE</span>
+          <span class="v-type">FOLLOW-UP</span>
+          <span class="v-dur">9:48</span>
+          <span><span class="pill ready"><span class="dot"></span>READY</span></span>
+          <span class="v-meta">Drafted · 16:58</span>
+          <span class="v-action">→</span>
+        </div>
+
+        <div class="visit-row">
+          <span class="v-time">16:02</span>
+          <div class="v-patient">
+            <span class="v-name">Ng, Charlotte</span>
+            <span class="v-dob">B. 1956 · F · MRN 4002983</span>
+          </div>
+          <span class="v-spec">CARDIOLOGY</span>
+          <span class="v-type">FOLLOW-UP</span>
+          <span class="v-dur">15:11</span>
+          <span><span class="pill signed"><span class="dot"></span>SIGNED</span></span>
+          <span class="v-meta">Signed · 16:18</span>
+          <span class="v-action">→</span>
+        </div>
+
+        <div class="visit-row">
+          <span class="v-time">15:33</span>
+          <div class="v-patient">
+            <span class="v-name">Hassan, Omar</span>
+            <span class="v-dob">B. 1988 · M · MRN 4020441</span>
+          </div>
+          <span class="v-spec">INT. MEDICINE</span>
+          <span class="v-type">NEW PATIENT</span>
+          <span class="v-dur">31:26</span>
+          <span><span class="pill signed"><span class="dot"></span>SIGNED</span></span>
+          <span class="v-meta">Signed · 15:54</span>
+          <span class="v-action">→</span>
+        </div>
+
+        <div class="visit-row">
+          <span class="v-time">14:48</span>
+          <div class="v-patient">
+            <span class="v-name">O'Brien, Margaret</span>
+            <span class="v-dob">B. 1942 · F · MRN 4001154</span>
+          </div>
+          <span class="v-spec">CARDIOLOGY</span>
+          <span class="v-type">FOLLOW-UP</span>
+          <span class="v-dur">13:08</span>
+          <span><span class="pill signed"><span class="dot"></span>SIGNED</span></span>
+          <span class="v-meta">Signed · 15:01</span>
+          <span class="v-action">→</span>
+        </div>
+
+        <div class="visit-row">
+          <span class="v-time">14:11</span>
+          <div class="v-patient">
+            <span class="v-name">Fernández, Lucía</span>
+            <span class="v-dob">B. 1979 · F · MRN 4017002</span>
+          </div>
+          <span class="v-spec">INT. MEDICINE</span>
+          <span class="v-type">ANNUAL</span>
+          <span class="v-dur">26:42</span>
+          <span><span class="pill signed"><span class="dot"></span>SIGNED</span></span>
+          <span class="v-meta">Signed · 14:38</span>
+          <span class="v-action">→</span>
+        </div>
+
+        <div class="visit-row">
+          <span class="v-time">13:25</span>
+          <div class="v-patient">
+            <span class="v-name">Robinson, Adelaide</span>
+            <span class="v-dob">B. 1962 · F · MRN 4009328</span>
+          </div>
+          <span class="v-spec">CARDIOLOGY</span>
+          <span class="v-type">URGENT</span>
+          <span class="v-dur">19:53</span>
+          <span><span class="pill signed"><span class="dot"></span>SIGNED</span></span>
+          <span class="v-meta">Signed · 13:46</span>
+          <span class="v-action">→</span>
+        </div>
+
+        <div class="visit-row">
+          <span class="v-time">12:40</span>
+          <div class="v-patient">
+            <span class="v-name">Bauer, Klaus</span>
+            <span class="v-dob">B. 1937 · M · MRN 4000211</span>
+          </div>
+          <span class="v-spec">CARDIOLOGY</span>
+          <span class="v-type">FOLLOW-UP</span>
+          <span class="v-dur">7:22</span>
+          <span><span class="pill recording"><span class="dot"></span>RECORDING</span></span>
+          <span class="v-meta">Audio · live</span>
+          <span class="v-action">→</span>
+        </div>
+      </div>
+
+      <!-- two-up below -->
+      <div class="row-2up">
+        <div class="panel">
+          <div class="panel-h">
+            <div class="left">
+              <span class="eyebrow">§ ACTIVITY · LAST 24H</span>
+              <span class="title">A quiet day.</span>
+            </div>
+            <span class="right">11 events</span>
+          </div>
+
+          <div class="feed-row accent">
+            <span class="t">19:48</span>
+            <span class="ic">
+              <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3"/></svg>
+            </span>
+            <span class="body">
+              Recording started · <em>Mrs. Lopez</em>
+              <span class="who">CARDIO · FOLLOW-UP</span>
+            </span>
+            <span class="meta">JUST NOW</span>
+          </div>
+
+          <div class="feed-row">
+            <span class="t">18:51</span>
+            <span class="ic">
+              <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6"><polyline points="20 6 9 17 4 12"/></svg>
+            </span>
+            <span class="body">
+              SOAP drafted · <em>Mr. Schwartz</em>
+              <span class="who">11.5 MIN AUDIO · 5 OF 5 STAGES</span>
+            </span>
+            <span class="meta">57 MIN AGO</span>
+          </div>
+
+          <div class="feed-row">
+            <span class="t">18:14</span>
+            <span class="ic">
+              <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4"/></svg>
+            </span>
+            <span class="body">
+              Rx flag raised · <em>Ms. Washington</em>
+              <span class="who">LISINOPRIL · DESATURATED REVIEW</span>
+            </span>
+            <span class="meta">2 HR AGO</span>
+          </div>
+
+          <div class="feed-row">
+            <span class="t">17:42</span>
+            <span class="ic">
+              <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6"><polyline points="20 6 9 17 4 12"/></svg>
+            </span>
+            <span class="body">
+              SOAP drafted · <em>Mr. Park</em>
+              <span class="who">URGENT · CARDIO</span>
+            </span>
+            <span class="meta">2 HR AGO</span>
+          </div>
+
+          <div class="feed-row">
+            <span class="t">16:18</span>
+            <span class="ic">
+              <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+            </span>
+            <span class="body">
+              Note signed · <em>Mrs. Ng</em>
+              <span class="who">SOAP · ICD · RX · PT-FACING SUMMARY</span>
+            </span>
+            <span class="meta">4 HR AGO</span>
+          </div>
+
+          <div class="feed-row">
+            <span class="t">15:54</span>
+            <span class="ic">
+              <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+            </span>
+            <span class="body">
+              Note signed · <em>Mr. Hassan</em>
+              <span class="who">NEW PATIENT · 31:26 AUDIO</span>
+            </span>
+            <span class="meta">4 HR AGO</span>
+          </div>
+
+          <div class="feed-row">
+            <span class="t">15:01</span>
+            <span class="ic">
+              <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+            </span>
+            <span class="body">
+              Note signed · <em>Mrs. O'Brien</em>
+              <span class="who">FOLLOW-UP · CARDIO</span>
+            </span>
+            <span class="meta">5 HR AGO</span>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-h">
+            <div class="left">
+              <span class="eyebrow">§ RECENT PATIENTS</span>
+              <span class="title">Seen this week.</span>
+            </div>
+            <span class="right">↗ all</span>
+          </div>
+
+          <div class="pat-row">
+            <div class="pat-av">L</div>
+            <div class="pat-info">
+              <span class="pat-name">Maria Lopez</span>
+              <span class="pat-sub">CARDIO · F · 67 · 4 VISITS YTD</span>
+            </div>
+            <span class="pat-last">19:48 · NOW</span>
+          </div>
+          <div class="pat-row">
+            <div class="pat-av">O</div>
+            <div class="pat-info">
+              <span class="pat-name">Daniel Okafor</span>
+              <span class="pat-sub">INT. MED · M · 45 · NEW PATIENT</span>
+            </div>
+            <span class="pat-last">19:12 · 1H</span>
+          </div>
+          <div class="pat-row">
+            <div class="pat-av">S</div>
+            <div class="pat-info">
+              <span class="pat-name">Eli Schwartz</span>
+              <span class="pat-sub">CARDIO · M · 78 · 12 VISITS YTD</span>
+            </div>
+            <span class="pat-last">18:34 · 2H</span>
+          </div>
+          <div class="pat-row">
+            <div class="pat-av">W</div>
+            <div class="pat-info">
+              <span class="pat-name">Tianna Washington</span>
+              <span class="pat-sub">INT. MED · F · 34 · 1 VISIT YTD</span>
+            </div>
+            <span class="pat-last">17:58 · 2H</span>
+          </div>
+          <div class="pat-row">
+            <div class="pat-av">P</div>
+            <div class="pat-info">
+              <span class="pat-name">Hyun-woo Park</span>
+              <span class="pat-sub">CARDIO · M · 53 · 7 VISITS YTD</span>
+            </div>
+            <span class="pat-last">17:21 · 3H</span>
+          </div>
+          <div class="pat-row">
+            <div class="pat-av">A</div>
+            <div class="pat-info">
+              <span class="pat-name">Rafael Almeida</span>
+              <span class="pat-sub">INT. MED · M · 61 · 5 VISITS YTD</span>
+            </div>
+            <span class="pat-last">16:45 · 3H</span>
+          </div>
+          <div class="pat-row">
+            <div class="pat-av">N</div>
+            <div class="pat-info">
+              <span class="pat-name">Charlotte Ng</span>
+              <span class="pat-sub">CARDIO · F · 70 · 9 VISITS YTD</span>
+            </div>
+            <span class="pat-last">16:02 · 4H</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- empty (illustrative for "no scheduled" later in evening) -->
+      <div class="empty-section">
+        <div class="dot"></div>
+        <div class="line">
+          Nothing scheduled after 22:00. Press <span style="font-family: var(--mono); font-style: normal; color: var(--fg); letter-spacing: 0.06em">⌘ N</span> to record a walk-in.
+        </div>
+      </div>
+    </main>
+
+    <footer>
+      <span>QuillMD · v0.1.0-beta</span>
+      <span><span style="color: var(--accent)">●</span> &nbsp;ALL SYSTEMS NORMAL · LATENCY 412 MS · LAST SYNC 19:48</span>
+    </footer>
+
+  </div>
+</div>
+
+</body>
+</html>
