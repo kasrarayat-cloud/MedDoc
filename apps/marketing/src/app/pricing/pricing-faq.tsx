@@ -41,37 +41,38 @@ const FAQ = [
 
 export function PricingFaq() {
   return (
-    <section className="relative border-t border-border-subtle bg-bg-surface-1/30 py-24">
+    <section className="relative border-t border-[rgba(43,38,32,0.08)] bg-[#F2EDE3] py-24">
       <div className="mx-auto max-w-3xl px-6 lg:px-8">
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: '-60px' }}
-          transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
+          transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
         >
-          <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-text-muted">
-            Frequently asked
-          </p>
-          <h2 className="mt-3 type-h2 text-text-primary">
-            The answers to things people usually email about.
+          <p className="qm-cl-eyebrow">Frequently asked</p>
+          <h2 className="mt-3 type-h2">
+            The answers to things people <em style={{ fontStyle: 'italic', color: '#2F5040' }}>usually email about.</em>
           </h2>
         </motion.div>
 
         <Accordion.Root
           type="single"
           collapsible
-          className="mt-10 divide-y divide-border-subtle overflow-hidden rounded-2xl border border-border-default bg-bg-surface-2/60 backdrop-blur"
+          className="mt-10 overflow-hidden rounded-2xl border border-[rgba(43,38,32,0.10)] bg-[#FFFCF5] shadow-[0_4px_14px_rgba(43,38,32,0.04)] divide-y divide-[rgba(43,38,32,0.08)]"
         >
           {FAQ.map((item, i) => (
             <Accordion.Item key={item.q} value={`item-${i}`}>
               <Accordion.Header>
-                <Accordion.Trigger className="group flex w-full items-center justify-between px-6 py-5 text-left text-[15px] font-medium text-text-primary transition-colors hover:bg-bg-surface-3/40 data-[state=open]:bg-bg-surface-3/30">
+                <Accordion.Trigger className="group flex w-full items-center justify-between px-6 py-5 text-left text-[15px] font-medium text-[#2B2620] transition-colors hover:bg-[#F2EDE3] data-[state=open]:bg-[#F2EDE3]">
                   <span>{item.q}</span>
-                  <ChevronDown className="h-4 w-4 text-text-tertiary transition-transform duration-300 group-data-[state=open]:rotate-180" />
+                  <ChevronDown className="h-4 w-4 text-[#8A8278] transition-transform duration-300 group-data-[state=open]:rotate-180" />
                 </Accordion.Trigger>
               </Accordion.Header>
               <Accordion.Content className="overflow-hidden data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down">
-                <div className="px-6 pb-5 text-[14px] leading-relaxed text-text-tertiary">
+                <div
+                  className="px-6 pb-5 text-[15px] leading-relaxed text-[#5C544A]"
+                  style={{ fontFamily: 'var(--font-serif), Georgia, serif' }}
+                >
                   {item.a}
                 </div>
               </Accordion.Content>

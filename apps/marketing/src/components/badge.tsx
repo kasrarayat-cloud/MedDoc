@@ -1,9 +1,12 @@
 import { cn } from '@/lib/cn';
 
 /**
- * Small pill used for hero taglines ("Now in private beta"), status
- * chips, and section section labels. Dot on the left is optional +
- * coloured via the `dot` prop.
+ * Small pill used for sub-page eyebrows ("About us", "Compliance",
+ * "Coming soon", etc.). Soft sage-tint background + sage-deep text by
+ * default. The optional `dot` keeps the discriminant API but every dot
+ * tone now resolves to a Clinician token — there is no violet on the
+ * Clinician palette so the legacy `dot="violet"` value falls through to
+ * the same warm sage chip.
  */
 export function Badge({
   children,
@@ -16,28 +19,24 @@ export function Badge({
 }) {
   const dotColor =
     dot === 'cyan'
-      ? 'bg-cyan-400'
+      ? 'bg-[#5BA3B4]'
       : dot === 'violet'
-        ? 'bg-violet-400'
+        ? 'bg-[#7AA68C]'
         : dot === 'success'
-          ? 'bg-success'
+          ? 'bg-[#7AA68C]'
           : 'bg-transparent';
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-2 rounded-full border border-border-default',
-        'bg-bg-surface-2/60 backdrop-blur px-3 py-1 text-[12px]',
-        'font-medium tracking-tight text-text-tertiary',
+        'inline-flex items-center gap-2 rounded-full',
+        'bg-[rgba(122,166,140,0.14)] px-3 py-1 text-[12.5px]',
+        'font-medium tracking-[0.01em] text-[#2F5040]',
         className
       )}
     >
       {dot !== 'none' && (
         <span
-          className={cn(
-            'inline-block h-1.5 w-1.5 rounded-full',
-            dotColor,
-            dot === 'cyan' && 'shadow-[0_0_8px_rgba(34,211,238,0.6)]'
-          )}
+          className={cn('inline-block h-1.5 w-1.5 rounded-full', dotColor)}
           aria-hidden
         />
       )}

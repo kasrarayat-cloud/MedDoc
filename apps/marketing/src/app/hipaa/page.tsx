@@ -24,8 +24,11 @@ export default function HipaaPage() {
               Last updated: {LAST_UPDATED}
             </p>
 
-            <div className="mt-8 rounded-lg border border-amber-500/40 bg-amber-500/5 p-4 text-[13px] leading-relaxed text-amber-200">
-              <strong className="font-semibold">
+            <div
+              className="mt-8 rounded-xl border border-[rgba(212,165,116,0.35)] bg-[rgba(212,165,116,0.10)] p-4 text-[13.5px] leading-relaxed text-[#7A4F1F]"
+              style={{ fontFamily: 'var(--font-serif), Georgia, serif' }}
+            >
+              <strong className="font-medium">
                 [DRAFT — PENDING LEGAL REVIEW]
               </strong>
               <p className="mt-1.5">
