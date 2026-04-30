@@ -36,6 +36,13 @@ interface SoapEditorProps {
   /** Readonly when the visit is SIGNED. The signed copy lives in
    *  signedSoap; the client passes that value as initialText. */
   readonly?: boolean;
+  /** Batch H — ISO 8601 UTC moment the doctor signed the note, or
+   *  null while still drafting. The Sign & Send CTA is hidden when
+   *  this is set so a doctor can't re-sign a locked note. The
+   *  visual replacement (a calm "Signed at … by …" card) lives in
+   *  visit-ready-view above this editor. Optional so the legacy
+   *  callsite signature stays backwards-compatible. */
+  signedAt?: string | null;
   theme?: SoapEditorTheme;
 }
 
@@ -45,12 +52,19 @@ export function SoapEditor({
   emailEnabled,
   initialText,
   readonly = false,
+  signedAt = null,
   theme = 'legacy',
 }: SoapEditorProps) {
   const [text, setText] = useState(initialText);
   const [editing, setEditing] = useState(false);
   const [saving, startSaving] = useTransition();
   const isClinician = theme === 'clinician';
+  // Batch H — the signed-state visual gate. Used directly (over the
+  // existing `readonly` flag) per the brief: signedAt is the canonical
+  // signal that the note is locked, regardless of how the lifecycle
+  // status enum was set. A signed visit MUST NOT show the Sign & Send
+  // CTA — that's the clinical-safety bug Batch H exists to fix.
+  const isSigned = signedAt !== null;
 
   const onSave = () => {
     startSaving(async () => {
@@ -154,7 +168,15 @@ export function SoapEditor({
           </>
         )}
 
-        {!editing && !readonly && (
+        {/* Batch H — the Sign & Send CTA renders ONLY when the visit
+            is unsigned (signedAt == null). Once a note has a sign
+            timestamp it's locked: re-signing is not a clinically
+            valid action, and previously the doctor could click this
+            button on a SIGNED visit if the lifecycle status enum
+            momentarily disagreed with signedAt. The calm
+            "Signed at … by …" replacement card lives in
+            visit-ready-view above this editor. */}
+        {!editing && !readonly && !isSigned && (
           <SignAndSendModal
             visitId={visitId}
             doctorEmail={doctorEmail}
@@ -166,7 +188,11 @@ export function SoapEditor({
           />
         )}
 
-        {!editing && readonly && (
+        {/* Batch H — Export again stays available on signed visits
+            so the doctor can still re-send a copy of the locked note
+            via clipboard / DOCX / PDF / email. We key off isSigned
+            here too so the gate composes from a single signal. */}
+        {!editing && (readonly || isSigned) && (
           <SignAndSendModal
             visitId={visitId}
             doctorEmail={doctorEmail}

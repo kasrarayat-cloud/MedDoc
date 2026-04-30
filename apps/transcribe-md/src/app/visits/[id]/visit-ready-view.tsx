@@ -219,6 +219,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
               emailEnabled={props.emailEnabled}
               initialText={props.soapText}
               readonly={props.readonly}
+              signedAt={props.signedAt}
               theme={theme}
             />
           </div>
