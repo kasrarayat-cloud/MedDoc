@@ -34,23 +34,35 @@ import { TranscribeVisitStatus } from '@prisma/client';
 import { auth } from '@/lib/nextauth';
 import { AppFrame } from '@/components/ui/app-frame';
 import { Ic } from '@/components/ui/icon';
-import { PageHeader } from '@/components/ui/page-header';
 import { StatCard } from '@/components/dashboard/stat-card';
-import {
-  PatientCard,
-  type DashboardPatient,
-} from '@/components/dashboard/patient-card';
 import {
   VisitList,
   type DashboardVisit,
 } from '@/components/dashboard/visit-list';
+// Phase 3 Wave 2 (dashboard density). Brings the patients tab to mockup
+// fidelity — adds the time-of-day greeting at the top, the 11-row
+// PatientList projecting the same data the legacy <PatientCard> grid
+// used to consume, and a "Three drafts, ready when you are." section
+// of preview cards under the patient list. The legacy <PatientCard>
+// grid is no longer rendered from this page (the component itself
+// stays in /components/dashboard/ for /patients/[id] consumers).
+import { Greeting } from '@/components/dashboard/greeting';
+import {
+  PatientList,
+  type DashboardListPatient,
+} from '@/components/dashboard/patient-list';
+import {
+  DraftsReady,
+  type DraftReadyVisit,
+} from '@/components/dashboard/drafts-ready';
 
 export const metadata: Metadata = { title: 'Dashboard' };
 
 type SearchParams = Record<string, string | string[] | undefined>;
 type ActiveTab = 'patients' | 'all';
 
-const PATIENTS_PAGE_SIZE = 20;
+// PATIENTS_PAGE_SIZE is gone — the patient panel is capped by
+// DASHBOARD_PATIENT_LIMIT (11) downstream to match the mockup.
 const VISITS_PAGE_SIZE = 20;
 
 export default async function DashboardPage({
@@ -61,9 +73,12 @@ export default async function DashboardPage({
   const session = await auth();
   if (!session?.user?.id) redirect('/login');
 
+  // Phase 3 Wave 2 — also pull `name` so the greeting can read
+  // "Good morning, Dr. {firstName}." downstream. The existing
+  // practiceId hand-off is unchanged.
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { practiceId: true },
+    select: { practiceId: true, name: true },
   });
   if (!user) redirect('/login');
 
@@ -77,6 +92,7 @@ export default async function DashboardPage({
         <DashboardBody
           userId={session.user.id}
           practiceId={user.practiceId}
+          userName={user.name}
           activeTab={activeTab}
         />
       </Suspense>
@@ -87,10 +103,12 @@ export default async function DashboardPage({
 async function DashboardBody({
   userId,
   practiceId,
+  userName,
   activeTab,
 }: {
   userId: string;
   practiceId: string;
+  userName: string | null;
   activeTab: ActiveTab;
 }) {
   const now = new Date();
@@ -161,32 +179,47 @@ async function DashboardBody({
   // below. Stats row stays at zero so the doctor can see the scaffold
   // before it fills in.
 
+  // Phase 3 Wave 2 — derive the doctor's first name for the greeting.
+  // Splits on whitespace so "Mei-Ling Chen" reads as "Mei-Ling".
+  const firstName = userName ? userName.trim().split(/\s+/)[0] ?? null : null;
+
   return (
     <>
-      <PageHeader
-        theme="clinician"
-        eyebrow="Today"
-        title={
-          <>
-            Your <em style={{ color: 'var(--sage-deep)' }}>workspace</em>.
-          </>
-        }
-        subtitle={
-          <>
-            {patientCount} patient{patientCount === 1 ? '' : 's'} ·{' '}
-            {activeVisitCount} total visit
-            {activeVisitCount === 1 ? '' : 's'}
-            {pendingReview > 0 && (
-              <>
-                {' · '}
-                <span style={{ color: 'var(--amber-deep)' }}>
-                  {pendingReview} awaiting your review
-                </span>
-              </>
-            )}
-          </>
-        }
-        actions={
+      {/* Greeting + New visit CTA. Replaces the legacy <PageHeader>
+         which carried "Your workspace." — the mockup's greeting line
+         is the dashboard's primary header now (docs/design-directions-
+         v3/clinician/dashboard.html L487–496). The same density/CTA
+         contract is preserved: serif heading on the left, primary
+         "New visit" button right-aligned to match the previous
+         PageHeader rendering. */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'flex-end',
+          justifyContent: 'space-between',
+          gap: 24,
+          padding: '40px 40px 24px',
+        }}
+      >
+        <Greeting
+          firstName={firstName}
+          subtitle={
+            <>
+              {patientCount} patient{patientCount === 1 ? '' : 's'} ·{' '}
+              {activeVisitCount} total visit
+              {activeVisitCount === 1 ? '' : 's'}
+              {pendingReview > 0 && (
+                <>
+                  {' · '}
+                  <span style={{ color: 'var(--amber-deep)' }}>
+                    {pendingReview} awaiting your review
+                  </span>
+                </>
+              )}
+            </>
+          }
+        />
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <Link
             href="/visits/new"
             className="qm-cl-btn qm-cl-btn-primary"
@@ -195,8 +228,8 @@ async function DashboardBody({
             <Ic.plus width={14} height={14} />
             New visit
           </Link>
-        }
-      />
+        </div>
+      </div>
 
       <div
         style={{
@@ -206,6 +239,7 @@ async function DashboardBody({
           padding: '0 40px 24px',
         }}
       >
+        {/* Existing 4 metric cards stay unchanged. */}
         <StatCard
           theme="clinician"
           label={`Visits / ${now.toLocaleString('en-US', { month: 'short' })}`}
@@ -236,7 +270,11 @@ async function DashboardBody({
       <TabBar activeTab={activeTab} patientCount={patientCount} visitCount={activeVisitCount} />
 
       {activeTab === 'patients' ? (
-        <PatientsTab practiceId={practiceId} patientCount={patientCount} />
+        <PatientsTab
+          practiceId={practiceId}
+          userId={userId}
+          patientCount={patientCount}
+        />
       ) : (
         <AllVisitsTab userId={userId} visitCount={activeVisitCount} />
       )}
@@ -307,23 +345,36 @@ function TabBar({
 
 async function PatientsTab({
   practiceId,
+  userId,
   patientCount,
 }: {
   practiceId: string;
+  userId: string;
   patientCount: number;
 }) {
   if (patientCount === 0) return <EmptyPatients />;
 
-  // Two-query form: patient row + latest visit (take:1), then a
-  // separate groupBy for active-visit counts. Explicit local types
-  // because the shared `@meddoc/db` export is typed `any` (adapter-
-  // pg require-wrap, see packages/db/src/index.ts) and loses Prisma's
-  // generated row types at the boundary.
+  // Phase 3 Wave 2 (dashboard density). Same two-query form as before,
+  // extended with two extra columns (`signedAt`, `chiefComplaint`)
+  // pulled from the latest visit so the new <PatientList> rows can
+  // render the Batch H "Signed · {date}" pill and the italic
+  // chief-complaint snippet from the mockup. A third parallel query
+  // grabs the most-recent READY-but-unsigned visits for the
+  // "Three drafts, ready when you are." section.
+  //
+  // Patient cap drops from 20 to 11 (PATIENTS_PAGE_SIZE → DASHBOARD_PATIENT_LIMIT)
+  // to match the mockup's "Eleven faces on the schedule." copy. The
+  // legacy 20-row scroll wasn't truly paginated upstream — this
+  // tightens the dashboard view without losing any patients (full list
+  // is at /patients).
   type LatestVisit = {
+    id: string;
     createdAt: Date;
     specialty: string;
     status: import('@prisma/client').TranscribeVisitStatus;
     needsReview: boolean;
+    signedAt: Date | null;
+    chiefComplaint: string | null;
   };
   type PatientRow = {
     id: string;
@@ -332,28 +383,72 @@ async function PatientsTab({
     transcribeVisits: LatestVisit[];
   };
   type CountRow = { patientId: string; _count: { _all: number } };
+  type DraftRow = {
+    id: string;
+    patientName: string | null;
+    specialty: string;
+    needsReview: boolean;
+    updatedAt: Date;
+    soapFinal: string | null;
+    soapDraft: string | null;
+    chiefComplaint: string | null;
+    patient: { name: string } | null;
+  };
 
-  const rows: PatientRow[] = await prisma.transcribeMdPatient.findMany({
-    where: { practiceId, deletedAt: null },
-    orderBy: { updatedAt: 'desc' },
-    take: PATIENTS_PAGE_SIZE,
-    select: {
-      id: true,
-      name: true,
-      dateOfBirth: true,
-      transcribeVisits: {
-        where: { deletedAt: null, archivedAt: null },
-        orderBy: { createdAt: 'desc' },
-        take: 1,
-        select: {
-          createdAt: true,
-          specialty: true,
-          status: true,
-          needsReview: true,
+  const [rows, draftRows] = await Promise.all([
+    prisma.transcribeMdPatient.findMany({
+      where: { practiceId, deletedAt: null },
+      orderBy: { updatedAt: 'desc' },
+      take: DASHBOARD_PATIENT_LIMIT,
+      select: {
+        id: true,
+        name: true,
+        dateOfBirth: true,
+        transcribeVisits: {
+          where: { deletedAt: null, archivedAt: null },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: {
+            id: true,
+            createdAt: true,
+            specialty: true,
+            status: true,
+            needsReview: true,
+            signedAt: true,
+            chiefComplaint: true,
+          },
         },
       },
-    },
-  });
+    }) as Promise<PatientRow[]>,
+    // Drafts query — READY status, not yet signed, ordered by most
+    // recently updated. Pull soapFinal AND soapDraft so we can prefer
+    // the post-Layer-6 polish but fall back to Layer 4 output if the
+    // pipeline stopped short. patient.name lives behind a relation
+    // include since the dashboard always wants the canonical name
+    // (visit.patientName is a legacy free-text fallback).
+    prisma.transcribeVisit.findMany({
+      where: {
+        userId,
+        deletedAt: null,
+        archivedAt: null,
+        status: TranscribeVisitStatus.READY,
+        signedAt: null,
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: DASHBOARD_DRAFT_LIMIT,
+      select: {
+        id: true,
+        patientName: true,
+        specialty: true,
+        needsReview: true,
+        updatedAt: true,
+        soapFinal: true,
+        soapDraft: true,
+        chiefComplaint: true,
+        patient: { select: { name: true } },
+      },
+    }) as Promise<DraftRow[]>,
+  ]);
 
   const patientIds = rows.map((r: PatientRow) => r.id);
   const counts: CountRow[] = patientIds.length
@@ -371,8 +466,8 @@ async function PatientsTab({
     counts.map((c: CountRow) => [c.patientId, c._count._all])
   );
 
-  const patients: DashboardPatient[] = rows.map(
-    (r: PatientRow): DashboardPatient => {
+  const patients: DashboardListPatient[] = rows.map(
+    (r: PatientRow): DashboardListPatient => {
       const latest = r.transcribeVisits[0];
       return {
         id: r.id,
@@ -387,24 +482,83 @@ async function PatientsTab({
         lastVisitSpecialty: latest?.specialty ?? null,
         lastVisitStatus: latest?.status ?? null,
         lastVisitNeedsReview: latest?.needsReview ?? false,
+        lastVisitSignedAt: latest?.signedAt
+          ? latest.signedAt.toISOString()
+          : null,
+        // Clip on the server so a long chief complaint doesn't push the
+        // serialized payload up. ~80 chars matches the mockup's snippet
+        // budget (one-line italic).
+        lastVisitChiefComplaint: clipChiefComplaint(
+          latest?.chiefComplaint ?? null
+        ),
       };
     }
   );
 
-  return (
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-        gap: 16,
-        padding: '22px 40px 40px',
-      }}
-    >
-      {patients.map((p) => (
-        <PatientCard key={p.id} patient={p} theme="clinician" />
-      ))}
-    </div>
+  const drafts: DraftReadyVisit[] = draftRows.map(
+    (v: DraftRow): DraftReadyVisit => ({
+      id: v.id,
+      patientName: v.patient?.name ?? null,
+      patientFallback: v.patientName ?? null,
+      specialty: v.specialty ?? null,
+      draftedAt: v.updatedAt.toISOString(),
+      previewLine: firstLineFromSoap(v.soapFinal ?? v.soapDraft, v.chiefComplaint),
+      needsReview: v.needsReview,
+    })
   );
+
+  return (
+    <>
+      <PatientList patients={patients} />
+      <DraftsReady drafts={drafts} />
+    </>
+  );
+}
+
+const DASHBOARD_PATIENT_LIMIT = 11;
+const DASHBOARD_DRAFT_LIMIT = 3;
+const SOAP_PREVIEW_MAX_CHARS = 160;
+const CHIEF_PREVIEW_MAX_CHARS = 80;
+
+/** Pick the first non-empty line of the SOAP body for the drafts-ready
+ *  preview. Falls back to the visit's chief complaint when soapFinal /
+ *  soapDraft are both empty (failed pipeline). Strips markdown headers
+ *  ("S:", "Subjective:", "##") so the preview reads as prose, not as a
+ *  section label. Server-side, no PHI redaction beyond what's already
+ *  in the raw text — the dashboard rendering is in-session for the
+ *  authed doctor. */
+function firstLineFromSoap(
+  body: string | null | undefined,
+  chiefComplaint: string | null | undefined
+): string | null {
+  const source = body && body.trim().length > 0 ? body : chiefComplaint ?? '';
+  if (!source) return null;
+  const lines = source.split(/\r?\n/);
+  for (const raw of lines) {
+    const line = raw
+      .replace(/^#+\s*/g, '')
+      .replace(/^\s*\*\*\s*/, '')
+      .replace(/\s*\*\*\s*$/, '')
+      .replace(/^(S|O|A|P|Subjective|Objective|Assessment|Plan)\s*[:—–-]\s*/i, '')
+      .trim();
+    if (line.length === 0) continue;
+    return line.length > SOAP_PREVIEW_MAX_CHARS
+      ? line.slice(0, SOAP_PREVIEW_MAX_CHARS - 1).trimEnd() + '…'
+      : line;
+  }
+  return null;
+}
+
+/** Clip the patient-list chief-complaint snippet to a single-line
+ *  budget. Trims trailing punctuation that would render awkwardly
+ *  inside curly quotes. */
+function clipChiefComplaint(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const trimmed = raw.replace(/\s+/g, ' ').trim();
+  if (!trimmed) return null;
+  return trimmed.length > CHIEF_PREVIEW_MAX_CHARS
+    ? trimmed.slice(0, CHIEF_PREVIEW_MAX_CHARS - 1).trimEnd() + '…'
+    : trimmed;
 }
 
 async function AllVisitsTab({
