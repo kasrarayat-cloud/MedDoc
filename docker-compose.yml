@@ -537,9 +537,27 @@ services:
       REMOTE_BACKUP_S3_SECRET_KEY: "${REMOTE_BACKUP_S3_SECRET_KEY:-}"
       REMOTE_BACKUP_S3_REGION: "${REMOTE_BACKUP_S3_REGION:-us-east-1}"
       REMOTE_BACKUP_PREFIX: "${REMOTE_BACKUP_PREFIX:-}"
+      # Phase 3 Wave 1 (h16-offsite-backup, encrypted variant): credentials
+      # for the Backblaze B2 path used by infra/backup-offsite-sync.sh.
+      # Empty defaults so the container starts even before the operator
+      # populates them; the script itself exits 78 / EX_CONFIG when the
+      # values are blank, leaving the local pg_dump unaffected. See
+      # docs/RUNBOOK_OFFSITE_BACKUP.md for the BAA + key-population flow.
+      BACKBLAZE_KEY_ID: "${BACKBLAZE_KEY_ID:-}"
+      BACKBLAZE_APPLICATION_KEY: "${BACKBLAZE_APPLICATION_KEY:-}"
+      BACKBLAZE_BUCKET: "${BACKBLAZE_BUCKET:-}"
     volumes:
       - ./backups:/backups
       - ./infra/postgres-backup/postscript.sh:/scripts/postscript.sh:ro
+      - ./infra/backup-offsite-sync.sh:/scripts/backup-offsite-sync.sh:ro
+      # h16-offsite-backup (encrypted): host-resident age keypair lives in
+      # /etc/meddoc on the VPS; mounted read-only so the script can read
+      # the public key for encryption. The private key never leaves the
+      # host filesystem (operator copies it offline for restoration).
+      - /etc/meddoc:/etc/meddoc:ro
+      # Run log destination — bind-mounted so logs survive container
+      # restarts and can be tail'd from the host without `docker logs`.
+      - /var/log/meddoc:/var/log/meddoc
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080"]
       interval: 60s
