@@ -21,17 +21,15 @@ export default function PricingPage() {
             className="pointer-events-none absolute inset-x-0 top-0 h-[500px]"
             style={{
               background:
-                'radial-gradient(ellipse 70% 50% at 50% 0%, rgba(139,92,246,0.18) 0%, transparent 65%)',
+                'radial-gradient(ellipse 70% 50% at 50% 0%, rgba(122,166,140,0.18) 0%, transparent 65%)',
             }}
           />
           <div className="relative mx-auto max-w-3xl px-6 text-center lg:px-8">
-            <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-text-muted">
-              Pricing
-            </p>
-            <h1 className="mt-3 type-h1 text-text-primary">
-              Simple. Transparent. Priced on the page.
+            <p className="qm-cl-eyebrow">Pricing</p>
+            <h1 className="mt-4 type-h1">
+              Simple. Transparent. <em style={{ fontStyle: 'italic', color: '#2F5040' }}>Priced on the page.</em>
             </h1>
-            <p className="mt-6 type-body text-text-tertiary">
+            <p className="mt-6 type-body">
               Start with 10 free notes. Upgrade whenever. Cancel whenever. No
               contracts, no sales calls.
             </p>
