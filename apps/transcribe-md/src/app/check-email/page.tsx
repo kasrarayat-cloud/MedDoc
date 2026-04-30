@@ -16,10 +16,11 @@ export default async function CheckEmailPage({ searchParams }: PageProps) {
 
   return (
     <AuthShell
+      theme="clinician"
       eyebrow="One more step"
       title={
         <>
-          Check your <em style={{ color: 'var(--accent-bright)' }}>email</em>
+          Check your <em style={{ color: 'var(--sage-deep)', fontStyle: 'italic' }}>email</em>
         </>
       }
       subtitle={

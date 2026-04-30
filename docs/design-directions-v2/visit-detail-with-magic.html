@@ -1,0 +1,841 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1600, initial-scale=1">
+<title>QuillMD — Apothecary · TRANSITION (visit detail with one magic moment)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,500;0,8..60,600;1,8..60,400;1,8..60,600&family=Inter+Tight:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #07060C;
+    --bg-1: #0C0A16;
+    --bg-2: #14111F;
+    --bg-3: #1C1828;
+    --bg-4: #221C30;
+    --line-soft: #191524;
+    --line: #26222F;
+    --line-strong: #3A3445;
+    --fg: #F5F2FA;
+    --fg-2: #B9B2C9;
+    --fg-3: #7E7791;
+    --fg-4: #4B4558;
+    --accent: #8B5CFF;
+    --accent-bright: #A87CFF;
+    --accent-deep: #6B3FD9;
+    --accent-a: #D1B5FF;
+    --copper: #E8A872;
+    --aqua: #7DD3FC;
+    --mint: #6EE7B7;
+    --amber: #FBBF24;
+    --coral: #FB7185;
+    --serif: 'Source Serif 4', Georgia, serif;
+    --sans: 'Inter Tight', system-ui, sans-serif;
+    --mono: 'JetBrains Mono', ui-monospace, monospace;
+    --ease: cubic-bezier(0.4, 0, 0.2, 1);
+    --ease-back: cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--fg);
+    font-size: 14px;
+    line-height: 1.5;
+    letter-spacing: -0.005em;
+    background-image: radial-gradient(ellipse 1200px 600px at 50% -200px, rgba(139,92,255,0.04), transparent 70%);
+    background-attachment: fixed;
+  }
+
+  /* Layout (same calm shell as dashboard) */
+  .qm-app { display: grid; grid-template-columns: 64px 1fr; min-height: 100vh; }
+  .qm-rail {
+    background: var(--bg-1); border-right: 1px solid var(--line-soft);
+    padding: 16px 0; display: flex; flex-direction: column; align-items: center; gap: 4px;
+    position: sticky; top: 0; height: 100vh;
+  }
+  .qm-rail .logo {
+    width: 36px; height: 36px; border-radius: 10px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-b, #D946EF));
+    display: grid; place-items: center; color: white; font-family: var(--serif); font-size: 18px;
+    box-shadow: 0 8px 22px -6px rgba(139,92,255,0.5);
+    margin-bottom: 12px;
+  }
+  .qm-rail-item {
+    width: 40px; height: 40px; border-radius: 10px;
+    display: grid; place-items: center; cursor: pointer; color: var(--fg-3);
+    transition: color 120ms var(--ease), background 120ms var(--ease);
+  }
+  .qm-rail-item:hover { color: var(--fg-2); background: var(--bg-2); }
+  .qm-rail-item.active { color: var(--fg); background: var(--bg-3); box-shadow: inset 0 0 0 1px var(--line-strong); }
+  .ic { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+
+  .qm-topbar {
+    height: 56px; padding: 0 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--bg); border-bottom: 1px solid var(--line-soft);
+    position: sticky; top: 0; z-index: 30;
+  }
+  .qm-crumb {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; color: var(--fg-3);
+  }
+  .qm-crumb a { color: var(--fg-3); }
+  .qm-crumb a:hover { color: var(--fg-2); }
+  .qm-crumb .sep { color: var(--fg-4); }
+  .qm-crumb .here { color: var(--fg); font-family: var(--mono); font-size: 12px; }
+
+  .qm-kbd {
+    display: inline-block; padding: 1px 6px;
+    border: 1px solid var(--line-strong); border-radius: 4px;
+    font-family: var(--mono); font-size: 10.5px; color: var(--fg-3);
+    background: rgba(0,0,0,0.25);
+  }
+
+  .qm-btn {
+    font-family: var(--sans); font-weight: 500; font-size: 13px;
+    height: 32px; padding: 0 12px; border-radius: 8px;
+    display: inline-flex; align-items: center; gap: 8px;
+    border: 1px solid var(--line); background: var(--bg-2); color: var(--fg-2);
+    cursor: pointer;
+    transition: color 120ms var(--ease), border-color 120ms var(--ease), background 120ms var(--ease);
+  }
+  .qm-btn:hover { color: var(--fg); border-color: var(--line-strong); background: var(--bg-3); }
+  .qm-btn-primary {
+    color: white;
+    background: linear-gradient(180deg, var(--accent-bright), var(--accent-deep));
+    border-color: var(--accent-deep);
+    box-shadow: 0 6px 18px -6px rgba(139,92,255,0.5), inset 0 1px 0 rgba(255,255,255,0.18);
+  }
+  .qm-btn-primary:hover { filter: brightness(1.06); }
+  .qm-btn-coral {
+    color: var(--coral); border-color: rgba(251,113,133,0.35);
+    background: rgba(251,113,133,0.06);
+  }
+  .qm-btn-coral:hover { background: rgba(251,113,133,0.10); border-color: rgba(251,113,133,0.5); }
+  .qm-btn-magic {
+    /* the only "magic" affordance in the calm screen */
+    color: white;
+    background: linear-gradient(90deg, var(--accent-deep), var(--accent), var(--aqua-deep, #38BDF8));
+    background-size: 200% 100%;
+    background-position: 0% 50%;
+    border-color: transparent;
+    box-shadow: 0 6px 18px -6px rgba(139,92,255,0.5);
+    transition: background-position 800ms var(--ease);
+  }
+  .qm-btn-magic:hover { background-position: 100% 50%; }
+
+  /* Pills */
+  .qm-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 2px 8px; border-radius: 999px;
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+    border: 1px solid var(--line); background: var(--bg-2); color: var(--fg-3);
+  }
+  .qm-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--fg-4); }
+  .qm-pill.mint   { color: var(--mint);   border-color: rgba(110,231,183,0.3); background: rgba(110,231,183,0.05); }
+  .qm-pill.mint .dot { background: var(--mint); }
+  .qm-pill.amber  { color: var(--amber);  border-color: rgba(251,191,36,0.3);  background: rgba(251,191,36,0.05); }
+  .qm-pill.amber .dot { background: var(--amber); }
+  .qm-pill.coral  { color: var(--coral);  border-color: rgba(251,113,133,0.3); background: rgba(251,113,133,0.05); }
+  .qm-pill.coral .dot { background: var(--coral); }
+  .qm-pill.copper { color: var(--copper); border-color: rgba(232,168,114,0.3); background: rgba(232,168,114,0.05); }
+  .qm-pill.copper .dot { background: var(--copper); }
+  .qm-pill.aqua   { color: var(--aqua);   border-color: rgba(125,211,252,0.3); background: rgba(125,211,252,0.05); }
+  .qm-pill.aqua .dot { background: var(--aqua); }
+  .qm-pill.violet { color: var(--accent-bright); border-color: rgba(168,124,255,0.3); background: rgba(139,92,255,0.06); }
+  .qm-pill.violet .dot { background: var(--accent); }
+
+  /* Page layout */
+  .qm-detail {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 360px;
+    gap: 24px;
+    padding: 28px 32px 60px;
+    max-width: 1600px;
+  }
+
+  /* Visit header (calm) */
+  .qm-visit-h {
+    display: flex; align-items: start; justify-content: space-between;
+    margin-bottom: 18px;
+  }
+  .qm-visit-h h1 {
+    font-family: var(--serif); font-weight: 400;
+    font-size: 38px; line-height: 1.05; letter-spacing: -0.025em;
+  }
+  .qm-visit-h h1 .dob {
+    font-style: italic; color: var(--fg-3); font-weight: 300;
+    font-size: 0.55em; margin-left: 12px;
+    letter-spacing: 0;
+  }
+  .qm-visit-h .meta {
+    margin-top: 8px; color: var(--fg-3); font-size: 13px;
+    display: flex; align-items: center; gap: 14px;
+  }
+  .qm-visit-h .meta strong { color: var(--fg-2); font-weight: 500; }
+
+  /* AI processing band — THE magic moment in the otherwise calm screen */
+  .qm-ai-band {
+    position: relative;
+    padding: 18px 22px;
+    border-radius: 14px;
+    background: linear-gradient(90deg, rgba(139,92,255,0.06), rgba(125,211,252,0.04));
+    border: 1px solid rgba(168,124,255,0.18);
+    display: grid; grid-template-columns: 280px 1fr auto; gap: 22px; align-items: center;
+    margin-bottom: 24px;
+    overflow: hidden;
+  }
+  /* the band has its own border-beam — only when active */
+  .qm-ai-band[data-state="active"] {
+    border-color: transparent;
+    box-shadow: inset 0 0 0 1px var(--line);
+  }
+  .qm-ai-band[data-state="active"]::before {
+    content: ''; position: absolute; inset: 0; pointer-events: none; border-radius: inherit;
+    padding: 1px;
+    background: conic-gradient(from var(--ang, 0deg),
+      transparent 0%, transparent 55%,
+      var(--accent-bright) 65%, var(--accent-a) 70%, var(--aqua) 78%, transparent 88%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor; mask-composite: exclude;
+    animation: bandBeam 4.2s linear infinite;
+  }
+  .qm-ai-band[data-state="idle"] {
+    background: var(--bg-1);
+    border-color: var(--line);
+  }
+  @keyframes bandBeam { to { --ang: 360deg; transform: rotate(0); } }
+  /* (use CSS @property for animatable custom prop) */
+  @property --ang { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+
+  .qm-ai-band .left {
+    display: flex; align-items: center; gap: 14px;
+  }
+  .qm-ai-band .glyph {
+    width: 44px; height: 44px; border-radius: 12px;
+    display: grid; place-items: center;
+    background: linear-gradient(135deg, var(--accent), var(--accent-deep));
+    color: white; font-family: var(--serif); font-style: italic; font-size: 22px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.2), 0 8px 22px -6px rgba(139,92,255,0.5);
+  }
+  .qm-ai-band .label-row { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--accent-bright); margin-bottom: 4px; }
+  .qm-ai-band .what {
+    font-family: var(--serif); font-size: 17px; letter-spacing: -0.015em;
+    color: var(--fg);
+  }
+  .qm-ai-band .what em { font-style: italic; color: var(--fg-3); font-weight: 300; }
+
+  /* Thought-chain ticker */
+  .qm-thought-ticker {
+    font-family: var(--mono); font-size: 12.5px;
+    color: var(--fg-2);
+    overflow: hidden;
+    height: 22px;
+    position: relative;
+  }
+  .qm-thought-ticker .roll { animation: rollUp 9s ease-in-out infinite; }
+  .qm-thought-ticker .roll > div { padding: 1px 0; height: 22px; line-height: 22px; }
+  .qm-thought-ticker .roll > div .ti { color: var(--aqua); margin-right: 8px; }
+  .qm-thought-ticker .roll > div .ms { color: var(--fg-4); margin-left: 8px; font-variant-numeric: tabular-nums; }
+  @keyframes rollUp {
+    0%, 18%   { transform: translateY(0%); }
+    20%, 38%  { transform: translateY(-22px); }
+    40%, 58%  { transform: translateY(-44px); }
+    60%, 78%  { transform: translateY(-66px); }
+    80%, 98%  { transform: translateY(-88px); }
+    100%      { transform: translateY(0%); }
+  }
+
+  /* Layer dots */
+  .qm-layer-dots { display: flex; gap: 4px; }
+  .qm-layer-dots .d { width: 6px; height: 6px; border-radius: 50%; background: var(--bg-3); border: 1px solid var(--line); }
+  .qm-layer-dots .d.done { background: var(--mint); border-color: var(--mint); }
+  .qm-layer-dots .d.live { background: var(--accent); border-color: var(--accent); animation: blip 1s ease-in-out infinite; box-shadow: 0 0 12px var(--accent); }
+  @keyframes blip { 0%,100% { opacity: 0.4; } 50% { opacity: 1; } }
+
+  /* SOAP editor (calm) */
+  .qm-soap {
+    background: var(--bg-1);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 32px 36px;
+  }
+  .qm-soap-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding-bottom: 16px; margin-bottom: 18px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .qm-soap-h2 {
+    font-family: var(--serif); font-weight: 400; font-size: 22px;
+    letter-spacing: -0.02em;
+  }
+  .qm-soap-h2 em { color: var(--fg-3); font-style: italic; font-weight: 300; }
+  .qm-soap-section { padding: 22px 0; border-top: 1px solid var(--line-soft); }
+  .qm-soap-section:first-of-type { border-top: 0; padding-top: 4px; }
+  .qm-soap-section.active { background: linear-gradient(90deg, rgba(139,92,255,0.05), transparent); margin: 0 -16px; padding: 22px 16px; border-radius: 8px; border-top-color: transparent; }
+  .qm-soap-label {
+    display: flex; align-items: center; gap: 10px;
+    font-family: var(--mono); font-size: 11px;
+    letter-spacing: 0.15em; text-transform: uppercase; color: var(--fg-3);
+    margin-bottom: 14px;
+  }
+  .qm-soap-label .num { color: var(--accent-bright); }
+  .qm-soap-label .actions { margin-left: auto; display: flex; gap: 6px; }
+  .qm-soap-label .actions .qm-btn { height: 26px; padding: 0 10px; font-size: 11px; }
+  .qm-soap-body {
+    font-family: var(--serif); font-size: 16.5px; line-height: 1.7;
+    color: var(--fg); max-width: 78ch;
+  }
+  .qm-soap-body p + p { margin-top: 14px; }
+  .qm-soap-body em { font-style: italic; color: var(--copper); }
+  .qm-soap-body .hl-source {
+    background: rgba(125,211,252,0.10);
+    padding: 1px 4px; border-radius: 3px;
+    border-bottom: 1px dashed rgba(125,211,252,0.4);
+    cursor: help;
+  }
+  .qm-soap-body .hl-edit {
+    background: rgba(232,168,114,0.10);
+    padding: 1px 4px; border-radius: 3px;
+    border-bottom: 1px dashed rgba(232,168,114,0.45);
+  }
+
+  /* Tabs (Codes / Rx / Extras) */
+  .qm-tabs-bar {
+    display: flex; gap: 2px;
+    background: var(--bg-2); border: 1px solid var(--line);
+    border-radius: 10px; padding: 4px;
+    width: fit-content;
+  }
+  .qm-tab {
+    padding: 6px 14px; font-size: 12.5px; color: var(--fg-3);
+    border-radius: 7px; cursor: pointer; font-weight: 500;
+    transition: color 120ms var(--ease), background 120ms var(--ease);
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .qm-tab:hover { color: var(--fg-2); }
+  .qm-tab.active { color: var(--fg); background: var(--bg-3); box-shadow: inset 0 0 0 1px var(--line-strong); }
+  .qm-tab .count { font-family: var(--mono); font-size: 10.5px; padding: 1px 6px; border-radius: 999px; background: var(--bg-3); color: var(--fg-3); }
+  .qm-tab.active .count { background: var(--bg-4); color: var(--fg-2); }
+
+  /* Right rail (visit metadata, audit, layer trace) */
+  .qm-side {
+    display: flex; flex-direction: column; gap: 16px;
+  }
+  .qm-side-card {
+    background: var(--bg-1);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 18px 20px;
+  }
+  .qm-side-h {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.16em;
+    text-transform: uppercase; color: var(--fg-3);
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .qm-side-h .num { color: var(--accent-bright); margin-right: 6px; }
+
+  .qm-kv { display: grid; grid-template-columns: 1fr auto; gap: 6px 14px; font-size: 12.5px; }
+  .qm-kv .k { color: var(--fg-3); font-family: var(--mono); font-size: 11px; letter-spacing: 0.04em; }
+  .qm-kv .v { color: var(--fg); font-family: var(--mono); font-size: 11.5px; text-align: right; }
+  .qm-kv .v.copper { color: var(--copper); }
+  .qm-kv .v.mint { color: var(--mint); }
+  .qm-kv .v.aqua { color: var(--aqua); }
+
+  /* Layer trace */
+  .qm-layer-trace { display: flex; flex-direction: column; gap: 6px; }
+  .qm-layer-trace .lr {
+    display: grid; grid-template-columns: 22px 1fr auto auto; gap: 10px;
+    align-items: center; padding: 6px 0; border-top: 1px solid var(--line-soft);
+    font-size: 12px;
+  }
+  .qm-layer-trace .lr:first-child { border-top: 0; }
+  .qm-layer-trace .lr .ix { font-family: var(--mono); font-size: 10px; color: var(--fg-4); }
+  .qm-layer-trace .lr .nm { color: var(--fg-2); }
+  .qm-layer-trace .lr .dt { font-family: var(--mono); color: var(--fg-3); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .qm-layer-trace .lr .ck { color: var(--mint); font-size: 12px; }
+
+  /* Codes / Rx tab content */
+  .qm-code-row {
+    display: grid; grid-template-columns: 90px 1fr auto auto; gap: 14px;
+    padding: 12px 0; border-top: 1px solid var(--line-soft);
+    align-items: center;
+  }
+  .qm-code-row:first-child { border-top: 0; }
+  .qm-code-row .code { font-family: var(--mono); font-size: 14px; color: var(--copper); }
+  .qm-code-row .desc { color: var(--fg); font-size: 14px; font-family: var(--serif); }
+  .qm-code-row .conf { font-family: var(--mono); font-size: 11px; color: var(--fg-3); }
+
+  .qm-rx-card {
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    border-radius: 12px; padding: 16px 18px;
+    display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 12px;
+  }
+  .qm-rx-card + .qm-rx-card { margin-top: 10px; }
+  .qm-rx-card .name {
+    font-family: var(--serif); font-size: 17px; letter-spacing: -0.015em;
+  }
+  .qm-rx-card .dose {
+    font-family: var(--mono); font-size: 12px; color: var(--fg-3); margin-top: 3px;
+  }
+  .qm-rx-card .meta { color: var(--fg-3); font-size: 12px; margin-top: 6px; }
+
+  /* THE Rx warning card frame — the spec is its own world; we just style its OUTER FRAME consistent with this direction. We do NOT redesign the inner contents. */
+  .qm-rx-warn-frame {
+    margin-top: 14px;
+    border-radius: 16px;
+    background: var(--bg-1);
+    border: 1px solid rgba(251,113,133,0.35);
+    box-shadow:
+      0 0 0 1px rgba(251,113,133,0.18),
+      0 28px 80px -30px rgba(251,113,133,0.25);
+    overflow: hidden;
+  }
+  .qm-rx-warn-frame .frame-h {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px; font-family: var(--mono); font-size: 11px; letter-spacing: 0.16em;
+    text-transform: uppercase; color: var(--coral);
+    border-bottom: 1px solid rgba(251,113,133,0.18);
+    background: linear-gradient(90deg, rgba(251,113,133,0.10), transparent 60%);
+  }
+  .qm-rx-warn-frame .frame-body { padding: 16px 18px; color: var(--fg-3); font-size: 12px; }
+  .qm-rx-warn-frame .frame-body .placeholder {
+    border: 1px dashed var(--line-strong);
+    border-radius: 10px;
+    padding: 14px 16px;
+    color: var(--fg-3);
+    font-family: var(--serif); font-size: 14.5px; font-style: italic;
+  }
+
+  /* Reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
+  }
+
+  *:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+  /* Misc */
+  .qm-divider-soft { height: 1px; background: var(--line-soft); margin: 18px 0; }
+</style>
+</head>
+<body>
+
+<div class="qm-app">
+
+  <!-- Icon rail (matches dashboard) -->
+  <aside class="qm-rail">
+    <div class="logo">q</div>
+    <a class="qm-rail-item"><svg class="ic" viewBox="0 0 24 24"><path d="M3 12 12 4l9 8M5 10v10h14V10"/></svg></a>
+    <a class="qm-rail-item active"><svg class="ic" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 3v4M16 3v4M4 11h16"/></svg></a>
+    <a class="qm-rail-item"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a6 6 0 0 1 16 0v2"/></svg></a>
+    <a class="qm-rail-item"><svg class="ic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></a>
+    <a class="qm-rail-item"><svg class="ic" viewBox="0 0 24 24"><path d="M4 19V5a2 2 0 0 1 2-2h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><path d="M14 3v5h5M8 13h8M8 17h6"/></svg></a>
+    <div style="flex: 1"></div>
+    <div class="qm-rail-item" style="width: 36px; height: 36px; border-radius: 50%; background: var(--bg-3); border: 1px solid var(--line); color: var(--accent-bright); font-family: var(--serif); font-size: 14px; cursor: default;">JR</div>
+  </aside>
+
+  <div>
+    <!-- Top bar with breadcrumb -->
+    <header class="qm-topbar">
+      <div class="qm-crumb">
+        <a href="dashboard.html"><svg class="ic" style="width:14px;height:14px" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></a>
+        <a href="dashboard.html">Dashboard</a>
+        <span class="sep">/</span>
+        <a href="#">Visits</a>
+        <span class="sep">/</span>
+        <span class="here">v_ck82h4</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <button class="qm-btn"><svg class="ic" style="width:14px;height:14px" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg> Prev</button>
+        <button class="qm-btn">Next <svg class="ic" style="width:14px;height:14px" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></button>
+        <span style="height: 22px; width: 1px; background: var(--line); margin: 0 6px;"></span>
+        <button class="qm-btn">Export <span class="qm-kbd">⌘E</span></button>
+        <button class="qm-btn qm-btn-primary">
+          <svg class="ic" style="width:14px;height:14px;stroke:white" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
+          Sign &amp; lock
+          <span class="qm-kbd" style="border-color: rgba(255,255,255,0.3); color: rgba(255,255,255,0.85);">⇧↵</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="qm-detail">
+
+      <!-- LEFT COLUMN -->
+      <div>
+
+        <!-- Visit header (calm) -->
+        <div class="qm-visit-h">
+          <div>
+            <div class="flex items-center gap-3" style="margin-bottom: 8px;">
+              <span class="qm-pill copper"><span class="dot"></span>awaiting your sign-off</span>
+              <span class="qm-pill aqua">cardiology</span>
+              <span class="qm-pill" style="font-family: var(--mono); font-size: 10px; color: var(--fg-3);">v_ck82h4</span>
+            </div>
+            <h1>John Smith <span class="dob">b. 1967 &middot; M &middot; est patient</span></h1>
+            <p class="meta">
+              <span><strong>Today &middot; 09:42</strong> · 12 min visit · drafted in 7&#x202F;min&#x202F;48&#x202F;s</span>
+              <span style="color: var(--fg-4)">·</span>
+              <span>last edited <strong>3 min ago</strong></span>
+              <span style="color: var(--fg-4)">·</span>
+              <span>4 prior visits · last <strong>Mar 12, 2026</strong></span>
+            </p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button class="qm-btn">Discard draft</button>
+            <button class="qm-btn">Save draft <span class="qm-kbd">⌘S</span></button>
+          </div>
+        </div>
+
+        <!-- THE AI PROCESSING BAND — the magic moment -->
+        <div class="qm-ai-band" id="aiBand" data-state="active">
+          <div class="left">
+            <div class="glyph">q</div>
+            <div>
+              <div class="label-row">
+                Apothecary &middot; regenerating subjective
+                <span class="qm-pill aqua" style="margin-left: 10px; font-size: 9px;">claude · sonnet 4.6</span>
+              </div>
+              <div class="what">
+                Re-reading transcript &middot; <em>identifying patient voice</em> &middot; drafting&hellip;
+              </div>
+            </div>
+          </div>
+
+          <!-- Thought ticker — rolling lines -->
+          <div class="qm-thought-ticker">
+            <div class="roll">
+              <div><span class="ti">●</span>identifying speakers · 2 voices · DR / PT <span class="ms">+0.41 s</span></div>
+              <div><span class="ti">●</span>extracting medications · metoprolol tartrate 25 mg BID <span class="ms">+0.68 s</span></div>
+              <div><span class="ti">●</span>extracting symptoms · chest tightness, exertional dyspnea, no diaphoresis <span class="ms">+1.02 s</span></div>
+              <div><span class="ti">●</span>drafting subjective · "58yo male presents with 3-week h/o exertional…" <span class="ms">+2.40 s</span></div>
+              <div><span class="ti">●</span>self-critique pass · readability grade 8.4 · safety clear <span class="ms">+3.11 s</span></div>
+            </div>
+          </div>
+
+          <div style="display: flex; flex-direction: column; align-items: end; gap: 8px;">
+            <div class="qm-layer-dots">
+              <span class="d done" title="L1 audio"></span>
+              <span class="d done" title="L2 diariz"></span>
+              <span class="d done" title="L3 entities"></span>
+              <span class="d live" title="L4 SOAP"></span>
+              <span class="d" title="L5 critique"></span>
+              <span class="d" title="L6 polish"></span>
+              <span class="d" title="L7 codes"></span>
+            </div>
+            <div style="font-family: var(--mono); font-size: 11px; color: var(--fg-3); font-variant-numeric: tabular-nums;">
+              ~ 4.3 s &middot; <span style="color: var(--copper);">$0.012</span>
+            </div>
+            <button class="qm-btn" style="height: 26px; padding: 0 10px; font-size: 11px; color: var(--fg-3);">cancel <span class="qm-kbd">esc</span></button>
+          </div>
+        </div>
+
+        <!-- SOAP editor (calm) -->
+        <div class="qm-soap">
+          <div class="qm-soap-head">
+            <div>
+              <h2 class="qm-soap-h2">SOAP <em>note</em> · v_ck82h4</h2>
+              <p style="color: var(--fg-3); font-size: 12.5px; margin-top: 4px;">312 words · readability grade 8.4 · saved automatically</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button class="qm-btn"><svg class="ic" style="width:14px;height:14px" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9 9 0 0 1 9 9 9 9 0 0 1-9 9 9 9 0 0 1-9-9zM12 7v5l3 3"/></svg> History</button>
+              <button class="qm-btn"><svg class="ic" style="width:14px;height:14px" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> Add section</button>
+            </div>
+          </div>
+
+          <!-- Subjective (the section being regenerated — gets a faint highlight) -->
+          <section class="qm-soap-section active">
+            <div class="qm-soap-label">
+              <span><span class="num">S</span> &middot; SUBJECTIVE</span>
+              <span class="qm-pill aqua" style="font-size: 9px;">drafted by ai · regenerating</span>
+              <div class="actions">
+                <button class="qm-btn-magic qm-btn" style="font-size: 11px;">
+                  <svg class="ic" style="width:12px;height:12px;stroke:white" viewBox="0 0 24 24"><path d="M14 4l6 6L8 22H2v-6L14 4z"/></svg>
+                  Regenerate
+                  <span class="qm-kbd" style="border-color: rgba(255,255,255,0.3); color: rgba(255,255,255,0.85);">⌘G</span>
+                </button>
+                <button class="qm-btn" style="font-size: 11px;">Edit</button>
+              </div>
+            </div>
+            <div class="qm-soap-body">
+              <p>
+                <span class="hl-source" title="from transcript line 3, 00:18">Mr. Smith is a 58&#8209;year&#8209;old male, established patient, presenting with a 3&#8209;week history of <em>exertional chest tightness</em></span>, occasionally accompanied by left&#8209;sided pinching pain and mild dyspnea. He reports the symptoms occur reliably with stair&#8209;climbing and resolve with rest within 1&ndash;3 minutes.
+              </p>
+              <p>
+                He <span class="hl-source" title="from transcript line 4, 00:42">denies arm or jaw radiation, denies diaphoresis</span>, and denies palpitations or syncope. Currently on <span class="hl-edit" title="user edit · 09:51">metoprolol tartrate 25 mg PO BID</span>; he confirms compliance every morning and night. No new medications since last visit (Mar 12, 2026).
+              </p>
+              <p>
+                Past cardiac history significant for <span class="hl-source" title="from chart">non-obstructive CAD on 2024 cath, hyperlipidemia, family history of premature MI (father, age 54)</span>. No tobacco. Social ETOH (2&ndash;3 drinks/week). Patient is mildly anxious about the symptom pattern and explicitly requested today's visit "to get ahead of it."
+              </p>
+            </div>
+          </section>
+
+          <!-- Objective -->
+          <section class="qm-soap-section">
+            <div class="qm-soap-label">
+              <span><span class="num">O</span> &middot; OBJECTIVE</span>
+              <div class="actions">
+                <button class="qm-btn" style="font-size: 11px;">Regenerate</button>
+                <button class="qm-btn" style="font-size: 11px;">Edit</button>
+              </div>
+            </div>
+            <div class="qm-soap-body">
+              <p>
+                <strong>Vitals:</strong> BP 138/86 (right arm, seated), HR 72 reg, RR 14, T 98.4&deg;F, SpO2 98% RA, BMI 28.4. <strong>General:</strong> well&#8209;appearing, in no acute distress, speaks in full sentences. <strong>Cardiac:</strong> RRR, normal S1/S2, no murmurs, rubs, or gallops. <strong>Pulm:</strong> CTAB, no wheeze. <strong>Ext:</strong> no edema, distal pulses 2+ bilaterally.
+              </p>
+              <p>
+                <strong>In&#8209;office EKG:</strong> normal sinus rhythm at 71, normal axis, no ST&#8209;T changes, QTc 412&#8202;ms. Compared to <span class="hl-source" title="prior, Mar 12 2026 visit">prior 03/12/26 EKG</span>: no significant interval change.
+              </p>
+            </div>
+          </section>
+
+          <!-- Assessment -->
+          <section class="qm-soap-section">
+            <div class="qm-soap-label">
+              <span><span class="num">A</span> &middot; ASSESSMENT</span>
+              <span class="qm-pill copper" style="font-size: 9px;">2 ICD candidates · 1 to confirm</span>
+              <div class="actions">
+                <button class="qm-btn" style="font-size: 11px;">Regenerate</button>
+                <button class="qm-btn" style="font-size: 11px;">Edit</button>
+              </div>
+            </div>
+            <div class="qm-soap-body">
+              <p>
+                <strong>1. Chest pain, exertional, new pattern</strong> — pattern is concerning for unstable angina vs. progression of known non-obstructive CAD. EKG is reassuring at rest, but symptom history warrants prompt non-invasive evaluation. <em>(<span style="font-family: var(--mono); color: var(--copper)">R07.9</span> chest pain, unspecified · <span style="font-family: var(--mono); color: var(--copper)">I20.9</span> angina pectoris, unspecified — clinician to confirm)</em>
+              </p>
+              <p>
+                <strong>2. Hyperlipidemia</strong> — continue current statin; recent lipid panel (02/14/26) within target. <em>(<span style="font-family: var(--mono); color: var(--copper)">E78.5</span> hyperlipidemia, unspecified)</em>
+              </p>
+            </div>
+          </section>
+
+          <!-- Plan -->
+          <section class="qm-soap-section">
+            <div class="qm-soap-label">
+              <span><span class="num">P</span> &middot; PLAN</span>
+              <div class="actions">
+                <button class="qm-btn" style="font-size: 11px;">Regenerate</button>
+                <button class="qm-btn" style="font-size: 11px;">Edit</button>
+              </div>
+            </div>
+            <div class="qm-soap-body">
+              <ol style="padding-left: 22px; margin: 0;">
+                <li style="margin-bottom: 10px;">Stress echocardiogram, expedited (within 7 days). Patient agreeable; staff to schedule before he leaves today.</li>
+                <li style="margin-bottom: 10px;">Continue metoprolol tartrate 25 mg PO BID. <em>No medication change today.</em></li>
+                <li style="margin-bottom: 10px;">Initiate sublingual nitroglycerin 0.4 mg PRN for acute exertional chest discomfort. Counsel: take seated, may repeat q5min ×3, call 911 if persists. <span class="hl-source">Discussed in detail; patient teach&#8209;back successful.</span></li>
+                <li style="margin-bottom: 10px;">Strict return precautions: ED for chest pain at rest, prolonged pain (&gt;15 min), associated dyspnea/diaphoresis, syncope.</li>
+                <li>Follow-up: in office within 14 days, sooner once stress echo resulted.</li>
+              </ol>
+            </div>
+          </section>
+
+          <!-- Tabs -->
+          <div style="margin-top: 32px; padding-top: 22px; border-top: 1px solid var(--line-soft);">
+            <div class="qm-tabs-bar" style="margin-bottom: 18px;">
+              <span class="qm-tab active">Codes <span class="count">3</span></span>
+              <span class="qm-tab">Rx <span class="count" style="color: var(--coral)">!</span></span>
+              <span class="qm-tab">Extras <span class="count">2</span></span>
+              <span class="qm-tab">Transcript</span>
+              <span class="qm-tab">Audit</span>
+            </div>
+
+            <!-- Tab body — Codes -->
+            <div>
+              <div class="qm-code-row">
+                <span class="code">R07.9</span>
+                <span class="desc">Chest pain, unspecified</span>
+                <span class="conf">conf 0.92 · primary</span>
+                <span class="qm-pill copper" style="font-size: 9px;">to confirm</span>
+              </div>
+              <div class="qm-code-row">
+                <span class="code">I20.9</span>
+                <span class="desc">Angina pectoris, unspecified</span>
+                <span class="conf">conf 0.78 · differential</span>
+                <span class="qm-pill copper" style="font-size: 9px;">to confirm</span>
+              </div>
+              <div class="qm-code-row">
+                <span class="code">E78.5</span>
+                <span class="desc">Hyperlipidemia, unspecified</span>
+                <span class="conf">conf 0.96 · chronic, continued</span>
+                <span class="qm-pill mint" style="font-size: 9px;">accepted</span>
+              </div>
+            </div>
+
+            <!-- Rx tab content (preview, behind/below codes) -->
+            <div style="margin-top: 26px;">
+              <div class="flex items-center justify-between" style="margin-bottom: 12px;">
+                <p style="font-family: var(--mono); font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--fg-3);"><span style="color: var(--accent-bright)">Rx</span> · DRAFT &middot; 1 NEW · 1 CONTINUED</p>
+                <span class="qm-pill coral"><span class="dot"></span>1 RX SAFETY HIT</span>
+              </div>
+
+              <div class="qm-rx-card">
+                <div>
+                  <div class="name">Nitroglycerin (sublingual)</div>
+                  <div class="dose">0.4 mg SL · 1 tablet PRN exertional chest pain · may repeat q5min ×3</div>
+                  <div class="meta">new · 30-day supply · 0 refills · counsel given</div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="qm-pill copper" style="font-size: 9px;">new</span>
+                  <button class="qm-btn" style="height: 28px;">Edit</button>
+                </div>
+              </div>
+
+              <div class="qm-rx-card">
+                <div>
+                  <div class="name">Metoprolol tartrate</div>
+                  <div class="dose">25 mg PO BID · continued · last filled Mar 18, 2026</div>
+                  <div class="meta">continued · no change · 90-day supply remaining</div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="qm-pill mint" style="font-size: 9px;">continued</span>
+                  <button class="qm-btn" style="height: 28px;">Edit</button>
+                </div>
+              </div>
+
+              <!-- Rx warning frame — preserved as-is (its inner content has its own design spec) -->
+              <div class="qm-rx-warn-frame">
+                <div class="frame-h">
+                  <span style="font-size: 14px;">!</span>
+                  <span>Rx safety · 1 hit &middot; nitroglycerin × pde-5 inhibitor history</span>
+                  <span style="margin-left: auto; color: var(--fg-3); font-family: var(--mono); font-size: 10px; letter-spacing: 0.04em; text-transform: none;">[ &lt;RxWarningCard /&gt; renders here — design preserved per docs/design/rx_warning_handoff/ ]</span>
+                </div>
+                <div class="frame-body">
+                  <div class="placeholder">
+                    The Rx warning card has its own design spec and Vitest test. This direction does <strong>not</strong> redesign its internals — only the frame around it (color, radius, shadow) so it sits coherently inside the Apothecary palette. The card's transcribed-vs-guess block, risk list, severity headline, and override flow stay byte-for-byte the same.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- RIGHT RAIL -->
+      <aside class="qm-side">
+
+        <!-- Visit metadata -->
+        <div class="qm-side-card">
+          <div class="qm-side-h">
+            <span><span class="num">§01</span> VISIT META</span>
+            <span class="qm-pill aqua">claude · sonnet 4.6</span>
+          </div>
+          <div class="qm-kv">
+            <span class="k">visit_id</span>            <span class="v">v_ck82h4</span>
+            <span class="k">created</span>             <span class="v">apr 29 · 09:42</span>
+            <span class="k">duration</span>            <span class="v">12:08</span>
+            <span class="k">queued</span>              <span class="v">09:54:02</span>
+            <span class="k">drafted</span>             <span class="v">10:01:50</span>
+            <span class="k">total cost</span>          <span class="v copper">$0.214</span>
+            <span class="k">deepgram cost</span>       <span class="v copper">$0.072</span>
+            <span class="k">claude cost</span>         <span class="v copper">$0.142</span>
+            <span class="k">prompt hash</span>         <span class="v">9a7c·e4f1</span>
+            <span class="k">phi redacted</span>        <span class="v mint">YES</span>
+          </div>
+        </div>
+
+        <!-- Layer trace -->
+        <div class="qm-side-card">
+          <div class="qm-side-h">
+            <span><span class="num">§02</span> LAYER TRACE</span>
+            <span class="qm-pill mint">7 / 7 ok</span>
+          </div>
+          <div class="qm-layer-trace">
+            <div class="lr"><span class="ix">L1</span><span class="nm">audio · transcribe</span><span class="dt">0.42 s</span><span class="ck">✓</span></div>
+            <div class="lr"><span class="ix">L2</span><span class="nm">speaker diarization</span><span class="dt">1.10 s</span><span class="ck">✓</span></div>
+            <div class="lr"><span class="ix">L3</span><span class="nm">entity extraction</span><span class="dt">0.84 s</span><span class="ck">✓</span></div>
+            <div class="lr"><span class="ix">L4</span><span class="nm">SOAP draft</span><span class="dt">2.31 s</span><span class="ck">✓</span></div>
+            <div class="lr"><span class="ix">L5</span><span class="nm">self-critique</span><span class="dt">0.94 s</span><span class="ck">✓</span></div>
+            <div class="lr"><span class="ix">L6</span><span class="nm">polish · readability</span><span class="dt">1.02 s</span><span class="ck">✓</span></div>
+            <div class="lr"><span class="ix">L7</span><span class="nm">codes · rx · referrals</span><span class="dt">0.71 s</span><span class="ck">✓</span></div>
+          </div>
+          <div class="qm-divider-soft"></div>
+          <div class="flex items-center justify-between" style="font-family: var(--mono); font-size: 11px; color: var(--fg-3);">
+            <span>total · 7&#x202F;min&#x202F;48&#x202F;s end-to-end</span>
+            <span style="color: var(--copper);">$0.214</span>
+          </div>
+        </div>
+
+        <!-- Audit chip -->
+        <div class="qm-side-card">
+          <div class="qm-side-h">
+            <span><span class="num">§03</span> AUDIT</span>
+            <span class="qm-pill mint"><span class="dot"></span>chain ok</span>
+          </div>
+          <div class="qm-kv">
+            <span class="k">created by</span>           <span class="v">dr. j. reyes</span>
+            <span class="k">user_id</span>              <span class="v">u_4a2c</span>
+            <span class="k">practice</span>             <span class="v">reyes family med</span>
+            <span class="k">edits</span>                <span class="v">3 · last 09:51</span>
+            <span class="k">audit hash</span>           <span class="v">e4f8·b1d2</span>
+            <span class="k">retention</span>            <span class="v">7 yr · hipaa</span>
+          </div>
+          <button class="qm-btn" style="margin-top: 14px; width: 100%; justify-content: center;">View full audit log <span class="qm-kbd">⌘L</span></button>
+        </div>
+
+        <!-- Patient mini context -->
+        <div class="qm-side-card">
+          <div class="qm-side-h">
+            <span><span class="num">§04</span> PATIENT CONTEXT</span>
+            <a href="#" style="font-family: var(--mono); font-size: 10.5px; color: var(--accent-bright); letter-spacing: 0.04em; text-transform: none;">open chart →</a>
+          </div>
+          <p style="font-family: var(--serif); font-size: 17px; line-height: 1.3; letter-spacing: -0.015em;">
+            John Smith <span style="color: var(--fg-3); font-style: italic; font-weight: 300;">b. 1967 &middot; M</span>
+          </p>
+          <p style="color: var(--fg-3); font-size: 12px; margin-top: 4px;">est patient · 4 prior visits · last <strong style="color: var(--fg-2)">Mar 12, 2026</strong></p>
+
+          <div style="margin-top: 14px; display: flex; flex-direction: column; gap: 6px;">
+            <div class="flex justify-between items-center" style="padding: 5px 0; border-top: 1px solid var(--line-soft);">
+              <span style="color: var(--fg-3); font-size: 12px;">allergies</span>
+              <span style="font-family: var(--mono); font-size: 11px; color: var(--fg-2);">none known</span>
+            </div>
+            <div class="flex justify-between items-center" style="padding: 5px 0; border-top: 1px solid var(--line-soft);">
+              <span style="color: var(--fg-3); font-size: 12px;">active meds</span>
+              <span style="font-family: var(--mono); font-size: 11px; color: var(--fg-2);">2 · metoprolol · atorvastatin</span>
+            </div>
+            <div class="flex justify-between items-center" style="padding: 5px 0; border-top: 1px solid var(--line-soft);">
+              <span style="color: var(--fg-3); font-size: 12px;">problem list</span>
+              <span style="font-family: var(--mono); font-size: 11px; color: var(--fg-2);">CAD · HLD · prediabetes</span>
+            </div>
+            <div class="flex justify-between items-center" style="padding: 5px 0; border-top: 1px solid var(--line-soft);">
+              <span style="color: var(--fg-3); font-size: 12px;">last vitals</span>
+              <span style="font-family: var(--mono); font-size: 11px; color: var(--fg-2);">138/86 · 72 · BMI 28.4</span>
+            </div>
+          </div>
+        </div>
+
+      </aside>
+
+    </main>
+  </div>
+</div>
+
+<script>
+  // The AI band's "regenerate" button (in the SOAP label) toggles the band state for demo.
+  // In production this fires on actual server-action call.
+  const band = document.getElementById('aiBand');
+  // For mockup: band is permanently active so reviewer sees the magic moment.
+  // We re-trigger the conic-rotate every visit by leaving CSS animation running.
+
+  // Demo: clicking a "Regenerate" button re-triggers the rolling thought-ticker.
+  document.querySelectorAll('.qm-btn-magic').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const ticker = document.querySelector('.qm-thought-ticker .roll');
+      if (ticker) {
+        ticker.style.animation = 'none';
+        void ticker.offsetWidth;
+        ticker.style.animation = '';
+      }
+    });
+  });
+</script>
+</body>
+</html>

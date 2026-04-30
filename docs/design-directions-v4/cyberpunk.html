@@ -1,0 +1,2464 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>QuillMD // CYBERPUNK_v4 :: TECH-FUTURE TOKYO BUILD</title>
+
+<!-- Tailwind CDN -->
+<script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+
+<!-- Google Fonts: Orbitron (display HUD), Russo One (display brutalist), JetBrains Mono (body), VT323 (CRT), Bebas Neue (kicker) -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;600;700;800;900&family=Russo+One&family=JetBrains+Mono:wght@300;400;500;700;800&family=VT323&family=Bebas+Neue&family=Share+Tech+Mono&display=swap" rel="stylesheet" />
+
+<style>
+/* ═════════════════════════════════════════════════════════════════════════════
+   CYBERPUNK v4 — QuillMD :: TECH-FUTURE TOKYO :: NEON TRIAD :: GLITCH PROTOCOL
+   The doctor is a netrunner. Medicine in 2026 is a HUD.
+   ═════════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Base layers ─────────────────────────────────────────────────────────── */
+  --void:          #05050E;   /* deepest base (purple-blue tint) */
+  --void-1:        #0A0A18;   /* surface */
+  --void-2:        #15152A;   /* elevated */
+  --void-3:        #1F1B3A;   /* hover */
+  --void-4:        #2A2348;   /* modal */
+
+  /* ── Neon triad ──────────────────────────────────────────────────────────── */
+  --neon-pink:     #FF0080;
+  --neon-pink-2:   #FF00C8;
+  --neon-cyan:     #00FFFF;
+  --neon-cyan-2:   #00E5FF;
+  --neon-green:    #39FF14;
+  --neon-green-2:  #7CFF00;
+
+  /* ── Holographic gradient stops ──────────────────────────────────────────── */
+  --holo-1:        #FF00C8;   /* magenta */
+  --holo-2:        #00FFFF;   /* cyan */
+  --holo-3:        #39FF14;   /* lime */
+  --holo-4:        #FFD600;   /* amber */
+  --holo-5:        #FF00C8;   /* loop */
+
+  /* ── HUD chrome ──────────────────────────────────────────────────────────── */
+  --line-pink:     rgba(255,0,128,0.45);
+  --line-cyan:     rgba(0,255,255,0.45);
+  --line-green:    rgba(57,255,20,0.45);
+  --line-soft:     rgba(170,140,255,0.18);
+
+  /* ── Foreground ──────────────────────────────────────────────────────────── */
+  --fg:            #F5F2FF;
+  --fg-2:          #C5BEDC;
+  --fg-3:          #8A82A8;
+  --fg-4:          #524B70;
+
+  /* ── Status overrides (still cyberpunk-flavored) ─────────────────────────── */
+  --status-ok:     #39FF14;
+  --status-warn:   #FFD600;
+  --status-err:    #FF0040;
+  --status-info:   #00FFFF;
+
+  /* ── Motion ──────────────────────────────────────────────────────────────── */
+  --snap:          cubic-bezier(0.85, 0, 0.15, 1);
+  --t-fast:        120ms;
+  --t-base:        180ms;
+  --t-slow:        220ms;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  background: var(--void);
+  color: var(--fg);
+  font-family: 'JetBrains Mono', 'Share Tech Mono', ui-monospace, monospace;
+  font-size: 14px;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+}
+
+::selection {
+  background: var(--neon-pink);
+  color: var(--void);
+}
+
+/* ── Type system ───────────────────────────────────────────────────────────── */
+.font-display   { font-family: 'Orbitron', sans-serif; font-weight: 800; letter-spacing: 0.04em; }
+.font-russo     { font-family: 'Russo One', sans-serif; letter-spacing: 0.02em; }
+.font-mono      { font-family: 'JetBrains Mono', monospace; }
+.font-crt       { font-family: 'VT323', monospace; }
+.font-kicker    { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.18em; }
+.font-tech      { font-family: 'Share Tech Mono', monospace; letter-spacing: 0.05em; }
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   SCANLINES :: pervasive CRT overlay across the whole document
+   ═════════════════════════════════════════════════════════════════════════════ */
+.scanlines::before {
+  content: '';
+  position: fixed; inset: 0;
+  pointer-events: none;
+  background-image: repeating-linear-gradient(
+    0deg,
+    rgba(0,0,0,0) 0px,
+    rgba(0,0,0,0) 2px,
+    rgba(0,255,255,0.025) 3px,
+    rgba(0,0,0,0) 4px
+  );
+  z-index: 9998;
+  mix-blend-mode: screen;
+}
+
+/* Heavier scanlines for inside cards/panels */
+.scanlines-inner {
+  position: relative;
+}
+.scanlines-inner::after {
+  content: '';
+  position: absolute; inset: 0;
+  pointer-events: none;
+  background-image: repeating-linear-gradient(
+    0deg,
+    rgba(0,0,0,0) 0px,
+    rgba(0,0,0,0) 3px,
+    rgba(255,0,200,0.04) 4px,
+    rgba(0,0,0,0) 5px
+  );
+  mix-blend-mode: screen;
+  border-radius: inherit;
+}
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   SCREEN-FLICKER :: persistent 0.5Hz flicker, subtle
+   ═════════════════════════════════════════════════════════════════════════════ */
+@keyframes screen-flicker {
+  0%, 90%, 100% { opacity: 1; }
+  92%           { opacity: 0.94; }
+  93%           { opacity: 1; }
+  94%           { opacity: 0.92; }
+  95%           { opacity: 1; }
+}
+.screen-flicker {
+  animation: screen-flicker 2s infinite linear;
+}
+
+/* Vignette + ambient noise */
+.noise-overlay::before {
+  content: '';
+  position: fixed; inset: 0;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1   0 0 0 0 0   0 0 0 0 0.5   0 0 0 0.18 0'/></filter><rect width='100%' height='100%' filter='url(%23n)' /></svg>");
+  opacity: 0.18;
+  mix-blend-mode: overlay;
+  z-index: 9997;
+}
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   ANIMATED GRID BACKGROUND :: neon vanishing point
+   ═════════════════════════════════════════════════════════════════════════════ */
+.neon-grid {
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(to right,  rgba(0,255,255,0.08) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255,0,200,0.08) 1px, transparent 1px);
+  background-size: 56px 56px;
+  background-position: 0 0;
+  mask-image: radial-gradient(ellipse 80% 70% at 50% 100%, #000 30%, transparent 90%);
+  -webkit-mask-image: radial-gradient(ellipse 80% 70% at 50% 100%, #000 30%, transparent 90%);
+  animation: grid-pulse 4s ease-in-out infinite alternate;
+}
+@keyframes grid-pulse {
+  0%   { background-position: 0 0; opacity: 0.7; }
+  100% { background-position: 0 28px; opacity: 1; }
+}
+
+.neon-grid-perspective {
+  position: absolute; inset: 0;
+  perspective: 1000px;
+  perspective-origin: 50% 100%;
+  pointer-events: none;
+  overflow: hidden;
+}
+.neon-grid-perspective::before {
+  content: '';
+  position: absolute;
+  left: -10%; right: -10%;
+  bottom: -50%;
+  height: 200%;
+  background-image:
+    linear-gradient(to right,  rgba(0,255,255,0.4)  1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255,0,200,0.4)  1px, transparent 1px);
+  background-size: 60px 60px;
+  transform: rotateX(70deg);
+  transform-origin: 50% 0;
+  mask-image: linear-gradient(to top, #000 0%, #000 30%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to top, #000 0%, #000 30%, transparent 100%);
+  animation: grid-rush 8s linear infinite;
+}
+@keyframes grid-rush {
+  0%   { background-position-y: 0; }
+  100% { background-position-y: 60px; }
+}
+
+/* Vanishing-point glow */
+.vanishing-glow {
+  position: absolute;
+  left: 50%; bottom: 0;
+  transform: translate(-50%, 30%);
+  width: 600px; height: 240px;
+  background: radial-gradient(ellipse at center,
+    rgba(255,0,200,0.55) 0%,
+    rgba(0,255,255,0.35) 40%,
+    transparent 70%);
+  filter: blur(40px);
+  pointer-events: none;
+}
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   HOLOGRAPHIC GRADIENT TEXT :: hue-rotates, magenta→cyan→lime→amber→loop
+   ═════════════════════════════════════════════════════════════════════════════ */
+.holo-text {
+  background: linear-gradient(135deg,
+    var(--holo-1) 0%,
+    var(--holo-2) 25%,
+    var(--holo-3) 50%,
+    var(--holo-4) 75%,
+    var(--holo-5) 100%);
+  background-size: 300% 300%;
+  -webkit-background-clip: text;
+          background-clip: text;
+  -webkit-text-fill-color: transparent;
+          color: transparent;
+  animation: holo-shift 6s linear infinite;
+  filter: drop-shadow(0 0 12px rgba(255,0,200,0.45));
+}
+@keyframes holo-shift {
+  0%   { background-position:   0%   50%; }
+  50%  { background-position: 100%   50%; }
+  100% { background-position:   0%   50%; }
+}
+
+.holo-bg {
+  background: linear-gradient(135deg,
+    var(--holo-1), var(--holo-2), var(--holo-3), var(--holo-4), var(--holo-5));
+  background-size: 300% 300%;
+  animation: holo-shift 6s linear infinite;
+}
+
+/* Iridescent border ring */
+.holo-ring {
+  position: relative;
+  isolation: isolate;
+}
+.holo-ring::before {
+  content: '';
+  position: absolute; inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg,
+    var(--holo-1), var(--holo-2), var(--holo-3), var(--holo-4), var(--holo-5));
+  background-size: 300% 300%;
+  animation: holo-shift 4s linear infinite;
+  -webkit-mask:
+     linear-gradient(#000 0 0) content-box,
+     linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   GLITCH TEXT :: RGB channel offset + horizontal slice displacement
+   ═════════════════════════════════════════════════════════════════════════════ */
+.glitch {
+  position: relative;
+  display: inline-block;
+  color: var(--fg);
+}
+.glitch::before,
+.glitch::after {
+  content: attr(data-text);
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  overflow: hidden;
+  pointer-events: none;
+}
+.glitch::before {
+  color: var(--neon-pink);
+  text-shadow: 2px 0 var(--neon-pink);
+  clip-path: inset(0 0 0 0);
+  transform: translate(0,0);
+  animation: glitch-r 3.6s steps(1, end) infinite;
+  mix-blend-mode: screen;
+}
+.glitch::after {
+  color: var(--neon-cyan);
+  text-shadow: -2px 0 var(--neon-cyan);
+  clip-path: inset(0 0 0 0);
+  transform: translate(0,0);
+  animation: glitch-l 3.6s steps(1, end) infinite;
+  mix-blend-mode: screen;
+}
+@keyframes glitch-r {
+  0%, 100%  { transform: translate(0,0);    clip-path: inset(0 0 0 0); }
+  3%        { transform: translate(2px,-1px); clip-path: inset(20% 0 60% 0); }
+  6%        { transform: translate(0,0);     clip-path: inset(0 0 0 0); }
+  35%       { transform: translate(3px,1px); clip-path: inset(45% 0 30% 0); }
+  37%       { transform: translate(0,0);     clip-path: inset(0 0 0 0); }
+  72%       { transform: translate(2px,0);   clip-path: inset(70% 0 8% 0); }
+  74%       { transform: translate(0,0);     clip-path: inset(0 0 0 0); }
+}
+@keyframes glitch-l {
+  0%, 100%  { transform: translate(0,0);     clip-path: inset(0 0 0 0); }
+  3%        { transform: translate(-2px,1px); clip-path: inset(60% 0 20% 0); }
+  6%        { transform: translate(0,0);      clip-path: inset(0 0 0 0); }
+  35%       { transform: translate(-3px,-1px); clip-path: inset(15% 0 65% 0); }
+  37%       { transform: translate(0,0);     clip-path: inset(0 0 0 0); }
+  72%       { transform: translate(-2px,0);  clip-path: inset(8% 0 70% 0); }
+  74%       { transform: translate(0,0);     clip-path: inset(0 0 0 0); }
+}
+
+/* Heavy on-load glitch (the manifesto + headline) */
+.glitch-load {
+  animation: glitch-burst 1.4s ease-out 1 both;
+}
+@keyframes glitch-burst {
+  0%   { transform: translateX(-8px) skewX(8deg); filter: hue-rotate(60deg) blur(2px); opacity: 0; }
+  18%  { transform: translateX(6px)  skewX(-4deg); filter: hue-rotate(0deg)  blur(0); opacity: 0.7; }
+  22%  { transform: translateX(-3px) skewX(2deg); filter: hue-rotate(120deg) blur(1px); }
+  26%  { transform: translateX(2px)  skewX(0); filter: hue-rotate(0); }
+  100% { transform: translateX(0);   skewX(0); filter: none; opacity: 1; }
+}
+
+/* Hover glitch (patient names) */
+.glitch-hover { position: relative; transition: color 80ms; }
+.glitch-hover:hover { color: var(--neon-cyan); animation: hover-glitch 220ms steps(3, end) 2; }
+@keyframes hover-glitch {
+  0%, 100% { transform: translate(0,0); text-shadow: none; }
+  20%      { transform: translate(-2px, 1px); text-shadow: 2px 0 var(--neon-pink), -2px 0 var(--neon-cyan); }
+  40%      { transform: translate(2px, -1px); text-shadow: -2px 0 var(--neon-pink), 2px 0 var(--neon-green); }
+  60%      { transform: translate(-1px, 0);  text-shadow: 2px 0 var(--neon-cyan); }
+}
+
+/* Glitch flash (status ticks, REC badge) */
+@keyframes glitch-flash {
+  0%, 100% { opacity: 1; transform: scale(1); filter: none; }
+  10%      { opacity: 0; transform: scale(1.2); }
+  20%      { opacity: 1; transform: scale(0.95); filter: hue-rotate(180deg); }
+  30%      { opacity: 1; transform: scale(1); filter: none; }
+}
+.glitch-flash { animation: glitch-flash 0.4s ease-out; }
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   ANGULAR HUD CARDS :: clip-path corner cuts (sci-fi chrome)
+   ═════════════════════════════════════════════════════════════════════════════ */
+.hud-card {
+  position: relative;
+  background: linear-gradient(180deg, rgba(21,21,42,0.95), rgba(10,10,24,0.95));
+  border: 1px solid var(--line-soft);
+  clip-path: polygon(
+    0 12px,
+    12px 0,
+    calc(100% - 24px) 0,
+    100% 24px,
+    100% calc(100% - 12px),
+    calc(100% - 12px) 100%,
+    24px 100%,
+    0 calc(100% - 24px)
+  );
+  padding: 20px;
+}
+.hud-card-cyan   { border-color: var(--line-cyan);  box-shadow: 0 0 0 1px var(--line-cyan), 0 0 24px rgba(0,255,255,0.15) inset; }
+.hud-card-pink   { border-color: var(--line-pink);  box-shadow: 0 0 0 1px var(--line-pink), 0 0 24px rgba(255,0,128,0.18) inset; }
+.hud-card-green  { border-color: var(--line-green); box-shadow: 0 0 0 1px var(--line-green),0 0 24px rgba(57,255,20,0.12) inset; }
+
+/* The smaller-cut variant for inline pills */
+.hud-cut {
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+}
+.hud-cut-tight {
+  clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px));
+}
+
+/* HUD card with corner brackets (Blade Runner style) */
+.hud-bracket {
+  position: relative;
+}
+.hud-bracket::before,
+.hud-bracket::after {
+  content: '';
+  position: absolute;
+  width: 14px; height: 14px;
+  border: 2px solid var(--neon-cyan);
+  pointer-events: none;
+}
+.hud-bracket::before { top: -4px; left: -4px; border-right: none; border-bottom: none; }
+.hud-bracket::after  { bottom: -4px; right: -4px; border-left: none; border-top: none; }
+
+.hud-bracket-pink::before,
+.hud-bracket-pink::after { border-color: var(--neon-pink); }
+.hud-bracket-green::before,
+.hud-bracket-green::after { border-color: var(--neon-green); }
+
+/* Four-corner brackets variant */
+.hud-corners {
+  position: relative;
+}
+.hud-corners > .corner {
+  position: absolute;
+  width: 18px; height: 18px;
+  pointer-events: none;
+  border: 2px solid var(--neon-cyan);
+}
+.hud-corners > .corner.tl { top: -3px; left: -3px;  border-right: none; border-bottom: none; }
+.hud-corners > .corner.tr { top: -3px; right: -3px; border-left:  none; border-bottom: none; }
+.hud-corners > .corner.bl { bottom: -3px; left: -3px;  border-right: none; border-top: none; }
+.hud-corners > .corner.br { bottom: -3px; right: -3px; border-left:  none; border-top: none; }
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   NEON GLOW HALOS
+   ═════════════════════════════════════════════════════════════════════════════ */
+.glow-pink   { box-shadow: 0 0 18px rgba(255,0,128,0.55), 0 0 40px rgba(255,0,128,0.3), inset 0 0 8px rgba(255,0,128,0.4); }
+.glow-cyan   { box-shadow: 0 0 18px rgba(0,255,255,0.55), 0 0 40px rgba(0,255,255,0.3), inset 0 0 8px rgba(0,255,255,0.4); }
+.glow-green  { box-shadow: 0 0 18px rgba(57,255,20,0.45), 0 0 40px rgba(57,255,20,0.25), inset 0 0 8px rgba(57,255,20,0.35); }
+.glow-multi  { box-shadow: 0 0 18px rgba(255,0,128,0.45), 0 0 36px rgba(0,255,255,0.35), 0 0 64px rgba(57,255,20,0.25); }
+
+.text-glow-pink  { text-shadow: 0 0 8px rgba(255,0,128,0.85), 0 0 18px rgba(255,0,128,0.6); }
+.text-glow-cyan  { text-shadow: 0 0 8px rgba(0,255,255,0.85), 0 0 18px rgba(0,255,255,0.6); }
+.text-glow-green { text-shadow: 0 0 8px rgba(57,255,20,0.85),  0 0 18px rgba(57,255,20,0.55); }
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   NEON CTA BUTTONS
+   ═════════════════════════════════════════════════════════════════════════════ */
+.btn-neon {
+  position: relative;
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 12px 22px;
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--neon-cyan);
+  background: rgba(0,255,255,0.04);
+  border: 1px solid var(--neon-cyan);
+  clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+  cursor: pointer;
+  transition: all var(--t-base) var(--snap);
+  text-shadow: 0 0 6px rgba(0,255,255,0.6);
+  box-shadow: 0 0 14px rgba(0,255,255,0.3), inset 0 0 14px rgba(0,255,255,0.08);
+}
+.btn-neon:hover {
+  color: var(--void);
+  background: var(--neon-cyan);
+  text-shadow: none;
+  box-shadow: 0 0 28px rgba(0,255,255,0.85), 0 0 60px rgba(0,255,255,0.5);
+  transform: translateY(-1px);
+}
+
+.btn-neon-pink  { color: var(--neon-pink);  border-color: var(--neon-pink);  background: rgba(255,0,128,0.04); box-shadow: 0 0 14px rgba(255,0,128,0.3), inset 0 0 14px rgba(255,0,128,0.08); text-shadow: 0 0 6px rgba(255,0,128,0.6); }
+.btn-neon-pink:hover  { background: var(--neon-pink);  color: var(--void); box-shadow: 0 0 28px rgba(255,0,128,0.85), 0 0 60px rgba(255,0,128,0.5); }
+
+.btn-neon-green { color: var(--neon-green); border-color: var(--neon-green); background: rgba(57,255,20,0.04); box-shadow: 0 0 14px rgba(57,255,20,0.25), inset 0 0 14px rgba(57,255,20,0.06); text-shadow: 0 0 6px rgba(57,255,20,0.6); }
+.btn-neon-green:hover { background: var(--neon-green); color: var(--void); box-shadow: 0 0 28px rgba(57,255,20,0.7), 0 0 60px rgba(57,255,20,0.45); }
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   KEYBOARD CHIPS (kbd) — cyberpunk respects keyboard
+   ═════════════════════════════════════════════════════════════════════════════ */
+.kbd {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 22px; height: 22px;
+  padding: 0 6px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--neon-cyan);
+  background: rgba(0,255,255,0.06);
+  border: 1px solid var(--line-cyan);
+  border-radius: 3px;
+  letter-spacing: 0.06em;
+  text-shadow: 0 0 4px rgba(0,255,255,0.5);
+  transition: all var(--t-fast) var(--snap);
+}
+.kbd:hover, *:hover > .kbd, [data-kbd-pulse]:hover .kbd {
+  background: var(--neon-cyan);
+  color: var(--void);
+  text-shadow: none;
+  box-shadow: 0 0 10px rgba(0,255,255,0.8);
+  animation: kbd-pulse 240ms infinite alternate;
+}
+@keyframes kbd-pulse {
+  0%   { box-shadow: 0 0 10px rgba(0,255,255,0.8); }
+  100% { box-shadow: 0 0 20px rgba(0,255,255,1), 0 0 32px rgba(0,255,255,0.5); }
+}
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   STATUS PILLS (cyberpunk-flavored)
+   ═════════════════════════════════════════════════════════════════════════════ */
+.cp-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  border: 1px solid;
+  clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px));
+}
+.cp-pill::before {
+  content: ''; width: 6px; height: 6px; border-radius: 50%;
+  display: inline-block;
+}
+.cp-pill-rec    { color: var(--neon-pink);  border-color: var(--neon-pink);  background: rgba(255,0,128,0.08); }
+.cp-pill-rec::before { background: var(--neon-pink); box-shadow: 0 0 8px var(--neon-pink); animation: blink 1s steps(2) infinite; }
+.cp-pill-proc   { color: var(--neon-cyan);  border-color: var(--neon-cyan);  background: rgba(0,255,255,0.08); }
+.cp-pill-proc::before { background: var(--neon-cyan); box-shadow: 0 0 8px var(--neon-cyan); animation: blink 0.6s steps(2) infinite; }
+.cp-pill-ready  { color: var(--neon-green); border-color: var(--neon-green); background: rgba(57,255,20,0.08); }
+.cp-pill-ready::before{ background: var(--neon-green); box-shadow: 0 0 8px var(--neon-green); }
+.cp-pill-warn   { color: #FFD600; border-color: #FFD600; background: rgba(255,214,0,0.08); }
+.cp-pill-warn::before { background: #FFD600; box-shadow: 0 0 8px #FFD600; }
+.cp-pill-err    { color: var(--status-err); border-color: var(--status-err); background: rgba(255,0,64,0.08); }
+.cp-pill-err::before  { background: var(--status-err); box-shadow: 0 0 8px var(--status-err); animation: blink 0.4s steps(2) infinite; }
+
+@keyframes blink { 50% { opacity: 0; } }
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   BLADE RUNNER SPINNER — Recording widget
+   ═════════════════════════════════════════════════════════════════════════════ */
+.spinner-rig {
+  position: relative;
+  width: 480px; height: 480px;
+  display: grid;
+  place-items: center;
+  margin: 0 auto;
+}
+.spinner-rig .ring {
+  position: absolute;
+  border-radius: 50%;
+  border-style: solid;
+  pointer-events: none;
+  inset: 0;
+}
+.ring-1 {
+  border: 1px dashed rgba(255,0,200,0.55);
+  animation: spin-cw 14s linear infinite;
+  filter: drop-shadow(0 0 4px rgba(255,0,200,0.6));
+}
+.ring-2 {
+  inset: 36px;
+  border: 1px solid rgba(0,255,255,0.6);
+  border-top: 2px solid var(--neon-cyan);
+  border-right: 2px solid transparent;
+  animation: spin-cw 6s linear infinite;
+  filter: drop-shadow(0 0 5px rgba(0,255,255,0.7));
+}
+.ring-3 {
+  inset: 80px;
+  border: 1px dashed rgba(57,255,20,0.6);
+  border-bottom: 2px solid var(--neon-green);
+  animation: spin-ccw 10s linear infinite;
+  filter: drop-shadow(0 0 4px rgba(57,255,20,0.5));
+}
+.ring-4 {
+  inset: 120px;
+  border: 1px solid rgba(255,0,200,0.4);
+  border-top: 2px solid var(--neon-pink);
+  animation: spin-cw 4s linear infinite;
+  filter: drop-shadow(0 0 6px rgba(255,0,128,0.7));
+}
+.ring-5 {
+  inset: 160px;
+  border: 2px solid rgba(0,255,255,0.4);
+  border-left: 3px solid var(--neon-cyan);
+  border-right: 3px solid transparent;
+  animation: spin-ccw 2s linear infinite;
+  filter: drop-shadow(0 0 8px rgba(0,255,255,0.85));
+}
+
+/* tick marks ring */
+.ring-ticks {
+  inset: 4px;
+  background:
+    repeating-conic-gradient(
+      from 0deg,
+      rgba(0,255,255,0.5) 0deg 0.5deg,
+      transparent       0.5deg  6deg);
+  border-radius: 50%;
+  -webkit-mask: radial-gradient(circle, transparent 49%, #000 50%, #000 51%, transparent 52%);
+          mask: radial-gradient(circle, transparent 49%, #000 50%, #000 51%, transparent 52%);
+  filter: drop-shadow(0 0 4px rgba(0,255,255,0.6));
+  animation: spin-cw 60s linear infinite;
+}
+
+@keyframes spin-cw  { 100% { transform: rotate(360deg);  } }
+@keyframes spin-ccw { 100% { transform: rotate(-360deg); } }
+
+.spinner-core {
+  position: relative;
+  width: 140px; height: 140px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, rgba(255,0,200,0.55), rgba(10,10,24,0.95) 65%);
+  display: grid; place-items: center;
+  border: 1px solid var(--line-pink);
+  box-shadow:
+    inset 0 0 30px rgba(255,0,200,0.5),
+    0 0 28px rgba(255,0,200,0.5),
+    0 0 80px rgba(0,255,255,0.25);
+  animation: core-pulse 1.4s ease-in-out infinite alternate;
+}
+@keyframes core-pulse {
+  0%   { box-shadow: inset 0 0 30px rgba(255,0,200,0.5), 0 0 28px rgba(255,0,200,0.5), 0 0 80px rgba(0,255,255,0.25); }
+  100% { box-shadow: inset 0 0 50px rgba(255,0,200,0.7), 0 0 50px rgba(255,0,200,0.8), 0 0 130px rgba(0,255,255,0.45); }
+}
+
+/* Orbital data points around the spinner */
+.orbital {
+  position: absolute;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  padding: 6px 12px;
+  border: 1px solid var(--line-cyan);
+  background: rgba(10,10,24,0.85);
+  color: var(--neon-cyan);
+  clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px));
+  text-shadow: 0 0 4px rgba(0,255,255,0.6);
+}
+.orbital-pink  { border-color: var(--line-pink);  color: var(--neon-pink);  text-shadow: 0 0 4px rgba(255,0,128,0.6); }
+.orbital-green { border-color: var(--line-green); color: var(--neon-green); text-shadow: 0 0 4px rgba(57,255,20,0.6); }
+
+/* Audio amplitude bars */
+.amp-bars {
+  display: inline-flex; align-items: end; gap: 2px; height: 14px;
+}
+.amp-bars span {
+  display: inline-block;
+  width: 3px;
+  background: var(--neon-cyan);
+  box-shadow: 0 0 4px var(--neon-cyan);
+  animation: amp 0.6s ease-in-out infinite alternate;
+}
+.amp-bars span:nth-child(1) { animation-delay: 0.0s; height: 30%; }
+.amp-bars span:nth-child(2) { animation-delay: 0.1s; height: 60%; }
+.amp-bars span:nth-child(3) { animation-delay: 0.2s; height: 80%; }
+.amp-bars span:nth-child(4) { animation-delay: 0.05s;height: 50%; }
+.amp-bars span:nth-child(5) { animation-delay: 0.3s; height: 90%; }
+.amp-bars span:nth-child(6) { animation-delay: 0.15s;height: 40%; }
+.amp-bars span:nth-child(7) { animation-delay: 0.25s;height: 70%; }
+@keyframes amp {
+  0%   { transform: scaleY(0.3); }
+  100% { transform: scaleY(1); }
+}
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   NEURAL PULSE — pipeline stages (magenta→cyan→lime sequence)
+   ═════════════════════════════════════════════════════════════════════════════ */
+.pipeline-stage {
+  position: relative;
+  flex: 1 1 0;
+  padding: 14px 12px;
+  border: 1px solid var(--line-soft);
+  background: rgba(10,10,24,0.7);
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+  text-align: center;
+  transition: all var(--t-base) var(--snap);
+}
+.pipeline-stage[data-active="true"] {
+  border-color: var(--neon-cyan);
+  box-shadow: 0 0 18px rgba(0,255,255,0.5), inset 0 0 18px rgba(0,255,255,0.18);
+  animation: stage-pulse 0.8s ease-in-out infinite alternate;
+}
+.pipeline-stage[data-done="true"] {
+  border-color: var(--neon-green);
+  color: var(--neon-green);
+  background: rgba(57,255,20,0.04);
+}
+.pipeline-stage[data-pending="true"] {
+  opacity: 0.45;
+}
+@keyframes stage-pulse {
+  0%   { filter: hue-rotate(0deg)   brightness(1); }
+  50%  { filter: hue-rotate(60deg)  brightness(1.2); }
+  100% { filter: hue-rotate(120deg) brightness(1); }
+}
+
+/* Pipeline connector — neural pulse */
+.pipeline-connector {
+  position: relative;
+  flex: 0 0 32px;
+  height: 2px;
+  align-self: center;
+  background: linear-gradient(90deg, var(--neon-pink), var(--neon-cyan), var(--neon-green));
+  background-size: 200% 100%;
+  animation: connector-pulse 2s linear infinite;
+  overflow: visible;
+}
+.pipeline-connector::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--neon-cyan);
+  box-shadow: 0 0 8px var(--neon-cyan);
+  left: 0;
+  animation: particle-drift 1.4s linear infinite;
+}
+@keyframes connector-pulse {
+  0%   { background-position: 0 0; }
+  100% { background-position: 200% 0; }
+}
+@keyframes particle-drift {
+  0%   { left: -6px; opacity: 0; }
+  20%  { opacity: 1; }
+  80%  { opacity: 1; }
+  100% { left: calc(100% + 6px); opacity: 0; }
+}
+
+/* Sweeping scanline across pipeline */
+.pipeline-scanner {
+  position: absolute;
+  top: 0; left: 0;
+  width: 80px; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(0,255,255,0.4), transparent);
+  pointer-events: none;
+  animation: scan-sweep 3s linear infinite;
+}
+@keyframes scan-sweep {
+  0%   { transform: translateX(-80px); }
+  100% { transform: translateX(calc(100vw + 80px)); }
+}
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   TERMINAL TABLE — sci-fi visit list
+   ═════════════════════════════════════════════════════════════════════════════ */
+.term-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 13px;
+}
+.term-table thead th {
+  text-align: left;
+  padding: 10px 14px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--neon-cyan);
+  border-bottom: 1px solid var(--line-cyan);
+  background: linear-gradient(180deg, rgba(0,255,255,0.05), transparent);
+  text-shadow: 0 0 6px rgba(0,255,255,0.5);
+}
+.term-table tbody tr {
+  transition: all var(--t-fast) var(--snap);
+  position: relative;
+}
+.term-table tbody td {
+  padding: 14px;
+  border-bottom: 1px solid rgba(170,140,255,0.1);
+  color: var(--fg-2);
+}
+.term-table tbody tr:hover {
+  background: linear-gradient(90deg, rgba(255,0,128,0.05), rgba(0,255,255,0.05));
+  box-shadow: inset 3px 0 0 var(--neon-pink), inset -3px 0 0 var(--neon-cyan);
+}
+.term-table tbody tr:hover td {
+  color: var(--fg);
+  text-shadow: 0 0 6px rgba(255,255,255,0.2);
+}
+
+/* Glitch on row hover */
+.term-table tbody tr:hover .row-name {
+  animation: hover-glitch 220ms steps(3, end) 2;
+  color: var(--neon-cyan);
+}
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   SECTOR LABEL — § 01 / NEURAL_LOG
+   ═════════════════════════════════════════════════════════════════════════════ */
+.sector-label {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--neon-cyan);
+  text-shadow: 0 0 4px rgba(0,255,255,0.45);
+}
+.sector-label::before {
+  content: '';
+  width: 24px; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--neon-cyan));
+}
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   SEPARATOR BAR — full-width neon-pink-to-cyan gradient with glitch reveal
+   ═════════════════════════════════════════════════════════════════════════════ */
+.sep-bar {
+  position: relative;
+  width: 100%;
+  padding: 56px 24px;
+  background:
+    linear-gradient(90deg,
+      rgba(255,0,128,0.85) 0%,
+      rgba(255,0,200,0.4) 25%,
+      rgba(0,255,255,0.4) 75%,
+      rgba(0,255,255,0.85) 100%),
+    linear-gradient(90deg, var(--void), var(--void));
+  background-blend-mode: normal;
+  overflow: hidden;
+  border-top: 1px solid rgba(255,0,128,0.6);
+  border-bottom: 1px solid rgba(0,255,255,0.6);
+  text-align: center;
+}
+.sep-bar::before {
+  content: '';
+  position: absolute; inset: 0;
+  background-image: repeating-linear-gradient(
+    0deg,
+    rgba(0,0,0,0) 0px,
+    rgba(0,0,0,0) 2px,
+    rgba(0,0,0,0.25) 3px,
+    rgba(0,0,0,0) 4px);
+  pointer-events: none;
+}
+.sep-bar::after {
+  content: '';
+  position: absolute; inset: 0;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100'><filter id='n'><feTurbulence baseFrequency='0.95' numOctaves='2'/><feColorMatrix values='0 0 0 0 0   0 0 0 0 0   0 0 0 0 0   0 0 0 0.4 0'/></filter><rect width='100%' height='100%' filter='url(%23n)' /></svg>");
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   DATA-VIZ — orbital radar / heart-rate-style scope
+   ═════════════════════════════════════════════════════════════════════════════ */
+.radar {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, rgba(0,255,255,0.05), transparent 70%),
+    repeating-radial-gradient(circle,
+       transparent 0,
+       transparent 22px,
+       rgba(0,255,255,0.18) 23px,
+       transparent 24px);
+  border: 1px solid var(--line-cyan);
+  overflow: hidden;
+}
+.radar::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: conic-gradient(from 0deg,
+    rgba(0,255,255,0.45) 0deg,
+    transparent          90deg,
+    transparent          360deg);
+  animation: spin-cw 4s linear infinite;
+}
+.radar::after {
+  content: '';
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 4px; height: 4px;
+  background: var(--neon-pink);
+  border-radius: 50%;
+  box-shadow: 0 0 8px var(--neon-pink), 0 0 16px var(--neon-pink);
+  transform: translate(-50%, -50%);
+}
+.radar .blip {
+  position: absolute;
+  width: 4px; height: 4px; border-radius: 50%;
+  background: var(--neon-green);
+  box-shadow: 0 0 8px var(--neon-green);
+  animation: blink 1.4s steps(2) infinite;
+}
+
+/* Heart-rate scope */
+.scope {
+  position: relative;
+  width: 100%;
+  height: 70px;
+  background:
+    repeating-linear-gradient(0deg, rgba(0,255,255,0.06) 0 1px, transparent 1px 14px),
+    repeating-linear-gradient(90deg, rgba(0,255,255,0.06) 0 1px, transparent 1px 14px),
+    var(--void-1);
+  border: 1px solid var(--line-cyan);
+  overflow: hidden;
+}
+.scope svg {
+  width: 100%; height: 100%;
+}
+.scope .scope-line {
+  stroke: var(--neon-cyan);
+  stroke-width: 1.5;
+  fill: none;
+  filter: drop-shadow(0 0 3px var(--neon-cyan));
+  stroke-dasharray: 4000;
+  stroke-dashoffset: 4000;
+  animation: scope-draw 4s linear infinite;
+}
+@keyframes scope-draw {
+  0%   { stroke-dashoffset: 4000; }
+  100% { stroke-dashoffset: 0; }
+}
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   MISC — manifesto, dividers, marquee
+   ═════════════════════════════════════════════════════════════════════════════ */
+.manifesto-rule {
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--neon-pink), var(--neon-pink), transparent);
+  filter: drop-shadow(0 0 6px var(--neon-pink));
+}
+
+.marquee {
+  overflow: hidden;
+  white-space: nowrap;
+  border-top: 1px solid var(--line-cyan);
+  border-bottom: 1px solid var(--line-cyan);
+  background: rgba(0,255,255,0.04);
+}
+.marquee-track {
+  display: inline-flex;
+  animation: marquee-roll 32s linear infinite;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--neon-cyan);
+  text-shadow: 0 0 4px rgba(0,255,255,0.5);
+  padding: 8px 0;
+}
+.marquee-track > span { padding: 0 32px; border-right: 1px solid var(--line-cyan); }
+@keyframes marquee-roll {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* Numbered fixed grid layout for the giant Blade Runner orbital labels */
+.orbit-pos-tl { top: 4%;  left: 8%;   transform: translate(-10%, -50%); }
+.orbit-pos-tr { top: 8%;  right: 4%;  transform: translate(10%, -50%); }
+.orbit-pos-r  { top: 50%; right: -8%; transform: translate(20%, -50%); }
+.orbit-pos-br { bottom: 6%; right: 8%; transform: translate(10%, 50%); }
+.orbit-pos-bl { bottom: 8%; left: 4%; transform: translate(-10%, 50%); }
+.orbit-pos-l  { top: 50%; left: -8%; transform: translate(-20%, -50%); }
+.orbit-pos-tm { top: -10%; left: 50%; transform: translate(-50%, 0); }
+.orbit-pos-bm { bottom: -10%; left: 50%; transform: translate(-50%, 0); }
+
+/* dashed pinging lines from spinner to data points */
+.orbit-line {
+  position: absolute;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--neon-cyan), transparent);
+  transform-origin: left center;
+  pointer-events: none;
+  opacity: 0.5;
+  animation: line-pulse 2s ease-in-out infinite alternate;
+}
+@keyframes line-pulse {
+  0% { opacity: 0.2; }
+  100% { opacity: 0.7; }
+}
+
+/* On-load reveal */
+@keyframes fade-rise {
+  0% { opacity: 0; transform: translateY(8px); filter: blur(6px); }
+  100% { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+.fade-rise { animation: fade-rise 600ms var(--snap) both; }
+.delay-1 { animation-delay: 100ms; }
+.delay-2 { animation-delay: 200ms; }
+.delay-3 { animation-delay: 300ms; }
+.delay-4 { animation-delay: 400ms; }
+.delay-5 { animation-delay: 500ms; }
+.delay-6 { animation-delay: 600ms; }
+
+/* Direction badge */
+.dir-badge {
+  font-family: 'Share Tech Mono', monospace;
+  letter-spacing: 0.28em;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+</style>
+</head>
+
+<body class="scanlines noise-overlay screen-flicker">
+
+<!-- ═════════════════════════════════════════════════════════════════════════════
+     SUB-NAV / TOP HUD STRIP
+     ═════════════════════════════════════════════════════════════════════════════ -->
+<nav class="border-b border-cyan-500/20 backdrop-blur-md" style="background: rgba(5,5,14,0.8); position: sticky; top: 0; z-index: 50;">
+  <div class="max-w-[1480px] mx-auto px-6 py-3 flex items-center gap-6">
+    <div class="flex items-center gap-3">
+      <!-- Q-mark sigil with holographic fill -->
+      <div class="relative w-8 h-8 hud-cut-tight" style="background: linear-gradient(135deg, var(--holo-1), var(--holo-2), var(--holo-3)); background-size: 200% 200%; animation: holo-shift 4s linear infinite;">
+        <div class="absolute inset-[1px] hud-cut-tight grid place-items-center font-russo text-lg" style="background: var(--void); color: var(--neon-cyan); text-shadow: 0 0 8px var(--neon-cyan);">Q</div>
+      </div>
+      <div>
+        <div class="font-display text-[14px] holo-text">QUILLMD</div>
+        <div class="font-tech text-[8px] tracking-[0.32em] text-cyan-300/70">// NETRUNNER_OS_v4.0.1</div>
+      </div>
+    </div>
+
+    <span class="dir-badge text-pink-400/80 hud-cut-tight px-3 py-1 border border-pink-500/40" style="background: rgba(255,0,128,0.06);">// DIR_03 :: CYBERPUNK</span>
+
+    <div class="flex-1 flex items-center gap-2 max-w-md ml-6">
+      <div class="flex-1 relative">
+        <div class="hud-cut border border-cyan-500/40 bg-cyan-500/5 px-3 py-1.5 font-mono text-[12px] text-cyan-300/80 flex items-center gap-2">
+          <span class="text-pink-400">&gt;</span>
+          <span class="opacity-70">SEARCH ROUTINE :: PATIENT // VISIT // ICD</span>
+        </div>
+      </div>
+      <span class="kbd">CTRL</span><span class="kbd">K</span>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <span class="cp-pill cp-pill-ready">UPLINK_OK</span>
+      <span class="font-tech text-[10px] text-cyan-300/70">DR. K_TANAKA / NETRUNNER_LV.7</span>
+      <div class="w-8 h-8 hud-cut-tight grid place-items-center border border-cyan-500/50 font-russo text-cyan-400 text-sm" style="background: rgba(0,255,255,0.08);">KT</div>
+    </div>
+  </div>
+</nav>
+
+<!-- ═════════════════════════════════════════════════════════════════════════════
+     MANIFESTO — between two neon-pink scanlines, glitches on load
+     ═════════════════════════════════════════════════════════════════════════════ -->
+<section class="relative">
+  <div class="max-w-[1080px] mx-auto px-6 pt-20 pb-12">
+    <div class="text-center mb-3">
+      <div class="sector-label justify-center">// MANIFESTO :: SYSTEM_ANNOUNCE :: CHANNEL_NULL_NULL_ZERO</div>
+    </div>
+
+    <div class="manifesto-rule mb-8"></div>
+
+    <p class="glitch-load font-mono text-[15px] md:text-[18px] leading-[1.85] text-center max-w-[920px] mx-auto" style="color: var(--fg-2);">
+      <span class="font-tech text-pink-400 text-glow-pink">&gt;_</span>
+      <span class="holo-text font-russo text-[20px] md:text-[24px]">THIS IS CYBERPUNK.</span>
+      <span class="block mt-3">
+        We believe medicine in <span class="text-cyan-300 text-glow-cyan font-russo">2026</span> should look like the future you were promised.
+        We refuse <span class="text-pink-400 text-glow-pink line-through decoration-2">beige enterprise</span> and the
+        <span class="font-russo text-fuchsia-300">silent gravity of tasteful tech</span>. The doctor is a
+        <span class="holo-text font-russo">netrunner</span>; the visit is a
+        <span class="text-green-400 text-glow-green">data-jack</span>; the SOAP note is a
+        <span class="text-cyan-300 text-glow-cyan">subroutine compiled from voice</span>.
+        We jack in. We sign. We exit. <span class="text-pink-400 text-glow-pink font-russo">No apologies.</span>
+      </span>
+      <span class="font-tech text-cyan-300 text-glow-cyan">_&lt;</span>
+    </p>
+
+    <div class="manifesto-rule mt-8"></div>
+
+    <div class="text-center mt-3">
+      <div class="sector-label justify-center text-pink-400/80" style="text-shadow: 0 0 4px rgba(255,0,128,0.5);">
+        // END_TRANSMISSION :: <span class="font-mono opacity-60">2026.04.29 // 03:11:42 JST</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════════════════════════════════════════════════════════════════════════
+     SECTION 1 — LANDING / HERO + RECORDING SPINNER
+     ═════════════════════════════════════════════════════════════════════════════ -->
+<section class="relative overflow-hidden" style="background: radial-gradient(ellipse 100% 70% at 50% 50%, rgba(74, 0, 130, 0.25), transparent 70%), var(--void);">
+  <!-- Animated grid backdrop with vanishing point -->
+  <div class="neon-grid-perspective"></div>
+  <div class="vanishing-glow"></div>
+
+  <div class="max-w-[1480px] mx-auto px-6 pt-20 pb-12 relative z-10">
+
+    <!-- Sector tag -->
+    <div class="sector-label mb-6"><span>§ 01</span> // LANDING_HERO :: PUBLIC_INTERFACE</div>
+
+    <!-- HERO HEADLINE -->
+    <div class="grid grid-cols-12 gap-8 items-center">
+      <div class="col-span-12 lg:col-span-7 fade-rise">
+        <div class="cp-pill cp-pill-rec mb-6">// LIVE_BUILD :: v4_NEON_MILESTONE_03</div>
+
+        <h1 class="font-display font-black text-[64px] md:text-[88px] leading-[0.92] tracking-tight mb-6 glitch-load">
+          <span class="block holo-text">JACK INTO</span>
+          <span class="block glitch text-glow-cyan" data-text="THE VISIT.">THE VISIT.</span>
+          <span class="block holo-text">SIGN OUT.</span>
+        </h1>
+
+        <p class="font-mono text-[16px] leading-[1.7] mb-8 max-w-[560px]" style="color: var(--fg-2);">
+          <span class="text-cyan-300 text-glow-cyan">QuillMD</span> is the <span class="holo-text font-russo">AI scribe</span> for clinicians who want their tools to look like
+          <span class="text-pink-400 text-glow-pink">2049</span>, not 2009. Speak the visit.
+          The neural pipeline returns a <span class="text-green-400 text-glow-green font-russo">structured SOAP note</span>,
+          ICD-10 candidates, CPT brackets, and Rx safety scans in <span class="font-russo text-fuchsia-300">≤ 90 seconds</span>.
+        </p>
+
+        <div class="flex flex-wrap items-center gap-4 mb-8">
+          <button class="btn-neon btn-neon-pink" data-kbd-pulse>
+            <span>JACK_IN // START_VISIT</span>
+            <span class="kbd">⏎</span>
+          </button>
+          <button class="btn-neon" data-kbd-pulse>
+            <span>VIEW_DEMO_LOG</span>
+            <span class="kbd">D</span>
+          </button>
+          <button class="btn-neon btn-neon-green" data-kbd-pulse>
+            <span>READ_SPEC.MD</span>
+            <span class="kbd">/</span>
+          </button>
+        </div>
+
+        <!-- Trust strip / specs -->
+        <div class="grid grid-cols-3 gap-3 max-w-[560px]">
+          <div class="hud-cut border border-cyan-500/30 px-3 py-2" style="background: rgba(0,255,255,0.04);">
+            <div class="font-tech text-[9px] tracking-[0.28em] text-cyan-300/70 uppercase">latency</div>
+            <div class="font-russo text-[18px] text-cyan-300 text-glow-cyan">62.4s</div>
+            <div class="font-tech text-[9px] text-fg-3">// p50_pipeline</div>
+          </div>
+          <div class="hud-cut border border-pink-500/30 px-3 py-2" style="background: rgba(255,0,128,0.04);">
+            <div class="font-tech text-[9px] tracking-[0.28em] text-pink-300/70 uppercase">accuracy</div>
+            <div class="font-russo text-[18px] text-pink-300 text-glow-pink">98.2%</div>
+            <div class="font-tech text-[9px] text-fg-3">// soap_validation</div>
+          </div>
+          <div class="hud-cut border border-green-500/30 px-3 py-2" style="background: rgba(57,255,20,0.04);">
+            <div class="font-tech text-[9px] tracking-[0.28em] text-green-300/70 uppercase">phi_redact</div>
+            <div class="font-russo text-[18px] text-green-300 text-glow-green">100%</div>
+            <div class="font-tech text-[9px] text-fg-3">// pre_log</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- HERO RIGHT — terminal panel -->
+      <div class="col-span-12 lg:col-span-5 fade-rise delay-2 relative">
+        <div class="hud-card hud-card-cyan scanlines-inner relative" style="min-height: 380px;">
+          <div class="hud-corners">
+            <div class="corner tl"></div><div class="corner tr"></div>
+            <div class="corner bl"></div><div class="corner br"></div>
+          </div>
+
+          <div class="flex items-center justify-between mb-4">
+            <div class="sector-label">// SHELL :: NEURAL_PIPELINE.LOG</div>
+            <div class="flex items-center gap-2 font-tech text-[10px] text-cyan-300/70">
+              <span class="cp-pill cp-pill-proc">CHANNEL_OPEN</span>
+            </div>
+          </div>
+
+          <div class="font-tech text-[12px] leading-[1.85]" style="color: var(--fg-2);">
+            <div><span class="text-cyan-400">[03:11:42]</span> &gt; deepgram.batch :: <span class="text-green-400 text-glow-green">ACK</span> :: 12.4s audio</div>
+            <div><span class="text-cyan-400">[03:11:54]</span> &gt; layer.02_speaker_roles :: <span class="text-pink-400 text-glow-pink">PROC...</span></div>
+            <div><span class="text-cyan-400">[03:12:01]</span> &gt; speakers detected :: <span class="text-fuchsia-300">PROVIDER, PATIENT</span></div>
+            <div><span class="text-cyan-400">[03:12:04]</span> &gt; layer.03_extract :: meds=<span class="text-pink-400">[lisinopril, metoprolol]</span></div>
+            <div><span class="text-cyan-400">[03:12:09]</span> &gt; layer.04_soap_gen :: claude_sonnet_4.6 :: 14.2k tok</div>
+            <div><span class="text-cyan-400">[03:12:31]</span> &gt; layer.07a_icd :: <span class="holo-text">R07.9 // I10 // E11.9</span></div>
+            <div><span class="text-cyan-400">[03:12:40]</span> &gt; layer.07c_rx :: <span class="text-green-400">SAFE</span> :: 2 interactions</div>
+            <div><span class="text-cyan-400">[03:12:47]</span> &gt; readability :: grade_8.2 :: <span class="text-green-400">PASS</span></div>
+            <div><span class="text-cyan-400">[03:12:48]</span> &gt; status :: <span class="font-russo text-glow-cyan text-cyan-300">READY</span></div>
+            <div><span class="text-cyan-400">[03:12:48]</span> &gt; <span class="cp-pill cp-pill-ready">awaiting_signature</span></div>
+            <div class="mt-2"><span class="text-pink-400">root@quillmd:~#</span> <span class="inline-block w-[8px] h-[14px] bg-pink-400" style="animation: blink 0.8s steps(2) infinite; box-shadow: 0 0 6px var(--neon-pink);"></span></div>
+          </div>
+
+          <!-- Bottom legend -->
+          <div class="absolute bottom-3 left-5 right-5 flex items-center justify-between font-tech text-[9px] tracking-[0.18em] uppercase text-cyan-300/50">
+            <span>// node :: tokyo-edge-04</span>
+            <span>// uplink :: 2.4 Gbps</span>
+            <span>// SEC :: tier-3</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ═════════════════════════════════════════════════════════════════════════════
+     RECORDING ACTIVE STATE — Blade Runner spinner unit
+     ═════════════════════════════════════════════════════════════════════════════ -->
+<section class="relative overflow-hidden" style="background: linear-gradient(180deg, var(--void), var(--void-1)); border-top: 1px solid var(--line-pink);">
+
+  <!-- ambient grid + scanline sweeper -->
+  <div class="neon-grid"></div>
+  <div class="pipeline-scanner"></div>
+
+  <div class="max-w-[1480px] mx-auto px-6 py-20 relative z-10">
+
+    <div class="flex items-center justify-between mb-10">
+      <div>
+        <div class="sector-label mb-2"><span>§ 02</span> // RECORDING_ACTIVE :: BLADE_RUNNER_SPINNER</div>
+        <h2 class="font-display text-[40px] md:text-[56px] leading-[0.95] mb-2">
+          <span class="glitch holo-text" data-text="JACK_IN.">JACK_IN.</span>
+        </h2>
+        <p class="font-mono text-fg-3 text-[13px]">// neural-link captured :: <span class="text-cyan-300 text-glow-cyan">DR. K_TANAKA</span> :: <span class="text-pink-400 text-glow-pink">PT_M.OKADA</span> :: SPECIALTY=cardiology</p>
+      </div>
+      <div class="flex flex-col items-end gap-2">
+        <span class="cp-pill cp-pill-rec">REC :: <span class="font-russo">02:14.3</span></span>
+        <div class="flex items-center gap-2">
+          <span class="font-tech text-[10px] text-cyan-300/70 tracking-[0.22em] uppercase">controls</span>
+          <span class="kbd">␣</span>
+          <span class="font-tech text-[10px] text-fg-3">PAUSE</span>
+          <span class="kbd">⏎</span>
+          <span class="font-tech text-[10px] text-fg-3">END</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- The spinner stage -->
+    <div class="grid grid-cols-12 gap-6 items-center">
+
+      <!-- Left orbital -->
+      <div class="col-span-12 lg:col-span-3 space-y-3">
+        <div class="hud-card hud-card-cyan scanlines-inner">
+          <div class="sector-label mb-3">// AUDIO_LEVEL</div>
+          <div class="flex items-end gap-1 h-12 mb-2">
+            <span class="amp-bars"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span>
+          </div>
+          <div class="flex items-baseline justify-between">
+            <span class="font-russo text-cyan-300 text-glow-cyan text-[28px]">-12.4</span>
+            <span class="font-tech text-[10px] text-fg-3">dBFS</span>
+          </div>
+          <div class="font-tech text-[10px] text-cyan-300/60 mt-1 tracking-[0.18em]">// peak: -3.1 // gate: -54</div>
+        </div>
+
+        <div class="hud-card hud-card-pink scanlines-inner">
+          <div class="sector-label mb-3" style="color: var(--neon-pink);">// LANG_DETECT</div>
+          <div class="flex items-baseline gap-2">
+            <span class="font-russo text-pink-300 text-glow-pink text-[24px]">EN-US</span>
+            <span class="font-tech text-[10px] text-fg-3">// conf 0.97</span>
+          </div>
+          <div class="mt-2 font-tech text-[10px] text-pink-300/60">DEEPGRAM_NOVA-2 :: BOOST=med_v3.2</div>
+        </div>
+
+        <div class="hud-card hud-card-green scanlines-inner">
+          <div class="sector-label mb-3" style="color: var(--neon-green);">// VOCAB_BOOST</div>
+          <div class="font-tech text-[11px] text-green-300/80 leading-[1.7]">
+            <div>+ 2.4k med_terms</div>
+            <div>+ 218 cardiology</div>
+            <div>+ 412 drug_names</div>
+            <div>+ 89 pt_specific</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CENTER: the spinner unit -->
+      <div class="col-span-12 lg:col-span-6 grid place-items-center relative">
+        <div class="spinner-rig">
+          <div class="ring ring-1"></div>
+          <div class="ring ring-2"></div>
+          <div class="ring ring-3"></div>
+          <div class="ring ring-4"></div>
+          <div class="ring ring-5"></div>
+          <div class="ring ring-ticks"></div>
+
+          <!-- Core REC badge -->
+          <div class="spinner-core glitch-flash">
+            <div class="text-center">
+              <div class="font-russo text-[28px] holo-text glitch" data-text="REC">REC</div>
+              <div class="font-tech text-[9px] tracking-[0.28em] text-cyan-300 text-glow-cyan mt-1">// JACK_LIVE</div>
+              <div class="font-russo text-pink-300 text-glow-pink text-[16px] mt-1">02:14.3</div>
+            </div>
+          </div>
+
+          <!-- Orbital data points -->
+          <div class="orbital orbital-pink orbit-pos-tl"><span class="font-russo text-[14px] text-glow-pink">187</span> WORDS</div>
+          <div class="orbital orbit-pos-tr"><span class="font-russo text-[14px] text-glow-cyan">02:14</span> ELAPSED</div>
+          <div class="orbital orbital-green orbit-pos-r"><span class="font-russo text-[14px] text-glow-green">42</span> WPM</div>
+          <div class="orbital orbital-pink orbit-pos-br">CARDIOLOGY // <span class="text-glow-pink">SPEC_07</span></div>
+          <div class="orbital orbit-pos-bm"><span class="text-glow-cyan">SPEAKERS</span> :: PROVIDER + PATIENT</div>
+          <div class="orbital orbital-green orbit-pos-bl">CONF <span class="font-russo text-glow-green">0.94</span></div>
+          <div class="orbital orbit-pos-l">EN-US <span class="text-glow-cyan">L_DET 0.97</span></div>
+          <div class="orbital orbital-pink orbit-pos-tm">PT_OKADA_M // <span class="text-glow-pink">DOB 1958.04.21</span></div>
+        </div>
+      </div>
+
+      <!-- Right orbital -->
+      <div class="col-span-12 lg:col-span-3 space-y-3">
+        <div class="hud-card hud-card-pink scanlines-inner">
+          <div class="sector-label mb-3" style="color: var(--neon-pink);">// HEART_SCOPE</div>
+          <div class="scope">
+            <svg viewBox="0 0 600 70" preserveAspectRatio="none">
+              <path class="scope-line" d="M0,35 L60,35 L70,15 L80,55 L95,5 L110,55 L120,35 L180,35 L190,20 L200,50 L215,15 L230,52 L240,35 L300,35 L310,12 L320,58 L335,8  L350,55 L360,35 L420,35 L430,20 L440,50 L455,15 L470,52 L480,35 L600,35"/>
+            </svg>
+          </div>
+          <div class="flex justify-between items-baseline mt-2">
+            <span class="font-russo text-pink-300 text-glow-pink text-[28px]">82</span>
+            <span class="font-tech text-[10px] text-fg-3">BPM // SINUS</span>
+          </div>
+        </div>
+
+        <div class="hud-card hud-card-cyan scanlines-inner">
+          <div class="sector-label mb-3">// SPEAKER_DIARIZATION</div>
+          <div class="space-y-2">
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full" style="background: var(--neon-pink); box-shadow: 0 0 6px var(--neon-pink);"></span>
+              <span class="font-tech text-[11px] text-pink-300">PROVIDER</span>
+              <span class="font-russo text-[10px] text-cyan-300 ml-auto">62%</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full" style="background: var(--neon-cyan); box-shadow: 0 0 6px var(--neon-cyan);"></span>
+              <span class="font-tech text-[11px] text-cyan-300">PATIENT</span>
+              <span class="font-russo text-[10px] text-cyan-300 ml-auto">36%</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full" style="background: var(--neon-green); box-shadow: 0 0 6px var(--neon-green);"></span>
+              <span class="font-tech text-[11px] text-green-300">CROSSTALK</span>
+              <span class="font-russo text-[10px] text-cyan-300 ml-auto">2%</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="hud-card hud-card-green scanlines-inner">
+          <div class="sector-label mb-3" style="color: var(--neon-green);">// PIPE_STATUS</div>
+          <div class="font-tech text-[11px] leading-[1.7]">
+            <div class="text-green-300">[OK] minio_ingest</div>
+            <div class="text-green-300">[OK] redis_queue</div>
+            <div class="text-cyan-300">[..] deepgram_ws</div>
+            <div class="text-fg-4">[--] worker_idle</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LIVE TRANSCRIPT PANEL — holographic-bordered -->
+    <div class="mt-12 holo-ring relative" style="border-radius: 4px;">
+      <div class="hud-card scanlines-inner" style="background: rgba(10,10,24,0.9); border-color: transparent; padding: 24px 28px;">
+
+        <div class="flex items-center justify-between mb-5">
+          <div class="flex items-center gap-3">
+            <div class="sector-label">// TRANSCRIPT_LIVE :: STREAMING</div>
+            <span class="cp-pill cp-pill-proc">PROC</span>
+          </div>
+          <div class="flex items-center gap-3 font-tech text-[10px] text-cyan-300/70">
+            <span>NOVA-2 // EN-US</span>
+            <span>•</span>
+            <span>187 WORDS</span>
+            <span>•</span>
+            <span>UPDATED 0.4s AGO</span>
+          </div>
+        </div>
+
+        <!-- Transcript body -->
+        <div class="space-y-4 font-mono text-[14px] leading-[1.7]">
+          <div class="flex gap-4">
+            <div class="flex-shrink-0 w-32">
+              <div class="font-tech text-[10px] tracking-[0.18em] uppercase text-pink-300 text-glow-pink">PROVIDER</div>
+              <div class="font-tech text-[9px] text-fg-4">00:00.4</div>
+            </div>
+            <div style="color: var(--fg-2);">
+              Good morning Mr. Okada. So I see you're following up after the chest pain episode last week. Can you tell me how things have been since then?
+            </div>
+          </div>
+
+          <div class="flex gap-4">
+            <div class="flex-shrink-0 w-32">
+              <div class="font-tech text-[10px] tracking-[0.18em] uppercase text-cyan-300 text-glow-cyan">PATIENT</div>
+              <div class="font-tech text-[9px] text-fg-4">00:11.2</div>
+            </div>
+            <div style="color: var(--fg-2);">
+              Better, doc. The pain hasn't come back, but I get a little short of breath when I climb the stairs to my apartment. Otherwise the new <span class="text-pink-400 text-glow-pink">metoprolol</span> seems to be working — I've been taking it like you said, twice a day.
+            </div>
+          </div>
+
+          <div class="flex gap-4">
+            <div class="flex-shrink-0 w-32">
+              <div class="font-tech text-[10px] tracking-[0.18em] uppercase text-pink-300 text-glow-pink">PROVIDER</div>
+              <div class="font-tech text-[9px] text-fg-4">00:31.8</div>
+            </div>
+            <div style="color: var(--fg-2);">
+              Good. Any palpitations, lightheadedness, or swelling in your ankles? And how about the <span class="text-pink-400 text-glow-pink">lisinopril</span> — any cough?
+            </div>
+          </div>
+
+          <div class="flex gap-4">
+            <div class="flex-shrink-0 w-32">
+              <div class="font-tech text-[10px] tracking-[0.18em] uppercase text-cyan-300 text-glow-cyan">PATIENT</div>
+              <div class="font-tech text-[9px] text-fg-4">00:48.1</div>
+            </div>
+            <div style="color: var(--fg-2);">
+              No swelling. Maybe a slight cough in the morning, but nothing crazy. <span class="text-cyan-300 text-glow-cyan">[laughs]</span> My wife says I sound like a smoker again.
+            </div>
+          </div>
+
+          <div class="flex gap-4">
+            <div class="flex-shrink-0 w-32">
+              <div class="font-tech text-[10px] tracking-[0.18em] uppercase text-pink-300 text-glow-pink">PROVIDER</div>
+              <div class="font-tech text-[9px] text-fg-4">01:02.7</div>
+            </div>
+            <div style="color: var(--fg-2);">
+              Let's check your vitals. Blood pressure is one thirty-eight over eighty-two. Heart rate eighty-two and regular. Lungs clear. Heart sounds normal — no murmurs, no <span class="text-fuchsia-300">S3 gallop</span>. Peripheral pulses two-plus and equal.
+            </div>
+          </div>
+
+          <div class="flex gap-4 opacity-60">
+            <div class="flex-shrink-0 w-32">
+              <div class="font-tech text-[10px] tracking-[0.18em] uppercase text-pink-300/50">PROVIDER</div>
+              <div class="font-tech text-[9px] text-fg-4">01:34.0</div>
+            </div>
+            <div style="color: var(--fg-3);">
+              <span class="font-tech text-[11px] text-cyan-400/80">[STREAMING...]</span>
+              EKG from last Tuesday showed sinus rhythm with no acute changes. The troponin was negative. My plan today is to <span class="inline-block w-[6px] h-[12px] bg-cyan-400 align-middle ml-1" style="animation: blink 0.6s steps(2) infinite;"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- bottom hint -->
+        <div class="mt-5 pt-4 border-t border-cyan-500/20 flex items-center justify-between">
+          <div class="font-tech text-[10px] text-fg-3 flex items-center gap-3">
+            <span class="kbd">␣</span> PAUSE_REC
+            <span class="kbd">⏎</span> END_VISIT
+            <span class="kbd">⌘</span><span class="kbd">B</span> INSERT_BOILERPLATE
+            <span class="kbd">/</span> JUMP_TO_TRANSCRIPT
+          </div>
+          <div class="font-tech text-[10px] text-cyan-300/70">
+            // PHI_REDACT_ACTIVE :: <span class="text-glow-green text-green-400">100%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ═════════════════════════════════════════════════════════════════════════════
+     SEPARATOR — full-width neon-pink-to-cyan with glitch DASHBOARD reveal
+     ═════════════════════════════════════════════════════════════════════════════ -->
+<section class="sep-bar">
+  <div class="font-display font-black text-[44px] md:text-[80px] tracking-[0.04em] glitch glitch-load relative z-10" data-text="// DASHBOARD //" style="color: var(--void); text-shadow: 2px 0 var(--neon-cyan), -2px 0 var(--neon-pink); letter-spacing: 0.08em;">
+    // DASHBOARD //
+  </div>
+  <div class="mt-2 font-tech text-[12px] tracking-[0.28em] uppercase relative z-10" style="color: rgba(0,0,0,0.7);">
+    NETRUNNER_OS // SECTOR_03 // VISIT_GRID
+  </div>
+</section>
+
+<!-- ═════════════════════════════════════════════════════════════════════════════
+     SECTION 2 — DASHBOARD
+     ═════════════════════════════════════════════════════════════════════════════ -->
+<section class="relative">
+
+  <!-- Marquee strip -->
+  <div class="marquee">
+    <div class="marquee-track">
+      <span>// LIVE_FEED :: 03:14:08 JST</span>
+      <span>14 VISITS_OPEN</span>
+      <span>3 PROCESSING</span>
+      <span>2 AWAITING_SIGNATURE</span>
+      <span>1 RX_WARN_ACTIVE</span>
+      <span>UPLINK 2.4 GBPS</span>
+      <span>NODE_TOKYO_EDGE_04 // SEC_TIER_3</span>
+      <span>// LIVE_FEED :: 03:14:08 JST</span>
+      <span>14 VISITS_OPEN</span>
+      <span>3 PROCESSING</span>
+      <span>2 AWAITING_SIGNATURE</span>
+      <span>1 RX_WARN_ACTIVE</span>
+      <span>UPLINK 2.4 GBPS</span>
+      <span>NODE_TOKYO_EDGE_04 // SEC_TIER_3</span>
+    </div>
+  </div>
+
+  <div class="max-w-[1480px] mx-auto px-6 py-12">
+
+    <!-- Dashboard header -->
+    <div class="flex flex-wrap items-end justify-between gap-4 mb-10">
+      <div>
+        <div class="sector-label mb-2"><span>§ 03</span> // CMD_CENTER :: SHIFT_2026.04.29</div>
+        <h2 class="font-display text-[44px] md:text-[64px] leading-[0.95]">
+          <span class="glitch holo-text" data-text="GOOD MORNING,">GOOD MORNING,</span><br/>
+          <span class="text-cyan-300 text-glow-cyan font-russo">DR. K_TANAKA.</span>
+        </h2>
+        <p class="font-mono text-[14px] mt-3" style="color: var(--fg-2);">
+          // <span class="text-pink-400 text-glow-pink font-russo">14</span> visits in queue.
+          <span class="text-cyan-300 text-glow-cyan font-russo">3</span> processing.
+          <span class="text-green-400 text-glow-green font-russo">2</span> awaiting signature.
+          <span class="font-russo text-pink-300 text-glow-pink">1</span> Rx_warn_critical.
+        </p>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-3">
+        <button class="btn-neon" data-kbd-pulse>
+          <span>FILTER_ROUTINE</span>
+          <span class="kbd">F</span>
+        </button>
+        <button class="btn-neon btn-neon-green" data-kbd-pulse>
+          <span>NEW_PATIENT</span>
+          <span class="kbd">P</span>
+        </button>
+        <button class="btn-neon btn-neon-pink" data-kbd-pulse>
+          <span>JACK_IN // NEW_VISIT</span>
+          <span class="kbd">N</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Stat tiles row — holographic gradients hue-rotating -->
+    <div class="grid grid-cols-12 gap-5 mb-10">
+
+      <!-- Stat 1 — Visits today -->
+      <div class="col-span-6 lg:col-span-3 hud-card hud-card-cyan scanlines-inner relative">
+        <div class="hud-corners"><div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div></div>
+        <div class="flex items-start justify-between mb-3">
+          <div class="sector-label">// VISITS_TODAY</div>
+          <span class="cp-pill cp-pill-proc">LIVE</span>
+        </div>
+        <div class="font-display font-black text-[64px] leading-[1] holo-text glitch" data-text="14">14</div>
+        <div class="font-tech text-[10px] tracking-[0.22em] text-cyan-300/70 mt-1 uppercase">
+          ▲ +<span class="text-green-400 text-glow-green">23%</span> vs. yesterday
+        </div>
+        <!-- mini sparkline -->
+        <div class="mt-4 flex items-end gap-1 h-8">
+          <div class="flex-1 bg-cyan-500/30" style="height: 30%; box-shadow: 0 0 4px var(--neon-cyan);"></div>
+          <div class="flex-1 bg-cyan-500/40" style="height: 50%;"></div>
+          <div class="flex-1 bg-cyan-500/50" style="height: 65%;"></div>
+          <div class="flex-1 bg-cyan-500/40" style="height: 45%;"></div>
+          <div class="flex-1 bg-cyan-500/60" style="height: 80%;"></div>
+          <div class="flex-1 bg-cyan-500/50" style="height: 55%;"></div>
+          <div class="flex-1 bg-cyan-500/70" style="height: 90%;"></div>
+          <div class="flex-1 bg-cyan-400" style="height: 100%; box-shadow: 0 0 8px var(--neon-cyan);"></div>
+        </div>
+      </div>
+
+      <!-- Stat 2 — Avg pipeline latency -->
+      <div class="col-span-6 lg:col-span-3 hud-card hud-card-pink scanlines-inner relative">
+        <div class="hud-corners hud-bracket-pink"><div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div></div>
+        <div class="flex items-start justify-between mb-3">
+          <div class="sector-label" style="color: var(--neon-pink);">// PIPELINE_P50</div>
+          <span class="font-tech text-[9px] tracking-[0.22em] uppercase text-pink-300/60">last_24h</span>
+        </div>
+        <div class="font-display font-black text-[64px] leading-[1] holo-text">62.4<span class="text-[24px] font-tech text-fg-3">s</span></div>
+        <div class="font-tech text-[10px] tracking-[0.22em] text-pink-300/70 mt-1 uppercase">
+          ▼ -<span class="text-green-400 text-glow-green">4.1s</span> // pipeline_op
+        </div>
+        <!-- pipeline mini-stages -->
+        <div class="mt-4 flex items-center gap-1">
+          <div class="flex-1 h-2 bg-green-500/60" style="box-shadow: 0 0 4px var(--neon-green);"></div>
+          <div class="flex-1 h-2 bg-green-500/60"></div>
+          <div class="flex-1 h-2 bg-cyan-500/60" style="box-shadow: 0 0 4px var(--neon-cyan);"></div>
+          <div class="flex-1 h-2 bg-pink-500/60" style="box-shadow: 0 0 4px var(--neon-pink);"></div>
+          <div class="flex-1 h-2 bg-pink-500/30"></div>
+          <div class="flex-1 h-2 bg-fg-4/30"></div>
+          <div class="flex-1 h-2 bg-fg-4/30"></div>
+        </div>
+        <div class="font-tech text-[8px] mt-1 tracking-[0.18em] text-fg-4">L01 L02 L03 L04 L05 L06 L07</div>
+      </div>
+
+      <!-- Stat 3 — Awaiting signature (alert) -->
+      <div class="col-span-6 lg:col-span-3 hud-card hud-card-green scanlines-inner relative">
+        <div class="hud-corners hud-bracket-green"><div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div></div>
+        <div class="flex items-start justify-between mb-3">
+          <div class="sector-label" style="color: var(--neon-green);">// AWAITING_SIG</div>
+          <span class="cp-pill cp-pill-ready">ACTION</span>
+        </div>
+        <div class="font-display font-black text-[64px] leading-[1] text-green-400 text-glow-green glitch" data-text="2">2</div>
+        <div class="font-tech text-[10px] tracking-[0.22em] text-green-300/70 mt-1 uppercase">
+          // press <span class="kbd">S</span> to BATCH_SIGN
+        </div>
+        <div class="mt-4 space-y-1">
+          <div class="font-tech text-[11px] flex justify-between">
+            <span class="text-fg-2">M_OKADA // CARD</span>
+            <span class="text-green-300 text-glow-green">READY 03:12</span>
+          </div>
+          <div class="font-tech text-[11px] flex justify-between">
+            <span class="text-fg-2">A_NAKAMURA // INT</span>
+            <span class="text-green-300 text-glow-green">READY 02:48</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stat 4 — Rx warnings active (CRITICAL) -->
+      <div class="col-span-6 lg:col-span-3 hud-card scanlines-inner relative" style="border-color: var(--status-err); box-shadow: 0 0 0 1px var(--status-err), 0 0 24px rgba(255,0,64,0.25) inset;">
+        <div class="hud-corners">
+          <div class="corner tl" style="border-color: var(--status-err);"></div>
+          <div class="corner tr" style="border-color: var(--status-err);"></div>
+          <div class="corner bl" style="border-color: var(--status-err);"></div>
+          <div class="corner br" style="border-color: var(--status-err);"></div>
+        </div>
+        <div class="flex items-start justify-between mb-3">
+          <div class="sector-label" style="color: var(--status-err);">// RX_WARN :: CRITICAL</div>
+          <span class="cp-pill cp-pill-err">ALERT</span>
+        </div>
+        <div class="font-display font-black text-[64px] leading-[1] glitch" data-text="1" style="color: var(--status-err); text-shadow: 0 0 12px rgba(255,0,64,0.85), 2px 0 var(--neon-pink), -2px 0 var(--neon-cyan);">1</div>
+        <div class="font-tech text-[10px] tracking-[0.22em] mt-1 uppercase" style="color: var(--status-err);">
+          // INTERACTION_DETECTED // QT_PROLONG
+        </div>
+        <div class="mt-4 font-tech text-[11px] leading-[1.6]">
+          <div class="text-pink-300">PT // <span class="text-fg-2">M_OKADA</span></div>
+          <div class="text-fg-3">drug_a // <span class="text-pink-300">amiodarone</span></div>
+          <div class="text-fg-3">drug_b // <span class="text-pink-300">azithromycin</span></div>
+          <div class="text-fg-3">conf // <span class="text-pink-300">0.92</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═════════════════════ DASHBOARD MAIN — table + sidebar ═════════════════════ -->
+    <div class="grid grid-cols-12 gap-6">
+
+      <!-- LEFT — visit list terminal -->
+      <div class="col-span-12 lg:col-span-8 hud-card scanlines-inner" style="padding: 0; overflow: hidden;">
+        <!-- Header strip -->
+        <div class="flex items-center justify-between p-5 border-b" style="border-color: var(--line-cyan); background: linear-gradient(180deg, rgba(0,255,255,0.04), transparent);">
+          <div class="flex items-center gap-4">
+            <div class="sector-label">// VISIT_GRID :: ALL</div>
+            <span class="cp-pill cp-pill-proc">14 ROWS</span>
+          </div>
+          <div class="flex items-center gap-2 font-tech text-[10px] text-cyan-300/70">
+            <span>SORT_BY</span>
+            <span class="hud-cut-tight px-2 py-1 border border-cyan-500/40 bg-cyan-500/5 text-cyan-300">last_active ▼</span>
+            <span class="kbd">/</span>
+          </div>
+        </div>
+
+        <!-- Table -->
+        <table class="term-table">
+          <thead>
+            <tr>
+              <th>// id</th>
+              <th>// pt_subject</th>
+              <th>// spec</th>
+              <th>// status</th>
+              <th>// pipe</th>
+              <th>// time</th>
+              <th>// op</th>
+            </tr>
+          </thead>
+          <tbody>
+
+            <tr>
+              <td><span class="font-tech text-pink-300 text-glow-pink">VST_8842F</span></td>
+              <td>
+                <div class="row-name font-russo text-[14px] glitch-hover" style="color: var(--fg);">M. OKADA</div>
+                <div class="font-tech text-[10px] text-fg-3">DOB 1958.04.21 // M // CHART_4291</div>
+              </td>
+              <td><span class="font-tech text-cyan-300">cardiology</span></td>
+              <td><span class="cp-pill cp-pill-warn">RX_WARN</span></td>
+              <td>
+                <div class="flex items-center gap-1 h-2">
+                  <div class="w-3 h-2 bg-green-500" style="box-shadow:0 0 3px var(--neon-green);"></div>
+                  <div class="w-3 h-2 bg-green-500"></div>
+                  <div class="w-3 h-2 bg-green-500"></div>
+                  <div class="w-3 h-2 bg-green-500"></div>
+                  <div class="w-3 h-2 bg-green-500"></div>
+                  <div class="w-3 h-2 bg-green-500"></div>
+                  <div class="w-3 h-2 bg-green-500"></div>
+                </div>
+                <div class="font-tech text-[9px] text-green-300 mt-1">L07 // 100%</div>
+              </td>
+              <td><span class="font-tech text-fg-2">03:12 JST</span></td>
+              <td><div class="flex items-center gap-1"><span class="kbd">↵</span><span class="kbd">⌫</span></div></td>
+            </tr>
+
+            <tr>
+              <td><span class="font-tech text-pink-300 text-glow-pink">VST_8841C</span></td>
+              <td>
+                <div class="row-name font-russo text-[14px] glitch-hover" style="color: var(--fg);">A. NAKAMURA</div>
+                <div class="font-tech text-[10px] text-fg-3">DOB 1972.11.09 // F // CHART_4290</div>
+              </td>
+              <td><span class="font-tech text-cyan-300">internal_med</span></td>
+              <td><span class="cp-pill cp-pill-ready">READY</span></td>
+              <td>
+                <div class="flex items-center gap-1 h-2">
+                  <div class="w-3 h-2 bg-green-500"></div>
+                  <div class="w-3 h-2 bg-green-500"></div>
+                  <div class="w-3 h-2 bg-green-500"></div>
+                  <div class="w-3 h-2 bg-green-500"></div>
+                  <div class="w-3 h-2 bg-green-500"></div>
+                  <div class="w-3 h-2 bg-green-500"></div>
+                  <div class="w-3 h-2 bg-green-500"></div>
+                </div>
+                <div class="font-tech text-[9px] text-green-300 mt-1">L07 // 100%</div>
+              </td>
+              <td><span class="font-tech text-fg-2">02:48 JST</span></td>
+              <td><div class="flex items-center gap-1"><span class="kbd">↵</span><span class="kbd">⌫</span></div></td>
+            </tr>
+
+            <tr>
+              <td><span class="font-tech text-pink-300 text-glow-pink">VST_8840B</span></td>
+              <td>
+                <div class="row-name font-russo text-[14px] glitch-hover" style="color: var(--fg);">R. KIM</div>
+                <div class="font-tech text-[10px] text-fg-3">DOB 1985.06.14 // M // CHART_4289</div>
+              </td>
+              <td><span class="font-tech text-cyan-300">family_med</span></td>
+              <td><span class="cp-pill cp-pill-proc">PROC</span></td>
+              <td>
+                <div class="flex items-center gap-1 h-2">
+                  <div class="w-3 h-2 bg-green-500"></div>
+                  <div class="w-3 h-2 bg-green-500"></div>
+                  <div class="w-3 h-2 bg-green-500"></div>
+                  <div class="w-3 h-2 bg-cyan-400" style="box-shadow:0 0 6px var(--neon-cyan); animation: blink 0.6s steps(2) infinite;"></div>
+                  <div class="w-3 h-2 bg-fg-4/40"></div>
+                  <div class="w-3 h-2 bg-fg-4/40"></div>
+                  <div class="w-3 h-2 bg-fg-4/40"></div>
+                </div>
+                <div class="font-tech text-[9px] text-cyan-300 mt-1">L04_SOAP // 57%</div>
+              </td>
+              <td><span class="font-tech text-fg-2">02:32 JST</span></td>
+              <td><div class="flex items-center gap-1"><span class="kbd">↵</span></div></td>
+            </tr>
+
+            <tr>
+              <td><span class="font-tech text-pink-300 text-glow-pink">VST_8839A</span></td>
+              <td>
+                <div class="row-name font-russo text-[14px] glitch-hover" style="color: var(--fg);">L. PATEL</div>
+                <div class="font-tech text-[10px] text-fg-3">DOB 1991.02.28 // F // CHART_4288</div>
+              </td>
+              <td><span class="font-tech text-cyan-300">peds</span></td>
+              <td><span class="cp-pill cp-pill-ready">SIGNED</span></td>
+              <td>
+                <div class="flex items-center gap-1 h-2">
+                  <div class="w-3 h-2 bg-green-500"></div>
+                  <div class="w-3 h-2 bg-green-500"></div>
+                  <div class="w-3 h-2 bg-green-500"></div>
+                  <div class="w-3 h-2 bg-green-500"></div>
+                  <div class="w-3 h-2 bg-green-500"></div>
+                  <div class="w-3 h-2 bg-green-500"></div>
+                  <div class="w-3 h-2 bg-green-500"></div>
+                </div>
+                <div class="font-tech text-[9px] text-green-300 mt-1">L07 // SEALED</div>
+              </td>
+              <td><span class="font-tech text-fg-2">02:14 JST</span></td>
+              <td><div class="flex items-center gap-1"><span class="kbd">↵</span><span class="kbd">↗</span></div></td>
+            </tr>
+
+            <tr>
+              <td><span class="font-tech text-pink-300 text-glow-pink">VST_8838E</span></td>
+              <td>
+                <div class="row-name font-russo text-[14px] glitch-hover" style="color: var(--fg);">D. LOPEZ</div>
+                <div class="font-tech text-[10px] text-fg-3">DOB 1968.09.03 // M // CHART_4287</div>
+              </td>
+              <td><span class="font-tech text-cyan-300">cardiology</span></td>
+              <td><span class="cp-pill cp-pill-proc">PROC</span></td>
+              <td>
+                <div class="flex items-center gap-1 h-2">
+                  <div class="w-3 h-2 bg-green-500"></div>
+                  <div class="w-3 h-2 bg-green-500"></div>
+                  <div class="w-3 h-2 bg-cyan-400" style="box-shadow:0 0 6px var(--neon-cyan);"></div>
+                  <div class="w-3 h-2 bg-fg-4/40"></div>
+                  <div class="w-3 h-2 bg-fg-4/40"></div>
+                  <div class="w-3 h-2 bg-fg-4/40"></div>
+                  <div class="w-3 h-2 bg-fg-4/40"></div>
+                </div>
+                <div class="font-tech text-[9px] text-cyan-300 mt-1">L03_EXTRACT // 38%</div>
+              </td>
+              <td><span class="font-tech text-fg-2">01:54 JST</span></td>
+              <td><div class="flex items-center gap-1"><span class="kbd">↵</span></div></td>
+            </tr>
+
+            <tr>
+              <td><span class="font-tech text-pink-300 text-glow-pink">VST_8837D</span></td>
+              <td>
+                <div class="row-name font-russo text-[14px] glitch-hover" style="color: var(--fg);">S. GARCIA</div>
+                <div class="font-tech text-[10px] text-fg-3">DOB 1979.12.18 // F // CHART_4286</div>
+              </td>
+              <td><span class="font-tech text-cyan-300">obgyn</span></td>
+              <td><span class="cp-pill cp-pill-err">FAILED</span></td>
+              <td>
+                <div class="flex items-center gap-1 h-2">
+                  <div class="w-3 h-2 bg-green-500"></div>
+                  <div class="w-3 h-2 bg-red-500" style="box-shadow:0 0 6px var(--status-err); animation: blink 0.4s steps(2) infinite;"></div>
+                  <div class="w-3 h-2 bg-fg-4/40"></div>
+                  <div class="w-3 h-2 bg-fg-4/40"></div>
+                  <div class="w-3 h-2 bg-fg-4/40"></div>
+                  <div class="w-3 h-2 bg-fg-4/40"></div>
+                  <div class="w-3 h-2 bg-fg-4/40"></div>
+                </div>
+                <div class="font-tech text-[9px] text-red-300 mt-1">L02_SPK // ERR_DIA</div>
+              </td>
+              <td><span class="font-tech text-fg-2">01:31 JST</span></td>
+              <td><div class="flex items-center gap-1"><span class="kbd">R</span><span class="kbd">⌫</span></div></td>
+            </tr>
+
+            <tr>
+              <td><span class="font-tech text-pink-300 text-glow-pink">VST_8836C</span></td>
+              <td>
+                <div class="row-name font-russo text-[14px] glitch-hover" style="color: var(--fg);">J. WONG</div>
+                <div class="font-tech text-[10px] text-fg-3">DOB 1955.07.22 // M // CHART_4285</div>
+              </td>
+              <td><span class="font-tech text-cyan-300">geriatric</span></td>
+              <td><span class="cp-pill cp-pill-ready">SIGNED</span></td>
+              <td>
+                <div class="flex items-center gap-1 h-2">
+                  <div class="w-3 h-2 bg-green-500"></div>
+                  <div class="w-3 h-2 bg-green-500"></div>
+                  <div class="w-3 h-2 bg-green-500"></div>
+                  <div class="w-3 h-2 bg-green-500"></div>
+                  <div class="w-3 h-2 bg-green-500"></div>
+                  <div class="w-3 h-2 bg-green-500"></div>
+                  <div class="w-3 h-2 bg-green-500"></div>
+                </div>
+                <div class="font-tech text-[9px] text-green-300 mt-1">L07 // SEALED</div>
+              </td>
+              <td><span class="font-tech text-fg-2">00:48 JST</span></td>
+              <td><div class="flex items-center gap-1"><span class="kbd">↵</span><span class="kbd">↗</span></div></td>
+            </tr>
+
+            <tr>
+              <td><span class="font-tech text-pink-300 text-glow-pink">VST_8835B</span></td>
+              <td>
+                <div class="row-name font-russo text-[14px] glitch-hover" style="color: var(--fg);">N. KAUR</div>
+                <div class="font-tech text-[10px] text-fg-3">DOB 1988.03.11 // F // CHART_4284</div>
+              </td>
+              <td><span class="font-tech text-cyan-300">derm</span></td>
+              <td><span class="cp-pill cp-pill-ready">SIGNED</span></td>
+              <td>
+                <div class="flex items-center gap-1 h-2">
+                  <div class="w-3 h-2 bg-green-500"></div>
+                  <div class="w-3 h-2 bg-green-500"></div>
+                  <div class="w-3 h-2 bg-green-500"></div>
+                  <div class="w-3 h-2 bg-green-500"></div>
+                  <div class="w-3 h-2 bg-green-500"></div>
+                  <div class="w-3 h-2 bg-green-500"></div>
+                  <div class="w-3 h-2 bg-green-500"></div>
+                </div>
+                <div class="font-tech text-[9px] text-green-300 mt-1">L07 // SEALED</div>
+              </td>
+              <td><span class="font-tech text-fg-2">YESTERDAY</span></td>
+              <td><div class="flex items-center gap-1"><span class="kbd">↵</span><span class="kbd">↗</span></div></td>
+            </tr>
+
+          </tbody>
+        </table>
+
+        <!-- Footer -->
+        <div class="flex items-center justify-between p-4 border-t" style="border-color: var(--line-cyan); background: linear-gradient(0deg, rgba(0,255,255,0.04), transparent);">
+          <div class="font-tech text-[10px] text-cyan-300/60">// SHOWING 1-8 OF 14 // CURSOR_OFFSET=0</div>
+          <div class="flex items-center gap-2">
+            <button class="hud-cut-tight px-3 py-1 font-tech text-[10px] tracking-[0.18em] uppercase border border-cyan-500/40 text-cyan-300 hover:bg-cyan-500/10">
+              <span class="kbd">←</span> PREV
+            </button>
+            <button class="hud-cut-tight px-3 py-1 font-tech text-[10px] tracking-[0.18em] uppercase border border-pink-500/40 text-pink-300 hover:bg-pink-500/10">
+              NEXT <span class="kbd">→</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT — sidebar HUD -->
+      <div class="col-span-12 lg:col-span-4 space-y-6">
+
+        <!-- Subject classification widget (ICD codes) -->
+        <div class="hud-card hud-card-pink scanlines-inner relative">
+          <div class="hud-corners hud-bracket-pink"><div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div></div>
+          <div class="flex items-center justify-between mb-3">
+            <div class="sector-label" style="color: var(--neon-pink);">// SUBJECT_CLASS_ROUTINE</div>
+            <span class="font-tech text-[9px] text-pink-300/60">VST_8842F // M_OKADA</span>
+          </div>
+
+          <div class="space-y-2">
+            <div class="hud-cut-tight border border-pink-500/40 px-3 py-2" style="background: rgba(255,0,128,0.05);">
+              <div class="flex items-baseline justify-between">
+                <span class="font-russo text-pink-300 text-glow-pink">R07.9</span>
+                <span class="font-tech text-[10px] text-cyan-300">CONF 0.78</span>
+              </div>
+              <div class="font-tech text-[11px] text-fg-2 mt-1">// CHEST_PAIN_UNSPEC</div>
+            </div>
+            <div class="hud-cut-tight border border-cyan-500/40 px-3 py-2" style="background: rgba(0,255,255,0.05);">
+              <div class="flex items-baseline justify-between">
+                <span class="font-russo text-cyan-300 text-glow-cyan">I10</span>
+                <span class="font-tech text-[10px] text-cyan-300">CONF 0.94</span>
+              </div>
+              <div class="font-tech text-[11px] text-fg-2 mt-1">// HYPERTENSION // ESSENTIAL</div>
+            </div>
+            <div class="hud-cut-tight border border-green-500/40 px-3 py-2" style="background: rgba(57,255,20,0.05);">
+              <div class="flex items-baseline justify-between">
+                <span class="font-russo text-green-300 text-glow-green">E11.9</span>
+                <span class="font-tech text-[10px] text-cyan-300">CONF 0.88</span>
+              </div>
+              <div class="font-tech text-[11px] text-fg-2 mt-1">// DM_TYPE_2 // NO_COMPLIC</div>
+            </div>
+          </div>
+
+          <div class="mt-4 pt-3 border-t border-pink-500/20 flex items-center justify-between font-tech text-[9px] text-pink-300/50 tracking-[0.18em] uppercase">
+            <span>// LAYER_07A_OUT</span>
+            <span>UPDATED 03:12:31</span>
+          </div>
+        </div>
+
+        <!-- Radar / live activity -->
+        <div class="hud-card hud-card-cyan scanlines-inner relative">
+          <div class="hud-corners"><div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div></div>
+          <div class="flex items-center justify-between mb-3">
+            <div class="sector-label">// LIVE_RADAR :: PIPE_HEALTH</div>
+            <span class="cp-pill cp-pill-ready">UPLINK</span>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3 items-center">
+            <div class="aspect-square">
+              <div class="radar">
+                <div class="blip" style="top: 30%; left: 60%;"></div>
+                <div class="blip" style="top: 70%; left: 40%; animation-delay: 0.6s;"></div>
+                <div class="blip" style="top: 45%; left: 75%; animation-delay: 1.0s;"></div>
+                <div class="blip" style="top: 25%; left: 25%; animation-delay: 0.3s;"></div>
+              </div>
+            </div>
+            <div class="space-y-2 font-tech text-[11px]">
+              <div class="flex justify-between"><span class="text-cyan-300/70">postgres</span><span class="text-green-300 text-glow-green">OK</span></div>
+              <div class="flex justify-between"><span class="text-cyan-300/70">redis_q</span><span class="text-green-300 text-glow-green">OK</span></div>
+              <div class="flex justify-between"><span class="text-cyan-300/70">minio_io</span><span class="text-green-300 text-glow-green">OK</span></div>
+              <div class="flex justify-between"><span class="text-cyan-300/70">deepgram</span><span class="text-green-300 text-glow-green">OK</span></div>
+              <div class="flex justify-between"><span class="text-cyan-300/70">claude_4.6</span><span class="text-green-300 text-glow-green">OK</span></div>
+              <div class="flex justify-between"><span class="text-cyan-300/70">resend</span><span class="text-yellow-300">DEG</span></div>
+              <div class="flex justify-between"><span class="text-cyan-300/70">phi_redact</span><span class="text-green-300 text-glow-green">100%</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Neural pipeline progress for active visit -->
+        <div class="hud-card scanlines-inner relative" style="border: 1px solid rgba(170,140,255,0.2);">
+          <div class="flex items-center justify-between mb-4">
+            <div class="sector-label">// NEURAL_PIPELINE :: VST_8840B</div>
+            <span class="cp-pill cp-pill-proc">L04 ACTIVE</span>
+          </div>
+
+          <div class="flex items-center gap-1 mb-3 relative">
+            <div class="pipeline-stage" data-done="true">
+              <div class="font-tech text-[9px] tracking-[0.16em] text-green-300">L01</div>
+              <div class="font-russo text-[10px] mt-1 text-green-300">XCRIBE</div>
+            </div>
+            <div class="pipeline-connector"></div>
+            <div class="pipeline-stage" data-done="true">
+              <div class="font-tech text-[9px] tracking-[0.16em] text-green-300">L02</div>
+              <div class="font-russo text-[10px] mt-1 text-green-300">SPK</div>
+            </div>
+            <div class="pipeline-connector"></div>
+            <div class="pipeline-stage" data-done="true">
+              <div class="font-tech text-[9px] tracking-[0.16em] text-green-300">L03</div>
+              <div class="font-russo text-[10px] mt-1 text-green-300">EXTR</div>
+            </div>
+            <div class="pipeline-connector"></div>
+            <div class="pipeline-stage" data-active="true">
+              <div class="font-tech text-[9px] tracking-[0.16em] text-cyan-300 glitch" data-text="L04">L04</div>
+              <div class="font-russo text-[10px] mt-1 text-cyan-300 text-glow-cyan">SOAP</div>
+            </div>
+            <div class="pipeline-connector"></div>
+            <div class="pipeline-stage" data-pending="true">
+              <div class="font-tech text-[9px] tracking-[0.16em]">L05</div>
+              <div class="font-russo text-[10px] mt-1">CRIT</div>
+            </div>
+            <div class="pipeline-connector"></div>
+            <div class="pipeline-stage" data-pending="true">
+              <div class="font-tech text-[9px] tracking-[0.16em]">L06</div>
+              <div class="font-russo text-[10px] mt-1">POL</div>
+            </div>
+            <div class="pipeline-connector"></div>
+            <div class="pipeline-stage" data-pending="true">
+              <div class="font-tech text-[9px] tracking-[0.16em]">L07</div>
+              <div class="font-russo text-[10px] mt-1">CODE</div>
+            </div>
+          </div>
+
+          <div class="font-tech text-[10px] text-cyan-300/70 leading-[1.7]">
+            <div>&gt; layer.04_soap_gen :: <span class="text-pink-300">claude_sonnet_4.6</span></div>
+            <div>&gt; tokens_in: <span class="text-green-300">8.4k</span> // out: <span class="text-cyan-300">3.1k</span></div>
+            <div>&gt; eta: <span class="text-pink-300 text-glow-pink font-russo">~14s</span></div>
+          </div>
+        </div>
+
+        <!-- Edit-pattern data viz -->
+        <div class="hud-card hud-card-green scanlines-inner relative">
+          <div class="hud-corners hud-bracket-green"><div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div></div>
+          <div class="flex items-center justify-between mb-3">
+            <div class="sector-label" style="color: var(--neon-green);">// EDIT_PATTERN_TELEM</div>
+            <span class="font-tech text-[9px] text-green-300/60">LAST_30D</span>
+          </div>
+
+          <div class="font-display text-[44px] leading-[1] text-green-300 text-glow-green holo-text">12%</div>
+          <div class="font-tech text-[10px] text-green-300/70 tracking-[0.18em] uppercase mt-1">// avg_edit_distance</div>
+
+          <!-- bar chart -->
+          <div class="mt-4 grid grid-cols-7 gap-1 h-16 items-end">
+            <div class="bg-green-500/40" style="height: 65%;"></div>
+            <div class="bg-green-500/50" style="height: 78%;"></div>
+            <div class="bg-green-500/40" style="height: 55%;"></div>
+            <div class="bg-cyan-400/60" style="height: 45%; box-shadow: 0 0 4px var(--neon-cyan);"></div>
+            <div class="bg-green-500/50" style="height: 62%;"></div>
+            <div class="bg-green-500/70" style="height: 88%; box-shadow: 0 0 4px var(--neon-green);"></div>
+            <div class="bg-pink-500/60" style="height: 42%; box-shadow: 0 0 4px var(--neon-pink);"></div>
+          </div>
+          <div class="mt-1 grid grid-cols-7 gap-1 font-tech text-[8px] text-fg-4 tracking-wider text-center">
+            <span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ───────────── Patient grid (holographic stat cards) ───────────── -->
+    <div class="mt-12">
+      <div class="flex items-end justify-between mb-6">
+        <div>
+          <div class="sector-label mb-2"><span>§ 04</span> // PT_REGISTRY</div>
+          <h3 class="font-display text-[28px] md:text-[36px] holo-text">RECENT_SUBJECTS</h3>
+        </div>
+        <button class="btn-neon" data-kbd-pulse>
+          <span>SUBJECTS_ALL</span>
+          <span class="kbd">⌘</span><span class="kbd">P</span>
+        </button>
+      </div>
+
+      <div class="grid grid-cols-12 gap-4">
+
+        <!-- patient card -->
+        <div class="col-span-12 md:col-span-6 lg:col-span-3 hud-card hud-card-cyan scanlines-inner relative cursor-pointer hover:glow-cyan transition-all" style="transition-duration: 180ms;">
+          <div class="hud-corners"><div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div></div>
+          <div class="flex items-start justify-between mb-3">
+            <div class="w-12 h-12 hud-cut-tight grid place-items-center font-russo text-[16px] holo-bg" style="color: var(--void);">MO</div>
+            <span class="cp-pill cp-pill-warn">RX_WARN</span>
+          </div>
+          <div class="font-russo text-[18px] text-glow-cyan glitch-hover" style="color: var(--fg);">M. OKADA</div>
+          <div class="font-tech text-[10px] text-cyan-300/60 mb-3">SUBJ_CHART_4291 // M // 1958.04.21</div>
+          <div class="space-y-1 font-tech text-[11px]">
+            <div class="flex justify-between"><span class="text-fg-3">VST_TOTAL</span><span class="text-cyan-300">14</span></div>
+            <div class="flex justify-between"><span class="text-fg-3">LAST_VST</span><span class="text-cyan-300">03:12 JST</span></div>
+            <div class="flex justify-between"><span class="text-fg-3">RX_ACTIVE</span><span class="text-pink-300">3</span></div>
+            <div class="flex justify-between"><span class="text-fg-3">ALLERG</span><span class="text-fg-2">PCN</span></div>
+          </div>
+        </div>
+
+        <!-- patient card -->
+        <div class="col-span-12 md:col-span-6 lg:col-span-3 hud-card hud-card-pink scanlines-inner relative cursor-pointer">
+          <div class="hud-corners hud-bracket-pink"><div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div></div>
+          <div class="flex items-start justify-between mb-3">
+            <div class="w-12 h-12 hud-cut-tight grid place-items-center font-russo text-[16px]" style="background: linear-gradient(135deg, var(--neon-pink), var(--neon-pink-2)); color: var(--void); box-shadow: 0 0 12px rgba(255,0,128,0.5);">AN</div>
+            <span class="cp-pill cp-pill-ready">READY</span>
+          </div>
+          <div class="font-russo text-[18px] text-glow-pink glitch-hover" style="color: var(--fg);">A. NAKAMURA</div>
+          <div class="font-tech text-[10px] text-pink-300/60 mb-3">SUBJ_CHART_4290 // F // 1972.11.09</div>
+          <div class="space-y-1 font-tech text-[11px]">
+            <div class="flex justify-between"><span class="text-fg-3">VST_TOTAL</span><span class="text-cyan-300">8</span></div>
+            <div class="flex justify-between"><span class="text-fg-3">LAST_VST</span><span class="text-cyan-300">02:48 JST</span></div>
+            <div class="flex justify-between"><span class="text-fg-3">RX_ACTIVE</span><span class="text-pink-300">2</span></div>
+            <div class="flex justify-between"><span class="text-fg-3">ALLERG</span><span class="text-green-300">NONE</span></div>
+          </div>
+        </div>
+
+        <!-- patient card -->
+        <div class="col-span-12 md:col-span-6 lg:col-span-3 hud-card hud-card-green scanlines-inner relative cursor-pointer">
+          <div class="hud-corners hud-bracket-green"><div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div></div>
+          <div class="flex items-start justify-between mb-3">
+            <div class="w-12 h-12 hud-cut-tight grid place-items-center font-russo text-[16px]" style="background: linear-gradient(135deg, var(--neon-green), var(--neon-green-2)); color: var(--void); box-shadow: 0 0 12px rgba(57,255,20,0.5);">RK</div>
+            <span class="cp-pill cp-pill-proc">PROC</span>
+          </div>
+          <div class="font-russo text-[18px] text-glow-green glitch-hover" style="color: var(--fg);">R. KIM</div>
+          <div class="font-tech text-[10px] text-green-300/60 mb-3">SUBJ_CHART_4289 // M // 1985.06.14</div>
+          <div class="space-y-1 font-tech text-[11px]">
+            <div class="flex justify-between"><span class="text-fg-3">VST_TOTAL</span><span class="text-cyan-300">3</span></div>
+            <div class="flex justify-between"><span class="text-fg-3">LAST_VST</span><span class="text-cyan-300">02:32 JST</span></div>
+            <div class="flex justify-between"><span class="text-fg-3">RX_ACTIVE</span><span class="text-pink-300">0</span></div>
+            <div class="flex justify-between"><span class="text-fg-3">ALLERG</span><span class="text-green-300">NONE</span></div>
+          </div>
+        </div>
+
+        <!-- patient card -->
+        <div class="col-span-12 md:col-span-6 lg:col-span-3 hud-card scanlines-inner relative cursor-pointer" style="border-color: rgba(170,140,255,0.3); box-shadow: 0 0 18px rgba(170,140,255,0.18) inset;">
+          <div class="hud-corners">
+            <div class="corner tl" style="border-color: rgba(170,140,255,0.6);"></div>
+            <div class="corner tr" style="border-color: rgba(170,140,255,0.6);"></div>
+            <div class="corner bl" style="border-color: rgba(170,140,255,0.6);"></div>
+            <div class="corner br" style="border-color: rgba(170,140,255,0.6);"></div>
+          </div>
+          <div class="flex items-start justify-between mb-3">
+            <div class="w-12 h-12 hud-cut-tight grid place-items-center font-russo text-[16px] holo-bg" style="color: var(--void);">LP</div>
+            <span class="cp-pill cp-pill-ready">SIGNED</span>
+          </div>
+          <div class="font-russo text-[18px] holo-text glitch-hover">L. PATEL</div>
+          <div class="font-tech text-[10px] text-fg-3 mb-3">SUBJ_CHART_4288 // F // 1991.02.28</div>
+          <div class="space-y-1 font-tech text-[11px]">
+            <div class="flex justify-between"><span class="text-fg-3">VST_TOTAL</span><span class="text-cyan-300">21</span></div>
+            <div class="flex justify-between"><span class="text-fg-3">LAST_VST</span><span class="text-cyan-300">02:14 JST</span></div>
+            <div class="flex justify-between"><span class="text-fg-3">RX_ACTIVE</span><span class="text-pink-300">5</span></div>
+            <div class="flex justify-between"><span class="text-fg-3">ALLERG</span><span class="text-fg-2">SULFA, NUTS</span></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+
+    <!-- ───────────── Visit detail / SOAP preview / RX warning ───────────── -->
+    <div class="mt-16">
+      <div class="flex items-end justify-between mb-6">
+        <div>
+          <div class="sector-label mb-2"><span>§ 05</span> // VISIT_DETAIL :: VST_8842F</div>
+          <h3 class="font-display text-[28px] md:text-[36px]">
+            <span class="glitch holo-text" data-text="SOAP_DECOMPILED">SOAP_DECOMPILED</span>
+          </h3>
+        </div>
+        <div class="flex items-center gap-3">
+          <span class="cp-pill cp-pill-warn">RX_WARN</span>
+          <button class="btn-neon" data-kbd-pulse>
+            <span>EDIT</span>
+            <span class="kbd">E</span>
+          </button>
+          <button class="btn-neon btn-neon-pink" data-kbd-pulse>
+            <span>SIGN_VISIT</span>
+            <span class="kbd">⌘</span><span class="kbd">S</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-12 gap-6">
+
+        <!-- SOAP body (left) -->
+        <div class="col-span-12 lg:col-span-8 hud-card scanlines-inner" style="border-color: rgba(170,140,255,0.25);">
+          <div class="hud-corners"><div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div></div>
+
+          <div class="grid grid-cols-2 gap-6 mb-6 pb-4 border-b border-cyan-500/20">
+            <div>
+              <div class="font-tech text-[9px] tracking-[0.22em] text-cyan-300/60 uppercase">SUBJ_PATIENT</div>
+              <div class="font-russo text-[18px] text-cyan-300 text-glow-cyan glitch-hover">M. OKADA</div>
+            </div>
+            <div>
+              <div class="font-tech text-[9px] tracking-[0.22em] text-cyan-300/60 uppercase">SPECIALTY // ENC_TYPE</div>
+              <div class="font-russo text-[14px] text-pink-300 text-glow-pink">CARDIOLOGY // FOLLOW_UP</div>
+            </div>
+            <div>
+              <div class="font-tech text-[9px] tracking-[0.22em] text-cyan-300/60 uppercase">VST_DATE</div>
+              <div class="font-tech text-[14px]">2026.04.29 // 03:11:42 JST</div>
+            </div>
+            <div>
+              <div class="font-tech text-[9px] tracking-[0.22em] text-cyan-300/60 uppercase">CHART_REF</div>
+              <div class="font-tech text-[14px] text-pink-300">CHART_4291</div>
+            </div>
+          </div>
+
+          <!-- SOAP S -->
+          <div class="mb-6">
+            <div class="flex items-baseline gap-3 mb-2">
+              <span class="font-display font-black text-[36px] holo-text">S</span>
+              <span class="sector-label">// SUBJECTIVE</span>
+            </div>
+            <p class="font-mono text-[13px] leading-[1.7]" style="color: var(--fg-2);">
+              <span class="text-fg-3">CC:</span> Follow-up after recent chest pain episode (1wk prior).<br/>
+              <span class="text-fg-3">HPI:</span> 67yo male presents one week post episode of substernal chest pain that resolved spontaneously. Pain has not recurred. Reports new <span class="text-pink-400 text-glow-pink">dyspnea on exertion</span> climbing stairs. Compliant with newly initiated <span class="text-cyan-300">metoprolol tartrate 25mg BID</span>. Mild morning cough since starting <span class="text-cyan-300">lisinopril 10mg daily</span>. No palpitations, lightheadedness, or peripheral edema.<br/>
+              <span class="text-fg-3">PMH:</span> HTN, T2DM, hyperlipidemia. <span class="text-fg-3">FH:</span> Father MI age 68. <span class="text-fg-3">SH:</span> Former smoker (quit 2018, 30 pack-yrs).
+            </p>
+          </div>
+
+          <!-- SOAP O -->
+          <div class="mb-6">
+            <div class="flex items-baseline gap-3 mb-2">
+              <span class="font-display font-black text-[36px] holo-text">O</span>
+              <span class="sector-label">// OBJECTIVE</span>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+              <div class="hud-cut-tight border border-cyan-500/30 px-3 py-2"><div class="font-tech text-[9px] text-cyan-300/60 uppercase tracking-[0.18em]">BP</div><div class="font-russo text-[16px] text-cyan-300">138/82</div></div>
+              <div class="hud-cut-tight border border-pink-500/30 px-3 py-2"><div class="font-tech text-[9px] text-pink-300/60 uppercase tracking-[0.18em]">HR</div><div class="font-russo text-[16px] text-pink-300">82</div></div>
+              <div class="hud-cut-tight border border-green-500/30 px-3 py-2"><div class="font-tech text-[9px] text-green-300/60 uppercase tracking-[0.18em]">SpO2</div><div class="font-russo text-[16px] text-green-300">98%</div></div>
+              <div class="hud-cut-tight border border-cyan-500/30 px-3 py-2"><div class="font-tech text-[9px] text-cyan-300/60 uppercase tracking-[0.18em]">Wt</div><div class="font-russo text-[16px] text-cyan-300">82kg</div></div>
+            </div>
+            <p class="font-mono text-[13px] leading-[1.7]" style="color: var(--fg-2);">
+              <span class="text-fg-3">PE:</span> Alert, NAD. Lungs clear bilaterally. Cardiac: RRR, no murmurs, rubs, or <span class="text-pink-400">S3 gallop</span>. Peripheral pulses 2+ symmetric. No edema.
+              <span class="text-fg-3">EKG (prior):</span> NSR, no acute changes. <span class="text-fg-3">Trop:</span> negative ×2.
+            </p>
+          </div>
+
+          <!-- SOAP A -->
+          <div class="mb-6">
+            <div class="flex items-baseline gap-3 mb-2">
+              <span class="font-display font-black text-[36px] holo-text">A</span>
+              <span class="sector-label">// ASSESSMENT</span>
+            </div>
+            <ol class="font-mono text-[13px] leading-[1.7] space-y-2">
+              <li><span class="text-pink-300 font-russo">[01]</span> Atypical chest pain, resolved // <span class="font-tech text-cyan-300">R07.9 // CONF 0.78</span></li>
+              <li><span class="text-pink-300 font-russo">[02]</span> Hypertension, suboptimal control // <span class="font-tech text-cyan-300">I10 // CONF 0.94</span></li>
+              <li><span class="text-pink-300 font-russo">[03]</span> Type 2 DM // <span class="font-tech text-cyan-300">E11.9 // CONF 0.88</span></li>
+              <li><span class="text-pink-300 font-russo">[04]</span> Dyspnea on exertion, new // <span class="font-tech text-cyan-300">R06.0 // CONF 0.71</span></li>
+              <li><span class="text-pink-300 font-russo">[05]</span> ACE-inhibitor cough, suspected // <span class="font-tech text-cyan-300">T88.7 // CONF 0.66</span></li>
+            </ol>
+          </div>
+
+          <!-- SOAP P -->
+          <div>
+            <div class="flex items-baseline gap-3 mb-2">
+              <span class="font-display font-black text-[36px] holo-text">P</span>
+              <span class="sector-label">// PLAN</span>
+            </div>
+            <ul class="font-mono text-[13px] leading-[1.8] space-y-1">
+              <li><span class="text-cyan-300">&gt;</span> Continue metoprolol tartrate 25mg BID; titrate per BP/HR.</li>
+              <li><span class="text-cyan-300">&gt;</span> <span class="text-pink-400 text-glow-pink">SWITCH lisinopril → losartan 50mg daily</span> (ACE-I cough; ARB substitution).</li>
+              <li><span class="text-cyan-300">&gt;</span> Stress echo within 2wk for DOE workup.</li>
+              <li><span class="text-cyan-300">&gt;</span> Lipid panel + HbA1c at next visit.</li>
+              <li><span class="text-cyan-300">&gt;</span> RTC 4 weeks; sooner if recurrent CP, dyspnea worsens.</li>
+              <li><span class="text-cyan-300">&gt;</span> Patient education re: warning symptoms (call 911).</li>
+            </ul>
+          </div>
+
+          <!-- footer ops bar -->
+          <div class="mt-6 pt-4 border-t border-cyan-500/20 flex items-center justify-between">
+            <div class="font-tech text-[10px] text-fg-3 flex items-center gap-3">
+              <span class="kbd">⌘</span><span class="kbd">C</span> COPY_EHR
+              <span class="kbd">⌘</span><span class="kbd">P</span> EXPORT_PDF
+              <span class="kbd">⌘</span><span class="kbd">D</span> EXPORT_DOCX
+              <span class="kbd">⌘</span><span class="kbd">M</span> EMAIL
+            </div>
+            <div class="font-tech text-[10px]">
+              <span class="text-cyan-300/70">// READABILITY</span>
+              <span class="text-green-300 text-glow-green font-russo">GRADE_8.2</span>
+              <span class="text-cyan-300/70">// EDIT_DIST</span>
+              <span class="text-pink-300 text-glow-pink font-russo">0.0</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- RIGHT — RX warning + actions -->
+        <div class="col-span-12 lg:col-span-4 space-y-6">
+
+          <!-- RX critical card -->
+          <div class="hud-card scanlines-inner relative" style="border-color: var(--status-err); box-shadow: 0 0 0 1px var(--status-err), 0 0 24px rgba(255,0,64,0.25) inset;">
+            <div class="hud-corners">
+              <div class="corner tl" style="border-color: var(--status-err);"></div>
+              <div class="corner tr" style="border-color: var(--status-err);"></div>
+              <div class="corner bl" style="border-color: var(--status-err);"></div>
+              <div class="corner br" style="border-color: var(--status-err);"></div>
+            </div>
+
+            <div class="flex items-start justify-between mb-4">
+              <div>
+                <div class="sector-label" style="color: var(--status-err);">// RX_WARN :: CRITICAL</div>
+                <div class="font-display text-[24px] mt-1 glitch text-glow-pink" data-text="QT_PROLONG" style="color: var(--status-err);">QT_PROLONG</div>
+              </div>
+              <span class="cp-pill cp-pill-err">CONF 0.92</span>
+            </div>
+
+            <div class="font-mono text-[13px] leading-[1.6] mb-4" style="color: var(--fg-2);">
+              <span class="text-pink-400 text-glow-pink font-russo">amiodarone</span> +
+              <span class="text-pink-400 text-glow-pink font-russo">azithromycin</span>
+              :: detected QTc-prolonging combination. Risk of torsades de pointes.
+            </div>
+
+            <div class="space-y-2 mb-4 font-tech text-[11px]">
+              <div class="flex justify-between border-b border-pink-500/20 pb-1">
+                <span class="text-fg-3">// MECHANISM</span>
+                <span class="text-pink-300">hERG_K_block</span>
+              </div>
+              <div class="flex justify-between border-b border-pink-500/20 pb-1">
+                <span class="text-fg-3">// EVIDENCE</span>
+                <span class="text-pink-300">FDA_BBW</span>
+              </div>
+              <div class="flex justify-between border-b border-pink-500/20 pb-1">
+                <span class="text-fg-3">// SEVERITY</span>
+                <span class="text-red-300 text-glow-pink font-russo">MAJOR</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-fg-3">// RECOMM</span>
+                <span class="text-pink-300">substitute_alt_macrolide</span>
+              </div>
+            </div>
+
+            <div class="space-y-2">
+              <button class="w-full btn-neon btn-neon-pink justify-center" data-kbd-pulse>
+                <span>SUBSTITUTE :: AZITH → DOXY</span>
+                <span class="kbd">↵</span>
+              </button>
+              <button class="w-full btn-neon justify-center" data-kbd-pulse>
+                <span>OVERRIDE :: REQ_REASON</span>
+                <span class="kbd">O</span>
+              </button>
+            </div>
+
+            <div class="mt-3 pt-3 border-t border-pink-500/20 font-tech text-[9px] text-fg-3 tracking-[0.18em] uppercase">
+              // LAYER_07C_RX :: AUDIT_TRAIL_ACTIVE
+            </div>
+          </div>
+
+          <!-- CPT codes -->
+          <div class="hud-card hud-card-cyan scanlines-inner relative">
+            <div class="hud-corners"><div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div></div>
+            <div class="flex items-center justify-between mb-3">
+              <div class="sector-label">// CPT_BRACKETS // L07B</div>
+              <span class="font-tech text-[9px] text-cyan-300/60">SUGG</span>
+            </div>
+            <div class="space-y-2">
+              <div class="hud-cut-tight border border-cyan-500/40 px-3 py-2 flex items-baseline justify-between">
+                <span class="font-russo text-cyan-300 text-glow-cyan">99214</span>
+                <span class="font-tech text-[10px] text-fg-3">EST_OFFICE_LV4</span>
+              </div>
+              <div class="hud-cut-tight border border-cyan-500/40 px-3 py-2 flex items-baseline justify-between">
+                <span class="font-russo text-cyan-300 text-glow-cyan">93000</span>
+                <span class="font-tech text-[10px] text-fg-3">EKG_INTERP</span>
+              </div>
+              <div class="hud-cut-tight border border-cyan-500/40 px-3 py-2 flex items-baseline justify-between">
+                <span class="font-russo text-cyan-300 text-glow-cyan">93306</span>
+                <span class="font-tech text-[10px] text-fg-3">ECHO_2D_DOPP</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Audit trail -->
+          <div class="hud-card hud-card-green scanlines-inner relative">
+            <div class="hud-corners hud-bracket-green"><div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div></div>
+            <div class="flex items-center justify-between mb-3">
+              <div class="sector-label" style="color: var(--neon-green);">// AUDIT_TRAIL</div>
+              <span class="font-tech text-[9px] text-green-300/60">5_EVENTS</span>
+            </div>
+            <div class="font-tech text-[10px] leading-[1.7] space-y-1">
+              <div class="flex gap-2"><span class="text-cyan-400">[03:12:48]</span><span class="text-green-300">VST_READY</span></div>
+              <div class="flex gap-2"><span class="text-cyan-400">[03:12:40]</span><span class="text-pink-300">RX_WARN_TRIGGERED</span></div>
+              <div class="flex gap-2"><span class="text-cyan-400">[03:12:09]</span><span class="text-cyan-300">SOAP_GEN_DONE</span></div>
+              <div class="flex gap-2"><span class="text-cyan-400">[03:11:54]</span><span class="text-cyan-300">XCRIBE_DONE</span></div>
+              <div class="flex gap-2"><span class="text-cyan-400">[03:11:42]</span><span class="text-fg-2">VST_OPENED</span></div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ═════════════════════════════════════════════════════════════════════════════
+     FOOTER STRIP
+     ═════════════════════════════════════════════════════════════════════════════ -->
+<footer class="border-t border-pink-500/30 mt-16" style="background: linear-gradient(180deg, transparent, rgba(255,0,128,0.05));">
+  <div class="max-w-[1480px] mx-auto px-6 py-10 grid grid-cols-12 gap-6">
+
+    <div class="col-span-12 md:col-span-4">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="relative w-10 h-10 hud-cut-tight" style="background: linear-gradient(135deg, var(--holo-1), var(--holo-2), var(--holo-3)); background-size: 200% 200%; animation: holo-shift 4s linear infinite;">
+          <div class="absolute inset-[1px] hud-cut-tight grid place-items-center font-russo text-xl" style="background: var(--void); color: var(--neon-cyan); text-shadow: 0 0 8px var(--neon-cyan);">Q</div>
+        </div>
+        <div>
+          <div class="font-display text-[18px] holo-text">QUILLMD</div>
+          <div class="font-tech text-[9px] tracking-[0.32em] text-cyan-300/70">// NETRUNNER_OS_v4.0.1</div>
+        </div>
+      </div>
+      <p class="font-mono text-[12px] leading-[1.7] text-fg-3">
+        // The AI scribe that ships in the hue you actually want.<br/>
+        // Tokyo edge. Tier-3 sec. PHI redacted before the log writes.
+      </p>
+    </div>
+
+    <div class="col-span-6 md:col-span-2">
+      <div class="sector-label mb-3">// PRODUCT</div>
+      <ul class="space-y-1 font-tech text-[12px] text-fg-2">
+        <li class="hover:text-cyan-300 cursor-pointer transition glitch-hover">SCRIBE</li>
+        <li class="hover:text-cyan-300 cursor-pointer transition glitch-hover">RX_GUARD</li>
+        <li class="hover:text-cyan-300 cursor-pointer transition glitch-hover">CODER_07</li>
+        <li class="hover:text-cyan-300 cursor-pointer transition glitch-hover">PORTAL</li>
+      </ul>
+    </div>
+
+    <div class="col-span-6 md:col-span-2">
+      <div class="sector-label mb-3">// COMPLIANCE</div>
+      <ul class="space-y-1 font-tech text-[12px] text-fg-2">
+        <li class="hover:text-pink-300 cursor-pointer transition glitch-hover">HIPAA_BAA</li>
+        <li class="hover:text-pink-300 cursor-pointer transition glitch-hover">SOC2_T2</li>
+        <li class="hover:text-pink-300 cursor-pointer transition glitch-hover">GDPR</li>
+        <li class="hover:text-pink-300 cursor-pointer transition glitch-hover">21_CFR_PART_11</li>
+      </ul>
+    </div>
+
+    <div class="col-span-6 md:col-span-2">
+      <div class="sector-label mb-3">// NETRUNNER</div>
+      <ul class="space-y-1 font-tech text-[12px] text-fg-2">
+        <li class="hover:text-green-300 cursor-pointer transition glitch-hover">DOC.MD</li>
+        <li class="hover:text-green-300 cursor-pointer transition glitch-hover">API_REF</li>
+        <li class="hover:text-green-300 cursor-pointer transition glitch-hover">CLI</li>
+        <li class="hover:text-green-300 cursor-pointer transition glitch-hover">SDK</li>
+      </ul>
+    </div>
+
+    <div class="col-span-6 md:col-span-2">
+      <div class="sector-label mb-3">// EXIT_NODE</div>
+      <ul class="space-y-1 font-tech text-[12px] text-fg-2">
+        <li class="hover:text-cyan-300 cursor-pointer transition glitch-hover">SUPPORT@</li>
+        <li class="hover:text-cyan-300 cursor-pointer transition glitch-hover">SECURITY@</li>
+        <li class="hover:text-cyan-300 cursor-pointer transition glitch-hover">SALES@</li>
+        <li class="hover:text-cyan-300 cursor-pointer transition glitch-hover">JACK_OUT</li>
+      </ul>
+    </div>
+
+  </div>
+
+  <div class="border-t border-cyan-500/20">
+    <div class="max-w-[1480px] mx-auto px-6 py-4 flex flex-wrap items-center justify-between gap-3 font-tech text-[10px] tracking-[0.22em] uppercase text-fg-3">
+      <span>// © 2026 QUILLMD_LABS // ALL_BITS_RESERVED</span>
+      <span class="flex items-center gap-3">
+        <span>v4.0.1 // BUILD_8842F</span>
+        <span class="text-cyan-300">//</span>
+        <span class="text-pink-400 text-glow-pink">DIR_03 :: CYBERPUNK</span>
+        <span class="text-cyan-300">//</span>
+        <span>NODE_TOKYO_EDGE_04</span>
+      </span>
+      <span>// JST 03:14:08</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // Periodic glitch flashes on randomized elements (REC badge, headlines)
+  (function () {
+    const targets = document.querySelectorAll('.glitch-flash');
+    setInterval(() => {
+      targets.forEach(t => {
+        if (Math.random() > 0.7) {
+          t.style.animation = 'none';
+          // force reflow
+          // eslint-disable-next-line no-unused-expressions
+          t.offsetHeight;
+          t.style.animation = '';
+        }
+      });
+    }, 1800);
+  })();
+
+  // Periodic glitch on holo-text headlines (random hue jumps)
+  (function () {
+    const headlines = document.querySelectorAll('.holo-text');
+    setInterval(() => {
+      headlines.forEach(h => {
+        if (Math.random() > 0.92) {
+          h.style.filter = 'hue-rotate(' + Math.floor(Math.random() * 240) + 'deg) drop-shadow(0 0 12px rgba(255,0,200,0.45))';
+          setTimeout(() => { h.style.filter = ''; }, 80);
+        }
+      });
+    }, 600);
+  })();
+
+  // Random character substitution glitch on key elements (~80ms)
+  (function () {
+    const cands = document.querySelectorAll('[data-text]');
+    const noise = '!@#$%^&*?<>/\\|0123456789ABCDEF';
+    setInterval(() => {
+      cands.forEach(el => {
+        if (Math.random() > 0.95) {
+          const orig = el.getAttribute('data-text');
+          const arr = orig.split('');
+          const idx = Math.floor(Math.random() * arr.length);
+          if (arr[idx] !== ' ') arr[idx] = noise[Math.floor(Math.random() * noise.length)];
+          const display = arr.join('');
+          el.setAttribute('data-text', display);
+          // also briefly substitute the visible text
+          const prev = el.firstChild && el.firstChild.nodeType === 3 ? el.firstChild.nodeValue : null;
+          if (prev) {
+            el.firstChild.nodeValue = display;
+            setTimeout(() => {
+              el.firstChild.nodeValue = orig;
+              el.setAttribute('data-text', orig);
+            }, 80);
+          } else {
+            setTimeout(() => { el.setAttribute('data-text', orig); }, 80);
+          }
+        }
+      });
+    }, 700);
+  })();
+</script>
+
+</body>
+</html>

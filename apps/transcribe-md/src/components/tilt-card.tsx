@@ -11,15 +11,29 @@ import { cn } from '@/lib/cn';
  * Reduced-motion preference is honoured via CSS (transitions collapse
  * in globals.css), and pointer-coarse devices (touch) skip the tilt
  * entirely to keep scroll performance clean.
+ *
+ * Variant — `'violet'` (default, App-redesign-v1 spotlight tint) or
+ * `'sage'` (Clinician). Per the migration brief no `theme` prop on
+ * this visual-flourish wrapper; instead an opt-in `data-variant`
+ * attribute hook + spotlight tint swap.
  */
 const MAX_TILT_DEG = 6;
+
+type TiltVariant = 'violet' | 'sage';
+
+const SPOTLIGHT_TINT: Record<TiltVariant, string> = {
+  violet: 'rgba(167,139,250,0.25)', // violet-300 @ 25 %
+  sage: 'rgba(122,166,140,0.20)',   // --sage @ 20 %
+};
 
 export function TiltCard({
   children,
   className,
+  variant = 'violet',
 }: {
   children: React.ReactNode;
   className?: string;
+  variant?: TiltVariant;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [transform, setTransform] = useState<string>('');
@@ -50,6 +64,7 @@ export function TiltCard({
   return (
     <div
       ref={ref}
+      data-variant={variant}
       onPointerMove={onMove}
       onPointerLeave={onLeave}
       style={{
@@ -66,8 +81,8 @@ export function TiltCard({
           aria-hidden
           className="pointer-events-none absolute inset-0 rounded-[inherit] opacity-40"
           style={{
-            background: `radial-gradient(circle at ${spotlight.x}% ${spotlight.y}%, rgba(167,139,250,0.25), transparent 55%)`,
-            mixBlendMode: 'screen',
+            background: `radial-gradient(circle at ${spotlight.x}% ${spotlight.y}%, ${SPOTLIGHT_TINT[variant]}, transparent 55%)`,
+            mixBlendMode: variant === 'sage' ? 'multiply' : 'screen',
           }}
         />
       )}
