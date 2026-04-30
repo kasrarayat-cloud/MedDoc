@@ -23,6 +23,7 @@ import {
   Sparkles,
   Download,
   ChevronDown,
+  Lock,
 } from 'lucide-react';
 
 import { cn } from '@/lib/cn';
@@ -39,6 +40,7 @@ import {
   sectionRx,
   sectionExtras,
 } from '@/lib/ehr-formatters';
+import { formatLocalDateTime } from '@/lib/format-time';
 
 type VisitReadyViewTheme = 'legacy' | 'clinician';
 
@@ -117,6 +119,18 @@ export interface VisitReadyViewProps {
    *  the server page reads `NEXT_PUBLIC_SHOW_PIPELINE_TAB=true` from
    *  the runtime env. */
   showPipelineTab: boolean;
+  /** Batch H — ISO 8601 UTC moment the doctor signed the note, or
+   *  null while still drafting. Drives the calm "Signed at … by …"
+   *  card that supersedes the Sign & Send CTA in the SOAP tab so a
+   *  doctor can never re-sign a note they've already signed. */
+  signedAt: string | null;
+  /** Batch H — display name of the signer for the calm card. The
+   *  Visit page already loads the authed user (who is, per the
+   *  ownership guard, the same person as the visit's user) so we
+   *  thread it through here as a string instead of selecting the
+   *  user relation a second time. Falls back to "you" in the UI
+   *  when missing. */
+  signedByName: string | null;
   /** Phase 2 (Clinician remodel) — additive theme prop. */
   theme?: VisitReadyViewTheme;
 }
@@ -181,6 +195,24 @@ export function VisitReadyView(props: VisitReadyViewProps) {
                 theme={theme}
               />
             </div>
+            {/* Batch H — when signedAt is set, surface a calm
+                "Signed at … by …" card immediately above the SOAP
+                editor. This is the visual replacement for the Sign &
+                Send CTA the doctor expected to find here; the CTA
+                itself is hidden inside <SoapEditor> via the same
+                signedAt gate. The card uses .qm-cl-card on the
+                clinician theme (cream-card surface + soft sage tint
+                on the lock icon) so it reads as finalized rather than
+                celebratory. The legacy theme renders a smaller
+                neutral banner so the dark non-Clinician routes still
+                surface the signed-state cue. */}
+            {props.signedAt && (
+              <SignedStateCard
+                signedAt={props.signedAt}
+                signedByName={props.signedByName}
+                theme={theme}
+              />
+            )}
             <SoapEditor
               visitId={props.visitId}
               doctorEmail={props.doctorEmail}
@@ -1052,5 +1084,108 @@ function RawTextInputView({
     >
       {text}
     </pre>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Batch H — SignedStateCard. Renders in place of the Sign & Send CTA
+// on signed visits. Calm tone (no celebratory checkmark explosion):
+// soft cream-card surface, sage lock icon, single line of factual
+// metadata. Mockup-aligned with the visit-detail design language —
+// the doctor sees "this note is locked" not "you did a great job."
+// ---------------------------------------------------------------------------
+function SignedStateCard({
+  signedAt,
+  signedByName,
+  theme,
+}: {
+  signedAt: string;
+  signedByName: string | null;
+  theme: VisitReadyViewTheme;
+}) {
+  const isClinician = theme === 'clinician';
+  const formatted = formatLocalDateTime(signedAt);
+  const signer = signedByName?.trim() || 'you';
+  if (isClinician) {
+    return (
+      <div
+        className="qm-cl-card"
+        role="status"
+        aria-label="This note is signed"
+        style={{
+          padding: '14px 18px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+        }}
+      >
+        <div
+          aria-hidden
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: 10,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'var(--sage-tint-strong)',
+            color: 'var(--sage-deep)',
+            flexShrink: 0,
+          }}
+        >
+          <Lock className="h-4 w-4" aria-hidden />
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <div
+            className="qm-cl-serif"
+            style={{
+              fontSize: 15,
+              color: 'var(--ink, #2B2620)',
+              lineHeight: 1.4,
+            }}
+          >
+            Signed at{' '}
+            <span style={{ fontStyle: 'italic', color: 'var(--sage-deep, #2F5040)' }}>
+              {formatted}
+            </span>{' '}
+            by <span style={{ color: 'var(--ink, #2B2620)' }}>{signer}</span>
+          </div>
+          <div
+            style={{
+              marginTop: 2,
+              fontSize: 12.5,
+              color: 'var(--ink-3, #8A8278)',
+            }}
+          >
+            This note is locked. Use Export again below to re-send a copy.
+          </div>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div
+      role="status"
+      aria-label="This note is signed"
+      className={cn(
+        'flex items-center gap-3 rounded-xl border border-border-subtle bg-bg-surface-1/60 px-4 py-3'
+      )}
+    >
+      <div
+        aria-hidden
+        className="flex h-8 w-8 flex-none items-center justify-center rounded-md bg-violet-500/15 text-violet-200"
+      >
+        <Lock className="h-4 w-4" aria-hidden />
+      </div>
+      <div className="min-w-0">
+        <div className="text-[13px] text-text-primary">
+          Signed at <span className="text-violet-300">{formatted}</span> by{' '}
+          <span className="text-text-primary">{signer}</span>
+        </div>
+        <div className="mt-0.5 text-[11.5px] text-text-muted">
+          This note is locked. Use Export again below to re-send a copy.
+        </div>
+      </div>
+    </div>
   );
 }
