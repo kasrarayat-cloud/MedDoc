@@ -4,9 +4,8 @@ import { HeroOrb } from './HeroOrb';
 /**
  * Split `text` into word spans with staggered `animation-delay` values so the
  * H1 fades up word-by-word on first paint. Server-rendered — no DOM mutation
- * and no hydration risk. The initial state (opacity 0, translateY) comes from
- * the `.word-anim` rule in landing.css; the `charIn` keyframe drives them to
- * final state with `forwards` fill-mode.
+ * and no hydration risk. Now uses the gentle Clinician word-in keyframe
+ * defined in landing.css (240–360ms ease-out, no springs).
  */
 function Staggered({
   text,
@@ -18,10 +17,6 @@ function Staggered({
   stepMs?: number;
 }) {
   const parts = text.split(/(\s+)/);
-  // Pre-compute animation delays so the render path doesn't reassign a
-  // closure-scoped `let` (react-hooks/immutability). Delay advances
-  // only for non-whitespace parts to keep the visual cadence tied to
-  // word count rather than whitespace count.
   const delays: number[] = [];
   let running = startMs;
   for (const part of parts) {
@@ -51,6 +46,12 @@ function Staggered({
   );
 }
 
+/**
+ * Hero — calm, two-column. Source Serif 4 italic accent on the headline.
+ * Per docs/design-directions-v3/clinician/landing-and-recording.html the
+ * pediatrician-at-5pm test: this surface should feel a tiny bit better
+ * than dark-mode brutalism, not a tiny bit worse.
+ */
 export function Hero() {
   return (
     <section className="hero">
@@ -76,7 +77,10 @@ export function Hero() {
           <p className="hero-sub reveal">
             QuillMD listens to the visit and hands you back a signed SOAP note, ICD‑10 / CPT codes,
             Rx drafts, referrals, and a patient summary — before your next patient knocks. Built for
-            US physicians. <strong style={{ color: 'var(--fg)' }}>$49 a month. Flat.</strong>
+            US physicians.{' '}
+            <strong style={{ color: 'var(--fg)', fontWeight: 500 }}>
+              $49 a month. Flat.
+            </strong>
           </p>
 
           <div className="hero-actions reveal">
