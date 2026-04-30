@@ -76,6 +76,7 @@ export default async function VisitPage({
     chiefComplaint: string | null;
     inputMode: string;
     status: TranscribeVisitStatus;
+    signedAt: Date | null;
     deletedAt: Date | null;
     archivedAt: Date | null;
     patient: {
@@ -126,6 +127,7 @@ export default async function VisitPage({
         chiefComplaint: true,
         inputMode: true,
         status: true,
+        signedAt: true,
         deletedAt: true,
         archivedAt: true,
         patient: {
@@ -306,9 +308,11 @@ export default async function VisitPage({
         <VisitBody
           visitId={visit.id}
           doctorEmail={user.email}
+          doctorName={user.name}
           emailEnabled={isEmailDeliveryEnabled()}
           inputMode={visit.inputMode}
           status={visit.status}
+          signedAt={visit.signedAt}
           audioKey={visit.audioKey}
           audioDurationSec={visit.audioDurationSec}
           dictationAudioKey={visit.dictationAudioKey}
@@ -433,9 +437,16 @@ function VisitReadyHeader({
 interface VisitBodyProps {
   visitId: string;
   doctorEmail: string;
+  /** Batch H — display name of the signer (i.e., the visit owner who
+   *  is the same person as the authed user per the ownership guard).
+   *  Threaded into VisitReadyView for the "Signed at … by …" card. */
+  doctorName: string | null;
   emailEnabled: boolean;
   inputMode: string;
   status: TranscribeVisitStatus;
+  /** Batch H — moment the doctor signed the note (or null while
+   *  drafting). Drives the visual signed-state pill + calm card. */
+  signedAt: Date | null;
   audioKey: string | null;
   audioDurationSec: number | null;
   dictationAudioKey: string | null;
@@ -576,6 +587,10 @@ function VisitBody(props: VisitBodyProps) {
       doctorEmail={props.doctorEmail}
       emailEnabled={props.emailEnabled}
       showPipelineTab={showPipelineTab}
+      signedAt={
+        props.signedAt ? props.signedAt.toISOString() : null
+      }
+      signedByName={props.doctorName}
       theme="clinician"
     />
   );
