@@ -10,6 +10,7 @@ Status legend:
 | ---                                     | ---                                                                                                                      |
 | `Mitigated`                             | Control is in place AND verified in production.                                                                          |
 | `Mitigated (pending operator migration)`| Code/infra change is shipped; production cutover requires a maintenance window run by the operator per the linked runbook. |
+| `Mitigated (pending operator credential population + BAA)` | Code/infra change is shipped; production activation requires the operator to sign the third-party BAA, populate credentials, and run the verification drill per the linked runbook. |
 | `In progress`                           | Active work, not yet shipped.                                                                                            |
 | `Open`                                  | Acknowledged, not yet started.                                                                                           |
 | `Accepted risk`                         | Documented decision not to mitigate; rationale linked.                                                                   |
@@ -18,10 +19,10 @@ Status legend:
 
 ## Findings matrix
 
-| ID  | HIPAA citation                              | Finding                                                                 | Status                                       | Evidence / runbook                                                                              |
-| --- | ---                                         | ---                                                                     | ---                                          | ---                                                                                             |
-| h8  | §164.312(a)(2)(iv) — Encryption & decryption | Postgres data volume on the Zap Hosting VPS is not encrypted at rest. | **Mitigated (pending operator migration)** | Code: `infra/setup-encrypted-volume.sh`, `docker-compose.yml` (postgres bind mount). Runbook: [docs/RUNBOOK_ENCRYPTED_VOLUME.md](RUNBOOK_ENCRYPTED_VOLUME.md). |
-| h16 | §164.308(a)(7)(ii)(A) — Data backup plan    | *(populated by sibling branch `feature/phase3-hipaa-h16-offsite-backup` — placeholder row, lead agent merges.)*   | *(see sibling branch)*                       | *(placeholder)*                                                                                 |
+| ID  | HIPAA citation                              | Finding                                                                                                                                       | Status                                                              | Evidence / runbook                                                                                                                                                                                |
+| --- | ---                                         | ---                                                                                                                                           | ---                                                                 | ---                                                                                                                                                                                              |
+| h8  | §164.312(a)(2)(iv) — Encryption & decryption | Postgres data volume on the Zap Hosting VPS is not encrypted at rest.                                                                         | **Mitigated (pending operator migration)**                          | Code: `infra/setup-encrypted-volume.sh`, `docker-compose.yml` (postgres bind mount). Runbook: [docs/RUNBOOK_ENCRYPTED_VOLUME.md](RUNBOOK_ENCRYPTED_VOLUME.md).                                  |
+| h16 | §164.308(a)(7)(ii)(A) — Data backup plan    | Backups are co-located with the live database. Loss of the VPS = loss of both. Geographically-distinct, encrypted offsite copy required. Also touches §164.308(a)(7)(ii)(B) (DR plan). | **Mitigated (pending operator credential population + BAA)**       | Code: `infra/backup-offsite-sync.sh`, `docker-compose.yml` (postgres-backup env block + bind mounts), `.env.example`. Runbook: [docs/RUNBOOK_OFFSITE_BACKUP.md](RUNBOOK_OFFSITE_BACKUP.md). |
 
 Additional rows from other Phase 3 findings will be appended here as
 each branch lands.
@@ -69,9 +70,71 @@ Hetzner-style managed volumes.
 
 ---
 
+## h16 — Offsite encrypted backup
+
+**Approach.** After every `pg_dump` produced by the existing
+`postgres-backup` sidecar, a post-hook script
+(`infra/backup-offsite-sync.sh`) **age-encrypts** the dump using a
+public key whose private counterpart is held by the operator
+off-host, then uploads the encrypted blob to a Backblaze B2 bucket
+under a HIPAA BAA. Retains 30 days of offsite blobs; the live local
+backups remain unchanged.
+
+**Why Backblaze B2.** Cheapest HIPAA-eligible S3-compatible object
+store with a published BAA process (~$6/TB/month at the time of
+writing). Buying offsite is a pure docs/operator gate — the code is
+provider-agnostic via the standard `b2` CLI; swapping providers is a
+runbook change, not a code change.
+
+**Why age (not GPG).** Single-recipient encryption with a fixed
+public key, no agent, no keyring, simple to audit. Private key never
+touches the VPS — it lives on an offline workstation in the
+operator's secrets store.
+
+**What "offsite encrypted backup" actually buys you here.**
+
+- Mitigates: total VPS loss (datacenter fire, account compromise,
+  ransomware on the host filesystem). Restoration requires only the
+  age private key + the latest B2 blob.
+- Does NOT mitigate: data integrity bugs that produce a corrupt
+  pg_dump (the offsite is a faithful copy of whatever the live
+  backup is — verify pg_restore drills quarterly).
+
+**Operational responsibilities.**
+
+1. Sign the BAA with Backblaze and file the countersigned copy in
+   the corporate compliance vault.
+2. Generate and **off-host archive** the age private key. The public
+   key (`/etc/meddoc/offsite-backup-public.age`) lives on the VPS;
+   the private key MUST NOT.
+3. Verify the encrypted blob hash + a successful end-to-end restore
+   drill on a non-prod host within 14 days of going live, and then
+   quarterly.
+4. Rotate the age keypair every 12 months. Old encrypted blobs
+   remain decryptable with the historical private key — keep an
+   offline archive.
+
+The code does NOT contain real B2 credentials. They live only in
+`.env` on the VPS, sourced into the `postgres-backup` container
+environment.
+
+---
+
+## Cross-reference
+
+The companion **unencrypted** offsite-backup procedure
+(`docs/H16_OFFSITE_BACKUP_PROCEDURE.md`, Hetzner Object Storage via `mc
+mirror`) remains in the repo and is independent of this work. For
+HIPAA-bound deployments, **prefer the encrypted-with-BAA path documented
+above**. The unencrypted Hetzner mirror is fine for non-PHI operational
+redundancy or as a second offsite copy after the encrypted one is
+running.
+
+---
+
 ## Key Rotation Policy
 
-**Rotate the LUKS key:**
+**Rotate the LUKS key (h8):**
 
 - **Every 12 months**, on a fixed calendar reminder.
 - **Immediately** after any privileged-staff turnover — anyone who
@@ -126,3 +189,8 @@ echo "$(date -u +%FT%TZ), h8-encrypt-at-rest, ROTATE, operator=<you>, sha256(key
 
 The full procedure with rollback notes lives in
 [docs/RUNBOOK_ENCRYPTED_VOLUME.md §5](RUNBOOK_ENCRYPTED_VOLUME.md#5-key-rotation).
+
+**Rotate the age keypair (h16):** see
+[docs/RUNBOOK_OFFSITE_BACKUP.md §D](RUNBOOK_OFFSITE_BACKUP.md). Old
+encrypted blobs remain decryptable with the historical private key —
+the operator MUST keep an offline archive of every key version.
