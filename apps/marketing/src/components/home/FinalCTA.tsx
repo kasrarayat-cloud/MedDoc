@@ -26,8 +26,8 @@ export function FinalCTA() {
           Your next patient <em>shouldn&apos;t wait.</em>
         </h2>
         <p className="reveal">
-          Set it up in minutes. Sign your first AI‑drafted note the same day. Keep the violet glow —
-          or match it to your practice colors later.
+          Set it up in minutes. Sign your first AI‑drafted note the same day. No sales call,
+          no demo gauntlet, no procurement. Cancel with one click if it doesn&apos;t earn its keep.
         </p>
         <div className="final-actions reveal">
           <a href={APP_SIGNUP_URL} className="btn btn-primary btn-lg">
