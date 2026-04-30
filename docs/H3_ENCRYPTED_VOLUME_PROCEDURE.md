@@ -1,3 +1,11 @@
+> **SUPERSEDED — 2026-04-30.** The Hetzner managed-volume approach
+> below is archival; production deployment moved to Zap Hosting,
+> which does not expose Hetzner managed volumes. The current
+> encryption-at-rest procedure is `docs/RUNBOOK_ENCRYPTED_VOLUME.md`
+> (LUKS-on-loop-file, self-managed key custody).
+
+---
+
 # H3 — Hetzner managed encrypted volume migration procedure
 
 *Phase 13. The procedure for closing `h8-h3-pilot-followup`.*
