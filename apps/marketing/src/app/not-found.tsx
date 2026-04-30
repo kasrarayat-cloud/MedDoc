@@ -14,23 +14,24 @@ export default function NotFound() {
       <NavBar />
       <main>
         <section className="relative flex min-h-[80vh] items-center overflow-hidden pt-32 pb-24">
-          {/* Floating violet orb — the "missing" thing. Drifts gently. */}
+          {/* Soft sage halo — the "missing" thing. Drifts gently per the
+             Clinician motion vocabulary (240–600ms ease-out, no springs). */}
           <motion.div
             aria-hidden
             initial={{ y: 0, opacity: 0 }}
             animate={{
-              y: [0, -18, 0],
-              opacity: [0.65, 0.9, 0.65],
+              y: [0, -10, 0],
+              opacity: [0.5, 0.75, 0.5],
             }}
             transition={{
               duration: 6,
               repeat: Infinity,
-              ease: 'easeInOut',
+              ease: [0.22, 1, 0.36, 1],
             }}
             className="absolute left-1/2 top-[30%] h-[360px] w-[360px] -translate-x-1/2"
             style={{
               background:
-                'radial-gradient(circle, rgba(139,92,246,0.35) 0%, rgba(124,58,237,0.1) 45%, transparent 70%)',
+                'radial-gradient(circle, rgba(122,166,140,0.28) 0%, rgba(122,166,140,0.08) 45%, transparent 70%)',
               filter: 'blur(24px)',
             }}
           />
@@ -38,15 +39,15 @@ export default function NotFound() {
             <motion.p
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
-              className="text-[12px] font-semibold uppercase tracking-[0.14em] text-text-muted"
+              transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+              className="qm-cl-eyebrow"
             >
               404
             </motion.p>
             <motion.h1
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.1, ease: [0.4, 0, 0.2, 1] }}
+              transition={{ duration: 0.5, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
               className="mt-4 type-display"
             >
               This page <GradientText>slipped through</GradientText>
@@ -57,7 +58,8 @@ export default function NotFound() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.5, delay: 0.25 }}
-              className="mx-auto mt-8 max-w-md text-[16px] text-text-tertiary"
+              className="mx-auto mt-8 max-w-md text-[16px] text-[#5C544A]"
+              style={{ fontFamily: 'var(--font-serif), Georgia, serif' }}
             >
               Nothing lives at this URL. Very rare for our models — we&apos;ll
               flag it for review.

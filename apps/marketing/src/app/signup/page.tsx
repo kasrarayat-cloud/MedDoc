@@ -35,19 +35,20 @@ export default function SignupRedirectPage() {
             className="pointer-events-none absolute inset-x-0 top-0 h-[500px]"
             style={{
               background:
-                'radial-gradient(ellipse 60% 50% at 50% 0%, rgba(139,92,246,0.18) 0%, transparent 65%)',
+                'radial-gradient(ellipse 60% 50% at 50% 0%, rgba(122,166,140,0.18) 0%, transparent 65%)',
             }}
           />
           <div className="relative mx-auto max-w-md px-6 lg:px-8">
             <GradientBorder>
               <div className="p-8 text-center">
-                <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-text-muted">
-                  Redirecting
-                </p>
+                <p className="qm-cl-eyebrow">Redirecting</p>
                 <h1 className="mt-4 type-h1">
                   <GradientText>Sending you to the app…</GradientText>
                 </h1>
-                <p className="mx-auto mt-6 max-w-sm text-[15px] leading-relaxed text-text-secondary">
+                <p
+                  className="mx-auto mt-6 max-w-sm text-[15px] leading-relaxed text-[#5C544A]"
+                  style={{ fontFamily: 'var(--font-serif), Georgia, serif' }}
+                >
                   Signup lives on the app itself now. If this page doesn&apos;t
                   redirect in a second, the button below takes you there.
                 </p>
@@ -57,11 +58,11 @@ export default function SignupRedirectPage() {
                     <ArrowRight className="h-4 w-4" />
                   </SpecularButton>
                 </div>
-                <p className="mt-6 text-[12px] text-text-muted">
+                <p className="mt-6 text-[12.5px] text-[#8A8278]">
                   Already have an account?{' '}
                   <Link
                     href={`${APP_SIGNUP_URL.replace(/\/signup$/, '/login')}`}
-                    className="text-violet-400 hover:text-violet-300 transition-colors"
+                    className="text-[#2F5040] underline decoration-[rgba(122,166,140,0.35)] transition-colors hover:text-[#7AA68C]"
                   >
                     Sign in →
                   </Link>

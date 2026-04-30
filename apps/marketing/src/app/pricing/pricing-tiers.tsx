@@ -79,7 +79,7 @@ export function PricingTiers() {
               {tier.highlight ? (
                 <GradientBorder className="relative h-full">
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <span className="rounded-full bg-[linear-gradient(135deg,#7C3AED_0%,#A855F7_100%)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.1em] text-white shadow-[0_6px_24px_-8px_rgba(124,58,237,0.8)]">
+                    <span className="rounded-full bg-[#2F5040] px-3 py-1 text-[11px] font-medium uppercase tracking-[0.10em] text-[#FFFCF5] shadow-[0_6px_18px_rgba(122,166,140,0.36)]">
                       Most popular
                     </span>
                   </div>
@@ -104,45 +104,43 @@ export function PricingTiers() {
 function TierBody({ tier }: { tier: (typeof TIERS)[number] }) {
   return (
     <div className="flex h-full flex-col p-8">
-      <h3 className="text-[14px] font-semibold uppercase tracking-[0.12em] text-text-muted">
-        {tier.name}
-      </h3>
+      <h3 className="qm-cl-eyebrow">{tier.name}</h3>
       <div className="mt-5 flex items-baseline gap-1">
         <span
           className={cn(
-            'text-[52px] font-bold tracking-tight leading-none',
+            'text-[52px] tracking-tight leading-none text-[#2B2620]',
             tier.highlight && 'text-transparent',
           )}
-          style={
-            tier.highlight
-              ? {
-                  background:
-                    'linear-gradient(135deg, #C4B5FD 0%, #A78BFA 60%, #E9D5FF 100%)',
-                  WebkitBackgroundClip: 'text',
-                  backgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                }
-              : undefined
-          }
+          style={{
+            fontFamily: 'var(--font-serif), Georgia, serif',
+            fontWeight: 400,
+          }}
         >
           {tier.highlight ? <GradientText>{tier.price}</GradientText> : tier.price}
         </span>
-        <span className="text-[14px] text-text-tertiary">{tier.priceSuffix}</span>
+        <span className="text-[14px] text-[#5C544A]">{tier.priceSuffix}</span>
       </div>
-      <p className="mt-4 text-[14px] leading-relaxed text-text-tertiary">
+      <p
+        className="mt-4 text-[15px] leading-relaxed text-[#5C544A]"
+        style={{ fontFamily: 'var(--font-serif), Georgia, serif' }}
+      >
         {tier.blurb}
       </p>
       <ul className="mt-6 space-y-3">
         {tier.features.map((f) => (
-          <li key={f} className="flex items-start gap-3 text-[14px] text-text-secondary">
-            <span className="mt-0.5 inline-flex h-4 w-4 flex-none items-center justify-center rounded-full bg-violet-500/15 text-violet-300">
+          <li
+            key={f}
+            className="flex items-start gap-3 text-[15px] text-[#2B2620]"
+            style={{ fontFamily: 'var(--font-serif), Georgia, serif' }}
+          >
+            <span className="mt-1 inline-flex h-4 w-4 flex-none items-center justify-center rounded-full bg-[rgba(122,166,140,0.18)] text-[#2F5040]">
               <Check className="h-3 w-3" />
             </span>
             <span>{f}</span>
           </li>
         ))}
       </ul>
-      <div className="mt-8 pt-6 border-t border-border-subtle">
+      <div className="mt-8 pt-6 border-t border-[rgba(43,38,32,0.08)]">
         <SpecularButton
           href={APP_SIGNUP_URL}
           variant={tier.highlight ? 'primary' : 'secondary'}
