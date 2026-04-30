@@ -11,6 +11,13 @@ const LINKS = [
   { href: '/#faq', label: 'FAQ' },
 ];
 
+/**
+ * Sticky cream-blur top nav. Wordmark uses the Clinician "Quill" lockup
+ * (Source Serif 4 + sage ink-feather mark) per the landing mockup; the
+ * "MD" italic suffix is dropped because the Clinician brand mark is just
+ * "Quill" (the sub-domain remains quillmd.com — that's the URL, not the
+ * brand).
+ */
 export function Nav() {
   return (
     <nav className="top">
@@ -19,9 +26,7 @@ export function Nav() {
           <span className="brand-quill">
             <QuillMark gradientId="navQuill" />
           </span>
-          <span>
-            Quill<em>MD</em>
-          </span>
+          <span>Quill</span>
         </Link>
         <div className="nav-links">
           {LINKS.map((link) => (
@@ -35,7 +40,7 @@ export function Nav() {
             Sign in
           </a>
           <a href={APP_SIGNUP_URL} className="btn btn-primary">
-            Start free trial <span className="arrow">→</span>
+            Begin a visit <span className="arrow">→</span>
           </a>
         </div>
       </div>
