@@ -1,203 +1,239 @@
 @import "tailwindcss";
 
 /* ============================================================================
-   TranscribeMD design tokens — Linear/Raycast/Vercel/Resend idiom
+   QuillMD marketing — Clinician design language (Phase 3)
    ----------------------------------------------------------------------------
-   Background layers (bg-base → bg-surface-3) climb from deepest to most
-   elevated. Borders climb from subtle → emphasis the same way. Violet is
-   the only brand colour; cyan/green/amber/red are status.
+   Re-skinned for the Clinician direction that ships on app.quillmd.com after
+   Phase 2. Warm cream canvas, sage primary, muted teal/amber/coral accents,
+   Source Serif 4 for content + DM Sans for chrome + JetBrains Mono for IDs.
+   Tokens duplicated 1:1 from apps/transcribe-md/src/app/globals.css so the
+   two surfaces share a vocabulary without a cross-import (the apps deploy
+   independently — cross-imports break the marketing build).
 
-   All tokens exposed as Tailwind utilities via the @theme directive
-   (Tailwind v4 CSS-first config — no tailwind.config.ts).
+   Source of truth: docs/design-directions-v3/clinician/{landing-and-recording,
+   dashboard,visit-detail}.html and docs/design-directions-v3/clinician/README.md.
+
+   Architecture:
+     1. @theme block — --color-clinician-* exposed as Tailwind utilities
+        (bg-clinician-cream, text-clinician-sage, border-clinician-line, etc.)
+     2. .qm-cl-app block — bare-name aliases (--cream, --ink, --sage, --serif,
+        --sans, --mono) so handwritten .qm-cl-* CSS resolves the same way the
+        mockups do.
+     3. Utility classes — .qm-cl-pill, .qm-cl-btn, .qm-cl-card, etc.
+     4. Marketing-only legacy aliases — keep --bg-base / --color-text-* /
+        --color-border-* / --color-violet-* slots populated with Clinician-
+        equivalents so any unmigrated `text-text-primary` / `border-border-
+        subtle` / `text-violet-400` / `bg-bg-surface-2` utility used by the
+        sub-pages renders on the cream canvas without needing a per-file edit.
    ========================================================================== */
+
 @theme {
-  /* Backgrounds */
-  --color-bg-base: #08090D;
-  --color-bg-surface-1: #101119;
-  --color-bg-surface-2: #161822;
-  --color-bg-surface-3: #1E2030;
+  /* ── Clinician tokens (canonical names) ── */
+  --color-clinician-cream: #FAF7F2;
+  --color-clinician-cream-card: #FFFCF5;
+  --color-clinician-cream-2: #F2EDE3;
+  --color-clinician-cream-3: #E8E1D3;
 
-  /* Borders */
-  --color-border-subtle: #1C1D28;
-  --color-border-default: #2A2C3A;
-  --color-border-emphasis: #3C3E50;
+  --color-clinician-line: rgba(43, 38, 32, 0.08);
+  --color-clinician-line-strong: rgba(43, 38, 32, 0.14);
 
-  /* Violet — brand */
-  --color-violet-300: #C4B5FD;
-  --color-violet-400: #A78BFA;
-  --color-violet-500: #8B5CF6;
-  --color-violet-600: #7C3AED;
-  --color-violet-700: #6D28D9;
+  --color-clinician-ink: #2B2620;
+  --color-clinician-ink-2: #5C544A;
+  --color-clinician-ink-3: #8A8278;
+  --color-clinician-ink-4: #B5AE9F;
 
-  /* Accent */
-  --color-cyan-400: #22D3EE;
-  --color-cyan-500: #06B6D4;
-  --color-success: #10B981;
-  --color-warning: #F59E0B;
-  --color-danger: #EF4444;
+  --color-clinician-sage: #7AA68C;
+  --color-clinician-sage-deep: #2F5040;
+  --color-clinician-sage-bright: #95BCA4;
 
-  /* Text */
-  --color-text-primary: #F8FAFC;
-  --color-text-secondary: #CBD5E1;
-  --color-text-tertiary: #94A3B8;
-  --color-text-muted: #64748B;
+  --color-clinician-teal: #5BA3B4;
+  --color-clinician-teal-deep: #2C5A66;
+
+  --color-clinician-amber: #D4A574;
+  --color-clinician-amber-deep: #7A4F1F;
+  --color-clinician-coral: #C97B6E;
+  --color-clinician-coral-deep: #7A3329;
+  --color-clinician-sky: #7BA8C4;
+  --color-clinician-sky-deep: #2C4F66;
+
+  /* ── Marketing legacy aliases ──
+     Re-point the existing -text-*, -bg-*, -border-*, -violet-* token slots
+     used across the sub-pages (pricing, about, contact, demo, hipaa, privacy,
+     security, terms, signup, not-found) at Clinician equivalents so Tailwind
+     utilities still resolve without per-file edits. The visual outcome:
+     -text-primary  → ink (warm charcoal)
+     -text-secondary→ ink-2 (body)
+     -text-tertiary → ink-3 (labels)
+     -text-muted    → ink-4 (captions)
+     -bg-base       → cream (page canvas)
+     -bg-surface-1  → cream-2 (section bands)
+     -bg-surface-2  → cream-card (cards)
+     -bg-surface-3  → cream-3 (deeper warm)
+     -border-subtle / -default / -emphasis → progressively stronger lines
+     -violet-* (brand) → sage family (the Clinician primary)
+     -cyan-400 / -success / -warning / -danger → teal / sage / amber / coral
+   */
+  --color-text-primary: #2B2620;
+  --color-text-secondary: #5C544A;
+  --color-text-tertiary: #8A8278;
+  --color-text-muted: #B5AE9F;
+
+  --color-bg-base: #FAF7F2;
+  --color-bg-surface-1: #F2EDE3;
+  --color-bg-surface-2: #FFFCF5;
+  --color-bg-surface-3: #E8E1D3;
+
+  --color-border-subtle: rgba(43, 38, 32, 0.06);
+  --color-border-default: rgba(43, 38, 32, 0.10);
+  --color-border-emphasis: rgba(43, 38, 32, 0.18);
+
+  --color-violet-300: #95BCA4; /* sage-bright */
+  --color-violet-400: #7AA68C; /* sage */
+  --color-violet-500: #6E9A80; /* sage hover */
+  --color-violet-600: #2F5040; /* sage-deep */
+  --color-violet-700: #244035;
+
+  --color-cyan-400: #5BA3B4;
+  --color-cyan-500: #2C5A66;
+  --color-success: #7AA68C;
+  --color-warning: #D4A574;
+  --color-danger: #C97B6E;
 
   /* Motion */
-  --ease-out-premium: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out-premium: cubic-bezier(0.22, 1, 0.36, 1);
   --duration-fast: 150ms;
   --duration-base: 300ms;
   --duration-slow: 500ms;
 }
 
 /* ============================================================================
-   Base styles — dark-only, Geist everywhere, crisp rendering
+   Base styles — Clinician light-mode-first; warm cream + ink, never pure
+   black, never hard 1px lines. The dark page background and fixed grain
+   overlay from the original violet design are gone.
    ========================================================================== */
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 html,
 body {
-  background: var(--color-bg-base);
-  color: var(--color-text-primary);
-  font-family: var(--font-geist-sans, system-ui, -apple-system, sans-serif);
+  background: var(--color-clinician-cream);
+  color: var(--color-clinician-ink);
+  font-family: var(--font-sans, "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
 }
 
 body {
-  /* A page-level radial glow anchored upper-centre. Sits behind everything;
-     per-section gradients layer over it. */
+  /* Subtle warm radial wash — replaces the violet glow. */
   background-image:
-    radial-gradient(
-      ellipse 90% 60% at 50% 0%,
-      rgba(124, 58, 237, 0.14) 0%,
-      rgba(124, 58, 237, 0.04) 35%,
-      transparent 70%
-    );
+    radial-gradient(ellipse at 12% 8%, rgba(122, 166, 140, 0.06) 0%, transparent 42%),
+    radial-gradient(ellipse at 88% 92%, rgba(91, 163, 180, 0.05) 0%, transparent 50%);
   background-attachment: fixed;
 }
 
-/* Disable text selection highlights that look ugly on dark. */
 ::selection {
-  background: rgba(139, 92, 246, 0.35);
-  color: #F8FAFC;
+  background: rgba(122, 166, 140, 0.22);
+  color: var(--color-clinician-ink);
 }
 
-/* Scrollbar — thin, violet accent on thumb hover. */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #2A2C3A transparent;
+  scrollbar-color: var(--color-clinician-cream-3) transparent;
 }
 *::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 *::-webkit-scrollbar-thumb {
-  background: #2A2C3A;
-  border-radius: 4px;
+  background: var(--color-clinician-cream-3);
+  border-radius: 999px;
   border: 2px solid transparent;
   background-clip: content-box;
 }
 *::-webkit-scrollbar-thumb:hover {
-  background: #3C3E50;
+  background: var(--color-clinician-ink-4);
   background-clip: content-box;
 }
 
 /* ============================================================================
-   Reusable utilities
+   Reusable utilities — kept for backward compatibility with sub-page
+   components that still reference them; re-pointed at Clinician equivalents.
    ========================================================================== */
 
-/* Gradient-border trick: a padding-box + border-box double-background.
-   The outer gradient becomes the "border"; the inner surface covers the
-   middle. Used by <GradientBorder>. */
+/* Gradient-border trick (used by GradientBorder in sub-pages). The "border"
+   becomes a sage-tinted hairline + warm-cream surface. */
 .gradient-border {
   background:
-    linear-gradient(var(--gb-surface, #161822), var(--gb-surface, #161822))
+    linear-gradient(var(--gb-surface, #FFFCF5), var(--gb-surface, #FFFCF5))
       padding-box,
     linear-gradient(
         var(--gb-angle, 135deg),
-        var(--gb-from, #7C3AED) 0%,
-        var(--gb-to, #A855F7) 100%
+        var(--gb-from, #7AA68C) 0%,
+        var(--gb-to, #95BCA4) 100%
       )
       border-box;
   border: 1px solid transparent;
 }
 
-/* Specular button — light sweep on hover. Uses a pseudo-element with a
-   translucent-white diagonal gradient that slides across. Linear's
-   "shine" idiom; timing kept tight. */
+/* Specular button — keep the structural pseudo-element so existing
+   components don't have to be reworked, but kill the sweep on hover (the
+   Clinician palette doesn't do glossy highlights). The transform now only
+   carries through the focus ring + surface fade. */
 .specular-button {
   position: relative;
   overflow: hidden;
   isolation: isolate;
 }
 .specular-button::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    115deg,
-    transparent 30%,
-    rgba(255, 255, 255, 0.18) 45%,
-    rgba(255, 255, 255, 0.28) 50%,
-    rgba(255, 255, 255, 0.18) 55%,
-    transparent 70%
-  );
-  transform: translateX(-120%);
-  transition: transform 650ms var(--ease-out-premium);
-  pointer-events: none;
-  z-index: 1;
-}
-.specular-button:hover::before {
-  transform: translateX(120%);
+  content: none;
 }
 .specular-button > * {
   position: relative;
   z-index: 2;
 }
 
-/* 48px grid background that fades toward edges. Used behind hero / CTA. */
+/* 48px grid — kept as a quiet sage hairline for any decorative usage.
+   Almost invisible on cream, which is the intent. */
 .grid-bg {
   background-image:
-    linear-gradient(to right, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+    linear-gradient(to right, rgba(43, 38, 32, 0.025) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(43, 38, 32, 0.025) 1px, transparent 1px);
   background-size: 48px 48px;
   mask-image: radial-gradient(ellipse 90% 70% at 50% 50%, black 40%, transparent 85%);
   -webkit-mask-image: radial-gradient(ellipse 90% 70% at 50% 50%, black 40%, transparent 85%);
 }
 
-/* Tilt card — inline 3D perspective; transform applied via inline style
-   from TiltCard.tsx. This class sets the perspective context. */
 .tilt-perspective {
   perspective: 1200px;
   transform-style: preserve-3d;
 }
 
-/* Text gradient — violet. */
+/* Text gradient — sage instead of violet. GradientText in the sub-pages
+   (about, demo, signup, not-found) reads on cream now. */
 .text-gradient-violet {
-  background: linear-gradient(135deg, #A78BFA 0%, #C4B5FD 60%, #E9D5FF 100%);
+  background: linear-gradient(135deg, #2F5040 0%, #7AA68C 60%, #95BCA4 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  /* Prevent text-shadow + selection showing white behind the gradient. */
   -webkit-text-fill-color: transparent;
+  font-style: italic;
+  font-family: "Source Serif 4", Georgia, serif;
 }
 
-/* Glow card — subtle violet halo behind an element. Pair with relative
-   positioning on the container. */
+/* Glow card — neutralized; the Clinician halo is shadow, not violet glow. */
 .glow-violet::after {
   content: "";
   position: absolute;
-  inset: -40%;
+  inset: -10%;
   background: radial-gradient(
     ellipse at center,
-    rgba(139, 92, 246, 0.25) 0%,
-    rgba(139, 92, 246, 0.08) 35%,
+    rgba(122, 166, 140, 0.10) 0%,
+    rgba(122, 166, 140, 0.04) 35%,
     transparent 65%
   );
-  filter: blur(30px);
+  filter: blur(18px);
   z-index: -1;
   pointer-events: none;
   opacity: 0;
@@ -208,40 +244,48 @@ body {
   opacity: 1;
 }
 
-/* Typography helpers — let the page use these instead of inline Tailwind
-   classes so we can enforce tracking + weight consistently. */
+/* Typography helpers — used by sub-pages. Re-tuned to Clinician scale. */
 .type-display {
-  font-weight: 800;
-  font-size: clamp(48px, 6vw, 88px);
-  line-height: 0.95;
-  letter-spacing: -0.04em;
+  font-family: "Source Serif 4", Georgia, serif;
+  font-weight: 400;
+  font-size: clamp(48px, 6vw, 80px);
+  line-height: 1.05;
+  letter-spacing: -0.015em;
+  color: var(--color-clinician-ink);
 }
 .type-h1 {
-  font-weight: 600;
-  font-size: clamp(36px, 4vw, 48px);
+  font-family: "Source Serif 4", Georgia, serif;
+  font-weight: 400;
+  font-size: clamp(36px, 4vw, 52px);
   line-height: 1.1;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.015em;
+  color: var(--color-clinician-ink);
 }
 .type-h2 {
-  font-weight: 600;
-  font-size: clamp(28px, 3vw, 32px);
+  font-family: "Source Serif 4", Georgia, serif;
+  font-weight: 400;
+  font-size: clamp(28px, 3vw, 36px);
   line-height: 1.2;
-  letter-spacing: -0.015em;
+  letter-spacing: -0.012em;
+  color: var(--color-clinician-ink);
 }
 .type-body {
+  font-family: "Source Serif 4", Georgia, serif;
   font-weight: 400;
   font-size: 17px;
-  line-height: 1.6;
+  line-height: 1.7;
+  color: var(--color-clinician-ink-2);
 }
 .type-small {
+  font-family: var(--font-sans, "DM Sans"), system-ui, sans-serif;
   font-weight: 500;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.5;
+  color: var(--color-clinician-ink-3);
 }
 
-/* Radix Accordion — animated open/close tied to data-state. The CSS
-   variable --radix-accordion-content-height is set by Radix at runtime,
-   so we can animate to it without measuring the DOM ourselves. */
+/* Radix Accordion — used by pricing-faq.tsx. Animation timing tuned to
+   Clinician's slow-ease vocabulary (260ms vs the original 200ms). */
 @keyframes accordion-down {
   from { height: 0; opacity: 0; }
   to { height: var(--radix-accordion-content-height); opacity: 1; }
@@ -257,8 +301,6 @@ body {
   animation: accordion-up 200ms var(--ease-out-premium);
 }
 
-/* Respect reduced-motion preferences. Animations collapse to a single
-   step, parallax disables, gradients stop shifting. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -267,5 +309,430 @@ body {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* ============================================================================
+   .qm-cl-app — Clinician scope
+   ----------------------------------------------------------------------------
+   Wrap any page (or the body) in this class so handwritten .qm-cl-* utilities
+   resolve their bare-name CSS vars correctly. Mirrors the apps/transcribe-md
+   block 1:1 so component code copy-pastes without a translation layer.
+   ========================================================================== */
+.qm-cl-app {
+  --cream: var(--color-clinician-cream);
+  --cream-card: var(--color-clinician-cream-card);
+  --cream-2: var(--color-clinician-cream-2);
+  --cream-3: var(--color-clinician-cream-3);
+
+  --line: var(--color-clinician-line);
+  --line-strong: var(--color-clinician-line-strong);
+
+  --ink: var(--color-clinician-ink);
+  --ink-2: var(--color-clinician-ink-2);
+  --ink-3: var(--color-clinician-ink-3);
+  --ink-4: var(--color-clinician-ink-4);
+
+  --sage: var(--color-clinician-sage);
+  --sage-deep: var(--color-clinician-sage-deep);
+  --sage-bright: var(--color-clinician-sage-bright);
+  --sage-tint: rgba(122, 166, 140, 0.14);
+  --sage-tint-strong: rgba(122, 166, 140, 0.22);
+
+  --teal: var(--color-clinician-teal);
+  --teal-deep: var(--color-clinician-teal-deep);
+  --teal-tint: rgba(91, 163, 180, 0.14);
+
+  --amber: var(--color-clinician-amber);
+  --amber-deep: var(--color-clinician-amber-deep);
+  --amber-tint: rgba(212, 165, 116, 0.18);
+  --amber-tint-strong: rgba(212, 165, 116, 0.28);
+
+  --coral: var(--color-clinician-coral);
+  --coral-deep: var(--color-clinician-coral-deep);
+  --coral-tint: rgba(201, 123, 110, 0.16);
+  --coral-tint-strong: rgba(201, 123, 110, 0.24);
+
+  --sky: var(--color-clinician-sky);
+  --sky-deep: var(--color-clinician-sky-deep);
+  --sky-tint: rgba(123, 168, 196, 0.16);
+
+  --shadow-card: 0 4px 14px rgba(43, 38, 32, 0.04);
+  --shadow-card-hover: 0 8px 24px rgba(43, 38, 32, 0.06);
+  --shadow-button: 0 1px 2px rgba(43, 38, 32, 0.05), 0 1px 1px rgba(43, 38, 32, 0.03);
+  --shadow-cta: 0 6px 18px rgba(122, 166, 140, 0.28);
+
+  --ease-clinician: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --serif: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --sans: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  font-family: var(--sans);
+  background: var(--cream);
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.qm-cl-app[data-grain] {
+  background-image:
+    radial-gradient(ellipse at 12% 8%, rgba(122, 166, 140, 0.06) 0%, transparent 42%),
+    radial-gradient(ellipse at 88% 92%, rgba(91, 163, 180, 0.05) 0%, transparent 50%);
+}
+
+/* ── Type-face helpers ── */
+.qm-cl-app .qm-cl-serif { font-family: var(--serif); }
+.qm-cl-app .qm-cl-sans  { font-family: var(--sans); }
+.qm-cl-app .qm-cl-mono  { font-family: var(--mono); }
+
+/* ── Wordmark ── */
+.qm-cl-app .qm-cl-wordmark {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 20px;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
+
+/* ── Pills — soft-bg + deep-fg ── */
+.qm-cl-app .qm-cl-pill,
+.qm-cl-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  font-family: var(--sans, "DM Sans");
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 0.01em;
+  line-height: 1;
+}
+.qm-cl-app .qm-cl-pill-sage,  .qm-cl-pill-sage  { background: rgba(122, 166, 140, 0.14); color: #2F5040; }
+.qm-cl-app .qm-cl-pill-teal,  .qm-cl-pill-teal  { background: rgba(91, 163, 180, 0.14);  color: #2C5A66; }
+.qm-cl-app .qm-cl-pill-amber, .qm-cl-pill-amber { background: rgba(212, 165, 116, 0.18); color: #7A4F1F; }
+.qm-cl-app .qm-cl-pill-coral, .qm-cl-pill-coral { background: rgba(201, 123, 110, 0.16); color: #7A3329; }
+.qm-cl-app .qm-cl-pill-sky,   .qm-cl-pill-sky   { background: rgba(123, 168, 196, 0.16); color: #2C4F66; }
+.qm-cl-app .qm-cl-pill-soft,  .qm-cl-pill-soft  { background: var(--color-clinician-cream-2); color: var(--color-clinician-ink-2); }
+.qm-cl-app .qm-cl-pill-dot,   .qm-cl-pill-dot   { width: 6px; height: 6px; border-radius: 999px; background: currentColor; opacity: 0.7; }
+
+/* ── Buttons — pill-shaped, sage primary, no specular sweep ── */
+.qm-cl-app .qm-cl-btn,
+.qm-cl-btn {
+  font-family: var(--sans, "DM Sans");
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 1;
+  border-radius: 999px;
+  padding: 10px 18px;
+  cursor: pointer;
+  border: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: transform 240ms var(--ease-out-premium),
+              background 240ms var(--ease-out-premium),
+              box-shadow 240ms var(--ease-out-premium),
+              color 240ms var(--ease-out-premium);
+  white-space: nowrap;
+  text-decoration: none;
+}
+.qm-cl-app .qm-cl-btn-primary,
+.qm-cl-btn-primary {
+  background: var(--color-clinician-sage);
+  color: #FFFCF5;
+  box-shadow: var(--shadow-cta, 0 6px 18px rgba(122, 166, 140, 0.28));
+}
+.qm-cl-app .qm-cl-btn-primary:hover,
+.qm-cl-btn-primary:hover {
+  background: #6E9A80;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 22px rgba(122, 166, 140, 0.36);
+}
+.qm-cl-app .qm-cl-btn-soft,
+.qm-cl-btn-soft {
+  background: var(--color-clinician-cream-card);
+  color: var(--color-clinician-ink);
+  border: 1px solid var(--color-clinician-line);
+  box-shadow: var(--shadow-button, 0 1px 2px rgba(43, 38, 32, 0.05));
+}
+.qm-cl-app .qm-cl-btn-soft:hover,
+.qm-cl-btn-soft:hover { background: var(--color-clinician-cream-2); }
+.qm-cl-app .qm-cl-btn-ghost,
+.qm-cl-btn-ghost {
+  background: transparent;
+  color: var(--color-clinician-ink-2);
+}
+.qm-cl-app .qm-cl-btn-ghost:hover,
+.qm-cl-btn-ghost:hover { background: var(--color-clinician-cream-2); color: var(--color-clinician-ink); }
+
+.qm-cl-app .qm-cl-btn-lg,
+.qm-cl-btn-lg {
+  font-size: 14.5px;
+  padding: 12px 22px;
+}
+
+/* ── Cards ── */
+.qm-cl-app .qm-cl-card,
+.qm-cl-card {
+  background: var(--color-clinician-cream-card);
+  border: 1px solid var(--color-clinician-line);
+  border-radius: 16px;
+  box-shadow: var(--shadow-card, 0 4px 14px rgba(43, 38, 32, 0.04));
+}
+
+.qm-cl-app .qm-cl-card-soft,
+.qm-cl-card-soft {
+  background: var(--color-clinician-cream-card);
+  border: 1px solid var(--color-clinician-line);
+  border-radius: 16px;
+  box-shadow: var(--shadow-card, 0 4px 14px rgba(43, 38, 32, 0.04));
+  transition: transform 360ms var(--ease-out-premium),
+              box-shadow 360ms var(--ease-out-premium);
+}
+.qm-cl-app .qm-cl-card-soft:hover,
+.qm-cl-card-soft:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card-hover, 0 8px 24px rgba(43, 38, 32, 0.06));
+}
+
+/* ── Top-nav surface ── */
+.qm-cl-app .qm-cl-topbar,
+.qm-cl-topbar {
+  background: rgba(250, 247, 242, 0.85);
+  backdrop-filter: blur(18px) saturate(115%);
+  -webkit-backdrop-filter: blur(18px) saturate(115%);
+  border-bottom: 1px solid var(--color-clinician-line);
+}
+
+/* ── Inputs ── */
+.qm-cl-app .qm-cl-input,
+.qm-cl-input {
+  background: var(--color-clinician-cream-card);
+  border: 1px solid var(--color-clinician-line);
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-family: var(--sans, "DM Sans");
+  font-size: 14px;
+  color: var(--color-clinician-ink);
+  transition: border-color 240ms var(--ease-out-premium),
+              box-shadow 240ms var(--ease-out-premium);
+  outline: 0;
+  width: 100%;
+}
+.qm-cl-app .qm-cl-input:focus,
+.qm-cl-input:focus {
+  border-color: var(--color-clinician-sage);
+  box-shadow: 0 0 0 3px rgba(122, 166, 140, 0.14);
+}
+.qm-cl-app .qm-cl-input::placeholder,
+.qm-cl-input::placeholder { color: var(--color-clinician-ink-4); }
+
+/* ── Section labels + eyebrow ── */
+.qm-cl-app .qm-cl-section-label,
+.qm-cl-section-label {
+  font-family: var(--sans, "DM Sans");
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-clinician-ink-3);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.qm-cl-app .qm-cl-eyebrow,
+.qm-cl-eyebrow {
+  font-family: var(--sans, "DM Sans");
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--color-clinician-sage-deep);
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+}
+
+/* ── Big serif number ── */
+.qm-cl-app .qm-cl-big-num,
+.qm-cl-big-num {
+  font-family: var(--serif, "Source Serif 4");
+  font-size: 38px;
+  font-weight: 500;
+  color: var(--color-clinician-ink);
+  letter-spacing: -0.01em;
+  line-height: 1;
+}
+
+/* ── Prose ── */
+.qm-cl-app .qm-cl-prose,
+.qm-cl-prose {
+  font-family: var(--serif, "Source Serif 4");
+  font-size: 16px;
+  line-height: 1.7;
+  color: var(--color-clinician-ink);
+  max-width: 720px;
+}
+.qm-cl-app .qm-cl-prose p,
+.qm-cl-prose p { margin: 0 0 14px 0; }
+.qm-cl-app .qm-cl-prose ul,
+.qm-cl-prose ul { margin: 8px 0 14px 0; padding-left: 1.4em; }
+.qm-cl-app .qm-cl-prose ul li,
+.qm-cl-prose ul li { padding-left: 4px; margin-bottom: 6px; }
+.qm-cl-app .qm-cl-prose strong,
+.qm-cl-prose strong { font-weight: 500; color: var(--color-clinician-ink); }
+.qm-cl-app .qm-cl-prose em,
+.qm-cl-prose em { color: var(--color-clinician-sage-deep); font-style: italic; }
+
+/* ── Tab pills ── */
+.qm-cl-app .qm-cl-tab-row,
+.qm-cl-tab-row {
+  display: inline-flex;
+  background: var(--color-clinician-cream-2);
+  border-radius: 999px;
+  padding: 4px;
+  gap: 2px;
+}
+.qm-cl-app .qm-cl-tab,
+.qm-cl-tab {
+  padding: 9px 18px;
+  border-radius: 999px;
+  font-family: var(--sans, "DM Sans");
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--color-clinician-ink-2);
+  cursor: pointer;
+  border: 0;
+  background: transparent;
+  transition: all 240ms var(--ease-out-premium);
+}
+.qm-cl-app .qm-cl-tab.qm-cl-active,
+.qm-cl-tab.qm-cl-active {
+  background: var(--color-clinician-cream-card);
+  color: var(--color-clinician-sage-deep);
+  box-shadow: var(--shadow-button, 0 1px 2px rgba(43, 38, 32, 0.05));
+}
+.qm-cl-app .qm-cl-tab:hover:not(.qm-cl-active),
+.qm-cl-tab:hover:not(.qm-cl-active) { color: var(--color-clinician-ink); }
+
+/* ── Avatar ── */
+.qm-cl-app .qm-cl-avatar,
+.qm-cl-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--serif, "Source Serif 4");
+  font-weight: 500;
+  font-size: 16px;
+}
+.qm-cl-app .qm-cl-avatar-sage,  .qm-cl-avatar-sage  { background: rgba(122, 166, 140, 0.22); color: #2F5040; }
+.qm-cl-app .qm-cl-avatar-teal,  .qm-cl-avatar-teal  { background: rgba(91, 163, 180, 0.14);  color: #2C5A66; }
+.qm-cl-app .qm-cl-avatar-amber, .qm-cl-avatar-amber { background: rgba(212, 165, 116, 0.18); color: #7A4F1F; }
+.qm-cl-app .qm-cl-avatar-coral, .qm-cl-avatar-coral { background: rgba(201, 123, 110, 0.16); color: #7A3329; }
+.qm-cl-app .qm-cl-avatar-sky,   .qm-cl-avatar-sky   { background: rgba(123, 168, 196, 0.16); color: #2C4F66; }
+
+/* ── Gentle dividers ── */
+.qm-cl-app .qm-cl-gentle-rule,
+.qm-cl-gentle-rule {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--color-clinician-line-strong), transparent);
+  border: 0;
+}
+.qm-cl-app .qm-cl-sage-divider,
+.qm-cl-sage-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(122, 166, 140, 0.22), transparent);
+  border: 0;
+}
+
+/* ── Misc helpers ── */
+.qm-cl-app .qm-cl-meta-dot,
+.qm-cl-meta-dot { color: var(--color-clinician-ink-4); }
+.qm-cl-app .qm-cl-lift,
+.qm-cl-lift {
+  transition: transform 360ms var(--ease-out-premium),
+              box-shadow 360ms var(--ease-out-premium);
+}
+.qm-cl-app .qm-cl-lift:hover,
+.qm-cl-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card-hover, 0 8px 24px rgba(43, 38, 32, 0.06));
+}
+
+.qm-cl-app .qm-cl-illus-stroke,
+.qm-cl-illus-stroke {
+  stroke: var(--color-clinician-sage);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+}
+.qm-cl-illus-stroke-warm { stroke: var(--color-clinician-ink-2); stroke-width: 1.2; fill: none; }
+.qm-cl-illus-fill-sage   { fill: rgba(122, 166, 140, 0.22); }
+.qm-cl-illus-fill-cream  { fill: var(--color-clinician-cream-2); }
+.qm-cl-illus-fill-amber  { fill: rgba(212, 165, 116, 0.18); }
+
+/* ── Scoped scrollbar + selection inside .qm-cl-app ── */
+.qm-cl-app ::-webkit-scrollbar { width: 10px; height: 10px; }
+.qm-cl-app ::-webkit-scrollbar-track { background: transparent; }
+.qm-cl-app ::-webkit-scrollbar-thumb { background: var(--color-clinician-cream-3); border-radius: 999px; }
+.qm-cl-app ::-webkit-scrollbar-thumb:hover { background: var(--color-clinician-ink-4); }
+.qm-cl-app ::selection { background: rgba(122, 166, 140, 0.22); color: var(--color-clinician-ink); }
+
+/* ── Recording-state animations (pre-positioned for landing visual; safe to
+       leave defined even if unused). ── */
+@keyframes qm-cl-halo-pulse {
+  0%, 100% { transform: scale(0.92); opacity: 0.55; }
+  50%      { transform: scale(1.18); opacity: 0.18; }
+}
+@keyframes qm-cl-mic-breath {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(122, 166, 140, 0.4); }
+  50%      { transform: scale(1.04); box-shadow: 0 0 0 14px rgba(122, 166, 140, 0); }
+}
+@keyframes qm-cl-slide-fade {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes qm-cl-ai-crossfade {
+  0%, 22%   { opacity: 1; }
+  33%, 100% { opacity: 0; }
+}
+@keyframes qm-cl-float-soft {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-4px); }
+}
+
+.qm-cl-halo {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(122, 166, 140, 0.22) 0%, transparent 70%);
+  animation: qm-cl-halo-pulse 3.4s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+.qm-cl-halo-delayed { animation-delay: 1.7s; }
+.qm-cl-mic-dot {
+  animation: qm-cl-mic-breath 2.8s var(--ease-out-premium) infinite;
+  will-change: transform, box-shadow;
+}
+.qm-cl-float-soft {
+  animation: qm-cl-float-soft 6s ease-in-out infinite;
+}
+.qm-cl-transcript-line {
+  animation: qm-cl-slide-fade 600ms var(--ease-out-premium) forwards;
+  opacity: 0;
+}
+.qm-cl-transcript-line.qm-cl-l1 { animation-delay: 200ms; }
+.qm-cl-transcript-line.qm-cl-l2 { animation-delay: 1500ms; }
+.qm-cl-transcript-line.qm-cl-l3 { animation-delay: 2900ms; }
+.qm-cl-transcript-line.qm-cl-l4 { animation-delay: 4400ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .qm-cl-halo,
+  .qm-cl-mic-dot,
+  .qm-cl-float-soft,
+  .qm-cl-transcript-line {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
   }
 }
