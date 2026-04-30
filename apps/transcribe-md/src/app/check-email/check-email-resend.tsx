@@ -48,13 +48,62 @@ export function CheckEmailResend({ email }: Props) {
   const canSend = Boolean(email) && !pending && !sent;
 
   return (
-    <div style={{ marginTop: 14 }}>
-      <p
+    <div style={{ marginTop: 18 }}>
+      {/* Soft sage line-art envelope — the warm illustration moment per
+         the Clinician landing-and-recording mockup's empty-state
+         vocabulary. Stroke 1.4 px, fill from --sage-tint-strong. */}
+      <div
         style={{
-          margin: '0 0 14px',
-          fontSize: 12.5,
-          color: 'var(--fg-3)',
+          display: 'flex',
+          justifyContent: 'center',
+          marginBottom: 18,
+        }}
+      >
+        <svg
+          width="96"
+          height="72"
+          viewBox="0 0 96 72"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          aria-hidden
+        >
+          <rect
+            x="6"
+            y="14"
+            width="84"
+            height="52"
+            rx="6"
+            className="qm-cl-illus-fill-cream qm-cl-illus-stroke"
+            strokeWidth="1.4"
+          />
+          <path
+            d="M6 18 L48 44 L90 18"
+            className="qm-cl-illus-stroke"
+            strokeWidth="1.4"
+          />
+          <path
+            d="M64 8 l6 6 -6 6"
+            className="qm-cl-illus-stroke"
+            strokeWidth="1.4"
+          />
+          <path
+            d="M48 14 l22 0"
+            className="qm-cl-illus-stroke"
+            strokeWidth="1.4"
+            opacity="0.6"
+          />
+        </svg>
+      </div>
+
+      <p
+        className="qm-cl-serif"
+        style={{
+          margin: '0 0 18px',
+          fontSize: 14.5,
+          color: 'var(--ink-2)',
           textAlign: 'center',
+          fontStyle: 'italic',
+          lineHeight: 1.55,
         }}
       >
         Didn&apos;t get it? Check your spam folder — or resend below.
@@ -64,11 +113,10 @@ export function CheckEmailResend({ email }: Props) {
         type="button"
         disabled={!canSend}
         onClick={onResend}
-        className="qm-btn qm-btn-ghost"
+        className="qm-cl-btn qm-cl-btn-soft"
         style={{
           width: '100%',
           justifyContent: 'center',
-          padding: 10,
           opacity: canSend ? 1 : 0.55,
           cursor: canSend ? 'pointer' : 'not-allowed',
         }}
@@ -83,12 +131,13 @@ export function CheckEmailResend({ email }: Props) {
       <div
         style={{
           textAlign: 'center',
-          color: 'var(--fg-3)',
+          color: 'var(--ink-3)',
           fontSize: 12.5,
           marginTop: 18,
+          fontFamily: 'var(--sans)',
         }}
       >
-        <Link href="/login" style={{ color: 'var(--accent-bright)' }}>
+        <Link href="/login" style={{ color: 'var(--sage-deep)', fontWeight: 500 }}>
           Back to sign in →
         </Link>
       </div>

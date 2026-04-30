@@ -1,0 +1,1672 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QuillMD · ARCADE — v4 design direction</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/motion@10.18.0/dist/motion.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Russo+One&family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    /* ARCADE base — deep, saturated, no apologies */
+    --bg-void: #07030F;
+    --bg-deep: #0E1428;
+    --bg-purple: #1A0B2E;
+    --bg-card: #160A2A;
+    --bg-card-hi: #1F1140;
+
+    /* Neon accents — use ALL of these */
+    --neon-magenta: #FF2E93;
+    --neon-cyan: #00E5FF;
+    --neon-gold: #FFD60A;
+    --neon-plasma: #39FF14;
+    --neon-violet: #9B5CFF;
+    --neon-blood: #FF3D5A;
+
+    /* HUD chrome */
+    --line-hud: #2A1560;
+    --line-hud-hot: #5B2BD6;
+    --scan: rgba(155, 92, 255, 0.06);
+  }
+
+  * { -webkit-font-smoothing: antialiased; }
+
+  html, body {
+    background: var(--bg-void);
+    color: #F5F2FA;
+    font-family: 'Inter Tight', system-ui, sans-serif;
+  }
+
+  .display { font-family: 'Russo One', 'Bungee', sans-serif; letter-spacing: 0.02em; }
+  .bungee { font-family: 'Bungee', sans-serif; letter-spacing: 0.04em; }
+  .mono   { font-family: 'JetBrains Mono', monospace; }
+
+  /* ====== HUD scanlines ====== */
+  .scanlines::after {
+    content: "";
+    position: absolute; inset: 0;
+    background: repeating-linear-gradient(
+      to bottom,
+      transparent 0px,
+      transparent 2px,
+      var(--scan) 3px,
+      transparent 4px
+    );
+    pointer-events: none;
+    mix-blend-mode: screen;
+  }
+
+  /* ====== Angular HUD card (clip-path corners) ====== */
+  .hud-card {
+    clip-path: polygon(
+      14px 0,
+      100% 0,
+      100% calc(100% - 14px),
+      calc(100% - 14px) 100%,
+      0 100%,
+      0 14px
+    );
+    background:
+      linear-gradient(180deg, rgba(155,92,255,0.06) 0%, rgba(0,0,0,0) 60%),
+      linear-gradient(180deg, var(--bg-card) 0%, var(--bg-card-hi) 100%);
+    position: relative;
+  }
+  .hud-card-thin {
+    clip-path: polygon(
+      10px 0,
+      100% 0,
+      100% calc(100% - 10px),
+      calc(100% - 10px) 100%,
+      0 100%,
+      0 10px
+    );
+  }
+  .hud-card-aggressive {
+    clip-path: polygon(
+      24px 0,
+      100% 0,
+      100% calc(100% - 6px),
+      calc(100% - 24px) 100%,
+      0 100%,
+      0 6px
+    );
+  }
+  .hud-frame {
+    clip-path: polygon(
+      18px 0,
+      100% 0,
+      100% calc(100% - 18px),
+      calc(100% - 18px) 100%,
+      0 100%,
+      0 18px
+    );
+  }
+
+  /* ====== Neon glow ====== */
+  .glow-magenta { box-shadow: 0 0 0 1px var(--neon-magenta), 0 0 24px rgba(255,46,147,0.55), inset 0 0 24px rgba(255,46,147,0.10); }
+  .glow-cyan    { box-shadow: 0 0 0 1px var(--neon-cyan),    0 0 24px rgba(0,229,255,0.55),  inset 0 0 24px rgba(0,229,255,0.10); }
+  .glow-gold    { box-shadow: 0 0 0 1px var(--neon-gold),    0 0 24px rgba(255,214,10,0.55), inset 0 0 24px rgba(255,214,10,0.10); }
+  .glow-plasma  { box-shadow: 0 0 0 1px var(--neon-plasma),  0 0 24px rgba(57,255,20,0.55),  inset 0 0 24px rgba(57,255,20,0.10); }
+  .glow-violet  { box-shadow: 0 0 0 1px var(--neon-violet),  0 0 24px rgba(155,92,255,0.55), inset 0 0 24px rgba(155,92,255,0.10); }
+
+  .text-glow-magenta { color: var(--neon-magenta); text-shadow: 0 0 12px rgba(255,46,147,0.8), 0 0 4px rgba(255,46,147,0.4); }
+  .text-glow-cyan    { color: var(--neon-cyan);    text-shadow: 0 0 12px rgba(0,229,255,0.8),  0 0 4px rgba(0,229,255,0.4); }
+  .text-glow-gold    { color: var(--neon-gold);    text-shadow: 0 0 12px rgba(255,214,10,0.8), 0 0 4px rgba(255,214,10,0.4); }
+  .text-glow-plasma  { color: var(--neon-plasma);  text-shadow: 0 0 12px rgba(57,255,20,0.8),  0 0 4px rgba(57,255,20,0.4); }
+  .text-glow-violet  { color: var(--neon-violet);  text-shadow: 0 0 12px rgba(155,92,255,0.8), 0 0 4px rgba(155,92,255,0.4); }
+
+  /* ====== XP-bar gradient fill ====== */
+  .xp-track {
+    background: linear-gradient(180deg, #060410, #0F0820);
+    border: 1px solid var(--line-hud);
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.4), inset 0 1px 0 rgba(155,92,255,0.15);
+  }
+  .xp-fill {
+    background: linear-gradient(90deg, var(--neon-violet) 0%, var(--neon-magenta) 50%, var(--neon-cyan) 100%);
+    box-shadow: 0 0 14px rgba(255,46,147,0.7), 0 0 28px rgba(0,229,255,0.4);
+    position: relative;
+  }
+  .xp-fill::after {
+    content: "";
+    position: absolute; inset: 0;
+    background: linear-gradient(180deg, rgba(255,255,255,0.5), rgba(255,255,255,0) 40%);
+    mix-blend-mode: overlay;
+  }
+  .xp-fill-gold {
+    background: linear-gradient(90deg, #B45309 0%, var(--neon-gold) 60%, #FFFBEA 100%);
+    box-shadow: 0 0 14px rgba(255,214,10,0.7);
+  }
+  .xp-fill-plasma {
+    background: linear-gradient(90deg, #166534 0%, var(--neon-plasma) 60%, #DCFCE7 100%);
+    box-shadow: 0 0 14px rgba(57,255,20,0.7);
+  }
+  .xp-fill-magenta {
+    background: linear-gradient(90deg, #831843 0%, var(--neon-magenta) 60%, #FCE7F3 100%);
+    box-shadow: 0 0 14px rgba(255,46,147,0.7);
+  }
+
+  /* HP bar (boss fight reverse-fill) */
+  .hp-track {
+    background: linear-gradient(180deg, #1A0610, #2A0820);
+    border: 1px solid var(--neon-magenta);
+    box-shadow:
+      0 0 0 2px rgba(0,0,0,0.6),
+      0 0 20px rgba(255,46,147,0.4),
+      inset 0 0 0 1px rgba(255,255,255,0.05);
+    height: 24px;
+  }
+  .hp-fill {
+    height: 100%;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.35), rgba(0,0,0,0.2) 50%),
+      linear-gradient(90deg, var(--neon-magenta) 0%, var(--neon-blood) 50%, var(--neon-gold) 100%);
+    box-shadow: 0 0 18px rgba(255,46,147,0.9);
+  }
+  .hp-tick {
+    position: absolute; top: 0; bottom: 0;
+    width: 2px;
+    background: rgba(0,0,0,0.6);
+  }
+
+  /* ====== Achievement tile ====== */
+  .badge-tile {
+    aspect-ratio: 1 / 1;
+    background:
+      radial-gradient(circle at 30% 20%, rgba(255,255,255,0.10), rgba(0,0,0,0) 50%),
+      linear-gradient(160deg, var(--bg-card) 0%, var(--bg-card-hi) 100%);
+    clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+    position: relative;
+  }
+  .badge-tile-locked {
+    background:
+      linear-gradient(160deg, #0A0612 0%, #14091F 100%);
+    opacity: 0.55;
+    filter: grayscale(0.6);
+  }
+
+  /* ====== Angular gradient separator ====== */
+  .arcade-band {
+    background:
+      linear-gradient(90deg,
+        var(--bg-purple) 0%,
+        var(--neon-violet) 18%,
+        var(--neon-magenta) 42%,
+        var(--neon-blood) 56%,
+        var(--neon-gold) 72%,
+        var(--neon-cyan) 92%,
+        var(--bg-deep) 100%);
+    position: relative;
+  }
+  .arcade-band::before, .arcade-band::after {
+    content: "";
+    position: absolute; left: 0; right: 0; height: 4px;
+    background: rgba(0,0,0,0.6);
+  }
+  .arcade-band::before { top: 0; }
+  .arcade-band::after  { bottom: 0; }
+
+  /* ====== Hex bullet ====== */
+  .hex {
+    width: 14px; height: 14px;
+    background: currentColor;
+    clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+    display: inline-block;
+  }
+
+  /* ====== Ability slot ====== */
+  .ability-slot {
+    width: 88px; height: 88px;
+    background:
+      radial-gradient(circle at 50% 0%, rgba(155,92,255,0.4), rgba(0,0,0,0) 60%),
+      linear-gradient(180deg, #160A2A 0%, #07030F 100%);
+    border: 2px solid var(--line-hud-hot);
+    clip-path: polygon(12px 0, calc(100% - 12px) 0, 100% 12px, 100% calc(100% - 12px), calc(100% - 12px) 100%, 12px 100%, 0 calc(100% - 12px), 0 12px);
+    position: relative;
+  }
+  .ability-slot-hot {
+    border-color: var(--neon-magenta);
+    box-shadow: 0 0 24px rgba(255,46,147,0.6);
+  }
+  .ability-key {
+    position: absolute;
+    top: -6px; left: -6px;
+    width: 22px; height: 22px;
+    background: var(--neon-gold);
+    color: #07030F;
+    font-family: 'Russo One', sans-serif;
+    font-size: 12px;
+    display: flex; align-items: center; justify-content: center;
+    clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+    box-shadow: 0 0 12px rgba(255,214,10,0.8);
+  }
+
+  /* ====== Circular meter ====== */
+  .meter-ring {
+    width: 120px; height: 120px;
+    border-radius: 50%;
+    background:
+      conic-gradient(
+        from -90deg,
+        var(--neon-cyan) 0deg,
+        var(--neon-magenta) 240deg,
+        rgba(155,92,255,0.2) 240deg,
+        rgba(155,92,255,0.2) 360deg
+      );
+    position: relative;
+    filter: drop-shadow(0 0 16px rgba(0,229,255,0.6));
+  }
+  .meter-ring::before {
+    content: "";
+    position: absolute; inset: 8px;
+    border-radius: 50%;
+    background: var(--bg-void);
+    border: 1px solid var(--line-hud);
+  }
+
+  /* ====== CTA button — game-style ====== */
+  .arcade-cta {
+    position: relative;
+    font-family: 'Russo One', sans-serif;
+    letter-spacing: 0.12em;
+    background: linear-gradient(180deg, #FF52A8 0%, var(--neon-magenta) 50%, #B91656 100%);
+    color: #07030F;
+    padding: 18px 44px;
+    clip-path: polygon(18px 0, calc(100% - 4px) 0, 100% 18px, 100% calc(100% - 4px), calc(100% - 18px) 100%, 4px 100%, 0 calc(100% - 18px), 0 4px);
+    text-shadow: 0 1px 0 rgba(255,255,255,0.5);
+    box-shadow:
+      0 0 0 2px #FFB3D6 inset,
+      0 0 32px rgba(255,46,147,0.7),
+      0 0 64px rgba(255,46,147,0.3);
+    text-transform: uppercase;
+    font-size: 18px;
+    font-weight: 400;
+    transition: transform 0.12s, box-shadow 0.12s;
+  }
+  .arcade-cta:hover {
+    transform: translateY(-2px);
+    box-shadow:
+      0 0 0 2px #FFCFE5 inset,
+      0 0 48px rgba(255,46,147,0.9),
+      0 0 96px rgba(255,46,147,0.4);
+  }
+  .arcade-cta-cyan {
+    background: linear-gradient(180deg, #59F0FF 0%, var(--neon-cyan) 50%, #007A8C 100%);
+    box-shadow:
+      0 0 0 2px #BBF6FF inset,
+      0 0 32px rgba(0,229,255,0.7);
+  }
+  .arcade-cta-gold {
+    background: linear-gradient(180deg, #FFE872 0%, var(--neon-gold) 50%, #B45309 100%);
+    box-shadow:
+      0 0 0 2px #FFF6BC inset,
+      0 0 32px rgba(255,214,10,0.7);
+  }
+
+  /* ====== Quest log row ====== */
+  .quest-row {
+    background: linear-gradient(90deg, rgba(155,92,255,0.06) 0%, rgba(0,0,0,0) 60%), var(--bg-card);
+    border-left: 4px solid var(--line-hud-hot);
+    position: relative;
+  }
+  .quest-row.completed { border-left-color: var(--neon-plasma); }
+  .quest-row.in-progress { border-left-color: var(--neon-magenta); }
+  .quest-row.queued { border-left-color: var(--neon-gold); }
+
+  /* ====== Toast ====== */
+  .toast-pulse {
+    animation: toast-pulse 2.4s ease-in-out infinite;
+  }
+  @keyframes toast-pulse {
+    0%, 100% { box-shadow: 0 0 0 1px var(--neon-gold), 0 0 32px rgba(255,214,10,0.6); }
+    50% { box-shadow: 0 0 0 1px var(--neon-gold), 0 0 48px rgba(255,214,10,1); }
+  }
+
+  /* ====== Shimmer for XP fill ====== */
+  .shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+  .shimmer::after {
+    content: "";
+    position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.4) 50%, transparent 100%);
+    animation: shimmer 2.4s linear infinite;
+  }
+  @keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+
+  /* ====== Pulse glow for boss fight ====== */
+  .boss-pulse {
+    animation: boss-pulse 1.8s ease-in-out infinite;
+  }
+  @keyframes boss-pulse {
+    0%, 100% { filter: drop-shadow(0 0 12px rgba(255,46,147,0.6)); }
+    50%      { filter: drop-shadow(0 0 36px rgba(255,46,147,1)); }
+  }
+
+  /* ====== Confetti burst (static SVG inline) ====== */
+  .level-up-flash {
+    animation: level-flash 3.6s ease-out infinite;
+  }
+  @keyframes level-flash {
+    0%, 100% { transform: scale(1); filter: brightness(1); }
+    8% { transform: scale(1.05); filter: brightness(1.6); }
+    16% { transform: scale(1); filter: brightness(1); }
+  }
+
+  /* ====== Grid bg ====== */
+  .grid-bg {
+    background-image:
+      linear-gradient(rgba(155,92,255,0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(155,92,255,0.05) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+
+  .stripe-warn {
+    background-image: repeating-linear-gradient(
+      45deg,
+      var(--neon-gold) 0,
+      var(--neon-gold) 8px,
+      #07030F 8px,
+      #07030F 16px
+    );
+  }
+
+  /* tick marks for HP bar */
+  .ticks::before { content: ""; position: absolute; left: 25%; top: 0; bottom: 0; width: 1px; background: rgba(0,0,0,0.6); }
+  .ticks::after  { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: rgba(0,0,0,0.6); }
+
+  /* Marquee */
+  .marquee {
+    overflow: hidden; white-space: nowrap;
+  }
+  .marquee-track {
+    display: inline-block;
+    animation: marquee 28s linear infinite;
+  }
+  @keyframes marquee {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+
+  /* Avatar frame */
+  .avatar-frame {
+    width: 44px; height: 44px;
+    background: linear-gradient(135deg, var(--neon-cyan), var(--neon-magenta), var(--neon-gold));
+    padding: 2px;
+    clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+  }
+  .avatar-frame > div {
+    width: 100%; height: 100%;
+    background:
+      radial-gradient(circle at 30% 30%, #FF8FCB, var(--neon-magenta) 60%, #4A0F2C);
+    color: #fff;
+    font-family: 'Russo One', sans-serif;
+    display: flex; align-items: center; justify-content: center;
+    clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+  }
+
+  /* faux pixel corners */
+  .corner-tl, .corner-tr, .corner-bl, .corner-br {
+    position: absolute;
+    width: 18px; height: 18px;
+    border: 2px solid var(--neon-cyan);
+  }
+  .corner-tl { top: -1px; left: -1px;  border-right: 0; border-bottom: 0; }
+  .corner-tr { top: -1px; right: -1px; border-left: 0;  border-bottom: 0; }
+  .corner-bl { bottom: -1px; left: -1px;  border-right: 0; border-top: 0; }
+  .corner-br { bottom: -1px; right: -1px; border-left: 0;  border-top: 0; }
+
+  /* Patient/boss name title */
+  .boss-title {
+    font-family: 'Bungee', sans-serif;
+    background: linear-gradient(180deg, #FFFFFF, var(--neon-gold) 60%, #B45309);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    text-shadow: 0 0 24px rgba(255,214,10,0.5);
+    letter-spacing: 0.04em;
+  }
+
+  /* Code/SOAP excerpt mono with phosphor green */
+  .soap-loot {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--neon-plasma);
+    text-shadow: 0 0 6px rgba(57,255,20,0.5);
+  }
+
+  .vignette::before {
+    content: "";
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse at center, rgba(0,0,0,0) 40%, rgba(0,0,0,0.6) 100%);
+    pointer-events: none;
+  }
+
+  /* Big section heads */
+  .section-head {
+    font-family: 'Bungee', sans-serif;
+    letter-spacing: 0.08em;
+  }
+
+  .underline-glitch {
+    position: relative;
+    display: inline-block;
+  }
+  .underline-glitch::after {
+    content: "";
+    position: absolute; left: 0; right: 0; bottom: -6px; height: 4px;
+    background: linear-gradient(90deg, var(--neon-magenta), var(--neon-cyan));
+    box-shadow: 0 0 12px rgba(255,46,147,0.8);
+  }
+
+  /* Marquee danger stripe */
+  .danger-strip {
+    background-image: repeating-linear-gradient(
+      135deg,
+      var(--neon-blood) 0,
+      var(--neon-blood) 12px,
+      #1A0610 12px,
+      #1A0610 24px
+    );
+  }
+</style>
+</head>
+<body class="min-h-screen">
+
+<!-- ========== TOP HUD STRIP ========== -->
+<div class="border-b border-[#2A1560] bg-[#07030F]">
+  <div class="px-6 py-2 flex items-center gap-6 text-[11px] mono uppercase tracking-widest text-[#7E7791]">
+    <span class="text-glow-cyan">// QuillMD ARCADE / DESIGN-DIRECTION-V4 / BUILD 04.29.26</span>
+    <span class="hidden md:inline">FRAMERATE 60fps</span>
+    <span class="hidden md:inline">PING 24ms</span>
+    <span class="hidden md:inline">REGION us-east-1</span>
+    <span class="ml-auto text-glow-magenta">PLAYER ONLINE</span>
+  </div>
+</div>
+
+<!-- ============================================================
+     MANIFESTO
+============================================================ -->
+<section class="relative px-6 md:px-12 py-12 md:py-16 grid-bg">
+  <div class="max-w-5xl mx-auto">
+    <div class="flex items-center gap-3 mb-6">
+      <span class="hex text-[color:var(--neon-magenta)]"></span>
+      <span class="hex text-[color:var(--neon-cyan)]"></span>
+      <span class="hex text-[color:var(--neon-gold)]"></span>
+      <span class="hex text-[color:var(--neon-plasma)]"></span>
+      <span class="ml-3 text-[11px] mono uppercase tracking-[0.4em] text-[#B9B2C9]">Direction · ARCADE · v4</span>
+    </div>
+
+    <h1 class="display text-[64px] md:text-[88px] leading-[0.95] mb-8">
+      <span class="text-glow-magenta">PRESS</span>
+      <span class="text-white">START</span>
+      <br/>
+      <span class="text-glow-cyan">TO</span>
+      <span class="text-glow-gold">CHART.</span>
+    </h1>
+
+    <div class="hud-card p-8 max-w-4xl">
+      <div class="flex items-center gap-2 mb-4">
+        <span class="bungee text-[12px] text-glow-plasma">// MANIFESTO.txt</span>
+        <span class="mono text-[11px] text-[#7E7791]">— uncompressed</span>
+      </div>
+      <p class="text-[20px] md:text-[22px] leading-[1.55] text-[#F5F2FA]">
+        This is <span class="bungee text-glow-magenta">ARCADE</span>. We believe the doctor is the
+        <span class="bungee text-glow-cyan">player</span>. We refuse boring progress bars, gray dashboards,
+        and the false sobriety that says clinicians can&rsquo;t enjoy their tools. Every visit is an
+        <span class="bungee text-glow-gold">encounter</span>. Every signed SOAP is
+        <span class="bungee text-glow-plasma">XP</span>. Every clean PHI streak is a
+        <span class="bungee text-glow-magenta">badge</span>. The 7-layer pipeline is a
+        <span class="bungee text-glow-cyan">combo chain</span>, the recording moment is a
+        <span class="bungee text-glow-gold">boss fight</span>, and your hundredth note unlocks a
+        <span class="bungee text-glow-plasma">level-up flash</span> that you will feel through the screen.
+        Medicine is serious. Medicine being serious does not require the UI to be a funeral. Saturated
+        is the brand. Glow is the grammar. Commit, or stay home.
+      </p>
+    </div>
+
+    <div class="mt-8 flex flex-wrap gap-3 mono text-[11px] uppercase tracking-widest">
+      <span class="px-3 py-1 border border-[color:var(--neon-magenta)] text-glow-magenta">SATURATED</span>
+      <span class="px-3 py-1 border border-[color:var(--neon-cyan)] text-glow-cyan">HUD-FIRST</span>
+      <span class="px-3 py-1 border border-[color:var(--neon-gold)] text-glow-gold">XP-DRIVEN</span>
+      <span class="px-3 py-1 border border-[color:var(--neon-plasma)] text-glow-plasma">LEVEL-UP MOMENTS</span>
+      <span class="px-3 py-1 border border-[color:var(--neon-violet)] text-glow-violet">ACHIEVEMENT-NATIVE</span>
+      <span class="px-3 py-1 border border-white/30 text-white/70">REJECTS LINEAR-FOR-MEDICINE</span>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     SECTION 1 — LANDING + RECORDING
+============================================================ -->
+<section class="relative px-6 md:px-12 pt-8 pb-20 grid-bg overflow-hidden">
+
+  <!-- background glow orbs -->
+  <div class="absolute -top-40 -left-40 w-[480px] h-[480px] rounded-full" style="background: radial-gradient(circle, rgba(255,46,147,0.35) 0%, transparent 60%); filter: blur(40px);"></div>
+  <div class="absolute top-40 right-0 w-[520px] h-[520px] rounded-full" style="background: radial-gradient(circle, rgba(0,229,255,0.30) 0%, transparent 60%); filter: blur(40px);"></div>
+  <div class="absolute bottom-0 left-1/2 w-[600px] h-[300px] rounded-full" style="background: radial-gradient(ellipse, rgba(255,214,10,0.25) 0%, transparent 60%); filter: blur(40px);"></div>
+
+  <div class="max-w-7xl mx-auto relative">
+
+    <!-- top label -->
+    <div class="flex items-center justify-between mb-10">
+      <div class="bungee text-[13px] text-glow-cyan">SECTION 01 / LANDING + RECORDING</div>
+      <div class="mono text-[11px] text-[#7E7791] uppercase tracking-widest">/app.quillmd.com</div>
+    </div>
+
+    <!-- ===== TOP NAV (game launcher chrome) ===== -->
+    <div class="hud-card hud-frame p-4 mb-12 flex items-center gap-6 border border-[color:var(--line-hud)]">
+      <div class="flex items-center gap-3">
+        <!-- Q logo -->
+        <div class="w-10 h-10 grid place-items-center" style="background: linear-gradient(135deg, var(--neon-magenta), var(--neon-cyan)); clip-path: polygon(20% 0, 80% 0, 100% 50%, 80% 100%, 20% 100%, 0 50%);">
+          <span class="bungee text-[18px] text-[#07030F]">Q</span>
+        </div>
+        <div class="bungee text-[18px] text-white">QUILLMD<span class="text-glow-magenta">·</span>ARCADE</div>
+      </div>
+
+      <nav class="hidden md:flex items-center gap-1 ml-6">
+        <a class="px-4 py-2 mono text-[12px] uppercase tracking-widest text-glow-magenta border-b-2 border-[color:var(--neon-magenta)]" href="#">[1] Lobby</a>
+        <a class="px-4 py-2 mono text-[12px] uppercase tracking-widest text-[#B9B2C9] hover:text-glow-cyan" href="#">[2] Encounters</a>
+        <a class="px-4 py-2 mono text-[12px] uppercase tracking-widest text-[#B9B2C9] hover:text-glow-cyan" href="#">[3] Roster</a>
+        <a class="px-4 py-2 mono text-[12px] uppercase tracking-widest text-[#B9B2C9] hover:text-glow-cyan" href="#">[4] Loadout</a>
+      </nav>
+
+      <!-- Player card -->
+      <div class="ml-auto flex items-center gap-4">
+        <!-- streak counter -->
+        <div class="hidden md:flex items-center gap-2 px-3 py-2 border border-[color:var(--neon-gold)] hud-card-thin glow-gold">
+          <span class="text-glow-gold mono text-[11px] uppercase tracking-widest">PHI-CLEAN</span>
+          <span class="bungee text-[16px] text-glow-gold">24<span class="text-[10px] ml-1">D STREAK</span></span>
+        </div>
+
+        <!-- bell + alerts -->
+        <div class="relative w-10 h-10 grid place-items-center border border-[color:var(--line-hud)]" style="clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);">
+          <span class="text-[#B9B2C9] text-[18px]">▒</span>
+          <span class="absolute -top-1 -right-1 w-5 h-5 grid place-items-center rounded-full bg-[color:var(--neon-magenta)] text-white mono text-[10px] font-bold">3</span>
+        </div>
+
+        <!-- Player chip -->
+        <div class="flex items-center gap-3 pl-3 border-l border-[color:var(--line-hud)]">
+          <div class="avatar-frame"><div>EC</div></div>
+          <div class="leading-tight">
+            <div class="text-white text-[14px] font-semibold">Dr. Elena Chen</div>
+            <div class="mono text-[11px] flex items-center gap-2">
+              <span class="text-glow-gold">LV 47</span>
+              <span class="text-[#7E7791]">·</span>
+              <span class="text-glow-cyan">INTERNAL MED</span>
+              <span class="text-[#7E7791]">·</span>
+              <span class="text-glow-plasma">ONLINE</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== HERO ===== -->
+    <div class="grid lg:grid-cols-12 gap-8 items-stretch mb-16">
+
+      <!-- Left: Headline + CTA -->
+      <div class="lg:col-span-7">
+        <div class="mono text-[12px] uppercase tracking-[0.4em] text-glow-cyan mb-4">// READY · MAIN MENU</div>
+        <h2 class="display text-[80px] md:text-[112px] leading-[0.92] mb-6">
+          THE DOCTOR<br/>
+          <span class="text-glow-magenta">IS THE</span><br/>
+          <span class="text-glow-gold">PLAYER.</span>
+        </h2>
+        <p class="text-[18px] text-[#B9B2C9] max-w-xl mb-10">
+          QuillMD turns every patient encounter into a clean, scored, signed run.
+          Hit record. Watch the boss-fight HUD. Loot the SOAP. Sign the note. Earn the badge.
+          Repeat until the leaderboard knows your name.
+        </p>
+
+        <div class="flex flex-wrap items-center gap-4 mb-10">
+          <button class="arcade-cta">▶  START PLAYING</button>
+          <button class="arcade-cta arcade-cta-cyan">+  NEW VISIT</button>
+          <span class="mono text-[11px] uppercase tracking-widest text-[#7E7791] ml-2">[ENTER] confirm · [ESC] cancel</span>
+        </div>
+
+        <!-- Stats row -->
+        <div class="grid grid-cols-3 gap-4 max-w-2xl">
+          <div class="hud-card hud-card-thin p-4">
+            <div class="mono text-[10px] uppercase tracking-widest text-[#7E7791] mb-1">SIGNED · LIFETIME</div>
+            <div class="bungee text-[28px] text-glow-cyan">3,847</div>
+            <div class="mono text-[10px] text-glow-plasma mt-1">+12 TODAY</div>
+          </div>
+          <div class="hud-card hud-card-thin p-4">
+            <div class="mono text-[10px] uppercase tracking-widest text-[#7E7791] mb-1">AVG SOAP TIME</div>
+            <div class="bungee text-[28px] text-glow-gold">04:12</div>
+            <div class="mono text-[10px] text-glow-plasma mt-1">−0:46 vs LV46</div>
+          </div>
+          <div class="hud-card hud-card-thin p-4">
+            <div class="mono text-[10px] uppercase tracking-widest text-[#7E7791] mb-1">ACCURACY</div>
+            <div class="bungee text-[28px] text-glow-magenta">98.4%</div>
+            <div class="mono text-[10px] text-glow-plasma mt-1">S-RANK</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: Player card / level showcase -->
+      <div class="lg:col-span-5">
+        <div class="hud-card p-6 relative overflow-hidden">
+          <div class="corner-tl" style="border-color: var(--neon-magenta);"></div>
+          <div class="corner-tr" style="border-color: var(--neon-magenta);"></div>
+          <div class="corner-bl" style="border-color: var(--neon-cyan);"></div>
+          <div class="corner-br" style="border-color: var(--neon-cyan);"></div>
+
+          <div class="mono text-[11px] uppercase tracking-widest text-[#7E7791] mb-4 flex items-center justify-between">
+            <span class="text-glow-cyan">// PLAYER CARD</span>
+            <span>SLOT 01</span>
+          </div>
+
+          <!-- Avatar + name -->
+          <div class="flex items-center gap-4 mb-6">
+            <div class="relative">
+              <div class="w-20 h-20" style="background: linear-gradient(135deg, var(--neon-cyan), var(--neon-magenta), var(--neon-gold)); padding: 2px; clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);">
+                <div class="w-full h-full grid place-items-center bungee text-[28px]" style="background: radial-gradient(circle at 30% 30%, #FF8FCB, var(--neon-magenta) 60%, #4A0F2C); color: #fff; clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);">EC</div>
+              </div>
+              <span class="absolute -bottom-2 left-1/2 -translate-x-1/2 px-2 py-0.5 bungee text-[10px] text-[#07030F] glow-plasma" style="background: var(--neon-plasma); clip-path: polygon(8% 0, 92% 0, 100% 50%, 92% 100%, 8% 100%, 0 50%);">LV 47</span>
+            </div>
+            <div>
+              <div class="bungee text-[22px] text-white leading-tight">DR. ELENA CHEN</div>
+              <div class="mono text-[12px] text-glow-cyan tracking-widest">CLASS · INTERNAL MEDICINE</div>
+              <div class="mono text-[11px] text-[#B9B2C9] mt-1">GUILD · MERIDIAN HEALTH PARTNERS</div>
+            </div>
+          </div>
+
+          <!-- XP bar -->
+          <div class="mb-2 flex items-center justify-between">
+            <div class="mono text-[11px] uppercase tracking-widest text-[#B9B2C9]">XP TO LV 48</div>
+            <div class="mono text-[11px] text-glow-gold">12,470 / 15,000</div>
+          </div>
+          <div class="xp-track h-3 relative">
+            <div class="xp-fill shimmer h-full" style="width: 83%;"></div>
+            <div class="absolute inset-0 flex items-center justify-end pr-2 mono text-[10px] text-white font-bold mix-blend-difference">83%</div>
+          </div>
+          <div class="mono text-[10px] text-[#7E7791] mt-1">+ 1,240 XP from today's runs</div>
+
+          <!-- Mini equipped badges -->
+          <div class="mt-6 grid grid-cols-4 gap-2">
+            <div class="badge-tile grid place-items-center">
+              <div class="text-glow-gold bungee text-[12px] text-center px-1 leading-tight">100<br/>NOTES</div>
+            </div>
+            <div class="badge-tile grid place-items-center" style="filter: hue-rotate(120deg);">
+              <div class="text-glow-plasma bungee text-[12px] text-center px-1 leading-tight">PHI<br/>CLEAN</div>
+            </div>
+            <div class="badge-tile grid place-items-center" style="filter: hue-rotate(240deg);">
+              <div class="text-glow-cyan bungee text-[10px] text-center px-1 leading-tight">SUB-<br/>5 MIN</div>
+            </div>
+            <div class="badge-tile grid place-items-center">
+              <div class="text-glow-magenta bungee text-[12px] text-center px-1 leading-tight">FIRST<br/>VISIT</div>
+            </div>
+          </div>
+
+          <!-- attribute bars -->
+          <div class="mt-6 space-y-3">
+            <div>
+              <div class="flex justify-between mono text-[10px] uppercase tracking-widest mb-1">
+                <span class="text-[#B9B2C9]">SPEED</span><span class="text-glow-cyan">94</span>
+              </div>
+              <div class="xp-track h-2"><div class="xp-fill h-full" style="width: 94%;"></div></div>
+            </div>
+            <div>
+              <div class="flex justify-between mono text-[10px] uppercase tracking-widest mb-1">
+                <span class="text-[#B9B2C9]">ACCURACY</span><span class="text-glow-magenta">98</span>
+              </div>
+              <div class="xp-track h-2"><div class="xp-fill-magenta h-full" style="width: 98%;"></div></div>
+            </div>
+            <div>
+              <div class="flex justify-between mono text-[10px] uppercase tracking-widest mb-1">
+                <span class="text-[#B9B2C9]">CONSISTENCY</span><span class="text-glow-plasma">87</span>
+              </div>
+              <div class="xp-track h-2"><div class="xp-fill-plasma h-full" style="width: 87%;"></div></div>
+            </div>
+            <div>
+              <div class="flex justify-between mono text-[10px] uppercase tracking-widest mb-1">
+                <span class="text-[#B9B2C9]">EMPATHY</span><span class="text-glow-gold">91</span>
+              </div>
+              <div class="xp-track h-2"><div class="xp-fill-gold h-full" style="width: 91%;"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== RECORDING / BOSS FIGHT HUD ===== -->
+    <div class="bungee text-[14px] text-glow-magenta mb-3">// LIVE ENCOUNTER · BOSS FIGHT IN PROGRESS</div>
+
+    <div class="hud-card relative overflow-hidden vignette" style="background: radial-gradient(ellipse at top, rgba(255,46,147,0.25) 0%, rgba(0,0,0,0) 60%), radial-gradient(ellipse at bottom, rgba(0,229,255,0.18) 0%, rgba(0,0,0,0) 60%), #0A0512;">
+
+      <div class="scanlines absolute inset-0"></div>
+
+      <div class="relative z-10 p-8 md:p-12 min-h-[760px] flex flex-col">
+
+        <!-- Top bar — boss name + clock -->
+        <div class="flex items-start justify-between mb-6">
+          <!-- Time -->
+          <div class="hud-card hud-card-thin px-5 py-3 border border-[color:var(--neon-cyan)] glow-cyan">
+            <div class="mono text-[10px] uppercase tracking-widest text-glow-cyan">ELAPSED</div>
+            <div class="bungee text-[34px] text-white leading-none mono">07:42</div>
+          </div>
+
+          <!-- Boss banner -->
+          <div class="text-center flex-1">
+            <div class="mono text-[12px] uppercase tracking-[0.4em] text-glow-magenta mb-1 boss-pulse">⟁ ENCOUNTER ENGAGED ⟁</div>
+            <div class="boss-title text-[44px] md:text-[60px] leading-none">MARGARET HARRIS</div>
+            <div class="mono text-[12px] uppercase tracking-widest text-[#B9B2C9] mt-2">
+              <span class="text-glow-cyan">CHIEF COMPLAINT</span>
+              <span class="mx-2">::</span>
+              <span class="text-white">PERSISTENT COUGH · 3 WEEKS</span>
+              <span class="mx-2">::</span>
+              <span class="text-glow-gold">SPECIALTY · INTERNAL MED</span>
+            </div>
+          </div>
+
+          <!-- End run -->
+          <div class="hud-card hud-card-thin px-4 py-3 border border-[color:var(--neon-blood)]" style="background: linear-gradient(180deg, #2A0814, #1A0410);">
+            <div class="mono text-[10px] uppercase tracking-widest" style="color: var(--neon-blood); text-shadow: 0 0 10px rgba(255,61,90,0.7);">ABORT</div>
+            <div class="bungee text-[18px] text-white">[ESC]</div>
+          </div>
+        </div>
+
+        <!-- Boss HP bar (transcript fills) -->
+        <div class="mb-2 flex items-center justify-between">
+          <div class="bungee text-[14px] text-glow-magenta">BOSS HP · TRANSCRIPT FILL</div>
+          <div class="mono text-[11px] text-glow-gold">2,418 / 3,200 WORDS — 76%</div>
+        </div>
+        <div class="hp-track relative">
+          <div class="hp-fill" style="width: 76%;"></div>
+          <span class="hp-tick" style="left: 25%;"></span>
+          <span class="hp-tick" style="left: 50%;"></span>
+          <span class="hp-tick" style="left: 75%;"></span>
+          <div class="absolute inset-0 flex items-center justify-center bungee text-[12px] text-white tracking-widest mix-blend-difference">PHASE 3 / 4 · APPROACHING SIGN-OFF</div>
+        </div>
+        <div class="mt-2 flex justify-between mono text-[10px] uppercase tracking-widest text-[#7E7791]">
+          <span>PHASE 1 · INTAKE</span>
+          <span>PHASE 2 · HPI</span>
+          <span class="text-glow-magenta">PHASE 3 · EXAM ◀ HERE</span>
+          <span>PHASE 4 · PLAN</span>
+        </div>
+
+        <!-- Center stage: live transcript + circular meter -->
+        <div class="grid lg:grid-cols-12 gap-6 mt-10 flex-1">
+
+          <!-- Live transcript ticker (left) -->
+          <div class="lg:col-span-8 hud-card p-6 border border-[color:var(--line-hud-hot)]" style="background: linear-gradient(180deg, #0A0418 0%, #1A0A2E 100%);">
+            <div class="flex items-center justify-between mb-4">
+              <div class="bungee text-[12px] text-glow-cyan tracking-widest">// LIVE FEED · DIARIZED</div>
+              <div class="flex items-center gap-2 mono text-[10px] uppercase tracking-widest">
+                <span class="w-2 h-2 rounded-full bg-[color:var(--neon-blood)] boss-pulse"></span>
+                <span class="text-glow-magenta">REC · 320 kbps</span>
+              </div>
+            </div>
+
+            <div class="space-y-3 mono text-[13px] leading-relaxed">
+              <div class="flex gap-3">
+                <span class="text-glow-cyan w-20 shrink-0 uppercase">[DR]</span>
+                <span class="text-[#F5F2FA]">"And the cough — has it been productive at all? Any blood?"</span>
+              </div>
+              <div class="flex gap-3">
+                <span class="text-glow-magenta w-20 shrink-0 uppercase">[PT]</span>
+                <span class="text-[#F5F2FA]">"It started dry, but the last week it's been bringing up some yellow stuff. No blood that I've seen."</span>
+              </div>
+              <div class="flex gap-3">
+                <span class="text-glow-cyan w-20 shrink-0 uppercase">[DR]</span>
+                <span class="text-[#F5F2FA]">"Any fever or chills? Night sweats?"</span>
+              </div>
+              <div class="flex gap-3">
+                <span class="text-glow-magenta w-20 shrink-0 uppercase">[PT]</span>
+                <span class="text-[#F5F2FA]">"A low fever maybe two days ago. No night sweats."</span>
+              </div>
+              <div class="flex gap-3 opacity-90">
+                <span class="text-glow-cyan w-20 shrink-0 uppercase">[DR]</span>
+                <span class="text-[#F5F2FA]">"Any travel recently? Sick contacts at home or work?"</span>
+              </div>
+              <div class="flex gap-3 opacity-70">
+                <span class="text-glow-magenta w-20 shrink-0 uppercase">[PT]</span>
+                <span class="text-[#F5F2FA]">"My grandson had a bad cold over Easter weekend — I watched him..."</span>
+              </div>
+              <div class="flex gap-3 opacity-50">
+                <span class="text-glow-cyan w-20 shrink-0 uppercase">[DR]</span>
+                <span class="text-[#F5F2FA] italic">"Got it. Let me listen to your lungs—"</span>
+              </div>
+              <div class="flex items-center gap-2 opacity-50 pt-2">
+                <span class="w-2 h-2 rounded-full bg-[color:var(--neon-cyan)] animate-pulse"></span>
+                <span class="text-[#7E7791] mono text-[11px]">listening...</span>
+              </div>
+            </div>
+
+            <!-- Floating combo counter -->
+            <div class="mt-6 flex items-center gap-3 pt-4 border-t border-[color:var(--line-hud)]">
+              <div class="bungee text-[12px] text-glow-gold">COMBO</div>
+              <div class="bungee text-[28px] text-glow-magenta">×7</div>
+              <div class="mono text-[10px] uppercase tracking-widest text-[#B9B2C9]">CLEAN HISTORY-TAKING CHAIN</div>
+              <div class="ml-auto mono text-[10px] uppercase tracking-widest text-glow-plasma">+150 XP</div>
+            </div>
+          </div>
+
+          <!-- Right column: audio meter + ability panel preview -->
+          <div class="lg:col-span-4 flex flex-col gap-6">
+
+            <!-- Circular audio meter -->
+            <div class="hud-card p-6 border border-[color:var(--line-hud-hot)] flex flex-col items-center">
+              <div class="bungee text-[12px] text-glow-cyan tracking-widest mb-4">AUDIO LEVEL</div>
+              <div class="relative">
+                <div class="meter-ring" style="background: conic-gradient(from -90deg, var(--neon-cyan) 0deg, var(--neon-magenta) 240deg, rgba(155,92,255,0.15) 240deg);"></div>
+                <div class="absolute inset-0 grid place-items-center">
+                  <div class="text-center">
+                    <div class="bungee text-[28px] text-white">−18</div>
+                    <div class="mono text-[10px] text-glow-cyan uppercase tracking-widest">dBFS</div>
+                  </div>
+                </div>
+              </div>
+              <div class="mt-4 grid grid-cols-12 gap-[2px] w-full h-6">
+                <div class="bg-[color:var(--neon-plasma)]" style="height: 30%;"></div>
+                <div class="bg-[color:var(--neon-plasma)]" style="height: 50%;"></div>
+                <div class="bg-[color:var(--neon-plasma)]" style="height: 35%;"></div>
+                <div class="bg-[color:var(--neon-plasma)]" style="height: 70%;"></div>
+                <div class="bg-[color:var(--neon-cyan)]"   style="height: 80%;"></div>
+                <div class="bg-[color:var(--neon-cyan)]"   style="height: 95%;"></div>
+                <div class="bg-[color:var(--neon-cyan)]"   style="height: 70%;"></div>
+                <div class="bg-[color:var(--neon-gold)]"   style="height: 85%;"></div>
+                <div class="bg-[color:var(--neon-gold)]"   style="height: 60%;"></div>
+                <div class="bg-[color:var(--neon-magenta)]" style="height: 40%;"></div>
+                <div class="bg-[color:var(--neon-magenta)]" style="height: 55%;"></div>
+                <div class="bg-[color:var(--neon-magenta)]" style="height: 30%;"></div>
+              </div>
+              <div class="mt-3 mono text-[10px] uppercase tracking-widest text-[#7E7791]">DEEPGRAM · NOVA-3 MEDICAL</div>
+            </div>
+
+            <!-- Mini-map of pipeline -->
+            <div class="hud-card p-5 border border-[color:var(--line-hud)]">
+              <div class="bungee text-[12px] text-glow-plasma tracking-widest mb-3">PIPELINE MINI-MAP</div>
+              <div class="space-y-2">
+                <div class="flex items-center gap-2 mono text-[11px]">
+                  <span class="hex text-[color:var(--neon-plasma)]"></span>
+                  <span class="text-[#B9B2C9] flex-1">L1 · TRANSCRIBE</span>
+                  <span class="text-glow-plasma">READY</span>
+                </div>
+                <div class="flex items-center gap-2 mono text-[11px]">
+                  <span class="hex text-[color:var(--neon-plasma)]"></span>
+                  <span class="text-[#B9B2C9] flex-1">L2 · SPEAKER ROLES</span>
+                  <span class="text-glow-plasma">READY</span>
+                </div>
+                <div class="flex items-center gap-2 mono text-[11px]">
+                  <span class="hex text-[color:var(--neon-magenta)] animate-pulse"></span>
+                  <span class="text-[#B9B2C9] flex-1">L3 · ENTITY EXTRACT</span>
+                  <span class="text-glow-magenta">CASTING</span>
+                </div>
+                <div class="flex items-center gap-2 mono text-[11px] opacity-50">
+                  <span class="hex text-[#4B4558]"></span>
+                  <span class="text-[#B9B2C9] flex-1">L4 · SOAP DRAFT</span>
+                  <span class="text-[#7E7791]">QUEUED</span>
+                </div>
+                <div class="flex items-center gap-2 mono text-[11px] opacity-50">
+                  <span class="hex text-[#4B4558]"></span>
+                  <span class="text-[#B9B2C9] flex-1">L5 · SELF-CRITIQUE</span>
+                  <span class="text-[#7E7791]">QUEUED</span>
+                </div>
+                <div class="flex items-center gap-2 mono text-[11px] opacity-50">
+                  <span class="hex text-[#4B4558]"></span>
+                  <span class="text-[#B9B2C9] flex-1">L6 · POLISH</span>
+                  <span class="text-[#7E7791]">QUEUED</span>
+                </div>
+                <div class="flex items-center gap-2 mono text-[11px] opacity-50">
+                  <span class="hex text-[#4B4558]"></span>
+                  <span class="text-[#B9B2C9] flex-1">L7 · ICD/CPT/Rx</span>
+                  <span class="text-[#7E7791]">QUEUED</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Ability bar (bottom) -->
+        <div class="mt-10">
+          <div class="bungee text-[12px] text-glow-cyan tracking-widest mb-3">// ABILITY BAR · KEYBOARD HOTKEYS BOUND</div>
+          <div class="flex items-end justify-between gap-3">
+            <div class="flex gap-3">
+              <!-- Slot 1 PAUSE -->
+              <div class="text-center">
+                <div class="ability-slot grid place-items-center mb-2">
+                  <span class="ability-key">1</span>
+                  <span class="bungee text-[28px] text-white">⏸</span>
+                </div>
+                <div class="bungee text-[11px] text-glow-cyan tracking-widest">PAUSE</div>
+                <div class="mono text-[9px] text-[#7E7791] uppercase">cooldown 0s</div>
+              </div>
+              <!-- Slot 2 FLAG -->
+              <div class="text-center">
+                <div class="ability-slot grid place-items-center mb-2" style="border-color: var(--neon-gold); box-shadow: 0 0 24px rgba(255,214,10,0.5);">
+                  <span class="ability-key" style="background: var(--neon-cyan); box-shadow: 0 0 12px rgba(0,229,255,0.8);">2</span>
+                  <span class="bungee text-[28px] text-glow-gold">⚑</span>
+                </div>
+                <div class="bungee text-[11px] text-glow-gold tracking-widest">FLAG MOMENT</div>
+                <div class="mono text-[9px] text-[#7E7791] uppercase">+50 XP review</div>
+              </div>
+              <!-- Slot 3 NOTE -->
+              <div class="text-center">
+                <div class="ability-slot grid place-items-center mb-2" style="border-color: var(--neon-cyan);">
+                  <span class="ability-key" style="background: var(--neon-cyan); box-shadow: 0 0 12px rgba(0,229,255,0.8);">3</span>
+                  <span class="bungee text-[28px] text-glow-cyan">✎</span>
+                </div>
+                <div class="bungee text-[11px] text-glow-cyan tracking-widest">QUICK NOTE</div>
+                <div class="mono text-[9px] text-[#7E7791] uppercase">free action</div>
+              </div>
+              <!-- Slot 4 END -->
+              <div class="text-center">
+                <div class="ability-slot ability-slot-hot grid place-items-center mb-2">
+                  <span class="ability-key">4</span>
+                  <span class="bungee text-[28px] text-glow-magenta">⏹</span>
+                </div>
+                <div class="bungee text-[11px] text-glow-magenta tracking-widest">END VISIT</div>
+                <div class="mono text-[9px] text-glow-magenta uppercase">summon SOAP</div>
+              </div>
+            </div>
+
+            <!-- Right side hint -->
+            <div class="hud-card hud-card-thin p-4 border border-[color:var(--neon-gold)] max-w-sm">
+              <div class="mono text-[10px] uppercase tracking-widest text-glow-gold mb-1">► PRO TIP</div>
+              <div class="text-[13px] text-[#F5F2FA]">
+                Hit <span class="bungee text-glow-gold">[2]</span> on a confusing exam beat — flagged moments
+                get reviewed first when the SOAP drops, and you bank a <span class="text-glow-plasma">+50 review XP</span> token.
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ===== Magic moment: SOAP loot reveal preview ===== -->
+    <div class="mt-12 grid lg:grid-cols-2 gap-6">
+
+      <!-- Loot card -->
+      <div class="hud-card p-6 border border-[color:var(--neon-plasma)] glow-plasma relative overflow-hidden">
+        <div class="absolute -top-10 -right-10 w-40 h-40 rounded-full" style="background: radial-gradient(circle, rgba(57,255,20,0.4), transparent 70%); filter: blur(20px);"></div>
+
+        <div class="bungee text-[12px] text-glow-plasma tracking-widest mb-2">+++ EPIC DROP UNLOCKED +++</div>
+        <div class="bungee text-[28px] text-glow-plasma mb-1">SOAP NOTE · TIER IV</div>
+        <div class="mono text-[11px] text-[#B9B2C9] uppercase tracking-widest mb-4">From boss · MARGARET HARRIS · 78yo F</div>
+
+        <div class="space-y-2 soap-loot text-[12px] leading-relaxed">
+          <div><span class="text-glow-cyan">[S]</span> 78yo F p/w 3wk productive cough, scant yellow sputum, low-grade fever 2d ago. No hemoptysis. Recent sick contact (grandson, URI symptoms ~10d ago). No travel, no TB exposure, no smoking hx.</div>
+          <div><span class="text-glow-cyan">[O]</span> T 100.2°F · BP 128/82 · HR 84 · RR 18 · SpO2 96% RA. Lungs: coarse crackles RLL, no wheeze. CV: RRR. Throat: mild erythema, no exudate.</div>
+          <div><span class="text-glow-cyan">[A]</span> Community-acquired pneumonia, RLL — moderate clinical confidence (CRB-65 = 1).</div>
+          <div><span class="text-glow-cyan">[P]</span> CXR PA/lat. Amoxicillin 1g PO TID × 7d. Symptomatic care. Return precautions reviewed. F/U 72h.</div>
+        </div>
+
+        <div class="mt-5 flex flex-wrap gap-2">
+          <span class="px-2 py-1 mono text-[10px] uppercase tracking-widest border border-[color:var(--neon-magenta)] text-glow-magenta">ICD-10 · J18.1</span>
+          <span class="px-2 py-1 mono text-[10px] uppercase tracking-widest border border-[color:var(--neon-cyan)] text-glow-cyan">CPT · 99214</span>
+          <span class="px-2 py-1 mono text-[10px] uppercase tracking-widest border border-[color:var(--neon-gold)] text-glow-gold">Rx · DRAFTED</span>
+        </div>
+      </div>
+
+      <!-- Rx warning as boss-warning HUD -->
+      <div class="hud-card p-0 border-2 border-[color:var(--neon-blood)] overflow-hidden relative">
+        <div class="danger-strip h-3"></div>
+        <div class="p-6">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="bungee text-[28px] text-glow-magenta">⚠</span>
+            <div>
+              <div class="bungee text-[18px] text-white">RX WARNING · INTERLOCK ENGAGED</div>
+              <div class="mono text-[11px] uppercase tracking-widest text-glow-magenta">SEVERITY · MAJOR · CONFIRM TO PROCEED</div>
+            </div>
+          </div>
+
+          <div class="hud-card-thin border border-[color:var(--neon-blood)] p-4 mb-4" style="background: rgba(40,8,20,0.6);">
+            <div class="mono text-[12px] text-[#F5F2FA] mb-2">
+              <span class="text-glow-magenta">AMOXICILLIN 1g</span>
+              <span class="text-[#7E7791]">×</span>
+              <span class="text-glow-cyan">METHOTREXATE</span>
+              <span class="text-[#7E7791]">(charted, weekly RA dose)</span>
+            </div>
+            <div class="text-[12px] text-[#B9B2C9] leading-snug">
+              Beta-lactams may reduce renal MTX clearance and elevate plasma levels.
+              Risk of MTX toxicity increases with co-administration > 7 days.
+            </div>
+          </div>
+
+          <div class="flex gap-3">
+            <button class="arcade-cta arcade-cta-cyan" style="padding: 12px 24px; font-size: 13px;">REVIEW &amp; OVERRIDE</button>
+            <button class="px-5 py-3 mono text-[11px] uppercase tracking-widest border border-[color:var(--neon-blood)] text-glow-magenta hud-card-thin">CHANGE Rx</button>
+          </div>
+        </div>
+        <div class="danger-strip h-3"></div>
+      </div>
+
+    </div>
+
+  </div>
+</section>
+
+<!-- ============================================================
+     SEPARATOR — DASHBOARD UNLOCKED
+============================================================ -->
+<section class="relative arcade-band py-10 overflow-hidden">
+  <div class="absolute inset-0 scanlines"></div>
+  <div class="relative max-w-7xl mx-auto px-6">
+    <div class="bungee text-[28px] md:text-[44px] text-white" style="text-shadow: 0 4px 0 rgba(0,0,0,0.6), 0 0 32px rgba(255,255,255,0.4);">
+      &gt;&gt;&gt; DASHBOARD UNLOCKED &gt;&gt;&gt;
+    </div>
+    <div class="mono text-[11px] uppercase tracking-[0.4em] text-white/90 mt-2">QUEST LOG · ACHIEVEMENTS · LEADERBOARD · LOADOUT</div>
+  </div>
+</section>
+
+<!-- Marquee strip below band -->
+<div class="bg-black border-y border-[color:var(--line-hud)] py-3 marquee">
+  <div class="marquee-track mono text-[12px] uppercase tracking-widest">
+    <span class="mx-8 text-glow-magenta">⚑ LV 47 → 48 PROGRESS 83%</span>
+    <span class="mx-8 text-glow-cyan">⚡ STREAK · 24 DAYS PHI-CLEAN</span>
+    <span class="mx-8 text-glow-gold">★ LIFETIME · 3,847 SIGNED</span>
+    <span class="mx-8 text-glow-plasma">◆ TODAY · 12 RUNS · 4:12 AVG</span>
+    <span class="mx-8 text-glow-magenta">⚑ UNLOCKED · SPEED DRAFTER VII</span>
+    <span class="mx-8 text-glow-cyan">⚡ GUILD RANK · #2 OF 14</span>
+    <span class="mx-8 text-glow-gold">★ NEXT TIER · LV 50 LEGEND</span>
+    <span class="mx-8 text-glow-plasma">◆ COMBO BANK · ×7 ACTIVE</span>
+    <span class="mx-8 text-glow-magenta">⚑ LV 47 → 48 PROGRESS 83%</span>
+    <span class="mx-8 text-glow-cyan">⚡ STREAK · 24 DAYS PHI-CLEAN</span>
+    <span class="mx-8 text-glow-gold">★ LIFETIME · 3,847 SIGNED</span>
+    <span class="mx-8 text-glow-plasma">◆ TODAY · 12 RUNS · 4:12 AVG</span>
+    <span class="mx-8 text-glow-magenta">⚑ UNLOCKED · SPEED DRAFTER VII</span>
+    <span class="mx-8 text-glow-cyan">⚡ GUILD RANK · #2 OF 14</span>
+  </div>
+</div>
+
+
+<!-- ============================================================
+     SECTION 2 — DASHBOARD
+============================================================ -->
+<section class="relative px-6 md:px-12 py-16 grid-bg overflow-hidden">
+
+  <!-- floating level-up toast -->
+  <div class="absolute top-10 right-6 md:right-12 z-30 max-w-sm">
+    <div class="hud-card p-5 border-2 border-[color:var(--neon-gold)] toast-pulse level-up-flash relative" style="background: linear-gradient(180deg, rgba(255,214,10,0.18), #14091F);">
+      <div class="absolute -top-3 left-4 px-3 py-0.5 bungee text-[11px] text-[#07030F] glow-gold" style="background: var(--neon-gold); clip-path: polygon(8% 0, 92% 0, 100% 50%, 92% 100%, 8% 100%, 0 50%);">+++ LEVEL UP +++</div>
+      <div class="flex items-center gap-4">
+        <div class="w-14 h-14 grid place-items-center" style="background: radial-gradient(circle at 30% 30%, #FFEC8B, var(--neon-gold) 60%, #B45309); clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%); box-shadow: 0 0 24px rgba(255,214,10,0.9);">
+          <span class="bungee text-[24px] text-[#07030F]">48</span>
+        </div>
+        <div>
+          <div class="bungee text-[16px] text-white leading-tight">LV 47 → LV 48</div>
+          <div class="mono text-[11px] text-glow-gold uppercase tracking-widest">SENIOR INTERNIST</div>
+          <div class="mono text-[11px] text-[#B9B2C9]">+1 attribute point · +1 badge slot</div>
+        </div>
+      </div>
+      <div class="mt-4 grid grid-cols-3 gap-2 mono text-[10px] uppercase tracking-widest">
+        <span class="px-2 py-1 border border-[color:var(--neon-cyan)] text-glow-cyan">+ICD AUTOFILL</span>
+        <span class="px-2 py-1 border border-[color:var(--neon-magenta)] text-glow-magenta">+BADGE SLOT</span>
+        <span class="px-2 py-1 border border-[color:var(--neon-plasma)] text-glow-plasma">+1 ATTR PT</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="max-w-7xl mx-auto relative">
+
+    <div class="flex items-center justify-between mb-10">
+      <div class="bungee text-[13px] text-glow-cyan">SECTION 02 / DASHBOARD · QUEST LOG</div>
+      <div class="mono text-[11px] text-[#7E7791] uppercase tracking-widest">/dashboard</div>
+    </div>
+
+    <!-- Top row: greeting + monthly XP banner -->
+    <div class="hud-card p-6 mb-8 grid lg:grid-cols-12 gap-6 items-center border border-[color:var(--line-hud-hot)]">
+      <div class="lg:col-span-5">
+        <div class="mono text-[11px] uppercase tracking-[0.4em] text-glow-magenta mb-2">// SESSION OPENED · 08:14</div>
+        <h3 class="display text-[40px] md:text-[52px] leading-none mb-2">
+          GG, <span class="text-glow-cyan">DR. CHEN.</span>
+        </h3>
+        <p class="text-[15px] text-[#B9B2C9] max-w-md">
+          You ended yesterday on a 12-run, 4:12-avg, 100% PHI-clean streak.
+          The board is hot. Pick a quest and run it.
+        </p>
+      </div>
+
+      <div class="lg:col-span-7">
+        <div class="flex items-center justify-between mb-2">
+          <div class="bungee text-[12px] text-glow-gold tracking-widest">MONTHLY ACHIEVEMENT · 100 RUNS APRIL</div>
+          <div class="mono text-[12px] text-glow-gold">87 / 100 — 13 to go</div>
+        </div>
+        <div class="xp-track h-5 relative">
+          <div class="xp-fill-gold shimmer h-full" style="width: 87%;"></div>
+          <div class="absolute inset-0 flex items-center justify-end pr-3 mono text-[11px] text-[#07030F] font-bold">87%</div>
+        </div>
+        <div class="mt-2 mono text-[10px] uppercase tracking-widest text-[#7E7791] flex justify-between">
+          <span>UNLOCK · GOLDEN STETHOSCOPE BADGE</span>
+          <span>+ 4,000 XP BONUS</span>
+        </div>
+
+        <!-- Sub-bars -->
+        <div class="grid grid-cols-3 gap-3 mt-5">
+          <div>
+            <div class="mono text-[10px] uppercase tracking-widest text-glow-plasma mb-1">SIGNED TODAY</div>
+            <div class="xp-track h-2"><div class="xp-fill-plasma h-full" style="width: 60%;"></div></div>
+            <div class="mono text-[10px] text-[#B9B2C9] mt-1">9 / 15</div>
+          </div>
+          <div>
+            <div class="mono text-[10px] uppercase tracking-widest text-glow-magenta mb-1">REVIEW QUEUE</div>
+            <div class="xp-track h-2"><div class="xp-fill-magenta h-full" style="width: 25%;"></div></div>
+            <div class="mono text-[10px] text-[#B9B2C9] mt-1">3 / 12 cleared</div>
+          </div>
+          <div>
+            <div class="mono text-[10px] uppercase tracking-widest text-glow-cyan mb-1">CLEAN-CHART STREAK</div>
+            <div class="xp-track h-2"><div class="xp-fill h-full" style="width: 96%;"></div></div>
+            <div class="mono text-[10px] text-[#B9B2C9] mt-1">24 d · keep going</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Achievement collection row -->
+    <div class="mb-12">
+      <div class="flex items-center justify-between mb-4">
+        <div class="bungee text-[18px] text-white tracking-widest">ACHIEVEMENT VAULT</div>
+        <div class="mono text-[11px] uppercase tracking-widest text-[#B9B2C9]"><span class="text-glow-gold">17</span> / 32 UNLOCKED · <span class="text-glow-magenta">2 NEW</span></div>
+      </div>
+
+      <div class="grid grid-cols-4 md:grid-cols-8 gap-4">
+        <!-- 8 badges, mix unlocked + locked -->
+        <div class="badge-tile grid place-items-center relative">
+          <div class="text-glow-gold bungee text-[12px] text-center px-2 leading-tight">100<br/>NOTES</div>
+          <span class="absolute -bottom-2 left-1/2 -translate-x-1/2 mono text-[9px] text-glow-gold uppercase whitespace-nowrap">III</span>
+        </div>
+        <div class="badge-tile grid place-items-center relative" style="filter: hue-rotate(120deg);">
+          <div class="text-glow-plasma bungee text-[11px] text-center px-1 leading-tight">PHI<br/>CLEAN</div>
+          <span class="absolute -bottom-2 left-1/2 -translate-x-1/2 mono text-[9px] text-glow-plasma uppercase whitespace-nowrap">24D</span>
+        </div>
+        <div class="badge-tile grid place-items-center relative" style="filter: hue-rotate(240deg);">
+          <div class="text-glow-cyan bungee text-[10px] text-center px-1 leading-tight">SUB-5<br/>SOAP</div>
+          <span class="absolute -bottom-2 left-1/2 -translate-x-1/2 mono text-[9px] text-glow-cyan uppercase whitespace-nowrap">VII</span>
+        </div>
+        <div class="badge-tile grid place-items-center relative">
+          <div class="text-glow-magenta bungee text-[10px] text-center px-1 leading-tight">FIRST<br/>VISIT</div>
+        </div>
+        <div class="badge-tile grid place-items-center relative" style="filter: hue-rotate(60deg);">
+          <div class="text-glow-gold bungee text-[10px] text-center px-1 leading-tight">RX<br/>OVERRIDE</div>
+          <span class="absolute -bottom-2 left-1/2 -translate-x-1/2 mono text-[9px] text-glow-gold uppercase whitespace-nowrap">II</span>
+        </div>
+        <div class="badge-tile badge-tile-locked grid place-items-center relative">
+          <div class="text-[#7E7791] bungee text-[10px] text-center px-1 leading-tight">500<br/>NOTES</div>
+          <span class="absolute -bottom-2 left-1/2 -translate-x-1/2 mono text-[9px] text-[#7E7791] uppercase whitespace-nowrap">LOCKED</span>
+        </div>
+        <div class="badge-tile badge-tile-locked grid place-items-center relative">
+          <div class="text-[#7E7791] bungee text-[10px] text-center px-1 leading-tight">PERFECT<br/>WEEK</div>
+          <span class="absolute -bottom-2 left-1/2 -translate-x-1/2 mono text-[9px] text-[#7E7791] uppercase whitespace-nowrap">3 / 7</span>
+        </div>
+        <div class="badge-tile grid place-items-center relative" style="background: radial-gradient(circle at 30% 30%, rgba(255,214,10,0.5), rgba(255,214,10,0.1) 50%), linear-gradient(160deg, #2A1004, #4A1B0A); box-shadow: 0 0 24px rgba(255,214,10,0.6);">
+          <div class="bungee text-[10px] text-center px-1 leading-tight" style="color: #FFE872; text-shadow: 0 0 12px rgba(255,214,10,1);">NEW!</div>
+          <span class="absolute -bottom-2 left-1/2 -translate-x-1/2 px-2 py-0.5 mono text-[9px] uppercase whitespace-nowrap" style="background: var(--neon-gold); color: #07030F;">JUST GOT</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main grid: Quest log + sidebar -->
+    <div class="grid lg:grid-cols-12 gap-8">
+
+      <!-- Quest log (left, 8 cols) -->
+      <div class="lg:col-span-8">
+
+        <div class="flex items-center justify-between mb-4">
+          <div class="bungee text-[18px] text-white tracking-widest underline-glitch">QUEST LOG · TODAY</div>
+          <div class="flex gap-2">
+            <button class="px-3 py-1.5 mono text-[11px] uppercase tracking-widest hud-card-thin border border-[color:var(--neon-magenta)] text-glow-magenta">ALL</button>
+            <button class="px-3 py-1.5 mono text-[11px] uppercase tracking-widest hud-card-thin border border-[color:var(--line-hud)] text-[#B9B2C9]">ACTIVE</button>
+            <button class="px-3 py-1.5 mono text-[11px] uppercase tracking-widest hud-card-thin border border-[color:var(--line-hud)] text-[#B9B2C9]">SIGNED</button>
+            <button class="arcade-cta arcade-cta-cyan" style="padding: 8px 18px; font-size: 11px;">+ NEW QUEST</button>
+          </div>
+        </div>
+
+        <div class="space-y-3">
+
+          <!-- IN PROGRESS quest -->
+          <div class="quest-row in-progress hud-card-aggressive p-5 relative">
+            <div class="flex items-center gap-5">
+              <div class="w-12 h-12 grid place-items-center bungee text-[14px] glow-magenta" style="background: linear-gradient(135deg, var(--neon-magenta), var(--neon-blood)); clip-path: polygon(20% 0, 80% 0, 100% 50%, 80% 100%, 20% 100%, 0 50%); color: white;">PT</div>
+              <div class="flex-1">
+                <div class="flex items-center gap-3 mb-1">
+                  <span class="bungee text-[18px] text-white">MARGARET HARRIS</span>
+                  <span class="mono text-[10px] uppercase tracking-widest text-[#7E7791]">78F · MRN 0042871</span>
+                  <span class="px-2 py-0.5 mono text-[10px] uppercase tracking-widest border border-[color:var(--neon-magenta)] text-glow-magenta animate-pulse">◉ IN PROGRESS</span>
+                </div>
+                <div class="mono text-[12px] text-[#B9B2C9]">Encounter · INTERNAL MED · cough x 3wk · started 08:14</div>
+                <div class="mt-3 grid grid-cols-2 gap-3 max-w-xl">
+                  <div>
+                    <div class="mono text-[9px] uppercase tracking-widest text-glow-magenta mb-1">BOSS HP (TRANSCRIPT)</div>
+                    <div class="xp-track h-2"><div class="xp-fill-magenta h-full" style="width: 76%;"></div></div>
+                  </div>
+                  <div>
+                    <div class="mono text-[9px] uppercase tracking-widest text-glow-cyan mb-1">PIPELINE STAGE</div>
+                    <div class="xp-track h-2"><div class="xp-fill h-full" style="width: 35%;"></div></div>
+                  </div>
+                </div>
+              </div>
+              <div class="text-right">
+                <div class="bungee text-[20px] text-glow-magenta">+250 XP</div>
+                <div class="mono text-[10px] uppercase tracking-widest text-[#7E7791]">est. on sign-off</div>
+                <button class="mt-2 arcade-cta arcade-cta-cyan" style="padding: 6px 14px; font-size: 11px;">RESUME ▶</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- COMPLETED quest -->
+          <div class="quest-row completed hud-card-aggressive p-5">
+            <div class="flex items-center gap-5">
+              <div class="w-12 h-12 grid place-items-center bungee text-[14px] glow-plasma" style="background: linear-gradient(135deg, var(--neon-plasma), #166534); clip-path: polygon(20% 0, 80% 0, 100% 50%, 80% 100%, 20% 100%, 0 50%); color: #07030F;">JT</div>
+              <div class="flex-1">
+                <div class="flex items-center gap-3 mb-1">
+                  <span class="bungee text-[18px] text-white">JAMES TORRES</span>
+                  <span class="mono text-[10px] uppercase tracking-widest text-[#7E7791]">52M · MRN 0099201</span>
+                  <span class="px-2 py-0.5 mono text-[10px] uppercase tracking-widest border border-[color:var(--neon-plasma)] text-glow-plasma">◆ COMPLETED · S-RANK</span>
+                </div>
+                <div class="mono text-[12px] text-[#B9B2C9]">F/U HTN — BP 142/88, lisinopril increased to 20mg · 06:42 → 06:54</div>
+                <div class="mt-2 flex flex-wrap gap-2">
+                  <span class="px-2 py-0.5 mono text-[10px] uppercase tracking-widest border border-[color:var(--neon-magenta)] text-glow-magenta">ICD · I10</span>
+                  <span class="px-2 py-0.5 mono text-[10px] uppercase tracking-widest border border-[color:var(--neon-cyan)] text-glow-cyan">CPT · 99213</span>
+                  <span class="px-2 py-0.5 mono text-[10px] uppercase tracking-widest border border-[color:var(--neon-gold)] text-glow-gold">SUB-5 BONUS</span>
+                  <span class="px-2 py-0.5 mono text-[10px] uppercase tracking-widest border border-[color:var(--neon-plasma)] text-glow-plasma">PHI CLEAN</span>
+                </div>
+              </div>
+              <div class="text-right">
+                <div class="bungee text-[20px] text-glow-plasma">+340 XP</div>
+                <div class="mono text-[10px] uppercase tracking-widest text-glow-gold">+50 SPEED BONUS</div>
+                <div class="mono text-[10px] uppercase tracking-widest text-[#7E7791]">SIGNED 06:54</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- COMPLETED quest 2 -->
+          <div class="quest-row completed hud-card-aggressive p-5">
+            <div class="flex items-center gap-5">
+              <div class="w-12 h-12 grid place-items-center bungee text-[14px] glow-plasma" style="background: linear-gradient(135deg, var(--neon-plasma), #166534); clip-path: polygon(20% 0, 80% 0, 100% 50%, 80% 100%, 20% 100%, 0 50%); color: #07030F;">SD</div>
+              <div class="flex-1">
+                <div class="flex items-center gap-3 mb-1">
+                  <span class="bungee text-[18px] text-white">SOFIA DELGADO</span>
+                  <span class="mono text-[10px] uppercase tracking-widest text-[#7E7791]">34F · MRN 0114007</span>
+                  <span class="px-2 py-0.5 mono text-[10px] uppercase tracking-widest border border-[color:var(--neon-plasma)] text-glow-plasma">◆ COMPLETED</span>
+                </div>
+                <div class="mono text-[12px] text-[#B9B2C9]">Annual physical · routine labs ordered · Pap deferred (current) · 07:02 → 07:18</div>
+                <div class="mt-2 flex flex-wrap gap-2">
+                  <span class="px-2 py-0.5 mono text-[10px] uppercase tracking-widest border border-[color:var(--neon-magenta)] text-glow-magenta">ICD · Z00.00</span>
+                  <span class="px-2 py-0.5 mono text-[10px] uppercase tracking-widest border border-[color:var(--neon-cyan)] text-glow-cyan">CPT · 99395</span>
+                </div>
+              </div>
+              <div class="text-right">
+                <div class="bungee text-[20px] text-glow-plasma">+220 XP</div>
+                <div class="mono text-[10px] uppercase tracking-widest text-[#7E7791]">SIGNED 07:18</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- REVIEW NEEDED quest -->
+          <div class="quest-row in-progress hud-card-aggressive p-5" style="border-left-color: var(--neon-blood);">
+            <div class="flex items-center gap-5">
+              <div class="w-12 h-12 grid place-items-center bungee text-[14px]" style="background: linear-gradient(135deg, var(--neon-blood), #4A0F2C); clip-path: polygon(20% 0, 80% 0, 100% 50%, 80% 100%, 20% 100%, 0 50%); color: white; box-shadow: 0 0 16px rgba(255,61,90,0.6);">RW</div>
+              <div class="flex-1">
+                <div class="flex items-center gap-3 mb-1">
+                  <span class="bungee text-[18px] text-white">ROBERT WANG</span>
+                  <span class="mono text-[10px] uppercase tracking-widest text-[#7E7791]">66M · MRN 0058331</span>
+                  <span class="px-2 py-0.5 mono text-[10px] uppercase tracking-widest" style="border: 1px solid var(--neon-blood); color: var(--neon-blood); text-shadow: 0 0 10px rgba(255,61,90,0.8);">⚠ RX REVIEW · OVERRIDE PENDING</span>
+                </div>
+                <div class="mono text-[12px] text-[#B9B2C9]">Atrial fib f/u — proposed amiodarone increase flagged: warfarin INR risk</div>
+                <div class="mt-2 flex flex-wrap gap-2">
+                  <span class="px-2 py-0.5 mono text-[10px] uppercase tracking-widest border border-[color:var(--neon-blood)]" style="color: var(--neon-blood);">DRUG-DRUG MAJOR</span>
+                  <span class="px-2 py-0.5 mono text-[10px] uppercase tracking-widest border border-[color:var(--neon-magenta)] text-glow-magenta">ICD · I48.91</span>
+                </div>
+              </div>
+              <div class="text-right">
+                <div class="bungee text-[20px]" style="color: var(--neon-blood);">+400 XP</div>
+                <div class="mono text-[10px] uppercase tracking-widest" style="color: var(--neon-blood);">REVIEW BONUS</div>
+                <button class="mt-2 px-3 py-1.5 mono text-[10px] uppercase tracking-widest border" style="border-color: var(--neon-blood); color: var(--neon-blood);">REVIEW NOW</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- QUEUED -->
+          <div class="quest-row queued hud-card-aggressive p-5 opacity-90">
+            <div class="flex items-center gap-5">
+              <div class="w-12 h-12 grid place-items-center bungee text-[14px]" style="background: linear-gradient(135deg, var(--neon-gold), #B45309); clip-path: polygon(20% 0, 80% 0, 100% 50%, 80% 100%, 20% 100%, 0 50%); color: #07030F;">AK</div>
+              <div class="flex-1">
+                <div class="flex items-center gap-3 mb-1">
+                  <span class="bungee text-[18px] text-white">AISHA KAMARA</span>
+                  <span class="mono text-[10px] uppercase tracking-widest text-[#7E7791]">29F · MRN 0140998</span>
+                  <span class="px-2 py-0.5 mono text-[10px] uppercase tracking-widest border border-[color:var(--neon-gold)] text-glow-gold">◐ QUEUED · 09:15</span>
+                </div>
+                <div class="mono text-[12px] text-[#B9B2C9]">New patient · migraine workup · referred from primary care</div>
+              </div>
+              <div class="text-right">
+                <div class="bungee text-[20px] text-glow-gold">+280 XP</div>
+                <div class="mono text-[10px] uppercase tracking-widest text-[#7E7791]">est. reward</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- QUEUED 2 -->
+          <div class="quest-row queued hud-card-aggressive p-5 opacity-90">
+            <div class="flex items-center gap-5">
+              <div class="w-12 h-12 grid place-items-center bungee text-[14px]" style="background: linear-gradient(135deg, var(--neon-gold), #B45309); clip-path: polygon(20% 0, 80% 0, 100% 50%, 80% 100%, 20% 100%, 0 50%); color: #07030F;">DF</div>
+              <div class="flex-1">
+                <div class="flex items-center gap-3 mb-1">
+                  <span class="bungee text-[18px] text-white">DAVID FELDSTEIN</span>
+                  <span class="mono text-[10px] uppercase tracking-widest text-[#7E7791]">71M · MRN 0023115</span>
+                  <span class="px-2 py-0.5 mono text-[10px] uppercase tracking-widest border border-[color:var(--neon-gold)] text-glow-gold">◐ QUEUED · 09:45</span>
+                </div>
+                <div class="mono text-[12px] text-[#B9B2C9]">3-month diabetes f/u · A1c review · last 7.4</div>
+              </div>
+              <div class="text-right">
+                <div class="bungee text-[20px] text-glow-gold">+260 XP</div>
+                <div class="mono text-[10px] uppercase tracking-widest text-[#7E7791]">est. reward</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="mt-6 flex justify-center">
+          <button class="arcade-cta arcade-cta-gold" style="padding: 12px 28px; font-size: 13px;">⊕  LOAD MORE QUESTS</button>
+        </div>
+
+      </div>
+
+      <!-- Sidebar (right, 4 cols) -->
+      <div class="lg:col-span-4 space-y-6">
+
+        <!-- Leaderboard -->
+        <div class="hud-card p-5 border border-[color:var(--neon-cyan)] glow-cyan">
+          <div class="flex items-center justify-between mb-4">
+            <div class="bungee text-[16px] text-glow-cyan tracking-widest">GUILD LEADERBOARD</div>
+            <span class="mono text-[10px] uppercase tracking-widest text-[#7E7791]">APR · LIVE</span>
+          </div>
+
+          <div class="mono text-[11px] uppercase tracking-widest text-[#7E7791] mb-2">MERIDIAN HEALTH PARTNERS · INTERNAL MED · 14 PLAYERS</div>
+
+          <div class="space-y-2">
+            <div class="flex items-center gap-3 p-2 hud-card-thin border border-[color:var(--line-hud)]">
+              <div class="bungee text-[18px] text-glow-gold w-8 text-center">#1</div>
+              <div class="avatar-frame" style="width: 32px; height: 32px;"><div class="text-[12px]">RB</div></div>
+              <div class="flex-1">
+                <div class="text-[13px] text-white">Dr. R. Bhargava</div>
+                <div class="mono text-[10px] text-[#B9B2C9]">LV 53 · 4,201 signed</div>
+              </div>
+              <div class="bungee text-[14px] text-glow-gold">21,400</div>
+            </div>
+
+            <div class="flex items-center gap-3 p-2 hud-card-thin border border-[color:var(--neon-magenta)] glow-magenta">
+              <div class="bungee text-[18px] text-glow-magenta w-8 text-center">#2</div>
+              <div class="avatar-frame" style="width: 32px; height: 32px;"><div class="text-[12px]">EC</div></div>
+              <div class="flex-1">
+                <div class="text-[13px] text-glow-magenta">Dr. E. Chen <span class="text-[10px] mono">— YOU</span></div>
+                <div class="mono text-[10px] text-[#B9B2C9]">LV 47 · 3,847 signed</div>
+              </div>
+              <div class="bungee text-[14px] text-glow-magenta">19,820</div>
+            </div>
+
+            <div class="flex items-center gap-3 p-2 hud-card-thin border border-[color:var(--line-hud)]">
+              <div class="bungee text-[18px] text-[#B9B2C9] w-8 text-center">#3</div>
+              <div class="avatar-frame" style="width: 32px; height: 32px;"><div class="text-[12px]">MO</div></div>
+              <div class="flex-1">
+                <div class="text-[13px] text-white">Dr. M. Okafor</div>
+                <div class="mono text-[10px] text-[#B9B2C9]">LV 44 · 3,512 signed</div>
+              </div>
+              <div class="bungee text-[14px] text-white">17,240</div>
+            </div>
+
+            <div class="flex items-center gap-3 p-2 hud-card-thin border border-[color:var(--line-hud)]">
+              <div class="bungee text-[18px] text-[#7E7791] w-8 text-center">#4</div>
+              <div class="avatar-frame" style="width: 32px; height: 32px;"><div class="text-[12px]">JL</div></div>
+              <div class="flex-1">
+                <div class="text-[13px] text-white">Dr. J. Liang</div>
+                <div class="mono text-[10px] text-[#B9B2C9]">LV 41 · 2,990 signed</div>
+              </div>
+              <div class="bungee text-[14px] text-white">14,802</div>
+            </div>
+
+            <div class="flex items-center gap-3 p-2 hud-card-thin border border-[color:var(--line-hud)]">
+              <div class="bungee text-[18px] text-[#7E7791] w-8 text-center">#5</div>
+              <div class="avatar-frame" style="width: 32px; height: 32px;"><div class="text-[12px]">PS</div></div>
+              <div class="flex-1">
+                <div class="text-[13px] text-white">Dr. P. Sharma</div>
+                <div class="mono text-[10px] text-[#B9B2C9]">LV 39 · 2,720 signed</div>
+              </div>
+              <div class="bungee text-[14px] text-white">13,180</div>
+            </div>
+          </div>
+
+          <div class="mt-4 px-3 py-2 mono text-[11px] uppercase tracking-widest border border-[color:var(--neon-magenta)] text-glow-magenta text-center">
+            ⚡ Sign 2 more to overtake #1 today
+          </div>
+        </div>
+
+        <!-- Daily challenge -->
+        <div class="hud-card p-5 border border-[color:var(--neon-gold)] glow-gold relative">
+          <div class="absolute -top-3 left-4 px-3 py-0.5 bungee text-[11px] text-[#07030F] glow-gold" style="background: var(--neon-gold); clip-path: polygon(8% 0, 92% 0, 100% 50%, 92% 100%, 8% 100%, 0 50%);">DAILY CHALLENGE</div>
+          <div class="bungee text-[16px] text-white mt-2 mb-2">"FAST &amp; CLEAN"</div>
+          <div class="text-[13px] text-[#B9B2C9] mb-4">
+            Sign <span class="text-glow-gold">5 visits</span> in under <span class="text-glow-magenta">5:00 each</span>,
+            zero PHI flags. Resets at 23:59.
+          </div>
+          <div class="mono text-[10px] uppercase tracking-widest text-glow-gold mb-1 flex justify-between">
+            <span>PROGRESS</span><span>3 / 5</span>
+          </div>
+          <div class="xp-track h-2"><div class="xp-fill-gold shimmer h-full" style="width: 60%;"></div></div>
+          <div class="mt-3 flex items-center justify-between mono text-[10px] uppercase tracking-widest">
+            <span class="text-[#7E7791]">REWARD</span>
+            <span class="text-glow-gold">+1,500 XP · GOLD STETHOSCOPE TOKEN</span>
+          </div>
+        </div>
+
+        <!-- Mini stats / loadout -->
+        <div class="hud-card p-5 border border-[color:var(--line-hud-hot)]">
+          <div class="bungee text-[14px] text-glow-violet tracking-widest mb-4">LOADOUT · ACTIVE PERKS</div>
+          <div class="space-y-3">
+            <div class="flex items-center gap-3">
+              <div class="w-9 h-9 grid place-items-center bungee text-[14px] text-[#07030F]" style="background: var(--neon-cyan); clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);">⚡</div>
+              <div class="flex-1">
+                <div class="text-[13px] text-white">Speed Drafter VII</div>
+                <div class="mono text-[10px] text-glow-cyan uppercase">−15% SOAP latency</div>
+              </div>
+            </div>
+            <div class="flex items-center gap-3">
+              <div class="w-9 h-9 grid place-items-center bungee text-[14px] text-[#07030F]" style="background: var(--neon-plasma); clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);">◆</div>
+              <div class="flex-1">
+                <div class="text-[13px] text-white">PHI Sentinel III</div>
+                <div class="mono text-[10px] text-glow-plasma uppercase">+25% PHI streak XP</div>
+              </div>
+            </div>
+            <div class="flex items-center gap-3">
+              <div class="w-9 h-9 grid place-items-center bungee text-[14px] text-[#07030F]" style="background: var(--neon-magenta); clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);">◉</div>
+              <div class="flex-1">
+                <div class="text-[13px] text-white">ICD Whisperer II</div>
+                <div class="mono text-[10px] text-glow-magenta uppercase">auto-suggest 3 codes</div>
+              </div>
+            </div>
+            <div class="flex items-center gap-3 opacity-60">
+              <div class="w-9 h-9 grid place-items-center bungee text-[14px] text-[#07030F]" style="background: var(--neon-gold); clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);">+</div>
+              <div class="flex-1">
+                <div class="text-[13px] text-[#B9B2C9]">Slot empty</div>
+                <div class="mono text-[10px] text-glow-gold uppercase">unlock at LV 50</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Bottom row: weekly graph + recent unlocks -->
+    <div class="grid lg:grid-cols-12 gap-6 mt-12">
+
+      <!-- Weekly XP chart (HUD bars) -->
+      <div class="lg:col-span-8 hud-card p-6 border border-[color:var(--line-hud-hot)]">
+        <div class="flex items-center justify-between mb-4">
+          <div class="bungee text-[16px] text-white tracking-widest">WEEKLY XP · 7-DAY BUFFER</div>
+          <div class="mono text-[11px] text-[#7E7791] uppercase tracking-widest"><span class="text-glow-plasma">+18.4%</span> vs prev. week</div>
+        </div>
+
+        <div class="grid grid-cols-7 gap-3 h-48 items-end">
+          <div class="text-center">
+            <div class="relative h-full flex items-end">
+              <div class="w-full" style="height: 55%; background: linear-gradient(180deg, var(--neon-violet), var(--neon-magenta)); box-shadow: 0 0 12px rgba(155,92,255,0.7); clip-path: polygon(0 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%);"></div>
+            </div>
+            <div class="mono text-[10px] text-[#B9B2C9] mt-1">MON</div>
+            <div class="bungee text-[12px] text-glow-magenta">2.1k</div>
+          </div>
+          <div class="text-center">
+            <div class="relative h-full flex items-end">
+              <div class="w-full" style="height: 70%; background: linear-gradient(180deg, var(--neon-violet), var(--neon-magenta)); box-shadow: 0 0 12px rgba(155,92,255,0.7); clip-path: polygon(0 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%);"></div>
+            </div>
+            <div class="mono text-[10px] text-[#B9B2C9] mt-1">TUE</div>
+            <div class="bungee text-[12px] text-glow-magenta">2.8k</div>
+          </div>
+          <div class="text-center">
+            <div class="relative h-full flex items-end">
+              <div class="w-full" style="height: 60%; background: linear-gradient(180deg, var(--neon-violet), var(--neon-magenta)); box-shadow: 0 0 12px rgba(155,92,255,0.7); clip-path: polygon(0 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%);"></div>
+            </div>
+            <div class="mono text-[10px] text-[#B9B2C9] mt-1">WED</div>
+            <div class="bungee text-[12px] text-glow-magenta">2.4k</div>
+          </div>
+          <div class="text-center">
+            <div class="relative h-full flex items-end">
+              <div class="w-full" style="height: 88%; background: linear-gradient(180deg, var(--neon-cyan), var(--neon-violet)); box-shadow: 0 0 18px rgba(0,229,255,0.7); clip-path: polygon(0 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%);"></div>
+            </div>
+            <div class="mono text-[10px] text-[#B9B2C9] mt-1">THU</div>
+            <div class="bungee text-[12px] text-glow-cyan">3.5k</div>
+          </div>
+          <div class="text-center">
+            <div class="relative h-full flex items-end">
+              <div class="w-full" style="height: 75%; background: linear-gradient(180deg, var(--neon-violet), var(--neon-magenta)); box-shadow: 0 0 12px rgba(155,92,255,0.7); clip-path: polygon(0 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%);"></div>
+            </div>
+            <div class="mono text-[10px] text-[#B9B2C9] mt-1">FRI</div>
+            <div class="bungee text-[12px] text-glow-magenta">3.0k</div>
+          </div>
+          <div class="text-center">
+            <div class="relative h-full flex items-end">
+              <div class="w-full" style="height: 30%; background: linear-gradient(180deg, var(--neon-gold), #B45309); box-shadow: 0 0 12px rgba(255,214,10,0.5); clip-path: polygon(0 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%);"></div>
+            </div>
+            <div class="mono text-[10px] text-[#B9B2C9] mt-1">SAT</div>
+            <div class="bungee text-[12px] text-glow-gold">1.2k</div>
+          </div>
+          <div class="text-center">
+            <div class="relative h-full flex items-end">
+              <div class="w-full" style="height: 45%; background: linear-gradient(180deg, var(--neon-plasma), #166534); box-shadow: 0 0 12px rgba(57,255,20,0.5); clip-path: polygon(0 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%);"></div>
+            </div>
+            <div class="mono text-[10px] text-[#B9B2C9] mt-1">SUN</div>
+            <div class="bungee text-[12px] text-glow-plasma">1.8k</div>
+          </div>
+        </div>
+
+        <div class="mt-4 pt-4 border-t border-[color:var(--line-hud)] flex flex-wrap gap-6">
+          <div>
+            <div class="mono text-[10px] uppercase tracking-widest text-[#7E7791]">WEEK XP</div>
+            <div class="bungee text-[20px] text-glow-cyan">16,820</div>
+          </div>
+          <div>
+            <div class="mono text-[10px] uppercase tracking-widest text-[#7E7791]">PEAK DAY</div>
+            <div class="bungee text-[20px] text-glow-cyan">THURSDAY</div>
+          </div>
+          <div>
+            <div class="mono text-[10px] uppercase tracking-widest text-[#7E7791]">RUN COUNT</div>
+            <div class="bungee text-[20px] text-glow-magenta">62</div>
+          </div>
+          <div>
+            <div class="mono text-[10px] uppercase tracking-widest text-[#7E7791]">AVG TIME</div>
+            <div class="bungee text-[20px] text-glow-gold">4:34</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent unlocks feed -->
+      <div class="lg:col-span-4 hud-card p-5 border border-[color:var(--neon-magenta)] glow-magenta">
+        <div class="bungee text-[16px] text-glow-magenta tracking-widest mb-4">RECENT UNLOCKS</div>
+        <div class="space-y-3">
+          <div class="flex items-start gap-3 pb-3 border-b border-[color:var(--line-hud)]">
+            <div class="badge-tile" style="width: 36px; height: 40px; flex-shrink: 0;">
+              <div class="w-full h-full grid place-items-center text-glow-gold bungee text-[8px]">LV<br/>48</div>
+            </div>
+            <div class="flex-1">
+              <div class="text-[13px] text-white">Senior Internist (Lv 48)</div>
+              <div class="mono text-[10px] text-glow-gold uppercase">just now</div>
+              <div class="text-[11px] text-[#B9B2C9] mt-1">+1 attribute pt · +1 badge slot</div>
+            </div>
+          </div>
+
+          <div class="flex items-start gap-3 pb-3 border-b border-[color:var(--line-hud)]">
+            <div class="badge-tile" style="width: 36px; height: 40px; flex-shrink: 0; filter: hue-rotate(120deg);">
+              <div class="w-full h-full grid place-items-center text-glow-plasma bungee text-[7px]">PHI<br/>24D</div>
+            </div>
+            <div class="flex-1">
+              <div class="text-[13px] text-white">PHI-Clean Streak · 24 days</div>
+              <div class="mono text-[10px] text-glow-plasma uppercase">2 hr ago</div>
+              <div class="text-[11px] text-[#B9B2C9] mt-1">Tier upgraded · Bronze → Silver</div>
+            </div>
+          </div>
+
+          <div class="flex items-start gap-3 pb-3 border-b border-[color:var(--line-hud)]">
+            <div class="badge-tile" style="width: 36px; height: 40px; flex-shrink: 0; filter: hue-rotate(240deg);">
+              <div class="w-full h-full grid place-items-center text-glow-cyan bungee text-[7px]">SUB<br/>5</div>
+            </div>
+            <div class="flex-1">
+              <div class="text-[13px] text-white">Speed Drafter VII</div>
+              <div class="mono text-[10px] text-glow-cyan uppercase">yesterday</div>
+              <div class="text-[11px] text-[#B9B2C9] mt-1">200 sub-5min SOAPs lifetime</div>
+            </div>
+          </div>
+
+          <div class="flex items-start gap-3">
+            <div class="badge-tile" style="width: 36px; height: 40px; flex-shrink: 0;">
+              <div class="w-full h-full grid place-items-center text-glow-magenta bungee text-[7px]">ICD<br/>★</div>
+            </div>
+            <div class="flex-1">
+              <div class="text-[13px] text-white">ICD Whisperer II</div>
+              <div class="mono text-[10px] text-glow-magenta uppercase">2 days ago</div>
+              <div class="text-[11px] text-[#B9B2C9] mt-1">95% code-acceptance rate</div>
+            </div>
+          </div>
+        </div>
+
+        <button class="mt-4 w-full px-3 py-2 mono text-[11px] uppercase tracking-widest border border-[color:var(--neon-magenta)] text-glow-magenta">VIEW ALL 32</button>
+      </div>
+
+    </div>
+
+  </div>
+</section>
+
+
+<!-- ============================================================
+     FOOTER HUD
+============================================================ -->
+<footer class="border-t border-[color:var(--line-hud)] bg-[#07030F] py-10 px-6">
+  <div class="max-w-7xl mx-auto grid md:grid-cols-3 gap-6 items-center">
+    <div>
+      <div class="bungee text-[18px] text-white">QUILLMD<span class="text-glow-magenta">·</span>ARCADE</div>
+      <div class="mono text-[10px] uppercase tracking-widest text-[#7E7791] mt-2">v4 design direction · 2026.04.29 · build 0001</div>
+    </div>
+    <div class="mono text-[11px] text-[#B9B2C9] uppercase tracking-widest text-center">
+      The doctor is the player. <span class="text-glow-gold">Press start.</span>
+    </div>
+    <div class="mono text-[10px] uppercase tracking-widest text-[#7E7791] md:text-right">
+      HIPAA · BAA-READY · SOC2-PROCESS · PHI-REDACTED IN ALL LOGS
+    </div>
+  </div>
+</footer>
+
+
+<script>
+  // small motion confetti for level-up flash if motion lib loaded
+  if (window.motion && window.motion.animate) {
+    window.motion.animate(
+      ".level-up-flash",
+      { rotate: [0, -1.2, 1.2, 0] },
+      { duration: 0.8, repeat: Infinity, repeatType: "loop", ease: "easeInOut" }
+    );
+  }
+</script>
+
+</body>
+</html>

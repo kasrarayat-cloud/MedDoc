@@ -1,0 +1,1150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1600, initial-scale=1">
+<title>QuillMD — Prism · visit detail (regenerate moment in-context)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;0,8..60,700;1,8..60,400;1,8..60,600&family=Inter+Tight:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #07060C;
+    --bg-1: #0C0A16;
+    --bg-2: #14111F;
+    --bg-3: #1C1828;
+    --bg-4: #221C30;
+    --line-soft: #191524;
+    --line: #26222F;
+    --line-strong: #3A3445;
+    --fg: #F5F2FA;
+    --fg-2: #B9B2C9;
+    --fg-3: #7E7791;
+    --fg-4: #4B4558;
+    --mint: #6EE7B7;
+    --amber: #FBBF24;
+    --coral: #FB7185;
+
+    --prism-1: #D946EF;
+    --prism-2: #7C3AED;
+    --prism-3: #22D3EE;
+    --prism-grad: linear-gradient(135deg, #D946EF 0%, #7C3AED 50%, #22D3EE 100%);
+    --prism-grad-stripe: linear-gradient(180deg, #D946EF 0%, #7C3AED 50%, #22D3EE 100%);
+
+    --serif: 'Source Serif 4', Georgia, serif;
+    --sans: 'Inter Tight', system-ui, sans-serif;
+    --mono: 'JetBrains Mono', ui-monospace, monospace;
+
+    --ease: cubic-bezier(0.4, 0, 0.2, 1);
+    --ease-back: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --ease-soft: cubic-bezier(0.65, 0, 0.35, 1);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: var(--sans);
+    color: var(--fg);
+    background: var(--bg);
+    background-image:
+      radial-gradient(ellipse 1400px 600px at 50% -200px, rgba(217, 70, 239, 0.04), transparent 70%),
+      radial-gradient(ellipse 900px 500px at 90% 100%, rgba(34, 211, 238, 0.03), transparent 70%);
+    background-attachment: fixed;
+    font-size: 14px;
+    line-height: 1.55;
+    letter-spacing: -0.01em;
+    overflow-x: hidden;
+  }
+
+  /* ====================== shell (same as dashboard) ====================== */
+  .app { display: grid; grid-template-columns: 64px 1fr; min-height: 100vh; }
+  .rail { background: var(--bg-1); border-right: 1px solid var(--line-soft); padding: 16px 0; display: flex; flex-direction: column; align-items: center; gap: 4px; position: sticky; top: 0; height: 100vh; }
+  .rail .logo { width: 36px; height: 36px; border-radius: 11px; background: var(--prism-grad); display: grid; place-items: center; color: white; font-family: var(--serif); font-weight: 700; font-size: 19px; box-shadow: 0 8px 22px -6px rgba(217, 70, 239, 0.5), inset 0 1px 0 rgba(255,255,255,0.25); margin-bottom: 14px; }
+  .rail-item { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; cursor: pointer; color: var(--fg-3); transition: color 140ms var(--ease), background 140ms var(--ease); position: relative; }
+  .rail-item:hover { color: var(--fg-2); background: var(--bg-2); }
+  .rail-item.active { color: var(--fg); background: var(--bg-3); box-shadow: inset 0 0 0 1px var(--line-strong); }
+  .rail-item.active::before { content: ''; position: absolute; left: -8px; top: 8px; bottom: 8px; width: 2px; border-radius: 2px; background: var(--prism-grad-stripe); box-shadow: 0 0 8px rgba(217, 70, 239, 0.5); }
+  .rail-spacer { flex: 1; }
+  .ic { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .main { display: flex; flex-direction: column; min-height: 100vh; }
+  .topbar { height: 60px; padding: 0 28px; display: flex; align-items: center; justify-content: space-between; background: var(--bg); border-bottom: 1px solid var(--line-soft); position: sticky; top: 0; z-index: 10; backdrop-filter: blur(8px); }
+  .crumb { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--fg-3); }
+  .crumb a { color: var(--fg-3); }
+  .crumb .sep { color: var(--fg-4); }
+  .crumb .here { color: var(--fg); font-weight: 500; }
+  .top-btn { height: 34px; padding: 0 12px; border-radius: 9px; background: var(--bg-2); border: 1px solid var(--line); color: var(--fg-2); font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; transition: border-color 140ms var(--ease), color 140ms var(--ease); }
+  .top-btn:hover { border-color: var(--line-strong); color: var(--fg); }
+  .new-visit-btn { height: 34px; padding: 0 14px; border-radius: 9px; background: var(--prism-grad); color: white; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; border: none; box-shadow: 0 6px 16px -4px rgba(217, 70, 239, 0.45), inset 0 1px 0 rgba(255,255,255,0.25); }
+  .avatar { width: 30px; height: 30px; border-radius: 50%; background: linear-gradient(135deg, var(--prism-2), var(--prism-3)); display: grid; place-items: center; font-family: var(--sans); font-weight: 700; font-size: 12px; color: white; }
+  .topbar-right { display: flex; align-items: center; gap: 12px; }
+
+  .mono-tabular { font-family: var(--mono); font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
+  .section-label { font-family: var(--mono); font-size: 11px; color: var(--fg-3); text-transform: uppercase; letter-spacing: 0.14em; }
+
+  /* ====================== visit header ====================== */
+  .vheader {
+    padding: 30px 32px 0;
+  }
+  .vheader-top {
+    display: flex; justify-content: space-between; align-items: end;
+    padding-bottom: 22px;
+  }
+  .pname-block {
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .pname-large {
+    font-family: var(--serif);
+    font-size: 44px; font-weight: 500; line-height: 1.05; letter-spacing: -0.025em;
+    color: var(--fg);
+    margin: 0; position: relative;
+    display: inline-block;
+  }
+  /* Animated gradient underline that draws on mount */
+  .pname-large::after {
+    content: '';
+    position: absolute; left: 0; right: 0; bottom: -8px; height: 3px;
+    background: var(--prism-grad);
+    border-radius: 2px;
+    transform-origin: left; transform: scaleX(0);
+    animation: drawUnderline 1.0s var(--ease-back) 0.3s forwards;
+  }
+  @keyframes drawUnderline { to { transform: scaleX(1); } }
+  .pname-meta {
+    font-family: var(--mono); font-size: 12px;
+    color: var(--fg-3); letter-spacing: 0.04em;
+  }
+  .pname-meta .sep { color: var(--fg-4); margin: 0 8px; }
+
+  .vheader-actions {
+    display: flex; align-items: center; gap: 10px;
+  }
+
+  /* gradient pill for status header */
+  .status-pill {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 6px 14px; border-radius: 999px;
+    font-family: var(--mono); font-size: 11px; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    color: white;
+  }
+  .status-pill .pdot { width: 6px; height: 6px; border-radius: 50%; background: white; box-shadow: 0 0 4px white; }
+  .status-pill.ready { background: linear-gradient(135deg, var(--mint) 0%, var(--prism-3) 100%); color: #0B2A1E; }
+  .status-pill.signed { background: linear-gradient(135deg, var(--prism-2) 0%, var(--prism-3) 100%); }
+
+  .vheader-meta {
+    display: flex; align-items: center; gap: 16px; padding-bottom: 18px;
+  }
+  .meta-chip {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 5px 12px; border-radius: 8px;
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    font-family: var(--mono); font-size: 11px;
+    color: var(--fg-2); letter-spacing: 0.04em;
+  }
+  .meta-chip svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .meta-chip .label { color: var(--fg-3); text-transform: uppercase; letter-spacing: 0.08em; }
+  .meta-chip .val { color: var(--fg); font-weight: 500; }
+
+  /* ====================== tabs ====================== */
+  .tab-bar {
+    display: flex; align-items: center; gap: 0;
+    border-bottom: 1px solid var(--line);
+    padding: 0 32px;
+    background: var(--bg);
+  }
+  .vtab {
+    padding: 14px 20px; cursor: pointer;
+    font-size: 13.5px; font-weight: 500;
+    color: var(--fg-3);
+    position: relative;
+    display: inline-flex; align-items: center; gap: 8px;
+    transition: color 140ms var(--ease);
+  }
+  .vtab:hover { color: var(--fg-2); }
+  .vtab.active { color: var(--fg); font-weight: 600; }
+  /* active gradient underline */
+  .vtab.active::after {
+    content: '';
+    position: absolute; left: 12px; right: 12px; bottom: -1px; height: 2px;
+    background: var(--prism-grad);
+    border-radius: 2px 2px 0 0;
+    box-shadow: 0 0 6px rgba(217, 70, 239, 0.45);
+  }
+  .vtab .count {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.04em;
+    padding: 1px 6px; border-radius: 4px;
+    background: var(--bg-2); color: var(--fg-3);
+    border: 1px solid var(--line);
+  }
+  .vtab.active .count {
+    color: var(--prism-3); border-color: rgba(34, 211, 238, 0.3);
+    background: rgba(34, 211, 238, 0.08);
+  }
+
+  /* ====================== body grid ====================== */
+  .vbody {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 24px;
+    padding: 28px 32px 64px;
+  }
+  .vmain { display: flex; flex-direction: column; gap: 20px; }
+  .vside { display: flex; flex-direction: column; gap: 16px; }
+
+  /* ====================== SOAP card ====================== */
+  .soap-card {
+    background: var(--bg-1);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    overflow: hidden;
+  }
+  .soap-h {
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--line-soft);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .soap-h-title {
+    display: flex; align-items: center; gap: 10px;
+    font-family: var(--sans); font-size: 14px; font-weight: 600; color: var(--fg);
+  }
+  .soap-h-title .grad-bullet {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--prism-grad);
+    box-shadow: 0 0 10px rgba(217, 70, 239, 0.45);
+  }
+  .soap-section {
+    padding: 22px 24px;
+    border-bottom: 1px solid var(--line-soft);
+    position: relative;
+  }
+  .soap-section:last-child { border-bottom: 0; }
+  .soap-section-h {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .soap-section-h .lhs {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .soap-section-letter {
+    font-family: var(--serif); font-style: italic;
+    font-size: 26px; font-weight: 500;
+    color: transparent; -webkit-text-fill-color: transparent;
+    background: var(--prism-grad);
+    -webkit-background-clip: text; background-clip: text;
+    line-height: 1;
+  }
+  .soap-section-name {
+    font-family: var(--sans); font-size: 13px; font-weight: 600;
+    color: var(--fg); letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .soap-body {
+    font-family: var(--serif); font-size: 16px; line-height: 1.65;
+    color: var(--fg);
+  }
+  .soap-body p { margin: 0 0 12px; }
+  .soap-body p:last-child { margin-bottom: 0; }
+  .soap-body em { color: var(--prism-3); font-style: italic; font-weight: 500; }
+  .soap-body strong { color: var(--fg); font-weight: 600; }
+
+  /* small action: regenerate this section */
+  .regen-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 10px; border-radius: 7px;
+    font-family: var(--sans); font-size: 12px; font-weight: 500;
+    color: var(--fg-2);
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    cursor: pointer;
+    transition: border-color 140ms var(--ease), color 140ms var(--ease), background 140ms var(--ease);
+  }
+  .regen-btn:hover {
+    color: var(--fg);
+    border-color: var(--prism-2);
+    background: var(--bg-3);
+  }
+  .regen-btn svg {
+    width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+  }
+
+  /* ====================== assessment with ICD candidates ====================== */
+  .icd-candidates {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    margin-top: 12px;
+  }
+  .icd-pill {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 12px; border-radius: 999px;
+    font-family: var(--mono); font-size: 11px;
+    background: var(--bg-2); border: 1px solid var(--line);
+    color: var(--fg);
+    transition: border-color 140ms var(--ease), background 140ms var(--ease);
+  }
+  .icd-pill:hover { border-color: var(--line-strong); background: var(--bg-3); }
+  .icd-pill .conf {
+    font-family: var(--mono); font-size: 10px; font-weight: 600;
+    padding: 2px 7px; border-radius: 999px;
+    color: white; letter-spacing: 0.04em;
+  }
+  .icd-pill .conf.high { background: linear-gradient(135deg, var(--mint) 0%, var(--prism-3) 100%); color: #0B2A1E; }
+  .icd-pill .conf.mid  { background: linear-gradient(135deg, var(--prism-3) 0%, var(--prism-2) 100%); }
+  .icd-pill .conf.low  { background: linear-gradient(135deg, var(--amber) 0%, var(--prism-1) 100%); color: #2A1A04; }
+  .icd-pill .code { color: var(--fg); font-weight: 600; }
+  .icd-pill .desc { color: var(--fg-2); }
+
+  /* ====================== Plan list ====================== */
+  .plan-list { list-style: none; padding: 0; margin: 0; }
+  .plan-list li {
+    display: grid;
+    grid-template-columns: 26px 1fr;
+    gap: 12px; align-items: start;
+    padding: 8px 0;
+    font-family: var(--serif); font-size: 16px; line-height: 1.55;
+    color: var(--fg);
+  }
+  .plan-list li::before { display: none; }
+  .plan-list .num {
+    font-family: var(--mono); font-size: 11px;
+    color: var(--prism-3); font-weight: 600;
+    padding-top: 5px;
+    letter-spacing: 0.04em;
+  }
+  .plan-list .num.coral { color: var(--coral); }
+
+  /* ====================== Regenerate showpiece (in-context) ====================== */
+  .regen-pipe {
+    margin: 16px 0 22px;
+    border: 1px solid rgba(124, 58, 237, 0.35);
+    border-radius: 18px;
+    background:
+      linear-gradient(180deg, rgba(217,70,239,0.04), rgba(34,211,238,0.04)),
+      var(--bg-1);
+    padding: 26px 22px 20px;
+    position: relative;
+    overflow: hidden;
+  }
+  .regen-pipe::before {
+    content: '';
+    position: absolute; inset: 0; pointer-events: none;
+    background:
+      radial-gradient(ellipse 500px 240px at 20% 30%, rgba(217,70,239,0.08), transparent 65%),
+      radial-gradient(ellipse 500px 240px at 80% 70%, rgba(34,211,238,0.08), transparent 65%);
+    animation: regenBreath 3.5s var(--ease-soft) infinite alternate;
+  }
+  @keyframes regenBreath { from { opacity: 0.65; } to { opacity: 1; } }
+
+  .regen-h {
+    position: relative; z-index: 1;
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 18px;
+  }
+  .regen-h-l {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .regen-rotate {
+    width: 22px; height: 22px;
+    background: var(--prism-grad);
+    border-radius: 8px;
+    display: grid; place-items: center;
+    color: white; flex-shrink: 0;
+    box-shadow: 0 4px 12px -2px rgba(217, 70, 239, 0.45);
+  }
+  .regen-rotate svg {
+    width: 14px; height: 14px; stroke: white; fill: none; stroke-width: 2;
+    animation: rotate 1.6s linear infinite;
+  }
+  @keyframes rotate { to { transform: rotate(360deg); } }
+  .regen-title {
+    font-family: var(--sans); font-size: 14px; font-weight: 600; color: var(--fg);
+  }
+  .regen-sub {
+    font-family: var(--mono); font-size: 11px; color: var(--prism-3);
+    letter-spacing: 0.04em;
+  }
+
+  /* mini pipeline inside the regen card */
+  .regen-pipe-row {
+    position: relative; z-index: 1;
+    display: grid;
+    grid-template-columns: 50px 1fr 50px 1fr 50px 1fr 50px 1fr 50px;
+    align-items: center;
+  }
+  .regen-node {
+    width: 50px; height: 50px; border-radius: 50%;
+    background: var(--bg-2);
+    border: 1px solid var(--line-strong);
+    display: grid; place-items: center;
+    position: relative;
+    color: var(--fg-2);
+  }
+  .regen-node svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .regen-node::before {
+    content: ''; position: absolute; inset: -7px; border-radius: 50%;
+    background: var(--prism-grad);
+    opacity: 0; filter: blur(12px); z-index: -1;
+    animation: regenPulse 1.4s var(--ease-soft) infinite;
+  }
+  .regen-node.active { color: var(--fg); border-color: var(--prism-2); }
+  .regen-node.active::before { animation-duration: 1.0s; opacity: 0.7; }
+  .regen-node.done { color: var(--fg); border-color: rgba(34, 211, 238, 0.35); }
+  .regen-node.done::before { animation: none; opacity: 0; }
+  .regen-node.done::after {
+    content: '';
+    position: absolute; inset: -3px; border-radius: 50%;
+    border: 1.5px solid var(--prism-3);
+    opacity: 0.5;
+  }
+  @keyframes regenPulse {
+    0%   { opacity: 0;    transform: scale(0.85); }
+    50%  { opacity: 0.55; transform: scale(1.05); }
+    100% { opacity: 0;    transform: scale(0.85); }
+  }
+  .regen-node:nth-of-type(1)::before { animation-delay: 0s; }
+  .regen-node:nth-of-type(2)::before { animation-delay: 0.28s; }
+  .regen-node:nth-of-type(3)::before { animation-delay: 0.56s; }
+  .regen-node:nth-of-type(4)::before { animation-delay: 0.84s; }
+  .regen-node:nth-of-type(5)::before { animation-delay: 1.12s; }
+
+  .regen-beam {
+    height: 40px; position: relative;
+    overflow: visible;
+  }
+  .regen-beam svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .regen-beam .beam-line { stroke: url(#prismBeamRegen); stroke-width: 2; fill: none; stroke-linecap: round; stroke-dasharray: 6 4; animation: regenFlow 1.3s linear infinite; }
+  @keyframes regenFlow { to { stroke-dashoffset: -20; } }
+  .regen-beam.done .beam-line { stroke: rgba(34, 211, 238, 0.5); animation: none; stroke-dasharray: 0; }
+  .regen-beam .particle { fill: white; filter: drop-shadow(0 0 4px var(--prism-3)); }
+
+  .regen-labels {
+    position: relative; z-index: 1;
+    display: grid;
+    grid-template-columns: 50px 1fr 50px 1fr 50px 1fr 50px 1fr 50px;
+    margin-top: 10px;
+    text-align: center;
+  }
+  .regen-labels .ml {
+    font-family: var(--mono); font-size: 9.5px;
+    color: var(--fg-3); text-transform: uppercase; letter-spacing: 0.1em;
+  }
+  .regen-labels .ml.done { color: var(--prism-3); }
+  .regen-labels .ml.active {
+    background: var(--prism-grad);
+    -webkit-background-clip: text; background-clip: text;
+    color: transparent; -webkit-text-fill-color: transparent;
+    font-weight: 700;
+  }
+
+  /* live thought line */
+  .regen-thought {
+    position: relative; z-index: 1;
+    margin-top: 18px; padding-top: 16px;
+    border-top: 1px solid var(--line-soft);
+    display: flex; align-items: center; gap: 12px;
+  }
+  .regen-thought .live-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--prism-1); box-shadow: 0 0 8px var(--prism-1);
+    animation: thoughtPulse 1.0s var(--ease-soft) infinite;
+  }
+  @keyframes thoughtPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+  .regen-thought-text {
+    font-family: var(--mono); font-size: 11.5px; color: var(--fg-2);
+    letter-spacing: 0.02em;
+  }
+  .regen-thought-text .verb {
+    background: var(--prism-grad);
+    -webkit-background-clip: text; background-clip: text;
+    color: transparent; -webkit-text-fill-color: transparent;
+    font-weight: 600;
+  }
+
+  /* ====================== transcript card (right side or below) ====================== */
+  .vtranscript {
+    background: var(--bg-1);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 22px 24px;
+  }
+  .speaker-line {
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    gap: 16px; align-items: start;
+    padding: 10px 0;
+    border-bottom: 1px dashed var(--line-soft);
+  }
+  .speaker-line:last-child { border-bottom: 0; }
+  .speaker-name {
+    font-family: var(--mono); font-size: 11px;
+    color: var(--prism-3); font-weight: 600; letter-spacing: 0.06em;
+    padding-top: 3px;
+  }
+  .speaker-name.dr {
+    background: var(--prism-grad);
+    -webkit-background-clip: text; background-clip: text;
+    color: transparent; -webkit-text-fill-color: transparent;
+  }
+  .speaker-line .said {
+    font-family: var(--serif); font-size: 15.5px; line-height: 1.55; color: var(--fg);
+  }
+  .speaker-line .ts {
+    font-family: var(--mono); font-size: 10.5px;
+    color: var(--fg-4); margin-top: 2px;
+  }
+
+  /* ====================== Side cards ====================== */
+  .side-card {
+    background: var(--bg-1);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    overflow: hidden;
+  }
+  .side-h {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--line-soft);
+    display: flex; align-items: center; justify-content: space-between;
+    font-family: var(--mono); font-size: 11px;
+    color: var(--fg-3); text-transform: uppercase; letter-spacing: 0.14em;
+  }
+  .side-body { padding: 16px 18px; }
+  .kv {
+    display: grid; grid-template-columns: 110px 1fr;
+    gap: 8px; padding: 5px 0;
+    font-size: 13px;
+  }
+  .kv .k { color: var(--fg-3); font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.04em; text-transform: uppercase; padding-top: 1px; }
+  .kv .v { color: var(--fg); font-family: var(--sans); }
+  .kv .v.coral { color: var(--coral); }
+  .kv .v.mint  { color: var(--mint); }
+
+  /* layer trace */
+  .layer-row {
+    display: grid;
+    grid-template-columns: 24px 1fr auto;
+    gap: 10px; align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px dashed var(--line-soft);
+    font-size: 13px;
+  }
+  .layer-row:last-child { border-bottom: 0; }
+  .layer-row .badge {
+    width: 22px; height: 22px; border-radius: 6px;
+    background: var(--bg-3); border: 1px solid var(--line-strong);
+    color: var(--fg-2);
+    display: grid; place-items: center;
+    font-family: var(--mono); font-size: 10px; font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+  .layer-row.done .badge {
+    background: linear-gradient(135deg, var(--mint), var(--prism-3));
+    color: #0B2A1E;
+    border-color: transparent;
+  }
+  .layer-row .name { color: var(--fg); font-weight: 500; font-size: 13px; }
+  .layer-row .meta { font-family: var(--mono); font-size: 10.5px; color: var(--fg-3); }
+  .layer-row .cost { font-family: var(--mono); font-size: 11px; color: var(--prism-3); }
+
+  /* ====================== Rx warning frame (preserves component, only severity pill becomes gradient) ====================== */
+  .rx-card {
+    background: var(--bg-1);
+    border: 1px solid rgba(251, 113, 133, 0.35);
+    border-radius: 18px;
+    overflow: hidden;
+    position: relative;
+  }
+  .rx-card::before {
+    content: '';
+    position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(180deg, rgba(251, 113, 133, 0.06), transparent 40%);
+  }
+  .rx-h {
+    position: relative; z-index: 1;
+    padding: 18px 22px 14px;
+    display: flex; align-items: center; gap: 12px;
+    border-bottom: 1px solid rgba(251, 113, 133, 0.20);
+  }
+  .rx-h-icon {
+    width: 36px; height: 36px; border-radius: 10px;
+    background: linear-gradient(135deg, var(--coral), var(--prism-1));
+    display: grid; place-items: center;
+    color: white; box-shadow: 0 6px 16px -4px rgba(251, 113, 133, 0.45);
+  }
+  .rx-h-icon svg { width: 18px; height: 18px; stroke: white; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .rx-h-title {
+    flex: 1;
+    font-family: var(--sans); font-size: 15px; font-weight: 600; color: var(--fg);
+  }
+  /* Severity pill — gradient. critical = magenta -> coral */
+  .severity-pill {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 5px 12px; border-radius: 999px;
+    font-family: var(--mono); font-size: 10px; font-weight: 700;
+    letter-spacing: 0.10em; text-transform: uppercase;
+    color: white;
+    background: linear-gradient(135deg, var(--prism-1) 0%, var(--coral) 100%);
+    box-shadow: 0 4px 12px -2px rgba(251, 113, 133, 0.45);
+  }
+  .severity-pill .pdot { width: 5px; height: 5px; border-radius: 50%; background: white; box-shadow: 0 0 4px white; }
+
+  .rx-body { position: relative; z-index: 1; padding: 18px 22px; }
+  .rx-row {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+  }
+  .rx-row .panel-label {
+    font-family: var(--mono); font-size: 10.5px;
+    color: var(--fg-3); text-transform: uppercase; letter-spacing: 0.1em;
+    margin-bottom: 4px;
+  }
+  .rx-row .panel-val {
+    font-family: var(--sans); font-size: 14px; font-weight: 500;
+    color: var(--fg);
+  }
+  .rx-row .panel-val.heard { color: var(--prism-3); }
+  .rx-row .panel-val.suspect { color: var(--amber); }
+
+  .rx-actions {
+    position: relative; z-index: 1;
+    padding: 12px 22px 18px;
+    border-top: 1px solid var(--line-soft);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .rx-confirm {
+    padding: 9px 16px; border-radius: 9px;
+    background: var(--prism-grad);
+    color: white; font-weight: 600; font-size: 13px;
+    border: 0; cursor: pointer;
+    box-shadow: 0 6px 16px -4px rgba(217, 70, 239, 0.4), inset 0 1px 0 rgba(255,255,255,0.20);
+  }
+  .rx-cancel {
+    padding: 9px 16px; border-radius: 9px;
+    background: var(--bg-2); border: 1px solid var(--line);
+    color: var(--fg-2); font-weight: 500; font-size: 13px;
+    cursor: pointer;
+  }
+
+  /* ====================== Reduced motion ====================== */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+  }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute;">
+  <defs>
+    <linearGradient id="prismBeamRegen" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#D946EF"/>
+      <stop offset="50%" stop-color="#7C3AED"/>
+      <stop offset="100%" stop-color="#22D3EE"/>
+    </linearGradient>
+    <linearGradient id="prismRail" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#D946EF"/>
+      <stop offset="50%" stop-color="#7C3AED"/>
+      <stop offset="100%" stop-color="#22D3EE"/>
+    </linearGradient>
+  </defs>
+</svg>
+
+<div class="app">
+
+  <!-- RAIL -->
+  <aside class="rail">
+    <div class="logo">Q</div>
+    <div class="rail-item" title="Dashboard"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg></div>
+    <div class="rail-item active" title="Visits"><svg class="ic" viewBox="0 0 24 24"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M5 3h9l5 5v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M8 13h8M8 17h6"/></svg></div>
+    <div class="rail-item" title="Patients"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M3 21a9 9 0 0 1 18 0"/></svg></div>
+    <div class="rail-item" title="Recordings"><svg class="ic" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 1 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 11a7 7 0 0 1-14 0M12 18v4M8 22h8"/></svg></div>
+    <div class="rail-item" title="Library"><svg class="ic" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></svg></div>
+    <div class="rail-spacer"></div>
+    <div class="rail-item" title="Settings"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a7.97 7.97 0 0 0 0-6l1.5-1.4-2.1-3.6-1.9.7a7.96 7.96 0 0 0-5.2-3l-.3-2H10.6l-.3 2a7.96 7.96 0 0 0-5.2 3l-1.9-.7-2.1 3.6L2.6 9a7.97 7.97 0 0 0 0 6l-1.5 1.4 2.1 3.6 1.9-.7a7.96 7.96 0 0 0 5.2 3l.3 2h2.8l.3-2a7.96 7.96 0 0 0 5.2-3l1.9.7 2.1-3.6Z"/></svg></div>
+  </aside>
+
+  <main class="main">
+
+    <!-- TOP BAR -->
+    <div class="topbar">
+      <div class="crumb">
+        <a href="#">Cascade</a>
+        <span class="sep">/</span>
+        <a href="#">Visits</a>
+        <span class="sep">/</span>
+        <span class="here">Margaret Chen · F/U HTN · 2026-04-29</span>
+      </div>
+      <div class="topbar-right">
+        <button class="top-btn">
+          <svg class="ic" viewBox="0 0 24 24" style="width: 13px; height: 13px;"><path d="M3 6h18M7 12h10M10 18h4"/></svg>
+          Filter
+        </button>
+        <button class="top-btn">
+          <svg class="ic" viewBox="0 0 24 24" style="width: 13px; height: 13px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+          Export
+        </button>
+        <button class="new-visit-btn">
+          <svg class="ic" viewBox="0 0 24 24" stroke="white" style="width: 14px; height: 14px;"><path d="m5 12 4.5 4.5L19 7"/></svg>
+          Sign visit
+        </button>
+        <div class="avatar">HP</div>
+      </div>
+    </div>
+
+    <!-- VISIT HEADER -->
+    <div class="vheader">
+      <div class="vheader-top">
+        <div class="pname-block">
+          <h1 class="pname-large">Margaret Chen</h1>
+          <div class="pname-meta">
+            F · b. 1962 (63 y) <span class="sep">·</span> MRN <span style="color: var(--fg);">4419-22</span> <span class="sep">·</span> Dr. Hira Patel <span class="sep">·</span> 14:42 · 2026-04-29
+          </div>
+        </div>
+        <div class="vheader-actions">
+          <span class="status-pill ready">
+            <span class="pdot"></span>
+            SOAP READY · NEEDS REVIEW
+          </span>
+        </div>
+      </div>
+
+      <div class="vheader-meta">
+        <div class="meta-chip">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+          <span class="label">Duration</span>
+          <span class="val">12m 18s</span>
+        </div>
+        <div class="meta-chip">
+          <svg viewBox="0 0 24 24"><path d="m12 2 3 7 7 .5-5 5 1.5 7-6.5-3.5-6.5 3.5 1.5-7-5-5L9 9z"/></svg>
+          <span class="label">Visit type</span>
+          <span class="val">Follow-up · HTN</span>
+        </div>
+        <div class="meta-chip">
+          <svg viewBox="0 0 24 24"><path d="M3 5h18l-2 6H5z"/><path d="M7 11v3a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-3"/></svg>
+          <span class="label">Room</span>
+          <span class="val">Cascade · Room 3</span>
+        </div>
+        <div class="meta-chip">
+          <svg viewBox="0 0 24 24"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+          <span class="label">AI cost</span>
+          <span class="val" style="color: var(--prism-3);">$0.0412</span>
+        </div>
+        <div class="meta-chip">
+          <svg viewBox="0 0 24 24"><path d="M19 14c1.5-1.4 3-3.4 3-6a4 4 0 0 0-7-2.7L12 8l-3-2.7A4 4 0 0 0 2 8c0 8 10 13 10 13s4-2 7-5"/></svg>
+          <span class="label">Allergies</span>
+          <span class="val" style="color: var(--coral);">Sulfa, PCN</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- TABS -->
+    <div class="tab-bar">
+      <div class="vtab active">SOAP <span class="count">4</span></div>
+      <div class="vtab">Transcript <span class="count">142</span></div>
+      <div class="vtab">ICD-10 <span class="count">3</span></div>
+      <div class="vtab">Rx safety <span class="count">1</span></div>
+      <div class="vtab">Audit trail <span class="count">L1-L5</span></div>
+      <div class="vtab">Export</div>
+    </div>
+
+    <!-- BODY -->
+    <div class="vbody">
+
+      <!-- =================== MAIN COL =================== -->
+      <div class="vmain">
+
+        <!-- SOAP -->
+        <div class="soap-card">
+          <div class="soap-h">
+            <div class="soap-h-title">
+              <span class="grad-bullet"></span>
+              SOAP note
+              <span style="color: var(--fg-3); font-weight: 500; font-size: 12px;">· drafted 14:42:18 · Claude Sonnet 4.6 · L3</span>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button class="regen-btn">
+                <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5"/></svg>
+                Regenerate all
+              </button>
+              <button class="regen-btn">
+                <svg viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
+                Edit inline
+              </button>
+            </div>
+          </div>
+
+          <!-- SUBJECTIVE — currently mid-regenerate (showpiece is open) -->
+          <div class="soap-section" style="background: linear-gradient(180deg, rgba(124, 58, 237, 0.04), transparent 60%);">
+            <div class="soap-section-h">
+              <div class="lhs">
+                <span class="soap-section-letter">S</span>
+                <span class="soap-section-name">Subjective</span>
+                <span class="severity-pill" style="background: linear-gradient(135deg, var(--prism-2) 0%, var(--prism-3) 100%); padding: 3px 10px; font-size: 9.5px;">
+                  <span class="pdot"></span>Regenerating
+                </span>
+              </div>
+              <button class="regen-btn">
+                <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5"/></svg>
+                Cancel
+              </button>
+            </div>
+
+            <!-- THE IN-CONTEXT REGENERATE SHOWPIECE -->
+            <div class="regen-pipe">
+              <div class="regen-h">
+                <div class="regen-h-l">
+                  <div class="regen-rotate">
+                    <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5"/></svg>
+                  </div>
+                  <div>
+                    <div class="regen-title">Regenerating Subjective</div>
+                    <div class="regen-sub">Claude Sonnet 4.6 · temperature 0.2 · running through 5 layers</div>
+                  </div>
+                </div>
+                <div class="mono-tabular text-[12px]" style="color: var(--prism-3);">L3 of 5 · 0.42s</div>
+              </div>
+
+              <div class="regen-pipe-row">
+                <!-- Layer 1: voice (done) -->
+                <div class="regen-node done">
+                  <svg viewBox="0 0 24 24"><path d="m5 12 4.5 4.5L19 7"/></svg>
+                </div>
+                <div class="regen-beam done">
+                  <svg viewBox="0 0 200 40" preserveAspectRatio="none">
+                    <path class="beam-line" d="M0,20 Q50,8 100,20 T200,20"/>
+                  </svg>
+                </div>
+                <!-- Layer 2: transcript (done) -->
+                <div class="regen-node done">
+                  <svg viewBox="0 0 24 24"><path d="m5 12 4.5 4.5L19 7"/></svg>
+                </div>
+                <div class="regen-beam done">
+                  <svg viewBox="0 0 200 40" preserveAspectRatio="none">
+                    <path class="beam-line" d="M0,20 Q50,32 100,20 T200,20"/>
+                  </svg>
+                </div>
+                <!-- Layer 3: SOAP (active) -->
+                <div class="regen-node active">
+                  <svg viewBox="0 0 24 24"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M5 3h9l5 5v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/></svg>
+                </div>
+                <div class="regen-beam">
+                  <svg viewBox="0 0 200 40" preserveAspectRatio="none">
+                    <path class="beam-line" d="M0,20 Q50,10 100,20 T200,20"/>
+                    <circle class="particle" cx="50" cy="20" r="2.5">
+                      <animateMotion path="M0,20 Q50,10 100,20 T200,20" dur="1.6s" repeatCount="indefinite"/>
+                      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.1;0.9;1" dur="1.6s" repeatCount="indefinite"/>
+                    </circle>
+                  </svg>
+                </div>
+                <!-- Layer 4: ICD (queued) -->
+                <div class="regen-node">
+                  <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9 12h6M12 9v6"/></svg>
+                </div>
+                <div class="regen-beam">
+                  <svg viewBox="0 0 200 40" preserveAspectRatio="none">
+                    <path class="beam-line" d="M0,20 Q50,30 100,20 T200,20" stroke="rgba(124,58,237,0.3)"/>
+                  </svg>
+                </div>
+                <!-- Layer 5: Rx (queued) -->
+                <div class="regen-node">
+                  <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-12V5l-8-3-8 3v5c0 8 8 12 8 12Z"/></svg>
+                </div>
+              </div>
+
+              <div class="regen-labels">
+                <div class="ml done">VOICE ✓</div><div></div>
+                <div class="ml done">TRANSCRIPT ✓</div><div></div>
+                <div class="ml active">SOAP · LIVE</div><div></div>
+                <div class="ml">ICD-10</div><div></div>
+                <div class="ml">RX SAFE</div>
+              </div>
+
+              <div class="regen-thought">
+                <span class="live-dot"></span>
+                <div class="regen-thought-text">
+                  <span class="verb">Weighing</span> the patient's report of dry cough against the active Lisinopril 20mg prescription. ACE inhibitor cough is a known side effect in 5–35% of patients. Cross-referencing duration (10 days) with medication start date (March 04, 2026)…
+                </div>
+              </div>
+            </div>
+
+            <!-- After the pipeline completes, the new SOAP text fades in. Shown here as "previous draft" + "live" overlay. -->
+            <div class="soap-body" style="opacity: 0.55;">
+              <p>63-year-old female with a 4-year history of essential hypertension presenting for scheduled follow-up. The patient was switched from amlodipine to <strong>lisinopril 20 mg daily</strong> in early March 2026 due to bilateral ankle edema.</p>
+              <p>She reports the morning dizziness she experienced during the first week resolved completely, but for the past <em>10 days</em> she has been experiencing a persistent, dry, non-productive cough that is significantly worse at night and disrupts sleep. She denies fever, chest pain, dyspnea, hemoptysis, or wheezing. She has not changed any other medications and has had no recent illnesses or sick contacts.</p>
+              <p>Home blood pressure readings, taken twice daily for the past three weeks, have averaged <strong>132/84</strong> with occasional readings of 128/80. She is adherent with her medication regimen and continues a low-sodium diet.</p>
+            </div>
+          </div>
+
+          <!-- OBJECTIVE -->
+          <div class="soap-section">
+            <div class="soap-section-h">
+              <div class="lhs">
+                <span class="soap-section-letter">O</span>
+                <span class="soap-section-name">Objective</span>
+              </div>
+              <button class="regen-btn">
+                <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5"/></svg>
+                Regenerate
+              </button>
+            </div>
+            <div class="soap-body">
+              <p><strong>Vitals (in office):</strong> BP 134/86 right arm, sitting · HR 72 bpm regular · RR 14 · T 98.4°F · SpO₂ 98% · Wt 68.4 kg · BMI 26.7</p>
+              <p><strong>General:</strong> Well-appearing 63-year-old female in no acute distress. Alert, oriented, conversational.</p>
+              <p><strong>HEENT:</strong> Pharynx without erythema or exudate. No cervical lymphadenopathy.</p>
+              <p><strong>Cardiovascular:</strong> Regular rate and rhythm, no murmurs, rubs, or gallops. No JVD. No peripheral edema.</p>
+              <p><strong>Respiratory:</strong> Clear to auscultation bilaterally. No wheezes, rales, or rhonchi. No accessory muscle use.</p>
+            </div>
+          </div>
+
+          <!-- ASSESSMENT -->
+          <div class="soap-section">
+            <div class="soap-section-h">
+              <div class="lhs">
+                <span class="soap-section-letter">A</span>
+                <span class="soap-section-name">Assessment</span>
+              </div>
+              <button class="regen-btn">
+                <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5"/></svg>
+                Regenerate
+              </button>
+            </div>
+            <div class="soap-body">
+              <p><strong>1.</strong> Essential hypertension, well-controlled on current monotherapy. Average home readings within JNC 8 goal range for age &lt;60 (target &lt;140/90); marginal for ASCVD risk-stratified target of &lt;130/80.</p>
+              <p><strong>2.</strong> <em>New persistent dry cough</em> — most likely ACE-inhibitor-induced cough, given temporal correlation with lisinopril initiation (4 weeks prior, cough onset ~3 weeks in). Differential includes post-viral cough, GERD-associated cough, and allergic etiology, but absence of associated symptoms favors medication-induced.</p>
+            </div>
+            <div class="icd-candidates">
+              <span class="icd-pill"><span class="code">I10</span> <span class="desc">Essential (primary) hypertension</span> <span class="conf high">96%</span></span>
+              <span class="icd-pill"><span class="code">T50.5X5A</span> <span class="desc">Adverse effect of ACE inhibitors, initial</span> <span class="conf mid">82%</span></span>
+              <span class="icd-pill"><span class="code">R05.9</span> <span class="desc">Cough, unspecified</span> <span class="conf mid">71%</span></span>
+            </div>
+          </div>
+
+          <!-- PLAN -->
+          <div class="soap-section">
+            <div class="soap-section-h">
+              <div class="lhs">
+                <span class="soap-section-letter">P</span>
+                <span class="soap-section-name">Plan</span>
+              </div>
+              <button class="regen-btn">
+                <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5"/></svg>
+                Regenerate
+              </button>
+            </div>
+            <ol class="plan-list">
+              <li><span class="num">01</span><span><strong>Discontinue lisinopril 20 mg.</strong> Patient counseled that ACE-inhibitor cough typically resolves within 1–4 weeks of discontinuation.</span></li>
+              <li><span class="num">02</span><span><strong>Initiate losartan 50 mg PO daily.</strong> ARB substitution preserves antihypertensive efficacy without cough side effect. Patient tolerated PCN-class allergy historically — no cross-reactivity concern.</span></li>
+              <li><span class="num">03</span><span>Continue home BP monitoring twice daily. Patient to record morning and evening readings.</span></li>
+              <li><span class="num">04</span><span>Follow up in <em>4 weeks</em> to reassess cough resolution and BP control on losartan.</span></li>
+              <li><span class="num coral">05</span><span style="color: var(--fg-2);"><em>Patient education:</em> warning signs requiring immediate evaluation — angioedema, dyspnea, hyperkalemia symptoms (muscle weakness, palpitations).</span></li>
+            </ol>
+          </div>
+        </div>
+
+        <!-- TRANSCRIPT -->
+        <div class="vtranscript">
+          <div class="flex items-center justify-between mb-4">
+            <div class="section-label">Transcript · diarized</div>
+            <div class="flex items-center gap-3">
+              <span class="mono-tabular text-[11px]" style="color: var(--fg-3);">Deepgram Nova-3 · 142 turns · 12m 18s</span>
+              <button class="regen-btn">
+                <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                Export
+              </button>
+            </div>
+          </div>
+
+          <div class="speaker-line">
+            <div>
+              <div class="speaker-name dr">DR. PATEL</div>
+              <div class="ts">00:18.4</div>
+            </div>
+            <div class="said">"How have you been since the medication change in March?"</div>
+          </div>
+          <div class="speaker-line">
+            <div>
+              <div class="speaker-name">PATIENT</div>
+              <div class="ts">00:22.1</div>
+            </div>
+            <div class="said">"Better, mostly. The dizziness in the mornings stopped after the first week. But I've had this dry cough — it started maybe ten days ago. It's worse at night."</div>
+          </div>
+          <div class="speaker-line">
+            <div>
+              <div class="speaker-name dr">DR. PATEL</div>
+              <div class="ts">00:32.7</div>
+            </div>
+            <div class="said">"That's an important detail. Lisinopril can do that in about one in ten patients. Let me check your blood pressure today and we'll talk about whether to switch."</div>
+          </div>
+          <div class="speaker-line">
+            <div>
+              <div class="speaker-name">PATIENT</div>
+              <div class="ts">00:42.0</div>
+            </div>
+            <div class="said">"My home readings have been around 132 over 84, mostly. Sometimes 128 over 80 if I take it at night."</div>
+          </div>
+          <div class="speaker-line">
+            <div>
+              <div class="speaker-name dr">DR. PATEL</div>
+              <div class="ts">00:51.6</div>
+            </div>
+            <div class="said">"Good. We can switch you to losartan — it's in a similar family but doesn't cause that cough. Same once-daily dose, fifty milligrams. Stop the lisinopril tomorrow morning, start losartan in its place. The cough should clear up within a couple weeks."</div>
+          </div>
+          <div class="speaker-line">
+            <div>
+              <div class="speaker-name">PATIENT</div>
+              <div class="ts">01:08.3</div>
+            </div>
+            <div class="said">"Will I need to come back?"</div>
+          </div>
+          <div class="speaker-line">
+            <div>
+              <div class="speaker-name dr">DR. PATEL</div>
+              <div class="ts">01:11.9</div>
+            </div>
+            <div class="said">"Four weeks. Keep your home log going, and call me if anything feels different — especially if your face or lips swell up, that's an emergency for either drug."</div>
+          </div>
+
+          <div class="text-center mt-4 pt-4" style="border-top: 1px solid var(--line-soft);">
+            <button class="top-btn" style="margin: 0 auto;">
+              <svg class="ic" viewBox="0 0 24 24" style="width: 13px; height: 13px;"><path d="M6 9l6 6 6-6"/></svg>
+              Show full transcript (135 more turns)
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- =================== SIDE COL =================== -->
+      <div class="vside">
+
+        <!-- Rx warning frame (preserves component) -->
+        <div class="rx-card">
+          <div class="rx-h">
+            <div class="rx-h-icon">
+              <svg viewBox="0 0 24 24"><path d="M19 14c1.5-1.4 3-3.4 3-6a4 4 0 0 0-7-2.7L12 8l-3-2.7A4 4 0 0 0 2 8c0 8 10 13 10 13s4-2 7-5"/></svg>
+            </div>
+            <div class="rx-h-title">
+              Rx safety check
+              <div style="font-size: 12px; font-weight: 400; color: var(--fg-3); margin-top: 2px;">1 finding · review before signing</div>
+            </div>
+            <span class="severity-pill"><span class="pdot"></span>Critical</span>
+          </div>
+
+          <div class="rx-body">
+            <div style="font-family: var(--serif); font-size: 15px; line-height: 1.5; color: var(--fg); margin-bottom: 14px;">
+              The patient described a new dry cough beginning ~3 weeks after starting <strong>Lisinopril 20 mg</strong>. ACE-inhibitor cough is a class effect occurring in 5–35% of patients.
+            </div>
+            <div class="rx-row">
+              <div>
+                <div class="panel-label">Heard in transcript</div>
+                <div class="panel-val heard">"This dry cough — it started maybe ten days ago"</div>
+              </div>
+              <div>
+                <div class="panel-label">Active prescription</div>
+                <div class="panel-val suspect">Lisinopril 20 mg PO daily (since 2026-03-04)</div>
+              </div>
+            </div>
+            <div style="margin-top: 12px;" class="text-[12.5px]">
+              <span style="color: var(--fg-3);">Recommended:</span> <span style="color: var(--fg);">Discontinue ACE-i and substitute ARB (losartan 50 mg) — already drafted in Plan #2.</span>
+            </div>
+          </div>
+
+          <div class="rx-actions">
+            <button class="rx-confirm">Confirm switch</button>
+            <button class="rx-cancel">Override (require note)</button>
+            <div class="ml-auto text-[11px] mono-tabular" style="color: var(--fg-3);">L5 · 0.18s</div>
+          </div>
+        </div>
+
+        <!-- Patient context -->
+        <div class="side-card">
+          <div class="side-h">
+            Patient context
+            <a href="#" style="color: var(--prism-3); text-transform: none; letter-spacing: 0; font-size: 12px; font-family: var(--sans); font-weight: 500;">Open chart →</a>
+          </div>
+          <div class="side-body">
+            <div class="kv"><div class="k">Last visit</div><div class="v">Apr 02, 2026 · BP follow-up</div></div>
+            <div class="kv"><div class="k">Insurance</div><div class="v">Cigna PPO · grp 88-3322</div></div>
+            <div class="kv"><div class="k">Allergies</div><div class="v coral">Sulfa, Penicillin</div></div>
+            <div class="kv"><div class="k">Active Rx</div><div class="v">Lisinopril 20 mg · ASA 81 mg · Atorvastatin 20 mg</div></div>
+            <div class="kv"><div class="k">Conditions</div><div class="v">HTN (4y) · Hyperlipidemia (2y)</div></div>
+            <div class="kv"><div class="k">Last labs</div><div class="v">CMP · 2026-03-15 · normal</div></div>
+          </div>
+        </div>
+
+        <!-- Layer trace -->
+        <div class="side-card">
+          <div class="side-h">
+            Audit trail · 5 layers
+            <span style="font-family: var(--mono); color: var(--prism-3); letter-spacing: 0;">$0.0412</span>
+          </div>
+          <div class="side-body" style="padding-top: 8px;">
+            <div class="layer-row done">
+              <div class="badge">L1</div>
+              <div>
+                <div class="name">Voice capture</div>
+                <div class="meta">22.05 kHz · stereo · 142 turns · 12m 18s</div>
+              </div>
+              <div class="cost">$0.001</div>
+            </div>
+            <div class="layer-row done">
+              <div class="badge">L2</div>
+              <div>
+                <div class="name">Transcript + diarization</div>
+                <div class="meta">Deepgram Nova-3 · 0.42 lag · 99.1% conf.</div>
+              </div>
+              <div class="cost">$0.018</div>
+            </div>
+            <div class="layer-row done">
+              <div class="badge">L3</div>
+              <div>
+                <div class="name">SOAP synthesis</div>
+                <div class="meta">Claude Sonnet 4.6 · 8.4k tokens in / 1.1k out · 0.42s</div>
+              </div>
+              <div class="cost">$0.014</div>
+            </div>
+            <div class="layer-row done">
+              <div class="badge">L4</div>
+              <div>
+                <div class="name">ICD-10 candidates</div>
+                <div class="meta">3 codes · top 96% conf · vector retrieval</div>
+              </div>
+              <div class="cost">$0.006</div>
+            </div>
+            <div class="layer-row done">
+              <div class="badge">L5</div>
+              <div>
+                <div class="name">Rx safety check</div>
+                <div class="meta">1 critical · ACE-i + dry cough · 0.18s</div>
+              </div>
+              <div class="cost">$0.003</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Audit chip / signature -->
+        <div class="side-card">
+          <div class="side-h">Sign-off</div>
+          <div class="side-body">
+            <div class="text-[12.5px] mb-3" style="color: var(--fg-2);">
+              By signing, you confirm the SOAP note is accurate and the substitution from lisinopril to losartan has been reviewed.
+            </div>
+            <div class="kv"><div class="k">Clinician</div><div class="v">Dr. Hira Patel, MD</div></div>
+            <div class="kv"><div class="k">License</div><div class="v">CA · A088321</div></div>
+            <div class="kv"><div class="k">When</div><div class="v" style="color: var(--prism-3);">Pending sign</div></div>
+            <button class="rx-confirm" style="width: 100%; margin-top: 12px;">
+              Sign & finalize SOAP
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+  </main>
+</div>
+
+</body>
+</html>

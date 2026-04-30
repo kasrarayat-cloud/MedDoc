@@ -1,0 +1,942 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Mrs. Elena Lopez — Cardiology consult · Quill</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=JetBrains+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,400i;8..60,500i&display=swap"
+  rel="stylesheet"
+/>
+
+<style>
+  :root {
+    --cream: #FAF7F2;
+    --cream-card: #FFFCF5;
+    --cream-2: #F2EDE3;
+    --cream-3: #E8E1D3;
+
+    --line: rgba(43, 38, 32, 0.08);
+    --line-strong: rgba(43, 38, 32, 0.14);
+
+    --ink: #2B2620;
+    --ink-2: #5C544A;
+    --ink-3: #8A8278;
+    --ink-4: #B5AE9F;
+
+    --sage: #7AA68C;
+    --sage-deep: #2F5040;
+    --sage-bright: #95BCA4;
+    --sage-tint: rgba(122, 166, 140, 0.14);
+    --sage-tint-strong: rgba(122, 166, 140, 0.22);
+
+    --teal: #5BA3B4;
+    --teal-deep: #2C5A66;
+    --teal-tint: rgba(91, 163, 180, 0.14);
+
+    --amber: #D4A574;
+    --amber-deep: #7A4F1F;
+    --amber-tint: rgba(212, 165, 116, 0.18);
+    --amber-tint-strong: rgba(212, 165, 116, 0.28);
+
+    --coral: #C97B6E;
+    --coral-deep: #7A3329;
+    --coral-tint: rgba(201, 123, 110, 0.16);
+    --coral-tint-strong: rgba(201, 123, 110, 0.24);
+
+    --sky: #7BA8C4;
+    --sky-deep: #2C4F66;
+    --sky-tint: rgba(123, 168, 196, 0.16);
+
+    --shadow-card: 0 4px 14px rgba(43, 38, 32, 0.04);
+    --shadow-card-hover: 0 8px 24px rgba(43, 38, 32, 0.06);
+    --shadow-button: 0 1px 2px rgba(43, 38, 32, 0.05);
+    --shadow-cta: 0 6px 18px rgba(122, 166, 140, 0.28);
+
+    --ease-clinician: cubic-bezier(0.22, 1, 0.36, 1);
+
+    --serif: "Source Serif 4", Georgia, "Times New Roman", serif;
+    --sans: "DM Sans", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  * { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+  body {
+    font-family: var(--sans);
+    background: var(--cream);
+    color: var(--ink);
+    margin: 0;
+    font-size: 15px;
+    line-height: 1.55;
+  }
+  .serif { font-family: var(--serif); }
+  .sans  { font-family: var(--sans); }
+  .mono  { font-family: var(--mono); }
+
+  /* Pills */
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 11px; border-radius: 999px;
+    font-family: var(--sans); font-weight: 500;
+    font-size: 12px; letter-spacing: 0.01em; line-height: 1;
+  }
+  .pill-sage  { background: var(--sage-tint);  color: var(--sage-deep); }
+  .pill-teal  { background: var(--teal-tint);  color: var(--teal-deep); }
+  .pill-amber { background: var(--amber-tint); color: var(--amber-deep); }
+  .pill-coral { background: var(--coral-tint); color: var(--coral-deep); }
+  .pill-sky   { background: var(--sky-tint);   color: var(--sky-deep); }
+  .pill-soft  { background: var(--cream-2);    color: var(--ink-2); }
+  .pill-dot   { width: 6px; height: 6px; border-radius: 999px; background: currentColor; opacity: 0.7; }
+
+  /* Buttons */
+  .btn {
+    font-family: var(--sans); font-weight: 500; font-size: 14px; line-height: 1;
+    border-radius: 999px; padding: 10px 18px; cursor: pointer; border: 0;
+    display: inline-flex; align-items: center; gap: 8px;
+    transition: transform 240ms var(--ease-clinician), background 240ms var(--ease-clinician),
+                box-shadow 240ms var(--ease-clinician), color 240ms var(--ease-clinician);
+  }
+  .btn-primary { background: var(--sage); color: #FFFCF5; box-shadow: var(--shadow-cta); }
+  .btn-primary:hover { background: #6E9A80; transform: translateY(-1px); }
+  .btn-soft { background: var(--cream-card); color: var(--ink); border: 1px solid var(--line); box-shadow: var(--shadow-button); }
+  .btn-soft:hover { background: var(--cream-2); }
+  .btn-ghost { background: transparent; color: var(--ink-2); }
+  .btn-ghost:hover { background: var(--cream-2); color: var(--ink); }
+
+  /* Card */
+  .card {
+    background: var(--cream-card);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    box-shadow: var(--shadow-card);
+  }
+
+  /* Top bar */
+  .topbar {
+    background: rgba(250, 247, 242, 0.9);
+    backdrop-filter: blur(18px) saturate(115%);
+    -webkit-backdrop-filter: blur(18px) saturate(115%);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .wordmark { font-family: var(--serif); font-weight: 500; font-size: 18px; letter-spacing: 0.02em; }
+
+  /* Avatar */
+  .avatar {
+    width: 44px; height: 44px;
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--serif); font-weight: 500; font-size: 16px;
+  }
+  .avatar.sage { background: var(--sage-tint-strong); color: var(--sage-deep); }
+  .avatar.teal { background: var(--teal-tint); color: var(--teal-deep); }
+
+  /* Section labels */
+  .section-label {
+    font-family: var(--sans); font-size: 12px; font-weight: 500;
+    color: var(--ink-3); letter-spacing: 0.08em; text-transform: uppercase;
+  }
+  .eyebrow {
+    font-family: var(--sans); font-size: 12.5px; font-weight: 500;
+    color: var(--sage-deep); letter-spacing: 0.10em; text-transform: uppercase;
+  }
+
+  /* Tab pills */
+  .tab-row {
+    display: inline-flex; background: var(--cream-2);
+    border-radius: 999px; padding: 4px; gap: 2px;
+  }
+  .tab {
+    padding: 9px 18px; border-radius: 999px;
+    font-size: 13.5px; font-weight: 500; color: var(--ink-2);
+    cursor: pointer; border: 0; background: transparent;
+    transition: all 240ms var(--ease-clinician);
+  }
+  .tab.active {
+    background: var(--cream-card); color: var(--sage-deep);
+    box-shadow: var(--shadow-button);
+  }
+  .tab:hover:not(.active) { color: var(--ink); }
+
+  /* SOAP editor */
+  .soap-section {
+    padding: 28px 0;
+    border-top: 1px solid var(--line);
+  }
+  .soap-section:first-child { border-top: 0; padding-top: 0; }
+
+  .soap-letter {
+    width: 36px; height: 36px;
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--serif); font-weight: 500; font-size: 17px;
+    background: var(--sage-tint);
+    color: var(--sage-deep);
+    flex-shrink: 0;
+  }
+
+  .soap-body {
+    font-family: var(--serif);
+    font-size: 16px;
+    line-height: 1.75;
+    color: var(--ink);
+    max-width: 720px;
+  }
+  .soap-body p { margin: 0 0 14px 0; }
+  .soap-body ul { margin: 8px 0 14px 0; padding-left: 1.4em; }
+  .soap-body ul li { padding-left: 4px; margin-bottom: 6px; }
+  .soap-body strong {
+    font-weight: 500;
+    color: var(--ink);
+  }
+  .soap-body em { color: var(--sage-deep); font-style: italic; }
+
+  /* Subtle in-line edit cursor — when editor is "live" */
+  .editing::after {
+    content: ""; display: inline-block;
+    width: 1.5px; height: 1.1em; vertical-align: -2px;
+    background: var(--sage); margin-left: 2px;
+    animation: caret 1.1s ease-in-out infinite;
+  }
+  @keyframes caret {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
+  }
+
+  /* Speaker turn cards (transcript) */
+  .turn {
+    padding: 14px 18px;
+    border-radius: 14px;
+    background: var(--cream-card);
+    border: 1px solid var(--line);
+    max-width: 80%;
+    box-shadow: var(--shadow-card);
+  }
+  .turn.dr  { background: var(--sage-tint); border-color: var(--sage-tint-strong); margin-left: auto; }
+  .turn.pt  { background: var(--cream-card); border-color: var(--line); margin-right: auto; }
+
+  .speaker-label {
+    font-family: var(--sans); font-size: 11.5px; font-weight: 500;
+    letter-spacing: 0.10em; text-transform: uppercase; opacity: 0.85;
+  }
+  .turn.dr .speaker-label { color: var(--sage-deep); }
+  .turn.pt .speaker-label { color: var(--ink-3); }
+  .turn-body {
+    font-family: var(--serif);
+    font-size: 15.5px; line-height: 1.65;
+    color: var(--ink);
+    margin-top: 6px;
+  }
+
+  /* Section divider — sage-tinted gentle */
+  .sage-divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--sage-tint-strong), transparent);
+    border: 0;
+  }
+
+  /* Input — soft */
+  .input-soft {
+    background: var(--cream-card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 10px 14px;
+    font-size: 14px;
+    color: var(--ink);
+    transition: border-color 240ms var(--ease-clinician), box-shadow 240ms var(--ease-clinician);
+  }
+  .input-soft:focus {
+    outline: 0; border-color: var(--sage);
+    box-shadow: 0 0 0 3px var(--sage-tint);
+  }
+
+  /* AI regenerate status, gentle crossfade */
+  .ai-status {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 15px;
+    color: var(--ink-2);
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 18px;
+    background: var(--sage-tint);
+    border: 1px dashed var(--sage-tint-strong);
+    border-radius: 12px;
+    position: relative;
+    height: 52px;
+  }
+  .ai-status-line {
+    position: absolute; left: 50px; right: 18px; top: 50%;
+    transform: translateY(-50%);
+    opacity: 0;
+    animation: ai-crossfade 4.8s var(--ease-clinician) infinite;
+  }
+  .ai-status-line.s1 { animation-delay: 0s; }
+  .ai-status-line.s2 { animation-delay: 1.6s; }
+  .ai-status-line.s3 { animation-delay: 3.2s; }
+  @keyframes ai-crossfade {
+    0%, 22%   { opacity: 1; transform: translateY(-50%) translateX(0); }
+    33%, 100% { opacity: 0; transform: translateY(-50%) translateX(0); }
+  }
+
+  @keyframes mic-breath {
+    0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(122,166,140,0.4); }
+    50%      { transform: scale(1.04); box-shadow: 0 0 0 10px rgba(122,166,140,0); }
+  }
+  .mic-dot {
+    animation: mic-breath 2.8s var(--ease-clinician) infinite;
+    will-change: transform, box-shadow;
+  }
+
+  /* Sidebar nav (left) */
+  .sidebar { background: var(--cream-2); border-right: 1px solid var(--line); }
+  .nav-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 14px; border-radius: 12px;
+    font-size: 14px; color: var(--ink-2);
+    cursor: pointer;
+    transition: all 240ms var(--ease-clinician);
+  }
+  .nav-item:hover { background: var(--cream-card); color: var(--ink); }
+  .nav-item.active { background: var(--cream-card); color: var(--sage-deep); box-shadow: var(--shadow-button); }
+  .nav-icon { width: 18px; height: 18px; color: var(--ink-3); flex-shrink: 0; }
+  .nav-item.active .nav-icon { color: var(--sage); }
+
+  /* gentle rule */
+  .gentle-rule {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--line-strong), transparent);
+    border: 0;
+  }
+
+  /* Lift */
+  .lift { transition: transform 360ms var(--ease-clinician), box-shadow 360ms var(--ease-clinician); }
+  .lift:hover { transform: translateY(-2px); box-shadow: var(--shadow-card-hover); }
+
+  /* meta divider middot */
+  .midp { color: var(--ink-4); margin: 0 7px; }
+
+  /* Right rail card */
+  .rail-card {
+    background: var(--cream-card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 18px;
+  }
+
+  /* Rx warning card — soft, pillified, NOT a glow */
+  .rx-card {
+    background: var(--cream-card);
+    border: 1px solid var(--coral-tint-strong);
+    border-radius: 16px;
+    padding: 22px;
+    box-shadow: var(--shadow-card);
+    position: relative;
+    overflow: hidden;
+  }
+  .rx-card::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 4px;
+    background: var(--coral);
+    border-radius: 16px 0 0 16px;
+  }
+
+  /* selection */
+  ::selection { background: var(--sage-tint-strong); color: var(--ink); }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--cream-3); border-radius: 999px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--ink-4); }
+
+  /* Section reveal — slow */
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .reveal { animation: fade-up 400ms var(--ease-clinician) forwards; }
+</style>
+</head>
+
+<body>
+
+<div class="flex min-h-screen">
+
+  <!-- ─────────────────────────────────────────────
+       LEFT SIDEBAR (compact)
+       ───────────────────────────────────────────── -->
+  <aside class="sidebar w-[64px] flex-shrink-0 flex flex-col items-center py-5">
+    <div class="mb-7">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+        <path d="M4 19c4 -1 7 -3.5 9.5 -7c1.5 -2 3 -3.5 5 -4.5c1.2 -0.6 2 -0.4 1.6 0.8c-0.7 2 -2.4 4.4 -4.6 6.4c-2.6 2.4 -5.6 4 -8.5 4.7c-1 0.2 -2.4 0.3 -3 -0.4z"
+          stroke="#7AA68C" stroke-width="1.5" fill="rgba(122,166,140,0.14)"/>
+      </svg>
+    </div>
+    <nav class="flex flex-col gap-1">
+      <div class="nav-item" style="padding: 10px;" title="Dashboard">
+        <svg class="nav-icon" viewBox="0 0 18 18" fill="none"><path d="M3 9l6 -6l6 6M5 8v6h8V8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="nav-item active" style="padding: 10px;" title="Patients">
+        <svg class="nav-icon" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="6.5" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M3 15c0 -3.3 2.7 -5 6 -5s6 1.7 6 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </div>
+      <div class="nav-item" style="padding: 10px;" title="Schedule">
+        <svg class="nav-icon" viewBox="0 0 18 18" fill="none"><rect x="2.5" y="3.5" width="13" height="11" rx="2" stroke="currentColor" stroke-width="1.5"/><line x1="2.5" y1="7" x2="15.5" y2="7" stroke="currentColor" stroke-width="1.5"/></svg>
+      </div>
+      <div class="nav-item" style="padding: 10px;" title="Notes">
+        <svg class="nav-icon" viewBox="0 0 18 18" fill="none"><rect x="3" y="2.5" width="12" height="13" rx="2" stroke="currentColor" stroke-width="1.5"/><line x1="6" y1="6" x2="12" y2="6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><line x1="6" y1="9" x2="12" y2="9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </div>
+    </nav>
+    <div class="mt-auto">
+      <div class="avatar sage" style="width: 36px; height: 36px; font-size: 13px;">MC</div>
+    </div>
+  </aside>
+
+
+  <!-- ─────────────────────────────────────────────
+       MAIN CANVAS
+       ───────────────────────────────────────────── -->
+  <main class="flex-1 min-w-0">
+
+    <!-- Top bar -->
+    <header class="topbar sticky top-0 z-30 px-10 h-[64px] flex items-center justify-between">
+      <!-- Breadcrumb -->
+      <div class="flex items-center gap-3 text-[13.5px] text-[var(--ink-3)]">
+        <a class="hover:text-[var(--ink)] transition-colors cursor-pointer">Patients</a>
+        <span class="text-[var(--ink-4)]">/</span>
+        <a class="hover:text-[var(--ink)] transition-colors cursor-pointer">Today, Apr 29</a>
+        <span class="text-[var(--ink-4)]">/</span>
+        <span class="text-[var(--ink)] serif">Mrs. Elena Lopez</span>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button class="btn btn-ghost text-[13px]">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7 l5 5 l5 -5 M2 3 l5 5 l5 -5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Previous patient
+        </button>
+        <button class="btn btn-ghost text-[13px]">
+          Next patient
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 3 l5 5 l5 -5 M2 7 l5 5 l5 -5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="w-px h-5 bg-[var(--line-strong)] mx-2"></div>
+        <button class="btn btn-soft text-[13px]" style="padding: 8px 14px;">Save draft</button>
+        <button class="btn btn-primary text-[13px]" style="padding: 8px 16px;">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 7 l3 3 l5 -6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Sign &amp; send to chart
+        </button>
+      </div>
+    </header>
+
+
+    <!-- Page body -->
+    <div class="px-10 pt-10 pb-32">
+
+      <!-- ───── Patient header ───── -->
+      <div class="mb-10 max-w-[1100px]">
+        <div class="flex items-start gap-6 mb-6">
+          <div class="avatar sage" style="width: 64px; height: 64px; border-radius: 18px; font-size: 22px;">EL</div>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-3 mb-2">
+              <h1 class="serif text-[40px] font-normal leading-tight text-[var(--ink)]">Mrs. Elena Lopez</h1>
+              <span class="pill pill-sage" style="padding: 5px 13px; font-size: 12.5px;"><span class="pill-dot"></span>Drafted, ready for review</span>
+            </div>
+            <p class="serif text-[16px] text-[var(--ink-2)] italic leading-snug">
+              Cardiology consult <span class="midp">·</span> 14 minutes <span class="midp">·</span> Reviewed at 2:14 PM <span class="midp">·</span> Wednesday, April 29
+            </p>
+            <div class="flex items-center gap-5 mt-4 text-[13px] text-[var(--ink-3)]">
+              <span><span class="text-[var(--ink-2)]">68 y/o</span> · DOB Apr 12, 1957</span>
+              <span class="text-[var(--ink-4)]">·</span>
+              <span class="mono text-[12.5px]">MRN-77324</span>
+              <span class="text-[var(--ink-4)]">·</span>
+              <span>Insurance: <span class="text-[var(--ink-2)]">BlueCross PPO</span></span>
+              <span class="text-[var(--ink-4)]">·</span>
+              <span>Allergies: <span class="text-[var(--coral-deep)]">Sulfa</span></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="flex items-center justify-between mt-7">
+          <div class="tab-row">
+            <button class="tab active">SOAP note</button>
+            <button class="tab">Transcript</button>
+            <button class="tab">Suggestions <span class="ml-1 text-[11px] text-[var(--ink-3)]">2</span></button>
+            <button class="tab">Coding · ICD/CPT</button>
+            <button class="tab">History</button>
+          </div>
+          <div class="flex items-center gap-2 text-[12.5px] text-[var(--ink-3)]">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 6l2 2 4-4" stroke="var(--sage)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Auto-saved 14 seconds ago
+          </div>
+        </div>
+      </div>
+
+      <!-- ───── Two-column layout: SOAP editor + Transcript rail ───── -->
+      <div class="grid grid-cols-12 gap-8 max-w-[1340px]">
+
+        <!-- ───── SOAP editor ───── -->
+        <div class="col-span-12 xl:col-span-8">
+          <div class="card p-10" style="border-radius: 20px;">
+
+            <!-- AI rewrite — soft sage strip -->
+            <div class="mb-8 flex items-center justify-between p-4 rounded-2xl"
+                 style="background: linear-gradient(180deg, var(--sage-tint) 0%, transparent 100%);
+                        border: 1px solid var(--sage-tint-strong);">
+              <div class="flex items-center gap-3">
+                <div class="mic-dot flex items-center justify-center"
+                     style="width: 28px; height: 28px; border-radius: 999px; background: var(--cream-card); border: 1px solid var(--sage);">
+                  <div style="width: 9px; height: 9px; border-radius: 999px; background: var(--sage);"></div>
+                </div>
+                <p class="serif italic text-[15px] text-[var(--ink-2)] leading-snug">
+                  Quill drafted this from your conversation with Mrs. Lopez.
+                  Edit anything — your changes are how Quill learns your voice.
+                </p>
+              </div>
+              <button class="btn btn-soft text-[13px]" style="padding: 7px 14px;">
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 6.5 a4.5 4.5 0 1 1 1.4 3.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/><path d="M1 4 v3 h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                Regenerate all
+              </button>
+            </div>
+
+            <!-- ── Subjective ── -->
+            <div class="soap-section">
+              <div class="flex items-center gap-3 mb-4">
+                <div class="soap-letter">S</div>
+                <div class="flex-1">
+                  <div class="serif text-[22px] text-[var(--ink)] font-medium leading-tight">Subjective</div>
+                  <div class="text-[12.5px] text-[var(--ink-3)] mt-0.5">What Mrs. Lopez told us</div>
+                </div>
+                <button class="btn btn-ghost text-[13px]">
+                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 6.5 a4.5 4.5 0 1 1 1.4 3.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/><path d="M1 4 v3 h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  Regenerate
+                </button>
+                <button class="btn btn-ghost text-[13px]" style="padding: 8px 12px;">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 11 l8 -8 l1.5 1.5 l-8 8 l-2.5 1 z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+                </button>
+              </div>
+
+              <div class="soap-body">
+                <p>
+                  68-year-old female, established cardiology patient, presents for 6-week
+                  follow-up after starting <strong>lisinopril 10 mg</strong> daily.
+                  She reports <em>markedly improved exertional tolerance</em> — she now walks
+                  around the block twice daily without dyspnea, which had previously
+                  limited her after one block.
+                </p>
+                <p>
+                  No chest discomfort, no palpitations, no orthopnea, no PND. She describes
+                  the post-walk fatigue as "the kind of tired that feels good." Sleep is
+                  unchanged. Appetite is good. She has been compliant with the medication
+                  and tolerates it well.
+                </p>
+                <p>
+                  Mrs. Lopez mentioned that her daughter is visiting from Phoenix next
+                  week and she is looking forward to gardening together.
+                </p>
+              </div>
+            </div>
+
+            <!-- ── Objective ── -->
+            <div class="soap-section">
+              <div class="flex items-center gap-3 mb-4">
+                <div class="soap-letter">O</div>
+                <div class="flex-1">
+                  <div class="serif text-[22px] text-[var(--ink)] font-medium leading-tight">Objective</div>
+                  <div class="text-[12.5px] text-[var(--ink-3)] mt-0.5">Today's measurements and exam</div>
+                </div>
+                <button class="btn btn-ghost text-[13px]">
+                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 6.5 a4.5 4.5 0 1 1 1.4 3.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/><path d="M1 4 v3 h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  Regenerate
+                </button>
+              </div>
+
+              <div class="soap-body">
+                <p>
+                  <strong>Vitals:</strong> BP 128/82 (right arm, sitting), HR 72 regular,
+                  RR 14, SpO₂ 98% on room air, T 36.7 °C, weight 71.4 kg (down 0.8 kg from last visit).
+                </p>
+                <p>
+                  <strong>Exam:</strong> Pleasant, in no acute distress. JVP not elevated.
+                  Lungs clear to auscultation bilaterally. Cardiac exam reveals regular rate
+                  and rhythm, normal S1 and S2, no murmurs, rubs, or gallops. Extremities
+                  warm and well-perfused with no peripheral edema.
+                </p>
+                <p>
+                  <strong>Labs (drawn 4/22):</strong> BMP within normal limits;
+                  potassium 4.2 mEq/L; creatinine 0.94 mg/dL (eGFR 68);
+                  fasting lipid panel: LDL 96, HDL 58, TG 124.
+                </p>
+              </div>
+            </div>
+
+            <!-- ── Assessment — show AI regenerate moment ── -->
+            <div class="soap-section">
+              <div class="flex items-center gap-3 mb-4">
+                <div class="soap-letter">A</div>
+                <div class="flex-1">
+                  <div class="serif text-[22px] text-[var(--ink)] font-medium leading-tight">Assessment</div>
+                  <div class="text-[12.5px] text-[var(--ink-3)] mt-0.5">Currently regenerating · 800ms crossfade</div>
+                </div>
+                <span class="pill pill-sage" style="padding: 5px 11px;"><span class="pill-dot"></span>Drafting</span>
+              </div>
+
+              <!-- AI status crossfading sentences -->
+              <div class="ai-status mb-5">
+                <div class="mic-dot flex items-center justify-center"
+                     style="width: 22px; height: 22px; border-radius: 999px; background: var(--cream-card); border: 1px solid var(--sage); flex-shrink: 0;">
+                  <div style="width: 7px; height: 7px; border-radius: 999px; background: var(--sage);"></div>
+                </div>
+                <div class="ai-status-line s1">Reviewing your transcript&hellip;</div>
+                <div class="ai-status-line s2">Drafting the assessment&hellip;</div>
+                <div class="ai-status-line s3">Polishing the wording&hellip;</div>
+              </div>
+
+              <div class="soap-body" style="opacity: 0.55;">
+                <p class="editing">
+                  <strong>1. Hypertension, well controlled on lisinopril 10 mg.</strong>
+                  Today's BP 128/82 represents a meaningful improvement from her pre-treatment
+                  baseline of 152/94. Patient reports excellent tolerance with no cough or dizziness.
+                </p>
+                <p>
+                  <strong>2. Functional status improved.</strong>
+                  Symptomatic improvement in exertional tolerance is consistent with
+                  better afterload reduction.
+                </p>
+              </div>
+            </div>
+
+            <!-- ── Plan ── -->
+            <div class="soap-section">
+              <div class="flex items-center gap-3 mb-4">
+                <div class="soap-letter">P</div>
+                <div class="flex-1">
+                  <div class="serif text-[22px] text-[var(--ink)] font-medium leading-tight">Plan</div>
+                  <div class="text-[12.5px] text-[var(--ink-3)] mt-0.5">What's next for Mrs. Lopez</div>
+                </div>
+                <button class="btn btn-ghost text-[13px]">
+                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 6.5 a4.5 4.5 0 1 1 1.4 3.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/><path d="M1 4 v3 h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  Regenerate
+                </button>
+              </div>
+
+              <div class="soap-body">
+                <ul>
+                  <li><strong>Continue lisinopril 10 mg daily.</strong> No dose adjustment indicated.</li>
+                  <li><strong>Home BP log:</strong> Continue twice-daily readings; bring log to next visit.</li>
+                  <li><strong>Lifestyle:</strong> Encouraged her to keep walking around the block twice daily; discussed slowly increasing duration as tolerated.</li>
+                  <li><strong>Labs in 6 weeks</strong> (BMP, potassium) prior to follow-up.</li>
+                  <li><strong>Follow-up:</strong> 6 weeks. Sooner if any new symptoms — chest discomfort, dyspnea, dizziness, or syncope.</li>
+                </ul>
+
+                <p class="serif italic text-[15px] text-[var(--ink-3)] mt-5">
+                  Patient leaving in good spirits. Encouraged her to enjoy the gardening visit with her daughter.
+                </p>
+              </div>
+            </div>
+
+            <!-- Footer actions -->
+            <div class="mt-8 pt-7 flex items-center justify-between" style="border-top: 1px solid var(--line);">
+              <div class="flex items-center gap-3">
+                <button class="btn btn-soft">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 4 h10 M4 7 h6 M6 10 h2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+                  Apply template
+                </button>
+                <button class="btn btn-ghost">Copy as text</button>
+                <button class="btn btn-ghost">Print</button>
+              </div>
+              <div class="flex items-center gap-3">
+                <span class="text-[12.5px] text-[var(--ink-3)]">All sections drafted · 1,238 words</span>
+                <button class="btn btn-primary">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 7 l3 3 l5 -6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  Sign &amp; send to chart
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+
+        <!-- ───── Right rail ───── -->
+        <div class="col-span-12 xl:col-span-4">
+
+          <!-- ── Rx warning (warm, soft) ── -->
+          <div class="rx-card mb-6">
+            <div class="flex items-start gap-4">
+              <div class="flex items-center justify-center shrink-0"
+                   style="width: 40px; height: 40px; border-radius: 12px; background: var(--coral-tint-strong);">
+                <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+                  <path d="M11 3 L 20 18 H 2 Z" stroke="var(--coral-deep)" stroke-width="1.6" stroke-linejoin="round" fill="var(--cream-card)"/>
+                  <line x1="11" y1="9" x2="11" y2="13" stroke="var(--coral-deep)" stroke-width="1.8" stroke-linecap="round"/>
+                  <circle cx="11" cy="15.5" r="1" fill="var(--coral-deep)"/>
+                </svg>
+              </div>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 mb-1.5">
+                  <h3 class="serif text-[18px] text-[var(--ink)] leading-tight font-medium">Rx caution</h3>
+                  <span class="pill pill-coral" style="padding: 3px 10px; font-size: 10.5px;">Moderate</span>
+                </div>
+                <p class="serif text-[14px] text-[var(--ink-2)] leading-[1.55] mb-4">
+                  Mrs. Lopez's chart shows a documented sulfa allergy.
+                  If you're considering a thiazide today, please confirm
+                  hydrochlorothiazide tolerance — it is structurally a sulfonamide
+                  and may cross-react in a small subset of patients.
+                </p>
+
+                <div class="flex flex-wrap gap-2 mb-4">
+                  <span class="pill pill-coral"><span class="pill-dot"></span>Allergy: Sulfa</span>
+                  <span class="pill pill-amber">Cross-react risk</span>
+                  <span class="pill pill-soft">Source: Lexicomp</span>
+                </div>
+
+                <div class="flex items-center gap-2">
+                  <button class="btn btn-soft text-[13px]" style="padding: 7px 14px;">
+                    <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="currentColor" stroke-width="1.4"/><path d="M6.5 4 v3.5 M6.5 9 h0.01" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+                    See full reference
+                  </button>
+                  <button class="btn btn-ghost text-[13px]">Acknowledge</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── Suggestions / coding ── -->
+          <div class="rail-card mb-6">
+            <div class="flex items-center justify-between mb-4">
+              <div>
+                <div class="section-label mb-1">Suggested codes</div>
+                <div class="serif text-[18px] text-[var(--ink)]">Two ICD-10s, one CPT</div>
+              </div>
+              <span class="pill pill-teal"><span class="pill-dot"></span>Pre-filled</span>
+            </div>
+
+            <div class="space-y-3">
+              <div class="flex items-start justify-between p-3 rounded-xl" style="background: var(--cream-2);">
+                <div>
+                  <div class="mono text-[13px] text-[var(--ink)] font-medium">I10</div>
+                  <div class="text-[12.5px] text-[var(--ink-2)] mt-0.5">Essential (primary) hypertension</div>
+                </div>
+                <button class="text-[var(--sage-deep)] text-[12px] hover:underline mt-0.5">Edit</button>
+              </div>
+              <div class="flex items-start justify-between p-3 rounded-xl" style="background: var(--cream-2);">
+                <div>
+                  <div class="mono text-[13px] text-[var(--ink)] font-medium">Z79.899</div>
+                  <div class="text-[12.5px] text-[var(--ink-2)] mt-0.5">Long-term use of antihypertensive drug</div>
+                </div>
+                <button class="text-[var(--sage-deep)] text-[12px] hover:underline mt-0.5">Edit</button>
+              </div>
+              <div class="flex items-start justify-between p-3 rounded-xl" style="background: var(--cream-2);">
+                <div>
+                  <div class="mono text-[13px] text-[var(--ink)] font-medium">99214</div>
+                  <div class="text-[12.5px] text-[var(--ink-2)] mt-0.5">Established patient · level 4 visit</div>
+                </div>
+                <button class="text-[var(--sage-deep)] text-[12px] hover:underline mt-0.5">Edit</button>
+              </div>
+            </div>
+
+            <button class="btn btn-ghost text-[13px] mt-4 w-full justify-center">
+              + Add a code
+            </button>
+          </div>
+
+          <!-- ── Vitals + chart context ── -->
+          <div class="rail-card mb-6">
+            <div class="section-label mb-3">Recent vitals</div>
+            <div class="grid grid-cols-2 gap-4 mb-4">
+              <div>
+                <div class="serif text-[24px] text-[var(--ink)] leading-none">128<span class="text-[var(--ink-3)]">/82</span></div>
+                <div class="text-[11.5px] text-[var(--ink-3)] mt-1.5">BP · today</div>
+                <div class="text-[11px] text-[var(--sage-deep)] mt-0.5">↓ 24 from 6 wk ago</div>
+              </div>
+              <div>
+                <div class="serif text-[24px] text-[var(--ink)] leading-none">72</div>
+                <div class="text-[11.5px] text-[var(--ink-3)] mt-1.5">HR · today</div>
+                <div class="text-[11px] text-[var(--ink-3)] mt-0.5">stable</div>
+              </div>
+              <div>
+                <div class="serif text-[24px] text-[var(--ink)] leading-none">71.4 <span class="text-[14px] text-[var(--ink-3)]">kg</span></div>
+                <div class="text-[11.5px] text-[var(--ink-3)] mt-1.5">Weight</div>
+                <div class="text-[11px] text-[var(--sage-deep)] mt-0.5">↓ 0.8 from last</div>
+              </div>
+              <div>
+                <div class="serif text-[24px] text-[var(--ink)] leading-none">98<span class="text-[14px] text-[var(--ink-3)]">%</span></div>
+                <div class="text-[11.5px] text-[var(--ink-3)] mt-1.5">SpO₂</div>
+                <div class="text-[11px] text-[var(--ink-3)] mt-0.5">RA</div>
+              </div>
+            </div>
+
+            <!-- BP trendline -->
+            <div class="pt-4" style="border-top: 1px solid var(--line);">
+              <div class="flex items-center justify-between mb-2">
+                <div class="text-[11.5px] text-[var(--ink-3)]">BP last 6 visits</div>
+                <div class="text-[11.5px] text-[var(--sage-deep)]">trending down</div>
+              </div>
+              <svg viewBox="0 0 240 60" class="w-full" height="56">
+                <!-- grid -->
+                <line x1="0" y1="20" x2="240" y2="20" stroke="var(--line)" stroke-width="1" stroke-dasharray="2 4"/>
+                <line x1="0" y1="40" x2="240" y2="40" stroke="var(--line)" stroke-width="1" stroke-dasharray="2 4"/>
+                <!-- area -->
+                <path d="M0 12 L 48 14 L 96 22 L 144 32 L 192 36 L 240 38 L 240 60 L 0 60 Z" fill="var(--sage-tint)"/>
+                <!-- line -->
+                <path d="M0 12 L 48 14 L 96 22 L 144 32 L 192 36 L 240 38" stroke="var(--sage)" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                <!-- dots -->
+                <g fill="var(--cream-card)" stroke="var(--sage)" stroke-width="1.5">
+                  <circle cx="0" cy="12" r="3.5"/>
+                  <circle cx="48" cy="14" r="3.5"/>
+                  <circle cx="96" cy="22" r="3.5"/>
+                  <circle cx="144" cy="32" r="3.5"/>
+                  <circle cx="192" cy="36" r="3.5"/>
+                  <circle cx="240" cy="38" r="3.5"/>
+                </g>
+              </svg>
+              <div class="flex justify-between text-[10.5px] text-[var(--ink-4)] mt-1">
+                <span>Sep</span><span>Oct</span><span>Nov</span><span>Jan</span><span>Mar</span><span>Apr</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── Quiet "this is the human in front of you" ── -->
+          <div class="rail-card" style="background: linear-gradient(180deg, var(--cream-card) 0%, rgba(91, 163, 180, 0.06) 100%); border-color: var(--teal-tint);">
+            <div class="section-label mb-3" style="color: var(--teal-deep);">A note about Elena</div>
+            <p class="serif text-[14.5px] text-[var(--ink-2)] leading-[1.6] italic">
+              "Mrs. Lopez was a piano teacher for 36 years. Her granddaughter Sofia is starting first grade in August. She always brings homemade flan around the holidays."
+            </p>
+            <div class="text-[11.5px] text-[var(--ink-3)] mt-3">
+              From Dr. Chen's notes · added Mar 2024
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+
+      <!-- ───── Transcript section — alternating turns ───── -->
+      <div class="mt-16 max-w-[1100px]">
+        <div class="flex items-center justify-between mb-6">
+          <div>
+            <div class="eyebrow mb-2">Conversation</div>
+            <h2 class="serif text-[28px] font-normal text-[var(--ink)] leading-tight">
+              The visit, in Mrs. Lopez's words and yours.
+            </h2>
+            <p class="text-[14px] text-[var(--ink-3)] mt-2">14 minutes · 86 turns · click any line to jump to it in the audio.</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button class="btn btn-soft text-[13px]" style="padding: 8px 14px;">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 4.5 l 4 2.5 l -4 2.5 z" fill="currentColor"/></svg>
+              Play audio
+            </button>
+            <button class="btn btn-ghost text-[13px]">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 4 h8 M3 7 h8 M3 10 h5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+              Show timestamps
+            </button>
+          </div>
+        </div>
+
+        <!-- Speaker turns alternating — visual rhythm -->
+        <div class="card p-8" style="border-radius: 20px;">
+          <div class="space-y-5">
+
+            <div class="flex">
+              <div class="turn dr">
+                <div class="speaker-label">Dr. Chen <span class="midp">·</span> 00:08</div>
+                <div class="turn-body">"How have you been since I saw you last? Tell me about the medication."</div>
+              </div>
+            </div>
+
+            <div class="flex">
+              <div class="turn pt">
+                <div class="speaker-label">Mrs. Lopez <span class="midp">·</span> 00:14</div>
+                <div class="turn-body">"Honestly, doctor, I feel quite a bit better. My breathing's been easier, especially when I walk."</div>
+              </div>
+            </div>
+
+            <div class="flex">
+              <div class="turn dr">
+                <div class="speaker-label">Dr. Chen <span class="midp">·</span> 00:31</div>
+                <div class="turn-body">"That's wonderful. How far are you walking?"</div>
+              </div>
+            </div>
+
+            <div class="flex">
+              <div class="turn pt">
+                <div class="speaker-label">Mrs. Lopez <span class="midp">·</span> 00:34</div>
+                <div class="turn-body">"Around the block twice a day. Slowly — I'm not going to win any races. But I do it every morning before coffee, and again in the afternoon when it cools down a little."</div>
+              </div>
+            </div>
+
+            <div class="flex">
+              <div class="turn dr">
+                <div class="speaker-label">Dr. Chen <span class="midp">·</span> 01:02</div>
+                <div class="turn-body">"Any chest discomfort during the walks? Any tightness, any shortness of breath?"</div>
+              </div>
+            </div>
+
+            <div class="flex">
+              <div class="turn pt">
+                <div class="speaker-label">Mrs. Lopez <span class="midp">·</span> 01:09</div>
+                <div class="turn-body">"None. I do feel a little tired by the end, but it's the kind of tired that feels good. Like I've done something with my day."</div>
+              </div>
+            </div>
+
+            <div class="flex">
+              <div class="turn dr">
+                <div class="speaker-label">Dr. Chen <span class="midp">·</span> 01:30</div>
+                <div class="turn-body">"That's exactly what I want to hear. Any side effects from the lisinopril? Cough? Dizziness?"</div>
+              </div>
+            </div>
+
+            <div class="flex">
+              <div class="turn pt">
+                <div class="speaker-label">Mrs. Lopez <span class="midp">·</span> 01:36</div>
+                <div class="turn-body">"Nothing. Sometimes I forget I'm taking it. Is that good or bad?"</div>
+              </div>
+            </div>
+
+            <div class="flex">
+              <div class="turn dr">
+                <div class="speaker-label">Dr. Chen <span class="midp">·</span> 01:50</div>
+                <div class="turn-body">"That's perfect. Let's check your blood pressure today and we'll talk about staying the course."</div>
+              </div>
+            </div>
+
+            <!-- Read more -->
+            <div class="text-center pt-3">
+              <button class="btn btn-ghost text-[13px]">
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M3 5 l3.5 3.5 l3.5 -3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                See remaining 77 turns
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quiet caption -->
+        <p class="text-center serif italic text-[14px] text-[var(--ink-3)] mt-6">
+          The transcript is your record, not Quill's. Edits here update the source but never the signed note.
+        </p>
+      </div>
+
+
+      <!-- ───── End of page reflection ───── -->
+      <div class="mt-20 max-w-[600px] mx-auto text-center">
+        <p class="serif italic text-[15px] text-[var(--ink-3)] leading-relaxed">
+          Take your time. Mrs. Lopez has been your patient for four years.
+          She'd rather wait two more minutes for a careful note than have a quick one.
+        </p>
+        <div class="flex items-center justify-center gap-3 mt-6">
+          <button class="btn btn-ghost">Back to today</button>
+          <button class="btn btn-primary">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 7 l3 3 l5 -6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Sign &amp; send to chart
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+</body>
+</html>

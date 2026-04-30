@@ -1322,3 +1322,897 @@ body {
     transition: none;
   }
 }
+
+/* ============================================================================
+   Rx warning card — CLINICIAN palette overrides (Batch D, REVIEWABLE)
+   ----------------------------------------------------------------------------
+   The .qm-warn-* family above is the canonical Rx warning design grammar
+   (DESIGN_SPEC.md, docs/design/rx_warning_handoff/). Every structural class
+   stays. ARIA attributes stay. data-testid attributes stay. The 8-region
+   architecture stays. Only the COLOR TOKENS change to the Clinician palette
+   when the card mounts inside `.qm-cl-app` (visit-detail Rx tab + Rx rail).
+
+   Per CL-6 / docs/REMODEL_PHASE2_PLAN.md the severity pills move from the
+   raycast-violet-saturated rgb triplets to soft warm equivalents:
+     critical (red)   → coral  (#C97B6E)
+     warning (amber)  → amber  (#D4A574)  — same warm amber as the legacy
+                                            map; only the deep tone changes
+     info (blue)      → sky    (#7BA8C4)
+   The deep "fg-2" (sev-fg-2) contrast pair maps to the Clinician *-deep
+   tokens so risk-pill ink reads on a soft tint rather than a glow.
+
+   Body color tokens swap legacy fg/line to ink/line tokens so the card
+   reads correctly on cream:
+     --fg     → --ink         --line        → --line (clinician scope)
+     --fg-2   → --ink-2        --line-strong → --line-strong (clinician)
+     --fg-3   → --ink-3        --line-soft   → --line (no soft variant
+     --fg-4   → --ink-4                          inside .qm-cl-app)
+     --amber  → --amber (clinician already defines a warm amber)
+
+   Hover overlays that were designed against a black canvas (rgba(255,255,255,
+   0.02-0.06)) flip to warm cream tints (cream-2 / cream-3) so the chrome
+   reads as a paper card, not a glass card.
+   ========================================================================== */
+
+/* Severity tone variables — remap the rgb triplets used by all
+   .qm-warn-* rules to the Clinician palette equivalents. The
+   structural rules (background, border, dot, etc.) all reference
+   var(--sev-hue-r/g/b) so a single override at the .qm-warn level
+   re-tints every region uniformly. */
+.qm-cl-app .qm-warn {
+  /* critical default — coral */
+  --sev-hue-r: 201;
+  --sev-hue-g: 123;
+  --sev-hue-b: 110;
+  /* sev-fg-2 (ink tone for risk pills + action tile copy + outcome
+     bold) → coral-deep */
+  --sev-fg-2: rgb(122, 51, 41);
+}
+.qm-cl-app .qm-warn-sev-warning {
+  /* warm amber */
+  --sev-hue-r: 212;
+  --sev-hue-g: 165;
+  --sev-hue-b: 116;
+  /* amber-deep */
+  --sev-fg-2: rgb(122, 79, 31);
+}
+.qm-cl-app .qm-warn-sev-info {
+  /* sky */
+  --sev-hue-r: 123;
+  --sev-hue-g: 168;
+  --sev-hue-b: 196;
+  /* sky-deep */
+  --sev-fg-2: rgb(44, 79, 102);
+}
+
+/* Card surface — paper on cream desk, not glass on void. */
+.qm-cl-app .qm-warn {
+  /* The .qm-warn rule above sets background: var(--sev-bg) which is a
+     4% rgba of the severity hue. Override to the cream-card so the
+     card reads as paper; the severity rail (::before) + the soft
+     sev-tint borders carry the tone. */
+  background: var(--cream-card);
+  color: var(--ink-2);
+  box-shadow: var(--shadow-card);
+}
+
+/* Region 1 — Header */
+.qm-cl-app .qm-warn-icon {
+  /* Sev-tinted soft chip on cream — replaces the dark glass icon
+     well. */
+  background: rgba(
+    var(--sev-hue-r),
+    var(--sev-hue-g),
+    var(--sev-hue-b),
+    0.12
+  );
+}
+.qm-cl-app .qm-warn-badge {
+  /* Solid sev color with inset highlight + soft shadow. The inset
+     highlight reads against the colored fill; lighten the shadow on
+     cream so it doesn't punch a hole. */
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    0 1px 2px rgba(43, 38, 32, 0.16);
+}
+.qm-cl-app .qm-warn-field {
+  color: var(--ink-3);
+}
+.qm-cl-app .qm-warn-headline {
+  color: var(--ink);
+}
+.qm-cl-app .qm-warn-dismiss {
+  color: var(--ink-3);
+}
+.qm-cl-app .qm-warn-dismiss:hover {
+  /* Warm cream-2 hover on cream — replaces rgba(255,255,255,0.03). */
+  background: var(--cream-2);
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+/* Region 4 — Transcribed (heard + guess) */
+.qm-cl-app .qm-warn-field-label {
+  color: var(--ink-3);
+}
+.qm-cl-app .qm-warn-field-value {
+  color: var(--ink);
+}
+.qm-cl-app .qm-warn-transcribed-arrow {
+  color: var(--ink-4);
+}
+.qm-cl-app .qm-warn-confidence {
+  /* Map the legacy fbbf24-ish amber chip onto the Clinician amber.
+     Both represent "low transcriber confidence" — the warm amber
+     reads quieter on cream than the neon. */
+  color: var(--amber-deep);
+  border-color: rgba(212, 165, 116, 0.34);
+  background: var(--amber-tint);
+}
+
+/* Region 5 — Risks */
+.qm-cl-app .qm-warn-mini-label {
+  color: var(--ink-4);
+}
+.qm-cl-app .qm-warn-risk-primary {
+  color: var(--ink);
+}
+.qm-cl-app .qm-warn-risk-outcome {
+  color: var(--ink-3);
+}
+
+/* Region 6 — Next step */
+.qm-cl-app .qm-warn-next {
+  border-color: var(--line-strong);
+  /* Replace rgba(255,255,255,0.015) with cream-2 wash. */
+  background: var(--cream-2);
+  color: var(--ink-2);
+}
+.qm-cl-app .qm-warn-next-icon {
+  color: var(--ink-3);
+}
+.qm-cl-app .qm-warn-next-label {
+  color: var(--ink-3);
+}
+
+/* Region 7 — Details toggle + body */
+.qm-cl-app .qm-warn-details-toggle {
+  /* The base rule uses --line-soft which doesn't exist inside
+     .qm-cl-app; map to the regular --line. */
+  border-top-color: var(--line);
+  color: var(--ink-3);
+}
+.qm-cl-app .qm-warn-details-toggle:hover {
+  /* Replace rgba(255,255,255,0.02) with cream-2. */
+  color: var(--ink-2);
+  background: var(--cream-2);
+}
+.qm-cl-app .qm-warn-details-chev {
+  color: var(--ink-3);
+}
+.qm-cl-app .qm-warn-details-source {
+  color: var(--ink-4);
+}
+.qm-cl-app .qm-warn-details-body {
+  border-top-color: var(--line);
+  color: var(--ink-2);
+}
+.qm-cl-app .qm-warn-details-cite {
+  color: var(--ink-4);
+}
+
+/* Region 8 — Actions */
+.qm-cl-app .qm-warn-actions {
+  border-top-color: var(--line);
+}
+.qm-cl-app .qm-warn-btn {
+  /* Replace rgba(255,255,255,0.02) glass surface with a cream-card
+     paper chip. */
+  border-color: var(--line);
+  background: var(--cream-card);
+  color: var(--ink-2);
+}
+.qm-cl-app .qm-warn-btn:hover {
+  background: var(--cream-2);
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+.qm-cl-app .qm-warn-btn:active {
+  background: var(--cream-3);
+}
+.qm-cl-app .qm-warn-btn-primary {
+  /* The primary button (Edit medication on critical) keeps the
+     severity-tinted gradient — the rgb triplets are already remapped
+     to the Clinician palette via the override at the top of this
+     section, so the gradient resolves to a soft sev-tint on cream
+     instead of a saturated raycast wash. */
+  color: var(--sev-fg-2);
+}
+.qm-cl-app .qm-warn-btn-primary:hover {
+  color: var(--ink);
+}
+
+/* Keyboard hint chip — replace the dark inset (rgba(0,0,0,0.2)) with
+   a cream-2 / line bordered chip that reads on cream. */
+.qm-cl-app .qm-warn-kbd {
+  background: var(--cream-2);
+  border-color: var(--line);
+  color: var(--ink-3);
+}
+
+/* ============================================================================
+   CLINICIAN — Phase 2 design direction (humane medical, light-mode-first)
+   ----------------------------------------------------------------------------
+   Source of truth: docs/design-directions-v3/clinician/{landing-and-recording,
+   dashboard,visit-detail}.html. Canonical tokens were ported 1:1 from the
+   `:root` blocks of those mockups; class names are prefixed `qm-cl-*` so they
+   never collide with the dark `.qm-*` family.
+
+   Architecture mirrors App-redesign-v1:
+     1. @theme block: --color-clinician-* exposed as Tailwind utilities
+        (bg-clinician-cream, text-clinician-sage, border-clinician-line, etc.)
+     2. .qm-cl-app block: bare-name aliases (--cream, --ink, --sage, --serif,
+        --sans, --mono) scoped here so handwritten .qm-cl-* CSS resolves
+        var(--cream) the same way the mockups do — without polluting the
+        global :root (where App-redesign-v1's --bg/--fg/--accent live).
+     3. Utility classes: .qm-cl-pill, .qm-cl-btn, .qm-cl-card, etc.
+        ONLY meaningful inside .qm-cl-app. Migrated routes wrap their tree.
+
+   DM Sans is loaded via @import below; Source Serif 4 + JetBrains Mono are
+   already loaded via next/font in layout.tsx. The @import sits AFTER
+   @import "tailwindcss" (top of file) which is invalid per CSS spec, but
+   Tailwind v4's processor accepts it. If a future build complains, move
+   the DM Sans @import to the very top OR migrate to next/font.
+   ============================================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap');
+
+@theme {
+  /* Cream surfaces (canvas + elevations) */
+  --color-clinician-cream: #FAF7F2;
+  --color-clinician-cream-card: #FFFCF5;
+  --color-clinician-cream-2: #F2EDE3;
+  --color-clinician-cream-3: #E8E1D3;
+
+  /* Hairlines */
+  --color-clinician-line: rgba(43, 38, 32, 0.08);
+  --color-clinician-line-strong: rgba(43, 38, 32, 0.14);
+
+  /* Warm-charcoal ink (text) */
+  --color-clinician-ink: #2B2620;
+  --color-clinician-ink-2: #5C544A;
+  --color-clinician-ink-3: #8A8278;
+  --color-clinician-ink-4: #B5AE9F;
+
+  /* Sage — primary accent */
+  --color-clinician-sage: #7AA68C;
+  --color-clinician-sage-deep: #2F5040;
+  --color-clinician-sage-bright: #95BCA4;
+
+  /* Teal — secondary accent */
+  --color-clinician-teal: #5BA3B4;
+  --color-clinician-teal-deep: #2C5A66;
+
+  /* Status — soft-warm tints */
+  --color-clinician-amber: #D4A574;
+  --color-clinician-amber-deep: #7A4F1F;
+  --color-clinician-coral: #C97B6E;
+  --color-clinician-coral-deep: #7A3329;
+  --color-clinician-sky: #7BA8C4;
+  --color-clinician-sky-deep: #2C4F66;
+}
+
+/* ── .qm-cl-app — root scope for Clinician routes ──
+   Wrap any migrated page's tree in this class. It:
+     1. Sets the cream canvas + warm-charcoal ink + DM Sans body
+     2. Defines bare-name aliases (--cream, --ink, --sage, --serif, etc.)
+        that the .qm-cl-* utility classes below reference
+   Pages NOT yet migrated continue to use .qm-app and the dark App-redesign-v1
+   tokens — no contention because the scopes don't overlap. */
+.qm-cl-app {
+  /* Bare-name aliases — referenced by .qm-cl-* utility classes below */
+  --cream: var(--color-clinician-cream);
+  --cream-card: var(--color-clinician-cream-card);
+  --cream-2: var(--color-clinician-cream-2);
+  --cream-3: var(--color-clinician-cream-3);
+
+  --line: var(--color-clinician-line);
+  --line-strong: var(--color-clinician-line-strong);
+
+  --ink: var(--color-clinician-ink);
+  --ink-2: var(--color-clinician-ink-2);
+  --ink-3: var(--color-clinician-ink-3);
+  --ink-4: var(--color-clinician-ink-4);
+
+  --sage: var(--color-clinician-sage);
+  --sage-deep: var(--color-clinician-sage-deep);
+  --sage-bright: var(--color-clinician-sage-bright);
+  --sage-tint: rgba(122, 166, 140, 0.14);
+  --sage-tint-strong: rgba(122, 166, 140, 0.22);
+
+  --teal: var(--color-clinician-teal);
+  --teal-deep: var(--color-clinician-teal-deep);
+  --teal-tint: rgba(91, 163, 180, 0.14);
+
+  --amber: var(--color-clinician-amber);
+  --amber-deep: var(--color-clinician-amber-deep);
+  --amber-tint: rgba(212, 165, 116, 0.18);
+  --amber-tint-strong: rgba(212, 165, 116, 0.28);
+
+  --coral: var(--color-clinician-coral);
+  --coral-deep: var(--color-clinician-coral-deep);
+  --coral-tint: rgba(201, 123, 110, 0.16);
+  --coral-tint-strong: rgba(201, 123, 110, 0.24);
+
+  --sky: var(--color-clinician-sky);
+  --sky-deep: var(--color-clinician-sky-deep);
+  --sky-tint: rgba(123, 168, 196, 0.16);
+
+  --shadow-card: 0 4px 14px rgba(43, 38, 32, 0.04);
+  --shadow-card-hover: 0 8px 24px rgba(43, 38, 32, 0.06);
+  --shadow-button: 0 1px 2px rgba(43, 38, 32, 0.05), 0 1px 1px rgba(43, 38, 32, 0.03);
+  --shadow-cta: 0 6px 18px rgba(122, 166, 140, 0.28);
+
+  --ease-clinician: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Type stack — DM Sans body, Source Serif 4 content, JetBrains Mono IDs */
+  --serif: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --sans: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Body — apply only inside the scope so non-migrated routes keep dark canvas */
+  font-family: var(--sans);
+  background: var(--cream);
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Body grain — gentle warm radial wash. Only applied to .qm-cl-app; the
+   App-redesign-v1 dark surfaces are untouched. */
+.qm-cl-app[data-grain] {
+  background-image:
+    radial-gradient(ellipse at 12% 8%, rgba(122, 166, 140, 0.06) 0%, transparent 42%),
+    radial-gradient(ellipse at 88% 92%, rgba(91, 163, 180, 0.05) 0%, transparent 50%);
+}
+
+/* Type-face helpers (Clinician scope only) */
+.qm-cl-app .qm-cl-serif { font-family: var(--serif); }
+.qm-cl-app .qm-cl-sans  { font-family: var(--sans); }
+.qm-cl-app .qm-cl-mono  { font-family: var(--mono); }
+
+/* Wordmark — used by AppFrame / TopNav (Batch B). Mockup: 18–20px Source Serif 4 */
+.qm-cl-app .qm-cl-wordmark {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 20px;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
+
+/* ── Pills — soft-bg + deep-fg; status grammar throughout the app ──
+   Used in: dashboard visit list (status column), visit-detail header
+   (status pill), patient cards (specialty chip), Rx warnings (severity). */
+.qm-cl-app .qm-cl-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  font-family: var(--sans);
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 0.01em;
+  line-height: 1;
+}
+.qm-cl-app .qm-cl-pill-sage  { background: var(--sage-tint);  color: var(--sage-deep); }
+.qm-cl-app .qm-cl-pill-teal  { background: var(--teal-tint);  color: var(--teal-deep); }
+.qm-cl-app .qm-cl-pill-amber { background: var(--amber-tint); color: var(--amber-deep); }
+.qm-cl-app .qm-cl-pill-coral { background: var(--coral-tint); color: var(--coral-deep); }
+.qm-cl-app .qm-cl-pill-sky   { background: var(--sky-tint);   color: var(--sky-deep); }
+.qm-cl-app .qm-cl-pill-soft  { background: var(--cream-2);    color: var(--ink-2); }
+.qm-cl-app .qm-cl-pill-dot   { width: 6px; height: 6px; border-radius: 999px; background: currentColor; opacity: 0.7; }
+
+/* ── Buttons — pill-shaped (radius 999px), gentle ease, no springs ──
+   Used in: every CTA (primary), inline actions (soft, ghost). Recording
+   "Start"/"End" buttons (Batch E) extend with .qm-cl-btn-record variant. */
+.qm-cl-app .qm-cl-btn {
+  font-family: var(--sans);
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 1;
+  border-radius: 999px;
+  padding: 10px 18px;
+  cursor: pointer;
+  border: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: transform 240ms var(--ease-clinician),
+              background 240ms var(--ease-clinician),
+              box-shadow 240ms var(--ease-clinician),
+              color 240ms var(--ease-clinician);
+}
+.qm-cl-app .qm-cl-btn-primary {
+  background: var(--sage);
+  color: #FFFCF5;
+  box-shadow: var(--shadow-cta);
+}
+.qm-cl-app .qm-cl-btn-primary:hover {
+  background: #6E9A80;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 22px rgba(122, 166, 140, 0.36);
+}
+.qm-cl-app .qm-cl-btn-soft {
+  background: var(--cream-card);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-button);
+}
+.qm-cl-app .qm-cl-btn-soft:hover { background: var(--cream-2); }
+.qm-cl-app .qm-cl-btn-ghost {
+  background: transparent;
+  color: var(--ink-2);
+}
+.qm-cl-app .qm-cl-btn-ghost:hover { background: var(--cream-2); color: var(--ink); }
+
+/* Larger CTA size — landing hero, signup CTA */
+.qm-cl-app .qm-cl-btn-lg {
+  font-size: 14.5px;
+  padding: 12px 22px;
+}
+
+/* ── Cards — soft warm shadow, 16px radius, cream-card surface ──
+   Used in: stat cards (dashboard), visit cards (list), SOAP section
+   (visit-detail), the recording widget container. */
+.qm-cl-app .qm-cl-card {
+  background: var(--cream-card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: var(--shadow-card);
+}
+
+/* Same as .qm-cl-card but with hover lift — for clickable cards */
+.qm-cl-app .qm-cl-card-soft {
+  background: var(--cream-card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: var(--shadow-card);
+  transition: transform 360ms var(--ease-clinician),
+              box-shadow 360ms var(--ease-clinician);
+}
+.qm-cl-app .qm-cl-card-soft:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card-hover);
+}
+
+/* ── Top-nav surface ──
+   Used in: <TopNav> (Batch B). Cream-w-blur backdrop sits sticky at top. */
+.qm-cl-app .qm-cl-topbar {
+  background: rgba(250, 247, 242, 0.85);
+  backdrop-filter: blur(18px) saturate(115%);
+  -webkit-backdrop-filter: blur(18px) saturate(115%);
+  border-bottom: 1px solid var(--line);
+}
+
+/* ── Sidebar / nav-item ──
+   Used in: <IconRail> / sidebar (Batch B). Active state shows a sage dot. */
+.qm-cl-app .qm-cl-sidebar {
+  background: var(--cream-2);
+  border-right: 1px solid var(--line);
+}
+.qm-cl-app .qm-cl-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 14px;
+  color: var(--ink-2);
+  transition: all 240ms var(--ease-clinician);
+  cursor: pointer;
+}
+.qm-cl-app .qm-cl-nav-item:hover {
+  background: var(--cream-card);
+  color: var(--ink);
+}
+.qm-cl-app .qm-cl-nav-item.qm-cl-active {
+  background: var(--cream-card);
+  color: var(--sage-deep);
+  box-shadow: var(--shadow-button);
+}
+.qm-cl-app .qm-cl-nav-item.qm-cl-active::after {
+  content: "";
+  margin-left: auto;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--sage);
+}
+.qm-cl-app .qm-cl-nav-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--ink-3);
+  transition: color 240ms var(--ease-clinician);
+  flex-shrink: 0;
+}
+.qm-cl-app .qm-cl-nav-item:hover .qm-cl-nav-icon { color: var(--ink); }
+.qm-cl-app .qm-cl-nav-item.qm-cl-active .qm-cl-nav-icon { color: var(--sage); }
+
+/* ── Inputs — soft warm with sage focus ring ──
+   Used in: search box (top-nav), forms (auth, settings, patient picker). */
+.qm-cl-app .qm-cl-input {
+  background: var(--cream-card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-family: var(--sans);
+  font-size: 14px;
+  color: var(--ink);
+  transition: border-color 240ms var(--ease-clinician),
+              box-shadow 240ms var(--ease-clinician);
+  outline: 0;
+  width: 100%;
+}
+.qm-cl-app .qm-cl-input:focus {
+  border-color: var(--sage);
+  box-shadow: 0 0 0 3px var(--sage-tint);
+}
+.qm-cl-app .qm-cl-input::placeholder { color: var(--ink-4); }
+
+/* ── Section labels + eyebrow ──
+   Used in: sectional headers across dashboard / visit-detail. */
+.qm-cl-app .qm-cl-section-label {
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-3);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.qm-cl-app .qm-cl-eyebrow {
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--sage-deep);
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+}
+
+/* ── Big serif number — stat tile ──
+   Used in: <StatCard> (Batch C). 38px Source Serif 4. */
+.qm-cl-app .qm-cl-big-num {
+  font-family: var(--serif);
+  font-size: 38px;
+  font-weight: 500;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+  line-height: 1;
+}
+
+/* ── Soft tab pills ──
+   Used in: visit-detail tabs (SOAP / Codes / Rx / Extras). */
+.qm-cl-app .qm-cl-tab-row {
+  display: inline-flex;
+  background: var(--cream-2);
+  border-radius: 999px;
+  padding: 4px;
+  gap: 2px;
+}
+.qm-cl-app .qm-cl-tab {
+  padding: 9px 18px;
+  border-radius: 999px;
+  font-family: var(--sans);
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--ink-2);
+  cursor: pointer;
+  border: 0;
+  background: transparent;
+  transition: all 240ms var(--ease-clinician);
+}
+.qm-cl-app .qm-cl-tab.qm-cl-active {
+  background: var(--cream-card);
+  color: var(--sage-deep);
+  box-shadow: var(--shadow-button);
+}
+.qm-cl-app .qm-cl-tab:hover:not(.qm-cl-active) { color: var(--ink); }
+
+/* ── Patient row — generous breathing room (76px tall) ──
+   Used in: dashboard visit list (Batch C). Hover slides 2px right + warms. */
+.qm-cl-app .qm-cl-patient-row {
+  display: grid;
+  grid-template-columns: 56px 1fr 200px 140px 140px 36px;
+  gap: 24px;
+  padding: 18px 24px;
+  align-items: center;
+  cursor: pointer;
+  border-radius: 12px;
+  transition: background 240ms var(--ease-clinician),
+              transform 240ms var(--ease-clinician);
+}
+.qm-cl-app .qm-cl-patient-row:hover {
+  background: var(--cream-2);
+  transform: translateX(2px);
+}
+.qm-cl-app .qm-cl-patient-row + .qm-cl-patient-row {
+  border-top: 1px solid var(--line);
+}
+.qm-cl-app .qm-cl-patient-row:hover + .qm-cl-patient-row,
+.qm-cl-app .qm-cl-patient-row:hover {
+  border-top-color: transparent;
+}
+
+/* ── Avatar — rounded square chip with serif initials ──
+   Used in: <PatientCard> + visit-detail header. The variants pick a
+   warm accent tint that pairs with specialty (sage for cardio, etc.) */
+.qm-cl-app .qm-cl-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 16px;
+}
+.qm-cl-app .qm-cl-avatar-sage  { background: var(--sage-tint-strong);  color: var(--sage-deep); }
+.qm-cl-app .qm-cl-avatar-teal  { background: var(--teal-tint);         color: var(--teal-deep); }
+.qm-cl-app .qm-cl-avatar-amber { background: var(--amber-tint);        color: var(--amber-deep); }
+.qm-cl-app .qm-cl-avatar-coral { background: var(--coral-tint);        color: var(--coral-deep); }
+.qm-cl-app .qm-cl-avatar-sky   { background: var(--sky-tint);          color: var(--sky-deep); }
+
+/* ── Prose body — Source Serif 4 16px line-height 1.7 ──
+   Used in: SOAP body, visit-detail prose, dashboard empty-state copy. */
+.qm-cl-app .qm-cl-prose {
+  font-family: var(--serif);
+  font-size: 16px;
+  line-height: 1.7;
+  color: var(--ink);
+  max-width: 720px;
+}
+.qm-cl-app .qm-cl-prose p { margin: 0 0 14px 0; }
+.qm-cl-app .qm-cl-prose ul { margin: 8px 0 14px 0; padding-left: 1.4em; }
+.qm-cl-app .qm-cl-prose ul li { padding-left: 4px; margin-bottom: 6px; }
+.qm-cl-app .qm-cl-prose strong { font-weight: 500; color: var(--ink); }
+.qm-cl-app .qm-cl-prose em { color: var(--sage-deep); font-style: italic; }
+
+/* ── SOAP section — letter-chip + body together ──
+   Used in: visit-detail SOAP editor (Batch D). Each S/O/A/P is a row. */
+.qm-cl-app .qm-cl-soap-section {
+  padding: 28px 0;
+  border-top: 1px solid var(--line);
+}
+.qm-cl-app .qm-cl-soap-section:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.qm-cl-app .qm-cl-soap-letter {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 17px;
+  background: var(--sage-tint);
+  color: var(--sage-deep);
+  flex-shrink: 0;
+}
+
+/* ── Transcript turn cards — doctor right-aligned, patient left ──
+   Used in: visit-detail transcript view. Cards alternate left/right
+   for visual rhythm; doctor uses sage-tint, patient uses cream-card. */
+.qm-cl-app .qm-cl-turn {
+  padding: 14px 18px;
+  border-radius: 14px;
+  background: var(--cream-card);
+  border: 1px solid var(--line);
+  max-width: 80%;
+  box-shadow: var(--shadow-card);
+}
+.qm-cl-app .qm-cl-turn-dr  {
+  background: var(--sage-tint);
+  border-color: var(--sage-tint-strong);
+  margin-left: auto;
+}
+.qm-cl-app .qm-cl-turn-pt  {
+  background: var(--cream-card);
+  border-color: var(--line);
+  margin-right: auto;
+}
+.qm-cl-app .qm-cl-speaker-label {
+  font-family: var(--sans);
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+.qm-cl-app .qm-cl-turn-dr .qm-cl-speaker-label { color: var(--sage-deep); }
+.qm-cl-app .qm-cl-turn-pt .qm-cl-speaker-label { color: var(--ink-3); }
+.qm-cl-app .qm-cl-turn-body {
+  font-family: var(--serif);
+  font-size: 15.5px;
+  line-height: 1.65;
+  color: var(--ink);
+  margin-top: 6px;
+}
+
+/* ── AI status — italic serif crossfade band ──
+   Used in: visit-detail "Regenerate" moment (Batch D). Sits inline,
+   above SOAP. Three lines crossfade through the pipeline stages. */
+.qm-cl-app .qm-cl-ai-status {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 15px;
+  color: var(--ink-2);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  background: var(--sage-tint);
+  border: 1px dashed var(--sage-tint-strong);
+  border-radius: 12px;
+  position: relative;
+  height: 52px;
+}
+.qm-cl-app .qm-cl-ai-status-line {
+  position: absolute;
+  left: 50px;
+  right: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 0;
+  animation: qm-cl-ai-crossfade 4.8s var(--ease-clinician) infinite;
+}
+.qm-cl-app .qm-cl-ai-status-line.qm-cl-s1 { animation-delay: 0s; }
+.qm-cl-app .qm-cl-ai-status-line.qm-cl-s2 { animation-delay: 1.6s; }
+.qm-cl-app .qm-cl-ai-status-line.qm-cl-s3 { animation-delay: 3.2s; }
+
+/* ── Editing caret — for the "live" SOAP editor cursor ──
+   Used in: SOAP editor when streaming new content. */
+.qm-cl-app .qm-cl-editing::after {
+  content: "";
+  display: inline-block;
+  width: 1.5px;
+  height: 1.1em;
+  vertical-align: -2px;
+  background: var(--sage);
+  margin-left: 2px;
+  animation: qm-cl-caret 1.1s ease-in-out infinite;
+}
+
+/* ── Recording state — slow halo + breathing mic dot ──
+   Used in: recording widget (Batch E). The halo is a radial gradient
+   that pulses at 3.4s; the mic-breath emits a soft sage shadow ring. */
+.qm-cl-app .qm-cl-halo {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: radial-gradient(circle, var(--sage-tint-strong) 0%, transparent 70%);
+  animation: qm-cl-halo-pulse 3.4s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+.qm-cl-app .qm-cl-halo-delayed { animation-delay: 1.7s; }
+.qm-cl-app .qm-cl-mic-dot {
+  animation: qm-cl-mic-breath 2.8s var(--ease-clinician) infinite;
+  will-change: transform, box-shadow;
+}
+
+/* Wave-bar — 3px sage bars used by the recording VU meter */
+.qm-cl-app .qm-cl-wave-bar {
+  width: 3px;
+  background: var(--sage);
+  border-radius: 999px;
+  opacity: 0.65;
+  animation: qm-cl-wave-bar 1.6s var(--ease-clinician) infinite;
+}
+
+/* Transcript line — gentle slide-up + fade-in (600ms) */
+.qm-cl-app .qm-cl-transcript-line {
+  animation: qm-cl-slide-fade 600ms var(--ease-clinician) forwards;
+  opacity: 0;
+}
+.qm-cl-app .qm-cl-transcript-line.qm-cl-l1 { animation-delay: 200ms; }
+.qm-cl-app .qm-cl-transcript-line.qm-cl-l2 { animation-delay: 1500ms; }
+.qm-cl-app .qm-cl-transcript-line.qm-cl-l3 { animation-delay: 2900ms; }
+.qm-cl-app .qm-cl-transcript-line.qm-cl-l4 { animation-delay: 4400ms; }
+
+/* ── Gentle dividers ──
+   .qm-cl-gentle-rule = 1px linear-gradient hairline (warm-charcoal at 14%)
+   .qm-cl-sage-divider = 1px sage-tinted variant — for SOAP section breaks */
+.qm-cl-app .qm-cl-gentle-rule {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--line-strong), transparent);
+  border: 0;
+}
+.qm-cl-app .qm-cl-sage-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--sage-tint-strong), transparent);
+  border: 0;
+}
+
+/* ── Misc helpers ──
+   .qm-cl-meta-dot = quiet meta-separator
+   .qm-cl-lift     = hover-lift on otherwise-static cards
+   .qm-cl-illus-*  = SVG line-art illustrations (landing empty-states) */
+.qm-cl-app .qm-cl-meta-dot { color: var(--ink-4); }
+.qm-cl-app .qm-cl-lift {
+  transition: transform 360ms var(--ease-clinician),
+              box-shadow 360ms var(--ease-clinician);
+}
+.qm-cl-app .qm-cl-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card-hover);
+}
+.qm-cl-app .qm-cl-illus-stroke {
+  stroke: var(--sage);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+}
+.qm-cl-app .qm-cl-illus-stroke-warm { stroke: var(--ink-2); stroke-width: 1.2; fill: none; }
+.qm-cl-app .qm-cl-illus-fill-sage { fill: var(--sage-tint-strong); }
+.qm-cl-app .qm-cl-illus-fill-cream { fill: var(--cream-2); }
+.qm-cl-app .qm-cl-illus-fill-amber { fill: var(--amber-tint); }
+
+/* ── Scrollbar — warm cream (Clinician-only) ── */
+.qm-cl-app ::-webkit-scrollbar { width: 10px; height: 10px; }
+.qm-cl-app ::-webkit-scrollbar-track { background: transparent; }
+.qm-cl-app ::-webkit-scrollbar-thumb { background: var(--cream-3); border-radius: 999px; }
+.qm-cl-app ::-webkit-scrollbar-thumb:hover { background: var(--ink-4); }
+.qm-cl-app ::selection { background: var(--sage-tint-strong); color: var(--ink); }
+
+/* ── Animations (global @keyframes — all prefixed qm-cl-*) ── */
+
+@keyframes qm-cl-halo-pulse {
+  0%, 100% { transform: scale(0.92); opacity: 0.55; }
+  50%      { transform: scale(1.18); opacity: 0.18; }
+}
+
+@keyframes qm-cl-mic-breath {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(122, 166, 140, 0.4); }
+  50%      { transform: scale(1.04); box-shadow: 0 0 0 14px rgba(122, 166, 140, 0); }
+}
+
+@keyframes qm-cl-slide-fade {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes qm-cl-ai-crossfade {
+  0%, 22%   { opacity: 1; }
+  33%, 100% { opacity: 0; }
+}
+
+@keyframes qm-cl-caret {
+  0%, 50%   { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+@keyframes qm-cl-wave-bar {
+  0%, 100% { height: 6px; }
+  50%      { height: var(--peak, 16px); }
+}
+
+/* Reduced motion — collapse Clinician animations to a static frame.
+   The global rule at the top of this file already matches `*` and zeroes
+   animation-duration; this block makes the Clinician-specific intent
+   explicit so a future maintainer who scopes the global rule doesn't
+   accidentally leave the Clinician halo pulsing. */
+@media (prefers-reduced-motion: reduce) {
+  .qm-cl-app .qm-cl-halo,
+  .qm-cl-app .qm-cl-mic-dot,
+  .qm-cl-app .qm-cl-wave-bar,
+  .qm-cl-app .qm-cl-transcript-line,
+  .qm-cl-app .qm-cl-ai-status-line {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
