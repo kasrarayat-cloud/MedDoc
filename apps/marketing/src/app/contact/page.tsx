@@ -20,13 +20,13 @@ export default function ContactPage() {
             className="pointer-events-none absolute inset-x-0 top-0 h-[500px]"
             style={{
               background:
-                'radial-gradient(ellipse 70% 50% at 50% 0%, rgba(139,92,246,0.18) 0%, transparent 65%)',
+                'radial-gradient(ellipse 70% 50% at 50% 0%, rgba(122,166,140,0.18) 0%, transparent 65%)',
             }}
           />
           <div className="relative mx-auto max-w-3xl px-6 lg:px-8">
             <Badge dot="violet">Contact</Badge>
-            <h1 className="mt-6 type-h1 text-text-primary">Get in touch</h1>
-            <p className="mt-6 type-body text-text-tertiary">
+            <h1 className="mt-6 type-h1">Get in touch</h1>
+            <p className="mt-6 type-body">
               We&apos;re a small team. You&apos;ll reach a human, usually the
               same day.
             </p>
@@ -43,7 +43,7 @@ export default function ContactPage() {
                 <dd className="mt-2">
                   <a
                     href="mailto:support@ashtechgroup.com"
-                    className="text-[16px] text-violet-400 hover:text-violet-300"
+                    className="text-[16px] text-[#2F5040] underline decoration-[rgba(122,166,140,0.35)] transition-colors hover:text-[#7AA68C]"
                   >
                     support@ashtechgroup.com
                   </a>
@@ -60,7 +60,7 @@ export default function ContactPage() {
                 <dd className="mt-2">
                   <a
                     href="mailto:sales@ashtechgroup.com"
-                    className="text-[16px] text-violet-400 hover:text-violet-300"
+                    className="text-[16px] text-[#2F5040] underline decoration-[rgba(122,166,140,0.35)] transition-colors hover:text-[#7AA68C]"
                   >
                     sales@ashtechgroup.com
                   </a>
@@ -77,7 +77,7 @@ export default function ContactPage() {
                 <dd className="mt-2">
                   <a
                     href="mailto:compliance@ashtechgroup.com"
-                    className="text-[16px] text-violet-400 hover:text-violet-300"
+                    className="text-[16px] text-[#2F5040] underline decoration-[rgba(122,166,140,0.35)] transition-colors hover:text-[#7AA68C]"
                   >
                     compliance@ashtechgroup.com
                   </a>
@@ -94,7 +94,7 @@ export default function ContactPage() {
                 <dd className="mt-2">
                   <a
                     href="mailto:security@ashtechgroup.com"
-                    className="text-[16px] text-violet-400 hover:text-violet-300"
+                    className="text-[16px] text-[#2F5040] underline decoration-[rgba(122,166,140,0.35)] transition-colors hover:text-[#7AA68C]"
                   >
                     security@ashtechgroup.com
                   </a>
@@ -112,7 +112,7 @@ export default function ContactPage() {
                 <dd className="mt-2">
                   <a
                     href="mailto:privacy@ashtechgroup.com"
-                    className="text-[16px] text-violet-400 hover:text-violet-300"
+                    className="text-[16px] text-[#2F5040] underline decoration-[rgba(122,166,140,0.35)] transition-colors hover:text-[#7AA68C]"
                   >
                     privacy@ashtechgroup.com
                   </a>
@@ -121,7 +121,7 @@ export default function ContactPage() {
                   Data requests (access / correction / deletion) per our{' '}
                   <a
                     href="/privacy"
-                    className="underline hover:text-violet-300"
+                    className="underline decoration-[rgba(122,166,140,0.35)] hover:text-[#7AA68C]"
                   >
                     Privacy Policy
                   </a>
@@ -136,7 +136,7 @@ export default function ContactPage() {
                 <dd className="mt-2">
                   <a
                     href="mailto:legal@ashtechgroup.com"
-                    className="text-[16px] text-violet-400 hover:text-violet-300"
+                    className="text-[16px] text-[#2F5040] underline decoration-[rgba(122,166,140,0.35)] transition-colors hover:text-[#7AA68C]"
                   >
                     legal@ashtechgroup.com
                   </a>

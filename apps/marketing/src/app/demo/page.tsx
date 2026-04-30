@@ -24,37 +24,40 @@ export default function DemoPage() {
             className="pointer-events-none absolute inset-x-0 top-0 h-[600px]"
             style={{
               background:
-                'radial-gradient(ellipse 70% 50% at 50% 0%, rgba(139,92,246,0.18) 0%, transparent 65%)',
+                'radial-gradient(ellipse 70% 50% at 50% 0%, rgba(122,166,140,0.18) 0%, transparent 65%)',
             }}
           />
           <div className="relative mx-auto max-w-4xl px-6 text-center lg:px-8">
             <div className="flex justify-center">
               <Badge dot="violet">Coming soon</Badge>
             </div>
-            <h1 className="mt-6 type-h1 text-text-primary">
+            <h1 className="mt-6 type-h1">
               A <GradientText>60-second</GradientText> walkthrough.
             </h1>
-            <p className="mx-auto mt-6 max-w-xl text-[18px] leading-relaxed text-text-secondary">
+            <p
+              className="mx-auto mt-6 max-w-xl text-[18px] leading-relaxed text-[#5C544A]"
+              style={{ fontFamily: 'var(--font-serif), Georgia, serif' }}
+            >
               We&apos;re shooting the demo this sprint. Start the free trial in
               the meantime — you&apos;ll be signed into the real product in
               under a minute.
             </p>
 
             <GradientBorder className="mx-auto mt-14 aspect-video max-w-3xl" angle="135deg">
-              <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-[15px]">
+              <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-[15px] bg-[#FFFCF5]">
                 <div
                   aria-hidden
                   className="absolute inset-0"
                   style={{
                     background:
-                      'radial-gradient(ellipse at center, rgba(139,92,246,0.18) 0%, transparent 70%)',
+                      'radial-gradient(ellipse at center, rgba(122,166,140,0.14) 0%, transparent 70%)',
                   }}
                 />
                 <div className="relative flex flex-col items-center gap-4">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-violet-500/20 backdrop-blur">
-                    <Play className="h-6 w-6 text-violet-300" />
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[rgba(122,166,140,0.18)]">
+                    <Play className="h-6 w-6 text-[#2F5040]" />
                   </div>
-                  <p className="text-[14px] text-text-tertiary">
+                  <p className="text-[14px] text-[#5C544A]">
                     Video coming soon
                   </p>
                 </div>

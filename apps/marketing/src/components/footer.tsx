@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { QuillMark } from './home/QuillMark';
 
 // External = absolute URL, opens in new tab. Internal = same-origin Link.
 type LinkDef = { href: string; label: string; external?: boolean };
@@ -44,31 +45,41 @@ const COLS: { title: string; links: LinkDef[] }[] = [
   },
 ];
 
+/**
+ * Sub-page footer (used by pricing, about, contact, demo, hipaa, privacy,
+ * security, terms, signup, not-found). Cream-2 surface, sage hairline
+ * dividers, ink-feather wordmark.
+ */
 export function Footer() {
   return (
-    <footer className="border-t border-border-subtle bg-bg-surface-1/40 backdrop-blur">
+    <footer className="border-t border-[rgba(43,38,32,0.08)] bg-[#F2EDE3]">
       <div className="mx-auto max-w-7xl px-6 py-16 lg:px-8">
         <div className="grid grid-cols-2 gap-10 md:grid-cols-5">
           <div className="col-span-2 md:col-span-1">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
+              <span className="inline-grid h-[22px] w-[22px] place-items-center">
+                <QuillMark />
+              </span>
               <span
-                aria-hidden
-                className="block h-4 w-4 rotate-45 rounded-[3px] bg-[linear-gradient(135deg,#7C3AED_0%,#A855F7_100%)]"
-              />
-              <span className="text-[15px] font-semibold tracking-tight text-text-primary">
-                QuillMD
+                className="text-[20px] tracking-[0.02em] text-[#2B2620]"
+                style={{ fontFamily: 'var(--font-serif), Georgia, serif', fontWeight: 500 }}
+              >
+                Quill
               </span>
             </div>
-            <p className="mt-4 text-[13px] leading-relaxed text-text-tertiary">
+            <p
+              className="mt-4 text-[14px] leading-relaxed text-[#5C544A]"
+              style={{ fontFamily: 'var(--font-serif), Georgia, serif' }}
+            >
               Made for doctors who deserve better tools.
             </p>
           </div>
           {COLS.map((col) => (
             <div key={col.title}>
-              <h3 className="text-[12px] font-semibold uppercase tracking-[0.1em] text-text-muted">
+              <h3 className="text-[11.5px] font-medium uppercase tracking-[0.10em] text-[#8A8278]">
                 {col.title}
               </h3>
-              <ul className="mt-4 space-y-2">
+              <ul className="mt-4 space-y-2.5">
                 {col.links.map((l) =>
                   l.external ? (
                     <li key={l.href}>
@@ -76,7 +87,7 @@ export function Footer() {
                         href={l.href}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-[13px] text-text-tertiary transition-colors hover:text-text-primary"
+                        className="text-[13.5px] text-[#5C544A] transition-colors hover:text-[#2F5040]"
                       >
                         {l.label}
                       </a>
@@ -85,7 +96,7 @@ export function Footer() {
                     <li key={l.href}>
                       <Link
                         href={l.href}
-                        className="text-[13px] text-text-tertiary transition-colors hover:text-text-primary"
+                        className="text-[13.5px] text-[#5C544A] transition-colors hover:text-[#2F5040]"
                       >
                         {l.label}
                       </Link>
@@ -96,10 +107,10 @@ export function Footer() {
             </div>
           ))}
         </div>
-        <div className="mt-12 flex flex-col items-start justify-between gap-4 border-t border-border-subtle pt-6 text-[12px] text-text-muted md:flex-row md:items-center">
+        <div className="mt-12 flex flex-col items-start justify-between gap-4 border-t border-[rgba(43,38,32,0.08)] pt-6 text-[12px] text-[#8A8278] md:flex-row md:items-center">
           <p>© {new Date().getFullYear()} QuillMD. All rights reserved.</p>
-          <p className="flex items-center gap-1">
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-cyan-400" />
+          <p className="flex items-center gap-2">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#7AA68C]" />
             All systems operational
           </p>
         </div>
