@@ -73,3 +73,13 @@ return results.violations.filter(
 ## 4. (Reserved) Items surfaced during Batch G
 
 To be appended after Batch G QA completes.
+
+---
+
+## 6. 📝 Pull mockup-fidelity dashboard content (Phase 3)
+
+Current dashboard renders 4 metric cards + 1 patient pill. The Clinician mockup at `docs/design-directions-v3/clinician/dashboard.html` shows a richer surface: morning greeting ("Good morning, Dr. Chen."), 11-row patient list with colored avatars per specialty, "Three drafts, ready when you are." section with named surface CTAs.
+
+Implementation gap is content/data-emit, not visual — palette + typography 100% match the mockup. Phase 3 task: extend dashboard data layer to surface the mockup's content density.
+
+**Surfaced by:** merge-prep round 1 verdict `🟡 PASS-WITH-FLAGS` (report `merge-prep-20260430T001246Z.md`, Flag #2). Deferred per user decision at the merge-prep gate; merge-prep round 2 (`merge-prep-20260430T010915Z.md`) confirmed the deferral and proceeded to 🟢 PASS without it.
