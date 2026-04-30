@@ -36,6 +36,8 @@ yarn-error.log*
 # with the repo (M7 — was on-VPS-only through M2-M6). Contents MUST stay
 # placeholder; never commit real values.
 !.env.production.example
+# h16-offsite-backup template (placeholder values only — never real creds).
+!.env.example
 
 # vercel
 .vercel
