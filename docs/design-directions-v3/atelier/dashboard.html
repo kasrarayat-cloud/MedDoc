@@ -1,0 +1,745 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QuillMD — Atelier · Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,300..700;1,8..60,300..700&family=Inter+Tight:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root {
+    --cream:        #FAF7F0;
+    --cream-2:      #F2EDE3;
+    --cream-3:      #EAE3D5;
+    --ink-15:       #E5DED1;
+    --ink-25:       #C9C0AF;
+    --ink-40:       #9C958A;
+    --ink-55:       #6E685E;
+    --ink-70:       #3F3A33;
+    --ink:          #1A1714;
+    --oxblood:      #7B1F2D;
+    --oxblood-deep: #5A1721;
+
+    --serif: "Source Serif 4", "Source Serif Pro", Georgia, serif;
+    --sans:  "Inter Tight", system-ui, -apple-system, sans-serif;
+    --mono:  "JetBrains Mono", ui-monospace, Menlo, monospace;
+  }
+
+  html, body { background: var(--cream); color: var(--ink-70); }
+  body {
+    font-family: var(--serif);
+    font-size: 16px;
+    line-height: 1.6;
+    font-feature-settings: "kern", "liga", "onum";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  ::selection { background: var(--oxblood); color: var(--cream); }
+
+  .atl-display {
+    font-family: var(--serif); font-weight: 600;
+    font-size: clamp(32px, 3.6vw, 44px);
+    line-height: 1.05; letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+  .atl-h1 {
+    font-family: var(--serif); font-weight: 600;
+    font-size: 28px; line-height: 1.1; letter-spacing: -0.018em;
+    color: var(--ink);
+  }
+  .atl-h2 {
+    font-family: var(--serif); font-weight: 600;
+    font-size: 19px; line-height: 1.25; letter-spacing: -0.01em;
+    color: var(--ink);
+  }
+  .atl-byline {
+    font-family: var(--serif); font-style: italic;
+    font-size: 14.5px; color: var(--ink-55); line-height: 1.55;
+  }
+  .atl-smallcaps {
+    font-family: var(--mono);
+    font-size: 10.5px; font-weight: 500;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--ink-55);
+  }
+  .atl-mono {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-55);
+    font-feature-settings: "tnum";
+  }
+  .atl-rule { height: 1px; background: var(--ink-15); border: 0; margin: 0; }
+  .atl-rule-strong { height: 1px; background: var(--ink-25); border: 0; margin: 0; }
+  .atl-rule-vert { width: 1px; align-self: stretch; background: var(--ink-15); }
+
+  a.atl-link {
+    color: inherit; text-decoration: none;
+    transition: color 140ms ease;
+  }
+  a.atl-link:hover { color: var(--oxblood); }
+
+  a.atl-link-ul {
+    color: inherit; text-decoration: none;
+    background-image: linear-gradient(var(--ink-25), var(--ink-25));
+    background-position: 0 100%; background-size: 100% 1px;
+    background-repeat: no-repeat;
+    transition: background-image 180ms ease, color 140ms ease;
+    padding-bottom: 2px;
+  }
+  a.atl-link-ul:hover { color: var(--oxblood); background-image: linear-gradient(var(--oxblood), var(--oxblood)); }
+
+  .atl-btn {
+    font-family: var(--sans); font-weight: 500;
+    font-size: 13.5px; letter-spacing: 0.005em; line-height: 1;
+    padding: 11px 18px;
+    border: 1px solid var(--ink); background: var(--ink); color: var(--cream);
+    cursor: pointer;
+    transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
+  }
+  .atl-btn:hover { background: var(--oxblood-deep); border-color: var(--oxblood-deep); }
+  .atl-btn-ghost {
+    background: transparent; color: var(--ink); border: 1px solid var(--ink-25);
+  }
+  .atl-btn-ghost:hover { color: var(--oxblood); border-color: var(--ink-40); }
+
+  .atl-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: var(--mono); font-size: 9.5px;
+    letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--ink-70);
+    border: 1px solid var(--ink-25);
+    padding: 3px 8px 2px; line-height: 1;
+    background: transparent;
+  }
+  .atl-pill .dot {
+    width: 4px; height: 4px; border-radius: 50%;
+    background: var(--ink-40);
+  }
+  .atl-pill.is-critical .dot { background: var(--oxblood); }
+
+  /* Top nav. */
+  .atl-topnav { border-bottom: 1px solid var(--ink-15); background: var(--cream); }
+  .atl-wordmark {
+    font-family: var(--serif); font-weight: 600;
+    font-size: 19.5px; letter-spacing: -0.012em; color: var(--ink); line-height: 1;
+  }
+  .atl-wordmark .amp { font-style: italic; color: var(--ink-55); font-weight: 400; }
+
+  /* User menu trigger — single accent dot. */
+  .atl-user-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--oxblood);
+    display: inline-block;
+  }
+
+  /* The visit table — editorial.
+     No row striping. No hover lift. Hairline dividers. Patient name shifts to oxblood on hover. */
+  table.atl-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--sans);
+    font-size: 14px;
+  }
+  table.atl-table thead th {
+    font-family: var(--mono);
+    font-size: 10px; font-weight: 500;
+    letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--ink-40);
+    text-align: left;
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--ink-25);
+    white-space: nowrap;
+  }
+  table.atl-table tbody td {
+    padding: 18px 18px;
+    border-bottom: 1px solid var(--ink-15);
+    vertical-align: middle;
+  }
+  table.atl-table tbody tr {
+    transition: background 140ms ease;
+    cursor: pointer;
+  }
+  table.atl-table tbody tr:hover {
+    background: var(--cream-2);
+  }
+  table.atl-table tbody tr:hover .pname {
+    color: var(--oxblood);
+  }
+  table.atl-table .pname {
+    font-family: var(--serif);
+    font-size: 16.5px;
+    font-weight: 500;
+    color: var(--ink);
+    transition: color 140ms ease;
+  }
+  table.atl-table .pname .pdob {
+    font-family: var(--serif);
+    font-style: italic;
+    font-weight: 400;
+    color: var(--ink-55);
+    font-size: 14px;
+    margin-left: 6px;
+  }
+
+  /* Stats row — horizontal hairlines, mono labels, serif numbers. */
+  .atl-stat {
+    flex: 1 1 0;
+    padding: 8px 28px 4px;
+    border-right: 1px solid var(--ink-15);
+  }
+  .atl-stat:last-child { border-right: 0; }
+  .atl-stat .label {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-40);
+    margin-bottom: 6px;
+  }
+  .atl-stat .num {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 38px;
+    line-height: 1.0;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    font-feature-settings: "lnum", "tnum";
+  }
+  .atl-stat .delta {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--ink-55);
+    margin-left: 8px;
+  }
+  .atl-stat .delta.up { color: var(--ink-70); }
+  .atl-stat .meta {
+    font-family: var(--serif); font-style: italic;
+    font-size: 13px; color: var(--ink-55);
+    margin-top: 6px;
+  }
+
+  /* Side cards — flat, hairline. */
+  .atl-card-flat {
+    background: transparent;
+    border: 1px solid var(--ink-15);
+    padding: 22px 26px;
+  }
+
+  /* Specialty/format chips — small caps mono, no fill. */
+  .atl-chip {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-55);
+    border: 1px solid var(--ink-25);
+    padding: 2px 7px 1px;
+  }
+
+  /* Faint paper grain. */
+  .atl-paper::before {
+    content: "";
+    position: fixed; inset: 0;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.10  0 0 0 0 0.09  0 0 0 0 0.07  0 0 0 0.045 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+    opacity: 0.45;
+    mix-blend-mode: multiply;
+    z-index: 1;
+  }
+  .atl-z { position: relative; z-index: 2; }
+
+  /* Side rail — hairline-divided list of activity. */
+  .atl-feed-row {
+    display: grid;
+    grid-template-columns: 60px 1fr;
+    gap: 12px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--ink-15);
+  }
+  .atl-feed-row:last-child { border-bottom: 0; }
+  .atl-feed-row .when {
+    font-family: var(--mono);
+    font-size: 11px; color: var(--ink-40);
+    letter-spacing: 0.05em;
+    padding-top: 2px;
+  }
+  .atl-feed-row .what {
+    font-family: var(--serif);
+    font-size: 14.5px;
+    color: var(--ink-70);
+    line-height: 1.55;
+  }
+  .atl-feed-row .what .who {
+    color: var(--ink); font-weight: 500;
+  }
+
+  /* Folio. */
+  .atl-folio {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--ink-40);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+
+  /* Sparkline (the only chart on this page) — single hair line. */
+  .atl-spark {
+    width: 100%; height: 36px;
+    stroke: var(--ink-70); stroke-width: 1;
+    fill: none;
+  }
+</style>
+</head>
+<body class="atl-paper">
+
+<div class="atl-z">
+
+<!-- =========================================== -->
+<!-- TOP NAV                                     -->
+<!-- =========================================== -->
+<header class="atl-topnav sticky top-0 z-30">
+  <div class="max-w-[1200px] mx-auto px-12 py-4 flex items-center justify-between">
+
+    <!-- Wordmark + section ribbon -->
+    <div class="flex items-center gap-9">
+      <a href="#" class="atl-wordmark atl-link">Quill<span class="amp">&amp;</span>MD</a>
+      <span class="atl-rule-vert" style="height: 22px;"></span>
+      <nav class="flex items-center gap-7" style="font-family: var(--sans); font-size: 13.5px;">
+        <a href="#" class="atl-link" style="color: var(--ink); border-bottom: 1px solid var(--oxblood); padding-bottom: 6px;">Dashboard</a>
+        <a href="#" class="atl-link" style="color: var(--ink-55);">Visits</a>
+        <a href="#" class="atl-link" style="color: var(--ink-55);">Patients</a>
+        <a href="#" class="atl-link" style="color: var(--ink-55);">Templates</a>
+        <a href="#" class="atl-link" style="color: var(--ink-55);">Settings</a>
+      </nav>
+    </div>
+
+    <!-- Right side — search hint + user menu -->
+    <div class="flex items-center gap-7">
+      <div class="atl-mono" style="color: var(--ink-40); border: 1px solid var(--ink-15); padding: 4px 10px;">
+        ⌘K &nbsp; Search patients, visits
+      </div>
+      <a href="#" class="flex items-center gap-2 atl-link" style="font-family: var(--sans); font-size: 13.5px;">
+        <span class="atl-user-dot"></span>
+        Caroline Hsu, MD
+      </a>
+    </div>
+  </div>
+</header>
+
+<!-- =========================================== -->
+<!-- PAGE HEADER                                 -->
+<!-- =========================================== -->
+<section>
+  <div class="max-w-[1200px] mx-auto px-12 pt-16">
+
+    <div class="atl-smallcaps mb-4" style="color: var(--ink-40);">Tuesday &nbsp;·&nbsp; April 29, 2026</div>
+
+    <div class="flex items-end justify-between gap-12 mb-2">
+      <h1 class="atl-display">
+        Good afternoon, Dr. Hsu.
+      </h1>
+      <div class="text-right">
+        <div class="atl-byline">
+          Six visits today &mdash; three signed, one in review, two yet to come.
+        </div>
+      </div>
+    </div>
+
+    <hr class="atl-rule" style="margin-top: 28px;">
+
+  </div>
+</section>
+
+<!-- =========================================== -->
+<!-- STATS ROW — horizontal, hairline-separated  -->
+<!-- =========================================== -->
+<section>
+  <div class="max-w-[1200px] mx-auto px-12 pt-10">
+
+    <div class="flex">
+      <div class="atl-stat" style="border-left: 0; padding-left: 0;">
+        <div class="label">Visits this week</div>
+        <div>
+          <span class="num">28</span>
+          <span class="delta up">+4 vs. prior</span>
+        </div>
+        <div class="meta">A heavier week than last; mostly cardiology follow-ups.</div>
+      </div>
+      <div class="atl-stat">
+        <div class="label">Avg. time to sign</div>
+        <div>
+          <span class="num">6<span style="font-size: 22px; color: var(--ink-55);">m</span> 12<span style="font-size: 22px; color: var(--ink-55);">s</span></span>
+        </div>
+        <div class="meta">From "End visit" to your signature.</div>
+      </div>
+      <div class="atl-stat">
+        <div class="label">Pending review</div>
+        <div>
+          <span class="num">3</span>
+          <span class="delta">awaiting you</span>
+        </div>
+        <div class="meta">One Rx warning held; two routine.</div>
+      </div>
+      <div class="atl-stat">
+        <div class="label">After-hours typing</div>
+        <div>
+          <span class="num">14<span style="font-size: 22px; color: var(--ink-55);">m</span></span>
+          <span class="delta up">−72%</span>
+        </div>
+        <div class="meta">Down from 49 minutes a day, six weeks ago.</div>
+      </div>
+    </div>
+
+    <hr class="atl-rule" style="margin-top: 24px;">
+
+  </div>
+</section>
+
+<!-- =========================================== -->
+<!-- BODY — 2 column: today's table + side rail  -->
+<!-- =========================================== -->
+<section>
+  <div class="max-w-[1200px] mx-auto px-12 pt-12 pb-20">
+
+    <div class="grid grid-cols-12 gap-12">
+
+      <!-- LEFT — TODAY'S VISITS                 -->
+      <div class="col-span-8">
+
+        <div class="flex items-baseline justify-between mb-6">
+          <div>
+            <div class="atl-smallcaps mb-1" style="color: var(--ink-40);">§ I. &nbsp; Today</div>
+            <h2 class="atl-h1">Today's visits</h2>
+          </div>
+          <div class="flex items-center gap-5">
+            <a href="#" class="atl-link-ul" style="font-family: var(--sans); font-size: 13.5px;">View all</a>
+            <a href="#" class="atl-btn">Begin a visit &nbsp;→</a>
+          </div>
+        </div>
+
+        <table class="atl-table">
+          <thead>
+            <tr>
+              <th style="width: 70px;">Time</th>
+              <th>Patient</th>
+              <th style="width: 160px;">Specialty</th>
+              <th style="width: 110px;">Length</th>
+              <th style="width: 130px;">Status</th>
+              <th style="width: 50px;"></th>
+            </tr>
+          </thead>
+          <tbody>
+
+            <!-- Row 1 — signed -->
+            <tr>
+              <td><span class="atl-mono" style="color: var(--ink-55);">8:30</span></td>
+              <td>
+                <div class="pname">John Smith <span class="pdob">b. 1967 · M</span></div>
+                <div class="atl-byline" style="font-size: 13px; color: var(--ink-55);">
+                  Chest tightness on exertion · R07.9
+                </div>
+              </td>
+              <td><span class="atl-chip">CARDIOLOGY</span></td>
+              <td><span class="atl-mono">14:32</span></td>
+              <td><span class="atl-pill">Signed</span></td>
+              <td class="atl-mono" style="text-align: right; color: var(--ink-25);">→</td>
+            </tr>
+
+            <!-- Row 2 — signed -->
+            <tr>
+              <td><span class="atl-mono" style="color: var(--ink-55);">9:15</span></td>
+              <td>
+                <div class="pname">Maria Lopez <span class="pdob">b. 1981 · F</span></div>
+                <div class="atl-byline" style="font-size: 13px; color: var(--ink-55);">
+                  Annual wellness · routine
+                </div>
+              </td>
+              <td><span class="atl-chip">INTERNAL MED</span></td>
+              <td><span class="atl-mono">22:08</span></td>
+              <td><span class="atl-pill">Signed</span></td>
+              <td class="atl-mono" style="text-align: right; color: var(--ink-25);">→</td>
+            </tr>
+
+            <!-- Row 3 — in review (the warning row) -->
+            <tr>
+              <td><span class="atl-mono" style="color: var(--ink-55);">10:00</span></td>
+              <td>
+                <div class="pname">Robert Chen <span class="pdob">b. 1958 · M</span></div>
+                <div class="atl-byline" style="font-size: 13px; color: var(--ink-55);">
+                  Refill metformin · suspected dosage misheard
+                </div>
+              </td>
+              <td><span class="atl-chip">FAMILY PRACTICE</span></td>
+              <td><span class="atl-mono">9:14</span></td>
+              <td><span class="atl-pill is-critical"><span class="dot"></span>In review</span></td>
+              <td class="atl-mono" style="text-align: right; color: var(--ink-25);">→</td>
+            </tr>
+
+            <!-- Row 4 — signed -->
+            <tr>
+              <td><span class="atl-mono" style="color: var(--ink-55);">11:30</span></td>
+              <td>
+                <div class="pname">Aisha Patel <span class="pdob">b. 1992 · F</span></div>
+                <div class="atl-byline" style="font-size: 13px; color: var(--ink-55);">
+                  Pregnancy follow-up · 28w
+                </div>
+              </td>
+              <td><span class="atl-chip">OB / GYN</span></td>
+              <td><span class="atl-mono">18:42</span></td>
+              <td><span class="atl-pill">Signed</span></td>
+              <td class="atl-mono" style="text-align: right; color: var(--ink-25);">→</td>
+            </tr>
+
+            <!-- Row 5 — processing -->
+            <tr>
+              <td><span class="atl-mono" style="color: var(--ink-55);">1:45</span></td>
+              <td>
+                <div class="pname">David Whitman <span class="pdob">b. 1974 · M</span></div>
+                <div class="atl-byline" style="font-size: 13px; color: var(--ink-55);">
+                  Hypertension management
+                </div>
+              </td>
+              <td><span class="atl-chip">CARDIOLOGY</span></td>
+              <td><span class="atl-mono">11:53</span></td>
+              <td><span class="atl-pill">Drafting</span></td>
+              <td class="atl-mono" style="text-align: right; color: var(--ink-25);">→</td>
+            </tr>
+
+            <!-- Row 6 — upcoming -->
+            <tr>
+              <td><span class="atl-mono" style="color: var(--ink-55);">3:00</span></td>
+              <td>
+                <div class="pname">Eleanor Reyes <span class="pdob">b. 1949 · F</span></div>
+                <div class="atl-byline" style="font-size: 13px; color: var(--ink-55);">
+                  Post-op follow-up · upcoming
+                </div>
+              </td>
+              <td><span class="atl-chip">CARDIOLOGY</span></td>
+              <td class="atl-mono" style="color: var(--ink-25);">—</td>
+              <td><span class="atl-pill">Scheduled</span></td>
+              <td class="atl-mono" style="text-align: right; color: var(--ink-25);">→</td>
+            </tr>
+
+            <!-- Row 7 — upcoming -->
+            <tr>
+              <td><span class="atl-mono" style="color: var(--ink-55);">4:15</span></td>
+              <td>
+                <div class="pname">Marcus Brown <span class="pdob">b. 1985 · M</span></div>
+                <div class="atl-byline" style="font-size: 13px; color: var(--ink-55);">
+                  New patient · referred · upcoming
+                </div>
+              </td>
+              <td><span class="atl-chip">FAMILY PRACTICE</span></td>
+              <td class="atl-mono" style="color: var(--ink-25);">—</td>
+              <td><span class="atl-pill">Scheduled</span></td>
+              <td class="atl-mono" style="text-align: right; color: var(--ink-25);">→</td>
+            </tr>
+
+          </tbody>
+        </table>
+
+        <!-- caption beneath table -->
+        <div class="flex items-center gap-6 mt-5">
+          <span class="atl-mono" style="color: var(--ink-40);">7 visits · 1 in review · 2 scheduled</span>
+          <span style="margin-left: auto;" class="atl-mono">
+            <a href="#" class="atl-link-ul">Export day &nbsp;→</a>
+            <span style="margin: 0 14px; color: var(--ink-25);">|</span>
+            <a href="#" class="atl-link-ul">Print schedule</a>
+          </span>
+        </div>
+
+        <!-- ==== Section II: This week ==== -->
+        <div style="margin-top: 64px;">
+          <div class="flex items-baseline justify-between mb-5">
+            <div>
+              <div class="atl-smallcaps mb-1" style="color: var(--ink-40);">§ II. &nbsp; This week</div>
+              <h2 class="atl-h1">A trend, not a celebration.</h2>
+            </div>
+            <div class="atl-mono" style="color: var(--ink-40);">Mon &nbsp; Tue &nbsp; Wed &nbsp; Thu &nbsp; Fri &nbsp; Sat &nbsp; Sun</div>
+          </div>
+
+          <!-- The sparkline section: serif headline + thin chart -->
+          <div class="atl-card-flat" style="padding: 28px 32px;">
+            <div class="grid grid-cols-12 gap-10 items-end">
+              <div class="col-span-3">
+                <div class="atl-smallcaps mb-1" style="color: var(--ink-40);">Visits per day</div>
+                <div class="atl-h1" style="font-size: 36px; line-height: 1.0;">
+                  4.0<span style="font-size: 19px; color: var(--ink-55); font-weight: 400;">/day</span>
+                </div>
+                <div class="atl-byline mt-1">a steady week.</div>
+              </div>
+              <div class="col-span-9">
+                <!-- Inline SVG sparkline — line only, no fill -->
+                <svg class="atl-spark" viewBox="0 0 600 60" preserveAspectRatio="none">
+                  <polyline points="0,42 100,28 200,34 300,18 400,30 500,20 600,32"
+                            fill="none" stroke="var(--ink-70)" stroke-width="1.25" />
+                  <!-- baseline rule -->
+                  <line x1="0" y1="58" x2="600" y2="58" stroke="var(--ink-15)" stroke-width="1" />
+                  <!-- today marker -->
+                  <line x1="500" y1="0" x2="500" y2="58" stroke="var(--ink-25)" stroke-width="1" stroke-dasharray="2 3" />
+                  <circle cx="500" cy="20" r="2.5" fill="var(--oxblood)"/>
+                </svg>
+                <div class="flex justify-between atl-mono mt-2" style="color: var(--ink-40); font-size: 11px;">
+                  <span>3</span><span>5</span><span>4</span><span>6</span><span>4</span><span>6</span><span>4</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- RIGHT — SIDE RAIL                     -->
+      <aside class="col-span-4">
+
+        <!-- Activity feed -->
+        <div>
+          <div class="atl-smallcaps mb-1" style="color: var(--ink-40);">§ III. &nbsp; Activity</div>
+          <h2 class="atl-h1 mb-4" style="font-size: 22px;">What has happened.</h2>
+
+          <div class="atl-card-flat">
+            <div class="atl-feed-row">
+              <div class="when">2:14 PM</div>
+              <div class="what">
+                <span class="who">John Smith</span> — chart signed.
+              </div>
+            </div>
+            <div class="atl-feed-row">
+              <div class="when">1:48 PM</div>
+              <div class="what">
+                Rx warning held on <span class="who">Robert Chen</span> — metformin dosage requires verification.
+              </div>
+            </div>
+            <div class="atl-feed-row">
+              <div class="when">12:02 PM</div>
+              <div class="what">
+                <span class="who">Aisha Patel</span> — chart signed and sent to EHR.
+              </div>
+            </div>
+            <div class="atl-feed-row">
+              <div class="when">11:14 AM</div>
+              <div class="what">
+                <span class="who">Maria Lopez</span> — chart signed.
+              </div>
+            </div>
+            <div class="atl-feed-row">
+              <div class="when">9:38 AM</div>
+              <div class="what">
+                New template &mdash; <em>Cardiology · brief follow-up</em> &mdash; created by you.
+              </div>
+            </div>
+            <div class="atl-feed-row">
+              <div class="when">8:46 AM</div>
+              <div class="what">
+                <span class="who">John Smith</span> — visit recorded, draft ready.
+              </div>
+            </div>
+          </div>
+
+          <a href="#" class="atl-link-ul mt-4 inline-block" style="font-family: var(--sans); font-size: 13.5px;">View full activity log &nbsp;→</a>
+        </div>
+
+        <!-- Templates -->
+        <div style="margin-top: 48px;">
+          <div class="atl-smallcaps mb-1" style="color: var(--ink-40);">§ IV. &nbsp; Templates</div>
+          <h2 class="atl-h1 mb-4" style="font-size: 22px;">Your idiom, saved.</h2>
+
+          <ul class="space-y-0">
+            <li style="padding: 14px 0; border-bottom: 1px solid var(--ink-15);" class="flex items-baseline justify-between">
+              <div>
+                <div style="font-family: var(--serif); font-size: 16px; color: var(--ink); font-weight: 500;">SOAP &middot; full</div>
+                <div class="atl-byline" style="font-size: 13px;">Default for cardiology follow-ups.</div>
+              </div>
+              <span class="atl-mono" style="color: var(--ink-40);">used 18×</span>
+            </li>
+            <li style="padding: 14px 0; border-bottom: 1px solid var(--ink-15);" class="flex items-baseline justify-between">
+              <div>
+                <div style="font-family: var(--serif); font-size: 16px; color: var(--ink); font-weight: 500;">SOAP &middot; brief</div>
+                <div class="atl-byline" style="font-size: 13px;">Refills, routine wellness, quick visits.</div>
+              </div>
+              <span class="atl-mono" style="color: var(--ink-40);">used 9×</span>
+            </li>
+            <li style="padding: 14px 0; border-bottom: 1px solid var(--ink-15);" class="flex items-baseline justify-between">
+              <div>
+                <div style="font-family: var(--serif); font-size: 16px; color: var(--ink); font-weight: 500;">H&amp;P &middot; new patient</div>
+                <div class="atl-byline" style="font-size: 13px;">First-encounter, deeper history.</div>
+              </div>
+              <span class="atl-mono" style="color: var(--ink-40);">used 1×</span>
+            </li>
+            <li style="padding: 14px 0;" class="flex items-baseline justify-between">
+              <div>
+                <div style="font-family: var(--serif); font-size: 16px; color: var(--ink); font-weight: 500;">Procedure note</div>
+                <div class="atl-byline" style="font-size: 13px;">For in-office cardioversions.</div>
+              </div>
+              <span class="atl-mono" style="color: var(--ink-40);">used 0×</span>
+            </li>
+          </ul>
+
+          <a href="#" class="atl-link-ul mt-3 inline-block" style="font-family: var(--sans); font-size: 13.5px;">Manage templates &nbsp;→</a>
+        </div>
+
+        <!-- A quiet pull-quote — like a magazine sidebar -->
+        <div style="margin-top: 56px; padding-top: 24px; border-top: 1px solid var(--ink-15);">
+          <div class="atl-smallcaps mb-3" style="color: var(--ink-40);">A note</div>
+          <blockquote style="font-family: var(--serif); font-size: 19px; line-height: 1.45; color: var(--ink); letter-spacing: -0.005em;">
+            &ldquo;The chart should answer the questions a colleague would ask of the visit, written in the doctor's voice, in fewer words than seemed possible.&rdquo;
+          </blockquote>
+          <div class="atl-byline mt-3">
+            — from the QuillMD style guide, §3
+          </div>
+        </div>
+
+      </aside>
+
+    </div>
+
+  </div>
+</section>
+
+<!-- =========================================== -->
+<!-- EMPTY-LIST EXAMPLE (rendered small at foot) -->
+<!-- =========================================== -->
+<section>
+  <div class="max-w-[1200px] mx-auto px-12 pb-20">
+    <hr class="atl-rule-strong" style="margin-bottom: 56px;">
+
+    <div class="atl-smallcaps mb-3" style="color: var(--ink-40);">§ V. &nbsp; A quieter day</div>
+    <h2 class="atl-h1 mb-3 max-w-[640px]">When there are no visits.</h2>
+    <p class="atl-byline mb-8 max-w-[640px]">
+      How the dashboard reads on a clear morning. (For reference; today is not such a day.)
+    </p>
+
+    <div style="border: 1px solid var(--ink-15); padding: 56px 64px; text-align: center; max-width: 760px;">
+      <div class="atl-smallcaps mb-4" style="color: var(--ink-40);">Today</div>
+      <div style="font-family: var(--serif); font-style: italic; font-size: 22px; line-height: 1.4; color: var(--ink); max-width: 460px; margin: 0 auto;">
+        No visits yet today.
+      </div>
+      <p class="atl-byline mt-3" style="max-width: 480px; margin: 0 auto;">
+        When you begin one, it will appear here.
+      </p>
+      <a href="#" class="atl-btn mt-7 inline-block" style="margin-top: 28px;">Begin first visit &nbsp;→</a>
+    </div>
+
+  </div>
+</section>
+
+<!-- =========================================== -->
+<!-- FOOTER (folio)                              -->
+<!-- =========================================== -->
+<footer>
+  <div class="max-w-[1200px] mx-auto px-12 pb-12">
+    <hr class="atl-rule" style="margin-bottom: 18px;">
+    <div class="flex items-center justify-between">
+      <div class="atl-folio">QuillMD &nbsp;·&nbsp; Dashboard &nbsp;·&nbsp; v3.atelier</div>
+      <div class="atl-folio" style="color: var(--ink-40);">Last sync &nbsp;·&nbsp; 2:14 PM &nbsp;·&nbsp; Apr 29</div>
+    </div>
+  </div>
+</footer>
+
+</div><!-- /atl-z -->
+
+</body>
+</html>

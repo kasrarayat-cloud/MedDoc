@@ -1,0 +1,1370 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>QuillMD · CHART · dashboard</title>
+<meta name="viewport" content="width=1600, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  /* =====================================================================
+     CHART — dashboard
+     ----------------------------------------------------------------------
+     Density rules:
+       padding scale: 4 / 8 / 12  (NOT 16/24/32)
+       row height:    24px   (table rows)   28px (toolbar inputs)
+       base font:     12px JetBrains Mono   line-height 1.5
+       accent:        signal-amber #F5A524
+     ===================================================================== */
+  :root {
+    /* tokens — App-redesign-v1 base */
+    --bg:        #07060C;
+    --bg-1:      #0C0A16;
+    --bg-2:      #14111F;
+    --bg-3:      #1C1828;
+    --bg-4:      #221C30;
+
+    --line-soft: #191524;
+    --line:      #26222F;
+    --line-strong: #3A3445;
+
+    --fg:        #F5F2FA;
+    --fg-2:      #B9B2C9;
+    --fg-3:      #7E7791;
+    --fg-4:      #4B4558;
+
+    --mint:  #6EE7B7;
+    --amber: #FBBF24;       /* warning */
+    --coral: #FB7185;
+
+    /* CHART-specific accent */
+    --signal-amber:        #F5A524;
+    --signal-amber-bright: #FCBF49;
+    --signal-amber-deep:   #B97A12;
+    --signal-amber-ink:    #2A1A04;
+
+    /* row striping */
+    --stripe-a: var(--bg-1);
+    --stripe-b: #0E0B18;
+
+    --sans:  'Inter Tight', system-ui, sans-serif;
+    --mono:  'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+
+    --row-h: 24px;
+    --tb-h: 36px;
+    --sb-h: 22px;
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--fg);
+    font-family: var(--mono);
+    font-size: 12px; line-height: 1.5;
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: geometricPrecision;
+  }
+
+  ::selection { background: var(--signal-amber); color: var(--signal-amber-ink); }
+
+  .sans { font-family: var(--sans); letter-spacing: -0.01em; }
+  .mono { font-family: var(--mono); }
+
+  /* ─────────────── shell grid ─────────────── */
+  .shell {
+    display: grid;
+    grid-template-rows: var(--tb-h) 1fr var(--sb-h);
+    grid-template-columns: 1fr;
+    height: 100vh;
+  }
+
+  .body {
+    display: grid;
+    grid-template-columns: 220px 1fr 280px;
+    min-height: 0;
+  }
+
+  /* ─────────────── top toolbar (sticky) ─────────────── */
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: var(--tb-h);
+    padding: 0 8px;
+    background: var(--bg-1);
+    border-bottom: 1px solid var(--line);
+  }
+  .logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 8px;
+    height: 24px;
+    border: 1px solid var(--line);
+    background: var(--bg-2);
+    border-radius: 2px;
+    font-family: var(--sans);
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: -0.01em;
+    color: var(--fg);
+  }
+  .logo .glyph {
+    width: 10px; height: 10px;
+    background: var(--signal-amber);
+    border-radius: 1px;
+    transform: rotate(45deg);
+  }
+  .ws-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 8px;
+    height: 24px;
+    border: 1px solid var(--line);
+    background: var(--bg-2);
+    border-radius: 2px;
+    color: var(--fg-2);
+    cursor: pointer;
+  }
+  .ws-switch:hover { border-color: var(--line-strong); color: var(--fg); }
+  .ws-switch .ws-name { color: var(--fg); font-weight: 500; }
+  .ws-switch .ws-role { color: var(--fg-3); }
+  .ws-switch .caret { color: var(--fg-3); }
+
+  /* command bar — ALWAYS visible, takes ~40% */
+  .cmdbar {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 6px;
+    border: 1px solid var(--line);
+    background: var(--bg-2);
+    border-radius: 2px;
+    color: var(--fg-2);
+    max-width: 640px;
+  }
+  .cmdbar:focus-within { border-color: var(--signal-amber); }
+  .cmdbar .prompt { color: var(--signal-amber); font-weight: 600; }
+  .cmdbar input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--fg);
+    font: inherit;
+    font-size: 12px;
+  }
+  .cmdbar input::placeholder { color: var(--fg-3); }
+  .cmdbar .kbd-end { color: var(--fg-3); font-size: 10.5px; }
+
+  .tb-spacer { flex: 1; }
+
+  .tb-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 24px;
+    padding: 0 8px;
+    border: 1px solid var(--line);
+    background: transparent;
+    border-radius: 2px;
+    color: var(--fg-2);
+    font: inherit;
+    font-size: 11.5px;
+    cursor: pointer;
+  }
+  .tb-btn:hover { border-color: var(--line-strong); color: var(--fg); background: var(--bg-2); }
+  .tb-btn .kbd { color: var(--fg-3); border-left: 1px solid var(--line); padding-left: 6px; margin-left: 2px; font-size: 10.5px; }
+
+  .user-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 24px;
+    padding: 0 4px 0 8px;
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    background: var(--bg-2);
+    color: var(--fg-2);
+  }
+  .user-chip .ini {
+    width: 16px; height: 16px;
+    background: var(--signal-amber-deep);
+    color: var(--signal-amber-ink);
+    border-radius: 1px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 10px;
+  }
+
+  /* ─────────────── sidenav (left) ─────────────── */
+  .sidenav {
+    background: var(--bg-1);
+    border-right: 1px solid var(--line);
+    overflow-y: auto;
+    padding: 8px 0;
+  }
+  .sn-section {
+    padding: 8px 12px 4px;
+    color: var(--fg-3);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .sn-section .count { color: var(--fg-4); }
+  .sn-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px;
+    height: 24px;
+    color: var(--fg-2);
+    cursor: pointer;
+    border-left: 2px solid transparent;
+  }
+  .sn-item:hover { background: var(--bg-2); color: var(--fg); }
+  .sn-item.active {
+    color: var(--fg);
+    background: var(--bg-2);
+    border-left-color: var(--signal-amber);
+  }
+  .sn-item .ic {
+    width: 12px; text-align: center;
+    color: var(--fg-3);
+    font-size: 11px;
+  }
+  .sn-item.active .ic { color: var(--signal-amber); }
+  .sn-item .lbl { flex: 1; }
+  .sn-item .badge {
+    color: var(--fg-3);
+    font-size: 10.5px;
+    padding: 0 4px;
+    height: 14px;
+    line-height: 14px;
+    border: 1px solid var(--line);
+    border-radius: 2px;
+  }
+  .sn-item .kbd-mini {
+    color: var(--fg-4);
+    font-size: 10px;
+  }
+  .sn-divider { height: 1px; background: var(--line); margin: 8px 12px; }
+
+  /* ─────────────── main pane ─────────────── */
+  .main {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    background: var(--bg);
+    overflow: hidden;
+  }
+
+  /* page header strip */
+  .page-h {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--line);
+    background: var(--bg);
+  }
+  .page-h .crumb {
+    color: var(--fg-3);
+  }
+  .page-h .crumb b { color: var(--fg-2); font-weight: 500; }
+  .page-h .crumb .sep { color: var(--fg-4); margin: 0 4px; }
+  .page-h .ts {
+    margin-left: auto;
+    color: var(--fg-3);
+    font-size: 11px;
+  }
+  .page-h .live-dot {
+    display: inline-block;
+    width: 6px; height: 6px;
+    background: var(--mint);
+    border-radius: 50%;
+    margin-right: 4px;
+    box-shadow: 0 0 0 0 rgba(110,231,183,0.5);
+    animation: dot-pulse-mint 4s ease-in-out infinite;
+  }
+  @keyframes dot-pulse-mint {
+    0%,100% { box-shadow: 0 0 0 0 rgba(110,231,183,0.4); }
+    50%     { box-shadow: 0 0 0 4px rgba(110,231,183,0); }
+  }
+
+  /* stat strip — 6 metrics in mono */
+  .statstrip {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    border-bottom: 1px solid var(--line);
+    background: var(--bg-1);
+  }
+  .stat {
+    padding: 8px 12px;
+    border-right: 1px solid var(--line);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    cursor: pointer;
+  }
+  .stat:last-child { border-right: none; }
+  .stat:hover { background: var(--bg-2); }
+  .stat .lbl {
+    color: var(--fg-3);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .stat .val {
+    color: var(--fg);
+    font-size: 18px;
+    font-weight: 600;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat .delta {
+    font-size: 10.5px;
+    color: var(--fg-3);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .stat .delta.up { color: var(--mint); }
+  .stat .delta.down { color: var(--coral); }
+  .stat .delta.signal { color: var(--signal-amber); }
+  .stat .spark {
+    margin-top: 2px;
+    height: 14px;
+    width: 100%;
+  }
+
+  /* filter bar — mono syntax */
+  .filterbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--line);
+    background: var(--bg-1);
+  }
+  .fb-input {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 24px;
+    padding: 0 6px;
+    border: 1px solid var(--line);
+    background: var(--bg-2);
+    border-radius: 2px;
+  }
+  .fb-input:focus-within { border-color: var(--signal-amber); }
+  .fb-input .label { color: var(--fg-3); font-size: 10.5px; }
+  .fb-input .syntax-token {
+    padding: 0 4px;
+    border: 1px solid var(--line-strong);
+    border-radius: 2px;
+    background: var(--bg-3);
+    color: var(--fg);
+    font-size: 11px;
+  }
+  .fb-input .syntax-token .k { color: var(--signal-amber); }
+  .fb-input .syntax-token .v { color: var(--fg); }
+  .fb-input input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--fg);
+    font: inherit;
+    font-size: 12px;
+  }
+  .fb-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 22px;
+    padding: 0 6px;
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    color: var(--fg-2);
+    background: var(--bg-2);
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .fb-pill:hover { border-color: var(--line-strong); color: var(--fg); }
+  .fb-pill .kbd-mini { color: var(--fg-4); }
+
+  /* table */
+  .table-wrap {
+    flex: 1;
+    overflow: auto;
+    position: relative;
+  }
+  table.qm-tbl {
+    width: 100%;
+    border-collapse: collapse;
+    font: inherit;
+    font-size: 12px;
+  }
+  table.qm-tbl thead th {
+    position: sticky; top: 0; z-index: 2;
+    background: var(--bg-1);
+    border-bottom: 1px solid var(--line-strong);
+    color: var(--fg-3);
+    font-weight: 500;
+    text-align: left;
+    padding: 4px 8px;
+    height: 24px;
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+  }
+  table.qm-tbl thead th:hover { color: var(--fg); }
+  table.qm-tbl thead th .sort-ind {
+    display: inline-block;
+    margin-left: 4px;
+    color: var(--fg-4);
+    transition: transform 120ms ease, color 120ms ease;
+  }
+  table.qm-tbl thead th.sorted .sort-ind { color: var(--signal-amber); }
+  table.qm-tbl thead th.sorted-desc .sort-ind { transform: rotate(180deg); }
+  table.qm-tbl thead th.num { text-align: right; }
+  /* sticky first column on wide tables */
+  table.qm-tbl thead th:first-child,
+  table.qm-tbl tbody td:first-child {
+    position: sticky; left: 0; z-index: 1;
+  }
+  table.qm-tbl thead th:first-child { z-index: 3; background: var(--bg-1); }
+  table.qm-tbl tbody td:first-child { background: inherit; }
+
+  table.qm-tbl tbody tr {
+    height: var(--row-h);
+    background: var(--stripe-a);
+    border-bottom: 1px solid var(--line-soft);
+    cursor: pointer;
+  }
+  table.qm-tbl tbody tr:nth-child(even) { background: var(--stripe-b); }
+  table.qm-tbl tbody tr:hover {
+    background: var(--bg-3);
+  }
+  table.qm-tbl tbody tr.active {
+    background: rgba(245,165,36,0.06);
+    box-shadow: inset 2px 0 0 var(--signal-amber);
+  }
+  table.qm-tbl tbody tr.active td:first-child { background: rgba(245,165,36,0.06); }
+  table.qm-tbl tbody td {
+    padding: 0 8px;
+    color: var(--fg-2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    border-right: 1px solid var(--line-soft);
+  }
+  table.qm-tbl tbody td:last-child { border-right: none; }
+  table.qm-tbl tbody td.fg { color: var(--fg); }
+  table.qm-tbl tbody td.dim { color: var(--fg-3); }
+  table.qm-tbl tbody td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  table.qm-tbl tbody td .pid {
+    color: var(--fg-4);
+    font-size: 10.5px;
+    margin-right: 4px;
+  }
+  table.qm-tbl tbody td .pname { color: var(--fg); font-weight: 500; }
+  table.qm-tbl tbody td .meta { color: var(--fg-3); font-size: 10.5px; margin-left: 4px; }
+
+  /* flat status pills — CHART idiom */
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 16px;
+    padding: 0 5px;
+    border: 1px solid currentColor;
+    border-radius: 2px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    line-height: 1;
+    background: transparent;
+  }
+  .pill::before {
+    content: '';
+    display: inline-block;
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+  .pill.queued   { color: var(--fg-3); }
+  .pill.rec      { color: var(--signal-amber); }
+  .pill.rec::before { animation: dot-pulse-amber 1.4s ease-in-out infinite; }
+  .pill.proc     { color: var(--signal-amber-bright); }
+  .pill.ready    { color: var(--mint); }
+  .pill.review   { color: var(--amber); }
+  .pill.signed   { color: var(--fg-2); }
+  .pill.failed   { color: var(--coral); }
+  @keyframes dot-pulse-amber {
+    0%,100% { opacity: 0.55; }
+    50%     { opacity: 1; }
+  }
+
+  /* footer hint legend */
+  .legend {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 6px 12px;
+    border-top: 1px solid var(--line);
+    background: var(--bg-1);
+    color: var(--fg-3);
+    font-size: 10.5px;
+  }
+  .legend .kg {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-right: 12px;
+  }
+  .legend .kbd {
+    display: inline-block;
+    border: 1px solid var(--line-strong);
+    background: var(--bg-2);
+    color: var(--fg-2);
+    padding: 0 4px;
+    height: 14px;
+    line-height: 14px;
+    border-radius: 2px;
+    font-size: 10px;
+    min-width: 14px;
+    text-align: center;
+  }
+
+  /* ─────────────── context rail (right) ─────────────── */
+  .ctxrail {
+    background: var(--bg-1);
+    border-left: 1px solid var(--line);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+  .ctx-section {
+    border-bottom: 1px solid var(--line);
+    padding: 8px 12px;
+  }
+  .ctx-section h3 {
+    margin: 0 0 6px;
+    color: var(--fg-3);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .ctx-section h3 .kbd {
+    color: var(--fg-4);
+    font-size: 9.5px;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .kv {
+    display: grid;
+    grid-template-columns: 80px 1fr;
+    gap: 4px 8px;
+    font-size: 11.5px;
+  }
+  .kv dt { color: var(--fg-3); }
+  .kv dd { color: var(--fg); margin: 0; }
+  .kv dd .v-dim { color: var(--fg-3); }
+  .kv dd .v-amber { color: var(--signal-amber); }
+  .kv dd .v-mint { color: var(--mint); }
+
+  /* L1 ▸ L2 ▸ ... pipeline trace */
+  .pipeline {
+    font-size: 11.5px;
+    color: var(--fg-3);
+    line-height: 1.4;
+    padding: 4px 0;
+    word-spacing: 1px;
+  }
+  .pipeline .stage { color: var(--fg-3); }
+  .pipeline .stage.done { color: var(--mint); }
+  .pipeline .stage.done::before { content: '✓ '; }
+  .pipeline .stage.active {
+    color: var(--signal-amber);
+    font-weight: 600;
+    background: rgba(245,165,36,0.08);
+    padding: 0 3px;
+    border-radius: 2px;
+  }
+  .pipeline .stage.active::after {
+    content: '▌';
+    margin-left: 2px;
+    animation: blink 1.05s steps(2, start) infinite;
+    color: var(--signal-amber);
+  }
+  .pipeline .sep { color: var(--fg-4); margin: 0 4px; }
+  .pipeline .ts {
+    color: var(--fg-4);
+    font-size: 10.5px;
+    margin-top: 4px;
+  }
+  @keyframes blink { 0%,49% { opacity: 1; } 50%,100% { opacity: 0; } }
+
+  /* audit trail rows */
+  .audit-row {
+    display: grid;
+    grid-template-columns: 56px 1fr 60px;
+    gap: 8px;
+    padding: 3px 0;
+    font-size: 11px;
+    border-bottom: 1px dashed var(--line-soft);
+    color: var(--fg-2);
+  }
+  .audit-row:last-child { border-bottom: none; }
+  .audit-row .when { color: var(--fg-3); }
+  .audit-row .who  { color: var(--fg-4); text-align: right; }
+
+  /* ─────────────── statusbar (sticky bottom) ─────────────── */
+  .statusbar {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    height: var(--sb-h);
+    background: var(--bg-1);
+    border-top: 1px solid var(--line);
+    color: var(--fg-3);
+    font-size: 10.5px;
+  }
+  .sb-cell {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 10px;
+    height: 100%;
+    border-right: 1px solid var(--line);
+  }
+  .sb-cell:last-child { border-right: none; }
+  .sb-cell.mode {
+    background: var(--signal-amber-deep);
+    color: var(--signal-amber-ink);
+    font-weight: 700;
+    letter-spacing: 0.1em;
+  }
+  .sb-cell.mode .glyph { font-size: 9px; }
+  .sb-cell .label { color: var(--fg-4); }
+  .sb-cell .v { color: var(--fg-2); }
+  .sb-cell .v.mint { color: var(--mint); }
+  .sb-cell .v.amber { color: var(--signal-amber); }
+  .sb-cell .v.coral { color: var(--coral); }
+  .sb-spacer { flex: 1; }
+  .sb-cell .blink {
+    display: inline-block;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+  .sb-cell .blink.live { animation: dot-pulse-mint 4s ease-in-out infinite; background: var(--mint); }
+
+  /* command-palette autocomplete pop (visual demo, statically open) */
+  .cmd-pop {
+    position: absolute;
+    top: 36px;
+    left: 244px;
+    width: 640px;
+    background: var(--bg-2);
+    border: 1px solid var(--line-strong);
+    border-radius: 2px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    z-index: 30;
+    display: none;            /* toggled via JS or [data-show] */
+  }
+  .cmd-pop[data-show="1"] { display: block; }
+  .cmd-pop .cp-section {
+    padding: 4px 8px;
+    color: var(--fg-3);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--line);
+  }
+  .cmd-pop .cp-row {
+    display: grid;
+    grid-template-columns: 16px 1fr auto;
+    gap: 8px;
+    padding: 4px 8px;
+    align-items: center;
+    cursor: pointer;
+  }
+  .cmd-pop .cp-row + .cp-row { border-top: 1px solid var(--line-soft); }
+  .cmd-pop .cp-row:hover, .cmd-pop .cp-row.sel { background: var(--bg-3); }
+  .cmd-pop .cp-row.sel { box-shadow: inset 2px 0 0 var(--signal-amber); }
+  .cmd-pop .cp-row .ic { color: var(--fg-3); }
+  .cmd-pop .cp-row .lbl { color: var(--fg); }
+  .cmd-pop .cp-row .lbl small { color: var(--fg-3); margin-left: 8px; }
+  .cmd-pop .cp-row .kbd-grp { display: inline-flex; gap: 3px; }
+  .cmd-pop .cp-foot {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 8px;
+    border-top: 1px solid var(--line);
+    color: var(--fg-3);
+    font-size: 10.5px;
+    background: var(--bg-1);
+  }
+
+  /* utility bits */
+  .kbd {
+    display: inline-block;
+    border: 1px solid var(--line-strong);
+    background: var(--bg-2);
+    color: var(--fg-2);
+    padding: 0 4px;
+    height: 14px;
+    line-height: 14px;
+    border-radius: 2px;
+    font-size: 10px;
+    min-width: 14px;
+    text-align: center;
+    font-family: var(--mono);
+  }
+  .kbd.amber { color: var(--signal-amber); border-color: var(--signal-amber-deep); }
+
+  /* mini sparkline (svg inline styling) */
+  .spark path { fill: none; stroke-width: 1.25; }
+  .spark .l-mint { stroke: var(--mint); }
+  .spark .l-amber { stroke: var(--signal-amber); }
+  .spark .l-coral { stroke: var(--coral); }
+  .spark .l-fg3   { stroke: var(--fg-3); }
+
+  /* scrollbars */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: var(--bg-3); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--line-strong); }
+  ::-webkit-scrollbar-track { background: transparent; }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- ─────────────────────────── TOP TOOLBAR ─────────────────────────── -->
+  <header class="toolbar">
+    <span class="logo"><span class="glyph"></span>QuillMD</span>
+
+    <button class="ws-switch" title="switch workspace [⌘W]">
+      <span class="ws-name sans">Park Slope Internal</span>
+      <span class="ws-role">/ admin</span>
+      <span class="caret">▾</span>
+    </button>
+
+    <div class="cmdbar" role="search">
+      <span class="prompt">›</span>
+      <input value="patient:&quot;Reyes&quot; status:ready" placeholder="search visits, patients, codes — or type a command  /help" />
+      <span class="kbd-end">always-on · <span style="color:var(--fg-2)">Esc</span> clear</span>
+    </div>
+
+    <div class="tb-spacer"></div>
+
+    <button class="tb-btn" title="new visit">
+      <span>+ new visit</span>
+      <span class="kbd">N</span>
+    </button>
+    <button class="tb-btn" title="kbd legend">
+      <span>?</span>
+    </button>
+    <span class="user-chip">
+      <span class="ini">EJ</span>
+      <span class="sans" style="color:var(--fg);font-size:11.5px">Dr. E. Jain</span>
+      <span class="caret" style="color:var(--fg-3)">▾</span>
+    </span>
+  </header>
+
+  <!-- always-visible cmd-palette flyout — STATICALLY VISIBLE for the mock -->
+  <div class="cmd-pop" data-show="0" style="position:fixed; left: 244px; top: 36px;">
+    <div class="cp-section">commands</div>
+    <div class="cp-row sel">
+      <span class="ic">+</span>
+      <span class="lbl">New visit <small>start ambient recording or upload audio</small></span>
+      <span class="kbd-grp"><span class="kbd">N</span></span>
+    </div>
+    <div class="cp-row">
+      <span class="ic">⤓</span>
+      <span class="lbl">Open visit by ID <small>e.g. v-7842 (paste anywhere)</small></span>
+      <span class="kbd-grp"><span class="kbd">⌘</span><span class="kbd">O</span></span>
+    </div>
+    <div class="cp-foot">
+      <span><span class="kbd">↑↓</span> nav · <span class="kbd">↵</span> open · <span class="kbd">Esc</span> close</span>
+      <span>14 results · 11ms</span>
+    </div>
+  </div>
+
+  <!-- ─────────────────────────── BODY ─────────────────────────── -->
+  <div class="body">
+
+    <!-- ─────────────────── SIDENAV ─────────────────── -->
+    <aside class="sidenav">
+
+      <div class="sn-section">workspace <span class="count">3</span></div>
+      <div class="sn-item active">
+        <span class="ic">▣</span><span class="lbl sans">Dashboard</span>
+        <span class="kbd-mini">g d</span>
+      </div>
+      <div class="sn-item">
+        <span class="ic">≡</span><span class="lbl sans">Visits</span>
+        <span class="badge">214</span>
+        <span class="kbd-mini">g v</span>
+      </div>
+      <div class="sn-item">
+        <span class="ic">⊕</span><span class="lbl sans">Patients</span>
+        <span class="badge">1.2k</span>
+        <span class="kbd-mini">g p</span>
+      </div>
+      <div class="sn-item">
+        <span class="ic">℞</span><span class="lbl sans">Rx warnings</span>
+        <span class="badge" style="color:var(--coral);border-color:var(--coral)">3</span>
+        <span class="kbd-mini">g r</span>
+      </div>
+
+      <div class="sn-divider"></div>
+      <div class="sn-section">queues <span class="count">live</span></div>
+      <div class="sn-item">
+        <span class="ic" style="color:var(--signal-amber)">●</span>
+        <span class="lbl sans">Processing</span>
+        <span class="badge" style="color:var(--signal-amber);border-color:var(--signal-amber-deep)">7</span>
+      </div>
+      <div class="sn-item">
+        <span class="ic" style="color:var(--mint)">●</span>
+        <span class="lbl sans">Ready</span>
+        <span class="badge" style="color:var(--mint);border-color:#1F4838">23</span>
+      </div>
+      <div class="sn-item">
+        <span class="ic" style="color:var(--amber)">●</span>
+        <span class="lbl sans">Review</span>
+        <span class="badge" style="color:var(--amber);border-color:#5C420C">5</span>
+      </div>
+      <div class="sn-item">
+        <span class="ic" style="color:var(--coral)">●</span>
+        <span class="lbl sans">Failed</span>
+        <span class="badge" style="color:var(--coral);border-color:#5C2030">1</span>
+      </div>
+
+      <div class="sn-divider"></div>
+      <div class="sn-section">saved views <span class="count">5</span></div>
+      <div class="sn-item">
+        <span class="ic">»</span><span class="lbl sans">Today · me</span>
+        <span class="kbd-mini">v 1</span>
+      </div>
+      <div class="sn-item">
+        <span class="ic">»</span><span class="lbl sans">Awaiting sign-off</span>
+        <span class="kbd-mini">v 2</span>
+      </div>
+      <div class="sn-item">
+        <span class="ic">»</span><span class="lbl sans">Last 24h · failed</span>
+        <span class="kbd-mini">v 3</span>
+      </div>
+      <div class="sn-item">
+        <span class="ic">»</span><span class="lbl sans">Rx-flagged</span>
+        <span class="kbd-mini">v 4</span>
+      </div>
+      <div class="sn-item">
+        <span class="ic">»</span><span class="lbl sans">Cardio · this week</span>
+        <span class="kbd-mini">v 5</span>
+      </div>
+
+      <div class="sn-divider"></div>
+      <div class="sn-section">admin</div>
+      <div class="sn-item">
+        <span class="ic">⊞</span><span class="lbl sans">Practices</span>
+        <span class="badge">4</span>
+      </div>
+      <div class="sn-item">
+        <span class="ic">⌖</span><span class="lbl sans">Providers</span>
+        <span class="badge">17</span>
+      </div>
+      <div class="sn-item">
+        <span class="ic">⎙</span><span class="lbl sans">Audit log</span>
+      </div>
+      <div class="sn-item">
+        <span class="ic">⚙</span><span class="lbl sans">Settings</span>
+        <span class="kbd-mini">,</span>
+      </div>
+    </aside>
+
+    <!-- ─────────────────── MAIN ─────────────────── -->
+    <section class="main">
+
+      <div class="page-h">
+        <span class="crumb"><b>Park Slope Internal</b><span class="sep">/</span><b>Dashboard</b><span class="sep">/</span>Today · all providers</span>
+        <span class="ts"><span class="live-dot"></span>updated 11s ago · auto-refresh every 4s</span>
+      </div>
+
+      <!-- stat strip -->
+      <div class="statstrip">
+        <div class="stat">
+          <span class="lbl">visits today</span>
+          <span class="val">42</span>
+          <span class="delta up">▲ 8 vs yesterday</span>
+          <svg class="spark" viewBox="0 0 80 14" preserveAspectRatio="none"><path class="l-fg3" d="M0,10 L8,8 L16,9 L24,7 L32,8 L40,5 L48,6 L56,4 L64,5 L72,3 L80,2"/></svg>
+        </div>
+        <div class="stat">
+          <span class="lbl">queue depth</span>
+          <span class="val">7</span>
+          <span class="delta signal">● workers 3/4 busy</span>
+          <svg class="spark" viewBox="0 0 80 14" preserveAspectRatio="none"><path class="l-amber" d="M0,8 L8,9 L16,7 L24,5 L32,4 L40,6 L48,5 L56,3 L64,5 L72,4 L80,3"/></svg>
+        </div>
+        <div class="stat">
+          <span class="lbl">avg L1→L7</span>
+          <span class="val">42.8s</span>
+          <span class="delta up">▼ 6.2s vs 7d</span>
+          <svg class="spark" viewBox="0 0 80 14" preserveAspectRatio="none"><path class="l-mint" d="M0,3 L8,4 L16,5 L24,5 L32,7 L40,7 L48,8 L56,9 L64,10 L72,9 L80,11"/></svg>
+        </div>
+        <div class="stat">
+          <span class="lbl">awaiting sign</span>
+          <span class="val">23</span>
+          <span class="delta down">▲ 2 since 09:00</span>
+          <svg class="spark" viewBox="0 0 80 14" preserveAspectRatio="none"><path class="l-amber" d="M0,11 L8,10 L16,9 L24,8 L32,9 L40,7 L48,6 L56,7 L64,5 L72,5 L80,4"/></svg>
+        </div>
+        <div class="stat">
+          <span class="lbl">rx warnings</span>
+          <span class="val" style="color:var(--coral)">3</span>
+          <span class="delta down">● 1 critical</span>
+          <svg class="spark" viewBox="0 0 80 14" preserveAspectRatio="none"><path class="l-coral" d="M0,12 L8,11 L16,12 L24,10 L32,11 L40,9 L48,10 L56,8 L64,9 L72,7 L80,6"/></svg>
+        </div>
+        <div class="stat">
+          <span class="lbl">edit rate p50</span>
+          <span class="val">11.4%</span>
+          <span class="delta up">▼ 1.8 pts vs 7d</span>
+          <svg class="spark" viewBox="0 0 80 14" preserveAspectRatio="none"><path class="l-mint" d="M0,4 L8,5 L16,5 L24,6 L32,7 L40,7 L48,8 L56,8 L64,9 L72,9 L80,10"/></svg>
+        </div>
+      </div>
+
+      <!-- filter bar -->
+      <div class="filterbar">
+        <div class="fb-input">
+          <span class="label">filter ›</span>
+          <span class="syntax-token"><span class="k">status</span>:<span class="v">ready</span></span>
+          <span class="syntax-token"><span class="k">since</span>:<span class="v">24h</span></span>
+          <span class="syntax-token"><span class="k">provider</span>:<span class="v">me</span></span>
+          <input value="" placeholder="add: specialty:cardio  duration:>15m  edited:&gt;20%" />
+          <span class="kbd-mini" style="color:var(--fg-4);font-size:10.5px">↵ apply · clear with /clear</span>
+        </div>
+        <span class="fb-pill">save view <span class="kbd-mini">⌘S</span></span>
+        <span class="fb-pill">columns <span class="kbd-mini">⌘.</span></span>
+        <span class="fb-pill">export <span class="kbd-mini">⌘E</span></span>
+      </div>
+
+      <!-- table -->
+      <div class="table-wrap">
+        <table class="qm-tbl">
+          <thead>
+            <tr>
+              <th class="sorted-desc sorted">when <span class="sort-ind">▾</span></th>
+              <th>id</th>
+              <th>patient</th>
+              <th>specialty</th>
+              <th>provider</th>
+              <th>mode</th>
+              <th>status</th>
+              <th class="num">dur</th>
+              <th class="num">L1▸L7</th>
+              <th class="num">edits</th>
+              <th>codes</th>
+              <th>flags</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="active">
+              <td class="dim">11:42:08</td>
+              <td><span class="pid">v-</span><span class="fg">7842</span></td>
+              <td><span class="pname">Reyes, Maria</span> <span class="meta">F · 58</span></td>
+              <td>Internal</td>
+              <td class="dim">jain.e</td>
+              <td>ambient</td>
+              <td><span class="pill ready">READY</span></td>
+              <td class="num">14:22</td>
+              <td class="num">38.4s</td>
+              <td class="num">8%</td>
+              <td>I10·E11.9·Z79.4</td>
+              <td></td>
+            </tr>
+            <tr>
+              <td class="dim">11:38:51</td>
+              <td><span class="pid">v-</span><span class="fg">7841</span></td>
+              <td><span class="pname">O'Connell, Brian</span> <span class="meta">M · 71</span></td>
+              <td>Internal</td>
+              <td class="dim">jain.e</td>
+              <td>ambient</td>
+              <td><span class="pill proc">L4·DRAFT</span></td>
+              <td class="num">19:08</td>
+              <td class="num">…</td>
+              <td class="num">—</td>
+              <td>—</td>
+              <td></td>
+            </tr>
+            <tr>
+              <td class="dim">11:31:14</td>
+              <td><span class="pid">v-</span><span class="fg">7840</span></td>
+              <td><span class="pname">Park, Hyun-Jin</span> <span class="meta">M · 44</span></td>
+              <td>Cardio</td>
+              <td class="dim">cho.s</td>
+              <td>upload</td>
+              <td><span class="pill review">REVIEW</span></td>
+              <td class="num">22:46</td>
+              <td class="num">51.2s</td>
+              <td class="num">24%</td>
+              <td>I20.9·R07.9</td>
+              <td><span class="pill failed">RX·CRIT</span></td>
+            </tr>
+            <tr>
+              <td class="dim">11:24:02</td>
+              <td><span class="pid">v-</span><span class="fg">7839</span></td>
+              <td><span class="pname">Khan, Aisha</span> <span class="meta">F · 32</span></td>
+              <td>OB/GYN</td>
+              <td class="dim">patel.r</td>
+              <td>ambient</td>
+              <td><span class="pill signed">SIGNED</span></td>
+              <td class="num">11:54</td>
+              <td class="num">36.7s</td>
+              <td class="num">4%</td>
+              <td>Z34.93·N94.6</td>
+              <td></td>
+            </tr>
+            <tr>
+              <td class="dim">11:18:33</td>
+              <td><span class="pid">v-</span><span class="fg">7838</span></td>
+              <td><span class="pname">Vogel, Hannah</span> <span class="meta">F · 67</span></td>
+              <td>Internal</td>
+              <td class="dim">jain.e</td>
+              <td>ambient</td>
+              <td><span class="pill ready">READY</span></td>
+              <td class="num">17:31</td>
+              <td class="num">44.1s</td>
+              <td class="num">12%</td>
+              <td>I50.9·E78.5·N18.3</td>
+              <td></td>
+            </tr>
+            <tr>
+              <td class="dim">11:11:47</td>
+              <td><span class="pid">v-</span><span class="fg">7837</span></td>
+              <td><span class="pname">Ahmed, Sayed</span> <span class="meta">M · 53</span></td>
+              <td>Endo</td>
+              <td class="dim">silva.l</td>
+              <td>upload</td>
+              <td><span class="pill ready">READY</span></td>
+              <td class="num">9:28</td>
+              <td class="num">34.6s</td>
+              <td class="num">3%</td>
+              <td>E11.9·E78.5</td>
+              <td></td>
+            </tr>
+            <tr>
+              <td class="dim">11:04:09</td>
+              <td><span class="pid">v-</span><span class="fg">7836</span></td>
+              <td><span class="pname">Iverson, Marcus</span> <span class="meta">M · 39</span></td>
+              <td>Ortho</td>
+              <td class="dim">cho.s</td>
+              <td>ambient</td>
+              <td><span class="pill failed">FAILED·L3</span></td>
+              <td class="num">8:11</td>
+              <td class="num">—</td>
+              <td class="num">—</td>
+              <td>—</td>
+              <td><span class="pill failed">RETRY</span></td>
+            </tr>
+            <tr>
+              <td class="dim">10:58:21</td>
+              <td><span class="pid">v-</span><span class="fg">7835</span></td>
+              <td><span class="pname">Chen, Wei</span> <span class="meta">M · 28</span></td>
+              <td>Derm</td>
+              <td class="dim">silva.l</td>
+              <td>text</td>
+              <td><span class="pill signed">SIGNED</span></td>
+              <td class="num">5:42</td>
+              <td class="num">27.9s</td>
+              <td class="num">2%</td>
+              <td>L70.0</td>
+              <td></td>
+            </tr>
+            <tr>
+              <td class="dim">10:51:04</td>
+              <td><span class="pid">v-</span><span class="fg">7834</span></td>
+              <td><span class="pname">Rodriguez, Pilar</span> <span class="meta">F · 49</span></td>
+              <td>Internal</td>
+              <td class="dim">jain.e</td>
+              <td>ambient</td>
+              <td><span class="pill ready">READY</span></td>
+              <td class="num">15:08</td>
+              <td class="num">41.3s</td>
+              <td class="num">7%</td>
+              <td>R51·G44.1</td>
+              <td></td>
+            </tr>
+            <tr>
+              <td class="dim">10:44:18</td>
+              <td><span class="pid">v-</span><span class="fg">7833</span></td>
+              <td><span class="pname">Akinwumi, Tope</span> <span class="meta">M · 36</span></td>
+              <td>Psych</td>
+              <td class="dim">patel.r</td>
+              <td>ambient</td>
+              <td><span class="pill signed">SIGNED</span></td>
+              <td class="num">28:54</td>
+              <td class="num">62.8s</td>
+              <td class="num">14%</td>
+              <td>F33.0·F41.1</td>
+              <td></td>
+            </tr>
+            <tr>
+              <td class="dim">10:37:42</td>
+              <td><span class="pid">v-</span><span class="fg">7832</span></td>
+              <td><span class="pname">Nakamura, Yuki</span> <span class="meta">F · 61</span></td>
+              <td>Cardio</td>
+              <td class="dim">cho.s</td>
+              <td>ambient</td>
+              <td><span class="pill ready">READY</span></td>
+              <td class="num">18:22</td>
+              <td class="num">47.8s</td>
+              <td class="num">11%</td>
+              <td>I48.91·I10·Z79.01</td>
+              <td><span class="pill review">RX·LOW</span></td>
+            </tr>
+            <tr>
+              <td class="dim">10:31:08</td>
+              <td><span class="pid">v-</span><span class="fg">7831</span></td>
+              <td><span class="pname">Singh, Davinder</span> <span class="meta">M · 55</span></td>
+              <td>Internal</td>
+              <td class="dim">jain.e</td>
+              <td>ambient</td>
+              <td><span class="pill signed">SIGNED</span></td>
+              <td class="num">12:04</td>
+              <td class="num">39.6s</td>
+              <td class="num">9%</td>
+              <td>K21.9·R10.13</td>
+              <td></td>
+            </tr>
+            <tr>
+              <td class="dim">10:24:55</td>
+              <td><span class="pid">v-</span><span class="fg">7830</span></td>
+              <td><span class="pname">McKinney, Lila</span> <span class="meta">F · 19</span></td>
+              <td>Pediatr</td>
+              <td class="dim">silva.l</td>
+              <td>ambient</td>
+              <td><span class="pill ready">READY</span></td>
+              <td class="num">7:18</td>
+              <td class="num">31.4s</td>
+              <td class="num">6%</td>
+              <td>J06.9·R05</td>
+              <td></td>
+            </tr>
+            <tr>
+              <td class="dim">10:18:22</td>
+              <td><span class="pid">v-</span><span class="fg">7829</span></td>
+              <td><span class="pname">Holloway, Vincent</span> <span class="meta">M · 78</span></td>
+              <td>Geri</td>
+              <td class="dim">jain.e</td>
+              <td>ambient</td>
+              <td><span class="pill signed">SIGNED</span></td>
+              <td class="num">26:02</td>
+              <td class="num">58.4s</td>
+              <td class="num">17%</td>
+              <td>F03.90·G30.9·Z79.811</td>
+              <td><span class="pill review">RX·MED</span></td>
+            </tr>
+            <tr>
+              <td class="dim">10:12:11</td>
+              <td><span class="pid">v-</span><span class="fg">7828</span></td>
+              <td><span class="pname">Beck, Sasha</span> <span class="meta">F · 41</span></td>
+              <td>Internal</td>
+              <td class="dim">silva.l</td>
+              <td>ambient</td>
+              <td><span class="pill ready">READY</span></td>
+              <td class="num">13:47</td>
+              <td class="num">42.0s</td>
+              <td class="num">5%</td>
+              <td>R51·H53.10</td>
+              <td></td>
+            </tr>
+            <tr>
+              <td class="dim">10:05:33</td>
+              <td><span class="pid">v-</span><span class="fg">7827</span></td>
+              <td><span class="pname">Adebayo, Kemi</span> <span class="meta">F · 34</span></td>
+              <td>OB/GYN</td>
+              <td class="dim">patel.r</td>
+              <td>upload</td>
+              <td><span class="pill signed">SIGNED</span></td>
+              <td class="num">10:08</td>
+              <td class="num">35.1s</td>
+              <td class="num">4%</td>
+              <td>O09.519·Z34.83</td>
+              <td></td>
+            </tr>
+            <tr>
+              <td class="dim">09:58:48</td>
+              <td><span class="pid">v-</span><span class="fg">7826</span></td>
+              <td><span class="pname">Tanaka, Hiroshi</span> <span class="meta">M · 62</span></td>
+              <td>Endo</td>
+              <td class="dim">silva.l</td>
+              <td>ambient</td>
+              <td><span class="pill ready">READY</span></td>
+              <td class="num">14:55</td>
+              <td class="num">46.2s</td>
+              <td class="num">10%</td>
+              <td>E11.9·E78.5·E66.9</td>
+              <td></td>
+            </tr>
+            <tr>
+              <td class="dim">09:52:14</td>
+              <td><span class="pid">v-</span><span class="fg">7825</span></td>
+              <td><span class="pname">Garcia, Jaqueline</span> <span class="meta">F · 27</span></td>
+              <td>Derm</td>
+              <td class="dim">cho.s</td>
+              <td>text</td>
+              <td><span class="pill signed">SIGNED</span></td>
+              <td class="num">4:11</td>
+              <td class="num">22.7s</td>
+              <td class="num">1%</td>
+              <td>L40.0</td>
+              <td></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- legend / footer -->
+      <div class="legend">
+        <div>
+          <span class="kg"><span class="kbd">j</span><span class="kbd">k</span> move row</span>
+          <span class="kg"><span class="kbd">↵</span> open</span>
+          <span class="kg"><span class="kbd">o</span> open in new pane</span>
+          <span class="kg"><span class="kbd">r</span> retry</span>
+          <span class="kg"><span class="kbd">s</span> sign</span>
+          <span class="kg"><span class="kbd">x</span> archive</span>
+          <span class="kg"><span class="kbd">/</span> focus filter</span>
+        </div>
+        <div>
+          <span class="kg" style="color:var(--fg-2)">18 rows · 214 visits matching</span>
+          <span class="kg"><span class="kbd">⌘</span><span class="kbd">↑</span>/<span class="kbd">⌘</span><span class="kbd">↓</span> page</span>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ─────────────────── CONTEXT RAIL ─────────────────── -->
+    <aside class="ctxrail">
+
+      <div class="ctx-section">
+        <h3>visit · v-7842 <span class="kbd">⌥1</span></h3>
+        <dl class="kv">
+          <dt>patient</dt><dd>Reyes, Maria <span class="v-dim">· F · 58</span></dd>
+          <dt>mrn</dt>     <dd>PSI-44218</dd>
+          <dt>visit</dt>   <dd>follow-up · htn / dm2</dd>
+          <dt>provider</dt><dd>Dr. E. Jain</dd>
+          <dt>specialty</dt><dd>Internal Medicine</dd>
+          <dt>recorded</dt><dd>11:42:08 EDT · 14:22</dd>
+          <dt>mode</dt>    <dd>ambient · stereo · 48 kHz</dd>
+          <dt>status</dt>  <dd><span class="v-mint">READY</span> <span class="v-dim">· awaiting sign-off</span></dd>
+          <dt>edits</dt>   <dd>8% <span class="v-dim">(p50 11.4%)</span></dd>
+          <dt>codes</dt>   <dd>I10 · E11.9 · Z79.4</dd>
+          <dt>billing</dt> <dd>99214 <span class="v-dim">· level 4</span></dd>
+        </dl>
+      </div>
+
+      <div class="ctx-section">
+        <h3>ai pipeline <span class="kbd">⌥2</span></h3>
+        <div class="pipeline">
+          <span class="stage done">L1 ingest</span><span class="sep">▸</span>
+          <span class="stage done">L2 dx</span><span class="sep">▸</span>
+          <span class="stage done">L3 cluster</span><span class="sep">▸</span>
+          <span class="stage done">L4 draft</span><span class="sep">▸</span>
+          <span class="stage done">L5 cite</span><span class="sep">▸</span>
+          <span class="stage done">L6 codes</span><span class="sep">▸</span>
+          <span class="stage done">L7 audit</span>
+          <div class="ts">completed 11:42:46 · 38.4s end-to-end · model: claude-opus-4-7</div>
+        </div>
+      </div>
+
+      <div class="ctx-section">
+        <h3>audit trail <span class="kbd">⌥3</span></h3>
+        <div class="audit-row"><span class="when">11:42:46</span><span>L7 audit pass</span><span class="who">system</span></div>
+        <div class="audit-row"><span class="when">11:42:46</span><span>codes proposed (3)</span><span class="who">system</span></div>
+        <div class="audit-row"><span class="when">11:42:31</span><span>SOAP draft generated</span><span class="who">system</span></div>
+        <div class="audit-row"><span class="when">11:42:14</span><span>transcript redacted</span><span class="who">system</span></div>
+        <div class="audit-row"><span class="when">11:42:08</span><span>recording uploaded</span><span class="who">jain.e</span></div>
+        <div class="audit-row"><span class="when">11:27:46</span><span>recording started</span><span class="who">jain.e</span></div>
+        <div class="audit-row"><span class="when">11:27:33</span><span>visit created</span><span class="who">jain.e</span></div>
+      </div>
+
+      <div class="ctx-section">
+        <h3>queue · live <span class="kbd">⌥4</span></h3>
+        <dl class="kv" style="grid-template-columns:100px 1fr">
+          <dt>workers</dt>   <dd>3 / 4 busy</dd>
+          <dt>depth</dt>     <dd><span class="v-amber">7 jobs</span></dd>
+          <dt>p50 wait</dt>  <dd>4.2s</dd>
+          <dt>p95 wait</dt>  <dd>11.8s</dd>
+          <dt>last fail</dt> <dd>v-7836 · L3 timeout · 11:04</dd>
+          <dt>retries 24h</dt><dd>2</dd>
+          <dt>region</dt>    <dd>us-east-1 · primary</dd>
+        </dl>
+      </div>
+
+      <div class="ctx-section">
+        <h3>actions <span class="kbd">⌥5</span></h3>
+        <div style="display:grid;gap:4px">
+          <button class="tb-btn" style="justify-content:space-between;width:100%"><span>open visit</span><span class="kbd amber">↵</span></button>
+          <button class="tb-btn" style="justify-content:space-between;width:100%"><span>sign + close</span><span class="kbd">s</span></button>
+          <button class="tb-btn" style="justify-content:space-between;width:100%"><span>request changes</span><span class="kbd">c</span></button>
+          <button class="tb-btn" style="justify-content:space-between;width:100%"><span>retry pipeline</span><span class="kbd">r</span></button>
+          <button class="tb-btn" style="justify-content:space-between;width:100%"><span>export · pdf</span><span class="kbd">⌘E</span></button>
+          <button class="tb-btn" style="justify-content:space-between;width:100%"><span>archive</span><span class="kbd">x</span></button>
+        </div>
+      </div>
+
+    </aside>
+  </div>
+
+  <!-- ─────────────────────────── STATUSBAR ─────────────────────────── -->
+  <footer class="statusbar">
+    <span class="sb-cell mode" title="keyboard mode"><span class="glyph">●</span> NORMAL</span>
+    <span class="sb-cell"><span class="label">conn</span><span class="blink live"></span><span class="v mint">live · 12ms</span></span>
+    <span class="sb-cell"><span class="label">db</span><span class="v">ok · 4 conns</span></span>
+    <span class="sb-cell"><span class="label">worker</span><span class="v amber">3/4 busy</span></span>
+    <span class="sb-cell"><span class="label">queue</span><span class="v amber">7</span></span>
+    <span class="sb-cell"><span class="label">visit</span><span class="v">v-7842 · ready</span></span>
+    <span class="sb-cell"><span class="label">user</span><span class="v">jain.e@psi</span></span>
+    <span class="sb-spacer"></span>
+    <span class="sb-cell"><span class="label">build</span><span class="v">T-M17.2 · sha 0c4f9a3</span></span>
+    <span class="sb-cell"><span class="label">region</span><span class="v">us-east-1</span></span>
+    <span class="sb-cell"><span class="label">utc</span><span class="v" id="clock">15:42:08</span></span>
+  </footer>
+
+</div>
+
+<script>
+  // tiny clock — purely cosmetic
+  (function(){
+    function tick(){
+      const n = new Date();
+      const z = (x)=>String(x).padStart(2,'0');
+      const el = document.getElementById('clock');
+      if (el) el.textContent = z(n.getUTCHours())+':'+z(n.getUTCMinutes())+':'+z(n.getUTCSeconds());
+    }
+    setInterval(tick, 1000); tick();
+  })();
+</script>
+</body>
+</html>

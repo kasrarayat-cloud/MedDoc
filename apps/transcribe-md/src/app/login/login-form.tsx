@@ -70,7 +70,7 @@ export function LoginForm() {
 
   return (
     <form action={formAction}>
-      <div style={{ marginTop: 14 }}>
+      <div style={{ marginTop: 18 }}>
         <AuthFieldLabel htmlFor="email">Email</AuthFieldLabel>
         <input
           id="email"
@@ -79,7 +79,7 @@ export function LoginForm() {
           autoComplete="email"
           defaultValue={values.email ?? ''}
           required
-          className="qm-input"
+          className="qm-cl-input"
           style={{ marginTop: 6 }}
         />
         <AuthFieldError message={errors.email} />
@@ -91,7 +91,12 @@ export function LoginForm() {
           hint={
             <Link
               href="/forgot-password"
-              style={{ fontSize: 11.5, color: 'var(--accent-bright)' }}
+              style={{
+                fontSize: 11.5,
+                color: 'var(--sage-deep)',
+                fontFamily: 'var(--sans)',
+                fontWeight: 500,
+              }}
             >
               Forgot?
             </Link>
@@ -105,7 +110,7 @@ export function LoginForm() {
           type="password"
           autoComplete="current-password"
           required
-          className="qm-input"
+          className="qm-cl-input"
           style={{ marginTop: 6 }}
         />
         <AuthFieldError message={errors.password} />
@@ -118,30 +123,24 @@ export function LoginForm() {
           style={{
             marginTop: 14,
             padding: 12,
-            borderRadius: 10,
-            border: '1px solid rgba(96, 165, 250, 0.35)',
-            background: 'rgba(96, 165, 250, 0.08)',
-            color: 'var(--accent-bright)',
-            fontSize: 12,
+            borderRadius: 12,
+            border: '1px solid rgba(123, 168, 196, 0.35)',
+            background: 'var(--sky-tint)',
+            color: 'var(--sky-deep)',
+            fontSize: 12.5,
             lineHeight: 1.5,
           }}
         >
-          <p style={{ margin: 0, color: 'var(--fg-1)' }}>
+          <p style={{ margin: 0, color: 'var(--ink)' }}>
             {crossAppRedirect.message}
           </p>
           <a
             href={crossAppRedirect.url}
+            className="qm-cl-btn qm-cl-btn-soft"
             style={{
               marginTop: 10,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
+              fontSize: 12.5,
               padding: '8px 14px',
-              borderRadius: 8,
-              background: 'rgba(96, 165, 250, 0.18)',
-              color: 'var(--accent-bright)',
-              fontSize: 12,
-              fontWeight: 600,
               textDecoration: 'none',
             }}
           >
@@ -156,17 +155,17 @@ export function LoginForm() {
           style={{
             marginTop: 14,
             padding: 12,
-            borderRadius: 10,
-            border: '1px solid rgba(251, 191, 36, 0.35)',
-            background: 'rgba(251, 191, 36, 0.06)',
-            color: 'var(--amber)',
-            fontSize: 12,
+            borderRadius: 12,
+            border: '1px solid rgba(212, 165, 116, 0.4)',
+            background: 'var(--amber-tint)',
+            color: 'var(--amber-deep)',
+            fontSize: 12.5,
             lineHeight: 1.5,
           }}
         >
           <p style={{ margin: 0 }}>
             We sent a verification link to{' '}
-            <strong style={{ color: '#FDE68A' }}>{needsVerificationFor}</strong>.
+            <strong style={{ color: 'var(--ink)' }}>{needsVerificationFor}</strong>.
             Click it, then sign in again.
           </p>
           <button
@@ -178,13 +177,14 @@ export function LoginForm() {
               background: 'none',
               border: 'none',
               padding: 0,
-              color: '#FDE68A',
+              color: 'var(--amber-deep)',
               fontSize: 12,
               fontWeight: 500,
               textDecoration: 'underline',
               textUnderlineOffset: 2,
               cursor: resendPending ? 'default' : 'pointer',
               opacity: resendPending ? 0.6 : 1,
+              fontFamily: 'var(--sans)',
             }}
           >
             {resendPending ? 'Sending…' : 'Resend the verification email'}
@@ -195,11 +195,10 @@ export function LoginForm() {
       <button
         type="submit"
         disabled={pending}
-        className="qm-btn qm-btn-primary"
+        className="qm-cl-btn qm-cl-btn-primary qm-cl-btn-lg"
         style={{
           width: '100%',
           justifyContent: 'center',
-          padding: 12,
           marginTop: 22,
           opacity: pending ? 0.75 : 1,
         }}
@@ -211,13 +210,17 @@ export function LoginForm() {
       <div
         style={{
           textAlign: 'center',
-          color: 'var(--fg-3)',
+          color: 'var(--ink-3)',
           fontSize: 12.5,
           marginTop: 18,
+          fontFamily: 'var(--sans)',
         }}
       >
         No account?{' '}
-        <Link href="/signup" style={{ color: 'var(--accent-bright)' }}>
+        <Link
+          href="/signup"
+          style={{ color: 'var(--sage-deep)', fontWeight: 500 }}
+        >
           Sign up →
         </Link>
       </div>

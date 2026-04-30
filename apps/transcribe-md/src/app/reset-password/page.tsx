@@ -21,10 +21,11 @@ export default async function ResetPasswordPage({ searchParams }: PageProps) {
 
   return (
     <AuthShell
+      theme="clinician"
       eyebrow="Account recovery"
       title={
         <>
-          Set new <em style={{ color: 'var(--accent-bright)' }}>password</em>
+          Set new <em style={{ color: 'var(--sage-deep)', fontStyle: 'italic' }}>password</em>
         </>
       }
       subtitle="Pick a new password. You'll be signed out everywhere when it saves."

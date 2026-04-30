@@ -50,6 +50,7 @@ export default async function AdminHomePage() {
     <AdminOverview
       initial={{ systemHealth, activity, threats, timeline, pipeline, hipaa }}
       userEmail={userEmail}
+      theme="clinician"
     />
   );
 }

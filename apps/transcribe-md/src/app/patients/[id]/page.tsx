@@ -574,6 +574,7 @@ async function VisitsTab({
     status: import('@prisma/client').TranscribeVisitStatus;
     needsReview: boolean;
     createdAt: Date;
+    signedAt: Date | null;
     audioDurationSec: number | null;
   };
   const rows: Row[] = await prisma.transcribeVisit.findMany({
@@ -591,6 +592,7 @@ async function VisitsTab({
       status: true,
       needsReview: true,
       createdAt: true,
+      signedAt: true,
       audioDurationSec: true,
     },
   });
@@ -603,6 +605,8 @@ async function VisitsTab({
       status: v.status,
       needsReview: v.needsReview,
       createdAt: v.createdAt.toISOString(),
+      // Batch H: surfaces "Signed · {date}" pill on the visit-list row.
+      signedAt: v.signedAt ? v.signedAt.toISOString() : null,
       audioDurationSec: v.audioDurationSec,
     })
   );

@@ -1,0 +1,1730 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>QuillMD · CHART · marketing landing + recording moment</title>
+<meta name="viewport" content="width=1600, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root {
+    --bg:        #07060C;
+    --bg-1:      #0C0A16;
+    --bg-2:      #14111F;
+    --bg-3:      #1C1828;
+    --bg-4:      #221C30;
+
+    --line-soft: #191524;
+    --line:      #26222F;
+    --line-strong: #3A3445;
+
+    --fg:        #F5F2FA;
+    --fg-2:      #B9B2C9;
+    --fg-3:      #7E7791;
+    --fg-4:      #4B4558;
+
+    --mint:  #6EE7B7;
+    --amber: #FBBF24;
+    --coral: #FB7185;
+
+    --signal-amber:        #F5A524;
+    --signal-amber-bright: #FCBF49;
+    --signal-amber-deep:   #B97A12;
+    --signal-amber-ink:    #2A1A04;
+
+    --stripe-a: var(--bg-1);
+    --stripe-b: #0E0B18;
+
+    --sans:  'Inter Tight', system-ui, sans-serif;
+    --mono:  'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--fg);
+    font-family: var(--mono);
+    font-size: 12px; line-height: 1.5;
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: var(--signal-amber); color: var(--signal-amber-ink); }
+
+  .sans { font-family: var(--sans); letter-spacing: -0.01em; }
+
+  /* page strip — frame for the two halves */
+  .pagestrip {
+    border-bottom: 1px solid var(--line);
+    background: var(--bg-1);
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .pagestrip h1 {
+    margin: 0;
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--fg);
+    letter-spacing: -0.01em;
+  }
+  .pagestrip .badge {
+    display: inline-flex;
+    align-items: center;
+    height: 18px;
+    padding: 0 6px;
+    border: 1px solid var(--signal-amber-deep);
+    color: var(--signal-amber);
+    border-radius: 2px;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .pagestrip p {
+    margin: 0;
+    color: var(--fg-2);
+    font-family: var(--sans);
+    font-size: 12.5px;
+  }
+  .pagestrip p .em { color: var(--fg); }
+
+  /* split */
+  .split {
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 8px 1fr;
+  }
+  .split-rule {
+    background: var(--line);
+    position: relative;
+  }
+  .split-rule .lbl {
+    position: absolute;
+    left: 16px; top: -10px;
+    background: var(--bg);
+    padding: 2px 8px;
+    border: 1px solid var(--line-strong);
+    border-radius: 2px;
+    font-size: 9.5px;
+    color: var(--fg-3);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    height: 16px;
+    line-height: 12px;
+  }
+
+  /* shell row inside each pane */
+  .pane {
+    display: grid;
+    grid-template-rows: 36px 1fr 22px;
+    height: 100%;
+    min-height: 0;
+  }
+
+  /* shared toolbar */
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 8px;
+    background: var(--bg-1);
+    border-bottom: 1px solid var(--line);
+  }
+  .logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 8px;
+    height: 24px;
+    border: 1px solid var(--line);
+    background: var(--bg-2);
+    border-radius: 2px;
+    font-family: var(--sans);
+    font-weight: 700;
+    font-size: 12px;
+    color: var(--fg);
+  }
+  .logo .glyph {
+    width: 10px; height: 10px;
+    background: var(--signal-amber);
+    border-radius: 1px;
+    transform: rotate(45deg);
+  }
+  .ws-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 8px;
+    height: 24px;
+    border: 1px solid var(--line);
+    background: var(--bg-2);
+    border-radius: 2px;
+    color: var(--fg-2);
+    cursor: pointer;
+  }
+  .ws-switch .ws-name { color: var(--fg); font-weight: 500; }
+  .ws-switch .ws-role { color: var(--fg-3); }
+
+  .cmdbar {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 6px;
+    border: 1px solid var(--line);
+    background: var(--bg-2);
+    border-radius: 2px;
+    color: var(--fg-2);
+    max-width: 640px;
+  }
+  .cmdbar:focus-within { border-color: var(--signal-amber); }
+  .cmdbar .prompt { color: var(--signal-amber); font-weight: 600; }
+  .cmdbar input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--fg);
+    font: inherit;
+    font-size: 12px;
+  }
+  .cmdbar input::placeholder { color: var(--fg-3); }
+  .cmdbar .kbd-end { color: var(--fg-3); font-size: 10.5px; }
+
+  /* RECORDING widget — toolbar version. THE moment. */
+  .rec-widget {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 8px;
+    height: 28px;
+    border: 1px solid var(--signal-amber-deep);
+    background: rgba(245,165,36,0.06);
+    border-radius: 2px;
+  }
+  .rec-widget .rec-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--signal-amber);
+    animation: dot-pulse-amber 1.4s ease-in-out infinite;
+  }
+  .rec-widget .rec-label {
+    color: var(--signal-amber);
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    font-size: 11px;
+  }
+  .rec-widget .rec-time {
+    color: var(--fg);
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    font-size: 13px;
+  }
+  /* 5 thin vertical lines audio meter */
+  .rec-widget .vu {
+    display: inline-flex;
+    align-items: end;
+    gap: 2px;
+    height: 14px;
+  }
+  .rec-widget .vu i {
+    display: inline-block;
+    width: 2px;
+    background: var(--signal-amber);
+    transform-origin: bottom;
+    animation: vu 1.4s ease-in-out infinite;
+  }
+  .rec-widget .vu i:nth-child(1) { height: 6px;  animation-delay: 0.0s; }
+  .rec-widget .vu i:nth-child(2) { height: 12px; animation-delay: 0.12s; }
+  .rec-widget .vu i:nth-child(3) { height: 8px;  animation-delay: 0.24s; }
+  .rec-widget .vu i:nth-child(4) { height: 14px; animation-delay: 0.36s; }
+  .rec-widget .vu i:nth-child(5) { height: 10px; animation-delay: 0.48s; }
+  @keyframes vu {
+    0%,100% { transform: scaleY(0.4); }
+    50% { transform: scaleY(1); }
+  }
+  @keyframes dot-pulse-amber {
+    0%,100% { opacity: 0.55; box-shadow: 0 0 0 0 rgba(245,165,36,0.4); }
+    50%     { opacity: 1;    box-shadow: 0 0 0 4px rgba(245,165,36,0); }
+  }
+  .rec-widget .kbd-end {
+    color: var(--fg-3);
+    font-size: 10.5px;
+    border-left: 1px solid var(--line);
+    padding-left: 6px;
+  }
+  .rec-widget .kbd {
+    border: 1px solid var(--line-strong);
+    background: var(--bg-2);
+    color: var(--fg-2);
+    padding: 0 4px;
+    height: 14px;
+    line-height: 14px;
+    border-radius: 2px;
+    font-size: 10px;
+  }
+
+  .tb-spacer { flex: 1; }
+  .tb-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 24px;
+    padding: 0 8px;
+    border: 1px solid var(--line);
+    background: transparent;
+    border-radius: 2px;
+    color: var(--fg-2);
+    font: inherit;
+    font-size: 11.5px;
+    cursor: pointer;
+  }
+  .tb-btn:hover { border-color: var(--line-strong); color: var(--fg); background: var(--bg-2); }
+  .tb-btn.amber { border-color: var(--signal-amber-deep); color: var(--signal-amber); }
+  .tb-btn .kbd { color: var(--fg-3); border-left: 1px solid var(--line); padding-left: 6px; margin-left: 2px; font-size: 10.5px; }
+
+  .user-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 24px;
+    padding: 0 4px 0 8px;
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    background: var(--bg-2);
+    color: var(--fg-2);
+  }
+  .user-chip .ini {
+    width: 16px; height: 16px;
+    background: var(--signal-amber-deep);
+    color: var(--signal-amber-ink);
+    border-radius: 1px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 10px;
+  }
+
+  /* statusbar */
+  .statusbar {
+    display: flex;
+    align-items: center;
+    background: var(--bg-1);
+    border-top: 1px solid var(--line);
+    color: var(--fg-3);
+    font-size: 10.5px;
+  }
+  .sb-cell {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 10px;
+    height: 100%;
+    border-right: 1px solid var(--line);
+  }
+  .sb-cell.mode {
+    background: var(--signal-amber-deep);
+    color: var(--signal-amber-ink);
+    font-weight: 700;
+    letter-spacing: 0.1em;
+  }
+  .sb-cell.mode.rec {
+    background: var(--signal-amber);
+    color: var(--signal-amber-ink);
+  }
+  .sb-cell .label { color: var(--fg-4); }
+  .sb-cell .v { color: var(--fg-2); }
+  .sb-cell .v.mint { color: var(--mint); }
+  .sb-cell .v.amber { color: var(--signal-amber); }
+  .sb-cell .v.coral { color: var(--coral); }
+  .sb-spacer { flex: 1; }
+  .sb-cell .blink {
+    display: inline-block;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+  .sb-cell .blink.live {
+    background: var(--mint);
+    animation: dot-pulse-mint 4s ease-in-out infinite;
+  }
+  .sb-cell .blink.signal {
+    background: var(--signal-amber);
+    animation: dot-pulse-amber 1.4s ease-in-out infinite;
+  }
+  @keyframes dot-pulse-mint {
+    0%,100% { box-shadow: 0 0 0 0 rgba(110,231,183,0.4); }
+    50%     { box-shadow: 0 0 0 4px rgba(110,231,183,0); }
+  }
+
+  /* ─────────────── TOP HALF — marketing landing as a table ─────────────── */
+  .marketing {
+    display: grid;
+    grid-template-columns: 220px 1fr 280px;
+    background: var(--bg);
+    overflow: auto;
+  }
+  /* sidenav (signed-out variant) */
+  .mside {
+    background: var(--bg-1);
+    border-right: 1px solid var(--line);
+    padding: 8px 0;
+  }
+  .ms-section {
+    padding: 8px 12px 4px;
+    color: var(--fg-3);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    display: flex;
+    justify-content: space-between;
+  }
+  .ms-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 0 12px;
+    height: 22px;
+    color: var(--fg-2);
+    font-size: 11.5px;
+    cursor: pointer;
+    border-left: 2px solid transparent;
+  }
+  .ms-item:hover { background: var(--bg-2); color: var(--fg); }
+  .ms-item.active {
+    color: var(--fg);
+    background: var(--bg-2);
+    border-left-color: var(--signal-amber);
+  }
+  .ms-item .ic { color: var(--fg-3); width: 12px; text-align: center; font-size: 11px; }
+  .ms-item.active .ic { color: var(--signal-amber); }
+  .ms-item .lbl { flex: 1; }
+  .ms-item .kbd-mini { color: var(--fg-4); font-size: 10px; }
+  .ms-divider { height: 1px; background: var(--line); margin: 8px 12px; }
+
+  .mbody {
+    padding: 0;
+    overflow: auto;
+    border-right: 1px solid var(--line);
+  }
+  .mhead {
+    padding: 16px 16px 8px;
+    border-bottom: 1px solid var(--line);
+    background: var(--bg);
+  }
+  .mhead h2 {
+    margin: 0 0 6px;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--fg);
+    font-weight: 600;
+  }
+  .mhead h2 .hash { color: var(--signal-amber); margin-right: 6px; }
+  .mhead .sub {
+    color: var(--fg-2);
+    font-size: 12px;
+    line-height: 1.5;
+    max-width: 720px;
+  }
+  .mhead .sub .em { color: var(--fg); }
+  .mhead .ctas {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+    align-items: center;
+  }
+  .mhead .ctas .cta-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px;
+    height: 30px;
+    background: var(--signal-amber);
+    color: var(--signal-amber-ink);
+    border: 1px solid var(--signal-amber);
+    border-radius: 2px;
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 12.5px;
+    cursor: pointer;
+  }
+  .mhead .ctas .cta-primary:hover { background: var(--signal-amber-bright); }
+  .mhead .ctas .cta-primary .kbd {
+    border: 1px solid var(--signal-amber-ink);
+    color: var(--signal-amber-ink);
+    background: transparent;
+    padding: 0 4px;
+    height: 16px;
+    line-height: 16px;
+    border-radius: 2px;
+    font-size: 10.5px;
+  }
+  .mhead .ctas .cta-secondary {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px;
+    height: 30px;
+    border: 1px solid var(--line-strong);
+    color: var(--fg-2);
+    background: var(--bg-2);
+    border-radius: 2px;
+    font: inherit;
+    font-size: 12.5px;
+  }
+  .mhead .ctas .cta-secondary:hover { border-color: var(--fg-3); color: var(--fg); }
+  .mhead .ctas .cta-meta { color: var(--fg-3); font-size: 10.5px; margin-left: 8px; }
+
+  /* feature table */
+  .ftbl-wrap { padding: 0 16px 16px; }
+  .ftbl-h {
+    display: flex; align-items: center; gap: 8px;
+    margin: 14px 0 6px;
+    color: var(--fg-3);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+  }
+  .ftbl-h .rule {
+    flex: 1;
+    height: 1px;
+    background: var(--line);
+  }
+  table.ftbl {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  table.ftbl thead th {
+    text-align: left;
+    padding: 4px 8px;
+    height: 22px;
+    border-bottom: 1px solid var(--line-strong);
+    color: var(--fg-3);
+    font-weight: 500;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    background: var(--bg-1);
+  }
+  table.ftbl thead th.num { text-align: right; }
+  table.ftbl tbody tr {
+    height: 22px;
+    background: var(--stripe-a);
+    border-bottom: 1px solid var(--line-soft);
+  }
+  table.ftbl tbody tr:nth-child(even) { background: var(--stripe-b); }
+  table.ftbl tbody tr:hover { background: var(--bg-3); }
+  table.ftbl tbody td {
+    padding: 0 8px;
+    color: var(--fg-2);
+    border-right: 1px solid var(--line-soft);
+  }
+  table.ftbl tbody td:last-child { border-right: none; }
+  table.ftbl tbody td.fg { color: var(--fg); }
+  table.ftbl tbody td.dim { color: var(--fg-3); font-size: 11px; }
+  table.ftbl tbody td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  table.ftbl tbody td .kbd {
+    border: 1px solid var(--line-strong);
+    background: var(--bg-2);
+    color: var(--fg-2);
+    padding: 0 4px;
+    height: 14px;
+    line-height: 14px;
+    border-radius: 2px;
+    font-size: 10px;
+    display: inline-block;
+    min-width: 14px;
+    text-align: center;
+  }
+  table.ftbl tbody td .ck { color: var(--mint); }
+  table.ftbl tbody td .x  { color: var(--fg-4); }
+  table.ftbl tbody td .br { color: var(--signal-amber); }
+
+  /* pricing table */
+  .pricing-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 8px;
+  }
+  .pricing-row .col {
+    padding: 8px 12px;
+    border-right: 1px solid var(--line);
+    background: var(--bg-1);
+    display: grid;
+    gap: 4px;
+  }
+  .pricing-row .col:last-child { border-right: none; }
+  .pricing-row .col.featured {
+    background: rgba(245,165,36,0.04);
+    box-shadow: inset 0 0 0 1px var(--signal-amber-deep);
+  }
+  .pricing-row .col h3 {
+    margin: 0;
+    font-family: var(--sans);
+    font-size: 13px;
+    color: var(--fg);
+    font-weight: 700;
+  }
+  .pricing-row .col .price {
+    font-family: var(--mono);
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--fg);
+    font-variant-numeric: tabular-nums;
+  }
+  .pricing-row .col .price .per {
+    color: var(--fg-3);
+    font-size: 11px;
+    font-weight: 400;
+  }
+  .pricing-row .col .price .accent { color: var(--signal-amber); }
+  .pricing-row .col ul {
+    list-style: none;
+    padding: 0; margin: 4px 0 0;
+    color: var(--fg-2);
+    font-size: 11.5px;
+  }
+  .pricing-row .col ul li {
+    padding: 1px 0;
+    border-bottom: 1px dashed var(--line-soft);
+  }
+  .pricing-row .col ul li::before { content: '› '; color: var(--fg-3); }
+  .pricing-row .col .pact {
+    margin-top: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    height: 26px;
+    padding: 0 8px;
+    border: 1px solid var(--line-strong);
+    color: var(--fg-2);
+    background: var(--bg-2);
+    border-radius: 2px;
+    font: inherit;
+    font-size: 11.5px;
+    cursor: pointer;
+  }
+  .pricing-row .col.featured .pact {
+    border-color: var(--signal-amber);
+    color: var(--signal-amber-ink);
+    background: var(--signal-amber);
+    font-weight: 700;
+  }
+
+  /* right rail: kbd cheatsheet */
+  .mright {
+    background: var(--bg-1);
+    border-left: 1px solid var(--line);
+    padding: 8px 12px;
+    overflow: auto;
+  }
+  .mright h3 {
+    margin: 0 0 4px;
+    color: var(--fg-3);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    display: flex;
+    justify-content: space-between;
+  }
+  .mright .grp {
+    margin-bottom: 12px;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 8px;
+  }
+  .mright .grp:last-child { border-bottom: none; }
+  .kb-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 8px;
+    padding: 2px 0;
+    color: var(--fg-2);
+    font-size: 11.5px;
+    border-bottom: 1px dashed var(--line-soft);
+  }
+  .kb-row .desc { color: var(--fg-2); }
+  .kb-row .keys { display: inline-flex; gap: 3px; }
+  .kb-row .kbd {
+    border: 1px solid var(--line-strong);
+    background: var(--bg-2);
+    color: var(--fg-2);
+    padding: 0 4px;
+    height: 14px;
+    line-height: 14px;
+    border-radius: 2px;
+    font-size: 10px;
+    min-width: 14px;
+    text-align: center;
+    display: inline-block;
+  }
+
+  .sec-head {
+    color: var(--signal-amber);
+    margin-right: 6px;
+  }
+
+  /* compliance strip */
+  .compliance {
+    display: flex;
+    gap: 8px;
+    padding: 6px 16px;
+    background: var(--bg-1);
+    border-bottom: 1px solid var(--line);
+    border-top: 1px solid var(--line);
+    color: var(--fg-3);
+    font-size: 10.5px;
+    align-items: center;
+    overflow: auto;
+  }
+  .compliance .pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    height: 18px; padding: 0 6px;
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    background: var(--bg-2);
+    color: var(--fg-2);
+    font-size: 10.5px;
+    flex-shrink: 0;
+  }
+  .compliance .pill .ck { color: var(--mint); }
+
+  /* ─────────────── BOTTOM HALF — recording-active dashboard ─────────────── */
+  .reclive {
+    display: grid;
+    grid-template-columns: 220px 1fr 320px;
+    background: var(--bg);
+    min-height: 0;
+  }
+  .rl-side {
+    background: var(--bg-1);
+    border-right: 1px solid var(--line);
+    padding: 8px 0;
+    overflow: auto;
+  }
+  .rl-side .ms-section { display: flex; justify-content: space-between; }
+
+  .rl-main {
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+    overflow: hidden;
+  }
+  .rl-head {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--line);
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .rl-head .crumb { color: var(--fg-3); }
+  .rl-head .crumb b { color: var(--fg); font-weight: 500; }
+  .rl-head .crumb .sep { color: var(--fg-4); margin: 0 6px; }
+  .rl-head .meta { color: var(--fg-3); }
+  .rl-head .meta .v { color: var(--fg-2); }
+  .rl-head .pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 0 6px; height: 18px;
+    border: 1px solid var(--signal-amber-deep);
+    color: var(--signal-amber);
+    border-radius: 2px;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+  .rl-head .pill::before {
+    content: ''; display: inline-block;
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: var(--signal-amber);
+    animation: dot-pulse-amber 1.4s ease-in-out infinite;
+  }
+
+  /* live transcript ticker */
+  .rl-live {
+    flex: 1;
+    overflow: auto;
+    padding: 10px 12px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .rl-col h3 {
+    margin: 0 0 6px;
+    color: var(--fg-3);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 4px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .rl-col h3 .meta { color: var(--fg-3); text-transform: none; letter-spacing: 0; font-size: 11px; }
+  .rl-col h3 .meta .v { color: var(--fg); }
+
+  .tx-line {
+    display: grid;
+    grid-template-columns: 56px 56px 1fr;
+    gap: 8px;
+    padding: 2px 0;
+    font-size: 12px;
+    line-height: 1.5;
+    border-bottom: 1px dashed var(--line-soft);
+  }
+  .tx-line .ts { color: var(--fg-4); font-size: 11px; }
+  .tx-line .who {
+    color: var(--fg-3);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    align-self: start;
+    padding-top: 2px;
+  }
+  .tx-line .who.dr { color: var(--signal-amber); }
+  .tx-line .who.pt { color: var(--mint); }
+  .tx-line .text { color: var(--fg); }
+  .tx-line.partial .text { color: var(--fg-2); }
+  .tx-line .partial-cursor {
+    display: inline-block;
+    width: 6px; height: 13px;
+    background: var(--signal-amber);
+    margin-left: 2px;
+    vertical-align: -2px;
+    animation: blink 1.05s steps(2, start) infinite;
+  }
+  @keyframes blink { 0%,49% { opacity: 1; } 50%,100% { opacity: 0; } }
+
+  /* live SOAP forming side */
+  .live-soap .sec {
+    margin-bottom: 8px;
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    background: var(--bg-1);
+    overflow: hidden;
+  }
+  .live-soap .sec-h {
+    padding: 4px 8px;
+    background: var(--bg-2);
+    border-bottom: 1px solid var(--line);
+    color: var(--fg-3);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .live-soap .sec-h .right { color: var(--fg-3); text-transform: none; letter-spacing: 0; font-size: 10.5px; }
+  .live-soap .sec-h .right .v { color: var(--fg-2); }
+  .live-soap .sec-b {
+    padding: 6px 8px;
+    color: var(--fg);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .live-soap .sec-b .pre {
+    color: var(--fg-3);
+    font-size: 11px;
+  }
+  .live-soap .sec-b .placeholder {
+    color: var(--fg-4);
+    font-style: italic;
+  }
+
+  /* right rail: live signals */
+  .rl-rail {
+    background: var(--bg-1);
+    border-left: 1px solid var(--line);
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+  }
+  .rr-section {
+    border-bottom: 1px solid var(--line);
+    padding: 8px 12px;
+  }
+  .rr-section h3 {
+    margin: 0 0 6px;
+    color: var(--fg-3);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    display: flex;
+    justify-content: space-between;
+  }
+  .rr-section h3 .kbd {
+    color: var(--fg-4);
+    font-size: 9.5px;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .kv {
+    display: grid;
+    grid-template-columns: 90px 1fr;
+    gap: 4px 8px;
+    font-size: 11.5px;
+  }
+  .kv dt { color: var(--fg-3); }
+  .kv dd { color: var(--fg); margin: 0; }
+  .kv dd .v-amber { color: var(--signal-amber); }
+  .kv dd .v-mint { color: var(--mint); }
+  .kv dd .v-dim { color: var(--fg-3); }
+
+  /* live audio waveform — flat ascii-ish */
+  .wave {
+    display: grid;
+    grid-template-columns: repeat(48, 1fr);
+    gap: 1px;
+    height: 32px;
+    align-items: end;
+    margin-top: 4px;
+  }
+  .wave i {
+    background: var(--signal-amber);
+    width: 100%;
+    border-radius: 1px;
+    animation: wave 2s ease-in-out infinite;
+    transform-origin: bottom;
+  }
+  @keyframes wave {
+    0%,100% { transform: scaleY(0.2); opacity: 0.5; }
+    50%     { transform: scaleY(1); opacity: 1; }
+  }
+
+  /* live pipeline (idle / armed) */
+  .pipeline {
+    font-size: 11.5px;
+    color: var(--fg-3);
+    line-height: 1.4;
+    word-spacing: 1px;
+  }
+  .pipeline .stage { color: var(--fg-3); }
+  .pipeline .stage.armed {
+    color: var(--signal-amber);
+    background: rgba(245,165,36,0.08);
+    padding: 0 3px;
+    border-radius: 2px;
+  }
+  .pipeline .stage.armed::after {
+    content: '·';
+    margin-left: 2px;
+    animation: blink 1.05s steps(2, start) infinite;
+  }
+  .pipeline .stage.dim { color: var(--fg-4); }
+  .pipeline .sep { color: var(--fg-4); margin: 0 4px; }
+  .pipeline .ts { color: var(--fg-4); font-size: 10.5px; margin-top: 4px; }
+
+  /* statusbar legend */
+  .legend {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 4px 12px;
+    border-top: 1px solid var(--line);
+    background: var(--bg-1);
+    color: var(--fg-3);
+    font-size: 10.5px;
+    flex-shrink: 0;
+  }
+  .legend .kg { display: inline-flex; align-items: center; gap: 4px; margin-right: 12px; }
+  .legend .kbd {
+    border: 1px solid var(--line-strong);
+    background: var(--bg-2);
+    color: var(--fg-2);
+    padding: 0 4px;
+    height: 14px;
+    line-height: 14px;
+    border-radius: 2px;
+    font-size: 10px;
+    min-width: 14px;
+    text-align: center;
+  }
+
+  /* "new visit" modal demo (not a wizard) */
+  .modal-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(7,6,12,0.66);
+    display: none;
+    align-items: flex-start;
+    justify-content: center;
+    z-index: 10;
+  }
+  .modal-overlay[data-open="1"] { display: flex; }
+  .modal {
+    margin-top: 60px;
+    width: 540px;
+    background: var(--bg-2);
+    border: 1px solid var(--line-strong);
+    border-radius: 2px;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.5);
+    font-size: 12px;
+  }
+  .modal-h {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--line);
+    color: var(--fg-3);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+  }
+  .modal-h .right { margin-left: auto; }
+  .modal-row {
+    display: grid;
+    grid-template-columns: 80px 1fr;
+    gap: 8px;
+    padding: 4px 12px;
+    align-items: center;
+    border-bottom: 1px dashed var(--line-soft);
+  }
+  .modal-row dt { color: var(--fg-3); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.1em; }
+  .modal-row dd { margin: 0; color: var(--fg); }
+  .modal-row dd input,
+  .modal-row dd select {
+    width: 100%;
+    background: var(--bg-1);
+    border: 1px solid var(--line);
+    color: var(--fg);
+    font: inherit;
+    padding: 0 6px;
+    height: 24px;
+    border-radius: 2px;
+    outline: none;
+  }
+  .modal-row dd input:focus { border-color: var(--signal-amber); }
+  .modal-row dd .chip-row { display: flex; gap: 4px; flex-wrap: wrap; }
+  .modal-row dd .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 0 6px;
+    height: 20px;
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    color: var(--fg-2);
+    background: var(--bg-1);
+    cursor: pointer;
+    font-size: 11px;
+  }
+  .modal-row dd .chip.active {
+    border-color: var(--signal-amber);
+    color: var(--signal-amber);
+    background: rgba(245,165,36,0.06);
+  }
+  .modal-row dd .chip .kbd {
+    color: var(--fg-4);
+    font-size: 10px;
+    border: 1px solid var(--line);
+    padding: 0 3px;
+    height: 13px;
+    line-height: 13px;
+    border-radius: 2px;
+  }
+  .modal-foot {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 12px;
+    background: var(--bg-1);
+    border-top: 1px solid var(--line);
+  }
+  .modal-foot .left { color: var(--fg-3); font-size: 10.5px; flex: 1; }
+  .modal-foot .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 24px;
+    padding: 0 10px;
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    background: var(--bg-2);
+    color: var(--fg-2);
+    cursor: pointer;
+    font: inherit;
+    font-size: 11.5px;
+  }
+  .modal-foot .btn.primary {
+    background: var(--signal-amber);
+    color: var(--signal-amber-ink);
+    border-color: var(--signal-amber);
+    font-weight: 700;
+  }
+  .modal-foot .btn .kbd {
+    border: 1px solid var(--line-strong);
+    background: var(--bg-1);
+    color: var(--fg-2);
+    padding: 0 4px;
+    height: 14px;
+    line-height: 14px;
+    border-radius: 2px;
+    font-size: 10px;
+  }
+  .modal-foot .btn.primary .kbd {
+    border-color: var(--signal-amber-ink);
+    color: var(--signal-amber-ink);
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: var(--bg-3); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--line-strong); }
+
+  .kbd {
+    display: inline-block;
+    border: 1px solid var(--line-strong);
+    background: var(--bg-2);
+    color: var(--fg-2);
+    padding: 0 4px;
+    height: 14px;
+    line-height: 14px;
+    border-radius: 2px;
+    font-size: 10px;
+    min-width: 14px;
+    text-align: center;
+    font-family: var(--mono);
+  }
+</style>
+</head>
+<body>
+
+<div class="pagestrip">
+  <h1 class="sans">CHART · landing-and-recording.html</h1>
+  <span class="badge">v3 · Direction CHART</span>
+  <p>Top half: marketing landing as a dense table — <span class="em">no hero</span>. Bottom half: an active recording inside the same Chart shell — the recording is a 6px pulsing dot + tabular timer in the toolbar, not a stage piece.</p>
+</div>
+
+<div class="split">
+
+  <!-- ─────────────────────────── TOP — MARKETING ─────────────────────────── -->
+  <div class="pane" style="position:relative">
+
+    <!-- toolbar (signed-out variant) -->
+    <header class="toolbar">
+      <span class="logo"><span class="glyph"></span>QuillMD</span>
+      <span class="ws-switch" style="cursor:default">
+        <span class="ws-name sans">quillmd.com</span>
+        <span class="ws-role">/ start</span>
+      </span>
+      <div class="cmdbar">
+        <span class="prompt">›</span>
+        <input value="" placeholder="search docs · pricing · changelog · /help" />
+        <span class="kbd-end">/ to focus</span>
+      </div>
+      <div class="tb-spacer"></div>
+      <button class="tb-btn"><span>changelog</span></button>
+      <button class="tb-btn"><span>docs</span></button>
+      <button class="tb-btn"><span>sign in</span><span class="kbd">L</span></button>
+      <button class="tb-btn amber" id="open-modal-btn"><span>+ start a visit</span><span class="kbd" style="color:var(--signal-amber-bright);border-color:var(--signal-amber-deep)">N</span></button>
+    </header>
+
+    <!-- marketing body -->
+    <div class="marketing">
+
+      <!-- left nav (signed-out) -->
+      <aside class="mside">
+        <div class="ms-section">product <span style="color:var(--fg-4)">3</span></div>
+        <div class="ms-item active"><span class="ic">▣</span><span class="lbl">Overview</span><span class="kbd-mini">g o</span></div>
+        <div class="ms-item"><span class="ic">≡</span><span class="lbl">Features</span><span class="kbd-mini">g f</span></div>
+        <div class="ms-item"><span class="ic">$</span><span class="lbl">Pricing</span><span class="kbd-mini">g p</span></div>
+
+        <div class="ms-divider"></div>
+        <div class="ms-section">resources</div>
+        <div class="ms-item"><span class="ic">›</span><span class="lbl">Docs</span></div>
+        <div class="ms-item"><span class="ic">›</span><span class="lbl">Changelog</span></div>
+        <div class="ms-item"><span class="ic">›</span><span class="lbl">Security · BAA</span></div>
+        <div class="ms-item"><span class="ic">›</span><span class="lbl">API · webhooks</span></div>
+        <div class="ms-item"><span class="ic">›</span><span class="lbl">Open-source</span></div>
+
+        <div class="ms-divider"></div>
+        <div class="ms-section">company</div>
+        <div class="ms-item"><span class="ic">›</span><span class="lbl">About</span></div>
+        <div class="ms-item"><span class="ic">›</span><span class="lbl">Customers</span></div>
+        <div class="ms-item"><span class="ic">›</span><span class="lbl">Careers</span><span class="kbd-mini">3</span></div>
+        <div class="ms-item"><span class="ic">›</span><span class="lbl">Contact</span></div>
+
+        <div class="ms-divider"></div>
+        <div class="ms-section">status <span style="color:var(--mint)">live</span></div>
+        <div class="ms-item">
+          <span class="ic" style="color:var(--mint)">●</span>
+          <span class="lbl">All systems · 99.99%</span>
+        </div>
+      </aside>
+
+      <!-- center body -->
+      <div class="mbody">
+        <div class="mhead">
+          <h2><span class="hash">#</span>QuillMD — keyboard-first ambient documentation for clinicians.</h2>
+          <p class="sub">A scribe that runs in the background, drafts the SOAP, surfaces the codes, flags the Rx interaction, and stays out of your way. <span class="em">Mono. Dense. Fast.</span> Built for the operator who already lives in <code style="color:var(--signal-amber)">vim</code> and wants their EHR to match. Press <span class="kbd" style="color:var(--signal-amber);border-color:var(--signal-amber-deep)">N</span> to start a visit. Press <span class="kbd">/</span> to search anything.</p>
+          <div class="ctas">
+            <button class="cta-primary" id="open-modal-cta"><span>+ start a visit</span><span class="kbd">N</span></button>
+            <button class="cta-secondary"><span>book a 20-min walkthrough</span><span class="kbd">B</span></button>
+            <span class="cta-meta">no demo video · no sales call required · 14-day free trial</span>
+          </div>
+        </div>
+
+        <!-- compliance strip -->
+        <div class="compliance">
+          <span style="color:var(--fg-3);text-transform:uppercase;letter-spacing:0.12em;font-size:10px">trusted by</span>
+          <span class="pill"><span class="ck">✓</span> HIPAA · BAA on file</span>
+          <span class="pill"><span class="ck">✓</span> SOC 2 Type II</span>
+          <span class="pill"><span class="ck">✓</span> AES-256 at rest</span>
+          <span class="pill"><span class="ck">✓</span> Customer-held keys</span>
+          <span class="pill"><span class="ck">✓</span> us-east-1 · us-west-2</span>
+          <span class="pill"><span class="ck">✓</span> 4 partner clinics · 17 providers · 12k visits</span>
+        </div>
+
+        <!-- features table -->
+        <div class="ftbl-wrap">
+
+          <div class="ftbl-h"><span class="sec-head">§01</span> features <span class="rule"></span> <span style="color:var(--fg-4)">11 rows</span></div>
+          <table class="ftbl">
+            <thead>
+              <tr>
+                <th style="width:30%">capability</th>
+                <th>what it does</th>
+                <th style="width:80px;text-align:center">starter</th>
+                <th style="width:80px;text-align:center">pro</th>
+                <th style="width:80px;text-align:center">scale</th>
+                <th style="width:80px">kbd</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td class="fg">ambient recording</td><td class="dim">2-mic stereo, 48 kHz, on-device VAD, auto-stop on quiet</td><td style="text-align:center"><span class="ck">✓</span></td><td style="text-align:center"><span class="ck">✓</span></td><td style="text-align:center"><span class="ck">✓</span></td><td><span class="kbd">N</span></td></tr>
+              <tr><td class="fg">SOAP draft (L1▸L7)</td><td class="dim">7-layer pipeline · ingest, dx, cluster, draft, cite, codes, audit</td><td style="text-align:center"><span class="ck">✓</span></td><td style="text-align:center"><span class="ck">✓</span></td><td style="text-align:center"><span class="ck">✓</span></td><td><span class="kbd">↵</span></td></tr>
+              <tr><td class="fg">code suggestion</td><td class="dim">ICD-10 + CPT E/M with confidence + cite to transcript line</td><td style="text-align:center"><span class="ck">✓</span></td><td style="text-align:center"><span class="ck">✓</span></td><td style="text-align:center"><span class="ck">✓</span></td><td><span class="kbd">2</span></td></tr>
+              <tr><td class="fg">Rx interaction guard</td><td class="dim">DAILYMED / Lexicomp / FDA labels · severity scored</td><td style="text-align:center"><span class="ck">✓</span></td><td style="text-align:center"><span class="ck">✓</span></td><td style="text-align:center"><span class="ck">✓</span></td><td><span class="kbd">3</span></td></tr>
+              <tr><td class="fg">section regenerate</td><td class="dim">re-run any SOAP section against same transcript w/ different style</td><td style="text-align:center"><span class="x">—</span></td><td style="text-align:center"><span class="ck">✓</span></td><td style="text-align:center"><span class="ck">✓</span></td><td><span class="kbd">R</span></td></tr>
+              <tr><td class="fg">EHR export</td><td class="dim">PDF · DOCX · clipboard · email · raw JSON · webhook</td><td style="text-align:center"><span class="ck">✓</span></td><td style="text-align:center"><span class="ck">✓</span></td><td style="text-align:center"><span class="ck">✓</span></td><td><span class="kbd">⌘E</span></td></tr>
+              <tr><td class="fg">multi-clinic admin</td><td class="dim">org · practice · provider scoping · per-practice templates</td><td style="text-align:center"><span class="x">—</span></td><td style="text-align:center"><span class="x">—</span></td><td style="text-align:center"><span class="ck">✓</span></td><td><span class="kbd">g a</span></td></tr>
+              <tr><td class="fg">audit log · 7yr</td><td class="dim">every prompt, every model call, every override · CSV export</td><td style="text-align:center"><span class="ck">✓</span></td><td style="text-align:center"><span class="ck">✓</span></td><td style="text-align:center"><span class="ck">✓</span></td><td><span class="kbd">⌥3</span></td></tr>
+              <tr><td class="fg">customer-held keys</td><td class="dim">BYO KMS · per-tenant encryption · zero-knowledge mode (beta)</td><td style="text-align:center"><span class="x">—</span></td><td style="text-align:center"><span class="ck">✓</span></td><td style="text-align:center"><span class="ck">✓</span></td><td></td></tr>
+              <tr><td class="fg">SLA · uptime</td><td class="dim">99.99% · single-tenant on Scale · status page incl.</td><td style="text-align:center" class="dim">99.9</td><td style="text-align:center" class="dim">99.95</td><td style="text-align:center"><span class="br">99.99</span></td><td></td></tr>
+              <tr><td class="fg">API · webhooks</td><td class="dim">REST + signed webhooks · BullMQ-grade retry</td><td style="text-align:center"><span class="x">—</span></td><td style="text-align:center"><span class="ck">✓</span></td><td style="text-align:center"><span class="ck">✓</span></td><td></td></tr>
+            </tbody>
+          </table>
+
+          <div class="ftbl-h"><span class="sec-head">§02</span> kbd shortcuts you'll use 50× a day <span class="rule"></span> <span style="color:var(--fg-4)">9 rows</span></div>
+          <table class="ftbl">
+            <thead>
+              <tr>
+                <th>action</th>
+                <th>scope</th>
+                <th style="width:120px">kbd</th>
+                <th class="num">avg saved / day</th>
+                <th>~time / yr</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td class="fg">new visit</td><td class="dim">global</td><td><span class="kbd">N</span></td><td class="num">62×</td><td class="dim">14h</td></tr>
+              <tr><td class="fg">command palette / search</td><td class="dim">global</td><td><span class="kbd">/</span></td><td class="num">130×</td><td class="dim">26h</td></tr>
+              <tr><td class="fg">jump to dashboard</td><td class="dim">global</td><td><span class="kbd">g</span> <span class="kbd">d</span></td><td class="num">18×</td><td class="dim">3h</td></tr>
+              <tr><td class="fg">jump to visits</td><td class="dim">global</td><td><span class="kbd">g</span> <span class="kbd">v</span></td><td class="num">22×</td><td class="dim">4h</td></tr>
+              <tr><td class="fg">regenerate section</td><td class="dim">visit</td><td><span class="kbd">R</span></td><td class="num">8×</td><td class="dim">9h</td></tr>
+              <tr><td class="fg">sign + close</td><td class="dim">visit</td><td><span class="kbd">S</span></td><td class="num">42×</td><td class="dim">11h</td></tr>
+              <tr><td class="fg">retry failed pipeline</td><td class="dim">row</td><td><span class="kbd">r</span></td><td class="num">2×</td><td class="dim">1h</td></tr>
+              <tr><td class="fg">stop recording</td><td class="dim">visit</td><td><span class="kbd">Esc</span></td><td class="num">42×</td><td class="dim">3h</td></tr>
+              <tr><td class="fg">tab through SOAP/Codes/Rx/Extras</td><td class="dim">visit</td><td><span class="kbd">1</span><span class="kbd">2</span><span class="kbd">3</span><span class="kbd">4</span></td><td class="num">120×</td><td class="dim">9h</td></tr>
+            </tbody>
+          </table>
+
+          <div class="ftbl-h"><span class="sec-head">§03</span> pricing <span class="rule"></span> <span style="color:var(--fg-4)">3 plans · annual</span></div>
+          <div class="pricing-row">
+            <div class="col">
+              <h3>Starter</h3>
+              <span class="price">$49<span class="per">/mo · per provider</span></span>
+              <ul>
+                <li>1 provider · 1 practice</li>
+                <li>Up to 60 visits / mo</li>
+                <li>SOAP · codes · Rx warn</li>
+                <li>14-day free trial · no card</li>
+                <li>Community support · GitHub</li>
+              </ul>
+              <button class="pact"><span>start free</span><span class="kbd">1</span></button>
+            </div>
+            <div class="col featured">
+              <h3>Pro <span style="color:var(--signal-amber);font-size:10px;letter-spacing:0.1em;text-transform:uppercase;font-weight:600;margin-left:6px">most-picked</span></h3>
+              <span class="price"><span class="accent">$129</span><span class="per">/mo · per provider</span></span>
+              <ul>
+                <li>Unlimited visits</li>
+                <li>Section regenerate · diff</li>
+                <li>BYO KMS · audit export</li>
+                <li>API + webhooks</li>
+                <li>Email support · 4h SLA</li>
+              </ul>
+              <button class="pact"><span>start 14-day trial</span><span class="kbd">2</span></button>
+            </div>
+            <div class="col">
+              <h3>Scale</h3>
+              <span class="price">talk<span class="per"> · multi-clinic + single-tenant</span></span>
+              <ul>
+                <li>10+ providers · 2+ practices</li>
+                <li>Single-tenant deploy · us-east/west</li>
+                <li>99.99% SLA · status page</li>
+                <li>Custom templates · custom KMS</li>
+                <li>Slack-shared support · 1h SLA</li>
+              </ul>
+              <button class="pact"><span>book a 20-min call</span><span class="kbd">3</span></button>
+            </div>
+          </div>
+
+          <div class="ftbl-h" style="margin-top:14px"><span class="sec-head">§04</span> empty CTA <span class="rule"></span></div>
+          <table class="ftbl">
+            <thead>
+              <tr>
+                <th>scenario</th>
+                <th>what we show</th>
+                <th style="width:100px">kbd</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="fg">first ever visit</td>
+                <td class="dim"># no visits yet — press <span class="kbd">N</span> to start one. (no wizard, no video, no overlay.)</td>
+                <td><span class="kbd">N</span></td>
+              </tr>
+              <tr>
+                <td class="fg">no recordings today</td>
+                <td class="dim"># quiet day. press <span class="kbd">N</span>. or browse <span class="kbd">g v</span>.</td>
+                <td><span class="kbd">N</span></td>
+              </tr>
+              <tr>
+                <td class="fg">queue empty</td>
+                <td class="dim"># 0 jobs · all caught up. workers idle 4/4.</td>
+                <td></td>
+              </tr>
+              <tr>
+                <td class="fg">no rx warnings</td>
+                <td class="dim"># 0 active warnings. last raised v-7836 · 11:04 · resolved.</td>
+                <td><span class="kbd">g r</span></td>
+              </tr>
+            </tbody>
+          </table>
+
+        </div>
+      </div>
+
+      <!-- right rail: kbd cheatsheet -->
+      <aside class="mright">
+        <h3>kbd cheatsheet <span style="color:var(--fg-4)">⌘? to open</span></h3>
+
+        <div class="grp">
+          <h3 style="color:var(--signal-amber)">global</h3>
+          <div class="kb-row"><span class="desc">command palette</span><span class="keys"><span class="kbd">/</span></span></div>
+          <div class="kb-row"><span class="desc">new visit</span><span class="keys"><span class="kbd">N</span></span></div>
+          <div class="kb-row"><span class="desc">go to dashboard</span><span class="keys"><span class="kbd">g</span><span class="kbd">d</span></span></div>
+          <div class="kb-row"><span class="desc">go to visits</span><span class="keys"><span class="kbd">g</span><span class="kbd">v</span></span></div>
+          <div class="kb-row"><span class="desc">go to patients</span><span class="keys"><span class="kbd">g</span><span class="kbd">p</span></span></div>
+          <div class="kb-row"><span class="desc">go to rx warnings</span><span class="keys"><span class="kbd">g</span><span class="kbd">r</span></span></div>
+          <div class="kb-row"><span class="desc">settings</span><span class="keys"><span class="kbd">,</span></span></div>
+          <div class="kb-row"><span class="desc">switch workspace</span><span class="keys"><span class="kbd">⌘</span><span class="kbd">W</span></span></div>
+          <div class="kb-row"><span class="desc">toggle sidenav</span><span class="keys"><span class="kbd">⌘</span><span class="kbd">\</span></span></div>
+          <div class="kb-row"><span class="desc">toggle context-rail</span><span class="keys"><span class="kbd">⌘</span><span class="kbd">.</span></span></div>
+          <div class="kb-row"><span class="desc">help · this cheatsheet</span><span class="keys"><span class="kbd">?</span></span></div>
+        </div>
+
+        <div class="grp">
+          <h3 style="color:var(--signal-amber)">table · row nav</h3>
+          <div class="kb-row"><span class="desc">move row</span><span class="keys"><span class="kbd">j</span><span class="kbd">k</span></span></div>
+          <div class="kb-row"><span class="desc">open row</span><span class="keys"><span class="kbd">↵</span></span></div>
+          <div class="kb-row"><span class="desc">open in new pane</span><span class="keys"><span class="kbd">o</span></span></div>
+          <div class="kb-row"><span class="desc">retry pipeline</span><span class="keys"><span class="kbd">r</span></span></div>
+          <div class="kb-row"><span class="desc">sign + close</span><span class="keys"><span class="kbd">s</span></span></div>
+          <div class="kb-row"><span class="desc">archive</span><span class="keys"><span class="kbd">x</span></span></div>
+          <div class="kb-row"><span class="desc">page up/down</span><span class="keys"><span class="kbd">⌘</span><span class="kbd">↑</span><span class="kbd">↓</span></span></div>
+        </div>
+
+        <div class="grp">
+          <h3 style="color:var(--signal-amber)">visit · editor</h3>
+          <div class="kb-row"><span class="desc">tab SOAP/Codes/Rx/Extras</span><span class="keys"><span class="kbd">1</span><span class="kbd">2</span><span class="kbd">3</span><span class="kbd">4</span></span></div>
+          <div class="kb-row"><span class="desc">regenerate section</span><span class="keys"><span class="kbd">R</span></span></div>
+          <div class="kb-row"><span class="desc">request changes</span><span class="keys"><span class="kbd">C</span></span></div>
+          <div class="kb-row"><span class="desc">undo · revert section</span><span class="keys"><span class="kbd">⌘</span><span class="kbd">Z</span></span></div>
+          <div class="kb-row"><span class="desc">play / pause transcript</span><span class="keys"><span class="kbd">space</span></span></div>
+          <div class="kb-row"><span class="desc">±5s</span><span class="keys"><span class="kbd">←</span><span class="kbd">→</span></span></div>
+          <div class="kb-row"><span class="desc">jump to citation</span><span class="keys"><span class="kbd">f</span></span></div>
+          <div class="kb-row"><span class="desc">insert quote into SOAP</span><span class="keys"><span class="kbd">⇧</span><span class="kbd">↵</span></span></div>
+          <div class="kb-row"><span class="desc">export · pdf</span><span class="keys"><span class="kbd">⌘</span><span class="kbd">E</span></span></div>
+        </div>
+
+        <div class="grp">
+          <h3 style="color:var(--signal-amber)">recording</h3>
+          <div class="kb-row"><span class="desc">start visit · open modal</span><span class="keys"><span class="kbd">N</span></span></div>
+          <div class="kb-row"><span class="desc">stop recording</span><span class="keys"><span class="kbd">Esc</span></span></div>
+          <div class="kb-row"><span class="desc">pause / resume</span><span class="keys"><span class="kbd">space</span></span></div>
+          <div class="kb-row"><span class="desc">flag a moment</span><span class="keys"><span class="kbd">f</span></span></div>
+          <div class="kb-row"><span class="desc">discard recording</span><span class="keys"><span class="kbd">⌘</span><span class="kbd">D</span></span></div>
+        </div>
+      </aside>
+    </div>
+
+    <!-- statusbar (signed-out) -->
+    <footer class="statusbar">
+      <span class="sb-cell mode">● BROWSE</span>
+      <span class="sb-cell"><span class="label">conn</span><span class="blink live"></span><span class="v mint">live · 14ms</span></span>
+      <span class="sb-cell"><span class="label">status</span><span class="v mint">all systems · 99.99%</span></span>
+      <span class="sb-cell"><span class="label">trial</span><span class="v">14d · no card</span></span>
+      <span class="sb-cell"><span class="label">visits run by users</span><span class="v">12,418 · this month</span></span>
+      <span class="sb-spacer"></span>
+      <span class="sb-cell"><span class="label">version</span><span class="v">T-M17.2 · 2026-04-29</span></span>
+      <span class="sb-cell"><span class="label">utc</span><span class="v">15:42:08</span></span>
+    </footer>
+
+    <!-- "+ start a visit" modal — DEMO open -->
+    <div class="modal-overlay" data-open="0" id="modal">
+      <div class="modal">
+        <div class="modal-h">
+          <span style="color:var(--signal-amber)">›</span>
+          <span>new visit</span>
+          <span class="right" style="color:var(--fg-4)">no wizard · single screen · ↵ to start</span>
+        </div>
+        <dl class="modal-row">
+          <dt>patient</dt>
+          <dd><input value="Reyes, Maria" /></dd>
+        </dl>
+        <dl class="modal-row">
+          <dt>specialty</dt>
+          <dd>
+            <div class="chip-row">
+              <span class="chip active">internal <span class="kbd">1</span></span>
+              <span class="chip">cardio <span class="kbd">2</span></span>
+              <span class="chip">endo <span class="kbd">3</span></span>
+              <span class="chip">ob/gyn <span class="kbd">4</span></span>
+              <span class="chip">psych <span class="kbd">5</span></span>
+              <span class="chip">peds <span class="kbd">6</span></span>
+              <span class="chip">other</span>
+            </div>
+          </dd>
+        </dl>
+        <dl class="modal-row">
+          <dt>mode</dt>
+          <dd>
+            <div class="chip-row">
+              <span class="chip active">ambient <span class="kbd">a</span></span>
+              <span class="chip">upload <span class="kbd">u</span></span>
+              <span class="chip">dictate <span class="kbd">d</span></span>
+              <span class="chip">text <span class="kbd">t</span></span>
+            </div>
+          </dd>
+        </dl>
+        <dl class="modal-row">
+          <dt>template</dt>
+          <dd><input value="psi · standard f/u" /></dd>
+        </dl>
+        <dl class="modal-row">
+          <dt>notes</dt>
+          <dd><input value="follow-up · htn / dm2" /></dd>
+        </dl>
+        <div class="modal-foot">
+          <span class="left">⤓ patient autocomplete searches your roster · type <span class="kbd">+</span> to add new</span>
+          <button class="btn"><span>cancel</span><span class="kbd">Esc</span></button>
+          <button class="btn primary"><span>start recording</span><span class="kbd">↵</span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- splitter rule -->
+  <div class="split-rule"><span class="lbl">↓ same shell · live recording state ↓</span></div>
+
+  <!-- ─────────────────────────── BOTTOM — RECORDING ACTIVE ─────────────────────────── -->
+  <div class="pane">
+
+    <!-- toolbar with REC widget -->
+    <header class="toolbar">
+      <span class="logo"><span class="glyph"></span>QuillMD</span>
+      <span class="ws-switch">
+        <span class="ws-name sans">Park Slope Internal</span>
+        <span class="ws-role">/ admin</span>
+      </span>
+
+      <!-- THE RECORDING MOMENT — toolbar widget. that's it. -->
+      <div class="rec-widget" title="recording — Esc to stop">
+        <span class="rec-dot"></span>
+        <span class="rec-label">REC</span>
+        <span class="rec-time">00:42</span>
+        <span class="vu" aria-hidden="true">
+          <i></i><i></i><i></i><i></i><i></i>
+        </span>
+        <span class="kbd-end">v-7843 · Reyes, M</span>
+        <span class="kbd-end">stop <span class="kbd">Esc</span></span>
+      </div>
+
+      <div class="cmdbar">
+        <span class="prompt">›</span>
+        <input value="" placeholder="search · jump · / focus  (cmd palette is always live, even while recording)" />
+        <span class="kbd-end">/ to focus</span>
+      </div>
+      <div class="tb-spacer"></div>
+      <button class="tb-btn"><span>flag moment</span><span class="kbd">F</span></button>
+      <button class="tb-btn"><span>+ new</span><span class="kbd">N</span></button>
+      <button class="tb-btn"><span>?</span></button>
+      <span class="user-chip">
+        <span class="ini">EJ</span>
+        <span class="sans" style="color:var(--fg);font-size:11.5px">Dr. E. Jain</span>
+      </span>
+    </header>
+
+    <!-- body -->
+    <div class="reclive">
+
+      <!-- side -->
+      <aside class="rl-side">
+        <div class="ms-section">workspace</div>
+        <div class="ms-item"><span class="ic">▣</span><span class="lbl">Dashboard</span><span class="kbd-mini">g d</span></div>
+        <div class="ms-item active"><span class="ic" style="color:var(--signal-amber)">●</span><span class="lbl" style="color:var(--signal-amber)">Recording · v-7843</span></div>
+        <div class="ms-item"><span class="ic">≡</span><span class="lbl">Visits</span><span style="color:var(--fg-4);font-size:10px">214</span></div>
+        <div class="ms-item"><span class="ic">⊕</span><span class="lbl">Patients</span></div>
+        <div class="ms-item"><span class="ic">℞</span><span class="lbl">Rx warnings</span></div>
+
+        <div class="ms-divider"></div>
+        <div class="ms-section">live signals</div>
+        <div class="ms-item"><span class="ic" style="color:var(--mint)">●</span><span class="lbl">mic · ok · -18 dBFS</span></div>
+        <div class="ms-item"><span class="ic" style="color:var(--mint)">●</span><span class="lbl">VAD · 2 speakers</span></div>
+        <div class="ms-item"><span class="ic" style="color:var(--mint)">●</span><span class="lbl">net · 9ms</span></div>
+        <div class="ms-item"><span class="ic" style="color:var(--mint)">●</span><span class="lbl">disk · 84% free</span></div>
+        <div class="ms-item"><span class="ic" style="color:var(--signal-amber)">●</span><span class="lbl">L1 · streaming</span></div>
+
+        <div class="ms-divider"></div>
+        <div class="ms-section">today · jain.e</div>
+        <div class="ms-item"><span class="ic">›</span><span class="lbl" style="color:var(--fg-3)">v-7842 Reyes, M</span><span style="color:var(--mint);font-size:9.5px">READY</span></div>
+        <div class="ms-item"><span class="ic">›</span><span class="lbl" style="color:var(--fg-3)">v-7841 O'Connell, B</span><span style="color:var(--signal-amber);font-size:9.5px">L4</span></div>
+        <div class="ms-item"><span class="ic">›</span><span class="lbl" style="color:var(--fg-3)">v-7838 Vogel, H</span><span style="color:var(--mint);font-size:9.5px">READY</span></div>
+
+        <div class="ms-divider"></div>
+        <div class="ms-section">notes</div>
+        <div style="padding: 4px 12px;color:var(--fg-3);font-size:10.5px;line-height:1.45">
+          # while recording the dashboard remains usable. switch panes freely · the rec widget sticks. press <span class="kbd">Esc</span> when finished.
+        </div>
+      </aside>
+
+      <!-- main -->
+      <section class="rl-main">
+
+        <div class="rl-head">
+          <span class="crumb"><b>Park Slope Internal</b><span class="sep">/</span><b>v-7843</b></span>
+          <span class="meta">patient <span class="v">Reyes, Maria · F · 58</span></span>
+          <span class="meta">specialty <span class="v">Internal</span></span>
+          <span class="meta">duration <span class="v">00:42</span></span>
+          <span class="pill">REC · LIVE</span>
+          <span style="margin-left:auto;color:var(--fg-3);font-size:10.5px">tx streaming · L1 ingest active · drafting will start at recording stop</span>
+        </div>
+
+        <div class="rl-live">
+
+          <!-- live transcript -->
+          <div class="rl-col">
+            <h3>live transcript <span class="meta">words <span class="v">147</span> · 2 spk · -18 dBFS</span></h3>
+            <div class="tx-line"><span class="ts">00:00.0</span><span class="who dr">DR</span><span class="text">Maria, good to see you. How have things been since the last visit?</span></div>
+            <div class="tx-line"><span class="ts">00:05.8</span><span class="who pt">PT</span><span class="text">They've been okay. The blood-pressure has been a little better since I started the new pill, I think.</span></div>
+            <div class="tx-line"><span class="ts">00:13.1</span><span class="who dr">DR</span><span class="text">Better — meaning what? Have you been checking at home?</span></div>
+            <div class="tx-line"><span class="ts">00:17.4</span><span class="who pt">PT</span><span class="text">Yes, every morning. Last week the highest was 138 over 84, mostly it's around 130-something.</span></div>
+            <div class="tx-line"><span class="ts">00:25.8</span><span class="who dr">DR</span><span class="text">That's good. And the diabetes — how have the sugars been?</span></div>
+            <div class="tx-line"><span class="ts">00:30.2</span><span class="who pt">PT</span><span class="text">Mostly fine. Mornings are 110 to 130. After dinner sometimes 180, 190.</span></div>
+            <div class="tx-line partial"><span class="ts">00:39.6</span><span class="who dr">DR</span><span class="text">Are those the days you eat out, or — <span class="partial-cursor"></span></span></div>
+
+            <h3 style="margin-top:14px">audio · waveform</h3>
+            <div class="wave">
+              <i style="animation-delay:.0s"></i><i style="animation-delay:.05s"></i><i style="animation-delay:.1s"></i>
+              <i style="animation-delay:.15s"></i><i style="animation-delay:.2s"></i><i style="animation-delay:.25s"></i>
+              <i style="animation-delay:.3s"></i><i style="animation-delay:.35s"></i><i style="animation-delay:.4s"></i>
+              <i style="animation-delay:.45s"></i><i style="animation-delay:.5s"></i><i style="animation-delay:.55s"></i>
+              <i style="animation-delay:.6s"></i><i style="animation-delay:.65s"></i><i style="animation-delay:.7s"></i>
+              <i style="animation-delay:.75s"></i><i style="animation-delay:.8s"></i><i style="animation-delay:.85s"></i>
+              <i style="animation-delay:.9s"></i><i style="animation-delay:.95s"></i><i style="animation-delay:1.0s"></i>
+              <i style="animation-delay:1.05s"></i><i style="animation-delay:1.1s"></i><i style="animation-delay:1.15s"></i>
+              <i style="animation-delay:1.2s"></i><i style="animation-delay:1.25s"></i><i style="animation-delay:1.3s"></i>
+              <i style="animation-delay:1.35s"></i><i style="animation-delay:1.4s"></i><i style="animation-delay:1.45s"></i>
+              <i style="animation-delay:1.5s"></i><i style="animation-delay:1.55s"></i><i style="animation-delay:1.6s"></i>
+              <i style="animation-delay:1.65s"></i><i style="animation-delay:1.7s"></i><i style="animation-delay:1.75s"></i>
+              <i style="animation-delay:1.8s"></i><i style="animation-delay:1.85s"></i><i style="animation-delay:1.9s"></i>
+              <i style="animation-delay:1.95s"></i><i style="animation-delay:2.0s"></i><i style="animation-delay:2.05s"></i>
+              <i style="animation-delay:2.1s"></i><i style="animation-delay:2.15s"></i><i style="animation-delay:2.2s"></i>
+              <i style="animation-delay:2.25s"></i><i style="animation-delay:2.3s"></i><i style="animation-delay:2.35s"></i>
+            </div>
+            <div style="margin-top:4px;color:var(--fg-3);font-size:10.5px;display:flex;justify-content:space-between">
+              <span>peak -6 dBFS · rms -18 dBFS</span>
+              <span>silence 0.4s · auto-stop 8.0s</span>
+            </div>
+          </div>
+
+          <!-- forming SOAP -->
+          <div class="rl-col live-soap">
+            <h3>SOAP · forming (locked until stop) <span class="meta">L1 ingest · L2-L7 will run on stop</span></h3>
+
+            <div class="sec">
+              <div class="sec-h">
+                <span>§01 · Subjective</span>
+                <span class="right">extracted from tx · <span class="v">3 anchors</span></span>
+              </div>
+              <div class="sec-b">
+                <div class="pre"># forming · auto-detected anchors</div>
+                <div>· <span style="color:var(--fg)">HTN</span> — patient reports home BP improved since new pill <span style="color:var(--fg-3);font-size:10.5px">tx 00:05–00:25</span></div>
+                <div>· <span style="color:var(--fg)">DM2</span> — fasting 110–130; postprandial 180–190 <span style="color:var(--fg-3);font-size:10.5px">tx 00:25–00:38</span></div>
+                <div class="placeholder">⏳ awaiting more dialog · L4 will draft on stop</div>
+              </div>
+            </div>
+
+            <div class="sec">
+              <div class="sec-h">
+                <span>§02 · Objective</span>
+                <span class="right"><span class="v">vitals from kiosk</span></span>
+              </div>
+              <div class="sec-b">
+                <div>BP 132/82 · HR 74 · SpO2 98 · T 36.8 · Wt 73kg · BMI 27.4</div>
+                <div class="placeholder">exam findings will populate at stop</div>
+              </div>
+            </div>
+
+            <div class="sec">
+              <div class="sec-h">
+                <span>§03 · Assessment</span>
+                <span class="right"><span class="v">draft pending</span></span>
+              </div>
+              <div class="sec-b">
+                <div class="placeholder"># L4 will draft once recording is stopped — not before</div>
+              </div>
+            </div>
+
+            <div class="sec">
+              <div class="sec-h">
+                <span>§04 · Plan</span>
+                <span class="right"><span class="v">draft pending</span></span>
+              </div>
+              <div class="sec-b">
+                <div class="placeholder"># L4 will draft on stop · Rx interactions will be checked at L7</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="legend">
+          <div>
+            <span class="kg"><span class="kbd">Esc</span> stop recording</span>
+            <span class="kg"><span class="kbd">space</span> pause</span>
+            <span class="kg"><span class="kbd">F</span> flag moment</span>
+            <span class="kg"><span class="kbd">/</span> focus search</span>
+            <span class="kg"><span class="kbd">⌘</span><span class="kbd">D</span> discard</span>
+          </div>
+          <div>
+            <span class="kg" style="color:var(--fg-2)">recording locked-in · auto-stop in 8.0s of silence</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- right rail -->
+      <aside class="rl-rail">
+
+        <div class="rr-section">
+          <h3>recording · v-7843 <span class="kbd">⌥1</span></h3>
+          <dl class="kv">
+            <dt>started</dt>     <dd>15:41:26 EDT</dd>
+            <dt>elapsed</dt>     <dd><span class="v-amber">00:42</span></dd>
+            <dt>auto-stop</dt>   <dd>8.0s silence · adjustable</dd>
+            <dt>mic</dt>         <dd>Shure MV7 · USB · 48 kHz</dd>
+            <dt>level</dt>       <dd><span class="v-mint">peak -6 · rms -18 dBFS</span></dd>
+            <dt>VAD</dt>         <dd>2 speakers detected</dd>
+            <dt>upload</dt>      <dd>queued · MinIO · us-east-1</dd>
+            <dt>encryption</dt>  <dd><span class="v-mint">AES-256 · per-tenant key</span></dd>
+            <dt>retention</dt>   <dd>raw audio · 7d · then purged</dd>
+          </dl>
+        </div>
+
+        <div class="rr-section">
+          <h3>pipeline · armed (will run on stop) <span class="kbd">⌥2</span></h3>
+          <div class="pipeline">
+            <span class="stage armed">L1 ingest</span><span class="sep">▸</span>
+            <span class="stage dim">L2 dx</span><span class="sep">▸</span>
+            <span class="stage dim">L3 cluster</span><span class="sep">▸</span>
+            <span class="stage dim">L4 draft</span><span class="sep">▸</span>
+            <span class="stage dim">L5 cite</span><span class="sep">▸</span>
+            <span class="stage dim">L6 codes</span><span class="sep">▸</span>
+            <span class="stage dim">L7 audit</span>
+            <div class="ts">L1 streaming live · L2-L7 fire on Esc · expected ~38s end-to-end</div>
+          </div>
+        </div>
+
+        <div class="rr-section">
+          <h3>flagged moments <span class="kbd">⌥3</span></h3>
+          <div style="font-size:11.5px;color:var(--fg-2)">
+            <div style="display:grid;grid-template-columns:50px 1fr;gap:8px;padding:2px 0;border-bottom:1px dashed var(--line-soft)"><span style="color:var(--fg-4)">00:32</span><span>"180-190 postprandial" · note</span></div>
+            <div style="color:var(--fg-3);font-size:10.5px;margin-top:4px"># press <span class="kbd">F</span> to flag the current moment for review · stays in audit trail</div>
+          </div>
+        </div>
+
+        <div class="rr-section">
+          <h3>past visits · same patient <span class="kbd">⌥4</span></h3>
+          <div style="font-size:11px;color:var(--fg-2)">
+            <div style="display:grid;grid-template-columns:60px 1fr 60px;gap:6px;padding:1px 0;color:var(--fg-2)"><span style="color:var(--fg-4)">04-01</span><span>follow-up · htn / dm2</span><span style="color:var(--fg-3)">SIGNED</span></div>
+            <div style="display:grid;grid-template-columns:60px 1fr 60px;gap:6px;padding:1px 0;color:var(--fg-2)"><span style="color:var(--fg-4)">02-19</span><span>annual physical</span><span style="color:var(--fg-3)">SIGNED</span></div>
+            <div style="display:grid;grid-template-columns:60px 1fr 60px;gap:6px;padding:1px 0;color:var(--fg-2)"><span style="color:var(--fg-4)">11-04</span><span>tele · medication change</span><span style="color:var(--fg-3)">SIGNED</span></div>
+          </div>
+        </div>
+
+        <div class="rr-section">
+          <h3>active rx · for interaction check <span class="kbd">⌥5</span></h3>
+          <div style="font-size:11.5px">
+            <div style="display:grid;grid-template-columns:1fr auto;gap:8px;padding:1px 0;color:var(--fg-2);border-bottom:1px dashed var(--line-soft)"><span>Lisinopril 20mg PO QD</span><span style="color:var(--fg-3)">2025-11-04</span></div>
+            <div style="display:grid;grid-template-columns:1fr auto;gap:8px;padding:1px 0;color:var(--fg-2);border-bottom:1px dashed var(--line-soft)"><span>Metformin 1000mg PO BID</span><span style="color:var(--fg-3)">2024-08-22</span></div>
+            <div style="display:grid;grid-template-columns:1fr auto;gap:8px;padding:1px 0;color:var(--fg-2);border-bottom:1px dashed var(--line-soft)"><span>Atorvastatin 20mg PO HS</span><span style="color:var(--fg-3)">2025-02-19</span></div>
+            <div style="display:grid;grid-template-columns:1fr auto;gap:8px;padding:1px 0;color:var(--fg-2)"><span>ASA 81mg PO QD</span><span style="color:var(--fg-3)">2024-08-22</span></div>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <!-- statusbar (recording) -->
+    <footer class="statusbar">
+      <span class="sb-cell mode rec">● REC</span>
+      <span class="sb-cell"><span class="label">conn</span><span class="blink live"></span><span class="v mint">live · 9ms</span></span>
+      <span class="sb-cell"><span class="label">ai</span><span class="blink signal"></span><span class="v amber">L1 ingest · streaming</span></span>
+      <span class="sb-cell"><span class="label">visit</span><span class="v">v-7843</span></span>
+      <span class="sb-cell"><span class="label">elapsed</span><span class="v amber">00:42</span></span>
+      <span class="sb-cell"><span class="label">level</span><span class="v">-18 dBFS</span></span>
+      <span class="sb-cell"><span class="label">disk</span><span class="v">84% free</span></span>
+      <span class="sb-cell"><span class="label">user</span><span class="v">jain.e@psi</span></span>
+      <span class="sb-spacer"></span>
+      <span class="sb-cell"><span class="label">build</span><span class="v">T-M17.2</span></span>
+      <span class="sb-cell"><span class="label">utc</span><span class="v" id="clock">15:42:08</span></span>
+    </footer>
+
+  </div>
+
+</div>
+
+<script>
+  (function(){
+    function tick(){
+      const n = new Date();
+      const z = (x)=>String(x).padStart(2,'0');
+      const el = document.getElementById('clock');
+      if (el) el.textContent = z(n.getUTCHours())+':'+z(n.getUTCMinutes())+':'+z(n.getUTCSeconds());
+    }
+    setInterval(tick, 1000); tick();
+
+    // open modal demo on either CTA
+    function openModal(){ document.getElementById('modal').setAttribute('data-open','1'); }
+    function closeModal(){ document.getElementById('modal').setAttribute('data-open','0'); }
+    var b1 = document.getElementById('open-modal-btn'); if (b1) b1.addEventListener('click', openModal);
+    var b2 = document.getElementById('open-modal-cta'); if (b2) b2.addEventListener('click', openModal);
+    document.addEventListener('keydown', function(e){
+      if (e.key === 'Escape') closeModal();
+      if ((e.key === 'n' || e.key === 'N') && !/INPUT|TEXTAREA/.test(document.activeElement.tagName)) {
+        openModal(); e.preventDefault();
+      }
+    });
+  })();
+</script>
+</body>
+</html>

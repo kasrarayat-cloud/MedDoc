@@ -12,6 +12,16 @@
 // The previous T-M18.2 "Trash" tab + archived toggle are not ported
 // yet — the new dashboard is deliberately two-tab per the redesign
 // brief. Global trash stays recoverable via /patients/[id] pages.
+//
+// Phase 2 (Clinician remodel — Batch C): opts in to the new chrome
+// by passing `theme="clinician"` to <AppFrame> and threading the
+// same `theme` through every restyled child (PageHeader, StatCard,
+// PatientCard, VisitList). Inline JSX (TabBar, EmptyPatients,
+// EmptyVisits, DashboardSkeleton) is restyled in-place using the
+// `.qm-cl-*` class catalog — they aren't reused elsewhere so a
+// theme prop on each would just duplicate code paths nobody else
+// calls. Server-side data fetching (auth, prisma queries, redirect)
+// is unchanged per PROTECTED_CONTRACTS.md.
 // ============================================================================
 
 import type { Metadata } from 'next';
@@ -62,7 +72,7 @@ export default async function DashboardPage({
   const activeTab: ActiveTab = tabRaw === 'all' ? 'all' : 'patients';
 
   return (
-    <AppFrame>
+    <AppFrame theme="clinician">
       <Suspense fallback={<DashboardSkeleton />}>
         <DashboardBody
           userId={session.user.id}
@@ -154,10 +164,11 @@ async function DashboardBody({
   return (
     <>
       <PageHeader
-        eyebrow="§ Home / Today"
+        theme="clinician"
+        eyebrow="Today"
         title={
           <>
-            Your <em style={{ color: 'var(--accent-bright)' }}>workspace</em>.
+            Your <em style={{ color: 'var(--sage-deep)' }}>workspace</em>.
           </>
         }
         subtitle={
@@ -168,7 +179,7 @@ async function DashboardBody({
             {pendingReview > 0 && (
               <>
                 {' · '}
-                <span style={{ color: 'var(--amber)' }}>
+                <span style={{ color: 'var(--amber-deep)' }}>
                   {pendingReview} awaiting your review
                 </span>
               </>
@@ -178,7 +189,7 @@ async function DashboardBody({
         actions={
           <Link
             href="/visits/new"
-            className="qm-btn qm-btn-primary"
+            className="qm-cl-btn qm-cl-btn-primary"
             style={{ textDecoration: 'none' }}
           >
             <Ic.plus width={14} height={14} />
@@ -191,28 +202,32 @@ async function DashboardBody({
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(4, 1fr)',
-          gap: 14,
-          padding: '0 32px 18px',
+          gap: 16,
+          padding: '0 40px 24px',
         }}
       >
         <StatCard
-          label={`§ Visits / ${now.toLocaleString('en-US', { month: 'short' })}`}
+          theme="clinician"
+          label={`Visits / ${now.toLocaleString('en-US', { month: 'short' })}`}
           value={visitsThisMonth}
           unit="this month"
         />
         <StatCard
-          label="§ Avg drafted in"
+          theme="clinician"
+          label="Avg drafted in"
           value={avgDraftedMin != null ? avgDraftedMin : '—'}
           unit={avgDraftedMin != null ? 'min / visit' : 'no data yet'}
         />
         <StatCard
-          label="§ Pending review"
+          theme="clinician"
+          label="Pending review"
           value={pendingReview}
           unit={pendingReview === 1 ? 'visit' : 'visits'}
           deltaTone={pendingReview > 0 ? 'amber' : 'mint'}
         />
         <StatCard
-          label="§ Signed this week"
+          theme="clinician"
+          label="Signed this week"
           value={signedThisWeek}
           unit={signedThisWeek === 1 ? 'note' : 'notes'}
         />
@@ -242,53 +257,50 @@ function TabBar({
     { id: 'patients', label: 'Patients', count: patientCount, href: '/dashboard' },
     { id: 'all', label: 'All visits', count: visitCount, href: '/dashboard?tab=all' },
   ];
+  // Mockup ref: docs/design-directions-v3/clinician/dashboard.html L571–576.
+  // Soft tab pills (`.qm-cl-tab-row` / `.qm-cl-tab` + `.qm-cl-active`)
+  // sit on the page, not on a bottom-border underline like the legacy
+  // tabs. Counts ride alongside the label in muted ink-4.
   return (
     <div
       style={{
-        padding: '0 32px',
+        padding: '4px 40px 18px',
         display: 'flex',
-        gap: 4,
-        borderBottom: '1px solid var(--line)',
-        marginTop: 6,
+        justifyContent: 'flex-start',
       }}
     >
-      {tabs.map((t) => {
-        const active = t.id === activeTab;
-        return (
-          <Link
-            key={t.id}
-            href={t.href}
-            scroll={false}
-            style={{
-              padding: '12px 16px',
-              background: 'none',
-              cursor: 'pointer',
-              color: active ? 'var(--fg)' : 'var(--fg-3)',
-              borderBottom: `2px solid ${active ? 'var(--accent-bright)' : 'transparent'}`,
-              fontFamily: 'var(--sans)',
-              fontSize: 13,
-              fontWeight: 500,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-              marginBottom: -1,
-              textDecoration: 'none',
-            }}
-            aria-current={active ? 'page' : undefined}
-          >
-            {t.label}
-            <span
+      <div className="qm-cl-tab-row">
+        {tabs.map((t) => {
+          const active = t.id === activeTab;
+          return (
+            <Link
+              key={t.id}
+              href={t.href}
+              scroll={false}
+              className={`qm-cl-tab${active ? ' qm-cl-active' : ''}`}
               style={{
-                fontFamily: 'var(--mono)',
-                fontSize: 10,
-                color: 'var(--fg-4)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                textDecoration: 'none',
               }}
+              aria-current={active ? 'page' : undefined}
             >
-              {t.count}
-            </span>
-          </Link>
-        );
-      })}
+              {t.label}
+              <span
+                style={{
+                  fontFamily: 'var(--mono)',
+                  fontSize: 11,
+                  color: active ? 'var(--sage-deep)' : 'var(--ink-4)',
+                  opacity: active ? 0.85 : 1,
+                }}
+              >
+                {t.count}
+              </span>
+            </Link>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -384,12 +396,12 @@ async function PatientsTab({
       style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-        gap: 14,
-        padding: '22px 32px 32px',
+        gap: 16,
+        padding: '22px 40px 40px',
       }}
     >
       {patients.map((p) => (
-        <PatientCard key={p.id} patient={p} />
+        <PatientCard key={p.id} patient={p} theme="clinician" />
       ))}
     </div>
   );
@@ -411,6 +423,7 @@ async function AllVisitsTab({
     status: import('@prisma/client').TranscribeVisitStatus;
     needsReview: boolean;
     createdAt: Date;
+    signedAt: Date | null;
     audioDurationSec: number | null;
     patient: { name: string } | null;
   };
@@ -425,6 +438,7 @@ async function AllVisitsTab({
       status: true,
       needsReview: true,
       createdAt: true,
+      signedAt: true,
       audioDurationSec: true,
       patient: { select: { name: true } },
     },
@@ -440,11 +454,13 @@ async function AllVisitsTab({
       needsReview: v.needsReview,
       // ISO UTC — <VisitList> formats + buckets in viewer's local TZ.
       createdAt: v.createdAt.toISOString(),
+      // Batch H: surfaces "Signed · {date}" pill on the visit-list row.
+      signedAt: v.signedAt ? v.signedAt.toISOString() : null,
       audioDurationSec: v.audioDurationSec,
     })
   );
 
-  return <VisitList visits={visits} />;
+  return <VisitList visits={visits} theme="clinician" />;
 }
 
 function EmptyPatients() {
@@ -452,25 +468,21 @@ function EmptyPatients() {
     <div
       style={{
         margin: '60px auto',
-        maxWidth: 420,
+        maxWidth: 460,
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         textAlign: 'center',
       }}
     >
-      {/* Minimal violet quill illustration — final version ported in
-         Gate 13 (EmptyState + IlloQuill). Placeholder keeps the
-         composition right without the asset work. */}
       <div
         aria-hidden
         style={{
           width: 96,
           height: 96,
           borderRadius: 24,
-          background:
-            'radial-gradient(circle at 30% 30%, rgba(209,181,255,0.35), rgba(107,63,217,0.08))',
-          border: '1px solid rgba(139,92,255,0.2)',
+          background: 'var(--sage-tint)',
+          border: '1px solid var(--sage-tint-strong)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -480,27 +492,30 @@ function EmptyPatients() {
         <Ic.sparkle
           width={36}
           height={36}
-          style={{ color: 'var(--accent-bright)' }}
+          style={{ color: 'var(--sage-deep)' }}
         />
       </div>
       <h2
-        className="qm-serif"
+        className="qm-cl-serif"
         style={{
           margin: 0,
-          fontSize: 24,
+          fontSize: 28,
           fontWeight: 400,
-          letterSpacing: '-0.015em',
+          letterSpacing: '-0.01em',
+          color: 'var(--ink)',
+          lineHeight: 1.2,
         }}
       >
-        No patients <em style={{ color: 'var(--accent-bright)' }}>yet</em>
+        No patients <em style={{ color: 'var(--sage-deep)' }}>yet</em>
       </h2>
       <p
+        className="qm-cl-serif"
         style={{
-          marginTop: 10,
-          fontSize: 13.5,
-          color: 'var(--fg-3)',
+          marginTop: 12,
+          fontSize: 15,
+          color: 'var(--ink-2)',
           lineHeight: 1.55,
-          maxWidth: 340,
+          maxWidth: 360,
         }}
       >
         Start your first visit — we&apos;ll create a patient record for you
@@ -508,10 +523,9 @@ function EmptyPatients() {
       </p>
       <Link
         href="/visits/new"
-        className="qm-btn qm-btn-primary"
+        className="qm-cl-btn qm-cl-btn-primary"
         style={{
-          marginTop: 20,
-          padding: '10px 18px',
+          marginTop: 22,
           textDecoration: 'none',
         }}
       >
@@ -527,16 +541,17 @@ function EmptyVisits() {
     <div
       style={{
         margin: '60px auto',
-        maxWidth: 420,
+        maxWidth: 460,
         textAlign: 'center',
-        color: 'var(--fg-3)',
-        fontSize: 13.5,
+        color: 'var(--ink-3)',
+        fontSize: 14.5,
+        fontFamily: 'var(--serif)',
       }}
     >
       No visits yet for any patient.{' '}
       <Link
         href="/visits/new"
-        style={{ color: 'var(--accent-bright)', fontWeight: 500 }}
+        style={{ color: 'var(--sage-deep)', fontWeight: 500 }}
       >
         Start one →
       </Link>
@@ -545,45 +560,57 @@ function EmptyVisits() {
 }
 
 function DashboardSkeleton() {
+  // Cream-tinted skeleton tiles. The legacy `.qm-shimmer` animation
+  // is built around a violet-on-dark gradient, which reads off-key
+  // on the warm cream canvas. For the Clinician variant we just
+  // render quiet placeholder rectangles in cream-2 — restful, no
+  // theatrical motion (per direction CL-5).
+  const tile: React.CSSProperties = {
+    background: 'var(--cream-2)',
+    border: '1px solid var(--line)',
+    borderRadius: 16,
+  };
   return (
-    <div style={{ padding: '28px 32px' }}>
+    <div style={{ padding: '40px 40px 0' }}>
       <div
-        className="qm-shimmer"
-        style={{ height: 36, width: 300, borderRadius: 6, marginBottom: 10 }}
+        style={{
+          height: 38,
+          width: 320,
+          marginBottom: 12,
+          ...tile,
+          borderRadius: 8,
+        }}
       />
       <div
-        className="qm-shimmer"
-        style={{ height: 14, width: 220, borderRadius: 4, marginBottom: 24 }}
+        style={{
+          height: 16,
+          width: 240,
+          marginBottom: 28,
+          ...tile,
+          borderRadius: 6,
+        }}
       />
       <div
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(4, 1fr)',
-          gap: 14,
-          marginBottom: 20,
+          gap: 16,
+          marginBottom: 24,
         }}
       >
         {Array.from({ length: 4 }).map((_, i) => (
-          <div
-            key={i}
-            className="qm-shimmer"
-            style={{ height: 110, borderRadius: 12 }}
-          />
+          <div key={i} style={{ height: 140, ...tile }} />
         ))}
       </div>
       <div
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-          gap: 14,
+          gap: 16,
         }}
       >
         {Array.from({ length: 6 }).map((_, i) => (
-          <div
-            key={i}
-            className="qm-shimmer"
-            style={{ height: 120, borderRadius: 12 }}
-          />
+          <div key={i} style={{ height: 140, ...tile }} />
         ))}
       </div>
     </div>
