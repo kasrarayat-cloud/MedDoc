@@ -44,8 +44,17 @@ services:
       POSTGRES_DB: meddoc
       POSTGRES_USER: meddoc
       POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme_in_production}
+    # Phase 3 / HIPAA h8 — encryption-at-rest. The host path
+    # /var/lib/meddoc-postgres-data is the mount point of a LUKS-on-
+    # loop-file device provisioned by infra/setup-encrypted-volume.sh
+    # and re-opened on boot by meddoc-postgres-volume.service (ordered
+    # Before=docker.service). Operator migration runbook:
+    # docs/RUNBOOK_ENCRYPTED_VOLUME.md. The legacy `pgdata` named
+    # volume is intentionally left in the top-level `volumes:` block
+    # for now — its cleanup is a separate task once migration is
+    # confirmed on every environment.
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - /var/lib/meddoc-postgres-data:/var/lib/postgresql/data
     ports:
       - "127.0.0.1:5432:5432"   # only accessible from localhost
     healthcheck:
