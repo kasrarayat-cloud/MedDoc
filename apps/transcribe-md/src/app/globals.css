@@ -2510,6 +2510,38 @@ body {
    landing-11-anim-1.html. Scoped under .qm-cl-app to avoid bleeding
    into the dark .qm-app routes. ── */
 .qm-cl-app .av1-word {
+/* ──────────────────────────────────────────────────────────────────────
+   Phase 4 — Apple Cinematic Hero primitives + .qm-cin-* utility catalog
+   ──────────────────────────────────────────────────────────────────────
+   Sourced verbatim from docs/design-directions-v6/studio-variations/
+   landing-11-anim-1.html (animation reference) + auth-04.html /
+   dashboard-{02,03,04}.html (visual references).
+
+   Design intent: every cinematic surface (landing, auth, dashboard,
+   visit-detail, etc.) builds the same vocabulary on top of:
+     - .av1-word   word-level blur-to-sharp + lift, with .em + .glow
+                   modifiers for the italic sage accent.
+     - .av1-fade   simple opacity + 8px lift (eyebrow, sub-copy, fields).
+     - .av1-card   blur-to-sharp + 40px slide-from-right (hero card
+                   reveal — used by the auth form card and any aside).
+     - .av1-cta    subtle scale-in for primary buttons.
+     - .qm-cin-*   layout utilities for the photo hero band, gradient
+                   overlays, and time-of-day crossfade stack.
+
+   Reduced-motion: every transitioned property is forced to its final
+   resting state when prefers-reduced-motion: reduce is set. The bucket
+   crossfade for the dashboard hero collapses to an instantaneous swap
+   in the same media query.
+
+   The classes below are deliberately UN-scoped (no .qm-cl-app prefix)
+   because the hero components mount above the .qm-cl-app shell on
+   /dashboard, and the auth shell wraps its hero in its own .qm-cl-app
+   already. They reference the bare-name CSS vars (--sage-bright,
+   --cream-card, --ease-clinician), all of which are aliased inside
+   .qm-cl-app and are also defined at :root for un-wrapped surfaces
+   (the landing page in particular). */
+
+.av1-word {
   display: inline-block;
   opacity: 0;
   filter: blur(14px);
@@ -2520,6 +2552,11 @@ body {
     transform 720ms var(--ease-clinician);
 }
 .qm-cl-app .av1-word.show {
+    opacity 720ms cubic-bezier(0.22, 1, 0.36, 1),
+    filter 720ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 720ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.av1-word.show {
   opacity: 1;
   filter: blur(0);
   transform: none;
@@ -2531,6 +2568,12 @@ body {
 }
 .qm-cl-app .av1-word.glow.show {
 .qm-cl-app .av1-word.em.glow.show {
+.av1-word.em {
+  font-style: italic;
+  color: var(--color-clinician-sage-bright, #95BCA4);
+  font-weight: 400;
+}
+.av1-word.em.glow.show {
   text-shadow:
     0 0 36px rgba(149, 188, 164, 0.55),
     0 2px 12px rgba(0, 0, 0, 0.30);
@@ -2547,6 +2590,20 @@ body {
   transform: none;
 }
 .qm-cl-app .av1-card {
+
+.av1-fade {
+  opacity: 0;
+  transform: translateY(8px);
+  transition:
+    opacity 800ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 800ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.av1-fade.show {
+  opacity: 1;
+  transform: none;
+}
+
+.av1-card {
   opacity: 0;
   filter: blur(12px);
   transform: translate3d(40px, 0, 0);
@@ -2556,6 +2613,11 @@ body {
     transform 900ms var(--ease-clinician);
 }
 .qm-cl-app .av1-card.show {
+    opacity 900ms cubic-bezier(0.22, 1, 0.36, 1),
+    filter 900ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 900ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.av1-card.show {
   opacity: 1;
   filter: blur(0);
   transform: none;
@@ -2585,6 +2647,24 @@ body {
   .qm-cl-app .av1-card,
   .qm-cl-app .av1-card-up,
   .qm-cl-app .av1-cta {
+
+.av1-cta {
+  opacity: 0;
+  transform: scale(0.95);
+  transition:
+    opacity 600ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 600ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.av1-cta.show {
+  opacity: 1;
+  transform: scale(1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .av1-word,
+  .av1-fade,
+  .av1-card,
+  .av1-cta {
     opacity: 1 !important;
     filter: none !important;
     transform: none !important;
@@ -2592,5 +2672,161 @@ body {
   }
   .qm-cl-app .qm-cin-rec-eyebrow .qm-cin-rec-dot {
     animation: none !important;
+}
+
+/* ── .qm-cin-* — Cinematic photo hero band utilities ── */
+
+/* Auth hero band: 280px tall on desktop, clamps down on mobile.
+   The band sits above the auth form card and serves as the cinematic
+   establishing shot for /login, /signup, /forgot-password, etc. */
+.qm-cin-auth-band {
+  position: relative;
+  width: 100%;
+  height: clamp(200px, 28vh, 280px);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* Dashboard hero band: 320px tall, full bleed, contains the time-based
+   photo stack + greeting. Sits above the existing 4-stat-card row. */
+.qm-cin-dash-band {
+  position: relative;
+  width: 100%;
+  height: clamp(260px, 36vh, 320px);
+  overflow: hidden;
+  isolation: isolate;
+  color: var(--cream-card, #FFFCF5);
+}
+
+/* The actual photo layer. Used inside both auth-band and dash-band.
+   Background-image is set inline by the React component so the same
+   class can host any of the four photos (auth + 3 time buckets). */
+.qm-cin-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-size: cover;
+  background-position: center;
+  /* Crossfade duration for the dashboard time-bucket swap. The auth
+     hero never re-targets so this transition is harmless there. */
+  transition: opacity 1200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Cream gradient overlay so headline text reads against any photo.
+   Sage radial highlight in the upper-left mirrors the studio reference
+   files (auth-04.html L74, dashboard-02.html L75). */
+.qm-cin-bg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(20, 16, 12, 0.30) 0%,
+      rgba(20, 16, 12, 0.10) 35%,
+      rgba(20, 16, 12, 0.55) 100%
+    ),
+    radial-gradient(
+      ellipse at 25% 35%,
+      rgba(122, 166, 140, 0.16) 0%,
+      transparent 55%
+    );
+  pointer-events: none;
+}
+
+/* Headline text sitting on top of the photo. White cream with a soft
+   shadow for legibility. Uses the existing serif stack. */
+.qm-cin-headline {
+  font-family: var(--serif, "Source Serif 4", Georgia, serif);
+  font-size: clamp(28px, 4.4vw, 56px);
+  line-height: 1.08;
+  letter-spacing: -0.012em;
+  font-weight: 500;
+  margin: 0;
+  color: var(--cream-card, #FFFCF5);
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.30);
+}
+
+/* Sub-copy that sits beneath the headline — used by the dashboard
+   hero ("8 visits on the schedule. 3 drafts ready when you are."). */
+.qm-cin-deck {
+  font-family: var(--serif, "Source Serif 4", Georgia, serif);
+  font-size: clamp(15px, 1.3vw, 18px);
+  line-height: 1.55;
+  color: rgba(255, 252, 245, 0.88);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.40);
+  max-width: 640px;
+  margin: 14px 0 0;
+}
+
+/* Eyebrow row above the headline (mono uppercase). On the auth band
+   it carries "Welcome back" / "New to QuillMD" / etc. On the dashboard
+   it carries the local date + season. */
+.qm-cin-eyebrow {
+  font-family: var(--mono, "JetBrains Mono", monospace);
+  font-size: 11.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 252, 245, 0.84);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.40);
+  margin: 0 0 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.qm-cin-eyebrow .dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--color-clinician-sage-bright, #95BCA4);
+}
+
+/* Inner content well — keeps the headline aligned with the page's
+   1180px content rail and applies sensible padding. */
+.qm-cin-inner {
+  position: relative;
+  z-index: 2;
+  max-width: 1180px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 40px 40px 28px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.qm-cin-inner-auth {
+  /* Auth band uses tighter padding so the headline reads close to the
+     form card below. */
+  padding: 36px 32px 24px;
+  justify-content: center;
+}
+@media (max-width: 760px) {
+  .qm-cin-inner,
+  .qm-cin-inner-auth {
+    padding: 28px 22px 22px;
+  }
+}
+
+/* Dashboard time-of-day crossfade stack — three .qm-cin-bg layers
+   stacked at the same coordinates, only the active one carries
+   .qm-cin-bg-active (opacity 1). The others sit at opacity 0 and the
+   1200ms transition above handles the silent swap when the bucket
+   changes mid-session. */
+.qm-cin-bg-stack {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+.qm-cin-bg-stack .qm-cin-bg {
+  opacity: 0;
+}
+.qm-cin-bg-stack .qm-cin-bg-active {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qm-cin-bg-stack .qm-cin-bg {
+    transition: none !important;
   }
 }
