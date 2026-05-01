@@ -210,6 +210,20 @@ export default async function VisitPage({
     visit.status === TranscribeVisitStatus.READY ||
     visit.status === TranscribeVisitStatus.SIGNED;
 
+  // Phase 4 — the cinematic hero band also fronts the PROCESSING views
+  // (TRANSCRIBING / EXTRACTING / DRAFTING / CRITIQUING / POLISHING /
+  // AUTOMATING) and the QUEUED-with-input state that VisitBody routes
+  // through ProcessingState. The internal 7-step pipeline rail in
+  // <ProcessingState> renders BELOW the band, untouched.
+  const hasInput =
+    visit.audioKey !== null ||
+    visit.dictationAudioKey !== null ||
+    (visit.rawTextInput !== null && visit.rawTextInput.length > 0);
+  const isProcessing =
+    PROCESSING_STATES.includes(visit.status) ||
+    (visit.status === TranscribeVisitStatus.QUEUED && hasInput);
+  const showHeroBand = isReadyOrSigned || isProcessing;
+
   const patientDisplayName =
     visit.patient?.name ?? visit.patientName ?? 'Patient';
   // Phase 4 — name splitting (head + sage-glowed tail) moved into
@@ -264,16 +278,17 @@ export default async function VisitPage({
         </span>
       </div>
 
-      {/* Phase 4 — Apple Cinematic hero band replaces the legacy
-          VisitReadyHeader for READY/SIGNED states. The band carries
-          the breadcrumb + specialty/status pills + word-by-word
-          patient name with sage glow on the last token, and lives
-          BETWEEN the upper sliver breadcrumb and the lifecycle
-          actions strip. The legacy header is retained as a fallback
-          so reduced-motion + non-clinician routes don't break, but
-          on the clinician theme the cinematic band is the canonical
-          visual. */}
-      {isReadyOrSigned && (
+      {/* Phase 4 — Apple Cinematic hero band fronts the visit-detail
+          for READY/SIGNED, every PROCESSING sub-state (TRANSCRIBING …
+          AUTOMATING), and QUEUED-with-input (the moment between
+          upload and the first pipeline tick). The band carries the
+          breadcrumb + specialty/status pills + word-by-word patient
+          name with sage glow on the last token, and lives BETWEEN
+          the upper sliver breadcrumb and the lifecycle actions row.
+          Below the band, every existing component (visit-ready-view,
+          processing-state's 7-step pipeline rail, etc.) renders
+          unchanged. */}
+      {showHeroBand && (
         <CinematicVisitHero
           patientName={patientDisplayName}
           specialty={specialtyLabel(visit.specialty)}
@@ -300,11 +315,7 @@ export default async function VisitPage({
           archivedAt={
             visit.archivedAt ? visit.archivedAt.toISOString() : null
           }
-          hasInput={
-            visit.audioKey !== null ||
-            visit.dictationAudioKey !== null ||
-            (visit.rawTextInput !== null && visit.rawTextInput.length > 0)
-          }
+          hasInput={hasInput}
           theme="clinician"
           editSlot={
             visit.status === TranscribeVisitStatus.QUEUED &&
