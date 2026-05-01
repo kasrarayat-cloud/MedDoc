@@ -1,155 +1,65 @@
-// HANDOFF §2.1 + §8.2 — authed app shell. Composes TopNav + IconRail +
-// scrollable main area under a .qm-app root. The scroll container is a
-// *direct child* of the flex row so position: sticky inside `children`
-// (right rails, jumplinks) resolves against it rather than silently
-// failing against an overflow:hidden ancestor.
+// Phase 5 — Linear V1 Faithful app shell.
+// Reference: docs/design-directions-v8-linear/dashboard-v1.html
 //
-// This is a server component — it reads auth() once so every page can
-// just render <AppFrame>...</AppFrame> without wiring user-name props.
-// Client interactions (route detection, avatar dropdown, shader loop)
-// live in the child components, each 'use client' as needed.
+// Pure dark-canvas chrome. The shell is a single grid: 240px sidebar |
+// content. The TopNav (48px sticky) lives at the top of the content
+// column so its blurred bottom hairline rests directly above the page.
+// IconRail (the sidebar) is sticky inside its grid cell.
 //
-// Phase 2 (Clinician remodel) — Strategy A dual-theme via additive
-// `theme` prop. Default `'legacy'` keeps the existing dark `.qm-app`
-// rendering identical to pre-remodel. Pages opt in to the Clinician
-// chrome by passing `theme="clinician"`, which wraps in `.qm-cl-app`
-// so all `.qm-cl-*` descendant classes resolve against the warm cream
-// token scope. Both branches share the same auth() call and propagate
-// the same user identity to TopNav/IconRail.
+// Server component — reads auth() once so every page can just render
+// <AppFrame>...</AppFrame> without wiring user-name props. Client
+// interactions (route detection, avatar dropdown) live in TopNav /
+// IconRail, each marked 'use client' as needed.
+//
+// HISTORICAL §8.2 — the scroll container must be a *direct child* of
+// the flex row so position: sticky inside `children` (right rails,
+// jumplinks) resolves against it rather than silently failing against
+// an overflow:hidden ancestor.
+//
+// `theme` and `shader` props remain in the type signature for backward
+// compatibility with surface code that hasn't been migrated yet, but
+// are intentionally ignored — Stage 5 cleanup will drop them in one
+// sweep across all call sites. ShaderBG has been removed entirely
+// (Linear V1 has no shader).
 
 import type { ReactNode } from 'react';
 import { auth } from '@/lib/nextauth';
 import { TopNav } from './top-nav';
 import { IconRail } from './icon-rail';
-import { ShaderBG } from './shader-bg';
 
 type AppFrameTheme = 'legacy' | 'clinician';
 
 interface AppFrameProps {
   children: ReactNode;
+  /** @deprecated kept for back-compat; Linear V1 has no shader. */
   shader?: boolean;
+  /** @deprecated kept for back-compat; Linear V1 is single-theme. */
   theme?: AppFrameTheme;
 }
 
-export async function AppFrame({
-  children,
-  shader = true,
-  theme = 'legacy',
-}: AppFrameProps) {
+export async function AppFrame({ children }: AppFrameProps) {
   const session = await auth();
   const userName = session?.user?.name || session?.user?.email || 'Doctor';
   const userEmail = session?.user?.email ?? undefined;
 
-  if (theme === 'clinician') {
-    return (
-      <ClinicianAppFrame userName={userName} userEmail={userEmail}>
-        {children}
-      </ClinicianAppFrame>
-    );
-  }
-
   return (
-    <LegacyAppFrame
-      userName={userName}
-      userEmail={userEmail}
-      shader={shader}
-    >
-      {children}
-    </LegacyAppFrame>
-  );
-}
-
-interface InnerFrameProps {
-  children: ReactNode;
-  userName: string;
-  userEmail: string | undefined;
-}
-
-function LegacyAppFrame({
-  children,
-  userName,
-  userEmail,
-  shader,
-}: InnerFrameProps & { shader: boolean }) {
-  return (
-    <div
-      className="qm-app"
-      style={{
-        width: '100%',
-        height: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        position: 'relative',
-      }}
-    >
-      {shader && <ShaderBG intensity={0.3} />}
-      <div className="qm-noise" aria-hidden />
-
-      <TopNav userName={userName} userEmail={userEmail} />
-
+    <div className="qm-lin-app">
+      <IconRail />
       <div
         style={{
-          flex: 1,
           display: 'flex',
-          minHeight: 0,
-          position: 'relative',
-          zIndex: 3,
+          flexDirection: 'column',
+          minHeight: '100vh',
+          minWidth: 0,
         }}
       >
-        <IconRail />
-        {/* §8.2: scroll container is this direct child. Do NOT add
-           overflow:hidden to anything between here and a sticky
-           descendant or position:sticky will silently go static. */}
+        <TopNav userName={userName} userEmail={userEmail} />
+        {/* §8.2: this <main> is the direct overflow parent so any
+            position: sticky inside `children` resolves here. */}
         <main
           style={{
             flex: 1,
-            overflowY: 'auto',
-            position: 'relative',
-          }}
-        >
-          {children}
-        </main>
-      </div>
-    </div>
-  );
-}
-
-function ClinicianAppFrame({
-  children,
-  userName,
-  userEmail,
-}: InnerFrameProps) {
-  // Per direction CL-5: no theatrical motion. ShaderBG is intentionally
-  // omitted from the Clinician branch (it stays available for the
-  // legacy branch). The cream canvas comes from `.qm-cl-app` itself.
-  return (
-    <div
-      className="qm-cl-app"
-      style={{
-        width: '100%',
-        minHeight: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        position: 'relative',
-      }}
-    >
-      <TopNav theme="clinician" userName={userName} userEmail={userEmail} />
-
-      <div
-        style={{
-          flex: 1,
-          display: 'flex',
-          minHeight: 0,
-          position: 'relative',
-        }}
-      >
-        <IconRail theme="clinician" />
-        {/* §8.2 still applies: keep this <main> as the direct overflow
-           parent so position: sticky inside `children` resolves here. */}
-        <main
-          style={{
-            flex: 1,
-            overflowY: 'auto',
+            minWidth: 0,
             position: 'relative',
           }}
         >
