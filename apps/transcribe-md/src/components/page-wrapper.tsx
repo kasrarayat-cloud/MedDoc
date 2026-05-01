@@ -1,25 +1,20 @@
-'use client';
-
-import { motion } from 'framer-motion';
-
 /**
- * Subtle page-enter animation. Wraps a page's content so navigating to
- * it fades in from 12px below. Because Next's App Router unmounts the
- * previous page before mounting the next, a plain one-shot mount
- * animation is enough — we don't need AnimatePresence here.
+ * Phase 5 — Linear V1 Faithful page wrapper.
  *
- * The same curve + duration live in the design tokens so toast pops,
- * dropdown opens, and page loads all share a rhythm.
+ * Subtle page-enter animation. Wraps a page's content so navigating to
+ * it fades in from 2px below. We swap framer-motion for the
+ * `.qm-lin-fade-in` utility from globals.css — Linear V1 keeps motion
+ * snappy (120 ms ease-out, 2px translate) and we don't need a separate
+ * JS-driven animator.
+ *
+ * Server-component-friendly: no 'use client' directive needed; the
+ * animation is pure CSS. Pages can wrap server-rendered children
+ * without forcing a client island.
  */
 export function PageWrapper({ children }: { children: React.ReactNode }) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.32, ease: [0.4, 0, 0.2, 1] }}
-      className="min-h-screen"
-    >
+    <div className="qm-lin-fade-in" style={{ minHeight: '100vh' }}>
       {children}
-    </motion.div>
+    </div>
   );
 }
