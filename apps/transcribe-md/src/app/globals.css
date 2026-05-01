@@ -971,147 +971,6 @@ body {
 }
 
 /* ============================================================================
- * Phase 5.1 — Extras V4 Card Stream (visit-detail Extras tab)
- * ----------------------------------------------------------------------------
- * Single-column stack of category cards. Mirrors
- * docs/design-directions-v9-tabs/extras-v4.html. Each card has a
- * standard head (icon + title + sub-eyebrow + count pill + edit btn),
- * a body region with category-specific layout, and an optional foot
- * row.
- *
- * Strictly additive — only `.qm-lin-card-stream` and `.qm-lin-extras-*`
- * classes. Existing Phase 5 utilities are not touched.
- * ========================================================================== */
-
-.qm-lin-card-stream {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  max-width: 920px;
-  margin: 0 auto;
-}
-
-.qm-lin-extras-card {
-  background: var(--color-linear-surface-1);
-  border: 1px solid var(--color-linear-hairline);
-  border-radius: 8px;
-  overflow: hidden;
-  transition: border-color 130ms ease-out, background-color 130ms ease-out;
-}
-.qm-lin-extras-card:hover {
-  border-color: var(--color-linear-hairline-strong);
-}
-.qm-lin-extras-card--focus {
-  border-left: 3px solid var(--color-linear-sage);
-}
-
-.qm-lin-extras-head {
- * Phase 5.1 — Visit-detail split-pane utilities
- * ----------------------------------------------------------------------------
- * Used by the SOAP NOTE V3 (sections | sources rail) and Transcript V3
- * (turns | audio rail) split-pane layouts. Mirrors
- *   docs/design-directions-v9-tabs/soap-note-v3.html
- *   docs/design-directions-v9-tabs/transcript-v3.html
- *
- * The split is a CSS grid that collapses to a single column at <=960px.
- * Right-rail elements use `position: sticky` on desktop and fall back to
- * static when the grid collapses.
- * ========================================================================== */
-
-.qm-lin-split {
-  display: grid;
-  grid-template-columns: 1fr 1px 38%;
-  gap: 0;
-  min-height: 480px;
-}
-.qm-lin-split-divider {
-  background: var(--color-linear-hairline);
-  width: 1px;
-}
-.qm-lin-split-left {
-  padding: 8px 28px 18px 0;
-  min-width: 0;
-}
-.qm-lin-split-right {
-  padding: 8px 0 18px 24px;
-  position: sticky;
-  top: 60px;
-  align-self: start;
-  max-height: calc(100vh - 80px);
-  overflow: auto;
-  min-width: 0;
-}
-@media (max-width: 960px) {
-  .qm-lin-split {
-    grid-template-columns: 1fr;
-    gap: 18px;
-  }
-  .qm-lin-split-divider {
-    display: none;
-  }
-  .qm-lin-split-left {
-    padding-right: 0;
-  }
-  .qm-lin-split-right {
-    position: static;
-    padding: 18px 0 0;
-    max-height: none;
-    border-top: 1px solid var(--color-linear-hairline);
-  }
-}
-
-/* SOAP section block — left pane */
-.qm-lin-soap-section {
-  margin-bottom: 32px;
-}
-.qm-lin-soap-section-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 14px 18px 12px;
-  border-bottom: 1px solid var(--color-linear-hairline);
-}
-.qm-lin-extras-head-left {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  min-width: 0;
-}
-.qm-lin-extras-head-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-.qm-lin-extras-icon {
-  flex-shrink: 0;
-  width: 28px;
-  height: 28px;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--color-linear-hairline-strong);
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.02);
-  font-size: 14px;
-  line-height: 1;
-}
-.qm-lin-extras-title-block {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-}
-.qm-lin-extras-title {
-  font-family: var(--font-sans);
-  font-size: 16px;
-  letter-spacing: -0.01em;
-  color: var(--color-linear-text);
-  font-weight: 600;
-  margin: 0;
-}
-.qm-lin-extras-sub {
  * Phase 5.1 — Flat severity warnings, grid layout
  * ----------------------------------------------------------------------------
  * The four flat severity classes above (.qm-warn-critical, -serious,
@@ -1208,14 +1067,6 @@ body {
   font-size: 10.5px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--color-linear-text-3);
-}
-
-.qm-lin-extras-count-pill {
-  display: inline-flex;
-  align-items: center;
-  height: 22px;
-  padding: 0 9px;
   font-weight: 500;
   margin-bottom: 4px;
   padding: 0;
@@ -1527,195 +1378,6 @@ body {
   position: relative;
 }
 .qm-lin-codes-row-low td:first-child::before {
-  margin-bottom: 12px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--color-linear-hairline);
-}
-.qm-lin-soap-eyebrow {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--color-linear-text-3);
-  margin-bottom: 4px;
-}
-.qm-lin-soap-letter {
-  display: inline-grid;
-  place-items: center;
-  width: 18px;
-  height: 18px;
-  border: 1px solid rgba(122, 166, 140, 0.28);
-  background: rgba(122, 166, 140, 0.07);
-  border-radius: 4px;
-  color: var(--color-linear-sage-bright);
-  font-size: 10px;
-  letter-spacing: 0;
-  font-weight: 500;
-}
-.qm-lin-soap-title {
-  font-family: var(--font-sans);
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: -0.012em;
-  color: var(--color-linear-text);
-  margin: 0;
-}
-.qm-lin-soap-body {
-  position: relative;
-  padding: 10px 14px;
-  margin: 0 -14px 4px;
-  border-radius: 6px;
-  border: 1px solid transparent;
-  cursor: pointer;
-  font-family: var(--font-sans);
-  font-size: 14.5px;
-  line-height: 1.7;
-  color: var(--color-linear-text);
-  letter-spacing: -0.005em;
-  transition: background-color 130ms ease-out, border-color 130ms ease-out;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-}
-.qm-lin-soap-body::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 8px;
-  bottom: 8px;
-  width: 2px;
-  background: var(--color-linear-sage);
-  opacity: 0;
-  border-radius: 1px;
-  transition: opacity 130ms ease-out;
-}
-.qm-lin-soap-body:hover {
-  background: rgba(255, 255, 255, 0.022);
-  border-color: var(--color-linear-hairline);
-}
-.qm-lin-soap-body--active {
-  background: rgba(122, 166, 140, 0.05);
-  border-color: rgba(122, 166, 140, 0.22);
-}
-.qm-lin-soap-body--active::before {
-  opacity: 1;
-}
-
-/* Sources rail — SOAP V3 right pane */
-.qm-lin-rail-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  padding-bottom: 10px;
-  margin-bottom: 14px;
-  border-bottom: 1px solid var(--color-linear-hairline);
-}
-.qm-lin-rail-title {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--color-linear-text);
-  font-weight: 500;
-}
-.qm-lin-rail-meta {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-linear-text-3);
-}
-.qm-lin-source-card {
-  position: relative;
-  padding: 10px 12px 10px 14px;
-  margin-bottom: 6px;
-  border: 1px solid transparent;
-  border-radius: 5px;
-  background: transparent;
-  cursor: pointer;
-  transition: background-color 130ms ease-out, border-color 130ms ease-out;
-}
-.qm-lin-source-card::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 8px;
-  bottom: 8px;
-  width: 2px;
-  background: var(--color-linear-sage);
-  opacity: 0;
-  border-radius: 1px;
-  transition: opacity 130ms ease-out;
-}
-.qm-lin-source-card:hover {
-  background: rgba(255, 255, 255, 0.02);
-  border-color: var(--color-linear-hairline);
-}
-.qm-lin-source-card--active {
-  background: rgba(122, 166, 140, 0.05);
-  border-color: rgba(122, 166, 140, 0.22);
-}
-.qm-lin-source-card--active::before {
-  opacity: 1;
-}
-.qm-lin-source-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.06em;
-  margin-bottom: 4px;
-}
-.qm-lin-source-time {
-  color: var(--color-linear-sage-bright);
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-}
-.qm-lin-source-speaker {
-  color: var(--color-linear-text-3);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-}
-.qm-lin-source-speaker--doctor {
-  color: var(--color-linear-info);
-}
-.qm-lin-source-text {
-  font-family: var(--font-sans);
-  font-size: 12.5px;
-  line-height: 1.55;
-  color: var(--color-linear-text-2);
-  letter-spacing: -0.005em;
-}
-
-/* Transcript turn — Transcript V3 left pane */
-.qm-lin-tx-stream {
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--color-linear-hairline);
-  border-radius: 8px;
-  background: var(--color-linear-surface-1);
-  overflow: hidden;
-}
-.qm-lin-tx-turn {
-  display: grid;
-  grid-template-columns: 76px 1fr;
-  gap: 14px;
-  padding: 12px 16px;
-  border-top: 1px solid var(--color-linear-hairline);
-  cursor: pointer;
-  position: relative;
-  transition: background-color 130ms ease-out;
-}
-.qm-lin-tx-turn:first-child {
-  border-top: 0;
-}
-.qm-lin-tx-turn:hover {
-  background: var(--color-linear-row-hover);
-}
-.qm-lin-tx-turn::before {
   content: '';
   position: absolute;
   left: 0;
@@ -2053,122 +1715,6 @@ body {
 .qm-lin-rx-pane-head {
   display: flex;
   align-items: flex-end;
-  background: var(--color-linear-sage);
-  opacity: 0;
-  transition: opacity 130ms ease-out;
-}
-.qm-lin-tx-turn--active {
-  background: rgba(122, 166, 140, 0.06);
-}
-.qm-lin-tx-turn--active::before {
-  opacity: 1;
-}
-.qm-lin-tx-meta {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-}
-.qm-lin-tx-ts {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--color-linear-text-3);
-  font-variant-numeric: tabular-nums;
-}
-.qm-lin-tx-role {
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  font-weight: 500;
-}
-.qm-lin-tx-role--doctor {
-  color: var(--color-linear-sage-bright);
-}
-.qm-lin-tx-role--patient {
-  color: var(--color-linear-text-2);
-}
-.qm-lin-tx-role--other {
-  color: var(--color-linear-text-3);
-}
-.qm-lin-tx-body {
-  font-family: var(--font-sans);
-  font-size: 14px;
-  line-height: 1.65;
-  color: var(--color-linear-text);
-  letter-spacing: -0.005em;
-}
-.qm-lin-tx-lowconf {
-  border-bottom: 1px dotted var(--color-linear-text-3);
-}
-.qm-lin-tx-lowconf-tag {
-  display: inline-flex;
-  align-items: center;
-  margin-left: 8px;
-  padding: 1px 5px;
-  border-radius: 3px;
-  background: rgba(212, 165, 116, 0.07);
-  border: 1px solid rgba(212, 165, 116, 0.22);
-  color: var(--color-linear-amber);
-  font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  font-weight: 500;
-  vertical-align: 1px;
-}
-
-/* Search input — pinned at top of transcript pane */
-.qm-lin-tx-search {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 32px;
-  padding: 0 10px;
-  background: var(--color-linear-surface-2);
-  border: 1px solid var(--color-linear-border);
-  border-radius: 6px;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--color-linear-text);
-  margin-bottom: 12px;
-  transition: border-color 100ms ease-out;
-}
-.qm-lin-tx-search:focus-within {
-  border-color: var(--color-linear-sage);
-}
-.qm-lin-tx-search input {
-  flex: 1;
-  background: transparent;
-  border: 0;
-  outline: 0;
-  color: inherit;
-  font: inherit;
-  min-width: 0;
-}
-.qm-lin-tx-search input::placeholder {
-  color: var(--color-linear-text-3);
-}
-.qm-lin-tx-search kbd {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--color-linear-text-3);
-  background: rgba(255, 255, 255, 0.04);
-  padding: 1px 4px;
-  border-radius: 3px;
-}
-
-/* Right-rail card — used by audio + jump-nav + metadata blocks */
-.qm-lin-rail-card {
-  background: var(--color-linear-surface-1);
-  border: 1px solid var(--color-linear-hairline);
-  border-radius: 8px;
-  padding: 14px;
-  margin-bottom: 16px;
-}
-.qm-lin-rail-card-head {
-  display: flex;
-  align-items: baseline;
   justify-content: space-between;
   margin-bottom: 12px;
   padding-bottom: 8px;
@@ -2327,111 +1873,433 @@ body {
 
 .qm-lin-rx-tag {
   flex: 0 0 auto;
-
-/* Jump-to-section nav */
-.qm-lin-jump-row {
-  display: grid;
-  grid-template-columns: 54px 1fr;
-  gap: 10px;
-  align-items: center;
-  padding: 8px 4px;
-  border-bottom: 1px solid var(--color-linear-hairline);
-  cursor: pointer;
-  border-radius: 4px;
-  transition: background-color 100ms ease-out;
-}
-.qm-lin-jump-row:last-child {
-  border-bottom: 0;
-}
-.qm-lin-jump-row:hover {
-  background: rgba(255, 255, 255, 0.025);
-}
-.qm-lin-jump-row--current {
-  background: rgba(122, 166, 140, 0.06);
-}
-.qm-lin-jump-ts {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--color-linear-text-3);
-  font-variant-numeric: tabular-nums;
-}
-.qm-lin-jump-row--current .qm-lin-jump-ts {
-  color: var(--color-linear-sage-bright);
-}
-.qm-lin-jump-label {
-  font-size: 13px;
-  color: var(--color-linear-text);
-  letter-spacing: -0.005em;
-}
-
-/* Audio waveform (mini) + scrubber */
-.qm-lin-wave {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 38px;
-  margin-bottom: 10px;
-  gap: 1.5px;
-}
-.qm-lin-wave-bar-static {
-  flex: 1;
-  background: var(--color-linear-surface-3);
-  border-radius: 1px;
-  min-width: 2px;
-}
-.qm-lin-wave-bar-static--played {
-  background: var(--color-linear-sage);
-}
-.qm-lin-wave-bar-static--cur {
-  background: var(--color-linear-sage-bright);
-}
-
-/* Speaker mini-pill (chip on transcript turn meta) */
-.qm-lin-speaker-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  font-weight: 500;
-}
-
-/* Visit metadata block (transcript right rail) */
-.qm-lin-vm-row {
-  display: grid;
-  grid-template-columns: 96px 1fr;
-  gap: 10px;
-  align-items: baseline;
-  padding: 4px 0;
-}
-.qm-lin-vm-label {
-  color: var(--color-linear-text-3);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  font-family: var(--font-mono);
-  font-size: 10px;
-}
-.qm-lin-vm-value {
-  color: var(--color-linear-text);
-  font-family: var(--font-sans);
-  font-size: 12.5px;
-  letter-spacing: -0.005em;
-}
-.qm-lin-vm-value--mono {
-  font-family: var(--font-mono);
-  font-size: 11px;
-}
-
-/* Section status pill (DRAFTED / REVIEWED / SIGNED) — the SOAP eyebrow */
-.qm-lin-sec-status {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   height: 22px;
   padding: 0 9px;
   border: 1px solid var(--color-linear-hairline-strong);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-linear-text-3);
+  background: rgba(255, 255, 255, 0.015);
+}
+.qm-lin-rx-tag-active {
+  color: var(--color-linear-sage-bright);
+  border-color: rgba(122, 166, 140, 0.28);
+  background: rgba(122, 166, 140, 0.06);
+}
+.qm-lin-rx-tag-new {
+  color: var(--color-linear-sage-bright);
+  border-color: rgba(122, 166, 140, 0.45);
+  background: rgba(122, 166, 140, 0.1);
+}
+.qm-lin-rx-tag-pending {
+  color: var(--color-linear-warning);
+  border-color: rgba(212, 164, 55, 0.3);
+  background: rgba(212, 164, 55, 0.06);
+}
+.qm-lin-rx-tag-discontinued {
+  color: var(--color-linear-warning);
+  border-color: rgba(212, 87, 74, 0.3);
+  background: rgba(212, 87, 74, 0.08);
+}
+.qm-lin-rx-tag-info {
+  color: var(--color-linear-info);
+  border-color: rgba(91, 141, 184, 0.28);
+  background: rgba(91, 141, 184, 0.08);
+}
+.qm-lin-rx-tag-warning {
+  color: var(--color-linear-warning);
+  border-color: rgba(212, 164, 55, 0.3);
+  background: rgba(212, 164, 55, 0.06);
+}
+
+/* 4-cell dose grid */
+.qm-lin-rx-row-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: var(--color-linear-hairline);
+  border: 1px solid var(--color-linear-hairline);
+  border-radius: 5px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+.qm-lin-rx-row-grid .cell {
+  background: var(--color-linear-surface-1);
+  padding: 7px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.qm-lin-rx-row-grid .cell .l {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-linear-text-4);
+}
+.qm-lin-rx-row-grid .cell .v {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--color-linear-text);
+  font-variant-numeric: tabular-nums;
+  word-break: break-word;
+}
+@media (max-width: 760px) {
+  .qm-lin-rx-row-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.qm-lin-rx-row-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.qm-lin-rx-warn-tally {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-linear-text-3);
+}
+.qm-lin-rx-warn-tally .chips {
+  display: inline-flex;
+  gap: 4px;
+}
+.qm-lin-rx-warn-tally .chip {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+.qm-lin-rx-warn-tally .chip.critical {
+  background: var(--color-linear-danger);
+}
+.qm-lin-rx-warn-tally .chip.serious {
+  background: var(--color-linear-coral);
+}
+.qm-lin-rx-warn-tally .chip.moderate {
+  background: var(--color-linear-warning);
+}
+.qm-lin-rx-warn-tally .chip.info {
+  background: var(--color-linear-info);
+}
+.qm-lin-rx-warn-tally-clean {
+  color: var(--color-linear-sage-bright);
+}
+
+.qm-lin-rx-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 100ms ease;
+}
+.qm-lin-rx-row:hover .qm-lin-rx-row-actions,
+.qm-lin-rx-row-active .qm-lin-rx-row-actions,
+.qm-lin-rx-row:focus-within .qm-lin-rx-row-actions {
+  opacity: 1;
+}
+.qm-lin-rx-row-actions button {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-linear-text-3);
+  padding: 4px 8px;
+  border-radius: 3px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  transition: color 100ms ease, background 100ms ease;
+}
+.qm-lin-rx-row-actions button:hover:not(:disabled) {
+  color: var(--color-linear-sage-bright);
+  background: rgba(122, 166, 140, 0.06);
+}
+.qm-lin-rx-row-actions button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Inline evidence reveal when card is active */
+.qm-lin-rx-evidence {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--color-linear-hairline);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.qm-lin-rx-evidence-label {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-linear-text-3);
+}
+.qm-lin-rx-evidence-body {
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  color: var(--color-linear-text-2);
+  font-style: italic;
+  line-height: 1.5;
+}
+
+/* + Add Rx tile */
+.qm-lin-rx-add {
+  background: transparent;
+  border: 1px dashed var(--color-linear-border-strong);
+  border-radius: 7px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-linear-text-3);
+  cursor: pointer;
+  transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
+}
+.qm-lin-rx-add:hover:not(:disabled) {
+  border-color: rgba(122, 166, 140, 0.4);
+  color: var(--color-linear-sage-bright);
+  background: rgba(122, 166, 140, 0.04);
+}
+.qm-lin-rx-add:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.qm-lin-rx-add .plus {
+  width: 14px;
+  height: 14px;
+  display: grid;
+  place-items: center;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  font-size: 11px;
+}
+
+/* ============================================================================
+ * Phase 5.1 — Rx interaction rail (right column)
+ * ========================================================================== */
+.qm-lin-rx-rail {
+  background: var(--color-linear-surface-1);
+  border: 1px solid var(--color-linear-hairline);
+  border-radius: 8px;
+  padding: 0;
+  position: sticky;
+  top: 60px;
+  max-height: calc(100vh - 80px);
+  overflow: auto;
+}
+.qm-lin-rx-rail-head {
+  position: sticky;
+  top: 0;
+  background: var(--color-linear-surface-1);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--color-linear-hairline);
+  z-index: 2;
+}
+.qm-lin-rx-rail-title {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-linear-text);
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.qm-lin-rx-rail-pulse {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-linear-danger);
+  box-shadow: 0 0 8px rgba(212, 87, 74, 0.6);
+  animation: qm-lin-rx-rail-pulse 2.4s ease-in-out infinite;
+}
+@keyframes qm-lin-rx-rail-pulse {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
+.qm-lin-rx-rail-filter {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-linear-text-3);
+}
+
+.qm-lin-rx-rail-group {
+  padding: 14px 16px 6px;
+}
+.qm-lin-rx-rail-group + .qm-lin-rx-rail-group {
+  border-top: 1px solid var(--color-linear-hairline);
+}
+.qm-lin-rx-rail-group-h {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.qm-lin-rx-rail-group-l {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+.qm-lin-rx-rail-group-l-critical {
+  color: var(--color-linear-danger);
+}
+.qm-lin-rx-rail-group-l-serious {
+  color: var(--color-linear-coral);
+}
+.qm-lin-rx-rail-group-l-moderate {
+  color: var(--color-linear-warning);
+}
+.qm-lin-rx-rail-group-l-info {
+  color: var(--color-linear-info);
+}
+.qm-lin-rx-rail-group-n {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  color: var(--color-linear-text-4);
+}
+.qm-lin-rx-rail-empty {
+  padding: 18px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-linear-sage-bright);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qm-lin-rx-rail-pulse {
+    animation: none;
+  }
+}
+
+
+/* ============================================================================
+ * Phase 5.1 — Extras V4 Card Stream (visit-detail Extras tab)
+ * ----------------------------------------------------------------------------
+ * Single-column stack of category cards. Mirrors
+ * docs/design-directions-v9-tabs/extras-v4.html. Each card has a
+ * standard head (icon + title + sub-eyebrow + count pill + edit btn),
+ * a body region with category-specific layout, and an optional foot
+ * row.
+ *
+ * Strictly additive — only `.qm-lin-card-stream` and `.qm-lin-extras-*`
+ * classes. Existing Phase 5 utilities are not touched.
+ * ========================================================================== */
+
+.qm-lin-card-stream {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 920px;
+  margin: 0 auto;
+}
+
+.qm-lin-extras-card {
+  background: var(--color-linear-surface-1);
+  border: 1px solid var(--color-linear-hairline);
+  border-radius: 8px;
+  overflow: hidden;
+  transition: border-color 130ms ease-out, background-color 130ms ease-out;
+}
+.qm-lin-extras-card:hover {
+  border-color: var(--color-linear-hairline-strong);
+}
+.qm-lin-extras-card--focus {
+  border-left: 3px solid var(--color-linear-sage);
+}
+
+.qm-lin-extras-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px 12px;
+  border-bottom: 1px solid var(--color-linear-hairline);
+}
+.qm-lin-extras-head-left {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+}
+.qm-lin-extras-head-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.qm-lin-extras-icon {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--color-linear-hairline-strong);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+  font-size: 14px;
+  line-height: 1;
+}
+.qm-lin-extras-title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.qm-lin-extras-title {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  letter-spacing: -0.01em;
+  color: var(--color-linear-text);
+  font-weight: 600;
+  margin: 0;
+}
+.qm-lin-extras-sub {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-linear-text-3);
+}
+
+.qm-lin-extras-count-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 9px;
   border-radius: 4px;
   font-family: var(--font-mono);
   font-size: 10px;
@@ -2545,42 +2413,6 @@ body {
 
 /* Vitals — 4-column tile grid. */
 .qm-lin-extras-vitals-tiles {
-  color: var(--color-linear-text-3);
-  background: rgba(255, 255, 255, 0.015);
-}
-.qm-lin-rx-tag-active {
-  color: var(--color-linear-sage-bright);
-  border-color: rgba(122, 166, 140, 0.28);
-  background: rgba(122, 166, 140, 0.06);
-}
-.qm-lin-rx-tag-new {
-  color: var(--color-linear-sage-bright);
-  border-color: rgba(122, 166, 140, 0.45);
-  background: rgba(122, 166, 140, 0.1);
-}
-.qm-lin-rx-tag-pending {
-  color: var(--color-linear-warning);
-  border-color: rgba(212, 164, 55, 0.3);
-  background: rgba(212, 164, 55, 0.06);
-}
-.qm-lin-rx-tag-discontinued {
-  color: var(--color-linear-warning);
-  border-color: rgba(212, 87, 74, 0.3);
-  background: rgba(212, 87, 74, 0.08);
-}
-.qm-lin-rx-tag-info {
-  color: var(--color-linear-info);
-  border-color: rgba(91, 141, 184, 0.28);
-  background: rgba(91, 141, 184, 0.08);
-}
-.qm-lin-rx-tag-warning {
-  color: var(--color-linear-warning);
-  border-color: rgba(212, 164, 55, 0.3);
-  background: rgba(212, 164, 55, 0.06);
-}
-
-/* 4-cell dose grid */
-.qm-lin-rx-row-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 1px;
@@ -2902,282 +2734,493 @@ body {
   font-size: 13px;
   color: var(--color-linear-text-3);
   padding: 4px 0 2px;
-  border-radius: 5px;
-  overflow: hidden;
-  margin-bottom: 10px;
 }
-.qm-lin-rx-row-grid .cell {
-  background: var(--color-linear-surface-1);
-  padding: 7px 10px;
+
+
+/* ============================================================================
+ * Phase 5.1 — Visit-detail split-pane utilities
+ * ----------------------------------------------------------------------------
+ * Used by the SOAP NOTE V3 (sections | sources rail) and Transcript V3
+ * (turns | audio rail) split-pane layouts. Mirrors
+ *   docs/design-directions-v9-tabs/soap-note-v3.html
+ *   docs/design-directions-v9-tabs/transcript-v3.html
+ *
+ * The split is a CSS grid that collapses to a single column at <=960px.
+ * Right-rail elements use `position: sticky` on desktop and fall back to
+ * static when the grid collapses.
+ * ========================================================================== */
+
+.qm-lin-split {
+  display: grid;
+  grid-template-columns: 1fr 1px 38%;
+  gap: 0;
+  min-height: 480px;
+}
+.qm-lin-split-divider {
+  background: var(--color-linear-hairline);
+  width: 1px;
+}
+.qm-lin-split-left {
+  padding: 8px 28px 18px 0;
+  min-width: 0;
+}
+.qm-lin-split-right {
+  padding: 8px 0 18px 24px;
+  position: sticky;
+  top: 60px;
+  align-self: start;
+  max-height: calc(100vh - 80px);
+  overflow: auto;
+  min-width: 0;
+}
+@media (max-width: 960px) {
+  .qm-lin-split {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+  .qm-lin-split-divider {
+    display: none;
+  }
+  .qm-lin-split-left {
+    padding-right: 0;
+  }
+  .qm-lin-split-right {
+    position: static;
+    padding: 18px 0 0;
+    max-height: none;
+    border-top: 1px solid var(--color-linear-hairline);
+  }
+}
+
+/* SOAP section block — left pane */
+.qm-lin-soap-section {
+  margin-bottom: 32px;
+}
+.qm-lin-soap-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--color-linear-hairline);
+}
+.qm-lin-soap-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-linear-text-3);
+  margin-bottom: 4px;
+}
+.qm-lin-soap-letter {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid rgba(122, 166, 140, 0.28);
+  background: rgba(122, 166, 140, 0.07);
+  border-radius: 4px;
+  color: var(--color-linear-sage-bright);
+  font-size: 10px;
+  letter-spacing: 0;
+  font-weight: 500;
+}
+.qm-lin-soap-title {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  color: var(--color-linear-text);
+  margin: 0;
+}
+.qm-lin-soap-body {
+  position: relative;
+  padding: 10px 14px;
+  margin: 0 -14px 4px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 14.5px;
+  line-height: 1.7;
+  color: var(--color-linear-text);
+  letter-spacing: -0.005em;
+  transition: background-color 130ms ease-out, border-color 130ms ease-out;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+.qm-lin-soap-body::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background: var(--color-linear-sage);
+  opacity: 0;
+  border-radius: 1px;
+  transition: opacity 130ms ease-out;
+}
+.qm-lin-soap-body:hover {
+  background: rgba(255, 255, 255, 0.022);
+  border-color: var(--color-linear-hairline);
+}
+.qm-lin-soap-body--active {
+  background: rgba(122, 166, 140, 0.05);
+  border-color: rgba(122, 166, 140, 0.22);
+}
+.qm-lin-soap-body--active::before {
+  opacity: 1;
+}
+
+/* Sources rail — SOAP V3 right pane */
+.qm-lin-rail-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding-bottom: 10px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--color-linear-hairline);
+}
+.qm-lin-rail-title {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-linear-text);
+  font-weight: 500;
+}
+.qm-lin-rail-meta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-linear-text-3);
+}
+.qm-lin-source-card {
+  position: relative;
+  padding: 10px 12px 10px 14px;
+  margin-bottom: 6px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  cursor: pointer;
+  transition: background-color 130ms ease-out, border-color 130ms ease-out;
+}
+.qm-lin-source-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background: var(--color-linear-sage);
+  opacity: 0;
+  border-radius: 1px;
+  transition: opacity 130ms ease-out;
+}
+.qm-lin-source-card:hover {
+  background: rgba(255, 255, 255, 0.02);
+  border-color: var(--color-linear-hairline);
+}
+.qm-lin-source-card--active {
+  background: rgba(122, 166, 140, 0.05);
+  border-color: rgba(122, 166, 140, 0.22);
+}
+.qm-lin-source-card--active::before {
+  opacity: 1;
+}
+.qm-lin-source-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  margin-bottom: 4px;
+}
+.qm-lin-source-time {
+  color: var(--color-linear-sage-bright);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.qm-lin-source-speaker {
+  color: var(--color-linear-text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.qm-lin-source-speaker--doctor {
+  color: var(--color-linear-info);
+}
+.qm-lin-source-text {
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--color-linear-text-2);
+  letter-spacing: -0.005em;
+}
+
+/* Transcript turn — Transcript V3 left pane */
+.qm-lin-tx-stream {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  border: 1px solid var(--color-linear-hairline);
+  border-radius: 8px;
+  background: var(--color-linear-surface-1);
+  overflow: hidden;
 }
-.qm-lin-rx-row-grid .cell .l {
+.qm-lin-tx-turn {
+  display: grid;
+  grid-template-columns: 76px 1fr;
+  gap: 14px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--color-linear-hairline);
+  cursor: pointer;
+  position: relative;
+  transition: background-color 130ms ease-out;
+}
+.qm-lin-tx-turn:first-child {
+  border-top: 0;
+}
+.qm-lin-tx-turn:hover {
+  background: var(--color-linear-row-hover);
+}
+.qm-lin-tx-turn::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--color-linear-sage);
+  opacity: 0;
+  transition: opacity 130ms ease-out;
+}
+.qm-lin-tx-turn--active {
+  background: rgba(122, 166, 140, 0.06);
+}
+.qm-lin-tx-turn--active::before {
+  opacity: 1;
+}
+.qm-lin-tx-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.qm-lin-tx-ts {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-linear-text-3);
+  font-variant-numeric: tabular-nums;
+}
+.qm-lin-tx-role {
   font-family: var(--font-mono);
   font-size: 9.5px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--color-linear-text-4);
+  font-weight: 500;
 }
-.qm-lin-rx-row-grid .cell .v {
-  font-family: var(--font-mono);
-  font-size: 11.5px;
+.qm-lin-tx-role--doctor {
+  color: var(--color-linear-sage-bright);
+}
+.qm-lin-tx-role--patient {
+  color: var(--color-linear-text-2);
+}
+.qm-lin-tx-role--other {
+  color: var(--color-linear-text-3);
+}
+.qm-lin-tx-body {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.65;
   color: var(--color-linear-text);
-  font-variant-numeric: tabular-nums;
-  word-break: break-word;
+  letter-spacing: -0.005em;
 }
-@media (max-width: 760px) {
-  .qm-lin-rx-row-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
+.qm-lin-tx-lowconf {
+  border-bottom: 1px dotted var(--color-linear-text-3);
+}
+.qm-lin-tx-lowconf-tag {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(212, 165, 116, 0.07);
+  border: 1px solid rgba(212, 165, 116, 0.22);
+  color: var(--color-linear-amber);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 500;
+  vertical-align: 1px;
 }
 
-.qm-lin-rx-row-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-.qm-lin-rx-warn-tally {
+/* Search input — pinned at top of transcript pane */
+.qm-lin-tx-search {
   display: flex;
   align-items: center;
   gap: 8px;
+  height: 32px;
+  padding: 0 10px;
+  background: var(--color-linear-surface-2);
+  border: 1px solid var(--color-linear-border);
+  border-radius: 6px;
   font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-linear-text-3);
+  font-size: 12px;
+  color: var(--color-linear-text);
+  margin-bottom: 12px;
+  transition: border-color 100ms ease-out;
 }
-.qm-lin-rx-warn-tally .chips {
-  display: inline-flex;
-  gap: 4px;
+.qm-lin-tx-search:focus-within {
+  border-color: var(--color-linear-sage);
 }
-.qm-lin-rx-warn-tally .chip {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-}
-.qm-lin-rx-warn-tally .chip.critical {
-  background: var(--color-linear-danger);
-}
-.qm-lin-rx-warn-tally .chip.serious {
-  background: var(--color-linear-coral);
-}
-.qm-lin-rx-warn-tally .chip.moderate {
-  background: var(--color-linear-warning);
-}
-.qm-lin-rx-warn-tally .chip.info {
-  background: var(--color-linear-info);
-}
-.qm-lin-rx-warn-tally-clean {
-  color: var(--color-linear-sage-bright);
-}
-
-.qm-lin-rx-row-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  opacity: 0;
-  transition: opacity 100ms ease;
-}
-.qm-lin-rx-row:hover .qm-lin-rx-row-actions,
-.qm-lin-rx-row-active .qm-lin-rx-row-actions,
-.qm-lin-rx-row:focus-within .qm-lin-rx-row-actions {
-  opacity: 1;
-}
-.qm-lin-rx-row-actions button {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-linear-text-3);
-  padding: 4px 8px;
-  border-radius: 3px;
+.qm-lin-tx-search input {
+  flex: 1;
   background: transparent;
   border: 0;
-  cursor: pointer;
-  transition: color 100ms ease, background 100ms ease;
+  outline: 0;
+  color: inherit;
+  font: inherit;
+  min-width: 0;
 }
-.qm-lin-rx-row-actions button:hover:not(:disabled) {
-  color: var(--color-linear-sage-bright);
-  background: rgba(122, 166, 140, 0.06);
-}
-.qm-lin-rx-row-actions button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-/* Inline evidence reveal when card is active */
-.qm-lin-rx-evidence {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px dashed var(--color-linear-hairline);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.qm-lin-rx-evidence-label {
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+.qm-lin-tx-search input::placeholder {
   color: var(--color-linear-text-3);
 }
-.qm-lin-rx-evidence-body {
-  font-family: var(--font-sans);
-  font-size: 12.5px;
-  color: var(--color-linear-text-2);
-  font-style: italic;
-  line-height: 1.5;
-}
-
-/* + Add Rx tile */
-.qm-lin-rx-add {
-  background: transparent;
-  border: 1px dashed var(--color-linear-border-strong);
-  border-radius: 7px;
-  padding: 14px 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
+.qm-lin-tx-search kbd {
   font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: 10px;
   color: var(--color-linear-text-3);
-  cursor: pointer;
-  transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
-}
-.qm-lin-rx-add:hover:not(:disabled) {
-  border-color: rgba(122, 166, 140, 0.4);
-  color: var(--color-linear-sage-bright);
-  background: rgba(122, 166, 140, 0.04);
-}
-.qm-lin-rx-add:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-.qm-lin-rx-add .plus {
-  width: 14px;
-  height: 14px;
-  display: grid;
-  place-items: center;
-  border: 1px solid currentColor;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 1px 4px;
   border-radius: 3px;
-  font-size: 11px;
 }
 
-/* ============================================================================
- * Phase 5.1 — Rx interaction rail (right column)
- * ========================================================================== */
-.qm-lin-rx-rail {
+/* Right-rail card — used by audio + jump-nav + metadata blocks */
+.qm-lin-rail-card {
   background: var(--color-linear-surface-1);
   border: 1px solid var(--color-linear-hairline);
   border-radius: 8px;
-  padding: 0;
-  position: sticky;
-  top: 60px;
-  max-height: calc(100vh - 80px);
-  overflow: auto;
+  padding: 14px;
+  margin-bottom: 16px;
 }
-.qm-lin-rx-rail-head {
-  position: sticky;
-  top: 0;
-  background: var(--color-linear-surface-1);
+.qm-lin-rail-card-head {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
-  padding: 13px 16px;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
   border-bottom: 1px solid var(--color-linear-hairline);
-  z-index: 2;
-}
-.qm-lin-rx-rail-title {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--color-linear-text);
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.qm-lin-rx-rail-pulse {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--color-linear-danger);
-  box-shadow: 0 0 8px rgba(212, 87, 74, 0.6);
-  animation: qm-lin-rx-rail-pulse 2.4s ease-in-out infinite;
-}
-@keyframes qm-lin-rx-rail-pulse {
-  0%, 100% { opacity: 0.7; }
-  50% { opacity: 1; }
-}
-.qm-lin-rx-rail-filter {
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-linear-text-3);
 }
 
-.qm-lin-rx-rail-group {
-  padding: 14px 16px 6px;
-}
-.qm-lin-rx-rail-group + .qm-lin-rx-rail-group {
-  border-top: 1px solid var(--color-linear-hairline);
-}
-.qm-lin-rx-rail-group-h {
-  display: flex;
+/* Jump-to-section nav */
+.qm-lin-jump-row {
+  display: grid;
+  grid-template-columns: 54px 1fr;
+  gap: 10px;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--color-linear-hairline);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background-color 100ms ease-out;
 }
-.qm-lin-rx-rail-group-l {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  font-weight: 500;
+.qm-lin-jump-row:last-child {
+  border-bottom: 0;
 }
-.qm-lin-rx-rail-group-l-critical {
-  color: var(--color-linear-danger);
+.qm-lin-jump-row:hover {
+  background: rgba(255, 255, 255, 0.025);
 }
-.qm-lin-rx-rail-group-l-serious {
-  color: var(--color-linear-coral);
+.qm-lin-jump-row--current {
+  background: rgba(122, 166, 140, 0.06);
 }
-.qm-lin-rx-rail-group-l-moderate {
-  color: var(--color-linear-warning);
-}
-.qm-lin-rx-rail-group-l-info {
-  color: var(--color-linear-info);
-}
-.qm-lin-rx-rail-group-n {
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.06em;
-  color: var(--color-linear-text-4);
-}
-.qm-lin-rx-rail-empty {
-  padding: 18px 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
+.qm-lin-jump-ts {
   font-family: var(--font-mono);
   font-size: 11px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  color: var(--color-linear-text-3);
+  font-variant-numeric: tabular-nums;
+}
+.qm-lin-jump-row--current .qm-lin-jump-ts {
   color: var(--color-linear-sage-bright);
 }
+.qm-lin-jump-label {
+  font-size: 13px;
+  color: var(--color-linear-text);
+  letter-spacing: -0.005em;
+}
 
-@media (prefers-reduced-motion: reduce) {
-  .qm-lin-rx-rail-pulse {
-    animation: none;
+/* Audio waveform (mini) + scrubber */
+.qm-lin-wave {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 38px;
+  margin-bottom: 10px;
+  gap: 1.5px;
+}
+.qm-lin-wave-bar-static {
+  flex: 1;
+  background: var(--color-linear-surface-3);
+  border-radius: 1px;
+  min-width: 2px;
+}
+.qm-lin-wave-bar-static--played {
+  background: var(--color-linear-sage);
+}
+.qm-lin-wave-bar-static--cur {
+  background: var(--color-linear-sage-bright);
+}
+
+/* Speaker mini-pill (chip on transcript turn meta) */
+.qm-lin-speaker-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+/* Visit metadata block (transcript right rail) */
+.qm-lin-vm-row {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 10px;
+  align-items: baseline;
+  padding: 4px 0;
+}
+.qm-lin-vm-label {
+  color: var(--color-linear-text-3);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+.qm-lin-vm-value {
+  color: var(--color-linear-text);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  letter-spacing: -0.005em;
+}
+.qm-lin-vm-value--mono {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+/* Section status pill (DRAFTED / REVIEWED / SIGNED) — the SOAP eyebrow */
+.qm-lin-sec-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 9px;
   border-radius: 4px;
   font-family: var(--font-mono);
   font-size: 10px;
