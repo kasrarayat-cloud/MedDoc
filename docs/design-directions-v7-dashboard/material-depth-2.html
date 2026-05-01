@@ -1,0 +1,704 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QuillMD · Material Depth · Layered Hero</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;1,8..60,400;1,8..60,500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* ----------------------------------------------------------------------
+     Mood C — Material Depth · Variation 2: Layered Hero
+     A single dominant "Today" card centered on the canvas. Sub-cards (4
+     metrics, patient list, recent stream) are inset INTO the hero card at
+     different elevations — like a watch face with multiple complications
+     visible at once. Each sub-card has its own elevation, so the hero
+     reads as a tray with objects laid into it.
+     ---------------------------------------------------------------------- */
+
+  :root {
+    --cream:        #FAF7F2;
+    --cream-card:   #FFFCF5;
+    --cream-2:      #F2EDE3;
+    --cream-3:      #E8E1D3;
+    --ink:          #2B2620;
+    --ink-2:        #5C544A;
+    --ink-3:        #8A8278;
+    --ink-4:        #B5AE9F;
+    --sage:         #7AA68C;
+    --sage-deep:    #2F5040;
+    --sage-bright:  #95BCA4;
+    --sage-tint:        rgba(122, 166, 140, 0.14);
+    --sage-tint-strong: rgba(122, 166, 140, 0.22);
+    --line:         rgba(43, 38, 32, 0.06);
+    --line-2:       rgba(43, 38, 32, 0.10);
+
+    /* Mood C elevation system. */
+    --elev-rest:    0 1px 2px rgba(43, 38, 32, 0.04), 0 1px 3px rgba(43, 38, 32, 0.06);
+    --elev-1:       0 2px 4px rgba(43, 38, 32, 0.04), 0 4px 12px rgba(43, 38, 32, 0.06);
+    --elev-2:       0 4px 10px rgba(43, 38, 32, 0.06), 0 12px 24px rgba(43, 38, 32, 0.08);
+    --elev-3:       0 8px 18px rgba(43, 38, 32, 0.08), 0 24px 48px rgba(43, 38, 32, 0.10);
+    --elev-hero:    0 12px 28px rgba(43, 38, 32, 0.07), 0 40px 80px rgba(43, 38, 32, 0.10);
+    --elev-hover:   0 6px 14px rgba(122, 166, 140, 0.15), 0 18px 36px rgba(43, 38, 32, 0.10);
+    --elev-pressed: 0 1px 2px rgba(43, 38, 32, 0.06);
+    --elev-inset-well: inset 0 2px 5px rgba(43, 38, 32, 0.04), inset 0 -1px 0 rgba(255, 252, 245, 0.6);
+
+    --serif: 'Source Serif 4', Georgia, serif;
+    --sans:  'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --mono:  'JetBrains Mono', ui-monospace, monospace;
+
+    --ease-mat: cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    background: var(--cream);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    /* Soft warm radial — concentrates light on the hero. */
+    background:
+      radial-gradient(900px 700px at 50% 18%, rgba(255, 252, 245, 0.9), transparent 70%),
+      radial-gradient(1100px 700px at 95% 110%, rgba(232, 225, 211, 0.45), transparent 60%),
+      var(--cream);
+    min-height: 100vh;
+  }
+
+  .canvas {
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: 26px 36px 80px;
+  }
+
+  /* ───── Floating top strip — chip-style controls float on the canvas ───── */
+  .top-strip {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 26px;
+  }
+
+  .wordmark {
+    display: inline-flex; align-items: center; gap: 9px;
+    padding: 8px 14px;
+    background: var(--cream-card);
+    border-radius: 999px;
+    box-shadow: var(--elev-rest);
+    transition: transform 320ms var(--ease-mat), box-shadow 320ms var(--ease-mat);
+  }
+  .wordmark:hover { transform: translate3d(0, -2px, 0); box-shadow: var(--elev-1); }
+  .wordmark .quill {
+    width: 18px; height: 18px; border-radius: 5px;
+    background: linear-gradient(135deg, var(--sage), var(--sage-deep));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.25);
+  }
+  .wordmark .name {
+    font-family: var(--serif);
+    font-size: 16px;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+  }
+  .wordmark .name em { color: var(--sage-deep); font-style: italic; }
+
+  .breadcrumb {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-3);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .breadcrumb .arrow { margin: 0 8px; color: var(--ink-4); }
+  .breadcrumb .here  { color: var(--sage-deep); }
+
+  .top-spacer { flex: 1; }
+
+  .search-chip {
+    display: inline-flex; align-items: center; gap: 10px;
+    padding: 9px 14px;
+    background: var(--cream-card);
+    border-radius: 999px;
+    box-shadow: var(--elev-1);
+    cursor: text; min-width: 280px;
+    transition: transform 320ms var(--ease-mat), box-shadow 320ms var(--ease-mat);
+  }
+  .search-chip:hover { transform: translate3d(0, -3px, 0); box-shadow: var(--elev-hover); }
+  .search-chip svg { width: 14px; height: 14px; color: var(--ink-3); }
+  .search-chip .placeholder { flex: 1; color: var(--ink-3); font-size: 13.5px; }
+  .search-chip .kbd {
+    font-family: var(--mono); font-size: 10.5px; color: var(--ink-3);
+    background: var(--cream-2); padding: 2px 7px; border-radius: 5px;
+    box-shadow: inset 0 -1px 0 var(--line);
+  }
+
+  .me-chip {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 5px 11px 5px 5px;
+    background: var(--cream-card);
+    border-radius: 999px;
+    box-shadow: var(--elev-rest);
+    transition: transform 320ms var(--ease-mat), box-shadow 320ms var(--ease-mat);
+    cursor: pointer;
+  }
+  .me-chip:hover { transform: translate3d(0, -3px, 0); box-shadow: var(--elev-hover); }
+  .me-chip .avatar {
+    width: 28px; height: 28px;
+    border-radius: 999px;
+    background: var(--sage-tint-strong); color: var(--sage-deep);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-family: var(--serif); font-weight: 500; font-size: 12px;
+    box-shadow: inset 0 0 0 1px rgba(47, 80, 64, 0.12);
+  }
+  .me-chip .me-name { font-size: 13px; color: var(--ink-2); font-weight: 500; }
+
+  /* ───── HERO CARD — the dominant elevated panel ────────────────────────── */
+  .hero {
+    background: linear-gradient(180deg, var(--cream-card) 0%, #FBF8F2 100%);
+    border-radius: 28px;
+    padding: 36px 38px 32px;
+    box-shadow: var(--elev-hero);
+    position: relative;
+    overflow: hidden;
+  }
+  /* Subtle inner lip — paper edge feel. */
+  .hero::before {
+    content: '';
+    position: absolute; inset: 0;
+    border-radius: 28px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), inset 0 0 0 1px rgba(43, 38, 32, 0.03);
+    pointer-events: none;
+  }
+
+  /* Hero header — greeting + CTA + filter pills. */
+  .hero-head {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 20px;
+    margin-bottom: 26px;
+    align-items: start;
+  }
+  .hero-head .left .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-3);
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+  }
+  .hero-head h1 {
+    font-family: var(--serif);
+    font-style: italic;
+    font-weight: 400;
+    font-size: 42px;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+  .hero-head h1 .glow {
+    color: var(--sage-deep);
+    background: var(--sage-tint);
+    padding: 0 8px;
+    border-radius: 8px;
+    box-shadow: inset 0 0 0 1px var(--sage-tint-strong);
+  }
+  .hero-head .sub {
+    margin-top: 14px;
+    font-family: var(--serif);
+    font-size: 16px;
+    color: var(--ink-2);
+    line-height: 1.55;
+    max-width: 540px;
+  }
+
+  .hero-head .cta-cluster {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 12px;
+  }
+
+  .cta-pill {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 12px 22px;
+    background: linear-gradient(180deg, #87B196 0%, var(--sage) 100%);
+    color: #FFFCF5;
+    border-radius: 999px;
+    font-weight: 500;
+    font-size: 14px;
+    box-shadow: var(--elev-2), inset 0 1px 0 rgba(255,255,255,0.20);
+    cursor: pointer; border: none;
+    font-family: var(--sans);
+    transition: transform 320ms var(--ease-mat), box-shadow 320ms var(--ease-mat);
+  }
+  .cta-pill:hover {
+    transform: translate3d(0, -4px, 0);
+    box-shadow: var(--elev-hover), inset 0 1px 0 rgba(255,255,255,0.25);
+  }
+  .cta-pill:active {
+    transform: translate3d(0, 0, 0);
+    box-shadow: var(--elev-pressed), inset 0 1px 2px rgba(43, 38, 32, 0.08);
+  }
+  .cta-pill svg { width: 13px; height: 13px; }
+
+  .filter-row {
+    display: flex; flex-wrap: wrap; gap: 7px;
+    justify-content: flex-end;
+    max-width: 360px;
+  }
+  .pill {
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: var(--cream-2);
+    color: var(--ink-2);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    box-shadow: var(--elev-rest);
+    transition: transform 240ms var(--ease-mat), box-shadow 320ms var(--ease-mat), background 240ms var(--ease-mat);
+  }
+  .pill:hover { transform: translate3d(0, -2px, 0); box-shadow: var(--elev-1); background: var(--cream-card); }
+  .pill.active { background: var(--sage-tint); color: var(--sage-deep); box-shadow: var(--elev-1); }
+
+  /* Hero complications grid — 4 sub-cards (metrics) inset at lower elevation. */
+  .complications {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    margin-bottom: 22px;
+  }
+
+  .sub-card {
+    background: var(--cream);
+    border-radius: 16px;
+    padding: 18px 20px;
+    box-shadow: var(--elev-inset-well);
+    transition: transform 320ms var(--ease-mat), box-shadow 320ms var(--ease-mat), background 240ms var(--ease-mat);
+    cursor: pointer;
+    position: relative;
+  }
+  /* Hover lifts a sub-card OUT of the inset well → elev-1. */
+  .sub-card:hover {
+    transform: translate3d(0, -4px, 0);
+    box-shadow: var(--elev-hover);
+    background: var(--cream-card);
+  }
+  .sub-card:active {
+    transform: translate3d(0, 0, 0);
+    box-shadow: var(--elev-pressed);
+  }
+
+  .sub-card .label {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-3);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .sub-card .num {
+    font-family: var(--serif);
+    font-size: 36px;
+    line-height: 1;
+    letter-spacing: -0.025em;
+    font-weight: 500;
+    color: var(--ink);
+  }
+  .sub-card .num .small { font-size: 22px; color: var(--ink-3); margin-left: 2px; }
+  .sub-card .unit {
+    font-family: var(--sans);
+    font-size: 11.5px;
+    color: var(--ink-3);
+    margin-top: 6px;
+  }
+  .sub-card .delta {
+    display: inline-block;
+    margin-top: 8px;
+    padding: 2px 7px;
+    background: var(--sage-tint);
+    color: var(--sage-deep);
+    border-radius: 999px;
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+  }
+  .sub-card.amber .delta { background: rgba(199, 151, 84, 0.16); color: #8E6526; }
+
+  .spark { margin-top: 8px; height: 22px; width: 100%; }
+  .spark path.line { fill: none; stroke: var(--sage); stroke-width: 1.5;
+                     stroke-linecap: round; stroke-linejoin: round; }
+  .spark path.area { fill: var(--sage-tint); }
+
+  /* Hero body — 2-column: today's patients (left, deeper inset) + recent stream (right). */
+  .hero-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  .well {
+    background: var(--cream);
+    border-radius: 18px;
+    padding: 20px 22px 16px;
+    box-shadow: var(--elev-inset-well);
+    position: relative;
+  }
+  .well .well-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .well .well-head h2 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 19px;
+    letter-spacing: -0.012em;
+    color: var(--ink);
+  }
+  .well .well-head h2 em { font-style: italic; color: var(--sage-deep); }
+  .well .well-head .count {
+    font-family: var(--mono); font-size: 11px; color: var(--ink-3);
+    letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  .well .well-head .link {
+    font-family: var(--mono); font-size: 11px; color: var(--sage-deep);
+    cursor: pointer; letter-spacing: 0.02em;
+  }
+  .well .well-head .link:hover { text-decoration: underline; text-underline-offset: 2px; }
+
+  /* Patient stack — each row is a tiny floating card lifted out of the well. */
+  .pstack { display: flex; flex-direction: column; gap: 8px; }
+  .p-row {
+    display: grid;
+    grid-template-columns: 36px 1fr auto auto;
+    gap: 12px;
+    align-items: center;
+    padding: 11px 13px;
+    background: var(--cream-card);
+    border-radius: 12px;
+    box-shadow: var(--elev-rest);
+    cursor: pointer;
+    transition: transform 320ms var(--ease-mat), box-shadow 320ms var(--ease-mat);
+  }
+  .p-row:hover {
+    transform: translate3d(0, -4px, 0);
+    box-shadow: var(--elev-hover);
+  }
+  .p-row:active {
+    transform: translate3d(0, 0, 0);
+    box-shadow: var(--elev-pressed);
+  }
+
+  .p-avatar {
+    width: 36px; height: 36px;
+    border-radius: 11px;
+    background: var(--sage-tint-strong); color: var(--sage-deep);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-family: var(--serif); font-weight: 500; font-size: 12.5px;
+    box-shadow: inset 0 0 0 1px rgba(47, 80, 64, 0.10);
+  }
+  .p-avatar.amber  { background: rgba(199, 151, 84, 0.18); color: #8E6526; box-shadow: inset 0 0 0 1px rgba(142, 101, 38, 0.10); }
+  .p-avatar.indigo { background: rgba(108, 122, 174, 0.18); color: #3E4A82; box-shadow: inset 0 0 0 1px rgba(62, 74, 130, 0.10); }
+  .p-avatar.rose   { background: rgba(180, 120, 130, 0.16); color: #7C2A38; box-shadow: inset 0 0 0 1px rgba(124, 42, 56, 0.10); }
+  .p-avatar.slate  { background: rgba(110, 122, 132, 0.18); color: #3F4B55; box-shadow: inset 0 0 0 1px rgba(63, 75, 85, 0.10); }
+  .p-avatar.olive  { background: rgba(150, 138, 80, 0.18); color: #5A5012; box-shadow: inset 0 0 0 1px rgba(90, 80, 18, 0.10); }
+
+  .p-meta { min-width: 0; }
+  .p-name {
+    font-family: var(--serif); font-size: 15.5px; font-weight: 500;
+    letter-spacing: -0.005em; color: var(--ink);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .p-sub {
+    margin-top: 1px;
+    font-size: 12px; color: var(--ink-3);
+    display: flex; gap: 7px; align-items: center;
+  }
+  .p-sub .sep { width: 3px; height: 3px; background: var(--ink-4); border-radius: 999px; }
+  .p-sub .code { font-family: var(--mono); font-size: 10.5px; color: var(--ink-2); }
+
+  .p-status {
+    padding: 3px 9px; border-radius: 999px;
+    font-size: 10.5px; font-weight: 500;
+    font-family: var(--mono); letter-spacing: 0.02em;
+    box-shadow: var(--elev-rest);
+  }
+  .p-status.ready  { background: var(--sage-tint); color: var(--sage-deep); }
+  .p-status.soon   { background: rgba(199, 151, 84, 0.16); color: #8E6526; }
+  .p-status.draft  { background: var(--cream-2); color: var(--ink-2); }
+  .p-status.signed { background: rgba(108, 122, 174, 0.14); color: #3E4A82; }
+
+  .p-time {
+    font-family: var(--mono); font-size: 10.5px;
+    color: var(--ink-3); letter-spacing: 0.02em;
+  }
+
+  /* Recent stream — flowing list inside its own well. */
+  .stream { display: flex; flex-direction: column; }
+  .stream-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center; gap: 8px;
+    padding: 9px 0;
+    border-bottom: 1px dashed var(--line);
+    border-radius: 6px;
+    margin: 0 -8px; padding-left: 8px; padding-right: 8px;
+    transition: background 240ms var(--ease-mat);
+  }
+  .stream-row:hover { background: var(--cream-2); }
+  .stream-row:last-child { border-bottom: none; }
+  .stream-line { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+  .stream-tag {
+    flex-shrink: 0; width: 6px; height: 6px;
+    border-radius: 999px; background: var(--sage);
+    box-shadow: 0 0 0 3px var(--sage-tint);
+    margin-top: 5px;
+  }
+  .stream-tag.signed { background: var(--ink-3); box-shadow: 0 0 0 3px var(--cream-2); }
+  .stream-tag.draft  { background: #C79754; box-shadow: 0 0 0 3px rgba(199, 151, 84, 0.16); }
+  .stream-name {
+    font-family: var(--serif); font-size: 13px; font-weight: 500;
+    color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .stream-spec { font-size: 11px; color: var(--ink-3); white-space: nowrap; }
+  .stream-time {
+    font-family: var(--mono); font-size: 10px;
+    color: var(--ink-4); letter-spacing: 0.02em; text-align: right;
+  }
+
+  /* ───── Footnote ─────────────────────────────────────────────────────── */
+  .footnote {
+    margin-top: 26px;
+    text-align: center;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    color: var(--ink-4);
+  }
+
+  /* ───── Responsive ───────────────────────────────────────────────────── */
+  @media (max-width: 980px) {
+    .complications { grid-template-columns: repeat(2, 1fr); }
+    .hero-body { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 720px) {
+    .canvas { padding: 18px 14px 60px; }
+    .top-strip { flex-wrap: wrap; gap: 10px; }
+    .breadcrumb { display: none; }
+    .top-spacer { display: none; }
+    .search-chip { order: 5; flex: 1 0 100%; min-width: 0; }
+    .hero { padding: 26px 22px 22px; border-radius: 22px; box-shadow: var(--elev-2); }
+    .hero-head { grid-template-columns: 1fr; }
+    .hero-head h1 { font-size: 30px; }
+    .hero-head .cta-cluster { align-items: flex-start; }
+    .filter-row { justify-content: flex-start; max-width: none; }
+    .complications { grid-template-columns: repeat(2, 1fr); }
+    .sub-card .num { font-size: 28px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      transition: none !important;
+      animation: none !important;
+    }
+    .sub-card:hover, .p-row:hover, .pill:hover, .cta-pill:hover,
+    .me-chip:hover, .wordmark:hover, .search-chip:hover {
+      transform: none !important;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div class="canvas">
+
+  <!-- Floating top strip — chips on cream canvas. -->
+  <div class="top-strip">
+    <div class="wordmark"><div class="quill"></div><div class="name">Quill<em>MD</em></div></div>
+
+    <div class="breadcrumb"><span>Berkeley</span><span class="arrow">›</span><span class="here">Today</span></div>
+
+    <div class="top-spacer"></div>
+
+    <div class="search-chip" role="search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.3-4.3"></path></svg>
+      <span class="placeholder">Search patients · visits · ICD-10 …</span>
+      <span class="kbd">⌘K</span>
+    </div>
+
+    <div class="me-chip" role="button" tabindex="0">
+      <span class="avatar">KR</span>
+      <span class="me-name">Dr. Reyes</span>
+    </div>
+  </div>
+
+  <!-- HERO CARD — single dominant panel. Sub-cards inset at different elevations. -->
+  <main class="hero" aria-labelledby="hero-h">
+
+    <div class="hero-head">
+      <div class="left">
+        <div class="eyebrow">Tuesday · 29 April · Sage Family Practice</div>
+        <h1 id="hero-h">Good <em><span class="glow">morning</span></em>, Dr. Reyes.</h1>
+        <p class="sub">Eleven faces on the schedule today, three drafts cooling. Coffee's ready.</p>
+      </div>
+      <div class="cta-cluster">
+        <button class="cta-pill" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+          New visit
+        </button>
+        <div class="filter-row">
+          <span class="pill active">All · 11</span>
+          <span class="pill">Family Med</span>
+          <span class="pill">Cardio</span>
+          <span class="pill">Endo</span>
+          <span class="pill">Peds</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Complications: 4 metric sub-cards inset into the hero. -->
+    <div class="complications" role="region" aria-label="Key metrics">
+
+      <div class="sub-card" tabindex="0" aria-label="Visits this month">
+        <div class="label">Visits / Apr</div>
+        <div class="num">127</div>
+        <div class="unit">this month</div>
+        <span class="delta">↗ +18 vs Mar</span>
+        <svg class="spark" viewBox="0 0 200 22" preserveAspectRatio="none" aria-hidden="true">
+          <path class="area" d="M0,18 L14,15 L28,17 L42,11 L56,13 L70,9 L84,11 L98,6 L112,8 L126,4 L140,7 L154,3 L168,5 L182,2 L200,4 L200,22 L0,22 Z"/>
+          <path class="line" d="M0,18 L14,15 L28,17 L42,11 L56,13 L70,9 L84,11 L98,6 L112,8 L126,4 L140,7 L154,3 L168,5 L182,2 L200,4"/>
+        </svg>
+      </div>
+
+      <div class="sub-card" tabindex="0" aria-label="Average drafted in seconds">
+        <div class="label">Avg drafted in</div>
+        <div class="num">38<span class="small">s</span></div>
+        <div class="unit">per visit</div>
+        <span class="delta">↘ −6s vs Mar</span>
+      </div>
+
+      <div class="sub-card amber" tabindex="0" aria-label="Pending review">
+        <div class="label">Pending review</div>
+        <div class="num">3</div>
+        <div class="unit">awaiting your eye</div>
+        <span class="delta">⏱ oldest 2h 14m</span>
+      </div>
+
+      <div class="sub-card" tabindex="0" aria-label="Signed this week">
+        <div class="label">Signed / wk</div>
+        <div class="num">42</div>
+        <div class="unit">notes finalized</div>
+        <span class="delta">↗ +9 vs last wk</span>
+      </div>
+
+    </div>
+
+    <!-- Hero body: today's patients (left well) + recent visits (right well). -->
+    <div class="hero-body">
+
+      <section class="well" aria-labelledby="today-h">
+        <div class="well-head">
+          <h2 id="today-h">Today, <em>at a glance</em></h2>
+          <div class="count">6 of 11 · 4 ready</div>
+        </div>
+        <div class="pstack">
+
+          <div class="p-row" tabindex="0">
+            <div class="p-avatar">MP</div>
+            <div class="p-meta">
+              <div class="p-name">Mei-Ling Park</div>
+              <div class="p-sub"><span>42F · Family Medicine</span><span class="sep"></span><span class="code">J20.9</span><span class="sep"></span><span class="code">99214</span></div>
+            </div>
+            <div class="p-status ready">Ready</div>
+            <div class="p-time">08:00</div>
+          </div>
+
+          <div class="p-row" tabindex="0">
+            <div class="p-avatar amber">DA</div>
+            <div class="p-meta">
+              <div class="p-name">Daniyal Abbasi</div>
+              <div class="p-sub"><span>58M · Cardiology</span><span class="sep"></span><span class="code">I10</span><span class="sep"></span><span class="code">99213</span></div>
+            </div>
+            <div class="p-status soon">In 12m</div>
+            <div class="p-time">08:30</div>
+          </div>
+
+          <div class="p-row" tabindex="0">
+            <div class="p-avatar indigo">JT</div>
+            <div class="p-meta">
+              <div class="p-name">Joaquín Torres</div>
+              <div class="p-sub"><span>7M · Pediatrics</span><span class="sep"></span><span class="code">H66.91</span><span class="sep"></span><span class="code">99213</span></div>
+            </div>
+            <div class="p-status draft">Drafted</div>
+            <div class="p-time">09:15</div>
+          </div>
+
+          <div class="p-row" tabindex="0">
+            <div class="p-avatar rose">AB</div>
+            <div class="p-meta">
+              <div class="p-name">Anika Bhattacharya</div>
+              <div class="p-sub"><span>34F · Endocrinology</span><span class="sep"></span><span class="code">E11.9</span><span class="sep"></span><span class="code">99214</span></div>
+            </div>
+            <div class="p-status ready">Ready</div>
+            <div class="p-time">10:00</div>
+          </div>
+
+          <div class="p-row" tabindex="0">
+            <div class="p-avatar slate">RO</div>
+            <div class="p-meta">
+              <div class="p-name">Rafael Olawale</div>
+              <div class="p-sub"><span>61M · Family Medicine</span><span class="sep"></span><span class="code">M54.5</span><span class="sep"></span><span class="code">99213</span></div>
+            </div>
+            <div class="p-status signed">Signed</div>
+            <div class="p-time">10:45</div>
+          </div>
+
+          <div class="p-row" tabindex="0">
+            <div class="p-avatar olive">SK</div>
+            <div class="p-meta">
+              <div class="p-name">Sophie Khalid</div>
+              <div class="p-sub"><span>29F · Dermatology</span><span class="sep"></span><span class="code">L40.0</span><span class="sep"></span><span class="code">99213</span></div>
+            </div>
+            <div class="p-status soon">In 1h</div>
+            <div class="p-time">11:30</div>
+          </div>
+
+        </div>
+      </section>
+
+      <section class="well" aria-labelledby="recent-h">
+        <div class="well-head">
+          <h2 id="recent-h">Recent <em>visits</em></h2>
+          <span class="link">All →</span>
+        </div>
+        <div class="stream">
+          <div class="stream-row"><div class="stream-line"><span class="stream-tag signed"></span><span class="stream-name">Eleanor Kowalski</span><span class="stream-spec">· FamMed · I10</span></div><div class="stream-time">12m</div></div>
+          <div class="stream-row"><div class="stream-line"><span class="stream-tag"></span><span class="stream-name">Tomás Aldridge</span><span class="stream-spec">· Cardio · I48.91</span></div><div class="stream-time">38m</div></div>
+          <div class="stream-row"><div class="stream-line"><span class="stream-tag draft"></span><span class="stream-name">Mira Vasquez-Olin</span><span class="stream-spec">· Endo · E11.65</span></div><div class="stream-time">1h 04m</div></div>
+          <div class="stream-row"><div class="stream-line"><span class="stream-tag signed"></span><span class="stream-name">Hassan Mboya</span><span class="stream-spec">· FamMed · J45.40</span></div><div class="stream-time">1h 22m</div></div>
+          <div class="stream-row"><div class="stream-line"><span class="stream-tag"></span><span class="stream-name">Caroline Westbrook</span><span class="stream-spec">· Derm · L70.0</span></div><div class="stream-time">2h 11m</div></div>
+          <div class="stream-row"><div class="stream-line"><span class="stream-tag signed"></span><span class="stream-name">Yuki Tanaka-Rhodes</span><span class="stream-spec">· Peds · J06.9</span></div><div class="stream-time">3h 02m</div></div>
+          <div class="stream-row"><div class="stream-line"><span class="stream-tag draft"></span><span class="stream-name">Bertrand Okeke</span><span class="stream-spec">· Cardio · I25.10</span></div><div class="stream-time">3h 45m</div></div>
+          <div class="stream-row"><div class="stream-line"><span class="stream-tag signed"></span><span class="stream-name">Priya Anand-Shah</span><span class="stream-spec">· Endo · E03.9</span></div><div class="stream-time">5h 20m</div></div>
+          <div class="stream-row"><div class="stream-line"><span class="stream-tag"></span><span class="stream-name">Marcus Liang</span><span class="stream-spec">· FamMed · K21.9</span></div><div class="stream-time">6h 18m</div></div>
+          <div class="stream-row"><div class="stream-line"><span class="stream-tag signed"></span><span class="stream-name">Ines Valverde</span><span class="stream-spec">· Peds · Z00.121</span></div><div class="stream-time">Yest.</div></div>
+          <div class="stream-row"><div class="stream-line"><span class="stream-tag draft"></span><span class="stream-name">Clarence Wu-Patel</span><span class="stream-spec">· Derm · L20.9</span></div><div class="stream-time">Yest.</div></div>
+          <div class="stream-row"><div class="stream-line"><span class="stream-tag signed"></span><span class="stream-name">Fatima Boukhari</span><span class="stream-spec">· FamMed · R51</span></div><div class="stream-time">Yest.</div></div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <div class="footnote">Material Depth · Layered Hero · QuillMD</div>
+
+</div><!-- /canvas -->
+
+</body>
+</html>

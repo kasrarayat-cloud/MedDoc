@@ -1,0 +1,560 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>QuillMD — Glass Concierge · Bottom Dock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;1,8..60,400;1,8..60,500&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --cream:#F2EBDC; --cream-card:#FFFCF5; --cream-2:#F2EDE3; --cream-3:#E8E0CC;
+    --ink:#2B2620; --ink-2:#5C544A; --ink-3:#8A8278; --ink-4:#B7AE9F;
+    --sage:#7AA68C; --sage-deep:#2F5040; --sage-bright:#5A8A6E;
+    --coral:#C97B6E; --amber:#D4A574; --teal:#5BA3B4;
+    --line:rgba(43,38,32,0.08); --line-2:rgba(43,38,32,0.14);
+    --serif:'Source Serif 4',Georgia,serif;
+    --sans:'DM Sans',-apple-system,system-ui,sans-serif;
+    --mono:'JetBrains Mono',ui-monospace,monospace;
+
+    --glass-bg-light: rgba(255, 252, 245, 0.62);
+    --glass-bg-warm:  rgba(242, 235, 220, 0.68);
+    --glass-bg-sage:  rgba(122, 166, 140, 0.10);
+    --glass-border:   rgba(255, 252, 245, 0.45);
+    --glass-blur:     blur(24px) saturate(1.05);
+    --glass-shadow:   0 8px 32px rgba(43, 38, 32, 0.10), 0 1px 0 rgba(255, 252, 245, 0.45) inset;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased;min-height:100%}
+  ::selection{background:rgba(122,166,140,.32);color:var(--ink)}
+  a{color:inherit;text-decoration:none}
+  button{font:inherit;color:inherit;cursor:pointer;border:none;background:transparent}
+
+  /* Warm-morning canvas (different time-of-day vs V1) */
+  .canvas{
+    position:fixed;inset:0;z-index:-1;pointer-events:none;
+    background:
+      radial-gradient(900px 620px at 18% 22%, rgba(255,210,150,.40), transparent 60%),
+      radial-gradient(820px 540px at 82% 70%, rgba(122,166,140,.28), transparent 62%),
+      radial-gradient(1200px 700px at 50% 110%, rgba(212,165,116,.16), transparent 70%),
+      linear-gradient(180deg, #F4ECD7 0%, #F2EBDC 50%, #ECE3CD 100%);
+  }
+  .canvas::before{
+    content:"";position:absolute;inset:0;
+    background:
+      radial-gradient(560px 380px at 24% 32%, rgba(255,225,170,.42), transparent 65%),
+      radial-gradient(360px 280px at 78% 60%, rgba(122,166,140,.22), transparent 70%);
+    filter: blur(40px); opacity:.96;
+  }
+  .grain{position:fixed;inset:0;z-index:-1;pointer-events:none;opacity:.32;mix-blend-mode:overlay;
+    background-image:radial-gradient(rgba(43,38,32,.05) 1px,transparent 1px);background-size:3px 3px}
+
+  .page{max-width:1140px;margin:0 auto;padding:42px 40px 160px;position:relative;min-height:100vh}
+
+  /* TOP STRIP — minimal cream chip with identity */
+  .top{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:6px 4px 26px
+  }
+  .top .word{font-family:var(--serif);font-style:italic;font-weight:500;font-size:18px;color:var(--ink)}
+  .top .word b{font-weight:500;font-style:normal;color:var(--sage-deep)}
+  .top-right{display:flex;gap:10px;align-items:center}
+  .top-meta{
+    font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3)
+  }
+  .ini-chip{
+    display:inline-flex;align-items:center;gap:8px;padding:5px 5px 5px 12px;border-radius:999px;
+    background:rgba(255,252,245,.55);border:1px solid var(--glass-border);
+    backdrop-filter:blur(14px) saturate(1.05);-webkit-backdrop-filter:blur(14px) saturate(1.05);
+    transition:all .25s ease
+  }
+  .ini-chip:hover{background:rgba(255,252,245,.78)}
+  .ini-chip span{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-2)}
+  .ini-chip .ini{
+    display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:999px;
+    background:linear-gradient(180deg,#3B6552,#234136);color:#FBF9F1;
+    font-family:var(--mono);font-size:10px;letter-spacing:.04em
+  }
+
+  /* THE BIG GLASS PANEL — entire dashboard inside one sheet */
+  .sheet{
+    position:relative;
+    border-radius:32px;
+    background:var(--glass-bg-light);
+    border:1px solid var(--glass-border);
+    box-shadow: 0 20px 60px rgba(43,38,32,.14), 0 1px 0 rgba(255,252,245,.55) inset, 0 0 0 1px rgba(255,252,245,.25) inset;
+    backdrop-filter:var(--glass-blur);
+    -webkit-backdrop-filter:var(--glass-blur);
+    overflow:hidden;
+  }
+  /* a soft bloom inside the glass */
+  .sheet::before{
+    content:"";position:absolute;left:-10%;top:-10%;width:60%;height:60%;
+    background:radial-gradient(closest-side,rgba(255,210,150,.30),transparent 70%);
+    pointer-events:none
+  }
+  .sheet > *{position:relative;z-index:1}
+
+  /* sheet header */
+  .sheet-head{
+    display:flex;align-items:flex-start;justify-content:space-between;gap:24px;
+    padding:42px 44px 28px;border-bottom:1px solid rgba(43,38,32,.07)
+  }
+  .sheet-head .greet{flex:1;min-width:0}
+  .sheet-head .greet .eyebrow{
+    font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3);margin-bottom:14px
+  }
+  .sheet-head .greet h1{
+    font-family:var(--serif);font-weight:400;font-size:clamp(40px,5.4vw,68px);line-height:1.0;
+    letter-spacing:-0.02em;color:var(--ink)
+  }
+  .sheet-head .greet h1 em{
+    font-style:italic;color:var(--sage-deep);position:relative
+  }
+  .sheet-head .greet h1 em::after{
+    content:"";position:absolute;left:-3%;right:-3%;bottom:.06em;height:.42em;
+    background:radial-gradient(closest-side,rgba(122,166,140,.35),rgba(122,166,140,0));
+    border-radius:8px;z-index:-1;filter:blur(5px)
+  }
+  .sheet-head .greet .lede{
+    margin-top:18px;max-width:54ch;font-family:var(--serif);font-style:italic;font-size:17px;color:var(--ink-2);line-height:1.5
+  }
+  .sheet-head .right-pack{display:flex;flex-direction:column;align-items:flex-end;gap:10px}
+  .sheet-head .new{
+    display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border-radius:999px;
+    background:var(--sage-deep);color:#FBF9F1;
+    font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+    box-shadow:0 6px 18px rgba(47,80,64,.32),0 1px 0 rgba(255,252,245,.25) inset;
+    transition:transform .25s cubic-bezier(.22,1,.36,1)
+  }
+  .sheet-head .new:hover{transform:translateY(-1px)}
+  .sheet-head .new svg{width:11px;height:11px;stroke:#FBF9F1;stroke-width:1.6;fill:none}
+  .sheet-head .kbd{
+    display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:999px;
+    background:rgba(43,38,32,.05);border:1px solid var(--line);
+    font-family:var(--mono);font-size:10.5px;color:var(--ink-2)
+  }
+  .kbd kbd{font-family:inherit}
+
+  /* inline metrics — within the panel */
+  .inline-mets{
+    display:grid;grid-template-columns:repeat(4,1fr);gap:0;
+    padding:24px 44px;border-bottom:1px solid rgba(43,38,32,.07);position:relative
+  }
+  .inline-mets .col{padding:6px 22px;border-right:1px solid rgba(43,38,32,.07);position:relative}
+  .inline-mets .col:first-child{padding-left:0}
+  .inline-mets .col:last-child{border-right:0;padding-right:0}
+  .inline-mets .lbl{font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3)}
+  .inline-mets .num{
+    font-family:var(--serif);font-weight:400;font-size:46px;line-height:1;letter-spacing:-0.03em;
+    color:var(--ink);margin-top:10px;display:flex;align-items:baseline;gap:8px
+  }
+  .inline-mets .num small{
+    font-family:var(--serif);font-style:italic;font-weight:400;font-size:.34em;color:var(--ink-3);letter-spacing:0
+  }
+  .inline-mets .delta{
+    margin-top:6px;font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3)
+  }
+  .inline-mets .delta.up{color:var(--sage-bright)}
+  .inline-mets .delta.warn{color:var(--coral)}
+  .inline-mets .col.alert .num{color:var(--coral)}
+  .inline-mets .col.glow .num{color:var(--sage-deep)}
+
+  /* WORK AREAS inside the glass — two columns */
+  .areas{
+    display:grid;grid-template-columns:1.45fr 1fr;gap:0;padding:0
+  }
+  .area{padding:32px 44px}
+  .area + .area{border-left:1px solid rgba(43,38,32,.07)}
+  .area-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:18px}
+  .area-head h2{font-family:var(--serif);font-weight:500;font-size:22px;letter-spacing:-0.012em;color:var(--ink)}
+  .area-head h2 em{font-style:italic;color:var(--sage-deep)}
+  .area-head .meta{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3)}
+
+  /* specialty pill row */
+  .filter{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+  .pill{
+    display:inline-flex;align-items:center;gap:8px;
+    padding:6px 12px;border-radius:999px;
+    background:rgba(255,252,245,.46);
+    border:1px solid var(--glass-border);
+    backdrop-filter:blur(10px) saturate(1.05);-webkit-backdrop-filter:blur(10px) saturate(1.05);
+    font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-2);
+    transition:all .25s ease
+  }
+  .pill .ct{color:var(--ink-3)}
+  .pill.on{background:var(--sage-deep);color:#FBF9F1;border-color:transparent}
+  .pill.on .ct{color:rgba(251,249,241,.75)}
+  .pill:hover:not(.on){background:rgba(255,252,245,.78);color:var(--ink)}
+
+  /* today list */
+  .today{display:flex;flex-direction:column;gap:0}
+  .t-row{
+    display:grid;grid-template-columns:64px 1.8fr 96px 100px;gap:14px;align-items:center;
+    padding:14px 12px;border-radius:12px;
+    transition:background .3s ease;cursor:pointer
+  }
+  .t-row + .t-row{border-top:1px solid rgba(43,38,32,.05)}
+  .t-row:hover{background:rgba(255,252,245,.55)}
+  .t-row .time{font-family:var(--mono);font-size:11px;color:var(--ink-3);letter-spacing:.04em;text-align:right}
+  .t-row .time b{display:block;color:var(--ink);font-size:13px;font-weight:500}
+  .t-row .who .name{font-family:var(--serif);font-weight:500;font-size:18px;color:var(--ink);letter-spacing:-0.005em}
+  .t-row .who .age{font-family:var(--serif);font-style:italic;color:var(--ink-3);font-size:13.5px;margin-left:6px}
+  .t-row .who .sub{margin-top:3px;font-family:var(--serif);font-style:italic;color:var(--ink-2);font-size:14px;line-height:1.4;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .t-row .spec{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-2)}
+  .t-row .stat{justify-self:end;display:inline-flex;align-items:center;gap:6px;
+    padding:5px 10px;border-radius:999px;
+    font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase}
+  .stat.ready{background:rgba(122,166,140,.18);color:var(--sage-deep)}
+  .stat.draft{background:rgba(212,165,116,.20);color:#7B5A2E}
+  .stat.review{background:rgba(201,123,110,.16);color:var(--coral)}
+  .stat.signed{background:rgba(43,38,32,.08);color:var(--ink-2)}
+  .stat .dot{width:6px;height:6px;border-radius:999px;background:currentColor}
+
+  /* recent column */
+  .recent{display:flex;flex-direction:column;gap:0}
+  .r-row{
+    display:grid;grid-template-columns:78px 1fr 84px;gap:12px;align-items:center;
+    padding:12px 8px;border-radius:10px;
+    transition:background .3s ease;cursor:pointer
+  }
+  .r-row + .r-row{border-top:1px solid rgba(43,38,32,.05)}
+  .r-row:hover{background:rgba(255,252,245,.50)}
+  .r-row .when{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3)}
+  .r-row .who{font-family:var(--serif);font-weight:500;font-size:15px;color:var(--ink);letter-spacing:-0.003em;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .r-row .who em{font-style:italic;color:var(--ink-3);margin-left:5px;font-size:13px;font-weight:400}
+  .r-row .stat{justify-self:end;font-size:9.5px}
+
+  .recent-foot{margin-top:14px;text-align:right}
+  .recent-foot a{font-family:var(--serif);font-style:italic;color:var(--sage-deep);font-size:14px;
+    border-bottom:1px solid rgba(47,80,64,.4);padding-bottom:1px}
+
+  /* THE DOCK — Mac-dock-style at bottom-center */
+  .dock-wrap{
+    position:fixed;left:50%;bottom:24px;transform:translateX(-50%);
+    z-index:60;
+    display:flex;align-items:flex-end;gap:12px;flex-direction:column
+  }
+  .dock-label{
+    font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink);
+    background:rgba(255,252,245,.85);padding:5px 10px;border-radius:6px;
+    border:1px solid var(--line);box-shadow:0 4px 12px rgba(43,38,32,.10);
+    opacity:0;transform:translateY(6px);transition:all .25s ease;
+    align-self:center
+  }
+  .dock{
+    display:flex;align-items:center;gap:6px;
+    padding:10px 14px;border-radius:22px;
+    background:var(--glass-bg-warm);
+    border:1px solid var(--glass-border);
+    box-shadow:0 14px 44px rgba(43,38,32,.18), 0 1px 0 rgba(255,252,245,.55) inset;
+    backdrop-filter:var(--glass-blur);
+    -webkit-backdrop-filter:var(--glass-blur);
+  }
+  .dock-item{
+    position:relative;
+    display:inline-flex;flex-direction:column;align-items:center;justify-content:center;
+    width:60px;height:60px;border-radius:16px;
+    background:linear-gradient(180deg,rgba(255,252,245,.65),rgba(255,252,245,.32));
+    border:1px solid rgba(255,252,245,.55);
+    transition:transform .35s cubic-bezier(.22,1,.36,1);cursor:pointer;color:var(--ink-2)
+  }
+  .dock-item:hover{transform:translateY(-10px) scale(1.08);color:var(--sage-deep)}
+  .dock-item.on{
+    background:linear-gradient(180deg,#3B6552,#234136);color:#FBF9F1;
+    box-shadow:0 8px 22px rgba(47,80,64,.40),0 1px 0 rgba(255,252,245,.30) inset;
+    border-color:transparent
+  }
+  .dock-item svg{width:24px;height:24px;stroke:currentColor;stroke-width:1.5;fill:none;stroke-linecap:round;stroke-linejoin:round}
+  .dock-item .lbl{
+    font-family:var(--mono);font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;color:currentColor;
+    margin-top:3px;opacity:.0;transform:translateY(2px);transition:all .25s ease
+  }
+  .dock-item:hover .lbl, .dock-item.on .lbl{opacity:.92;transform:translateY(0)}
+  .dock-sep{width:1px;height:36px;background:rgba(43,38,32,.10);margin:0 4px;align-self:center}
+  .dock-cta{
+    display:inline-flex;align-items:center;gap:7px;height:46px;padding:0 16px;
+    margin:7px 0;
+    border-radius:14px;
+    background:var(--sage-deep);color:#FBF9F1;
+    font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+    box-shadow:0 6px 18px rgba(47,80,64,.34),0 1px 0 rgba(255,252,245,.25) inset
+  }
+  .dock-cta svg{width:12px;height:12px;stroke:#FBF9F1;stroke-width:1.6;fill:none}
+
+  /* mobile */
+  @media (max-width:920px){
+    .areas{grid-template-columns:1fr}
+    .area + .area{border-left:0;border-top:1px solid rgba(43,38,32,.07)}
+    .inline-mets{grid-template-columns:repeat(2,1fr);padding:18px 22px}
+    .inline-mets .col{border-right:0;padding:8px 8px}
+    .inline-mets .col:nth-child(2n){border-right:0}
+    .sheet-head{padding:30px 26px 22px;flex-wrap:wrap}
+    .area{padding:24px 22px}
+    .page{padding:22px 18px 180px}
+    .t-row{grid-template-columns:54px 1fr 80px;gap:10px}
+    .t-row .spec{display:none}
+    .dock-item{width:52px;height:52px;border-radius:14px}
+    .dock-item svg{width:20px;height:20px}
+    .dock-cta{height:40px;padding:0 12px;font-size:10px}
+  }
+  @media (max-width:760px){
+    :root{--glass-blur:blur(16px) saturate(1.05)}
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    *,*::before,*::after{transition:none!important;animation:none!important}
+  }
+  @media (prefers-reduced-transparency: reduce){
+    .sheet,.dock,.ini-chip,.pill{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;
+      background:rgba(255,252,245,.96)!important;border-color:rgba(43,38,32,.10)!important}
+  }
+  @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+    .sheet,.dock,.ini-chip,.pill{background:rgba(255,252,245,.94)}
+  }
+</style>
+</head>
+<body>
+
+<div class="canvas" aria-hidden="true"></div>
+<div class="grain" aria-hidden="true"></div>
+
+<main class="page">
+
+  <header class="top">
+    <span class="word">Quill<b>MD</b></span>
+    <div class="top-right">
+      <span class="top-meta">Tue · Apr 29 · 9:14 AM PT</span>
+      <button class="ini-chip">
+        <span>Cedar Park</span>
+        <span class="ini">KR</span>
+      </button>
+    </div>
+  </header>
+
+  <article class="sheet" aria-label="Today's dashboard">
+
+    <div class="sheet-head">
+      <div class="greet">
+        <div class="eyebrow">Tuesday morning · Cedar Park Family Health</div>
+        <h1>Good <em>morning</em>, Karuna.</h1>
+        <p class="lede">
+          A gentle slate today — six on the books, three drafts left over from yesterday.
+          The first patient is checking in now. We've kept the room warm.
+        </p>
+      </div>
+      <div class="right-pack">
+        <button class="new">
+          <svg viewBox="0 0 14 14" stroke-linecap="round"><path d="M7 1.5v11M1.5 7h11"/></svg>
+          New Visit
+        </button>
+        <span class="kbd">Search · <kbd>⌘</kbd><kbd>K</kbd></span>
+      </div>
+    </div>
+
+    <!-- inline metrics -->
+    <div class="inline-mets">
+      <div class="col glow">
+        <div class="lbl">Visits / April</div>
+        <div class="num">142 <small>this month</small></div>
+        <div class="delta up">▲ 8% vs last month</div>
+      </div>
+      <div class="col">
+        <div class="lbl">Avg drafted in</div>
+        <div class="num">3 <small>min / visit</small></div>
+        <div class="delta up">22 s faster this week</div>
+      </div>
+      <div class="col alert">
+        <div class="lbl">Pending review</div>
+        <div class="num">3 <small>visits</small></div>
+        <div class="delta warn">2 since yesterday</div>
+      </div>
+      <div class="col">
+        <div class="lbl">Signed this week</div>
+        <div class="num">37 <small>notes</small></div>
+        <div class="delta up">on pace for 48</div>
+      </div>
+    </div>
+
+    <!-- two work areas -->
+    <div class="areas">
+      <section class="area" aria-labelledby="today-h">
+        <div class="area-head">
+          <h2 id="today-h">Today's <em>schedule</em></h2>
+          <span class="meta">6 booked · 1 here</span>
+        </div>
+
+        <div class="filter">
+          <button class="pill on">All <span class="ct">6</span></button>
+          <button class="pill">Family <span class="ct">3</span></button>
+          <button class="pill">Cardio <span class="ct">1</span></button>
+          <button class="pill">Endo <span class="ct">1</span></button>
+          <button class="pill">Derm <span class="ct">1</span></button>
+        </div>
+
+        <div class="today">
+          <a class="t-row" href="#">
+            <div class="time"><b>9:00</b>am</div>
+            <div class="who">
+              <div class="name">Mei-Ling Chen <span class="age">· 54</span></div>
+              <div class="sub">"chest tightness on stairs, two weeks now"</div>
+            </div>
+            <div class="spec">Cardio</div>
+            <div class="stat ready"><span class="dot"></span>Here</div>
+          </a>
+          <a class="t-row" href="#">
+            <div class="time"><b>10:30</b>am</div>
+            <div class="who">
+              <div class="name">Ronan O'Sullivan <span class="age">· 67</span></div>
+              <div class="sub">post-op knee replacement, six weeks</div>
+            </div>
+            <div class="spec">Family</div>
+            <div class="stat draft"><span class="dot"></span>Drafting</div>
+          </a>
+          <a class="t-row" href="#">
+            <div class="time"><b>11:15</b>am</div>
+            <div class="who">
+              <div class="name">Aisha Mwangi <span class="age">· 31</span></div>
+              <div class="sub">annual wellness, prenatal counseling</div>
+            </div>
+            <div class="spec">Family</div>
+            <div class="stat ready"><span class="dot"></span>Soon</div>
+          </a>
+          <a class="t-row" href="#">
+            <div class="time"><b>1:45</b>pm</div>
+            <div class="who">
+              <div class="name">Felix Hartmann <span class="age">· 72</span></div>
+              <div class="sub">A1c trending up, considering GLP-1</div>
+            </div>
+            <div class="spec">Endo</div>
+            <div class="stat review"><span class="dot"></span>Review</div>
+          </a>
+          <a class="t-row" href="#">
+            <div class="time"><b>2:30</b>pm</div>
+            <div class="who">
+              <div class="name">Priya Subramanian <span class="age">· 8</span></div>
+              <div class="sub">wheezing at night, albuterol daily</div>
+            </div>
+            <div class="spec">Family</div>
+            <div class="stat ready"><span class="dot"></span>Soon</div>
+          </a>
+          <a class="t-row" href="#">
+            <div class="time"><b>3:50</b>pm</div>
+            <div class="who">
+              <div class="name">Marcus Brennan <span class="age">· 44</span></div>
+              <div class="sub">acne flare on jawline, third visit</div>
+            </div>
+            <div class="spec">Derm</div>
+            <div class="stat ready"><span class="dot"></span>Soon</div>
+          </a>
+        </div>
+      </section>
+
+      <section class="area" aria-labelledby="recent-h">
+        <div class="area-head">
+          <h2 id="recent-h">Recent <em>visits</em></h2>
+          <span class="meta">12 closed</span>
+        </div>
+
+        <div class="recent">
+          <a class="r-row" href="#">
+            <div class="when">Mon · 4:12p</div>
+            <div class="who">Yusuf El-Sayed <em>· 39</em></div>
+            <div class="stat signed"><span class="dot"></span>Signed</div>
+          </a>
+          <a class="r-row" href="#">
+            <div class="when">Mon · 2:48p</div>
+            <div class="who">Naledi Khumalo <em>· 28</em></div>
+            <div class="stat signed"><span class="dot"></span>Signed</div>
+          </a>
+          <a class="r-row" href="#">
+            <div class="when">Mon · 1:30p</div>
+            <div class="who">Sven Lindqvist <em>· 61</em></div>
+            <div class="stat draft"><span class="dot"></span>Drafted</div>
+          </a>
+          <a class="r-row" href="#">
+            <div class="when">Mon · 11:12a</div>
+            <div class="who">Imani Brooks <em>· 45</em></div>
+            <div class="stat signed"><span class="dot"></span>Signed</div>
+          </a>
+          <a class="r-row" href="#">
+            <div class="when">Mon · 9:55a</div>
+            <div class="who">Tomás Reyes <em>· 7</em></div>
+            <div class="stat signed"><span class="dot"></span>Signed</div>
+          </a>
+          <a class="r-row" href="#">
+            <div class="when">Fri · 4:40p</div>
+            <div class="who">Hyo-Jin Park <em>· 52</em></div>
+            <div class="stat review"><span class="dot"></span>Review</div>
+          </a>
+          <a class="r-row" href="#">
+            <div class="when">Fri · 3:11p</div>
+            <div class="who">Constance Aboagye <em>· 38</em></div>
+            <div class="stat signed"><span class="dot"></span>Signed</div>
+          </a>
+          <a class="r-row" href="#">
+            <div class="when">Fri · 1:46p</div>
+            <div class="who">Wesley Buchanan <em>· 70</em></div>
+            <div class="stat signed"><span class="dot"></span>Signed</div>
+          </a>
+          <a class="r-row" href="#">
+            <div class="when">Fri · 11:30a</div>
+            <div class="who">Daniela Rossi <em>· 33</em></div>
+            <div class="stat signed"><span class="dot"></span>Signed</div>
+          </a>
+          <a class="r-row" href="#">
+            <div class="when">Fri · 10:08a</div>
+            <div class="who">Kofi Asante <em>· 56</em></div>
+            <div class="stat draft"><span class="dot"></span>Drafted</div>
+          </a>
+          <a class="r-row" href="#">
+            <div class="when">Thu · 3:55p</div>
+            <div class="who">Lior Shapiro <em>· 41</em></div>
+            <div class="stat signed"><span class="dot"></span>Signed</div>
+          </a>
+          <a class="r-row" href="#">
+            <div class="when">Thu · 2:20p</div>
+            <div class="who">Margaret Whitfield <em>· 78</em></div>
+            <div class="stat signed"><span class="dot"></span>Signed</div>
+          </a>
+        </div>
+        <div class="recent-foot"><a href="#">View all visits →</a></div>
+      </section>
+    </div>
+  </article>
+
+</main>
+
+<!-- BOTTOM DOCK -->
+<div class="dock-wrap">
+  <nav class="dock" aria-label="Main">
+    <button class="dock-item on" aria-label="Today">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      <span class="lbl">Today</span>
+    </button>
+    <button class="dock-item" aria-label="Patients">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6"/></svg>
+      <span class="lbl">Patients</span>
+    </button>
+    <button class="dock-item" aria-label="Drafts">
+      <svg viewBox="0 0 24 24"><path d="M5 4h11l3 3v13H5z"/><path d="M9 11h6M9 15h6M9 7h4"/></svg>
+      <span class="lbl">Drafts</span>
+    </button>
+    <span class="dock-sep"></span>
+    <button class="dock-cta" aria-label="New visit">
+      <svg viewBox="0 0 14 14" stroke-linecap="round"><path d="M7 1.5v11M1.5 7h11"/></svg>
+      New
+    </button>
+    <span class="dock-sep"></span>
+    <button class="dock-item" aria-label="Settings">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.13-1.34l2-1.55-2-3.46-2.36.93a7 7 0 0 0-2.32-1.34L13.5 3h-3l-.69 2.24a7 7 0 0 0-2.32 1.34L5.13 5.65l-2 3.46 2 1.55A7 7 0 0 0 5 12c0 .46.05.91.13 1.34l-2 1.55 2 3.46 2.36-.93a7 7 0 0 0 2.32 1.34L10.5 21h3l.69-2.24a7 7 0 0 0 2.32-1.34l2.36.93 2-3.46-2-1.55c.08-.43.13-.88.13-1.34Z"/></svg>
+      <span class="lbl">Settings</span>
+    </button>
+  </nav>
+</div>
+
+</body>
+</html>

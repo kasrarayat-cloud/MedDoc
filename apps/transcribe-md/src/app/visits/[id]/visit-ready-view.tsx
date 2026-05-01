@@ -3,12 +3,12 @@
 // ============================================================================
 // VisitReadyView — visit-detail body for READY/SIGNED states.
 // ----------------------------------------------------------------------------
-// Phase 2 (Clinician remodel) — Strategy A dual-theme via additive
-// `theme` prop. Default `'legacy'` keeps every dark surface +
-// violet-ring focus + Tabs pill row verbatim. Visit-detail passes
-// `theme="clinician"` to render the .qm-cl-tab-row with .qm-cl-tab
-// chips, sage focus rings, and turn-card / .qm-cl-prose body
-// styling that matches the visit-detail mockup.
+// Phase 5 — Linear V1 Faithful. A horizontal Linear-style underlined
+// tab bar drives the SOAP / Transcript / Codes / Rx / Extras /
+// Pipeline panels. Surfaces are hairline-bordered surface-1 cards on
+// the dark canvas; transcript turns render in floating doctor/patient
+// bubbles tinted sage and surface-2 respectively. The `theme` prop
+// is preserved as a no-op for caller back-compat.
 // ============================================================================
 
 import { useMemo, useState, useTransition } from 'react';
@@ -57,6 +57,9 @@ const ROLE_OPTIONS: { value: string; label: string }[] = [
   { value: 'unknown', label: 'Unknown' },
 ];
 
+const SECTION_LABEL =
+  'mb-2 text-[10px] font-medium uppercase tracking-[0.07em] font-mono text-linear-text-3';
+
 export interface Utterance {
   speaker?: number;
   start: number;
@@ -93,9 +96,7 @@ export interface VisitReadyViewProps {
     overall_quality: string;
     safe_to_sign_without_review: boolean;
   } | null;
-  /** T-M6 automation-layer outputs. All unknown-typed — the tab
-   *  components own their wire-types so the server page doesn't have
-   *  to import them. */
+  /** T-M6 automation-layer outputs. */
   icdCodes: unknown;
   cptCodes: unknown;
   rxDrafts: unknown;
@@ -111,33 +112,20 @@ export interface VisitReadyViewProps {
    *  where the "Email to me" destination points. */
   doctorEmail: string;
   /** T-M9 — whether the "Email to me" checkbox is visible in Sign &
-   *  Send. Hidden by default until ops verifies the from-domain on
-   *  Resend (RESEND_FROM_VERIFIED=true). */
+   *  Send. */
   emailEnabled: boolean;
-  /** T-M20.3 — Pipeline tab is developer/debug UI (raw entities JSON,
-   *  wall-time, cost). Hidden from doctors in production; shown when
-   *  the server page reads `NEXT_PUBLIC_SHOW_PIPELINE_TAB=true` from
-   *  the runtime env. */
+  /** T-M20.3 — Pipeline tab is developer/debug UI. */
   showPipelineTab: boolean;
-  /** Batch H — ISO 8601 UTC moment the doctor signed the note, or
-   *  null while still drafting. Drives the calm "Signed at … by …"
-   *  card that supersedes the Sign & Send CTA in the SOAP tab so a
-   *  doctor can never re-sign a note they've already signed. */
+  /** Batch H — ISO 8601 UTC moment the doctor signed the note. */
   signedAt: string | null;
-  /** Batch H — display name of the signer for the calm card. The
-   *  Visit page already loads the authed user (who is, per the
-   *  ownership guard, the same person as the visit's user) so we
-   *  thread it through here as a string instead of selecting the
-   *  user relation a second time. Falls back to "you" in the UI
-   *  when missing. */
+  /** Batch H — display name of the signer. */
   signedByName: string | null;
-  /** Phase 2 (Clinician remodel) — additive theme prop. */
+  /** @deprecated kept for back-compat; Linear V1 is single-theme. */
   theme?: VisitReadyViewTheme;
 }
 
 export function VisitReadyView(props: VisitReadyViewProps) {
   const [tab, setTab] = useState<TabKey>('soap');
-  const theme: VisitReadyViewTheme = props.theme ?? 'legacy';
 
   // The second tab is labelled "Input" for text_notes, "Transcript" for
   // the other two modes. Everything else renders identically.
@@ -182,7 +170,6 @@ export function VisitReadyView(props: VisitReadyViewProps) {
           rx: rxWarn,
           extras: extrasWarn ? 'any' : null,
         }}
-        theme={theme}
       />
       <div className="mt-6">
         {tab === 'soap' && (
@@ -192,25 +179,16 @@ export function VisitReadyView(props: VisitReadyViewProps) {
                 text={sectionSoap(sectionData)}
                 label="Copy SOAP"
                 section="SOAP note"
-                theme={theme}
               />
             </div>
             {/* Batch H — when signedAt is set, surface a calm
                 "Signed at … by …" card immediately above the SOAP
-                editor. This is the visual replacement for the Sign &
-                Send CTA the doctor expected to find here; the CTA
-                itself is hidden inside <SoapEditor> via the same
-                signedAt gate. The card uses .qm-cl-card on the
-                clinician theme (cream-card surface + soft sage tint
-                on the lock icon) so it reads as finalized rather than
-                celebratory. The legacy theme renders a smaller
-                neutral banner so the dark non-Clinician routes still
-                surface the signed-state cue. */}
+                editor. The Sign & Send CTA is hidden inside
+                <SoapEditor> via the same signedAt gate. */}
             {props.signedAt && (
               <SignedStateCard
                 signedAt={props.signedAt}
                 signedByName={props.signedByName}
-                theme={theme}
               />
             )}
             <SoapEditor
@@ -220,7 +198,6 @@ export function VisitReadyView(props: VisitReadyViewProps) {
               initialText={props.soapText}
               readonly={props.readonly}
               signedAt={props.signedAt}
-              theme={theme}
             />
           </div>
         )}
@@ -231,16 +208,14 @@ export function VisitReadyView(props: VisitReadyViewProps) {
               utterances={props.utterances}
               speakerMap={props.speakerMap}
               readonly={props.readonly}
-              theme={theme}
             />
           ) : props.inputMode === 'voice_dictation' ? (
             <DictationTranscriptView
               visitId={props.visitId}
               transcript={props.dictationTranscript}
-              theme={theme}
             />
           ) : (
-            <RawTextInputView text={props.rawTextInput} theme={theme} />
+            <RawTextInputView text={props.rawTextInput} />
           ))}
         {tab === 'codes' && (
           <div className="space-y-3">
@@ -249,10 +224,9 @@ export function VisitReadyView(props: VisitReadyViewProps) {
                 text={sectionCodes(sectionData)}
                 label="Copy codes"
                 section="Codes"
-                theme={theme}
               />
             </div>
-            <CodesTab icd={props.icdCodes} cpt={props.cptCodes} theme={theme} />
+            <CodesTab icd={props.icdCodes} cpt={props.cptCodes} />
           </div>
         )}
         {tab === 'rx' && (
@@ -262,10 +236,9 @@ export function VisitReadyView(props: VisitReadyViewProps) {
                 text={sectionRx(sectionData)}
                 label="Copy Rx"
                 section="Prescriptions"
-                theme={theme}
               />
             </div>
-            <RxTab rx={props.rxDrafts} visitId={props.visitId} theme={theme} />
+            <RxTab rx={props.rxDrafts} visitId={props.visitId} />
           </div>
         )}
         {tab === 'extras' && (
@@ -275,7 +248,6 @@ export function VisitReadyView(props: VisitReadyViewProps) {
                 text={sectionExtras(sectionData)}
                 label="Copy extras"
                 section="Referrals + patient summary"
-                theme={theme}
               />
             </div>
             <ExtrasTab
@@ -283,7 +255,6 @@ export function VisitReadyView(props: VisitReadyViewProps) {
               patientSummary={props.patientSummary}
               fleschKincaid={fleschKincaid}
               flagged={summaryFlagged}
-              theme={theme}
             />
           </div>
         )}
@@ -295,7 +266,6 @@ export function VisitReadyView(props: VisitReadyViewProps) {
             costCents={props.costCents}
             processingStartedAt={props.processingStartedAt}
             processingFinishedAt={props.processingFinishedAt}
-            theme={theme}
           />
         )}
       </div>
@@ -304,15 +274,9 @@ export function VisitReadyView(props: VisitReadyViewProps) {
 }
 
 // ---------------------------------------------------------------------------
-// Minimal VisitExportData for the section-copy helpers. Placeholder
-// fields are never read by sectionSoap/Codes/Rx/Extras; centralising
-// this keeps the ehr-formatters module the single source of truth for
-// section formatting.
+// Minimal VisitExportData for the section-copy helpers.
 // ---------------------------------------------------------------------------
 function buildSectionData(props: VisitReadyViewProps): VisitExportData {
-  // Unpack the unknown-typed blob columns the same way the tab
-  // components do. The section helpers in ehr-formatters expect the
-  // shape VisitExportData defines.
   const cptBlob =
     (props.cptCodes as {
       em?: VisitExportData['em'];
@@ -353,15 +317,13 @@ function buildSectionData(props: VisitReadyViewProps): VisitExportData {
 }
 
 // ---------------------------------------------------------------------------
-// Tabs — simple role=tab buttons, no Radix (3 static options, not worth
-// the bundle). Labels collapse to icon-only on mobile.
+// Tabs — Linear V1 underline tabs.
 // ---------------------------------------------------------------------------
 interface TabDescriptor {
   key: TabKey;
   label: string;
   icon: React.ReactNode;
-  /** When set, Tabs draws a dot badge — red for 'critical', amber for
-   *  anything else. */
+  /** When set, draws a dot badge — danger for 'critical', warning otherwise. */
   warning?: 'critical' | 'any' | null;
 }
 
@@ -371,7 +333,6 @@ function Tabs({
   secondTabLabel,
   showPipelineTab,
   warnings,
-  theme,
 }: {
   tab: TabKey;
   onChange: (t: TabKey) => void;
@@ -382,7 +343,6 @@ function Tabs({
     rx: 'critical' | 'any' | null;
     extras: 'critical' | 'any' | null;
   };
-  theme: VisitReadyViewTheme;
 }) {
   const tabs: TabDescriptor[] = [
     { key: 'soap', label: 'SOAP Note', icon: <FileTextIcon className="h-3.5 w-3.5" aria-hidden /> },
@@ -390,30 +350,57 @@ function Tabs({
     { key: 'codes', label: 'Codes', icon: <Stethoscope className="h-3.5 w-3.5" aria-hidden />, warning: warnings.codes },
     { key: 'rx', label: 'Rx', icon: <Pill className="h-3.5 w-3.5" aria-hidden />, warning: warnings.rx },
     { key: 'extras', label: 'Extras', icon: <Sparkles className="h-3.5 w-3.5" aria-hidden />, warning: warnings.extras },
-    // T-M20.3: Pipeline tab carries developer/debug UI (raw entities
-    // JSON, wall-time, cost). Hidden from doctors by default; surfaced
-    // only when NEXT_PUBLIC_SHOW_PIPELINE_TAB=true in the server env.
     ...(showPipelineTab
       ? [{ key: 'pipeline' as const, label: 'Pipeline', icon: <LayersIcon className="h-3.5 w-3.5" aria-hidden /> }]
       : []),
   ];
-  const isClinician = theme === 'clinician';
-  if (isClinician) {
-    return (
-      <div role="tablist" className="qm-cl-tab-row">
-        {tabs.map((t) => (
+  return (
+    <div
+      role="tablist"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 0,
+        borderBottom: '1px solid var(--color-linear-hairline)',
+      }}
+    >
+      {tabs.map((t, i) => {
+        const active = tab === t.key;
+        return (
           <button
             key={t.key}
             type="button"
             role="tab"
-            aria-selected={tab === t.key}
+            aria-selected={active}
             onClick={() => onChange(t.key)}
-            className={cn(
-              'qm-cl-tab relative',
-              tab === t.key && 'qm-cl-active'
-            )}
             aria-label={t.label}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            style={{
+              position: 'relative',
+              padding: i === 0 ? '8px 14px 10px 0' : '8px 14px 10px',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+              letterSpacing: '0.07em',
+              textTransform: 'uppercase',
+              fontWeight: 500,
+              color: active
+                ? 'var(--color-linear-text)'
+                : 'var(--color-linear-text-3)',
+              cursor: 'pointer',
+              background: 'transparent',
+              border: 0,
+              transition: 'color 100ms ease-out',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+            onMouseEnter={(e) => {
+              if (!active)
+                e.currentTarget.style.color = 'var(--color-linear-text)';
+            }}
+            onMouseLeave={(e) => {
+              if (!active)
+                e.currentTarget.style.color = 'var(--color-linear-text-3)';
+            }}
           >
             {t.icon}
             <span className="hidden sm:inline">{t.label}</span>
@@ -421,60 +408,34 @@ function Tabs({
               <span
                 aria-hidden
                 style={{
-                  position: 'absolute',
-                  right: 6,
-                  top: 3,
                   display: 'inline-block',
-                  width: 6,
-                  height: 6,
+                  width: 5,
+                  height: 5,
                   borderRadius: 999,
                   background:
                     t.warning === 'critical'
-                      ? 'var(--coral, #C97B6E)'
-                      : 'var(--amber, #D4A574)',
+                      ? 'var(--color-linear-danger)'
+                      : 'var(--color-linear-warning)',
+                }}
+              />
+            )}
+            {active && (
+              <span
+                aria-hidden
+                style={{
+                  position: 'absolute',
+                  left: i === 0 ? 0 : 0,
+                  right: 0,
+                  bottom: -1,
+                  height: 1.5,
+                  borderRadius: '1px 1px 0 0',
+                  background: 'var(--color-linear-sage)',
                 }}
               />
             )}
           </button>
-        ))}
-      </div>
-    );
-  }
-  return (
-    <div
-      role="tablist"
-      className="inline-flex max-w-full flex-wrap gap-0.5 rounded-full border border-border-subtle bg-bg-surface-2/60 p-1"
-    >
-      {tabs.map((t) => (
-        <button
-          key={t.key}
-          type="button"
-          role="tab"
-          aria-selected={tab === t.key}
-          onClick={() => onChange(t.key)}
-          className={cn(
-            'relative inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium tracking-tight',
-            'transition-colors duration-150 ease-[cubic-bezier(0.4,0,0.2,1)]',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base',
-            tab === t.key
-              ? 'bg-bg-surface-3 text-text-primary shadow-[0_0_0_1px_rgba(139,92,246,0.3)]'
-              : 'text-text-tertiary hover:text-text-primary'
-          )}
-          aria-label={t.label}
-        >
-          {t.icon}
-          <span className="hidden sm:inline">{t.label}</span>
-          {t.warning && (
-            <span
-              aria-hidden
-              className={cn(
-                'absolute right-1.5 top-1 inline-block h-1.5 w-1.5 rounded-full',
-                t.warning === 'critical' ? 'bg-danger' : 'bg-warning'
-              )}
-            />
-          )}
-        </button>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -488,15 +449,12 @@ function TranscriptView({
   utterances,
   speakerMap,
   readonly,
-  theme,
 }: {
   visitId: string;
   utterances: Utterance[];
   speakerMap: Record<string, SpeakerInfo>;
   readonly: boolean;
-  theme: VisitReadyViewTheme;
 }) {
-  const isClinician = theme === 'clinician';
   const [pending, startTransition] = useTransition();
   const router = useRouter();
 
@@ -545,63 +503,28 @@ function TranscriptView({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <div
-          className={cn(
-            'flex-1 text-[12px]',
-            isClinician ? 'text-clinician-ink-3' : 'text-text-tertiary'
-          )}
-        >
-          {speakerIds.length} speaker{speakerIds.length === 1 ? '' : 's'}, {utterances.length} utterances
+        <div className="flex-1 text-[12px] text-linear-text-3">
+          {speakerIds.length} speaker{speakerIds.length === 1 ? '' : 's'},{' '}
+          {utterances.length} utterances
         </div>
-        <button
-          type="button"
-          onClick={downloadTxt}
-          className={cn(
-            'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px]',
-            isClinician
-              ? 'border border-clinician-line bg-clinician-cream-card text-clinician-ink-3 hover:border-clinician-line-strong hover:text-clinician-ink-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinician-sage focus-visible:ring-offset-2 focus-visible:ring-offset-clinician-cream'
-              : 'border border-border-subtle bg-bg-surface-2/60 text-text-tertiary hover:border-border-default hover:text-text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base'
-          )}
-        >
+        <button type="button" onClick={downloadTxt} className="qm-lin-btn">
           <Download className="h-3.5 w-3.5" aria-hidden />
           Download .txt
         </button>
       </div>
 
       {!readonly && speakerIds.length > 0 && (
-        <div
-          className={cn(
-            'rounded-xl p-4',
-            isClinician
-              ? 'qm-cl-card'
-              : 'border border-border-subtle bg-bg-surface-1/40'
-          )}
-        >
-          <div
-            className={cn(
-              'mb-2 text-[11px] font-medium uppercase tracking-wider',
-              isClinician ? 'text-clinician-ink-3' : 'text-text-muted'
-            )}
-          >
-            Speaker roles
-          </div>
+        <div className="rounded-lg border border-linear-border bg-linear-surface-1 p-4">
+          <div className={SECTION_LABEL}>Speaker roles</div>
           <div className="flex flex-wrap gap-3">
             {speakerIds.map((sid) => {
               const info = speakerMap[sid];
               return (
                 <label
                   key={sid}
-                  className={cn(
-                    'flex items-center gap-2 text-[12px]',
-                    isClinician ? 'text-clinician-ink-2' : 'text-text-secondary'
-                  )}
+                  className="flex items-center gap-2 text-[12px] text-linear-text-2"
                 >
-                  <span
-                    className={cn(
-                      'font-medium',
-                      isClinician ? 'text-clinician-ink' : 'text-text-primary'
-                    )}
-                  >
+                  <span className="font-medium text-linear-text">
                     Speaker #{sid}
                   </span>
                   <div className="relative">
@@ -609,12 +532,7 @@ function TranscriptView({
                       disabled={pending}
                       value={info?.role ?? 'unknown'}
                       onChange={(e) => reassign(sid, e.target.value)}
-                      className={cn(
-                        'appearance-none rounded-md py-1 pl-2 pr-6 text-[12px] outline-none',
-                        isClinician
-                          ? 'border border-clinician-line bg-clinician-cream-card text-clinician-ink focus:border-clinician-sage focus:ring-2 focus:ring-clinician-sage/30'
-                          : 'border border-border-default bg-bg-surface-2 text-text-primary focus:border-violet-500 focus:ring-2 focus:ring-violet-500/30'
-                      )}
+                      className="appearance-none rounded-md border border-linear-border bg-linear-surface-2 py-1 pl-2 pr-6 text-[12px] text-linear-text outline-none focus:border-linear-sage focus:ring-2 focus:ring-linear-sage/30"
                     >
                       {ROLE_OPTIONS.map((r) => (
                         <option key={r.value} value={r.value}>
@@ -623,20 +541,11 @@ function TranscriptView({
                       ))}
                     </select>
                     <ChevronDown
-                      className={cn(
-                        'pointer-events-none absolute right-1.5 top-1/2 h-3 w-3 -translate-y-1/2',
-                        isClinician
-                          ? 'text-clinician-ink-3'
-                          : 'text-text-muted'
-                      )}
+                      className="pointer-events-none absolute right-1.5 top-1/2 h-3 w-3 -translate-y-1/2 text-linear-text-3"
                       aria-hidden
                     />
                   </div>
-                  <span
-                    className={cn(
-                      isClinician ? 'text-clinician-ink-3' : 'text-text-muted'
-                    )}
-                  >
+                  <span className="text-linear-text-3">
                     · conf {(info?.confidence ?? 0).toFixed(2)}
                   </span>
                 </label>
@@ -654,47 +563,36 @@ function TranscriptView({
           const ts = Math.max(0, Math.floor(u.start ?? 0));
           const mm = Math.floor(ts / 60);
           const ss = (ts % 60).toString().padStart(2, '0');
-          if (isClinician) {
-            // Speaker turn cards via .qm-cl-turn family. Doctor's
-            // turns float right with sage-tint background; patient
-            // turns float left on cream-card. Mirrors the visit-detail
-            // mockup's transcript section visual rhythm.
-            return (
-              <div
-                key={i}
-                className={cn('flex gap-3', isDoctor ? 'justify-end' : 'justify-start')}
-              >
-                <div
-                  className={cn(
-                    'qm-cl-turn',
-                    isDoctor ? 'qm-cl-turn-dr' : 'qm-cl-turn-pt'
-                  )}
-                >
-                  <div className="qm-cl-speaker-label">
-                    {role} #{key} · {mm}:{ss}
-                  </div>
-                  <div className="qm-cl-turn-body">{u.transcript}</div>
-                </div>
-              </div>
-            );
-          }
           return (
             <div
               key={i}
               className={cn(
                 'flex gap-3',
-                isDoctor ? 'justify-end sm:justify-end' : 'justify-start'
+                isDoctor ? 'justify-end' : 'justify-start'
               )}
             >
               <div
-                className={cn(
-                  'max-w-[85%] rounded-2xl px-4 py-2.5 text-[13px] leading-relaxed',
-                  isDoctor
-                    ? 'bg-violet-500/15 text-text-primary ring-1 ring-violet-500/30'
-                    : 'bg-bg-surface-2 text-text-secondary ring-1 ring-border-subtle'
-                )}
+                className="max-w-[85%] rounded-lg px-4 py-2.5 text-[13px] leading-relaxed"
+                style={{
+                  background: isDoctor
+                    ? 'var(--color-linear-sage-tint)'
+                    : 'var(--color-linear-surface-2)',
+                  border: isDoctor
+                    ? '1px solid rgba(122,166,140,0.32)'
+                    : '1px solid var(--color-linear-border)',
+                  color: isDoctor
+                    ? 'var(--color-linear-text)'
+                    : 'var(--color-linear-text-2)',
+                }}
               >
-                <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-text-muted">
+                <div
+                  className="mb-1 font-mono text-[10px] font-medium uppercase tracking-[0.07em]"
+                  style={{
+                    color: isDoctor
+                      ? 'var(--color-linear-sage-bright)'
+                      : 'var(--color-linear-text-3)',
+                  }}
+                >
                   {role} #{key} · {mm}:{ss}
                 </div>
                 {u.transcript}
@@ -717,7 +615,6 @@ function PipelineView({
   costCents,
   processingStartedAt,
   processingFinishedAt,
-  theme,
 }: {
   entities: unknown;
   critique: VisitReadyViewProps['critique'];
@@ -725,9 +622,7 @@ function PipelineView({
   costCents: number | null;
   processingStartedAt: string | null;
   processingFinishedAt: string | null;
-  theme: VisitReadyViewTheme;
 }) {
-  const isClinician = theme === 'clinician';
   const processingMs =
     processingStartedAt && processingFinishedAt
       ? new Date(processingFinishedAt).getTime() -
@@ -740,56 +635,33 @@ function PipelineView({
         <Stat
           label="Audio duration"
           value={durationSec ? `${Math.round(durationSec / 60)} min ${durationSec % 60}s` : '—'}
-          theme={theme}
         />
         <Stat
           label="Pipeline wall-time"
           value={processingMs ? `${Math.round(processingMs / 1000)}s` : '—'}
-          theme={theme}
         />
         <Stat
           label="Compute cost"
           value={costCents != null ? `$${(costCents / 100).toFixed(2)}` : '—'}
-          theme={theme}
         />
       </div>
 
-      <CollapsibleSection title="Critique" theme={theme}>
+      <CollapsibleSection title="Critique">
         {critique ? (
           <div className="space-y-3">
-            <div
-              className={cn(
-                'text-[12px]',
-                isClinician ? 'text-clinician-ink-3' : 'text-text-tertiary'
-              )}
-            >
+            <div className="text-[12px] text-linear-text-3">
               Overall quality:{' '}
-              <span
-                className={cn(
-                  'font-medium',
-                  isClinician ? 'text-clinician-ink' : 'text-text-primary'
-                )}
-              >
+              <span className="font-medium text-linear-text">
                 {critique.overall_quality}
               </span>
               {' · '}
               Safe to sign without review:{' '}
-              <span
-                className={cn(
-                  'font-medium',
-                  isClinician ? 'text-clinician-ink' : 'text-text-primary'
-                )}
-              >
+              <span className="font-medium text-linear-text">
                 {critique.safe_to_sign_without_review ? 'yes' : 'no'}
               </span>
             </div>
             {critique.issues.length === 0 ? (
-              <div
-                className={cn(
-                  'text-[12px]',
-                  isClinician ? 'text-clinician-ink-3' : 'text-text-muted'
-                )}
-              >
+              <div className="text-[12px] text-linear-text-3">
                 No issues flagged.
               </div>
             ) : (
@@ -797,59 +669,25 @@ function PipelineView({
                 {critique.issues.map((i, idx) => (
                   <li
                     key={idx}
-                    className={cn(
-                      'rounded-lg p-3 text-[12px]',
-                      isClinician
-                        ? 'border border-clinician-line bg-clinician-cream-card'
-                        : 'border border-border-subtle bg-bg-surface-1/40'
-                    )}
+                    className="rounded-md border border-linear-border bg-linear-surface-1 p-3 text-[12px]"
                   >
                     <div className="mb-1 flex items-center gap-2">
                       <span
                         className={cn(
-                          'inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider',
-                          isClinician
-                            ? i.severity === 'critical'
-                              ? 'qm-cl-pill qm-cl-pill-coral'
-                              : i.severity === 'major'
-                                ? 'qm-cl-pill qm-cl-pill-amber'
-                                : 'qm-cl-pill qm-cl-pill-soft'
-                            : i.severity === 'critical'
-                              ? 'border border-danger/40 bg-danger/10 text-danger'
-                              : i.severity === 'major'
-                                ? 'border border-warning/40 bg-warning/10 text-warning'
-                                : 'border border-border-default bg-bg-surface-2 text-text-tertiary'
+                          'qm-lin-pill',
+                          i.severity === 'critical'
+                            ? 'bg-linear-danger/15 text-linear-danger'
+                            : i.severity === 'major'
+                              ? 'bg-linear-warning/15 text-linear-warning'
+                              : ''
                         )}
                       >
                         {i.severity}
                       </span>
-                      <span
-                        className={cn(
-                          isClinician
-                            ? 'text-clinician-ink'
-                            : 'text-text-primary'
-                        )}
-                      >
-                        {i.location}
-                      </span>
+                      <span className="text-linear-text">{i.location}</span>
                     </div>
-                    <div
-                      className={cn(
-                        isClinician
-                          ? 'text-clinician-ink-2'
-                          : 'text-text-secondary'
-                      )}
-                    >
-                      {i.description}
-                    </div>
-                    <div
-                      className={cn(
-                        'mt-1',
-                        isClinician
-                          ? 'text-clinician-ink-3'
-                          : 'text-text-muted'
-                      )}
-                    >
+                    <div className="text-linear-text-2">{i.description}</div>
+                    <div className="mt-1 text-linear-text-3">
                       Fix: {i.suggested_fix}
                     </div>
                   </li>
@@ -858,77 +696,32 @@ function PipelineView({
             )}
           </div>
         ) : (
-          <div
-            className={cn(
-              'text-[12px]',
-              isClinician ? 'text-clinician-ink-3' : 'text-text-muted'
-            )}
-          >
+          <div className="text-[12px] text-linear-text-3">
             No critique available.
           </div>
         )}
       </CollapsibleSection>
 
-      <CollapsibleSection title="Extracted entities" theme={theme}>
+      <CollapsibleSection title="Extracted entities">
         {entities ? (
-          <pre
-            className={cn(
-              'overflow-x-auto rounded-lg p-3 font-mono text-[11px]',
-              isClinician
-                ? 'border border-clinician-line bg-clinician-cream-2 text-clinician-ink-2'
-                : 'border border-border-subtle bg-bg-surface-1/40 text-text-tertiary'
-            )}
-          >
+          <pre className="overflow-x-auto rounded-md border border-linear-hairline bg-linear-surface-2 p-3 font-mono text-[11px] text-linear-text-2">
             {JSON.stringify(entities, null, 2)}
           </pre>
         ) : (
-          <div
-            className={cn(
-              'text-[12px]',
-              isClinician ? 'text-clinician-ink-3' : 'text-text-muted'
-            )}
-          >
-            Not available.
-          </div>
+          <div className="text-[12px] text-linear-text-3">Not available.</div>
         )}
       </CollapsibleSection>
     </div>
   );
 }
 
-function Stat({
-  label,
-  value,
-  theme,
-}: {
-  label: string;
-  value: string;
-  theme: VisitReadyViewTheme;
-}) {
-  const isClinician = theme === 'clinician';
+function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div
-      className={cn(
-        'rounded-lg px-4 py-3',
-        isClinician
-          ? 'qm-cl-card'
-          : 'border border-border-subtle bg-bg-surface-1/40'
-      )}
-    >
-      <div
-        className={cn(
-          'text-[10px] font-medium uppercase tracking-wider',
-          isClinician ? 'text-clinician-ink-3' : 'text-text-muted'
-        )}
-      >
+    <div className="rounded-lg border border-linear-border bg-linear-surface-1 px-4 py-3">
+      <div className="font-mono text-[10px] font-medium uppercase tracking-[0.07em] text-linear-text-3">
         {label}
       </div>
-      <div
-        className={cn(
-          'mt-1 text-[15px] font-medium',
-          isClinician ? 'text-clinician-ink' : 'text-text-primary'
-        )}
-      >
+      <div className="mt-1 text-[15px] font-medium text-linear-text">
         {value}
       </div>
     </div>
@@ -938,32 +731,17 @@ function Stat({
 function CollapsibleSection({
   title,
   children,
-  theme,
 }: {
   title: string;
   children: React.ReactNode;
-  theme: VisitReadyViewTheme;
 }) {
   const [open, setOpen] = useState(true);
-  const isClinician = theme === 'clinician';
   return (
-    <div
-      className={cn(
-        'rounded-xl',
-        isClinician
-          ? 'border border-clinician-line bg-clinician-cream-card'
-          : 'border border-border-default bg-bg-surface-1/40'
-      )}
-    >
+    <div className="rounded-lg border border-linear-border bg-linear-surface-1">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className={cn(
-          'flex w-full items-center justify-between px-4 py-3 text-left text-[12px] font-medium uppercase tracking-wider',
-          isClinician
-            ? 'text-clinician-ink-3 hover:text-clinician-ink-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinician-sage focus-visible:ring-offset-2 focus-visible:ring-offset-clinician-cream'
-            : 'text-text-muted hover:text-text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base'
-        )}
+        className="flex w-full items-center justify-between px-4 py-3 text-left font-mono text-[10.5px] font-medium uppercase tracking-[0.07em] text-linear-text-3 hover:text-linear-text-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-linear-sage focus-visible:ring-offset-2 focus-visible:ring-offset-linear-bg"
       >
         {title}
         <ChevronDown
@@ -972,12 +750,7 @@ function CollapsibleSection({
         />
       </button>
       {open && (
-        <div
-          className={cn(
-            'border-t px-4 py-3',
-            isClinician ? 'border-clinician-line' : 'border-border-subtle'
-          )}
-        >
+        <div className="border-t border-linear-hairline px-4 py-3">
           {children}
         </div>
       )}
@@ -992,25 +765,15 @@ function CollapsibleSection({
 function DictationTranscriptView({
   visitId,
   transcript,
-  theme,
 }: {
   visitId: string;
   transcript: string | null;
-  theme: VisitReadyViewTheme;
 }) {
-  const isClinician = theme === 'clinician';
   const audioSrc = `/api/visits/${visitId}/dictation/audio`;
 
   return (
     <div className="space-y-4">
-      <div
-        className={cn(
-          'rounded-xl p-3',
-          isClinician
-            ? 'qm-cl-card'
-            : 'border border-border-default bg-bg-surface-1/60'
-        )}
-      >
+      <div className="rounded-lg border border-linear-border bg-linear-surface-1 p-3">
         <audio
           src={audioSrc}
           controls
@@ -1021,26 +784,11 @@ function DictationTranscriptView({
       </div>
 
       {transcript ? (
-        <div
-          className={cn(
-            'rounded-xl p-5 leading-relaxed whitespace-pre-wrap',
-            isClinician
-              ? 'qm-cl-card qm-cl-prose text-[16px] text-clinician-ink-2'
-              : 'border border-border-subtle bg-bg-surface-1/40 text-[14px] text-text-secondary'
-          )}
-          style={isClinician ? { lineHeight: 1.7 } : undefined}
-        >
+        <div className="rounded-lg border border-linear-border bg-linear-surface-1 p-5 text-[14px] leading-relaxed text-linear-text-2 whitespace-pre-wrap">
           {transcript}
         </div>
       ) : (
-        <div
-          className={cn(
-            'rounded-xl p-5 text-[13px]',
-            isClinician
-              ? 'border border-dashed border-clinician-line bg-clinician-cream-card text-clinician-ink-3'
-              : 'border border-border-subtle bg-bg-surface-1/40 text-text-muted'
-          )}
-        >
+        <div className="rounded-lg border border-dashed border-linear-border bg-linear-surface-1 p-5 text-[13px] text-linear-text-3">
           Dictation transcript not available.
         </div>
       )}
@@ -1052,37 +800,16 @@ function DictationTranscriptView({
 // Raw typed input view (T-M5) — text_notes. Monospace block so the
 // doctor sees exactly what they typed.
 // ---------------------------------------------------------------------------
-function RawTextInputView({
-  text,
-  theme,
-}: {
-  text: string | null;
-  theme: VisitReadyViewTheme;
-}) {
-  const isClinician = theme === 'clinician';
+function RawTextInputView({ text }: { text: string | null }) {
   if (!text) {
     return (
-      <div
-        className={cn(
-          'rounded-xl p-5 text-[13px]',
-          isClinician
-            ? 'border border-dashed border-clinician-line bg-clinician-cream-card text-clinician-ink-3'
-            : 'border border-border-subtle bg-bg-surface-1/40 text-text-muted'
-        )}
-      >
+      <div className="rounded-lg border border-dashed border-linear-border bg-linear-surface-1 p-5 text-[13px] text-linear-text-3">
         No input text stored.
       </div>
     );
   }
   return (
-    <pre
-      className={cn(
-        'overflow-x-auto rounded-xl p-5 font-mono text-[12.5px] leading-relaxed whitespace-pre-wrap',
-        isClinician
-          ? 'border border-clinician-line bg-clinician-cream-2 text-clinician-ink-2'
-          : 'border border-border-default bg-bg-surface-1/60 text-text-secondary'
-      )}
-    >
+    <pre className="overflow-x-auto rounded-lg border border-linear-border bg-linear-surface-2 p-5 font-mono text-[12.5px] leading-relaxed whitespace-pre-wrap text-linear-text-2">
       {text}
     </pre>
   );
@@ -1091,99 +818,47 @@ function RawTextInputView({
 // ---------------------------------------------------------------------------
 // Batch H — SignedStateCard. Renders in place of the Sign & Send CTA
 // on signed visits. Calm tone (no celebratory checkmark explosion):
-// soft cream-card surface, sage lock icon, single line of factual
-// metadata. Mockup-aligned with the visit-detail design language —
-// the doctor sees "this note is locked" not "you did a great job."
+// soft hairline-bordered surface-1 card, sage lock icon, single line
+// of factual metadata.
 // ---------------------------------------------------------------------------
 function SignedStateCard({
   signedAt,
   signedByName,
-  theme,
 }: {
   signedAt: string;
   signedByName: string | null;
-  theme: VisitReadyViewTheme;
 }) {
-  const isClinician = theme === 'clinician';
   const formatted = formatLocalDateTime(signedAt);
   const signer = signedByName?.trim() || 'you';
-  if (isClinician) {
-    return (
-      <div
-        className="qm-cl-card"
-        role="status"
-        aria-label="This note is signed"
-        style={{
-          padding: '14px 18px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-        }}
-      >
-        <div
-          aria-hidden
-          style={{
-            width: 32,
-            height: 32,
-            borderRadius: 10,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'var(--sage-tint-strong)',
-            color: 'var(--sage-deep)',
-            flexShrink: 0,
-          }}
-        >
-          <Lock className="h-4 w-4" aria-hidden />
-        </div>
-        <div style={{ minWidth: 0 }}>
-          <div
-            className="qm-cl-serif"
-            style={{
-              fontSize: 15,
-              color: 'var(--ink, #2B2620)',
-              lineHeight: 1.4,
-            }}
-          >
-            Signed at{' '}
-            <span style={{ fontStyle: 'italic', color: 'var(--sage-deep, #2F5040)' }}>
-              {formatted}
-            </span>{' '}
-            by <span style={{ color: 'var(--ink, #2B2620)' }}>{signer}</span>
-          </div>
-          <div
-            style={{
-              marginTop: 2,
-              fontSize: 12.5,
-              color: 'var(--ink-3, #8A8278)',
-            }}
-          >
-            This note is locked. Use Export again below to re-send a copy.
-          </div>
-        </div>
-      </div>
-    );
-  }
   return (
     <div
       role="status"
       aria-label="This note is signed"
-      className={cn(
-        'flex items-center gap-3 rounded-xl border border-border-subtle bg-bg-surface-1/60 px-4 py-3'
-      )}
+      className="flex items-center gap-3 rounded-lg border px-4 py-3"
+      style={{
+        background: 'var(--color-linear-surface-1)',
+        borderColor: 'rgba(122,166,140,0.32)',
+      }}
     >
       <div
         aria-hidden
-        className="flex h-8 w-8 flex-none items-center justify-center rounded-md bg-violet-500/15 text-violet-200"
+        className="flex h-8 w-8 flex-none items-center justify-center rounded-md"
+        style={{
+          background: 'var(--color-linear-sage-tint)',
+          color: 'var(--color-linear-sage-bright)',
+        }}
       >
         <Lock className="h-4 w-4" aria-hidden />
       </div>
       <div className="min-w-0">
-        <div className="text-[13px] text-text-primary">
-          Signed at <span className="text-violet-300">{formatted}</span> by{' '}
-          <span className="text-text-primary">{signer}</span>
+        <div className="text-[13px] text-linear-text">
+          Signed at{' '}
+          <span style={{ color: 'var(--color-linear-sage-bright)' }}>
+            {formatted}
+          </span>{' '}
+          by <span style={{ color: 'var(--color-linear-text)' }}>{signer}</span>
         </div>
-        <div className="mt-0.5 text-[11.5px] text-text-muted">
+        <div className="mt-0.5 text-[11.5px] text-linear-text-3">
           This note is locked. Use Export again below to re-send a copy.
         </div>
       </div>

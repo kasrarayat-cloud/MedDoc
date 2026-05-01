@@ -13,20 +13,13 @@ export default async function ForgotPasswordPage() {
 
   return (
     <AuthShell
-      theme="clinician"
       eyebrow="Account recovery"
       title={
         <>
-          Reset <em style={{ color: 'var(--sage-deep)', fontStyle: 'italic' }}>password</em>
+          Reset <em>password</em>
         </>
       }
       subtitle="Enter your account email and we'll send you a reset link."
-      cinematic={{
-        eyebrow: 'Account recovery',
-        headlinePre: '',
-        headlineEm: 'Reset ',
-        headlinePost: 'your password.',
-      }}
     >
       <ForgotPasswordForm />
     </AuthShell>

@@ -1,5 +1,16 @@
 'use client';
 
+// ============================================================================
+// SignAndSendModal — Sign & Send / Export-again destination picker
+// ----------------------------------------------------------------------------
+// Phase 5 — Linear V1 Faithful. Renders inside a `.qm-lin-spotlight`
+// scrim with a centered surface-1 panel. Destination groups are
+// rows of selectable surface-2 chips with a sage-tint-strong
+// active state. The trigger button uses `.qm-lin-btn-primary` for
+// the sign path and `.qm-lin-btn` for re-export. Server actions and
+// browser delivery semantics are unchanged from Phase 2.
+// ============================================================================
+
 import { useCallback, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import * as Dialog from '@radix-ui/react-dialog';
@@ -7,7 +18,6 @@ import { Check, Loader2, Lock, Send, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { cn } from '@/lib/cn';
-import { SpecularButton } from '@/components/specular-button';
 
 export type Destination =
   | 'clipboard_epic'
@@ -70,11 +80,7 @@ interface SignAndSendModalProps {
   triggerVariant?: 'primary' | 'secondary';
   /** Disable the trigger while parent is saving edits, etc. */
   disabled?: boolean;
-  /** Phase 2 (Clinician remodel) — additive theme prop. Default
-   *  `'legacy'` keeps the dark dialog with violet ring shadow.
-   *  `'clinician'` swaps the dialog body to .qm-cl-card chrome on
-   *  cream, sage focus rings, and quiet pill checkbox rows in cream-2
-   *  / sage-tint. */
+  /** @deprecated kept for back-compat; Linear V1 is single-theme. */
   theme?: SignAndSendModalTheme;
 }
 
@@ -85,7 +91,6 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
     () => new Set(['clipboard_epic', 'pdf'])
   );
   const [pending, startTransition] = useTransition();
-  const isClinician = props.theme === 'clinician';
   // Selections persist across open/close so a doctor who always picks
   // the same two targets doesn't re-check them every time.
 
@@ -192,77 +197,68 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
     });
   }, [props.visitId, props.signOnSubmit, props.emailEnabled, router, selected]);
 
+  const triggerVariant = props.triggerVariant ?? 'primary';
+
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
       <Dialog.Trigger asChild>
-        <SpecularButton
-          theme={props.theme ?? 'legacy'}
-          variant={props.triggerVariant ?? 'primary'}
-          size="md"
+        <button
+          type="button"
+          className={
+            triggerVariant === 'primary' ? 'qm-lin-btn-primary' : 'qm-lin-btn'
+          }
           disabled={props.disabled}
+          style={{ padding: '8px 14px', height: 32 }}
         >
           {props.triggerIcon}
           {props.triggerLabel}
-        </SpecularButton>
+        </button>
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Overlay
           className={cn(
-            'fixed inset-0 z-[200] backdrop-blur-sm',
-            isClinician
-              ? // Clinician: warm-charcoal scrim @ 30%, lighter than the
-                // dark variant since it lands on cream, not black.
-                'bg-[rgba(43,38,32,0.32)]'
-              : 'bg-black/60',
+            'qm-lin-spotlight',
             'data-[state=open]:animate-in data-[state=open]:fade-in-0',
             'data-[state=closed]:animate-out data-[state=closed]:fade-out-0'
           )}
         />
         <Dialog.Content
           aria-describedby={undefined}
-          // The Radix Dialog mounts in a Portal at <body>, OUTSIDE any
-          // .qm-cl-app wrapper. So we wrap the content in .qm-cl-app
-          // ourselves when theme="clinician" so the inner .qm-cl-* /
-          // text-clinician-* utilities resolve. Same pattern as Batch
-          // C dropped on the override-confirm modal.
           className={cn(
-            'fixed left-1/2 top-[10vh] z-[201] w-[min(94vw,560px)] -translate-x-1/2',
-            'focus:outline-none',
-            'data-[state=open]:animate-in data-[state=open]:fade-in-0',
-            'data-[state=open]:zoom-in-95 data-[state=open]:slide-in-from-top-2',
+            'qm-lin-spotlight-panel',
+            'fixed left-1/2 top-[12vh] z-[201] -translate-x-1/2',
+            'focus:outline-none qm-lin-blur-in',
             'data-[state=closed]:animate-out data-[state=closed]:fade-out-0',
-            'data-[state=closed]:zoom-out-95',
-            isClinician
-              ? 'qm-cl-app rounded-2xl border border-clinician-line bg-clinician-cream-card shadow-[0_32px_96px_-24px_rgba(43,38,32,0.18)]'
-              : 'rounded-2xl border border-border-default bg-bg-surface-1/95 backdrop-blur-xl shadow-[0_32px_96px_-24px_rgba(0,0,0,0.9),0_0_0_1px_rgba(139,92,246,0.15)]'
+            'data-[state=closed]:zoom-out-95'
           )}
+          style={{ width: 'min(94vw, 560px)' }}
         >
-          <div className="flex items-start justify-between gap-4 p-6">
+          <div
+            className="flex items-start justify-between gap-4"
+            style={{ padding: '20px 24px 12px' }}
+          >
             <div>
               <Dialog.Title
-                className={cn(
-                  'text-[16px] font-semibold',
-                  isClinician
-                    ? 'qm-cl-serif text-clinician-ink'
-                    : 'text-text-primary'
-                )}
-                style={
-                  isClinician
-                    ? { fontWeight: 500, letterSpacing: '-0.01em' }
-                    : undefined
-                }
+                style={{
+                  margin: 0,
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 16,
+                  fontWeight: 500,
+                  letterSpacing: '-0.01em',
+                  color: 'var(--color-linear-text)',
+                }}
               >
                 {props.signOnSubmit
                   ? 'Sign and deliver your note'
                   : 'Export signed note'}
               </Dialog.Title>
               <p
-                className={cn(
-                  'mt-1 text-[13px]',
-                  isClinician
-                    ? 'text-clinician-ink-3'
-                    : 'text-text-tertiary'
-                )}
+                style={{
+                  marginTop: 6,
+                  marginBottom: 0,
+                  fontSize: 13,
+                  color: 'var(--color-linear-text-2)',
+                }}
               >
                 Pick one or more destinations.{' '}
                 {props.signOnSubmit && 'The note locks after signing.'}
@@ -272,26 +268,23 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
               <button
                 type="button"
                 aria-label="Close"
-                className={cn(
-                  'rounded-md p-1 transition-colors',
-                  isClinician
-                    ? 'text-clinician-ink-3 hover:bg-clinician-cream-2 hover:text-clinician-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinician-sage'
-                    : 'text-text-muted hover:bg-bg-surface-2 hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500'
-                )}
+                className="rounded-md p-1 text-linear-text-3 transition-colors hover:bg-linear-surface-2 hover:text-linear-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-linear-sage"
               >
                 <X className="h-4 w-4" aria-hidden />
               </button>
             </Dialog.Close>
           </div>
 
-          <div className="max-h-[60vh] overflow-y-auto px-6 pb-2">
+          <div
+            className="max-h-[60vh] overflow-y-auto"
+            style={{ padding: '4px 24px 8px' }}
+          >
             <Group
               title="Copy to clipboard"
               hint="Paste the formatted note into your EHR's note field."
               items={DESTINATIONS.filter((d) => d.group === 'clipboard')}
               selected={selected}
               onToggle={toggle}
-              theme={props.theme ?? 'legacy'}
             />
             <Group
               title="Download"
@@ -299,7 +292,6 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
               items={DESTINATIONS.filter((d) => d.group === 'download')}
               selected={selected}
               onToggle={toggle}
-              theme={props.theme ?? 'legacy'}
             />
             {props.emailEnabled && (
               <Group
@@ -308,44 +300,38 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
                 items={DESTINATIONS.filter((d) => d.group === 'email')}
                 selected={selected}
                 onToggle={toggle}
-                theme={props.theme ?? 'legacy'}
               />
             )}
           </div>
 
           <div
-            className={cn(
-              'flex items-center justify-between gap-3 border-t px-6 py-3',
-              isClinician
-                ? 'border-clinician-line bg-clinician-cream-2'
-                : 'border-border-subtle bg-bg-surface-2/40'
-            )}
+            className="flex items-center justify-between gap-3"
+            style={{
+              borderTop: '1px solid var(--color-linear-hairline)',
+              background: 'var(--color-linear-surface-2)',
+              padding: '12px 24px',
+            }}
           >
             <p
-              className={cn(
-                'text-[11px]',
-                isClinician ? 'text-clinician-ink-3' : 'text-text-muted'
-              )}
+              style={{
+                margin: 0,
+                fontSize: 11,
+                color: 'var(--color-linear-text-3)',
+              }}
             >
               {props.signOnSubmit
                 ? 'Locked notes can still be re-exported later.'
                 : 'This visit is already signed.'}
             </p>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <Dialog.Close asChild>
-                <SpecularButton
-                  theme={props.theme ?? 'legacy'}
-                  variant="secondary"
-                  size="sm"
-                  sweep={false}
-                >
+                <button type="button" className="qm-lin-btn">
                   Cancel
-                </SpecularButton>
+                </button>
               </Dialog.Close>
-              <SpecularButton
-                theme={props.theme ?? 'legacy'}
-                variant="primary"
-                size="sm"
+              <button
+                type="button"
+                className="qm-lin-btn-primary"
                 onClick={submit}
                 disabled={pending}
               >
@@ -364,7 +350,7 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
                     {props.signOnSubmit ? 'Sign & Deliver' : 'Deliver'}
                   </>
                 )}
-              </SpecularButton>
+              </button>
             </div>
           </div>
         </Dialog.Content>
@@ -383,34 +369,19 @@ function Group({
   items,
   selected,
   onToggle,
-  theme,
 }: {
   title: string;
   hint: string;
   items: { key: Destination; label: string }[];
   selected: Set<Destination>;
   onToggle: (k: Destination) => void;
-  theme: SignAndSendModalTheme;
 }) {
-  const isClinician = theme === 'clinician';
   return (
     <div className="py-3">
-      <div
-        className={cn(
-          'mb-1 text-[11px] font-semibold uppercase tracking-wider',
-          isClinician ? 'text-clinician-ink-3' : 'text-text-muted'
-        )}
-      >
+      <div className="mb-1 font-mono text-[10.5px] font-medium uppercase tracking-[0.07em] text-linear-text-3">
         {title}
       </div>
-      <div
-        className={cn(
-          'mb-2 text-[12px]',
-          isClinician ? 'text-clinician-ink-3' : 'text-text-tertiary'
-        )}
-      >
-        {hint}
-      </div>
+      <div className="mb-2 text-[12px] text-linear-text-3">{hint}</div>
       <div className="space-y-1.5">
         {items.map((it) => (
           <CheckboxRow
@@ -418,7 +389,6 @@ function Group({
             label={it.label}
             checked={selected.has(it.key)}
             onToggle={() => onToggle(it.key)}
-            theme={theme}
           />
         ))}
       </div>
@@ -430,53 +400,32 @@ function CheckboxRow({
   label,
   checked,
   onToggle,
-  theme,
 }: {
   label: string;
   checked: boolean;
   onToggle: () => void;
-  theme: SignAndSendModalTheme;
 }) {
-  const isClinician = theme === 'clinician';
   return (
     <button
       type="button"
       onClick={onToggle}
       aria-pressed={checked}
       className={cn(
-        'flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left',
-        'transition-colors duration-150 ease-[cubic-bezier(0.4,0,0.2,1)]',
-        isClinician
-          ? 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinician-sage focus-visible:ring-offset-2 focus-visible:ring-offset-clinician-cream'
-          : 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base',
+        'flex w-full items-center gap-3 rounded-md border px-3 py-2 text-left',
+        'transition-colors duration-150 ease-out',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-linear-sage focus-visible:ring-offset-2 focus-visible:ring-offset-linear-bg',
         checked
-          ? isClinician
-            ? // Sage-tint pill on cream-card with sage-deep ink — same
-              // soft "this is your selection" tonality as the dashboard
-              // PatientCard's selected state.
-              'border-[rgba(122,166,140,0.34)] bg-clinician-cream-card text-clinician-ink'
-            : 'border-violet-500/50 bg-violet-500/10 text-text-primary'
-          : isClinician
-            ? 'border-clinician-line bg-clinician-cream-card text-clinician-ink-2 hover:border-clinician-line-strong hover:text-clinician-ink'
-            : 'border-border-subtle bg-bg-surface-2/40 text-text-secondary hover:border-border-default hover:text-text-primary'
+          ? 'border-[rgba(122,166,140,0.34)] bg-linear-sage-tint text-linear-text'
+          : 'border-linear-border bg-linear-surface-2 text-linear-text-2 hover:border-linear-border-strong hover:text-linear-text'
       )}
-      style={
-        isClinician && checked
-          ? { background: 'var(--sage-tint, rgba(122, 166, 140, 0.14))' }
-          : undefined
-      }
     >
       <span
         aria-hidden
         className={cn(
           'flex h-4 w-4 flex-none items-center justify-center rounded-[4px] border',
           checked
-            ? isClinician
-              ? 'border-clinician-sage bg-clinician-sage text-white'
-              : 'border-violet-500 bg-violet-500 text-white'
-            : isClinician
-              ? 'border-clinician-line-strong bg-transparent'
-              : 'border-border-emphasis bg-transparent'
+            ? 'border-linear-sage bg-linear-sage text-[#0d1611]'
+            : 'border-linear-border-strong bg-transparent'
         )}
       >
         {checked && <Check className="h-3 w-3" strokeWidth={3} aria-hidden />}

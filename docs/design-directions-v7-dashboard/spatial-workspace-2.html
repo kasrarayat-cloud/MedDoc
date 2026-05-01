@@ -1,0 +1,1126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>QuillMD — Workstation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;1,8..60,400&amp;family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+  :root {
+    --cream: #FAF7F2;
+    --cream-card: #FFFCF5;
+    --cream-2: #F2EDE3;
+    --cream-3: #E8E1D3;
+    --cream-4: #D9D0BD;
+    --line: rgba(43, 38, 32, 0.08);
+    --line-strong: rgba(43, 38, 32, 0.14);
+    --ink: #2B2620;
+    --ink-2: #5C544A;
+    --ink-3: #8A8278;
+    --ink-4: #B5AE9F;
+    --sage: #7AA68C;
+    --sage-deep: #2F5040;
+    --sage-bright: #95BCA4;
+    --sage-tint: rgba(122, 166, 140, 0.14);
+    --sage-tint-strong: rgba(122, 166, 140, 0.22);
+    --teal: #5BA3B4; --teal-deep: #2C5A66; --teal-tint: rgba(91, 163, 180, 0.14);
+    --amber: #D4A574; --amber-deep: #7A4F1F; --amber-tint: rgba(212, 165, 116, 0.18);
+    --coral: #C97B6E; --coral-deep: #7A3329; --coral-tint: rgba(201, 123, 110, 0.16);
+    --sky: #7BA8C4; --sky-deep: #2C4F66; --sky-tint: rgba(123, 168, 196, 0.16);
+    --serif: "Source Serif 4", Georgia, serif;
+    --sans: "DM Sans", -apple-system, system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    --ease: cubic-bezier(0.22, 1, 0.36, 1);
+    --shadow-soft: 0 4px 14px rgba(43, 38, 32, 0.04);
+  }
+  * { box-sizing: border-box; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: var(--sans);
+    background: var(--cream);
+    color: var(--ink);
+    font-size: 14px;
+    line-height: 1.55;
+    overflow: hidden;
+  }
+  ::selection { background: var(--sage-tint-strong); }
+
+  /* === SHELL === */
+  .shell {
+    display: grid;
+    grid-template-rows: 44px 1fr 26px;
+    height: 100vh;
+    width: 100vw;
+  }
+
+  /* === HEADER === */
+  .header {
+    display: flex;
+    align-items: center;
+    background: var(--cream-card);
+    border-bottom: 1px solid var(--line);
+    padding: 0 22px;
+    gap: 18px;
+  }
+  .wordmark {
+    font-family: var(--serif);
+    font-size: 17px; font-weight: 500;
+    letter-spacing: 0.01em;
+    color: var(--ink);
+  }
+  .wordmark sub {
+    font-family: var(--mono); font-size: 9.5px;
+    color: var(--sage-deep); margin-left: 5px;
+    background: var(--sage-tint); padding: 2px 6px;
+    border-radius: 4px; vertical-align: 1px;
+  }
+  .crumb {
+    font-family: var(--mono); font-size: 11px;
+    color: var(--ink-3);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .crumb .sep { color: var(--ink-4); }
+  .crumb b { color: var(--ink-2); font-weight: 500; }
+
+  .pane-toggles {
+    margin-left: auto;
+    display: flex; align-items: center; gap: 4px;
+    background: var(--cream-2);
+    padding: 3px;
+    border-radius: 7px;
+  }
+  .pane-toggle {
+    width: 28px; height: 24px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 4px;
+    color: var(--ink-3);
+    cursor: pointer;
+    transition: all 180ms var(--ease);
+  }
+  .pane-toggle:hover { color: var(--ink); }
+  .pane-toggle.active { background: var(--cream-card); color: var(--sage-deep); box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+
+  .header-user {
+    display: flex; align-items: center; gap: 10px;
+    padding-left: 14px;
+    border-left: 1px solid var(--line);
+    margin-left: 6px;
+  }
+  .header-user .ava {
+    width: 26px; height: 26px;
+    border-radius: 7px;
+    background: var(--sage-tint-strong);
+    color: var(--sage-deep);
+    font-family: var(--serif);
+    font-size: 12px; font-weight: 500;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .header-user .who {
+    display: flex; flex-direction: column;
+    line-height: 1.15;
+  }
+  .header-user .who-name { font-size: 12px; font-weight: 500; color: var(--ink); }
+  .header-user .who-spec { font-size: 10px; color: var(--ink-3); font-family: var(--mono); }
+
+  /* === MAIN === */
+  .workspace {
+    display: grid;
+    grid-template-rows: 1fr 12px 1fr;
+    overflow: hidden;
+  }
+
+  .resize-v {
+    background: var(--cream-2);
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; justify-content: center;
+    cursor: row-resize;
+    position: relative;
+    transition: background 180ms var(--ease);
+  }
+  .resize-v::before {
+    content: "";
+    width: 28px; height: 3px;
+    background: var(--cream-4);
+    border-radius: 999px;
+  }
+  .resize-v:hover { background: var(--sage-tint); }
+  .resize-v:hover::before { background: var(--sage); }
+
+  /* === TOP PANE — agenda full width === */
+  .top-pane {
+    display: flex; flex-direction: column;
+    background: var(--cream);
+    overflow: hidden;
+  }
+
+  .pane-strip {
+    height: 36px;
+    display: flex; align-items: center;
+    background: var(--cream-2);
+    border-bottom: 1px solid var(--line);
+    padding: 0 18px;
+    flex-shrink: 0;
+    gap: 14px;
+  }
+  .pane-strip-label {
+    font-family: var(--mono); font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.14em;
+    color: var(--ink-3); font-weight: 500;
+  }
+  .pane-strip-label .accent { color: var(--sage-deep); }
+  .pane-strip-divider { width: 1px; height: 14px; background: var(--line-strong); }
+  .pane-strip-day {
+    font-family: var(--mono); font-size: 10.5px;
+    color: var(--ink-2);
+  }
+  .pane-strip-day b { color: var(--ink); font-weight: 500; }
+
+  .pane-strip-tabs {
+    margin-left: auto;
+    display: flex; align-items: center; gap: 2px;
+  }
+  .strip-tab {
+    padding: 5px 11px;
+    font-family: var(--mono); font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--ink-3);
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .strip-tab:hover { color: var(--ink); background: var(--cream-card); }
+  .strip-tab.active {
+    background: var(--cream-card);
+    color: var(--sage-deep);
+    border: 1px solid var(--sage-tint-strong);
+    padding: 4px 10px;
+  }
+  .strip-tab .count {
+    color: var(--ink-4); margin-left: 6px; font-weight: 400;
+  }
+  .strip-tab.active .count { color: var(--sage); }
+
+  .pane-strip-cta {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 12px;
+    background: var(--sage); color: var(--cream-card);
+    font-size: 12px; font-weight: 500;
+    border-radius: 999px;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(122, 166, 140, 0.28);
+    transition: all 240ms var(--ease);
+    margin-left: 12px;
+    border: 0;
+  }
+  .pane-strip-cta:hover { background: #6E9A80; transform: translateY(-1px); }
+
+  .top-body {
+    flex: 1; overflow-y: auto;
+    padding: 26px 36px 24px;
+  }
+
+  .greeting {
+    display: flex; align-items: baseline;
+    gap: 18px;
+    margin-bottom: 22px;
+  }
+  .greeting-stamp {
+    font-family: var(--mono); font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.14em;
+    color: var(--ink-3);
+  }
+  .greeting-stamp .accent { color: var(--sage-deep); }
+  .greeting-h {
+    font-family: var(--serif);
+    font-size: 28px; font-weight: 400;
+    color: var(--ink); margin: 0;
+    line-height: 1.15;
+    letter-spacing: -0.012em;
+  }
+  .greeting-h em { color: var(--sage-deep); font-style: italic; }
+  .greeting-summary {
+    font-family: var(--serif); font-size: 14.5px;
+    color: var(--ink-2); margin-left: auto;
+    font-style: italic;
+  }
+
+  .agenda-flow {
+    position: relative;
+    padding-left: 60px;
+  }
+  .timeline-axis {
+    position: absolute;
+    left: 32px;
+    top: 8px; bottom: 8px;
+    width: 1px;
+    background: var(--line-strong);
+  }
+  .timeline-axis::before {
+    content: "NOW";
+    position: absolute;
+    left: -16px; top: 30%;
+    font-family: var(--mono); font-size: 8.5px;
+    font-weight: 600;
+    color: var(--coral);
+    letter-spacing: 0.1em;
+    background: var(--cream);
+    padding: 2px 4px;
+  }
+  .timeline-axis::after {
+    content: "";
+    position: absolute;
+    left: -3px; top: calc(30% + 12px);
+    width: 7px; height: 7px;
+    border-radius: 999px;
+    background: var(--coral);
+    box-shadow: 0 0 0 4px rgba(201, 123, 110, 0.18);
+  }
+
+  .agenda-card {
+    position: relative;
+    display: grid;
+    grid-template-columns: 90px 1fr auto auto;
+    gap: 22px;
+    padding: 14px 18px;
+    background: var(--cream-card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    margin-bottom: 8px;
+    align-items: center;
+    cursor: pointer;
+    transition: all 200ms var(--ease);
+  }
+  .agenda-card:hover {
+    background: var(--cream);
+    border-color: var(--line-strong);
+    transform: translateX(2px);
+    box-shadow: var(--shadow-soft);
+  }
+  .agenda-card.live {
+    border-color: var(--coral-tint);
+    background: linear-gradient(90deg, rgba(201, 123, 110, 0.05), var(--cream-card) 35%);
+  }
+  .agenda-card.live::before {
+    content: "";
+    position: absolute;
+    left: -28px; top: 50%; transform: translateY(-50%);
+    width: 9px; height: 9px;
+    border-radius: 999px;
+    background: var(--coral);
+    box-shadow: 0 0 0 4px rgba(201, 123, 110, 0.22);
+    animation: livepulse 1.6s ease-in-out infinite;
+  }
+  .agenda-card.signed::before {
+    content: "";
+    position: absolute;
+    left: -28px; top: 50%; transform: translateY(-50%);
+    width: 7px; height: 7px;
+    border-radius: 999px;
+    background: var(--ink-3);
+  }
+  .agenda-card.ready::before {
+    content: "";
+    position: absolute;
+    left: -28px; top: 50%; transform: translateY(-50%);
+    width: 7px; height: 7px;
+    border-radius: 999px;
+    background: var(--sage);
+  }
+  .agenda-card.up::before {
+    content: "";
+    position: absolute;
+    left: -28px; top: 50%; transform: translateY(-50%);
+    width: 7px; height: 7px;
+    border-radius: 999px;
+    background: var(--cream-card);
+    border: 1.5px solid var(--ink-4);
+  }
+  @keyframes livepulse {
+    0%, 100% { transform: translateY(-50%) scale(1); }
+    50% { transform: translateY(-50%) scale(1.2); }
+  }
+
+  .ag-time {
+    font-family: var(--mono); font-size: 13px;
+    color: var(--ink); font-weight: 500;
+  }
+  .ag-time .ampm {
+    color: var(--ink-3); font-weight: 400;
+    font-size: 10px; margin-left: 2px;
+  }
+  .ag-pat-name {
+    font-family: var(--serif); font-size: 16px;
+    font-weight: 500; color: var(--ink);
+  }
+  .ag-pat-cc {
+    font-family: var(--serif); font-size: 12.5px;
+    color: var(--ink-3); font-style: italic; margin-top: 2px;
+  }
+  .ag-spec {
+    font-family: var(--mono); font-size: 9.5px;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    background: var(--sage-tint); color: var(--sage-deep);
+    padding: 3px 7px; border-radius: 4px;
+  }
+  .ag-status {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: var(--mono); font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: var(--cream-2); color: var(--ink-3);
+  }
+  .ag-status.live { background: var(--coral-tint); color: var(--coral-deep); }
+  .ag-status.ready { background: var(--sage-tint); color: var(--sage-deep); }
+  .ag-status.signed { background: var(--cream-2); color: var(--ink-3); }
+  .ag-status.review { background: var(--amber-tint); color: var(--amber-deep); }
+  .ag-status.up { background: var(--sky-tint); color: var(--sky-deep); }
+
+  /* === BOTTOM PANE — split === */
+  .bottom-pane {
+    display: grid;
+    grid-template-columns: 1fr 12px 1fr;
+    overflow: hidden;
+  }
+
+  .resize-h {
+    background: var(--cream-2);
+    border-left: 1px solid var(--line);
+    border-right: 1px solid var(--line);
+    display: flex; align-items: center; justify-content: center;
+    cursor: col-resize;
+    transition: background 180ms var(--ease);
+  }
+  .resize-h::before {
+    content: "";
+    width: 3px; height: 28px;
+    background: var(--cream-4);
+    border-radius: 999px;
+  }
+  .resize-h:hover { background: var(--sage-tint); }
+  .resize-h:hover::before { background: var(--sage); }
+
+  .b-pane {
+    background: var(--cream);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .b-pane.right { background: var(--cream-2); }
+
+  .b-strip {
+    height: 36px;
+    display: flex; align-items: center;
+    padding: 0 16px;
+    background: var(--cream-2);
+    border-bottom: 1px solid var(--line);
+    flex-shrink: 0;
+    gap: 12px;
+  }
+  .b-pane.right .b-strip { background: var(--cream-3); }
+  .b-strip-label {
+    font-family: var(--mono); font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.14em;
+    color: var(--ink-3); font-weight: 500;
+  }
+  .b-strip-pills {
+    display: flex; gap: 4px;
+    margin-left: 6px;
+  }
+  .b-strip-chip {
+    font-family: var(--mono); font-size: 10px;
+    padding: 3px 8px; border-radius: 4px;
+    color: var(--ink-3); cursor: pointer;
+    transition: all 180ms var(--ease);
+  }
+  .b-strip-chip:hover { color: var(--ink); }
+  .b-strip-chip.active {
+    background: var(--cream-card); color: var(--sage-deep);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+  }
+  .b-strip-icon {
+    margin-left: auto;
+    width: 24px; height: 24px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 5px;
+    color: var(--ink-3); cursor: pointer;
+  }
+  .b-strip-icon:hover { background: var(--cream-card); color: var(--ink); }
+
+  .b-body { flex: 1; overflow-y: auto; }
+
+  /* Patient list (bottom-left) */
+  .pat-grid { padding: 6px; }
+  .pat-row {
+    display: grid;
+    grid-template-columns: 36px 1fr 80px 80px;
+    gap: 12px;
+    padding: 10px 12px;
+    align-items: center;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: background 180ms var(--ease);
+  }
+  .pat-row:hover { background: var(--cream-2); }
+  .pat-ava {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--serif);
+    font-size: 12px; font-weight: 500;
+  }
+  .pat-ava.sage { background: var(--sage-tint-strong); color: var(--sage-deep); }
+  .pat-ava.amber { background: var(--amber-tint); color: var(--amber-deep); }
+  .pat-ava.teal { background: var(--teal-tint); color: var(--teal-deep); }
+  .pat-ava.coral { background: var(--coral-tint); color: var(--coral-deep); }
+  .pat-ava.sky { background: var(--sky-tint); color: var(--sky-deep); }
+  .pat-name {
+    font-family: var(--serif); font-size: 14.5px;
+    font-weight: 500; color: var(--ink);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .pat-meta {
+    font-family: var(--mono); font-size: 10px;
+    color: var(--ink-3); margin-top: 2px;
+  }
+  .pat-last {
+    font-family: var(--mono); font-size: 10px;
+    color: var(--ink-3);
+    text-align: right;
+  }
+  .pat-vc {
+    font-family: var(--mono); font-size: 10px;
+    color: var(--ink-3);
+    text-align: right;
+  }
+  .pat-vc b { color: var(--ink); font-weight: 500; }
+
+  /* Activity (bottom-right) */
+  .act-list { padding: 6px 0; }
+  .act-row {
+    display: grid;
+    grid-template-columns: 28px 1fr auto;
+    gap: 10px;
+    padding: 9px 16px;
+    align-items: center;
+    cursor: pointer;
+    transition: background 180ms var(--ease);
+  }
+  .act-row:hover { background: var(--cream-card); }
+  .act-icon {
+    width: 26px; height: 26px;
+    border-radius: 7px;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--cream-card);
+  }
+  .act-icon.signed { background: var(--sage-tint); color: var(--sage-deep); }
+  .act-icon.review { background: var(--amber-tint); color: var(--amber-deep); }
+  .act-icon.live { background: var(--coral-tint); color: var(--coral-deep); }
+  .act-icon.upload { background: var(--sky-tint); color: var(--sky-deep); }
+  .act-icon.export { background: var(--teal-tint); color: var(--teal-deep); }
+  .act-icon.failed { background: var(--coral-tint); color: var(--coral-deep); }
+  .act-text {
+    font-family: var(--sans); font-size: 12.5px;
+    color: var(--ink-2); line-height: 1.4;
+  }
+  .act-text strong {
+    font-family: var(--serif); font-weight: 500;
+    color: var(--ink);
+  }
+  .act-time {
+    font-family: var(--mono); font-size: 10px;
+    color: var(--ink-4);
+  }
+
+  .act-day {
+    font-family: var(--mono); font-size: 9.5px;
+    text-transform: uppercase; letter-spacing: 0.14em;
+    color: var(--ink-4);
+    padding: 12px 16px 6px;
+    background: rgba(232, 225, 211, 0.4);
+    position: sticky; top: 0;
+    backdrop-filter: blur(6px);
+  }
+
+  /* Right pane summary */
+  .right-summary {
+    margin: 12px 16px;
+    padding: 14px 16px;
+    background: var(--cream-card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px 18px;
+  }
+  .right-summary-cell {
+    display: flex; flex-direction: column; gap: 3px;
+  }
+  .rs-label {
+    font-family: var(--mono); font-size: 9.5px;
+    text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--ink-3);
+  }
+  .rs-num {
+    font-family: var(--serif); font-size: 22px; font-weight: 500;
+    color: var(--ink); line-height: 1;
+  }
+  .rs-num.warn { color: var(--amber-deep); }
+  .rs-num.good { color: var(--sage-deep); }
+  .rs-trail {
+    font-family: var(--mono); font-size: 9.5px;
+    color: var(--ink-3); margin-top: 3px;
+  }
+
+  /* === STATUS BAR === */
+  .statusbar {
+    display: flex;
+    align-items: center;
+    background: var(--cream-2);
+    border-top: 1px solid var(--line);
+    padding: 0 18px;
+    font-family: var(--mono); font-size: 10px;
+    color: var(--ink-3);
+    letter-spacing: 0.04em;
+    gap: 18px;
+  }
+  .statusbar .seg { display: inline-flex; align-items: center; gap: 6px; }
+  .statusbar .seg.live { color: var(--sage-deep); }
+  .live-dot {
+    width: 6px; height: 6px; border-radius: 999px;
+    background: var(--sage); box-shadow: 0 0 0 2px var(--sage-tint);
+  }
+  .statusbar .right { margin-left: auto; display: flex; gap: 18px; }
+
+  /* === Cmd+K === */
+  .cmdk {
+    position: fixed;
+    bottom: 36px; right: 18px;
+    z-index: 100;
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 9px 14px;
+    background: var(--cream-card);
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    font-family: var(--mono); font-size: 11px;
+    color: var(--ink-2);
+    box-shadow: 0 8px 24px rgba(43, 38, 32, 0.10);
+    cursor: pointer;
+    transition: all 240ms var(--ease);
+  }
+  .cmdk:hover { transform: translateY(-1px); }
+  .cmdk kbd {
+    font-family: var(--mono); font-size: 10px;
+    color: var(--ink-3);
+    background: var(--cream-2);
+    border: 1px solid var(--line);
+    padding: 1px 6px; border-radius: 4px;
+  }
+  .cmdk .glyph { color: var(--sage-deep); font-size: 13px; }
+
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--cream-3); border-radius: 999px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--cream-4); }
+
+  /* mobile */
+  @media (max-width: 760px) {
+    .workspace { grid-template-rows: 1fr !important; }
+    .resize-v, .bottom-pane { display: none; }
+    .top-body { padding: 18px 14px; }
+    .agenda-flow { padding-left: 18px; }
+    .timeline-axis { display: none; }
+    .agenda-card { grid-template-columns: 70px 1fr; gap: 14px; }
+    .agenda-card.live::before, .agenda-card.signed::before, .agenda-card.ready::before, .agenda-card.up::before {
+      left: -10px;
+    }
+    .ag-spec, .ag-status { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- HEADER -->
+  <div class="header">
+    <span class="wordmark">Quill<sub>MD</sub></span>
+    <span class="crumb">
+      <span>workstation</span>
+      <span class="sep">/</span>
+      <b>today</b>
+    </span>
+
+    <div class="pane-toggles">
+      <div class="pane-toggle active" title="Both panes">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+          <rect x="3" y="3" width="18" height="8" rx="1"/>
+          <rect x="3" y="13" width="18" height="8" rx="1"/>
+        </svg>
+      </div>
+      <div class="pane-toggle" title="Top only">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+          <rect x="3" y="3" width="18" height="18" rx="1"/>
+          <line x1="3" y1="13" x2="21" y2="13"/>
+        </svg>
+      </div>
+      <div class="pane-toggle" title="Side by side">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+          <rect x="3" y="3" width="8" height="18" rx="1"/>
+          <rect x="13" y="3" width="8" height="18" rx="1"/>
+        </svg>
+      </div>
+    </div>
+
+    <div class="header-user">
+      <span class="ava">KR</span>
+      <div class="who">
+        <div class="who-name">Dr. Kalia Reyes</div>
+        <div class="who-spec">Family · Burbank</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- WORKSPACE -->
+  <div class="workspace">
+
+    <!-- TOP PANE — agenda full width -->
+    <section class="top-pane">
+      <div class="pane-strip">
+        <span class="pane-strip-label"><span class="accent">▌</span> Agenda</span>
+        <span class="pane-strip-divider"></span>
+        <span class="pane-strip-day">Tuesday <b>April 29</b> · 7:42 AM PT</span>
+
+        <div class="pane-strip-tabs">
+          <div class="strip-tab active">Today <span class="count">6</span></div>
+          <div class="strip-tab">Tomorrow <span class="count">8</span></div>
+          <div class="strip-tab">This week <span class="count">31</span></div>
+        </div>
+
+        <button class="pane-strip-cta">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <path d="M12 5v14M5 12h14"/>
+          </svg>
+          New visit
+        </button>
+      </div>
+
+      <div class="top-body">
+        <div class="greeting">
+          <span class="greeting-stamp"><span class="accent">●</span> Tuesday morning</span>
+          <h1 class="greeting-h">Good morning, <em>Dr. Reyes</em>.</h1>
+          <span class="greeting-summary">"Six on the schedule. One live, one ready, three drafts."</span>
+        </div>
+
+        <div class="agenda-flow">
+          <div class="timeline-axis"></div>
+
+          <div class="agenda-card signed">
+            <div class="ag-time">8:00<span class="ampm"> AM</span></div>
+            <div>
+              <div class="ag-pat-name">Marisol Echeverría</div>
+              <div class="ag-pat-cc">"Annual physical — feeling well, no concerns to raise."</div>
+            </div>
+            <div class="ag-spec">Family</div>
+            <div class="ag-status signed">● Signed · 8:38 AM</div>
+          </div>
+
+          <div class="agenda-card live">
+            <div class="ag-time">8:45<span class="ampm"> AM</span></div>
+            <div>
+              <div class="ag-pat-name">Aram Sahakian</div>
+              <div class="ag-pat-cc">"BP creeping up despite lisinopril 20mg — wants to discuss options."</div>
+            </div>
+            <div class="ag-spec">Cardio</div>
+            <div class="ag-status live">● Recording · 4m 12s</div>
+          </div>
+
+          <div class="agenda-card ready">
+            <div class="ag-time">9:30<span class="ampm"> AM</span></div>
+            <div>
+              <div class="ag-pat-name">Mei-Ling Park</div>
+              <div class="ag-pat-cc">"Migraines twice a week, sumatriptan working but exhausted next day."</div>
+            </div>
+            <div class="ag-spec">Neuro</div>
+            <div class="ag-status ready">● Ready · sign now</div>
+          </div>
+
+          <div class="agenda-card ready">
+            <div class="ag-time">10:15<span class="ampm"> AM</span></div>
+            <div>
+              <div class="ag-pat-name">Theodore Whitcombe</div>
+              <div class="ag-pat-cc">"Lower-back pain since lifting boxes Saturday — radiating to right glute."</div>
+            </div>
+            <div class="ag-spec">Ortho</div>
+            <div class="ag-status review">● Review · Rx flag</div>
+          </div>
+
+          <div class="agenda-card up">
+            <div class="ag-time">11:00<span class="ampm"> AM</span></div>
+            <div>
+              <div class="ag-pat-name">Priya Ramaswamy</div>
+              <div class="ag-pat-cc">"6-week postpartum — feeding well, mood steady, scar healing."</div>
+            </div>
+            <div class="ag-spec">OB-Gyn</div>
+            <div class="ag-status up">○ In 1h 18m</div>
+          </div>
+
+          <div class="agenda-card up">
+            <div class="ag-time">11:45<span class="ampm"> AM</span></div>
+            <div>
+              <div class="ag-pat-name">Declan O'Bannon</div>
+              <div class="ag-pat-cc">"A1c review — last reading 7.4, has been more consistent on ozempic."</div>
+            </div>
+            <div class="ag-spec">Endo</div>
+            <div class="ag-status up">○ In 2h 03m</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- VERTICAL RESIZE -->
+    <div class="resize-v" title="Drag to resize"></div>
+
+    <!-- BOTTOM PANE — split horizontal -->
+    <section class="bottom-pane">
+
+      <!-- Bottom-left: patient list -->
+      <div class="b-pane">
+        <div class="b-strip">
+          <span class="b-strip-label">Patients</span>
+          <div class="b-strip-pills">
+            <div class="b-strip-chip active">All · 17</div>
+            <div class="b-strip-chip">Family</div>
+            <div class="b-strip-chip">Cardio</div>
+            <div class="b-strip-chip">Endo</div>
+            <div class="b-strip-chip">Psych</div>
+          </div>
+          <div class="b-strip-icon">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>
+            </svg>
+          </div>
+        </div>
+        <div class="b-body">
+          <div class="pat-grid">
+            <div class="pat-row">
+              <div class="pat-ava sage">ME</div>
+              <div>
+                <div class="pat-name">Marisol Echeverría</div>
+                <div class="pat-meta">F · 47 · #2104</div>
+              </div>
+              <div class="pat-vc"><b>14</b> visits</div>
+              <div class="pat-last">8:38 AM</div>
+            </div>
+
+            <div class="pat-row">
+              <div class="pat-ava coral">AS</div>
+              <div>
+                <div class="pat-name">Aram Sahakian</div>
+                <div class="pat-meta">M · 62 · #2087</div>
+              </div>
+              <div class="pat-vc"><b>22</b> visits</div>
+              <div class="pat-last">live now</div>
+            </div>
+
+            <div class="pat-row">
+              <div class="pat-ava teal">MP</div>
+              <div>
+                <div class="pat-name">Mei-Ling Park</div>
+                <div class="pat-meta">F · 34 · #2156</div>
+              </div>
+              <div class="pat-vc"><b>6</b> visits</div>
+              <div class="pat-last">9:54 AM</div>
+            </div>
+
+            <div class="pat-row">
+              <div class="pat-ava amber">TW</div>
+              <div>
+                <div class="pat-name">Theodore Whitcombe</div>
+                <div class="pat-meta">M · 51 · #2042</div>
+              </div>
+              <div class="pat-vc"><b>9</b> visits</div>
+              <div class="pat-last">10:18 AM</div>
+            </div>
+
+            <div class="pat-row">
+              <div class="pat-ava sky">PR</div>
+              <div>
+                <div class="pat-name">Priya Ramaswamy</div>
+                <div class="pat-meta">F · 31 · #2178</div>
+              </div>
+              <div class="pat-vc"><b>4</b> visits</div>
+              <div class="pat-last">last Tue</div>
+            </div>
+
+            <div class="pat-row">
+              <div class="pat-ava sage">DO</div>
+              <div>
+                <div class="pat-name">Declan O'Bannon</div>
+                <div class="pat-meta">M · 58 · #2023</div>
+              </div>
+              <div class="pat-vc"><b>17</b> visits</div>
+              <div class="pat-last">last Wed</div>
+            </div>
+
+            <div class="pat-row">
+              <div class="pat-ava coral">BT</div>
+              <div>
+                <div class="pat-name">Bea Tørstrup</div>
+                <div class="pat-meta">F · 67 · #1998</div>
+              </div>
+              <div class="pat-vc"><b>28</b> visits</div>
+              <div class="pat-last">5:42 PM yest</div>
+            </div>
+
+            <div class="pat-row">
+              <div class="pat-ava teal">FZ</div>
+              <div>
+                <div class="pat-name">Frederick Zoryan</div>
+                <div class="pat-meta">M · 44 · #2099</div>
+              </div>
+              <div class="pat-vc"><b>11</b> visits</div>
+              <div class="pat-last">3:11 PM yest</div>
+            </div>
+
+            <div class="pat-row">
+              <div class="pat-ava amber">SR</div>
+              <div>
+                <div class="pat-name">Sophie Renard</div>
+                <div class="pat-meta">F · 29 · #2167</div>
+              </div>
+              <div class="pat-vc"><b>3</b> visits</div>
+              <div class="pat-last">1:50 PM yest</div>
+            </div>
+
+            <div class="pat-row">
+              <div class="pat-ava sage">KW</div>
+              <div>
+                <div class="pat-name">Kenji Watanabe</div>
+                <div class="pat-meta">M · 55 · #2078</div>
+              </div>
+              <div class="pat-vc"><b>13</b> visits</div>
+              <div class="pat-last">Mon · 4:22P</div>
+            </div>
+
+            <div class="pat-row">
+              <div class="pat-ava sky">AM</div>
+              <div>
+                <div class="pat-name">Aoife McCullough</div>
+                <div class="pat-meta">F · 38 · #2143</div>
+              </div>
+              <div class="pat-vc"><b>8</b> visits</div>
+              <div class="pat-last">Mon · 2:30P</div>
+            </div>
+
+            <div class="pat-row">
+              <div class="pat-ava coral">JB</div>
+              <div>
+                <div class="pat-name">Joaquim Bezerra</div>
+                <div class="pat-meta">M · 24 · #2189</div>
+              </div>
+              <div class="pat-vc"><b>2</b> visits</div>
+              <div class="pat-last">Sun</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- HORIZONTAL RESIZE -->
+      <div class="resize-h" title="Drag to resize"></div>
+
+      <!-- Bottom-right: activity -->
+      <div class="b-pane right">
+        <div class="b-strip">
+          <span class="b-strip-label">Recent activity</span>
+          <div class="b-strip-pills">
+            <div class="b-strip-chip active">All</div>
+            <div class="b-strip-chip">Reviews · 3</div>
+            <div class="b-strip-chip">Mine</div>
+          </div>
+          <div class="b-strip-icon">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <line x1="4" y1="6" x2="20" y2="6"/>
+              <line x1="4" y1="12" x2="20" y2="12"/>
+              <line x1="4" y1="18" x2="14" y2="18"/>
+            </svg>
+          </div>
+        </div>
+        <div class="b-body">
+
+          <div class="right-summary">
+            <div class="right-summary-cell">
+              <span class="rs-label">Visits / Apr</span>
+              <span class="rs-num">112</span>
+              <span class="rs-trail">+18 vs Mar</span>
+            </div>
+            <div class="right-summary-cell">
+              <span class="rs-label">Avg drafted</span>
+              <span class="rs-num">3<small style="font-size:14px;color:var(--ink-3);">m</small></span>
+              <span class="rs-trail">−42 sec</span>
+            </div>
+            <div class="right-summary-cell">
+              <span class="rs-label">Pending review</span>
+              <span class="rs-num warn">3</span>
+              <span class="rs-trail">2 over 24h</span>
+            </div>
+            <div class="right-summary-cell">
+              <span class="rs-label">Signed / wk</span>
+              <span class="rs-num good">28</span>
+              <span class="rs-trail">on track</span>
+            </div>
+          </div>
+
+          <div class="act-day">Today · April 29</div>
+
+          <div class="act-row">
+            <div class="act-icon live">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="4"/></svg>
+            </div>
+            <div>
+              <div class="act-text"><strong>Sahakian</strong> recording in progress</div>
+            </div>
+            <div class="act-time">live · 4m</div>
+          </div>
+
+          <div class="act-row">
+            <div class="act-icon signed">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+            </div>
+            <div>
+              <div class="act-text">You signed <strong>Echeverría's</strong> annual physical</div>
+            </div>
+            <div class="act-time">8:38 AM</div>
+          </div>
+
+          <div class="act-row">
+            <div class="act-icon export">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            </div>
+            <div>
+              <div class="act-text"><strong>Echeverría</strong> note delivered to Epic</div>
+            </div>
+            <div class="act-time">8:38 AM</div>
+          </div>
+
+          <div class="act-row">
+            <div class="act-icon review">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+            </div>
+            <div>
+              <div class="act-text"><strong>Whitcombe's</strong> draft flagged · Rx interaction</div>
+            </div>
+            <div class="act-time">9:21 AM</div>
+          </div>
+
+          <div class="act-row">
+            <div class="act-icon signed">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>
+            </div>
+            <div>
+              <div class="act-text"><strong>Park's</strong> note ready · drafted in 2m 41s</div>
+            </div>
+            <div class="act-time">9:54 AM</div>
+          </div>
+
+          <div class="act-row">
+            <div class="act-icon upload">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            </div>
+            <div>
+              <div class="act-text">Audio uploaded for <strong>Whitcombe</strong> · 14m 22s</div>
+            </div>
+            <div class="act-time">10:18 AM</div>
+          </div>
+
+          <div class="act-day">Yesterday · April 28</div>
+
+          <div class="act-row">
+            <div class="act-icon signed">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+            </div>
+            <div>
+              <div class="act-text">You signed <strong>Tørstrup's</strong> wellness visit</div>
+            </div>
+            <div class="act-time">5:42 PM</div>
+          </div>
+
+          <div class="act-row">
+            <div class="act-icon export">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            </div>
+            <div>
+              <div class="act-text"><strong>Zoryan's</strong> refill faxed to CVS Glendale</div>
+            </div>
+            <div class="act-time">3:14 PM</div>
+          </div>
+
+          <div class="act-row">
+            <div class="act-icon failed">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+            </div>
+            <div>
+              <div class="act-text">Pipeline retried for <strong>Renard</strong> · transient error</div>
+            </div>
+            <div class="act-time">2:01 PM</div>
+          </div>
+
+          <div class="act-row">
+            <div class="act-icon signed">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+            </div>
+            <div>
+              <div class="act-text">You signed <strong>Renard's</strong> knee-strain note</div>
+            </div>
+            <div class="act-time">1:52 PM</div>
+          </div>
+
+          <div class="act-row">
+            <div class="act-icon export">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            </div>
+            <div>
+              <div class="act-text">Patient summary emailed to <strong>Renard</strong></div>
+            </div>
+            <div class="act-time">1:53 PM</div>
+          </div>
+
+          <div class="act-row">
+            <div class="act-icon signed">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+            </div>
+            <div>
+              <div class="act-text">You signed <strong>Watanabe's</strong> lipid review</div>
+            </div>
+            <div class="act-time">Mon · 4:22P</div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- STATUS BAR -->
+  <div class="statusbar">
+    <span class="seg live"><span class="live-dot"></span>Pipeline ready</span>
+    <span class="seg">Two-pane layout</span>
+    <span class="seg">⌘1 stack · ⌘2 split</span>
+    <div class="right">
+      <span class="seg">UTC−7 Pacific</span>
+      <span class="seg">v1.42 · 2 jobs</span>
+    </div>
+  </div>
+
+</div>
+
+<!-- Cmd+K -->
+<div class="cmdk">
+  <span class="glyph">⌘</span>
+  Search patients, drafts, codes
+  <kbd>⌘ K</kbd>
+</div>
+
+</body>
+</html>

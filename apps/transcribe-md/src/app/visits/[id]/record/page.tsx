@@ -1,18 +1,17 @@
 // ============================================================================
-// /visits/[id]/record — Clinician live-recording shell (Phase 2 Batch E,
-// was HANDOFF §2.3 Gate 9).
+// /visits/[id]/record — Linear V1 live-recording shell.
+// Reference: docs/design-directions-v8-linear/recording.html
 // ----------------------------------------------------------------------------
-// Full-bleed layout: centered LiveOrb + timer. MediaRecorder flow reuses
-// the existing /api/visits/[id]/dictation/upload endpoint so the worker
-// pipeline runs unchanged. The scribe-ws live-transcript integration is
-// a follow-up — the right rail shows a "listening…" placeholder until
-// the worker produces a transcript.
+// 440px left column (mic + halo + waveform + status + actions) ‖ live
+// transcript on the right. MediaRecorder flow reuses the existing
+// /api/visits/[id]/dictation/upload endpoint so the worker pipeline
+// runs unchanged. The scribe-ws live-transcript integration is a
+// follow-up — the transcript area shows a "listening…" placeholder
+// until the worker produces a transcript.
 //
-// Phase 2 (Clinician remodel) — this route opts in to the Clinician
-// chrome via `<AppFrame theme="clinician">` and threads
-// `theme="clinician"` down to RecordingClient so the calm halo + mic
-// dot + waveform + status pill render against the warm cream canvas
-// (per CL-5: no Three.js orbs in Clinician).
+// 🔴 PROTECTED: All MediaRecorder lifecycle code lives in
+// recording-client.tsx and is preserved byte-for-byte across the
+// Linear V1 visual migration.
 // ============================================================================
 
 import type { Metadata } from 'next';
@@ -60,12 +59,11 @@ export default async function RecordVisitPage({
   }
 
   return (
-    <AppFrame theme="clinician">
+    <AppFrame>
       <RecordingClient
         visitId={visit.id}
         patientName={visit.patient?.name ?? 'Patient'}
         specialty={visit.specialty}
-        theme="clinician"
       />
     </AppFrame>
   );

@@ -1,0 +1,816 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QuillMD · Text to SOAP · v8 Linear</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#08090a;
+  --panel:#0d0e10;
+  --panel-2:#101113;
+  --hairline:rgba(255,255,255,.05);
+  --hairline-strong:rgba(255,255,255,.08);
+  --t1:#f7f8f8;
+  --t2:#b4bcc8;
+  --t3:#6c737f;
+  --t4:#4b5159;
+  --sage:#7AA68C;
+  --sage-bright:#9BC4A8;
+  --sage-deep:#2F5040;
+  --sage-tint:rgba(122,166,140,.13);
+  --mono:'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sans:'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --ease:cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--t1);overflow:hidden}
+body{
+  font-family:var(--sans);
+  font-feature-settings:'cv11','ss01','ss03';
+  font-size:13px;
+  line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  letter-spacing:-0.005em;
+  height:100vh;
+}
+::selection{background:rgba(122,166,140,.25);color:var(--t1)}
+
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+
+/* ─────────────── Top bar ─────────────── */
+.topbar{
+  position:relative;z-index:30;
+  height:44px;
+  display:flex;align-items:center;gap:12px;
+  padding:0 16px;
+  background:rgba(8,9,10,.85);
+  backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--hairline);
+  opacity:0;
+  animation:chrome-fade 120ms var(--ease) forwards;
+}
+@keyframes chrome-fade{to{opacity:1}}
+.brand{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;color:var(--t1);letter-spacing:-0.01em}
+.brand-mark{
+  width:18px;height:18px;border-radius:5px;
+  background:linear-gradient(135deg,var(--sage) 0%,var(--sage-deep) 100%);
+  display:grid;place-items:center;color:#0c1410;font-size:10px;font-weight:700;
+  box-shadow:0 0 0 1px rgba(255,255,255,.06) inset;
+}
+.brand-mark::before{content:'Q'}
+.crumb-sep{color:var(--t4);font-size:12px}
+.crumb{color:var(--t2);font-size:13px}
+.crumb-active{color:var(--t1)}
+.spacer{flex:1}
+
+.kbd-chip{
+  display:inline-flex;align-items:center;gap:6px;
+  height:26px;padding:0 9px;
+  border:1px solid var(--hairline-strong);
+  border-radius:6px;
+  background:rgba(255,255,255,.02);
+  color:var(--t2);
+  font-family:var(--mono);font-size:11px;
+  transition:background 100ms var(--ease), border-color 100ms var(--ease), color 100ms var(--ease);
+}
+.kbd-chip:hover{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.12);color:var(--t1)}
+.kbd-chip kbd{font-family:var(--mono);font-size:10.5px;color:var(--t2)}
+.kbd-chip .label{color:var(--t3)}
+
+.avatar-chip{
+  width:24px;height:24px;border-radius:6px;
+  background:linear-gradient(135deg,#3a4a52 0%,#2a3036 100%);
+  color:#dde6ec;font-size:10.5px;font-weight:600;
+  display:grid;place-items:center;letter-spacing:0.02em;
+  border:1px solid var(--hairline-strong);
+}
+
+/* ─────────────── Sage spotlight ─────────────── */
+.spotlight{
+  position:fixed;
+  top:44px;left:0;right:0;height:280px;
+  pointer-events:none;
+  background:radial-gradient(ellipse 60% 100% at 50% 0%, rgba(122,166,140,.06) 0%, transparent 70%);
+  z-index:1;
+}
+
+/* ─────────────── Sub-bar: patient + mode tabs ─────────────── */
+.subbar{
+  position:relative;z-index:20;
+  height:42px;
+  display:flex;align-items:center;gap:14px;
+  padding:0 16px;
+  background:rgba(13,14,16,.6);
+  border-bottom:1px solid var(--hairline);
+  opacity:0;
+  animation:chrome-fade 160ms var(--ease) 60ms forwards;
+}
+.pt-chip{
+  display:inline-flex;align-items:center;gap:8px;
+  height:26px;padding:0 9px 0 6px;
+  border:1px solid var(--hairline-strong);border-radius:6px;
+  background:rgba(255,255,255,.02);
+  font-size:12px;color:var(--t2);
+}
+.pt-chip .pt-avatar{
+  width:18px;height:18px;border-radius:4px;
+  background:linear-gradient(135deg,#3a4a52 0%,#2a3036 100%);
+  color:#dde6ec;font-size:9.5px;font-weight:600;
+  display:grid;place-items:center;letter-spacing:0.02em;
+}
+.pt-chip .pt-name{color:var(--t1);font-weight:500;letter-spacing:-0.005em}
+.pt-chip .pt-meta{color:var(--t3);font-family:var(--mono);font-size:10.5px;font-variant-numeric:tabular-nums}
+.pt-chip .pt-sep{color:var(--t4);font-size:11px}
+
+.mode-tabs{
+  display:inline-flex;align-items:center;gap:0;
+  height:28px;padding:2px;
+  border:1px solid var(--hairline-strong);border-radius:6px;
+  background:rgba(255,255,255,.015);
+}
+.mode-tab{
+  display:inline-flex;align-items:center;gap:6px;
+  height:22px;padding:0 10px;
+  font-size:11.5px;color:var(--t3);
+  border-radius:4px;
+  letter-spacing:-0.005em;font-weight:500;
+  transition:background 100ms var(--ease), color 100ms var(--ease);
+}
+.mode-tab:hover{color:var(--t1)}
+.mode-tab.active{background:rgba(122,166,140,.1);color:var(--sage-bright)}
+.mode-tab svg{flex:0 0 auto}
+
+.sub-meta{
+  margin-left:auto;
+  display:inline-flex;align-items:center;gap:14px;
+  font-family:var(--mono);font-size:10.5px;color:var(--t4);
+  letter-spacing:0.05em;
+}
+.sub-meta .sm-item{display:inline-flex;align-items:center;gap:5px}
+.sub-meta .sm-dot{width:5px;height:5px;border-radius:50%;background:var(--sage);box-shadow:0 0 4px rgba(122,166,140,.5)}
+.sub-meta .sm-amber{background:#D4A574;box-shadow:0 0 4px rgba(212,165,116,.5)}
+
+/* ─────────────── Split layout ─────────────── */
+.split{
+  position:relative;z-index:2;
+  display:grid;
+  grid-template-columns:560px 1fr;
+  height:calc(100vh - 44px - 42px);
+  min-height:0;
+}
+@media (max-width:1080px){
+  .split{grid-template-columns:1fr 1fr}
+}
+@media (max-width:840px){
+  .split{grid-template-columns:1fr;grid-template-rows:1fr 1fr}
+}
+
+.col{
+  display:flex;flex-direction:column;
+  min-height:0;min-width:0;
+  padding:18px 20px 20px;
+  opacity:0;
+  transform:translateY(8px);
+  animation:col-in 200ms var(--ease) forwards;
+}
+.col-left{animation-delay:80ms}
+.col-right{animation-delay:140ms;border-left:1px solid var(--hairline)}
+@keyframes col-in{to{opacity:1;transform:translateY(0)}}
+
+.col-left.dim{opacity:.95}
+.col-left{transition:opacity 240ms var(--ease)}
+
+.col-hd{
+  display:flex;align-items:center;gap:8px;
+  font-family:var(--mono);font-size:10.5px;
+  color:var(--t3);letter-spacing:0.08em;text-transform:uppercase;font-weight:500;
+  margin-bottom:10px;
+  padding-bottom:8px;
+  border-bottom:1px solid var(--hairline);
+}
+.col-hd .hd-dot{
+  width:5px;height:5px;border-radius:50%;
+  background:var(--sage);box-shadow:0 0 4px rgba(122,166,140,.5);
+}
+.col-hd .hd-meta{margin-left:auto;color:var(--t4);font-size:10px;letter-spacing:0.06em}
+
+/* ─────────────── Notes panel ─────────────── */
+.notes-surface{
+  flex:1;
+  background:
+    linear-gradient(180deg, rgba(122,166,140,.025) 0%, transparent 60px),
+    #0d0e10;
+  border:1px solid var(--hairline);
+  border-radius:8px;
+  padding:24px 26px;
+  font-family:var(--sans);
+  font-size:14px;
+  line-height:1.6;
+  color:var(--t1);
+  overflow-y:auto;
+  position:relative;
+  letter-spacing:-0.005em;
+  min-height:0;
+  scrollbar-width:thin;
+  scrollbar-color:rgba(255,255,255,.08) transparent;
+}
+.notes-surface::-webkit-scrollbar{width:6px}
+.notes-surface::-webkit-scrollbar-thumb{background:rgba(255,255,255,.08);border-radius:3px}
+.notes-surface::-webkit-scrollbar-track{background:transparent}
+.notes-surface::before{
+  content:'';position:absolute;left:0;top:0;width:2px;height:100%;
+  background:linear-gradient(180deg, rgba(122,166,140,.16) 0%, transparent 30%);
+  border-radius:2px 0 0 2px;
+}
+.notes-surface:focus-within,
+.notes-surface.active{
+  border-color:rgba(122,166,140,.22);
+}
+
+.notes-line{
+  display:block;
+  opacity:0;
+  transform:translateX(-4px);
+  animation:line-in 160ms var(--ease) forwards;
+  margin:0;
+  white-space:pre-wrap;
+  word-break:break-word;
+}
+@keyframes line-in{to{opacity:1;transform:translateX(0)}}
+
+.notes-bullet{color:var(--sage);font-weight:500;margin-right:6px}
+
+.cursor{
+  display:inline-block;
+  width:8px;height:1.05em;
+  background:var(--sage);
+  vertical-align:text-bottom;
+  margin-left:1px;
+  animation:blink 600ms steps(2,end) infinite;
+  border-radius:1px;
+  transform:translateY(2px);
+}
+@keyframes blink{50%{opacity:0}}
+
+.notes-foot{
+  display:flex;align-items:center;gap:10px;
+  margin-top:14px;
+  padding-top:0;
+}
+.btn-generate{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  height:38px;padding:0 18px;
+  background:var(--sage);color:#0d1611;
+  border-radius:7px;
+  font-weight:500;font-size:13px;
+  letter-spacing:-0.005em;
+  transition:background 120ms var(--ease), transform 80ms var(--ease);
+  position:relative;
+  min-width:160px;
+}
+.btn-generate:hover{background:#88b599}
+.btn-generate:active{transform:translateY(.5px)}
+.btn-generate .gen-arrow{font-size:14px;line-height:1;transform:translateY(-.5px)}
+
+.btn-generate .dots{
+  display:none;align-items:center;gap:5px;
+  height:8px;
+}
+.btn-generate.loading .label,.btn-generate.loading .gen-arrow{display:none}
+.btn-generate.loading .dots{display:inline-flex}
+.btn-generate .dots span{
+  width:6px;height:6px;border-radius:50%;background:#0d1611;
+  animation:dot-pulse 400ms var(--ease) infinite;
+}
+.btn-generate .dots span:nth-child(2){animation-delay:100ms}
+.btn-generate .dots span:nth-child(3){animation-delay:200ms}
+@keyframes dot-pulse{
+  0%,100%{opacity:.35;transform:scale(.85)}
+  50%{opacity:1;transform:scale(1.05)}
+}
+
+.ai-badge{
+  display:inline-flex;align-items:center;gap:6px;
+  height:26px;padding:0 9px;
+  border:1px solid var(--hairline-strong);
+  border-radius:5px;
+  background:rgba(255,255,255,.015);
+  color:var(--t3);
+  font-family:var(--mono);font-size:10.5px;
+  letter-spacing:0.06em;text-transform:uppercase;font-weight:500;
+}
+.ai-badge .ab-dot{
+  width:5px;height:5px;border-radius:50%;background:var(--sage);
+  box-shadow:0 0 4px rgba(122,166,140,.5);
+}
+
+.foot-meta{
+  margin-left:auto;
+  font-family:var(--mono);font-size:10.5px;color:var(--t4);
+  letter-spacing:0.05em;
+}
+
+/* ─────────────── SOAP panel ─────────────── */
+.soap-surface{
+  flex:1;
+  display:flex;flex-direction:column;gap:18px;
+  overflow-y:auto;
+  padding:6px 4px 6px 0;
+  min-height:0;
+}
+
+.soap-section{
+  display:flex;flex-direction:column;gap:7px;
+}
+.soap-shd{
+  display:flex;align-items:center;gap:8px;
+  font-family:var(--mono);font-size:10.5px;
+  color:var(--t3);letter-spacing:0.08em;text-transform:uppercase;font-weight:500;
+  padding-bottom:5px;
+  border-bottom:1px solid var(--hairline);
+  position:relative;
+  transition:background-color 200ms var(--ease);
+}
+.soap-shd::after{
+  content:'';position:absolute;left:0;right:0;top:0;bottom:0;
+  background:rgba(122,166,140,.06);
+  opacity:0;pointer-events:none;
+  transition:opacity 200ms var(--ease);
+}
+.soap-shd.flash::after{opacity:1}
+
+.soap-dot{
+  width:6px;height:6px;border-radius:50%;
+  background:var(--t4);
+  transition:background 200ms var(--ease), box-shadow 200ms var(--ease);
+}
+.soap-section.lit .soap-dot{
+  background:var(--sage);
+  box-shadow:0 0 5px rgba(122,166,140,.5);
+}
+.soap-section.brighten .soap-dot{
+  background:var(--sage-bright);
+  box-shadow:0 0 7px rgba(155,196,168,.7);
+}
+.soap-shd .shd-label{flex:1}
+.soap-shd .shd-meta{color:var(--t4);font-size:10px;letter-spacing:0.06em}
+
+.soap-body{
+  font-family:var(--sans);font-size:13.5px;line-height:1.6;
+  color:var(--t1);
+  white-space:pre-wrap;
+  letter-spacing:-0.005em;
+  min-height:1.2em;
+}
+.soap-body strong{color:var(--sage-bright);font-weight:500}
+
+.soap-foot{
+  display:flex;align-items:center;gap:10px;
+  margin-top:8px;
+  padding-top:10px;
+  border-top:1px solid var(--hairline);
+  flex-wrap:wrap;
+}
+.code-chip{
+  display:inline-flex;align-items:center;gap:6px;
+  height:22px;padding:0 8px;
+  border:1px solid var(--hairline-strong);border-radius:4px;
+  background:rgba(255,255,255,.015);
+  font-family:var(--mono);font-size:10.5px;color:var(--t2);
+  letter-spacing:0.04em;
+}
+.code-chip .cc-tag{color:var(--t4);text-transform:uppercase}
+.code-chip .cc-val{color:var(--t1);font-weight:500}
+.code-chip.sage{border-color:rgba(122,166,140,.22);background:rgba(122,166,140,.05)}
+.code-chip.sage .cc-val{color:var(--sage-bright)}
+
+.conf-meter{
+  display:inline-flex;align-items:center;gap:8px;
+  margin-left:auto;
+  font-family:var(--mono);font-size:10.5px;color:var(--t3);
+  letter-spacing:0.05em;text-transform:uppercase;
+}
+.conf-bar{
+  display:inline-flex;align-items:center;gap:2px;
+  height:8px;
+}
+.conf-seg{
+  width:14px;height:6px;border-radius:1px;
+  background:rgba(255,255,255,.04);
+}
+.conf-seg.lit{background:var(--sage)}
+.conf-seg.lit.bright{background:var(--sage-bright)}
+
+.insights{
+  display:grid;grid-template-columns:1fr 1fr;gap:14px;
+  margin-top:14px;
+  padding-top:12px;
+  border-top:1px solid var(--hairline);
+}
+.insights-card{
+  display:flex;flex-direction:column;gap:6px;
+  padding:10px 12px;
+  border:1px solid var(--hairline);
+  border-radius:6px;
+  background:rgba(255,255,255,.012);
+}
+.insights-hd{
+  display:flex;align-items:center;justify-content:space-between;
+  font-family:var(--mono);font-size:9.5px;color:var(--t4);
+  letter-spacing:0.08em;text-transform:uppercase;font-weight:500;
+}
+.insights-hd .hd-tag{
+  color:var(--sage);background:rgba(122,166,140,.08);
+  padding:1px 5px;border-radius:3px;
+}
+.insights-row{
+  display:flex;align-items:center;gap:8px;
+  font-size:12px;color:var(--t2);
+}
+.insights-row .ir-bar{
+  flex:1;height:3px;border-radius:2px;
+  background:rgba(255,255,255,.04);
+  overflow:hidden;
+}
+.insights-row .ir-fill{
+  display:block;height:100%;background:var(--sage);border-radius:2px;
+}
+.insights-row .ir-pct{
+  font-family:var(--mono);font-size:10.5px;color:var(--t3);
+  font-variant-numeric:tabular-nums;min-width:32px;text-align:right;
+}
+.insights-row .ir-name{flex:0 0 auto;letter-spacing:-0.005em}
+.insights-row.dim .ir-name{color:var(--t3)}
+
+.ros-grid{
+  display:grid;grid-template-columns:repeat(4, 1fr);gap:4px;
+  margin-top:2px;
+}
+.ros-cell{
+  display:flex;align-items:center;gap:4px;
+  font-size:10.5px;color:var(--t3);
+  font-family:var(--mono);
+  letter-spacing:0.02em;
+}
+.ros-cell .rd{width:5px;height:5px;border-radius:50%;background:var(--t4)}
+.ros-cell.covered{color:var(--t1)}
+.ros-cell.covered .rd{background:var(--sage);box-shadow:0 0 3px rgba(122,166,140,.45)}
+
+/* ─────────────── Cmd+K floating chip ─────────────── */
+.cmdk-fab{
+  position:fixed;right:18px;bottom:18px;z-index:25;
+  height:30px;padding:0 11px;
+  display:inline-flex;align-items:center;gap:8px;
+  border:1px solid var(--hairline-strong);
+  background:rgba(13,14,16,.85);
+  backdrop-filter:blur(10px);
+  border-radius:8px;
+  font-size:11.5px;color:var(--t3);
+  font-family:var(--mono);
+  box-shadow:0 8px 24px rgba(0,0,0,.4);
+  transition:color 100ms var(--ease), border-color 100ms var(--ease);
+  cursor:pointer;
+  opacity:0;
+  animation:chrome-fade 200ms var(--ease) 200ms forwards;
+}
+.cmdk-fab:hover{color:var(--t1);border-color:rgba(255,255,255,.15)}
+.cmdk-fab .kkbd{
+  font-family:var(--mono);font-size:10.5px;
+  background:rgba(255,255,255,.05);
+  padding:1px 5px;border-radius:3px;color:var(--t2);
+}
+
+/* ─────────────── Reduced motion ─────────────── */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:0.01ms !important;
+    animation-delay:0ms !important;
+    transition-duration:0.01ms !important;
+  }
+  .cursor{display:none}
+  .notes-line{opacity:1;transform:none}
+  .col{opacity:1;transform:none}
+  .topbar,.cmdk-fab{opacity:1}
+  .soap-section .soap-dot{
+    background:var(--sage) !important;
+    box-shadow:0 0 5px rgba(122,166,140,.5) !important;
+  }
+}
+
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><span class="brand-mark"></span> QuillMD</div>
+  <span class="crumb-sep">/</span>
+  <span class="crumb">Dashboard</span>
+  <span class="crumb-sep">/</span>
+  <span class="crumb">Patients</span>
+  <span class="crumb-sep">/</span>
+  <span class="crumb crumb-active">Visit · New (Text Mode)</span>
+  <div class="spacer"></div>
+  <button class="kbd-chip" aria-label="Command palette">
+    <kbd>⌘</kbd><kbd>K</kbd><span class="label">Search</span>
+  </button>
+  <div class="avatar-chip" title="Dr. Kalyani Park">KP</div>
+</header>
+
+<div class="spotlight"></div>
+
+<div class="subbar">
+  <div class="pt-chip">
+    <span class="pt-avatar">SC</span>
+    <span class="pt-name">Sofia Castellano</span>
+    <span class="pt-sep">·</span>
+    <span class="pt-meta">28F · MRN-44218</span>
+  </div>
+  <div class="mode-tabs" role="tablist" aria-label="Input mode">
+    <button class="mode-tab" role="tab">
+      <svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M3 3.5h6l3 3v4a1 1 0 01-1 1H3a1 1 0 01-1-1V4.5a1 1 0 011-1z" stroke="currentColor" stroke-width="1.2"/><path d="M9 3.5v3h3" stroke="currentColor" stroke-width="1.2"/></svg>
+      Audio
+    </button>
+    <button class="mode-tab" role="tab">
+      <svg width="11" height="11" viewBox="0 0 14 14" fill="none"><rect x="5" y="2" width="4" height="7" rx="2" stroke="currentColor" stroke-width="1.2"/><path d="M3 7c0 2.2 1.8 4 4 4s4-1.8 4-4M7 11v2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+      Voice
+    </button>
+    <button class="mode-tab active" role="tab" aria-selected="true">
+      <svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M2.5 3h9M2.5 6h9M2.5 9h6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+      Text
+    </button>
+  </div>
+  <div class="sub-meta">
+    <span class="sm-item"><span class="sm-dot"></span>autosaved · 2s ago</span>
+    <span class="sm-item">draft · queued</span>
+    <span class="sm-item">⌘ ↵ to generate</span>
+  </div>
+</div>
+
+<div class="split">
+
+  <!-- LEFT: Notes -->
+  <section class="col col-left" id="colLeft">
+    <div class="col-hd">
+      <span class="hd-dot"></span>
+      <span>Notes · Dr. Park · Family Medicine</span>
+      <span class="hd-meta">7 lines</span>
+    </div>
+
+    <div class="notes-surface" id="notesSurface" aria-label="Visit notes">
+      <span class="notes-line"><span class="notes-bullet">·</span>28F, sore throat × 3 days</span>
+      <span class="notes-line"><span class="notes-bullet">·</span>subjective fever, no chills</span>
+      <span class="notes-line"><span class="notes-bullet">·</span>denies cough, no nasal congestion</span>
+      <span class="notes-line"><span class="notes-bullet">·</span>exam: erythematous pharynx, no exudate</span>
+      <span class="notes-line"><span class="notes-bullet">·</span>no cervical LAD</span>
+      <span class="notes-line"><span class="notes-bullet">·</span>vitals: T 37.6, HR 76, BP 118/74, SpO₂ 99%</span>
+      <span class="notes-line"><span class="notes-bullet">·</span>last URI ~6 mo ago, otherwise healthy</span>
+    </div>
+
+    <div class="notes-foot">
+      <button class="btn-generate" id="btnGen">
+        <span class="label">Generate SOAP</span>
+        <span class="gen-arrow">→</span>
+        <span class="dots"><span></span><span></span><span></span></span>
+      </button>
+      <span class="ai-badge"><span class="ab-dot"></span>AI · GPT-4-class</span>
+      <span class="foot-meta">⌘ ↵</span>
+    </div>
+  </section>
+
+  <!-- RIGHT: SOAP -->
+  <section class="col col-right" id="colRight">
+    <div class="col-hd">
+      <span class="hd-dot"></span>
+      <span>SOAP Draft · J20.9 · 99214</span>
+      <span class="hd-meta">claude sonnet 4.6</span>
+    </div>
+
+    <div class="soap-surface" id="soapSurface">
+      <div class="soap-section lit" data-key="subjective">
+        <div class="soap-shd">
+          <span class="soap-dot"></span>
+          <span class="shd-label">Subjective</span>
+          <span class="shd-meta">HPI · ROS</span>
+        </div>
+        <div class="soap-body" data-body="subjective">28-year-old female presents with sore throat × 3 days. Reports subjective fever, denies chills, cough, or nasal congestion. No otalgia. Last URI ~6 months ago; otherwise healthy.</div>
+      </div>
+      <div class="soap-section lit" data-key="objective">
+        <div class="soap-shd">
+          <span class="soap-dot"></span>
+          <span class="shd-label">Objective</span>
+          <span class="shd-meta">Vitals · Exam</span>
+        </div>
+        <div class="soap-body" data-body="objective">Vitals stable: T 37.6 °C, HR 76, BP 118/74, SpO₂ 99 %. Oropharynx with erythematous pharynx, no exudate, no tonsillar hypertrophy. No cervical lymphadenopathy. Lungs CTA bilaterally. No conjunctival injection.</div>
+      </div>
+      <div class="soap-section lit" data-key="assessment">
+        <div class="soap-shd">
+          <span class="soap-dot"></span>
+          <span class="shd-label">Assessment</span>
+          <span class="shd-meta">Dx · ICD-10</span>
+        </div>
+        <div class="soap-body" data-body="assessment">Acute viral pharyngitis, most likely. ICD-10: J02.9. Centor score 0/4 — low pretest probability for streptococcal pharyngitis; rapid strep not indicated.</div>
+      </div>
+      <div class="soap-section lit" data-key="plan">
+        <div class="soap-shd">
+          <span class="soap-dot"></span>
+          <span class="shd-label">Plan</span>
+          <span class="shd-meta">Tx · Follow-up</span>
+        </div>
+        <div class="soap-body" data-body="plan">Symptomatic care: NSAIDs/acetaminophen for pain and fever, salt-water gargles, humidified air, hydration, rest. Return precautions: persistent fever > 5 days, difficulty swallowing, drooling, neck stiffness, or worsening symptoms — present immediately. No follow-up needed if improving as expected.</div>
+      </div>
+
+      <div class="soap-foot">
+        <span class="code-chip sage"><span class="cc-tag">ICD-10</span><span class="cc-val">J02.9</span></span>
+        <span class="code-chip"><span class="cc-tag">CPT</span><span class="cc-val">99214</span></span>
+        <span class="code-chip"><span class="cc-tag">Centor</span><span class="cc-val">0/4</span></span>
+        <span class="code-chip"><span class="cc-tag">Rx</span><span class="cc-val">none</span></span>
+        <span class="conf-meter">
+          confidence
+          <span class="conf-bar">
+            <span class="conf-seg lit"></span>
+            <span class="conf-seg lit"></span>
+            <span class="conf-seg lit"></span>
+            <span class="conf-seg lit bright"></span>
+            <span class="conf-seg"></span>
+          </span>
+          <span>0.91</span>
+        </span>
+      </div>
+
+      <div class="insights">
+        <div class="insights-card">
+          <div class="insights-hd"><span>Differential considered</span><span class="hd-tag">3</span></div>
+          <div class="insights-row"><span class="ir-name">Viral pharyngitis</span><span class="ir-bar"><span class="ir-fill" style="width:91%"></span></span><span class="ir-pct">0.91</span></div>
+          <div class="insights-row dim"><span class="ir-name">Strep pharyngitis</span><span class="ir-bar"><span class="ir-fill" style="width:6%"></span></span><span class="ir-pct">0.06</span></div>
+          <div class="insights-row dim"><span class="ir-name">Mononucleosis</span><span class="ir-bar"><span class="ir-fill" style="width:3%"></span></span><span class="ir-pct">0.03</span></div>
+        </div>
+        <div class="insights-card">
+          <div class="insights-hd"><span>ROS coverage</span><span class="hd-tag">7 / 14</span></div>
+          <div class="ros-grid">
+            <span class="ros-cell covered"><span class="rd"></span>const</span>
+            <span class="ros-cell covered"><span class="rd"></span>HEENT</span>
+            <span class="ros-cell covered"><span class="rd"></span>resp</span>
+            <span class="ros-cell covered"><span class="rd"></span>cardio</span>
+            <span class="ros-cell covered"><span class="rd"></span>GI</span>
+            <span class="ros-cell covered"><span class="rd"></span>lymph</span>
+            <span class="ros-cell covered"><span class="rd"></span>skin</span>
+            <span class="ros-cell"><span class="rd"></span>GU</span>
+            <span class="ros-cell"><span class="rd"></span>MSK</span>
+            <span class="ros-cell"><span class="rd"></span>neuro</span>
+            <span class="ros-cell"><span class="rd"></span>endo</span>
+            <span class="ros-cell"><span class="rd"></span>psych</span>
+            <span class="ros-cell"><span class="rd"></span>heme</span>
+            <span class="ros-cell"><span class="rd"></span>allergy</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<button class="cmdk-fab" aria-label="Open command palette">
+  <span class="kkbd">⌘K</span>
+  <span>Command</span>
+</button>
+
+<script>
+(function(){
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const bullets = [
+    '28F, sore throat × 3 days',
+    'subjective fever, no chills',
+    'denies cough, no nasal congestion',
+    'exam: erythematous pharynx, no exudate',
+    'no cervical LAD',
+    'vitals: T 37.6, HR 76, BP 118/74, SpO₂ 99%',
+    'last URI ~6 mo ago, otherwise healthy',
+  ];
+
+  const soap = {
+    subjective: '28-year-old female presents with sore throat × 3 days. Reports subjective fever, denies chills, cough, or nasal congestion. No otalgia. Last URI ~6 months ago; otherwise healthy.',
+    objective: 'Vitals stable: T 37.6 °C, HR 76, BP 118/74, SpO₂ 99 %. Oropharynx with erythematous pharynx, no exudate, no tonsillar hypertrophy. No cervical lymphadenopathy. Lungs CTA bilaterally. No conjunctival injection.',
+    assessment: 'Acute viral pharyngitis, most likely. ICD-10: J02.9. Centor score 0/4 — low pretest probability for streptococcal pharyngitis; rapid strep not indicated.',
+    plan: 'Symptomatic care: NSAIDs/acetaminophen for pain and fever, salt-water gargles, humidified air, hydration, rest. Return precautions: persistent fever > 5 days, difficulty swallowing, drooling, neck stiffness, or worsening symptoms — present immediately. No follow-up needed if improving as expected.',
+  };
+
+  const notes = document.getElementById('notesSurface');
+  const colLeft = document.getElementById('colLeft');
+  const btnGen = document.getElementById('btnGen');
+  const soapSections = document.querySelectorAll('.soap-section');
+  const soapShds = document.querySelectorAll('.soap-shd');
+  const soapBodies = document.querySelectorAll('[data-body]');
+
+  // Reduced-motion: render fully and stop.
+  if(reduced){
+    soapSections.forEach(s => s.classList.add('lit'));
+    soapBodies.forEach(b => {
+      const k = b.getAttribute('data-body');
+      b.textContent = soap[k];
+    });
+    return;
+  }
+
+  // Reset to dynamic mode (clear server-rendered settled state).
+  function clearAll(){
+    notes.innerHTML = '';
+    notes.classList.add('active');
+    colLeft.classList.remove('dim');
+    btnGen.classList.remove('loading');
+    soapSections.forEach(s => s.classList.remove('lit','brighten'));
+    soapShds.forEach(h => h.classList.remove('flash'));
+    soapBodies.forEach(b => b.textContent = '');
+  }
+
+  function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+
+  async function streamBullet(text){
+    const line = document.createElement('span');
+    line.className = 'notes-line';
+    const dot = document.createElement('span');
+    dot.className = 'notes-bullet';
+    dot.textContent = '·';
+    line.appendChild(dot);
+    line.appendChild(document.createTextNode(' '));
+    const txt = document.createElement('span');
+    line.appendChild(txt);
+    const cursor = document.createElement('span');
+    cursor.className = 'cursor';
+    line.appendChild(cursor);
+    notes.appendChild(line);
+    notes.scrollTop = notes.scrollHeight;
+
+    for(let i = 0; i < text.length; i++){
+      txt.textContent += text[i];
+      notes.scrollTop = notes.scrollHeight;
+      await sleep(30);
+    }
+    line.removeChild(cursor);
+  }
+
+  async function streamSoap(key, text){
+    const section = document.querySelector(`.soap-section[data-key="${key}"]`);
+    const shd = section.querySelector('.soap-shd');
+    const body = section.querySelector('[data-body]');
+
+    section.classList.add('lit');
+    shd.classList.add('flash');
+    setTimeout(() => shd.classList.remove('flash'), 200);
+
+    for(let i = 0; i < text.length; i++){
+      body.textContent += text[i];
+      await sleep(25);
+    }
+
+    section.classList.add('brighten');
+    setTimeout(() => section.classList.remove('brighten'), 160);
+  }
+
+  async function runLoop(){
+    while(true){
+      clearAll();
+      // Phase 1 — bullets stream in
+      await sleep(500);
+      for(let i = 0; i < bullets.length; i++){
+        await streamBullet(bullets[i]);
+        if(i < bullets.length - 1) await sleep(250);
+      }
+
+      // Phase 2 — generate transition
+      await sleep(400);
+      btnGen.classList.add('loading');
+      colLeft.classList.add('dim');
+      await sleep(1400);
+      btnGen.classList.remove('loading');
+
+      // Phase 3 — SOAP fills in
+      await streamSoap('subjective', soap.subjective);
+      await sleep(300);
+      await streamSoap('objective', soap.objective);
+      await sleep(300);
+      await streamSoap('assessment', soap.assessment);
+      await sleep(300);
+      await streamSoap('plan', soap.plan);
+
+      // Phase 4 — settled
+      colLeft.classList.remove('dim');
+      await sleep(2000);
+    }
+  }
+
+  // Begin after column-in animations settle.
+  setTimeout(runLoop, 350);
+
+  // Cmd+K chip click is decorative.
+  document.querySelector('.cmdk-fab')?.addEventListener('click', e => e.preventDefault());
+})();
+</script>
+
+</body>
+</html>

@@ -15,21 +15,31 @@ export default function PricingPage() {
     <>
       <NavBar />
       <main>
-        <section className="relative overflow-hidden pt-32 pb-12">
+        <section
+          className="relative overflow-hidden"
+          style={{ paddingTop: 96, paddingBottom: 24 }}
+        >
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-x-0 top-0 h-[500px]"
+            className="pointer-events-none absolute inset-x-0 top-0"
             style={{
+              height: 500,
               background:
                 'radial-gradient(ellipse 70% 50% at 50% 0%, rgba(122,166,140,0.18) 0%, transparent 65%)',
             }}
           />
-          <div className="relative mx-auto max-w-3xl px-6 text-center lg:px-8">
-            <p className="qm-cl-eyebrow">Pricing</p>
-            <h1 className="mt-4 type-h1">
-              Simple. Transparent. <em style={{ fontStyle: 'italic', color: '#2F5040' }}>Priced on the page.</em>
+          <div
+            className="container"
+            style={{ maxWidth: 760, textAlign: 'center', position: 'relative' }}
+          >
+            <div className="section-eyebrow">Pricing</div>
+            <h1 className="hero-title" style={{ marginTop: 16 }}>
+              Simple. Transparent.{' '}
+              <span style={{ color: 'var(--color-linear-sage-bright)' }}>
+                Priced on the page.
+              </span>
             </h1>
-            <p className="mt-6 type-body">
+            <p className="hero-sub" style={{ marginTop: 20 }}>
               Start with 10 free notes. Upgrade whenever. Cancel whenever. No
               contracts, no sales calls.
             </p>

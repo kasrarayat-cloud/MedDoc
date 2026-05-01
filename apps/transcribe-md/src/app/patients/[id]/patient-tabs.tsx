@@ -13,7 +13,11 @@ interface Props {
 /** Tab header for /patients/[id]. Server component — both tabs are
  *  <Link>s so the server re-renders with the new ?tab= on click.
  *  The Trash tab is hidden when the patient has zero trashed visits
- *  so the UI stays clean for the common case. */
+ *  so the UI stays clean for the common case.
+ *
+ *  Currently unused — page.tsx renders its own inline <TabBar> with
+ *  the full tab catalog (visits / notes / files / trash). Kept here
+ *  in case future server-only entry points need a slimmer variant. */
 export function PatientTabs({
   patientId,
   active,
@@ -21,7 +25,7 @@ export function PatientTabs({
   trashCount,
 }: Props) {
   return (
-    <div className="mb-4 flex items-center gap-1 border-b border-border-subtle">
+    <div className="mb-4 flex items-center gap-1 border-b border-linear-border">
       <TabLink
         href={`/patients/${patientId}`}
         label="Active"
@@ -63,20 +67,20 @@ function TabLink({
         'relative -mb-px flex items-center gap-2 border-b-2 px-4 py-3 text-[14px] font-medium transition-colors',
         active
           ? tone === 'warning'
-            ? 'border-warning text-text-primary'
-            : 'border-violet-400 text-text-primary'
-          : 'border-transparent text-text-tertiary hover:text-text-secondary'
+            ? 'border-linear-warning text-linear-text'
+            : 'border-linear-sage text-linear-text'
+          : 'border-transparent text-linear-text-3 hover:text-linear-text-2'
       )}
     >
       <span>{label}</span>
       <span
         className={cn(
-          'inline-flex min-w-[20px] items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-semibold tracking-tight',
+          'inline-flex min-w-[20px] items-center justify-center rounded-full px-1.5 py-0.5 font-mono text-[10px] font-medium tracking-tight tabular-nums',
           active
             ? tone === 'warning'
-              ? 'bg-warning/20 text-warning'
-              : 'bg-violet-500/20 text-violet-200'
-            : 'bg-bg-surface-2 text-text-muted'
+              ? 'bg-[rgba(212,164,55,0.18)] text-linear-warning'
+              : 'bg-linear-sage-tint text-linear-sage-bright'
+            : 'bg-linear-surface-2 text-linear-text-3'
         )}
       >
         {count}

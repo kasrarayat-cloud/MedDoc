@@ -1,10 +1,13 @@
-// HANDOFF §2.2 EmptyState — minimal violet line-art illustration + serif
-// title + subcopy + optional CTA. Used by Dashboard / Patient detail /
-// search results when there's no data to render yet.
+// Phase 5 — Linear V1 Faithful empty state.
+// Reference: docs/design-directions-v8-linear/dashboard-v1.html
+// (general chrome tokens — surface-1 card, hairline border, sage icon).
 //
-// Illos are lightweight inline SVGs rather than ported IlloQuill /
-// IlloStethoscope / IlloSearch from the handoff (those land in a
-// follow-up); the accompanying text + button composition matches.
+// Centered card on `--color-linear-surface-1` with a hairline border,
+// sage tint icon well, Inter heading + linear-text-2 body, single
+// primary CTA below. No serif italics.
+//
+// `theme` prop remains for back-compat; both values render the same
+// Linear V1 surface.
 
 import type { ReactNode } from 'react';
 import { Ic } from './icon';
@@ -26,7 +29,6 @@ export function EmptyState({
   body,
   cta,
   illustration,
-  theme = 'legacy',
 }: {
   kind?: EmptyStateKind;
   eyebrow?: string;
@@ -34,78 +36,22 @@ export function EmptyState({
   body?: ReactNode;
   cta?: ReactNode;
   /** Optional render slot for a custom line-art illustration. When
-   *  passed, it replaces the default `Ic[kind]` glyph entirely — used
-   *  by Clinician routes that ship the IlloQuill / IlloStethoscope /
-   *  IlloSearch family from the design handoff. */
+   *  passed, it replaces the default `Ic[kind]` glyph entirely. */
   illustration?: ReactNode;
+  /** @deprecated kept for back-compat; Linear V1 is single-theme. */
   theme?: EmptyStateTheme;
 }) {
   const Illo = ICON_MAP[kind];
-
-  if (theme === 'clinician') {
-    return (
-      <div
-        style={{
-          margin: '60px auto',
-          maxWidth: 440,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          textAlign: 'center',
-        }}
-      >
-        <div
-          aria-hidden
-          style={{
-            width: 96,
-            height: 96,
-            borderRadius: 24,
-            marginBottom: 22,
-            background: 'var(--sage-tint, rgba(122, 166, 140, 0.14))',
-            border: '1px solid var(--line, rgba(43, 38, 32, 0.08))',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'var(--sage-deep, #2F5040)',
-          }}
-        >
-          {illustration ?? <Illo width={38} height={38} />}
-        </div>
-        {eyebrow && (
-          <div className="qm-cl-eyebrow" style={{ marginBottom: 10 }}>
-            {eyebrow}
-          </div>
-        )}
-        <h2
-          style={{
-            margin: 0,
-            fontFamily: 'var(--serif, "Source Serif 4", Georgia, serif)',
-            fontSize: 24,
-            fontWeight: 400,
-            letterSpacing: '-0.015em',
-            color: 'var(--ink, #2B2620)',
-          }}
-        >
-          {title}
-        </h2>
-        {body && (
-          <div
-            className="qm-cl-prose"
-            style={{ marginTop: 10, maxWidth: 360 }}
-          >
-            {typeof body === 'string' ? <p>{body}</p> : body}
-          </div>
-        )}
-        {cta && <div style={{ marginTop: 20 }}>{cta}</div>}
-      </div>
-    );
-  }
 
   return (
     <div
       style={{
         margin: '60px auto',
-        maxWidth: 440,
+        maxWidth: 480,
+        padding: '32px 28px',
+        background: 'var(--color-linear-surface-1)',
+        border: '1px solid var(--color-linear-border)',
+        borderRadius: 10,
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
@@ -115,33 +61,43 @@ export function EmptyState({
       <div
         aria-hidden
         style={{
-          width: 96,
-          height: 96,
-          borderRadius: 24,
-          marginBottom: 22,
-          background:
-            'radial-gradient(circle at 30% 30%, rgba(209,181,255,0.3), rgba(107,63,217,0.05))',
-          border: '1px solid rgba(139,92,255,0.18)',
+          width: 56,
+          height: 56,
+          borderRadius: 12,
+          marginBottom: 18,
+          background: 'var(--color-linear-sage-tint)',
+          border: '1px solid rgba(122, 166, 140, 0.25)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          color: 'var(--accent-bright)',
+          color: 'var(--color-linear-sage-bright)',
         }}
       >
-        {illustration ?? <Illo width={38} height={38} />}
+        {illustration ?? <Illo width={26} height={26} />}
       </div>
       {eyebrow && (
-        <div className="qm-sectlabel" style={{ marginBottom: 10 }}>
+        <div
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10.5,
+            fontWeight: 500,
+            letterSpacing: '0.07em',
+            textTransform: 'uppercase',
+            color: 'var(--color-linear-text-3)',
+            marginBottom: 8,
+          }}
+        >
           {eyebrow}
         </div>
       )}
       <h2
-        className="qm-serif"
         style={{
           margin: 0,
-          fontSize: 24,
-          fontWeight: 400,
-          letterSpacing: '-0.015em',
+          fontFamily: 'var(--font-sans)',
+          fontSize: 17,
+          fontWeight: 500,
+          letterSpacing: '-0.012em',
+          color: 'var(--color-linear-text)',
         }}
       >
         {title}
@@ -149,11 +105,14 @@ export function EmptyState({
       {body && (
         <p
           style={{
-            marginTop: 10,
-            fontSize: 13.5,
-            color: 'var(--fg-3)',
+            marginTop: 8,
+            marginBottom: 0,
+            fontFamily: 'var(--font-sans)',
+            fontSize: 13,
+            color: 'var(--color-linear-text-2)',
             lineHeight: 1.55,
-            maxWidth: 360,
+            letterSpacing: '-0.005em',
+            maxWidth: 400,
           }}
         >
           {body}
