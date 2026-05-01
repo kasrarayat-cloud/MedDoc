@@ -1,738 +1,828 @@
 @import "tailwindcss";
 
 /* ============================================================================
-   QuillMD marketing — Clinician design language (Phase 3)
-   ----------------------------------------------------------------------------
-   Re-skinned for the Clinician direction that ships on app.quillmd.com after
-   Phase 2. Warm cream canvas, sage primary, muted teal/amber/coral accents,
-   Source Serif 4 for content + DM Sans for chrome + JetBrains Mono for IDs.
-   Tokens duplicated 1:1 from apps/transcribe-md/src/app/globals.css so the
-   two surfaces share a vocabulary without a cross-import (the apps deploy
-   independently — cross-imports break the marketing build).
-
-   Source of truth: docs/design-directions-v3/clinician/{landing-and-recording,
-   dashboard,visit-detail}.html and docs/design-directions-v3/clinician/README.md.
-
-   Architecture:
-     1. @theme block — --color-clinician-* exposed as Tailwind utilities
-        (bg-clinician-cream, text-clinician-sage, border-clinician-line, etc.)
-     2. .qm-cl-app block — bare-name aliases (--cream, --ink, --sage, --serif,
-        --sans, --mono) so handwritten .qm-cl-* CSS resolves the same way the
-        mockups do.
-     3. Utility classes — .qm-cl-pill, .qm-cl-btn, .qm-cl-card, etc.
-     4. Marketing-only legacy aliases — keep --bg-base / --color-text-* /
-        --color-border-* / --color-violet-* slots populated with Clinician-
-        equivalents so any unmigrated `text-text-primary` / `border-border-
-        subtle` / `text-violet-400` / `bg-bg-surface-2` utility used by the
-        sub-pages renders on the cream canvas without needing a per-file edit.
-   ========================================================================== */
+ * QuillMD marketing — Phase 5 Linear V1 (Faithful)
+ * ----------------------------------------------------------------------------
+ * Mirrors apps/transcribe-md/src/app/globals.css 1:1 on tokens + the
+ * `.qm-lin-*` utility surface so the marketing site (quillmd.com) and the
+ * authenticated app (app.quillmd.com) share a vocabulary without any
+ * cross-package import. The two apps deploy independently — duplicating
+ * the token table is the trade-off for that independence.
+ *
+ * Source of truth:
+ *   docs/design-directions-v8-linear/landing-v1.html   (PRIMARY — hero,
+ *                                                       nav, CTA grammar)
+ *   docs/design-directions-v8-linear/dashboard-v1.html (token alignment)
+ *
+ * Pages also load `landing.css` (the marketing-specific landing-page
+ * grammar). This file is the foundation; landing.css decorates the
+ * landing-only surfaces (hero band, feature blocks, comparison tables,
+ * pricing tiers).
+ * ========================================================================== */
 
 @theme {
-  /* ── Clinician tokens (canonical names) ── */
-  --color-clinician-cream: #F2EBDC;
-  --color-clinician-cream-card: #FFFCF5;
-  --color-clinician-cream-2: #F2EDE3;
-  --color-clinician-cream-3: #E8E1D3;
+  /* ── Surface — pure dark canvas + 3 elevations ── */
+  --color-linear-bg: #08090a;
+  --color-linear-surface-1: #0d0e10;
+  --color-linear-surface-2: #131416;
+  --color-linear-surface-3: #1a1c1e;
 
-  --color-clinician-line: rgba(43, 38, 32, 0.08);
-  --color-clinician-line-strong: rgba(43, 38, 32, 0.14);
+  /* ── Borders — hairlines (no shadows) ── */
+  --color-linear-border: #21232a;
+  --color-linear-border-strong: #2c2f38;
+  --color-linear-hairline: rgba(255, 255, 255, 0.05);
+  --color-linear-hairline-strong: rgba(255, 255, 255, 0.08);
 
-  --color-clinician-ink: #2B2620;
-  --color-clinician-ink-2: #5C544A;
-  --color-clinician-ink-3: #8A8278;
-  --color-clinician-ink-4: #B5AE9F;
+  /* ── Text ── */
+  --color-linear-text: #f7f8f8;
+  --color-linear-text-2: #b4bcc8;
+  --color-linear-text-3: #6c737f;
 
-  --color-clinician-sage: #7AA68C;
-  --color-clinician-sage-deep: #2F5040;
-  --color-clinician-sage-bright: #95BCA4;
+  /* ── Sage accent — replaces Linear's purple ── */
+  --color-linear-sage: #7AA68C;
+  --color-linear-sage-bright: #9BC4A8;
+  --color-linear-sage-soft: #5d8a73;
+  --color-linear-sage-deep: #2F5040;
+  --color-linear-sage-tint: rgba(122, 166, 140, 0.13);
+  --color-linear-sage-glow: rgba(122, 166, 140, 0.18);
 
-  --color-clinician-teal: #5BA3B4;
-  --color-clinician-teal-deep: #2C5A66;
+  /* ── Row hover / active tints ── */
+  --color-linear-row-hover: rgba(255, 255, 255, 0.03);
+  --color-linear-row-active: rgba(255, 255, 255, 0.05);
 
-  --color-clinician-amber: #D4A574;
-  --color-clinician-amber-deep: #7A4F1F;
-  --color-clinician-coral: #C97B6E;
-  --color-clinician-coral-deep: #7A3329;
-  --color-clinician-sky: #7BA8C4;
-  --color-clinician-sky-deep: #2C4F66;
+  /* ── Status palette ── */
+  --color-linear-success: #4caf7d;
+  --color-linear-warning: #d4a437;
+  --color-linear-danger: #d4574a;
+  --color-linear-info: #5b8db8;
+  --color-linear-amber: #D4A574;
+  --color-linear-coral: #C97B6E;
+  --color-linear-sky: #74A8C9;
+  --color-linear-teal: #5BA3B4;
 
-  /* ── Marketing legacy aliases ──
-     Re-point the existing -text-*, -bg-*, -border-*, -violet-* token slots
-     used across the sub-pages (pricing, about, contact, demo, hipaa, privacy,
-     security, terms, signup, not-found) at Clinician equivalents so Tailwind
-     utilities still resolve without per-file edits. The visual outcome:
-     -text-primary  → ink (warm charcoal)
-     -text-secondary→ ink-2 (body)
-     -text-tertiary → ink-3 (labels)
-     -text-muted    → ink-4 (captions)
-     -bg-base       → cream (page canvas)
-     -bg-surface-1  → cream-2 (section bands)
-     -bg-surface-2  → cream-card (cards)
-     -bg-surface-3  → cream-3 (deeper warm)
-     -border-subtle / -default / -emphasis → progressively stronger lines
-     -violet-* (brand) → sage family (the Clinician primary)
-     -cyan-400 / -success / -warning / -danger → teal / sage / amber / coral
-   */
-  --color-text-primary: #2B2620;
-  --color-text-secondary: #5C544A;
-  --color-text-tertiary: #8A8278;
-  --color-text-muted: #B5AE9F;
-
-  --color-bg-base: #FAF7F2;
-  --color-bg-surface-1: #F2EDE3;
-  --color-bg-surface-2: #FFFCF5;
-  --color-bg-surface-3: #E8E1D3;
-
-  --color-border-subtle: rgba(43, 38, 32, 0.06);
-  --color-border-default: rgba(43, 38, 32, 0.10);
-  --color-border-emphasis: rgba(43, 38, 32, 0.18);
-
-  --color-violet-300: #95BCA4; /* sage-bright */
-  --color-violet-400: #7AA68C; /* sage */
-  --color-violet-500: #6E9A80; /* sage hover */
-  --color-violet-600: #2F5040; /* sage-deep */
-  --color-violet-700: #244035;
-
-  --color-cyan-400: #5BA3B4;
-  --color-cyan-500: #2C5A66;
-  --color-success: #7AA68C;
-  --color-warning: #D4A574;
-  --color-danger: #C97B6E;
-
-  /* Motion */
-  --ease-out-premium: cubic-bezier(0.22, 1, 0.36, 1);
-  --duration-fast: 150ms;
-  --duration-base: 300ms;
-  --duration-slow: 500ms;
+  /* ── Typography ──
+   * Inter is loaded via next/font in layout.tsx (so the `--font-sans` /
+   * `--font-mono` CSS vars are set on <html>). The fallback stacks here
+   * cover the brief moment before the webfont arrives. */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 /* ============================================================================
-   Base styles — Clinician light-mode-first; warm cream + ink, never pure
-   black, never hard 1px lines. The dark page background and fixed grain
-   overlay from the original violet design are gone.
-   ========================================================================== */
-:root {
-  color-scheme: light;
-}
-
+ * Body baseline
+ * ----------------------------------------------------------------------------
+ * Dark canvas, Inter sans, OpenType cv11 + ss01 features. */
 html,
 body {
-  background: var(--color-clinician-cream);
-  color: var(--color-clinician-ink);
-  font-family: var(--font-sans, "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
+  margin: 0;
+  padding: 0;
 }
 
 body {
-  /* Subtle warm radial wash — replaces the violet glow. */
-  background-image:
-    radial-gradient(ellipse at 12% 8%, rgba(122, 166, 140, 0.06) 0%, transparent 42%),
-    radial-gradient(ellipse at 88% 92%, rgba(91, 163, 180, 0.05) 0%, transparent 50%);
-  background-attachment: fixed;
+  background-color: var(--color-linear-bg);
+  color: var(--color-linear-text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.55;
+  letter-spacing: -0.005em;
+  font-feature-settings: 'cv11', 'ss01';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 ::selection {
-  background: rgba(122, 166, 140, 0.22);
-  color: var(--color-clinician-ink);
+  background: rgba(122, 166, 140, 0.25);
+  color: var(--color-linear-text);
 }
 
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--color-clinician-cream-3) transparent;
+*:focus-visible {
+  outline: 2px solid rgba(122, 166, 140, 0.55);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
-*::-webkit-scrollbar {
+
+::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
-*::-webkit-scrollbar-thumb {
-  background: var(--color-clinician-cream-3);
-  border-radius: 999px;
-  border: 2px solid transparent;
-  background-clip: content-box;
+::-webkit-scrollbar-track {
+  background: transparent;
 }
-*::-webkit-scrollbar-thumb:hover {
-  background: var(--color-clinician-ink-4);
-  background-clip: content-box;
+::-webkit-scrollbar-thumb {
+  background: var(--color-linear-border);
+  border-radius: 5px;
+  border: 2px solid var(--color-linear-bg);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-linear-border-strong);
 }
 
 /* ============================================================================
-   Reusable utilities — kept for backward compatibility with sub-page
-   components that still reference them; re-pointed at Clinician equivalents.
-   ========================================================================== */
+ * Linear V1 utility classes (.qm-lin-*)
+ * ----------------------------------------------------------------------------
+ * Marketing pages don't use the app shell (.qm-lin-app / .qm-lin-sidebar)
+ * but they share the same buttons, pills, spotlight modal, and noise +
+ * fade primitives. Class definitions are byte-identical to the app's
+ * globals.css so the visual language is consistent end-to-end.
+ * ========================================================================== */
 
-/* Gradient-border trick (used by GradientBorder in sub-pages). The "border"
-   becomes a sage-tinted hairline + warm-cream surface. */
-.gradient-border {
-  background:
-    linear-gradient(var(--gb-surface, #FFFCF5), var(--gb-surface, #FFFCF5))
-      padding-box,
-    linear-gradient(
-        var(--gb-angle, 135deg),
-        var(--gb-from, #7AA68C) 0%,
-        var(--gb-to, #95BCA4) 100%
-      )
-      border-box;
-  border: 1px solid transparent;
+/* App shell + chrome — marketing rarely needs these but we ship them so
+ * any embedded dashboard preview / app-frame screenshot in marketing
+ * pages reads correctly. */
+.qm-lin-app {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  min-height: 100vh;
+  background: var(--color-linear-bg);
+  color: var(--color-linear-text);
 }
-
-/* Specular button — keep the structural pseudo-element so existing
-   components don't have to be reworked, but kill the sweep on hover (the
-   Clinician palette doesn't do glossy highlights). The transform now only
-   carries through the focus ring + surface fade. */
-.specular-button {
-  position: relative;
-  overflow: hidden;
-  isolation: isolate;
-}
-.specular-button::before {
-  content: none;
-}
-.specular-button > * {
-  position: relative;
-  z-index: 2;
-}
-
-/* 48px grid — kept as a quiet sage hairline for any decorative usage.
-   Almost invisible on cream, which is the intent. */
-.grid-bg {
-  background-image:
-    linear-gradient(to right, rgba(43, 38, 32, 0.025) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(43, 38, 32, 0.025) 1px, transparent 1px);
-  background-size: 48px 48px;
-  mask-image: radial-gradient(ellipse 90% 70% at 50% 50%, black 40%, transparent 85%);
-  -webkit-mask-image: radial-gradient(ellipse 90% 70% at 50% 50%, black 40%, transparent 85%);
-}
-
-.tilt-perspective {
-  perspective: 1200px;
-  transform-style: preserve-3d;
-}
-
-/* Text gradient — sage instead of violet. GradientText in the sub-pages
-   (about, demo, signup, not-found) reads on cream now. */
-.text-gradient-violet {
-  background: linear-gradient(135deg, #2F5040 0%, #7AA68C 60%, #95BCA4 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  -webkit-text-fill-color: transparent;
-  font-style: italic;
-  font-family: "Source Serif 4", Georgia, serif;
-}
-
-/* Glow card — neutralized; the Clinician halo is shadow, not violet glow. */
-.glow-violet::after {
-  content: "";
-  position: absolute;
-  inset: -10%;
-  background: radial-gradient(
-    ellipse at center,
-    rgba(122, 166, 140, 0.10) 0%,
-    rgba(122, 166, 140, 0.04) 35%,
-    transparent 65%
-  );
-  filter: blur(18px);
-  z-index: -1;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity var(--duration-base) var(--ease-out-premium);
-}
-.glow-violet:hover::after,
-.glow-violet[data-glow="on"]::after {
-  opacity: 1;
-}
-
-/* Typography helpers — used by sub-pages. Re-tuned to Clinician scale. */
-.type-display {
-  font-family: "Source Serif 4", Georgia, serif;
-  font-weight: 400;
-  font-size: clamp(48px, 6vw, 80px);
-  line-height: 1.05;
-  letter-spacing: -0.015em;
-  color: var(--color-clinician-ink);
-}
-.type-h1 {
-  font-family: "Source Serif 4", Georgia, serif;
-  font-weight: 400;
-  font-size: clamp(36px, 4vw, 52px);
-  line-height: 1.1;
-  letter-spacing: -0.015em;
-  color: var(--color-clinician-ink);
-}
-.type-h2 {
-  font-family: "Source Serif 4", Georgia, serif;
-  font-weight: 400;
-  font-size: clamp(28px, 3vw, 36px);
-  line-height: 1.2;
-  letter-spacing: -0.012em;
-  color: var(--color-clinician-ink);
-}
-.type-body {
-  font-family: "Source Serif 4", Georgia, serif;
-  font-weight: 400;
-  font-size: 17px;
-  line-height: 1.7;
-  color: var(--color-clinician-ink-2);
-}
-.type-small {
-  font-family: var(--font-sans, "DM Sans"), system-ui, sans-serif;
-  font-weight: 500;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--color-clinician-ink-3);
-}
-
-/* Radix Accordion — used by pricing-faq.tsx. Animation timing tuned to
-   Clinician's slow-ease vocabulary (260ms vs the original 200ms). */
-@keyframes accordion-down {
-  from { height: 0; opacity: 0; }
-  to { height: var(--radix-accordion-content-height); opacity: 1; }
-}
-@keyframes accordion-up {
-  from { height: var(--radix-accordion-content-height); opacity: 1; }
-  to { height: 0; opacity: 0; }
-}
-.animate-accordion-down {
-  animation: accordion-down 260ms var(--ease-out-premium);
-}
-.animate-accordion-up {
-  animation: accordion-up 200ms var(--ease-out-premium);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
+@media (max-width: 980px) {
+  .qm-lin-app {
+    grid-template-columns: 1fr;
   }
 }
 
-/* ============================================================================
-   .qm-cl-app — Clinician scope
-   ----------------------------------------------------------------------------
-   Wrap any page (or the body) in this class so handwritten .qm-cl-* utilities
-   resolve their bare-name CSS vars correctly. Mirrors the apps/transcribe-md
-   block 1:1 so component code copy-pastes without a translation layer.
-   ========================================================================== */
-.qm-cl-app {
-  --cream: var(--color-clinician-cream);
-  --cream-card: var(--color-clinician-cream-card);
-  --cream-2: var(--color-clinician-cream-2);
-  --cream-3: var(--color-clinician-cream-3);
-
-  --line: var(--color-clinician-line);
-  --line-strong: var(--color-clinician-line-strong);
-
-  --ink: var(--color-clinician-ink);
-  --ink-2: var(--color-clinician-ink-2);
-  --ink-3: var(--color-clinician-ink-3);
-  --ink-4: var(--color-clinician-ink-4);
-
-  --sage: var(--color-clinician-sage);
-  --sage-deep: var(--color-clinician-sage-deep);
-  --sage-bright: var(--color-clinician-sage-bright);
-  --sage-tint: rgba(122, 166, 140, 0.14);
-  --sage-tint-strong: rgba(122, 166, 140, 0.22);
-
-  --teal: var(--color-clinician-teal);
-  --teal-deep: var(--color-clinician-teal-deep);
-  --teal-tint: rgba(91, 163, 180, 0.14);
-
-  --amber: var(--color-clinician-amber);
-  --amber-deep: var(--color-clinician-amber-deep);
-  --amber-tint: rgba(212, 165, 116, 0.18);
-  --amber-tint-strong: rgba(212, 165, 116, 0.28);
-
-  --coral: var(--color-clinician-coral);
-  --coral-deep: var(--color-clinician-coral-deep);
-  --coral-tint: rgba(201, 123, 110, 0.16);
-  --coral-tint-strong: rgba(201, 123, 110, 0.24);
-
-  --sky: var(--color-clinician-sky);
-  --sky-deep: var(--color-clinician-sky-deep);
-  --sky-tint: rgba(123, 168, 196, 0.16);
-
-  --shadow-card: 0 4px 14px rgba(43, 38, 32, 0.04);
-  --shadow-card-hover: 0 8px 24px rgba(43, 38, 32, 0.06);
-  --shadow-button: 0 1px 2px rgba(43, 38, 32, 0.05), 0 1px 1px rgba(43, 38, 32, 0.03);
-  --shadow-cta: 0 6px 18px rgba(122, 166, 140, 0.28);
-
-  --ease-clinician: cubic-bezier(0.22, 1, 0.36, 1);
-
-  --serif: "Source Serif 4", Georgia, "Times New Roman", serif;
-  --sans: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-
-  font-family: var(--sans);
-  background: var(--cream);
-  color: var(--ink);
-  font-size: 15px;
-  line-height: 1.55;
+.qm-lin-chrome {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  background: rgba(13, 14, 16, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--color-linear-hairline);
 }
 
-.qm-cl-app[data-grain] {
-  background-image:
-    radial-gradient(ellipse at 12% 8%, rgba(122, 166, 140, 0.06) 0%, transparent 42%),
-    radial-gradient(ellipse at 88% 92%, rgba(91, 163, 180, 0.05) 0%, transparent 50%);
+.qm-lin-cmdk {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 26px;
+  padding: 0 10px;
+  background: var(--color-linear-surface-2);
+  border: 1px solid var(--color-linear-border);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--color-linear-text-3);
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: background-color 100ms ease, border-color 100ms ease, color 100ms ease;
+}
+.qm-lin-cmdk:hover {
+  background: var(--color-linear-surface-3);
+  border-color: var(--color-linear-border-strong);
+  color: var(--color-linear-text-2);
+}
+.qm-lin-cmdk kbd {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--color-linear-text-2);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 1px 4px;
+  border-radius: 3px;
 }
 
-/* ── Type-face helpers ── */
-.qm-cl-app .qm-cl-serif { font-family: var(--serif); }
-.qm-cl-app .qm-cl-sans  { font-family: var(--sans); }
-.qm-cl-app .qm-cl-mono  { font-family: var(--mono); }
-
-/* ── Wordmark ── */
-.qm-cl-app .qm-cl-wordmark {
-  font-family: var(--serif);
-  font-weight: 500;
-  font-size: 20px;
-  letter-spacing: 0.02em;
-  color: var(--ink);
+.qm-lin-sidebar {
+  background: var(--color-linear-surface-1);
+  border-right: 1px solid var(--color-linear-border);
+  padding: 12px 8px 16px;
+  overflow: auto;
+  position: sticky;
+  top: 48px;
+  height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
 }
 
-/* ── Pills — soft-bg + deep-fg ── */
-.qm-cl-app .qm-cl-pill,
-.qm-cl-pill {
+/* --- Pills ---------------------------------------------------------------- */
+.qm-lin-pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 11px;
-  border-radius: 999px;
-  font-family: var(--sans, "DM Sans");
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  background: var(--color-linear-surface-2);
+  color: var(--color-linear-text-2);
+  border: 1px solid var(--color-linear-border);
+  white-space: nowrap;
+  letter-spacing: 0.02em;
   font-weight: 500;
-  font-size: 12px;
-  letter-spacing: 0.01em;
-  line-height: 1;
 }
-.qm-cl-app .qm-cl-pill-sage,  .qm-cl-pill-sage  { background: rgba(122, 166, 140, 0.14); color: #2F5040; }
-.qm-cl-app .qm-cl-pill-teal,  .qm-cl-pill-teal  { background: rgba(91, 163, 180, 0.14);  color: #2C5A66; }
-.qm-cl-app .qm-cl-pill-amber, .qm-cl-pill-amber { background: rgba(212, 165, 116, 0.18); color: #7A4F1F; }
-.qm-cl-app .qm-cl-pill-coral, .qm-cl-pill-coral { background: rgba(201, 123, 110, 0.16); color: #7A3329; }
-.qm-cl-app .qm-cl-pill-sky,   .qm-cl-pill-sky   { background: rgba(123, 168, 196, 0.16); color: #2C4F66; }
-.qm-cl-app .qm-cl-pill-soft,  .qm-cl-pill-soft  { background: var(--color-clinician-cream-2); color: var(--color-clinician-ink-2); }
-.qm-cl-app .qm-cl-pill-dot,   .qm-cl-pill-dot   { width: 6px; height: 6px; border-radius: 999px; background: currentColor; opacity: 0.7; }
+.qm-lin-pill--sage {
+  background: var(--color-linear-sage-tint);
+  color: var(--color-linear-sage-bright);
+  border-color: rgba(122, 166, 140, 0.3);
+}
+.qm-lin-pill--ready {
+  background: var(--color-linear-sage-tint);
+  color: var(--color-linear-sage-bright);
+  border-color: rgba(122, 166, 140, 0.25);
+}
+.qm-lin-pill--review {
+  background: rgba(212, 165, 116, 0.06);
+  color: #e3b984;
+  border-color: rgba(212, 165, 116, 0.25);
+}
+.qm-lin-pill--draft {
+  background: var(--color-linear-surface-2);
+  color: var(--color-linear-text-2);
+}
+.qm-lin-pill--signed {
+  background: transparent;
+  color: var(--color-linear-text-3);
+  border-color: var(--color-linear-hairline);
+}
+.qm-lin-pill--processing {
+  background: rgba(116, 168, 201, 0.06);
+  color: #9bc4d9;
+  border-color: rgba(116, 168, 201, 0.22);
+}
+.qm-lin-pill--processing::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--color-linear-sky);
+  animation: qm-lin-pulse 1.4s ease-in-out infinite;
+}
 
-/* ── Buttons — pill-shaped, sage primary, no specular sweep ── */
-.qm-cl-app .qm-cl-btn,
-.qm-cl-btn {
-  font-family: var(--sans, "DM Sans");
-  font-weight: 500;
-  font-size: 14px;
-  line-height: 1;
-  border-radius: 999px;
-  padding: 10px 18px;
+@keyframes qm-lin-pulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
+/* --- Row -------------------------------------------------------------------- */
+.qm-lin-row {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--color-linear-hairline);
+  transition: background-color 100ms ease-out;
   cursor: pointer;
-  border: 0;
+}
+.qm-lin-row:hover {
+  background: var(--color-linear-row-hover);
+}
+.qm-lin-row--active {
+  background: var(--color-linear-row-active);
+}
+
+/* --- Buttons ---------------------------------------------------------------- */
+.qm-lin-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  transition: transform 240ms var(--ease-out-premium),
-              background 240ms var(--ease-out-premium),
-              box-shadow 240ms var(--ease-out-premium),
-              color 240ms var(--ease-out-premium);
-  white-space: nowrap;
-  text-decoration: none;
-}
-.qm-cl-app .qm-cl-btn-primary,
-.qm-cl-btn-primary {
-  background: var(--color-clinician-sage);
-  color: #FFFCF5;
-  box-shadow: var(--shadow-cta, 0 6px 18px rgba(122, 166, 140, 0.28));
-}
-.qm-cl-app .qm-cl-btn-primary:hover,
-.qm-cl-btn-primary:hover {
-  background: #6E9A80;
-  transform: translateY(-1px);
-  box-shadow: 0 8px 22px rgba(122, 166, 140, 0.36);
-}
-.qm-cl-app .qm-cl-btn-soft,
-.qm-cl-btn-soft {
-  background: var(--color-clinician-cream-card);
-  color: var(--color-clinician-ink);
-  border: 1px solid var(--color-clinician-line);
-  box-shadow: var(--shadow-button, 0 1px 2px rgba(43, 38, 32, 0.05));
-}
-.qm-cl-app .qm-cl-btn-soft:hover,
-.qm-cl-btn-soft:hover { background: var(--color-clinician-cream-2); }
-.qm-cl-app .qm-cl-btn-ghost,
-.qm-cl-btn-ghost {
-  background: transparent;
-  color: var(--color-clinician-ink-2);
-}
-.qm-cl-app .qm-cl-btn-ghost:hover,
-.qm-cl-btn-ghost:hover { background: var(--color-clinician-cream-2); color: var(--color-clinician-ink); }
-
-.qm-cl-app .qm-cl-btn-lg,
-.qm-cl-btn-lg {
-  font-size: 14.5px;
-  padding: 12px 22px;
-}
-
-/* ── Cards ── */
-.qm-cl-app .qm-cl-card,
-.qm-cl-card {
-  background: var(--color-clinician-cream-card);
-  border: 1px solid var(--color-clinician-line);
-  border-radius: 16px;
-  box-shadow: var(--shadow-card, 0 4px 14px rgba(43, 38, 32, 0.04));
-}
-
-.qm-cl-app .qm-cl-card-soft,
-.qm-cl-card-soft {
-  background: var(--color-clinician-cream-card);
-  border: 1px solid var(--color-clinician-line);
-  border-radius: 16px;
-  box-shadow: var(--shadow-card, 0 4px 14px rgba(43, 38, 32, 0.04));
-  transition: transform 360ms var(--ease-out-premium),
-              box-shadow 360ms var(--ease-out-premium);
-}
-.qm-cl-app .qm-cl-card-soft:hover,
-.qm-cl-card-soft:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-card-hover, 0 8px 24px rgba(43, 38, 32, 0.06));
-}
-
-/* ── Top-nav surface ── */
-.qm-cl-app .qm-cl-topbar,
-.qm-cl-topbar {
-  background: rgba(250, 247, 242, 0.85);
-  backdrop-filter: blur(18px) saturate(115%);
-  -webkit-backdrop-filter: blur(18px) saturate(115%);
-  border-bottom: 1px solid var(--color-clinician-line);
-}
-
-/* ── Inputs ── */
-.qm-cl-app .qm-cl-input,
-.qm-cl-input {
-  background: var(--color-clinician-cream-card);
-  border: 1px solid var(--color-clinician-line);
-  border-radius: 12px;
-  padding: 10px 14px;
-  font-family: var(--sans, "DM Sans");
-  font-size: 14px;
-  color: var(--color-clinician-ink);
-  transition: border-color 240ms var(--ease-out-premium),
-              box-shadow 240ms var(--ease-out-premium);
-  outline: 0;
-  width: 100%;
-}
-.qm-cl-app .qm-cl-input:focus,
-.qm-cl-input:focus {
-  border-color: var(--color-clinician-sage);
-  box-shadow: 0 0 0 3px rgba(122, 166, 140, 0.14);
-}
-.qm-cl-app .qm-cl-input::placeholder,
-.qm-cl-input::placeholder { color: var(--color-clinician-ink-4); }
-
-/* ── Section labels + eyebrow ── */
-.qm-cl-app .qm-cl-section-label,
-.qm-cl-section-label {
-  font-family: var(--sans, "DM Sans");
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
   font-size: 12px;
   font-weight: 500;
-  color: var(--color-clinician-ink-3);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.qm-cl-app .qm-cl-eyebrow,
-.qm-cl-eyebrow {
-  font-family: var(--sans, "DM Sans");
-  font-size: 12.5px;
-  font-weight: 500;
-  color: var(--color-clinician-sage-deep);
-  letter-spacing: 0.10em;
-  text-transform: uppercase;
-}
-
-/* ── Big serif number ── */
-.qm-cl-app .qm-cl-big-num,
-.qm-cl-big-num {
-  font-family: var(--serif, "Source Serif 4");
-  font-size: 38px;
-  font-weight: 500;
-  color: var(--color-clinician-ink);
-  letter-spacing: -0.01em;
-  line-height: 1;
-}
-
-/* ── Prose ── */
-.qm-cl-app .qm-cl-prose,
-.qm-cl-prose {
-  font-family: var(--serif, "Source Serif 4");
-  font-size: 16px;
-  line-height: 1.7;
-  color: var(--color-clinician-ink);
-  max-width: 720px;
-}
-.qm-cl-app .qm-cl-prose p,
-.qm-cl-prose p { margin: 0 0 14px 0; }
-.qm-cl-app .qm-cl-prose ul,
-.qm-cl-prose ul { margin: 8px 0 14px 0; padding-left: 1.4em; }
-.qm-cl-app .qm-cl-prose ul li,
-.qm-cl-prose ul li { padding-left: 4px; margin-bottom: 6px; }
-.qm-cl-app .qm-cl-prose strong,
-.qm-cl-prose strong { font-weight: 500; color: var(--color-clinician-ink); }
-.qm-cl-app .qm-cl-prose em,
-.qm-cl-prose em { color: var(--color-clinician-sage-deep); font-style: italic; }
-
-/* ── Tab pills ── */
-.qm-cl-app .qm-cl-tab-row,
-.qm-cl-tab-row {
-  display: inline-flex;
-  background: var(--color-clinician-cream-2);
-  border-radius: 999px;
-  padding: 4px;
-  gap: 2px;
-}
-.qm-cl-app .qm-cl-tab,
-.qm-cl-tab {
-  padding: 9px 18px;
-  border-radius: 999px;
-  font-family: var(--sans, "DM Sans");
-  font-size: 13.5px;
-  font-weight: 500;
-  color: var(--color-clinician-ink-2);
-  cursor: pointer;
-  border: 0;
+  font-family: var(--font-sans);
   background: transparent;
-  transition: all 240ms var(--ease-out-premium);
+  color: var(--color-linear-text-2);
+  border: 1px solid var(--color-linear-border);
+  cursor: pointer;
+  transition: border-color 120ms ease-out, color 120ms ease-out, background-color 120ms ease-out;
+  letter-spacing: -0.005em;
+  white-space: nowrap;
 }
-.qm-cl-app .qm-cl-tab.qm-cl-active,
-.qm-cl-tab.qm-cl-active {
-  background: var(--color-clinician-cream-card);
-  color: var(--color-clinician-sage-deep);
-  box-shadow: var(--shadow-button, 0 1px 2px rgba(43, 38, 32, 0.05));
+.qm-lin-btn:hover {
+  border-color: var(--color-linear-border-strong);
+  color: var(--color-linear-text);
 }
-.qm-cl-app .qm-cl-tab:hover:not(.qm-cl-active),
-.qm-cl-tab:hover:not(.qm-cl-active) { color: var(--color-clinician-ink); }
+.qm-lin-btn:active {
+  background: var(--color-linear-row-hover);
+}
+.qm-lin-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 
-/* ── Avatar ── */
-.qm-cl-app .qm-cl-avatar,
-.qm-cl-avatar {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
+.qm-lin-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  background: var(--color-linear-sage);
+  color: #0d1611;
+  border: none;
+  box-shadow: 0 0 0 1px rgba(122, 166, 140, 0.3);
+  cursor: pointer;
+  transition: background-color 100ms ease-out, transform 80ms ease-out;
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+}
+.qm-lin-btn-primary:hover {
+  background: var(--color-linear-sage-bright);
+}
+.qm-lin-btn-primary:active {
+  transform: translateY(0.5px);
+}
+.qm-lin-btn-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* --- Spotlight (Cmd-K) ------------------------------------------------------ */
+.qm-lin-spotlight {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  display: grid;
+  place-items: start center;
+  padding-top: 12vh;
+  z-index: 50;
+  animation: qm-lin-fade-in 120ms ease-out;
+}
+.qm-lin-spotlight-panel {
+  background: var(--color-linear-surface-1);
+  border: 1px solid var(--color-linear-border-strong);
+  border-radius: 10px;
+  width: min(640px, 90vw);
+  padding: 4px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(255, 255, 255, 0.03);
+  overflow: hidden;
+}
+
+/* --- Noise overlay --------------------------------------------------------- */
+.qm-lin-noise {
+  position: relative;
+}
+.qm-lin-noise::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.025;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='180' height='180' filter='url(%23n)'/></svg>");
+}
+
+/* --- Animations ------------------------------------------------------------ */
+.qm-lin-fade-in {
+  animation: qm-lin-fade-in 120ms ease-out both;
+}
+@keyframes qm-lin-fade-in {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: none; }
+}
+
+.qm-lin-blur-in {
+  animation: qm-lin-blur-in 200ms ease-out both;
+}
+@keyframes qm-lin-blur-in {
+  from { opacity: 0; filter: blur(4px); }
+  to { opacity: 1; filter: blur(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qm-lin-fade-in,
+  .qm-lin-blur-in,
+  .qm-lin-spotlight {
+    animation: none;
+  }
+  .qm-lin-pill--processing::before {
+    animation: none;
+  }
+}
+
+/* ============================================================================
+ * Rx warning card — class names byte-identical to the app's globals.css.
+ * Marketing rarely renders Rx warnings, but the four flat severity classes
+ * (.qm-warn-critical/-serious/-moderate/-info) are useful in pricing /
+ * comparison surfaces, and the full .qm-warn-* family is kept for parity
+ * with the app — any embedded preview of a clinical surface in the
+ * marketing site will render identically.
+ * ========================================================================== */
+
+.qm-warn {
+  --sev-hue-r: 212;
+  --sev-hue-g: 87;
+  --sev-hue-b: 74;
+  --sev-fg: rgb(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b));
+  --sev-fg-2: rgb(228, 134, 122);
+  --sev-bg: rgba(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b), 0.08);
+  --sev-border: rgba(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b), 0.28);
+  --sev-border-strong: rgba(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b), 0.55);
+
+  position: relative;
+  border-radius: 10px;
+  border: 1px solid var(--color-linear-border);
+  background: var(--color-linear-surface-1);
+  overflow: hidden;
+  color: var(--color-linear-text-2);
+  font-family: var(--font-sans);
+}
+
+.qm-warn-sev-warning {
+  --sev-hue-r: 212;
+  --sev-hue-g: 164;
+  --sev-hue-b: 55;
+  --sev-fg-2: rgb(228, 185, 132);
+}
+.qm-warn-sev-info {
+  --sev-hue-r: 91;
+  --sev-hue-g: 141;
+  --sev-hue-b: 184;
+  --sev-fg-2: rgb(155, 196, 217);
+}
+
+.qm-warn::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--sev-fg);
+}
+
+.qm-warn-head {
+  display: grid;
+  grid-template-columns: 36px auto auto 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 16px 20px 8px 20px;
+}
+.qm-warn-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid var(--sev-border);
+  background: rgba(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b), 0.10);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: var(--serif, "Source Serif 4");
+  color: var(--sev-fg);
+}
+.qm-warn-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px 0 7px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-linear-bg);
+  background: var(--sev-fg);
+  border: 1px solid var(--sev-border-strong);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+.qm-warn-field {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-linear-text-3);
+}
+.qm-warn-headline {
+  grid-column: 1 / -2;
+  margin: 2px 0 0 0;
+  padding-top: 6px;
+  font-family: var(--font-sans);
+  font-size: 17px;
   font-weight: 500;
-  font-size: 16px;
+  letter-spacing: -0.012em;
+  color: var(--color-linear-text);
+  line-height: 1.3;
 }
-.qm-cl-app .qm-cl-avatar-sage,  .qm-cl-avatar-sage  { background: rgba(122, 166, 140, 0.22); color: #2F5040; }
-.qm-cl-app .qm-cl-avatar-teal,  .qm-cl-avatar-teal  { background: rgba(91, 163, 180, 0.14);  color: #2C5A66; }
-.qm-cl-app .qm-cl-avatar-amber, .qm-cl-avatar-amber { background: rgba(212, 165, 116, 0.18); color: #7A4F1F; }
-.qm-cl-app .qm-cl-avatar-coral, .qm-cl-avatar-coral { background: rgba(201, 123, 110, 0.16); color: #7A3329; }
-.qm-cl-app .qm-cl-avatar-sky,   .qm-cl-avatar-sky   { background: rgba(123, 168, 196, 0.16); color: #2C4F66; }
-
-/* ── Gentle dividers ── */
-.qm-cl-app .qm-cl-gentle-rule,
-.qm-cl-gentle-rule {
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--color-clinician-line-strong), transparent);
-  border: 0;
+.qm-warn-dismiss {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--color-linear-text-3);
+  padding: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 120ms ease, border-color 120ms ease, background-color 120ms ease;
 }
-.qm-cl-app .qm-cl-sage-divider,
-.qm-cl-sage-divider {
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(122, 166, 140, 0.22), transparent);
-  border: 0;
-}
-
-/* ── Misc helpers ── */
-.qm-cl-app .qm-cl-meta-dot,
-.qm-cl-meta-dot { color: var(--color-clinician-ink-4); }
-.qm-cl-app .qm-cl-lift,
-.qm-cl-lift {
-  transition: transform 360ms var(--ease-out-premium),
-              box-shadow 360ms var(--ease-out-premium);
-}
-.qm-cl-app .qm-cl-lift:hover,
-.qm-cl-lift:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-card-hover, 0 8px 24px rgba(43, 38, 32, 0.06));
+.qm-warn-dismiss:hover {
+  background: var(--color-linear-row-hover);
+  border-color: var(--color-linear-border);
+  color: var(--color-linear-text);
 }
 
-.qm-cl-app .qm-cl-illus-stroke,
-.qm-cl-illus-stroke {
-  stroke: var(--color-clinician-sage);
-  stroke-width: 1.4;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  fill: none;
+.qm-warn-body {
+  padding: 0 20px 14px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
-.qm-cl-illus-stroke-warm { stroke: var(--color-clinician-ink-2); stroke-width: 1.2; fill: none; }
-.qm-cl-illus-fill-sage   { fill: rgba(122, 166, 140, 0.22); }
-.qm-cl-illus-fill-cream  { fill: var(--color-clinician-cream-2); }
-.qm-cl-illus-fill-amber  { fill: rgba(212, 165, 116, 0.18); }
-
-/* ── Scoped scrollbar + selection inside .qm-cl-app ── */
-.qm-cl-app ::-webkit-scrollbar { width: 10px; height: 10px; }
-.qm-cl-app ::-webkit-scrollbar-track { background: transparent; }
-.qm-cl-app ::-webkit-scrollbar-thumb { background: var(--color-clinician-cream-3); border-radius: 999px; }
-.qm-cl-app ::-webkit-scrollbar-thumb:hover { background: var(--color-clinician-ink-4); }
-.qm-cl-app ::selection { background: rgba(122, 166, 140, 0.22); color: var(--color-clinician-ink); }
-
-/* ── Recording-state animations (pre-positioned for landing visual; safe to
-       leave defined even if unused). ── */
-@keyframes qm-cl-halo-pulse {
-  0%, 100% { transform: scale(0.92); opacity: 0.55; }
-  50%      { transform: scale(1.18); opacity: 0.18; }
+.qm-warn-action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: rgba(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b), 0.10);
+  border: 1px solid var(--sev-border);
+  color: var(--sev-fg-2);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
 }
-@keyframes qm-cl-mic-breath {
-  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(122, 166, 140, 0.4); }
-  50%      { transform: scale(1.04); box-shadow: 0 0 0 14px rgba(122, 166, 140, 0); }
+.qm-warn-sev-info .qm-warn-action {
+  padding: 8px 14px;
+  font-weight: 500;
 }
-@keyframes qm-cl-slide-fade {
-  from { opacity: 0; transform: translateY(10px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-@keyframes qm-cl-ai-crossfade {
-  0%, 22%   { opacity: 1; }
-  33%, 100% { opacity: 0; }
-}
-@keyframes qm-cl-float-soft {
-  0%, 100% { transform: translateY(0); }
-  50%      { transform: translateY(-4px); }
+.qm-warn-action-icon {
+  flex: 0 0 18px;
+  color: var(--sev-fg);
 }
 
-.qm-cl-halo {
-  position: absolute;
-  inset: 0;
-  border-radius: 999px;
-  background: radial-gradient(circle, rgba(122, 166, 140, 0.22) 0%, transparent 70%);
-  animation: qm-cl-halo-pulse 3.4s ease-in-out infinite;
-  will-change: transform, opacity;
+.qm-warn-transcribed {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 14px;
+  align-items: center;
 }
-.qm-cl-halo-delayed { animation-delay: 1.7s; }
-.qm-cl-mic-dot {
-  animation: qm-cl-mic-breath 2.8s var(--ease-out-premium) infinite;
-  will-change: transform, box-shadow;
+.qm-warn-field-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
-.qm-cl-float-soft {
-  animation: qm-cl-float-soft 6s ease-in-out infinite;
+.qm-warn-field-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-linear-text-3);
 }
-.qm-cl-transcript-line {
-  animation: qm-cl-slide-fade 600ms var(--ease-out-premium) forwards;
-  opacity: 0;
+.qm-warn-field-value {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-linear-text);
 }
-.qm-cl-transcript-line.qm-cl-l1 { animation-delay: 200ms; }
-.qm-cl-transcript-line.qm-cl-l2 { animation-delay: 1500ms; }
-.qm-cl-transcript-line.qm-cl-l3 { animation-delay: 2900ms; }
-.qm-cl-transcript-line.qm-cl-l4 { animation-delay: 4400ms; }
+.qm-warn-transcribed-arrow {
+  color: var(--color-linear-text-3);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding-top: 14px;
+}
+.qm-warn-confidence {
+  margin-left: 8px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--color-linear-warning);
+  border: 1px solid rgba(212, 164, 55, 0.3);
+  background: rgba(212, 164, 55, 0.08);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
 
-@media (prefers-reduced-motion: reduce) {
-  .qm-cl-halo,
-  .qm-cl-mic-dot,
-  .qm-cl-float-soft,
-  .qm-cl-transcript-line {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-  }
+.qm-warn-risks {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.qm-warn-mini-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-linear-text-3);
+}
+.qm-warn-risk {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 10px;
+  align-items: start;
+}
+.qm-warn-risk-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--sev-fg);
+  margin: 7px 0 0 6px;
+  box-shadow: 0 0 0 3px rgba(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b), 0.12);
+}
+.qm-warn-risk-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.qm-warn-risk-primary {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  letter-spacing: -0.005em;
+  color: var(--color-linear-text);
+}
+.qm-warn-risk-primary .qm-warn-pill {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sev-fg-2);
+  background: rgba(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b), 0.10);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.qm-warn-risk-outcome {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--color-linear-text-2);
+}
+.qm-warn-risk-outcome .qm-warn-outcome-bold {
+  color: var(--sev-fg-2);
+  font-weight: 500;
+}
+
+.qm-warn-next {
+  display: grid;
+  grid-template-columns: 18px auto 1fr;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px dashed var(--color-linear-border-strong);
+  background: var(--color-linear-row-hover);
+  color: var(--color-linear-text-2);
+  font-family: var(--font-sans);
+  font-size: 13px;
+}
+.qm-warn-next-icon {
+  color: var(--color-linear-text-3);
+}
+.qm-warn-next-label {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-linear-text-3);
+}
+
+.qm-warn-details-toggle {
+  all: unset;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  width: 100%;
+  box-sizing: border-box;
+  border-top: 1px solid var(--color-linear-hairline);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--color-linear-text-3);
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.qm-warn-details-toggle:hover {
+  color: var(--color-linear-text-2);
+  background: var(--color-linear-row-hover);
+}
+.qm-warn-details-chev {
+  display: inline-block;
+  transition: transform 200ms ease;
+  color: var(--color-linear-text-3);
+}
+.qm-warn-details-toggle[aria-expanded='true'] .qm-warn-details-chev {
+  transform: rotate(90deg);
+}
+.qm-warn-details-source {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--color-linear-text-3);
+}
+.qm-warn-details-body {
+  padding: 10px 20px 14px 20px;
+  border-top: 1px dashed var(--color-linear-hairline);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--color-linear-text-2);
+  letter-spacing: -0.005em;
+}
+.qm-warn-details-body p {
+  margin: 0 0 10px 0;
+}
+.qm-warn-details-body p:last-child {
+  margin-bottom: 0;
+}
+.qm-warn-details-cite {
+  margin-top: 8px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--color-linear-text-3);
+}
+
+.qm-warn-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--color-linear-hairline);
+}
+.qm-warn-actions-spacer {
+  flex: 1;
+}
+.qm-warn-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--color-linear-border);
+  background: transparent;
+  color: var(--color-linear-text-2);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+.qm-warn-btn:hover {
+  background: var(--color-linear-row-hover);
+  border-color: var(--color-linear-border-strong);
+  color: var(--color-linear-text);
+}
+.qm-warn-btn-primary {
+  background: var(--sev-bg);
+  border-color: var(--sev-border-strong);
+  color: var(--sev-fg-2);
+}
+.qm-warn-btn-primary:hover {
+  background: rgba(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b), 0.18);
+  color: var(--color-linear-text);
+}
+.qm-warn-kbd {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--color-linear-hairline-strong);
+  color: var(--color-linear-text-3);
+  line-height: 1;
+}
+
+/* Flat severity classes — additional API surface. */
+.qm-warn-critical {
+  background: rgba(212, 87, 74, 0.08);
+  border-left: 3px solid var(--color-linear-danger);
+  color: var(--color-linear-text);
+  padding: 10px 14px;
+  border-radius: 4px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.qm-warn-critical .qm-warn-icon {
+  color: var(--color-linear-danger);
+}
+.qm-warn-serious {
+  background: rgba(212, 87, 74, 0.05);
+  border-left: 3px solid var(--color-linear-coral);
+  color: var(--color-linear-text);
+  padding: 10px 14px;
+  border-radius: 4px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.qm-warn-serious .qm-warn-icon {
+  color: var(--color-linear-coral);
+}
+.qm-warn-moderate {
+  background: rgba(212, 164, 55, 0.06);
+  border-left: 3px solid var(--color-linear-warning);
+  color: var(--color-linear-text);
+  padding: 10px 14px;
+  border-radius: 4px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.qm-warn-moderate .qm-warn-icon {
+  color: var(--color-linear-warning);
+}
+.qm-warn-info {
+  background: rgba(91, 141, 184, 0.06);
+  border-left: 3px solid var(--color-linear-info);
+  color: var(--color-linear-text);
+  padding: 10px 14px;
+  border-radius: 4px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.qm-warn-info .qm-warn-icon {
+  color: var(--color-linear-info);
 }
