@@ -142,3 +142,33 @@ Full visual replacement of Phases 2/3/4 with Linear V1 Faithful aesthetic. PR #9
 - **Pre-flight image-prune saved deploy time** (53 MB freed before build).
 - **Worktree symlink quirk:** Turbopack rejects `node_modules` symlinks that cross filesystem boundaries (e.g. `/tmp/wt-…` → `/opt/meddoc-pro/node_modules`). Subagents must use `--webpack` flag in worktree builds, OR keep the worktree path inside the same filesystem as the project (e.g. `/opt/meddoc-pro/wt-…`). Production CI on `main` is unaffected (no symlinks).
 - **Backward-compatible deprecated props pattern:** When migrating shared components (AppFrame, TopNav, etc.), keep the old `theme` prop in the type signature as a no-op while collapsing the rendered branches to one. Lets parallel surface subagents proceed without TS errors at every call site; deprecated props can be removed in a follow-up sweep without coordinating across branches.
+
+---
+
+## 9. ✅ Phase 5.1 — visit-detail tab interiors — completed 2026-05-01
+
+Five tab content bodies re-implemented per v9 design exploration picks: SOAP V3 split-pane, Transcript V3 split-pane, Codes V2 power-table, Rx V3 split-pane, Extras V4 card-stream. PR #92, 15 commits, $0 cost (pure CSS, no AI image gen).
+
+### What landed
+- **SOAP NOTE** — V3 split-pane: 4 sections left (S/O/A/P with status pills + sage section letter chips + mono uppercase eyebrows), Sources rail right (transcript turn citations)
+- **TRANSCRIPT** — V3 split-pane: diarised turns left (speaker chip + mono timestamp + body, low-confidence dotted-underline), audio waveform + speed picker + visit metadata rail right
+- **CODES** — V2 power-table: ICD-10 + CPT sortable tables, 4 px sage confidence bars, evidence-quote popover, AI-suggestion accept/reject (rail), "(coming in T-M21)" tooltips on Add/Edit/Remove until mutations land
+- **RX** — V3 split-pane: Rx list left with 4-col dose grid, severity-grouped warnings rail right (CRITICAL → SERIOUS → MODERATE → INFO with pulsing critical dot). `.qm-warn-critical/-serious/-moderate/-info` class names byte-identical (Subagent B grep-confirmed); worker emits 3-band severity (`critical|major|minor`), mapped at component boundary to 4-band rail (`major→serious`, `minor→info`)
+- **EXTRAS** — V4 card-stream: 7 stacked cards with hairline borders, em-dash placeholders for the 6 unwired categories, AI extras (the existing `referrals + patientSummary`) wired today
+
+### Live verification (post-deploy, 2026-05-01T18:01:33Z)
+- 16 Phase 5.1 `qm-lin-*` utilities served across both prod CSS chunks (split, soap-section, source-card, tx-stream, tx-turn, codes-frame, codes-row, rx-split, rx-rail, card-stream, extras-card, extras-head, extras-vitals-tiles, etc.)
+- Phase 5 baseline intact (`#08090a`, `--color-linear-sage`, `.qm-lin-app`, `.qm-lin-cmdk` all served)
+- Avatar bug class regression: 0 renewed `4024354389` errors in last 2 min
+- External smoke: `/login` 200, `/dashboard` 307 (auth), `/patients` 307 (auth)
+- Deploy outage: 9 seconds (UP-START 18:01:24Z → HEALTHY 18:01:33Z)
+
+### Follow-up PRs needed (UI in place, data plumbing pending)
+- **T-M21:** SOAP citations field on Server Action (powers the Sources rail filter — currently shows all turns until per-section citation IDs are emitted by the SOAP draft worker)
+- **T-M22:** `/api/visits/[id]/audio` streaming endpoint (powers the Transcript V3 audio scrubber — currently decorative; only the dictation-flow audio endpoint exists)
+- **T-M23:** Extras data plumbing (vitals, allergies, current meds, problem list, demographics, audit log fetches threaded through `extras-tab` props — cards already render, just need wire data)
+- **T-M24:** Code/Rx mutation Server Actions (Add / Edit / Remove buttons currently stubbed `disabled` with "(coming in T-M21)" tooltip — sort / expand / copy work today)
+
+### Lessons added
+- **Naive conflict-strip on additive globals.css broke a CSS rule mid-block.** When 3 parallel subagents all append utility classes to globals.css, git's 3-way merge conflicts span both branches' tail-additions. Stripping `<<<<<<<`/`=======`/`>>>>>>>` markers naively can leave a `.foo { ... }` opener separated from its closer by the conflict boundary. Fix used: `git show <branch>:globals.css` for each branch's clean version, then surgical concatenation of base + each branch's tail-additions. Brace balance check (`{ count == } count`) caught the issue. Future large additive merges should use this surgical pattern from the start, not after the conflict-strip fails.
+- **Worktree path inside project dir works with Turbopack.** Phase 5 hit a cross-fs Turbopack quirk when worktrees lived at `/tmp/wt-*` symlinking back to `/opt/meddoc-pro/node_modules`. Phase 5.1 kept worktrees at `/opt/meddoc-pro/wt-p51-*` (same filesystem) and Turbopack worked unchanged. Faster build path. Worktree-symlinked node_modules across mountpoints still need `--webpack`.
