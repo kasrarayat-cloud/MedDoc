@@ -129,7 +129,12 @@ export default async function VisitPage({
       name: string;
       dateOfBirth: Date | null;
       externalId: string | null;
+      // Phase 5.1.1 — V4 Extras card-stream
+      mrn: string | null;
+      insurance: string | null;
+      problemList: unknown;
     } | null;
+    createdAt: Date;
     audioKey: string | null;
     audioDurationSec: number | null;
     dictationAudioKey: string | null;
@@ -181,8 +186,13 @@ export default async function VisitPage({
             name: true,
             dateOfBirth: true,
             externalId: true,
+            // Phase 5.1.1 — V4 Extras card-stream wiring
+            mrn: true,
+            insurance: true,
+            problemList: true,
           },
         },
+        createdAt: true,
         audioKey: true,
         audioDurationSec: true,
         dictationAudioKey: true,
@@ -410,6 +420,10 @@ export default async function VisitPage({
           referrals={visit.referrals}
           patientSummary={visit.patientSummary}
           confidenceScores={visit.confidenceScores}
+          // Phase 5.1.1 — V4 Extras card-stream wiring
+          patientName={visit.patientName}
+          patient={visit.patient}
+          createdAt={visit.createdAt}
         />
       </div>
     </AppFrame>
@@ -456,6 +470,19 @@ interface VisitBodyProps {
   referrals: unknown;
   patientSummary: string | null;
   confidenceScores: unknown;
+
+  // Phase 5.1.1 — V4 Extras card-stream wiring.
+  patientName: string | null;
+  patient: {
+    id: string;
+    name: string;
+    dateOfBirth: Date | null;
+    externalId: string | null;
+    mrn: string | null;
+    insurance: string | null;
+    problemList: unknown;
+  } | null;
+  createdAt: Date;
 }
 
 function VisitBody(props: VisitBodyProps) {
@@ -573,6 +600,20 @@ function VisitBody(props: VisitBodyProps) {
       signedByName={props.doctorName}
       specialtyLabel={props.specialty}
       recordedByName={props.doctorName}
+      // Phase 5.1.1 — V4 Extras card-stream wiring
+      patientName={props.patient?.name ?? props.patientName}
+      patientDob={
+        props.patient?.dateOfBirth
+          ? props.patient.dateOfBirth.toISOString().slice(0, 10)
+          : null
+      }
+      patientMrn={props.patient?.mrn ?? null}
+      patientInsurance={props.patient?.insurance ?? null}
+      patientExternalId={props.patient?.externalId ?? null}
+      patientProblemList={props.patient?.problemList ?? null}
+      visitCreatedAt={
+        props.createdAt ? props.createdAt.toISOString() : null
+      }
     />
   );
 }
