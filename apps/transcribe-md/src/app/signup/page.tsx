@@ -15,20 +15,13 @@ export default async function SignupPage() {
 
   return (
     <AuthShell
-      theme="clinician"
       eyebrow="New to QuillMD"
       title={
         <>
-          Create your <em style={{ color: 'var(--sage-deep)', fontStyle: 'italic' }}>account</em>
+          Create your <em>account</em>
         </>
       }
       subtitle="Free for 14 days. No credit card."
-      cinematic={{
-        eyebrow: 'New to QuillMD',
-        headlinePre: 'Get ',
-        headlineEm: 'started',
-        headlinePost: '.',
-      }}
     >
       <SignupForm />
     </AuthShell>

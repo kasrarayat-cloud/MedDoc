@@ -11,29 +11,56 @@ export const metadata: Metadata = {
 
 const LAST_UPDATED = '2026-04-20';
 
+const SECTION_TITLE: React.CSSProperties = {
+  color: 'var(--color-linear-text)',
+};
+const SECTION_BODY: React.CSSProperties = {
+  marginTop: 16,
+  fontSize: 15,
+  lineHeight: 1.7,
+  color: 'var(--color-linear-text-2)',
+};
+const CODE: React.CSSProperties = {
+  fontFamily: 'var(--font-mono)',
+  fontSize: 13,
+  color: 'var(--color-linear-sage-bright)',
+};
+const LINK: React.CSSProperties = {
+  color: 'var(--color-linear-sage-bright)',
+  textDecoration: 'underline',
+  textDecorationColor: 'rgba(122,166,140,0.4)',
+};
+
 export default function SecurityPage() {
   return (
     <>
       <NavBar />
       <main>
-        <section className="relative overflow-hidden pt-32 pb-16">
-          <div className="relative mx-auto max-w-3xl px-6 lg:px-8">
+        <section
+          className="relative overflow-hidden"
+          style={{ paddingTop: 96, paddingBottom: 48 }}
+        >
+          <div className="container" style={{ maxWidth: 760, position: 'relative' }}>
             <Badge dot="violet">Security</Badge>
-            <h1 className="mt-6 type-h1 text-text-primary">
+            <h1 className="hero-title" style={{ marginTop: 20, textAlign: 'left' }}>
               Security practices
             </h1>
-            <p className="mt-6 text-[14px] text-text-muted">
+            <p
+              style={{
+                marginTop: 16,
+                fontSize: 13,
+                color: 'var(--color-linear-text-3)',
+                fontFamily: 'var(--font-mono)',
+                letterSpacing: '0.04em',
+              }}
+            >
               Last updated: {LAST_UPDATED}
             </p>
-
-            <div
-              className="mt-8 rounded-xl border border-[rgba(212,165,116,0.35)] bg-[rgba(212,165,116,0.10)] p-4 text-[13.5px] leading-relaxed text-[#7A4F1F]"
-              style={{ fontFamily: 'var(--font-serif), Georgia, serif' }}
-            >
-              <strong className="font-medium">
+            <div className="qm-warn-moderate" style={{ marginTop: 24 }}>
+              <strong style={{ fontWeight: 600, color: 'var(--color-linear-text)' }}>
                 [DRAFT — PENDING LEGAL REVIEW]
               </strong>
-              <p className="mt-1.5">
+              <p style={{ marginTop: 6 }}>
                 This page summarizes how QuillMD is built and operated.
                 It&apos;s a transparent operational statement, not a marketing
                 claim. If you need a signed SOC 2, ISO 27001, or HITRUST
@@ -43,11 +70,28 @@ export default function SecurityPage() {
           </div>
         </section>
 
-        <section className="relative border-t border-border-subtle py-12">
-          <div className="mx-auto max-w-3xl px-6 lg:px-8 space-y-10 text-[15px] leading-relaxed text-text-secondary">
+        <section
+          style={{
+            position: 'relative',
+            borderTop: '1px solid var(--color-linear-hairline)',
+            paddingTop: 48,
+            paddingBottom: 96,
+          }}
+        >
+          <div
+            className="container"
+            style={{
+              maxWidth: 760,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 40,
+            }}
+          >
             <div>
-              <h2 className="type-h2 text-text-primary">Application</h2>
-              <ul className="mt-4 list-disc space-y-2 pl-5">
+              <h2 className="section-title" style={SECTION_TITLE}>
+                Application
+              </h2>
+              <ul style={{ ...SECTION_BODY, paddingLeft: 20, listStyle: 'disc' }}>
                 <li>
                   Auth via NextAuth (Auth.js v5) with JWT sessions, bcrypt-12
                   password hashing, 5-attempt lockout with 15-minute cooldown.
@@ -74,8 +118,10 @@ export default function SecurityPage() {
             </div>
 
             <div>
-              <h2 className="type-h2 text-text-primary">Infrastructure</h2>
-              <ul className="mt-4 list-disc space-y-2 pl-5">
+              <h2 className="section-title" style={SECTION_TITLE}>
+                Infrastructure
+              </h2>
+              <ul style={{ ...SECTION_BODY, paddingLeft: 20, listStyle: 'disc' }}>
                 <li>
                   All services run in Docker containers on a dedicated VPS.
                   No shared-tenant compute.
@@ -91,29 +137,30 @@ export default function SecurityPage() {
                   Encrypt with auto-renewal once a domain is configured.
                 </li>
                 <li>
-                  Secrets live in a root-owned <code>.env</code> file on the
-                  VPS only; <code>.env*</code> is gitignored.
+                  Secrets live in a root-owned <code style={CODE}>.env</code> file on
+                  the VPS only; <code style={CODE}>.env*</code> is gitignored.
                 </li>
               </ul>
             </div>
 
             <div>
-              <h2 className="type-h2 text-text-primary">
+              <h2 className="section-title" style={SECTION_TITLE}>
                 Data handling
               </h2>
-              <ul className="mt-4 list-disc space-y-2 pl-5">
+              <ul style={{ ...SECTION_BODY, paddingLeft: 20, listStyle: 'disc' }}>
                 <li>
                   TLS 1.2+ for every outbound call to AI providers, email, and
                   the browser.
                 </li>
                 <li>
-                  At-rest encryption inherits from the VPS provider&apos;s
-                  disk encryption.
+                  At-rest encryption inherits from the VPS provider&apos;s disk
+                  encryption.
                 </li>
                 <li>
-                  A PHI scrubber (<code>redactPhi</code>) masks emails, phone
-                  numbers, and SSNs in error logs and Sentry events. Free-text
-                  fields above a length threshold collapse to length markers.
+                  A PHI scrubber (<code style={CODE}>redactPhi</code>) masks emails,
+                  phone numbers, and SSNs in error logs and Sentry events.
+                  Free-text fields above a length threshold collapse to
+                  length markers.
                 </li>
                 <li>
                   Audio retention defaults to 90 days; transcripts retain for
@@ -123,10 +170,10 @@ export default function SecurityPage() {
             </div>
 
             <div>
-              <h2 className="type-h2 text-text-primary">
+              <h2 className="section-title" style={SECTION_TITLE}>
                 Operations
               </h2>
-              <ul className="mt-4 list-disc space-y-2 pl-5">
+              <ul style={{ ...SECTION_BODY, paddingLeft: 20, listStyle: 'disc' }}>
                 <li>
                   Secrets rotated quarterly (JWT, AI provider keys) per our
                   internal rotation runbook.
@@ -142,7 +189,7 @@ export default function SecurityPage() {
                 </li>
                 <li>
                   Vulnerability disclosure: email{' '}
-                  <code>security@ashtechgroup.com</code>. We aim to
+                  <code style={CODE}>security@ashtechgroup.com</code>. We aim to
                   acknowledge within 48 hours. Please do not open GitHub
                   issues for security reports.
                 </li>
@@ -150,18 +197,15 @@ export default function SecurityPage() {
             </div>
 
             <div>
-              <h2 className="type-h2 text-text-primary">
+              <h2 className="section-title" style={SECTION_TITLE}>
                 Certifications
               </h2>
-              <p className="mt-4">
-                QuillMD does not currently hold a SOC 2, ISO 27001, or
-                HITRUST certification. Our launch target is SOC 2 Type 2
-                readiness within 12 months of general availability. Our
-                HIPAA posture is covered by{' '}
-                <a
-                  href="/hipaa"
-                  className="text-[#2F5040] underline decoration-[rgba(122,166,140,0.35)] hover:text-[#7AA68C]"
-                >
+              <p style={SECTION_BODY}>
+                QuillMD does not currently hold a SOC 2, ISO 27001, or HITRUST
+                certification. Our launch target is SOC 2 Type 2 readiness
+                within 12 months of general availability. Our HIPAA posture
+                is covered by{' '}
+                <a href="/hipaa" style={LINK}>
                   BAAs and operational controls
                 </a>{' '}
                 rather than third-party audit today.
@@ -169,21 +213,23 @@ export default function SecurityPage() {
             </div>
 
             <div>
-              <h2 className="type-h2 text-text-primary">
+              <h2 className="section-title" style={SECTION_TITLE}>
                 Known gaps (transparent)
               </h2>
-              <p className="mt-4">
+              <p style={SECTION_BODY}>
                 We publish pre-launch audit findings. See our internal{' '}
-                <code>docs/T-M15-AUDIT-REPORT.md</code> (available on request
-                for prospects under NDA) for the current queue of
+                <code style={CODE}>docs/T-M15-AUDIT-REPORT.md</code> (available on
+                request for prospects under NDA) for the current queue of
                 hardening work.
               </p>
             </div>
 
             <div>
-              <h2 className="type-h2 text-text-primary">Contact</h2>
-              <p className="mt-4">
-                Security: <code>security@ashtechgroup.com</code>.
+              <h2 className="section-title" style={SECTION_TITLE}>
+                Contact
+              </h2>
+              <p style={SECTION_BODY}>
+                Security: <code style={CODE}>security@ashtechgroup.com</code>.
               </p>
             </div>
           </div>

@@ -1,0 +1,1069 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QuillMD · Dashboard · v8 Linear Faithful</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#08090a;
+  --panel:#0d0e10;
+  --panel-2:#101113;
+  --hairline:rgba(255,255,255,.05);
+  --hairline-strong:rgba(255,255,255,.08);
+  --row-hover:rgba(255,255,255,.03);
+  --row-active:rgba(255,255,255,.05);
+  --t1:#f7f8f8;
+  --t2:#b4bcc8;
+  --t3:#6c737f;
+  --t4:#4b5159;
+  --sage:#7AA68C;
+  --sage-bright:#9BC4A8;
+  --sage-deep:#2F5040;
+  --sage-tint:rgba(122,166,140,.13);
+  --amber:#D4A574;
+  --coral:#C97B6E;
+  --sky:#74A8C9;
+  --teal:#5BA3B4;
+  --violet:#8a85d6;
+  --mono:'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sans:'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--t1)}
+body{
+  font-family:var(--sans);
+  font-feature-settings:'cv11','ss01','ss03';
+  font-size:13px;
+  line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  letter-spacing:-0.005em;
+}
+::selection{background:rgba(122,166,140,.25);color:var(--t1)}
+
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+a{color:inherit;text-decoration:none}
+
+/* ─────────────── Top bar ─────────────── */
+.topbar{
+  position:sticky;top:0;z-index:30;
+  height:46px;
+  display:flex;align-items:center;gap:12px;
+  padding:0 16px;
+  background:rgba(8,9,10,.85);
+  backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--hairline);
+}
+.brand{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;color:var(--t1);letter-spacing:-0.01em}
+.brand-mark{
+  width:18px;height:18px;border-radius:5px;
+  background:linear-gradient(135deg,var(--sage) 0%,var(--sage-deep) 100%);
+  display:grid;place-items:center;color:#0c1410;font-size:10px;font-weight:700;
+  box-shadow:0 0 0 1px rgba(255,255,255,.06) inset;
+}
+.brand-mark::before{content:'Q'}
+.crumb-sep{color:var(--t4);font-size:12px}
+.crumb{color:var(--t2);font-size:13px}
+.crumb-active{color:var(--t1)}
+.spacer{flex:1}
+
+.kbd-chip{
+  display:inline-flex;align-items:center;gap:6px;
+  height:26px;padding:0 9px;
+  border:1px solid var(--hairline-strong);
+  border-radius:6px;
+  background:rgba(255,255,255,.02);
+  color:var(--t2);
+  font-family:var(--mono);font-size:11px;
+  transition:background 100ms ease, border-color 100ms ease, color 100ms ease;
+}
+.kbd-chip:hover{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.12);color:var(--t1)}
+.kbd-chip kbd{font-family:var(--mono);font-size:10.5px;color:var(--t2)}
+.kbd-chip .label{color:var(--t3)}
+
+.btn-primary{
+  display:inline-flex;align-items:center;gap:6px;
+  height:28px;padding:0 11px;
+  background:var(--sage);color:#0d1611;
+  border-radius:6px;font-weight:500;font-size:12.5px;
+  letter-spacing:-0.005em;
+  transition:background 100ms ease, transform 80ms ease;
+}
+.btn-primary:hover{background:#88b599}
+.btn-primary:active{transform:translateY(.5px)}
+.btn-primary .plus{font-weight:500;font-size:14px;line-height:1}
+
+.avatar-chip{
+  width:24px;height:24px;border-radius:6px;
+  background:linear-gradient(135deg,#3a4a52 0%,#2a3036 100%);
+  color:#dde6ec;font-size:10.5px;font-weight:600;
+  display:grid;place-items:center;letter-spacing:0.02em;
+  border:1px solid var(--hairline-strong);
+}
+
+/* ─────────────── Layout ─────────────── */
+.shell{
+  display:grid;
+  grid-template-columns:212px 1fr 252px;
+  min-height:calc(100vh - 46px);
+}
+@media (max-width:1240px){
+  .shell{grid-template-columns:200px 1fr}
+  .right-pane{display:none}
+}
+@media (max-width:980px){
+  .shell{grid-template-columns:1fr}
+  .sidebar{display:none}
+  .mobile-nav{display:block}
+}
+
+/* ─────────────── Sidebar ─────────────── */
+.sidebar{
+  background:var(--panel);
+  border-right:1px solid var(--hairline);
+  padding:10px 8px 16px;
+  overflow:auto;
+  position:sticky;top:46px;height:calc(100vh - 46px);
+}
+.side-section{margin-bottom:14px}
+.side-label{
+  font-size:10.5px;color:var(--t4);font-weight:500;
+  letter-spacing:0.06em;text-transform:uppercase;
+  padding:6px 8px 4px;
+}
+.side-row{
+  display:flex;align-items:center;gap:8px;
+  height:28px;padding:0 8px;
+  border-radius:5px;
+  font-size:13px;color:var(--t2);
+  position:relative;
+  transition:background 80ms ease, color 80ms ease;
+  cursor:pointer;
+  user-select:none;
+}
+.side-row:hover{background:rgba(255,255,255,.025);color:var(--t1)}
+.side-row.active{
+  background:rgba(122,166,140,.07);
+  color:var(--t1);
+}
+.side-row.active::before{
+  content:'';position:absolute;left:-8px;top:6px;bottom:6px;width:3px;
+  background:var(--sage);border-radius:0 2px 2px 0;
+}
+.side-row .ico{
+  width:14px;height:14px;flex:0 0 14px;color:var(--t3);
+  display:grid;place-items:center;
+}
+.side-row.active .ico{color:var(--sage-bright)}
+.side-row.active .label{color:var(--t1)}
+.side-row .label{flex:1;letter-spacing:-0.005em}
+.side-row .badge{
+  font-family:var(--mono);font-size:11px;color:var(--t3);
+  font-variant-numeric:tabular-nums;
+}
+.side-row.active .badge{color:var(--sage-bright)}
+.side-row.has-children .chev{
+  width:10px;height:10px;color:var(--t4);
+  transition:transform 100ms ease;
+}
+.side-row.expanded .chev{transform:rotate(90deg)}
+
+.subrows{padding:2px 0 4px 14px}
+.sub-row{
+  display:flex;align-items:center;gap:8px;
+  height:26px;padding:0 8px;
+  border-radius:5px;
+  font-size:12.5px;color:var(--t3);
+  cursor:pointer;
+  transition:background 80ms ease, color 80ms ease;
+}
+.sub-row:hover{background:rgba(255,255,255,.02);color:var(--t2)}
+.sub-row.active{color:var(--t1);background:rgba(255,255,255,.025)}
+.sub-row .dot{width:5px;height:5px;border-radius:1px;background:var(--t4)}
+.sub-row.active .dot{background:var(--sage)}
+.sub-row .badge{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--t4)}
+
+.side-footer{
+  margin-top:auto;padding-top:10px;
+  border-top:1px solid var(--hairline);
+  display:flex;align-items:center;gap:8px;
+  padding:10px 8px 0;
+  font-size:11.5px;color:var(--t4);
+  font-family:var(--mono);
+}
+.status-dot{width:6px;height:6px;border-radius:50%;background:var(--sage);box-shadow:0 0 4px rgba(122,166,140,.5)}
+
+/* ─────────────── Main ─────────────── */
+.main{
+  padding:18px 24px 80px;
+  min-width:0;
+  position:relative;
+}
+.greet{
+  display:flex;align-items:center;gap:10px;
+  font-size:13px;color:var(--t2);
+  margin-bottom:18px;
+  letter-spacing:-0.005em;
+}
+.greet .dot-sep{color:var(--t4);margin:0 2px}
+.greet .greet-day{color:var(--t1);font-weight:500}
+.greet .greet-mono{font-family:var(--mono);font-size:12px;color:var(--t2)}
+
+/* Stats — inline, NOT cards */
+.stats-row{
+  display:flex;align-items:flex-end;gap:0;
+  padding:6px 0 14px;
+  margin-bottom:8px;
+  border-bottom:1px solid var(--hairline);
+}
+.stat{
+  display:flex;flex-direction:column;gap:2px;
+  padding:0 18px;
+  border-right:1px solid var(--hairline);
+  min-width:0;
+}
+.stat:first-child{padding-left:0}
+.stat:last-child{border-right:0}
+.stat .num{
+  font-family:var(--mono);font-size:18px;color:var(--t1);
+  font-weight:500;letter-spacing:-0.01em;
+  font-variant-numeric:tabular-nums;
+  display:flex;align-items:baseline;gap:2px;
+}
+.stat .num .unit{font-size:11px;color:var(--t3);margin-left:2px;font-weight:400}
+.stat .lbl{
+  font-size:10px;color:var(--t3);
+  letter-spacing:0.07em;text-transform:uppercase;font-weight:500;
+}
+.stat .delta{font-size:10.5px;color:var(--sage);font-family:var(--mono);margin-left:6px}
+.stat .delta.amber{color:var(--amber)}
+
+/* Section headers */
+.sec-hd{
+  display:flex;align-items:center;justify-content:space-between;
+  margin:22px 0 6px;
+  padding-bottom:6px;
+  border-bottom:1px solid var(--hairline);
+}
+.sec-hd .title{font-size:12.5px;color:var(--t1);font-weight:500;letter-spacing:-0.005em}
+.sec-hd .meta{font-family:var(--mono);font-size:11px;color:var(--t3)}
+.sec-hd .actions{display:flex;align-items:center;gap:6px}
+.icon-btn{
+  width:24px;height:24px;border-radius:4px;
+  display:grid;place-items:center;color:var(--t3);
+  transition:background 80ms ease, color 80ms ease;
+}
+.icon-btn:hover{background:rgba(255,255,255,.04);color:var(--t1)}
+
+/* Visit rows — Linear-density */
+.row-list{display:flex;flex-direction:column}
+.row{
+  display:grid;
+  grid-template-columns: 56px 1fr 90px 132px 1fr 140px 60px;
+  align-items:center;
+  gap:12px;
+  height:32px;
+  padding:0 6px;
+  border-bottom:1px solid var(--hairline);
+  font-size:13px;
+  cursor:pointer;
+  transition:background 100ms ease;
+  position:relative;
+}
+.row:hover{background:var(--row-hover)}
+.row:hover .shortcut-hint{opacity:1}
+.row .ts{font-family:var(--mono);font-size:11.5px;color:var(--t3);font-variant-numeric:tabular-nums}
+.row .name{font-weight:600;color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:-0.005em}
+.row .demog{font-family:var(--mono);font-size:11.5px;color:var(--t3);font-variant-numeric:tabular-nums}
+.row .pill-host{display:flex;align-items:center;gap:6px;min-width:0}
+.row .cc{font-style:italic;color:var(--t2);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .status-host{display:flex;align-items:center;justify-content:flex-end}
+.row .shortcut-hint{
+  font-family:var(--mono);font-size:10.5px;color:var(--t4);
+  text-align:right;opacity:0;transition:opacity 80ms ease;
+  font-variant-numeric:tabular-nums;
+}
+
+/* Pills — monochrome with colored dot */
+.pill{
+  display:inline-flex;align-items:center;gap:6px;
+  height:20px;padding:0 7px;
+  border:1px solid var(--hairline-strong);
+  border-radius:4px;
+  font-size:10.5px;color:var(--t2);
+  letter-spacing:0.04em;text-transform:uppercase;font-weight:500;
+  background:rgba(255,255,255,.015);
+  white-space:nowrap;
+}
+.pill .pdot{width:5px;height:5px;border-radius:50%;background:var(--t3)}
+.pill .pico{width:10px;height:10px;color:var(--t4)}
+.pill.spec{font-family:var(--sans);text-transform:none;letter-spacing:0;font-size:11px;color:var(--t2)}
+.pill.spec .pdot{background:var(--violet)}
+.pill.spec.cardio .pdot{background:var(--coral)}
+.pill.spec.peds .pdot{background:var(--sky)}
+.pill.spec.intmed .pdot{background:var(--sage)}
+.pill.spec.derm .pdot{background:#c794d6}
+.pill.spec.psych .pdot{background:var(--teal)}
+.pill.spec.fammed .pdot{background:#d6c194}
+
+/* Status dots */
+.pill.ready{color:var(--sage-bright);border-color:rgba(122,166,140,.25)}
+.pill.ready .pdot{background:var(--sage)}
+.pill.review{color:#e3b984;border-color:rgba(212,165,116,.25)}
+.pill.review .pdot{background:var(--amber)}
+.pill.draft{color:var(--t2)}
+.pill.draft .pdot{background:var(--t3)}
+.pill.processing{color:#9bc4d9;border-color:rgba(116,168,201,.22)}
+.pill.processing .pdot{background:var(--sky);animation:pulse 1.4s ease-in-out infinite}
+.pill.signed{color:var(--t3)}
+.pill.signed .pdot{background:#5e7a6c}
+.pill.tiny{height:18px;padding:0 6px;font-size:10px}
+
+@keyframes pulse{
+  0%,100%{opacity:.55}
+  50%{opacity:1}
+}
+
+.safety-chip{
+  display:inline-flex;align-items:center;gap:5px;
+  height:18px;padding:0 6px;
+  border:1px solid rgba(122,166,140,.2);
+  background:rgba(122,166,140,.06);
+  border-radius:3px;
+  font-size:10px;color:var(--sage-bright);
+  letter-spacing:0.03em;font-weight:500;
+}
+.safety-chip .check{font-size:9px}
+
+/* All-visits stream */
+.stream .row{grid-template-columns: 88px 1fr 90px 132px 1fr 132px 56px}
+
+.load-more{
+  display:flex;align-items:center;gap:8px;justify-content:center;
+  padding:12px 0;
+  color:var(--t3);font-size:12px;
+  font-family:var(--mono);
+}
+.load-more:hover{color:var(--t1)}
+
+/* ─────────────── Right pane ─────────────── */
+.right-pane{
+  background:var(--panel);
+  border-left:1px solid var(--hairline);
+  padding:18px 16px;
+  overflow:auto;
+  position:sticky;top:46px;height:calc(100vh - 46px);
+  display:flex;flex-direction:column;gap:18px;
+}
+.rp-section .rp-hd{
+  font-size:11px;color:var(--t3);font-weight:500;
+  letter-spacing:0.07em;text-transform:uppercase;
+  margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;
+}
+.rp-section .rp-hd .more{color:var(--t4);font-family:var(--mono);font-size:10.5px}
+.timeline{display:flex;flex-direction:column;gap:0}
+.tl-item{
+  display:grid;grid-template-columns:14px 1fr;gap:8px;
+  padding:7px 0;border-bottom:1px solid var(--hairline);
+  font-size:12px;
+}
+.tl-item:last-child{border-bottom:0}
+.tl-dot-wrap{display:flex;align-items:center;justify-content:center;padding-top:3px}
+.tl-dot{width:6px;height:6px;border-radius:50%;background:var(--t3)}
+.tl-dot.sage{background:var(--sage)}
+.tl-dot.amber{background:var(--amber)}
+.tl-dot.sky{background:var(--sky)}
+.tl-dot.coral{background:var(--coral)}
+.tl-text{color:var(--t2);line-height:1.4;letter-spacing:-0.005em}
+.tl-text strong{color:var(--t1);font-weight:500}
+.tl-meta{font-family:var(--mono);font-size:10.5px;color:var(--t4);margin-top:2px}
+
+.pinned-item{
+  display:flex;align-items:center;gap:8px;
+  padding:7px 0;border-bottom:1px solid var(--hairline);
+  font-size:12.5px;color:var(--t2);
+  cursor:pointer;
+}
+.pinned-item:hover{color:var(--t1)}
+.pinned-item:last-child{border-bottom:0}
+.pinned-item .px{color:var(--amber)}
+.pinned-item .pname{color:var(--t1);font-weight:500}
+
+/* ─────────────── Cmd+K modal ─────────────── */
+.kbar-overlay{
+  position:fixed;inset:0;z-index:50;
+  background:rgba(0,0,0,.55);
+  backdrop-filter:blur(2px);
+  display:grid;place-items:flex-start center;
+  padding-top:14vh;
+  animation:fade-in 120ms ease-out;
+}
+@keyframes fade-in{from{opacity:0}to{opacity:1}}
+.kbar{
+  width:min(620px, calc(100vw - 40px));
+  background:#111214;
+  border:1px solid var(--hairline-strong);
+  border-radius:10px;
+  box-shadow:0 30px 80px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.03);
+  overflow:hidden;
+  animation:lift 100ms cubic-bezier(.22,1,.36,1);
+}
+@keyframes lift{from{transform:translateY(8px);opacity:0}to{transform:translateY(0);opacity:1}}
+.kbar .input-row{
+  display:flex;align-items:center;gap:10px;
+  padding:13px 16px;
+  border-bottom:1px solid var(--hairline);
+}
+.kbar .search-ico{width:14px;height:14px;color:var(--t3)}
+.kbar input{
+  flex:1;background:transparent;border:0;color:var(--t1);
+  font-family:var(--sans);font-size:14px;outline:none;
+  letter-spacing:-0.005em;
+}
+.kbar input::placeholder{color:var(--t3)}
+.kbar .esc{font-family:var(--mono);font-size:10.5px;color:var(--t4);border:1px solid var(--hairline-strong);padding:2px 6px;border-radius:3px}
+
+.kbar-section{
+  padding:6px 0 6px;
+  border-bottom:1px solid var(--hairline);
+}
+.kbar-section:last-child{border-bottom:0}
+.kbar-shd{
+  font-size:10px;color:var(--t4);
+  letter-spacing:0.08em;text-transform:uppercase;font-weight:500;
+  padding:6px 16px 4px;
+}
+.kbar-row{
+  display:flex;align-items:center;gap:10px;
+  padding:7px 16px;
+  font-size:13px;color:var(--t2);
+  cursor:pointer;
+  transition:background 80ms ease, color 80ms ease;
+}
+.kbar-row:hover{background:rgba(255,255,255,.03);color:var(--t1)}
+.kbar-row.active{background:rgba(122,166,140,.08);color:var(--t1)}
+.kbar-row .kico{width:14px;height:14px;color:var(--t3);flex:0 0 14px}
+.kbar-row.active .kico{color:var(--sage-bright)}
+.kbar-row .ktxt{flex:1;letter-spacing:-0.005em}
+.kbar-row .kctx{font-family:var(--mono);font-size:11px;color:var(--t4)}
+.kbar-row .kbd{
+  font-family:var(--mono);font-size:10.5px;color:var(--t3);
+  border:1px solid var(--hairline-strong);
+  padding:1.5px 5px;border-radius:3px;background:rgba(255,255,255,.02);
+}
+
+.kbar-foot{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:8px 16px;
+  border-top:1px solid var(--hairline);
+  background:rgba(255,255,255,.012);
+  font-size:11px;color:var(--t4);
+  font-family:var(--mono);
+}
+.kbar-foot .group{display:inline-flex;gap:10px}
+.kbar-foot .item{display:inline-flex;align-items:center;gap:5px}
+.kbar-foot .kbd-mini{
+  font-family:var(--mono);font-size:10px;color:var(--t3);
+  border:1px solid var(--hairline);padding:1px 4px;border-radius:2px;
+}
+
+/* ─────────────── Floating Cmd+K chip ─────────────── */
+.cmdk-fab{
+  position:fixed;right:18px;bottom:18px;z-index:25;
+  height:30px;padding:0 11px;
+  display:inline-flex;align-items:center;gap:8px;
+  border:1px solid var(--hairline-strong);
+  background:rgba(13,14,16,.85);
+  backdrop-filter:blur(10px);
+  border-radius:8px;
+  font-size:11.5px;color:var(--t3);
+  font-family:var(--mono);
+  box-shadow:0 8px 24px rgba(0,0,0,.4);
+  transition:color 100ms ease, border-color 100ms ease;
+  cursor:pointer;
+}
+.cmdk-fab:hover{color:var(--t1);border-color:rgba(255,255,255,.15)}
+.cmdk-fab .kkbd{
+  font-family:var(--mono);font-size:10.5px;
+  background:rgba(255,255,255,.05);
+  padding:1px 5px;border-radius:3px;color:var(--t2);
+}
+
+/* ─────────────── Mobile dropdown ─────────────── */
+.mobile-nav{display:none;padding:8px 14px;border-bottom:1px solid var(--hairline);background:var(--panel)}
+.mobile-nav select{
+  width:100%;background:transparent;color:var(--t1);
+  border:1px solid var(--hairline-strong);border-radius:6px;
+  padding:7px 10px;font:inherit;
+}
+
+/* SVG-icon font shim */
+.ic{display:inline-grid;place-items:center;width:14px;height:14px}
+
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<header class="topbar">
+  <div class="brand"><span class="brand-mark"></span> QuillMD</div>
+  <span class="crumb-sep">/</span>
+  <span class="crumb">Dr. Park</span>
+  <span class="crumb-sep">/</span>
+  <span class="crumb crumb-active">Today</span>
+  <div class="spacer"></div>
+  <button class="kbd-chip" aria-label="Command palette">
+    <kbd>⌘</kbd><kbd>K</kbd><span class="label">Search</span>
+  </button>
+  <button class="btn-primary"><span class="plus">+</span> New visit</button>
+  <div class="avatar-chip" title="Dr. Kalyani Park">KP</div>
+</header>
+
+<!-- MOBILE NAV (under 980px) -->
+<div class="mobile-nav">
+  <select aria-label="Section">
+    <option>Today · 11</option>
+    <option>Inbox · 8</option>
+    <option>Patients · 312</option>
+    <option>Drafts · 3</option>
+    <option>Templates</option>
+    <option>Settings</option>
+  </select>
+</div>
+
+<div class="shell">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="side-section">
+      <div class="side-row">
+        <span class="ico"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 4l5 3 5-3M2 4v6a1 1 0 001 1h8a1 1 0 001-1V4M2 4l1-1h8l1 1" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        <span class="label">Inbox</span>
+        <span class="badge">8</span>
+      </div>
+      <div class="side-row active expanded has-children">
+        <span class="ico"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.2" stroke="currentColor" stroke-width="1.2"/><path d="M7 4v3l2 1.4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg></span>
+        <span class="label">Today</span>
+        <span class="badge">11</span>
+      </div>
+      <div class="subrows">
+        <div class="sub-row active"><span class="dot"></span><span>Scheduled</span><span class="badge">8</span></div>
+        <div class="sub-row"><span class="dot"></span><span>Walk-ins</span><span class="badge">2</span></div>
+        <div class="sub-row"><span class="dot"></span><span>Phone follow-up</span><span class="badge">1</span></div>
+      </div>
+      <div class="side-row">
+        <span class="ico"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="5" r="2.4" stroke="currentColor" stroke-width="1.2"/><path d="M2.5 12c.5-2.4 2.4-3.6 4.5-3.6S11 9.6 11.5 12" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg></span>
+        <span class="label">Patients</span>
+        <span class="badge">312</span>
+      </div>
+      <div class="side-row">
+        <span class="ico"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 2.5h6l3 3V11.5a1 1 0 01-1 1H3a1 1 0 01-1-1V3.5a1 1 0 011-1z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><path d="M9 2.5v3h3" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg></span>
+        <span class="label">Drafts</span>
+        <span class="badge">3</span>
+      </div>
+      <div class="side-row">
+        <span class="ico"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="2" y="2.5" width="10" height="9" rx="1" stroke="currentColor" stroke-width="1.2"/><path d="M2 5.5h10M5 2.5v9" stroke="currentColor" stroke-width="1.2"/></svg></span>
+        <span class="label">Templates</span>
+        <span class="badge">14</span>
+      </div>
+    </div>
+
+    <div class="side-section">
+      <div class="side-label">Workspace</div>
+      <div class="side-row">
+        <span class="ico"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1.5l1.5 3.2 3.5.5-2.5 2.4.6 3.4L7 9.5l-3.1 1.5.6-3.4L2 5.2l3.5-.5L7 1.5z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg></span>
+        <span class="label">Pinned</span>
+        <span class="badge">4</span>
+      </div>
+      <div class="side-row">
+        <span class="ico"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.2" stroke="currentColor" stroke-width="1.2"/><path d="M5 5.5h4M5 7h4M5 8.5h2.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg></span>
+        <span class="label">My views</span>
+        <span class="badge">3</span>
+      </div>
+      <div class="side-row">
+        <span class="ico"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1.8l5 2.4v3.4c0 3.2-2.4 4.6-5 5.6-2.6-1-5-2.4-5-5.6V4.2l5-2.4z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg></span>
+        <span class="label">Compliance</span>
+        <span class="badge">·</span>
+      </div>
+      <div class="side-row">
+        <span class="ico"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="2" stroke="currentColor" stroke-width="1.2"/><path d="M11.5 7c0-.4 0-.8-.1-1.2l1.3-1-1.3-2.2-1.5.6c-.6-.5-1.3-.9-2-1.1L7.5 1H5.5l-.4 1.5c-.7.2-1.4.6-2 1.1l-1.5-.6L.3 5.2l1.3 1c-.1.4-.1.8-.1 1.2 0 .4 0 .8.1 1.2l-1.3 1 1.3 2.2 1.5-.6c.6.5 1.3.9 2 1.1l.4 1.5h2l.4-1.5c.7-.2 1.4-.6 2-1.1l1.5.6 1.3-2.2-1.3-1c.1-.4.1-.8.1-1.2z" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"/></svg></span>
+        <span class="label">Settings</span>
+      </div>
+    </div>
+
+    <div class="side-footer">
+      <span class="status-dot"></span>
+      <span>All systems · 99.98%</span>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+    <div class="greet">
+      <span class="greet-day">Wednesday, April 30</span>
+      <span class="dot-sep">·</span>
+      <span class="greet-mono">11 to review</span>
+      <span class="dot-sep">·</span>
+      <span class="greet-mono">3 drafts ready to sign</span>
+      <span class="dot-sep">·</span>
+      <span class="greet-mono">2:47 PM PT</span>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat">
+        <div class="num">127<span class="delta">+12</span></div>
+        <div class="lbl">Visits / Apr</div>
+      </div>
+      <div class="stat">
+        <div class="num">38<span class="unit">s</span></div>
+        <div class="lbl">Avg drafted in</div>
+      </div>
+      <div class="stat">
+        <div class="num">3<span class="delta amber">·</span></div>
+        <div class="lbl">Pending review</div>
+      </div>
+      <div class="stat">
+        <div class="num">42</div>
+        <div class="lbl">Signed this week</div>
+      </div>
+    </div>
+
+    <!-- TODAY -->
+    <div class="sec-hd">
+      <div class="title">Today's visits</div>
+      <div class="actions">
+        <span class="meta">8 of 11</span>
+        <button class="icon-btn" aria-label="filter"><svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2 3.5h10M4 7h6M5.5 10.5h3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></button>
+        <button class="icon-btn" aria-label="grouping"><svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2 4h3v3H2zM9 4h3v3H9zM2 9h3v3H2zM9 9h3v3H9z" stroke="currentColor" stroke-width="1.2"/></svg></button>
+      </div>
+    </div>
+
+    <div class="row-list">
+      <!-- 1: Mei-Ling Park -->
+      <div class="row" tabindex="0">
+        <div class="ts">09:14</div>
+        <div class="name">Mei-Ling Park</div>
+        <div class="demog">42F</div>
+        <div class="pill-host"><span class="pill spec fammed"><span class="pdot"></span>Family Med</span></div>
+        <div class="cc">acute bronchitis · J20.9 · 99214 · drafted 0:38</div>
+        <div class="status-host"><span class="pill ready"><span class="pdot"></span>Ready</span></div>
+        <div class="shortcut-hint">⌘1</div>
+      </div>
+      <!-- 2: Aram Sahakian -->
+      <div class="row" tabindex="0">
+        <div class="ts">09:42</div>
+        <div class="name">Aram Sahakian</div>
+        <div class="demog">38M</div>
+        <div class="pill-host"><span class="pill spec cardio"><span class="pdot"></span>Cardiology</span></div>
+        <div class="cc">pre-op clearance · I10 · BP 138/86</div>
+        <div class="status-host"><span class="pill review"><span class="pdot"></span>Needs review</span></div>
+        <div class="shortcut-hint">⌘2</div>
+      </div>
+      <!-- 3: Daniel Tran -->
+      <div class="row" tabindex="0">
+        <div class="ts">10:05</div>
+        <div class="name">Daniel Tran</div>
+        <div class="demog">27M</div>
+        <div class="pill-host"><span class="pill spec peds"><span class="pdot"></span>Pediatrics</span></div>
+        <div class="cc">well-check · Z00.129 · routine</div>
+        <div class="status-host"><span class="pill signed"><span class="pdot"></span>Signed 14:30</span></div>
+        <div class="shortcut-hint">⌘3</div>
+      </div>
+      <!-- 4: Priya Gupta -->
+      <div class="row" tabindex="0">
+        <div class="ts">10:30</div>
+        <div class="name">Priya Gupta</div>
+        <div class="demog">55F</div>
+        <div class="pill-host"><span class="pill spec intmed"><span class="pdot"></span>Internal Med</span></div>
+        <div class="cc">diabetes follow-up · E11.9 · A1C 7.4</div>
+        <div class="status-host"><span class="pill review"><span class="pdot"></span>Needs review</span></div>
+        <div class="shortcut-hint">⌘4</div>
+      </div>
+      <!-- 5: Elena Lopez -->
+      <div class="row" tabindex="0">
+        <div class="ts">11:00</div>
+        <div class="name">Elena Lopez</div>
+        <div class="demog">61F</div>
+        <div class="pill-host"><span class="pill spec derm"><span class="pdot"></span>Dermatology</span></div>
+        <div class="cc">mole check · D22.4 · benign nevi</div>
+        <div class="status-host"><span class="pill draft"><span class="pdot"></span>Drafting</span></div>
+        <div class="shortcut-hint">⌘5</div>
+      </div>
+      <!-- 6: Hiroshi Tanaka -->
+      <div class="row" tabindex="0">
+        <div class="ts">11:30</div>
+        <div class="name">Hiroshi Tanaka</div>
+        <div class="demog">73M</div>
+        <div class="pill-host"><span class="pill spec cardio"><span class="pdot"></span>Cardiology</span></div>
+        <div class="cc">CHF follow-up · I50.9 · EF 38%</div>
+        <div class="status-host"><span class="pill ready"><span class="pdot"></span>Ready</span></div>
+        <div class="shortcut-hint">⌘6</div>
+      </div>
+      <!-- 7: Naomi Whitehorse -->
+      <div class="row" tabindex="0">
+        <div class="ts">13:15</div>
+        <div class="name">Naomi Whitehorse</div>
+        <div class="demog">34F</div>
+        <div class="pill-host"><span class="pill spec psych"><span class="pdot"></span>Psychiatry</span></div>
+        <div class="cc">depression follow-up · F33.1 · PHQ-9: 14</div>
+        <div class="status-host">
+          <span class="safety-chip" title="Safety clause present"><span class="check">✓</span>safety</span>
+          <span class="pill draft" style="margin-left:6px"><span class="pdot"></span>Drafting</span>
+        </div>
+        <div class="shortcut-hint">⌘7</div>
+      </div>
+      <!-- 8: Marcus Johnson -->
+      <div class="row" tabindex="0">
+        <div class="ts">13:45</div>
+        <div class="name">Marcus Johnson</div>
+        <div class="demog">54M</div>
+        <div class="pill-host"><span class="pill spec intmed"><span class="pdot"></span>Internal Med</span></div>
+        <div class="cc">annual physical · I10 / E11.9 · labs pending</div>
+        <div class="status-host"><span class="pill processing"><span class="pdot"></span>Processing</span></div>
+        <div class="shortcut-hint">⌘8</div>
+      </div>
+    </div>
+
+    <!-- ALL VISITS -->
+    <div class="sec-hd">
+      <div class="title">All visits</div>
+      <div class="actions">
+        <span class="meta">last 14 days · 312 total</span>
+      </div>
+    </div>
+
+    <div class="row-list stream">
+      <div class="row" tabindex="0">
+        <div class="ts">Apr 30 · 09:14</div>
+        <div class="name">Mei-Ling Park</div>
+        <div class="demog">42F</div>
+        <div class="pill-host"><span class="pill spec fammed"><span class="pdot"></span>Family Med</span></div>
+        <div class="cc">acute bronchitis · J20.9</div>
+        <div class="status-host"><span class="pill ready"><span class="pdot"></span>Ready</span></div>
+        <div class="shortcut-hint">↵</div>
+      </div>
+      <div class="row" tabindex="0">
+        <div class="ts">Apr 29 · 16:42</div>
+        <div class="name">Owen Brennan</div>
+        <div class="demog">66M</div>
+        <div class="pill-host"><span class="pill spec intmed"><span class="pdot"></span>Internal Med</span></div>
+        <div class="cc">hypertension · I10 · med-rec adjustment</div>
+        <div class="status-host"><span class="pill signed"><span class="pdot"></span>Signed</span></div>
+        <div class="shortcut-hint">↵</div>
+      </div>
+      <div class="row" tabindex="0">
+        <div class="ts">Apr 29 · 14:08</div>
+        <div class="name">Sofia Castellano</div>
+        <div class="demog">29F</div>
+        <div class="pill-host"><span class="pill spec fammed"><span class="pdot"></span>Family Med</span></div>
+        <div class="cc">UTI · N39.0 · TMP-SMX 5d</div>
+        <div class="status-host"><span class="pill signed"><span class="pdot"></span>Signed</span></div>
+        <div class="shortcut-hint">↵</div>
+      </div>
+      <div class="row" tabindex="0">
+        <div class="ts">Apr 29 · 11:55</div>
+        <div class="name">Jamal Whitfield</div>
+        <div class="demog">47M</div>
+        <div class="pill-host"><span class="pill spec cardio"><span class="pdot"></span>Cardiology</span></div>
+        <div class="cc">post-MI follow-up · I25.10</div>
+        <div class="status-host"><span class="pill review"><span class="pdot"></span>Needs review</span></div>
+        <div class="shortcut-hint">↵</div>
+      </div>
+      <div class="row" tabindex="0">
+        <div class="ts">Apr 29 · 10:21</div>
+        <div class="name">Aisha Patel</div>
+        <div class="demog">31F</div>
+        <div class="pill-host"><span class="pill spec psych"><span class="pdot"></span>Psychiatry</span></div>
+        <div class="cc">anxiety · F41.1 · escitalopram cont.</div>
+        <div class="status-host"><span class="pill signed"><span class="pdot"></span>Signed</span></div>
+        <div class="shortcut-hint">↵</div>
+      </div>
+      <div class="row" tabindex="0">
+        <div class="ts">Apr 29 · 09:30</div>
+        <div class="name">Robert Kowalski</div>
+        <div class="demog">58M</div>
+        <div class="pill-host"><span class="pill spec intmed"><span class="pdot"></span>Internal Med</span></div>
+        <div class="cc">GERD · K21.9 · PPI titration</div>
+        <div class="status-host"><span class="pill processing"><span class="pdot"></span>Processing</span></div>
+        <div class="shortcut-hint">↵</div>
+      </div>
+      <div class="row" tabindex="0">
+        <div class="ts">Apr 28 · 17:11</div>
+        <div class="name">Yuki Watanabe</div>
+        <div class="demog">39F</div>
+        <div class="pill-host"><span class="pill spec derm"><span class="pdot"></span>Dermatology</span></div>
+        <div class="cc">eczema flare · L20.9 · TCS course</div>
+        <div class="status-host"><span class="pill signed"><span class="pdot"></span>Signed</span></div>
+        <div class="shortcut-hint">↵</div>
+      </div>
+      <div class="row" tabindex="0">
+        <div class="ts">Apr 28 · 15:30</div>
+        <div class="name">Charlotte Bishop</div>
+        <div class="demog">71F</div>
+        <div class="pill-host"><span class="pill spec cardio"><span class="pdot"></span>Cardiology</span></div>
+        <div class="cc">a-fib · I48.91 · DOAC continued</div>
+        <div class="status-host"><span class="pill signed"><span class="pdot"></span>Signed</span></div>
+        <div class="shortcut-hint">↵</div>
+      </div>
+      <div class="row" tabindex="0">
+        <div class="ts">Apr 28 · 13:45</div>
+        <div class="name">Ahmed Hassan</div>
+        <div class="demog">44M</div>
+        <div class="pill-host"><span class="pill spec fammed"><span class="pdot"></span>Family Med</span></div>
+        <div class="cc">low-back pain · M54.5 · PT referral</div>
+        <div class="status-host"><span class="pill review"><span class="pdot"></span>Needs review</span></div>
+        <div class="shortcut-hint">↵</div>
+      </div>
+      <div class="row" tabindex="0">
+        <div class="ts">Apr 28 · 11:02</div>
+        <div class="name">Lucia Hernandez</div>
+        <div class="demog">26F</div>
+        <div class="pill-host"><span class="pill spec peds"><span class="pdot"></span>Pediatrics</span></div>
+        <div class="cc">asthma maintenance · J45.40 · ICS cont.</div>
+        <div class="status-host"><span class="pill signed"><span class="pdot"></span>Signed</span></div>
+        <div class="shortcut-hint">↵</div>
+      </div>
+      <div class="row" tabindex="0">
+        <div class="ts">Apr 27 · 16:18</div>
+        <div class="name">Theo Andersson</div>
+        <div class="demog">52M</div>
+        <div class="pill-host"><span class="pill spec intmed"><span class="pdot"></span>Internal Med</span></div>
+        <div class="cc">cholesterol · E78.5 · statin start</div>
+        <div class="status-host"><span class="pill signed"><span class="pdot"></span>Signed</span></div>
+        <div class="shortcut-hint">↵</div>
+      </div>
+      <div class="row" tabindex="0">
+        <div class="ts">Apr 27 · 14:50</div>
+        <div class="name">Grace Okonkwo</div>
+        <div class="demog">35F</div>
+        <div class="pill-host"><span class="pill spec fammed"><span class="pdot"></span>Family Med</span></div>
+        <div class="cc">migraine · G43.909 · sumatriptan PRN</div>
+        <div class="status-host"><span class="pill signed"><span class="pdot"></span>Signed</span></div>
+        <div class="shortcut-hint">↵</div>
+      </div>
+    </div>
+
+    <button class="load-more">Load 14 more · ↓ J</button>
+  </main>
+
+  <!-- RIGHT PANE -->
+  <aside class="right-pane">
+    <div class="rp-section">
+      <div class="rp-hd"><span>Activity</span><span class="more">live</span></div>
+      <div class="timeline">
+        <div class="tl-item">
+          <div class="tl-dot-wrap"><span class="tl-dot sage"></span></div>
+          <div>
+            <div class="tl-text"><strong>Mei-Ling Park</strong> · note ready · 0:38</div>
+            <div class="tl-meta">2:46 PM · just now</div>
+          </div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-dot-wrap"><span class="tl-dot sky"></span></div>
+          <div>
+            <div class="tl-text"><strong>Marcus Johnson</strong> · processing layer 4/7</div>
+            <div class="tl-meta">2:44 PM</div>
+          </div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-dot-wrap"><span class="tl-dot sage"></span></div>
+          <div>
+            <div class="tl-text"><strong>Hiroshi Tanaka</strong> · note ready · 0:34</div>
+            <div class="tl-meta">11:42 AM</div>
+          </div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-dot-wrap"><span class="tl-dot amber"></span></div>
+          <div>
+            <div class="tl-text"><strong>Aram Sahakian</strong> · flagged for cardiology review</div>
+            <div class="tl-meta">10:18 AM</div>
+          </div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-dot-wrap"><span class="tl-dot"></span></div>
+          <div>
+            <div class="tl-text"><strong>Daniel Tran</strong> · signed and exported to Epic</div>
+            <div class="tl-meta">9:51 AM</div>
+          </div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-dot-wrap"><span class="tl-dot coral"></span></div>
+          <div>
+            <div class="tl-text">Rx warning · <strong>amlodipine</strong> + grapefruit interaction</div>
+            <div class="tl-meta">9:33 AM · acknowledged</div>
+          </div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-dot-wrap"><span class="tl-dot"></span></div>
+          <div>
+            <div class="tl-text">Pipeline · 03-extract-entities · p95 421ms</div>
+            <div class="tl-meta">9:00 AM</div>
+          </div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-dot-wrap"><span class="tl-dot sage"></span></div>
+          <div>
+            <div class="tl-text">Day started · 8 visits scheduled</div>
+            <div class="tl-meta">8:30 AM</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="rp-section">
+      <div class="rp-hd"><span>Pinned</span><span class="more">4</span></div>
+      <div>
+        <div class="pinned-item">
+          <span class="px">★</span>
+          <span class="pname">Sahakian, A.</span>
+          <span style="font-family:var(--mono);font-size:10.5px;color:var(--t4);margin-left:auto">cardio</span>
+        </div>
+        <div class="pinned-item">
+          <span class="px">★</span>
+          <span class="pname">Tanaka, H.</span>
+          <span style="font-family:var(--mono);font-size:10.5px;color:var(--t4);margin-left:auto">CHF</span>
+        </div>
+        <div class="pinned-item">
+          <span class="px">★</span>
+          <span class="pname">Whitehorse, N.</span>
+          <span style="font-family:var(--mono);font-size:10.5px;color:var(--t4);margin-left:auto">psych</span>
+        </div>
+        <div class="pinned-item">
+          <span class="px">★</span>
+          <span class="pname">Gupta, P.</span>
+          <span style="font-family:var(--mono);font-size:10.5px;color:var(--t4);margin-left:auto">DM2</span>
+        </div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<!-- COMMAND PALETTE (rendered open per V1 brief) -->
+<div class="kbar-overlay" role="dialog" aria-modal="true" aria-label="Command palette">
+  <div class="kbar">
+    <div class="input-row">
+      <span class="search-ico">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="6" cy="6" r="4" stroke="currentColor" stroke-width="1.3"/><path d="M9.2 9.2L12 12" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+      </span>
+      <input value="park" placeholder="Type a command, search a patient…" />
+      <span class="esc">esc</span>
+    </div>
+
+    <div class="kbar-section">
+      <div class="kbar-shd">Patients · 3 matches</div>
+      <div class="kbar-row active">
+        <span class="kico"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="5" r="2.4" stroke="currentColor" stroke-width="1.2"/><path d="M2.5 12c.5-2.4 2.4-3.6 4.5-3.6S11 9.6 11.5 12" stroke="currentColor" stroke-width="1.2"/></svg></span>
+        <span class="ktxt">Mei-Ling <strong style="color:var(--sage-bright);font-weight:600">Park</strong> · 42F · MRN-77324</span>
+        <span class="kctx">today 09:14 · ready</span>
+        <span class="kbd">↵</span>
+      </div>
+      <div class="kbar-row">
+        <span class="kico"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="5" r="2.4" stroke="currentColor" stroke-width="1.2"/><path d="M2.5 12c.5-2.4 2.4-3.6 4.5-3.6S11 9.6 11.5 12" stroke="currentColor" stroke-width="1.2"/></svg></span>
+        <span class="ktxt">James <strong style="color:var(--sage-bright);font-weight:600">Park</strong>er · 53M · MRN-44187</span>
+        <span class="kctx">apr 18 · signed</span>
+      </div>
+      <div class="kbar-row">
+        <span class="kico"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="5" r="2.4" stroke="currentColor" stroke-width="1.2"/><path d="M2.5 12c.5-2.4 2.4-3.6 4.5-3.6S11 9.6 11.5 12" stroke="currentColor" stroke-width="1.2"/></svg></span>
+        <span class="ktxt"><strong style="color:var(--sage-bright);font-weight:600">Park</strong>, Daniel · 27M · MRN-11203</span>
+        <span class="kctx">today 10:05 · signed</span>
+      </div>
+    </div>
+
+    <div class="kbar-section">
+      <div class="kbar-shd">Recent commands</div>
+      <div class="kbar-row">
+        <span class="kico" style="color:var(--sage)">+</span>
+        <span class="ktxt">New visit</span>
+        <span class="kbd">N</span>
+      </div>
+      <div class="kbar-row">
+        <span class="kico"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 7.5l3 3 5-7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span>
+        <span class="ktxt">Sign current visit</span>
+        <span class="kbd">⌘ ↵</span>
+      </div>
+      <div class="kbar-row">
+        <span class="kico"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="3" y="3" width="6" height="8" rx="1" stroke="currentColor" stroke-width="1.2"/><path d="M5 5h2M5 7h2M5 9h2" stroke="currentColor" stroke-width="1.2"/></svg></span>
+        <span class="ktxt">Copy SOAP for Epic</span>
+        <span class="kbd">⌘ C</span>
+      </div>
+      <div class="kbar-row">
+        <span class="kico"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 2.5h10M2 7h10M2 11.5h10" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span>
+        <span class="ktxt">Jump to drafts</span>
+        <span class="kbd">G D</span>
+      </div>
+      <div class="kbar-row">
+        <span class="kico"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.2"/><path d="M7 4v3l2 1.4" stroke="currentColor" stroke-width="1.2"/></svg></span>
+        <span class="ktxt">Switch to Today's view</span>
+        <span class="kbd">G T</span>
+      </div>
+    </div>
+
+    <div class="kbar-foot">
+      <div class="group">
+        <span class="item"><span class="kbd-mini">↑↓</span> navigate</span>
+        <span class="item"><span class="kbd-mini">↵</span> select</span>
+        <span class="item"><span class="kbd-mini">⌘ K</span> close</span>
+      </div>
+      <div>QuillMD · 3 sources</div>
+    </div>
+  </div>
+</div>
+
+<button class="cmdk-fab" aria-label="Open command palette">
+  <span class="kkbd">⌘K</span>
+  <span>Command</span>
+</button>
+
+<script>
+// Light, snappy: arrow-key navigation in command palette + Esc close.
+(function(){
+  const overlay = document.querySelector('.kbar-overlay');
+  const fab = document.querySelector('.cmdk-fab');
+  const rows = Array.from(document.querySelectorAll('.kbar-row'));
+  let activeIdx = rows.findIndex(r => r.classList.contains('active'));
+
+  function setActive(i){
+    if(i < 0) i = rows.length - 1;
+    if(i >= rows.length) i = 0;
+    rows[activeIdx]?.classList.remove('active');
+    rows[i].classList.add('active');
+    activeIdx = i;
+    rows[i].scrollIntoView({block:'nearest'});
+  }
+
+  function close(){ overlay.style.display = 'none'; }
+  function open(){ overlay.style.display = 'grid'; const inp = overlay.querySelector('input'); inp?.focus(); inp?.select(); }
+
+  fab.addEventListener('click', open);
+
+  document.addEventListener('keydown', e => {
+    if((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k'){
+      e.preventDefault();
+      if(overlay.style.display === 'none') open(); else close();
+      return;
+    }
+    if(overlay.style.display === 'none') return;
+    if(e.key === 'Escape'){ close(); }
+    else if(e.key === 'ArrowDown'){ e.preventDefault(); setActive(activeIdx + 1); }
+    else if(e.key === 'ArrowUp'){ e.preventDefault(); setActive(activeIdx - 1); }
+  });
+
+  rows.forEach((r,i) => r.addEventListener('mouseenter', () => setActive(i)));
+
+  // Visit row hover keys
+  document.querySelectorAll('.row').forEach((r, i) => {
+    r.addEventListener('keydown', e => {
+      if(e.key === 'j'){ r.nextElementSibling?.focus?.(); }
+      if(e.key === 'k'){ r.previousElementSibling?.focus?.(); }
+    });
+  });
+})();
+</script>
+
+</body>
+</html>

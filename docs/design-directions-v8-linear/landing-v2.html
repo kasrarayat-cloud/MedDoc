@@ -1,0 +1,1134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>QuillMD — The medical scribe practitioners actually use</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Source+Serif+4:ital,opsz,wght@1,8..60,400;1,8..60,500&display=swap" rel="stylesheet">
+<style>
+  /* ---------- TOKENS — warm-tinted dark canvas ---------- */
+  :root {
+    --bg: #0d0c0a;
+    --surface-1: #14130f;
+    --surface-2: #1c1a16;
+    --surface-3: #24211c;
+    --line: rgba(255, 245, 225, 0.07);
+    --line-strong: rgba(255, 245, 225, 0.13);
+    --hover-bg: rgba(122, 166, 140, 0.06);
+    --text: #f8f5ef;
+    --text-2: #bfb9ad;
+    --text-3: #7c7669;
+    --sage: #7AA68C;
+    --sage-bright: #9bc4ad;
+    --sage-glow: #b6d4c2;
+    --sage-tint: rgba(122, 166, 140, 0.18);
+    --sage-tint-2: rgba(122, 166, 140, 0.10);
+    --amber: #D4A574;
+    --amber-tint: rgba(212, 165, 116, 0.16);
+    --warm-shadow: 0 6px 18px rgba(122, 166, 140, 0.18);
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-feature-settings: 'cv11', 'ss01';
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.55;
+    letter-spacing: -0.005em;
+    overflow-x: hidden;
+    position: relative;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    animation: fadeBlur 360ms var(--ease);
+  }
+
+  @keyframes fadeBlur {
+    from { opacity: 0; filter: blur(8px); }
+    to { opacity: 1; filter: blur(0); }
+  }
+
+  /* Hero radial spotlight + warm grain */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background: radial-gradient(ellipse 1100px 700px at 80% -5%, rgba(122, 166, 140, 0.20) 0%, transparent 50%),
+                radial-gradient(ellipse 800px 500px at 15% 0%, rgba(212, 165, 116, 0.07) 0%, transparent 60%);
+    z-index: 0;
+  }
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.04;
+    z-index: 1;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='1 0 0 0 0.05  0 1 0 0 0.04  0 0 1 0 0.02  0 0 0 1 0'/></filter><rect width='180' height='180' filter='url(%23n)' opacity='1'/></svg>");
+    mix-blend-mode: overlay;
+  }
+
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 32px; position: relative; z-index: 2; }
+
+  /* ---------- TOP NAV ---------- */
+  .nav {
+    position: sticky;
+    top: 0;
+    height: 48px;
+    background: rgba(13, 12, 10, 0.78);
+    backdrop-filter: saturate(180%) blur(12px);
+    -webkit-backdrop-filter: saturate(180%) blur(12px);
+    border-bottom: 1px solid var(--line);
+    z-index: 100;
+  }
+  .nav-inner {
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 0 32px;
+  }
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    font-size: 14px;
+    letter-spacing: -0.01em;
+    color: var(--text);
+    text-decoration: none;
+  }
+  .logo-mark {
+    width: 18px; height: 18px;
+    border-radius: 5px;
+    background: var(--sage);
+    position: relative;
+  }
+  .logo-mark::after {
+    content: '';
+    position: absolute;
+    inset: 4px;
+    border-radius: 2px;
+    background: var(--bg);
+  }
+  .nav-links {
+    display: flex;
+    align-items: center;
+    gap: 22px;
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+  .nav-links a {
+    font-size: 13px;
+    color: var(--text-2);
+    text-decoration: none;
+    font-weight: 500;
+    transition: color 120ms var(--ease);
+  }
+  .nav-links a:hover { color: var(--sage); }
+  .nav-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .cmdk-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 7px;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-3);
+    background: var(--surface-1);
+  }
+  .nav-signin {
+    font-size: 13px;
+    color: var(--text-2);
+    text-decoration: none;
+    font-weight: 500;
+    transition: color 120ms var(--ease);
+  }
+  .nav-signin:hover { color: var(--text); }
+
+  /* ---------- BUTTONS ---------- */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 130ms var(--ease);
+    border: 1px solid transparent;
+    letter-spacing: -0.005em;
+    white-space: nowrap;
+  }
+  .btn-primary {
+    background: var(--sage);
+    color: #0a1612;
+    font-weight: 600;
+    box-shadow: var(--warm-shadow);
+  }
+  .btn-primary:hover {
+    background: var(--sage-bright);
+    transform: translateY(-1px);
+    box-shadow: 0 8px 22px rgba(122, 166, 140, 0.24);
+  }
+  .btn-secondary {
+    background: transparent;
+    color: var(--sage-bright);
+    border: 1px solid rgba(122, 166, 140, 0.35);
+  }
+  .btn-secondary:hover {
+    background: rgba(122, 166, 140, 0.08);
+    border-color: rgba(122, 166, 140, 0.55);
+  }
+  .btn-ghost {
+    background: transparent;
+    color: var(--text-2);
+  }
+  .btn-ghost:hover { color: var(--text); }
+  .btn-lg { height: 40px; padding: 0 18px; font-size: 14px; }
+
+  /* ---------- HERO ---------- */
+  .hero {
+    padding: 96px 0 88px;
+    text-align: center;
+    position: relative;
+  }
+  .hero-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text-2);
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 5px 12px 5px 6px;
+    margin-bottom: 26px;
+    transition: all 140ms var(--ease);
+  }
+  .hero-eyebrow:hover { border-color: var(--line-strong); }
+  .hero-eyebrow .pill-tag {
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--sage-bright);
+    background: var(--sage-tint);
+    padding: 2px 8px;
+    border-radius: 999px;
+  }
+  .hero-eyebrow .pill-arrow { color: var(--text-3); }
+  h1.hero-title {
+    font-size: 44px;
+    font-weight: 600;
+    letter-spacing: -0.022em;
+    line-height: 1.08;
+    margin: 0 auto 18px;
+    max-width: 760px;
+    color: var(--text);
+  }
+  /* The Source Serif 4 italic accent — Clinician brand thread */
+  h1.hero-title em {
+    font-family: 'Source Serif 4', serif;
+    font-style: italic;
+    font-weight: 400;
+    color: var(--sage-glow);
+    text-shadow: 0 0 28px rgba(155, 196, 173, 0.45),
+                 0 0 1px rgba(182, 212, 194, 0.6);
+    letter-spacing: -0.01em;
+    padding: 0 2px;
+  }
+  .hero-sub {
+    font-size: 16px;
+    line-height: 1.55;
+    color: var(--text-2);
+    max-width: 580px;
+    margin: 0 auto 32px;
+  }
+  .hero-ctas {
+    display: inline-flex;
+    gap: 10px;
+    margin-bottom: 32px;
+  }
+  .hero-trust {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-3);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .hero-trust .dot { display: inline-block; margin: 0 8px; opacity: 0.5; }
+
+  /* ---------- ANIMATED PRODUCT UI ---------- */
+  .product {
+    margin: 8px auto 96px;
+    max-width: 1040px;
+    background: var(--surface-1);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 30px 80px -20px rgba(0,0,0,0.65),
+                0 0 0 1px rgba(122, 166, 140, 0.05),
+                0 12px 32px rgba(122, 166, 140, 0.08);
+    position: relative;
+  }
+  .product-chrome {
+    height: 36px;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    background: var(--surface-2);
+    gap: 10px;
+  }
+  .chrome-dots { display: flex; gap: 6px; }
+  .chrome-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--surface-3); }
+  .chrome-tabs {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+  }
+  .chrome-tab {
+    font-size: 11px;
+    color: var(--text-3);
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .chrome-tab.active { color: var(--text); background: var(--surface-3); }
+  .chrome-meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-3);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .chrome-meta .live-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--sage);
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(122, 166, 140, 0.5); }
+    50% { opacity: 0.7; box-shadow: 0 0 0 6px rgba(122, 166, 140, 0); }
+  }
+
+  .product-body {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    min-height: 400px;
+  }
+  .pane {
+    padding: 20px 22px;
+    overflow: hidden;
+  }
+  .pane.transcript { border-right: 1px solid var(--line); }
+  .pane-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .pane-label .meta { color: var(--text-3); font-weight: 400; }
+
+  .turn {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 14px;
+    opacity: 0;
+    animation: turnIn 320ms var(--ease) forwards;
+  }
+  .turn:nth-child(2) { animation-delay: 200ms; }
+  .turn:nth-child(3) { animation-delay: 1200ms; }
+  .turn:nth-child(4) { animation-delay: 2400ms; }
+  .turn:nth-child(5) { animation-delay: 3600ms; }
+  .turn:nth-child(6) { animation-delay: 4800ms; }
+  @keyframes turnIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .turn-speaker {
+    flex-shrink: 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    width: 36px;
+    padding-top: 1px;
+  }
+  .turn-speaker.dr { color: var(--sage); }
+  .turn-text {
+    font-size: 13px;
+    color: var(--text-2);
+    line-height: 1.6;
+  }
+  .typing-cursor {
+    display: inline-block;
+    width: 1px;
+    height: 12px;
+    background: var(--sage);
+    margin-left: 1px;
+    vertical-align: -2px;
+    animation: blink 1s step-end infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* SOAP pane */
+  .soap-section {
+    padding: 13px 15px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    margin-bottom: 9px;
+    background: var(--surface-2);
+    opacity: 0.35;
+  }
+  .soap-section[data-stage="2"] { animation: lightStage 0s 1400ms forwards; }
+  .soap-section[data-stage="3"] { animation: lightStage 0s 2600ms forwards; }
+  .soap-section[data-stage="4"] { animation: lightStage 0s 3800ms forwards; }
+  .soap-section[data-stage="5"] { animation: lightStage 0s 5000ms forwards; }
+  @keyframes lightStage {
+    to {
+      opacity: 1;
+      border-color: rgba(122, 166, 140, 0.30);
+      background: linear-gradient(180deg, rgba(122, 166, 140, 0.06) 0%, var(--surface-2) 100%);
+      box-shadow: inset 0 0 28px rgba(122, 166, 140, 0.06);
+    }
+  }
+  .soap-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  .soap-letter {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px; height: 18px;
+    background: var(--sage-tint);
+    color: var(--sage-bright);
+    font-size: 10.5px;
+    font-weight: 600;
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .soap-name {
+    flex: 1;
+    margin-left: 8px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text);
+  }
+  .soap-status {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--sage);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .soap-body {
+    font-size: 12.5px;
+    color: var(--text-2);
+    line-height: 1.6;
+  }
+  .soap-code-row {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+    flex-wrap: wrap;
+  }
+  .soap-code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    color: var(--sage-bright);
+    background: var(--sage-tint);
+    padding: 2px 7px;
+    border-radius: 4px;
+  }
+
+  /* ---------- SECTION HEADS ---------- */
+  .section-head {
+    text-align: center;
+    margin-bottom: 48px;
+  }
+  .section-eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--sage);
+    text-transform: uppercase;
+    letter-spacing: 0.10em;
+    margin-bottom: 12px;
+  }
+  .section-title {
+    font-size: 30px;
+    font-weight: 600;
+    letter-spacing: -0.020em;
+    line-height: 1.15;
+    color: var(--text);
+    max-width: 640px;
+    margin: 0 auto 12px;
+  }
+  .section-sub {
+    font-size: 15px;
+    color: var(--text-2);
+    max-width: 540px;
+    margin: 0 auto;
+  }
+
+  /* ---------- FEATURES ---------- */
+  .features { padding: 8px 0 96px; }
+  .feature-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--surface-1);
+  }
+  .feature {
+    padding: 26px 24px;
+    border-right: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    transition: all 130ms var(--ease);
+    position: relative;
+  }
+  .feature:hover {
+    background: var(--hover-bg);
+    box-shadow: inset 0 0 40px rgba(122, 166, 140, 0.04);
+  }
+  .feature:nth-child(3n) { border-right: none; }
+  .feature:nth-child(n+4) { border-bottom: none; }
+  .feature-icon {
+    width: 22px; height: 22px;
+    margin-bottom: 14px;
+    color: var(--sage);
+  }
+  .feature-icon svg { width: 100%; height: 100%; }
+  .feature-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 6px;
+    letter-spacing: -0.005em;
+  }
+  .feature-copy {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-2);
+  }
+
+  /* ---------- QUOTES ---------- */
+  .quotes { padding: 24px 0 96px; }
+  .quote-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+  }
+  .quote {
+    padding: 26px 24px;
+    background: var(--surface-1);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+  }
+  .quote-text {
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--text);
+    margin-bottom: 18px;
+    letter-spacing: -0.005em;
+  }
+  .quote-meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    line-height: 1.6;
+  }
+  .quote-meta .name { color: var(--sage); }
+
+  /* ---------- PRICING ---------- */
+  .pricing { padding: 24px 0 96px; }
+  .price-card {
+    max-width: 540px;
+    margin: 0 auto;
+    padding: 34px;
+    background: var(--surface-1);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    position: relative;
+    box-shadow: 0 12px 36px rgba(122, 166, 140, 0.08);
+  }
+  .price-card::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: 14px;
+    padding: 1px;
+    background: linear-gradient(180deg, rgba(122, 166, 140, 0.30), transparent 60%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask-composite: exclude;
+    -webkit-mask-composite: xor;
+    pointer-events: none;
+  }
+  .price-tag {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    margin-bottom: 6px;
+  }
+  .price-amount {
+    font-size: 38px;
+    font-weight: 600;
+    letter-spacing: -0.022em;
+    color: var(--text);
+  }
+  .price-unit {
+    font-size: 14px;
+    color: var(--text-3);
+  }
+  .price-headline {
+    font-size: 14px;
+    color: var(--text-2);
+    margin-bottom: 22px;
+  }
+  .price-list {
+    list-style: none;
+    margin: 0 0 24px;
+    padding: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 11px 18px;
+  }
+  .price-list li {
+    font-size: 13px;
+    color: var(--text-2);
+    padding-left: 22px;
+    position: relative;
+    line-height: 1.5;
+  }
+  /* WARM amber checkmark for the sparing accent */
+  .price-list li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 4px;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--amber-tint);
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14' fill='none' stroke='%23D4A574' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='3 7.5 6 10 11 4.5'/></svg>");
+    background-repeat: no-repeat;
+    background-position: center;
+  }
+  .price-cta {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+  .price-note {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  /* ---------- FAQ ---------- */
+  .faq { padding: 24px 0 96px; }
+  .faq-list {
+    max-width: 720px;
+    margin: 0 auto;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--surface-1);
+  }
+  .faq-item {
+    padding: 22px 24px;
+    border-bottom: 1px solid var(--line);
+  }
+  .faq-item:last-child { border-bottom: none; }
+  .faq-q {
+    font-size: 14.5px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 6px;
+    letter-spacing: -0.005em;
+  }
+  .faq-a {
+    font-size: 13.5px;
+    line-height: 1.65;
+    color: var(--text-2);
+  }
+
+  /* ---------- FOOTER ---------- */
+  footer.footer {
+    border-top: 1px solid var(--line);
+    padding: 56px 0 28px;
+    background: var(--surface-1);
+    position: relative;
+    z-index: 2;
+  }
+  .footer-grid {
+    display: grid;
+    grid-template-columns: 1.4fr repeat(4, 1fr);
+    gap: 32px;
+    margin-bottom: 40px;
+  }
+  .footer-brand .logo { margin-bottom: 14px; }
+  .footer-tag {
+    font-size: 13px;
+    color: var(--text-3);
+    line-height: 1.6;
+    max-width: 220px;
+  }
+  .footer-col h6 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.10em;
+    margin-bottom: 14px;
+    font-weight: 500;
+  }
+  .footer-col ul { list-style: none; }
+  .footer-col li { margin-bottom: 8px; }
+  .footer-col a {
+    font-size: 13px;
+    color: var(--text-2);
+    text-decoration: none;
+    transition: color 120ms var(--ease);
+  }
+  .footer-col a:hover { color: var(--sage); }
+  .footer-bottom {
+    border-top: 1px solid var(--line);
+    padding-top: 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    color: var(--text-3);
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.04em;
+  }
+  .footer-trust {
+    display: flex;
+    gap: 14px;
+  }
+  .footer-trust span { color: var(--text-3); }
+
+  /* ---------- RESPONSIVE ---------- */
+  @media (max-width: 980px) {
+    .feature-grid { grid-template-columns: repeat(2, 1fr); }
+    .feature:nth-child(3n) { border-right: 1px solid var(--line); }
+    .feature:nth-child(2n) { border-right: none; }
+    .feature:nth-child(n+4) { border-bottom: 1px solid var(--line); }
+    .feature:nth-child(n+5) { border-bottom: none; }
+    .quote-grid { grid-template-columns: 1fr 1fr; }
+    .footer-grid { grid-template-columns: 1.5fr 1fr 1fr; }
+    .footer-grid .footer-brand { grid-column: 1 / -1; margin-bottom: 8px; }
+  }
+  @media (max-width: 760px) {
+    h1.hero-title { font-size: 32px; }
+    .hero { padding: 64px 0 56px; }
+    .product-body { grid-template-columns: 1fr; }
+    .pane.transcript { border-right: none; border-bottom: 1px solid var(--line); }
+    .feature-grid { grid-template-columns: 1fr; }
+    .feature { border-right: none !important; border-bottom: 1px solid var(--line) !important; }
+    .feature:last-child { border-bottom: none !important; }
+    .quote-grid { grid-template-columns: 1fr; }
+    .nav-links { display: none; }
+    .price-list { grid-template-columns: 1fr; }
+    .footer-grid { grid-template-columns: 1fr 1fr; }
+    .footer-bottom { flex-direction: column; gap: 12px; }
+    .hero-ctas { flex-direction: column; width: 100%; }
+    .hero-ctas .btn { width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<!-- TOP NAV -->
+<nav class="nav">
+  <div class="nav-inner">
+    <a href="#" class="logo">
+      <span class="logo-mark"></span>
+      <span>QuillMD</span>
+    </a>
+    <div class="nav-links">
+      <a href="#method">Method</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#changelog">Changelog</a>
+      <a href="#docs">Docs</a>
+    </div>
+    <div class="nav-right">
+      <span class="cmdk-chip">⌘K</span>
+      <a href="#signin" class="nav-signin">Sign in</a>
+      <a href="#start" class="btn btn-primary">Get started</a>
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="wrap">
+    <div class="hero-eyebrow">
+      <span class="pill-tag">New</span>
+      <span>Specialty packs for Cardiology &amp; Psych are live</span>
+      <span class="pill-arrow">›</span>
+    </div>
+    <h1 class="hero-title">The medical scribe that practitioners <em>actually</em> use.</h1>
+    <p class="hero-sub">Real-time SOAP drafting, ICD-10 + CPT recommendations, and signed notes in under ninety seconds. Built for US clinicians who'd rather see the next patient than fight the chart.</p>
+    <div class="hero-ctas">
+      <a href="#start" class="btn btn-primary btn-lg">Begin a visit →</a>
+      <a href="#demo" class="btn btn-secondary btn-lg">Watch a 90-second demo</a>
+    </div>
+    <div class="hero-trust">
+      Made for US clinicians<span class="dot">·</span>HIPAA<span class="dot">·</span>BAA on file
+    </div>
+  </div>
+
+  <!-- ANIMATED PRODUCT UI -->
+  <div class="wrap">
+    <div class="product" id="demo">
+      <div class="product-chrome">
+        <div class="chrome-dots">
+          <span class="chrome-dot"></span>
+          <span class="chrome-dot"></span>
+          <span class="chrome-dot"></span>
+        </div>
+        <div class="chrome-tabs">
+          <span class="chrome-tab">visit-7K2A</span>
+          <span class="chrome-tab active">live</span>
+          <span class="chrome-tab">soap.md</span>
+        </div>
+        <div class="chrome-meta">
+          <span class="live-dot"></span>
+          <span>recording · 01:42</span>
+        </div>
+      </div>
+      <div class="product-body">
+        <!-- TRANSCRIPT -->
+        <div class="pane transcript">
+          <div class="pane-label">
+            <span>Transcript</span>
+            <span class="meta">Deepgram · diarized</span>
+          </div>
+          <div class="turn">
+            <span class="turn-speaker">Pt</span>
+            <span class="turn-text">It started about three days ago. Dull, behind the sternum, worse when I lie down.</span>
+          </div>
+          <div class="turn">
+            <span class="turn-speaker dr">Dr</span>
+            <span class="turn-text">Any radiation to the jaw or arm, shortness of breath?</span>
+          </div>
+          <div class="turn">
+            <span class="turn-speaker">Pt</span>
+            <span class="turn-text">No jaw. A little tight when I climb stairs, but I have asthma.</span>
+          </div>
+          <div class="turn">
+            <span class="turn-speaker dr">Dr</span>
+            <span class="turn-text">BP one-twenty-eight over eighty-two, heart rate seventy-six, regular rhythm. Lungs clear bilaterally.</span>
+          </div>
+          <div class="turn">
+            <span class="turn-speaker">Pt</span>
+            <span class="turn-text">My albuterol — I think I was using it more last week.</span>
+          </div>
+          <div class="turn">
+            <span class="turn-speaker dr">Dr</span>
+            <span class="turn-text">Let's get an ECG today and a follow-up next Tuesday. I'll also re-check your peak flow<span class="typing-cursor"></span></span>
+          </div>
+        </div>
+        <!-- SOAP -->
+        <div class="pane soap">
+          <div class="pane-label">
+            <span>SOAP draft</span>
+            <span class="meta">claude-sonnet-4.6 · validated</span>
+          </div>
+          <div class="soap-section" data-stage="2">
+            <div class="soap-head">
+              <span class="soap-letter">S</span>
+              <span class="soap-name">Subjective</span>
+              <span class="soap-status">drafted</span>
+            </div>
+            <div class="soap-body">3-day retrosternal chest discomfort, positional, non-radiating. Mild exertional dyspnea on stairs. Increased albuterol use over past week.</div>
+          </div>
+          <div class="soap-section" data-stage="3">
+            <div class="soap-head">
+              <span class="soap-letter">O</span>
+              <span class="soap-name">Objective</span>
+              <span class="soap-status">drafted</span>
+            </div>
+            <div class="soap-body">BP 128/82, HR 76 reg., RR 16, SpO₂ 98% RA. Lungs CTAB. No JVD, no peripheral edema.</div>
+          </div>
+          <div class="soap-section" data-stage="4">
+            <div class="soap-head">
+              <span class="soap-letter">A</span>
+              <span class="soap-name">Assessment</span>
+              <span class="soap-status">coded</span>
+            </div>
+            <div class="soap-body">Atypical chest pain, likely esophageal vs. musculoskeletal. Asthma — uncontrolled per albuterol overuse.</div>
+            <div class="soap-code-row">
+              <span class="soap-code">R07.89</span>
+              <span class="soap-code">J45.40</span>
+            </div>
+          </div>
+          <div class="soap-section" data-stage="5">
+            <div class="soap-head">
+              <span class="soap-letter">P</span>
+              <span class="soap-name">Plan</span>
+              <span class="soap-status">complete</span>
+            </div>
+            <div class="soap-body">ECG today. Trial PPI × 2 wks. Step-up ICS, peak-flow review. F/U Tue.</div>
+            <div class="soap-code-row">
+              <span class="soap-code">99214</span>
+              <span class="soap-code">93000</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section class="features" id="method">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="section-eyebrow">Built for the visit</div>
+      <h2 class="section-title">Everything a working clinic needs. Nothing it doesn't.</h2>
+      <p class="section-sub">Six features that move the cursor from end-of-visit to next-patient.</p>
+    </div>
+    <div class="feature-grid">
+      <div class="feature">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h3l3-9 4 18 3-9h5"/></svg>
+        </div>
+        <div class="feature-title">Real-time SOAP draft</div>
+        <div class="feature-copy">Subjective, Objective, Assessment, Plan light up section-by-section as the visit unfolds.</div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h10M7 12h6M7 16h8"/></svg>
+        </div>
+        <div class="feature-title">ICD-10 + CPT auto-coded</div>
+        <div class="feature-copy">Diagnosis and procedure recommendations with confidence scores; doctor approves or edits in one click.</div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L4 6v6c0 5 3.5 9 8 10 4.5-1 8-5 8-10V6l-8-4z"/><path d="M9 12l2 2 4-4"/></svg>
+        </div>
+        <div class="feature-title">HIPAA, BAA on file</div>
+        <div class="feature-copy">Audit-logged at every layer. End-to-end encryption. PHI never leaves our US-hosted environment.</div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/></svg>
+        </div>
+        <div class="feature-title">Specialty-aware</div>
+        <div class="feature-copy">Family Medicine, Cardiology, Pediatrics, Psychiatry, Endo. The model adapts to your domain, not the reverse.</div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 9h2v2H6zM10 9h2v2h-2zM14 9h2v2h-2zM6 13h12v2H6z"/></svg>
+        </div>
+        <div class="feature-title">Cmd-K everywhere</div>
+        <div class="feature-copy">Jump to any patient, any visit, any specialty pack. Never more than two keystrokes from the next note.</div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12c0 5-4 9-9 9s-9-4-9-9 4-9 9-9c2.5 0 4.7 1 6.4 2.6"/><path d="M21 4v5h-5"/></svg>
+        </div>
+        <div class="feature-title">Audit-logged + US-hosted</div>
+        <div class="feature-copy">Every action emits an immutable event. Servers in us-east-1. Your data never crosses a border.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- QUOTES -->
+<section class="quotes">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="section-eyebrow">Heard in the wild</div>
+      <h2 class="section-title">Doctors aren't a hard sell. They're a fair one.</h2>
+    </div>
+    <div class="quote-grid">
+      <div class="quote">
+        <div class="quote-text">"It returned my evenings. The first week I closed my laptop at 5:40 — that hadn't happened in two years."</div>
+        <div class="quote-meta"><span class="name">Dr. Mei-Ling Park</span><br>Pediatrics · San Diego</div>
+      </div>
+      <div class="quote">
+        <div class="quote-text">"The ICD-10 suggestions are accurate often enough that I trust them. The ones that aren't, I correct in two clicks."</div>
+        <div class="quote-meta"><span class="name">Dr. Alex Boateng</span><br>Family Medicine · Atlanta</div>
+      </div>
+      <div class="quote">
+        <div class="quote-text">"I've used six scribes. This is the only one where the SOAP reads like something I'd write myself."</div>
+        <div class="quote-meta"><span class="name">Dr. Priya Sundaram</span><br>Cardiology · Boston</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section class="pricing" id="pricing">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="section-eyebrow">Pricing</div>
+      <h2 class="section-title">One tier. Unlimited visits. No surprises.</h2>
+    </div>
+    <div class="price-card">
+      <div class="price-tag">
+        <span class="price-amount">$49</span>
+        <span class="price-unit">/ month per physician</span>
+      </div>
+      <p class="price-headline">Everything below, billed monthly. Cancel anytime.</p>
+      <ul class="price-list">
+        <li>Unlimited visits, no per-note caps</li>
+        <li>Real-time SOAP drafting</li>
+        <li>ICD-10 and CPT recommendations</li>
+        <li>Specialty packs (all 12)</li>
+        <li>HIPAA BAA, on file</li>
+        <li>US-hosted infrastructure</li>
+        <li>Cmd-K command palette</li>
+        <li>EHR-formatted exports (Epic, Athena, Cerner, eCW)</li>
+        <li>DOCX and PDF generation</li>
+        <li>Email and Slack support</li>
+      </ul>
+      <div class="price-cta">
+        <a href="#start" class="btn btn-primary btn-lg">Start your trial →</a>
+        <span class="price-note">14 days free · no card</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section class="faq">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="section-eyebrow">FAQ</div>
+      <h2 class="section-title">Short answers to the questions doctors ask first.</h2>
+    </div>
+    <div class="faq-list">
+      <div class="faq-item">
+        <div class="faq-q">Is QuillMD a covered entity or a business associate?</div>
+        <div class="faq-a">Business associate. We sign a BAA before any practice goes live, and our infrastructure is HIPAA-compliant end to end. Your practice remains the covered entity; we never act as one on your behalf.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">Where does the audio go after the visit?</div>
+        <div class="faq-a">Audio is stored encrypted in our US-east-1 MinIO cluster, retained per your practice's policy (default 30 days), and then permanently deleted. The transcript and SOAP note remain. You can purge audio earlier from any visit detail view.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">Which EHRs do you export to?</div>
+        <div class="faq-a">Epic, Athena, Cerner, eCW, and a generic plain-text format. Most practices copy-paste; the formatter handles the section labels each EHR expects. Direct integrations are on the 2026 roadmap.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">Can I edit the SOAP before signing?</div>
+        <div class="faq-a">Yes. Every section is editable until you tap "Sign". After that, the note is immutable and any further edits create an addendum with a timestamp and audit entry — the same pattern your malpractice carrier expects.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">What if a recommendation is wrong?</div>
+        <div class="faq-a">Override it. Every ICD-10, CPT, and Rx warning has an explicit override path that captures your reason. We use that data — fully de-identified — to improve the model for your specialty over time.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">How fast does a visit process?</div>
+        <div class="faq-a">Median 47 seconds for a 12-minute visit, including transcription, SOAP drafting, ICD-10 + CPT coding, and Rx safety checks. The pipeline is parallel; no single layer blocks the others.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer class="footer">
+  <div class="wrap">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <a href="#" class="logo">
+          <span class="logo-mark"></span>
+          <span>QuillMD</span>
+        </a>
+        <p class="footer-tag">The medical scribe that practitioners actually use. Made in the US, audited end-to-end.</p>
+      </div>
+      <div class="footer-col">
+        <h6>Product</h6>
+        <ul>
+          <li><a href="#">Method</a></li>
+          <li><a href="#">Specialties</a></li>
+          <li><a href="#">Pricing</a></li>
+          <li><a href="#">Changelog</a></li>
+          <li><a href="#">Roadmap</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h6>Company</h6>
+        <ul>
+          <li><a href="#">About</a></li>
+          <li><a href="#">Customers</a></li>
+          <li><a href="#">Careers</a></li>
+          <li><a href="#">Contact</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h6>Legal</h6>
+        <ul>
+          <li><a href="#">Terms</a></li>
+          <li><a href="#">Privacy</a></li>
+          <li><a href="#">BAA</a></li>
+          <li><a href="#">DPA</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h6>Trust</h6>
+        <ul>
+          <li><a href="#">HIPAA</a></li>
+          <li><a href="#">SOC 2</a></li>
+          <li><a href="#">Status</a></li>
+          <li><a href="#">Security</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 QuillMD, Inc. All rights reserved.</span>
+      <div class="footer-trust">
+        <span>HIPAA</span>
+        <span>·</span>
+        <span>SOC 2 TYPE II</span>
+        <span>·</span>
+        <span>US-HOSTED</span>
+      </div>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
