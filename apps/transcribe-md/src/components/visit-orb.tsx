@@ -1,29 +1,41 @@
-'use client';
+// Phase 5 — Linear V1 Faithful visit-orb wrapper.
+//
+// The Phase 4 dynamic-imported R3F orb is gone. Linear V1 renders a
+// static sage glow disk so the visit empty-state still has a visual
+// anchor without spinning a WebGL canvas. The dynamic import is no
+// longer needed — VioletOrb is now a pure CSS stub that's safe to
+// import directly from a server component.
 
-import dynamic from 'next/dynamic';
+import { VioletOrb } from '@/components/violet-orb';
 
-const VioletOrb = dynamic(
-  () => import('@/components/violet-orb').then((m) => m.VioletOrb),
-  { ssr: false, loading: () => <div className="h-full w-full" /> }
-);
-
-/** Wraps VioletOrb in a client-side dynamic import so server pages can
- *  place it without tripping Next.js's "ssr:false in server component"
- *  rule. The halo behind the orb is rendered here too to keep the
- *  visual composition in one place. */
+/** Wraps VioletOrb in the same 256px square the legacy orb consumed
+ *  so caller layouts (visit-detail empty state, voice dictator) don't
+ *  need to change. Behind the orb sits a wider sage-glow halo to
+ *  match the Linear V1 AuthShell right pane. */
 export function VisitOrb() {
   return (
-    <div className="relative mb-10 h-64 w-64">
+    <div
+      style={{
+        position: 'relative',
+        marginBottom: 40,
+        width: 256,
+        height: 256,
+      }}
+    >
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 -z-10 rounded-full"
         style={{
+          position: 'absolute',
+          inset: 0,
+          zIndex: -1,
+          borderRadius: '50%',
           background:
-            'radial-gradient(ellipse at center, rgba(139,92,246,0.4) 0%, rgba(139,92,246,0.1) 40%, transparent 70%)',
+            'radial-gradient(ellipse at center, var(--color-linear-sage-glow) 0%, transparent 70%)',
           filter: 'blur(32px)',
+          pointerEvents: 'none',
         }}
       />
-      <VioletOrb radius={1.55} quiet />
+      <VioletOrb />
     </div>
   );
 }

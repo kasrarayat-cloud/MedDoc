@@ -16,11 +16,10 @@ export default async function CheckEmailPage({ searchParams }: PageProps) {
 
   return (
     <AuthShell
-      theme="clinician"
       eyebrow="One more step"
       title={
         <>
-          Check your <em style={{ color: 'var(--sage-deep)', fontStyle: 'italic' }}>email</em>
+          Check your <em>email</em>
         </>
       }
       subtitle={
@@ -28,12 +27,6 @@ export default async function CheckEmailPage({ searchParams }: PageProps) {
           ? `We sent a verification link to ${email}. It expires in 24 hours.`
           : 'We sent a verification link to your email. It expires in 24 hours.'
       }
-      cinematic={{
-        eyebrow: 'One more step',
-        headlinePre: 'Check ',
-        headlineEm: 'your ',
-        headlinePost: 'email.',
-      }}
     >
       <CheckEmailResend email={email} />
     </AuthShell>
