@@ -1,11 +1,18 @@
 'use client';
 
-// HANDOFF §2.3 LiveOrb — SVG circular waveform + core orb driven by a
-// mock amplitude signal (§3.5). RAF loop guarded against StrictMode
-// double-mount per §8.3; reduced-motion short-circuits to a static
-// frame per §8.9.
+// Phase 5 — Linear V1 Faithful LiveOrb.
+// Reference: docs/design-directions-v8-linear/recording.html
+//
+// The legacy violet 64-spoke SVG orb is replaced with a calm sage halo
+// + sage-bright mic dot + 40-bar waveform driven by a clamped random
+// walk (matching the recording.html mockup). The component still
+// exposes the original `paused` + `reducedMotion` props so existing
+// call sites (visits/[id]/processing-state.tsx) keep working.
+// reduced-motion short-circuits to a static frame.
 
 import { useEffect, useRef, useState } from 'react';
+
+const BARS = 40;
 
 export function LiveOrb({
   paused = false,
@@ -14,33 +21,39 @@ export function LiveOrb({
   paused?: boolean;
   reducedMotion?: boolean;
 }) {
-  const [amp, setAmp] = useState(0.5);
+  const [heights, setHeights] = useState<number[]>(() =>
+    Array.from({ length: BARS }, (_, i) =>
+      6 + Math.round(Math.abs(Math.sin(i * 1.7)) * 22)
+    )
+  );
   const rafRef = useRef<number | null>(null);
+  const lastTickRef = useRef<number>(0);
 
   useEffect(() => {
     if (reducedMotion || paused) {
       if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
-      // Amp is intentionally NOT reset here — the render just below
-      // handles the static frame, and writing setAmp would trigger a
-      // cascading render. The component re-mounts clean on state
-      // changes that matter (paused flip → new effect run).
       return;
     }
     let cancelled = false;
-    let t = 0;
-    const tick = () => {
+    const loop = (now: number) => {
       if (cancelled) return;
-      t += 0.04;
-      const base = 0.35 + 0.15 * Math.sin(t * 2);
-      const burst =
-        Math.max(0, Math.sin(t * 5.3)) *
-        0.4 *
-        (Math.random() > 0.6 ? 1 : 0.3);
-      setAmp(Math.min(1, base + burst + Math.random() * 0.08));
-      rafRef.current = requestAnimationFrame(tick);
+      // 80ms tick cadence per the mockup — matches the
+      // qm-lin-wave-bar transition timing.
+      if (now - lastTickRef.current >= 80) {
+        lastTickRef.current = now;
+        setHeights((prev) =>
+          prev.map((h) => {
+            let next = h + (Math.floor(Math.random() * 13) - 6);
+            if (next < 4) next = 4;
+            if (next > 32) next = 32;
+            return next;
+          })
+        );
+      }
+      rafRef.current = requestAnimationFrame(loop);
     };
-    rafRef.current = requestAnimationFrame(tick);
+    rafRef.current = requestAnimationFrame(loop);
     return () => {
       cancelled = true;
       if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
@@ -48,116 +61,116 @@ export function LiveOrb({
     };
   }, [paused, reducedMotion]);
 
-  const scale = 1 + amp * 0.12;
-  const rings = [0, 1, 2];
+  const isActive = !paused && !reducedMotion;
 
   return (
     <div
       style={{
         position: 'relative',
-        width: 360,
-        height: 360,
+        width: 280,
+        height: 280,
         display: 'flex',
+        flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
       }}
     >
-      {rings.map((i) => (
-        <div
-          key={i}
+      {/* Halo + mic centerpiece */}
+      <div
+        style={{
+          position: 'relative',
+          width: 200,
+          height: 200,
+          display: 'grid',
+          placeItems: 'center',
+        }}
+      >
+        {/* concentric sage rings */}
+        <span
           aria-hidden
           style={{
             position: 'absolute',
-            width: 220 + i * 60,
-            height: 220 + i * 60,
+            inset: 0,
             borderRadius: '50%',
-            border: `1px solid rgba(139,92,255,${0.2 - i * 0.04})`,
-            transform: `scale(${1 + amp * 0.05})`,
-            transition: 'transform .08s linear',
+            border: '1px solid rgba(122,166,140,0.18)',
           }}
         />
-      ))}
-      <svg
-        viewBox="0 0 360 360"
-        width={360}
-        height={360}
-        style={{ position: 'absolute' }}
-        aria-hidden
-      >
-        <defs>
-          <linearGradient id="qm-orb-g" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stopColor="#D1B5FF" />
-            <stop offset="0.5" stopColor="#A87CFF" />
-            <stop offset="1" stopColor="#6B3FD9" />
-          </linearGradient>
-          <radialGradient id="qm-orb-core" cx="0.5" cy="0.45" r="0.55">
-            <stop offset="0" stopColor="#E8D9FF" stopOpacity="0.9" />
-            <stop offset="0.45" stopColor="#8B5CFF" stopOpacity="0.5" />
-            <stop offset="1" stopColor="#2A1560" stopOpacity="0.95" />
-          </radialGradient>
-          <radialGradient id="qm-orb-glow" cx="0.5" cy="0.5" r="0.7">
-            <stop offset="0" stopColor="#8B5CFF" stopOpacity="0.55" />
-            <stop offset="1" stopColor="#8B5CFF" stopOpacity="0" />
-          </radialGradient>
-        </defs>
-        <circle
-          cx={180}
-          cy={180}
-          r={170}
-          fill="url(#qm-orb-glow)"
-          opacity={0.6 + amp * 0.3}
+        <span
+          aria-hidden
+          style={{
+            position: 'absolute',
+            inset: 24,
+            borderRadius: '50%',
+            border: '1px solid rgba(122,166,140,0.26)',
+          }}
         />
-        {Array.from({ length: 64 }).map((_, i) => {
-          const a = (i / 64) * Math.PI * 2;
-          const seed = Math.sin(i * 0.7) * 0.5 + Math.sin(i * 1.3) * 0.5;
-          const mag = 6 + (amp + 0.2) * (12 + Math.abs(seed) * 18);
-          const r0 = 130;
-          const r1 = r0 + mag;
-          const x0 = 180 + Math.cos(a) * r0;
-          const y0 = 180 + Math.sin(a) * r0;
-          const x1 = 180 + Math.cos(a) * r1;
-          const y1 = 180 + Math.sin(a) * r1;
-          return (
-            <line
-              key={i}
-              x1={x0}
-              y1={y0}
-              x2={x1}
-              y2={y1}
-              stroke="url(#qm-orb-g)"
-              strokeWidth={2}
-              strokeLinecap="round"
-              opacity={paused ? 0.3 : 0.9}
-            />
-          );
-        })}
-        <circle cx={180} cy={180} r={118 * scale} fill="url(#qm-orb-core)" />
-        <circle
-          cx={180}
-          cy={180}
-          r={118 * scale}
-          fill="none"
-          stroke="rgba(255,255,255,0.35)"
-          strokeWidth={0.6}
+        <span
+          aria-hidden
+          style={{
+            position: 'absolute',
+            inset: 48,
+            borderRadius: '50%',
+            border: '1px solid rgba(122,166,140,0.36)',
+          }}
         />
-        <ellipse
-          cx={155}
-          cy={148}
-          rx={42}
-          ry={24}
-          fill="rgba(255,255,255,0.22)"
-          transform="rotate(-18 155 148)"
-        />
-        {!paused && (
-          <circle
-            cx={180}
-            cy={180}
-            r={8 + amp * 6}
-            fill="#FB7185"
-            opacity={0.85}
+        {/* Pulsing sage glow halo */}
+        {isActive && (
+          <span
+            aria-hidden
+            className="qm-lin-mic-halo"
+            style={{
+              position: 'absolute',
+              inset: 36,
+              borderRadius: '50%',
+              background:
+                'radial-gradient(closest-side, rgba(155,196,168,0.32), rgba(122,166,140,0) 70%)',
+            }}
           />
         )}
-      </svg>
+        {/* Mic dot */}
+        <span
+          aria-hidden
+          className={isActive ? 'qm-lin-mic-dot' : undefined}
+          style={{
+            position: 'relative',
+            width: 16,
+            height: 16,
+            borderRadius: '50%',
+            background: 'var(--color-linear-sage-bright)',
+            boxShadow:
+              '0 0 18px rgba(155,196,168,0.65), 0 0 0 4px rgba(155,196,168,0.10)',
+          }}
+        />
+      </div>
+
+      {/* 40-bar waveform */}
+      <div
+        aria-hidden
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 3,
+          height: 40,
+          marginTop: 18,
+          width: '100%',
+          maxWidth: 340,
+        }}
+      >
+        {heights.map((h, i) => (
+          <span
+            key={i}
+            style={{
+              width: 4,
+              height: h,
+              borderRadius: 2,
+              background: 'var(--color-linear-sage)',
+              opacity: paused ? 0.3 : 0.85,
+              transition: 'height 80ms linear, opacity 200ms ease-out',
+            }}
+          />
+        ))}
+      </div>
     </div>
   );
 }
