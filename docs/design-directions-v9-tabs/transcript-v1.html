@@ -1,0 +1,603 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QuillMD · Visit · Mei-Ling Park · Transcript V1 · Editorial Density</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#08090a;
+  --surface-1:#0d0e10;
+  --surface-2:#131416;
+  --surface-3:#1a1c1e;
+  --border:#21232a;
+  --border-strong:#2c2f38;
+  --hairline:rgba(255,255,255,0.05);
+  --hairline-strong:rgba(255,255,255,0.08);
+  --t1:#f7f8f8;
+  --t2:#b4bcc8;
+  --t3:#6c737f;
+  --t4:#4b5159;
+  --sage:#7AA68C;
+  --sage-bright:#9BC4A8;
+  --sage-deep:#2F5040;
+  --sage-tint:rgba(122,166,140,0.13);
+  --sage-glow:rgba(122,166,140,0.18);
+  --info:#5b8db8;
+  --info-bright:#74A8C9;
+  --font-sans:'Inter', -apple-system, system-ui, sans-serif;
+  --font-mono:'JetBrains Mono', ui-monospace, Menlo, monospace;
+  --ease:cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--t1)}
+body{
+  font-family:var(--font-sans);
+  font-feature-settings:'cv11','ss01';
+  font-size:13px;
+  line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  letter-spacing:-0.005em;
+  min-height:100vh;
+}
+::selection{background:rgba(122,166,140,.25);color:var(--t1)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+a{color:inherit;text-decoration:none}
+
+/* ─── Top bar (matches V8 baseline) ─── */
+.topbar{
+  position:sticky;top:0;z-index:30;
+  height:44px;
+  display:flex;align-items:center;gap:12px;
+  padding:0 16px;
+  background:rgba(8,9,10,.85);
+  backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--hairline);
+  opacity:0;
+  animation:topbar-in 120ms var(--ease) forwards;
+}
+@keyframes topbar-in{to{opacity:1}}
+.brand{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;color:var(--t1);letter-spacing:-0.01em}
+.brand-mark{
+  width:18px;height:18px;border-radius:5px;
+  background:linear-gradient(135deg,var(--sage) 0%,var(--sage-deep) 100%);
+  display:grid;place-items:center;color:#0c1410;font-size:10px;font-weight:700;
+}
+.brand-mark::before{content:'Q'}
+.crumb-sep{color:var(--t4);font-size:12px}
+.crumb{color:var(--t2);font-size:13px;transition:color 100ms var(--ease)}
+.crumb:hover{color:var(--t1)}
+.crumb-active{color:var(--t1)}
+.spacer{flex:1}
+.status-pill-chrome{
+  display:inline-flex;align-items:center;gap:6px;
+  height:22px;padding:0 9px;
+  border-radius:4px;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.06em;text-transform:uppercase;font-weight:500;
+  border:1px solid rgba(122,166,140,.25);
+  color:var(--sage-bright);
+  background:rgba(122,166,140,.06);
+}
+.status-pill-chrome .pdot{
+  width:5px;height:5px;border-radius:50%;
+  background:var(--sage);
+  animation:idle-pulse 1.6s ease-in-out infinite;
+}
+@keyframes idle-pulse{
+  0%,100%{opacity:.7;transform:scale(1)}
+  50%{opacity:1;transform:scale(1.04)}
+}
+.btn-sage-sm{
+  display:inline-flex;align-items:center;gap:8px;
+  height:30px;padding:0 14px;
+  background:var(--sage);
+  color:#0d1611;
+  border-radius:6px;
+  font-size:12.5px;font-weight:500;
+  letter-spacing:-0.005em;
+  transition:background 100ms var(--ease),transform 80ms var(--ease),box-shadow 200ms var(--ease);
+}
+.btn-sage-sm:hover{background:#88b599;box-shadow:0 0 0 4px rgba(122,166,140,.18)}
+.btn-sage-sm .shortcut{font-family:var(--font-mono);font-size:10.5px;color:rgba(13,22,17,.55)}
+.avatar-chip{
+  width:24px;height:24px;border-radius:6px;
+  background:linear-gradient(135deg,#3a4a52 0%,#2a3036 100%);
+  color:#dde6ec;font-size:10.5px;font-weight:600;
+  display:grid;place-items:center;
+  border:1px solid var(--hairline-strong);
+}
+
+/* ─── Main shell ─── */
+.shell{
+  max-width:920px;
+  margin:0 auto;
+  padding:18px 28px 80px;
+  position:relative;
+}
+.shell::before{
+  content:'';
+  position:absolute;
+  top:-100px;left:30%;
+  width:600px;height:380px;
+  background:radial-gradient(ellipse at center, rgba(122,166,140,.045) 0%, transparent 70%);
+  pointer-events:none;
+  z-index:0;
+}
+.left-col{position:relative;z-index:1;opacity:0;transform:translateY(8px);animation:col-in 200ms var(--ease) forwards}
+@keyframes col-in{to{opacity:1;transform:translateY(0)}}
+
+/* ─── Patient meta strip ─── */
+.meta-strip{
+  display:flex;align-items:center;
+  padding:6px 0 14px;
+  margin-bottom:14px;
+  border-bottom:1px solid var(--hairline);
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--t2);
+}
+.meta-strip .field{padding:0 14px;border-right:1px solid var(--hairline)}
+.meta-strip .field:first-child{padding-left:0;color:var(--t1);font-weight:500}
+.meta-strip .field:last-child{border-right:0}
+.meta-strip .field .lbl{color:var(--t4);margin-right:4px;font-weight:400}
+
+/* ─── Tabs ─── */
+.tabs-row{
+  display:flex;align-items:center;gap:0;
+  margin-bottom:22px;
+  border-bottom:1px solid var(--hairline);
+}
+.tab{
+  position:relative;
+  padding:8px 16px 10px;
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.07em;
+  text-transform:uppercase;
+  color:var(--t3);
+  font-weight:500;
+  cursor:pointer;
+  transition:color 100ms var(--ease);
+}
+.tab:first-child{padding-left:0}
+.tab:hover{color:var(--t1)}
+.tab.active{color:var(--t1)}
+.tab.active::after{
+  content:'';position:absolute;
+  left:0;right:0;bottom:-1px;
+  height:1.5px;
+  background:var(--sage);
+  border-radius:1px 1px 0 0;
+}
+
+/* ─── Audio + search bar (sticky pill) ─── */
+.toolbar{
+  position:sticky;
+  top:44px;
+  z-index:5;
+  display:grid;
+  grid-template-columns:1fr auto;
+  gap:14px;
+  align-items:center;
+  padding:14px 16px;
+  margin-bottom:28px;
+  background:rgba(13,14,16,.92);
+  backdrop-filter:blur(14px);
+  border:1px solid var(--hairline);
+  border-radius:8px;
+}
+.player{
+  display:flex;align-items:center;gap:12px;
+  min-width:0;
+}
+.play-btn{
+  flex:0 0 32px;
+  width:32px;height:32px;
+  border-radius:50%;
+  background:var(--sage);
+  color:#0d1611;
+  display:grid;place-items:center;
+  transition:background 100ms var(--ease),transform 80ms var(--ease),box-shadow 200ms var(--ease);
+}
+.play-btn:hover{background:#88b599;box-shadow:0 0 0 4px rgba(122,166,140,.18)}
+.play-btn:active{transform:scale(.96)}
+.play-btn svg{width:11px;height:11px}
+.scrub-wrap{
+  flex:1;
+  display:flex;align-items:center;gap:10px;
+  min-width:0;
+}
+.time-mono{
+  font-family:var(--font-mono);
+  font-size:11px;
+  color:var(--t2);
+  font-variant-numeric:tabular-nums;
+  white-space:nowrap;
+}
+.time-mono .total{color:var(--t4)}
+.scrub-bar{
+  flex:1;
+  position:relative;
+  height:4px;
+  background:var(--surface-3);
+  border-radius:99px;
+  overflow:visible;
+  cursor:pointer;
+}
+.scrub-fill{
+  position:absolute;
+  inset:0 auto 0 0;
+  width:42%;
+  background:var(--sage);
+  border-radius:99px 0 0 99px;
+}
+.scrub-thumb{
+  position:absolute;
+  top:50%;
+  left:42%;
+  width:11px;height:11px;
+  border-radius:50%;
+  background:var(--sage-bright);
+  transform:translate(-50%,-50%);
+  box-shadow:0 0 0 4px rgba(122,166,140,.22);
+  transition:box-shadow 120ms var(--ease);
+}
+.scrub-bar:hover .scrub-thumb{box-shadow:0 0 0 6px rgba(122,166,140,.28)}
+.search-pill{
+  display:inline-flex;align-items:center;gap:8px;
+  height:30px;padding:0 11px;
+  border:1px solid var(--hairline-strong);
+  border-radius:6px;
+  background:rgba(255,255,255,.02);
+  color:var(--t3);
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.04em;
+  white-space:nowrap;
+  transition:background 100ms var(--ease),color 100ms var(--ease),border-color 100ms var(--ease);
+}
+.search-pill:hover{background:rgba(255,255,255,.04);color:var(--t1);border-color:rgba(255,255,255,.12)}
+.search-pill kbd{font-family:var(--font-mono);font-size:10.5px;color:var(--t3)}
+.search-pill .label{color:var(--t3)}
+
+/* ─── Editorial transcript turns ─── */
+.transcript{
+  display:flex;flex-direction:column;
+}
+.turn{
+  padding:22px 0 26px;
+  border-top:1px solid var(--hairline);
+  position:relative;
+  opacity:0;
+  transform:translateY(6px);
+  animation:turn-in 280ms var(--ease) forwards;
+}
+.turn:first-child{border-top:0;padding-top:4px}
+.turn:nth-child(1){animation-delay:60ms}
+.turn:nth-child(2){animation-delay:90ms}
+.turn:nth-child(3){animation-delay:120ms}
+.turn:nth-child(4){animation-delay:150ms}
+.turn:nth-child(5){animation-delay:180ms}
+.turn:nth-child(6){animation-delay:210ms}
+.turn:nth-child(7){animation-delay:240ms}
+.turn:nth-child(8){animation-delay:270ms}
+.turn:nth-child(9){animation-delay:290ms}
+.turn:nth-child(10){animation-delay:310ms}
+.turn:nth-child(11){animation-delay:330ms}
+.turn:nth-child(12){animation-delay:350ms}
+.turn:nth-child(13){animation-delay:370ms}
+@keyframes turn-in{to{opacity:1;transform:translateY(0)}}
+
+.eyebrow{
+  display:flex;align-items:center;gap:10px;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.12em;
+  text-transform:uppercase;
+  color:var(--t4);
+  margin-bottom:10px;
+  font-variant-numeric:tabular-nums;
+}
+.eyebrow .ts{color:var(--t3)}
+.eyebrow .sep{color:var(--t4);opacity:.6}
+.eyebrow.doctor .role{color:var(--sage-bright)}
+.eyebrow.patient .role{color:var(--t1)}
+.eyebrow.other .role{color:var(--t3)}
+
+.speaker-label{
+  font-family:var(--font-sans);
+  font-size:22px;
+  font-weight:600;
+  letter-spacing:-0.018em;
+  margin-bottom:8px;
+  line-height:1.2;
+}
+.speaker-label.doctor{color:var(--sage-bright)}
+.speaker-label.patient{color:var(--t1)}
+.speaker-label.other{color:var(--t3)}
+
+.turn-body{
+  font-family:var(--font-sans);
+  font-size:16.5px;
+  line-height:1.7;
+  color:var(--t1);
+  letter-spacing:-0.005em;
+  max-width:680px;
+}
+.turn-body.muted{color:var(--t2)}
+
+/* low-confidence styling */
+.lowconf{
+  border-bottom:1px dotted var(--t4);
+  position:relative;
+}
+.lowconf-tag{
+  display:inline-flex;align-items:center;gap:5px;
+  margin-left:10px;
+  padding:1px 6px;
+  border-radius:3px;
+  background:rgba(212,165,116,.07);
+  border:1px solid rgba(212,165,116,.22);
+  color:#D4A574;
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  font-weight:500;
+  vertical-align:1px;
+}
+
+/* end card */
+.end-card{
+  margin-top:28px;
+  padding:14px 0 0;
+  border-top:1px solid var(--hairline);
+  display:flex;align-items:center;justify-content:space-between;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--t4);
+}
+.end-card .meta-line{display:flex;align-items:center;gap:14px}
+.end-card .meta-line .dot{width:3px;height:3px;border-radius:50%;background:var(--t4)}
+
+/* reduced motion */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;
+  }
+  .topbar,.left-col,.turn{opacity:1;transform:none}
+  .status-pill-chrome .pdot{animation:none}
+}
+
+/* responsive */
+@media (max-width:760px){
+  .shell{padding:14px 16px 60px}
+  .meta-strip{flex-wrap:wrap;font-size:10px}
+  .meta-strip .field{padding:4px 10px}
+  .toolbar{grid-template-columns:1fr;gap:10px}
+  .speaker-label{font-size:19px}
+  .turn-body{font-size:15.5px;line-height:1.65}
+  .crumb,.crumb-sep{display:none}
+  .crumb-active{display:inline}
+  .topbar{gap:8px;padding:0 12px}
+}
+@media (max-width:480px){
+  .turn-body{font-size:15px}
+  .btn-sage-sm .shortcut{display:none}
+  .search-pill .label{display:none}
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><span class="brand-mark"></span> QuillMD</div>
+  <span class="crumb-sep">/</span>
+  <span class="crumb">Patients</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb">Mei-Ling Park</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb crumb-active">Visit · Apr 30, 2026</span>
+  <div class="spacer"></div>
+  <div class="status-pill-chrome" aria-live="polite">
+    <span class="pdot"></span>
+    <span>READY</span>
+  </div>
+  <button class="btn-sage-sm" type="button">
+    <span>Sign &amp; send</span>
+    <span class="shortcut">⌘ ↵</span>
+  </button>
+  <div class="avatar-chip" title="Dr. Kalyani Park">KP</div>
+</header>
+
+<div class="shell">
+  <main class="left-col">
+
+    <div class="meta-strip">
+      <div class="field">MEI-LING PARK</div>
+      <div class="field">34F</div>
+      <div class="field"><span class="lbl">MRN</span>77324</div>
+      <div class="field">J20.9</div>
+      <div class="field"><span class="lbl">Recorded</span>Apr 30 · 11:14</div>
+      <div class="field"><span class="lbl">Length</span>6m 04s</div>
+    </div>
+
+    <div class="tabs-row" role="tablist">
+      <div class="tab" role="tab" aria-selected="false">Soap Note</div>
+      <div class="tab active" role="tab" aria-selected="true">Transcript</div>
+      <div class="tab" role="tab" aria-selected="false">Codes</div>
+      <div class="tab" role="tab" aria-selected="false">Rx</div>
+      <div class="tab" role="tab" aria-selected="false">Extras</div>
+    </div>
+
+    <div class="toolbar">
+      <div class="player">
+        <button class="play-btn" type="button" aria-label="Play audio">
+          <svg viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+            <path d="M3 1.5l7 4.5-7 4.5z"/>
+          </svg>
+        </button>
+        <div class="scrub-wrap">
+          <span class="time-mono">02:34</span>
+          <div class="scrub-bar" role="slider" aria-label="Audio scrubber" aria-valuemin="0" aria-valuemax="364" aria-valuenow="154">
+            <div class="scrub-fill"></div>
+            <div class="scrub-thumb"></div>
+          </div>
+          <span class="time-mono total">06:04</span>
+        </div>
+      </div>
+      <button class="search-pill" type="button" aria-label="Search transcript">
+        <kbd>⌘F</kbd><span class="label">· search transcript</span>
+      </button>
+    </div>
+
+    <article class="transcript" aria-label="Visit transcript">
+
+      <div class="turn">
+        <div class="eyebrow doctor"><span class="ts">00:00</span><span class="sep">·</span><span class="role">DOCTOR</span></div>
+        <div class="speaker-label doctor">Dr. Park</div>
+        <p class="turn-body">Hi Mei-Ling, good to see you back. How's that cough doing?</p>
+      </div>
+
+      <div class="turn">
+        <div class="eyebrow patient"><span class="ts">00:08</span><span class="sep">·</span><span class="role">PATIENT</span></div>
+        <div class="speaker-label patient">Mei-Ling Park</div>
+        <p class="turn-body">It's a lot better. Mostly just morning now, like a little tickle. Sputum's gone clear too.</p>
+      </div>
+
+      <div class="turn">
+        <div class="eyebrow doctor"><span class="ts">00:21</span><span class="sep">·</span><span class="role">DOCTOR</span></div>
+        <div class="speaker-label doctor">Dr. Park</div>
+        <p class="turn-body">Good. Any fever still?</p>
+      </div>
+
+      <div class="turn">
+        <div class="eyebrow patient"><span class="ts">00:24</span><span class="sep">·</span><span class="role">PATIENT</span></div>
+        <div class="speaker-label patient">Mei-Ling Park</div>
+        <p class="turn-body">No, hasn't spiked since Saturday.</p>
+      </div>
+
+      <div class="turn">
+        <div class="eyebrow doctor"><span class="ts">00:30</span><span class="sep">·</span><span class="role">DOCTOR</span></div>
+        <div class="speaker-label doctor">Dr. Park</div>
+        <p class="turn-body">Sleeping okay?</p>
+      </div>
+
+      <div class="turn">
+        <div class="eyebrow patient"><span class="ts">00:33</span><span class="sep">·</span><span class="role">PATIENT</span></div>
+        <div class="speaker-label patient">Mei-Ling Park</div>
+        <p class="turn-body">Yes, pretty much normal. I went back to work Monday.</p>
+      </div>
+
+      <div class="turn">
+        <div class="eyebrow doctor"><span class="ts">00:40</span><span class="sep">·</span><span class="role">DOCTOR</span></div>
+        <div class="speaker-label doctor">Dr. Park</div>
+        <p class="turn-body">Are you feeling tired in a way that's different from work tiredness?</p>
+      </div>
+
+      <div class="turn">
+        <div class="eyebrow patient"><span class="ts">00:46</span><span class="sep">·</span><span class="role">PATIENT</span></div>
+        <div class="speaker-label patient">Mei-Ling Park</div>
+        <p class="turn-body">A little. Like — I'm fine in the morning but by 4 PM I'm really wiped. That's not me normally.</p>
+      </div>
+
+      <div class="turn">
+        <div class="eyebrow doctor"><span class="ts">01:02</span><span class="sep">·</span><span class="role">DOCTOR</span></div>
+        <div class="speaker-label doctor">Dr. Park</div>
+        <p class="turn-body"><span class="lowconf">That's expected after a viral chest infection. It usually takes another week or two for energy to come back.</span> Let me listen to your lungs.<span class="lowconf-tag">78%</span></p>
+      </div>
+
+      <div class="turn">
+        <div class="eyebrow doctor"><span class="ts">01:14</span><span class="sep">·</span><span class="role">DOCTOR</span></div>
+        <div class="speaker-label doctor">Dr. Park</div>
+        <p class="turn-body">Lungs sound clear bilaterally. No crackles. Throat's a little red but no pus. Heart sounds normal.</p>
+      </div>
+
+      <div class="turn">
+        <div class="eyebrow doctor"><span class="ts">03:32</span><span class="sep">·</span><span class="role">DOCTOR</span></div>
+        <div class="speaker-label doctor">Dr. Park</div>
+        <p class="turn-body">Okay, so the diagnosis is acute bronchitis, resolving — that's J20.9. I'm going to give you albuterol just in case the cough flares up overnight or before runs.</p>
+      </div>
+
+      <div class="turn">
+        <div class="eyebrow patient"><span class="ts">04:18</span><span class="sep">·</span><span class="role">PATIENT</span></div>
+        <div class="speaker-label patient">Mei-Ling Park</div>
+        <p class="turn-body">Do I need to come back?</p>
+      </div>
+
+      <div class="turn">
+        <div class="eyebrow doctor"><span class="ts">04:21</span><span class="sep">·</span><span class="role">DOCTOR</span></div>
+        <div class="speaker-label doctor">Dr. Park</div>
+        <p class="turn-body">If you're still coughing in seven days, or if you spike a fever, or you get short of breath — call. Otherwise, we're done.</p>
+      </div>
+
+    </article>
+
+    <div class="end-card">
+      <div class="meta-line">
+        <span>End of transcript</span>
+        <span class="dot"></span>
+        <span>6m 04s</span>
+        <span class="dot"></span>
+        <span>32 kHz mono Opus</span>
+        <span class="dot"></span>
+        <span>iPad</span>
+      </div>
+      <div>13 turns</div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+(function(){
+  document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(x => {
+        x.classList.remove('active');
+        x.setAttribute('aria-selected','false');
+      });
+      t.classList.add('active');
+      t.setAttribute('aria-selected','true');
+    });
+  });
+
+  // play-button toggle (visual only)
+  const playBtn = document.querySelector('.play-btn');
+  const playIcon = playBtn.querySelector('svg');
+  let playing = false;
+  playBtn.addEventListener('click', () => {
+    playing = !playing;
+    playIcon.innerHTML = playing
+      ? '<rect x="3" y="2" width="2.4" height="8" rx=".4"/><rect x="6.6" y="2" width="2.4" height="8" rx=".4"/>'
+      : '<path d="M3 1.5l7 4.5-7 4.5z"/>';
+  });
+
+  // scrub bar click jump (visual only)
+  const scrub = document.querySelector('.scrub-bar');
+  const fill = scrub.querySelector('.scrub-fill');
+  const thumb = scrub.querySelector('.scrub-thumb');
+  scrub.addEventListener('click', (e) => {
+    const rect = scrub.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    fill.style.width = (pct*100)+'%';
+    thumb.style.left = (pct*100)+'%';
+  });
+})();
+</script>
+
+</body>
+</html>

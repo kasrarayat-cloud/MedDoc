@@ -1,0 +1,802 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QuillMD · Visit · Mei-Ling Park · v9 SOAP V4 Card Stream</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#08090a;
+  --surface-1:#0d0e10;
+  --surface-2:#131416;
+  --surface-3:#1a1c1e;
+  --border:#21232a;
+  --border-strong:#2c2f38;
+  --hairline:rgba(255,255,255,0.05);
+  --hairline-strong:rgba(255,255,255,0.08);
+  --text:#f7f8f8;
+  --text-2:#b4bcc8;
+  --text-3:#6c737f;
+  --text-4:#4b5159;
+  --sage:#7AA68C;
+  --sage-bright:#9BC4A8;
+  --sage-deep:#2F5040;
+  --sage-tint:rgba(122,166,140,0.13);
+  --sage-glow:rgba(122,166,140,0.18);
+  --row-hover:rgba(255,255,255,0.03);
+  --row-active:rgba(255,255,255,0.05);
+  --warning:#d4a437;
+  --warning-bright:#e3b950;
+  --info:#5b8db8;
+  --font-sans:'Inter', -apple-system, system-ui, sans-serif;
+  --font-mono:'JetBrains Mono', ui-monospace, Menlo, monospace;
+  --ease:cubic-bezier(0.16, 1, 0.3, 1);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text)}
+body{
+  font-family:var(--font-sans);
+  font-feature-settings:'cv11','ss01';
+  font-size:13px;
+  line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  letter-spacing:-0.005em;
+  min-height:100vh;
+}
+::selection{background:rgba(122,166,140,.25);color:var(--text)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+a{color:inherit;text-decoration:none}
+
+/* topbar */
+.topbar{
+  position:sticky;top:0;z-index:30;
+  height:44px;
+  display:flex;align-items:center;gap:12px;
+  padding:0 16px;
+  background:rgba(8,9,10,.85);
+  backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--hairline);
+}
+.brand{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;letter-spacing:-0.01em}
+.brand-mark{
+  width:18px;height:18px;border-radius:5px;
+  background:linear-gradient(135deg,var(--sage) 0%,var(--sage-deep) 100%);
+  display:grid;place-items:center;color:#0c1410;font-size:10px;font-weight:700;
+  box-shadow:0 0 0 1px rgba(255,255,255,.06) inset;
+}
+.brand-mark::before{content:'Q'}
+.crumb-sep{color:var(--text-4);font-size:12px}
+.crumb{color:var(--text-2);font-size:13px;transition:color 100ms var(--ease)}
+.crumb:hover{color:var(--text)}
+.crumb-active{color:var(--text)}
+.spacer{flex:1}
+.status-pill-chrome{
+  display:inline-flex;align-items:center;gap:6px;
+  height:22px;padding:0 9px;
+  border-radius:4px;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.06em;text-transform:uppercase;font-weight:500;
+  border:1px solid rgba(122,166,140,.25);
+  color:var(--sage-bright);
+  background:rgba(122,166,140,.06);
+}
+.status-pill-chrome .pdot{
+  width:5px;height:5px;border-radius:50%;
+  background:var(--sage);
+  animation:idle-pulse 1.6s ease-in-out infinite;
+}
+@keyframes idle-pulse{
+  0%,100%{opacity:.7;transform:scale(1)}
+  50%{opacity:1;transform:scale(1.04)}
+}
+.btn-sage{
+  display:inline-flex;align-items:center;gap:8px;
+  height:30px;padding:0 14px;
+  background:var(--sage);
+  color:#0d1611;
+  border-radius:6px;
+  font-size:12.5px;font-weight:500;
+  letter-spacing:-0.005em;
+  transition:background 100ms var(--ease), transform 80ms var(--ease), box-shadow 200ms var(--ease);
+}
+.btn-sage:hover{background:#88b599;transform:scale(1.02);box-shadow:0 0 0 4px rgba(122,166,140,.18)}
+.btn-sage .shortcut{font-family:var(--font-mono);font-size:11px;color:rgba(13,22,17,.55)}
+.avatar-chip{
+  width:24px;height:24px;border-radius:6px;
+  background:linear-gradient(135deg,#3a4a52 0%,#2a3036 100%);
+  color:#dde6ec;font-size:10.5px;font-weight:600;
+  display:grid;place-items:center;letter-spacing:0.02em;
+  border:1px solid var(--hairline-strong);
+}
+
+.shell{
+  position:relative;
+  min-height:calc(100vh - 44px);
+  padding:18px 28px 80px;
+  max-width:920px;
+  margin:0 auto;
+}
+.shell::before{
+  content:'';
+  position:absolute;
+  top:-100px;left:30%;
+  width:600px;height:380px;
+  background:radial-gradient(ellipse at center, rgba(122,166,140,.045) 0%, transparent 70%);
+  pointer-events:none;
+  z-index:0;
+}
+
+.meta-strip{
+  display:flex;align-items:center;
+  padding:6px 0 14px;
+  margin-bottom:14px;
+  border-bottom:1px solid var(--hairline);
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--text-2);
+  position:relative;z-index:1;
+}
+.meta-strip .field{padding:0 14px;border-right:1px solid var(--hairline)}
+.meta-strip .field:first-child{padding-left:0;color:var(--text);font-weight:500}
+.meta-strip .field:last-child{border-right:0}
+.meta-strip .field .lbl{color:var(--text-4);margin-right:4px;font-weight:400}
+
+.tabs-row{
+  display:flex;align-items:center;gap:0;
+  margin-bottom:24px;
+  border-bottom:1px solid var(--hairline);
+  position:relative;z-index:1;
+}
+.tab{
+  position:relative;
+  padding:8px 16px 10px;
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.07em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  font-weight:500;
+  cursor:pointer;
+  transition:color 100ms var(--ease);
+}
+.tab:first-child{padding-left:0}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--sage-bright)}
+.tab.active::after{
+  content:'';position:absolute;
+  left:0;right:0;bottom:-1px;
+  height:1.5px;
+  background:var(--sage);
+  border-radius:1px 1px 0 0;
+}
+
+/* ─────────────── Card Stream ─────────────── */
+.stream{
+  position:relative;z-index:1;
+  display:flex;flex-direction:column;
+  gap:24px;
+}
+
+.soap-card{
+  position:relative;
+  background:var(--surface-1);
+  border:1px solid var(--hairline);
+  border-radius:10px;
+  overflow:hidden;
+  transition:background 130ms var(--ease), border-color 130ms var(--ease), transform 130ms var(--ease);
+}
+.soap-card::before{
+  content:'';
+  position:absolute;
+  left:0;top:0;bottom:0;
+  width:3px;
+  background:var(--sage);
+  opacity:0;
+  transform:translateX(-3px);
+  transition:opacity 130ms var(--ease), transform 130ms var(--ease);
+}
+.soap-card:hover{
+  background:var(--surface-2);
+  border-color:var(--hairline-strong);
+}
+.soap-card.active{
+  background:var(--surface-2);
+  border-color:rgba(122,166,140,.22);
+}
+.soap-card.active::before{opacity:1;transform:translateX(0)}
+
+/* card header */
+.card-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 18px;
+  gap:12px;
+  border-bottom:1px solid var(--hairline);
+}
+.card-head-l{display:flex;align-items:center;gap:12px;min-width:0}
+.card-letter{
+  display:inline-grid;place-items:center;
+  width:30px;height:30px;
+  border-radius:7px;
+  background:rgba(122,166,140,.08);
+  border:1px solid rgba(122,166,140,.24);
+  color:var(--sage-bright);
+  font-family:var(--font-mono);
+  font-size:13px;
+  font-weight:500;
+  letter-spacing:0;
+}
+.card-meta-block{display:flex;flex-direction:column;gap:2px;min-width:0}
+.card-name{
+  font-family:var(--font-sans);
+  font-size:14.5px;
+  font-weight:600;
+  letter-spacing:-0.01em;
+  color:var(--text);
+}
+.card-sub{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  display:flex;align-items:center;gap:8px;
+}
+.card-sub .dot{width:3px;height:3px;border-radius:50%;background:var(--text-4)}
+
+.card-head-r{display:flex;align-items:center;gap:8px;flex-shrink:0}
+
+.section-status{
+  display:inline-flex;align-items:center;gap:6px;
+  height:22px;padding:0 9px;
+  border-radius:4px;
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  font-weight:500;
+}
+.section-status .sdot{width:4px;height:4px;border-radius:50%;background:currentColor}
+.section-status.reviewed{
+  border:1px solid rgba(122,166,140,.28);
+  color:var(--sage-bright);
+  background:rgba(122,166,140,.08);
+}
+.section-status.drafted{
+  border:1px solid rgba(212,164,55,.25);
+  color:var(--warning-bright);
+  background:rgba(212,164,55,.06);
+}
+
+.icon-btn{
+  width:28px;height:28px;
+  display:grid;place-items:center;
+  border-radius:5px;
+  color:var(--text-3);
+  border:1px solid transparent;
+  transition:background 100ms var(--ease), color 100ms var(--ease), border-color 100ms var(--ease);
+}
+.icon-btn:hover{background:rgba(255,255,255,.04);color:var(--text);border-color:var(--hairline-strong)}
+.icon-btn svg{width:14px;height:14px}
+
+/* card body */
+.card-body{
+  padding:18px 22px 20px;
+  font-family:var(--font-sans);
+  font-size:15px;
+  line-height:1.7;
+  color:var(--text);
+  letter-spacing:-0.005em;
+}
+.card-body p{margin:0}
+.card-body p + p{margin-top:10px}
+.card-body strong{color:var(--text);font-weight:600}
+.card-body em{color:var(--text-2);font-style:italic}
+
+/* vitals tile */
+.vitals-tile{
+  margin-bottom:14px;
+  padding:12px 14px;
+  background:var(--surface-3);
+  border:1px solid var(--hairline);
+  border-radius:6px;
+  display:grid;
+  grid-template-columns:repeat(3, 1fr);
+  gap:8px 16px;
+  font-family:var(--font-mono);
+  font-size:12.5px;
+  font-variant-numeric:tabular-nums;
+}
+.soap-card.active .vitals-tile{background:var(--surface-1)}
+.vitals-tile .pair{display:flex;align-items:baseline;gap:6px}
+.vitals-tile .v-lbl{
+  color:var(--text-4);
+  font-size:9.5px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+}
+.vitals-tile .v-val{color:var(--text);font-weight:500}
+
+/* assessment list */
+.dx-list{margin:0;padding:0;list-style:none}
+.dx-list li{
+  padding:8px 0 8px 30px;
+  position:relative;
+  counter-increment:dx;
+  font-size:15px;
+  line-height:1.6;
+  border-top:1px solid var(--hairline);
+}
+.dx-list{counter-reset:dx}
+.dx-list li:first-child{border-top:0;padding-top:0}
+.dx-list li:first-child::before{top:0}
+.dx-list li::before{
+  content:counter(dx) ".";
+  position:absolute;
+  left:0;top:8px;
+  font-family:var(--font-mono);
+  font-size:11.5px;
+  color:var(--sage-bright);
+  font-weight:500;
+}
+.dx-list .dx-code{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  color:var(--text-3);
+  margin-left:6px;
+  padding:1px 6px;
+  border:1px solid var(--hairline-strong);
+  border-radius:3px;
+  letter-spacing:0.04em;
+  background:rgba(255,255,255,.02);
+}
+
+/* plan list */
+.plan-list{margin:0;padding:0;list-style:none}
+.plan-list li{
+  padding:10px 0;
+  display:grid;
+  grid-template-columns:84px 1fr;
+  gap:14px;
+  align-items:start;
+  border-top:1px solid var(--hairline);
+}
+.plan-list li:first-child{border-top:0;padding-top:0}
+.plan-list .p-tag{
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.12em;
+  text-transform:uppercase;
+  color:var(--sage-bright);
+  padding:4px 8px;
+  border:1px solid rgba(122,166,140,.22);
+  background:rgba(122,166,140,.05);
+  border-radius:4px;
+  text-align:center;
+  font-weight:500;
+  align-self:start;
+  margin-top:2px;
+}
+.plan-list .p-body{font-size:15px;line-height:1.6;color:var(--text)}
+.plan-list .p-body strong{font-weight:600}
+
+/* card footer */
+.card-foot{
+  padding:10px 18px;
+  background:rgba(255,255,255,.012);
+  border-top:1px solid var(--hairline);
+  display:flex;align-items:center;justify-content:space-between;
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  gap:10px;
+}
+.card-foot .left{display:flex;align-items:center;gap:10px}
+.card-foot .left .dot{width:3px;height:3px;border-radius:50%;background:var(--text-4)}
+.card-foot .left .num{color:var(--text-2)}
+.card-foot .actions{display:flex;align-items:center;gap:6px}
+.fbtn{
+  display:inline-flex;align-items:center;gap:5px;
+  height:22px;padding:0 8px;
+  border:1px solid var(--hairline-strong);
+  border-radius:4px;
+  background:rgba(255,255,255,.015);
+  color:var(--text-2);
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  font-weight:500;
+  transition:background 100ms var(--ease), color 100ms var(--ease), border-color 100ms var(--ease);
+}
+.fbtn:hover{background:rgba(255,255,255,.04);color:var(--text);border-color:rgba(255,255,255,.14)}
+
+/* stream summary card (top) */
+.summary-card{
+  background:var(--surface-1);
+  border:1px solid var(--hairline);
+  border-radius:10px;
+  padding:18px 22px;
+  display:flex;align-items:center;justify-content:space-between;
+  gap:16px;
+  flex-wrap:wrap;
+}
+.summary-card .left{display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+.summary-card .stat{display:flex;flex-direction:column;gap:2px;min-width:0}
+.summary-card .stat-num{
+  font-family:var(--font-sans);
+  font-size:18px;
+  font-weight:600;
+  letter-spacing:-0.015em;
+  color:var(--text);
+  font-variant-numeric:tabular-nums;
+}
+.summary-card .stat-num.sage{color:var(--sage-bright)}
+.summary-card .stat-lbl{
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.12em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  font-weight:500;
+}
+.summary-card .vsep{
+  width:1px;height:28px;
+  background:var(--hairline);
+}
+.summary-card .right{display:flex;align-items:center;gap:8px}
+
+/* end-of-stream footer */
+.stream-end{
+  padding:18px 0;
+  text-align:center;
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.14em;
+  text-transform:uppercase;
+  color:var(--text-4);
+  display:flex;align-items:center;justify-content:center;gap:14px;
+  margin-top:6px;
+}
+.stream-end::before,.stream-end::after{
+  content:'';height:1px;flex:1;
+  background:var(--hairline);
+}
+
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;
+  }
+  .status-pill-chrome .pdot{animation:none}
+  .soap-card:hover{background:var(--surface-1);border-color:var(--hairline)}
+}
+
+@media (max-width:760px){
+  .meta-strip{flex-wrap:wrap;font-size:10px}
+  .meta-strip .field{padding:4px 10px}
+  .shell{padding:14px 14px 60px}
+  .topbar{padding:0 12px;gap:8px;flex-wrap:wrap;height:auto;min-height:44px}
+  .crumb,.crumb-sep{display:none}
+  .crumb-active{display:inline}
+  .tabs-row{overflow-x:auto;flex-wrap:nowrap}
+  .tab{flex-shrink:0}
+  .vitals-tile{grid-template-columns:1fr 1fr}
+  .card-body{padding:16px 16px 18px}
+  .card-head{padding:12px 14px;flex-wrap:wrap}
+  .card-foot{padding:10px 14px;flex-wrap:wrap}
+  .plan-list li{grid-template-columns:1fr;gap:6px}
+  .plan-list .p-tag{justify-self:start;width:auto}
+  .summary-card{padding:14px}
+  .summary-card .left{gap:12px}
+}
+@media (max-width:420px){
+  .vitals-tile{grid-template-columns:1fr}
+  .card-name{font-size:14px}
+  .card-head{gap:8px}
+  .card-head-r{flex-wrap:wrap}
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><span class="brand-mark"></span> QuillMD</div>
+  <span class="crumb-sep">/</span>
+  <span class="crumb">Patients</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb">Mei-Ling Park</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb crumb-active">Visit · Apr 30, 2026</span>
+  <div class="spacer"></div>
+  <div class="status-pill-chrome"><span class="pdot"></span><span>Ready</span></div>
+  <button class="btn-sage" type="button"><span>Sign &amp; send</span><span class="shortcut">⌘ ↵</span></button>
+  <div class="avatar-chip">KP</div>
+</header>
+
+<div class="shell">
+
+  <div class="meta-strip">
+    <div class="field">Mei-Ling Park</div>
+    <div class="field">34 F</div>
+    <div class="field"><span class="lbl">MRN</span>77324</div>
+    <div class="field">J20.9 · Bronchitis follow-up</div>
+    <div class="field">99214</div>
+    <div class="field"><span class="lbl">Duration</span>22 min</div>
+  </div>
+
+  <div class="tabs-row" role="tablist">
+    <div class="tab active" role="tab" aria-selected="true">Soap Note</div>
+    <div class="tab" role="tab" aria-selected="false">Transcript</div>
+    <div class="tab" role="tab" aria-selected="false">Codes</div>
+    <div class="tab" role="tab" aria-selected="false">Rx</div>
+    <div class="tab" role="tab" aria-selected="false">Extras</div>
+  </div>
+
+  <div class="stream">
+
+    <!-- summary card -->
+    <div class="summary-card">
+      <div class="left">
+        <div class="stat">
+          <span class="stat-num">4</span>
+          <span class="stat-lbl">Sections</span>
+        </div>
+        <div class="vsep"></div>
+        <div class="stat">
+          <span class="stat-num sage">3 / 4</span>
+          <span class="stat-lbl">Reviewed</span>
+        </div>
+        <div class="vsep"></div>
+        <div class="stat">
+          <span class="stat-num">412</span>
+          <span class="stat-lbl">Words</span>
+        </div>
+        <div class="vsep"></div>
+        <div class="stat">
+          <span class="stat-num">0.94</span>
+          <span class="stat-lbl">Confidence</span>
+        </div>
+      </div>
+      <div class="right">
+        <button class="fbtn">Markdown</button>
+        <button class="fbtn">Diff vs prev</button>
+        <button class="fbtn">Copy SOAP</button>
+      </div>
+    </div>
+
+    <!-- S CARD -->
+    <article class="soap-card" data-sec="S">
+      <header class="card-head">
+        <div class="card-head-l">
+          <div class="card-letter">S</div>
+          <div class="card-meta-block">
+            <div class="card-name">Subjective</div>
+            <div class="card-sub">
+              <span>01 of 04</span>
+              <span class="dot"></span>
+              <span>Patient narrative</span>
+            </div>
+          </div>
+        </div>
+        <div class="card-head-r">
+          <span class="section-status reviewed"><span class="sdot"></span>Reviewed</span>
+          <button class="icon-btn" aria-label="Edit section">
+            <svg viewBox="0 0 14 14" fill="none"><path d="M9 2.5l2.5 2.5-7 7H2v-2.5l7-7z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
+          </button>
+          <button class="icon-btn" aria-label="Section menu">
+            <svg viewBox="0 0 14 14" fill="none"><circle cx="3" cy="7" r="1" fill="currentColor"/><circle cx="7" cy="7" r="1" fill="currentColor"/><circle cx="11" cy="7" r="1" fill="currentColor"/></svg>
+          </button>
+        </div>
+      </header>
+      <div class="card-body">
+        <p>Patient reports cough has improved over past week — now occasional, mostly morning. <strong>No fever for 5 days.</strong> Sputum changed from yellow-green to clear. Sleep restored. Returned to work Mon.</p>
+        <p>Concerned about ongoing fatigue. Denies SOB, chest pain, hemoptysis. No new exposures or sick household contacts.</p>
+      </div>
+      <footer class="card-foot">
+        <div class="left">
+          <span><span class="num">2</span> paragraphs</span>
+          <span class="dot"></span>
+          <span><span class="num">4</span> cited turns</span>
+        </div>
+        <div class="actions">
+          <button class="fbtn">Sign section</button>
+        </div>
+      </footer>
+    </article>
+
+    <!-- O CARD -->
+    <article class="soap-card" data-sec="O">
+      <header class="card-head">
+        <div class="card-head-l">
+          <div class="card-letter">O</div>
+          <div class="card-meta-block">
+            <div class="card-name">Objective</div>
+            <div class="card-sub">
+              <span>02 of 04</span>
+              <span class="dot"></span>
+              <span>Exam &amp; vitals</span>
+            </div>
+          </div>
+        </div>
+        <div class="card-head-r">
+          <span class="section-status reviewed"><span class="sdot"></span>Reviewed</span>
+          <button class="icon-btn" aria-label="Edit section">
+            <svg viewBox="0 0 14 14" fill="none"><path d="M9 2.5l2.5 2.5-7 7H2v-2.5l7-7z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
+          </button>
+          <button class="icon-btn" aria-label="Section menu">
+            <svg viewBox="0 0 14 14" fill="none"><circle cx="3" cy="7" r="1" fill="currentColor"/><circle cx="7" cy="7" r="1" fill="currentColor"/><circle cx="11" cy="7" r="1" fill="currentColor"/></svg>
+          </button>
+        </div>
+      </header>
+      <div class="card-body">
+        <div class="vitals-tile">
+          <div class="pair"><span class="v-lbl">BP</span><span class="v-val">118/74</span></div>
+          <div class="pair"><span class="v-lbl">HR</span><span class="v-val">88</span></div>
+          <div class="pair"><span class="v-lbl">RR</span><span class="v-val">18</span></div>
+          <div class="pair"><span class="v-lbl">Temp</span><span class="v-val">98.6 °F</span></div>
+          <div class="pair"><span class="v-lbl">SpO₂</span><span class="v-val">98% RA</span></div>
+          <div class="pair"><span class="v-lbl">Wt</span><span class="v-val">138 lb</span></div>
+        </div>
+        <p><strong>Pulmonary:</strong> Lungs clear to auscultation bilaterally, no wheezes/rales/rhonchi.</p>
+        <p><strong>HEENT:</strong> Throat mildly erythematous, no exudate. Cervical LAD: none.</p>
+        <p><strong>Cardiovascular:</strong> Heart RRR no m/r/g. Peripheral pulses 2+ symmetric.</p>
+      </div>
+      <footer class="card-foot">
+        <div class="left">
+          <span><span class="num">3</span> systems</span>
+          <span class="dot"></span>
+          <span><span class="num">6</span> vitals</span>
+          <span class="dot"></span>
+          <span><span class="num">3</span> cited turns</span>
+        </div>
+        <div class="actions">
+          <button class="fbtn">Sign section</button>
+        </div>
+      </footer>
+    </article>
+
+    <!-- A CARD -->
+    <article class="soap-card" data-sec="A">
+      <header class="card-head">
+        <div class="card-head-l">
+          <div class="card-letter">A</div>
+          <div class="card-meta-block">
+            <div class="card-name">Assessment</div>
+            <div class="card-sub">
+              <span>03 of 04</span>
+              <span class="dot"></span>
+              <span>Clinical impression</span>
+            </div>
+          </div>
+        </div>
+        <div class="card-head-r">
+          <span class="section-status reviewed"><span class="sdot"></span>Reviewed</span>
+          <button class="icon-btn" aria-label="Edit section">
+            <svg viewBox="0 0 14 14" fill="none"><path d="M9 2.5l2.5 2.5-7 7H2v-2.5l7-7z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
+          </button>
+          <button class="icon-btn" aria-label="Section menu">
+            <svg viewBox="0 0 14 14" fill="none"><circle cx="3" cy="7" r="1" fill="currentColor"/><circle cx="7" cy="7" r="1" fill="currentColor"/><circle cx="11" cy="7" r="1" fill="currentColor"/></svg>
+          </button>
+        </div>
+      </header>
+      <div class="card-body">
+        <ol class="dx-list">
+          <li><strong>Acute bronchitis, resolving.</strong> Marked symptomatic improvement on day 10; lungs clear, oxygenation normal.<span class="dx-code">J20.9</span></li>
+          <li><strong>Post-viral fatigue.</strong> Expected resolution within 1–2 weeks. <em>Reassurance and conservative measures appropriate.</em></li>
+          <li><strong>Cough variant — improving.</strong> Trending downward; albuterol use has tapered to PRN.</li>
+        </ol>
+      </div>
+      <footer class="card-foot">
+        <div class="left">
+          <span><span class="num">3</span> problems</span>
+          <span class="dot"></span>
+          <span><span class="num">1</span> ICD code</span>
+        </div>
+        <div class="actions">
+          <button class="fbtn">Sign section</button>
+        </div>
+      </footer>
+    </article>
+
+    <!-- P CARD (active state) -->
+    <article class="soap-card active" data-sec="P">
+      <header class="card-head">
+        <div class="card-head-l">
+          <div class="card-letter">P</div>
+          <div class="card-meta-block">
+            <div class="card-name">Plan</div>
+            <div class="card-sub">
+              <span>04 of 04</span>
+              <span class="dot"></span>
+              <span>Plan &amp; follow-up</span>
+              <span class="dot"></span>
+              <span style="color:var(--warning-bright)">Awaiting review</span>
+            </div>
+          </div>
+        </div>
+        <div class="card-head-r">
+          <span class="section-status drafted"><span class="sdot"></span>Drafted</span>
+          <button class="icon-btn" aria-label="Edit section">
+            <svg viewBox="0 0 14 14" fill="none"><path d="M9 2.5l2.5 2.5-7 7H2v-2.5l7-7z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
+          </button>
+          <button class="icon-btn" aria-label="Section menu">
+            <svg viewBox="0 0 14 14" fill="none"><circle cx="3" cy="7" r="1" fill="currentColor"/><circle cx="7" cy="7" r="1" fill="currentColor"/><circle cx="11" cy="7" r="1" fill="currentColor"/></svg>
+          </button>
+        </div>
+      </header>
+      <div class="card-body">
+        <ul class="plan-list">
+          <li>
+            <span class="p-tag">Symptomatic</span>
+            <div class="p-body">Continue conservative care: humidified air, hydration. Honey-based cough suppression at bedtime as needed.</div>
+          </li>
+          <li>
+            <span class="p-tag">Rx</span>
+            <div class="p-body"><strong>Albuterol HFA 90 mcg</strong> — 1–2 puffs every 4–6 hours PRN cough or shortness of breath.</div>
+          </li>
+          <li>
+            <span class="p-tag">Activity</span>
+            <div class="p-body">Resume normal activities as tolerated; pre-exercise albuterol if symptomatic.</div>
+          </li>
+          <li>
+            <span class="p-tag">Follow-up</span>
+            <div class="p-body">Return in 7 days if cough persists or worsens, or sooner if fever / SOB. Patient counseled on red flags.</div>
+          </li>
+        </ul>
+      </div>
+      <footer class="card-foot">
+        <div class="left">
+          <span><span class="num">4</span> plan items</span>
+          <span class="dot"></span>
+          <span><span class="num">1</span> Rx</span>
+          <span class="dot"></span>
+          <span><span class="num">3</span> cited turns</span>
+        </div>
+        <div class="actions">
+          <button class="fbtn">Mark reviewed</button>
+        </div>
+      </footer>
+    </article>
+
+    <div class="stream-end">End of clinical note · 22 min · Drafted by QuillMD</div>
+
+  </div>
+
+</div>
+
+<script>
+(function(){
+  document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(x => {
+        x.classList.remove('active');
+        x.setAttribute('aria-selected','false');
+      });
+      t.classList.add('active');
+      t.setAttribute('aria-selected','true');
+    });
+  });
+  // toggle active card on click
+  document.querySelectorAll('.soap-card').forEach(card => {
+    card.addEventListener('click', (e) => {
+      // ignore clicks on action buttons
+      if(e.target.closest('button')) return;
+      document.querySelectorAll('.soap-card').forEach(c => c.classList.remove('active'));
+      card.classList.add('active');
+    });
+  });
+})();
+</script>
+
+</body>
+</html>

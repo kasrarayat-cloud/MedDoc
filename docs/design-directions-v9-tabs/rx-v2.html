@@ -1,0 +1,788 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QuillMD · Rx · Mei-Ling Park · v9 Power Table</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#08090a;
+  --surface-1:#0d0e10;
+  --surface-2:#131416;
+  --surface-3:#1a1c1e;
+  --border:#21232a;
+  --border-strong:#2c2f38;
+  --hairline:rgba(255,255,255,0.05);
+  --hairline-strong:rgba(255,255,255,0.08);
+  --row-hover:rgba(255,255,255,0.025);
+  --text:#f7f8f8;
+  --text-2:#b4bcc8;
+  --text-3:#6c737f;
+  --text-4:#4b5159;
+  --sage:#7AA68C;
+  --sage-bright:#9BC4A8;
+  --sage-deep:#2F5040;
+  --sage-tint:rgba(122,166,140,0.13);
+  --sage-glow:rgba(122,166,140,0.18);
+  --success:#4caf7d;
+  --warning:#d4a437;
+  --danger:#d4574a;
+  --coral:#C97B6E;
+  --info:#5b8db8;
+  --font-sans:'Inter',-apple-system,system-ui,sans-serif;
+  --font-mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+  --ease:cubic-bezier(0.16,1,0.3,1);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text)}
+body{
+  font-family:var(--font-sans);
+  font-feature-settings:'cv11','ss01';
+  font-size:13px;
+  line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  letter-spacing:-0.005em;
+  min-height:100vh;
+}
+::selection{background:rgba(122,166,140,.25);color:var(--text)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+a{color:inherit;text-decoration:none}
+
+/* ─────── Top bar ─────── */
+.topbar{
+  position:sticky;top:0;z-index:30;
+  height:44px;
+  display:flex;align-items:center;gap:12px;
+  padding:0 16px;
+  background:rgba(8,9,10,.85);
+  backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--hairline);
+}
+.brand{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;letter-spacing:-0.01em}
+.brand-mark{
+  width:18px;height:18px;border-radius:5px;
+  background:linear-gradient(135deg,var(--sage) 0%,var(--sage-deep) 100%);
+  display:grid;place-items:center;color:#0c1410;font-size:10px;font-weight:700;
+  box-shadow:0 0 0 1px rgba(255,255,255,.06) inset;
+}
+.brand-mark::before{content:'Q'}
+.crumb-sep{color:var(--text-4);font-size:12px}
+.crumb{color:var(--text-2);font-size:13px;transition:color 100ms var(--ease)}
+.crumb:hover{color:var(--text)}
+.crumb-active{color:var(--text)}
+.spacer{flex:1}
+.status-pill{
+  display:inline-flex;align-items:center;gap:6px;
+  height:22px;padding:0 9px;
+  border-radius:4px;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.06em;text-transform:uppercase;font-weight:500;
+  border:1px solid rgba(122,166,140,.25);
+  color:var(--sage-bright);
+  background:rgba(122,166,140,.06);
+}
+.status-pill .pdot{
+  width:5px;height:5px;border-radius:50%;
+  background:var(--sage);
+  animation:idle-pulse 1.6s ease-in-out infinite;
+}
+@keyframes idle-pulse{0%,100%{opacity:.7;transform:scale(1)}50%{opacity:1;transform:scale(1.04)}}
+
+.btn-sage{
+  display:inline-flex;align-items:center;gap:8px;
+  height:32px;padding:0 14px;
+  background:var(--sage);
+  color:#0d1611;
+  border-radius:6px;
+  font-size:12.5px;font-weight:500;
+  letter-spacing:-0.005em;
+  transition:background 120ms var(--ease),transform 80ms var(--ease),box-shadow 200ms var(--ease);
+}
+.btn-sage:hover{background:#88b599;box-shadow:0 0 0 4px rgba(122,166,140,.18)}
+.btn-sage:active{transform:scale(.98)}
+.btn-sage .shortcut{font-family:var(--font-mono);font-size:10.5px;color:rgba(13,22,17,.55)}
+
+.avatar-chip{
+  width:24px;height:24px;border-radius:6px;
+  background:linear-gradient(135deg,#3a4a52 0%,#2a3036 100%);
+  color:#dde6ec;font-size:10.5px;font-weight:600;
+  display:grid;place-items:center;letter-spacing:0.02em;
+  border:1px solid var(--hairline-strong);
+}
+
+.shell{padding:18px 28px 80px;max-width:1280px;margin:0 auto}
+
+.meta-strip{
+  display:flex;align-items:center;
+  padding:6px 0 14px;
+  margin-bottom:14px;
+  border-bottom:1px solid var(--hairline);
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--text-2);
+}
+.meta-strip .field{padding:0 14px;border-right:1px solid var(--hairline)}
+.meta-strip .field:first-child{padding-left:0;color:var(--text);font-weight:500}
+.meta-strip .field:last-child{border-right:0}
+.meta-strip .field .lbl{color:var(--text-4);margin-right:4px;font-weight:400}
+
+.tabs-row{
+  display:flex;align-items:center;gap:0;
+  margin-bottom:24px;
+  border-bottom:1px solid var(--hairline);
+}
+.tab{
+  position:relative;
+  padding:8px 16px 10px;
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.07em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  font-weight:500;
+  cursor:pointer;
+  transition:color 100ms var(--ease);
+}
+.tab:first-child{padding-left:0}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--text)}
+.tab.active::after{
+  content:'';position:absolute;
+  left:0;right:0;bottom:-1px;
+  height:1.5px;
+  background:var(--sage);
+  border-radius:1px 1px 0 0;
+}
+
+/* ─────── Section headers ─────── */
+.sec-head{
+  display:flex;align-items:flex-end;justify-content:space-between;
+  margin-bottom:12px;
+}
+.sec-title{
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--text);
+  font-weight:500;
+  display:flex;align-items:center;gap:10px;
+}
+.sec-title .count{
+  color:var(--text-4);
+  font-size:10.5px;
+  letter-spacing:0.06em;
+  font-weight:400;
+}
+.sec-actions{display:flex;align-items:center;gap:8px}
+
+.toolbar{
+  display:flex;align-items:center;gap:8px;
+}
+.toolbar input{
+  height:30px;padding:0 10px;
+  background:var(--surface-1);
+  border:1px solid var(--hairline-strong);
+  border-radius:5px;
+  color:var(--text);
+  font:inherit;
+  font-size:12px;
+  width:240px;
+  outline:none;
+  transition:border-color 100ms var(--ease),background 100ms var(--ease);
+}
+.toolbar input::placeholder{color:var(--text-4)}
+.toolbar input:focus{border-color:rgba(122,166,140,.4);background:var(--surface-2)}
+.toolbar .seg{
+  display:inline-flex;height:30px;
+  border:1px solid var(--hairline-strong);
+  border-radius:5px;
+  overflow:hidden;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+}
+.toolbar .seg button{
+  padding:0 12px;
+  color:var(--text-3);
+  border-right:1px solid var(--hairline);
+  transition:background 100ms var(--ease),color 100ms var(--ease);
+}
+.toolbar .seg button:last-child{border-right:0}
+.toolbar .seg button:hover{background:rgba(255,255,255,.03);color:var(--text)}
+.toolbar .seg button.active{
+  background:var(--sage-tint);
+  color:var(--sage-bright);
+}
+
+/* ─────── Power table ─────── */
+.rx-table-wrap{
+  background:var(--surface-1);
+  border:1px solid var(--hairline);
+  border-radius:8px;
+  overflow:hidden;
+  margin-bottom:28px;
+}
+.rx-table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:12.5px;
+}
+.rx-table thead th{
+  position:sticky;top:0;
+  background:var(--surface-1);
+  text-align:left;
+  padding:9px 14px;
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  font-weight:500;
+  border-bottom:1px solid var(--hairline);
+  cursor:pointer;
+  user-select:none;
+  transition:color 120ms var(--ease),background 120ms var(--ease);
+}
+.rx-table thead th:hover{color:var(--text);background:var(--surface-2)}
+.rx-table thead th .sort-arrow{
+  display:inline-block;margin-left:4px;
+  color:var(--sage);opacity:.7;
+}
+.rx-table tbody tr{
+  height:32px;
+  border-bottom:1px solid var(--hairline);
+  transition:background 100ms var(--ease);
+  cursor:pointer;
+}
+.rx-table tbody tr:last-child{border-bottom:0}
+.rx-table tbody tr:hover{background:var(--row-hover)}
+.rx-table tbody tr.active{
+  background:rgba(122,166,140,.05);
+  box-shadow:inset 2px 0 0 var(--sage);
+}
+.rx-table td{
+  padding:6px 14px;
+  vertical-align:middle;
+  color:var(--text-2);
+}
+.rx-table td.rx-id{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  color:var(--text-4);
+  letter-spacing:0.04em;
+  width:54px;
+}
+.rx-table td.drug{
+  font-family:var(--font-mono);
+  font-size:12.5px;
+  color:var(--text);
+  font-weight:500;
+  letter-spacing:0;
+}
+.rx-table td.drug .strength{color:var(--sage-bright);font-weight:400;margin-left:6px}
+.rx-table td.dose{
+  font-family:var(--font-mono);
+  font-variant-numeric:tabular-nums;
+  color:var(--text-2);
+}
+.rx-table td.route,
+.rx-table td.freq{font-family:var(--font-sans);color:var(--text-2)}
+.rx-table td.qty{
+  font-family:var(--font-mono);
+  font-variant-numeric:tabular-nums;
+  color:var(--text);
+  text-align:right;
+}
+.rx-table td.refills{
+  font-family:var(--font-mono);
+  font-variant-numeric:tabular-nums;
+  color:var(--text-2);
+  text-align:right;
+}
+.rx-table td.warn-tally{text-align:center;width:100px}
+.warn-chips{display:inline-flex;gap:3px}
+.warn-chip{
+  width:5px;height:5px;border-radius:50%;
+  display:inline-block;
+}
+.warn-chip.critical{background:var(--danger)}
+.warn-chip.serious{background:var(--coral)}
+.warn-chip.moderate{background:var(--warning)}
+.warn-chip.info{background:var(--info)}
+.rx-table td.actions{
+  text-align:right;
+  width:120px;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+}
+.rx-table td.actions a{
+  color:var(--text-3);
+  margin-left:10px;
+  transition:color 100ms var(--ease);
+}
+.rx-table td.actions a:hover{color:var(--sage-bright)}
+
+.rx-table tfoot td{
+  padding:10px 14px;
+  border-top:1px solid var(--hairline);
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+}
+.rx-table tfoot button{
+  color:var(--sage-bright);
+  display:inline-flex;align-items:center;gap:6px;
+  transition:color 100ms var(--ease);
+}
+.rx-table tfoot button:hover{color:var(--sage)}
+.rx-table tfoot .plus{
+  width:16px;height:16px;
+  display:grid;place-items:center;
+  border:1px solid rgba(122,166,140,.3);
+  border-radius:3px;
+  font-size:11px;line-height:1;
+}
+
+/* Stat strip below table */
+.stat-strip{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:1px;
+  background:var(--hairline);
+  border:1px solid var(--hairline);
+  border-radius:6px;
+  overflow:hidden;
+  margin:-12px 0 24px;
+}
+.stat-strip .stat{
+  padding:10px 14px;
+  background:var(--surface-1);
+  display:flex;flex-direction:column;gap:3px;
+}
+.stat-strip .stat .v{
+  font-family:var(--font-mono);
+  font-size:18px;
+  font-variant-numeric:tabular-nums;
+  font-weight:500;
+  color:var(--text);
+  letter-spacing:-0.01em;
+}
+.stat-strip .stat .v.warn{color:var(--warning)}
+.stat-strip .stat .v.danger{color:var(--danger)}
+.stat-strip .stat .v.sage{color:var(--sage-bright)}
+.stat-strip .stat .l{
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--text-3);
+}
+
+/* ─────── Warnings stack below table ─────── */
+.qm-warns-stack{
+  display:flex;flex-direction:column;gap:8px;
+  margin-bottom:24px;
+}
+.qm-warn-critical,
+.qm-warn-serious,
+.qm-warn-moderate,
+.qm-warn-info{
+  display:grid;
+  grid-template-columns:60px 24px 1fr auto;
+  gap:12px;
+  align-items:start;
+  padding:12px 14px 12px 14px;
+  border-radius:6px;
+  border:1px solid var(--hairline);
+  border-left:3px solid var(--info);
+  background:rgba(91,141,184,0.06);
+  color:var(--text-2);
+  letter-spacing:-0.005em;
+  transition:background 130ms var(--ease),transform 100ms var(--ease);
+  cursor:pointer;
+}
+.qm-warn-critical:hover,
+.qm-warn-serious:hover,
+.qm-warn-moderate:hover,
+.qm-warn-info:hover{transform:translateY(-1px)}
+.qm-warn-critical{
+  border-left-color:var(--danger);
+  background:rgba(212,87,74,0.08);
+  color:var(--text);
+}
+.qm-warn-serious{
+  border-left-color:var(--coral);
+  background:rgba(201,123,110,0.07);
+  color:var(--text);
+}
+.qm-warn-moderate{
+  border-left-color:var(--warning);
+  background:rgba(212,164,55,0.06);
+}
+.qm-warn-info{
+  border-left-color:var(--info);
+  background:rgba(91,141,184,0.06);
+}
+.warn-rxid{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.08em;
+  color:var(--text-3);
+  padding:3px 7px;
+  border:1px solid var(--hairline-strong);
+  border-radius:3px;
+  background:rgba(255,255,255,.02);
+  text-align:center;
+  height:22px;
+  display:inline-flex;align-items:center;justify-content:center;
+}
+.qm-warn-icon{
+  width:24px;height:24px;
+  display:grid;place-items:center;
+  border-radius:5px;
+  font-family:var(--font-mono);
+  font-size:13px;
+  font-weight:500;
+  line-height:1;
+}
+.qm-warn-critical .qm-warn-icon{background:rgba(212,87,74,0.18);color:var(--danger)}
+.qm-warn-serious .qm-warn-icon{background:rgba(201,123,110,0.18);color:var(--coral)}
+.qm-warn-moderate .qm-warn-icon{background:rgba(212,164,55,0.16);color:var(--warning)}
+.qm-warn-info .qm-warn-icon{background:rgba(91,141,184,0.18);color:var(--info)}
+.qm-warn-head{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  font-weight:500;
+  margin-bottom:4px;
+}
+.qm-warn-critical .qm-warn-head{color:var(--danger)}
+.qm-warn-serious .qm-warn-head{color:var(--coral)}
+.qm-warn-moderate .qm-warn-head{color:var(--warning)}
+.qm-warn-info .qm-warn-head{color:var(--info)}
+.qm-warn-body{
+  font-size:13px;
+  line-height:1.5;
+  color:var(--text-2);
+}
+.qm-warn-critical .qm-warn-body,
+.qm-warn-serious .qm-warn-body{color:var(--text)}
+.qm-warn-body strong{color:var(--text);font-weight:500}
+.warn-action{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  align-self:center;
+}
+.warn-action:hover{color:var(--sage-bright)}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms !important;
+    transition-duration:.001ms !important;
+  }
+  .status-pill .pdot{animation:none}
+}
+
+@media (max-width:900px){
+  .shell{padding:14px 14px 60px}
+  .rx-table{font-size:11.5px}
+  .rx-table thead th,.rx-table td{padding:6px 10px}
+  .toolbar input{width:140px}
+  .stat-strip{grid-template-columns:repeat(2,1fr)}
+  .qm-warn-critical,.qm-warn-serious,.qm-warn-moderate,.qm-warn-info{
+    grid-template-columns:24px 1fr;
+  }
+  .warn-rxid,.warn-action{display:none}
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><span class="brand-mark"></span> QuillMD</div>
+  <span class="crumb-sep">/</span>
+  <span class="crumb">Patients</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb">Mei-Ling Park</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb crumb-active">Visit · Apr 30, 2026</span>
+  <div class="spacer"></div>
+  <div class="status-pill" aria-live="polite">
+    <span class="pdot"></span>
+    <span>READY</span>
+  </div>
+  <button class="btn-sage" aria-label="Sign and send note">
+    <span>Sign &amp; send</span>
+    <span class="shortcut">⌘↵</span>
+  </button>
+  <div class="avatar-chip" title="Dr. Kalyani Park">KP</div>
+</header>
+
+<div class="shell">
+
+  <div class="meta-strip">
+    <div class="field">MEI-LING PARK</div>
+    <div class="field">34F</div>
+    <div class="field"><span class="lbl">MRN</span>77324</div>
+    <div class="field">J20.9</div>
+    <div class="field">99214</div>
+    <div class="field"><span class="lbl">Duration</span>22 min</div>
+  </div>
+
+  <div class="tabs-row" role="tablist">
+    <div class="tab" role="tab" aria-selected="false">Soap Note</div>
+    <div class="tab" role="tab" aria-selected="false">Transcript</div>
+    <div class="tab" role="tab" aria-selected="false">Codes</div>
+    <div class="tab active" role="tab" aria-selected="true">Rx</div>
+    <div class="tab" role="tab" aria-selected="false">Extras</div>
+  </div>
+
+  <!-- Section: Prescription table -->
+  <div class="sec-head">
+    <div class="sec-title">
+      Prescriptions
+      <span class="count">2 active · 1 pending</span>
+    </div>
+    <div class="sec-actions">
+      <div class="toolbar">
+        <input type="text" placeholder="Filter Rx by drug, route, or pharmacy…" />
+        <div class="seg">
+          <button class="active">All</button>
+          <button>Active</button>
+          <button>Pending</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="rx-table-wrap">
+    <table class="rx-table" role="table">
+      <thead>
+        <tr>
+          <th>Rx</th>
+          <th>Drug ↓</th>
+          <th>Dose</th>
+          <th>Route</th>
+          <th>Freq</th>
+          <th style="text-align:right">Qty</th>
+          <th style="text-align:right">Refills</th>
+          <th style="text-align:center">Warns</th>
+          <th style="text-align:right">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="active" tabindex="0">
+          <td class="rx-id">R-001</td>
+          <td class="drug">Albuterol HFA<span class="strength">90 mcg</span></td>
+          <td class="dose">1–2 puffs</td>
+          <td class="route">Inhalation</td>
+          <td class="freq">q4–6h PRN</td>
+          <td class="qty">1 inh / 200 puffs</td>
+          <td class="refills">0</td>
+          <td class="warn-tally">
+            <span class="warn-chips" aria-label="2 warnings">
+              <span class="warn-chip moderate"></span>
+              <span class="warn-chip info"></span>
+            </span>
+          </td>
+          <td class="actions"><a href="#">Edit</a><a href="#">Copy</a></td>
+        </tr>
+        <tr tabindex="0">
+          <td class="rx-id">R-002</td>
+          <td class="drug">Guaifenesin ER<span class="strength">600 mg</span></td>
+          <td class="dose">1 tab</td>
+          <td class="route">Oral</td>
+          <td class="freq">q12h</td>
+          <td class="qty">30 tabs</td>
+          <td class="refills">1</td>
+          <td class="warn-tally">
+            <span class="warn-chips" aria-label="1 warning">
+              <span class="warn-chip info"></span>
+            </span>
+          </td>
+          <td class="actions"><a href="#">Edit</a><a href="#">Copy</a></td>
+        </tr>
+        <tr tabindex="0">
+          <td class="rx-id">R-003</td>
+          <td class="drug">Erythromycin ES<span class="strength">400 mg/5 mL</span></td>
+          <td class="dose">400 mg</td>
+          <td class="route">Oral</td>
+          <td class="freq">QID</td>
+          <td class="qty">28 doses</td>
+          <td class="refills">0</td>
+          <td class="warn-tally">
+            <span class="warn-chips" aria-label="3 warnings">
+              <span class="warn-chip critical"></span>
+              <span class="warn-chip serious"></span>
+              <span class="warn-chip info"></span>
+            </span>
+          </td>
+          <td class="actions"><a href="#">Edit</a><a href="#">Copy</a></td>
+        </tr>
+      </tbody>
+      <tfoot>
+        <tr>
+          <td colspan="9">
+            <button type="button" aria-label="Add new prescription">
+              <span class="plus">+</span>
+              Add Rx
+            </button>
+          </td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+  <div class="stat-strip" aria-label="Rx summary stats">
+    <div class="stat">
+      <div class="v">3</div>
+      <div class="l">Total Rx</div>
+    </div>
+    <div class="stat">
+      <div class="v sage">2</div>
+      <div class="l">Active</div>
+    </div>
+    <div class="stat">
+      <div class="v warn">6</div>
+      <div class="l">Total warnings</div>
+    </div>
+    <div class="stat">
+      <div class="v danger">1</div>
+      <div class="l">Critical interactions</div>
+    </div>
+  </div>
+
+  <!-- Section: Stacked warnings -->
+  <div class="sec-head">
+    <div class="sec-title">
+      Interaction &amp; Allergy Review
+      <span class="count">6 warnings across 3 Rx</span>
+    </div>
+    <div class="sec-actions">
+      <div class="toolbar">
+        <div class="seg">
+          <button class="active">By severity</button>
+          <button>By Rx</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="qm-warns-stack">
+
+    <div class="qm-warn-critical" role="alert">
+      <span class="warn-rxid">R-003</span>
+      <div class="qm-warn-icon" aria-hidden="true">⚠</div>
+      <div>
+        <div class="qm-warn-head">Critical · Major QT prolongation risk</div>
+        <div class="qm-warn-body">Erythromycin is a known <strong>potent CYP3A4 inhibitor</strong> and may significantly prolong the QT interval. Verify baseline ECG and screen for concurrent QT-prolonging agents (e.g. azithromycin, ondansetron, citalopram) before dispensing.</div>
+      </div>
+      <a href="#" class="warn-action">Review →</a>
+    </div>
+
+    <div class="qm-warn-serious" role="alert">
+      <span class="warn-rxid">R-003</span>
+      <div class="qm-warn-icon" aria-hidden="true">⚠</div>
+      <div>
+        <div class="qm-warn-head">Serious · GI side-effect profile</div>
+        <div class="qm-warn-body">High incidence of <strong>nausea, abdominal cramping, and diarrhea</strong> reported with erythromycin oral suspension; counsel patient explicitly and consider azithromycin if tolerability is a concern.</div>
+      </div>
+      <a href="#" class="warn-action">Review →</a>
+    </div>
+
+    <div class="qm-warn-moderate" role="note">
+      <span class="warn-rxid">R-001</span>
+      <div class="qm-warn-icon" aria-hidden="true">⚠</div>
+      <div>
+        <div class="qm-warn-head">Moderate · Allergy review</div>
+        <div class="qm-warn-body">Patient lists <strong>penicillin allergy</strong>. Albuterol does NOT cross-react, but verify any new combination drugs against listed allergies before dispensing.</div>
+      </div>
+      <a href="#" class="warn-action">Acknowledge</a>
+    </div>
+
+    <div class="qm-warn-info" role="note">
+      <span class="warn-rxid">R-001</span>
+      <div class="qm-warn-icon" aria-hidden="true">ⓘ</div>
+      <div>
+        <div class="qm-warn-head">Info · NSAID reminder</div>
+        <div class="qm-warn-body">Patient is currently <strong>NOT on any NSAIDs</strong>. If NSAIDs are added later, monitor for bronchospasm exacerbation in this patient.</div>
+      </div>
+      <a href="#" class="warn-action">Acknowledge</a>
+    </div>
+
+    <div class="qm-warn-info" role="note">
+      <span class="warn-rxid">R-002</span>
+      <div class="qm-warn-icon" aria-hidden="true">ⓘ</div>
+      <div>
+        <div class="qm-warn-head">Info · Hydration counsel</div>
+        <div class="qm-warn-body">Encourage <strong>oral hydration</strong> alongside guaifenesin to maximize mucolytic effect. Note in patient education handout for visit summary.</div>
+      </div>
+      <a href="#" class="warn-action">Acknowledge</a>
+    </div>
+
+    <div class="qm-warn-info" role="note">
+      <span class="warn-rxid">R-003</span>
+      <div class="qm-warn-icon" aria-hidden="true">ⓘ</div>
+      <div>
+        <div class="qm-warn-head">Info · Hold for clinical confirmation</div>
+        <div class="qm-warn-body">This Rx is <strong>not yet active</strong>. Sputum culture or 48-hour symptom check required before sending to pharmacy.</div>
+      </div>
+      <a href="#" class="warn-action">Acknowledge</a>
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+(function(){
+  document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(x => {
+        x.classList.remove('active');
+        x.setAttribute('aria-selected','false');
+      });
+      t.classList.add('active');
+      t.setAttribute('aria-selected','true');
+    });
+  });
+
+  // Row click → activate
+  document.querySelectorAll('.rx-table tbody tr').forEach(r => {
+    r.addEventListener('click', () => {
+      document.querySelectorAll('.rx-table tbody tr').forEach(x => x.classList.remove('active'));
+      r.classList.add('active');
+    });
+  });
+
+  // Segmented toggles
+  document.querySelectorAll('.seg').forEach(seg => {
+    seg.querySelectorAll('button').forEach(b => {
+      b.addEventListener('click', () => {
+        seg.querySelectorAll('button').forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+      });
+    });
+  });
+})();
+</script>
+
+</body>
+</html>
