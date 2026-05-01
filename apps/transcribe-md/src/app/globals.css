@@ -2642,7 +2642,7 @@ body {
   display: flex;
   align-items: flex-end;
 }
-.qm-cl-app .qm-cin-band-tall { min-height: 280px; padding: 28px 32px 24px; }
+.qm-cl-app .qm-cin-band-tall { min-height: 360px; padding: 32px 32px 28px; }
 .qm-cl-app .qm-cin-band-short { min-height: 200px; padding: 24px 32px 20px; }
 
 /* Background photo + parallax-ready transform/filter target.
