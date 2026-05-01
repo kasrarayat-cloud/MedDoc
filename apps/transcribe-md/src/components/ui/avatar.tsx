@@ -1,3 +1,5 @@
+'use client';
+
 // Phase 5 — Linear V1 Faithful avatar.
 // Reference: docs/design-directions-v8-linear/dashboard-v1.html (.avatar-chip)
 //
