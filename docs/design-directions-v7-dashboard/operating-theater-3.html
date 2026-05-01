@@ -1,0 +1,781 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Operating Theater 3 — Tabular Density</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;1,8..60,400;1,8..60,500&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --cream: #F2EBDC;
+    --cream-card: #FFFCF5;
+    --cream-2: #F2EDE3;
+    --ink: #2B2620;
+    --ink-2: #5C544A;
+    --ink-3: #8A8278;
+    --sage: #7AA68C;
+    --sage-deep: #2F5040;
+    --coral: #C97B6E;
+    --amber: #D4A574;
+    --teal: #5BA3B4;
+    --line: rgba(43, 38, 32, 0.08);
+    --line-strong: rgba(43, 38, 32, 0.14);
+    --serif: 'Source Serif 4', Georgia, serif;
+    --sans: 'DM Sans', system-ui, sans-serif;
+    --mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--cream);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 13px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Sticky terminal header */
+  .terminal-head {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    background: rgba(242, 235, 220, 0.82);
+    backdrop-filter: blur(8px) saturate(110%);
+    -webkit-backdrop-filter: blur(8px) saturate(110%);
+    border-bottom: 1px solid var(--line-strong);
+  }
+  .terminal-row-1 {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 32px 10px;
+    gap: 24px;
+    border-bottom: 1px solid var(--line);
+  }
+  .term-brand {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+  }
+  .wordmark {
+    font-family: var(--serif);
+    font-size: 17px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+  }
+  .wordmark em {
+    font-style: italic;
+    color: var(--sage-deep);
+    font-weight: 400;
+  }
+  .ticker {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--ink-3);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    display: flex;
+    gap: 12px;
+    align-items: baseline;
+  }
+  .ticker .live {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--sage-deep);
+  }
+  .ticker .live .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--sage);
+    animation: pulse 2.4s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(122, 166, 140, 0.5); }
+    50% { box-shadow: 0 0 0 4px rgba(122, 166, 140, 0); }
+  }
+  .term-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+  .cmdk-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 9px 5px 11px;
+    border: 1px solid var(--line-strong);
+    border-radius: 6px;
+    background: var(--cream-card);
+    cursor: pointer;
+    transition: border-color 160ms ease;
+  }
+  .cmdk-chip:hover { border-color: var(--sage); }
+  .cmdk-chip .label {
+    font-family: var(--sans);
+    font-size: 11.5px;
+    color: var(--ink-2);
+  }
+  .cmdk-chip kbd {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 2px 5px;
+    border: 1px solid var(--line-strong);
+    border-radius: 3px;
+    color: var(--ink);
+    background: var(--cream-2);
+  }
+  .id-chip {
+    padding: 5px 9px;
+    border: 1px solid var(--line-strong);
+    border-radius: 6px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    background: transparent;
+    cursor: pointer;
+    color: var(--ink);
+    letter-spacing: 0.04em;
+  }
+  .id-chip .sep { margin: 0 5px; color: var(--ink-3); }
+  .new-visit {
+    padding: 6px 12px 6px 10px;
+    border: 1px solid var(--sage-deep);
+    border-radius: 6px;
+    background: var(--sage-deep);
+    color: var(--cream-card);
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .new-visit .plus { font-family: var(--mono); font-size: 13px; line-height: 1; }
+  .new-visit:hover { background: #244033; }
+
+  /* Row 2 — greeting + metrics inline (terminal-style) */
+  .terminal-row-2 {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 14px 32px;
+    border-bottom: 1px solid var(--line);
+  }
+  .greeting {
+    font-family: var(--serif);
+    font-style: italic;
+    font-weight: 400;
+    font-size: 19px;
+    letter-spacing: -0.005em;
+    color: var(--ink);
+    line-height: 1.3;
+  }
+  .greeting .glow {
+    color: var(--sage-deep);
+    text-shadow: 0 0 18px rgba(122, 166, 140, 0.18);
+  }
+  .greeting .stamp {
+    display: inline-block;
+    margin-left: 14px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    font-style: normal;
+    color: var(--ink-3);
+    letter-spacing: 0.04em;
+    transform: translateY(-2px);
+  }
+  .term-metrics {
+    display: flex;
+    gap: 0;
+    align-items: stretch;
+  }
+  .term-metrics .m {
+    padding: 0 18px;
+    border-left: 1px solid var(--line);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    align-items: flex-start;
+  }
+  .term-metrics .m:first-child { border-left: none; padding-left: 0; }
+  .term-metrics .m .label {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    color: var(--ink-3);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+  }
+  .term-metrics .m .num {
+    font-family: var(--serif);
+    font-size: 22px;
+    font-weight: 400;
+    line-height: 1.05;
+    letter-spacing: -0.005em;
+    color: var(--ink);
+  }
+  .term-metrics .m .num .unit {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--ink-3);
+    margin-left: 4px;
+    letter-spacing: 0.04em;
+    font-weight: 400;
+  }
+
+  /* Row 3 — column header / specialty filter */
+  .terminal-row-3 {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 32px;
+    background: rgba(242, 237, 227, 0.45);
+    border-bottom: 1px solid var(--line-strong);
+  }
+  .filter-tags {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .filter-tags .lbl {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    color: var(--ink-3);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin-right: 8px;
+  }
+  .specialty-tag {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--ink-2);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 3px 8px;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    background: transparent;
+    cursor: pointer;
+  }
+  .specialty-tag:hover { border-color: var(--ink-3); color: var(--ink); }
+  .specialty-tag.active {
+    border-color: var(--sage-deep);
+    color: var(--sage-deep);
+  }
+  .specialty-tag .count { color: var(--ink-3); margin-left: 4px; }
+  .specialty-tag.active .count { color: var(--sage); }
+  .terminal-row-3 .right {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--ink-3);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    display: flex;
+    gap: 14px;
+  }
+  .terminal-row-3 .sort {
+    color: var(--ink-2);
+    cursor: pointer;
+  }
+  .terminal-row-3 .sort.active {
+    color: var(--sage-deep);
+  }
+  .terminal-row-3 .sort .arrow {
+    margin-left: 4px;
+    font-size: 9px;
+  }
+
+  /* THE TABLE */
+  .table-head {
+    display: grid;
+    grid-template-columns: 220px 60px 90px 90px 80px 1fr 100px 110px 28px;
+    column-gap: 18px;
+    padding: 9px 32px;
+    border-bottom: 1px solid var(--line-strong);
+    position: sticky;
+    top: 130px;
+    z-index: 5;
+    background: var(--cream);
+  }
+  .table-head .h {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    color: var(--ink-3);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+  }
+  .table-head .h.right { text-align: right; }
+
+  .data-row {
+    display: grid;
+    grid-template-columns: 220px 60px 90px 90px 80px 1fr 100px 110px 28px;
+    column-gap: 18px;
+    align-items: baseline;
+    padding: 11px 32px;
+    border-bottom: 1px solid var(--line);
+    transition: background 130ms ease;
+    cursor: pointer;
+  }
+  .data-row:hover { background: rgba(255, 252, 245, 0.55); }
+  .data-row .cell-name {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 16px;
+    font-weight: 400;
+    color: var(--ink);
+    letter-spacing: -0.005em;
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .data-row .cell-age {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-2);
+    letter-spacing: 0.02em;
+  }
+  .data-row .cell-spec {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--ink-2);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding: 2px 7px;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    justify-self: start;
+  }
+  .data-row .cell-icd {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink);
+    letter-spacing: 0.02em;
+  }
+  .data-row .cell-cpt {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-3);
+    letter-spacing: 0.02em;
+  }
+  .data-row .cell-complaint {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 13.5px;
+    color: var(--ink-2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 1.4;
+  }
+  .data-row .cell-time {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--ink-3);
+    letter-spacing: 0.02em;
+    text-align: right;
+  }
+  .data-row .cell-status {
+    font-family: var(--mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    text-align: right;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 7px;
+  }
+  .data-row .cell-status .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .data-row .cell-status .dot.sage { background: var(--sage); }
+  .data-row .cell-status .dot.coral { background: var(--coral); }
+  .data-row .cell-status .dot.amber { background: var(--amber); }
+  .data-row .cell-status .dot.teal {
+    background: var(--teal);
+    animation: pulse 2.4s ease-in-out infinite;
+  }
+  .data-row .cell-status .dot.ink { background: var(--ink-3); }
+  .text-sage { color: var(--sage-deep); }
+  .text-coral { color: var(--coral); }
+  .text-amber { color: #a47532; }
+  .text-teal { color: #357f8e; }
+  .text-ink { color: var(--ink-2); }
+  .data-row .cell-arrow {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-3);
+    text-align: right;
+    opacity: 0;
+    transition: opacity 130ms ease;
+  }
+  .data-row:hover .cell-arrow { opacity: 1; color: var(--sage-deep); }
+
+  /* Group separator inside table */
+  .group-band {
+    display: grid;
+    grid-template-columns: 1fr;
+    padding: 14px 32px 6px;
+    border-bottom: 1px solid var(--line);
+    background: rgba(242, 237, 227, 0.35);
+  }
+  .group-band .lbl {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    color: var(--ink-3);
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .group-band .lbl .mini {
+    color: var(--ink-2);
+    border: 1px solid var(--line-strong);
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 9.5px;
+  }
+
+  /* Footer key hints */
+  .keyhint {
+    padding: 18px 32px 36px;
+    border-top: 1px solid var(--line);
+    margin-top: 24px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 22px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--ink-3);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .keyhint kbd {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    padding: 1px 5px;
+    border: 1px solid var(--line-strong);
+    border-radius: 3px;
+    color: var(--ink-2);
+    background: var(--cream-card);
+    margin-right: 5px;
+  }
+
+  @media (max-width: 1100px) {
+    .table-head, .data-row {
+      grid-template-columns: 1fr 50px 70px 80px 100px 28px;
+      grid-template-areas:
+        "name age spec icd status arrow"
+        "complaint complaint complaint complaint time arrow";
+      column-gap: 14px;
+      row-gap: 4px;
+      padding: 12px 22px;
+    }
+    .table-head { display: none; }
+    .data-row .cell-name { grid-area: name; font-size: 15.5px; }
+    .data-row .cell-age { grid-area: age; }
+    .data-row .cell-spec { grid-area: spec; }
+    .data-row .cell-icd { grid-area: icd; }
+    .data-row .cell-cpt { display: none; }
+    .data-row .cell-complaint { grid-area: complaint; }
+    .data-row .cell-status { grid-area: status; }
+    .data-row .cell-time { grid-area: time; }
+    .data-row .cell-arrow { grid-area: arrow; }
+  }
+  @media (max-width: 700px) {
+    .terminal-row-1 { padding: 12px 18px; gap: 10px; flex-wrap: wrap; }
+    .terminal-row-2 { padding: 14px 18px; flex-wrap: wrap; gap: 14px; }
+    .terminal-row-3 { padding: 10px 18px; flex-wrap: wrap; gap: 12px; }
+    .term-metrics { width: 100%; justify-content: space-between; }
+    .term-metrics .m { padding: 0 8px; }
+    .term-metrics .m:first-child { padding-left: 0; }
+    .data-row, .group-band { padding-left: 18px; padding-right: 18px; }
+    .greeting { font-size: 16px; }
+    .greeting .stamp { display: block; margin: 4px 0 0; }
+  }
+</style>
+</head>
+<body>
+
+  <header class="terminal-head">
+    <div class="terminal-row-1">
+      <div class="term-brand">
+        <span class="wordmark">Quill<em>·</em>MD</span>
+        <span class="ticker">
+          <span class="live"><span class="dot"></span>LIVE</span>
+          <span>WED 29 APR 26 · 12:08:32Z · PT 05:08</span>
+          <span>WS / DEEPGRAM 200 OK</span>
+        </span>
+      </div>
+      <div class="term-actions">
+        <button class="cmdk-chip"><span class="label">Search · jump · act</span><kbd>⌘K</kbd></button>
+        <button class="id-chip">DR. PARK<span class="sep">·</span>FM</button>
+        <button class="new-visit"><span class="plus">+</span><span>New visit</span></button>
+      </div>
+    </div>
+
+    <div class="terminal-row-2">
+      <div class="greeting">
+        Good morning, Dr. Park &mdash; <span class="glow">eleven</span> on the bench.
+        <span class="stamp">SHIFT 04:08 · ROOMS 3 / 4 OCC</span>
+      </div>
+      <div class="term-metrics">
+        <div class="m">
+          <span class="label">VISITS / APR</span>
+          <span class="num">127<span class="unit">visits</span></span>
+        </div>
+        <div class="m">
+          <span class="label">AVG DRAFT</span>
+          <span class="num">38<span class="unit">s</span></span>
+        </div>
+        <div class="m">
+          <span class="label">PEND. REVIEW</span>
+          <span class="num">3<span class="unit">open</span></span>
+        </div>
+        <div class="m">
+          <span class="label">SIGNED / WK</span>
+          <span class="num">42<span class="unit">notes</span></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="terminal-row-3">
+      <div class="filter-tags">
+        <span class="lbl">SPEC</span>
+        <button class="specialty-tag active">All <span class="count">11</span></button>
+        <button class="specialty-tag">FM <span class="count">4</span></button>
+        <button class="specialty-tag">IM <span class="count">3</span></button>
+        <button class="specialty-tag">CARD <span class="count">2</span></button>
+        <button class="specialty-tag">PEDS <span class="count">1</span></button>
+        <button class="specialty-tag">DERM <span class="count">1</span></button>
+      </div>
+      <div class="right">
+        <span class="sort active">Activity <span class="arrow">&darr;</span></span>
+        <span class="sort">Status</span>
+        <span class="sort">Specialty</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="table-head" role="row">
+    <span class="h">Patient</span>
+    <span class="h">Age/Sex</span>
+    <span class="h">Specialty</span>
+    <span class="h">ICD-10</span>
+    <span class="h">CPT</span>
+    <span class="h">Chief complaint</span>
+    <span class="h right">Last activity</span>
+    <span class="h right">Status</span>
+    <span class="h right"></span>
+  </div>
+
+  <div class="group-band">
+    <span class="lbl">Today &mdash; awaiting <span class="mini">5</span></span>
+  </div>
+
+  <div class="data-row">
+    <span class="cell-name">Aram Sahakian</span>
+    <span class="cell-age">38M</span>
+    <span class="cell-spec">CARD</span>
+    <span class="cell-icd">I10</span>
+    <span class="cell-cpt">99214</span>
+    <span class="cell-complaint">Pre-op clearance &middot; HTN, on lisinopril 10 mg</span>
+    <span class="cell-time">3h 06m</span>
+    <span class="cell-status text-coral"><span class="dot coral"></span>NEEDS REVIEW</span>
+    <span class="cell-arrow">&rarr;</span>
+  </div>
+  <div class="data-row">
+    <span class="cell-name">Priya Gupta</span>
+    <span class="cell-age">55F</span>
+    <span class="cell-spec">IM</span>
+    <span class="cell-icd">E11.9</span>
+    <span class="cell-cpt">99214</span>
+    <span class="cell-complaint">Diabetes f/u &middot; A1c trending 7.6 &rarr; 7.1</span>
+    <span class="cell-time">1h 51m</span>
+    <span class="cell-status text-coral"><span class="dot coral"></span>NEEDS REVIEW</span>
+    <span class="cell-arrow">&rarr;</span>
+  </div>
+  <div class="data-row">
+    <span class="cell-name">Robert Castellanos</span>
+    <span class="cell-age">71M</span>
+    <span class="cell-spec">CARD</span>
+    <span class="cell-icd">I48.91</span>
+    <span class="cell-cpt">99214</span>
+    <span class="cell-complaint">Atrial fibrillation f/u &middot; rate-controlled</span>
+    <span class="cell-time">just now</span>
+    <span class="cell-status text-teal"><span class="dot teal"></span>PROCESSING</span>
+    <span class="cell-arrow">&rarr;</span>
+  </div>
+  <div class="data-row">
+    <span class="cell-name">Elena Lopez</span>
+    <span class="cell-age">61F</span>
+    <span class="cell-spec">DERM</span>
+    <span class="cell-icd">D22.4</span>
+    <span class="cell-cpt">99213</span>
+    <span class="cell-complaint">Mole check &middot; right shoulder &middot; ABCDE noted</span>
+    <span class="cell-time">20m</span>
+    <span class="cell-status text-teal"><span class="dot teal"></span>DRAFTING</span>
+    <span class="cell-arrow">&rarr;</span>
+  </div>
+  <div class="data-row">
+    <span class="cell-name">Hannah Whitfield</span>
+    <span class="cell-age">34F</span>
+    <span class="cell-spec">FM</span>
+    <span class="cell-icd">G43.909</span>
+    <span class="cell-cpt">99214</span>
+    <span class="cell-complaint">Migraine prophylaxis &middot; topiramate trial</span>
+    <span class="cell-time">36m</span>
+    <span class="cell-status text-amber"><span class="dot amber"></span>DRAFT</span>
+    <span class="cell-arrow">&rarr;</span>
+  </div>
+
+  <div class="group-band">
+    <span class="lbl">Today &mdash; signed <span class="mini">8</span></span>
+  </div>
+
+  <div class="data-row">
+    <span class="cell-name">Mei-Ling Park</span>
+    <span class="cell-age">42F</span>
+    <span class="cell-spec">FM</span>
+    <span class="cell-icd">J20.9</span>
+    <span class="cell-cpt">99214</span>
+    <span class="cell-complaint">Productive cough &middot; fever 38.4 &middot; 4 days</span>
+    <span class="cell-time">08:52</span>
+    <span class="cell-status text-sage"><span class="dot sage"></span>SIGNED</span>
+    <span class="cell-arrow">&rarr;</span>
+  </div>
+  <div class="data-row">
+    <span class="cell-name">Daniel Tran</span>
+    <span class="cell-age">27M</span>
+    <span class="cell-spec">PEDS</span>
+    <span class="cell-icd">Z00.129</span>
+    <span class="cell-cpt">99393</span>
+    <span class="cell-complaint">Annual well-check &middot; immunizations current</span>
+    <span class="cell-time">14:30</span>
+    <span class="cell-status text-sage"><span class="dot sage"></span>SIGNED</span>
+    <span class="cell-arrow">&rarr;</span>
+  </div>
+  <div class="data-row">
+    <span class="cell-name">Jorge Restrepo</span>
+    <span class="cell-age">48M</span>
+    <span class="cell-spec">FM</span>
+    <span class="cell-icd">M54.5</span>
+    <span class="cell-cpt">99213</span>
+    <span class="cell-complaint">Lower-back pain &middot; 6 weeks &middot; no red flags</span>
+    <span class="cell-time">10:54</span>
+    <span class="cell-status text-sage"><span class="dot sage"></span>SIGNED</span>
+    <span class="cell-arrow">&rarr;</span>
+  </div>
+  <div class="data-row">
+    <span class="cell-name">Sofia Korte</span>
+    <span class="cell-age">29F</span>
+    <span class="cell-spec">FM</span>
+    <span class="cell-icd">Z39.2</span>
+    <span class="cell-cpt">99213</span>
+    <span class="cell-complaint">Postpartum check &middot; week 6</span>
+    <span class="cell-time">10:14</span>
+    <span class="cell-status text-sage"><span class="dot sage"></span>SIGNED</span>
+    <span class="cell-arrow">&rarr;</span>
+  </div>
+  <div class="data-row">
+    <span class="cell-name">Ezekiel Owusu</span>
+    <span class="cell-age">52M</span>
+    <span class="cell-spec">IM</span>
+    <span class="cell-icd">I10</span>
+    <span class="cell-cpt">99213</span>
+    <span class="cell-complaint">Hypertension f/u &middot; SBP 132 home avg</span>
+    <span class="cell-time">09:41</span>
+    <span class="cell-status text-sage"><span class="dot sage"></span>SIGNED</span>
+    <span class="cell-arrow">&rarr;</span>
+  </div>
+  <div class="data-row">
+    <span class="cell-name">Anika Bose</span>
+    <span class="cell-age">39F</span>
+    <span class="cell-spec">IM</span>
+    <span class="cell-icd">R51.9</span>
+    <span class="cell-cpt">99213</span>
+    <span class="cell-complaint">Tension headache &middot; chronic, stable</span>
+    <span class="cell-time">09:18</span>
+    <span class="cell-status text-sage"><span class="dot sage"></span>SIGNED</span>
+    <span class="cell-arrow">&rarr;</span>
+  </div>
+  <div class="data-row">
+    <span class="cell-name">Theodore Hines</span>
+    <span class="cell-age">44M</span>
+    <span class="cell-spec">FM</span>
+    <span class="cell-icd">K21.9</span>
+    <span class="cell-cpt">99213</span>
+    <span class="cell-complaint">GERD &middot; PPI step-down trial</span>
+    <span class="cell-time">08:46</span>
+    <span class="cell-status text-sage"><span class="dot sage"></span>SIGNED</span>
+    <span class="cell-arrow">&rarr;</span>
+  </div>
+  <div class="data-row">
+    <span class="cell-name">Lila Okonkwo</span>
+    <span class="cell-age">8F</span>
+    <span class="cell-spec">PEDS</span>
+    <span class="cell-icd">J45.30</span>
+    <span class="cell-cpt">99213</span>
+    <span class="cell-complaint">Asthma f/u &middot; albuterol use 2/wk</span>
+    <span class="cell-time">08:14</span>
+    <span class="cell-status text-sage"><span class="dot sage"></span>SIGNED</span>
+    <span class="cell-arrow">&rarr;</span>
+  </div>
+
+  <div class="group-band">
+    <span class="lbl">Yesterday <span class="mini">3</span></span>
+  </div>
+
+  <div class="data-row">
+    <span class="cell-name">Marco Bellini</span>
+    <span class="cell-age">66M</span>
+    <span class="cell-spec">CARD</span>
+    <span class="cell-icd">E78.5</span>
+    <span class="cell-cpt">99214</span>
+    <span class="cell-complaint">Statin reassessment &middot; LDL 142</span>
+    <span class="cell-time">YDA 15:18</span>
+    <span class="cell-status text-ink"><span class="dot ink"></span>SIGNED</span>
+    <span class="cell-arrow">&rarr;</span>
+  </div>
+  <div class="data-row">
+    <span class="cell-name">Yelena Frolova</span>
+    <span class="cell-age">44F</span>
+    <span class="cell-spec">FM</span>
+    <span class="cell-icd">J32.9</span>
+    <span class="cell-cpt">99213</span>
+    <span class="cell-complaint">Sinusitis &middot; 9-day course, improving</span>
+    <span class="cell-time">YDA 13:55</span>
+    <span class="cell-status text-ink"><span class="dot ink"></span>SIGNED</span>
+    <span class="cell-arrow">&rarr;</span>
+  </div>
+  <div class="data-row">
+    <span class="cell-name">Henrik Lindqvist</span>
+    <span class="cell-age">59M</span>
+    <span class="cell-spec">FM</span>
+    <span class="cell-icd">M25.561</span>
+    <span class="cell-cpt">99213</span>
+    <span class="cell-complaint">Right knee pain &middot; running, no trauma</span>
+    <span class="cell-time">YDA 11:20</span>
+    <span class="cell-status text-ink"><span class="dot ink"></span>SIGNED</span>
+    <span class="cell-arrow">&rarr;</span>
+  </div>
+
+  <footer class="keyhint">
+    <span><kbd>⌘K</kbd> command palette</span>
+    <span><kbd>J</kbd> next row</span>
+    <span><kbd>K</kbd> prev row</span>
+    <span><kbd>⏎</kbd> open visit</span>
+    <span><kbd>R</kbd> review</span>
+    <span><kbd>N</kbd> new visit</span>
+    <span><kbd>?</kbd> shortcuts</span>
+  </footer>
+
+</body>
+</html>

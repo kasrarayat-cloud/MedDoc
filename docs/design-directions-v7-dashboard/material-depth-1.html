@@ -1,0 +1,883 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QuillMD · Material Depth · Bento Tray</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;1,8..60,400;1,8..60,500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* ----------------------------------------------------------------------
+     Mood C — Material Depth · Variation 1: Bento Tray
+     Masonry of differently-sized cards, each with its own elevation tier.
+     Hover any card → lifts 6 px. Click → presses to 0 px with a soft shadow
+     change. The whole page reads as a tray of objects.
+     ---------------------------------------------------------------------- */
+
+  :root {
+    /* Clinician palette (matches docs/design-directions-v3/clinician). */
+    --cream:        #FAF7F2;
+    --cream-card:   #FFFCF5;
+    --cream-2:      #F2EDE3;
+    --cream-3:      #E8E1D3;
+    --ink:          #2B2620;
+    --ink-2:        #5C544A;
+    --ink-3:        #8A8278;
+    --ink-4:        #B5AE9F;
+    --sage:         #7AA68C;
+    --sage-deep:    #2F5040;
+    --sage-bright:  #95BCA4;
+    --sage-tint:        rgba(122, 166, 140, 0.14);
+    --sage-tint-strong: rgba(122, 166, 140, 0.22);
+    --line:         rgba(43, 38, 32, 0.06);
+    --line-2:       rgba(43, 38, 32, 0.10);
+
+    /* Mood C elevation system — sage-tinted, warm, layered. */
+    --elev-rest:    0 1px 2px rgba(43, 38, 32, 0.04), 0 1px 3px rgba(43, 38, 32, 0.06);
+    --elev-1:       0 2px 4px rgba(43, 38, 32, 0.04), 0 4px 12px rgba(43, 38, 32, 0.06);
+    --elev-2:       0 4px 10px rgba(43, 38, 32, 0.06), 0 12px 24px rgba(43, 38, 32, 0.08);
+    --elev-3:       0 8px 18px rgba(43, 38, 32, 0.08), 0 24px 48px rgba(43, 38, 32, 0.10);
+    --elev-hover:   0 6px 14px rgba(122, 166, 140, 0.15), 0 18px 36px rgba(43, 38, 32, 0.10);
+    --elev-pressed: 0 1px 2px rgba(43, 38, 32, 0.06);
+    --elev-inset:   inset 0 1px 0 rgba(255, 252, 245, 0.8), inset 0 -1px 0 rgba(43, 38, 32, 0.03);
+
+    --serif: 'Source Serif 4', Georgia, serif;
+    --sans:  'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --mono:  'JetBrains Mono', ui-monospace, monospace;
+
+    --ease-mat: cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    background: var(--cream);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    /* Quiet warm radial — the tray sits on a creamy surface. */
+    background:
+      radial-gradient(1200px 600px at 12% -8%, rgba(122, 166, 140, 0.05), transparent 60%),
+      radial-gradient(900px 600px at 95% 105%, rgba(232, 225, 211, 0.5), transparent 55%),
+      var(--cream);
+    min-height: 100vh;
+  }
+
+  .page {
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: 32px 40px 80px;
+  }
+
+  /* ───── Top strip: identity chip + search chip + CTA pill ─────────────── */
+  .top-strip {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 28px;
+  }
+
+  .wordmark {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    padding: 8px 14px;
+    background: var(--cream-card);
+    border-radius: 999px;
+    box-shadow: var(--elev-rest);
+    transition: transform 320ms var(--ease-mat), box-shadow 320ms var(--ease-mat);
+  }
+  .wordmark:hover { transform: translate3d(0, -2px, 0); box-shadow: var(--elev-1); }
+  .wordmark .quill {
+    width: 18px; height: 18px; border-radius: 5px;
+    background: linear-gradient(135deg, var(--sage), var(--sage-deep));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.25);
+  }
+  .wordmark .name {
+    font-family: var(--serif);
+    font-size: 16px;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+  }
+  .wordmark .name em { color: var(--sage-deep); font-style: italic; }
+
+  .search-chip {
+    flex: 1;
+    max-width: 420px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    background: var(--cream-card);
+    border-radius: 999px;
+    box-shadow: var(--elev-1);
+    cursor: text;
+    transition: transform 320ms var(--ease-mat), box-shadow 320ms var(--ease-mat);
+  }
+  .search-chip:hover { transform: translate3d(0, -3px, 0); box-shadow: var(--elev-hover); }
+  .search-chip:active { transform: translate3d(0, 0, 0); box-shadow: var(--elev-pressed); }
+  .search-chip svg { width: 15px; height: 15px; color: var(--ink-3); }
+  .search-chip .placeholder {
+    flex: 1;
+    color: var(--ink-3);
+    font-size: 14px;
+  }
+  .search-chip .kbd {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px 7px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-3);
+    background: var(--cream-2);
+    border-radius: 5px;
+    box-shadow: inset 0 -1px 0 var(--line);
+  }
+
+  .top-spacer { flex: 1; }
+
+  .cta-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 11px 20px;
+    background: linear-gradient(180deg, #87B196 0%, var(--sage) 100%);
+    color: #FFFCF5;
+    border-radius: 999px;
+    font-weight: 500;
+    font-size: 14px;
+    letter-spacing: 0.005em;
+    box-shadow: var(--elev-2), inset 0 1px 0 rgba(255,255,255,0.20);
+    cursor: pointer;
+    transition: transform 320ms var(--ease-mat), box-shadow 320ms var(--ease-mat);
+    border: none;
+    font-family: var(--sans);
+  }
+  .cta-pill:hover {
+    transform: translate3d(0, -4px, 0);
+    box-shadow: var(--elev-hover), inset 0 1px 0 rgba(255,255,255,0.25);
+  }
+  .cta-pill:active {
+    transform: translate3d(0, 0, 0);
+    box-shadow: var(--elev-pressed), inset 0 1px 2px rgba(43, 38, 32, 0.08);
+  }
+  .cta-pill svg { width: 13px; height: 13px; }
+
+  .me-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 11px 5px 5px;
+    background: var(--cream-card);
+    border-radius: 999px;
+    box-shadow: var(--elev-rest);
+    cursor: pointer;
+    transition: transform 320ms var(--ease-mat), box-shadow 320ms var(--ease-mat);
+  }
+  .me-chip:hover { transform: translate3d(0, -3px, 0); box-shadow: var(--elev-hover); }
+  .me-chip .avatar {
+    width: 28px; height: 28px;
+    border-radius: 999px;
+    background: var(--sage-tint-strong);
+    color: var(--sage-deep);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 12px;
+    letter-spacing: 0.02em;
+    box-shadow: inset 0 0 0 1px rgba(47, 80, 64, 0.12);
+  }
+  .me-chip .me-name { font-size: 13px; color: var(--ink-2); font-weight: 500; }
+
+  /* ───── Bento grid — masonry of differently-sized cards ────────────────── */
+  .bento {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    grid-auto-rows: 110px;
+    gap: 18px;
+  }
+
+  .card {
+    background: var(--cream-card);
+    border-radius: 18px;
+    padding: 22px 24px;
+    box-shadow: var(--elev-1);
+    transition: transform 320ms var(--ease-mat), box-shadow 320ms var(--ease-mat);
+    position: relative;
+    overflow: hidden;
+  }
+  .card.hoverable:hover {
+    transform: translate3d(0, -6px, 0);
+    box-shadow: var(--elev-hover);
+  }
+  .card.hoverable:active {
+    transform: translate3d(0, 0, 0);
+    box-shadow: var(--elev-pressed);
+  }
+
+  /* Tier elevations — different cards rest at different heights. */
+  .card.tier-1 { box-shadow: var(--elev-rest); }
+  .card.tier-2 { box-shadow: var(--elev-1); }
+  .card.tier-3 { box-shadow: var(--elev-2); }
+  .card.tier-4 { box-shadow: var(--elev-3); }
+
+  /* Greeting card — biggest, at top-left. */
+  .c-greet { grid-column: span 7; grid-row: span 2; padding: 30px 34px; }
+  .c-greet .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin-bottom: 14px;
+  }
+  .c-greet h1 {
+    font-family: var(--serif);
+    font-style: italic;
+    font-weight: 400;
+    font-size: 38px;
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+  .c-greet h1 .glow {
+    color: var(--sage-deep);
+    background: var(--sage-tint);
+    padding: 0 6px;
+    border-radius: 6px;
+    box-shadow: inset 0 0 0 1px var(--sage-tint-strong);
+  }
+  .c-greet .sub {
+    margin-top: 12px;
+    font-family: var(--serif);
+    font-size: 15.5px;
+    color: var(--ink-2);
+    line-height: 1.55;
+    max-width: 480px;
+  }
+  .c-greet .meta-row {
+    display: flex; gap: 22px; margin-top: 18px; align-items: center;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--ink-3);
+  }
+  .c-greet .dot {
+    width: 6px; height: 6px; border-radius: 999px;
+    background: var(--sage); margin-right: 7px; vertical-align: middle;
+  }
+
+  /* Specialty filter pills — tucked into a small card. */
+  .c-filter { grid-column: span 5; grid-row: span 2; padding: 22px 24px; }
+  .c-filter .label {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin-bottom: 12px;
+  }
+  .pill-row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .pill {
+    padding: 7px 13px;
+    border-radius: 999px;
+    background: var(--cream-2);
+    color: var(--ink-2);
+    font-size: 12.5px;
+    font-weight: 500;
+    cursor: pointer;
+    box-shadow: var(--elev-rest);
+    transition: transform 320ms var(--ease-mat), box-shadow 320ms var(--ease-mat), background 240ms var(--ease-mat);
+  }
+  .pill:hover { transform: translate3d(0, -2px, 0); box-shadow: var(--elev-1); background: var(--cream-card); }
+  .pill.active { background: var(--sage-tint); color: var(--sage-deep); box-shadow: var(--elev-1); }
+
+  /* Metric tiles — varied sizes so they don't form a uniform row. */
+  .m-1 { grid-column: span 4; grid-row: span 2; padding: 24px 26px; }
+  .m-2 { grid-column: span 3; grid-row: span 2; padding: 22px 24px; }
+  .m-3 { grid-column: span 2; grid-row: span 2; padding: 22px 22px; }
+  .m-4 { grid-column: span 3; grid-row: span 2; padding: 22px 24px; }
+
+  .metric .label {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin-bottom: 10px;
+  }
+  .metric .num {
+    font-family: var(--serif);
+    font-size: 42px;
+    line-height: 1;
+    letter-spacing: -0.025em;
+    color: var(--ink);
+    font-weight: 500;
+  }
+  .metric.smaller .num { font-size: 36px; }
+  .metric .unit {
+    font-family: var(--sans);
+    font-size: 12px;
+    color: var(--ink-3);
+    margin-top: 8px;
+  }
+  .metric .delta {
+    display: inline-block;
+    margin-top: 9px;
+    padding: 2px 8px;
+    background: var(--sage-tint);
+    color: var(--sage-deep);
+    border-radius: 999px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    font-weight: 500;
+  }
+  .metric.amber .delta { background: rgba(199, 151, 84, 0.16); color: #8E6526; }
+
+  /* Sparkline ornament for the visits-mo card. */
+  .spark {
+    margin-top: 12px;
+    height: 26px; width: 100%;
+    overflow: visible;
+  }
+  .spark path.line {
+    fill: none; stroke: var(--sage); stroke-width: 1.6;
+    stroke-linecap: round; stroke-linejoin: round;
+  }
+  .spark path.area { fill: var(--sage-tint); }
+
+  /* Today card — wide, with a stack of patient sub-cards inset. */
+  .c-today {
+    grid-column: span 7; grid-row: span 5;
+    padding: 24px 24px 18px;
+    /* paper-fan inset shadow gives the floating-paper feel */
+  }
+  .c-today .head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .c-today .head h2 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 22px;
+    letter-spacing: -0.015em;
+    color: var(--ink);
+  }
+  .c-today .head h2 em { font-style: italic; color: var(--sage-deep); }
+  .c-today .head .count {
+    font-family: var(--mono); font-size: 11px; color: var(--ink-3);
+    letter-spacing: 0.08em; text-transform: uppercase;
+  }
+
+  .patient-stack {
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .p-row {
+    display: grid;
+    grid-template-columns: 38px 1fr auto auto;
+    gap: 14px;
+    align-items: center;
+    padding: 12px 14px;
+    background: var(--cream);
+    border-radius: 12px;
+    box-shadow: var(--elev-rest), var(--elev-inset);
+    cursor: pointer;
+    transition: transform 320ms var(--ease-mat), box-shadow 320ms var(--ease-mat);
+  }
+  .p-row:hover {
+    transform: translate3d(0, -3px, 0);
+    box-shadow: var(--elev-1), var(--elev-inset);
+    background: var(--cream-card);
+  }
+  .p-row:active {
+    transform: translate3d(0, 0, 0);
+    box-shadow: var(--elev-pressed);
+  }
+  .p-avatar {
+    width: 38px; height: 38px;
+    border-radius: 12px;
+    background: var(--sage-tint-strong);
+    color: var(--sage-deep);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 13px;
+    box-shadow: inset 0 0 0 1px rgba(47, 80, 64, 0.10);
+  }
+  .p-avatar.amber  { background: rgba(199, 151, 84, 0.18); color: #8E6526; box-shadow: inset 0 0 0 1px rgba(142, 101, 38, 0.10); }
+  .p-avatar.indigo { background: rgba(108, 122, 174, 0.18); color: #3E4A82; box-shadow: inset 0 0 0 1px rgba(62, 74, 130, 0.10); }
+  .p-avatar.rose   { background: rgba(180, 120, 130, 0.16); color: #7C2A38; box-shadow: inset 0 0 0 1px rgba(124, 42, 56, 0.10); }
+  .p-avatar.slate  { background: rgba(110, 122, 132, 0.18); color: #3F4B55; box-shadow: inset 0 0 0 1px rgba(63, 75, 85, 0.10); }
+  .p-avatar.olive  { background: rgba(150, 138, 80, 0.18); color: #5A5012; box-shadow: inset 0 0 0 1px rgba(90, 80, 18, 0.10); }
+
+  .p-meta { min-width: 0; }
+  .p-name {
+    font-family: var(--serif);
+    font-size: 16px;
+    font-weight: 500;
+    letter-spacing: -0.005em;
+    color: var(--ink);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .p-sub {
+    margin-top: 2px;
+    font-size: 12.5px; color: var(--ink-3);
+    display: flex; gap: 8px; align-items: center;
+    font-family: var(--sans);
+  }
+  .p-sub .sep { width: 3px; height: 3px; background: var(--ink-4); border-radius: 999px; }
+  .p-sub .code {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-2);
+  }
+  .p-status {
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 500;
+    font-family: var(--mono);
+    letter-spacing: 0.02em;
+    box-shadow: var(--elev-rest);
+  }
+  .p-status.ready { background: var(--sage-tint); color: var(--sage-deep); }
+  .p-status.soon  { background: rgba(199, 151, 84, 0.16); color: #8E6526; }
+  .p-status.draft { background: var(--cream-2); color: var(--ink-2); }
+  .p-status.signed { background: rgba(108, 122, 174, 0.14); color: #3E4A82; }
+  .p-time {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-3);
+    letter-spacing: 0.02em;
+  }
+
+  /* Recent stream — narrow, tall, flowing list. */
+  .c-recent {
+    grid-column: span 5; grid-row: span 5;
+    padding: 22px 22px 18px;
+  }
+  .c-recent .head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .c-recent .head h2 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 18px;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+  }
+  .c-recent .head h2 em { font-style: italic; color: var(--sage-deep); }
+  .c-recent .head .link {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--sage-deep);
+    cursor: pointer;
+    letter-spacing: 0.02em;
+  }
+  .c-recent .head .link:hover { text-decoration: underline; text-underline-offset: 2px; }
+
+  .stream {
+    display: flex; flex-direction: column;
+    max-height: 478px; overflow: hidden;
+  }
+  .stream-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+    padding: 9px 0;
+    border-bottom: 1px dashed var(--line);
+    align-items: center;
+    transition: background 240ms var(--ease-mat);
+    border-radius: 6px;
+    margin: 0 -8px; padding-left: 8px; padding-right: 8px;
+  }
+  .stream-row:hover { background: var(--cream-2); }
+  .stream-row:last-child { border-bottom: none; }
+  .stream-line { display: flex; gap: 9px; align-items: baseline; min-width: 0; }
+  .stream-tag {
+    flex-shrink: 0;
+    width: 6px; height: 6px;
+    border-radius: 999px;
+    background: var(--sage);
+    margin-top: 6px;
+    box-shadow: 0 0 0 3px var(--sage-tint);
+  }
+  .stream-tag.signed { background: var(--ink-3); box-shadow: 0 0 0 3px var(--cream-2); }
+  .stream-tag.draft  { background: #C79754; box-shadow: 0 0 0 3px rgba(199, 151, 84, 0.16); }
+  .stream-name {
+    font-family: var(--serif);
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--ink);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .stream-spec {
+    font-family: var(--sans);
+    font-size: 11.5px;
+    color: var(--ink-3);
+    white-space: nowrap;
+  }
+  .stream-time {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--ink-4);
+    text-align: right;
+    letter-spacing: 0.02em;
+  }
+
+  /* Inset pressed label rib — used for tiny labels that look "stamped in". */
+  .stamp {
+    display: inline-flex;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: var(--cream-2);
+    box-shadow: var(--elev-pressed), inset 0 1px 2px rgba(43, 38, 32, 0.05);
+    color: var(--ink-2);
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.04em;
+  }
+
+  /* ───── Footnote ───────────────────────────────────────────────────────── */
+  .footnote {
+    margin-top: 26px;
+    text-align: center;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    color: var(--ink-4);
+  }
+
+  /* ───── Responsive ─────────────────────────────────────────────────────── */
+  @media (max-width: 880px) {
+    .page { padding: 22px 18px 60px; }
+    .top-strip { flex-wrap: wrap; gap: 10px; }
+    .search-chip { order: 4; flex: 1 0 100%; max-width: none; }
+    .top-spacer { display: none; }
+    .bento { grid-template-columns: 1fr; grid-auto-rows: auto; gap: 14px; }
+    .c-greet, .c-filter, .m-1, .m-2, .m-3, .m-4, .c-today, .c-recent {
+      grid-column: 1; grid-row: auto;
+    }
+    .card.tier-2, .card.tier-3, .card.tier-4 { box-shadow: var(--elev-1); }
+    .c-greet h1 { font-size: 28px; }
+  }
+
+  /* ───── Reduced motion: kill all transitions + transforms ──────────────── */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      transition: none !important;
+      animation: none !important;
+    }
+    .card.hoverable:hover, .pill:hover, .p-row:hover,
+    .search-chip:hover, .cta-pill:hover, .me-chip:hover, .wordmark:hover {
+      transform: none !important;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <!-- Top strip: floating chips on cream canvas. Each owns its own elevation. -->
+  <div class="top-strip">
+    <div class="wordmark" role="img" aria-label="QuillMD">
+      <div class="quill"></div>
+      <div class="name">Quill<em>MD</em></div>
+    </div>
+
+    <div class="search-chip" role="search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.3-4.3"></path></svg>
+      <span class="placeholder">Search patients, visits, codes…</span>
+      <span class="kbd">⌘K</span>
+    </div>
+
+    <div class="top-spacer"></div>
+
+    <button class="cta-pill" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+      New visit
+    </button>
+
+    <div class="me-chip" role="button" tabindex="0">
+      <span class="avatar">KR</span>
+      <span class="me-name">Dr. Reyes</span>
+    </div>
+  </div>
+
+  <!-- Bento masonry tray. Differently-sized cards, varied elevation tiers. -->
+  <div class="bento">
+
+    <!-- Greeting card — tier 3, dominant. -->
+    <section class="card hoverable tier-3 c-greet" aria-labelledby="greet-h">
+      <div class="eyebrow">Tuesday · 29 April</div>
+      <h1 id="greet-h">Good <em><span class="glow">morning</span></em>, Dr. Reyes.</h1>
+      <p class="sub">Eleven faces on the schedule, three drafts cooling, and the clinic is just waking up.</p>
+      <div class="meta-row">
+        <span><span class="dot"></span>Sage Family Practice · Berkeley</span>
+        <span class="stamp">07:42 PT</span>
+      </div>
+    </section>
+
+    <!-- Specialty filter card — tier 1, quiet. -->
+    <section class="card hoverable tier-1 c-filter" aria-labelledby="filter-h">
+      <div class="label" id="filter-h">Specialty filter</div>
+      <div class="pill-row">
+        <span class="pill active">All · 11</span>
+        <span class="pill">Family Med · 5</span>
+        <span class="pill">Cardio · 2</span>
+        <span class="pill">Endo · 1</span>
+        <span class="pill">Derm · 1</span>
+        <span class="pill">Pediatrics · 2</span>
+      </div>
+      <div class="label" style="margin-top:18px;">Quick filters</div>
+      <div class="pill-row">
+        <span class="pill">Pending · 3</span>
+        <span class="pill">Signed today · 4</span>
+        <span class="pill">Drafted</span>
+      </div>
+    </section>
+
+    <!-- Metric 1: visits this month — tier 4, biggest weight. -->
+    <section class="card hoverable tier-4 metric m-1" aria-label="Visits this month">
+      <div class="label">Visits / Apr</div>
+      <div class="num">127</div>
+      <div class="unit">this month</div>
+      <span class="delta">↗ +18 vs Mar</span>
+      <svg class="spark" viewBox="0 0 200 28" preserveAspectRatio="none" aria-hidden="true">
+        <path class="area" d="M0,22 L12,18 L24,20 L36,15 L48,17 L60,12 L72,14 L84,9 L96,11 L108,7 L120,9 L132,5 L144,8 L156,4 L168,6 L180,3 L200,5 L200,28 L0,28 Z"/>
+        <path class="line" d="M0,22 L12,18 L24,20 L36,15 L48,17 L60,12 L72,14 L84,9 L96,11 L108,7 L120,9 L132,5 L144,8 L156,4 L168,6 L180,3 L200,5"/>
+      </svg>
+    </section>
+
+    <!-- Metric 2: avg drafted in seconds — tier 2. -->
+    <section class="card hoverable tier-2 metric m-2" aria-label="Average drafted in seconds">
+      <div class="label">Avg drafted in</div>
+      <div class="num">38<span style="font-size:24px; color:var(--ink-3); margin-left:2px;">s</span></div>
+      <div class="unit">per visit</div>
+      <span class="delta">↘ −6s vs Mar</span>
+    </section>
+
+    <!-- Metric 3: pending review — tier 2, amber accent. -->
+    <section class="card hoverable tier-2 metric smaller amber m-3" aria-label="Pending review">
+      <div class="label">Pending</div>
+      <div class="num">3</div>
+      <div class="unit">awaiting review</div>
+      <span class="delta">⏱ oldest 2h</span>
+    </section>
+
+    <!-- Metric 4: signed this week — tier 2. -->
+    <section class="card hoverable tier-2 metric m-4" aria-label="Signed this week">
+      <div class="label">Signed / wk</div>
+      <div class="num">42</div>
+      <div class="unit">notes finalized</div>
+      <span class="delta">↗ +9 vs last wk</span>
+    </section>
+
+    <!-- Today card — wide, 5 rows tall, with paper-fanned sub-rows. -->
+    <section class="card hoverable tier-3 c-today" aria-labelledby="today-h">
+      <div class="head">
+        <h2 id="today-h">Today, <em>at a glance</em></h2>
+        <div class="count">6 patients · 4 ready, 2 upcoming</div>
+      </div>
+      <div class="patient-stack">
+
+        <div class="p-row">
+          <div class="p-avatar">MP</div>
+          <div class="p-meta">
+            <div class="p-name">Mei-Ling Park</div>
+            <div class="p-sub">42F · Family Medicine <span class="sep"></span><span class="code">J20.9</span><span class="sep"></span><span class="code">99214</span></div>
+          </div>
+          <div class="p-status ready">Ready</div>
+          <div class="p-time">08:00</div>
+        </div>
+
+        <div class="p-row">
+          <div class="p-avatar amber">DA</div>
+          <div class="p-meta">
+            <div class="p-name">Daniyal Abbasi</div>
+            <div class="p-sub">58M · Cardiology <span class="sep"></span><span class="code">I10</span><span class="sep"></span><span class="code">99213</span></div>
+          </div>
+          <div class="p-status soon">In 12m</div>
+          <div class="p-time">08:30</div>
+        </div>
+
+        <div class="p-row">
+          <div class="p-avatar indigo">JT</div>
+          <div class="p-meta">
+            <div class="p-name">Joaquín Torres</div>
+            <div class="p-sub">7M · Pediatrics <span class="sep"></span><span class="code">H66.91</span><span class="sep"></span><span class="code">99213</span></div>
+          </div>
+          <div class="p-status draft">Drafted</div>
+          <div class="p-time">09:15</div>
+        </div>
+
+        <div class="p-row">
+          <div class="p-avatar rose">AB</div>
+          <div class="p-meta">
+            <div class="p-name">Anika Bhattacharya</div>
+            <div class="p-sub">34F · Endocrinology <span class="sep"></span><span class="code">E11.9</span><span class="sep"></span><span class="code">99214</span></div>
+          </div>
+          <div class="p-status ready">Ready</div>
+          <div class="p-time">10:00</div>
+        </div>
+
+        <div class="p-row">
+          <div class="p-avatar slate">RO</div>
+          <div class="p-meta">
+            <div class="p-name">Rafael Olawale</div>
+            <div class="p-sub">61M · Family Medicine <span class="sep"></span><span class="code">M54.5</span><span class="sep"></span><span class="code">99213</span></div>
+          </div>
+          <div class="p-status signed">Signed</div>
+          <div class="p-time">10:45</div>
+        </div>
+
+        <div class="p-row">
+          <div class="p-avatar olive">SK</div>
+          <div class="p-meta">
+            <div class="p-name">Sophie Khalid</div>
+            <div class="p-sub">29F · Dermatology <span class="sep"></span><span class="code">L40.0</span><span class="sep"></span><span class="code">99213</span></div>
+          </div>
+          <div class="p-status soon">In 1h</div>
+          <div class="p-time">11:30</div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- Recent stream — narrow, tall, scroll-feel. -->
+    <section class="card hoverable tier-2 c-recent" aria-labelledby="recent-h">
+      <div class="head">
+        <h2 id="recent-h">Recent <em>visits</em></h2>
+        <span class="link">All visits →</span>
+      </div>
+      <div class="stream">
+
+        <div class="stream-row">
+          <div class="stream-line">
+            <span class="stream-tag signed"></span>
+            <span class="stream-name">Eleanor Kowalski</span>
+            <span class="stream-spec">· FamMed · I10</span>
+          </div>
+          <div class="stream-time">12 min ago</div>
+        </div>
+
+        <div class="stream-row">
+          <div class="stream-line">
+            <span class="stream-tag"></span>
+            <span class="stream-name">Tomás Aldridge</span>
+            <span class="stream-spec">· Cardio · I48.91</span>
+          </div>
+          <div class="stream-time">38 min</div>
+        </div>
+
+        <div class="stream-row">
+          <div class="stream-line">
+            <span class="stream-tag draft"></span>
+            <span class="stream-name">Mira Vasquez-Olin</span>
+            <span class="stream-spec">· Endo · E11.65</span>
+          </div>
+          <div class="stream-time">1h 04m</div>
+        </div>
+
+        <div class="stream-row">
+          <div class="stream-line">
+            <span class="stream-tag signed"></span>
+            <span class="stream-name">Hassan Mboya</span>
+            <span class="stream-spec">· FamMed · J45.40</span>
+          </div>
+          <div class="stream-time">1h 22m</div>
+        </div>
+
+        <div class="stream-row">
+          <div class="stream-line">
+            <span class="stream-tag"></span>
+            <span class="stream-name">Caroline Westbrook</span>
+            <span class="stream-spec">· Derm · L70.0</span>
+          </div>
+          <div class="stream-time">2h 11m</div>
+        </div>
+
+        <div class="stream-row">
+          <div class="stream-line">
+            <span class="stream-tag signed"></span>
+            <span class="stream-name">Yuki Tanaka-Rhodes</span>
+            <span class="stream-spec">· Peds · J06.9</span>
+          </div>
+          <div class="stream-time">3h 02m</div>
+        </div>
+
+        <div class="stream-row">
+          <div class="stream-line">
+            <span class="stream-tag draft"></span>
+            <span class="stream-name">Bertrand Okeke</span>
+            <span class="stream-spec">· Cardio · I25.10</span>
+          </div>
+          <div class="stream-time">3h 45m</div>
+        </div>
+
+        <div class="stream-row">
+          <div class="stream-line">
+            <span class="stream-tag signed"></span>
+            <span class="stream-name">Priya Anand-Shah</span>
+            <span class="stream-spec">· Endo · E03.9</span>
+          </div>
+          <div class="stream-time">5h 20m</div>
+        </div>
+
+        <div class="stream-row">
+          <div class="stream-line">
+            <span class="stream-tag"></span>
+            <span class="stream-name">Marcus Liang</span>
+            <span class="stream-spec">· FamMed · K21.9</span>
+          </div>
+          <div class="stream-time">6h 18m</div>
+        </div>
+
+        <div class="stream-row">
+          <div class="stream-line">
+            <span class="stream-tag signed"></span>
+            <span class="stream-name">Ines Valverde</span>
+            <span class="stream-spec">· Peds · Z00.121</span>
+          </div>
+          <div class="stream-time">Yesterday</div>
+        </div>
+
+        <div class="stream-row">
+          <div class="stream-line">
+            <span class="stream-tag draft"></span>
+            <span class="stream-name">Clarence Wu-Patel</span>
+            <span class="stream-spec">· Derm · L20.9</span>
+          </div>
+          <div class="stream-time">Yesterday</div>
+        </div>
+
+        <div class="stream-row">
+          <div class="stream-line">
+            <span class="stream-tag signed"></span>
+            <span class="stream-name">Fatima Boukhari</span>
+            <span class="stream-spec">· FamMed · R51</span>
+          </div>
+          <div class="stream-time">Yesterday</div>
+        </div>
+
+      </div>
+    </section>
+
+  </div><!-- /bento -->
+
+  <div class="footnote">Material Depth · Bento Tray · QuillMD</div>
+
+</div><!-- /page -->
+
+</body>
+</html>

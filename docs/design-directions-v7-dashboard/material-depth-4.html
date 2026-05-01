@@ -1,0 +1,817 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QuillMD · Material Depth · Floating Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;1,8..60,400;1,8..60,500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* ----------------------------------------------------------------------
+     Mood C — Material Depth · Variation 4: Floating Dashboard
+     Three layers: ground (cream canvas), mid (a single elevated panel
+     containing today's patients), and top (overlay-style cards for
+     "Pending review" + "+ New visit" floating above the mid layer).
+     Strong visual stratification — feels like a glass pane suspended over
+     a desk.
+     ---------------------------------------------------------------------- */
+
+  :root {
+    --cream:        #FAF7F2;
+    --cream-card:   #FFFCF5;
+    --cream-2:      #F2EDE3;
+    --cream-3:      #E8E1D3;
+    --ink:          #2B2620;
+    --ink-2:        #5C544A;
+    --ink-3:        #8A8278;
+    --ink-4:        #B5AE9F;
+    --sage:         #7AA68C;
+    --sage-deep:    #2F5040;
+    --sage-bright:  #95BCA4;
+    --sage-tint:        rgba(122, 166, 140, 0.14);
+    --sage-tint-strong: rgba(122, 166, 140, 0.22);
+    --line:         rgba(43, 38, 32, 0.06);
+
+    /* Mood C elevation system — three explicit layers. */
+    --elev-rest:    0 1px 2px rgba(43, 38, 32, 0.04), 0 1px 3px rgba(43, 38, 32, 0.06);
+    --elev-1:       0 2px 4px rgba(43, 38, 32, 0.04), 0 4px 12px rgba(43, 38, 32, 0.06);
+    --elev-2:       0 4px 10px rgba(43, 38, 32, 0.06), 0 12px 24px rgba(43, 38, 32, 0.08);
+    --elev-3:       0 8px 18px rgba(43, 38, 32, 0.08), 0 24px 48px rgba(43, 38, 32, 0.10);
+    /* Mid layer — the panel that holds today's patients. */
+    --elev-mid:     0 6px 14px rgba(43, 38, 32, 0.06), 0 24px 56px rgba(43, 38, 32, 0.10);
+    /* Top layer — overlays floating above mid. */
+    --elev-top:     0 12px 28px rgba(122, 166, 140, 0.16), 0 30px 70px rgba(43, 38, 32, 0.14);
+    --elev-hover:   0 8px 16px rgba(122, 166, 140, 0.18), 0 22px 44px rgba(43, 38, 32, 0.11);
+    --elev-pressed: 0 1px 2px rgba(43, 38, 32, 0.06);
+
+    --serif: 'Source Serif 4', Georgia, serif;
+    --sans:  'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --mono:  'JetBrains Mono', ui-monospace, monospace;
+
+    --ease-mat: cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    background: var(--cream);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    /* Ground layer — quiet warm radial. */
+    background:
+      radial-gradient(1100px 700px at 50% 100%, rgba(232, 225, 211, 0.55), transparent 65%),
+      radial-gradient(900px 600px at 88% -10%, rgba(122, 166, 140, 0.05), transparent 60%),
+      var(--cream);
+    min-height: 100vh;
+  }
+
+  /* ───── Ground layer — top strip + greeting + metric "ground" tiles ────── */
+  .canvas {
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: 28px 36px 100px;
+    position: relative;
+  }
+
+  .top-strip {
+    display: flex; align-items: center; gap: 14px; margin-bottom: 26px;
+  }
+  .wordmark {
+    display: inline-flex; align-items: center; gap: 9px;
+    padding: 8px 14px;
+    background: var(--cream-card);
+    border-radius: 999px;
+    box-shadow: var(--elev-rest);
+    transition: transform 320ms var(--ease-mat), box-shadow 320ms var(--ease-mat);
+  }
+  .wordmark:hover { transform: translate3d(0, -2px, 0); box-shadow: var(--elev-1); }
+  .wordmark .quill {
+    width: 18px; height: 18px; border-radius: 5px;
+    background: linear-gradient(135deg, var(--sage), var(--sage-deep));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.25);
+  }
+  .wordmark .name {
+    font-family: var(--serif); font-size: 16px; letter-spacing: -0.01em; color: var(--ink);
+  }
+  .wordmark .name em { color: var(--sage-deep); font-style: italic; }
+
+  .top-spacer { flex: 1; }
+
+  .search-chip {
+    display: inline-flex; align-items: center; gap: 10px;
+    padding: 9px 14px;
+    background: var(--cream-card);
+    border-radius: 999px;
+    box-shadow: var(--elev-1);
+    cursor: text; min-width: 280px;
+    transition: transform 320ms var(--ease-mat), box-shadow 320ms var(--ease-mat);
+  }
+  .search-chip:hover { transform: translate3d(0, -3px, 0); box-shadow: var(--elev-hover); }
+  .search-chip svg { width: 14px; height: 14px; color: var(--ink-3); }
+  .search-chip .placeholder { flex: 1; color: var(--ink-3); font-size: 13.5px; }
+  .search-chip .kbd {
+    font-family: var(--mono); font-size: 10.5px; color: var(--ink-3);
+    background: var(--cream-2); padding: 2px 7px; border-radius: 5px;
+    box-shadow: inset 0 -1px 0 var(--line);
+  }
+
+  .me-chip {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 5px 11px 5px 5px;
+    background: var(--cream-card);
+    border-radius: 999px;
+    box-shadow: var(--elev-rest);
+    cursor: pointer;
+    transition: transform 320ms var(--ease-mat), box-shadow 320ms var(--ease-mat);
+  }
+  .me-chip:hover { transform: translate3d(0, -3px, 0); box-shadow: var(--elev-hover); }
+  .me-chip .avatar {
+    width: 28px; height: 28px;
+    border-radius: 999px;
+    background: var(--sage-tint-strong); color: var(--sage-deep);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-family: var(--serif); font-weight: 500; font-size: 12px;
+    box-shadow: inset 0 0 0 1px rgba(47, 80, 64, 0.12);
+  }
+  .me-chip .me-name { font-size: 13px; color: var(--ink-2); font-weight: 500; }
+
+  /* Greeting — sits on the ground layer. */
+  .greet {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: end;
+    gap: 28px;
+    margin-bottom: 24px;
+  }
+  .greet .left .eyebrow {
+    font-family: var(--mono); font-size: 11px;
+    color: var(--ink-3); letter-spacing: 0.10em;
+    text-transform: uppercase; margin-bottom: 12px;
+  }
+  .greet h1 {
+    font-family: var(--serif); font-style: italic; font-weight: 400;
+    font-size: 42px; line-height: 1.15; letter-spacing: -0.02em; color: var(--ink);
+  }
+  .greet h1 .glow {
+    color: var(--sage-deep);
+    background: var(--sage-tint);
+    padding: 0 8px;
+    border-radius: 8px;
+    box-shadow: inset 0 0 0 1px var(--sage-tint-strong);
+  }
+  .greet .sub {
+    margin-top: 12px; font-family: var(--serif); font-size: 16px;
+    color: var(--ink-2); line-height: 1.5; max-width: 540px;
+  }
+
+  .filter-strip {
+    display: flex; flex-wrap: wrap; gap: 7px;
+    justify-content: flex-end; max-width: 360px;
+  }
+  .pill {
+    padding: 7px 12px; border-radius: 999px;
+    background: var(--cream-card); color: var(--ink-2);
+    font-size: 12.5px; font-weight: 500;
+    cursor: pointer;
+    box-shadow: var(--elev-rest);
+    transition: transform 240ms var(--ease-mat), box-shadow 320ms var(--ease-mat), background 240ms var(--ease-mat);
+  }
+  .pill:hover { transform: translate3d(0, -3px, 0); box-shadow: var(--elev-1); }
+  .pill.active { background: var(--sage-tint); color: var(--sage-deep); box-shadow: var(--elev-1); }
+
+  /* Ground-level metric strip — sits flat on the canvas, low elevation. */
+  .ground-strip {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr 1fr;
+    gap: 14px;
+    margin-bottom: 30px;
+  }
+  .ground-tile {
+    background: var(--cream-card);
+    border-radius: 14px;
+    padding: 16px 18px;
+    box-shadow: var(--elev-rest);
+    cursor: pointer;
+    display: flex; align-items: center; gap: 16px;
+    transition: transform 320ms var(--ease-mat), box-shadow 320ms var(--ease-mat);
+  }
+  .ground-tile:hover { transform: translate3d(0, -4px, 0); box-shadow: var(--elev-1); }
+  .ground-tile:active { transform: translate3d(0, 0, 0); box-shadow: var(--elev-pressed); }
+
+  .gt-num {
+    font-family: var(--serif); font-size: 30px; font-weight: 500;
+    line-height: 1; letter-spacing: -0.025em; color: var(--ink);
+    flex-shrink: 0;
+  }
+  .gt-num .small { font-size: 18px; color: var(--ink-3); margin-left: 2px; }
+  .gt-meta { min-width: 0; }
+  .gt-label {
+    font-family: var(--mono); font-size: 10.5px;
+    color: var(--ink-3); letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .gt-unit {
+    font-size: 12.5px; color: var(--ink-2); margin-top: 3px;
+  }
+  .gt-spark { margin-left: auto; flex-shrink: 0; height: 28px; width: 80px; }
+  .gt-spark path.line { fill: none; stroke: var(--sage); stroke-width: 1.5;
+                         stroke-linecap: round; stroke-linejoin: round; }
+  .gt-spark path.area { fill: var(--sage-tint); }
+
+  /* ───── Stage — wraps mid + top with an explicit vertical stack ────────── */
+  .stage {
+    position: relative;
+    /* leaves headroom for top-layer overlays to peek above the mid panel */
+    padding-top: 18px;
+  }
+
+  /* ───── Mid layer — single elevated panel: today's patients ────────────── */
+  .mid {
+    background: linear-gradient(180deg, var(--cream-card) 0%, #FBF8F2 100%);
+    border-radius: 24px;
+    padding: 30px 30px 26px;
+    box-shadow: var(--elev-mid);
+    position: relative;
+    overflow: visible;
+  }
+  /* Inner lip — the paper edge. */
+  .mid::before {
+    content: '';
+    position: absolute; inset: 0;
+    border-radius: 24px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), inset 0 0 0 1px rgba(43, 38, 32, 0.03);
+    pointer-events: none;
+  }
+
+  .mid-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-bottom: 20px;
+    /* offset so top-layer overlays don't crowd the head */
+    padding-right: 240px;
+  }
+  .mid-head h2 {
+    font-family: var(--serif); font-weight: 500;
+    font-size: 24px; letter-spacing: -0.015em; color: var(--ink);
+  }
+  .mid-head h2 em { font-style: italic; color: var(--sage-deep); }
+  .mid-head .meta {
+    font-family: var(--mono); font-size: 11px;
+    color: var(--ink-3); letter-spacing: 0.08em; text-transform: uppercase;
+  }
+
+  /* Patient list inside the mid panel. */
+  .pgrid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px 16px;
+  }
+  .p-row {
+    display: grid;
+    grid-template-columns: 40px 1fr auto auto;
+    gap: 12px;
+    align-items: center;
+    padding: 12px 14px;
+    background: var(--cream);
+    border-radius: 12px;
+    box-shadow: var(--elev-rest);
+    cursor: pointer;
+    transition: transform 320ms var(--ease-mat), box-shadow 320ms var(--ease-mat);
+  }
+  .p-row:hover {
+    transform: translate3d(0, -4px, 0);
+    box-shadow: var(--elev-hover);
+    background: var(--cream-card);
+  }
+  .p-row:active {
+    transform: translate3d(0, 0, 0);
+    box-shadow: var(--elev-pressed);
+  }
+  .p-avatar {
+    width: 40px; height: 40px;
+    border-radius: 12px;
+    background: var(--sage-tint-strong); color: var(--sage-deep);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-family: var(--serif); font-weight: 500; font-size: 13.5px;
+    box-shadow: inset 0 0 0 1px rgba(47, 80, 64, 0.10);
+  }
+  .p-avatar.amber  { background: rgba(199, 151, 84, 0.18); color: #8E6526; box-shadow: inset 0 0 0 1px rgba(142, 101, 38, 0.10); }
+  .p-avatar.indigo { background: rgba(108, 122, 174, 0.18); color: #3E4A82; box-shadow: inset 0 0 0 1px rgba(62, 74, 130, 0.10); }
+  .p-avatar.rose   { background: rgba(180, 120, 130, 0.16); color: #7C2A38; box-shadow: inset 0 0 0 1px rgba(124, 42, 56, 0.10); }
+  .p-avatar.slate  { background: rgba(110, 122, 132, 0.18); color: #3F4B55; box-shadow: inset 0 0 0 1px rgba(63, 75, 85, 0.10); }
+  .p-avatar.olive  { background: rgba(150, 138, 80, 0.18); color: #5A5012; box-shadow: inset 0 0 0 1px rgba(90, 80, 18, 0.10); }
+
+  .p-meta { min-width: 0; }
+  .p-name {
+    font-family: var(--serif); font-size: 16px; font-weight: 500;
+    letter-spacing: -0.005em; color: var(--ink);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .p-sub {
+    margin-top: 1px;
+    font-size: 12px; color: var(--ink-3);
+    display: flex; gap: 7px; align-items: center;
+  }
+  .p-sub .sep { width: 3px; height: 3px; background: var(--ink-4); border-radius: 999px; }
+  .p-sub .code { font-family: var(--mono); font-size: 10.5px; color: var(--ink-2); }
+
+  .p-status {
+    padding: 3px 9px; border-radius: 999px;
+    font-size: 11px; font-weight: 500;
+    font-family: var(--mono); letter-spacing: 0.02em;
+    box-shadow: var(--elev-rest);
+  }
+  .p-status.ready  { background: var(--sage-tint); color: var(--sage-deep); }
+  .p-status.soon   { background: rgba(199, 151, 84, 0.16); color: #8E6526; }
+  .p-status.draft  { background: var(--cream-2); color: var(--ink-2); }
+  .p-status.signed { background: rgba(108, 122, 174, 0.14); color: #3E4A82; }
+
+  .p-time {
+    font-family: var(--mono); font-size: 11px;
+    color: var(--ink-3); letter-spacing: 0.02em;
+  }
+
+  /* Mid-panel footer — quiet "Recent visits" stream. */
+  .recent-strip {
+    margin-top: 26px;
+    padding-top: 20px;
+    border-top: 1px dashed var(--line);
+  }
+  .recent-strip .rh {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .recent-strip .rh h3 {
+    font-family: var(--serif); font-weight: 500;
+    font-size: 17px; color: var(--ink); letter-spacing: -0.01em;
+  }
+  .recent-strip .rh h3 em { font-style: italic; color: var(--sage-deep); }
+  .recent-strip .rh .link {
+    font-family: var(--mono); font-size: 11px; color: var(--sage-deep);
+    cursor: pointer; letter-spacing: 0.02em;
+  }
+  .recent-strip .rh .link:hover { text-decoration: underline; text-underline-offset: 2px; }
+
+  .recent-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0 22px;
+  }
+  .rrow {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    padding: 8px 8px;
+    border-bottom: 1px dashed var(--line);
+    border-radius: 6px;
+    margin: 0 -8px;
+    transition: background 240ms var(--ease-mat);
+  }
+  .rrow:hover { background: var(--cream-2); }
+  .rrow .rl { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+  .rrow .tag {
+    flex-shrink: 0; width: 6px; height: 6px;
+    border-radius: 999px; background: var(--sage);
+    box-shadow: 0 0 0 3px var(--sage-tint);
+    margin-top: 5px;
+  }
+  .rrow .tag.signed { background: var(--ink-3); box-shadow: 0 0 0 3px var(--cream-2); }
+  .rrow .tag.draft  { background: #C79754; box-shadow: 0 0 0 3px rgba(199, 151, 84, 0.18); }
+  .rrow .nm {
+    font-family: var(--serif); font-size: 13px; font-weight: 500; color: var(--ink);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .rrow .sp { font-size: 11px; color: var(--ink-3); white-space: nowrap; }
+  .rrow .tm {
+    font-family: var(--mono); font-size: 10px;
+    color: var(--ink-4); letter-spacing: 0.02em; text-align: right;
+  }
+
+  /* ───── Top layer — overlays floating above the mid panel ───────────────
+     Two cards: "Pending review" (urgent, amber) + "+ New visit" (CTA, sage).
+     Positioned absolute over the mid panel, anchored to top-right.
+     ──────────────────────────────────────────────────────────────────── */
+  .overlay-stack {
+    position: absolute;
+    top: 22px;
+    right: 30px;
+    display: flex; flex-direction: column;
+    gap: 14px;
+    width: 220px;
+    z-index: 5;
+  }
+
+  .overlay {
+    background: var(--cream-card);
+    border-radius: 16px;
+    padding: 18px;
+    box-shadow: var(--elev-top);
+    cursor: pointer;
+    position: relative;
+    transition: transform 320ms var(--ease-mat), box-shadow 320ms var(--ease-mat);
+  }
+  .overlay:hover {
+    transform: translate3d(0, -6px, 0);
+    box-shadow: var(--elev-top), 0 8px 16px rgba(122, 166, 140, 0.15);
+  }
+  .overlay:active {
+    transform: translate3d(0, 0, 0);
+    box-shadow: var(--elev-pressed);
+  }
+
+  /* Pending overlay — urgent amber accent. */
+  .overlay-pending {
+    background: linear-gradient(180deg, var(--cream-card) 0%, #FCF6E8 100%);
+  }
+  .overlay-pending .label {
+    font-family: var(--mono); font-size: 10.5px;
+    color: #8E6526; letter-spacing: 0.10em; text-transform: uppercase;
+    display: flex; align-items: center; gap: 6px; margin-bottom: 10px;
+  }
+  .overlay-pending .label::before {
+    content: '';
+    width: 7px; height: 7px;
+    background: #C79754;
+    border-radius: 999px;
+    box-shadow: 0 0 0 3px rgba(199, 151, 84, 0.20);
+  }
+  .overlay-pending .num {
+    font-family: var(--serif); font-size: 38px; font-weight: 500;
+    line-height: 1; letter-spacing: -0.025em; color: var(--ink);
+  }
+  .overlay-pending .descrip {
+    margin-top: 6px;
+    font-family: var(--serif); font-style: italic;
+    font-size: 13.5px; color: var(--ink-2);
+    line-height: 1.4;
+  }
+  .overlay-pending .oldest {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed rgba(199, 151, 84, 0.30);
+    font-family: var(--mono); font-size: 11px;
+    color: #8E6526; letter-spacing: 0.02em;
+  }
+
+  /* New-visit CTA overlay — sage gradient, primary action. */
+  .overlay-cta {
+    background: linear-gradient(180deg, #87B196 0%, var(--sage) 100%);
+    color: #FFFCF5;
+    box-shadow: var(--elev-top), inset 0 1px 0 rgba(255,255,255,0.18);
+  }
+  .overlay-cta:hover {
+    transform: translate3d(0, -6px, 0);
+    box-shadow: var(--elev-top), inset 0 1px 0 rgba(255,255,255,0.25), 0 8px 16px rgba(122, 166, 140, 0.25);
+  }
+  .overlay-cta .top-row {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+  }
+  .overlay-cta .icon-disc {
+    width: 36px; height: 36px; border-radius: 12px;
+    background: rgba(255, 252, 245, 0.18);
+    display: inline-flex; align-items: center; justify-content: center;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.2);
+  }
+  .overlay-cta .icon-disc svg { width: 18px; height: 18px; color: #FFFCF5; }
+  .overlay-cta .label-w {
+    font-family: var(--mono); font-size: 10.5px;
+    letter-spacing: 0.10em; text-transform: uppercase;
+    color: rgba(255, 252, 245, 0.80);
+  }
+  .overlay-cta .title {
+    font-family: var(--serif); font-style: italic;
+    font-size: 22px; line-height: 1.15; letter-spacing: -0.01em;
+    color: #FFFCF5; margin-top: 2px;
+  }
+  .overlay-cta .descrip {
+    margin-top: 8px;
+    font-size: 13px; line-height: 1.4;
+    color: rgba(255, 252, 245, 0.85);
+  }
+  .overlay-cta .row-foot {
+    margin-top: 12px;
+    display: flex; align-items: center; justify-content: space-between;
+    padding-top: 10px;
+    border-top: 1px dashed rgba(255, 252, 245, 0.20);
+  }
+  .overlay-cta .kbd {
+    font-family: var(--mono); font-size: 10.5px;
+    color: rgba(255, 252, 245, 0.80);
+    background: rgba(255, 252, 245, 0.16);
+    padding: 3px 7px; border-radius: 5px;
+    box-shadow: inset 0 -1px 0 rgba(0,0,0,0.05);
+  }
+  .overlay-cta .arrow {
+    font-family: var(--mono); font-size: 14px;
+    color: #FFFCF5; opacity: 0.85;
+  }
+
+  /* ───── Footnote ─────────────────────────────────────────────────────── */
+  .footnote {
+    margin-top: 32px;
+    text-align: center;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    color: var(--ink-4);
+  }
+
+  /* ───── Responsive ───────────────────────────────────────────────────── */
+  @media (max-width: 1040px) {
+    .ground-strip { grid-template-columns: 1fr 1fr; }
+    .ground-strip .gt-1 { grid-column: span 2; }
+    .pgrid { grid-template-columns: 1fr; }
+    .recent-grid { grid-template-columns: repeat(2, 1fr); }
+    .mid-head { padding-right: 0; }
+    .overlay-stack {
+      position: static;
+      width: 100%;
+      flex-direction: row;
+      margin-top: 18px;
+    }
+    .overlay { flex: 1; }
+  }
+  @media (max-width: 720px) {
+    .canvas { padding: 20px 14px 60px; }
+    .top-strip { flex-wrap: wrap; gap: 10px; }
+    .search-chip { order: 5; flex: 1 0 100%; min-width: 0; }
+    .top-spacer { display: none; }
+    .greet { grid-template-columns: 1fr; }
+    .greet h1 { font-size: 30px; }
+    .filter-strip { justify-content: flex-start; max-width: none; }
+    .ground-strip { grid-template-columns: 1fr; }
+    .ground-strip .gt-1 { grid-column: 1; }
+    .mid { padding: 22px 18px 18px; box-shadow: var(--elev-2); }
+    .recent-grid { grid-template-columns: 1fr; }
+    .overlay-stack { flex-direction: column; }
+    .overlay { box-shadow: var(--elev-2); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      transition: none !important;
+      animation: none !important;
+    }
+    .p-row:hover, .pill:hover, .ground-tile:hover, .overlay:hover,
+    .me-chip:hover, .wordmark:hover, .search-chip:hover {
+      transform: none !important;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div class="canvas">
+
+  <!-- Ground layer: chips on the canvas. -->
+  <div class="top-strip">
+    <div class="wordmark"><div class="quill"></div><div class="name">Quill<em>MD</em></div></div>
+
+    <div class="top-spacer"></div>
+
+    <div class="search-chip" role="search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.3-4.3"></path></svg>
+      <span class="placeholder">Search patients · visits · ICD-10 …</span>
+      <span class="kbd">⌘K</span>
+    </div>
+
+    <div class="me-chip" role="button" tabindex="0">
+      <span class="avatar">KR</span>
+      <span class="me-name">Dr. Reyes</span>
+    </div>
+  </div>
+
+  <!-- Greeting + filter strip — ground layer. -->
+  <header class="greet">
+    <div class="left">
+      <div class="eyebrow">Tuesday · 29 April · Sage Family Practice</div>
+      <h1>Good <em><span class="glow">morning</span></em>, Dr. Reyes.</h1>
+      <p class="sub">Eleven faces on the schedule, three drafts cooling. Three need your eyes today.</p>
+    </div>
+    <div class="filter-strip">
+      <span class="pill active">All · 6</span>
+      <span class="pill">FamMed</span>
+      <span class="pill">Cardio</span>
+      <span class="pill">Endo</span>
+      <span class="pill">Peds</span>
+      <span class="pill">Derm</span>
+    </div>
+  </header>
+
+  <!-- Ground tiles — low elevation, wide one + 2 small ones. -->
+  <div class="ground-strip">
+
+    <div class="ground-tile gt-1" tabindex="0" aria-label="Visits this month">
+      <div class="gt-num">127</div>
+      <div class="gt-meta">
+        <div class="gt-label">Visits / Apr</div>
+        <div class="gt-unit">+18 vs Mar · drafted 38s avg</div>
+      </div>
+      <svg class="gt-spark" viewBox="0 0 80 28" preserveAspectRatio="none" aria-hidden="true">
+        <path class="area" d="M0,22 L8,18 L16,20 L24,15 L32,17 L40,11 L48,13 L56,8 L64,10 L72,5 L80,7 L80,28 L0,28 Z"/>
+        <path class="line" d="M0,22 L8,18 L16,20 L24,15 L32,17 L40,11 L48,13 L56,8 L64,10 L72,5 L80,7"/>
+      </svg>
+    </div>
+
+    <div class="ground-tile" tabindex="0" aria-label="Average drafted in seconds">
+      <div class="gt-num">38<span class="small">s</span></div>
+      <div class="gt-meta">
+        <div class="gt-label">Avg drafted in</div>
+        <div class="gt-unit">−6s vs Mar</div>
+      </div>
+    </div>
+
+    <div class="ground-tile" tabindex="0" aria-label="Signed this week">
+      <div class="gt-num">42</div>
+      <div class="gt-meta">
+        <div class="gt-label">Signed / wk</div>
+        <div class="gt-unit">+9 vs last wk</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Stage: holds the mid panel + the floating top-layer overlays. -->
+  <div class="stage">
+
+    <!-- Mid layer: single elevated panel containing today's patients + recent stream. -->
+    <main class="mid" aria-labelledby="mid-h">
+
+      <div class="mid-head">
+        <h2 id="mid-h">Today, <em>at a glance</em></h2>
+        <span class="meta">6 of 11 patients · 4 ready</span>
+      </div>
+
+      <div class="pgrid">
+
+        <div class="p-row" tabindex="0">
+          <div class="p-avatar">MP</div>
+          <div class="p-meta">
+            <div class="p-name">Mei-Ling Park</div>
+            <div class="p-sub"><span>42F · Family Medicine</span><span class="sep"></span><span class="code">J20.9</span><span class="sep"></span><span class="code">99214</span></div>
+          </div>
+          <div class="p-status ready">Ready</div>
+          <div class="p-time">08:00</div>
+        </div>
+
+        <div class="p-row" tabindex="0">
+          <div class="p-avatar amber">DA</div>
+          <div class="p-meta">
+            <div class="p-name">Daniyal Abbasi</div>
+            <div class="p-sub"><span>58M · Cardiology</span><span class="sep"></span><span class="code">I10</span><span class="sep"></span><span class="code">99213</span></div>
+          </div>
+          <div class="p-status soon">In 12m</div>
+          <div class="p-time">08:30</div>
+        </div>
+
+        <div class="p-row" tabindex="0">
+          <div class="p-avatar indigo">JT</div>
+          <div class="p-meta">
+            <div class="p-name">Joaquín Torres</div>
+            <div class="p-sub"><span>7M · Pediatrics</span><span class="sep"></span><span class="code">H66.91</span><span class="sep"></span><span class="code">99213</span></div>
+          </div>
+          <div class="p-status draft">Drafted</div>
+          <div class="p-time">09:15</div>
+        </div>
+
+        <div class="p-row" tabindex="0">
+          <div class="p-avatar rose">AB</div>
+          <div class="p-meta">
+            <div class="p-name">Anika Bhattacharya</div>
+            <div class="p-sub"><span>34F · Endocrinology</span><span class="sep"></span><span class="code">E11.9</span><span class="sep"></span><span class="code">99214</span></div>
+          </div>
+          <div class="p-status ready">Ready</div>
+          <div class="p-time">10:00</div>
+        </div>
+
+        <div class="p-row" tabindex="0">
+          <div class="p-avatar slate">RO</div>
+          <div class="p-meta">
+            <div class="p-name">Rafael Olawale</div>
+            <div class="p-sub"><span>61M · Family Medicine</span><span class="sep"></span><span class="code">M54.5</span><span class="sep"></span><span class="code">99213</span></div>
+          </div>
+          <div class="p-status signed">Signed</div>
+          <div class="p-time">10:45</div>
+        </div>
+
+        <div class="p-row" tabindex="0">
+          <div class="p-avatar olive">SK</div>
+          <div class="p-meta">
+            <div class="p-name">Sophie Khalid</div>
+            <div class="p-sub"><span>29F · Dermatology</span><span class="sep"></span><span class="code">L40.0</span><span class="sep"></span><span class="code">99213</span></div>
+          </div>
+          <div class="p-status soon">In 1h</div>
+          <div class="p-time">11:30</div>
+        </div>
+
+      </div>
+
+      <!-- Recent visits stream — folded into the mid panel as a compact rib. -->
+      <section class="recent-strip" aria-labelledby="recent-h">
+        <div class="rh">
+          <h3 id="recent-h">Recent <em>visits</em></h3>
+          <span class="link">All visits →</span>
+        </div>
+        <div class="recent-grid">
+
+          <div class="rrow">
+            <div class="rl"><span class="tag signed"></span><span class="nm">Eleanor Kowalski</span><span class="sp">· I10</span></div>
+            <span class="tm">12m</span>
+          </div>
+          <div class="rrow">
+            <div class="rl"><span class="tag"></span><span class="nm">Tomás Aldridge</span><span class="sp">· I48.91</span></div>
+            <span class="tm">38m</span>
+          </div>
+          <div class="rrow">
+            <div class="rl"><span class="tag draft"></span><span class="nm">Mira Vasquez-Olin</span><span class="sp">· E11.65</span></div>
+            <span class="tm">1h 04m</span>
+          </div>
+          <div class="rrow">
+            <div class="rl"><span class="tag signed"></span><span class="nm">Hassan Mboya</span><span class="sp">· J45.40</span></div>
+            <span class="tm">1h 22m</span>
+          </div>
+          <div class="rrow">
+            <div class="rl"><span class="tag"></span><span class="nm">Caroline Westbrook</span><span class="sp">· L70.0</span></div>
+            <span class="tm">2h 11m</span>
+          </div>
+          <div class="rrow">
+            <div class="rl"><span class="tag signed"></span><span class="nm">Yuki Tanaka-Rhodes</span><span class="sp">· J06.9</span></div>
+            <span class="tm">3h 02m</span>
+          </div>
+          <div class="rrow">
+            <div class="rl"><span class="tag draft"></span><span class="nm">Bertrand Okeke</span><span class="sp">· I25.10</span></div>
+            <span class="tm">3h 45m</span>
+          </div>
+          <div class="rrow">
+            <div class="rl"><span class="tag signed"></span><span class="nm">Priya Anand-Shah</span><span class="sp">· E03.9</span></div>
+            <span class="tm">5h 20m</span>
+          </div>
+          <div class="rrow">
+            <div class="rl"><span class="tag"></span><span class="nm">Marcus Liang</span><span class="sp">· K21.9</span></div>
+            <span class="tm">6h 18m</span>
+          </div>
+          <div class="rrow">
+            <div class="rl"><span class="tag signed"></span><span class="nm">Ines Valverde</span><span class="sp">· Z00.121</span></div>
+            <span class="tm">Yest.</span>
+          </div>
+          <div class="rrow">
+            <div class="rl"><span class="tag draft"></span><span class="nm">Clarence Wu-Patel</span><span class="sp">· L20.9</span></div>
+            <span class="tm">Yest.</span>
+          </div>
+          <div class="rrow">
+            <div class="rl"><span class="tag signed"></span><span class="nm">Fatima Boukhari</span><span class="sp">· R51</span></div>
+            <span class="tm">Yest.</span>
+          </div>
+
+        </div>
+      </section>
+
+    </main>
+
+    <!-- TOP LAYER: floating overlays above the mid panel. -->
+    <aside class="overlay-stack" aria-label="Quick actions">
+
+      <!-- Pending review — urgent amber overlay. -->
+      <div class="overlay overlay-pending" tabindex="0">
+        <div class="label">Pending review</div>
+        <div class="num">3</div>
+        <div class="descrip">Three drafts ready when you are.</div>
+        <div class="oldest">⏱ Oldest 2h 14m</div>
+      </div>
+
+      <!-- New-visit CTA — primary sage overlay. -->
+      <div class="overlay overlay-cta" tabindex="0" role="button">
+        <div class="top-row">
+          <div class="icon-disc" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>
+          </div>
+          <div>
+            <div class="label-w">Start</div>
+            <div class="title">New visit</div>
+          </div>
+        </div>
+        <div class="descrip">Audio, dictation, or a quick text note — pick a path.</div>
+        <div class="row-foot">
+          <span class="kbd">⌘N</span>
+          <span class="arrow">→</span>
+        </div>
+      </div>
+
+    </aside>
+
+  </div><!-- /stage -->
+
+  <div class="footnote">Material Depth · Floating Dashboard · QuillMD</div>
+
+</div><!-- /canvas -->
+
+</body>
+</html>
