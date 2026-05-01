@@ -172,3 +172,46 @@ Five tab content bodies re-implemented per v9 design exploration picks: SOAP V3 
 ### Lessons added
 - **Naive conflict-strip on additive globals.css broke a CSS rule mid-block.** When 3 parallel subagents all append utility classes to globals.css, git's 3-way merge conflicts span both branches' tail-additions. Stripping `<<<<<<<`/`=======`/`>>>>>>>` markers naively can leave a `.foo { ... }` opener separated from its closer by the conflict boundary. Fix used: `git show <branch>:globals.css` for each branch's clean version, then surgical concatenation of base + each branch's tail-additions. Brace balance check (`{ count == } count`) caught the issue. Future large additive merges should use this surgical pattern from the start, not after the conflict-strip fails.
 - **Worktree path inside project dir works with Turbopack.** Phase 5 hit a cross-fs Turbopack quirk when worktrees lived at `/tmp/wt-*` symlinking back to `/opt/meddoc-pro/node_modules`. Phase 5.1 kept worktrees at `/opt/meddoc-pro/wt-p51-*` (same filesystem) and Turbopack worked unchanged. Faster build path. Worktree-symlinked node_modules across mountpoints still need `--webpack`.
+
+---
+
+## 10. ✅ Phase 5.1.1 — Extras 7-card wiring fix — completed 2026-05-01
+
+Audit-driven fix. PR #92 claimed 5/5 tabs migrated; user spotted Extras still showing legacy empty-state on iPad ("hanoz hamoon sample ghadimiye"). Audit (read-only side-by-side vs v9 mockups + DOM count assertions on test instance with rich Mei-Ling Park seed) confirmed 🔴 NOT migrated. Other 4 tabs verified 🟢. Root cause: `visit-ready-view.tsx` didn't thread the 7 new V4 data props to `<ExtrasTab>` — Subagent C built the cards but the orchestrator wasn't updated. PR #93, 2 files, 210 LOC.
+
+### What landed
+- **page.tsx:** patient select extended with `mrn` + `insurance` + `problemList`; visit select extended with `createdAt`. 7 new optional props plumbed through `<VisitBody>`.
+- **visit-ready-view.tsx:** `VisitReadyViewProps` extended with optional patient demographics + problem list + visitCreatedAt; `parseProblemList` helper added (normalizes the 2 jsonb shapes the schema documents); `synthesizeAuditEvents` helper added (derives 4-event timeline from `createdAt → processingStartedAt → processingFinishedAt → signedAt` — no new Prisma query, per Subagent C's "audit log is READ-ONLY, derived from visit fields" design). 7 props threaded to `<ExtrasTab>`.
+- **No new Prisma queries.** Audit log is derived. Vitals/allergies/current-meds pass empty-data props so cards render their own per-field "Not recorded" empty states.
+
+### Live verification (post-deploy 2026-05-01T22:41:38Z)
+- 5 Phase 5.1.1 utilities served in prod CSS (`.qm-lin-card-stream`, `.qm-lin-extras-card`, `.qm-lin-extras-vitals-tiles`, `.qm-lin-extras-audit-ev`, `.qm-lin-extras-kv-grid`)
+- External smoke: `app.quillmd.com/login` 200
+- 0 errors / 0 "Event handlers cannot be passed" in last 2 min
+- Deploy outage: 10 seconds (UP-START 22:41:28Z → HEALTHY 22:41:38Z)
+- Test-instance DOM probe pre-deploy: 7/7 V4 cards rendered with correct titles (Demographics / Vitals / Allergies / Current medications / Problem list / Visit metadata / Audit log)
+
+### qa-bug-hunter bumped to v1.1.0
+Skill at `~/.claude/skills/qa-bug-hunter/SKILL.md` now adds **per-tab structural DOM count assertions**:
+
+| Tab | Assertion |
+|---|---|
+| SOAP NOTE | `.qm-lin-split` ≥ 1 + `.qm-lin-soap-section` ≥ 4 |
+| TRANSCRIPT | `.qm-lin-split` ≥ 1 + (`.qm-lin-tx-stream` OR `.qm-lin-tx-search`) ≥ 1 |
+| CODES | `.qm-lin-codes-frame` + `.qm-lin-codes-table` ≥ 1 each |
+| RX | `.qm-lin-rx-split` + (`.qm-lin-rx-row` ≥ 1 OR "No prescriptions" empty-state text) |
+| EXTRAS | `.qm-lin-card-stream` + `.qm-lin-extras-card` **≥ 7** |
+
+v1.1 self-test on the fixed build with rich seed data: 5/5 structural assertions pass. The Extras assertion is the smoking-gun fix — v1.0 saw 1 empty-state card and signed off green; v1.1 requires ≥7 (one per V4 category).
+
+### Schema gaps remaining (T-M23 follow-up)
+- vitals table — Vitals card renders 8 em-dash tiles
+- allergies table for transcribe-md scope — AllergiesCard shows "None known"
+- current chronic meds for transcribe-md scope — MedicationsCard shows "Not recorded"
+
+Cards render correctly with empty-state UI for now.
+
+### Lessons added
+- **Smoke checks (no errors, HTTP 200) are NECESSARY but NOT SUFFICIENT.** A tab can render the WRONG chrome cleanly with 0 errors. Always assert STRUCTURAL DOM presence for the chosen design variation per tab. v1.0 of qa-bug-hunter missed Phase 5.1 Extras because the empty-state legacy card rendered cleanly; the user spotted it on iPad before any automation did. v1.1's structural-DOM-count assertions catch this regression class at the smoke layer.
+- **Subagent claims need orchestrator-side verification.** Subagent C's report said "the 7 cards are wired through new optional props on `ExtrasTab`; the existing call site in `visit-ready-view.tsx` is untouched." That's literally true — they shipped the cards but didn't update the call site. Future subagent briefs should require the orchestrator wiring as part of the same commit, OR the lead's verification step should specifically check that new component props are actually being PASSED, not just declared.
+- **Audit-log without a new Prisma query is fine.** The Subagent C design comment "derive from visit fields" is the right call — read-only display surfaces should synthesize timelines from existing data rather than load the full audit_logs table (which has its own RBAC/query-cost concerns).
