@@ -1,0 +1,684 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QuillMD · Visit · Mei-Ling Park · v9 SOAP V1 Editorial</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#08090a;
+  --surface-1:#0d0e10;
+  --surface-2:#131416;
+  --surface-3:#1a1c1e;
+  --border:#21232a;
+  --border-strong:#2c2f38;
+  --hairline:rgba(255,255,255,0.05);
+  --hairline-strong:rgba(255,255,255,0.08);
+  --text:#f7f8f8;
+  --text-2:#b4bcc8;
+  --text-3:#6c737f;
+  --text-4:#4b5159;
+  --sage:#7AA68C;
+  --sage-bright:#9BC4A8;
+  --sage-deep:#2F5040;
+  --sage-tint:rgba(122,166,140,0.13);
+  --sage-glow:rgba(122,166,140,0.18);
+  --row-hover:rgba(255,255,255,0.03);
+  --row-active:rgba(255,255,255,0.05);
+  --success:#4caf7d;
+  --warning:#d4a437;
+  --danger:#d4574a;
+  --info:#5b8db8;
+  --font-sans:'Inter', -apple-system, system-ui, sans-serif;
+  --font-mono:'JetBrains Mono', ui-monospace, Menlo, monospace;
+  --ease:cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text)}
+body{
+  font-family:var(--font-sans);
+  font-feature-settings:'cv11','ss01';
+  font-size:13px;
+  line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  letter-spacing:-0.005em;
+  min-height:100vh;
+}
+::selection{background:rgba(122,166,140,.25);color:var(--text)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+a{color:inherit;text-decoration:none}
+
+/* ─────────────── Top bar ─────────────── */
+.topbar{
+  position:sticky;top:0;z-index:30;
+  height:44px;
+  display:flex;align-items:center;gap:12px;
+  padding:0 16px;
+  background:rgba(8,9,10,.85);
+  backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--hairline);
+}
+.brand{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;letter-spacing:-0.01em}
+.brand-mark{
+  width:18px;height:18px;border-radius:5px;
+  background:linear-gradient(135deg,var(--sage) 0%,var(--sage-deep) 100%);
+  display:grid;place-items:center;color:#0c1410;font-size:10px;font-weight:700;
+  box-shadow:0 0 0 1px rgba(255,255,255,.06) inset;
+}
+.brand-mark::before{content:'Q'}
+.crumb-sep{color:var(--text-4);font-size:12px}
+.crumb{color:var(--text-2);font-size:13px;transition:color 100ms var(--ease)}
+.crumb:hover{color:var(--text)}
+.crumb-active{color:var(--text)}
+.spacer{flex:1}
+
+.status-pill-chrome{
+  display:inline-flex;align-items:center;gap:6px;
+  height:22px;padding:0 9px;
+  border-radius:4px;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.06em;text-transform:uppercase;font-weight:500;
+  border:1px solid rgba(122,166,140,.25);
+  color:var(--sage-bright);
+  background:rgba(122,166,140,.06);
+}
+.status-pill-chrome .pdot{
+  width:5px;height:5px;border-radius:50%;
+  background:var(--sage);
+  animation:idle-pulse 1.6s ease-in-out infinite;
+}
+@keyframes idle-pulse{
+  0%,100%{opacity:.7;transform:scale(1)}
+  50%{opacity:1;transform:scale(1.04)}
+}
+.btn-sage{
+  display:inline-flex;align-items:center;gap:8px;
+  height:30px;padding:0 14px;
+  background:var(--sage);
+  color:#0d1611;
+  border-radius:6px;
+  font-size:12.5px;font-weight:500;
+  letter-spacing:-0.005em;
+  transition:background 100ms var(--ease), transform 80ms var(--ease), box-shadow 200ms var(--ease);
+}
+.btn-sage:hover{background:#88b599;transform:scale(1.02);box-shadow:0 0 0 4px rgba(122,166,140,.18)}
+.btn-sage .shortcut{font-family:var(--font-mono);font-size:11px;color:rgba(13,22,17,.55)}
+
+.avatar-chip{
+  width:24px;height:24px;border-radius:6px;
+  background:linear-gradient(135deg,#3a4a52 0%,#2a3036 100%);
+  color:#dde6ec;font-size:10.5px;font-weight:600;
+  display:grid;place-items:center;letter-spacing:0.02em;
+  border:1px solid var(--hairline-strong);
+}
+
+/* ─────────────── Layout ─────────────── */
+.shell{
+  position:relative;
+  min-height:calc(100vh - 44px);
+  padding:18px 28px 80px;
+}
+.shell::before{
+  content:'';
+  position:absolute;
+  top:-100px;left:30%;
+  width:600px;height:380px;
+  background:radial-gradient(ellipse at center, rgba(122,166,140,.045) 0%, transparent 70%);
+  pointer-events:none;
+  z-index:0;
+}
+
+/* meta strip */
+.meta-strip{
+  display:flex;align-items:center;
+  padding:6px 0 14px;
+  margin-bottom:14px;
+  border-bottom:1px solid var(--hairline);
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--text-2);
+  position:relative;z-index:1;
+}
+.meta-strip .field{padding:0 14px;border-right:1px solid var(--hairline)}
+.meta-strip .field:first-child{padding-left:0;color:var(--text);font-weight:500}
+.meta-strip .field:last-child{border-right:0}
+.meta-strip .field .lbl{color:var(--text-4);margin-right:4px;font-weight:400}
+
+/* tabs */
+.tabs-row{
+  display:flex;align-items:center;gap:0;
+  margin-bottom:32px;
+  border-bottom:1px solid var(--hairline);
+  position:relative;z-index:1;
+}
+.tab{
+  position:relative;
+  padding:8px 16px 10px;
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.07em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  font-weight:500;
+  cursor:pointer;
+  transition:color 100ms var(--ease);
+}
+.tab:first-child{padding-left:0}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--sage-bright)}
+.tab.active::after{
+  content:'';position:absolute;
+  left:0;right:0;bottom:-1px;
+  height:1.5px;
+  background:var(--sage);
+  border-radius:1px 1px 0 0;
+}
+
+/* ─────────────── Editorial reading column ─────────────── */
+.reading-frame{
+  position:relative;z-index:1;
+  max-width:760px;
+  margin:0 auto;
+}
+
+.note-masthead{
+  padding:8px 0 28px;
+  border-bottom:1px solid var(--hairline);
+  margin-bottom:42px;
+}
+.note-eyebrow{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.14em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  margin-bottom:14px;
+}
+.note-eyebrow .sage-mark{color:var(--sage-bright);margin-right:6px}
+.note-title{
+  font-family:var(--font-sans);
+  font-size:30px;
+  line-height:1.18;
+  letter-spacing:-0.02em;
+  font-weight:600;
+  color:var(--text);
+  margin:0 0 12px;
+}
+.note-byline{
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+}
+.note-byline .dot{width:3px;height:3px;border-radius:50%;background:var(--text-4)}
+.note-byline strong{color:var(--text-2);font-weight:500}
+
+/* sections */
+.soap-section{
+  margin-bottom:48px;
+  position:relative;
+}
+.section-head{
+  display:flex;align-items:flex-start;justify-content:space-between;
+  gap:16px;
+  margin-bottom:20px;
+}
+.section-eyebrow{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.14em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  margin-bottom:8px;
+  display:flex;align-items:center;gap:8px;
+}
+.section-eyebrow .num{color:var(--sage-bright);font-weight:500}
+.section-eyebrow .sep{color:var(--text-4)}
+.section-heading{
+  font-family:var(--font-sans);
+  font-size:25px;
+  line-height:1.2;
+  letter-spacing:-0.02em;
+  font-weight:600;
+  color:var(--text);
+  margin:0;
+}
+.section-heading .ltr{
+  display:inline-block;
+  font-family:var(--font-mono);
+  font-size:13px;
+  vertical-align:6px;
+  margin-right:10px;
+  padding:2px 7px;
+  border:1px solid var(--hairline-strong);
+  border-radius:5px;
+  color:var(--sage-bright);
+  background:rgba(122,166,140,.05);
+  letter-spacing:0.04em;
+  font-weight:500;
+}
+
+.section-status{
+  flex-shrink:0;
+  display:inline-flex;align-items:center;gap:6px;
+  height:22px;padding:0 9px;
+  border-radius:4px;
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  font-weight:500;
+  margin-top:4px;
+}
+.section-status.reviewed{
+  border:1px solid rgba(122,166,140,.28);
+  color:var(--sage-bright);
+  background:rgba(122,166,140,.08);
+}
+.section-status.drafted{
+  border:1px solid rgba(212,164,55,.25);
+  color:var(--warning);
+  background:rgba(212,164,55,.06);
+}
+.section-status.signed{
+  border:1px solid rgba(122,166,140,.4);
+  color:var(--sage-bright);
+  background:rgba(122,166,140,.14);
+}
+.section-status .sdot{width:4px;height:4px;border-radius:50%;background:currentColor;opacity:.85}
+
+/* body */
+.section-body{
+  font-family:var(--font-sans);
+  font-size:15.5px;
+  line-height:1.72;
+  color:var(--text);
+  letter-spacing:-0.005em;
+}
+.section-body p{
+  margin:0;
+  padding:6px 0 6px 18px;
+  position:relative;
+  border-radius:0 4px 4px 0;
+  transition:background 130ms var(--ease);
+  margin-left:-18px;
+}
+.section-body p::before{
+  content:'';
+  position:absolute;
+  left:0;top:8px;bottom:8px;
+  width:2px;background:var(--sage);
+  opacity:0;
+  transform:translateX(-3px);
+  transition:opacity 130ms var(--ease), transform 130ms var(--ease);
+  border-radius:1px;
+}
+.section-body p:hover{background:rgba(255,255,255,.022)}
+.section-body p:hover::before{opacity:1;transform:translateX(0)}
+.section-body p:hover .edit-tag{opacity:1;transform:translateX(0)}
+.section-body p + p{margin-top:6px}
+.section-body strong{color:var(--text);font-weight:600}
+.section-body em{font-style:italic;color:var(--text-2)}
+
+.edit-tag{
+  position:absolute;
+  right:0;top:9px;
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.14em;
+  text-transform:uppercase;
+  color:var(--sage);
+  opacity:0;
+  transform:translateX(-4px);
+  transition:opacity 100ms var(--ease), transform 100ms var(--ease);
+  font-weight:500;
+}
+
+/* vitals callout */
+.vitals-block{
+  margin:14px 0;
+  padding:14px 16px;
+  background:var(--surface-1);
+  border:1px solid var(--hairline);
+  border-radius:6px;
+  font-family:var(--font-mono);
+  font-size:12.5px;
+  color:var(--text);
+  letter-spacing:0.01em;
+  display:grid;
+  grid-template-columns:repeat(3, 1fr);
+  gap:10px 18px;
+  font-variant-numeric:tabular-nums;
+}
+.vitals-block .v-row{display:flex;align-items:baseline;gap:8px}
+.vitals-block .v-lbl{
+  color:var(--text-4);
+  font-size:10px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+}
+.vitals-block .v-val{color:var(--text);font-weight:500}
+
+/* assessment list */
+.assessment-list{
+  list-style:none;padding:0;margin:0;
+  counter-reset:dx;
+}
+.assessment-list li{
+  counter-increment:dx;
+  padding:10px 0 10px 38px;
+  position:relative;
+  border-top:1px solid var(--hairline);
+  font-size:15.5px;
+  line-height:1.7;
+  color:var(--text);
+}
+.assessment-list li:first-child{border-top:0}
+.assessment-list li::before{
+  content:counter(dx,decimal-leading-zero);
+  position:absolute;
+  left:0;top:12px;
+  font-family:var(--font-mono);
+  font-size:11px;
+  color:var(--sage-bright);
+  letter-spacing:0.06em;
+  font-weight:500;
+}
+.assessment-list .dx-code{
+  font-family:var(--font-mono);
+  font-size:11px;
+  color:var(--text-3);
+  margin-left:8px;
+  padding:1px 6px;
+  border:1px solid var(--hairline-strong);
+  border-radius:3px;
+  letter-spacing:0.05em;
+  background:rgba(255,255,255,.02);
+}
+
+/* plan list */
+.plan-list{
+  list-style:none;padding:0;margin:0;
+}
+.plan-list li{
+  padding:14px 0 14px 0;
+  border-top:1px solid var(--hairline);
+  display:grid;
+  grid-template-columns:54px 1fr;
+  gap:14px;
+  align-items:start;
+}
+.plan-list li:first-child{border-top:0}
+.plan-list .p-tag{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.12em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  padding-top:6px;
+}
+.plan-list .p-body{
+  font-size:15.5px;
+  line-height:1.7;
+  color:var(--text);
+}
+.plan-list .p-body strong{font-weight:600;color:var(--text)}
+
+/* footer */
+.note-footer{
+  margin-top:48px;
+  padding-top:24px;
+  border-top:1px solid var(--hairline);
+  display:flex;align-items:center;justify-content:space-between;gap:16px;
+}
+.note-footer .meta{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--text-3);
+}
+.btn-ghost{
+  display:inline-flex;align-items:center;gap:8px;
+  height:34px;padding:0 14px;
+  border:1px solid var(--hairline-strong);
+  border-radius:6px;
+  background:transparent;
+  color:var(--text-2);
+  font-size:12.5px;font-weight:500;
+  letter-spacing:-0.005em;
+  transition:background 100ms var(--ease), color 100ms var(--ease), border-color 100ms var(--ease);
+}
+.btn-ghost:hover{background:rgba(255,255,255,.04);color:var(--text);border-color:rgba(255,255,255,.14)}
+
+/* reduced motion */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;
+  }
+  .status-pill-chrome .pdot{animation:none}
+  .section-body p:hover{background:transparent}
+  .section-body p:hover::before{opacity:0}
+  .section-body p:hover .edit-tag{opacity:0}
+}
+
+/* responsive */
+@media (max-width:760px){
+  .meta-strip{flex-wrap:wrap;font-size:10px}
+  .meta-strip .field{padding:4px 10px}
+  .shell{padding:14px 16px 60px}
+  .reading-frame{max-width:100%}
+  .note-title{font-size:24px}
+  .section-heading{font-size:20px}
+  .section-body{font-size:15px;line-height:1.7}
+  .vitals-block{grid-template-columns:1fr 1fr}
+  .tabs-row{overflow-x:auto;flex-wrap:nowrap}
+  .tab{flex-shrink:0}
+  .topbar{padding:0 12px;gap:8px;flex-wrap:wrap;height:auto;min-height:44px}
+  .crumb,.crumb-sep{display:none}
+  .crumb-active{display:inline}
+}
+@media (max-width:420px){
+  .vitals-block{grid-template-columns:1fr}
+  .plan-list li{grid-template-columns:1fr;gap:6px}
+  .note-byline{font-size:10px}
+}
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<header class="topbar">
+  <div class="brand"><span class="brand-mark"></span> QuillMD</div>
+  <span class="crumb-sep">/</span>
+  <span class="crumb">Patients</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb">Mei-Ling Park</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb crumb-active">Visit · Apr 30, 2026</span>
+  <div class="spacer"></div>
+  <div class="status-pill-chrome" aria-live="polite">
+    <span class="pdot"></span>
+    <span class="label">Ready</span>
+  </div>
+  <button class="btn-sage" type="button" aria-label="Sign and send note">
+    <span>Sign &amp; send</span>
+    <span class="shortcut">⌘ ↵</span>
+  </button>
+  <div class="avatar-chip" title="Dr. Kalyani Park">KP</div>
+</header>
+
+<div class="shell">
+
+  <!-- meta strip -->
+  <div class="meta-strip">
+    <div class="field">Mei-Ling Park</div>
+    <div class="field">34 F</div>
+    <div class="field"><span class="lbl">MRN</span>77324</div>
+    <div class="field">J20.9 · Bronchitis follow-up</div>
+    <div class="field">99214</div>
+    <div class="field"><span class="lbl">Duration</span>22 min</div>
+  </div>
+
+  <!-- tabs -->
+  <div class="tabs-row" role="tablist">
+    <div class="tab active" role="tab" aria-selected="true">Soap Note</div>
+    <div class="tab" role="tab" aria-selected="false">Transcript</div>
+    <div class="tab" role="tab" aria-selected="false">Codes</div>
+    <div class="tab" role="tab" aria-selected="false">Rx</div>
+    <div class="tab" role="tab" aria-selected="false">Extras</div>
+  </div>
+
+  <!-- editorial reading column -->
+  <div class="reading-frame">
+
+    <header class="note-masthead">
+      <div class="note-eyebrow"><span class="sage-mark">●</span>Clinical note · drafted from voice</div>
+      <h1 class="note-title">Bronchitis follow-up — symptoms resolving on conservative care</h1>
+      <div class="note-byline">
+        <span><strong>Dr. Kalyani Park</strong></span>
+        <span class="dot"></span>
+        <span>Apr 30, 2026</span>
+        <span class="dot"></span>
+        <span>11:14 am</span>
+        <span class="dot"></span>
+        <span>22 min · Established patient</span>
+      </div>
+    </header>
+
+    <!-- SUBJECTIVE -->
+    <section class="soap-section">
+      <div class="section-head">
+        <div>
+          <div class="section-eyebrow">
+            <span class="num">01</span><span class="sep">·</span><span>Subjective</span>
+          </div>
+          <h2 class="section-heading"><span class="ltr">S</span>Patient narrative</h2>
+        </div>
+        <span class="section-status reviewed"><span class="sdot"></span>Reviewed</span>
+      </div>
+      <div class="section-body">
+        <p>Patient reports cough has improved over the past week — now occasional, mostly in the morning, and no longer disrupts daily activity. <strong>No fever for 5 days.</strong> Sputum production has shifted from yellow-green to clear, with markedly reduced volume.<span class="edit-tag">Edit</span></p>
+        <p>Sleep is restored to baseline; she returned to her usual half-time desk schedule on Monday and tolerated a full workday by Wednesday. Mild residual fatigue persists in the late afternoon, which she finds mildly concerning.<span class="edit-tag">Edit</span></p>
+        <p>Denies shortness of breath, chest pain, or hemoptysis. No recent travel, no new exposures, and no household contacts symptomatic. She is requesting clearance to resume a regular exercise routine.<span class="edit-tag">Edit</span></p>
+      </div>
+    </section>
+
+    <!-- OBJECTIVE -->
+    <section class="soap-section">
+      <div class="section-head">
+        <div>
+          <div class="section-eyebrow">
+            <span class="num">02</span><span class="sep">·</span><span>Objective</span>
+          </div>
+          <h2 class="section-heading"><span class="ltr">O</span>Exam &amp; vitals</h2>
+        </div>
+        <span class="section-status reviewed"><span class="sdot"></span>Reviewed</span>
+      </div>
+      <div class="section-body">
+        <div class="vitals-block">
+          <div class="v-row"><span class="v-lbl">BP</span><span class="v-val">118/74</span></div>
+          <div class="v-row"><span class="v-lbl">HR</span><span class="v-val">88</span></div>
+          <div class="v-row"><span class="v-lbl">RR</span><span class="v-val">18</span></div>
+          <div class="v-row"><span class="v-lbl">Temp</span><span class="v-val">98.6 °F</span></div>
+          <div class="v-row"><span class="v-lbl">SpO₂</span><span class="v-val">98% RA</span></div>
+          <div class="v-row"><span class="v-lbl">Wt</span><span class="v-val">138 lb</span></div>
+        </div>
+        <p><strong>Pulmonary:</strong> Lungs clear to auscultation bilaterally. No wheezes, rales, or rhonchi. Symmetric chest expansion; no accessory muscle use.<span class="edit-tag">Edit</span></p>
+        <p><strong>HEENT:</strong> Throat mildly erythematous without exudate. No cervical lymphadenopathy. Tympanic membranes clear.<span class="edit-tag">Edit</span></p>
+        <p><strong>Cardiovascular:</strong> Regular rate and rhythm; no murmurs, rubs, or gallops. Peripheral pulses 2+ symmetric.<span class="edit-tag">Edit</span></p>
+      </div>
+    </section>
+
+    <!-- ASSESSMENT -->
+    <section class="soap-section">
+      <div class="section-head">
+        <div>
+          <div class="section-eyebrow">
+            <span class="num">03</span><span class="sep">·</span><span>Assessment</span>
+          </div>
+          <h2 class="section-heading"><span class="ltr">A</span>Clinical impression</h2>
+        </div>
+        <span class="section-status reviewed"><span class="sdot"></span>Reviewed</span>
+      </div>
+      <div class="section-body">
+        <ol class="assessment-list">
+          <li><strong>Acute bronchitis, resolving.</strong> Marked symptomatic improvement. Lungs clear, oxygenation normal, no constitutional symptoms — natural post-viral course consistent with resolution. <span class="dx-code">J20.9</span></li>
+          <li><strong>Post-viral fatigue.</strong> Expected resolution within 1–2 weeks; reassurance and conservative measures appropriate. No additional workup indicated at this time.</li>
+          <li><strong>Cough variant, improving.</strong> Frequency and severity trending downward; albuterol use has tapered to PRN.</li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- PLAN -->
+    <section class="soap-section">
+      <div class="section-head">
+        <div>
+          <div class="section-eyebrow">
+            <span class="num">04</span><span class="sep">·</span><span>Plan</span>
+          </div>
+          <h2 class="section-heading"><span class="ltr">P</span>Plan &amp; follow-up</h2>
+        </div>
+        <span class="section-status drafted"><span class="sdot"></span>Drafted</span>
+      </div>
+      <div class="section-body">
+        <ul class="plan-list">
+          <li>
+            <span class="p-tag">Symptomatic</span>
+            <div class="p-body">Continue conservative care: humidified air, hydration, honey-based cough suppression at bedtime as needed.</div>
+          </li>
+          <li>
+            <span class="p-tag">Rx</span>
+            <div class="p-body"><strong>Albuterol HFA 90 mcg</strong> — 1–2 puffs every 4–6 hours PRN cough or shortness of breath. Reinforce inhaler technique on this visit.</div>
+          </li>
+          <li>
+            <span class="p-tag">Activity</span>
+            <div class="p-body">Resume normal activities and moderate exercise as tolerated; advise pre-exercise albuterol if symptomatic.</div>
+          </li>
+          <li>
+            <span class="p-tag">Follow-up</span>
+            <div class="p-body">Return in 7 days if cough persists or worsens, or sooner if fever, dyspnea, or hemoptysis develop. Patient counseled on red flags.</div>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <footer class="note-footer">
+      <div class="meta">Drafted from 22 min of audio · Confidence 0.94 · Last edited 2 min ago</div>
+      <button class="btn-ghost" type="button">Copy SOAP</button>
+    </footer>
+
+  </div>
+
+</div>
+
+<script>
+(function(){
+  // tabs visual swap
+  document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(x => {
+        x.classList.remove('active');
+        x.setAttribute('aria-selected','false');
+      });
+      t.classList.add('active');
+      t.setAttribute('aria-selected','true');
+    });
+  });
+})();
+</script>
+
+</body>
+</html>
