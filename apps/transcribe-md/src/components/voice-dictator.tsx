@@ -3,13 +3,16 @@
 // ============================================================================
 // VoiceDictator — live mic capture with MediaRecorder + AudioContext analyser.
 // ----------------------------------------------------------------------------
-// Phase 2 (Clinician remodel) — Strategy A dual-theme via additive
-// `theme` prop. Default `'legacy'` keeps the dark cinematic VioletOrb +
-// violet halo background byte-for-byte. `theme="clinician"` replaces
-// the Three.js orb with the calm class-driven chrome from
-// landing-and-recording.html: `.qm-cl-halo` breathing rings + sage
-// `.qm-cl-mic-dot` mic chip + `.qm-cl-wave-bar` VU meter (per CL-5: no
-// theatrical motion, no Three.js orbs in Clinician).
+// Phase 5 — Linear V1 Faithful re-skin.
+// Reference: docs/design-directions-v8-linear/voice-add.html
+//
+// Centered panel: 96px sage-haloed mic chip, 16-bar live waveform driven
+// by the AudioContext analyser amplitude, JetBrains Mono uppercase
+// status sentence, and qm-lin-btn-primary "Stop & process" CTA. The
+// Phase 2 dual-theme branch (legacy VioletOrb vs clinician halo) is
+// collapsed — Linear V1 is single-theme. The `theme` prop stays in the
+// signature as a deprecated no-op so existing call sites
+// (visits/[id]/page.tsx) keep working without edits.
 //
 // 🔴 PROTECTED: All MediaRecorder / AudioContext / analyser /
 // streamRef / chunksRef / finalizeAndUpload / stopRecording /
@@ -24,18 +27,8 @@ import {
   useState,
 } from 'react';
 import { useRouter } from 'next/navigation';
-import dynamic from 'next/dynamic';
 import { Mic, Square, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-
-import { cn } from '@/lib/cn';
-import { SpecularButton } from '@/components/specular-button';
-import type { OrbState } from '@/components/violet-orb';
-
-const VioletOrb = dynamic(
-  () => import('@/components/violet-orb').then((m) => m.VioletOrb),
-  { ssr: false, loading: () => <div className="h-64 w-64" /> }
-);
 
 type Phase = 'idle' | 'requesting' | 'listening' | 'uploading' | 'error';
 type VoiceDictatorTheme = 'legacy' | 'clinician';
@@ -48,16 +41,20 @@ const MAX_SECONDS = 10 * 60; // 10 minutes
 
 interface VoiceDictatorProps {
   visitId: string;
-  /** Phase 2 (Clinician remodel) — additive theme prop. */
+  /** @deprecated kept for back-compat; Linear V1 is single-theme. */
   theme?: VoiceDictatorTheme;
 }
 
-export function VoiceDictator({ visitId, theme = 'legacy' }: VoiceDictatorProps) {
+export function VoiceDictator({ visitId }: VoiceDictatorProps) {
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>('idle');
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [level, setLevel] = useState(0); // 0-1 amplitude, drives orb reactivity
+  const [level, setLevel] = useState(0); // 0-1 amplitude, drives waveform reactivity
+  const [reducedMotion, setReducedMotion] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  });
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -69,6 +66,16 @@ export function VoiceDictator({ visitId, theme = 'legacy' }: VoiceDictatorProps)
   // Guard against double-firing the final upload — onstop() and the
   // max-length timeout both can call through.
   const finalizingRef = useRef(false);
+
+  // Reduced-motion subscription — disable halo pulse + waveform animation
+  // when the user opts out at the OS level.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const handler = () => setReducedMotion(mq.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
 
   // ── cleanup on unmount ──────────────────────────────────────────────
   useEffect(() => {
@@ -187,8 +194,8 @@ export function VoiceDictator({ visitId, theme = 'legacy' }: VoiceDictatorProps)
     }
     streamRef.current = stream;
 
-    // Wire a tiny analyser so the orb's reactive prop reflects the mic
-    // amplitude — makes the recording feel alive rather than frozen.
+    // Wire a tiny analyser so the waveform's reactive prop reflects the
+    // mic amplitude — makes the recording feel alive rather than frozen.
     const AudioCtx =
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (window.AudioContext as any) ||
@@ -240,139 +247,337 @@ export function VoiceDictator({ visitId, theme = 'legacy' }: VoiceDictatorProps)
     }, 1000);
   }, [stopRecording, finalizeAndUpload]);
 
-  const orbState: OrbState =
-    phase === 'listening' ? 'listening' : phase === 'uploading' ? 'processing' : 'idle';
-
   const mm = Math.floor(elapsed / 60);
   const ss = (elapsed % 60).toString().padStart(2, '0');
 
-  if (theme === 'clinician') {
-    return (
-      <ClinicianVoiceDictatorView
-        phase={phase}
-        elapsed={elapsed}
-        mm={mm}
-        ss={ss}
-        level={level}
-        error={error}
-        onStart={startRecording}
-        onStop={stopRecording}
-        onRetry={() => {
-          setError(null);
-          setPhase('idle');
-        }}
-      />
-    );
-  }
+  const isListening = phase === 'listening';
+  const isUploading = phase === 'uploading';
+  const isError = phase === 'error';
+  const isRequesting = phase === 'requesting';
 
   return (
-    <div className="mx-auto flex max-w-xl flex-col items-center py-12 text-center sm:py-20">
-      <div className="relative mb-10 h-72 w-72">
-        <div
+    <div
+      style={{
+        margin: '0 auto',
+        maxWidth: 560,
+        padding: '48px 24px 64px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        textAlign: 'center',
+      }}
+    >
+      {/* Halo + mic centerpiece */}
+      <div
+        style={{
+          position: 'relative',
+          width: 200,
+          height: 200,
+          marginBottom: 24,
+          display: 'grid',
+          placeItems: 'center',
+        }}
+      >
+        {/* concentric sage rings */}
+        <span
           aria-hidden
-          className={cn(
-            'orb-pulse pointer-events-none absolute inset-0 -z-10 rounded-full transition-opacity duration-300',
-            phase === 'listening'
-              ? 'opacity-100'
-              : phase === 'uploading'
-                ? 'opacity-90'
-                : 'opacity-70'
-          )}
           style={{
-            background:
-              phase === 'listening'
-                ? 'radial-gradient(ellipse at center, rgba(6,182,212,0.45) 0%, rgba(6,182,212,0.12) 40%, transparent 72%)'
-                : 'radial-gradient(ellipse at center, rgba(139,92,246,0.4) 0%, rgba(139,92,246,0.1) 40%, transparent 72%)',
-            filter: 'blur(28px)',
+            position: 'absolute',
+            inset: 0,
+            borderRadius: '50%',
+            border: '1px solid rgba(122,166,140,0.18)',
           }}
         />
-        <VioletOrb
-          radius={1.4}
-          state={orbState}
-          // When idle, pulse is just ambient (0.3). When listening,
-          // the analyser amplitude drives the reactive factor so the
-          // orb breathes with the doctor's voice.
-          reactive={phase === 'listening' ? Math.max(0.3, level) : 0.3}
+        <span
+          aria-hidden
+          style={{
+            position: 'absolute',
+            inset: 24,
+            borderRadius: '50%',
+            border: '1px solid rgba(122,166,140,0.26)',
+          }}
         />
+        <span
+          aria-hidden
+          style={{
+            position: 'absolute',
+            inset: 48,
+            borderRadius: '50%',
+            border: '1px solid rgba(122,166,140,0.36)',
+          }}
+        />
+        {/* Pulsing sage glow halo (active during listening / uploading) */}
+        {(isListening || isUploading) && !reducedMotion && (
+          <span
+            aria-hidden
+            className="qm-lin-mic-halo"
+            style={{
+              position: 'absolute',
+              inset: 36,
+              borderRadius: '50%',
+              background:
+                'radial-gradient(closest-side, rgba(155,196,168,0.32), rgba(122,166,140,0) 70%)',
+            }}
+          />
+        )}
+        {/* Mic chip */}
+        <div
+          aria-hidden
+          className={isListening && !reducedMotion ? 'qm-lin-mic-dot' : undefined}
+          style={{
+            position: 'relative',
+            width: 96,
+            height: 96,
+            borderRadius: '50%',
+            background: 'var(--color-linear-surface-2)',
+            border: `1.5px solid ${
+              isError
+                ? 'var(--color-linear-danger)'
+                : 'var(--color-linear-sage)'
+            }`,
+            boxShadow:
+              '0 0 0 1px var(--color-linear-hairline-strong), 0 8px 24px rgba(0,0,0,0.35)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          {isUploading ? (
+            <Loader2
+              className={reducedMotion ? undefined : 'animate-spin'}
+              style={{
+                width: 36,
+                height: 36,
+                color: 'var(--color-linear-sage-bright)',
+              }}
+              aria-hidden
+            />
+          ) : (
+            <Mic
+              style={{
+                width: 36,
+                height: 36,
+                color: isError
+                  ? 'var(--color-linear-danger)'
+                  : 'var(--color-linear-sage-bright)',
+              }}
+              aria-hidden
+            />
+          )}
+        </div>
       </div>
 
-      {phase === 'idle' || phase === 'requesting' ? (
+      {/* Live waveform — 16 bars, AudioContext-driven amplitude */}
+      <Waveform
+        active={isListening}
+        processing={isUploading}
+        level={level}
+        reducedMotion={reducedMotion}
+      />
+
+      {/* Phase-specific copy + controls */}
+      {phase === 'idle' || isRequesting ? (
         <>
-          <h2 className="type-h1 text-text-primary">
+          <h2
+            style={{
+              margin: 0,
+              fontFamily: 'var(--font-sans)',
+              fontSize: 24,
+              fontWeight: 500,
+              lineHeight: 1.2,
+              letterSpacing: '-0.012em',
+              color: 'var(--color-linear-text)',
+            }}
+          >
             Dictate a quick summary
           </h2>
-          <p className="mt-3 max-w-md text-[15px] leading-relaxed text-text-tertiary">
+          <p
+            style={{
+              marginTop: 12,
+              maxWidth: 460,
+              fontFamily: 'var(--font-sans)',
+              fontSize: 14,
+              lineHeight: 1.55,
+              letterSpacing: '-0.005em',
+              color: 'var(--color-linear-text-2)',
+            }}
+          >
             Tap below and speak. Keep it natural — we&apos;ll turn your
             dictation into a structured SOAP note.
           </p>
-          <div className="mt-8">
-            <SpecularButton
+          <div style={{ marginTop: 28 }}>
+            <button
+              type="button"
               onClick={startRecording}
-              variant="primary"
-              size="lg"
-              disabled={phase === 'requesting'}
+              disabled={isRequesting}
+              className="qm-lin-btn-primary"
+              style={{
+                height: 36,
+                padding: '0 18px',
+                fontSize: 13,
+              }}
             >
-              <Mic className="h-4 w-4" aria-hidden />
-              {phase === 'requesting' ? 'Getting mic ready…' : 'Start dictating'}
-            </SpecularButton>
+              <Mic style={{ width: 14, height: 14 }} aria-hidden />
+              {isRequesting ? 'Getting mic ready…' : 'Start dictating'}
+            </button>
           </div>
-          <p className="mt-6 text-[12px] text-text-muted">
-            Up to 10 minutes. WebM/Opus — stays private.
-          </p>
-        </>
-      ) : phase === 'listening' ? (
-        <>
-          <div
-            className="font-mono text-[28px] tabular-nums text-text-primary"
-            aria-live="polite"
+          <p
+            style={{
+              marginTop: 24,
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+              letterSpacing: '0.05em',
+              color: 'var(--color-linear-text-3)',
+              textTransform: 'uppercase',
+            }}
           >
-            {mm}:{ss}
-          </div>
-          <p className="mt-2 text-[13px] text-text-tertiary">
-            Recording… speak in whatever order you like.
-          </p>
-          <div className="mt-8">
-            <SpecularButton
-              onClick={stopRecording}
-              variant="secondary"
-              size="lg"
-              sweep={false}
-            >
-              <Square className="h-3.5 w-3.5 fill-current" aria-hidden />
-              Stop &amp; process
-            </SpecularButton>
-          </div>
-          <p className="mt-6 text-[12px] text-text-muted">
-            Auto-stops at 10:00.
+            Up to 10 minutes · WebM/Opus · Stays private
           </p>
         </>
-      ) : phase === 'uploading' ? (
+      ) : isListening ? (
         <>
-          <h2 className="type-h1 text-text-primary">
+          <span
+            className="qm-lin-pill qm-lin-pill--sage"
+            style={{
+              height: 22,
+              padding: '0 9px',
+              fontFamily: 'var(--font-sans)',
+              fontSize: 10.5,
+              letterSpacing: '0.07em',
+              textTransform: 'uppercase',
+              marginBottom: 12,
+            }}
+          >
+            <span
+              aria-hidden
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                background: 'var(--color-linear-sage)',
+                boxShadow: '0 0 6px rgba(122,166,140,0.7)',
+              }}
+            />
+            Recording · {mm}:{ss}
+          </span>
+          <p
+            style={{
+              margin: 0,
+              fontFamily: 'var(--font-sans)',
+              fontSize: 13.5,
+              color: 'var(--color-linear-text-2)',
+              letterSpacing: '-0.005em',
+            }}
+          >
+            Listening. You can speak as you would in any other visit.
+          </p>
+          <div style={{ marginTop: 28 }}>
+            <button
+              type="button"
+              onClick={stopRecording}
+              className="qm-lin-btn-primary"
+              style={{
+                height: 36,
+                padding: '0 18px',
+                fontSize: 13,
+              }}
+            >
+              <Square
+                style={{ width: 12, height: 12, fill: 'currentColor' }}
+                aria-hidden
+              />
+              Stop &amp; process
+            </button>
+          </div>
+          <p
+            style={{
+              marginTop: 22,
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+              letterSpacing: '0.05em',
+              color: 'var(--color-linear-text-3)',
+              textTransform: 'uppercase',
+            }}
+          >
+            Auto-stops at 10:00
+          </p>
+        </>
+      ) : isUploading ? (
+        <>
+          <h2
+            style={{
+              margin: 0,
+              fontFamily: 'var(--font-sans)',
+              fontSize: 22,
+              fontWeight: 500,
+              lineHeight: 1.2,
+              letterSpacing: '-0.012em',
+              color: 'var(--color-linear-text)',
+            }}
+          >
             Processing your dictation
           </h2>
-          <p className="mt-3 flex items-center justify-center gap-2 text-[14px] text-text-tertiary">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+          <p
+            style={{
+              marginTop: 12,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              fontFamily: 'var(--font-sans)',
+              fontSize: 13,
+              color: 'var(--color-linear-text-2)',
+            }}
+          >
+            <Loader2
+              className={reducedMotion ? undefined : 'animate-spin'}
+              style={{ width: 14, height: 14 }}
+              aria-hidden
+            />
             Uploading and queuing for SOAP generation…
           </p>
         </>
       ) : (
         <>
-          <h2 className="type-h1 text-text-primary">Something went wrong</h2>
-          <p className="mt-3 max-w-md text-[14px] text-danger">
+          <h2
+            style={{
+              margin: 0,
+              fontFamily: 'var(--font-sans)',
+              fontSize: 22,
+              fontWeight: 500,
+              lineHeight: 1.2,
+              letterSpacing: '-0.012em',
+              color: 'var(--color-linear-text)',
+            }}
+          >
+            Something went wrong
+          </h2>
+          <p
+            style={{
+              marginTop: 12,
+              maxWidth: 460,
+              fontSize: 13,
+              color: 'var(--color-linear-danger)',
+            }}
+          >
             {error ?? 'Unknown error.'}
           </p>
-          <div className="mt-8">
-            <SpecularButton
+          <div style={{ marginTop: 28 }}>
+            <button
+              type="button"
               onClick={() => {
                 setError(null);
                 setPhase('idle');
               }}
-              variant="primary"
-              size="md"
+              className="qm-lin-btn-primary"
+              style={{
+                height: 32,
+                padding: '0 14px',
+                fontSize: 12.5,
+              }}
             >
               Try again
-            </SpecularButton>
+            </button>
           </div>
         </>
       )}
@@ -381,280 +586,72 @@ export function VoiceDictator({ visitId, theme = 'legacy' }: VoiceDictatorProps)
 }
 
 // ----------------------------------------------------------------------------
-// Clinician variant — calm halo + sage mic-dot + class-driven waveform.
-// Replaces the Three.js VioletOrb with the landing-and-recording.html
-// idiom (per CL-5: no theatrical motion). The level [0-1] from the
-// AudioContext analyser drives a per-bar height multiplier so the
-// waveform breathes with the doctor's voice.
+// Waveform — 16 sage bars whose live height is driven by the
+// AudioContext analyser amplitude (0-1). Quiet moments collapse the
+// meter and louder moments push it up; the per-bar phase comes from a
+// deterministic sin-based seed so the meter reads as alive on first
+// paint without a per-frame setState. Falls back to a flat row when
+// reduced-motion is set or when not actively listening.
 // ----------------------------------------------------------------------------
 
-function ClinicianVoiceDictatorView({
-  phase,
-  elapsed: _elapsed,
-  mm,
-  ss,
+function Waveform({
+  active,
+  processing,
   level,
-  error,
-  onStart,
-  onStop,
-  onRetry,
+  reducedMotion,
 }: {
-  phase: Phase;
-  elapsed: number;
-  mm: number;
-  ss: string;
+  active: boolean;
+  processing: boolean;
   level: number;
-  error: string | null;
-  onStart: () => void;
-  onStop: () => void;
-  onRetry: () => void;
+  reducedMotion: boolean;
 }) {
-  const isListening = phase === 'listening';
-  const isUploading = phase === 'uploading';
-  const isError = phase === 'error';
-
-  // Twelve bars with hand-tuned peaks so the waveform reads as alive
-  // rather than uniform. The `level` ref scales the peak so quiet
-  // moments collapse the meter and louder moments push it up.
-  const peaks = [12, 18, 14, 20, 16, 22, 12, 18, 14, 10, 17, 13];
-  const delays = [0, 0.1, 0.2, 0.3, 0.05, 0.15, 0.25, 0.4, 0.5, 0.35, 0.6, 0.55];
-  const livePeak = (basePeak: number) =>
-    isListening
-      ? Math.max(8, basePeak * (0.6 + level * 0.8))
-      : basePeak * 0.5;
-
+  const BARS = 16;
   return (
-    <div className="mx-auto flex max-w-xl flex-col items-center py-12 text-center sm:py-20">
-      {/* Halo + mic centerpiece */}
-      <div
-        style={{
-          position: 'relative',
-          width: 220,
-          height: 220,
-          marginBottom: 24,
-        }}
-      >
-        {(isListening || isUploading) && (
-          <>
-            <div className="qm-cl-halo" aria-hidden />
-            <div className="qm-cl-halo qm-cl-halo-delayed" aria-hidden />
-          </>
-        )}
-        <div
-          className={cn(isListening && 'qm-cl-mic-dot')}
-          style={{
-            position: 'absolute',
-            inset: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <div
+    <div
+      aria-hidden
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 3,
+        height: 32,
+        marginBottom: 24,
+        width: '100%',
+        maxWidth: 220,
+      }}
+    >
+      {Array.from({ length: BARS }).map((_, i) => {
+        const seed = 0.5 + (Math.sin(i * 0.9) * 0.5 + 0.5) * 0.5;
+        const baseHeight = 6;
+        const peakHeight = active
+          ? Math.max(6, Math.round(baseHeight + seed * (8 + level * 22)))
+          : baseHeight;
+        const delay = (i * 67) % 900;
+        const dur = 700 + ((i * 53) % 500);
+        return (
+          <span
+            key={i}
+            className={
+              active && !reducedMotion ? 'qm-lin-wave-bar' : undefined
+            }
             style={{
-              width: 96,
-              height: 96,
-              borderRadius: 999,
-              background: 'var(--cream-card)',
-              border: `1.5px solid ${isError ? 'var(--coral)' : 'var(--sage)'}`,
-              boxShadow: 'var(--shadow-card)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
+              width: 3,
+              height: peakHeight,
+              borderRadius: 2,
+              background: processing
+                ? 'var(--color-linear-warning)'
+                : 'var(--color-linear-sage)',
+              opacity: processing ? 0.4 : 0.85,
+              transition:
+                'height 80ms linear, background 200ms ease-out, opacity 200ms ease-out',
+              animationDelay:
+                active && !reducedMotion ? `-${delay}ms` : undefined,
+              animationDuration:
+                active && !reducedMotion ? `${dur}ms` : undefined,
             }}
-          >
-            {isUploading ? (
-              <Loader2
-                className="h-9 w-9 animate-spin"
-                style={{ color: 'var(--sage)' }}
-                aria-hidden
-              />
-            ) : (
-              <Mic
-                className="h-9 w-9"
-                style={{
-                  color: isError ? 'var(--coral)' : 'var(--sage)',
-                }}
-                aria-hidden
-              />
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Waveform — quiet, present, sage-tinted */}
-      {isListening && (
-        <div
-          className="flex items-end gap-[3px]"
-          style={{ height: 24, marginBottom: 18 }}
-          aria-hidden
-        >
-          {peaks.map((p, i) => (
-            <span
-              key={i}
-              className="qm-cl-wave-bar"
-              style={
-                {
-                  '--peak': `${livePeak(p)}px`,
-                  animationDelay: `${delays[i]}s`,
-                } as React.CSSProperties
-              }
-            />
-          ))}
-        </div>
-      )}
-
-      {/* Phase-specific copy + controls */}
-      {phase === 'idle' || phase === 'requesting' ? (
-        <>
-          <h2
-            className="qm-cl-serif"
-            style={{
-              fontSize: 32,
-              fontWeight: 400,
-              lineHeight: 1.15,
-              letterSpacing: '-0.015em',
-              color: 'var(--ink)',
-              margin: 0,
-            }}
-          >
-            Dictate a quick summary
-          </h2>
-          <p
-            className="qm-cl-serif"
-            style={{
-              marginTop: 12,
-              maxWidth: 460,
-              fontSize: 16,
-              lineHeight: 1.65,
-              color: 'var(--ink-2)',
-              fontStyle: 'italic',
-            }}
-          >
-            Tap below and speak. Keep it natural — we&apos;ll turn your
-            dictation into a structured SOAP note.
-          </p>
-          <div className="mt-8">
-            <SpecularButton
-              onClick={onStart}
-              variant="primary"
-              size="lg"
-              disabled={phase === 'requesting'}
-              theme="clinician"
-            >
-              <Mic className="h-4 w-4" aria-hidden />
-              {phase === 'requesting' ? 'Getting mic ready…' : 'Start dictating'}
-            </SpecularButton>
-          </div>
-          <p
-            className="mt-6 text-[12px]"
-            style={{ color: 'var(--ink-3)' }}
-          >
-            Up to 10 minutes. WebM/Opus — stays private.
-          </p>
-        </>
-      ) : isListening ? (
-        <>
-          <div
-            className="qm-cl-pill qm-cl-pill-sage"
-            style={{
-              padding: '6px 14px',
-              fontSize: 13,
-              marginBottom: 10,
-            }}
-          >
-            <span className="qm-cl-pill-dot" />
-            Recording · {mm}:{ss}
-          </div>
-          <p
-            className="qm-cl-serif"
-            style={{
-              marginTop: 4,
-              fontSize: 15,
-              fontStyle: 'italic',
-              color: 'var(--ink-3)',
-            }}
-          >
-            Listening. You can speak as you would in any other visit.
-          </p>
-          <div className="mt-8">
-            <SpecularButton
-              onClick={onStop}
-              variant="secondary"
-              size="lg"
-              sweep={false}
-              theme="clinician"
-            >
-              <Square className="h-3.5 w-3.5 fill-current" aria-hidden />
-              Stop &amp; process
-            </SpecularButton>
-          </div>
-          <p
-            className="mt-6 text-[12px]"
-            style={{ color: 'var(--ink-3)' }}
-          >
-            Auto-stops at 10:00.
-          </p>
-        </>
-      ) : isUploading ? (
-        <>
-          <h2
-            className="qm-cl-serif"
-            style={{
-              fontSize: 28,
-              fontWeight: 400,
-              lineHeight: 1.2,
-              letterSpacing: '-0.01em',
-              color: 'var(--ink)',
-              margin: 0,
-            }}
-          >
-            Processing your dictation
-          </h2>
-          <p
-            className="qm-cl-serif mt-3"
-            style={{
-              fontSize: 15,
-              fontStyle: 'italic',
-              color: 'var(--ink-2)',
-            }}
-          >
-            Uploading and queuing for SOAP generation…
-          </p>
-        </>
-      ) : (
-        <>
-          <h2
-            className="qm-cl-serif"
-            style={{
-              fontSize: 28,
-              fontWeight: 400,
-              lineHeight: 1.2,
-              letterSpacing: '-0.01em',
-              color: 'var(--ink)',
-              margin: 0,
-            }}
-          >
-            Something went wrong
-          </h2>
-          <p
-            className="mt-3 max-w-md text-[14px]"
-            style={{ color: 'var(--coral-deep)' }}
-          >
-            {error ?? 'Unknown error.'}
-          </p>
-          <div className="mt-8">
-            <SpecularButton
-              onClick={onRetry}
-              variant="primary"
-              size="md"
-              theme="clinician"
-            >
-              Try again
-            </SpecularButton>
-          </div>
-        </>
-      )}
+          />
+        );
+      })}
     </div>
   );
 }
