@@ -1,5 +1,3 @@
-import { ShaderBackground } from '@/components/home/ShaderBackground';
-import { CursorAura } from '@/components/home/CursorAura';
 import { RevealMount } from '@/components/home/RevealMount';
 import { Nav } from '@/components/home/Nav';
 import { Hero } from '@/components/home/Hero';
@@ -16,11 +14,18 @@ import { FAQ } from '@/components/home/FAQ';
 import { FinalCTA } from '@/components/home/FinalCTA';
 import { Footer } from '@/components/home/Footer';
 
+/**
+ * Landing page — Phase 4 Apple Cinematic.
+ *
+ * The full-bleed cinematic Hero replaces the legacy ShaderBackground
+ * canvas + CursorAura mouse-follow blob (both display:none'd in Phase 3
+ * already; now removed entirely to drop their JS bundle weight on first
+ * paint). RevealMount is kept because the post-hero `.reveal` blocks
+ * (Trust / Problem / Features / etc.) still rely on it.
+ */
 export default function HomePage() {
   return (
     <>
-      <ShaderBackground />
-      <CursorAura />
       <RevealMount />
       <Nav />
       <main>
