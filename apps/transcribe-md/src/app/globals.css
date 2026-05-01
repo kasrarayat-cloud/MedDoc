@@ -1,929 +1,548 @@
 @import "tailwindcss";
 
-/* tailwindcss-animate is a v3-era plugin that Tailwind v4 can still load
-   via the @plugin directive. If this ever breaks, the utility definitions
-   below (.animate-in, .fade-in-0, .zoom-in-95, .slide-in-from-top-2)
-   duplicate exactly what the plugin provides, so the UI stays working
-   regardless of plugin compatibility. Belt-and-suspenders on purpose. */
+/* tailwindcss-animate is a v3-era plugin Tailwind v4 still loads via the
+ * @plugin directive. Several Radix-derived components in the app
+ * (popovers, tooltips, sheets) reference its `animate-in / fade-in-0 /
+ * zoom-in-95 / slide-in-from-top-2` utilities, so we keep the plugin
+ * registered. If the plugin ever stops loading, the `.qm-lin-fade-in` /
+ * `.qm-lin-blur-in` utilities below cover the cases the redesign relies
+ * on directly. */
 @plugin "tailwindcss-animate";
 
 /* ============================================================================
-   TranscribeMD design tokens — Linear/Raycast/Vercel/Resend idiom
-   ----------------------------------------------------------------------------
-   Background layers (bg-base → bg-surface-3) climb from deepest to most
-   elevated. Borders climb from subtle → emphasis the same way. Violet is
-   the only brand colour; cyan/green/amber/red are status.
+ * QuillMD — Phase 5 Linear V1 (Faithful)
+ * ----------------------------------------------------------------------------
+ * Single design language across the entire product. Pure dark canvas
+ * (#08090a), hairline borders, sage primary (replaces Linear's purple),
+ * Inter for everything, JetBrains Mono for IDs / timestamps / keyboard
+ * hints. No serif italic accents, no cream surfaces, no Phase 4
+ * cinematic photo washes.
+ *
+ * Source of truth:
+ *   docs/design-directions-v8-linear/dashboard-v1.html   (PRIMARY — sidebar,
+ *                                                         topbar, rows,
+ *                                                         command-bar)
+ *   docs/design-directions-v8-linear/admin-v1.html
+ *   docs/design-directions-v8-linear/landing-v1.html
+ *   docs/design-directions-v8-linear/recording.html
+ *   docs/design-directions-v8-linear/visit-detail.html
+ *
+ * The mockups use bare-name CSS vars (--bg, --sage, --panel, …). We
+ * translate them to the `--color-linear-*` namespace so Tailwind v4's
+ * @theme directive auto-exports them as utilities (e.g. `bg-linear-bg`,
+ * `text-linear-sage-bright`, `border-linear-border`).
+ * ========================================================================== */
 
-   All tokens exposed as Tailwind utilities via the @theme directive
-   (Tailwind v4 CSS-first config — no tailwind.config.ts).
-   ========================================================================== */
 @theme {
-  /* Backgrounds */
-  --color-bg-base: #08090D;
-  --color-bg-surface-1: #101119;
-  --color-bg-surface-2: #161822;
-  --color-bg-surface-3: #1E2030;
+  /* ── Surface — pure dark canvas + 3 elevations ── */
+  --color-linear-bg: #08090a;
+  --color-linear-surface-1: #0d0e10;
+  --color-linear-surface-2: #131416;
+  --color-linear-surface-3: #1a1c1e;
 
-  /* Borders */
-  --color-border-subtle: #1C1D28;
-  --color-border-default: #2A2C3A;
-  --color-border-emphasis: #3C3E50;
+  /* ── Borders — hairlines (no shadows) ──
+   * Both literal greys (border / border-strong) for opaque rules and
+   * white-tint variants (hairline / hairline-strong) for cases where the
+   * border needs to ride a translucent surface. */
+  --color-linear-border: #21232a;
+  --color-linear-border-strong: #2c2f38;
+  --color-linear-hairline: rgba(255, 255, 255, 0.05);
+  --color-linear-hairline-strong: rgba(255, 255, 255, 0.08);
 
-  /* Violet — brand */
-  --color-violet-300: #C4B5FD;
-  --color-violet-400: #A78BFA;
-  --color-violet-500: #8B5CF6;
-  --color-violet-600: #7C3AED;
-  --color-violet-700: #6D28D9;
+  /* ── Text — 3 weights ── */
+  --color-linear-text: #f7f8f8;
+  --color-linear-text-2: #b4bcc8;
+  --color-linear-text-3: #6c737f;
 
-  /* Accent */
-  --color-cyan-400: #22D3EE;
-  --color-cyan-500: #06B6D4;
-  --color-success: #10B981;
-  --color-warning: #F59E0B;
-  --color-danger: #EF4444;
+  /* ── Sage accent — the replacement for Linear's purple ──
+   * `sage` is the everyday accent; `sage-bright` is hover / active text
+   * tone; `sage-soft` is muted; `sage-deep` is the gradient anchor for
+   * the brand mark; `sage-tint` / `sage-glow` are the tint backgrounds
+   * for active rows + chips. */
+  --color-linear-sage: #7AA68C;
+  --color-linear-sage-bright: #9BC4A8;
+  --color-linear-sage-soft: #5d8a73;
+  --color-linear-sage-deep: #2F5040;
+  --color-linear-sage-tint: rgba(122, 166, 140, 0.13);
+  --color-linear-sage-glow: rgba(122, 166, 140, 0.18);
 
-  /* Text */
-  --color-text-primary: #F8FAFC;
-  --color-text-secondary: #CBD5E1;
-  --color-text-tertiary: #94A3B8;
-  --color-text-muted: #64748B;
+  /* ── Row hover / active — subtle white tints over the dark canvas ── */
+  --color-linear-row-hover: rgba(255, 255, 255, 0.03);
+  --color-linear-row-active: rgba(255, 255, 255, 0.05);
 
-  /* Motion */
-  --ease-out-premium: cubic-bezier(0.4, 0, 0.2, 1);
-  --ease-out-back: cubic-bezier(0.34, 1.56, 0.64, 1);
-  --ease-in-out-soft: cubic-bezier(0.65, 0, 0.35, 1);
-  --duration-fast: 150ms;
-  --duration-base: 300ms;
-  --duration-slow: 500ms;
-  --duration-lazy: 800ms;
+  /* ── Status palette — quiet, desaturated ── */
+  --color-linear-success: #4caf7d;
+  --color-linear-warning: #d4a437;
+  --color-linear-danger: #d4574a;
+  --color-linear-info: #5b8db8;
+  --color-linear-amber: #D4A574;
+  --color-linear-coral: #C97B6E;
+  --color-linear-sky: #74A8C9;
+  --color-linear-teal: #5BA3B4;
 
-  /* ──────────────────────────────────────────────────────────────
-     App-redesign-v1 tokens (HANDOFF §1, ported 1:1 from
-     /tmp/design_handoff_quillmd_app/app/tokens.css).
-
-     Named under Tailwind's --color-* convention so the redesign
-     gets utilities like `bg-bg`, `bg-bg-1`, `text-fg-2`, `border-line`,
-     `bg-accent`, `text-mint`, etc. out of the box.
-
-     Short bare-name aliases (--bg, --fg, --accent, …) for the ported
-     .qm-* CSS live in the :root block below. Radii + shadows whose
-     handoff names would collide with Tailwind defaults (--radius-sm/
-     --radius-lg/--shadow-*) are scoped to .qm-app instead.
-     ────────────────────────────────────────────────────────────── */
-  --color-bg: #07060C;
-  --color-bg-1: #0C0A16;
-  --color-bg-2: #14111F;
-  --color-bg-3: #1C1828;
-  --color-bg-4: #221C30;
-
-  --color-line: #26222F;
-  --color-line-soft: #191524;
-  --color-line-strong: #3A3445;
-
-  --color-fg: #F5F2FA;
-  --color-fg-2: #B9B2C9;
-  --color-fg-3: #7E7791;
-  --color-fg-4: #4B4558;
-
-  --color-accent: #8B5CFF;
-  --color-accent-bright: #A87CFF;
-  --color-accent-deep: #6B3FD9;
-  --color-accent-ink: #2A1560;
-  --color-accent-a: #D1B5FF;
-  --color-accent-b: #D946EF;
-  --color-accent-c: #60A5FA;
-
-  --color-mint: #6EE7B7;
-  --color-amber: #FBBF24;
-  --color-coral: #FB7185;
+  /* ── Typography ──
+   * Inter is loaded via next/font in layout.tsx (the `--font-sans` /
+   * `--font-mono` CSS vars are set on <html>). The fallback stacks here
+   * cover the brief moment before the webfont arrives. */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 /* ============================================================================
-   Base styles — dark-only, Geist everywhere, crisp rendering
-   ========================================================================== */
-:root {
-  color-scheme: dark;
-
-  /* ── App-redesign-v1 bare-name colour aliases (HANDOFF §1) ──
-     Mirrors the --color-* slots in @theme so the ported .qm-* CSS
-     can reference var(--bg), var(--fg), var(--accent) directly while
-     Tailwind utilities (bg-bg, text-fg, border-line …) also work. */
-  --bg: var(--color-bg);
-  --bg-1: var(--color-bg-1);
-  --bg-2: var(--color-bg-2);
-  --bg-3: var(--color-bg-3);
-  --bg-4: var(--color-bg-4);
-
-  --line: var(--color-line);
-  --line-soft: var(--color-line-soft);
-  --line-strong: var(--color-line-strong);
-
-  --fg: var(--color-fg);
-  --fg-2: var(--color-fg-2);
-  --fg-3: var(--color-fg-3);
-  --fg-4: var(--color-fg-4);
-
-  --accent: var(--color-accent);
-  --accent-bright: var(--color-accent-bright);
-  --accent-deep: var(--color-accent-deep);
-  --accent-ink: var(--color-accent-ink);
-  --accent-a: var(--color-accent-a);
-  --accent-b: var(--color-accent-b);
-  --accent-c: var(--color-accent-c);
-
-  --mint: var(--color-mint);
-  --amber: var(--color-amber);
-  --coral: var(--color-coral);
-}
-
-/* ── App-redesign-v1 scoped tokens (HANDOFF §1) ──
-   Radii + shadows whose handoff names (--radius-sm, --radius-lg,
-   --shadow-1, --glow-accent) would override Tailwind's defaults
-   globally live here. Any Tailwind `rounded-*` / `shadow-*`
-   utility INSIDE .qm-app picks up these values; outside the scope
-   (landing, marketing) Tailwind's defaults are untouched. Every
-   redesigned app / auth screen wraps its tree in .qm-app so the
-   ported .qm-btn / .qm-glass / .qm-input rules resolve correctly. */
-.qm-app {
-  --radius-sm: 6px;
-  --radius: 12px;
-  --radius-lg: 20px;
-  --radius-xl: 28px;
-
-  --shadow-1: 0 1px 0 rgba(255, 255, 255, 0.04) inset,
-    0 10px 30px rgba(0, 0, 0, 0.35);
-  --shadow-2: 0 1px 0 rgba(255, 255, 255, 0.06) inset,
-    0 20px 60px rgba(0, 0, 0, 0.55);
-  --glow-accent: 0 0 0 1px rgba(139, 92, 255, 0.35),
-    0 10px 40px rgba(139, 92, 255, 0.18);
-}
-
+ * Body baseline
+ * ----------------------------------------------------------------------------
+ * Dark canvas, Inter sans, OpenType features (cv11 = single-storey g,
+ * ss01 = stylistic-set 1) match Linear's default. Smoothing is on for
+ * macOS legibility. */
 html,
 body {
-  background: var(--color-bg-base);
-  color: var(--color-text-primary);
-  font-family: var(--font-geist-sans, system-ui, -apple-system, sans-serif);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
+  margin: 0;
+  padding: 0;
 }
 
 body {
-  /* A page-level radial glow anchored upper-centre. Sits behind everything;
-     per-section gradients layer over it. */
-  background-image:
-    radial-gradient(
-      ellipse 90% 60% at 50% 0%,
-      rgba(124, 58, 237, 0.14) 0%,
-      rgba(124, 58, 237, 0.04) 35%,
-      transparent 70%
-    );
-  background-attachment: fixed;
+  background-color: var(--color-linear-bg);
+  color: var(--color-linear-text);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.45;
+  letter-spacing: -0.005em;
+  font-feature-settings: 'cv11', 'ss01';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Disable text selection highlights that look ugly on dark. */
 ::selection {
-  background: rgba(139, 92, 246, 0.35);
-  color: #F8FAFC;
+  background: rgba(122, 166, 140, 0.25);
+  color: var(--color-linear-text);
 }
 
-/* Scrollbar — thin, violet accent on thumb hover. */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: #2A2C3A transparent;
+/* Universal focus ring — sage outline, used everywhere except inside
+ * elements that want their own custom focus treatment. */
+*:focus-visible {
+  outline: 2px solid rgba(122, 166, 140, 0.55);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
-*::-webkit-scrollbar {
+
+/* Default scrollbar — narrow, dark, hairline thumb. */
+::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
-*::-webkit-scrollbar-thumb {
-  background: #2A2C3A;
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-linear-border);
+  border-radius: 5px;
+  border: 2px solid var(--color-linear-bg);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-linear-border-strong);
+}
+
+/* ============================================================================
+ * Linear V1 utility classes (.qm-lin-*)
+ * ----------------------------------------------------------------------------
+ * Each utility maps to a specific surface or chrome primitive in the
+ * dashboard / admin / visit-detail mockups. Snap timing 80–150ms across
+ * the board; no spring, no shadow chains. Mirror the dashboard-v1.html
+ * visual rhythm.
+ * ========================================================================== */
+
+/* --- Root grid wrapper for app surfaces -----------------------------------
+ * 240px sidebar | content. Top bar is 48px, sticky at 0. Pages compose
+ * inside a child <main>. */
+.qm-lin-app {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  min-height: 100vh;
+  background: var(--color-linear-bg);
+  color: var(--color-linear-text);
+}
+@media (max-width: 980px) {
+  .qm-lin-app {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* --- Top bar -------------------------------------------------------------
+ * 48px tall, 12px hairline bottom, blurred translucent. Slot order from
+ * the mockup:
+ *   workspace switcher | breadcrumbs | spacer | command-bar trigger | user
+ * Layout is up to the consumer; this class only sets chrome. */
+.qm-lin-chrome {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  background: rgba(13, 14, 16, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--color-linear-hairline);
+}
+
+/* --- Cmd+K trigger pill in the top bar ----------------------------------
+ * Looks like a search input but is a button. Has a `<kbd>⌘K</kbd>` slot
+ * inside. */
+.qm-lin-cmdk {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 26px;
+  padding: 0 10px;
+  background: var(--color-linear-surface-2);
+  border: 1px solid var(--color-linear-border);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--color-linear-text-3);
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: background-color 100ms ease, border-color 100ms ease, color 100ms ease;
+}
+.qm-lin-cmdk:hover {
+  background: var(--color-linear-surface-3);
+  border-color: var(--color-linear-border-strong);
+  color: var(--color-linear-text-2);
+}
+.qm-lin-cmdk kbd {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--color-linear-text-2);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+/* --- Sidebar — 240px left rail -------------------------------------------
+ * Surface-1 background, hairline right border. Sticky to the top bar so
+ * scrolling the main pane keeps the rail visible. */
+.qm-lin-sidebar {
+  background: var(--color-linear-surface-1);
+  border-right: 1px solid var(--color-linear-border);
+  padding: 12px 8px 16px;
+  overflow: auto;
+  position: sticky;
+  top: 48px;
+  height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+}
+
+/* --- Pill — small chip ---------------------------------------------------
+ * Default reads as a quiet metadata tag. Variants:
+ *   .qm-lin-pill--sage    → sage-tint background, sage-bright text
+ *   .qm-lin-pill--ready   → sage status (ready)
+ *   .qm-lin-pill--review  → amber status (needs review)
+ *   .qm-lin-pill--draft   → quiet text-2 (drafting)
+ *   .qm-lin-pill--signed  → muted text-3 (signed)
+ *   .qm-lin-pill--processing → sky animated (processing) */
+.qm-lin-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
   border-radius: 4px;
-  border: 2px solid transparent;
-  background-clip: content-box;
-}
-*::-webkit-scrollbar-thumb:hover {
-  background: #3C3E50;
-  background-clip: content-box;
-}
-
-/* ============================================================================
-   Reusable utilities
-   ========================================================================== */
-
-/* Gradient-border trick: a padding-box + border-box double-background.
-   The outer gradient becomes the "border"; the inner surface covers the
-   middle. Used by <GradientBorder>. */
-.gradient-border {
-  background:
-    linear-gradient(var(--gb-surface, #161822), var(--gb-surface, #161822))
-      padding-box,
-    linear-gradient(
-        var(--gb-angle, 135deg),
-        var(--gb-from, #7C3AED) 0%,
-        var(--gb-to, #A855F7) 100%
-      )
-      border-box;
-  border: 1px solid transparent;
-}
-
-/* Specular button — light sweep on hover. Uses a pseudo-element with a
-   translucent-white diagonal gradient that slides across. Linear's
-   "shine" idiom; timing kept tight. */
-.specular-button {
-  position: relative;
-  overflow: hidden;
-  isolation: isolate;
-}
-.specular-button::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    115deg,
-    transparent 30%,
-    rgba(255, 255, 255, 0.18) 45%,
-    rgba(255, 255, 255, 0.28) 50%,
-    rgba(255, 255, 255, 0.18) 55%,
-    transparent 70%
-  );
-  transform: translateX(-120%);
-  transition: transform 650ms var(--ease-out-premium);
-  pointer-events: none;
-  z-index: 1;
-}
-.specular-button:hover::before {
-  transform: translateX(120%);
-}
-.specular-button > * {
-  position: relative;
-  z-index: 2;
-}
-
-/* 48px grid background that fades toward edges. Used behind hero / CTA. */
-.grid-bg {
-  background-image:
-    linear-gradient(to right, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
-  background-size: 48px 48px;
-  mask-image: radial-gradient(ellipse 90% 70% at 50% 50%, black 40%, transparent 85%);
-  -webkit-mask-image: radial-gradient(ellipse 90% 70% at 50% 50%, black 40%, transparent 85%);
-}
-
-/* Tilt card — inline 3D perspective; transform applied via inline style
-   from TiltCard.tsx. This class sets the perspective context. */
-.tilt-perspective {
-  perspective: 1200px;
-  transform-style: preserve-3d;
-}
-
-/* Text gradient — violet. */
-.text-gradient-violet {
-  background: linear-gradient(135deg, #A78BFA 0%, #C4B5FD 60%, #E9D5FF 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  /* Prevent text-shadow + selection showing white behind the gradient. */
-  -webkit-text-fill-color: transparent;
-}
-
-/* Glow card — subtle violet halo behind an element. Pair with relative
-   positioning on the container. */
-.glow-violet::after {
-  content: "";
-  position: absolute;
-  inset: -40%;
-  background: radial-gradient(
-    ellipse at center,
-    rgba(139, 92, 246, 0.25) 0%,
-    rgba(139, 92, 246, 0.08) 35%,
-    transparent 65%
-  );
-  filter: blur(30px);
-  z-index: -1;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity var(--duration-base) var(--ease-out-premium);
-}
-.glow-violet:hover::after,
-.glow-violet[data-glow="on"]::after {
-  opacity: 1;
-}
-
-/* Typography helpers — let the page use these instead of inline Tailwind
-   classes so we can enforce tracking + weight consistently. */
-.type-display {
-  font-weight: 800;
-  font-size: clamp(48px, 6vw, 88px);
-  line-height: 0.95;
-  letter-spacing: -0.04em;
-}
-.type-h1 {
-  font-weight: 600;
-  font-size: clamp(36px, 4vw, 48px);
-  line-height: 1.1;
-  letter-spacing: -0.02em;
-}
-.type-h2 {
-  font-weight: 600;
-  font-size: clamp(28px, 3vw, 32px);
-  line-height: 1.2;
-  letter-spacing: -0.015em;
-}
-.type-body {
-  font-weight: 400;
-  font-size: 17px;
-  line-height: 1.6;
-}
-.type-small {
+  font-size: 11px;
+  background: var(--color-linear-surface-2);
+  color: var(--color-linear-text-2);
+  border: 1px solid var(--color-linear-border);
+  white-space: nowrap;
+  letter-spacing: 0.02em;
   font-weight: 500;
-  font-size: 14px;
-  line-height: 1.5;
+}
+.qm-lin-pill--sage {
+  background: var(--color-linear-sage-tint);
+  color: var(--color-linear-sage-bright);
+  border-color: rgba(122, 166, 140, 0.3);
+}
+.qm-lin-pill--ready {
+  background: var(--color-linear-sage-tint);
+  color: var(--color-linear-sage-bright);
+  border-color: rgba(122, 166, 140, 0.25);
+}
+.qm-lin-pill--review {
+  background: rgba(212, 165, 116, 0.06);
+  color: #e3b984;
+  border-color: rgba(212, 165, 116, 0.25);
+}
+.qm-lin-pill--draft {
+  background: var(--color-linear-surface-2);
+  color: var(--color-linear-text-2);
+}
+.qm-lin-pill--signed {
+  background: transparent;
+  color: var(--color-linear-text-3);
+  border-color: var(--color-linear-hairline);
+}
+.qm-lin-pill--processing {
+  background: rgba(116, 168, 201, 0.06);
+  color: #9bc4d9;
+  border-color: rgba(116, 168, 201, 0.22);
+}
+.qm-lin-pill--processing::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--color-linear-sky);
+  animation: qm-lin-pulse 1.4s ease-in-out infinite;
 }
 
-/* Radix Accordion — animated open/close tied to data-state. The CSS
-   variable --radix-accordion-content-height is set by Radix at runtime,
-   so we can animate to it without measuring the DOM ourselves. */
-@keyframes accordion-down {
-  from { height: 0; opacity: 0; }
-  to { height: var(--radix-accordion-content-height); opacity: 1; }
-}
-@keyframes accordion-up {
-  from { height: var(--radix-accordion-content-height); opacity: 1; }
-  to { height: 0; opacity: 0; }
-}
-.animate-accordion-down {
-  animation: accordion-down 260ms var(--ease-out-premium);
-}
-.animate-accordion-up {
-  animation: accordion-up 200ms var(--ease-out-premium);
+@keyframes qm-lin-pulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
 }
 
-/* ============================================================================
-   Enter/exit animation utilities (T-M3)
-   ----------------------------------------------------------------------------
-   Same class names as tailwindcss-animate. The @plugin directive at the
-   top SHOULD emit these in Tailwind v4, but this block is an explicit
-   fallback so we never end up in T-M2's "silently invisible Radix
-   portal" state again if the plugin stops cooperating with Tailwind v4.
-   tailwindcss-animate uses the --tw-enter-* and --tw-exit-* CSS-variable
-   convention so classes compose: `animate-in fade-in-0 zoom-in-95`.
-   ========================================================================== */
-@keyframes enter {
-  from {
-    opacity: var(--tw-enter-opacity, 1);
-    transform: translate3d(
-        var(--tw-enter-translate-x, 0),
-        var(--tw-enter-translate-y, 0),
-        0
-      )
-      scale3d(
-        var(--tw-enter-scale, 1),
-        var(--tw-enter-scale, 1),
-        var(--tw-enter-scale, 1)
-      )
-      rotate(var(--tw-enter-rotate, 0));
-  }
+/* --- Row — list row (Linear-density 32-40px) -----------------------------
+ * 80-100ms hover. Use `.qm-lin-row--active` to mark the focused row. */
+.qm-lin-row {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--color-linear-hairline);
+  transition: background-color 100ms ease-out;
+  cursor: pointer;
 }
-@keyframes exit {
-  to {
-    opacity: var(--tw-exit-opacity, 1);
-    transform: translate3d(
-        var(--tw-exit-translate-x, 0),
-        var(--tw-exit-translate-y, 0),
-        0
-      )
-      scale3d(
-        var(--tw-exit-scale, 1),
-        var(--tw-exit-scale, 1),
-        var(--tw-exit-scale, 1)
-      )
-      rotate(var(--tw-exit-rotate, 0));
-  }
+.qm-lin-row:hover {
+  background: var(--color-linear-row-hover);
 }
-.animate-in {
-  animation-name: enter;
-  animation-duration: 180ms;
-  animation-timing-function: var(--ease-out-premium);
-  --tw-enter-opacity: initial;
-  --tw-enter-scale: initial;
-  --tw-enter-rotate: initial;
-  --tw-enter-translate-x: initial;
-  --tw-enter-translate-y: initial;
+.qm-lin-row--active {
+  background: var(--color-linear-row-active);
 }
-.animate-out {
-  animation-name: exit;
-  animation-duration: 140ms;
-  animation-timing-function: var(--ease-out-premium);
-  --tw-exit-opacity: initial;
-  --tw-exit-scale: initial;
-  --tw-exit-rotate: initial;
-  --tw-exit-translate-x: initial;
-  --tw-exit-translate-y: initial;
-}
-.fade-in-0 { --tw-enter-opacity: 0; }
-.fade-out-0 { --tw-exit-opacity: 0; }
-.zoom-in-95 { --tw-enter-scale: 0.95; }
-.zoom-out-95 { --tw-exit-scale: 0.95; }
-.slide-in-from-top-2 { --tw-enter-translate-y: -0.5rem; }
-.slide-in-from-bottom-2 { --tw-enter-translate-y: 0.5rem; }
-.slide-in-from-left-2 { --tw-enter-translate-x: -0.5rem; }
-.slide-in-from-right-2 { --tw-enter-translate-x: 0.5rem; }
-.slide-out-to-top-2 { --tw-exit-translate-y: -0.5rem; }
-.slide-out-to-bottom-2 { --tw-exit-translate-y: 0.5rem; }
 
-/* ============================================================================
-   Skeleton shimmer (T-M3)
-   ----------------------------------------------------------------------------
-   A 1.4s linear sweep used by <Skeleton> to hint at loading content.
-   ========================================================================== */
-@keyframes shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
+/* --- Buttons -------------------------------------------------------------
+ * `.qm-lin-btn` is the ghost / outline button used for every secondary
+ * action (cancel, view, etc.). `.qm-lin-btn-primary` is the sage CTA used
+ * for "New visit", "Sign", etc. Snap 120ms. */
+.qm-lin-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  background: transparent;
+  color: var(--color-linear-text-2);
+  border: 1px solid var(--color-linear-border);
+  cursor: pointer;
+  transition: border-color 120ms ease-out, color 120ms ease-out, background-color 120ms ease-out;
+  letter-spacing: -0.005em;
+  white-space: nowrap;
 }
-.shimmer {
-  position: relative;
+.qm-lin-btn:hover {
+  border-color: var(--color-linear-border-strong);
+  color: var(--color-linear-text);
+}
+.qm-lin-btn:active {
+  background: var(--color-linear-row-hover);
+}
+.qm-lin-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.qm-lin-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  background: var(--color-linear-sage);
+  color: #0d1611;
+  border: none;
+  box-shadow: 0 0 0 1px rgba(122, 166, 140, 0.3);
+  cursor: pointer;
+  transition: background-color 100ms ease-out, transform 80ms ease-out;
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+}
+.qm-lin-btn-primary:hover {
+  background: var(--color-linear-sage-bright);
+}
+.qm-lin-btn-primary:active {
+  transform: translateY(0.5px);
+}
+.qm-lin-btn-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* --- Spotlight — Cmd+K modal overlay -------------------------------------
+ * Centered top, dark backdrop, hairline-bordered panel. Pair with
+ * `.qm-lin-blur-in` on the panel for the entry animation. */
+.qm-lin-spotlight {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  display: grid;
+  place-items: start center;
+  padding-top: 12vh;
+  z-index: 50;
+  animation: qm-lin-fade-in 120ms ease-out;
+}
+.qm-lin-spotlight-panel {
+  background: var(--color-linear-surface-1);
+  border: 1px solid var(--color-linear-border-strong);
+  border-radius: 10px;
+  width: min(640px, 90vw);
+  padding: 4px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(255, 255, 255, 0.03);
   overflow: hidden;
-  background: linear-gradient(
-    90deg,
-    var(--color-bg-surface-2) 0%,
-    var(--color-bg-surface-3) 50%,
-    var(--color-bg-surface-2) 100%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.4s linear infinite;
 }
 
-/* ============================================================================
-   Orb halo pulse (T-M3)
-   ----------------------------------------------------------------------------
-   Ambient breathe behind the <VioletOrb>. The 3D sphere itself has its
-   own useFrame pulse — this second, slower, CSS layer makes the two
-   rhythms intertwine so the orb never feels metronomic.
-   ========================================================================== */
-@keyframes orb-pulse {
-  0%, 100% {
-    transform: scale(1);
-    opacity: 0.7;
-  }
-  50% {
-    transform: scale(1.08);
-    opacity: 1;
-  }
-}
-.orb-pulse {
-  animation: orb-pulse 4s var(--ease-in-out-soft) infinite;
-}
-
-/* Respect reduced-motion preferences. Animations collapse to a single
-   step, parallax disables, gradients stop shifting. */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
-}
-
-/* ============================================================================
-   App-redesign-v1 utility classes (HANDOFF §2.5 global patterns + rest of
-   /tmp/design_handoff_quillmd_app/app/tokens.css lines 46–333).
-   ----------------------------------------------------------------------------
-   Every redesigned screen wraps its tree in `.qm-app` so these classes
-   resolve with the scoped tokens (see :root / .qm-app blocks above).
-   ========================================================================== */
-
-/* Frame base — font, colors, overflow-hidden so the shader doesn't bleed
-   past page boundaries. Combined with the scoped tokens block above so
-   the whole redesign contract sits under one selector. */
-.qm-app {
-  font-family: var(--sans);
-  color: var(--fg);
-  background: var(--bg);
-  font-size: 14px;
-  line-height: 1.5;
-  letter-spacing: -0.01em;
+/* --- Noise — subtle SVG grain overlay ------------------------------------
+ * Apply via the `qm-lin-noise` class on any surface that needs the
+ * Linear V1 grain (typically the page wrapper). 1.5% opacity, soft-light
+ * blend. */
+.qm-lin-noise {
   position: relative;
-  overflow: hidden;
-  isolation: isolate;
 }
-.qm-app *,
-.qm-app *::before,
-.qm-app *::after {
-  box-sizing: border-box;
-}
-
-.qm-serif {
-  font-family: var(--serif);
-  letter-spacing: -0.015em;
-}
-.qm-mono {
-  font-family: var(--mono);
-  letter-spacing: 0;
-}
-.qm-sans {
-  font-family: var(--sans);
-}
-
-/* Section label — "§ 01 / METHOD" pattern. */
-.qm-sectlabel {
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--fg-3);
-}
-
-/* ── Shader mesh background ── */
-.qm-shader {
+.qm-lin-noise::before {
+  content: '';
   position: absolute;
   inset: 0;
   pointer-events: none;
   z-index: 0;
-}
-.qm-shader canvas {
-  width: 100%;
-  height: 100%;
-  display: block;
-}
-
-/* Noise overlay on top of the shader. */
-.qm-noise {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 1;
-  opacity: 0.28;
+  opacity: 0.025;
   mix-blend-mode: overlay;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.05 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='180' height='180' filter='url(%23n)'/></svg>");
 }
 
-/* ── Glass cards ── */
-.qm-glass {
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.025),
-    rgba(255, 255, 255, 0.01)
-  );
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  backdrop-filter: blur(14px);
-  position: relative;
-  transition: border-color 0.18s, transform 0.18s, box-shadow 0.18s;
+/* --- Animations: fade-in + blur-in ---------------------------------------
+ * `.qm-lin-fade-in` (120ms): subtle 2px upward drift on opacity rise.
+ * `.qm-lin-blur-in` (200ms): blur(4px) → blur(0) entrance for spotlight
+ * panels and modals. */
+.qm-lin-fade-in {
+  animation: qm-lin-fade-in 120ms ease-out both;
 }
-.qm-glass.hover:hover {
-  border-color: rgba(139, 92, 255, 0.35);
-  box-shadow: var(--glow-accent);
-  transform: translateY(-2px);
+@keyframes qm-lin-fade-in {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: none; }
 }
 
-/* ── Buttons ── */
-.qm-btn {
-  font-family: var(--sans);
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 9px 14px;
-  font-size: 13px;
-  font-weight: 500;
-  border-radius: 10px;
-  border: 1px solid transparent;
-  cursor: pointer;
-  letter-spacing: -0.005em;
-  transition: all 0.15s;
-  white-space: nowrap;
-  background: none;
-  color: inherit;
+.qm-lin-blur-in {
+  animation: qm-lin-blur-in 200ms ease-out both;
 }
-.qm-btn-primary {
-  background: linear-gradient(180deg, #A87CFF 0%, #7B4BF0 45%, #5A2FCC 100%);
-  color: white;
-  border-color: rgba(139, 92, 255, 0.45);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.25),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.25),
-    0 4px 14px rgba(139, 92, 255, 0.35);
-}
-.qm-btn-primary:hover {
-  filter: brightness(1.08);
-  transform: translateY(-1px);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.3),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.25),
-    0 8px 22px rgba(139, 92, 255, 0.45);
-}
-.qm-btn-ghost {
-  border-color: var(--line);
-  color: var(--fg-2);
-  background: rgba(255, 255, 255, 0.02);
-}
-.qm-btn-ghost:hover {
-  border-color: var(--line-strong);
-  color: var(--fg);
-  background: rgba(255, 255, 255, 0.04);
-}
-.qm-btn-icon {
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  justify-content: center;
-  border-radius: 8px;
-  border-color: var(--line);
-  color: var(--fg-2);
-  background: rgba(255, 255, 255, 0.02);
-}
-.qm-btn-icon:hover {
-  color: var(--fg);
-  border-color: var(--line-strong);
-}
-.qm-btn-sm {
-  padding: 6px 10px;
-  font-size: 12px;
-  border-radius: 8px;
+@keyframes qm-lin-blur-in {
+  from { opacity: 0; filter: blur(4px); }
+  to { opacity: 1; filter: blur(0); }
 }
 
-/* Inputs */
-.qm-input {
-  font-family: var(--sans);
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 10px 12px;
-  color: var(--fg);
-  font-size: 13px;
-  width: 100%;
-  transition: border-color 0.15s, background 0.15s;
-  outline: none;
-}
-.qm-input:focus {
-  border-color: var(--accent);
-  background: rgba(139, 92, 255, 0.06);
-  box-shadow: 0 0 0 3px rgba(139, 92, 255, 0.14);
-}
-.qm-input::placeholder {
-  color: var(--fg-4);
+@media (prefers-reduced-motion: reduce) {
+  .qm-lin-fade-in,
+  .qm-lin-blur-in,
+  .qm-lin-spotlight {
+    animation: none;
+  }
+  .qm-lin-pill--processing::before {
+    animation: none;
+  }
 }
 
-/* Chip */
-.qm-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 9px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-family: var(--mono);
-  letter-spacing: 0.04em;
-  border: 1px solid var(--line);
-  color: var(--fg-2);
-  background: rgba(255, 255, 255, 0.02);
-  white-space: nowrap;
+/* --- Recording-specific motion -------------------------------------------
+ * Mic halo (1.2s pulse) + 40-bar waveform animation (recording.html). */
+@keyframes qm-lin-halo-pulse {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 0.85; transform: scale(1.06); }
 }
-.qm-chip.dot::before {
-  content: '';
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
+@keyframes qm-lin-mic-pulse {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 1; }
 }
-.qm-chip-accent {
-  color: var(--accent-bright);
-  border-color: rgba(139, 92, 255, 0.35);
-  background: rgba(139, 92, 255, 0.08);
-}
-.qm-chip-mint {
-  color: var(--mint);
-  border-color: rgba(110, 231, 183, 0.35);
-  background: rgba(110, 231, 183, 0.06);
-}
-.qm-chip-amber {
-  color: var(--amber);
-  border-color: rgba(251, 191, 36, 0.35);
-  background: rgba(251, 191, 36, 0.06);
-}
-.qm-chip-coral {
-  color: var(--coral);
-  border-color: rgba(251, 113, 133, 0.35);
-  background: rgba(251, 113, 133, 0.06);
-}
-.qm-chip-blue {
-  color: var(--accent-c);
-  border-color: rgba(96, 165, 250, 0.35);
-  background: rgba(96, 165, 250, 0.06);
+@keyframes qm-lin-bar-pulse {
+  0%, 100% { transform: scaleY(0.3); }
+  50% { transform: scaleY(1); }
 }
 
-/* ── LOUD status chips (HANDOFF §5) ── */
-.qm-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 11px;
-  border-radius: 999px;
-  font-family: var(--sans);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.005em;
-  border: 1px solid transparent;
-  white-space: nowrap;
-  line-height: 1;
+.qm-lin-mic-halo {
+  animation: qm-lin-halo-pulse 1200ms ease-in-out infinite;
 }
-.qm-status-queued {
-  color: #0F0A1C;
-  background: linear-gradient(180deg, #C8BFDB, #9C92B8);
-  border-color: rgba(156, 146, 184, 0.5);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.25),
-    0 2px 6px rgba(0, 0, 0, 0.25);
+.qm-lin-mic-dot {
+  animation: qm-lin-mic-pulse 1200ms ease-in-out infinite;
 }
-.qm-status-processing {
-  color: #0E0A1D;
-  background: linear-gradient(180deg, #D1B5FF, #8B5CFF);
-  border-color: rgba(139, 92, 255, 0.7);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.3),
-    0 2px 10px rgba(139, 92, 255, 0.35);
-}
-.qm-status-processing::before {
-  content: '';
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.8);
-  animation: qm-pulse-white 1.4s infinite;
-}
-@keyframes qm-pulse-white {
-  0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.9); }
-  80% { box-shadow: 0 0 0 6px rgba(255, 255, 255, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
-}
-.qm-status-ready {
-  color: #052E1E;
-  background: linear-gradient(180deg, #86EFAC, #22C55E);
-  border-color: rgba(34, 197, 94, 0.7);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.3),
-    0 2px 8px rgba(34, 197, 94, 0.35);
-}
-.qm-status-review {
-  color: #3A1C04;
-  background: linear-gradient(180deg, #FCD34D, #F59E0B);
-  border-color: rgba(245, 158, 11, 0.7);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.3),
-    0 2px 8px rgba(245, 158, 11, 0.35);
-}
-.qm-status-signed {
-  color: #D1B5FF;
-  background: rgba(139, 92, 255, 0.12);
-  border-color: rgba(139, 92, 255, 0.3);
-}
-.qm-status-error {
-  color: #3D0A10;
-  background: linear-gradient(180deg, #FDA4AF, #F43F5E);
-  border-color: rgba(244, 63, 94, 0.7);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.3),
-    0 2px 8px rgba(244, 63, 94, 0.35);
+.qm-lin-wave-bar {
+  transform-origin: center;
+  animation: qm-lin-bar-pulse 900ms ease-in-out infinite;
 }
 
-/* Keyboard key */
-.qm-kbd {
-  font-family: var(--mono);
-  font-size: 10px;
-  padding: 2px 6px;
-  border-radius: 4px;
-  border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.03);
-  color: var(--fg-2);
-  line-height: 1;
-}
-
-/* Divider line */
-.qm-divider {
-  height: 1px;
-  background: var(--line);
-  width: 100%;
-}
-
-/* Pulsing status dot (ambient — not the loud status chip's pulse). */
-@keyframes qm-pulse {
-  0%   { box-shadow: 0 0 0 0 rgba(110, 231, 183, 0.6); }
-  80%  { box-shadow: 0 0 0 8px rgba(110, 231, 183, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(110, 231, 183, 0); }
-}
-.qm-pulse {
-  animation: qm-pulse 2s infinite;
-}
-
-@keyframes qm-spin {
-  to { transform: rotate(360deg); }
-}
-.qm-spin {
-  animation: qm-spin 1.2s linear infinite;
-}
-
-/* Shimmer for skeletons */
-@keyframes qm-shimmer {
-  0%   { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
-}
-.qm-shimmer {
-  background: linear-gradient(
-    90deg,
-    rgba(255, 255, 255, 0.04) 0%,
-    rgba(139, 92, 255, 0.12) 50%,
-    rgba(255, 255, 255, 0.04) 100%
-  );
-  background-size: 200% 100%;
-  animation: qm-shimmer 1.6s infinite;
-  border-radius: 4px;
-}
-
-/* Scoped scrollbar inside the app (violet accent, thinner). */
-.qm-app ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-.qm-app ::-webkit-scrollbar-track {
-  background: transparent;
-}
-.qm-app ::-webkit-scrollbar-thumb {
-  background: rgba(139, 92, 255, 0.15);
-  border-radius: 4px;
-}
-.qm-app ::-webkit-scrollbar-thumb:hover {
-  background: rgba(139, 92, 255, 0.3);
-}
-
-/* Select-none helper (keyboard legends, etc). */
-.qm-nosel {
-  user-select: none;
-}
-
-/* Focus ring — violet, part of the redesign identity. Applies only
-   inside .qm-app so the landing's focus ring stays its own thing. */
-.qm-app :focus-visible {
-  outline: 2px solid rgba(139, 92, 255, 0.55);
-  outline-offset: 2px;
-  border-radius: 6px;
+@media (prefers-reduced-motion: reduce) {
+  .qm-lin-mic-halo,
+  .qm-lin-mic-dot,
+  .qm-lin-wave-bar {
+    animation: none;
+  }
 }
 
 /* ============================================================================
-   Rx warning card (DESIGN_SPEC §2–§8, docs/design/rx_warning_handoff/).
-   ----------------------------------------------------------------------------
-   Three severity variants via 4 CSS vars remapped per modifier class:
-   --sev-hue-{r,g,b}, --sev-fg, --sev-fg-2, --sev-bg, --sev-border,
-   --sev-border-strong. Default = critical (coral). Override with
-   .qm-warn-sev-warning or .qm-warn-sev-info.
-   ========================================================================== */
+ * Rx warning card — Linear V1 dark re-skin
+ * ----------------------------------------------------------------------------
+ * Class names are byte-identical to the Phase 4 implementation so the
+ * prescription-warnings JSX (apps/transcribe-md/src/app/dev/rx-warnings/,
+ * visits/[id]/extras-tab.tsx, codes-tab.tsx, etc.) works without changes.
+ * Bodies are rebuilt against the dark canvas, hairline borders, and
+ * semantic tokens (`--color-linear-*`) — no raw hex inside.
+ *
+ * Severity remap (semantic):
+ *   default (no modifier)   → critical / danger (coral)
+ *   .qm-warn-sev-warning    → warning amber
+ *   .qm-warn-sev-info       → info sky
+ *
+ * Eight regions (DESIGN_SPEC.md): header, badge, action tile, transcribed,
+ * risks, next step, details toggle, actions. All 38 .qm-warn-* classes
+ * referenced by JSX are kept.
+ *
+ * The four flat severity classes also requested by the brief
+ * (.qm-warn-critical, .qm-warn-serious, .qm-warn-moderate, .qm-warn-info)
+ * are added at the bottom — they aren't currently used by JSX but are
+ * supported for future call sites.
+ * ========================================================================== */
 
 .qm-warn {
-  /* Default — critical (coral). Remapped below for warning + info. */
-  --sev-hue-r: 251;
-  --sev-hue-g: 113;
-  --sev-hue-b: 133;
+  /* Severity hue triplets — remapped per modifier class. Default = critical/danger. */
+  --sev-hue-r: 212;
+  --sev-hue-g: 87;
+  --sev-hue-b: 74;
   --sev-fg: rgb(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b));
-  --sev-fg-2: rgb(253, 164, 175);
-  --sev-bg: rgba(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b), 0.04);
+  --sev-fg-2: rgb(228, 134, 122);
+  --sev-bg: rgba(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b), 0.08);
   --sev-border: rgba(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b), 0.28);
-  --sev-border-strong: rgba(
-    var(--sev-hue-r),
-    var(--sev-hue-g),
-    var(--sev-hue-b),
-    0.55
-  );
+  --sev-border-strong: rgba(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b), 0.55);
 
   position: relative;
-  border-radius: 12px;
-  border: 1px solid var(--sev-border);
-  background: var(--sev-bg);
+  border-radius: 10px;
+  border: 1px solid var(--color-linear-border);
+  background: var(--color-linear-surface-1);
   overflow: hidden;
-  color: var(--fg-2);
-  font-family: var(--sans);
-  /* Rx slip scrolls the card into view; §8.3. */
+  color: var(--color-linear-text-2);
+  font-family: var(--font-sans);
   scroll-margin-top: 80px;
 }
 
 .qm-warn-sev-warning {
-  --sev-hue-r: 251;
-  --sev-hue-g: 191;
-  --sev-hue-b: 36;
-  --sev-fg-2: rgb(253, 214, 112);
+  --sev-hue-r: 212;
+  --sev-hue-g: 164;
+  --sev-hue-b: 55;
+  --sev-fg-2: rgb(228, 185, 132);
 }
 .qm-warn-sev-info {
-  --sev-hue-r: 96;
-  --sev-hue-g: 165;
-  --sev-hue-b: 250;
-  --sev-fg-2: rgb(125, 183, 255);
+  --sev-hue-r: 91;
+  --sev-hue-g: 141;
+  --sev-hue-b: 184;
+  --sev-fg-2: rgb(155, 196, 217);
 }
 
 /* 3px severity rail on the left edge. */
@@ -943,112 +562,98 @@ body {
   grid-template-columns: 36px auto auto 1fr auto;
   gap: 10px;
   align-items: center;
-  padding: 18px 22px 10px 22px;
+  padding: 16px 20px 8px 20px;
 }
 .qm-warn-icon {
   width: 36px;
   height: 36px;
-  border-radius: 10px;
+  border-radius: 8px;
   border: 1px solid var(--sev-border);
-  background: rgba(
-    var(--sev-hue-r),
-    var(--sev-hue-g),
-    var(--sev-hue-b),
-    0.08
-  );
+  background: rgba(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b), 0.10);
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--sev-fg);
 }
 
-/* Region 2 — severity pill. Mono, uppercase, severity-tinted. */
+/* Severity badge (mono uppercase pill, severity tint). */
 .qm-warn-badge {
   display: inline-flex;
   align-items: center;
   height: 20px;
   padding: 0 8px 0 7px;
   border-radius: 4px;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: #fff;
+  color: var(--color-linear-bg);
   background: var(--sev-fg);
   border: 1px solid var(--sev-border-strong);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22),
-    0 1px 4px rgba(0, 0, 0, 0.3);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
 }
 
-/* Field label (Rx · Line 2) */
+/* Field label (mono caps). */
 .qm-warn-field {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--fg-3);
+  color: var(--color-linear-text-3);
 }
 
 .qm-warn-headline {
   grid-column: 1 / -2;
   margin: 2px 0 0 0;
   padding-top: 6px;
-  font-family: var(--serif);
-  font-size: 19px;
+  font-family: var(--font-sans);
+  font-size: 17px;
   font-weight: 500;
-  letter-spacing: -0.015em;
-  color: var(--fg);
+  letter-spacing: -0.012em;
+  color: var(--color-linear-text);
+  line-height: 1.3;
 }
 
 .qm-warn-dismiss {
   background: transparent;
   border: 1px solid transparent;
   border-radius: 6px;
-  color: var(--fg-3);
+  color: var(--color-linear-text-3);
   padding: 6px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: color 150ms ease, border-color 150ms ease,
-    background 150ms ease;
+  transition: color 120ms ease, border-color 120ms ease, background-color 120ms ease;
 }
 .qm-warn-dismiss:hover {
-  background: rgba(255, 255, 255, 0.03);
-  border-color: var(--line);
-  color: var(--fg);
+  background: var(--color-linear-row-hover);
+  border-color: var(--color-linear-border);
+  color: var(--color-linear-text);
 }
 
 /* ── Region 3 — Action tile ── */
 .qm-warn-body {
-  padding: 0 22px 14px 22px;
+  padding: 0 20px 14px 20px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 .qm-warn-action {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 10px 14px;
-  border-radius: 9px;
-  background: rgba(
-    var(--sev-hue-r),
-    var(--sev-hue-g),
-    var(--sev-hue-b),
-    0.1
-  );
+  border-radius: 8px;
+  background: rgba(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b), 0.10);
   border: 1px solid var(--sev-border);
   color: var(--sev-fg-2);
-  font-family: var(--sans);
-  font-size: 14.5px;
+  font-family: var(--font-sans);
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: -0.005em;
-  box-shadow: inset 0 0 0 1px
-    rgba(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b), 0.04);
 }
-/* Info variant softens the action tile. */
 .qm-warn-sev-info .qm-warn-action {
   padding: 8px 14px;
   font-weight: 500;
@@ -1071,31 +676,31 @@ body {
   gap: 4px;
 }
 .qm-warn-field-label {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--fg-3);
+  color: var(--color-linear-text-3);
 }
 .qm-warn-field-value {
-  font-family: var(--mono);
-  font-size: 14px;
+  font-family: var(--font-mono);
+  font-size: 13px;
   font-weight: 500;
-  color: var(--fg);
+  color: var(--color-linear-text);
 }
 .qm-warn-transcribed-arrow {
-  color: var(--fg-4);
-  font-family: var(--mono);
+  color: var(--color-linear-text-3);
+  font-family: var(--font-mono);
   font-size: 13px;
   padding-top: 14px;
 }
 .qm-warn-confidence {
   margin-left: 8px;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 10.5px;
-  color: var(--amber);
-  border: 1px solid rgba(251, 191, 36, 0.3);
-  background: rgba(251, 191, 36, 0.08);
+  color: var(--color-linear-warning);
+  border: 1px solid rgba(212, 164, 55, 0.3);
+  background: rgba(212, 164, 55, 0.08);
   padding: 1px 6px;
   border-radius: 4px;
 }
@@ -1107,11 +712,11 @@ body {
   gap: 10px;
 }
 .qm-warn-mini-label {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 9px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--fg-4);
+  color: var(--color-linear-text-3);
 }
 .qm-warn-risk {
   display: grid;
@@ -1125,8 +730,7 @@ body {
   border-radius: 50%;
   background: var(--sev-fg);
   margin: 7px 0 0 6px;
-  box-shadow: 0 0 0 3px
-    rgba(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b), 0.12);
+  box-shadow: 0 0 0 3px rgba(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b), 0.12);
 }
 .qm-warn-risk-body {
   display: flex;
@@ -1134,29 +738,24 @@ body {
   gap: 4px;
 }
 .qm-warn-risk-primary {
-  font-family: var(--serif);
-  font-size: 13.5px;
+  font-family: var(--font-sans);
+  font-size: 13px;
   letter-spacing: -0.005em;
-  color: var(--fg);
+  color: var(--color-linear-text);
 }
 .qm-warn-risk-primary .qm-warn-pill {
-  font-family: var(--sans);
-  font-size: 12.5px;
+  font-family: var(--font-sans);
+  font-size: 12px;
   font-weight: 600;
   color: var(--sev-fg-2);
-  background: rgba(
-    var(--sev-hue-r),
-    var(--sev-hue-g),
-    var(--sev-hue-b),
-    0.08
-  );
+  background: rgba(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b), 0.10);
   padding: 1px 6px;
   border-radius: 4px;
 }
 .qm-warn-risk-outcome {
-  font-family: var(--sans);
-  font-size: 12.5px;
-  color: var(--fg-3);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--color-linear-text-2);
 }
 .qm-warn-risk-outcome .qm-warn-outcome-bold {
   color: var(--sev-fg-2);
@@ -1170,22 +769,22 @@ body {
   gap: 10px;
   align-items: center;
   padding: 10px 14px;
-  border-radius: 9px;
-  border: 1px dashed var(--line-strong);
-  background: rgba(255, 255, 255, 0.015);
-  color: var(--fg-2);
-  font-family: var(--sans);
+  border-radius: 8px;
+  border: 1px dashed var(--color-linear-border-strong);
+  background: var(--color-linear-row-hover);
+  color: var(--color-linear-text-2);
+  font-family: var(--font-sans);
   font-size: 13px;
 }
 .qm-warn-next-icon {
-  color: var(--fg-3);
+  color: var(--color-linear-text-3);
 }
 .qm-warn-next-label {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 9.5px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--fg-3);
+  color: var(--color-linear-text-3);
 }
 
 /* ── Region 7 — Details toggle ── */
@@ -1194,41 +793,41 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 22px;
+  padding: 10px 20px;
   width: 100%;
   box-sizing: border-box;
-  border-top: 1px solid var(--line-soft);
-  font-family: var(--sans);
-  font-size: 12.5px;
-  color: var(--fg-3);
+  border-top: 1px solid var(--color-linear-hairline);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--color-linear-text-3);
   cursor: pointer;
-  transition: background 150ms ease, color 150ms ease;
+  transition: background-color 120ms ease, color 120ms ease;
 }
 .qm-warn-details-toggle:hover {
-  color: var(--fg-2);
-  background: rgba(255, 255, 255, 0.02);
+  color: var(--color-linear-text-2);
+  background: var(--color-linear-row-hover);
 }
 .qm-warn-details-chev {
   display: inline-block;
   transition: transform 200ms ease;
-  color: var(--fg-3);
+  color: var(--color-linear-text-3);
 }
 .qm-warn-details-toggle[aria-expanded='true'] .qm-warn-details-chev {
   transform: rotate(90deg);
 }
 .qm-warn-details-source {
   margin-left: auto;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 10.5px;
-  color: var(--fg-4);
+  color: var(--color-linear-text-3);
 }
 .qm-warn-details-body {
-  padding: 10px 22px 14px 22px;
-  border-top: 1px dashed var(--line);
-  font-family: var(--serif);
+  padding: 10px 20px 14px 20px;
+  border-top: 1px dashed var(--color-linear-hairline);
+  font-family: var(--font-sans);
   font-size: 13px;
-  line-height: 1.65;
-  color: var(--fg-2);
+  line-height: 1.6;
+  color: var(--color-linear-text-2);
   letter-spacing: -0.005em;
 }
 .qm-warn-details-body p {
@@ -1239,9 +838,9 @@ body {
 }
 .qm-warn-details-cite {
   margin-top: 8px;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 10.5px;
-  color: var(--fg-4);
+  color: var(--color-linear-text-3);
 }
 
 /* ── Region 8 — Actions ── */
@@ -1249,8 +848,8 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 14px 22px 14px 22px;
-  border-top: 1px solid var(--line);
+  padding: 14px 20px;
+  border-top: 1px solid var(--color-linear-hairline);
 }
 .qm-warn-actions-spacer {
   flex: 1;
@@ -1260,1542 +859,111 @@ body {
   align-items: center;
   gap: 8px;
   padding: 7px 12px;
-  border-radius: 7px;
-  border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.02);
-  color: var(--fg-2);
-  font-family: var(--sans);
-  font-size: 12.5px;
+  border-radius: 6px;
+  border: 1px solid var(--color-linear-border);
+  background: transparent;
+  color: var(--color-linear-text-2);
+  font-family: var(--font-sans);
+  font-size: 12px;
   font-weight: 500;
   letter-spacing: -0.005em;
   cursor: pointer;
-  transition: all 150ms ease;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 .qm-warn-btn:hover {
-  background: rgba(255, 255, 255, 0.04);
-  border-color: var(--line-strong);
-  color: var(--fg);
+  background: var(--color-linear-row-hover);
+  border-color: var(--color-linear-border-strong);
+  color: var(--color-linear-text);
 }
 .qm-warn-btn:active {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--color-linear-row-active);
 }
 .qm-warn-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
 .qm-warn-btn-primary {
-  background: linear-gradient(
-    180deg,
-    rgba(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b), 0.22),
-    rgba(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b), 0.1)
-  );
+  background: var(--sev-bg);
   border-color: var(--sev-border-strong);
   color: var(--sev-fg-2);
 }
 .qm-warn-btn-primary:hover {
-  background: linear-gradient(
-    180deg,
-    rgba(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b), 0.32),
-    rgba(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b), 0.16)
-  );
-  color: #fff;
-}
-.qm-warn-btn-primary:active {
-  filter: brightness(0.95);
+  background: rgba(var(--sev-hue-r), var(--sev-hue-g), var(--sev-hue-b), 0.18);
+  color: var(--color-linear-text);
 }
 
 /* Keyboard-hint chip on action buttons. */
 .qm-warn-kbd {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 10px;
   padding: 2px 5px;
   border-radius: 4px;
-  background: rgba(0, 0, 0, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: var(--fg-3);
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--color-linear-hairline-strong);
+  color: var(--color-linear-text-3);
   line-height: 1;
 }
 
-/* Reduced motion — disable chevron rotation per §8.4. */
 @media (prefers-reduced-motion: reduce) {
   .qm-warn-details-chev {
     transition: none;
   }
 }
 
-/* ============================================================================
-   Rx warning card — CLINICIAN palette overrides (Batch D, REVIEWABLE)
-   ----------------------------------------------------------------------------
-   The .qm-warn-* family above is the canonical Rx warning design grammar
-   (DESIGN_SPEC.md, docs/design/rx_warning_handoff/). Every structural class
-   stays. ARIA attributes stay. data-testid attributes stay. The 8-region
-   architecture stays. Only the COLOR TOKENS change to the Clinician palette
-   when the card mounts inside `.qm-cl-app` (visit-detail Rx tab + Rx rail).
-
-   Per CL-6 / docs/REMODEL_PHASE2_PLAN.md the severity pills move from the
-   raycast-violet-saturated rgb triplets to soft warm equivalents:
-     critical (red)   → coral  (#C97B6E)
-     warning (amber)  → amber  (#D4A574)  — same warm amber as the legacy
-                                            map; only the deep tone changes
-     info (blue)      → sky    (#7BA8C4)
-   The deep "fg-2" (sev-fg-2) contrast pair maps to the Clinician *-deep
-   tokens so risk-pill ink reads on a soft tint rather than a glow.
-
-   Body color tokens swap legacy fg/line to ink/line tokens so the card
-   reads correctly on cream:
-     --fg     → --ink         --line        → --line (clinician scope)
-     --fg-2   → --ink-2        --line-strong → --line-strong (clinician)
-     --fg-3   → --ink-3        --line-soft   → --line (no soft variant
-     --fg-4   → --ink-4                          inside .qm-cl-app)
-     --amber  → --amber (clinician already defines a warm amber)
-
-   Hover overlays that were designed against a black canvas (rgba(255,255,255,
-   0.02-0.06)) flip to warm cream tints (cream-2 / cream-3) so the chrome
-   reads as a paper card, not a glass card.
-   ========================================================================== */
-
-/* Severity tone variables — remap the rgb triplets used by all
-   .qm-warn-* rules to the Clinician palette equivalents. The
-   structural rules (background, border, dot, etc.) all reference
-   var(--sev-hue-r/g/b) so a single override at the .qm-warn level
-   re-tints every region uniformly. */
-.qm-cl-app .qm-warn {
-  /* critical default — coral */
-  --sev-hue-r: 201;
-  --sev-hue-g: 123;
-  --sev-hue-b: 110;
-  /* sev-fg-2 (ink tone for risk pills + action tile copy + outcome
-     bold) → coral-deep */
-  --sev-fg-2: rgb(122, 51, 41);
-}
-.qm-cl-app .qm-warn-sev-warning {
-  /* warm amber */
-  --sev-hue-r: 212;
-  --sev-hue-g: 165;
-  --sev-hue-b: 116;
-  /* amber-deep */
-  --sev-fg-2: rgb(122, 79, 31);
-}
-.qm-cl-app .qm-warn-sev-info {
-  /* sky */
-  --sev-hue-r: 123;
-  --sev-hue-g: 168;
-  --sev-hue-b: 196;
-  /* sky-deep */
-  --sev-fg-2: rgb(44, 79, 102);
-}
-
-/* Card surface — paper on cream desk, not glass on void. */
-.qm-cl-app .qm-warn {
-  /* The .qm-warn rule above sets background: var(--sev-bg) which is a
-     4% rgba of the severity hue. Override to the cream-card so the
-     card reads as paper; the severity rail (::before) + the soft
-     sev-tint borders carry the tone. */
-  background: var(--cream-card);
-  color: var(--ink-2);
-  box-shadow: var(--shadow-card);
-}
-
-/* Region 1 — Header */
-.qm-cl-app .qm-warn-icon {
-  /* Sev-tinted soft chip on cream — replaces the dark glass icon
-     well. */
-  background: rgba(
-    var(--sev-hue-r),
-    var(--sev-hue-g),
-    var(--sev-hue-b),
-    0.12
-  );
-}
-.qm-cl-app .qm-warn-badge {
-  /* Solid sev color with inset highlight + soft shadow. The inset
-     highlight reads against the colored fill; lighten the shadow on
-     cream so it doesn't punch a hole. */
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32),
-    0 1px 2px rgba(43, 38, 32, 0.16);
-}
-.qm-cl-app .qm-warn-field {
-  color: var(--ink-3);
-}
-.qm-cl-app .qm-warn-headline {
-  color: var(--ink);
-}
-.qm-cl-app .qm-warn-dismiss {
-  color: var(--ink-3);
-}
-.qm-cl-app .qm-warn-dismiss:hover {
-  /* Warm cream-2 hover on cream — replaces rgba(255,255,255,0.03). */
-  background: var(--cream-2);
-  border-color: var(--line);
-  color: var(--ink);
-}
-
-/* Region 4 — Transcribed (heard + guess) */
-.qm-cl-app .qm-warn-field-label {
-  color: var(--ink-3);
-}
-.qm-cl-app .qm-warn-field-value {
-  color: var(--ink);
-}
-.qm-cl-app .qm-warn-transcribed-arrow {
-  color: var(--ink-4);
-}
-.qm-cl-app .qm-warn-confidence {
-  /* Map the legacy fbbf24-ish amber chip onto the Clinician amber.
-     Both represent "low transcriber confidence" — the warm amber
-     reads quieter on cream than the neon. */
-  color: var(--amber-deep);
-  border-color: rgba(212, 165, 116, 0.34);
-  background: var(--amber-tint);
-}
-
-/* Region 5 — Risks */
-.qm-cl-app .qm-warn-mini-label {
-  color: var(--ink-4);
-}
-.qm-cl-app .qm-warn-risk-primary {
-  color: var(--ink);
-}
-.qm-cl-app .qm-warn-risk-outcome {
-  color: var(--ink-3);
-}
-
-/* Region 6 — Next step */
-.qm-cl-app .qm-warn-next {
-  border-color: var(--line-strong);
-  /* Replace rgba(255,255,255,0.015) with cream-2 wash. */
-  background: var(--cream-2);
-  color: var(--ink-2);
-}
-.qm-cl-app .qm-warn-next-icon {
-  color: var(--ink-3);
-}
-.qm-cl-app .qm-warn-next-label {
-  color: var(--ink-3);
-}
-
-/* Region 7 — Details toggle + body */
-.qm-cl-app .qm-warn-details-toggle {
-  /* The base rule uses --line-soft which doesn't exist inside
-     .qm-cl-app; map to the regular --line. */
-  border-top-color: var(--line);
-  color: var(--ink-3);
-}
-.qm-cl-app .qm-warn-details-toggle:hover {
-  /* Replace rgba(255,255,255,0.02) with cream-2. */
-  color: var(--ink-2);
-  background: var(--cream-2);
-}
-.qm-cl-app .qm-warn-details-chev {
-  color: var(--ink-3);
-}
-.qm-cl-app .qm-warn-details-source {
-  color: var(--ink-4);
-}
-.qm-cl-app .qm-warn-details-body {
-  border-top-color: var(--line);
-  color: var(--ink-2);
-}
-.qm-cl-app .qm-warn-details-cite {
-  color: var(--ink-4);
-}
-
-/* Region 8 — Actions */
-.qm-cl-app .qm-warn-actions {
-  border-top-color: var(--line);
-}
-.qm-cl-app .qm-warn-btn {
-  /* Replace rgba(255,255,255,0.02) glass surface with a cream-card
-     paper chip. */
-  border-color: var(--line);
-  background: var(--cream-card);
-  color: var(--ink-2);
-}
-.qm-cl-app .qm-warn-btn:hover {
-  background: var(--cream-2);
-  border-color: var(--line-strong);
-  color: var(--ink);
-}
-.qm-cl-app .qm-warn-btn:active {
-  background: var(--cream-3);
-}
-.qm-cl-app .qm-warn-btn-primary {
-  /* The primary button (Edit medication on critical) keeps the
-     severity-tinted gradient — the rgb triplets are already remapped
-     to the Clinician palette via the override at the top of this
-     section, so the gradient resolves to a soft sev-tint on cream
-     instead of a saturated raycast wash. */
-  color: var(--sev-fg-2);
-}
-.qm-cl-app .qm-warn-btn-primary:hover {
-  color: var(--ink);
-}
-
-/* Keyboard hint chip — replace the dark inset (rgba(0,0,0,0.2)) with
-   a cream-2 / line bordered chip that reads on cream. */
-.qm-cl-app .qm-warn-kbd {
-  background: var(--cream-2);
-  border-color: var(--line);
-  color: var(--ink-3);
-}
-
-/* ============================================================================
-   CLINICIAN — Phase 2 design direction (humane medical, light-mode-first)
-   ----------------------------------------------------------------------------
-   Source of truth: docs/design-directions-v3/clinician/{landing-and-recording,
-   dashboard,visit-detail}.html. Canonical tokens were ported 1:1 from the
-   `:root` blocks of those mockups; class names are prefixed `qm-cl-*` so they
-   never collide with the dark `.qm-*` family.
-
-   Architecture mirrors App-redesign-v1:
-     1. @theme block: --color-clinician-* exposed as Tailwind utilities
-        (bg-clinician-cream, text-clinician-sage, border-clinician-line, etc.)
-     2. .qm-cl-app block: bare-name aliases (--cream, --ink, --sage, --serif,
-        --sans, --mono) scoped here so handwritten .qm-cl-* CSS resolves
-        var(--cream) the same way the mockups do — without polluting the
-        global :root (where App-redesign-v1's --bg/--fg/--accent live).
-     3. Utility classes: .qm-cl-pill, .qm-cl-btn, .qm-cl-card, etc.
-        ONLY meaningful inside .qm-cl-app. Migrated routes wrap their tree.
-
-   DM Sans is loaded via @import below; Source Serif 4 + JetBrains Mono are
-   already loaded via next/font in layout.tsx. The @import sits AFTER
-   @import "tailwindcss" (top of file) which is invalid per CSS spec, but
-   Tailwind v4's processor accepts it. If a future build complains, move
-   the DM Sans @import to the very top OR migrate to next/font.
-   ============================================================================ */
-
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap');
-
-@theme {
-  /* Cream surfaces (canvas + elevations) */
-  --color-clinician-cream: #F2EBDC;
-  --color-clinician-cream-card: #FFFCF5;
-  --color-clinician-cream-2: #F2EDE3;
-  --color-clinician-cream-3: #E8E1D3;
-
-  /* Hairlines */
-  --color-clinician-line: rgba(43, 38, 32, 0.08);
-  --color-clinician-line-strong: rgba(43, 38, 32, 0.14);
-
-  /* Warm-charcoal ink (text) */
-  --color-clinician-ink: #2B2620;
-  --color-clinician-ink-2: #5C544A;
-  --color-clinician-ink-3: #8A8278;
-  --color-clinician-ink-4: #B5AE9F;
-
-  /* Sage — primary accent */
-  --color-clinician-sage: #7AA68C;
-  --color-clinician-sage-deep: #2F5040;
-  --color-clinician-sage-bright: #95BCA4;
-
-  /* Teal — secondary accent */
-  --color-clinician-teal: #5BA3B4;
-  --color-clinician-teal-deep: #2C5A66;
-
-  /* Status — soft-warm tints */
-  --color-clinician-amber: #D4A574;
-  --color-clinician-amber-deep: #7A4F1F;
-  --color-clinician-coral: #C97B6E;
-  --color-clinician-coral-deep: #7A3329;
-  --color-clinician-sky: #7BA8C4;
-  --color-clinician-sky-deep: #2C4F66;
-}
-
-/* ── .qm-cl-app — root scope for Clinician routes ──
-   Wrap any migrated page's tree in this class. It:
-     1. Sets the cream canvas + warm-charcoal ink + DM Sans body
-     2. Defines bare-name aliases (--cream, --ink, --sage, --serif, etc.)
-        that the .qm-cl-* utility classes below reference
-   Pages NOT yet migrated continue to use .qm-app and the dark App-redesign-v1
-   tokens — no contention because the scopes don't overlap. */
-.qm-cl-app {
-  /* Bare-name aliases — referenced by .qm-cl-* utility classes below */
-  --cream: var(--color-clinician-cream);
-  --cream-card: var(--color-clinician-cream-card);
-  --cream-2: var(--color-clinician-cream-2);
-  --cream-3: var(--color-clinician-cream-3);
-
-  --line: var(--color-clinician-line);
-  --line-strong: var(--color-clinician-line-strong);
-
-  --ink: var(--color-clinician-ink);
-  --ink-2: var(--color-clinician-ink-2);
-  --ink-3: var(--color-clinician-ink-3);
-  --ink-4: var(--color-clinician-ink-4);
-
-  --sage: var(--color-clinician-sage);
-  --sage-deep: var(--color-clinician-sage-deep);
-  --sage-bright: var(--color-clinician-sage-bright);
-  --sage-tint: rgba(122, 166, 140, 0.14);
-  --sage-tint-strong: rgba(122, 166, 140, 0.22);
-
-  --teal: var(--color-clinician-teal);
-  --teal-deep: var(--color-clinician-teal-deep);
-  --teal-tint: rgba(91, 163, 180, 0.14);
-
-  --amber: var(--color-clinician-amber);
-  --amber-deep: var(--color-clinician-amber-deep);
-  --amber-tint: rgba(212, 165, 116, 0.18);
-  --amber-tint-strong: rgba(212, 165, 116, 0.28);
-
-  --coral: var(--color-clinician-coral);
-  --coral-deep: var(--color-clinician-coral-deep);
-  --coral-tint: rgba(201, 123, 110, 0.16);
-  --coral-tint-strong: rgba(201, 123, 110, 0.24);
-
-  --sky: var(--color-clinician-sky);
-  --sky-deep: var(--color-clinician-sky-deep);
-  --sky-tint: rgba(123, 168, 196, 0.16);
-
-  --shadow-card: 0 4px 14px rgba(43, 38, 32, 0.04);
-  --shadow-card-hover: 0 8px 24px rgba(43, 38, 32, 0.06);
-  --shadow-button: 0 1px 2px rgba(43, 38, 32, 0.05), 0 1px 1px rgba(43, 38, 32, 0.03);
-  --shadow-cta: 0 6px 18px rgba(122, 166, 140, 0.28);
-
-  --ease-clinician: cubic-bezier(0.22, 1, 0.36, 1);
-
-  /* Type stack — DM Sans body, Source Serif 4 content, JetBrains Mono IDs */
-  --serif: "Source Serif 4", Georgia, "Times New Roman", serif;
-  --sans: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-
-  /* Body — apply only inside the scope so non-migrated routes keep dark canvas */
-  font-family: var(--sans);
-  background: var(--cream);
-  color: var(--ink);
-  font-size: 15px;
-  line-height: 1.55;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-/* Body grain — gentle warm radial wash. Only applied to .qm-cl-app; the
-   App-redesign-v1 dark surfaces are untouched. */
-.qm-cl-app[data-grain] {
-  background-image:
-    radial-gradient(ellipse at 12% 8%, rgba(122, 166, 140, 0.06) 0%, transparent 42%),
-    radial-gradient(ellipse at 88% 92%, rgba(91, 163, 180, 0.05) 0%, transparent 50%);
-}
-
-/* Type-face helpers (Clinician scope only) */
-.qm-cl-app .qm-cl-serif { font-family: var(--serif); }
-.qm-cl-app .qm-cl-sans  { font-family: var(--sans); }
-.qm-cl-app .qm-cl-mono  { font-family: var(--mono); }
-
-/* Wordmark — used by AppFrame / TopNav (Batch B). Mockup: 18–20px Source Serif 4 */
-.qm-cl-app .qm-cl-wordmark {
-  font-family: var(--serif);
-  font-weight: 500;
-  font-size: 20px;
-  letter-spacing: 0.02em;
-  color: var(--ink);
-}
-
-/* ── Pills — soft-bg + deep-fg; status grammar throughout the app ──
-   Used in: dashboard visit list (status column), visit-detail header
-   (status pill), patient cards (specialty chip), Rx warnings (severity). */
-.qm-cl-app .qm-cl-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 11px;
-  border-radius: 999px;
-  font-family: var(--sans);
-  font-weight: 500;
-  font-size: 12px;
-  letter-spacing: 0.01em;
-  line-height: 1;
-}
-.qm-cl-app .qm-cl-pill-sage  { background: var(--sage-tint);  color: var(--sage-deep); }
-.qm-cl-app .qm-cl-pill-teal  { background: var(--teal-tint);  color: var(--teal-deep); }
-.qm-cl-app .qm-cl-pill-amber { background: var(--amber-tint); color: var(--amber-deep); }
-.qm-cl-app .qm-cl-pill-coral { background: var(--coral-tint); color: var(--coral-deep); }
-.qm-cl-app .qm-cl-pill-sky   { background: var(--sky-tint);   color: var(--sky-deep); }
-.qm-cl-app .qm-cl-pill-soft  { background: var(--cream-2);    color: var(--ink-2); }
-.qm-cl-app .qm-cl-pill-dot   { width: 6px; height: 6px; border-radius: 999px; background: currentColor; opacity: 0.7; }
-
-/* ── Buttons — pill-shaped (radius 999px), gentle ease, no springs ──
-   Used in: every CTA (primary), inline actions (soft, ghost). Recording
-   "Start"/"End" buttons (Batch E) extend with .qm-cl-btn-record variant. */
-.qm-cl-app .qm-cl-btn {
-  font-family: var(--sans);
-  font-weight: 500;
-  font-size: 14px;
-  line-height: 1;
-  border-radius: 999px;
-  padding: 10px 18px;
-  cursor: pointer;
-  border: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  transition: transform 240ms var(--ease-clinician),
-              background 240ms var(--ease-clinician),
-              box-shadow 240ms var(--ease-clinician),
-              color 240ms var(--ease-clinician);
-}
-.qm-cl-app .qm-cl-btn-primary {
-  background: var(--sage);
-  color: #FFFCF5;
-  box-shadow: var(--shadow-cta);
-}
-.qm-cl-app .qm-cl-btn-primary:hover {
-  background: #6E9A80;
-  transform: translateY(-1px);
-  box-shadow: 0 8px 22px rgba(122, 166, 140, 0.36);
-}
-.qm-cl-app .qm-cl-btn-soft {
-  background: var(--cream-card);
-  color: var(--ink);
-  border: 1px solid var(--line);
-  box-shadow: var(--shadow-button);
-}
-.qm-cl-app .qm-cl-btn-soft:hover { background: var(--cream-2); }
-.qm-cl-app .qm-cl-btn-ghost {
-  background: transparent;
-  color: var(--ink-2);
-}
-.qm-cl-app .qm-cl-btn-ghost:hover { background: var(--cream-2); color: var(--ink); }
-
-/* Larger CTA size — landing hero, signup CTA */
-.qm-cl-app .qm-cl-btn-lg {
-  font-size: 14.5px;
-  padding: 12px 22px;
-}
-
-/* ── Cards — soft warm shadow, 16px radius, cream-card surface ──
-   Used in: stat cards (dashboard), visit cards (list), SOAP section
-   (visit-detail), the recording widget container. */
-.qm-cl-app .qm-cl-card {
-  background: var(--cream-card);
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  box-shadow: var(--shadow-card);
-}
-
-/* Same as .qm-cl-card but with hover lift — for clickable cards */
-.qm-cl-app .qm-cl-card-soft {
-  background: var(--cream-card);
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  box-shadow: var(--shadow-card);
-  transition: transform 360ms var(--ease-clinician),
-              box-shadow 360ms var(--ease-clinician);
-}
-.qm-cl-app .qm-cl-card-soft:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-card-hover);
-}
-
-/* ── Top-nav surface ──
-   Used in: <TopNav> (Batch B). Cream-w-blur backdrop sits sticky at top. */
-.qm-cl-app .qm-cl-topbar {
-  background: rgba(250, 247, 242, 0.85);
-  backdrop-filter: blur(18px) saturate(115%);
-  -webkit-backdrop-filter: blur(18px) saturate(115%);
-  border-bottom: 1px solid var(--line);
-}
-
-/* ── Sidebar / nav-item ──
-   Used in: <IconRail> / sidebar (Batch B). Active state shows a sage dot. */
-.qm-cl-app .qm-cl-sidebar {
-  background: var(--cream-2);
-  border-right: 1px solid var(--line);
-}
-.qm-cl-app .qm-cl-nav-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+/* ── Flat severity classes — additional API surface ──
+ * Kept in the .qm-warn-* family because the brief lists them by name.
+ * They render the same severity rail / tint pattern as the modifier
+ * variants above, but they're standalone (no nested .qm-warn-* needed).
+ * Class names are byte-identical to the brief spec. */
+.qm-warn-critical {
+  background: rgba(212, 87, 74, 0.08);
+  border-left: 3px solid var(--color-linear-danger);
+  color: var(--color-linear-text);
   padding: 10px 14px;
-  border-radius: 12px;
-  font-size: 14px;
-  color: var(--ink-2);
-  transition: all 240ms var(--ease-clinician);
-  cursor: pointer;
+  border-radius: 4px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
 }
-.qm-cl-app .qm-cl-nav-item:hover {
-  background: var(--cream-card);
-  color: var(--ink);
+.qm-warn-critical .qm-warn-icon {
+  color: var(--color-linear-danger);
 }
-.qm-cl-app .qm-cl-nav-item.qm-cl-active {
-  background: var(--cream-card);
-  color: var(--sage-deep);
-  box-shadow: var(--shadow-button);
-}
-.qm-cl-app .qm-cl-nav-item.qm-cl-active::after {
-  content: "";
-  margin-left: auto;
-  width: 5px;
-  height: 5px;
-  border-radius: 999px;
-  background: var(--sage);
-}
-.qm-cl-app .qm-cl-nav-icon {
-  width: 18px;
-  height: 18px;
-  color: var(--ink-3);
-  transition: color 240ms var(--ease-clinician);
-  flex-shrink: 0;
-}
-.qm-cl-app .qm-cl-nav-item:hover .qm-cl-nav-icon { color: var(--ink); }
-.qm-cl-app .qm-cl-nav-item.qm-cl-active .qm-cl-nav-icon { color: var(--sage); }
-
-/* ── Inputs — soft warm with sage focus ring ──
-   Used in: search box (top-nav), forms (auth, settings, patient picker). */
-.qm-cl-app .qm-cl-input {
-  background: var(--cream-card);
-  border: 1px solid var(--line);
-  border-radius: 12px;
+.qm-warn-serious {
+  background: rgba(212, 87, 74, 0.05);
+  border-left: 3px solid var(--color-linear-coral);
+  color: var(--color-linear-text);
   padding: 10px 14px;
-  font-family: var(--sans);
-  font-size: 14px;
-  color: var(--ink);
-  transition: border-color 240ms var(--ease-clinician),
-              box-shadow 240ms var(--ease-clinician);
-  outline: 0;
-  width: 100%;
+  border-radius: 4px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.qm-warn-serious .qm-warn-icon {
+  color: var(--color-linear-coral);
+}
+.qm-warn-moderate {
+  background: rgba(212, 164, 55, 0.06);
+  border-left: 3px solid var(--color-linear-warning);
+  color: var(--color-linear-text);
+  padding: 10px 14px;
+  border-radius: 4px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.qm-warn-moderate .qm-warn-icon {
+  color: var(--color-linear-warning);
+}
+.qm-warn-info {
+  background: rgba(91, 141, 184, 0.06);
+  border-left: 3px solid var(--color-linear-info);
+  color: var(--color-linear-text);
+  padding: 10px 14px;
+  border-radius: 4px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.qm-warn-info .qm-warn-icon {
+  color: var(--color-linear-info);
 }
-.qm-cl-app .qm-cl-input:focus {
-  border-color: var(--sage);
-  box-shadow: 0 0 0 3px var(--sage-tint);
-}
-.qm-cl-app .qm-cl-input::placeholder { color: var(--ink-4); }
-
-/* ── Section labels + eyebrow ──
-   Used in: sectional headers across dashboard / visit-detail. */
-.qm-cl-app .qm-cl-section-label {
-  font-family: var(--sans);
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--ink-3);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.qm-cl-app .qm-cl-eyebrow {
-  font-family: var(--sans);
-  font-size: 12.5px;
-  font-weight: 500;
-  color: var(--sage-deep);
-  letter-spacing: 0.10em;
-  text-transform: uppercase;
-}
-
-/* ── Big serif number — stat tile ──
-   Used in: <StatCard> (Batch C). 38px Source Serif 4. */
-.qm-cl-app .qm-cl-big-num {
-  font-family: var(--serif);
-  font-size: 38px;
-  font-weight: 500;
-  color: var(--ink);
-  letter-spacing: -0.01em;
-  line-height: 1;
-}
-
-/* ── Soft tab pills ──
-   Used in: visit-detail tabs (SOAP / Codes / Rx / Extras). */
-.qm-cl-app .qm-cl-tab-row {
-  display: inline-flex;
-  background: var(--cream-2);
-  border-radius: 999px;
-  padding: 4px;
-  gap: 2px;
-}
-.qm-cl-app .qm-cl-tab {
-  padding: 9px 18px;
-  border-radius: 999px;
-  font-family: var(--sans);
-  font-size: 13.5px;
-  font-weight: 500;
-  color: var(--ink-2);
-  cursor: pointer;
-  border: 0;
-  background: transparent;
-  transition: all 240ms var(--ease-clinician);
-}
-.qm-cl-app .qm-cl-tab.qm-cl-active {
-  background: var(--cream-card);
-  color: var(--sage-deep);
-  box-shadow: var(--shadow-button);
-}
-.qm-cl-app .qm-cl-tab:hover:not(.qm-cl-active) { color: var(--ink); }
-
-/* ── Patient row — generous breathing room (76px tall) ──
-   Used in: dashboard visit list (Batch C). Hover slides 2px right + warms. */
-.qm-cl-app .qm-cl-patient-row {
-  display: grid;
-  grid-template-columns: 56px 1fr 200px 140px 140px 36px;
-  gap: 24px;
-  padding: 18px 24px;
-  align-items: center;
-  cursor: pointer;
-  border-radius: 12px;
-  transition: background 240ms var(--ease-clinician),
-              transform 240ms var(--ease-clinician);
-}
-.qm-cl-app .qm-cl-patient-row:hover {
-  background: var(--cream-2);
-  transform: translateX(2px);
-}
-.qm-cl-app .qm-cl-patient-row + .qm-cl-patient-row {
-  border-top: 1px solid var(--line);
-}
-.qm-cl-app .qm-cl-patient-row:hover + .qm-cl-patient-row,
-.qm-cl-app .qm-cl-patient-row:hover {
-  border-top-color: transparent;
-}
-
-/* ── Avatar — rounded square chip with serif initials ──
-   Used in: <PatientCard> + visit-detail header. The variants pick a
-   warm accent tint that pairs with specialty (sage for cardio, etc.) */
-.qm-cl-app .qm-cl-avatar {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--serif);
-  font-weight: 500;
-  font-size: 16px;
-}
-.qm-cl-app .qm-cl-avatar-sage  { background: var(--sage-tint-strong);  color: var(--sage-deep); }
-.qm-cl-app .qm-cl-avatar-teal  { background: var(--teal-tint);         color: var(--teal-deep); }
-.qm-cl-app .qm-cl-avatar-amber { background: var(--amber-tint);        color: var(--amber-deep); }
-.qm-cl-app .qm-cl-avatar-coral { background: var(--coral-tint);        color: var(--coral-deep); }
-.qm-cl-app .qm-cl-avatar-sky   { background: var(--sky-tint);          color: var(--sky-deep); }
-
-/* ── Prose body — Source Serif 4 16px line-height 1.7 ──
-   Used in: SOAP body, visit-detail prose, dashboard empty-state copy. */
-.qm-cl-app .qm-cl-prose {
-  font-family: var(--serif);
-  font-size: 16px;
-  line-height: 1.7;
-  color: var(--ink);
-  max-width: 720px;
-}
-.qm-cl-app .qm-cl-prose p { margin: 0 0 14px 0; }
-.qm-cl-app .qm-cl-prose ul { margin: 8px 0 14px 0; padding-left: 1.4em; }
-.qm-cl-app .qm-cl-prose ul li { padding-left: 4px; margin-bottom: 6px; }
-.qm-cl-app .qm-cl-prose strong { font-weight: 500; color: var(--ink); }
-.qm-cl-app .qm-cl-prose em { color: var(--sage-deep); font-style: italic; }
-
-/* ── SOAP section — letter-chip + body together ──
-   Used in: visit-detail SOAP editor (Batch D). Each S/O/A/P is a row. */
-.qm-cl-app .qm-cl-soap-section {
-  padding: 28px 0;
-  border-top: 1px solid var(--line);
-}
-.qm-cl-app .qm-cl-soap-section:first-child {
-  border-top: 0;
-  padding-top: 0;
-}
-.qm-cl-app .qm-cl-soap-letter {
-  width: 36px;
-  height: 36px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--serif);
-  font-weight: 500;
-  font-size: 17px;
-  background: var(--sage-tint);
-  color: var(--sage-deep);
-  flex-shrink: 0;
-}
-
-/* ── Transcript turn cards — doctor right-aligned, patient left ──
-   Used in: visit-detail transcript view. Cards alternate left/right
-   for visual rhythm; doctor uses sage-tint, patient uses cream-card. */
-.qm-cl-app .qm-cl-turn {
-  padding: 14px 18px;
-  border-radius: 14px;
-  background: var(--cream-card);
-  border: 1px solid var(--line);
-  max-width: 80%;
-  box-shadow: var(--shadow-card);
-}
-.qm-cl-app .qm-cl-turn-dr  {
-  background: var(--sage-tint);
-  border-color: var(--sage-tint-strong);
-  margin-left: auto;
-}
-.qm-cl-app .qm-cl-turn-pt  {
-  background: var(--cream-card);
-  border-color: var(--line);
-  margin-right: auto;
-}
-.qm-cl-app .qm-cl-speaker-label {
-  font-family: var(--sans);
-  font-size: 11.5px;
-  font-weight: 500;
-  letter-spacing: 0.10em;
-  text-transform: uppercase;
-  opacity: 0.85;
-}
-.qm-cl-app .qm-cl-turn-dr .qm-cl-speaker-label { color: var(--sage-deep); }
-.qm-cl-app .qm-cl-turn-pt .qm-cl-speaker-label { color: var(--ink-3); }
-.qm-cl-app .qm-cl-turn-body {
-  font-family: var(--serif);
-  font-size: 15.5px;
-  line-height: 1.65;
-  color: var(--ink);
-  margin-top: 6px;
-}
-
-/* ── AI status — italic serif crossfade band ──
-   Used in: visit-detail "Regenerate" moment (Batch D). Sits inline,
-   above SOAP. Three lines crossfade through the pipeline stages. */
-.qm-cl-app .qm-cl-ai-status {
-  font-family: var(--serif);
-  font-style: italic;
-  font-size: 15px;
-  color: var(--ink-2);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 18px;
-  background: var(--sage-tint);
-  border: 1px dashed var(--sage-tint-strong);
-  border-radius: 12px;
-  position: relative;
-  height: 52px;
-}
-.qm-cl-app .qm-cl-ai-status-line {
-  position: absolute;
-  left: 50px;
-  right: 18px;
-  top: 50%;
-  transform: translateY(-50%);
-  opacity: 0;
-  animation: qm-cl-ai-crossfade 4.8s var(--ease-clinician) infinite;
-}
-.qm-cl-app .qm-cl-ai-status-line.qm-cl-s1 { animation-delay: 0s; }
-.qm-cl-app .qm-cl-ai-status-line.qm-cl-s2 { animation-delay: 1.6s; }
-.qm-cl-app .qm-cl-ai-status-line.qm-cl-s3 { animation-delay: 3.2s; }
-
-/* ── Editing caret — for the "live" SOAP editor cursor ──
-   Used in: SOAP editor when streaming new content. */
-.qm-cl-app .qm-cl-editing::after {
-  content: "";
-  display: inline-block;
-  width: 1.5px;
-  height: 1.1em;
-  vertical-align: -2px;
-  background: var(--sage);
-  margin-left: 2px;
-  animation: qm-cl-caret 1.1s ease-in-out infinite;
-}
-
-/* ── Recording state — slow halo + breathing mic dot ──
-   Used in: recording widget (Batch E). The halo is a radial gradient
-   that pulses at 3.4s; the mic-breath emits a soft sage shadow ring. */
-.qm-cl-app .qm-cl-halo {
-  position: absolute;
-  inset: 0;
-  border-radius: 999px;
-  background: radial-gradient(circle, var(--sage-tint-strong) 0%, transparent 70%);
-  animation: qm-cl-halo-pulse 3.4s ease-in-out infinite;
-  will-change: transform, opacity;
-}
-.qm-cl-app .qm-cl-halo-delayed { animation-delay: 1.7s; }
-.qm-cl-app .qm-cl-mic-dot {
-  animation: qm-cl-mic-breath 2.8s var(--ease-clinician) infinite;
-  will-change: transform, box-shadow;
-}
-
-/* Wave-bar — 3px sage bars used by the recording VU meter */
-.qm-cl-app .qm-cl-wave-bar {
-  width: 3px;
-  background: var(--sage);
-  border-radius: 999px;
-  opacity: 0.65;
-  animation: qm-cl-wave-bar 1.6s var(--ease-clinician) infinite;
-}
-
-/* Transcript line — gentle slide-up + fade-in (600ms) */
-.qm-cl-app .qm-cl-transcript-line {
-  animation: qm-cl-slide-fade 600ms var(--ease-clinician) forwards;
-  opacity: 0;
-}
-.qm-cl-app .qm-cl-transcript-line.qm-cl-l1 { animation-delay: 200ms; }
-.qm-cl-app .qm-cl-transcript-line.qm-cl-l2 { animation-delay: 1500ms; }
-.qm-cl-app .qm-cl-transcript-line.qm-cl-l3 { animation-delay: 2900ms; }
-.qm-cl-app .qm-cl-transcript-line.qm-cl-l4 { animation-delay: 4400ms; }
-
-/* ── Gentle dividers ──
-   .qm-cl-gentle-rule = 1px linear-gradient hairline (warm-charcoal at 14%)
-   .qm-cl-sage-divider = 1px sage-tinted variant — for SOAP section breaks */
-.qm-cl-app .qm-cl-gentle-rule {
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--line-strong), transparent);
-  border: 0;
-}
-.qm-cl-app .qm-cl-sage-divider {
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--sage-tint-strong), transparent);
-  border: 0;
-}
-
-/* ── Misc helpers ──
-   .qm-cl-meta-dot = quiet meta-separator
-   .qm-cl-lift     = hover-lift on otherwise-static cards
-   .qm-cl-illus-*  = SVG line-art illustrations (landing empty-states) */
-.qm-cl-app .qm-cl-meta-dot { color: var(--ink-4); }
-.qm-cl-app .qm-cl-lift {
-  transition: transform 360ms var(--ease-clinician),
-              box-shadow 360ms var(--ease-clinician);
-}
-.qm-cl-app .qm-cl-lift:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-card-hover);
-}
-.qm-cl-app .qm-cl-illus-stroke {
-  stroke: var(--sage);
-  stroke-width: 1.4;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  fill: none;
-}
-.qm-cl-app .qm-cl-illus-stroke-warm { stroke: var(--ink-2); stroke-width: 1.2; fill: none; }
-.qm-cl-app .qm-cl-illus-fill-sage { fill: var(--sage-tint-strong); }
-.qm-cl-app .qm-cl-illus-fill-cream { fill: var(--cream-2); }
-.qm-cl-app .qm-cl-illus-fill-amber { fill: var(--amber-tint); }
-
-/* ── Scrollbar — warm cream (Clinician-only) ── */
-.qm-cl-app ::-webkit-scrollbar { width: 10px; height: 10px; }
-.qm-cl-app ::-webkit-scrollbar-track { background: transparent; }
-.qm-cl-app ::-webkit-scrollbar-thumb { background: var(--cream-3); border-radius: 999px; }
-.qm-cl-app ::-webkit-scrollbar-thumb:hover { background: var(--ink-4); }
-.qm-cl-app ::selection { background: var(--sage-tint-strong); color: var(--ink); }
-
-/* ── Animations (global @keyframes — all prefixed qm-cl-*) ── */
-
-@keyframes qm-cl-halo-pulse {
-  0%, 100% { transform: scale(0.92); opacity: 0.55; }
-  50%      { transform: scale(1.18); opacity: 0.18; }
-}
-
-@keyframes qm-cl-mic-breath {
-  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(122, 166, 140, 0.4); }
-  50%      { transform: scale(1.04); box-shadow: 0 0 0 14px rgba(122, 166, 140, 0); }
-}
-
-@keyframes qm-cl-slide-fade {
-  from { opacity: 0; transform: translateY(10px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes qm-cl-ai-crossfade {
-  0%, 22%   { opacity: 1; }
-  33%, 100% { opacity: 0; }
-}
-
-@keyframes qm-cl-caret {
-  0%, 50%   { opacity: 1; }
-  51%, 100% { opacity: 0; }
-}
-
-@keyframes qm-cl-wave-bar {
-  0%, 100% { height: 6px; }
-  50%      { height: var(--peak, 16px); }
-}
-
-/* Reduced motion — collapse Clinician animations to a static frame.
-   The global rule at the top of this file already matches `*` and zeroes
-   animation-duration; this block makes the Clinician-specific intent
-   explicit so a future maintainer who scopes the global rule doesn't
-   accidentally leave the Clinician halo pulsing. */
-@media (prefers-reduced-motion: reduce) {
-  .qm-cl-app .qm-cl-halo,
-  .qm-cl-app .qm-cl-mic-dot,
-  .qm-cl-app .qm-cl-wave-bar,
-  .qm-cl-app .qm-cl-transcript-line,
-  .qm-cl-app .qm-cl-ai-status-line {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-  }
-}
-
-/* ──────────────────────────────────────────────────────────────────────
-   Phase 4 — Apple Cinematic Hero primitives + .qm-cin-* utility catalog
-   ──────────────────────────────────────────────────────────────────────
-   Sourced verbatim from docs/design-directions-v6/studio-variations/
-   landing-11-anim-1.html (animation reference) + auth-04.html /
-   dashboard-{02,03,04}.html (visual references).
-
-   Design intent: every cinematic surface (landing, auth, dashboard,
-   visit-detail, etc.) builds the same vocabulary on top of:
-     - .av1-word   word-level blur-to-sharp + lift, with .em + .glow
-                   modifiers for the italic sage accent.
-     - .av1-fade   simple opacity + 8px lift (eyebrow, sub-copy, fields).
-     - .av1-card   blur-to-sharp + 40px slide-from-right (hero card
-                   reveal — used by the auth form card and any aside).
-     - .av1-cta    subtle scale-in for primary buttons.
-     - .qm-cin-*   layout utilities for the photo hero band, gradient
-                   overlays, and time-of-day crossfade stack.
-
-   Reduced-motion: every transitioned property is forced to its final
-   resting state when prefers-reduced-motion: reduce is set. The bucket
-   crossfade for the dashboard hero collapses to an instantaneous swap
-   in the same media query.
-
-   The classes below are deliberately UN-scoped (no .qm-cl-app prefix)
-   because the hero components mount above the .qm-cl-app shell on
-   /dashboard, and the auth shell wraps its hero in its own .qm-cl-app
-   already. They reference the bare-name CSS vars (--sage-bright,
-   --cream-card, --ease-clinician), all of which are aliased inside
-   .qm-cl-app and are also defined at :root for un-wrapped surfaces
-   (the landing page in particular). */
-
-.av1-word {
-  display: inline-block;
-  opacity: 0;
-  filter: blur(14px);
-  transform: translateY(14px);
-  transition:
-    opacity 720ms cubic-bezier(0.22, 1, 0.36, 1),
-    filter 720ms cubic-bezier(0.22, 1, 0.36, 1),
-    transform 720ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-.av1-word.show {
-  opacity: 1;
-  filter: blur(0);
-  transform: none;
-}
-.av1-word.em {
-  font-style: italic;
-  color: var(--color-clinician-sage-bright, #95BCA4);
-  font-weight: 400;
-}
-.av1-word.em.glow.show {
-  text-shadow:
-    0 0 36px rgba(149, 188, 164, 0.55),
-    0 2px 12px rgba(0, 0, 0, 0.30);
-}
-
-.av1-fade {
-  opacity: 0;
-  transform: translateY(8px);
-  transition:
-    opacity 800ms cubic-bezier(0.22, 1, 0.36, 1),
-    transform 800ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-.av1-fade.show {
-  opacity: 1;
-  transform: none;
-}
-
-.av1-card {
-  opacity: 0;
-  filter: blur(12px);
-  transform: translate3d(40px, 0, 0);
-  transition:
-    opacity 900ms cubic-bezier(0.22, 1, 0.36, 1),
-    filter 900ms cubic-bezier(0.22, 1, 0.36, 1),
-    transform 900ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-.av1-card.show {
-  opacity: 1;
-  filter: blur(0);
-  transform: none;
-}
-
-.av1-cta {
-  opacity: 0;
-  transform: scale(0.95);
-  transition:
-    opacity 600ms cubic-bezier(0.22, 1, 0.36, 1),
-    transform 600ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-.av1-cta.show {
-  opacity: 1;
-  transform: scale(1);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .av1-word,
-  .av1-fade,
-  .av1-card,
-  .av1-cta {
-    opacity: 1 !important;
-    filter: none !important;
-    transform: none !important;
-    transition: none !important;
-  }
-}
-
-/* ── .qm-cin-* — Cinematic photo hero band utilities ── */
-
-/* Auth hero band: 280px tall on desktop, clamps down on mobile.
-   The band sits above the auth form card and serves as the cinematic
-   establishing shot for /login, /signup, /forgot-password, etc. */
-.qm-cin-auth-band {
-  position: relative;
-  width: 100%;
-  height: clamp(200px, 28vh, 280px);
-  overflow: hidden;
-  isolation: isolate;
-}
-
-/* Dashboard hero band: 320px tall, full bleed, contains the time-based
-   photo stack + greeting. Sits above the existing 4-stat-card row. */
-.qm-cin-dash-band {
-  position: relative;
-  width: 100%;
-  height: clamp(260px, 36vh, 320px);
-  overflow: hidden;
-  isolation: isolate;
-  color: var(--cream-card, #FFFCF5);
-}
-
-/* The actual photo layer. Used inside both auth-band and dash-band.
-   Background-image is set inline by the React component so the same
-   class can host any of the four photos (auth + 3 time buckets). */
-.qm-cin-bg {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  background-size: cover;
-  background-position: center;
-  /* Crossfade duration for the dashboard time-bucket swap. The auth
-     hero never re-targets so this transition is harmless there. */
-  transition: opacity 1200ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-/* Cream gradient overlay so headline text reads against any photo.
-   Sage radial highlight in the upper-left mirrors the studio reference
-   files (auth-04.html L74, dashboard-02.html L75). */
-.qm-cin-bg::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(
-      180deg,
-      rgba(20, 16, 12, 0.30) 0%,
-      rgba(20, 16, 12, 0.10) 35%,
-      rgba(20, 16, 12, 0.55) 100%
-    ),
-    radial-gradient(
-      ellipse at 25% 35%,
-      rgba(122, 166, 140, 0.16) 0%,
-      transparent 55%
-    );
-  pointer-events: none;
-}
-
-/* Headline text sitting on top of the photo. White cream with a soft
-   shadow for legibility. Uses the existing serif stack. */
-.qm-cin-headline {
-  font-family: var(--serif, "Source Serif 4", Georgia, serif);
-  font-size: clamp(28px, 4.4vw, 56px);
-  line-height: 1.08;
-  letter-spacing: -0.012em;
-  font-weight: 500;
-  margin: 0;
-  color: var(--cream-card, #FFFCF5);
-  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.30);
-}
-
-/* Sub-copy that sits beneath the headline — used by the dashboard
-   hero ("8 visits on the schedule. 3 drafts ready when you are."). */
-.qm-cin-deck {
-  font-family: var(--serif, "Source Serif 4", Georgia, serif);
-  font-size: clamp(15px, 1.3vw, 18px);
-  line-height: 1.55;
-  color: rgba(255, 252, 245, 0.88);
-  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.40);
-  max-width: 640px;
-  margin: 14px 0 0;
-}
-
-/* Eyebrow row above the headline (mono uppercase). On the auth band
-   it carries "Welcome back" / "New to QuillMD" / etc. On the dashboard
-   it carries the local date + season. */
-.qm-cin-eyebrow {
-  font-family: var(--mono, "JetBrains Mono", monospace);
-  font-size: 11.5px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: rgba(255, 252, 245, 0.84);
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.40);
-  margin: 0 0 14px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-.qm-cin-eyebrow .dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--color-clinician-sage-bright, #95BCA4);
-}
-
-/* Inner content well — keeps the headline aligned with the page's
-   1180px content rail and applies sensible padding. */
-.qm-cin-inner {
-  position: relative;
-  z-index: 2;
-  max-width: 1180px;
-  width: 100%;
-  margin: 0 auto;
-  padding: 40px 40px 28px;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-.qm-cin-inner-auth {
-  /* Auth band uses tighter padding so the headline reads close to the
-     form card below. */
-  padding: 36px 32px 24px;
-  justify-content: center;
-}
-@media (max-width: 760px) {
-  .qm-cin-inner,
-  .qm-cin-inner-auth {
-    padding: 28px 22px 22px;
-  }
-}
-
-/* Dashboard time-of-day crossfade stack — three .qm-cin-bg layers
-   stacked at the same coordinates, only the active one carries
-   .qm-cin-bg-active (opacity 1). The others sit at opacity 0 and the
-   1200ms transition above handles the silent swap when the bucket
-   changes mid-session. */
-.qm-cin-bg-stack {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-}
-.qm-cin-bg-stack .qm-cin-bg {
-  opacity: 0;
-}
-.qm-cin-bg-stack .qm-cin-bg-active {
-  opacity: 1;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .qm-cin-bg-stack .qm-cin-bg {
-    transition: none !important;
-  }
-}
-
-/* ============================================================================
-   Phase 4 — admin surface (.qm-cin-admin-*) — appended at integration merge.
-   ============================================================================ */
-
-/* ============================================================================
-   Phase 4 — Apple Cinematic admin hero (transcribe-md scope).
-   ----------------------------------------------------------------------------
-   Source of truth:
-     docs/design-directions-v6/studio-variations/landing-11-anim-1.html
-     docs/design-directions-v6/studio-variations/admin-03.html
-
-   The admin variant is a SHORT photo band (200 px) that sits at the top of
-   /admin/* before the existing nav + dashboard chrome. Same parallax + DOF
-   blur on scroll as the marketing landing hero, same .av1-* animation
-   primitives, but the photo (admin-hero) is moodier — desk-lamp glow,
-   evening — to signal "supervisor view".
-
-   Class family:
-     .qm-cin-admin-hero       — the band wrapper
-     .qm-cin-admin-bg         — the parallax photo layer (id="qm-cin-admin-bg")
-     .qm-cin-admin-inner      — flex row holding the headline + super-badge
-     .qm-cin-admin-eyebrow    — mono uppercase eyebrow ("SUPER_ADMIN · ...")
-     .qm-cin-admin-title      — serif headline ("Operations.")
-     .qm-cin-admin-badge      — coral-tinted SUPER_ADMIN pill on the right
-
-   Animation primitives (.av1-word / .av1-fade / .av1-card / .av1-cta) are
-   defined globally below, mirroring the marketing app. The CinematicAdminHero
-   client component drives the timeline via useEffect (no inline <script>).
-   ========================================================================== */
-
-.qm-cl-app .qm-cin-admin-hero {
-  position: relative;
-  min-height: 200px;
-  padding: 70px 56px 24px;
-  overflow: hidden;
-  isolation: isolate;
-  color: var(--cream-card);
-}
-@media (max-width: 760px) {
-  .qm-cl-app .qm-cin-admin-hero { padding: 56px 24px 20px; }
-}
-
-.qm-cl-app .qm-cin-admin-bg {
-  position: absolute;
-  inset: -10% 0 -10% 0;
-  z-index: 0;
-  background-image: image-set(
-    url('/images/cinematic/admin-hero.webp') type('image/webp'),
-    url('/images/cinematic/admin-hero.jpg') type('image/jpeg')
-  );
-  background-image: url('/images/cinematic/admin-hero.jpg');
-  background-image: -webkit-image-set(
-    url('/images/cinematic/admin-hero.webp') type('image/webp'),
-    url('/images/cinematic/admin-hero.jpg') type('image/jpeg')
-  );
-  background-size: cover;
-  background-position: center;
-  will-change: transform, filter;
-  transform: scale(1) translateZ(0);
-  transition:
-    transform 220ms var(--ease-clinician),
-    filter 220ms var(--ease-clinician);
-}
-.qm-cl-app .qm-cin-admin-bg::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(180deg, rgba(20, 16, 12, 0.40) 0%, rgba(20, 16, 12, 0.18) 35%, rgba(20, 16, 12, 0.65) 100%),
-    radial-gradient(ellipse at 25% 35%, rgba(122, 166, 140, 0.16) 0%, transparent 55%);
-  pointer-events: none;
-}
-
-.qm-cl-app .qm-cin-admin-inner {
-  position: relative;
-  z-index: 2;
-  max-width: 1440px;
-  margin: 0 auto;
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 24px;
-}
-
-.qm-cl-app .qm-cin-admin-eyebrow {
-  display: inline-block;
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: rgba(255, 252, 245, 0.80);
-  margin-bottom: 10px;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.40);
-}
-
-.qm-cl-app .qm-cin-admin-title {
-  font-family: var(--serif);
-  font-size: clamp(36px, 5vw, 60px);
-  line-height: 1.06;
-  letter-spacing: -0.012em;
-  font-weight: 500;
-  margin: 0;
-  color: var(--cream-card);
-  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.30);
-}
-
-.qm-cl-app .qm-cin-admin-badge {
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--cream-card);
-  padding: 6px 14px;
-  background: rgba(201, 123, 110, 0.55);
-  border-radius: 999px;
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-  border: 1px solid rgba(255, 252, 245, 0.32);
-  white-space: nowrap;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
-}
-
-/* ── Apple Cinematic primitives (anim-1) ────────────────────────────────────
-   Verbatim from landing-11-anim-1.html. Defined under .qm-cl-app so they
-   only resolve inside the Clinician scope (admin layout already wraps in
-   `.qm-cl-app`). Adding these unscoped would risk colliding with the
-   marketing app's identical class names if both ever load on the same DOM.
-   ─────────────────────────────────────────────────────────────────────── */
-
-/* ============================================================================
-   Phase 4 — visit-detail + recording surfaces (.qm-cin-band-*, .qm-cin-bg-*, .qm-cin-headline-*) — appended at integration merge.
-   ============================================================================ */
-
-/* ============================================================================
-   Phase 4 — Apple Cinematic hero band primitives
-   ----------------------------------------------------------------------------
-   Source of truth: docs/design-directions-v6/studio-variations/
-       landing-11-anim-1.html
-       visit-detail-04.html
-       recording-04.html
-   Used by:
-     - <CinematicVisitHero>     (apps/transcribe-md/src/components/visits/)
-     - <CinematicRecordingHero> (apps/transcribe-md/src/components/visits/)
-   Scoped under .qm-cl-app so the warm cream tokens (--cream, --ink,
-   --sage, --serif, --mono, --ease-clinician, etc.) defined on that
-   scope are in scope when the hero band renders. The .av1-* class
-   family (av1-word, av1-fade, av1-card, av1-cta) is intentionally
-   scoped under .qm-cl-app so it doesn't bleed into the dark App-
-   redesign-v1 (.qm-app) routes that have their own animation idiom.
-   ========================================================================== */
-
-/* ── Hero band (visit-detail = 280px tall, recording = 200px tall) ── */
-.qm-cl-app .qm-cin-band {
-  position: relative;
-  overflow: hidden;
-  isolation: isolate;
-  color: var(--cream-card);
-  display: flex;
-  align-items: flex-end;
-}
-.qm-cl-app .qm-cin-band-tall { min-height: 360px; padding: 32px 32px 28px; }
-.qm-cl-app .qm-cin-band-short { min-height: 200px; padding: 24px 32px 20px; }
-
-/* Background photo + parallax-ready transform/filter target.
-   The .qm-cin-bg-visit and .qm-cin-bg-recording variants set the
-   image-set; the bare .qm-cin-bg carries the layout + transition. */
-.qm-cl-app .qm-cin-bg {
-  position: absolute;
-  inset: -10% 0 -10% 0;
-  z-index: 0;
-  background-size: cover;
-  background-position: center;
-  will-change: transform, filter;
-  transform: scale(1) translateZ(0);
-  transition: transform 220ms var(--ease-clinician),
-              filter 220ms var(--ease-clinician);
-}
-.qm-cl-app .qm-cin-bg::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(180deg,
-      rgba(20, 16, 12, 0.30) 0%,
-      rgba(20, 16, 12, 0.10) 35%,
-      rgba(20, 16, 12, 0.55) 100%),
-    radial-gradient(ellipse at 25% 35%,
-      rgba(122, 166, 140, 0.16) 0%,
-      transparent 55%);
-  pointer-events: none;
-}
-.qm-cl-app .qm-cin-bg-visit {
-  background-image: url('/images/cinematic/visit-detail-hero.jpg');
-  background-image: -webkit-image-set(
-    url('/images/cinematic/visit-detail-hero.webp') type('image/webp'),
-    url('/images/cinematic/visit-detail-hero.jpg') type('image/jpeg')
-  );
-  background-image: image-set(
-    url('/images/cinematic/visit-detail-hero.webp') type('image/webp'),
-    url('/images/cinematic/visit-detail-hero.jpg') type('image/jpeg')
-  );
-}
-.qm-cl-app .qm-cin-bg-recording {
-  background-image: url('/images/cinematic/recording-hero.jpg');
-  background-image: -webkit-image-set(
-    url('/images/cinematic/recording-hero.webp') type('image/webp'),
-    url('/images/cinematic/recording-hero.jpg') type('image/jpeg')
-  );
-  background-image: image-set(
-    url('/images/cinematic/recording-hero.webp') type('image/webp'),
-    url('/images/cinematic/recording-hero.jpg') type('image/jpeg')
-  );
-}
-
-.qm-cl-app .qm-cin-inner {
-  position: relative;
-  z-index: 2;
-  max-width: 1080px;
-  width: 100%;
-  margin: 0 auto;
-}
-
-/* ── Breadcrumb (mono, faded cream, sits inside the band) ── */
-.qm-cl-app .qm-cin-breadcrumb {
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: rgba(255, 252, 245, 0.76);
-  margin-bottom: 14px;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.40);
-}
-
-/* ── Pills row (Family Medicine · Ready · J20.9) ── */
-.qm-cl-app .qm-cin-pills {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 14px;
-  flex-wrap: wrap;
-}
-.qm-cl-app .qm-cin-pill {
-  background: rgba(255, 252, 245, 0.18);
-  border: 1px solid rgba(255, 252, 245, 0.30);
-  padding: 4px 12px;
-  border-radius: 999px;
-  font-family: var(--sans);
-  font-size: 12px;
-  color: var(--cream-card);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.qm-cl-app .qm-cin-pill .qm-cin-pill-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--sage-bright);
-}
-
-/* ── Recording variant — coral pulsing dot + mono pill ── */
-.qm-cl-app .qm-cin-rec-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 14px;
-  background: rgba(255, 252, 245, 0.18);
-  border: 1px solid rgba(255, 252, 245, 0.30);
-  border-radius: 999px;
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--cream-card);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  margin-bottom: 14px;
-}
-.qm-cl-app .qm-cin-rec-eyebrow .qm-cin-rec-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--coral);
-  animation: qm-cin-rec-pulse 1.4s ease-in-out infinite;
-}
-@keyframes qm-cin-rec-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(201, 123, 110, 0.6); }
-  50%      { box-shadow: 0 0 0 8px rgba(201, 123, 110, 0); }
-}
-
-/* ── Headline (cinematic serif + sage glow on em token) ── */
-.qm-cl-app .qm-cin-headline {
-  font-family: var(--serif);
-  font-size: clamp(36px, 5vw, 56px);
-  line-height: 1.06;
-  letter-spacing: -0.012em;
-  font-weight: 500;
-  margin: 0;
-  color: var(--cream-card);
-  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.30);
-}
-.qm-cl-app .qm-cin-headline-rec {
-  font-size: clamp(32px, 4.4vw, 48px);
-}
-.qm-cl-app .qm-cin-meta {
-  margin-top: 8px;
-  font-family: var(--mono);
-  font-size: 12px;
-  color: rgba(255, 252, 245, 0.78);
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.40);
-  letter-spacing: 0.06em;
-}
-
-/* ── Apple Cinematic animation primitives — verbatim from
-   landing-11-anim-1.html. Scoped under .qm-cl-app to avoid bleeding
-   into the dark .qm-app routes. ── */
