@@ -1,11 +1,12 @@
 import { cn } from '@/lib/cn';
 
 /**
- * Sage italic accent inside a heading — the Clinician way to mark a
- * highlighted phrase ("doctor at the desk", "60-second", "slipped
- * through" etc.). The actual gradient + serif italic styling lives in
- * globals.css as .text-gradient-violet (legacy class name kept so call
- * sites in about/demo/signup/not-found don't need editing).
+ * Sage-bright accent inside a heading — Linear V1 (Faithful).
+ *
+ * Phase 4 used a Source Serif italic gradient. Linear V1 drops the serif
+ * italic and instead colours the accent phrase sage-bright in the same
+ * Inter weight as the surrounding heading. Component API unchanged so
+ * call sites (about/demo/signup/not-found/pricing) keep rendering.
  */
 export function GradientText({
   children,
@@ -15,6 +16,11 @@ export function GradientText({
   className?: string;
 }) {
   return (
-    <span className={cn('text-gradient-violet', className)}>{children}</span>
+    <span
+      className={cn(className)}
+      style={{ color: 'var(--color-linear-sage-bright)' }}
+    >
+      {children}
+    </span>
   );
 }
