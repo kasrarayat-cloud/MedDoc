@@ -29,40 +29,57 @@ export default function SignupRedirectPage() {
     <>
       <NavBar />
       <main>
-        <section className="relative overflow-hidden pt-32 pb-24">
+        <section
+          className="relative overflow-hidden"
+          style={{ paddingTop: 96, paddingBottom: 64 }}
+        >
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-x-0 top-0 h-[500px]"
+            className="pointer-events-none absolute inset-x-0 top-0"
             style={{
+              height: 500,
               background:
                 'radial-gradient(ellipse 60% 50% at 50% 0%, rgba(122,166,140,0.18) 0%, transparent 65%)',
             }}
           />
-          <div className="relative mx-auto max-w-md px-6 lg:px-8">
+          <div
+            className="container"
+            style={{ maxWidth: 480, position: 'relative' }}
+          >
             <GradientBorder>
-              <div className="p-8 text-center">
-                <p className="qm-cl-eyebrow">Redirecting</p>
-                <h1 className="mt-4 type-h1">
+              <div style={{ padding: 32, textAlign: 'center' }}>
+                <div className="section-eyebrow">Redirecting</div>
+                <h1
+                  className="hero-title"
+                  style={{ marginTop: 16, fontSize: 28 }}
+                >
                   <GradientText>Sending you to the app…</GradientText>
                 </h1>
-                <p
-                  className="mx-auto mt-6 max-w-sm text-[15px] leading-relaxed text-[#5C544A]"
-                  style={{ fontFamily: 'var(--font-serif), Georgia, serif' }}
-                >
+                <p className="hero-sub" style={{ marginTop: 20 }}>
                   Signup lives on the app itself now. If this page doesn&apos;t
                   redirect in a second, the button below takes you there.
                 </p>
-                <div className="mt-8">
+                <div style={{ marginTop: 28 }}>
                   <SpecularButton href={APP_SIGNUP_URL} variant="primary" size="lg">
                     Continue to signup
                     <ArrowRight className="h-4 w-4" />
                   </SpecularButton>
                 </div>
-                <p className="mt-6 text-[12.5px] text-[#8A8278]">
+                <p
+                  style={{
+                    marginTop: 20,
+                    fontSize: 12.5,
+                    color: 'var(--color-linear-text-3)',
+                  }}
+                >
                   Already have an account?{' '}
                   <Link
                     href={`${APP_SIGNUP_URL.replace(/\/signup$/, '/login')}`}
-                    className="text-[#2F5040] underline decoration-[rgba(122,166,140,0.35)] transition-colors hover:text-[#7AA68C]"
+                    style={{
+                      color: 'var(--color-linear-sage-bright)',
+                      textDecoration: 'underline',
+                      textDecorationColor: 'rgba(122,166,140,0.4)',
+                    }}
                   >
                     Sign in →
                   </Link>

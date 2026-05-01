@@ -4,18 +4,18 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/cn';
 import { APP_URL, APP_SIGNUP_URL } from '@/lib/constants';
-import { QuillMark } from './home/QuillMark';
-import { SpecularButton } from './specular-button';
 
 /**
- * Sticky cream-blur top nav, used by every sub-page (pricing, about,
- * contact, demo, hipaa, privacy, security, terms, signup, not-found).
- * Mirrors the Clinician topnav style from landing-and-recording.html.
- * Transparent at page top; cream-blur surface fades in once the page
- * scrolls so it doesn't compete with hero content above the fold.
+ * Sub-page top nav — Linear V1 (Faithful).
+ *
+ * Fixed 48px chrome on the dark canvas, blurred translucent surface,
+ * hairline bottom border. Used by every sub-page that doesn't render
+ * the home/Nav (pricing, about, contact, demo, hipaa, privacy, security,
+ * terms, signup, not-found). The mark is the Linear V1 flat sage square
+ * (.brand-quill::after — defined in landing.css).
  */
 const LINKS = [
-  { href: '/#how', label: 'How it works' },
+  { href: '/#how', label: 'How' },
   { href: '/#features', label: 'Features' },
   { href: '/pricing', label: 'Pricing' },
   { href: '/about', label: 'About' },
@@ -34,50 +34,65 @@ export function NavBar() {
   return (
     <header
       className={cn(
-        'fixed top-0 left-0 right-0 z-50',
-        'transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
-        scrolled
-          ? 'bg-[rgba(250,247,242,0.85)] backdrop-blur-xl border-b border-[rgba(43,38,32,0.08)]'
-          : 'bg-transparent border-b border-transparent'
+        'fixed top-0 left-0 right-0 z-50 transition-all duration-200',
       )}
+      style={{
+        height: 48,
+        background: scrolled
+          ? 'rgba(8, 9, 10, 0.78)'
+          : 'transparent',
+        backdropFilter: scrolled ? 'saturate(180%) blur(12px)' : 'none',
+        WebkitBackdropFilter: scrolled ? 'saturate(180%) blur(12px)' : 'none',
+        borderBottom: scrolled
+          ? '1px solid var(--color-linear-hairline)'
+          : '1px solid transparent',
+      }}
     >
-      <div className="mx-auto flex h-[68px] max-w-7xl items-center justify-between px-6 lg:px-8">
-        <Link
-          href="/"
-          className="flex items-center gap-2.5 text-[20px] tracking-[0.02em] text-[#2B2620]"
-          style={{ fontFamily: 'var(--font-serif), Georgia, serif', fontWeight: 500 }}
-        >
-          <span className="inline-grid h-[22px] w-[22px] place-items-center">
-            <QuillMark />
-          </span>
-          <span>Quill</span>
+      <div
+        className="container"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          height: 48,
+        }}
+      >
+        <Link href="/" className="brand">
+          <span className="brand-quill" aria-hidden />
+          <span>QuillMD</span>
         </Link>
 
-        <nav className="hidden items-center gap-7 md:flex">
+        <nav
+          className="nav-links"
+          style={{
+            display: 'flex',
+            gap: 22,
+          }}
+        >
           {LINKS.map((l) => (
-            <Link
-              key={l.href}
-              href={l.href}
-              className="text-[14px] text-[#5C544A] transition-colors hover:text-[#2B2620]"
-            >
+            <Link key={l.href} href={l.href}>
               {l.label}
             </Link>
           ))}
         </nav>
 
-        <div className="flex items-center gap-2">
-          <SpecularButton
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+          }}
+        >
+          <a
             href={`${APP_URL}/login`}
-            variant="ghost"
-            size="sm"
-            className="hidden sm:inline-flex"
-            sweep={false}
+            className="nav-item"
+            style={{ display: 'inline-flex', alignItems: 'center' }}
           >
             Sign in
-          </SpecularButton>
-          <SpecularButton href={APP_SIGNUP_URL} variant="primary" size="sm">
-            Begin a visit
-          </SpecularButton>
+          </a>
+          <a href={APP_SIGNUP_URL} className="btn btn-primary">
+            Get started
+          </a>
         </div>
       </div>
     </header>

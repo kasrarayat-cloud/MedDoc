@@ -1,40 +1,50 @@
 import { APP_SIGNUP_URL } from '@/lib/constants';
 
+/**
+ * Final CTA — Linear V1 (Faithful).
+ *
+ * Centered eyebrow + Inter 600 heading + body copy + sage primary CTA
+ * (Begin a visit) + sage outline CTA (Book demo). No more big-Q SVG
+ * background; Linear V1 keeps decoration to the body::before radial
+ * spotlight in landing.css.
+ */
 export function FinalCTA() {
   return (
     <section className="final-cta">
-      <div className="inner-quill" aria-hidden>
-        <svg viewBox="0 0 200 200" fill="none">
-          <defs>
-            <linearGradient id="bigQ" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0" stopColor="currentColor" stopOpacity="0.9" />
-              <stop offset="1" stopColor="currentColor" stopOpacity="0.1" />
-            </linearGradient>
-          </defs>
-          <path
-            d="M160 30 C 110 40, 60 70, 40 140 L 35 165 L 60 155 C 130 135, 170 90, 175 40 Z"
-            stroke="url(#bigQ)"
-            strokeWidth="1.2"
-            fill="none"
-          />
-          <path d="M55 150 L 130 80" stroke="currentColor" strokeOpacity="0.4" strokeWidth="0.8" />
-        </svg>
-      </div>
       <div className="container">
-        <span className="eyebrow reveal">§ One more thing</span>
-        <h2 className="reveal">
-          Your next patient <em>shouldn&apos;t wait.</em>
-        </h2>
-        <p className="reveal">
-          Set it up in minutes. Sign your first AI‑drafted note the same day. No sales call,
-          no demo gauntlet, no procurement. Cancel with one click if it doesn&apos;t earn its keep.
-        </p>
-        <div className="final-actions reveal">
+        <div className="section-head reveal">
+          <div className="section-eyebrow">One more thing</div>
+          <h2 className="section-title">Your next patient shouldn&apos;t wait.</h2>
+          <p className="section-sub">
+            Set it up in minutes. Sign your first AI-drafted note the same day. No sales call,
+            no demo gauntlet, no procurement. Cancel with one click if it doesn&apos;t earn its
+            keep.
+          </p>
+        </div>
+        <div
+          className="reveal"
+          style={{
+            display: 'flex',
+            justifyContent: 'center',
+            gap: 12,
+            flexWrap: 'wrap',
+          }}
+        >
           <a href={APP_SIGNUP_URL} className="btn btn-primary btn-lg">
-            Start 14‑day free trial <span className="arrow">→</span>
+            Start 14-day free trial
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M5 12h14M13 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
           </a>
-          <a href="/demo" className="btn btn-outline btn-lg">
-            Book a 15‑min demo
+          <a href="/demo" className="btn btn-secondary btn-lg">
+            Book a 15-min demo
           </a>
         </div>
       </div>
