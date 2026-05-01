@@ -1,7 +1,7 @@
 'use client';
 
 // ============================================================================
-// Delete Patient confirmation dialog (T-M17.2 Phase 3 Commit 10)
+// Delete Patient confirmation dialog
 // ----------------------------------------------------------------------------
 // Radix Dialog fronting DELETE /api/patients/[id]. Soft-delete only —
 // the backend sets deletedAt = now(); linked visits remain intact
@@ -12,6 +12,9 @@
 // On success: toast + redirect to /dashboard. Sonner's toast store
 // persists across the client navigation so the "X deleted" banner
 // shows up on the landing page.
+//
+// Phase 5 (Linear V1 Faithful) — spotlight overlay on the dark canvas
+// with a danger-tinted icon plate and danger CTA.
 // ============================================================================
 
 import { useState } from 'react';
@@ -79,27 +82,31 @@ export function DeletePatientDialog({
       <Dialog.Trigger asChild>
         <button
           type="button"
-          className="inline-flex items-center gap-1.5 rounded-full border border-border-default bg-bg-surface-1/60 px-4 py-2 text-[13px] font-medium text-text-secondary transition-colors hover:border-danger/60 hover:bg-danger/10 hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base"
+          className="inline-flex items-center gap-1.5 rounded-md border border-linear-border bg-transparent px-3 py-1.5 text-[12px] font-medium text-linear-text-2 transition-colors hover:border-linear-danger/60 hover:bg-[rgba(212,87,74,0.10)] hover:text-linear-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-linear-danger/40"
         >
           <Trash2 className="h-3.5 w-3.5" aria-hidden />
           Delete
         </button>
       </Dialog.Trigger>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm data-[state=open]:animate-in data-[state=open]:fade-in" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border-default bg-bg-surface-1 p-6 shadow-2xl outline-none">
+        <Dialog.Overlay className="fixed inset-0 z-40 bg-black/60 backdrop-blur-[2px] data-[state=open]:animate-in data-[state=open]:fade-in" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-linear-border-strong bg-linear-surface-2 p-6 shadow-[0_30px_80px_rgba(0,0,0,0.6)] outline-none">
           <div className="mb-5 flex items-start gap-3">
             <div
               aria-hidden
-              className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-danger/15 text-danger"
+              className="flex h-9 w-9 flex-none items-center justify-center rounded-full"
+              style={{
+                background: 'rgba(212,87,74,0.18)',
+                color: 'var(--color-linear-danger)',
+              }}
             >
               <AlertTriangle className="h-4 w-4" />
             </div>
             <div className="min-w-0 flex-1">
-              <Dialog.Title className="text-[15px] font-semibold tracking-tight text-text-primary">
+              <Dialog.Title className="text-[15px] font-semibold tracking-tight text-linear-text">
                 Delete patient?
               </Dialog.Title>
-              <Dialog.Description className="mt-1 text-[13px] leading-relaxed text-text-tertiary">
+              <Dialog.Description className="mt-1 text-[13px] leading-relaxed text-linear-text-2">
                 {copy}
               </Dialog.Description>
             </div>
@@ -107,7 +114,7 @@ export function DeletePatientDialog({
               <button
                 type="button"
                 aria-label="Close"
-                className="flex-none rounded-md p-1 text-text-muted hover:text-text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                className="flex-none rounded-md p-1 text-linear-text-3 hover:text-linear-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-linear-sage/40"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -115,14 +122,14 @@ export function DeletePatientDialog({
           </div>
 
           {error && (
-            <p className="mb-3 text-[12px] text-danger">{error}</p>
+            <p className="mb-3 text-[12px] text-linear-danger">{error}</p>
           )}
 
-          <div className="flex items-center justify-end gap-2 border-t border-border-subtle pt-4">
+          <div className="flex items-center justify-end gap-2 border-t border-linear-border pt-4">
             <Dialog.Close asChild>
               <button
                 type="button"
-                className="rounded-full px-3 py-2 text-[13px] text-text-tertiary hover:text-text-secondary"
+                className="qm-lin-btn"
               >
                 Cancel
               </button>
@@ -131,7 +138,11 @@ export function DeletePatientDialog({
               type="button"
               onClick={onConfirm}
               disabled={submitting}
-              className="inline-flex items-center gap-1.5 rounded-full bg-danger px-4 py-2 text-[13px] font-medium text-white shadow-[0_0_0_1px_rgba(239,68,68,0.3)] transition-all hover:shadow-[0_0_0_1px_rgba(239,68,68,0.5)] disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+              style={{
+                background: 'var(--color-linear-danger)',
+                color: '#fff',
+              }}
             >
               {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               Delete patient
