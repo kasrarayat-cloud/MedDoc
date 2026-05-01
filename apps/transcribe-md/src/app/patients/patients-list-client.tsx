@@ -4,6 +4,14 @@
 // the full page (<=100 rows); filtering runs in memory on every input
 // tick. If this page grows past ~200 patients, move to a debounced
 // server search via /api/patients or the ⌘K palette.
+//
+// Phase 4 follow-up (Bug 2) — re-themed to the Clinician chrome that
+// the rest of the app already uses on `/dashboard`, `/visits`, and
+// `/patients/[id]`. The filter input now uses `.qm-cl-input` (cream
+// surface + sage focus ring) and the empty-filter copy reads against
+// the warm canvas with ink tokens. <PatientCard> receives
+// `theme="clinician"` so the card grid mirrors the dashboard list.
+// Filter logic, in-memory matching, and the grid layout are unchanged.
 
 import { useMemo, useState } from 'react';
 
@@ -29,12 +37,12 @@ export function PatientsListClient({
   }, [patients, normalized]);
 
   return (
-    <div style={{ padding: '0 32px 48px' }}>
+    <div style={{ padding: '0 40px 48px' }}>
       <div
         style={{
           position: 'relative',
           maxWidth: 420,
-          marginBottom: 20,
+          marginBottom: 22,
         }}
       >
         <Ic.search
@@ -44,7 +52,7 @@ export function PatientsListClient({
             position: 'absolute',
             top: 13,
             left: 14,
-            color: 'var(--fg-3)',
+            color: 'var(--ink-3)',
             pointerEvents: 'none',
           }}
         />
@@ -53,8 +61,8 @@ export function PatientsListClient({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Filter by name…"
-          className="qm-input"
-          style={{ paddingLeft: 38, fontSize: 13 }}
+          className="qm-cl-input"
+          style={{ paddingLeft: 38, fontSize: 13.5 }}
           autoComplete="off"
           aria-label="Filter patients by name"
         />
@@ -66,11 +74,16 @@ export function PatientsListClient({
             margin: '40px auto',
             maxWidth: 420,
             textAlign: 'center',
-            fontSize: 13,
-            color: 'var(--fg-3)',
+            fontSize: 13.5,
+            color: 'var(--ink-3)',
+            fontFamily: 'var(--serif)',
           }}
         >
-          No patients match <strong style={{ color: 'var(--fg-2)' }}>{query}</strong>.
+          No patients match{' '}
+          <strong style={{ color: 'var(--ink)', fontWeight: 500 }}>
+            {query}
+          </strong>
+          .
         </div>
       ) : (
         <div
@@ -81,7 +94,7 @@ export function PatientsListClient({
           }}
         >
           {filtered.map((p) => (
-            <PatientCard key={p.id} patient={p} />
+            <PatientCard key={p.id} patient={p} theme="clinician" />
           ))}
         </div>
       )}
