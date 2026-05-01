@@ -1,0 +1,776 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QuillMD · Visit · Mei-Ling Park · Transcript V2 · Power Table</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#08090a;
+  --surface-1:#0d0e10;
+  --surface-2:#131416;
+  --surface-3:#1a1c1e;
+  --border:#21232a;
+  --border-strong:#2c2f38;
+  --hairline:rgba(255,255,255,0.05);
+  --hairline-strong:rgba(255,255,255,0.08);
+  --row-hover:rgba(255,255,255,0.025);
+  --row-zebra:rgba(255,255,255,0.012);
+  --t1:#f7f8f8;
+  --t2:#b4bcc8;
+  --t3:#6c737f;
+  --t4:#4b5159;
+  --sage:#7AA68C;
+  --sage-bright:#9BC4A8;
+  --sage-deep:#2F5040;
+  --sage-tint:rgba(122,166,140,0.13);
+  --sage-glow:rgba(122,166,140,0.18);
+  --info:#5b8db8;
+  --info-bright:#74A8C9;
+  --amber:#D4A574;
+  --font-sans:'Inter', -apple-system, system-ui, sans-serif;
+  --font-mono:'JetBrains Mono', ui-monospace, Menlo, monospace;
+  --ease:cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--t1)}
+body{
+  font-family:var(--font-sans);
+  font-feature-settings:'cv11','ss01';
+  font-size:13px;
+  line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  letter-spacing:-0.005em;
+  min-height:100vh;
+}
+::selection{background:rgba(122,166,140,.25);color:var(--t1)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+a{color:inherit;text-decoration:none}
+
+/* ─── Top bar ─── */
+.topbar{
+  position:sticky;top:0;z-index:30;
+  height:44px;
+  display:flex;align-items:center;gap:12px;
+  padding:0 16px;
+  background:rgba(8,9,10,.85);
+  backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--hairline);
+  opacity:0;
+  animation:topbar-in 120ms var(--ease) forwards;
+}
+@keyframes topbar-in{to{opacity:1}}
+.brand{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;color:var(--t1);letter-spacing:-0.01em}
+.brand-mark{
+  width:18px;height:18px;border-radius:5px;
+  background:linear-gradient(135deg,var(--sage) 0%,var(--sage-deep) 100%);
+  display:grid;place-items:center;color:#0c1410;font-size:10px;font-weight:700;
+}
+.brand-mark::before{content:'Q'}
+.crumb-sep{color:var(--t4);font-size:12px}
+.crumb{color:var(--t2);font-size:13px;transition:color 100ms var(--ease)}
+.crumb:hover{color:var(--t1)}
+.crumb-active{color:var(--t1)}
+.spacer{flex:1}
+.status-pill-chrome{
+  display:inline-flex;align-items:center;gap:6px;
+  height:22px;padding:0 9px;
+  border-radius:4px;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.06em;text-transform:uppercase;font-weight:500;
+  border:1px solid rgba(122,166,140,.25);
+  color:var(--sage-bright);
+  background:rgba(122,166,140,.06);
+}
+.status-pill-chrome .pdot{
+  width:5px;height:5px;border-radius:50%;
+  background:var(--sage);
+  animation:idle-pulse 1.6s ease-in-out infinite;
+}
+@keyframes idle-pulse{
+  0%,100%{opacity:.7;transform:scale(1)}
+  50%{opacity:1;transform:scale(1.04)}
+}
+.btn-sage-sm{
+  display:inline-flex;align-items:center;gap:8px;
+  height:30px;padding:0 14px;
+  background:var(--sage);
+  color:#0d1611;
+  border-radius:6px;
+  font-size:12.5px;font-weight:500;
+  letter-spacing:-0.005em;
+  transition:background 100ms var(--ease),transform 80ms var(--ease),box-shadow 200ms var(--ease);
+}
+.btn-sage-sm:hover{background:#88b599;box-shadow:0 0 0 4px rgba(122,166,140,.18)}
+.btn-sage-sm .shortcut{font-family:var(--font-mono);font-size:10.5px;color:rgba(13,22,17,.55)}
+.avatar-chip{
+  width:24px;height:24px;border-radius:6px;
+  background:linear-gradient(135deg,#3a4a52 0%,#2a3036 100%);
+  color:#dde6ec;font-size:10.5px;font-weight:600;
+  display:grid;place-items:center;
+  border:1px solid var(--hairline-strong);
+}
+
+/* ─── Shell ─── */
+.shell{
+  max-width:1100px;
+  margin:0 auto;
+  padding:18px 28px 80px;
+  position:relative;
+}
+.shell::before{
+  content:'';
+  position:absolute;
+  top:-100px;left:30%;
+  width:600px;height:380px;
+  background:radial-gradient(ellipse at center, rgba(122,166,140,.045) 0%, transparent 70%);
+  pointer-events:none;
+  z-index:0;
+}
+.left-col{position:relative;z-index:1;opacity:0;transform:translateY(8px);animation:col-in 200ms var(--ease) forwards}
+@keyframes col-in{to{opacity:1;transform:translateY(0)}}
+
+/* ─── Meta strip + tabs (shared) ─── */
+.meta-strip{
+  display:flex;align-items:center;
+  padding:6px 0 14px;
+  margin-bottom:14px;
+  border-bottom:1px solid var(--hairline);
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--t2);
+}
+.meta-strip .field{padding:0 14px;border-right:1px solid var(--hairline)}
+.meta-strip .field:first-child{padding-left:0;color:var(--t1);font-weight:500}
+.meta-strip .field:last-child{border-right:0}
+.meta-strip .field .lbl{color:var(--t4);margin-right:4px;font-weight:400}
+
+.tabs-row{
+  display:flex;align-items:center;gap:0;
+  margin-bottom:18px;
+  border-bottom:1px solid var(--hairline);
+}
+.tab{
+  position:relative;
+  padding:8px 16px 10px;
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.07em;
+  text-transform:uppercase;
+  color:var(--t3);
+  font-weight:500;
+  cursor:pointer;
+  transition:color 100ms var(--ease);
+}
+.tab:first-child{padding-left:0}
+.tab:hover{color:var(--t1)}
+.tab.active{color:var(--t1)}
+.tab.active::after{
+  content:'';position:absolute;
+  left:0;right:0;bottom:-1px;
+  height:1.5px;
+  background:var(--sage);
+  border-radius:1px 1px 0 0;
+}
+
+/* ─── Slim audio bar ─── */
+.audio-bar{
+  position:sticky;
+  top:44px;
+  z-index:5;
+  display:flex;align-items:center;gap:12px;
+  height:32px;
+  padding:0 14px;
+  margin-bottom:14px;
+  background:rgba(13,14,16,.92);
+  backdrop-filter:blur(14px);
+  border:1px solid var(--hairline);
+  border-radius:6px;
+}
+.audio-bar .play-mini{
+  width:18px;height:18px;border-radius:50%;
+  background:var(--sage);
+  color:#0d1611;
+  display:grid;place-items:center;
+  flex:0 0 18px;
+  transition:background 100ms var(--ease),box-shadow 200ms var(--ease);
+}
+.audio-bar .play-mini:hover{background:#88b599;box-shadow:0 0 0 3px rgba(122,166,140,.22)}
+.audio-bar .play-mini svg{width:7px;height:7px}
+.audio-bar .ts-mono{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  color:var(--t2);
+  font-variant-numeric:tabular-nums;
+  letter-spacing:0.04em;
+}
+.audio-bar .ts-mono .total{color:var(--t4)}
+.audio-bar .scrub-line{
+  flex:1;
+  position:relative;
+  height:3px;
+  background:var(--surface-3);
+  border-radius:99px;
+  cursor:pointer;
+}
+.audio-bar .scrub-fill{
+  position:absolute;inset:0 auto 0 0;
+  width:42%;
+  background:var(--sage);
+  border-radius:99px 0 0 99px;
+}
+.audio-bar .scrub-fill::after{
+  content:'';
+  position:absolute;
+  right:-4px;top:50%;
+  width:8px;height:8px;
+  border-radius:50%;
+  background:var(--sage-bright);
+  transform:translateY(-50%);
+  box-shadow:0 0 0 3px rgba(122,166,140,.22);
+}
+.audio-bar .audio-meta{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--t4);
+  display:flex;align-items:center;gap:8px;
+}
+.audio-bar .audio-meta .dot{width:3px;height:3px;border-radius:50%;background:var(--t4)}
+
+/* ─── Floating spotlight (Cmd+K) ─── */
+.spotlight-trigger{
+  position:fixed;
+  bottom:24px;
+  right:24px;
+  display:inline-flex;align-items:center;gap:10px;
+  height:36px;padding:0 14px;
+  border:1px solid var(--hairline-strong);
+  border-radius:99px;
+  background:rgba(13,14,16,.92);
+  backdrop-filter:blur(14px);
+  color:var(--t2);
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.04em;
+  z-index:6;
+  transition:background 100ms var(--ease),color 100ms var(--ease),border-color 100ms var(--ease),transform 80ms var(--ease);
+}
+.spotlight-trigger:hover{background:rgba(20,22,26,.96);color:var(--t1);border-color:rgba(255,255,255,.14);transform:translateY(-1px)}
+.spotlight-trigger kbd{font-family:var(--font-mono);font-size:10.5px;color:var(--t3)}
+.spotlight-trigger .icon{
+  width:12px;height:12px;
+  display:grid;place-items:center;
+  color:var(--t3);
+}
+
+/* ─── Power table ─── */
+.tx-table{
+  display:flex;flex-direction:column;
+  border:1px solid var(--hairline);
+  border-radius:6px;
+  background:var(--surface-1);
+  overflow:hidden;
+}
+.tx-row{
+  display:grid;
+  grid-template-columns:60px 110px 1fr;
+  align-items:start;
+  gap:14px;
+  padding:8px 14px;
+  min-height:30px;
+  border-top:1px solid transparent;
+  transition:background 100ms var(--ease),border-color 100ms var(--ease);
+  cursor:default;
+  position:relative;
+  opacity:0;
+  animation:row-in 200ms var(--ease) forwards;
+}
+.tx-row:nth-child(odd){background:var(--row-zebra)}
+.tx-row:hover{background:var(--row-hover)}
+.tx-row.active{
+  background:rgba(122,166,140,.05);
+}
+.tx-row.active::before{
+  content:'';
+  position:absolute;
+  left:0;top:0;bottom:0;width:2px;
+  background:var(--sage);
+}
+.tx-row:nth-child(1){animation-delay:30ms}
+.tx-row:nth-child(2){animation-delay:50ms}
+.tx-row:nth-child(3){animation-delay:70ms}
+.tx-row:nth-child(4){animation-delay:90ms}
+.tx-row:nth-child(5){animation-delay:110ms}
+.tx-row:nth-child(6){animation-delay:130ms}
+.tx-row:nth-child(7){animation-delay:150ms}
+.tx-row:nth-child(8){animation-delay:170ms}
+.tx-row:nth-child(9){animation-delay:190ms}
+.tx-row:nth-child(10){animation-delay:210ms}
+.tx-row:nth-child(11){animation-delay:230ms}
+.tx-row:nth-child(12){animation-delay:250ms}
+.tx-row:nth-child(13){animation-delay:270ms}
+@keyframes row-in{to{opacity:1}}
+
+.tx-ts{
+  font-family:var(--font-mono);
+  font-size:11px;
+  color:var(--t3);
+  font-variant-numeric:tabular-nums;
+  letter-spacing:0.04em;
+  padding-top:1px;
+}
+.tx-row:hover .tx-ts{color:var(--t2)}
+
+.tx-speaker{
+  display:inline-flex;align-items:center;gap:6px;
+  height:20px;padding:0 8px;
+  border-radius:4px;
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  font-weight:500;
+  white-space:nowrap;
+  align-self:start;
+  margin-top:0;
+}
+.tx-speaker.doctor{
+  background:rgba(122,166,140,.08);
+  border:1px solid rgba(122,166,140,.22);
+  color:var(--sage-bright);
+}
+.tx-speaker.patient{
+  background:rgba(255,255,255,.025);
+  border:1px solid var(--hairline-strong);
+  color:var(--t1);
+}
+.tx-speaker.other{
+  background:rgba(255,255,255,.012);
+  border:1px solid var(--hairline);
+  color:var(--t3);
+}
+.tx-speaker .dot{
+  width:5px;height:5px;border-radius:50%;
+}
+.tx-speaker.doctor .dot{background:var(--sage)}
+.tx-speaker.patient .dot{background:var(--t2)}
+.tx-speaker.other .dot{background:var(--t3)}
+
+.tx-text{
+  font-family:var(--font-sans);
+  font-size:13.5px;
+  line-height:1.55;
+  color:var(--t1);
+  letter-spacing:-0.005em;
+  padding-top:1px;
+}
+.tx-text .lowconf{
+  border-bottom:1px dotted var(--t4);
+}
+.tx-text .lowconf-tag{
+  display:inline-flex;align-items:center;
+  margin-left:8px;
+  padding:1px 5px;
+  border-radius:3px;
+  background:rgba(212,165,116,.07);
+  border:1px solid rgba(212,165,116,.22);
+  color:var(--amber);
+  font-family:var(--font-mono);
+  font-size:9px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  font-weight:500;
+  vertical-align:1px;
+}
+
+/* table footer */
+.tx-foot{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 14px;
+  border-top:1px solid var(--hairline);
+  background:var(--surface-1);
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--t4);
+}
+.tx-foot .stats{display:flex;align-items:center;gap:14px}
+.tx-foot .dot{width:3px;height:3px;border-radius:50%;background:var(--t4)}
+
+/* legend strip */
+.legend{
+  display:flex;align-items:center;gap:14px;
+  margin-bottom:10px;
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--t4);
+}
+.legend .item{display:flex;align-items:center;gap:6px}
+.legend .swatch{width:8px;height:8px;border-radius:3px}
+.legend .swatch.doctor{background:rgba(122,166,140,.22);border:1px solid rgba(122,166,140,.32)}
+.legend .swatch.patient{background:rgba(255,255,255,.04);border:1px solid var(--hairline-strong)}
+.legend .spacer-l{flex:1}
+.legend .right{color:var(--t3)}
+
+/* spotlight modal (visual placeholder, hidden) */
+.spotlight{
+  position:fixed;
+  inset:0;
+  z-index:50;
+  display:none;
+  align-items:flex-start;justify-content:center;
+  background:rgba(8,9,10,.55);
+  backdrop-filter:blur(8px);
+  padding-top:14vh;
+}
+.spotlight.open{display:flex}
+.spotlight .panel{
+  width:560px;max-width:calc(100vw - 32px);
+  background:var(--surface-2);
+  border:1px solid var(--border);
+  border-radius:8px;
+  overflow:hidden;
+}
+.spotlight .input-row{
+  display:flex;align-items:center;gap:10px;
+  padding:14px 16px;
+  border-bottom:1px solid var(--hairline);
+}
+.spotlight input{
+  flex:1;
+  background:transparent;
+  border:0;outline:0;
+  color:var(--t1);
+  font-family:var(--font-sans);
+  font-size:14px;
+}
+.spotlight input::placeholder{color:var(--t3)}
+.spotlight .results{
+  padding:6px 0;
+  max-height:320px;
+  overflow:auto;
+}
+.spotlight .res-row{
+  display:grid;
+  grid-template-columns:60px 1fr auto;
+  gap:14px;
+  align-items:center;
+  padding:8px 16px;
+  font-size:13px;
+  color:var(--t2);
+  cursor:pointer;
+  transition:background 100ms var(--ease),color 100ms var(--ease);
+}
+.spotlight .res-row:hover,.spotlight .res-row.sel{background:rgba(122,166,140,.06);color:var(--t1)}
+.spotlight .res-row .ts{font-family:var(--font-mono);font-size:10.5px;color:var(--t4)}
+.spotlight .res-row mark{background:rgba(122,166,140,.22);color:var(--sage-bright);padding:1px 2px;border-radius:2px}
+.spotlight .res-row .speaker-mini{
+  font-family:var(--font-mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--t4);
+}
+.spotlight .foot{
+  padding:8px 16px;
+  border-top:1px solid var(--hairline);
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--t4);
+  display:flex;align-items:center;justify-content:space-between;
+}
+.spotlight .foot kbd{padding:1px 5px;border:1px solid var(--hairline-strong);border-radius:3px;color:var(--t2);margin:0 3px}
+
+/* reduced motion */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;
+  }
+  .topbar,.left-col,.tx-row{opacity:1;transform:none}
+  .status-pill-chrome .pdot{animation:none}
+}
+
+/* responsive */
+@media (max-width:760px){
+  .shell{padding:14px 16px 60px}
+  .meta-strip{flex-wrap:wrap;font-size:10px}
+  .tx-row{grid-template-columns:54px 1fr;row-gap:6px;padding:10px 12px}
+  .tx-speaker{grid-column:2}
+  .tx-text{grid-column:1 / -1;font-size:13px}
+  .audio-bar .audio-meta{display:none}
+  .crumb,.crumb-sep{display:none}
+  .crumb-active{display:inline}
+  .topbar{gap:8px;padding:0 12px}
+}
+@media (max-width:480px){
+  .btn-sage-sm .shortcut{display:none}
+  .spotlight-trigger{padding:0 12px;height:34px}
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><span class="brand-mark"></span> QuillMD</div>
+  <span class="crumb-sep">/</span>
+  <span class="crumb">Patients</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb">Mei-Ling Park</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb crumb-active">Visit · Apr 30, 2026</span>
+  <div class="spacer"></div>
+  <div class="status-pill-chrome" aria-live="polite">
+    <span class="pdot"></span>
+    <span>READY</span>
+  </div>
+  <button class="btn-sage-sm" type="button">
+    <span>Sign &amp; send</span>
+    <span class="shortcut">⌘ ↵</span>
+  </button>
+  <div class="avatar-chip" title="Dr. Kalyani Park">KP</div>
+</header>
+
+<div class="shell">
+  <main class="left-col">
+
+    <div class="meta-strip">
+      <div class="field">MEI-LING PARK</div>
+      <div class="field">34F</div>
+      <div class="field"><span class="lbl">MRN</span>77324</div>
+      <div class="field">J20.9</div>
+      <div class="field"><span class="lbl">Recorded</span>Apr 30 · 11:14</div>
+      <div class="field"><span class="lbl">Length</span>6m 04s</div>
+    </div>
+
+    <div class="tabs-row" role="tablist">
+      <div class="tab" role="tab" aria-selected="false">Soap Note</div>
+      <div class="tab active" role="tab" aria-selected="true">Transcript</div>
+      <div class="tab" role="tab" aria-selected="false">Codes</div>
+      <div class="tab" role="tab" aria-selected="false">Rx</div>
+      <div class="tab" role="tab" aria-selected="false">Extras</div>
+    </div>
+
+    <div class="audio-bar">
+      <button class="play-mini" type="button" aria-label="Play audio">
+        <svg viewBox="0 0 8 8" fill="currentColor" aria-hidden="true"><path d="M2 1l5 3-5 3z"/></svg>
+      </button>
+      <span class="ts-mono">02:34<span class="total"> / 06:04</span></span>
+      <div class="scrub-line" role="slider" aria-label="Audio scrubber" aria-valuemin="0" aria-valuemax="364" aria-valuenow="154">
+        <div class="scrub-fill"></div>
+      </div>
+      <span class="audio-meta">
+        <span>32 kHz</span>
+        <span class="dot"></span>
+        <span>Opus</span>
+        <span class="dot"></span>
+        <span>iPad</span>
+      </span>
+    </div>
+
+    <div class="legend">
+      <span class="item"><span class="swatch doctor"></span>Doctor</span>
+      <span class="item"><span class="swatch patient"></span>Patient</span>
+      <span class="spacer-l"></span>
+      <span class="right">13 turns · 6m 04s</span>
+    </div>
+
+    <section class="tx-table" aria-label="Visit transcript">
+
+      <div class="tx-row">
+        <div class="tx-ts">00:00</div>
+        <div><span class="tx-speaker doctor"><span class="dot"></span>Doctor</span></div>
+        <div class="tx-text">Hi Mei-Ling, good to see you back. How's that cough doing?</div>
+      </div>
+
+      <div class="tx-row">
+        <div class="tx-ts">00:08</div>
+        <div><span class="tx-speaker patient"><span class="dot"></span>Patient</span></div>
+        <div class="tx-text">It's a lot better. Mostly just morning now, like a little tickle. Sputum's gone clear too.</div>
+      </div>
+
+      <div class="tx-row">
+        <div class="tx-ts">00:21</div>
+        <div><span class="tx-speaker doctor"><span class="dot"></span>Doctor</span></div>
+        <div class="tx-text">Good. Any fever still?</div>
+      </div>
+
+      <div class="tx-row">
+        <div class="tx-ts">00:24</div>
+        <div><span class="tx-speaker patient"><span class="dot"></span>Patient</span></div>
+        <div class="tx-text">No, hasn't spiked since Saturday.</div>
+      </div>
+
+      <div class="tx-row">
+        <div class="tx-ts">00:30</div>
+        <div><span class="tx-speaker doctor"><span class="dot"></span>Doctor</span></div>
+        <div class="tx-text">Sleeping okay?</div>
+      </div>
+
+      <div class="tx-row">
+        <div class="tx-ts">00:33</div>
+        <div><span class="tx-speaker patient"><span class="dot"></span>Patient</span></div>
+        <div class="tx-text">Yes, pretty much normal. I went back to work Monday.</div>
+      </div>
+
+      <div class="tx-row">
+        <div class="tx-ts">00:40</div>
+        <div><span class="tx-speaker doctor"><span class="dot"></span>Doctor</span></div>
+        <div class="tx-text">Are you feeling tired in a way that's different from work tiredness?</div>
+      </div>
+
+      <div class="tx-row active">
+        <div class="tx-ts">00:46</div>
+        <div><span class="tx-speaker patient"><span class="dot"></span>Patient</span></div>
+        <div class="tx-text">A little. Like — I'm fine in the morning but by 4 PM I'm really wiped. That's not me normally.</div>
+      </div>
+
+      <div class="tx-row">
+        <div class="tx-ts">01:02</div>
+        <div><span class="tx-speaker doctor"><span class="dot"></span>Doctor</span></div>
+        <div class="tx-text"><span class="lowconf">That's expected after a viral chest infection. It usually takes another week or two for energy to come back.</span> Let me listen to your lungs.<span class="lowconf-tag">78%</span></div>
+      </div>
+
+      <div class="tx-row">
+        <div class="tx-ts">01:14</div>
+        <div><span class="tx-speaker doctor"><span class="dot"></span>Doctor</span></div>
+        <div class="tx-text">Lungs sound clear bilaterally. No crackles. Throat's a little red but no pus. Heart sounds normal.</div>
+      </div>
+
+      <div class="tx-row">
+        <div class="tx-ts">03:32</div>
+        <div><span class="tx-speaker doctor"><span class="dot"></span>Doctor</span></div>
+        <div class="tx-text">Okay, so the diagnosis is acute bronchitis, resolving — that's J20.9. I'm going to give you albuterol just in case the cough flares up overnight or before runs.</div>
+      </div>
+
+      <div class="tx-row">
+        <div class="tx-ts">04:18</div>
+        <div><span class="tx-speaker patient"><span class="dot"></span>Patient</span></div>
+        <div class="tx-text">Do I need to come back?</div>
+      </div>
+
+      <div class="tx-row">
+        <div class="tx-ts">04:21</div>
+        <div><span class="tx-speaker doctor"><span class="dot"></span>Doctor</span></div>
+        <div class="tx-text">If you're still coughing in seven days, or if you spike a fever, or you get short of breath — call. Otherwise, we're done.</div>
+      </div>
+
+      <div class="tx-foot">
+        <div class="stats">
+          <span>13 turns</span>
+          <span class="dot"></span>
+          <span>6m 04s</span>
+          <span class="dot"></span>
+          <span>32 kHz mono Opus</span>
+          <span class="dot"></span>
+          <span>iPad</span>
+        </div>
+        <span>Diarisation v3.2</span>
+      </div>
+
+    </section>
+
+  </main>
+</div>
+
+<button class="spotlight-trigger" type="button" id="spotlightOpen" aria-label="Open transcript search">
+  <span class="icon">
+    <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
+      <circle cx="5" cy="5" r="3.4"/>
+      <path d="M7.6 7.6L10 10"/>
+    </svg>
+  </span>
+  <span>Search transcript</span>
+  <kbd>⌘K</kbd>
+</button>
+
+<div class="spotlight" id="spotlight" role="dialog" aria-modal="true" aria-label="Transcript spotlight search">
+  <div class="panel">
+    <div class="input-row">
+      <span style="color:var(--t3)">
+        <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" width="14" height="14" aria-hidden="true">
+          <circle cx="6" cy="6" r="4"/>
+          <path d="M9 9l3 3"/>
+        </svg>
+      </span>
+      <input type="text" placeholder="Search transcript… try 'cough' or 'albuterol'" autocomplete="off" />
+    </div>
+    <div class="results" role="listbox">
+      <div class="res-row sel"><span class="ts">00:00</span><span><mark>Cough</mark> doing? — <span class="speaker-mini">Doctor</span></span><span class="speaker-mini">↵</span></div>
+      <div class="res-row"><span class="ts">01:02</span><span>after a viral chest infection — <span class="speaker-mini">Doctor</span></span><span class="speaker-mini">↵</span></div>
+      <div class="res-row"><span class="ts">03:32</span><span>I'm going to give you <mark>albuterol</mark> — <span class="speaker-mini">Doctor</span></span><span class="speaker-mini">↵</span></div>
+      <div class="res-row"><span class="ts">04:21</span><span>If you're still <mark>coughing</mark> in seven days — <span class="speaker-mini">Doctor</span></span><span class="speaker-mini">↵</span></div>
+    </div>
+    <div class="foot">
+      <span>4 matches</span>
+      <span><kbd>↑</kbd><kbd>↓</kbd> navigate <kbd>↵</kbd> jump <kbd>esc</kbd> close</span>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(x => {
+        x.classList.remove('active');
+        x.setAttribute('aria-selected','false');
+      });
+      t.classList.add('active');
+      t.setAttribute('aria-selected','true');
+    });
+  });
+
+  // play-button toggle
+  const playBtn = document.querySelector('.play-mini');
+  let playing = false;
+  playBtn.addEventListener('click', () => {
+    playing = !playing;
+    playBtn.querySelector('svg').innerHTML = playing
+      ? '<rect x="2" y="1.4" width="1.6" height="5.2" rx=".3"/><rect x="4.4" y="1.4" width="1.6" height="5.2" rx=".3"/>'
+      : '<path d="M2 1l5 3-5 3z"/>';
+  });
+
+  // spotlight open/close
+  const spotlight = document.getElementById('spotlight');
+  const opener = document.getElementById('spotlightOpen');
+  opener.addEventListener('click', () => {
+    spotlight.classList.add('open');
+    setTimeout(() => spotlight.querySelector('input').focus(), 30);
+  });
+  document.addEventListener('keydown', (e) => {
+    if((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k'){
+      e.preventDefault();
+      spotlight.classList.toggle('open');
+      if(spotlight.classList.contains('open')) setTimeout(() => spotlight.querySelector('input').focus(), 30);
+    }
+    if(e.key === 'Escape') spotlight.classList.remove('open');
+  });
+  spotlight.addEventListener('click', (e) => {
+    if(e.target === spotlight) spotlight.classList.remove('open');
+  });
+
+  // row click -> mark active
+  document.querySelectorAll('.tx-row').forEach(r => {
+    r.addEventListener('click', () => {
+      document.querySelectorAll('.tx-row').forEach(x => x.classList.remove('active'));
+      r.classList.add('active');
+    });
+  });
+})();
+</script>
+
+</body>
+</html>
