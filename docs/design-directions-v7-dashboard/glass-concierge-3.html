@@ -1,0 +1,529 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>QuillMD — Glass Concierge · Command Bar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;1,8..60,400;1,8..60,500&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --cream:#F2EBDC; --cream-card:#FFFCF5; --cream-2:#F2EDE3;
+    --ink:#2B2620; --ink-2:#5C544A; --ink-3:#8A8278; --ink-4:#B7AE9F;
+    --sage:#7AA68C; --sage-deep:#2F5040; --sage-bright:#5A8A6E;
+    --coral:#C97B6E; --amber:#D4A574; --teal:#5BA3B4;
+    --line:rgba(43,38,32,0.08); --line-2:rgba(43,38,32,0.14);
+    --serif:'Source Serif 4',Georgia,serif;
+    --sans:'DM Sans',-apple-system,system-ui,sans-serif;
+    --mono:'JetBrains Mono',ui-monospace,monospace;
+
+    --glass-bg-light: rgba(255, 252, 245, 0.62);
+    --glass-bg-warm:  rgba(242, 235, 220, 0.68);
+    --glass-bg-sage:  rgba(122, 166, 140, 0.10);
+    --glass-border:   rgba(255, 252, 245, 0.45);
+    --glass-blur:     blur(24px) saturate(1.05);
+    --glass-shadow:   0 8px 32px rgba(43, 38, 32, 0.10), 0 1px 0 rgba(255, 252, 245, 0.45) inset;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:14.5px;line-height:1.55;-webkit-font-smoothing:antialiased;min-height:100%}
+  ::selection{background:rgba(122,166,140,.32);color:var(--ink)}
+  a{color:inherit;text-decoration:none}
+  button{font:inherit;color:inherit;cursor:pointer;border:none;background:transparent}
+
+  /* warm afternoon canvas */
+  .canvas{
+    position:fixed;inset:0;z-index:-1;pointer-events:none;
+    background:
+      radial-gradient(950px 600px at 50% 10%, rgba(255,210,150,.34), transparent 65%),
+      radial-gradient(700px 480px at 8% 88%, rgba(91,163,180,.18), transparent 60%),
+      radial-gradient(700px 480px at 92% 78%, rgba(122,166,140,.22), transparent 62%),
+      linear-gradient(180deg, #F4ECD7 0%, #F2EBDC 50%, #ECE3CD 100%);
+  }
+  .canvas::before{
+    content:"";position:absolute;inset:0;
+    background:
+      radial-gradient(640px 440px at 70% 32%, rgba(255,225,170,.40), transparent 70%),
+      radial-gradient(420px 320px at 18% 60%, rgba(122,166,140,.20), transparent 70%);
+    filter: blur(38px); opacity:.95;
+  }
+  .grain{position:fixed;inset:0;z-index:-1;pointer-events:none;opacity:.30;mix-blend-mode:overlay;
+    background-image:radial-gradient(rgba(43,38,32,.05) 1px,transparent 1px);background-size:3px 3px}
+
+  .page{max-width:1280px;margin:0 auto;padding:120px 36px 80px;position:relative;min-height:100vh}
+
+  /* COMMAND BAR — top, glass, integrating greeting + search + new visit */
+  .cmdbar{
+    position:fixed;top:22px;left:50%;transform:translateX(-50%);
+    z-index:60;
+    width:min(1180px, calc(100vw - 36px));
+    display:grid;grid-template-columns:auto 1fr auto auto auto;gap:14px;align-items:center;
+    padding:10px 12px 10px 24px;border-radius:999px;
+    background:var(--glass-bg-light);
+    border:1px solid var(--glass-border);
+    box-shadow:var(--glass-shadow);
+    backdrop-filter:var(--glass-blur);
+    -webkit-backdrop-filter:var(--glass-blur);
+  }
+  .cmdbar .greet{
+    display:flex;align-items:baseline;gap:14px;min-width:0
+  }
+  .cmdbar .word{font-family:var(--serif);font-style:italic;font-weight:500;font-size:18px;color:var(--ink)}
+  .cmdbar .word b{font-style:normal;font-weight:500;color:var(--sage-deep)}
+  .cmdbar .greet .hello{
+    font-family:var(--serif);font-size:17px;color:var(--ink);letter-spacing:-0.005em;
+    border-left:1px solid var(--line-2);padding-left:14px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis
+  }
+  .cmdbar .greet .hello em{font-style:italic;color:var(--sage-deep)}
+  .cmdbar .search{
+    display:flex;align-items:center;gap:10px;
+    padding:10px 16px;border-radius:999px;
+    background:rgba(255,252,245,.58);
+    border:1px solid var(--glass-border);
+    backdrop-filter:blur(14px) saturate(1.05);-webkit-backdrop-filter:blur(14px) saturate(1.05);
+    transition:all .25s ease;min-width:240px
+  }
+  .cmdbar .search:hover{background:rgba(255,252,245,.82)}
+  .cmdbar .search svg{width:14px;height:14px;stroke:var(--ink-2);stroke-width:1.5;fill:none}
+  .cmdbar .search input{
+    flex:1;border:0;background:transparent;outline:none;
+    font:inherit;color:var(--ink);font-size:14px
+  }
+  .cmdbar .search input::placeholder{color:var(--ink-3);font-style:italic;font-family:var(--serif)}
+  .cmdbar .search .kbd{
+    display:inline-flex;gap:4px;padding:3px 8px;border-radius:6px;background:rgba(43,38,32,.06);
+    font-family:var(--mono);font-size:10px;color:var(--ink-2)
+  }
+  .cmdbar .new{
+    display:inline-flex;align-items:center;gap:7px;padding:10px 16px;border-radius:999px;
+    background:var(--sage-deep);color:#FBF9F1;
+    font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+    box-shadow:0 6px 18px rgba(47,80,64,.32),0 1px 0 rgba(255,252,245,.25) inset;
+    transition:transform .25s cubic-bezier(.22,1,.36,1)
+  }
+  .cmdbar .new:hover{transform:translateY(-1px)}
+  .cmdbar .new svg{width:11px;height:11px;stroke:#FBF9F1;stroke-width:1.6;fill:none}
+  .cmdbar .ini-chip{
+    display:inline-flex;align-items:center;gap:8px;padding:5px 5px 5px 10px;border-radius:999px;
+    background:rgba(43,38,32,.05);
+    transition:all .25s ease
+  }
+  .cmdbar .ini-chip:hover{background:rgba(43,38,32,.10)}
+  .cmdbar .ini-chip span{font-family:var(--mono);font-size:10px;letter-spacing:.10em;text-transform:uppercase;color:var(--ink-2)}
+  .cmdbar .ini-chip .ini{
+    display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:999px;
+    background:linear-gradient(180deg,#3B6552,#234136);color:#FBF9F1;
+    font-family:var(--mono);font-size:10px;letter-spacing:.04em
+  }
+
+  /* hero band — minimal title above the columns */
+  .hero{padding:6px 6px 24px;display:grid;grid-template-columns:1fr auto;gap:24px;align-items:end}
+  .hero h1{
+    font-family:var(--serif);font-weight:400;font-size:clamp(34px,5vw,56px);line-height:1.0;
+    letter-spacing:-0.02em;color:var(--ink)
+  }
+  .hero h1 em{
+    font-style:italic;color:var(--sage-deep);position:relative
+  }
+  .hero h1 em::after{
+    content:"";position:absolute;left:-3%;right:-3%;bottom:.06em;height:.42em;
+    background:radial-gradient(closest-side,rgba(122,166,140,.34),rgba(122,166,140,0));
+    border-radius:8px;z-index:-1;filter:blur(6px)
+  }
+  .hero .sub{font-family:var(--serif);font-style:italic;color:var(--ink-2);font-size:17px;margin-top:10px;max-width:54ch}
+  .hero .clock{
+    display:flex;flex-direction:column;align-items:flex-end;gap:6px
+  }
+  .hero .clock .now{font-family:var(--serif);font-size:38px;font-weight:400;letter-spacing:-0.02em;color:var(--ink);line-height:1}
+  .hero .clock .meta{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3)}
+
+  /* specialty filter row */
+  .filter{display:flex;gap:7px;flex-wrap:wrap;padding:0 6px 18px}
+  .pill{
+    display:inline-flex;align-items:center;gap:8px;
+    padding:7px 14px;border-radius:999px;
+    background:rgba(255,252,245,.50);
+    border:1px solid var(--glass-border);
+    backdrop-filter:blur(12px) saturate(1.05);-webkit-backdrop-filter:blur(12px) saturate(1.05);
+    font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-2);
+    transition:all .25s ease
+  }
+  .pill .ct{color:var(--ink-3)}
+  .pill.on{background:var(--sage-deep);color:#FBF9F1;border-color:transparent}
+  .pill.on .ct{color:rgba(251,249,241,.75)}
+  .pill:hover:not(.on){background:rgba(255,252,245,.78);color:var(--ink)}
+
+  /* THREE GLASS COLUMNS */
+  .grid{display:grid;grid-template-columns:1.1fr 1.4fr 1fr;gap:18px}
+  .panel{
+    background:var(--glass-bg-light);
+    border:1px solid var(--glass-border);
+    border-radius:24px;
+    box-shadow:var(--glass-shadow);
+    backdrop-filter:var(--glass-blur);
+    -webkit-backdrop-filter:var(--glass-blur);
+    padding:22px;position:relative;overflow:hidden
+  }
+  .panel.warm{background:var(--glass-bg-warm)}
+  .panel::before{
+    content:"";position:absolute;left:-30%;top:-30%;width:80%;height:60%;
+    background:radial-gradient(closest-side,rgba(255,210,150,.16),transparent 70%);
+    pointer-events:none
+  }
+  .panel > *{position:relative;z-index:1}
+  .panel-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px}
+  .panel-head h2{font-family:var(--serif);font-weight:500;font-size:20px;letter-spacing:-0.012em;color:var(--ink)}
+  .panel-head h2 em{font-style:italic;color:var(--sage-deep)}
+  .panel-head .meta{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3)}
+
+  /* metrics row inside columns (column 1 hosts inline metrics + patients-of-the-day count) */
+  .col-1{display:flex;flex-direction:column;gap:18px}
+  .stat-card{
+    padding:16px 18px;border-radius:16px;
+    background:linear-gradient(180deg,rgba(255,252,245,.48),rgba(255,252,245,.22));
+    border:1px solid rgba(255,252,245,.55);
+    transition:transform .3s cubic-bezier(.22,1,.36,1)
+  }
+  .stat-card:hover{transform:translateY(-2px)}
+  .stat-card .lbl{font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3)}
+  .stat-card .num{font-family:var(--serif);font-weight:400;font-size:42px;line-height:1;letter-spacing:-0.025em;color:var(--ink);margin-top:8px}
+  .stat-card .num small{font-family:var(--serif);font-style:italic;font-weight:400;font-size:.36em;color:var(--ink-3);margin-left:5px}
+  .stat-card .cap{margin-top:6px;font-family:var(--serif);font-style:italic;font-size:13.5px;color:var(--ink-2);line-height:1.4}
+  .stat-card.coral .num{color:var(--coral)}
+  .stat-card.sage  .num{color:var(--sage-deep)}
+  .stat-card .delta{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--sage-bright);margin-top:8px}
+  .stat-card .delta.warn{color:var(--coral)}
+
+  /* patient list — column 2 */
+  .pat-list{display:flex;flex-direction:column;gap:0}
+  .p-row{
+    display:grid;grid-template-columns:60px 1fr 96px;gap:12px;align-items:center;
+    padding:12px 10px;border-radius:12px;
+    transition:background .3s ease;cursor:pointer
+  }
+  .p-row + .p-row{border-top:1px solid rgba(43,38,32,.05)}
+  .p-row:hover{background:rgba(255,252,245,.55)}
+  .p-row .time{font-family:var(--mono);font-size:11px;color:var(--ink-3);letter-spacing:.04em;text-align:right}
+  .p-row .time b{display:block;color:var(--ink);font-size:13px;font-weight:500;letter-spacing:.02em}
+  .p-row .who .name{font-family:var(--serif);font-weight:500;font-size:17px;color:var(--ink);letter-spacing:-0.005em}
+  .p-row .who .age{font-family:var(--serif);font-style:italic;color:var(--ink-3);font-size:13px;margin-left:5px}
+  .p-row .who .sub{margin-top:3px;font-family:var(--serif);font-style:italic;color:var(--ink-2);font-size:13.5px;line-height:1.4;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .p-row .who .meta{margin-top:4px;font-family:var(--mono);font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3)}
+  .p-row .stat{justify-self:end;display:inline-flex;align-items:center;gap:6px;
+    padding:5px 10px;border-radius:999px;
+    font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase}
+  .stat.ready{background:rgba(122,166,140,.18);color:var(--sage-deep)}
+  .stat.draft{background:rgba(212,165,116,.20);color:#7B5A2E}
+  .stat.review{background:rgba(201,123,110,.16);color:var(--coral)}
+  .stat.signed{background:rgba(43,38,32,.08);color:var(--ink-2)}
+  .stat .dot{width:6px;height:6px;border-radius:999px;background:currentColor}
+
+  /* activity feed — column 3 */
+  .act{display:flex;flex-direction:column;gap:0}
+  .a-row{
+    padding:12px 10px;border-radius:10px;
+    transition:background .3s ease;cursor:pointer;display:grid;grid-template-columns:6px 1fr;gap:12px
+  }
+  .a-row + .a-row{border-top:1px solid rgba(43,38,32,.05)}
+  .a-row:hover{background:rgba(255,252,245,.50)}
+  .a-row .marker{width:6px;height:6px;border-radius:999px;background:var(--sage);margin-top:7px}
+  .a-row.signed .marker{background:var(--ink-3)}
+  .a-row.review .marker{background:var(--coral)}
+  .a-row.draft  .marker{background:var(--amber)}
+  .a-row .body .when{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3)}
+  .a-row .body .text{font-family:var(--serif);font-size:14px;color:var(--ink);line-height:1.45;margin-top:3px}
+  .a-row .body .text b{font-weight:500;color:var(--ink)}
+  .a-row .body .text em{font-style:italic;color:var(--ink-2)}
+
+  /* footer hints */
+  .esc-hint{margin-top:30px;text-align:center;font-family:var(--serif);font-style:italic;color:var(--ink-3);font-size:13.5px}
+  .esc-hint .kk{
+    display:inline-flex;align-items:center;justify-content:center;
+    padding:3px 8px;margin:0 4px;border-radius:6px;background:rgba(43,38,32,.06);
+    border:1px solid var(--line);font-family:var(--mono);font-size:10px;color:var(--ink-2);font-style:normal
+  }
+
+  /* mobile */
+  @media (max-width:1080px){
+    .grid{grid-template-columns:1fr 1fr;gap:14px}
+    .col-3{grid-column:1 / -1}
+  }
+  @media (max-width:760px){
+    :root{--glass-blur:blur(16px) saturate(1.05)}
+    .grid{grid-template-columns:1fr}
+    .col-3{grid-column:auto}
+    .page{padding:120px 18px 80px}
+    .cmdbar{grid-template-columns:1fr auto auto;gap:8px;padding:8px 8px 8px 14px}
+    .cmdbar .greet .hello{display:none}
+    .cmdbar .search{min-width:0;padding:8px 12px}
+    .cmdbar .search .kbd{display:none}
+    .cmdbar .ini-chip span{display:none}
+    .hero{grid-template-columns:1fr}
+    .hero .clock{display:none}
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    *,*::before,*::after{transition:none!important;animation:none!important}
+  }
+  @media (prefers-reduced-transparency: reduce){
+    .cmdbar,.panel,.pill,.cmdbar .search{
+      backdrop-filter:none!important;-webkit-backdrop-filter:none!important;
+      background:rgba(255,252,245,.96)!important;border-color:rgba(43,38,32,.10)!important
+    }
+  }
+  @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+    .cmdbar,.panel,.pill{background:rgba(255,252,245,.94)}
+  }
+</style>
+</head>
+<body>
+
+<div class="canvas" aria-hidden="true"></div>
+<div class="grain" aria-hidden="true"></div>
+
+<!-- COMMAND BAR -->
+<header class="cmdbar" role="banner">
+  <div class="greet">
+    <span class="word">Quill<b>MD</b></span>
+    <span class="hello">Good <em>afternoon</em>, Karuna.</span>
+  </div>
+  <button class="search" aria-label="Search">
+    <svg viewBox="0 0 14 14"><circle cx="6" cy="6" r="4"/><path d="m12 12-3-3"/></svg>
+    <input placeholder="Search patients, visits, drafts…" />
+    <span class="kbd">⌘K</span>
+  </button>
+  <button class="new">
+    <svg viewBox="0 0 14 14" stroke-linecap="round"><path d="M7 1.5v11M1.5 7h11"/></svg>
+    New Visit
+  </button>
+  <button class="ini-chip" aria-label="Account">
+    <span>Cedar Park</span>
+    <span class="ini">KR</span>
+  </button>
+</header>
+
+<main class="page">
+
+  <section class="hero">
+    <div>
+      <h1>The clinic is <em>quiet</em>.</h1>
+      <p class="sub">A gentle Tuesday afternoon — six patients on the slate, three drafts politely waiting, and the chart room is empty.</p>
+    </div>
+    <div class="clock" aria-label="Local time">
+      <span class="now">2:18<span style="font-style:italic;color:var(--ink-3);font-size:.55em">pm</span></span>
+      <span class="meta">Tue · Apr 29 · Cedar Park</span>
+    </div>
+  </section>
+
+  <div class="filter" role="tablist" aria-label="Filter by specialty">
+    <button class="pill on">All <span class="ct">6</span></button>
+    <button class="pill">Family Med <span class="ct">3</span></button>
+    <button class="pill">Cardiology <span class="ct">1</span></button>
+    <button class="pill">Endocrinology <span class="ct">1</span></button>
+    <button class="pill">Dermatology <span class="ct">1</span></button>
+    <button class="pill">Drafts <span class="ct">3</span></button>
+    <button class="pill">Needs review <span class="ct">2</span></button>
+  </div>
+
+  <div class="grid">
+
+    <!-- COL 1: METRICS / PATIENT-CARD COLUMN -->
+    <section class="panel col-1" aria-labelledby="metrics-h">
+      <div class="panel-head">
+        <h2 id="metrics-h">At a <em>glance</em></h2>
+        <span class="meta">Apr</span>
+      </div>
+      <div class="stat-card sage">
+        <div class="lbl">Visits this month</div>
+        <div class="num">142 <small>across 89 patients</small></div>
+        <div class="cap">a strong cadence — slightly above March</div>
+        <div class="delta">▲ 8% vs March</div>
+      </div>
+      <div class="stat-card">
+        <div class="lbl">Avg drafted in</div>
+        <div class="num">3 <small>min / visit</small></div>
+        <div class="cap">median time from "stop" to first draft</div>
+        <div class="delta">▼ 22s — record week</div>
+      </div>
+      <div class="stat-card coral">
+        <div class="lbl">Pending review</div>
+        <div class="num">3 <small>visits</small></div>
+        <div class="cap">drafts ready when you are</div>
+        <div class="delta warn">2 since lunch</div>
+      </div>
+      <div class="stat-card">
+        <div class="lbl">Signed this week</div>
+        <div class="num">37 <small>notes</small></div>
+        <div class="cap">finalized — Mon to Fri this week</div>
+        <div class="delta">on pace for 48</div>
+      </div>
+    </section>
+
+    <!-- COL 2: TODAY'S AGENDA -->
+    <section class="panel warm" aria-labelledby="today-h">
+      <div class="panel-head">
+        <h2 id="today-h">Today's <em>agenda</em></h2>
+        <span class="meta">6 booked</span>
+      </div>
+      <div class="pat-list">
+        <a class="p-row" href="#">
+          <div class="time"><b>9:00</b>am</div>
+          <div class="who">
+            <div class="name">Mei-Ling Chen <span class="age">· 54</span></div>
+            <div class="sub">"chest tightness on the stairs again"</div>
+            <div class="meta">Cardio · Room 3 · 22 min</div>
+          </div>
+          <div class="stat ready"><span class="dot"></span>Here</div>
+        </a>
+        <a class="p-row" href="#">
+          <div class="time"><b>10:30</b>am</div>
+          <div class="who">
+            <div class="name">Ronan O'Sullivan <span class="age">· 67</span></div>
+            <div class="sub">post-op knee replacement, six weeks</div>
+            <div class="meta">Family · Room 1 · 18 min</div>
+          </div>
+          <div class="stat draft"><span class="dot"></span>Draft</div>
+        </a>
+        <a class="p-row" href="#">
+          <div class="time"><b>11:15</b>am</div>
+          <div class="who">
+            <div class="name">Aisha Mwangi <span class="age">· 31</span></div>
+            <div class="sub">annual wellness, prenatal counseling</div>
+            <div class="meta">Family · Room 2 · 14 min</div>
+          </div>
+          <div class="stat ready"><span class="dot"></span>Ready</div>
+        </a>
+        <a class="p-row" href="#">
+          <div class="time"><b>1:45</b>pm</div>
+          <div class="who">
+            <div class="name">Felix Hartmann <span class="age">· 72</span></div>
+            <div class="sub">A1c trending up, considering GLP-1</div>
+            <div class="meta">Endo · Room 4 · 30 min</div>
+          </div>
+          <div class="stat review"><span class="dot"></span>Review</div>
+        </a>
+        <a class="p-row" href="#">
+          <div class="time"><b>2:30</b>pm</div>
+          <div class="who">
+            <div class="name">Priya Subramanian <span class="age">· 8</span></div>
+            <div class="sub">wheezing at night, albuterol daily now</div>
+            <div class="meta">Family · Room 1 · 15 min</div>
+          </div>
+          <div class="stat ready"><span class="dot"></span>Ready</div>
+        </a>
+        <a class="p-row" href="#">
+          <div class="time"><b>3:50</b>pm</div>
+          <div class="who">
+            <div class="name">Marcus Brennan <span class="age">· 44</span></div>
+            <div class="sub">acne flare on jawline, third visit</div>
+            <div class="meta">Derm · Room 2 · 12 min</div>
+          </div>
+          <div class="stat ready"><span class="dot"></span>Ready</div>
+        </a>
+      </div>
+    </section>
+
+    <!-- COL 3: ACTIVITY FEED -->
+    <section class="panel col-3" aria-labelledby="activity-h">
+      <div class="panel-head">
+        <h2 id="activity-h">Recent <em>activity</em></h2>
+        <span class="meta">Last 48h</span>
+      </div>
+      <div class="act">
+        <div class="a-row signed">
+          <span class="marker"></span>
+          <div class="body">
+            <span class="when">12:14 pm · today</span>
+            <p class="text"><b>Yusuf El-Sayed</b> signed and sent to <em>Epic · Cedar Park</em>.</p>
+          </div>
+        </div>
+        <div class="a-row review">
+          <span class="marker"></span>
+          <div class="body">
+            <span class="when">11:48 am · today</span>
+            <p class="text">SOAP for <b>Felix Hartmann</b> needs review — <em>Rx warning, GLP-1 + ACE-I</em>.</p>
+          </div>
+        </div>
+        <div class="a-row draft">
+          <span class="marker"></span>
+          <div class="body">
+            <span class="when">10:32 am · today</span>
+            <p class="text">Draft ready for <b>Ronan O'Sullivan</b> — <em>polished in 2:48</em>.</p>
+          </div>
+        </div>
+        <div class="a-row signed">
+          <span class="marker"></span>
+          <div class="body">
+            <span class="when">9:22 am · today</span>
+            <p class="text"><b>Naledi Khumalo</b> signed and sent to <em>Athena · Cedar Park</em>.</p>
+          </div>
+        </div>
+        <div class="a-row signed">
+          <span class="marker"></span>
+          <div class="body">
+            <span class="when">8:45 am · today</span>
+            <p class="text">Practice usage report ready — <em>April month-to-date</em>.</p>
+          </div>
+        </div>
+        <div class="a-row signed">
+          <span class="marker"></span>
+          <div class="body">
+            <span class="when">4:12 pm · Mon</span>
+            <p class="text"><b>Imani Brooks</b> signed — <em>9:34 dictation, no edits</em>.</p>
+          </div>
+        </div>
+        <div class="a-row review">
+          <span class="marker"></span>
+          <div class="body">
+            <span class="when">3:55 pm · Mon</span>
+            <p class="text">SOAP for <b>Hyo-Jin Park</b> — <em>diarization confidence low</em>.</p>
+          </div>
+        </div>
+        <div class="a-row draft">
+          <span class="marker"></span>
+          <div class="body">
+            <span class="when">1:30 pm · Mon</span>
+            <p class="text">Draft ready for <b>Sven Lindqvist</b> — <em>polished in 4:11</em>.</p>
+          </div>
+        </div>
+        <div class="a-row signed">
+          <span class="marker"></span>
+          <div class="body">
+            <span class="when">11:12 am · Mon</span>
+            <p class="text"><b>Tomás Reyes</b> signed and sent to <em>eClinicalWorks</em>.</p>
+          </div>
+        </div>
+        <div class="a-row signed">
+          <span class="marker"></span>
+          <div class="body">
+            <span class="when">4:40 pm · Fri</span>
+            <p class="text"><b>Wesley Buchanan</b> signed — <em>22:55 dictation</em>.</p>
+          </div>
+        </div>
+        <div class="a-row signed">
+          <span class="marker"></span>
+          <div class="body">
+            <span class="when">3:11 pm · Fri</span>
+            <p class="text"><b>Constance Aboagye</b> signed and exported to PDF.</p>
+          </div>
+        </div>
+        <div class="a-row signed">
+          <span class="marker"></span>
+          <div class="body">
+            <span class="when">10:08 am · Fri</span>
+            <p class="text"><b>Kofi Asante</b> drafted — <em>endocrine consult letter</em>.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <p class="esc-hint">
+    Press <span class="kk">⌘</span><span class="kk">K</span> to find anything · <span class="kk">N</span> for a new visit · <span class="kk">G</span> then <span class="kk">P</span> for patients.
+  </p>
+
+</main>
+</body>
+</html>

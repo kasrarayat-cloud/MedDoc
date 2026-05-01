@@ -1,0 +1,563 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>QuillMD — Glass Concierge · Floating Island</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;1,8..60,400;1,8..60,500&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --cream:#F2EBDC; --cream-card:#FFFCF5; --cream-2:#F2EDE3; --cream-3:#E8E0CC;
+    --ink:#2B2620; --ink-2:#5C544A; --ink-3:#8A8278; --ink-4:#B7AE9F;
+    --sage:#7AA68C; --sage-deep:#2F5040; --sage-bright:#5A8A6E;
+    --coral:#C97B6E; --amber:#D4A574; --teal:#5BA3B4;
+    --line:rgba(43,38,32,0.08); --line-2:rgba(43,38,32,0.14);
+    --serif:'Source Serif 4',Georgia,serif;
+    --sans:'DM Sans',-apple-system,system-ui,sans-serif;
+    --mono:'JetBrains Mono',ui-monospace,monospace;
+
+    /* glass tokens */
+    --glass-bg-light: rgba(255, 252, 245, 0.62);
+    --glass-bg-warm:  rgba(242, 235, 220, 0.68);
+    --glass-bg-sage:  rgba(122, 166, 140, 0.10);
+    --glass-border:   rgba(255, 252, 245, 0.45);
+    --glass-blur:     blur(24px) saturate(1.05);
+    --glass-shadow:   0 8px 32px rgba(43, 38, 32, 0.10), 0 1px 0 rgba(255, 252, 245, 0.45) inset;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased;min-height:100%}
+  ::selection{background:rgba(122,166,140,.32);color:var(--ink)}
+  a{color:inherit;text-decoration:none}
+  button{font:inherit;color:inherit;cursor:pointer;border:none;background:transparent}
+
+  /* warm-evening canvas behind everything (Phase 4 dashboard-evening fake) */
+  .canvas{
+    position:fixed; inset:0; z-index:-1; pointer-events:none;
+    background:
+      radial-gradient(1100px 720px at 78% 18%, rgba(212,165,116,.34), transparent 62%),
+      radial-gradient(900px 600px at 12% 82%, rgba(122,166,140,.22), transparent 58%),
+      radial-gradient(1500px 900px at 50% 110%, rgba(91,163,180,.14), transparent 70%),
+      linear-gradient(180deg, #EFE5D0 0%, #F2EBDC 38%, #ECE3CD 100%);
+  }
+  /* a soft "photo-style" warm glow band — hero-evening flavor */
+  .canvas::before{
+    content:"";position:absolute;inset:0;
+    background:
+      radial-gradient(620px 420px at 86% 26%, rgba(232,170,98,.42), transparent 65%),
+      radial-gradient(420px 320px at 70% 40%, rgba(255,210,150,.28), transparent 70%);
+    filter: blur(36px);
+    opacity:.92;
+  }
+  .canvas::after{
+    content:"";position:absolute;inset:0;
+    background:
+      radial-gradient(700px 260px at 50% 92%, rgba(47,80,64,.18), transparent 70%);
+    filter: blur(52px);
+  }
+
+  /* tiny cream grain to disguise gradient banding */
+  .grain{position:fixed;inset:0;z-index:-1;pointer-events:none;opacity:.35;mix-blend-mode:overlay;
+    background-image:radial-gradient(rgba(43,38,32,.05) 1px,transparent 1px);background-size:3px 3px}
+
+  .page{max-width:1180px;margin:0 auto;padding:118px 40px 140px;position:relative;min-height:100vh}
+
+  /* FLOATING ISLAND NAV — pill shape, centered, glass */
+  .island{
+    position:fixed;top:22px;left:50%;transform:translateX(-50%);
+    z-index:50;
+    display:flex;align-items:center;gap:6px;
+    padding:8px 8px 8px 18px;border-radius:999px;
+    background:var(--glass-bg-light);
+    border:1px solid var(--glass-border);
+    box-shadow:var(--glass-shadow);
+    backdrop-filter:var(--glass-blur);
+    -webkit-backdrop-filter:var(--glass-blur);
+    transition:transform .4s cubic-bezier(.22,1,.36,1);
+  }
+  .island .word{
+    font-family:var(--serif);font-style:italic;font-size:18px;color:var(--ink);letter-spacing:0;
+    padding-right:14px;border-right:1px solid var(--line-2);margin-right:6px
+  }
+  .island .word b{font-weight:500;font-style:normal;color:var(--sage-deep)}
+  .island .nav{display:flex;align-items:center;gap:2px}
+  .island .nav a{
+    display:inline-flex;align-items:center;gap:8px;
+    padding:7px 14px;border-radius:999px;
+    font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-2);
+    transition:all .25s ease
+  }
+  .island .nav a.on{background:var(--sage-deep);color:#FBF9F1}
+  .island .nav a:not(.on):hover{background:rgba(43,38,32,.05);color:var(--ink)}
+  .island .kbd{
+    display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;
+    background:rgba(43,38,32,.05);border:1px solid var(--line);
+    font-family:var(--mono);font-size:10.5px;color:var(--ink-2)
+  }
+  .island .new{
+    display:inline-flex;align-items:center;gap:6px;padding:8px 14px 8px 12px;border-radius:999px;
+    background:var(--sage-deep);color:#FBF9F1;
+    font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+    box-shadow:0 6px 18px rgba(47,80,64,.32),0 1px 0 rgba(255,252,245,.25) inset;
+    transition:transform .25s cubic-bezier(.22,1,.36,1)
+  }
+  .island .new:hover{transform:translateY(-1px)}
+  .island .new svg{width:11px;height:11px;stroke:#FBF9F1;stroke-width:1.6;fill:none}
+  .island .ini{
+    display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:999px;
+    background:linear-gradient(180deg,#3B6552,#234136);color:#FBF9F1;
+    font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;
+    box-shadow:0 4px 12px rgba(47,80,64,.28),0 1px 0 rgba(255,252,245,.25) inset
+  }
+
+  /* HERO greeting */
+  .hero{padding:30px 8px 36px;text-align:left}
+  .hero .eyebrow{
+    font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3);
+    margin-bottom:18px
+  }
+  .hero h1{
+    font-family:var(--serif);font-weight:400;font-size:clamp(54px,8vw,98px);line-height:.96;
+    letter-spacing:-0.025em;color:var(--ink);max-width:18ch
+  }
+  .hero h1 em{
+    font-style:italic;font-weight:400;color:var(--sage-deep);position:relative
+  }
+  .hero h1 em::after{
+    content:"";position:absolute;left:-3%;right:-3%;bottom:.05em;height:.46em;
+    background:radial-gradient(closest-side,rgba(122,166,140,.34),rgba(122,166,140,0));
+    border-radius:8px;z-index:-1;filter:blur(6px)
+  }
+  .hero .lede{
+    margin-top:22px;max-width:62ch;font-family:var(--serif);font-size:18px;line-height:1.5;color:var(--ink-2);
+    font-style:italic
+  }
+  .hero .lede b{font-style:normal;color:var(--sage-deep);font-weight:500}
+
+  /* GLASS PANELS — base */
+  .panel{
+    background:var(--glass-bg-light);
+    border:1px solid var(--glass-border);
+    border-radius:24px;
+    box-shadow:var(--glass-shadow);
+    backdrop-filter:var(--glass-blur);
+    -webkit-backdrop-filter:var(--glass-blur);
+    padding:22px;
+  }
+  .panel.warm{background:var(--glass-bg-warm)}
+  .panel.sage{background:linear-gradient(180deg,rgba(122,166,140,.16),rgba(122,166,140,.08))}
+
+  /* metrics card */
+  .metrics{margin-top:36px;padding:8px}
+  .metrics-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+  .met{
+    padding:24px 22px 20px;border-radius:18px;
+    background:linear-gradient(180deg,rgba(255,252,245,.55),rgba(255,252,245,.30));
+    border:1px solid rgba(255,252,245,.55);
+    transition:transform .3s cubic-bezier(.22,1,.36,1)
+  }
+  .met:hover{transform:translateY(-2px)}
+  .met .lbl{font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3)}
+  .met .big{
+    font-family:var(--serif);font-weight:400;font-size:54px;line-height:1;letter-spacing:-0.03em;
+    color:var(--ink);margin-top:14px
+  }
+  .met .big sup{font-family:var(--serif);font-style:italic;font-size:.36em;color:var(--ink-3);margin-left:5px;vertical-align:34%}
+  .met .cap{margin-top:8px;font-family:var(--serif);font-style:italic;font-size:13.5px;color:var(--ink-2);line-height:1.4}
+  .met.coral .big{color:var(--coral)}
+  .met.sage  .big{color:var(--sage-deep)}
+  .met .delta{
+    display:inline-flex;align-items:center;gap:6px;margin-top:10px;
+    font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase
+  }
+  .met .delta.up{color:var(--sage-bright)}
+  .met .delta.warn{color:var(--coral)}
+
+  /* TODAY'S SCHEDULE — glass list */
+  .today{margin-top:22px}
+  .today-head{
+    display:flex;align-items:baseline;justify-content:space-between;
+    padding:6px 14px 18px
+  }
+  .today-head h2{font-family:var(--serif);font-weight:500;font-size:26px;letter-spacing:-0.012em;color:var(--ink)}
+  .today-head h2 em{font-style:italic;color:var(--sage-deep)}
+  .today-head .meta{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3)}
+
+  /* specialty filter — glass pills */
+  .filter{display:flex;gap:8px;flex-wrap:wrap;padding:0 14px 18px}
+  .pill{
+    display:inline-flex;align-items:center;gap:8px;
+    padding:7px 14px;border-radius:999px;
+    background:rgba(255,252,245,.50);
+    border:1px solid var(--glass-border);
+    backdrop-filter:blur(12px) saturate(1.05);
+    -webkit-backdrop-filter:blur(12px) saturate(1.05);
+    font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-2);
+    transition:all .25s ease
+  }
+  .pill .ct{color:var(--ink-3);font-weight:400}
+  .pill.on{background:var(--sage-deep);color:#FBF9F1;border-color:transparent}
+  .pill.on .ct{color:rgba(251,249,241,.72)}
+  .pill:hover:not(.on){background:rgba(255,252,245,.75);color:var(--ink)}
+
+  /* the patient list inside glass */
+  .pat-list{display:flex;flex-direction:column;gap:6px}
+  .pat-row{
+    display:grid;grid-template-columns:38px 2.4fr 1.4fr 1fr 110px;
+    gap:18px;align-items:center;
+    padding:16px 16px;border-radius:14px;
+    transition:background .3s ease, transform .3s ease;
+    cursor:pointer;position:relative;
+  }
+  .pat-row:hover{background:rgba(255,252,245,.55);transform:translateX(2px)}
+  .pat-row::before{
+    content:"";position:absolute;left:8px;right:8px;bottom:-1px;height:1px;
+    background:linear-gradient(90deg,transparent,rgba(43,38,32,.07),transparent)
+  }
+  .pat-row:last-child::before{display:none}
+  .pat-row .time{
+    font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--ink-3);text-align:right
+  }
+  .pat-row .time b{display:block;color:var(--ink);font-size:13px;letter-spacing:.02em;font-weight:500}
+  .pat-row .who .name{
+    font-family:var(--serif);font-weight:500;font-size:19px;letter-spacing:-0.005em;color:var(--ink);line-height:1.2
+  }
+  .pat-row .who .age{font-family:var(--serif);font-style:italic;color:var(--ink-3);font-size:14px;margin-left:6px}
+  .pat-row .who .sub{
+    margin-top:4px;font-family:var(--serif);font-style:italic;color:var(--ink-2);font-size:14.5px;line-height:1.4;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap
+  }
+  .pat-row .spec{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-2)}
+  .pat-row .room{font-family:var(--mono);font-size:11px;color:var(--ink-3);letter-spacing:.04em}
+  .pat-row .room b{color:var(--ink-2);font-weight:500}
+  .pat-row .stat{justify-self:end;display:inline-flex;align-items:center;gap:6px;
+    padding:6px 10px;border-radius:999px;
+    font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase
+  }
+  .stat.ready{background:rgba(122,166,140,.18);color:var(--sage-deep)}
+  .stat.draft{background:rgba(212,165,116,.20);color:#7B5A2E}
+  .stat.review{background:rgba(201,123,110,.16);color:var(--coral)}
+  .stat.signed{background:rgba(43,38,32,.08);color:var(--ink-2)}
+  .stat .dot{width:6px;height:6px;border-radius:999px;background:currentColor}
+
+  /* RECENT VISITS — sub-glass card */
+  .recent{margin-top:22px;padding:8px 0}
+  .recent-head{padding:6px 14px 14px;display:flex;align-items:baseline;justify-content:space-between}
+  .recent-head h2{font-family:var(--serif);font-weight:500;font-size:22px;color:var(--ink)}
+  .recent-head h2 em{font-style:italic;color:var(--sage-deep)}
+  .recent-head .more{font-family:var(--serif);font-style:italic;font-size:14px;color:var(--sage-deep);
+    border-bottom:1px solid rgba(47,80,64,.4);padding-bottom:1px}
+  .rec-list{display:grid;grid-template-columns:1fr;gap:0}
+  .rec-row{
+    display:grid;grid-template-columns:90px 2.6fr 1.4fr 1fr 110px;
+    gap:18px;align-items:center;
+    padding:14px 18px;border-radius:12px;
+    transition:background .3s ease;cursor:pointer
+  }
+  .rec-row:hover{background:rgba(255,252,245,.45)}
+  .rec-row + .rec-row{border-top:1px solid rgba(43,38,32,.06)}
+  .rec-row .when{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3)}
+  .rec-row .who{font-family:var(--serif);font-weight:500;font-size:16px;color:var(--ink);letter-spacing:-0.003em}
+  .rec-row .who em{font-style:italic;color:var(--ink-3);font-size:13.5px;margin-left:6px;font-weight:400}
+  .rec-row .spec{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-2)}
+  .rec-row .dur{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+  .rec-row .stat{justify-self:end}
+
+  /* footer hint */
+  .esc-hint{
+    margin-top:30px;text-align:center;
+    font-family:var(--serif);font-style:italic;color:var(--ink-3);font-size:14px
+  }
+  .esc-hint .kk{
+    display:inline-flex;align-items:center;justify-content:center;
+    padding:3px 8px;margin:0 4px;border-radius:6px;background:rgba(43,38,32,.06);
+    border:1px solid var(--line);font-family:var(--mono);font-size:10.5px;color:var(--ink-2);font-style:normal
+  }
+
+  /* small details */
+  .ribbon{
+    position:absolute;left:50%;transform:translateX(-50%);top:-9px;
+    padding:3px 12px;border-radius:999px;background:#FFFCF5;border:1px solid var(--line-2);
+    font-family:var(--mono);font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3)
+  }
+
+  /* mobile */
+  @media (max-width:920px){
+    .page{padding:96px 18px 100px}
+    .metrics-grid{grid-template-columns:repeat(2,1fr)}
+    .pat-row{grid-template-columns:64px 1fr 100px;gap:12px}
+    .pat-row .spec, .pat-row .room{display:none}
+    .rec-row{grid-template-columns:80px 1fr 100px;gap:12px}
+    .rec-row .spec,.rec-row .dur{display:none}
+    .island{padding:6px 8px;gap:4px}
+    .island .word{display:none}
+    .island .nav a{padding:6px 10px}
+  }
+  @media (max-width:760px){
+    :root{--glass-blur:blur(16px) saturate(1.05)}
+    .hero h1{font-size:46px}
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    *,*::before,*::after{transition:none!important;animation:none!important}
+  }
+  @media (prefers-reduced-transparency: reduce){
+    .island,.panel,.pill{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;
+      background:rgba(255,252,245,.96)!important;border-color:rgba(43,38,32,.10)!important}
+  }
+  /* progressive enhancement: if backdrop-filter not supported, fall back */
+  @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+    .island,.panel,.pill{background:rgba(255,252,245,.94)}
+  }
+</style>
+</head>
+<body>
+
+<div class="canvas" aria-hidden="true"></div>
+<div class="grain" aria-hidden="true"></div>
+
+<!-- FLOATING ISLAND NAV -->
+<nav class="island" aria-label="Primary">
+  <span class="word">Quill<b>MD</b></span>
+  <div class="nav">
+    <a href="#today" class="on">Today</a>
+    <a href="#patients">Patients</a>
+    <a href="#drafts">Drafts</a>
+    <a href="#settings">Settings</a>
+  </div>
+  <button class="kbd" aria-label="Open command palette">
+    <svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="6" cy="6" r="4"/><path d="m12 12-3-3"/></svg>
+    <span>Search</span><kbd>⌘</kbd><kbd>K</kbd>
+  </button>
+  <button class="new">
+    <svg viewBox="0 0 14 14"><path d="M7 1.5v11M1.5 7h11"/></svg>
+    New Visit
+  </button>
+  <span class="ini" title="Dr. Karuna Ramanathan">KR</span>
+</nav>
+
+<main class="page">
+
+  <section class="hero">
+    <div class="eyebrow">Tuesday · April 29 · 4:42 PM PT · Cedar Park Family Health</div>
+    <h1>Good <em>evening</em>,<br>Dr. Ramanathan.</h1>
+    <p class="lede">
+      Six patients on your slate, three drafts politely waiting, and the after-hours queue is
+      <b>quiet</b>. The clinic is yours — take the next one when you're ready.
+    </p>
+  </section>
+
+  <!-- METRICS GLASS CARD -->
+  <section class="panel metrics" aria-label="Today at a glance">
+    <div style="position:relative">
+      <span class="ribbon">At a glance</span>
+    </div>
+    <div class="metrics-grid">
+      <div class="met sage">
+        <div class="lbl">Visits / Apr</div>
+        <div class="big">142</div>
+        <div class="cap">across 89 patients this month</div>
+        <div class="delta up">▲ 8% vs March</div>
+      </div>
+      <div class="met">
+        <div class="lbl">Avg drafted in</div>
+        <div class="big">3<sup>min</sup></div>
+        <div class="cap">median time from "stop" to first draft</div>
+        <div class="delta up">▼ 22s — record week</div>
+      </div>
+      <div class="met coral">
+        <div class="lbl">Pending review</div>
+        <div class="big">3</div>
+        <div class="cap">drafts ready when you are</div>
+        <div class="delta warn">2 since lunch</div>
+      </div>
+      <div class="met">
+        <div class="lbl">Signed this week</div>
+        <div class="big">37</div>
+        <div class="cap">notes finalized — Mon to Fri</div>
+        <div class="delta up">on pace for 48</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TODAY'S PATIENTS -->
+  <section class="panel today" aria-labelledby="today-h">
+    <div class="today-head">
+      <h2 id="today-h">Today's <em>schedule</em></h2>
+      <span class="meta">Six on the books · Two arrived</span>
+    </div>
+
+    <div class="filter" role="tablist" aria-label="Filter by specialty">
+      <button class="pill on">All <span class="ct">6</span></button>
+      <button class="pill">Family Med <span class="ct">3</span></button>
+      <button class="pill">Cardiology <span class="ct">1</span></button>
+      <button class="pill">Endocrinology <span class="ct">1</span></button>
+      <button class="pill">Dermatology <span class="ct">1</span></button>
+    </div>
+
+    <div class="pat-list">
+      <a class="pat-row" href="#">
+        <div class="time"><b>9:00</b>am</div>
+        <div class="who">
+          <span class="name">Mei-Ling Chen <span class="age">· 54</span></span>
+          <div class="sub">"chest tightness on the stairs again, two weeks now"</div>
+        </div>
+        <div class="spec">Cardiology</div>
+        <div class="room"><b>Room 3</b> · 22 min</div>
+        <div class="stat ready"><span class="dot"></span>Ready</div>
+      </a>
+      <a class="pat-row" href="#">
+        <div class="time"><b>10:30</b>am</div>
+        <div class="who">
+          <span class="name">Ronan O'Sullivan <span class="age">· 67</span></span>
+          <div class="sub">post-op check, knee replacement, six weeks</div>
+        </div>
+        <div class="spec">Family Med</div>
+        <div class="room"><b>Room 1</b> · 18 min</div>
+        <div class="stat draft"><span class="dot"></span>Drafting</div>
+      </a>
+      <a class="pat-row" href="#">
+        <div class="time"><b>11:15</b>am</div>
+        <div class="who">
+          <span class="name">Aisha Mwangi <span class="age">· 31</span></span>
+          <div class="sub">annual wellness, IUD follow-up, prenatal counseling</div>
+        </div>
+        <div class="spec">Family Med</div>
+        <div class="room"><b>Room 2</b> · 14 min</div>
+        <div class="stat ready"><span class="dot"></span>Ready</div>
+      </a>
+      <a class="pat-row" href="#">
+        <div class="time"><b>1:45</b>pm</div>
+        <div class="who">
+          <span class="name">Felix Hartmann <span class="age">· 72</span></span>
+          <div class="sub">A1c trending up, considering GLP-1 — daughter present</div>
+        </div>
+        <div class="spec">Endocrinology</div>
+        <div class="room"><b>Room 4</b> · 30 min</div>
+        <div class="stat review"><span class="dot"></span>Review</div>
+      </a>
+      <a class="pat-row" href="#">
+        <div class="time"><b>2:30</b>pm</div>
+        <div class="who">
+          <span class="name">Priya Subramanian <span class="age">· 8</span></span>
+          <div class="sub">wheezing at night — albuterol working but using daily</div>
+        </div>
+        <div class="spec">Family Med</div>
+        <div class="room"><b>Room 1</b> · 15 min</div>
+        <div class="stat ready"><span class="dot"></span>Ready</div>
+      </a>
+      <a class="pat-row" href="#">
+        <div class="time"><b>3:50</b>pm</div>
+        <div class="who">
+          <span class="name">Marcus Brennan <span class="age">· 44</span></span>
+          <div class="sub">acne flare on jawline — third visit in six months</div>
+        </div>
+        <div class="spec">Dermatology</div>
+        <div class="room"><b>Room 2</b> · 12 min</div>
+        <div class="stat signed"><span class="dot"></span>Signed</div>
+      </a>
+    </div>
+  </section>
+
+  <!-- RECENT VISITS -->
+  <section class="panel warm recent" aria-labelledby="recent-h">
+    <div class="recent-head">
+      <h2 id="recent-h">Recent <em>visits</em></h2>
+      <a class="more" href="#">All visits →</a>
+    </div>
+    <div class="rec-list">
+      <a class="rec-row" href="#">
+        <div class="when">Mon · 4:12pm</div>
+        <div class="who">Yusuf El-Sayed <em>· 39</em></div>
+        <div class="spec">Cardiology</div>
+        <div class="dur">14:22</div>
+        <div class="stat signed"><span class="dot"></span>Signed</div>
+      </a>
+      <a class="rec-row" href="#">
+        <div class="when">Mon · 2:48pm</div>
+        <div class="who">Naledi Khumalo <em>· 28</em></div>
+        <div class="spec">Family Med</div>
+        <div class="dur">11:05</div>
+        <div class="stat signed"><span class="dot"></span>Signed</div>
+      </a>
+      <a class="rec-row" href="#">
+        <div class="when">Mon · 1:30pm</div>
+        <div class="who">Sven Lindqvist <em>· 61</em></div>
+        <div class="spec">Endocrinology</div>
+        <div class="dur">17:48</div>
+        <div class="stat draft"><span class="dot"></span>Drafted</div>
+      </a>
+      <a class="rec-row" href="#">
+        <div class="when">Mon · 11:12am</div>
+        <div class="who">Imani Brooks <em>· 45</em></div>
+        <div class="spec">Family Med</div>
+        <div class="dur">9:34</div>
+        <div class="stat signed"><span class="dot"></span>Signed</div>
+      </a>
+      <a class="rec-row" href="#">
+        <div class="when">Mon · 9:55am</div>
+        <div class="who">Tomás Reyes <em>· 7</em></div>
+        <div class="spec">Family Med</div>
+        <div class="dur">8:21</div>
+        <div class="stat signed"><span class="dot"></span>Signed</div>
+      </a>
+      <a class="rec-row" href="#">
+        <div class="when">Fri · 4:40pm</div>
+        <div class="who">Hyo-Jin Park <em>· 52</em></div>
+        <div class="spec">Cardiology</div>
+        <div class="dur">19:02</div>
+        <div class="stat review"><span class="dot"></span>Review</div>
+      </a>
+      <a class="rec-row" href="#">
+        <div class="when">Fri · 3:11pm</div>
+        <div class="who">Constance Aboagye <em>· 38</em></div>
+        <div class="spec">Family Med</div>
+        <div class="dur">10:18</div>
+        <div class="stat signed"><span class="dot"></span>Signed</div>
+      </a>
+      <a class="rec-row" href="#">
+        <div class="when">Fri · 1:46pm</div>
+        <div class="who">Wesley Buchanan <em>· 70</em></div>
+        <div class="spec">Family Med</div>
+        <div class="dur">22:55</div>
+        <div class="stat signed"><span class="dot"></span>Signed</div>
+      </a>
+      <a class="rec-row" href="#">
+        <div class="when">Fri · 11:30am</div>
+        <div class="who">Daniela Rossi <em>· 33</em></div>
+        <div class="spec">Dermatology</div>
+        <div class="dur">7:42</div>
+        <div class="stat signed"><span class="dot"></span>Signed</div>
+      </a>
+      <a class="rec-row" href="#">
+        <div class="when">Fri · 10:08am</div>
+        <div class="who">Kofi Asante <em>· 56</em></div>
+        <div class="spec">Endocrinology</div>
+        <div class="dur">15:30</div>
+        <div class="stat draft"><span class="dot"></span>Drafted</div>
+      </a>
+      <a class="rec-row" href="#">
+        <div class="when">Thu · 3:55pm</div>
+        <div class="who">Lior Shapiro <em>· 41</em></div>
+        <div class="spec">Family Med</div>
+        <div class="dur">12:11</div>
+        <div class="stat signed"><span class="dot"></span>Signed</div>
+      </a>
+      <a class="rec-row" href="#">
+        <div class="when">Thu · 2:20pm</div>
+        <div class="who">Margaret Whitfield <em>· 78</em></div>
+        <div class="spec">Family Med</div>
+        <div class="dur">24:09</div>
+        <div class="stat signed"><span class="dot"></span>Signed</div>
+      </a>
+    </div>
+  </section>
+
+  <p class="esc-hint">
+    The schedule will refresh quietly on its own. Press <span class="kk">⌘</span><span class="kk">K</span> to find anything · <span class="kk">N</span> for a new visit.
+  </p>
+
+</main>
+</body>
+</html>

@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>QuillMD — The Daily Round, Vol. IV, No. 119</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;1,8..60,400;1,8..60,500&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --cream:#F2EBDC; --cream-card:#FFFCF5; --cream-2:#F2EDE3;
+    --ink:#2B2620; --ink-2:#5C544A; --ink-3:#8A8278;
+    --sage:#7AA68C; --sage-deep:#2F5040;
+    --coral:#C97B6E; --amber:#D4A574; --teal:#5BA3B4;
+    --line:rgba(43,38,32,0.08);
+    --line-2:rgba(43,38,32,0.14);
+    --serif:'Source Serif 4',Georgia,serif;
+    --sans:'DM Sans',-apple-system,system-ui,sans-serif;
+    --mono:'JetBrains Mono',ui-monospace,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+  ::selection{background:rgba(122,166,140,.32);color:var(--ink)}
+  a{color:inherit;text-decoration:none}
+
+  /* shell */
+  .page{max-width:1180px;margin:0 auto;padding:28px 56px 120px;position:relative}
+
+  /* fly title bar */
+  .flytitle{
+    display:flex;align-items:baseline;justify-content:space-between;
+    padding-bottom:14px;border-bottom:1px solid var(--ink);
+    font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-2)
+  }
+  .flytitle .lh{display:flex;gap:22px;align-items:baseline}
+  .flytitle .rh{display:flex;gap:22px;align-items:center}
+  .wordmark{font-family:var(--serif);font-style:italic;font-weight:500;font-size:18px;letter-spacing:0;color:var(--ink);text-transform:none}
+  .kbd{display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border:1px solid var(--line-2);border-radius:6px;background:var(--cream-card);font-family:var(--mono);font-size:10.5px;color:var(--ink-2)}
+  .kbd kbd{font-family:inherit;font-size:10.5px;color:var(--ink)}
+  .chip{display:inline-flex;align-items:center;gap:8px;padding:5px 5px 5px 9px;border:1px solid var(--line-2);border-radius:999px;background:var(--cream-card);font-size:12px}
+  .chip .ini{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:999px;background:var(--sage-deep);color:#FBF9F1;font-family:var(--mono);font-size:9.5px;letter-spacing:.04em}
+  .chip span{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-2)}
+
+  /* masthead */
+  .masthead{padding:54px 0 26px;border-bottom:1px solid var(--ink)}
+  .masthead h1{
+    font-family:var(--serif);font-weight:400;font-size:clamp(72px,11vw,148px);line-height:.9;letter-spacing:-0.035em;
+    color:var(--ink);
+  }
+  .masthead h1 em{font-style:italic;font-weight:400;color:var(--sage-deep);position:relative}
+  .masthead h1 em::after{content:"";position:absolute;left:-2%;right:-2%;bottom:.06em;height:.42em;background:rgba(122,166,140,.18);border-radius:6px;z-index:-1}
+  .masthead .standfirst{
+    display:grid;grid-template-columns:1fr 1fr 1fr;gap:48px;margin-top:30px;
+    font-family:var(--serif);font-size:18px;line-height:1.55;color:var(--ink-2)
+  }
+  .masthead .standfirst .meta{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3);margin-bottom:8px;display:block}
+  .masthead .lede{font-style:italic;color:var(--ink)}
+
+  /* dateline */
+  .dateline{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:14px 0;border-bottom:1px solid var(--line);
+    font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-2)
+  }
+  .dateline .seg{display:flex;gap:32px}
+  .dateline .seg span b{color:var(--ink);font-weight:500}
+  .new-link{font-family:var(--serif);font-style:italic;color:var(--sage-deep);font-size:15px;text-transform:none;letter-spacing:0;border-bottom:1px solid rgba(47,80,64,.4);padding-bottom:1px}
+  .new-link:hover{border-bottom-color:var(--sage-deep)}
+
+  /* section header */
+  .section-h{display:flex;align-items:baseline;justify-content:space-between;padding:42px 0 16px;border-bottom:1px solid var(--line)}
+  .section-h h2{font-family:var(--serif);font-weight:500;font-size:26px;letter-spacing:-0.012em;color:var(--ink)}
+  .section-h h2 em{font-style:italic;color:var(--sage-deep)}
+  .section-h .rh{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3)}
+
+  /* table-of-contents — today's patients */
+  .toc{padding-top:6px}
+  .toc .row{
+    display:grid;grid-template-columns:48px 2.4fr 1.2fr 1fr 92px;
+    gap:24px;align-items:baseline;
+    padding:22px 0;border-bottom:1px solid var(--line);
+    transition:transform .35s ease,background .35s ease;
+  }
+  .toc .row:hover{background:linear-gradient(90deg,rgba(255,252,245,.55),transparent 60%)}
+  .toc .num{font-family:var(--serif);font-style:italic;font-weight:400;font-size:30px;color:var(--ink-3);line-height:1;letter-spacing:-.01em}
+  .toc .head{font-family:var(--serif);font-weight:500;font-size:22px;letter-spacing:-0.012em;color:var(--ink);line-height:1.25}
+  .toc .head em{font-style:italic;color:var(--ink-2);font-weight:400;font-size:15px;margin-left:6px}
+  .toc .sub{margin-top:6px;font-family:var(--serif);font-style:italic;color:var(--ink-2);font-size:15px;line-height:1.45}
+  .toc .codes{font-family:var(--mono);font-size:11px;letter-spacing:.05em;color:var(--ink-3);text-transform:uppercase}
+  .toc .codes b{color:var(--ink-2);font-weight:500}
+  .toc .specialty{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-2)}
+  .toc .status{justify-self:end;font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase}
+  .s-ready{color:var(--sage-deep)}
+  .s-needs{color:var(--coral)}
+  .s-drafting{color:var(--amber)}
+  .s-await{color:var(--ink-3)}
+  .s-signed{color:var(--ink-2)}
+  .s-signed::before{content:"●";margin-right:6px;color:var(--ink-3)}
+
+  /* tags */
+  .tags{display:flex;flex-wrap:wrap;gap:18px 22px;padding:18px 0 0}
+  .tag{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-2);cursor:pointer}
+  .tag b{color:var(--ink);font-weight:500}
+  .tag:hover{color:var(--sage-deep)}
+
+  /* numbers spread */
+  .numbers{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border-top:1px solid var(--ink);border-bottom:1px solid var(--line);margin-top:18px}
+  .numbers .col{padding:38px 28px 36px;border-right:1px solid var(--line);position:relative}
+  .numbers .col:last-child{border-right:0}
+  .numbers .lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3)}
+  .numbers .big{font-family:var(--serif);font-weight:400;font-size:clamp(64px,7vw,92px);line-height:.95;letter-spacing:-0.04em;color:var(--ink);margin-top:18px}
+  .numbers .big sup{font-family:var(--serif);font-style:italic;font-weight:400;font-size:.32em;color:var(--ink-3);margin-left:6px;letter-spacing:0;vertical-align:32%}
+  .numbers .cap{margin-top:14px;font-family:var(--serif);font-style:italic;color:var(--ink-2);font-size:15px;line-height:1.45;max-width:30ch}
+  .numbers .col.coral .big{color:var(--coral)}
+  .numbers .col.sage .big{color:var(--sage-deep)}
+
+  /* recent stream — column ledger */
+  .ledger{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--line);margin-top:6px}
+  .ledger .lcol{padding:0 24px 0 0;border-right:1px solid var(--line)}
+  .ledger .lcol + .lcol{padding:0 0 0 24px;border-right:0}
+  .lrow{display:grid;grid-template-columns:64px 1fr auto;gap:14px;align-items:baseline;padding:14px 0;border-bottom:1px solid var(--line)}
+  .lrow:last-child{border-bottom:0}
+  .lrow .ts{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;color:var(--ink-3);text-transform:uppercase}
+  .lrow .who{font-family:var(--serif);font-size:15.5px;color:var(--ink);line-height:1.35}
+  .lrow .who em{font-style:italic;color:var(--ink-2);font-size:13.5px;margin-left:5px}
+  .lrow .who .codes{display:block;margin-top:3px;font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;color:var(--ink-3);text-transform:uppercase}
+  .lrow .st{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase}
+
+  /* colophon footer */
+  .colophon{padding:48px 0 0;display:flex;align-items:baseline;justify-content:space-between;border-top:1px solid var(--ink);margin-top:42px}
+  .colophon .l{font-family:var(--serif);font-style:italic;color:var(--ink-2);font-size:15px}
+  .colophon .r{font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3)}
+
+  /* drop cap accent on lede */
+  .dropcap::first-letter{
+    font-family:var(--serif);font-style:italic;font-weight:500;float:left;font-size:62px;line-height:.92;
+    padding:6px 10px 0 0;color:var(--sage-deep)
+  }
+
+  /* mobile */
+  @media (max-width:760px){
+    .page{padding:22px 22px 80px}
+    .masthead h1{font-size:64px}
+    .masthead .standfirst{grid-template-columns:1fr;gap:18px}
+    .toc .row{grid-template-columns:34px 1fr;gap:14px}
+    .toc .specialty,.toc .codes,.toc .status{grid-column:2/3}
+    .toc .status{justify-self:start;margin-top:6px}
+    .numbers{grid-template-columns:1fr 1fr}
+    .numbers .col{border-right:1px solid var(--line)}
+    .numbers .col:nth-child(2n){border-right:0}
+    .numbers .col:nth-child(-n+2){border-bottom:1px solid var(--line)}
+    .ledger{grid-template-columns:1fr}
+    .ledger .lcol{padding:0;border-right:0}
+    .ledger .lcol + .lcol{padding-top:0}
+    .dateline{flex-direction:column;align-items:flex-start;gap:10px}
+    .dateline .seg{flex-wrap:wrap;gap:14px}
+    .flytitle{flex-direction:column;gap:10px;align-items:flex-start}
+  }
+</style>
+</head>
+<body>
+<main class="page">
+
+  <!-- FLY TITLE -->
+  <div class="flytitle">
+    <div class="lh">
+      <span class="wordmark">QuillMD</span>
+      <span>Vol. IV · No. 119</span>
+      <span>The Daily Round</span>
+    </div>
+    <div class="rh">
+      <span class="kbd"><kbd>⌘</kbd><kbd>K</kbd> · find anyone</span>
+      <span class="chip"><span>Dr. Park · Family Med</span><span class="ini">MP</span></span>
+    </div>
+  </div>
+
+  <!-- MASTHEAD -->
+  <header class="masthead">
+    <h1>Good <em>evening</em>,<br/>Dr. Park.</h1>
+    <div class="standfirst">
+      <div>
+        <span class="meta">The Lede</span>
+        <p class="lede dropcap">Eleven faces on the schedule, three drafts waiting on your eyes, and a slow rain over the parking lot. The Round is calm tonight.</p>
+      </div>
+      <div>
+        <span class="meta">In This Issue</span>
+        <p>A pre-op clearance for Mr. Sahakian. A diabetes follow-up that wants a closer look. Two well-checks. One mole that probably is, and one that probably isn't.</p>
+      </div>
+      <div>
+        <span class="meta">Editor's Note</span>
+        <p style="font-style:italic">"Slow is smooth, smooth is fast." Sign the Tran chart before you leave; it's been ready since two-thirty.</p>
+      </div>
+    </div>
+  </header>
+
+  <!-- DATELINE -->
+  <div class="dateline">
+    <div class="seg">
+      <span>Wed · 29 Apr 2026</span>
+      <span>Edition <b>EVE</b></span>
+      <span>Cream &amp; Sage</span>
+      <span>Pages I — V</span>
+    </div>
+    <div class="seg">
+      <span>Filed by Dr. Park</span>
+      <a class="new-link" href="#">Open a new visit →</a>
+    </div>
+  </div>
+
+  <!-- I. TABLE OF CONTENTS — TODAY'S PATIENTS -->
+  <div class="section-h">
+    <h2>I. <em>Today's chapter</em>, by appointment.</h2>
+    <span class="rh">Five on the schedule</span>
+  </div>
+
+  <section class="toc">
+
+    <article class="row">
+      <div class="num">i.</div>
+      <div>
+        <div class="head">Mei-Ling Park <em>· 42 F</em></div>
+        <div class="sub">"A nagging cough she can't shake — three weeks now, worse at night."</div>
+      </div>
+      <div class="specialty">Family Medicine</div>
+      <div class="codes"><b>J20.9</b> · <b>99214</b> · drafted 0:38</div>
+      <div class="status s-ready">Ready</div>
+    </article>
+
+    <article class="row">
+      <div class="num">ii.</div>
+      <div>
+        <div class="head">Aram Sahakian <em>· 38 M</em></div>
+        <div class="sub">Pre-op clearance for left rotator-cuff repair. EKG attached, awaits cardiology stamp.</div>
+      </div>
+      <div class="specialty">Cardiology</div>
+      <div class="codes"><b>I10</b> · audio queued</div>
+      <div class="status s-await">Awaiting note</div>
+    </article>
+
+    <article class="row">
+      <div class="num">iii.</div>
+      <div>
+        <div class="head">Daniel Tran <em>· 27 M</em></div>
+        <div class="sub">Annual well-check; cleared for return to recreational soccer. Routine labs pending.</div>
+      </div>
+      <div class="specialty">Pediatrics</div>
+      <div class="codes"><b>Z00.129</b> · <b>99395</b></div>
+      <div class="status s-signed">Signed 14:30</div>
+    </article>
+
+    <article class="row">
+      <div class="num">iv.</div>
+      <div>
+        <div class="head">Priya Gupta <em>· 55 F</em></div>
+        <div class="sub">Quarterly diabetes follow-up. A1c trending up two points; medication review owed.</div>
+      </div>
+      <div class="specialty">Internal Medicine</div>
+      <div class="codes"><b>E11.9</b> · <b>99213</b></div>
+      <div class="status s-needs">Needs review</div>
+    </article>
+
+    <article class="row">
+      <div class="num">v.</div>
+      <div>
+        <div class="head">Elena Lopez <em>· 61 F</em></div>
+        <div class="sub">Routine mole check on the upper back. One spot warrants a second look — biopsy queued.</div>
+      </div>
+      <div class="specialty">Dermatology</div>
+      <div class="codes"><b>D22.4</b> · biopsy</div>
+      <div class="status s-drafting">Drafting</div>
+    </article>
+
+  </section>
+
+  <!-- TAGS -->
+  <div class="tags" aria-label="Filter by specialty">
+    <span class="tag">All <b>5</b></span>
+    <span class="tag">Family Medicine <b>4</b></span>
+    <span class="tag">Internal <b>3</b></span>
+    <span class="tag">Cardiology <b>2</b></span>
+    <span class="tag">Pediatrics <b>1</b></span>
+    <span class="tag">Dermatology <b>1</b></span>
+  </div>
+
+  <!-- II. NUMBERS -->
+  <div class="section-h">
+    <h2>II. <em>The numbers</em>, plainly stated.</h2>
+    <span class="rh">Month to date · Apr 2026</span>
+  </div>
+
+  <section class="numbers">
+    <div class="col">
+      <span class="lbl">Visits / month</span>
+      <div class="big">127</div>
+      <p class="cap">Pace is right. Last month closed at one-thirty-eight.</p>
+    </div>
+    <div class="col sage">
+      <span class="lbl">Avg drafted in</span>
+      <div class="big">38<sup>s</sup></div>
+      <p class="cap">From last word of audio to first SOAP draft.</p>
+    </div>
+    <div class="col coral">
+      <span class="lbl">Pending review</span>
+      <div class="big">3</div>
+      <p class="cap">Gupta. Lopez. The Tuesday-morning Singh chart.</p>
+    </div>
+    <div class="col">
+      <span class="lbl">Signed this week</span>
+      <div class="big">42</div>
+      <p class="cap">Eight ahead of last week. Friday is reading day.</p>
+    </div>
+  </section>
+
+  <!-- III. RECENT STREAM -->
+  <div class="section-h">
+    <h2>III. <em>Recently filed</em>, in two columns.</h2>
+    <span class="rh">Last 48 hours</span>
+  </div>
+
+  <section class="ledger">
+    <div class="lcol">
+
+      <div class="lrow">
+        <span class="ts">14:30</span>
+        <div class="who">Daniel Tran <em>· Pediatrics</em>
+          <span class="codes">Z00.129 · 99395 · 17 min</span>
+        </div>
+        <span class="st s-signed">Signed</span>
+      </div>
+
+      <div class="lrow">
+        <span class="ts">13:12</span>
+        <div class="who">Mei-Ling Park <em>· Family Med</em>
+          <span class="codes">J20.9 · 99214 · 11 min</span>
+        </div>
+        <span class="st s-ready">Ready</span>
+      </div>
+
+      <div class="lrow">
+        <span class="ts">11:48</span>
+        <div class="who">Priya Gupta <em>· Internal Med</em>
+          <span class="codes">E11.9 · 99213 · 22 min</span>
+        </div>
+        <span class="st s-needs">Needs review</span>
+      </div>
+
+      <div class="lrow">
+        <span class="ts">10:25</span>
+        <div class="who">Elena Lopez <em>· Dermatology</em>
+          <span class="codes">D22.4 · 99213 · 14 min</span>
+        </div>
+        <span class="st s-drafting">Drafting</span>
+      </div>
+
+      <div class="lrow">
+        <span class="ts">09:51</span>
+        <div class="who">Aram Sahakian <em>· Cardiology</em>
+          <span class="codes">I10 · 99244 · 19 min</span>
+        </div>
+        <span class="st s-await">Processing</span>
+      </div>
+
+      <div class="lrow">
+        <span class="ts">09:02</span>
+        <div class="who">Henry Okafor <em>· Family Med</em>
+          <span class="codes">M54.5 · 99213 · 8 min</span>
+        </div>
+        <span class="st s-signed">Signed</span>
+      </div>
+
+    </div>
+    <div class="lcol">
+
+      <div class="lrow">
+        <span class="ts">YDA 16:42</span>
+        <div class="who">Beatrice Lin <em>· Family Med</em>
+          <span class="codes">R05.9 · 99213 · 12 min</span>
+        </div>
+        <span class="st s-signed">Signed</span>
+      </div>
+
+      <div class="lrow">
+        <span class="ts">YDA 15:18</span>
+        <div class="who">Marcus Devereaux <em>· Internal Med</em>
+          <span class="codes">I50.9 · 99214 · 24 min</span>
+        </div>
+        <span class="st s-signed">Signed</span>
+      </div>
+
+      <div class="lrow">
+        <span class="ts">YDA 14:03</span>
+        <div class="who">Anya Petrova <em>· Pediatrics</em>
+          <span class="codes">J06.9 · 99213 · 9 min</span>
+        </div>
+        <span class="st s-needs">Needs review</span>
+      </div>
+
+      <div class="lrow">
+        <span class="ts">YDA 11:36</span>
+        <div class="who">Jamal Carter <em>· Family Med</em>
+          <span class="codes">E78.5 · 99213 · 16 min</span>
+        </div>
+        <span class="st s-signed">Signed</span>
+      </div>
+
+      <div class="lrow">
+        <span class="ts">YDA 10:11</span>
+        <div class="who">Sophia Albright <em>· Dermatology</em>
+          <span class="codes">L70.0 · 99202 · 11 min</span>
+        </div>
+        <span class="st s-signed">Signed</span>
+      </div>
+
+      <div class="lrow">
+        <span class="ts">YDA 08:54</span>
+        <div class="who">Nathaniel Cho <em>· Cardiology</em>
+          <span class="codes">I25.10 · 99214 · 26 min</span>
+        </div>
+        <span class="st s-ready">Ready</span>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- COLOPHON -->
+  <footer class="colophon">
+    <span class="l">"The chart is patient. The patient is not." <em style="color:var(--ink-3)">— house motto</em></span>
+    <span class="r">QuillMD · v7 · Edition Eve · pp. 1 — 1</span>
+  </footer>
+
+</main>
+</body>
+</html>

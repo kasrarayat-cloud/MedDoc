@@ -1,0 +1,1379 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QuillMD Operations — admin.quillmd.com</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Source+Serif+4:ital,opsz,wght@1,8..60,400;1,8..60,500&display=swap" rel="stylesheet" />
+<style>
+  /* ---------------------------------------------------------------- *
+   * V2 — LINEAR ADAPTED FOR MEDICAL (admin surface)                   *
+   * Warm-tinted dark canvas, sage accent, Source Serif 4 italic       *
+   * accent on greeting word, coral admin chip with warm glow.         *
+   * Operating-room indicator mood; HUD legibility preserved.          *
+   * ---------------------------------------------------------------- */
+
+  :root {
+    --bg: #0d0c0a;
+    --surface-1: #14130f;
+    --surface-2: #1c1a16;
+    --surface-3: #24211c;
+
+    --line: rgba(255, 245, 225, 0.06);
+    --line-strong: rgba(255, 245, 225, 0.10);
+
+    --text-1: #f8f5ef;
+    --text-2: #bfb9ad;
+    --text-3: #7c7669;
+
+    --sage: #7AA68C;
+    --sage-bright: #9bc2ab;
+    --sage-tint: rgba(122, 166, 140, 0.16);
+    --sage-faint: rgba(122, 166, 140, 0.08);
+
+    --coral: #C97B6E;
+    --coral-bg: rgba(201, 123, 110, 0.18);
+    --coral-faint: rgba(201, 123, 110, 0.10);
+
+    --amber: #D4A574;
+    --amber-bg: rgba(212, 165, 116, 0.16);
+
+    --sky: #7BA8C4;
+    --sky-bg: rgba(123, 168, 196, 0.14);
+
+    --hover: rgba(255, 245, 225, 0.045);
+
+    --duration: 100ms;
+    --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+
+  body {
+    background: var(--bg);
+    color: var(--text-1);
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 13px;
+    font-feature-settings: 'cv11', 'ss01';
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    line-height: 1.45;
+  }
+
+  .mono {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-feature-settings: 'tnum';
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---------- App shell ---------- */
+
+  .app {
+    display: grid;
+    grid-template-rows: 48px 1fr;
+    height: 100vh;
+  }
+
+  /* ---------- Top bar ---------- */
+
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 0 16px;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface-1);
+  }
+
+  .logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    font-weight: 600;
+    font-size: 13.5px;
+    letter-spacing: -0.01em;
+  }
+  .logo-mark {
+    width: 20px;
+    height: 20px;
+    border-radius: 5px;
+    background: linear-gradient(135deg, var(--sage), #5d8a72);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    color: #0b1611;
+    font-weight: 700;
+  }
+
+  .admin-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    color: var(--coral);
+    background: var(--coral-bg);
+    padding: 5px 9px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    box-shadow: 0 0 12px rgba(201, 123, 110, 0.10);
+    position: relative;
+  }
+  .admin-badge::before {
+    content: '';
+    position: absolute;
+    left: 7px;
+    top: 50%;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--coral);
+    transform: translateY(-50%);
+    display: none;
+  }
+
+  .topbar-spacer { flex: 1; }
+
+  .cmdk-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    height: 28px;
+    padding: 0 9px 0 11px;
+    border: 1px solid var(--line-strong);
+    background: var(--surface-2);
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--text-2);
+    cursor: pointer;
+    transition: background var(--duration) var(--ease);
+  }
+  .cmdk-chip:hover { background: var(--surface-3); }
+  .cmdk-chip kbd {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    color: var(--text-3);
+    background: rgba(255,245,225,0.04);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 1px 5px;
+    line-height: 1;
+  }
+
+  .new-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 11px;
+    background: var(--sage-tint);
+    color: var(--sage);
+    border: 1px solid rgba(122, 166, 140, 0.24);
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background var(--duration) var(--ease);
+  }
+  .new-action:hover { background: rgba(122, 166, 140, 0.24); }
+
+  .initials-chip {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    background: var(--surface-3);
+    border: 1px solid var(--line-strong);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-1);
+    cursor: pointer;
+  }
+
+  /* ---------- Layout shell ---------- */
+
+  .shell {
+    display: grid;
+    grid-template-columns: 220px 1fr 268px;
+    overflow: hidden;
+  }
+
+  /* ---------- Sidebar ---------- */
+
+  .sidebar {
+    background: var(--surface-1);
+    border-right: 1px solid var(--line);
+    padding: 12px 8px;
+    overflow-y: auto;
+  }
+
+  .sidebar-section { margin-bottom: 16px; }
+  .sidebar-section-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 0 8px 6px;
+  }
+
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 32px;
+    padding: 0 9px;
+    border-radius: 5px;
+    color: var(--text-2);
+    cursor: pointer;
+    font-size: 13px;
+    position: relative;
+    transition: background var(--duration) var(--ease), color var(--duration) var(--ease);
+  }
+  .nav-item:hover { background: var(--hover); color: var(--text-1); }
+  .nav-item.active {
+    background: var(--sage-faint);
+    color: var(--text-1);
+  }
+  .nav-item.active::before {
+    content: '';
+    position: absolute;
+    left: -8px;
+    top: 7px;
+    bottom: 7px;
+    width: 2px;
+    background: var(--sage);
+    border-radius: 0 2px 2px 0;
+  }
+  .nav-icon {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    color: var(--text-3);
+  }
+  .nav-item.active .nav-icon { color: var(--sage); }
+  .nav-label { flex: 1; }
+  .nav-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    color: var(--text-3);
+    background: rgba(255,245,225,0.04);
+    padding: 1px 6px;
+    border-radius: 3px;
+    border: 1px solid var(--line);
+  }
+  .nav-count.alert { color: var(--coral); background: var(--coral-faint); border-color: rgba(201, 123, 110, 0.18); }
+
+  .ws-switcher {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 7px 9px;
+    border-radius: 5px;
+    cursor: pointer;
+    margin-bottom: 4px;
+  }
+  .ws-switcher:hover { background: var(--hover); }
+  .ws-mark {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    background: linear-gradient(135deg, #c97b6e, #8a4339);
+    flex-shrink: 0;
+  }
+  .ws-name { font-size: 13px; font-weight: 500; color: var(--text-1); }
+  .ws-tier {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-3);
+  }
+
+  /* ---------- Main pane ---------- */
+
+  .main {
+    background: var(--bg);
+    overflow-y: auto;
+    min-width: 0;
+  }
+
+  .main-inner { padding: 20px 24px 28px; }
+
+  .greeting {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text-2);
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+  }
+  .greeting-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--coral);
+    box-shadow: 0 0 8px rgba(201, 123, 110, 0.55);
+  }
+  .greeting-em { color: var(--text-1); }
+  .greeting-num {
+    font-family: 'Source Serif 4', Georgia, serif;
+    font-style: italic;
+    font-weight: 500;
+    color: var(--sage-bright);
+    font-size: 17px;
+    text-shadow: 0 0 14px rgba(155, 194, 171, 0.30);
+    margin: 0 1px;
+    letter-spacing: -0.01em;
+  }
+
+  /* KPI strip */
+  .kpi-strip {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    padding: 16px 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    flex-wrap: wrap;
+  }
+  .kpi {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 0 20px;
+    border-right: 1px solid var(--line);
+    min-width: 0;
+    flex: 1;
+  }
+  .kpi:last-child { border-right: none; }
+  .kpi:first-child { padding-left: 0; }
+
+  .kpi-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9.5px;
+    font-weight: 500;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .kpi-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--text-1);
+    letter-spacing: -0.01em;
+  }
+  .kpi-sub {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-3);
+  }
+  .kpi-value.warn { color: var(--coral); }
+  .kpi-value.amber { color: var(--amber); }
+
+  /* Tab bar */
+  .tabbar {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    border-bottom: 1px solid var(--line);
+    margin-top: 4px;
+  }
+  .tab {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-3);
+    padding: 13px 16px;
+    cursor: pointer;
+    border-bottom: 1.5px solid transparent;
+    margin-bottom: -1px;
+    transition: color var(--duration) var(--ease);
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .tab:hover { color: var(--text-2); }
+  .tab.active {
+    color: var(--sage);
+    border-bottom-color: var(--sage);
+  }
+  .tab-count {
+    font-size: 10px;
+    color: var(--text-3);
+    background: rgba(255,245,225,0.04);
+    padding: 1px 6px;
+    border-radius: 3px;
+    letter-spacing: 0;
+    border: 1px solid var(--line);
+  }
+  .tab.active .tab-count { color: var(--sage); background: var(--sage-tint); border-color: rgba(122, 166, 140, 0.20); }
+
+  .tabbar-right {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-right: 4px;
+  }
+  .filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 24px;
+    padding: 0 8px;
+    border: 1px solid rgba(255, 245, 225, 0.06);
+    border-radius: 4px;
+    background: transparent;
+    font-size: 11px;
+    color: var(--text-2);
+    cursor: pointer;
+  }
+  .filter-chip:hover { background: var(--hover); }
+
+  /* ---------- Users table ---------- */
+
+  .table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+  .table thead th {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    text-align: left;
+    padding: 11px 10px 11px 12px;
+    border-bottom: 1px solid var(--line);
+    background: var(--bg);
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+  .table thead th:first-child { padding-left: 0; }
+  .table thead th.num { text-align: right; }
+
+  .table tbody td {
+    height: 36px;
+    padding: 0 10px 0 12px;
+    border-bottom: 1px solid var(--line);
+    color: var(--text-1);
+    font-size: 13px;
+    white-space: nowrap;
+    vertical-align: middle;
+  }
+  .table tbody td:first-child { padding-left: 0; }
+  .table tbody tr {
+    transition: background var(--duration) var(--ease);
+    cursor: pointer;
+  }
+  .table tbody tr:hover { background: var(--hover); }
+
+  .row-initials {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 5px;
+    font-size: 10.5px;
+    font-weight: 600;
+    color: #0b0c0d;
+    background: linear-gradient(135deg, #bfb9ad, #948c7c);
+  }
+  .row-initials.sage { background: linear-gradient(135deg, #9bc2ab, #6f9b85); }
+  .row-initials.coral { background: linear-gradient(135deg, #d99a90, #b06b60); color: #fff; }
+  .row-initials.amber { background: linear-gradient(135deg, #e2bd92, #b88752); color: #1c1409; }
+  .row-initials.sky { background: linear-gradient(135deg, #a5c8dd, #6e95ad); color: #0a1820; }
+  .row-initials.violet { background: linear-gradient(135deg, #c9b8a4, #927d68); color: #1a1208; }
+
+  .name { font-weight: 500; color: var(--text-1); }
+  .email { color: var(--text-2); }
+  .role-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-2);
+    letter-spacing: 0.05em;
+  }
+  .role-tag.admin { color: var(--sage); }
+  .last-active { color: var(--text-2); }
+  .visits { color: var(--text-1); text-align: right; font-variant-numeric: tabular-nums; }
+
+  /* status pills with warm-tinted hairline (V2 distinguisher) */
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 22px;
+    padding: 0 9px;
+    border-radius: 4px;
+    background: rgba(255,245,225,0.04);
+    border: 1px solid rgba(255, 245, 225, 0.06);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-2);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .pill-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--text-3);
+    flex-shrink: 0;
+  }
+  .pill.active .pill-dot { background: var(--sage); }
+  .pill.suspended { color: var(--coral); border-color: rgba(201, 123, 110, 0.18); }
+  .pill.suspended .pill-dot { background: var(--coral); }
+  .pill.idle { color: var(--text-3); }
+
+  .flag-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 20px;
+    padding: 0 7px;
+    margin-left: 7px;
+    border-radius: 3px;
+    background: var(--amber-bg);
+    border: 1px solid rgba(212, 165, 116, 0.18);
+    color: var(--amber);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9.5px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+  }
+
+  .actions-btn {
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    border: none;
+    background: transparent;
+    color: var(--text-3);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background var(--duration) var(--ease), color var(--duration) var(--ease);
+    font-size: 13px;
+    letter-spacing: 1px;
+    line-height: 1;
+    padding-bottom: 4px;
+  }
+  .actions-btn:hover { background: var(--hover); color: var(--text-1); }
+  .actions-btn::before { content: '···'; }
+
+  /* ---------- Right pane ---------- */
+
+  .rightpane {
+    border-left: 1px solid var(--line);
+    background: var(--surface-1);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+  .rp-section {
+    border-bottom: 1px solid var(--line);
+    padding: 16px 16px 14px;
+  }
+  .rp-section:last-of-type { border-bottom: none; }
+  .rp-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .rp-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .rp-link {
+    font-size: 11px;
+    color: var(--sage);
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .rp-link:hover { text-decoration: underline; }
+
+  .threat-item {
+    display: grid;
+    grid-template-columns: 8px 1fr;
+    gap: 9px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  .threat-item:last-child { border-bottom: none; }
+  .threat-item:hover { background: var(--hover); margin: 0 -8px; padding: 10px 8px; border-radius: 4px; border-bottom-color: transparent; }
+  .threat-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-top: 5px;
+  }
+  .threat-dot.coral { background: var(--coral); box-shadow: 0 0 6px rgba(201, 123, 110, 0.55); }
+  .threat-dot.amber { background: var(--amber); box-shadow: 0 0 6px rgba(212, 165, 116, 0.45); }
+  .threat-dot.sky { background: var(--sky); }
+  .threat-meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-3);
+    margin-bottom: 3px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .threat-id { color: var(--text-2); }
+  .threat-status {
+    font-size: 9px;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .threat-status.coral { color: var(--coral); }
+  .threat-status.amber { color: var(--amber); }
+  .threat-status.sky { color: var(--sky); }
+  .threat-text { color: var(--text-1); font-size: 12.5px; }
+
+  /* sparkline section */
+  .sparkbox {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    margin-top: 6px;
+  }
+  .spark-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 11px;
+  }
+  .spark-label { color: var(--text-3); flex: 1; font-family: 'JetBrains Mono', monospace; font-size: 10px; }
+  .spark-svg { flex-shrink: 0; }
+  .spark-num {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-1);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    width: 40px;
+    text-align: right;
+  }
+
+  /* operating-room indicator strip — V2 only */
+  .op-strip {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    margin-top: 12px;
+    background: rgba(201, 123, 110, 0.06);
+    border: 1px solid rgba(201, 123, 110, 0.14);
+    border-radius: 5px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    color: var(--coral);
+  }
+  .op-pulse {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--coral);
+    box-shadow: 0 0 8px rgba(201, 123, 110, 0.55);
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
+  }
+  .op-strip-text { flex: 1; color: var(--text-2); font-family: 'Inter', sans-serif; font-size: 11.5px; }
+  .op-strip-em { color: var(--coral); font-family: 'JetBrains Mono', monospace; font-size: 10.5px; }
+
+  /* ---------- ⌘K floating chip ---------- */
+  .cmdk-floater {
+    position: fixed;
+    bottom: 18px;
+    right: 18px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 13px 9px 14px;
+    background: var(--surface-2);
+    border: 1px solid var(--line-strong);
+    border-radius: 10px;
+    font-size: 12px;
+    color: var(--text-2);
+    cursor: pointer;
+    z-index: 50;
+    transition: background var(--duration) var(--ease);
+    box-shadow: 0 4px 18px rgba(0,0,0,0.4), 0 0 18px rgba(122, 166, 140, 0.04);
+  }
+  .cmdk-floater:hover { background: var(--surface-3); }
+  .cmdk-floater kbd {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    color: var(--text-1);
+    background: rgba(255,245,225,0.06);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 2px 6px;
+    line-height: 1;
+  }
+
+  /* ---------- ⌘K modal preview (V2 closed; opens on chip click) ---------- */
+  .cmdk-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(6px);
+    z-index: 100;
+    display: none;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 14vh;
+  }
+  .cmdk-overlay.open { display: flex; }
+  .cmdk-modal {
+    width: min(580px, 92vw);
+    background: var(--surface-2);
+    border: 1px solid var(--line-strong);
+    border-radius: 12px;
+    box-shadow: 0 28px 60px rgba(0, 0, 0, 0.6);
+    overflow: hidden;
+  }
+
+  /* ---------- Mobile collapse ---------- */
+  @media (max-width: 980px) {
+    .shell {
+      grid-template-columns: 1fr;
+    }
+    .sidebar, .rightpane { display: none; }
+    .kpi-strip { flex-wrap: wrap; }
+    .kpi { flex-basis: 33.333%; border-right: none; padding: 6px 12px; }
+    .table thead { display: none; }
+    .table, .table tbody, .table tr, .table td { display: block; width: 100%; }
+    .table tbody tr {
+      padding: 12px;
+      border-bottom: 1px solid var(--line);
+      display: grid;
+      grid-template-columns: 24px 1fr auto;
+      grid-template-rows: auto auto auto;
+      gap: 4px 10px;
+    }
+    .table tbody tr td { height: auto; padding: 0; border: none; white-space: normal; }
+    .cmdk-floater { bottom: 12px; right: 12px; }
+  }
+
+  svg.i { display: inline-block; vertical-align: middle; }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- Top bar -->
+  <header class="topbar">
+    <div class="logo">
+      <span class="logo-mark">Q</span>
+      <span>QuillMD</span>
+    </div>
+    <span class="admin-badge">OPERATIONS · SUPER_ADMIN</span>
+    <div class="topbar-spacer"></div>
+    <div class="cmdk-chip" aria-label="Open command menu">
+      <svg class="i" width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="5"/><path d="M14 14l-3-3"/></svg>
+      <span>Search</span>
+      <kbd>⌘K</kbd>
+    </div>
+    <button class="new-action">
+      <svg class="i" width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M8 3v10M3 8h10"/></svg>
+      New action
+    </button>
+    <div class="initials-chip" title="Eleanor Walsh · ewalsh@quillmd.com">EW</div>
+  </header>
+
+  <div class="shell">
+
+    <!-- =============== Sidebar =============== -->
+    <aside class="sidebar">
+
+      <div class="ws-switcher">
+        <span class="ws-mark"></span>
+        <div style="flex:1;min-width:0">
+          <div class="ws-name">QuillMD Ops</div>
+          <div class="ws-tier">tier · platform</div>
+        </div>
+        <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="var(--text-3)" stroke-width="1.5"><path d="M5 6l3 3 3-3"/></svg>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-section-label">Operations</div>
+        <div class="nav-item active">
+          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>
+          <span class="nav-label">Overview</span>
+        </div>
+        <div class="nav-item">
+          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="6" r="3"/><path d="M2 14c0-3 2.5-5 6-5s6 2 6 5"/></svg>
+          <span class="nav-label">Users</span>
+          <span class="nav-count">132</span>
+        </div>
+        <div class="nav-item">
+          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h12M2 8h12M2 12h8"/></svg>
+          <span class="nav-label">Audit log</span>
+          <span class="nav-count">1.2k</span>
+        </div>
+        <div class="nav-item">
+          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1l6 3v5c0 4-2.5 6-6 7-3.5-1-6-3-6-7V4l6-3z"/></svg>
+          <span class="nav-label">HIPAA</span>
+          <span class="nav-count">14</span>
+        </div>
+        <div class="nav-item">
+          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1l1.6 4 4.4.4-3.4 3 1 4.6L8 11l-3.6 2 1-4.6-3.4-3 4.4-.4z"/></svg>
+          <span class="nav-label">Threats</span>
+          <span class="nav-count alert">2</span>
+        </div>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-section-label">Platform</div>
+        <div class="nav-item">
+          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="12" height="9" rx="1.5"/><path d="M2 7h12"/></svg>
+          <span class="nav-label">Billing</span>
+          <span class="nav-count">$11.4k</span>
+        </div>
+        <div class="nav-item">
+          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2"/><path d="M8 1.5v2M8 12.5v2M14.5 8h-2M3.5 8h-2M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4M12.6 12.6l-1.4-1.4M4.8 4.8L3.4 3.4"/></svg>
+          <span class="nav-label">Settings</span>
+        </div>
+        <div class="nav-item">
+          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 12V4l6 4 6-4v8"/><rect x="2" y="4" width="12" height="8" rx="1"/></svg>
+          <span class="nav-label">Notifications</span>
+          <span class="nav-count">7</span>
+        </div>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-section-label">Infra</div>
+        <div class="nav-item">
+          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><ellipse cx="8" cy="3.5" rx="5" ry="1.5"/><path d="M3 3.5v9c0 .8 2.2 1.5 5 1.5s5-.7 5-1.5v-9"/><path d="M3 8c0 .8 2.2 1.5 5 1.5s5-.7 5-1.5"/></svg>
+          <span class="nav-label">Postgres</span>
+          <span class="nav-count">OK</span>
+        </div>
+        <div class="nav-item">
+          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="4" rx="1"/><rect x="2" y="9" width="12" height="4" rx="1"/><circle cx="4.5" cy="5" r=".7" fill="currentColor"/><circle cx="4.5" cy="11" r=".7" fill="currentColor"/></svg>
+          <span class="nav-label">Workers</span>
+          <span class="nav-count">8/8</span>
+        </div>
+        <div class="nav-item">
+          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8c0-3 2-5 5-5s5 2 5 5-2 5-5 5-5-2-5-5z"/><path d="M3 8h10"/></svg>
+          <span class="nav-label">External APIs</span>
+          <span class="nav-count">3/3</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- =============== Main pane =============== -->
+    <main class="main">
+      <div class="main-inner">
+
+        <!-- Greeting / context — note "two" in Source Serif 4 italic, sage-glowed -->
+        <div class="greeting">
+          <span class="greeting-dot"></span>
+          <span class="greeting-em">Wednesday, April 30</span>
+          <span>·</span>
+          <span>23:14 PT</span>
+          <span>·</span>
+          <span class="greeting-num">two</span>
+          <span>anomalies overnight</span>
+          <span>·</span>
+          <span>last sync 4s ago</span>
+        </div>
+
+        <!-- KPI strip (inline, NOT cards) -->
+        <div class="kpi-strip">
+          <div class="kpi">
+            <span class="kpi-label">Active doctors</span>
+            <span class="kpi-value">132</span>
+            <span class="kpi-sub">+5 / 24h</span>
+          </div>
+          <div class="kpi">
+            <span class="kpi-label">Visits / wk</span>
+            <span class="kpi-value">2,418</span>
+            <span class="kpi-sub">+12.4% wow</span>
+          </div>
+          <div class="kpi">
+            <span class="kpi-label">HIPAA findings</span>
+            <span class="kpi-value amber">14</span>
+            <span class="kpi-sub">2 pending op</span>
+          </div>
+          <div class="kpi">
+            <span class="kpi-label">Threats 24h</span>
+            <span class="kpi-value warn">2</span>
+            <span class="kpi-sub">1 escalated</span>
+          </div>
+          <div class="kpi">
+            <span class="kpi-label">MRR</span>
+            <span class="kpi-value">$11.4k</span>
+            <span class="kpi-sub">+$840 mom</span>
+          </div>
+          <div class="kpi">
+            <span class="kpi-label">Avg latency</span>
+            <span class="kpi-value">412 <span style="font-size:11px;color:var(--text-3)">ms</span></span>
+            <span class="kpi-sub">p95 1.8s</span>
+          </div>
+        </div>
+
+        <!-- Tab bar -->
+        <div class="tabbar">
+          <div class="tab active">
+            Users
+            <span class="tab-count">132</span>
+          </div>
+          <div class="tab">
+            Audit
+            <span class="tab-count">1.2k</span>
+          </div>
+          <div class="tab">
+            HIPAA
+            <span class="tab-count">14</span>
+          </div>
+          <div class="tab">
+            Threats
+            <span class="tab-count">2</span>
+          </div>
+          <div class="tabbar-right">
+            <button class="filter-chip">
+              <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h12M4 8h8M6 12h4"/></svg>
+              Role: any
+            </button>
+            <button class="filter-chip">
+              <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 1.5"/></svg>
+              Last 30d
+            </button>
+            <button class="filter-chip">
+              <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 3v10M3 8h10"/></svg>
+              Add filter
+            </button>
+          </div>
+        </div>
+
+        <!-- Users table -->
+        <table class="table" role="table" aria-label="Users">
+          <thead>
+            <tr>
+              <th style="width:36px"></th>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Role</th>
+              <th>Last active</th>
+              <th class="num">Visits</th>
+              <th>Status</th>
+              <th style="width:34px"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="row-initials sage">MP</span></td>
+              <td><span class="name">Mei-Ling Park</span></td>
+              <td class="mono email">park@pacificpeds.com</td>
+              <td><span class="role-tag">DOCTOR</span></td>
+              <td class="mono last-active">2m ago</td>
+              <td class="mono visits">1,247</td>
+              <td><span class="pill active"><span class="pill-dot"></span>Active</span></td>
+              <td><button class="actions-btn" aria-label="More"></button></td>
+            </tr>
+            <tr>
+              <td><span class="row-initials">AS</span></td>
+              <td><span class="name">Aram Sahakian</span></td>
+              <td class="mono email">aram@verdevalley.com</td>
+              <td><span class="role-tag">DOCTOR</span></td>
+              <td class="mono last-active">14m ago</td>
+              <td class="mono visits">892</td>
+              <td><span class="pill active"><span class="pill-dot"></span>Active</span></td>
+              <td><button class="actions-btn" aria-label="More"></button></td>
+            </tr>
+            <tr>
+              <td><span class="row-initials amber">DT</span></td>
+              <td>
+                <span class="name">Daniel Tran</span>
+                <span class="flag-chip">7 FAILED LOGINS · TODAY</span>
+              </td>
+              <td class="mono email">dtran@northshore.com</td>
+              <td><span class="role-tag">DOCTOR</span></td>
+              <td class="mono last-active">38m ago</td>
+              <td class="mono visits">412</td>
+              <td><span class="pill active"><span class="pill-dot"></span>Active</span></td>
+              <td><button class="actions-btn" aria-label="More"></button></td>
+            </tr>
+            <tr>
+              <td><span class="row-initials violet">EW</span></td>
+              <td><span class="name">Eleanor Walsh</span></td>
+              <td class="mono email">ewalsh@quillmd.com</td>
+              <td><span class="role-tag admin">SUPER_ADMIN</span></td>
+              <td class="mono last-active">1h ago</td>
+              <td class="mono visits" style="color:var(--text-3)">—</td>
+              <td><span class="pill active"><span class="pill-dot"></span>Active</span></td>
+              <td><button class="actions-btn" aria-label="More"></button></td>
+            </tr>
+            <tr>
+              <td><span class="row-initials sky">PG</span></td>
+              <td><span class="name">Priya Gupta</span></td>
+              <td class="mono email">priya@internalmed.com</td>
+              <td><span class="role-tag">DOCTOR</span></td>
+              <td class="mono last-active">2h ago</td>
+              <td class="mono visits">1,103</td>
+              <td><span class="pill active"><span class="pill-dot"></span>Active</span></td>
+              <td><button class="actions-btn" aria-label="More"></button></td>
+            </tr>
+            <tr>
+              <td><span class="row-initials">HT</span></td>
+              <td><span class="name">Hiroshi Tanaka</span></td>
+              <td class="mono email">hiroshi@montereyim.com</td>
+              <td><span class="role-tag">DOCTOR</span></td>
+              <td class="mono last-active">3h ago</td>
+              <td class="mono visits">614</td>
+              <td><span class="pill active"><span class="pill-dot"></span>Active</span></td>
+              <td><button class="actions-btn" aria-label="More"></button></td>
+            </tr>
+            <tr>
+              <td><span class="row-initials sage">EL</span></td>
+              <td><span class="name">Elena Lopez</span></td>
+              <td class="mono email">elena@coastderm.com</td>
+              <td><span class="role-tag">DOCTOR</span></td>
+              <td class="mono last-active">4h ago</td>
+              <td class="mono visits">287</td>
+              <td><span class="pill active"><span class="pill-dot"></span>Active</span></td>
+              <td><button class="actions-btn" aria-label="More"></button></td>
+            </tr>
+            <tr>
+              <td><span class="row-initials sky">NW</span></td>
+              <td><span class="name">Naomi Whitehorse</span></td>
+              <td class="mono email">whitehorse@blueridgepsy.com</td>
+              <td><span class="role-tag">DOCTOR</span></td>
+              <td class="mono last-active">5h ago</td>
+              <td class="mono visits">412</td>
+              <td><span class="pill active"><span class="pill-dot"></span>Active</span></td>
+              <td><button class="actions-btn" aria-label="More"></button></td>
+            </tr>
+            <tr>
+              <td><span class="row-initials coral">MJ</span></td>
+              <td><span class="name">Marcus Johnson</span></td>
+              <td class="mono email">mjohnson@summitim.com</td>
+              <td><span class="role-tag">DOCTOR</span></td>
+              <td class="mono last-active">7h ago</td>
+              <td class="mono visits">56</td>
+              <td><span class="pill suspended"><span class="pill-dot"></span>Suspended <span style="color:var(--text-3);margin-left:4px">· dup-account</span></span></td>
+              <td><button class="actions-btn" aria-label="More"></button></td>
+            </tr>
+            <tr>
+              <td><span class="row-initials amber">SP</span></td>
+              <td><span class="name">Sara Patel</span></td>
+              <td class="mono email">spatel@desertfm.com</td>
+              <td><span class="role-tag">DOCTOR</span></td>
+              <td class="mono last-active">1d ago</td>
+              <td class="mono visits">387</td>
+              <td><span class="pill active"><span class="pill-dot"></span>Active</span></td>
+              <td><button class="actions-btn" aria-label="More"></button></td>
+            </tr>
+            <tr>
+              <td><span class="row-initials violet">DK</span></td>
+              <td><span class="name">David Kim</span></td>
+              <td class="mono email">dkim@quillmd.com</td>
+              <td><span class="role-tag admin">SUPER_ADMIN</span></td>
+              <td class="mono last-active">2d ago</td>
+              <td class="mono visits" style="color:var(--text-3)">—</td>
+              <td><span class="pill idle"><span class="pill-dot"></span>Active</span></td>
+              <td><button class="actions-btn" aria-label="More"></button></td>
+            </tr>
+            <tr>
+              <td><span class="row-initials">FN</span></td>
+              <td><span class="name">Felipe Navarro</span></td>
+              <td class="mono email">navarro@valleycard.com</td>
+              <td><span class="role-tag">DOCTOR</span></td>
+              <td class="mono last-active">3d ago</td>
+              <td class="mono visits">148</td>
+              <td><span class="pill idle"><span class="pill-dot"></span>Active</span></td>
+              <td><button class="actions-btn" aria-label="More"></button></td>
+            </tr>
+            <tr>
+              <td><span class="row-initials sage">MO</span></td>
+              <td><span class="name">Margaret O'Connor</span></td>
+              <td class="mono email">oconnor@portrose.com</td>
+              <td><span class="role-tag">DOCTOR</span></td>
+              <td class="mono last-active">5d ago</td>
+              <td class="mono visits">692</td>
+              <td><span class="pill idle"><span class="pill-dot"></span>Active</span></td>
+              <td><button class="actions-btn" aria-label="More"></button></td>
+            </tr>
+          </tbody>
+        </table>
+
+      </div>
+    </main>
+
+    <!-- =============== Right pane =============== -->
+    <aside class="rightpane">
+
+      <div class="rp-section">
+        <div class="rp-header">
+          <span class="rp-title">Recent threats</span>
+          <a class="rp-link">View all →</a>
+        </div>
+        <div class="threat-item">
+          <span class="threat-dot coral"></span>
+          <div>
+            <div class="threat-meta">
+              <span>2m ago</span>
+              <span class="threat-id">TX-2026-0429-002</span>
+              <span class="threat-status coral">ESCALATED</span>
+            </div>
+            <div class="threat-text">Anomalous login · Eleanor Walsh · new device · Tokyo IP</div>
+          </div>
+        </div>
+        <div class="threat-item">
+          <span class="threat-dot amber"></span>
+          <div>
+            <div class="threat-meta">
+              <span>14m ago</span>
+              <span class="threat-id">TX-2026-0429-001</span>
+              <span class="threat-status amber">UNDER REVIEW</span>
+            </div>
+            <div class="threat-text">7 failed logins for Daniel Tran</div>
+          </div>
+        </div>
+        <div class="threat-item">
+          <span class="threat-dot sky"></span>
+          <div>
+            <div class="threat-meta">
+              <span>1h ago</span>
+              <span class="threat-id">h17-flag</span>
+              <span class="threat-status sky">INFO</span>
+            </div>
+            <div class="threat-text">Audit log retention 90% of 2yr window</div>
+          </div>
+        </div>
+        <div class="threat-item">
+          <span class="threat-dot coral"></span>
+          <div>
+            <div class="threat-meta">
+              <span>3h ago</span>
+              <span class="threat-id">TX-2026-0428-008</span>
+              <span class="threat-status sky">RESOLVED</span>
+            </div>
+            <div class="threat-text">Cross-tenant query attempt blocked by RBAC</div>
+          </div>
+        </div>
+        <div class="threat-item">
+          <span class="threat-dot sky"></span>
+          <div>
+            <div class="threat-meta">
+              <span>5h ago</span>
+              <span class="threat-id">h11-rotation</span>
+              <span class="threat-status sky">INFO</span>
+            </div>
+            <div class="threat-text">Break-glass key rotation due in 30d</div>
+          </div>
+        </div>
+        <div class="threat-item">
+          <span class="threat-dot amber"></span>
+          <div>
+            <div class="threat-meta">
+              <span>7h ago</span>
+              <span class="threat-id">TX-2026-0428-007</span>
+              <span class="threat-status amber">REVIEW</span>
+            </div>
+            <div class="threat-text">Bulk export · Sara Patel · 84 records</div>
+          </div>
+        </div>
+        <div class="threat-item">
+          <span class="threat-dot sky"></span>
+          <div>
+            <div class="threat-meta">
+              <span>yest 18:22</span>
+              <span class="threat-id">h8-pending</span>
+              <span class="threat-status sky">INFO</span>
+            </div>
+            <div class="threat-text">Postgres encryption-at-rest migration pending operator</div>
+          </div>
+        </div>
+        <div class="threat-item">
+          <span class="threat-dot sky"></span>
+          <div>
+            <div class="threat-meta">
+              <span>yest 14:08</span>
+              <span class="threat-id">TX-2026-0428-001</span>
+              <span class="threat-status sky">RESOLVED</span>
+            </div>
+            <div class="threat-text">Suspicious download pattern (false positive)</div>
+          </div>
+        </div>
+
+        <!-- V2 only — operating-room indicator strip -->
+        <div class="op-strip">
+          <span class="op-pulse"></span>
+          <span class="op-strip-text">Elevated session active —</span>
+          <span class="op-strip-em">expires 11h</span>
+        </div>
+      </div>
+
+      <div class="rp-section">
+        <div class="rp-header">
+          <span class="rp-title">Pipeline 24h</span>
+          <a class="rp-link">Open →</a>
+        </div>
+        <div class="sparkbox">
+          <div class="spark-row">
+            <span class="spark-label">layer 04 soap</span>
+            <svg class="spark-svg" width="86" height="20" viewBox="0 0 86 20">
+              <polyline fill="none" stroke="#7AA68C" stroke-width="1.3" points="0,14 10,12 20,10 30,12 40,8 50,9 60,6 70,8 80,5 86,4"/>
+            </svg>
+            <span class="spark-num">412ms</span>
+          </div>
+          <div class="spark-row">
+            <span class="spark-label">layer 06 polish</span>
+            <svg class="spark-svg" width="86" height="20" viewBox="0 0 86 20">
+              <polyline fill="none" stroke="#7AA68C" stroke-width="1.3" points="0,9 10,10 20,8 30,9 40,12 50,10 60,11 70,9 80,10 86,9"/>
+            </svg>
+            <span class="spark-num">1.8s</span>
+          </div>
+          <div class="spark-row">
+            <span class="spark-label">queue depth</span>
+            <svg class="spark-svg" width="86" height="20" viewBox="0 0 86 20">
+              <polyline fill="none" stroke="#D4A574" stroke-width="1.3" points="0,16 10,14 20,11 30,9 40,10 50,5 60,4 70,7 80,11 86,14"/>
+            </svg>
+            <span class="spark-num">3</span>
+          </div>
+          <div class="spark-row">
+            <span class="spark-label">err rate</span>
+            <svg class="spark-svg" width="86" height="20" viewBox="0 0 86 20">
+              <polyline fill="none" stroke="#7AA68C" stroke-width="1.3" points="0,17 10,17 20,18 30,16 40,17 50,17 60,18 70,17 80,17 86,17"/>
+            </svg>
+            <span class="spark-num">0.4%</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="rp-section">
+        <div class="rp-header">
+          <span class="rp-title">Operators on call</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--text-2)">
+          <span class="row-initials sage" style="width:22px;height:22px;font-size:9.5px">EW</span>
+          <span style="flex:1">Eleanor Walsh</span>
+          <span class="mono" style="color:var(--sage);font-size:10px">PRIMARY</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--text-2);margin-top:9px">
+          <span class="row-initials" style="width:22px;height:22px;font-size:9.5px">DK</span>
+          <span style="flex:1">David Kim</span>
+          <span class="mono" style="color:var(--text-3);font-size:10px">BACKUP</span>
+        </div>
+      </div>
+
+    </aside>
+
+  </div>
+</div>
+
+<!-- ⌘K floating chip (always visible) -->
+<button class="cmdk-floater" id="cmdk-trigger" aria-label="Open command palette">
+  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="5"/><path d="M14 14l-3-3"/></svg>
+  Command
+  <kbd>⌘K</kbd>
+</button>
+
+<!-- ⌘K modal (V2: closed by default; click chip or press ⌘K to open) -->
+<div class="cmdk-overlay" id="cmdk-overlay" role="dialog" aria-modal="true" aria-label="Command palette">
+  <div class="cmdk-modal">
+    <div style="display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line)">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="var(--text-3)" stroke-width="1.5" style="flex-shrink:0"><circle cx="7" cy="7" r="5"/><path d="M14 14l-3-3"/></svg>
+      <input style="flex:1;background:transparent;border:none;outline:none;color:var(--text-1);font-family:inherit;font-size:14px" placeholder="Search users, threats, audit events…" />
+      <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-3);border:1px solid var(--line);border-radius:3px;padding:2px 6px">esc</span>
+    </div>
+    <div style="padding:6px 0;border-bottom:1px solid var(--line)">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;font-weight:500;color:var(--text-3);text-transform:uppercase;letter-spacing:0.08em;padding:8px 16px 4px">Admin actions</div>
+      <div style="display:flex;align-items:center;gap:12px;padding:8px 16px;background:var(--sage-faint)">
+        <div style="width:24px;height:24px;border-radius:5px;background:var(--sage-tint);display:inline-flex;align-items:center;justify-content:center;color:var(--sage);flex-shrink:0">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="10" height="10" rx="2"/><path d="M6 8l1.5 1.5L10 7"/></svg>
+        </div>
+        <div style="flex:1">
+          <div style="font-size:13px;color:var(--text-1)">Suspend user…</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--text-3);margin-top:1px">isActive=false · revokes all UserSessions</div>
+        </div>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-3);border:1px solid var(--line);border-radius:3px;padding:2px 6px">↵</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;padding:8px 16px;cursor:pointer">
+        <div style="width:24px;height:24px;border-radius:5px;background:rgba(255,245,225,0.05);display:inline-flex;align-items:center;justify-content:center;color:var(--text-2);flex-shrink:0">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M11 4l-7 7M11 11L4 4"/></svg>
+        </div>
+        <div style="flex:1">
+          <div style="font-size:13px;color:var(--text-1)">Force logout…</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--text-3);margin-top:1px">Revoke active session · all devices</div>
+        </div>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-3);border:1px solid var(--line);border-radius:3px;padding:2px 6px">⇧↵</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;padding:8px 16px;cursor:pointer">
+        <div style="width:24px;height:24px;border-radius:5px;background:rgba(255,245,225,0.05);display:inline-flex;align-items:center;justify-content:center;color:var(--text-2);flex-shrink:0">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1l6 3v5c0 4-2.5 6-6 7-3.5-1-6-3-6-7V4l6-3z"/><path d="M5.5 8l1.5 1.5L11 6"/></svg>
+        </div>
+        <div style="flex:1">
+          <div style="font-size:13px;color:var(--text-1)">Resolve threat…</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--text-3);margin-top:1px">Mark TX-2026-0429-002 investigated</div>
+        </div>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-3);border:1px solid var(--line);border-radius:3px;padding:2px 6px">⌘R</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;padding:8px 16px;cursor:pointer">
+        <div style="width:24px;height:24px;border-radius:5px;background:rgba(255,245,225,0.05);display:inline-flex;align-items:center;justify-content:center;color:var(--text-2);flex-shrink:0">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="2" width="10" height="12" rx="1"/><path d="M5.5 6h5M5.5 9h5M5.5 12h3"/></svg>
+        </div>
+        <div style="flex:1">
+          <div style="font-size:13px;color:var(--text-1)">Export audit log…</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--text-3);margin-top:1px">CSV · last 30d · PHI-redacted</div>
+        </div>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-3);border:1px solid var(--line);border-radius:3px;padding:2px 6px">⌘E</span>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:14px;padding:8px 14px;border-top:1px solid var(--line);background:var(--surface-1);font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-3)">
+      <span><span style="border:1px solid var(--line);border-radius:3px;padding:1px 5px;margin-right:4px">↑↓</span> navigate</span>
+      <span><span style="border:1px solid var(--line);border-radius:3px;padding:1px 5px;margin-right:4px">↵</span> run</span>
+      <span><span style="border:1px solid var(--line);border-radius:3px;padding:1px 5px;margin-right:4px">esc</span> close</span>
+      <span style="margin-left:auto;color:var(--coral)">elevated session · expires 11h</span>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    var trigger = document.getElementById('cmdk-trigger');
+    var overlay = document.getElementById('cmdk-overlay');
+    function open() { overlay.classList.add('open'); }
+    function close() { overlay.classList.remove('open'); }
+    if (trigger) trigger.addEventListener('click', open);
+    if (overlay) overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
+    document.addEventListener('keydown', function (e) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); overlay.classList.toggle('open'); }
+      if (e.key === 'Escape') close();
+    });
+  })();
+</script>
+
+</body>
+</html>
