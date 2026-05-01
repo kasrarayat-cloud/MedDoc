@@ -21,6 +21,12 @@ export default async function ForgotPasswordPage() {
         </>
       }
       subtitle="Enter your account email and we'll send you a reset link."
+      cinematic={{
+        eyebrow: 'Account recovery',
+        headlinePre: '',
+        headlineEm: 'Reset ',
+        headlinePost: 'your password.',
+      }}
     >
       <ForgotPasswordForm />
     </AuthShell>

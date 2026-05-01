@@ -25,6 +25,7 @@ import { Product } from '@prisma/client';
 import { auth } from '@/lib/nextauth';
 import { logAudit } from '@/lib/audit';
 import { isAdminSessionStale } from '@/lib/admin-session-freshness';
+import CinematicAdminHero from '@/components/admin/CinematicAdminHero';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -102,8 +103,17 @@ export default async function AdminLayout({
   // page resolves `.qm-cl-*` class lookups against the warm cream
   // token scope without each page wrapping itself. Mirror of how
   // /dashboard layouts opt in via <AppFrame theme="clinician">.
+  //
+  // Phase 4 (admin cinematic hero) — a short photo band slots in
+  // above the existing nav + dashboard chrome. The band is purely
+  // visual: it announces the supervisor view via the lamp-glow
+  // photo + "Operations." headline + coral SUPER_ADMIN pill, and
+  // hosts the .av1-* animation entry points. The SUPER_ADMIN gate,
+  // freshness check, and audit-log write above are unchanged — we
+  // pass the gate result down so the badge mirrors gate state.
   return (
     <div className="qm-cl-app min-h-screen">
+      <CinematicAdminHero hasSuperAdmin={hasSuperAdmin} />
       <main className="min-h-screen text-clinician-ink">{children}</main>
     </div>
   );
