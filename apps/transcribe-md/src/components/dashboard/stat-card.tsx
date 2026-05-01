@@ -1,13 +1,18 @@
-// HANDOFF §2.2 StatCard — eyebrow + big serif number + unit + optional
-// colored delta line. Used by Dashboard (visits/month, avg time saved,
-// pending review, signed this week) and later by Patient Detail.
+// Phase 5 — Linear V1 Faithful stat card.
+// Reference: docs/design-directions-v8-linear/dashboard-v1.html (.stat)
 //
-// Phase 2 (Clinician remodel) — Strategy A dual-theme via additive
-// `theme` prop. Default `'legacy'` keeps the existing dark .qm-glass
-// surface + qm-sectlabel + qm-serif treatment unchanged. Pages opt
-// in to the Clinician chrome by passing `theme="clinician"`, which
-// renders a warm `.qm-cl-card` paper-on-cream surface with the
-// `.qm-cl-section-label` eyebrow and `.qm-cl-big-num` numeral.
+// The Phase 4 Source-Serif big-numeral card on a cream surface is gone.
+// Linear V1 stats are inline, mono numerals on the dark canvas with a
+// hairline divider between siblings (caller composes them inside a
+// `.stats-row` flex container — see dashboard/page.tsx).
+//
+// Each cell renders:
+//   ▎  big mono number with optional small-caps unit
+//   ▎  uppercase mono label below
+//   ▎  optional sage / amber delta marker
+//
+// The legacy `theme` prop remains in the type signature for back-compat
+// with unmigrated callers; the Linear V1 stat is the only render path.
 
 import type { ReactNode } from 'react';
 
@@ -20,7 +25,22 @@ interface StatCardProps {
   unit?: ReactNode;
   delta?: ReactNode;
   deltaTone?: StatDeltaTone;
+  /** @deprecated kept for back-compat; Linear V1 is single-theme. */
   theme?: StatCardTheme;
+}
+
+/** Map the legacy delta tones to Linear V1 sage/amber/coral. */
+function deltaColor(tone: StatDeltaTone): string {
+  switch (tone) {
+    case 'amber':
+      return 'var(--color-linear-amber)';
+    case 'coral':
+      return 'var(--color-linear-coral)';
+    case 'mint':
+    case 'accent-bright':
+    default:
+      return 'var(--color-linear-sage-bright)';
+  }
 }
 
 export function StatCard({
@@ -29,160 +49,73 @@ export function StatCard({
   unit,
   delta,
   deltaTone = 'mint',
-  theme = 'legacy',
 }: StatCardProps) {
-  if (theme === 'clinician') {
-    return (
-      <ClinicianStatCard
-        label={label}
-        value={value}
-        unit={unit}
-        delta={delta}
-        deltaTone={deltaTone}
-      />
-    );
-  }
   return (
-    <LegacyStatCard
-      label={label}
-      value={value}
-      unit={unit}
-      delta={delta}
-      deltaTone={deltaTone}
-    />
-  );
-}
-
-function LegacyStatCard({
-  label,
-  value,
-  unit,
-  delta,
-  deltaTone,
-}: {
-  label: ReactNode;
-  value: ReactNode;
-  unit?: ReactNode;
-  delta?: ReactNode;
-  deltaTone: StatDeltaTone;
-}) {
-  return (
-    <div className="qm-glass" style={{ padding: '18px 20px' }}>
-      <div className="qm-sectlabel" style={{ marginBottom: 12 }}>
-        {label}
-      </div>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-        <div
-          className="qm-serif"
-          style={{
-            fontSize: 40,
-            fontWeight: 400,
-            letterSpacing: '-0.025em',
-            lineHeight: 1,
-          }}
-        >
-          {value}
-        </div>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 6,
+        padding: '0 18px',
+        borderRight: '1px solid var(--color-linear-hairline)',
+        minWidth: 0,
+      }}
+      // First/last children handle their own padding/border via inline
+      // flex parent rules — caller composes inside a `.stats-row`-style
+      // wrapper that strips the trailing border.
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'baseline',
+          gap: 2,
+          fontFamily: 'var(--font-mono)',
+          fontSize: 22,
+          color: 'var(--color-linear-text)',
+          fontWeight: 500,
+          letterSpacing: '-0.01em',
+          fontVariantNumeric: 'tabular-nums',
+          lineHeight: 1.1,
+        }}
+      >
+        {value}
         {unit && (
-          <div
+          <span
             style={{
-              color: 'var(--fg-3)',
-              fontSize: 13,
-              fontFamily: 'var(--mono)',
+              fontSize: 11,
+              color: 'var(--color-linear-text-3)',
+              marginLeft: 4,
+              fontWeight: 400,
             }}
           >
             {unit}
-          </div>
+          </span>
+        )}
+        {delta && (
+          <span
+            style={{
+              fontSize: 11,
+              color: deltaColor(deltaTone),
+              fontFamily: 'var(--font-mono)',
+              marginLeft: 6,
+            }}
+          >
+            {delta}
+          </span>
         )}
       </div>
-      {delta && (
-        <div
-          style={{
-            marginTop: 10,
-            fontSize: 11.5,
-            fontFamily: 'var(--mono)',
-            color: `var(--${deltaTone})`,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 4,
-          }}
-        >
-          {delta}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** Map the legacy `StatDeltaTone` (mint/amber/coral/accent-bright) onto
- *  the Clinician palette tokens that exist inside .qm-cl-app:
- *    mint           → sage-deep (positive / on-track)
- *    accent-bright  → sage-deep (positive accent)
- *    amber          → amber-deep (caution)
- *    coral          → coral-deep (warning)
- *  Avoids any new globals.css additions; tokens are scoped under
- *  .qm-cl-app already (see globals.css ~L1395). */
-function clinicianDeltaColor(tone: StatDeltaTone): string {
-  switch (tone) {
-    case 'amber':
-      return 'var(--amber-deep)';
-    case 'coral':
-      return 'var(--coral-deep)';
-    case 'mint':
-    case 'accent-bright':
-    default:
-      return 'var(--sage-deep)';
-  }
-}
-
-function ClinicianStatCard({
-  label,
-  value,
-  unit,
-  delta,
-  deltaTone,
-}: {
-  label: ReactNode;
-  value: ReactNode;
-  unit?: ReactNode;
-  delta?: ReactNode;
-  deltaTone: StatDeltaTone;
-}) {
-  return (
-    <div className="qm-cl-card" style={{ padding: '22px 24px' }}>
       <div
-        className="qm-cl-section-label"
-        style={{ marginBottom: 14 }}
+        style={{
+          fontFamily: 'var(--font-sans)',
+          fontSize: 10,
+          color: 'var(--color-linear-text-3)',
+          letterSpacing: '0.07em',
+          textTransform: 'uppercase',
+          fontWeight: 500,
+        }}
       >
         {label}
       </div>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-        <div className="qm-cl-big-num">{value}</div>
-        {unit && (
-          <div
-            style={{
-              color: 'var(--ink-3)',
-              fontSize: 12.5,
-            }}
-          >
-            {unit}
-          </div>
-        )}
-      </div>
-      {delta && (
-        <div
-          style={{
-            marginTop: 14,
-            fontSize: 12.5,
-            color: clinicianDeltaColor(deltaTone),
-            display: 'flex',
-            alignItems: 'center',
-            gap: 4,
-          }}
-        >
-          {delta}
-        </div>
-      )}
     </div>
   );
 }

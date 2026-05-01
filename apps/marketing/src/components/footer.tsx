@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import { QuillMark } from './home/QuillMark';
 
 // External = absolute URL, opens in new tab. Internal = same-origin Link.
 type LinkDef = { href: string; label: string; external?: boolean };
@@ -46,73 +45,78 @@ const COLS: { title: string; links: LinkDef[] }[] = [
 ];
 
 /**
- * Sub-page footer (used by pricing, about, contact, demo, hipaa, privacy,
- * security, terms, signup, not-found). Cream-2 surface, sage hairline
- * dividers, ink-feather wordmark.
+ * Sub-page footer — Linear V1 (Faithful).
+ *
+ * Used by every sub-page (pricing, about, contact, demo, hipaa, privacy,
+ * security, terms, signup, not-found). Linear V1 dark surface with the
+ * .foot/.foot-grid/.foot-bottom structure styled in landing.css. The
+ * mark is the flat sage rounded-square (.brand-quill::after).
  */
 export function Footer() {
   return (
-    <footer className="border-t border-[rgba(43,38,32,0.08)] bg-[#F2EDE3]">
-      <div className="mx-auto max-w-7xl px-6 py-16 lg:px-8">
-        <div className="grid grid-cols-2 gap-10 md:grid-cols-5">
-          <div className="col-span-2 md:col-span-1">
-            <div className="flex items-center gap-2.5">
-              <span className="inline-grid h-[22px] w-[22px] place-items-center">
-                <QuillMark />
-              </span>
-              <span
-                className="text-[20px] tracking-[0.02em] text-[#2B2620]"
-                style={{ fontFamily: 'var(--font-serif), Georgia, serif', fontWeight: 500 }}
-              >
-                Quill
-              </span>
-            </div>
+    <footer className="foot">
+      <div className="container">
+        <div className="foot-grid">
+          <div>
+            <Link href="/" className="brand">
+              <span className="brand-quill" aria-hidden />
+              <span>QuillMD</span>
+            </Link>
             <p
-              className="mt-4 text-[14px] leading-relaxed text-[#5C544A]"
-              style={{ fontFamily: 'var(--font-serif), Georgia, serif' }}
+              style={{
+                marginTop: 14,
+                fontSize: 13,
+                color: 'var(--color-linear-text-3)',
+                lineHeight: 1.55,
+                maxWidth: 220,
+              }}
             >
               Made for doctors who deserve better tools.
             </p>
           </div>
           {COLS.map((col) => (
-            <div key={col.title}>
-              <h3 className="text-[11.5px] font-medium uppercase tracking-[0.10em] text-[#8A8278]">
-                {col.title}
-              </h3>
-              <ul className="mt-4 space-y-2.5">
+            <div key={col.title} className="foot-col">
+              <h4>{col.title}</h4>
+              <ul>
                 {col.links.map((l) =>
                   l.external ? (
                     <li key={l.href}>
-                      <a
-                        href={l.href}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[13.5px] text-[#5C544A] transition-colors hover:text-[#2F5040]"
-                      >
+                      <a href={l.href} target="_blank" rel="noopener noreferrer">
                         {l.label}
                       </a>
                     </li>
                   ) : (
                     <li key={l.href}>
-                      <Link
-                        href={l.href}
-                        className="text-[13.5px] text-[#5C544A] transition-colors hover:text-[#2F5040]"
-                      >
-                        {l.label}
-                      </Link>
+                      <Link href={l.href}>{l.label}</Link>
                     </li>
-                  )
+                  ),
                 )}
               </ul>
             </div>
           ))}
         </div>
-        <div className="mt-12 flex flex-col items-start justify-between gap-4 border-t border-[rgba(43,38,32,0.08)] pt-6 text-[12px] text-[#8A8278] md:flex-row md:items-center">
-          <p>© {new Date().getFullYear()} QuillMD. All rights reserved.</p>
-          <p className="flex items-center gap-2">
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#7AA68C]" />
+        <div className="foot-bottom">
+          <span>© {new Date().getFullYear()} QuillMD. All rights reserved.</span>
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              fontFamily: 'var(--font-mono)',
+              letterSpacing: '0.04em',
+            }}
+          >
+            <span
+              style={{
+                display: 'inline-block',
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                background: 'var(--color-linear-sage)',
+              }}
+            />
             All systems operational
-          </p>
+          </span>
         </div>
       </div>
     </footer>

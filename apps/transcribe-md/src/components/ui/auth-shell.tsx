@@ -1,35 +1,23 @@
-// HANDOFF §2.2 (SignInScreen visual) — shared shell for every auth route
-// (login, signup, forgot-password, reset-password, check-email).
+// Phase 5 — Linear V1 Faithful auth shell.
+// Reference: docs/design-directions-v8-linear/dashboard-v1.html (chrome
+// tokens), landing-v1.html (sage-glow accent on a darker right pane).
 //
-// Two visual variants live behind a single `theme` prop:
-//   - `'legacy'`  (default): the original dark App-redesign-v1 surface —
-//                  ShaderBG + mesh-grid + .qm-glass card. Kept intact in
-//                  case any non-Clinician auth caller appears later.
-//   - `'clinician'`: warm cream canvas, Source Serif 4 wordmark with the
-//                    sage line-art ink-feather mark, .qm-cl-card form
-//                    panel, sage CTA-tinted trust footer. Per Phase 2
-//                    Batch F (clinician remodel).
+// Split-screen on dark canvas:
+//   - Left pane (linear-bg): brand wordmark + form card
+//   - Right pane (linear-surface-1, hidden < 980px): subtle sage glow
+//     accent with HIPAA / BAA / US-hosted trust strip in mono.
 //
-// Every page passes its own form + inline links as `children`. Server-
-// action wiring stays in the page-level form components, untouched.
-//
-// Subcomponents `AuthFieldLabel` + `AuthFieldError` keep their existing
-// API and pick up the right typography per theme.
+// All Phase 4 cinematic photo-band machinery is gone. The `cinematic`
+// prop and `AuthShellTheme` / `AuthShellCinematic` types are kept for
+// back-compat with login/page.tsx etc. that still pass them — the
+// runtime ignores both. Stage 5 will drop the props in one sweep.
 
 import type { ReactNode } from 'react';
 import { Ic } from './icon';
-import { QuillLogo } from './quill-logo';
-import { ShaderBG } from './shader-bg';
-import { WordMark } from './word-mark';
-import { CinematicAuthHero } from '@/components/auth/CinematicAuthHero';
 
 export type AuthShellTheme = 'legacy' | 'clinician';
 
-/** Phase 4 — page-specific cinematic headline + eyebrow consumed by
- *  the <CinematicAuthHero> band that sits above the form card. The
- *  italic sage glow word lands on `headlineEm`. Whitespace in pre/em/
- *  post strings is preserved so the three .av1-word inline-block
- *  spans connect correctly. */
+/** @deprecated kept for back-compat; cinematic photo band is removed. */
 export interface AuthShellCinematic {
   eyebrow?: ReactNode;
   headlinePre: string;
@@ -42,381 +30,304 @@ export function AuthShell({
   title,
   subtitle,
   children,
-  theme = 'legacy',
-  cinematic,
 }: {
   /** Small mono all-caps line above the title. */
   eyebrow?: ReactNode;
-  /** Serif title — pass JSX so the <em> italic-accent pattern works:
-   *  `<>Sign <em>in</em></>` → "Sign *in*" with the accent color. */
+  /** Page heading. JSX accepted; emphasised <em> nodes pick up
+   *  sage-bright color via the .qm-auth-em selector below. */
   title: ReactNode;
   subtitle?: ReactNode;
-  /** Form + inline nav links. Rendered inside the card. */
+  /** Form + inline nav links. Rendered inside the form card. */
   children: ReactNode;
-  /** Visual variant. Defaults to `'legacy'` to keep any unmigrated
-   *  caller working; Clinician auth routes pass `'clinician'`. */
+  /** @deprecated kept for back-compat with unmigrated callers. */
   theme?: AuthShellTheme;
-  /** Phase 4 — when present, renders the cinematic photo band above
-   *  the form card and runs the anim-1 reveal sequence. The form card
-   *  picks up the .av1-card slide-in automatically. Clinician-theme
-   *  only; ignored on legacy. */
+  /** @deprecated kept for back-compat; cinematic band is removed. */
   cinematic?: AuthShellCinematic;
 }) {
-  if (theme === 'clinician') {
-    return <ClinicianAuthShell {...{ eyebrow, title, subtitle, children, cinematic }} />;
-  }
-  return <LegacyAuthShell {...{ eyebrow, title, subtitle, children }} />;
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// Clinician variant — warm cream + sage line-art, per landing-and-
-// recording.html mockup. Centered card, soft warm shadow, italic-serif
-// accent in the headline.
-// ─────────────────────────────────────────────────────────────────────
-
-function ClinicianAuthShell({
-  eyebrow,
-  title,
-  subtitle,
-  children,
-  cinematic,
-}: {
-  eyebrow?: ReactNode;
-  title: ReactNode;
-  subtitle?: ReactNode;
-  children: ReactNode;
-  cinematic?: AuthShellCinematic;
-}) {
-  // Phase 4 — when a `cinematic` prop is passed, the layout becomes a
-  // vertical column: photo band (280px) on top, form card centered
-  // below. The card itself carries `.av1-card` + `data-cin-card` so
-  // <CinematicAuthHero>'s effect can sequence its slide-in alongside
-  // the headline reveal. Without `cinematic`, the legacy
-  // center-stacked card layout is preserved verbatim.
-  const hasCinematic = !!cinematic;
   return (
     <div
-      className="qm-cl-app"
-      data-grain
       style={{
         minHeight: '100vh',
         width: '100%',
-        position: 'relative',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'stretch',
-        // Without the band on top, the card sits centered in the
-        // viewport. With the band, the card stacks below the band and
-        // the column starts at top-of-page so the band is full-bleed.
-        justifyContent: hasCinematic ? 'flex-start' : 'center',
-        padding: hasCinematic ? '0' : '32px 20px',
+        background: 'var(--color-linear-bg)',
+        color: 'var(--color-linear-text)',
+        display: 'grid',
+        gridTemplateColumns: '1fr',
       }}
     >
-      {hasCinematic && cinematic && (
-        <CinematicAuthHero
-          eyebrow={cinematic.eyebrow}
-          headlinePre={cinematic.headlinePre}
-          headlineEm={cinematic.headlineEm}
-          headlinePost={cinematic.headlinePost}
-        />
-      )}
+      <style>{`
+        @media (min-width: 980px) {
+          .qm-auth-grid {
+            grid-template-columns: 1fr 1fr !important;
+          }
+          .qm-auth-right {
+            display: flex !important;
+          }
+        }
+        /* Promote <em> inside the auth title to sage-bright + non-italic
+           regardless of any legacy inline color the page may pass.
+           Hard rule: Linear V1 has no Source Serif italics. */
+        .qm-auth-em-host em {
+          color: var(--color-linear-sage-bright) !important;
+          font-style: normal !important;
+        }
+      `}</style>
+
       <div
+        className="qm-auth-grid"
         style={{
-          position: 'relative',
-          zIndex: 1,
-          width: '100%',
-          maxWidth: 440,
-          // Center the card in the remaining viewport space when the
-          // band is present. Without the band, the parent flex
-          // already centers it.
-          margin: hasCinematic ? '36px auto 48px' : '0 auto',
-          padding: hasCinematic ? '0 20px' : '0',
+          display: 'grid',
+          gridTemplateColumns: '1fr',
+          minHeight: '100vh',
         }}
       >
-        {/* Wordmark — Source Serif 4 "Quill" with the sage ink-feather
-            mark from the landing mockup (header brand). */}
-        <div
+        {/* LEFT — form pane */}
+        <section
           style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: 10,
-            marginBottom: 28,
+            padding: '48px 24px',
+            background: 'var(--color-linear-bg)',
           }}
         >
-          <InkFeatherMark size={28} />
-          <span className="qm-cl-wordmark" style={{ fontSize: 22 }}>
-            Quill
-          </span>
-        </div>
-
-        {/* Form card — warm cream-card surface, 16px radius, soft
-            shadow. Phase 4: when the cinematic band is rendered, the
-            card opts into the .av1-card blur-to-sharp + slide-from-
-            right reveal driven by <CinematicAuthHero>'s effect. The
-            data-cin-card attribute is the lookup hook the hero uses
-            to find this card across the tree. */}
-        <div
-          className={`qm-cl-card${hasCinematic ? ' av1-card' : ''}`}
-          {...(hasCinematic ? { 'data-cin-card': '' } : {})}
-          style={{
-            padding: '32px 32px 30px',
-            textAlign: 'left',
-          }}
-        >
-          {eyebrow && (
-            <div className="qm-cl-eyebrow" style={{ marginBottom: 10 }}>
-              {eyebrow}
-            </div>
-          )}
-          <h1
-            className="qm-cl-serif"
+          <div
             style={{
-              margin: 0,
-              fontSize: 34,
-              fontWeight: 400,
-              letterSpacing: '-0.015em',
-              lineHeight: 1.1,
-              color: 'var(--ink)',
+              width: '100%',
+              maxWidth: 400,
             }}
           >
-            {title}
-          </h1>
-          {subtitle && (
-            <p
-              className="qm-cl-serif"
+            {/* Brand */}
+            <div
               style={{
-                color: 'var(--ink-2)',
-                marginTop: 10,
-                marginBottom: 22,
-                fontSize: 15,
-                lineHeight: 1.55,
-                fontStyle: 'italic',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                marginBottom: 32,
               }}
             >
-              {subtitle}
-            </p>
-          )}
-
-          {children}
-        </div>
-
-        {/* Trust footer — quiet meta in DM Sans 11.5px */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 14,
-            marginTop: 22,
-            color: 'var(--ink-3)',
-            fontSize: 11.5,
-            fontFamily: 'var(--sans)',
-          }}
-        >
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-            <Ic.shield width={13} height={13} />
-            HIPAA ready
-          </span>
-          <span style={{ color: 'var(--ink-4)' }}>·</span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-            <Ic.lock width={13} height={13} />
-            BAA included
-          </span>
-          <span style={{ color: 'var(--ink-4)' }}>·</span>
-          <span>US-hosted</span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/** The sage ink-feather mark from the landing mockup wordmark. Quill's
- *  lone bit of decoration on the auth surfaces. */
-function InkFeatherMark({ size = 28 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden
-    >
-      <path
-        d="M4 19c4 -1 7 -3.5 9.5 -7c1.5 -2 3 -3.5 5 -4.5c1.2 -0.6 2 -0.4 1.6 0.8c-0.7 2 -2.4 4.4 -4.6 6.4c-2.6 2.4 -5.6 4 -8.5 4.7c-1 0.2 -2.4 0.3 -3 -0.4z"
-        stroke="#7AA68C"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        fill="rgba(122,166,140,0.14)"
-      />
-      <path
-        d="M4 19l3.5 -3"
-        stroke="#7AA68C"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// Legacy variant — preserved verbatim for any non-Clinician caller. Per
-// Batch F decision, no caller exists today, but keeping the legacy path
-// mirrors Batch A's `theme` prop pattern (defensive, removable later).
-// ─────────────────────────────────────────────────────────────────────
-
-function LegacyAuthShell({
-  eyebrow,
-  title,
-  subtitle,
-  children,
-}: {
-  eyebrow?: ReactNode;
-  title: ReactNode;
-  subtitle?: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <div
-      className="qm-app"
-      style={{
-        minHeight: '100vh',
-        width: '100%',
-        position: 'relative',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '32px 20px',
-      }}
-    >
-      <ShaderBG intensity={0.9} />
-      <div className="qm-noise" aria-hidden />
-
-      {/* Faint mesh grid behind the glass card (HANDOFF source lines
-         13–18) — 48px cells in violet, radial-masked to fade at the
-         edges so it reads as "depth" not "graph paper". */}
-      <div
-        aria-hidden
-        style={{
-          position: 'absolute',
-          inset: 0,
-          zIndex: 1,
-          opacity: 0.35,
-          backgroundImage:
-            'linear-gradient(rgba(139,92,255,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(139,92,255,0.06) 1px, transparent 1px)',
-          backgroundSize: '48px 48px',
-          maskImage:
-            'radial-gradient(circle at 50% 45%, #000 0%, transparent 70%)',
-          WebkitMaskImage:
-            'radial-gradient(circle at 50% 45%, #000 0%, transparent 70%)',
-        }}
-      />
-
-      <div
-        style={{
-          position: 'relative',
-          zIndex: 3,
-          width: '100%',
-          maxWidth: 420,
-          textAlign: 'center',
-        }}
-      >
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 10,
-            marginBottom: 28,
-          }}
-        >
-          <QuillLogo size={30} />
-          <WordMark size={20} />
-        </div>
-
-        <div
-          className="qm-glass"
-          style={{
-            padding: '36px 34px',
-            borderRadius: 20,
-            textAlign: 'left',
-            boxShadow: 'var(--shadow-2)',
-          }}
-        >
-          {eyebrow && (
-            <div className="qm-sectlabel" style={{ marginBottom: 8 }}>
-              {eyebrow}
+              <span
+                aria-hidden
+                style={{
+                  width: 22,
+                  height: 22,
+                  borderRadius: 6,
+                  background:
+                    'linear-gradient(135deg, var(--color-linear-sage) 0%, var(--color-linear-sage-deep) 100%)',
+                  display: 'grid',
+                  placeItems: 'center',
+                  color: '#0c1410',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.06)',
+                }}
+              >
+                Q
+              </span>
+              <span
+                style={{
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 16,
+                  fontWeight: 600,
+                  letterSpacing: '-0.01em',
+                  color: 'var(--color-linear-text)',
+                }}
+              >
+                QuillMD
+              </span>
             </div>
-          )}
-          <h1
-            className="qm-serif"
+
+            {eyebrow && (
+              <div
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 10.5,
+                  fontWeight: 500,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  color: 'var(--color-linear-text-3)',
+                  marginBottom: 12,
+                }}
+              >
+                {eyebrow}
+              </div>
+            )}
+            <h1
+              style={{
+                margin: 0,
+                fontFamily: 'var(--font-sans)',
+                fontSize: 26,
+                fontWeight: 500,
+                letterSpacing: '-0.015em',
+                lineHeight: 1.2,
+                color: 'var(--color-linear-text)',
+              }}
+            >
+              <AuthTitle>{title}</AuthTitle>
+            </h1>
+            {subtitle && (
+              <p
+                style={{
+                  fontFamily: 'var(--font-sans)',
+                  marginTop: 8,
+                  marginBottom: 28,
+                  fontSize: 13.5,
+                  lineHeight: 1.5,
+                  color: 'var(--color-linear-text-2)',
+                  letterSpacing: '-0.005em',
+                }}
+              >
+                {subtitle}
+              </p>
+            )}
+            {!subtitle && <div style={{ height: 24 }} />}
+
+            <div>{children}</div>
+
+            {/* Trust footer */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 14,
+                marginTop: 28,
+                color: 'var(--color-linear-text-3)',
+                fontSize: 11,
+                fontFamily: 'var(--font-mono)',
+                letterSpacing: '0.04em',
+              }}
+            >
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                <Ic.shield width={12} height={12} />
+                HIPAA ready
+              </span>
+              <span style={{ color: 'var(--color-linear-text-3)' }}>·</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                <Ic.lock width={12} height={12} />
+                BAA included
+              </span>
+              <span style={{ color: 'var(--color-linear-text-3)' }}>·</span>
+              <span>US-hosted</span>
+            </div>
+          </div>
+        </section>
+
+        {/* RIGHT — accent pane (hidden under 980px) */}
+        <section
+          className="qm-auth-right"
+          aria-hidden
+          style={{
+            display: 'none',
+            position: 'relative',
+            background: 'var(--color-linear-surface-1)',
+            borderLeft: '1px solid var(--color-linear-border)',
+            overflow: 'hidden',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '48px',
+          }}
+        >
+          {/* Sage glow accent */}
+          <div
+            aria-hidden
             style={{
-              margin: 0,
-              fontSize: 32,
-              fontWeight: 400,
-              letterSpacing: '-0.02em',
-              lineHeight: 1.1,
+              position: 'absolute',
+              inset: 0,
+              backgroundImage:
+                'radial-gradient(circle at 70% 35%, var(--color-linear-sage-glow), transparent 55%)',
+              opacity: 0.7,
+              pointerEvents: 'none',
+            }}
+          />
+          {/* Hairline grid */}
+          <div
+            aria-hidden
+            style={{
+              position: 'absolute',
+              inset: 0,
+              backgroundImage:
+                'linear-gradient(var(--color-linear-hairline) 1px, transparent 1px), linear-gradient(90deg, var(--color-linear-hairline) 1px, transparent 1px)',
+              backgroundSize: '64px 64px',
+              maskImage:
+                'radial-gradient(circle at 60% 40%, #000 0%, transparent 70%)',
+              WebkitMaskImage:
+                'radial-gradient(circle at 60% 40%, #000 0%, transparent 70%)',
+              opacity: 0.6,
+              pointerEvents: 'none',
+            }}
+          />
+          <div
+            style={{
+              position: 'relative',
+              maxWidth: 360,
+              textAlign: 'left',
             }}
           >
-            {title}
-          </h1>
-          {subtitle && (
+            <div
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10.5,
+                letterSpacing: '0.1em',
+                textTransform: 'uppercase',
+                color: 'var(--color-linear-sage-bright)',
+                marginBottom: 16,
+              }}
+            >
+              QuillMD · Clinical workspace
+            </div>
+            <h2
+              style={{
+                margin: 0,
+                fontFamily: 'var(--font-sans)',
+                fontSize: 22,
+                fontWeight: 500,
+                lineHeight: 1.3,
+                letterSpacing: '-0.012em',
+                color: 'var(--color-linear-text)',
+              }}
+            >
+              Notes drafted in seconds. Signed by the{' '}
+              <span style={{ color: 'var(--color-linear-sage-bright)' }}>
+                clinician
+              </span>
+              .
+            </h2>
             <p
               style={{
-                color: 'var(--fg-3)',
-                marginTop: 6,
-                marginBottom: 24,
+                marginTop: 14,
+                fontFamily: 'var(--font-sans)',
                 fontSize: 13,
+                lineHeight: 1.55,
+                color: 'var(--color-linear-text-2)',
+                letterSpacing: '-0.005em',
               }}
             >
-              {subtitle}
+              SOAP, ICD-10, and CPT pulled from the encounter audio.
+              Reviewable, exportable, HIPAA-eligible.
             </p>
-          )}
-
-          {children}
-        </div>
-
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 14,
-            marginTop: 20,
-            color: 'var(--fg-4)',
-            fontSize: 11.5,
-          }}
-        >
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-            <Ic.shield width={13} height={13} />
-            HIPAA ready
-          </span>
-          <span>·</span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-            <Ic.lock width={13} height={13} />
-            BAA included
-          </span>
-          <span>·</span>
-          <span>US-hosted</span>
-        </div>
+          </div>
+        </section>
       </div>
     </div>
   );
 }
 
+/** Wrap the title in a span that promotes any <em> child to sage-bright.
+ *  Pages pass `<>Sign <em>in</em></>` and the em picks up the accent
+ *  via the .qm-auth-em selector. We render children verbatim — the
+ *  accent is applied through CSS so callers don't need to know it. */
+function AuthTitle({ children }: { children: ReactNode }) {
+  return <span className="qm-auth-em-host">{children}</span>;
+}
+
 // ─────────────────────────────────────────────────────────────────────
-// Field subcomponents — shared between legacy + clinician auth pages.
-// They opt into the right typography by reading from the surrounding
-// scope: inside `.qm-cl-app` the bare-name CSS vars resolve to the
-// Clinician palette; inside `.qm-app` they resolve to the legacy
-// palette. So the components themselves stay theme-agnostic.
+// Field subcomponents — shared by login / signup / forgot / reset /
+// check-email forms. Now Linear V1 only: mono uppercase label,
+// linear-text-3 color, linear-coral error message.
 // ─────────────────────────────────────────────────────────────────────
 
-/** Shared label used by auth form fields. In Clinician scope this picks
- *  up DM Sans + warm-charcoal ink. In legacy scope it stays JetBrains
- *  Mono uppercase. */
+/** Auth form-field label. Mono uppercase in linear-text-3. */
 export function AuthFieldLabel({
   htmlFor,
   children,
@@ -438,11 +349,12 @@ export function AuthFieldLabel({
       <label
         htmlFor={htmlFor}
         style={{
-          fontSize: 11.5,
-          color: 'var(--fg-3, var(--ink-3))',
-          letterSpacing: '0.04em',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10.5,
+          fontWeight: 500,
+          color: 'var(--color-linear-text-3)',
+          letterSpacing: '0.06em',
           textTransform: 'uppercase',
-          fontFamily: 'var(--mono)',
         }}
       >
         {children}
@@ -460,8 +372,10 @@ export function AuthFieldError({ message }: { message?: string }) {
       role="alert"
       style={{
         marginTop: 6,
+        fontFamily: 'var(--font-sans)',
         fontSize: 12,
-        color: 'var(--coral)',
+        color: 'var(--color-linear-coral)',
+        letterSpacing: '-0.005em',
       }}
     >
       {message}

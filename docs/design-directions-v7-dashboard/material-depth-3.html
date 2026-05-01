@@ -1,0 +1,777 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QuillMD · Material Depth · Card Deck</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;1,8..60,400;1,8..60,500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* ----------------------------------------------------------------------
+     Mood C — Material Depth · Variation 3: Card Deck
+     Patients render as a fanned-out paper-stack pile. Cards rotate slightly
+     (1° clockwise, 1.5° counter, etc.). Hover one → it lifts out of the
+     stack and straightens. Numbers float as separate elevated tiles above
+     the deck. The whole thing reads like clinical chart cards on a desk.
+     ---------------------------------------------------------------------- */
+
+  :root {
+    --cream:        #FAF7F2;
+    --cream-card:   #FFFCF5;
+    --cream-2:      #F2EDE3;
+    --cream-3:      #E8E1D3;
+    --ink:          #2B2620;
+    --ink-2:        #5C544A;
+    --ink-3:        #8A8278;
+    --ink-4:        #B5AE9F;
+    --sage:         #7AA68C;
+    --sage-deep:    #2F5040;
+    --sage-bright:  #95BCA4;
+    --sage-tint:        rgba(122, 166, 140, 0.14);
+    --sage-tint-strong: rgba(122, 166, 140, 0.22);
+    --line:         rgba(43, 38, 32, 0.06);
+
+    /* Mood C elevation system. */
+    --elev-rest:    0 1px 2px rgba(43, 38, 32, 0.04), 0 1px 3px rgba(43, 38, 32, 0.06);
+    --elev-1:       0 2px 4px rgba(43, 38, 32, 0.04), 0 4px 12px rgba(43, 38, 32, 0.06);
+    --elev-2:       0 4px 10px rgba(43, 38, 32, 0.06), 0 12px 24px rgba(43, 38, 32, 0.08);
+    --elev-3:       0 8px 18px rgba(43, 38, 32, 0.08), 0 24px 48px rgba(43, 38, 32, 0.10);
+    --elev-deck:    0 3px 7px rgba(43, 38, 32, 0.05), 0 10px 28px rgba(43, 38, 32, 0.08);
+    --elev-hover:   0 8px 16px rgba(122, 166, 140, 0.16), 0 22px 44px rgba(43, 38, 32, 0.11);
+    --elev-pressed: 0 1px 2px rgba(43, 38, 32, 0.06);
+
+    --serif: 'Source Serif 4', Georgia, serif;
+    --sans:  'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --mono:  'JetBrains Mono', ui-monospace, monospace;
+
+    --ease-mat: cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    background: var(--cream);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background:
+      radial-gradient(1100px 700px at 25% -10%, rgba(122, 166, 140, 0.06), transparent 60%),
+      radial-gradient(800px 500px at 90% 100%, rgba(232, 225, 211, 0.55), transparent 55%),
+      var(--cream);
+    min-height: 100vh;
+  }
+
+  .canvas {
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: 28px 36px 100px;
+  }
+
+  /* ───── Floating top strip ─────────────────────────────────────────────── */
+  .top-strip {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 28px;
+  }
+  .wordmark {
+    display: inline-flex; align-items: center; gap: 9px;
+    padding: 8px 14px;
+    background: var(--cream-card);
+    border-radius: 999px;
+    box-shadow: var(--elev-rest);
+    transition: transform 320ms var(--ease-mat), box-shadow 320ms var(--ease-mat);
+  }
+  .wordmark:hover { transform: translate3d(0, -2px, 0); box-shadow: var(--elev-1); }
+  .wordmark .quill {
+    width: 18px; height: 18px; border-radius: 5px;
+    background: linear-gradient(135deg, var(--sage), var(--sage-deep));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.25);
+  }
+  .wordmark .name {
+    font-family: var(--serif); font-size: 16px; letter-spacing: -0.01em; color: var(--ink);
+  }
+  .wordmark .name em { color: var(--sage-deep); font-style: italic; }
+
+  .top-spacer { flex: 1; }
+
+  .search-chip {
+    display: inline-flex; align-items: center; gap: 10px;
+    padding: 9px 14px;
+    background: var(--cream-card);
+    border-radius: 999px;
+    box-shadow: var(--elev-1);
+    cursor: text; min-width: 280px;
+    transition: transform 320ms var(--ease-mat), box-shadow 320ms var(--ease-mat);
+  }
+  .search-chip:hover { transform: translate3d(0, -3px, 0); box-shadow: var(--elev-hover); }
+  .search-chip svg { width: 14px; height: 14px; color: var(--ink-3); }
+  .search-chip .placeholder { flex: 1; color: var(--ink-3); font-size: 13.5px; }
+  .search-chip .kbd {
+    font-family: var(--mono); font-size: 10.5px; color: var(--ink-3);
+    background: var(--cream-2); padding: 2px 7px; border-radius: 5px;
+    box-shadow: inset 0 -1px 0 var(--line);
+  }
+
+  .cta-pill {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 11px 20px;
+    background: linear-gradient(180deg, #87B196 0%, var(--sage) 100%);
+    color: #FFFCF5;
+    border-radius: 999px;
+    font-weight: 500; font-size: 14px;
+    box-shadow: var(--elev-2), inset 0 1px 0 rgba(255,255,255,0.20);
+    cursor: pointer; border: none; font-family: var(--sans);
+    transition: transform 320ms var(--ease-mat), box-shadow 320ms var(--ease-mat);
+  }
+  .cta-pill:hover { transform: translate3d(0, -4px, 0); box-shadow: var(--elev-hover); }
+  .cta-pill:active { transform: translate3d(0, 0, 0); box-shadow: var(--elev-pressed); }
+  .cta-pill svg { width: 13px; height: 13px; }
+
+  .me-chip {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 5px 11px 5px 5px;
+    background: var(--cream-card);
+    border-radius: 999px; box-shadow: var(--elev-rest);
+    cursor: pointer;
+    transition: transform 320ms var(--ease-mat), box-shadow 320ms var(--ease-mat);
+  }
+  .me-chip:hover { transform: translate3d(0, -3px, 0); box-shadow: var(--elev-hover); }
+  .me-chip .avatar {
+    width: 28px; height: 28px;
+    border-radius: 999px;
+    background: var(--sage-tint-strong); color: var(--sage-deep);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-family: var(--serif); font-weight: 500; font-size: 12px;
+    box-shadow: inset 0 0 0 1px rgba(47, 80, 64, 0.12);
+  }
+  .me-chip .me-name { font-size: 13px; color: var(--ink-2); font-weight: 500; }
+
+  /* ───── Greeting band ──────────────────────────────────────────────────── */
+  .greet {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: end;
+    gap: 24px;
+    margin-bottom: 30px;
+  }
+  .greet .left .eyebrow {
+    font-family: var(--mono); font-size: 11px;
+    color: var(--ink-3); letter-spacing: 0.10em;
+    text-transform: uppercase; margin-bottom: 12px;
+  }
+  .greet h1 {
+    font-family: var(--serif); font-style: italic; font-weight: 400;
+    font-size: 40px; line-height: 1.15; letter-spacing: -0.02em; color: var(--ink);
+  }
+  .greet h1 .glow {
+    color: var(--sage-deep);
+    background: var(--sage-tint);
+    padding: 0 8px;
+    border-radius: 8px;
+    box-shadow: inset 0 0 0 1px var(--sage-tint-strong);
+  }
+  .greet .sub {
+    margin-top: 12px; font-family: var(--serif); font-size: 16px;
+    color: var(--ink-2); line-height: 1.5; max-width: 540px;
+  }
+
+  .filter-strip {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    justify-content: flex-end; max-width: 420px;
+  }
+  .pill {
+    padding: 7px 13px; border-radius: 999px;
+    background: var(--cream-card); color: var(--ink-2);
+    font-size: 12.5px; font-weight: 500;
+    cursor: pointer;
+    box-shadow: var(--elev-rest);
+    transition: transform 240ms var(--ease-mat), box-shadow 320ms var(--ease-mat), background 240ms var(--ease-mat);
+  }
+  .pill:hover { transform: translate3d(0, -3px, 0); box-shadow: var(--elev-1); }
+  .pill.active { background: var(--sage-tint); color: var(--sage-deep); box-shadow: var(--elev-1); }
+
+  /* ───── Floating metric tiles — above the deck ─────────────────────────── */
+  .metric-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 38px;
+  }
+  /* These are intentionally varied: rotate ever so slightly to feel hand-laid. */
+  .m-tile {
+    background: var(--cream-card);
+    border-radius: 18px;
+    padding: 20px 22px 18px;
+    box-shadow: var(--elev-2);
+    cursor: pointer;
+    position: relative;
+    transition: transform 320ms var(--ease-mat), box-shadow 320ms var(--ease-mat);
+  }
+  .m-tile:nth-child(1) { transform: rotate(-0.6deg); }
+  .m-tile:nth-child(2) { transform: rotate( 0.4deg); }
+  .m-tile:nth-child(3) { transform: rotate(-0.3deg); }
+  .m-tile:nth-child(4) { transform: rotate( 0.7deg); }
+  .m-tile:hover {
+    transform: rotate(0deg) translate3d(0, -6px, 0);
+    box-shadow: var(--elev-hover);
+  }
+  .m-tile:active {
+    transform: rotate(0deg) translate3d(0, 0, 0);
+    box-shadow: var(--elev-pressed);
+  }
+
+  .m-tile .label {
+    font-family: var(--mono); font-size: 11px;
+    color: var(--ink-3); letter-spacing: 0.08em;
+    text-transform: uppercase; margin-bottom: 8px;
+  }
+  .m-tile .num {
+    font-family: var(--serif); font-size: 38px; font-weight: 500;
+    line-height: 1; letter-spacing: -0.025em; color: var(--ink);
+  }
+  .m-tile .num .small { font-size: 24px; color: var(--ink-3); margin-left: 2px; }
+  .m-tile .unit {
+    font-family: var(--sans); font-size: 12px; color: var(--ink-3); margin-top: 7px;
+  }
+  .m-tile .delta {
+    display: inline-block; margin-top: 8px; padding: 2px 8px;
+    background: var(--sage-tint); color: var(--sage-deep);
+    border-radius: 999px; font-family: var(--mono);
+    font-size: 10.5px; font-weight: 500;
+  }
+  .m-tile.amber .delta { background: rgba(199, 151, 84, 0.16); color: #8E6526; }
+
+  /* Tape strip — paper-tape ornament across the top of the metric tile. */
+  .m-tile::before {
+    content: '';
+    position: absolute;
+    top: -4px; left: 14px;
+    width: 48px; height: 12px;
+    background: rgba(122, 166, 140, 0.18);
+    border-radius: 2px;
+    box-shadow: inset 0 1px 1px rgba(255, 252, 245, 0.5), 0 1px 2px rgba(43, 38, 32, 0.05);
+    transform: rotate(-2deg);
+  }
+  .m-tile.amber::before { background: rgba(199, 151, 84, 0.20); }
+
+  /* ───── Section heading — written across the deck ──────────────────────── */
+  .deck-heading {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-bottom: 22px;
+  }
+  .deck-heading h2 {
+    font-family: var(--serif); font-weight: 500;
+    font-size: 26px; letter-spacing: -0.015em; color: var(--ink);
+  }
+  .deck-heading h2 em { font-style: italic; color: var(--sage-deep); }
+  .deck-heading .meta {
+    font-family: var(--mono); font-size: 11px;
+    color: var(--ink-3); letter-spacing: 0.08em; text-transform: uppercase;
+  }
+
+  /* ───── Card deck — fanned chart cards ─────────────────────────────────── */
+  .deck {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 28px 22px;
+    padding: 14px 0;
+    perspective: 1200px;
+  }
+
+  .chart-card {
+    background: var(--cream-card);
+    border-radius: 14px;
+    padding: 20px 20px 18px;
+    box-shadow: var(--elev-deck);
+    cursor: pointer;
+    position: relative;
+    transition: transform 320ms var(--ease-mat), box-shadow 320ms var(--ease-mat);
+    transform-origin: center 80%;
+    /* Fanned-paper feel via tiny rotation per card. */
+  }
+  /* Apply rotation tilt per slot — gives the deck-of-papers vibe. */
+  .chart-card:nth-child(8n+1) { transform: rotate(-1.2deg); }
+  .chart-card:nth-child(8n+2) { transform: rotate( 0.9deg); }
+  .chart-card:nth-child(8n+3) { transform: rotate(-1.5deg); }
+  .chart-card:nth-child(8n+4) { transform: rotate( 1.0deg); }
+  .chart-card:nth-child(8n+5) { transform: rotate(-0.7deg); }
+  .chart-card:nth-child(8n+6) { transform: rotate( 1.3deg); }
+  .chart-card:nth-child(8n+7) { transform: rotate(-1.1deg); }
+  .chart-card:nth-child(8n+0) { transform: rotate( 0.6deg); }
+
+  .chart-card:hover {
+    transform: rotate(0deg) translate3d(0, -8px, 0) scale(1.015);
+    box-shadow: var(--elev-hover);
+    z-index: 4;
+  }
+  .chart-card:active {
+    transform: rotate(0deg) translate3d(0, 0, 0);
+    box-shadow: var(--elev-pressed);
+  }
+
+  /* Paper edge — the tiny tab at top-left, like a chart binder index. */
+  .chart-card::before {
+    content: '';
+    position: absolute;
+    top: -3px; left: 18px;
+    width: 38px; height: 8px;
+    background: var(--cream-2);
+    border-radius: 3px 3px 1px 1px;
+    box-shadow: var(--elev-rest);
+  }
+
+  /* Card head — patient identity. */
+  .ch-head {
+    display: grid;
+    grid-template-columns: 44px 1fr;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 14px;
+  }
+  .ch-avatar {
+    width: 44px; height: 44px;
+    border-radius: 12px;
+    background: var(--sage-tint-strong); color: var(--sage-deep);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-family: var(--serif); font-weight: 500; font-size: 14.5px;
+    box-shadow: inset 0 0 0 1px rgba(47, 80, 64, 0.12);
+  }
+  .ch-avatar.amber  { background: rgba(199, 151, 84, 0.20); color: #8E6526; box-shadow: inset 0 0 0 1px rgba(142, 101, 38, 0.12); }
+  .ch-avatar.indigo { background: rgba(108, 122, 174, 0.20); color: #3E4A82; box-shadow: inset 0 0 0 1px rgba(62, 74, 130, 0.12); }
+  .ch-avatar.rose   { background: rgba(180, 120, 130, 0.18); color: #7C2A38; box-shadow: inset 0 0 0 1px rgba(124, 42, 56, 0.12); }
+  .ch-avatar.slate  { background: rgba(110, 122, 132, 0.20); color: #3F4B55; box-shadow: inset 0 0 0 1px rgba(63, 75, 85, 0.12); }
+  .ch-avatar.olive  { background: rgba(150, 138, 80, 0.20); color: #5A5012; box-shadow: inset 0 0 0 1px rgba(90, 80, 18, 0.12); }
+  .ch-avatar.coral  { background: rgba(195, 130, 110, 0.18); color: #7B3015; box-shadow: inset 0 0 0 1px rgba(123, 48, 21, 0.12); }
+
+  .ch-name {
+    font-family: var(--serif); font-size: 17.5px; font-weight: 500;
+    letter-spacing: -0.005em; color: var(--ink);
+    line-height: 1.15;
+  }
+  .ch-meta {
+    margin-top: 3px;
+    font-size: 12px; color: var(--ink-3);
+  }
+
+  /* Specialty + age + dx + cpt — info row inside the card. */
+  .ch-info {
+    display: flex; flex-wrap: wrap; gap: 6px 8px;
+    margin-bottom: 14px;
+  }
+  .info-chip {
+    font-family: var(--mono); font-size: 10.5px;
+    padding: 3px 8px; border-radius: 6px;
+    background: var(--cream-2); color: var(--ink-2);
+    box-shadow: inset 0 1px 1px rgba(43, 38, 32, 0.04);
+  }
+  .info-chip.spec { background: var(--sage-tint); color: var(--sage-deep); box-shadow: none; }
+
+  /* Note line — chief complaint, italic, like a chart annotation. */
+  .ch-note {
+    font-family: var(--serif); font-style: italic;
+    font-size: 13px; color: var(--ink-2);
+    line-height: 1.5;
+    border-left: 2px solid var(--sage-tint-strong);
+    padding-left: 10px;
+    margin-bottom: 14px;
+  }
+
+  /* Status pill + time at the foot of the card. */
+  .ch-foot {
+    display: flex; justify-content: space-between; align-items: center;
+    padding-top: 12px;
+    border-top: 1px dashed var(--line);
+  }
+  .ch-status {
+    padding: 4px 10px; border-radius: 999px;
+    font-size: 11px; font-weight: 500;
+    font-family: var(--mono); letter-spacing: 0.02em;
+    box-shadow: var(--elev-rest);
+  }
+  .ch-status.ready  { background: var(--sage-tint); color: var(--sage-deep); }
+  .ch-status.soon   { background: rgba(199, 151, 84, 0.18); color: #8E6526; }
+  .ch-status.draft  { background: var(--cream-2); color: var(--ink-2); }
+  .ch-status.signed { background: rgba(108, 122, 174, 0.16); color: #3E4A82; }
+
+  .ch-time {
+    font-family: var(--mono); font-size: 11px;
+    color: var(--ink-3); letter-spacing: 0.02em;
+  }
+
+  /* ───── Recent visits stream — a quieter scroll list at bottom ─────────── */
+  .recent {
+    margin-top: 56px;
+    background: var(--cream-card);
+    border-radius: 18px;
+    padding: 24px 26px 18px;
+    box-shadow: var(--elev-1);
+    transition: transform 320ms var(--ease-mat), box-shadow 320ms var(--ease-mat);
+  }
+  .recent:hover { transform: translate3d(0, -3px, 0); box-shadow: var(--elev-2); }
+  .recent .rh {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .recent .rh h3 {
+    font-family: var(--serif); font-weight: 500;
+    font-size: 19px; color: var(--ink);
+    letter-spacing: -0.01em;
+  }
+  .recent .rh h3 em { font-style: italic; color: var(--sage-deep); }
+  .recent .rh .link {
+    font-family: var(--mono); font-size: 11px; color: var(--sage-deep);
+    cursor: pointer; letter-spacing: 0.02em;
+  }
+  .recent .rh .link:hover { text-decoration: underline; text-underline-offset: 2px; }
+
+  .recent-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0 22px;
+  }
+  .rrow {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    padding: 9px 8px;
+    border-bottom: 1px dashed var(--line);
+    border-radius: 6px;
+    margin: 0 -8px;
+    transition: background 240ms var(--ease-mat);
+  }
+  .rrow:hover { background: var(--cream-2); }
+  .rrow .rl { display: flex; gap: 9px; align-items: baseline; min-width: 0; }
+  .rrow .tag {
+    flex-shrink: 0; width: 6px; height: 6px;
+    border-radius: 999px; background: var(--sage);
+    box-shadow: 0 0 0 3px var(--sage-tint);
+    margin-top: 5px;
+  }
+  .rrow .tag.signed { background: var(--ink-3); box-shadow: 0 0 0 3px var(--cream-2); }
+  .rrow .tag.draft  { background: #C79754; box-shadow: 0 0 0 3px rgba(199, 151, 84, 0.18); }
+  .rrow .nm {
+    font-family: var(--serif); font-size: 13.5px; font-weight: 500; color: var(--ink);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .rrow .sp { font-size: 11.5px; color: var(--ink-3); white-space: nowrap; }
+  .rrow .tm {
+    font-family: var(--mono); font-size: 10.5px;
+    color: var(--ink-4); letter-spacing: 0.02em; text-align: right;
+  }
+
+  /* ───── Footnote ─────────────────────────────────────────────────────── */
+  .footnote {
+    margin-top: 32px;
+    text-align: center;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    color: var(--ink-4);
+  }
+
+  /* ───── Responsive ───────────────────────────────────────────────────── */
+  @media (max-width: 840px) {
+    .canvas { padding: 22px 16px 60px; }
+    .top-strip { flex-wrap: wrap; }
+    .search-chip { order: 5; flex: 1 0 100%; min-width: 0; }
+    .top-spacer { display: none; }
+    .greet { grid-template-columns: 1fr; }
+    .greet h1 { font-size: 30px; }
+    .filter-strip { justify-content: flex-start; max-width: none; }
+    .metric-row { grid-template-columns: repeat(2, 1fr); }
+    .m-tile, .chart-card { transform: none !important; box-shadow: var(--elev-1); }
+    .deck { grid-template-columns: 1fr; }
+    .recent-grid { grid-template-columns: 1fr; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      transition: none !important;
+      animation: none !important;
+    }
+    .m-tile, .chart-card { transform: none !important; }
+    .m-tile:hover, .chart-card:hover, .pill:hover, .cta-pill:hover,
+    .me-chip:hover, .wordmark:hover, .search-chip:hover, .recent:hover {
+      transform: none !important;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div class="canvas">
+
+  <!-- Floating top strip. -->
+  <div class="top-strip">
+    <div class="wordmark"><div class="quill"></div><div class="name">Quill<em>MD</em></div></div>
+
+    <div class="top-spacer"></div>
+
+    <div class="search-chip" role="search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.3-4.3"></path></svg>
+      <span class="placeholder">Find a patient, visit, or code…</span>
+      <span class="kbd">⌘K</span>
+    </div>
+
+    <button class="cta-pill" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+      New visit
+    </button>
+
+    <div class="me-chip" role="button" tabindex="0">
+      <span class="avatar">KR</span>
+      <span class="me-name">Dr. Reyes</span>
+    </div>
+  </div>
+
+  <!-- Greeting + filter strip. -->
+  <header class="greet">
+    <div class="left">
+      <div class="eyebrow">Tuesday · 29 April · 07:42 PT</div>
+      <h1>Good <em><span class="glow">morning</span></em>, Dr. Reyes.</h1>
+      <p class="sub">A small stack of charts on the desk this morning — six visits, four ready to read, two drafted.</p>
+    </div>
+    <div class="filter-strip">
+      <span class="pill active">All · 6</span>
+      <span class="pill">FamMed</span>
+      <span class="pill">Cardio</span>
+      <span class="pill">Endo</span>
+      <span class="pill">Peds</span>
+      <span class="pill">Derm</span>
+      <span class="pill">Pending</span>
+    </div>
+  </header>
+
+  <!-- Floating metric tiles — slightly tilted, paper-taped to the surface. -->
+  <div class="metric-row" role="region" aria-label="Key metrics">
+    <div class="m-tile" tabindex="0" aria-label="Visits this month">
+      <div class="label">Visits / Apr</div>
+      <div class="num">127</div>
+      <div class="unit">this month</div>
+      <span class="delta">↗ +18 vs Mar</span>
+    </div>
+    <div class="m-tile" tabindex="0" aria-label="Average drafted in seconds">
+      <div class="label">Avg drafted in</div>
+      <div class="num">38<span class="small">s</span></div>
+      <div class="unit">per visit</div>
+      <span class="delta">↘ −6s</span>
+    </div>
+    <div class="m-tile amber" tabindex="0" aria-label="Pending review">
+      <div class="label">Pending</div>
+      <div class="num">3</div>
+      <div class="unit">awaiting review</div>
+      <span class="delta">⏱ oldest 2h</span>
+    </div>
+    <div class="m-tile" tabindex="0" aria-label="Signed this week">
+      <div class="label">Signed / wk</div>
+      <div class="num">42</div>
+      <div class="unit">notes finalized</div>
+      <span class="delta">↗ +9</span>
+    </div>
+  </div>
+
+  <!-- Card deck heading. -->
+  <div class="deck-heading">
+    <h2>Today's <em>charts</em></h2>
+    <span class="meta">6 cards on the desk</span>
+  </div>
+
+  <!-- Card deck — fanned, slightly rotated chart cards. -->
+  <section class="deck" aria-label="Today's patients">
+
+    <article class="chart-card" tabindex="0">
+      <div class="ch-head">
+        <div class="ch-avatar">MP</div>
+        <div>
+          <div class="ch-name">Mei-Ling Park</div>
+          <div class="ch-meta">42F · Berkeley</div>
+        </div>
+      </div>
+      <div class="ch-info">
+        <span class="info-chip spec">Family Medicine</span>
+        <span class="info-chip">J20.9</span>
+        <span class="info-chip">99214</span>
+      </div>
+      <p class="ch-note">"Productive cough, low-grade fever — eight days now."</p>
+      <div class="ch-foot">
+        <span class="ch-status ready">Ready</span>
+        <span class="ch-time">08:00 · today</span>
+      </div>
+    </article>
+
+    <article class="chart-card" tabindex="0">
+      <div class="ch-head">
+        <div class="ch-avatar amber">DA</div>
+        <div>
+          <div class="ch-name">Daniyal Abbasi</div>
+          <div class="ch-meta">58M · Berkeley</div>
+        </div>
+      </div>
+      <div class="ch-info">
+        <span class="info-chip spec">Cardiology</span>
+        <span class="info-chip">I10</span>
+        <span class="info-chip">99213</span>
+        <span class="info-chip">F/U 30d</span>
+      </div>
+      <p class="ch-note">"BP up at home logs — check meds + electrolytes."</p>
+      <div class="ch-foot">
+        <span class="ch-status soon">In 12m</span>
+        <span class="ch-time">08:30 · today</span>
+      </div>
+    </article>
+
+    <article class="chart-card" tabindex="0">
+      <div class="ch-head">
+        <div class="ch-avatar indigo">JT</div>
+        <div>
+          <div class="ch-name">Joaquín Torres</div>
+          <div class="ch-meta">7M · El Cerrito</div>
+        </div>
+      </div>
+      <div class="ch-info">
+        <span class="info-chip spec">Pediatrics</span>
+        <span class="info-chip">H66.91</span>
+        <span class="info-chip">99213</span>
+      </div>
+      <p class="ch-note">"Right ear pain three days, slight tug on exam."</p>
+      <div class="ch-foot">
+        <span class="ch-status draft">Drafted</span>
+        <span class="ch-time">09:15 · today</span>
+      </div>
+    </article>
+
+    <article class="chart-card" tabindex="0">
+      <div class="ch-head">
+        <div class="ch-avatar rose">AB</div>
+        <div>
+          <div class="ch-name">Anika Bhattacharya</div>
+          <div class="ch-meta">34F · Oakland</div>
+        </div>
+      </div>
+      <div class="ch-info">
+        <span class="info-chip spec">Endocrinology</span>
+        <span class="info-chip">E11.9</span>
+        <span class="info-chip">99214</span>
+        <span class="info-chip">A1c 8.2</span>
+      </div>
+      <p class="ch-note">"A1c trending up — discuss GLP-1 add-on."</p>
+      <div class="ch-foot">
+        <span class="ch-status ready">Ready</span>
+        <span class="ch-time">10:00 · today</span>
+      </div>
+    </article>
+
+    <article class="chart-card" tabindex="0">
+      <div class="ch-head">
+        <div class="ch-avatar slate">RO</div>
+        <div>
+          <div class="ch-name">Rafael Olawale</div>
+          <div class="ch-meta">61M · Berkeley</div>
+        </div>
+      </div>
+      <div class="ch-info">
+        <span class="info-chip spec">Family Medicine</span>
+        <span class="info-chip">M54.5</span>
+        <span class="info-chip">99213</span>
+      </div>
+      <p class="ch-note">"Low-back ache after yard work — mild. PT plan."</p>
+      <div class="ch-foot">
+        <span class="ch-status signed">Signed</span>
+        <span class="ch-time">10:45 · today</span>
+      </div>
+    </article>
+
+    <article class="chart-card" tabindex="0">
+      <div class="ch-head">
+        <div class="ch-avatar olive">SK</div>
+        <div>
+          <div class="ch-name">Sophie Khalid</div>
+          <div class="ch-meta">29F · Albany</div>
+        </div>
+      </div>
+      <div class="ch-info">
+        <span class="info-chip spec">Dermatology</span>
+        <span class="info-chip">L40.0</span>
+        <span class="info-chip">99213</span>
+      </div>
+      <p class="ch-note">"Plaque flare on elbows — review topical regimen."</p>
+      <div class="ch-foot">
+        <span class="ch-status soon">In 1h</span>
+        <span class="ch-time">11:30 · today</span>
+      </div>
+    </article>
+
+  </section>
+
+  <!-- Recent visits list — quieter, settled below the deck. -->
+  <section class="recent" aria-labelledby="recent-h">
+    <div class="rh">
+      <h3 id="recent-h">Recent <em>visits</em></h3>
+      <span class="link">All visits →</span>
+    </div>
+    <div class="recent-grid">
+
+      <div class="rrow">
+        <div class="rl"><span class="tag signed"></span><span class="nm">Eleanor Kowalski</span><span class="sp">· FamMed · I10</span></div>
+        <span class="tm">12 min</span>
+      </div>
+      <div class="rrow">
+        <div class="rl"><span class="tag"></span><span class="nm">Tomás Aldridge</span><span class="sp">· Cardio · I48.91</span></div>
+        <span class="tm">38 min</span>
+      </div>
+      <div class="rrow">
+        <div class="rl"><span class="tag draft"></span><span class="nm">Mira Vasquez-Olin</span><span class="sp">· Endo · E11.65</span></div>
+        <span class="tm">1h 04m</span>
+      </div>
+      <div class="rrow">
+        <div class="rl"><span class="tag signed"></span><span class="nm">Hassan Mboya</span><span class="sp">· FamMed · J45.40</span></div>
+        <span class="tm">1h 22m</span>
+      </div>
+      <div class="rrow">
+        <div class="rl"><span class="tag"></span><span class="nm">Caroline Westbrook</span><span class="sp">· Derm · L70.0</span></div>
+        <span class="tm">2h 11m</span>
+      </div>
+      <div class="rrow">
+        <div class="rl"><span class="tag signed"></span><span class="nm">Yuki Tanaka-Rhodes</span><span class="sp">· Peds · J06.9</span></div>
+        <span class="tm">3h 02m</span>
+      </div>
+      <div class="rrow">
+        <div class="rl"><span class="tag draft"></span><span class="nm">Bertrand Okeke</span><span class="sp">· Cardio · I25.10</span></div>
+        <span class="tm">3h 45m</span>
+      </div>
+      <div class="rrow">
+        <div class="rl"><span class="tag signed"></span><span class="nm">Priya Anand-Shah</span><span class="sp">· Endo · E03.9</span></div>
+        <span class="tm">5h 20m</span>
+      </div>
+      <div class="rrow">
+        <div class="rl"><span class="tag"></span><span class="nm">Marcus Liang</span><span class="sp">· FamMed · K21.9</span></div>
+        <span class="tm">6h 18m</span>
+      </div>
+      <div class="rrow">
+        <div class="rl"><span class="tag signed"></span><span class="nm">Ines Valverde</span><span class="sp">· Peds · Z00.121</span></div>
+        <span class="tm">Yesterday</span>
+      </div>
+      <div class="rrow">
+        <div class="rl"><span class="tag draft"></span><span class="nm">Clarence Wu-Patel</span><span class="sp">· Derm · L20.9</span></div>
+        <span class="tm">Yesterday</span>
+      </div>
+      <div class="rrow">
+        <div class="rl"><span class="tag signed"></span><span class="nm">Fatima Boukhari</span><span class="sp">· FamMed · R51</span></div>
+        <span class="tm">Yesterday</span>
+      </div>
+
+    </div>
+  </section>
+
+  <div class="footnote">Material Depth · Card Deck · QuillMD</div>
+
+</div><!-- /canvas -->
+
+</body>
+</html>

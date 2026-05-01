@@ -6,20 +6,11 @@
 // exhaustive list, sorted by updatedAt so doctors see their most-
 // recently-touched charts first.
 //
-// Phase 4 follow-up (Bug 2) — this route was missed in the Phase 2 / 3 / 4
-// Clinician migration and was still rendering in the legacy dark + violet
-// `app-redesign-v1` chrome. We now opt in to the Clinician shell via
-// `<AppFrame theme="clinician">` and `<PageHeader theme="clinician">`,
-// matching the pattern used by `/dashboard`, `/visits`, `/admin`, and
-// `/patients/[id]`. The page-level data fetches (auth, prisma queries,
-// redirects) are unchanged per PROTECTED_CONTRACTS.md — only chrome,
-// title typography, and child theme props change.
-//
-// No Phase 4 cinematic photo hero on this surface: `/patients` is a
-// list/search route and a tall photo band would push the search bar
-// and grid below the fold. Instead we use the slim Clinician
-// `<PageHeader theme="clinician">` (same component the `/visits` list
-// uses) with the "All <em>patients</em>." sage-italic title.
+// Phase 5 (Linear V1 Faithful) — page renders inside the standard
+// AppFrame (already migrated to Linear V1 in Stage 2.5). The header
+// uses Inter at 600/700 instead of the earlier serif emphasis, and
+// the page-level data fetches (auth, prisma queries, redirects) are
+// unchanged per PROTECTED_CONTRACTS.md.
 // ============================================================================
 
 import type { Metadata } from 'next';
@@ -120,24 +111,10 @@ export default async function PatientsPage() {
   );
 
   return (
-    <AppFrame theme="clinician">
+    <AppFrame>
       <PageHeader
-        theme="clinician"
         eyebrow="Patients"
-        title={
-          <>
-            All{' '}
-            <em
-              style={{
-                color: 'var(--sage-deep, #2F5040)',
-                fontStyle: 'italic',
-              }}
-            >
-              patients
-            </em>
-            .
-          </>
-        }
+        title="All patients"
         subtitle={
           patients.length === PAGE_SIZE
             ? `Showing the ${PAGE_SIZE} most recently touched. Use ⌘K to search the full list.`
@@ -146,7 +123,7 @@ export default async function PatientsPage() {
         actions={
           <Link
             href="/visits/new"
-            className="qm-cl-btn qm-cl-btn-primary"
+            className="qm-lin-btn-primary"
             style={{ textDecoration: 'none' }}
           >
             <Ic.plus width={14} height={14} />
@@ -157,27 +134,14 @@ export default async function PatientsPage() {
 
       {patients.length === 0 ? (
         <EmptyState
-          theme="clinician"
           kind="sparkle"
           eyebrow="No patients"
-          title={
-            <>
-              No patients{' '}
-              <em
-                style={{
-                  color: 'var(--sage-deep, #2F5040)',
-                  fontStyle: 'italic',
-                }}
-              >
-                yet
-              </em>
-            </>
-          }
+          title="No patients yet"
           body="Start your first visit — we'll create the patient record along the way."
           cta={
             <Link
               href="/visits/new"
-              className="qm-cl-btn qm-cl-btn-primary"
+              className="qm-lin-btn-primary"
               style={{ textDecoration: 'none' }}
             >
               <Ic.plus width={14} height={14} />

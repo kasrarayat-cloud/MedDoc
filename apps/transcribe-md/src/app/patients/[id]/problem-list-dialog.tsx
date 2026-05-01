@@ -109,6 +109,9 @@ export function ProblemListDialog({
     }
   }
 
+  const inputCls =
+    'block w-full rounded-md border border-linear-border bg-linear-surface-1 px-2.5 py-2 text-[13px] text-linear-text placeholder:text-linear-text-3 outline-none transition-colors focus:border-linear-border-strong focus:ring-2 focus:ring-linear-sage/40';
+
   return (
     <Dialog.Root
       open={open}
@@ -120,7 +123,7 @@ export function ProblemListDialog({
       <Dialog.Trigger asChild>
         <button
           type="button"
-          className="qm-btn qm-btn-ghost qm-btn-sm"
+          className="qm-lin-btn"
           aria-label="Manage problem list"
         >
           <Ic.edit width={12} height={12} />
@@ -128,63 +131,14 @@ export function ProblemListDialog({
         </button>
       </Dialog.Trigger>
       <Dialog.Portal>
-        <Dialog.Overlay
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 40,
-            background: 'rgba(0, 0, 0, 0.7)',
-            backdropFilter: 'blur(4px)',
-          }}
-        />
-        <Dialog.Content
-          className="qm-app"
-          style={{
-            position: 'fixed',
-            left: '50%',
-            top: '50%',
-            transform: 'translate(-50%, -50%)',
-            zIndex: 50,
-            width: 'calc(100% - 40px)',
-            maxWidth: 560,
-            maxHeight: '85vh',
-            overflow: 'auto',
-            borderRadius: 20,
-            border: '1px solid var(--line)',
-            background: 'var(--bg-1)',
-            padding: 24,
-            outline: 'none',
-            boxShadow: 'var(--shadow-2)',
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              justifyContent: 'space-between',
-              gap: 12,
-              marginBottom: 16,
-            }}
-          >
+        <Dialog.Overlay className="fixed inset-0 z-40 bg-black/60 backdrop-blur-[2px]" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[85vh] w-[calc(100%-40px)] max-w-[560px] -translate-x-1/2 -translate-y-1/2 overflow-auto rounded-lg border border-linear-border-strong bg-linear-surface-2 p-6 shadow-[0_30px_80px_rgba(0,0,0,0.6)] outline-none">
+          <div className="mb-4 flex items-start justify-between gap-3">
             <div>
-              <Dialog.Title
-                className="qm-serif"
-                style={{
-                  margin: 0,
-                  fontSize: 20,
-                  fontWeight: 400,
-                  letterSpacing: '-0.015em',
-                }}
-              >
+              <Dialog.Title className="m-0 text-[18px] font-semibold tracking-tight text-linear-text">
                 Problem list
               </Dialog.Title>
-              <Dialog.Description
-                style={{
-                  marginTop: 4,
-                  fontSize: 12.5,
-                  color: 'var(--fg-3)',
-                }}
-              >
+              <Dialog.Description className="mt-1 text-[12.5px] text-linear-text-3">
                 Running conditions shown on the patient header. ICD-10 is a
                 free-text field for now.
               </Dialog.Description>
@@ -193,44 +147,24 @@ export function ProblemListDialog({
               <button
                 type="button"
                 aria-label="Close"
-                className="qm-btn qm-btn-icon"
+                className="flex-none rounded-md p-1 text-linear-text-3 hover:text-linear-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-linear-sage/40"
               >
                 <Ic.close width={14} height={14} />
               </button>
             </Dialog.Close>
           </div>
 
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 10,
-              marginBottom: 14,
-            }}
-          >
+          <div className="mb-3.5 flex flex-col gap-2.5">
             {items.length === 0 && (
-              <p
-                style={{
-                  fontSize: 12.5,
-                  color: 'var(--fg-3)',
-                  textAlign: 'center',
-                  padding: '18px 0',
-                  border: '1px dashed var(--line)',
-                  borderRadius: 10,
-                }}
-              >
+              <p className="rounded-md border border-dashed border-linear-border px-4 py-4 text-center text-[12.5px] text-linear-text-3">
                 No conditions yet. Add one below.
               </p>
             )}
             {items.map((item, i) => (
               <div
                 key={i}
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 130px 140px 32px',
-                  gap: 8,
-                  alignItems: 'center',
-                }}
+                className="grid items-center gap-2"
+                style={{ gridTemplateColumns: '1fr 130px 140px 32px' }}
               >
                 <input
                   type="text"
@@ -240,19 +174,17 @@ export function ProblemListDialog({
                   }
                   placeholder="Condition (e.g. HTN, Afib)"
                   maxLength={200}
-                  className="qm-input"
-                  style={{ padding: '8px 10px' }}
+                  className={inputCls}
                 />
                 <select
                   value={item.status}
                   onChange={(e) =>
                     updateRow(i, { status: e.target.value as ProblemStatus })
                   }
-                  className="qm-input"
-                  style={{ padding: '8px 10px', cursor: 'pointer' }}
+                  className={`${inputCls} cursor-pointer appearance-none`}
                 >
                   {ProblemStatusValues.map((s) => (
-                    <option key={s} value={s}>
+                    <option key={s} value={s} className="bg-linear-surface-1 text-linear-text">
                       {s[0].toUpperCase() + s.slice(1)}
                     </option>
                   ))}
@@ -263,15 +195,13 @@ export function ProblemListDialog({
                   onChange={(e) => updateRow(i, { icd10: e.target.value })}
                   placeholder="ICD-10"
                   maxLength={20}
-                  className="qm-input"
-                  style={{ padding: '8px 10px', fontFamily: 'var(--mono)' }}
+                  className={`${inputCls} font-mono`}
                 />
                 <button
                   type="button"
                   onClick={() => removeRow(i)}
-                  className="qm-btn qm-btn-icon"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-linear-border bg-transparent text-linear-text-3 hover:border-linear-danger/40 hover:text-linear-danger"
                   aria-label="Remove condition"
-                  style={{ width: 32, height: 32 }}
                 >
                   <Ic.trash width={13} height={13} />
                 </button>
@@ -282,48 +212,21 @@ export function ProblemListDialog({
           <button
             type="button"
             onClick={addRow}
-            className="qm-btn qm-btn-ghost"
-            style={{
-              width: '100%',
-              justifyContent: 'center',
-              padding: 10,
-              borderStyle: 'dashed',
-            }}
+            className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-linear-border bg-transparent px-3 py-2.5 text-[12px] font-medium text-linear-text-2 hover:border-linear-border-strong hover:text-linear-text"
           >
             <Ic.plus width={13} height={13} />
             Add condition
           </button>
 
           {error && (
-            <p
-              role="alert"
-              style={{
-                marginTop: 12,
-                fontSize: 12,
-                color: 'var(--coral)',
-              }}
-            >
+            <p role="alert" className="mt-3 text-[12px] text-linear-danger">
               {error}
             </p>
           )}
 
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'flex-end',
-              gap: 8,
-              borderTop: '1px solid var(--line-soft)',
-              marginTop: 18,
-              paddingTop: 16,
-            }}
-          >
+          <div className="mt-5 flex items-center justify-end gap-2 border-t border-linear-border pt-4">
             <Dialog.Close asChild>
-              <button
-                type="button"
-                className="qm-btn qm-btn-ghost"
-                style={{ padding: '8px 14px' }}
-              >
+              <button type="button" className="qm-lin-btn">
                 Cancel
               </button>
             </Dialog.Close>
@@ -331,12 +234,7 @@ export function ProblemListDialog({
               type="button"
               disabled={!dirty || submitting}
               onClick={onSave}
-              className="qm-btn qm-btn-primary"
-              style={{
-                padding: '8px 16px',
-                opacity: !dirty || submitting ? 0.5 : 1,
-                cursor: !dirty || submitting ? 'not-allowed' : 'pointer',
-              }}
+              className="qm-lin-btn-primary disabled:cursor-not-allowed disabled:opacity-50"
             >
               {submitting ? 'Saving…' : 'Save problem list'}
             </button>

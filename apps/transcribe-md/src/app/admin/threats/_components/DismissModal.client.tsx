@@ -1,12 +1,16 @@
 'use client';
 
 // ============================================================================
-// DismissModal — Phase 6H "false positive"
+// DismissModal — "false positive"
 // ----------------------------------------------------------------------------
 // Note + a "silence similar future threats" checkbox. The checkbox
 // derives a silencePattern server-side based on the threat id (e.g.
 // for an xdom threat: { type, userId, domain }). Privilege grants
 // don't support pattern silencing — we hide the checkbox.
+//
+// Phase 5 (Linear V1 Faithful) — spotlight overlay on the dark canvas
+// with a warning-amber tinted icon plate and CTA. The `theme` prop
+// survives as an ignored compat shim.
 // ============================================================================
 
 import { useState } from 'react';
@@ -15,16 +19,15 @@ import { toast } from 'sonner';
 
 import type { Threat } from '../_types';
 
-type DismissModalTheme = 'legacy' | 'clinician';
-
 interface Props {
   threat: Threat;
   onClose: () => void;
   onDismissed: () => void;
-  theme?: DismissModalTheme;
+  /** Phase 4 dual-theme prop. Phase 5 ignores it; kept for caller compat. */
+  theme?: string;
 }
 
-export default function DismissModal({ threat, onClose, onDismissed, theme = 'legacy' }: Props) {
+export default function DismissModal({ threat, onClose, onDismissed }: Props) {
   const [note, setNote] = useState('');
   const [silenceSimilar, setSilenceSimilar] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -71,205 +74,31 @@ export default function DismissModal({ threat, onClose, onDismissed, theme = 'le
     }
   }
 
-  if (theme === 'clinician') {
-    return (
-      <div
-        onClick={onClose}
-        style={{
-          position: 'fixed',
-          inset: 0,
-          zIndex: 50,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: 16,
-          background: 'rgba(43, 38, 32, 0.32)',
-          backdropFilter: 'blur(2px)',
-        }}
-      >
-        <div
-          className="qm-cl-card"
-          onClick={(e) => e.stopPropagation()}
-          style={{ width: '100%', maxWidth: 448, padding: 0, overflow: 'hidden' }}
-        >
-          <header
-            style={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              justifyContent: 'space-between',
-              gap: 12,
-              borderBottom: '1px solid var(--line)',
-              padding: '16px 20px',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-              <span
-                style={{
-                  marginTop: 2,
-                  display: 'inline-flex',
-                  width: 28,
-                  height: 28,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  borderRadius: 999,
-                  background: 'var(--amber-tint)',
-                  color: 'var(--amber-deep)',
-                }}
-              >
-                <ShieldOff style={{ width: 14, height: 14 }} />
-              </span>
-              <div>
-                <h2 className="qm-cl-serif" style={{ fontSize: 16, fontWeight: 500, color: 'var(--ink)' }}>
-                  Dismiss as false positive
-                </h2>
-                <p style={{ marginTop: 2, fontSize: 11, color: 'var(--ink-3)' }}>
-                  Removes this threat from the active list.
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Close"
-              style={{
-                marginTop: -4,
-                marginRight: -4,
-                display: 'inline-flex',
-                width: 28,
-                height: 28,
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderRadius: 8,
-                color: 'var(--ink-3)',
-                background: 'transparent',
-                border: 0,
-                cursor: 'pointer',
-              }}
-            >
-              <X style={{ width: 14, height: 14 }} />
-            </button>
-          </header>
-
-          <div style={{ padding: '16px 20px' }}>
-            <div
-              style={{
-                marginBottom: 12,
-                borderRadius: 8,
-                border: '1px solid var(--line)',
-                background: 'var(--cream-2)',
-                padding: '10px 12px',
-                fontSize: 12,
-                color: 'var(--ink-2)',
-              }}
-            >
-              <div style={{ fontWeight: 500, color: 'var(--ink)' }}>{threat.summary}</div>
-              <div style={{ marginTop: 2, color: 'var(--ink-2)' }}>{threat.detail}</div>
-            </div>
-
-            <label style={{ display: 'block' }}>
-              <span className="qm-cl-section-label">Note (optional)</span>
-              <textarea
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                rows={3}
-                maxLength={2000}
-                placeholder="Why is this a false positive?"
-                className="qm-cl-input"
-                style={{ marginTop: 4, width: '100%', resize: 'none', fontSize: 13 }}
-              />
-            </label>
-
-            {supportsSilence && (
-              <label
-                style={{
-                  marginTop: 12,
-                  display: 'flex',
-                  cursor: 'pointer',
-                  alignItems: 'flex-start',
-                  gap: 8,
-                  borderRadius: 8,
-                  border: '1px solid var(--amber-tint-strong, rgba(212,165,116,0.32))',
-                  background: 'var(--amber-tint)',
-                  padding: '10px 12px',
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={silenceSimilar}
-                  onChange={(e) => setSilenceSimilar(e.target.checked)}
-                  style={{ marginTop: 2, width: 14, height: 14, cursor: 'pointer', accentColor: 'var(--amber-deep)' }}
-                />
-                <span style={{ fontSize: 12, color: 'var(--amber-deep)' }}>
-                  <span style={{ fontWeight: 500 }}>Silence similar future threats.</span>{' '}
-                  Future detector runs will suppress threats matching this one&apos;s
-                  identifying tuple (e.g. same IP for failed-login bursts, same
-                  user+domain for export attempts).
-                </span>
-              </label>
-            )}
-          </div>
-
-          <footer
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'flex-end',
-              gap: 8,
-              borderTop: '1px solid var(--line)',
-              background: 'var(--cream-2)',
-              padding: '12px 20px',
-            }}
-          >
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={busy}
-              className="qm-cl-btn qm-cl-btn-ghost"
-              style={{ height: 32, padding: '0 14px', fontSize: 12, opacity: busy ? 0.5 : 1 }}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={submit}
-              disabled={busy}
-              className="qm-cl-btn qm-cl-btn-soft"
-              style={{
-                height: 32,
-                padding: '0 14px',
-                fontSize: 12,
-                color: 'var(--amber-deep)',
-                background: 'var(--amber-tint)',
-                opacity: busy ? 0.5 : 1,
-              }}
-            >
-              {busy ? 'Dismissing…' : 'Confirm dismiss'}
-            </button>
-          </footer>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-[2px] p-4"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-xl border border-slate-200 bg-white shadow-2xl"
+        className="w-full max-w-md overflow-hidden rounded-lg border border-linear-border-strong bg-linear-surface-2 shadow-[0_30px_80px_rgba(0,0,0,0.6)]"
         onClick={(e) => e.stopPropagation()}
       >
-        <header className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
+        <header className="flex items-start justify-between gap-3 border-b border-linear-border px-5 py-4">
           <div className="flex items-start gap-2.5">
-            <span className="mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+            <span
+              className="mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-full"
+              style={{
+                background: 'rgba(212,164,55,0.18)',
+                color: 'var(--color-linear-warning)',
+              }}
+            >
               <ShieldOff className="h-4 w-4" />
             </span>
             <div>
-              <h2 className="text-sm font-semibold tracking-tight text-slate-900">
+              <h2 className="text-sm font-semibold tracking-tight text-linear-text">
                 Dismiss as false positive
               </h2>
-              <p className="mt-0.5 text-[11px] text-slate-500">
+              <p className="mt-0.5 text-[11px] text-linear-text-3">
                 Removes this threat from the active list.
               </p>
             </div>
@@ -277,7 +106,7 @@ export default function DismissModal({ threat, onClose, onDismissed, theme = 'le
           <button
             type="button"
             onClick={onClose}
-            className="-mt-1 -mr-1 inline-flex h-7 w-7 items-center justify-center rounded text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            className="-mt-1 -mr-1 inline-flex h-7 w-7 items-center justify-center rounded text-linear-text-3 hover:bg-linear-row-hover hover:text-linear-text"
             aria-label="Close"
           >
             <X className="h-4 w-4" />
@@ -285,13 +114,13 @@ export default function DismissModal({ threat, onClose, onDismissed, theme = 'le
         </header>
 
         <div className="px-5 py-4">
-          <div className="mb-3 rounded border border-slate-200 bg-slate-50 px-3 py-2.5 text-[12px] text-slate-700">
-            <div className="font-medium text-slate-900">{threat.summary}</div>
-            <div className="mt-0.5 text-slate-600">{threat.detail}</div>
+          <div className="mb-3 rounded-md border border-linear-border bg-linear-surface-1 px-3 py-2.5 text-[12px] text-linear-text-2">
+            <div className="font-medium text-linear-text">{threat.summary}</div>
+            <div className="mt-0.5 text-linear-text-2">{threat.detail}</div>
           </div>
 
           <label className="block">
-            <span className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+            <span className="font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-linear-text-3">
               Note (optional)
             </span>
             <textarea
@@ -300,19 +129,26 @@ export default function DismissModal({ threat, onClose, onDismissed, theme = 'le
               rows={3}
               maxLength={2000}
               placeholder="Why is this a false positive?"
-              className="mt-1 block w-full resize-none rounded border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-slate-500 focus:outline-none"
+              className="mt-1 block w-full resize-none rounded-md border border-linear-border bg-linear-surface-1 px-3 py-2 text-sm text-linear-text placeholder:text-linear-text-3 focus:border-linear-border-strong focus:outline-none focus:ring-2 focus:ring-linear-sage/40"
             />
           </label>
 
           {supportsSilence && (
-            <label className="mt-3 flex cursor-pointer items-start gap-2 rounded border border-amber-200 bg-amber-50 px-3 py-2.5">
+            <label
+              className="mt-3 flex cursor-pointer items-start gap-2 rounded-md px-3 py-2.5"
+              style={{
+                background: 'rgba(212,164,55,0.10)',
+                boxShadow: 'inset 0 0 0 1px rgba(212,164,55,0.30)',
+              }}
+            >
               <input
                 type="checkbox"
                 checked={silenceSimilar}
                 onChange={(e) => setSilenceSimilar(e.target.checked)}
-                className="mt-0.5 h-3.5 w-3.5 cursor-pointer accent-amber-600"
+                className="mt-0.5 h-3.5 w-3.5 cursor-pointer"
+                style={{ accentColor: 'var(--color-linear-warning)' }}
               />
-              <span className="text-[12px] text-amber-900">
+              <span className="text-[12px]" style={{ color: 'var(--color-linear-warning)' }}>
                 <span className="font-medium">Silence similar future threats.</span>{' '}
                 Future detector runs will suppress threats matching this one&apos;s
                 identifying tuple (e.g. same IP for failed-login bursts, same
@@ -322,12 +158,12 @@ export default function DismissModal({ threat, onClose, onDismissed, theme = 'le
           )}
         </div>
 
-        <footer className="flex items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
+        <footer className="flex items-center justify-end gap-2 border-t border-linear-border bg-linear-surface-1 px-5 py-3">
           <button
             type="button"
             onClick={onClose}
             disabled={busy}
-            className="rounded border border-slate-300 bg-white px-3 py-1.5 text-[12px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            className="qm-lin-btn"
           >
             Cancel
           </button>
@@ -335,7 +171,12 @@ export default function DismissModal({ threat, onClose, onDismissed, theme = 'le
             type="button"
             onClick={submit}
             disabled={busy}
-            className="rounded bg-amber-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+            className="inline-flex items-center justify-center rounded-md px-3 py-1.5 text-[12px] font-medium transition-colors disabled:opacity-50"
+            style={{
+              background: 'rgba(212,164,55,0.18)',
+              color: 'var(--color-linear-warning)',
+              boxShadow: 'inset 0 0 0 1px rgba(212,164,55,0.30)',
+            }}
           >
             {busy ? 'Dismissing…' : 'Confirm dismiss'}
           </button>

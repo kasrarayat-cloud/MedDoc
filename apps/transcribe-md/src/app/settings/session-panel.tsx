@@ -3,21 +3,22 @@
 import type { ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+
 import { SpecularButton } from '@/components/specular-button';
 import { LocalTime } from '@/components/ui/local-time';
 import { signOutAction, signOutAllDevicesAction } from '@/actions/session';
+
+// Phase 5 — Linear V1 Faithful session panel. Server actions
+// (signOutAction, signOutAllDevicesAction) are unchanged per
+// PROTECTED_CONTRACTS.
 
 interface SessionPanelProps {
   ipAddress: string | null;
   browser: string;
   os: string;
   locationLabel: string;
-  /** ISO 8601 UTC — session createdAt. Formatted client-side in the
-   *  viewer's local timezone. */
   loggedInAtIso: string;
-  /** ISO 8601 UTC — session expiresAt. */
   expiresAtIso: string;
-  /** ISO 8601 UTC — session lastActiveAt. */
   lastActiveAtIso: string;
 }
 
@@ -41,8 +42,15 @@ export function SessionPanel(props: SessionPanelProps) {
   }
 
   return (
-    <div className="space-y-6">
-      <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <dl
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          gap: 12,
+          margin: 0,
+        }}
+      >
         <Row label="IP address" value={props.ipAddress ?? 'Unknown'} />
         <Row label="Location" value={props.locationLabel} />
         <Row label="Browser" value={`${props.browser} · ${props.os}`} />
@@ -66,22 +74,48 @@ export function SessionPanel(props: SessionPanelProps) {
         </SpecularButton>
       </div>
 
-      <div className="border-t border-border-subtle pt-6">
-        <div className="mb-2 text-[12px] font-semibold uppercase tracking-wider text-danger">
+      <div
+        style={{
+          borderTop: '1px solid var(--color-linear-hairline)',
+          paddingTop: 18,
+        }}
+      >
+        <div
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10.5,
+            fontWeight: 600,
+            textTransform: 'uppercase',
+            letterSpacing: '0.07em',
+            color: 'var(--color-linear-coral)',
+            marginBottom: 6,
+          }}
+        >
           Danger zone
         </div>
-        <p className="mb-3 text-[13px] text-text-tertiary">
-          If you think your account was accessed without your permission, sign out
-          of every device to revoke all active sessions.
+        <p
+          style={{
+            margin: '0 0 12px',
+            fontFamily: 'var(--font-sans)',
+            fontSize: 13,
+            color: 'var(--color-linear-text-2)',
+            lineHeight: 1.5,
+          }}
+        >
+          If you think your account was accessed without your permission, sign
+          out of every device to revoke all active sessions.
         </p>
-        <SpecularButton
-          variant="secondary"
-          size="md"
+        <button
+          type="button"
           onClick={doSignOutAll}
-          className="border-danger/40 text-danger hover:border-danger hover:text-danger"
+          className="qm-lin-btn"
+          style={{
+            borderColor: 'rgba(212, 87, 74, 0.40)',
+            color: 'var(--color-linear-coral)',
+          }}
         >
           Sign out all devices
-        </SpecularButton>
+        </button>
       </div>
     </div>
   );
@@ -89,11 +123,37 @@ export function SessionPanel(props: SessionPanelProps) {
 
 function Row({ label, value }: { label: string; value: ReactNode }) {
   return (
-    <div className="rounded-lg border border-border-subtle bg-bg-surface-1/60 px-3.5 py-3">
-      <dt className="text-[11px] font-medium uppercase tracking-wider text-text-muted">
+    <div
+      style={{
+        padding: '10px 12px',
+        background: 'var(--color-linear-surface-2)',
+        border: '1px solid var(--color-linear-border)',
+        borderRadius: 6,
+      }}
+    >
+      <dt
+        style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10.5,
+          fontWeight: 500,
+          letterSpacing: '0.07em',
+          textTransform: 'uppercase',
+          color: 'var(--color-linear-text-3)',
+        }}
+      >
         {label}
       </dt>
-      <dd className="mt-1 text-[13px] text-text-secondary break-all">{value}</dd>
+      <dd
+        style={{
+          margin: '4px 0 0',
+          fontFamily: 'var(--font-sans)',
+          fontSize: 13,
+          color: 'var(--color-linear-text)',
+          wordBreak: 'break-all',
+        }}
+      >
+        {value}
+      </dd>
     </div>
   );
 }
