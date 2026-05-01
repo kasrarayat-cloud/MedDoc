@@ -3,17 +3,16 @@
 // ============================================================================
 // VisitFailedView — terminal-state UI for a FAILED visit row.
 // ----------------------------------------------------------------------------
-// Phase 2 (Clinician remodel) — Strategy A dual-theme via additive
-// `theme` prop. Default `'legacy'` keeps the dark VioletOrb halo +
-// amber/coral copy verbatim. Visit-detail (Clinician) drops the
-// VioletOrb (per direction CL-5: no Three.js theatrical moments) and
-// renders a quiet coral-tinted icon block with sage CTAs and serif
-// headlines on cream. Retry semantics + failure categorization
-// unchanged on both paths.
+// Phase 5 — Linear V1 Faithful. Drops the VioletOrb cinematic and the
+// clinician dual-theme branch. Renders a quiet danger-tinted icon
+// block with a sage primary CTA for transient/provider/unknown
+// retries and a `.qm-lin-btn` ghost "Back to dashboard". The retry
+// semantics + failure categorization are unchanged.
 // ============================================================================
 
 import { useState, useTransition, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import {
   Cloud,
   FileX,
@@ -22,18 +21,9 @@ import {
   Upload,
   WifiOff,
 } from 'lucide-react';
-import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
 
-import { SpecularButton } from '@/components/specular-button';
-import { cn } from '@/lib/cn';
-
 type VisitFailedViewTheme = 'legacy' | 'clinician';
-
-const VioletOrb = dynamic(
-  () => import('@/components/violet-orb').then((m) => m.VioletOrb),
-  { ssr: false, loading: () => <div className="h-48 w-48" /> }
-);
 
 interface Props {
   visitId: string;
@@ -41,9 +31,7 @@ interface Props {
   /** One of 'transient' | 'permanent' | 'provider_down' (or null on
    *  pre-categorization rows). Drives icon + headline + CTA. */
   failureCategory?: string | null;
-  /** Phase 2 (Clinician remodel) — additive theme prop. Default
-   *  `'legacy'` keeps the VioletOrb + dark chrome. `'clinician'`
-   *  drops the orb (per CL-5) and renders coral-tinted soft chrome. */
+  /** @deprecated kept for back-compat; Linear V1 is single-theme. */
   theme?: VisitFailedViewTheme;
 }
 
@@ -106,12 +94,10 @@ export function VisitFailedView({
   visitId,
   reason,
   failureCategory,
-  theme = 'legacy',
 }: Props) {
   const router = useRouter();
   const [submitting, startTransition] = useTransition();
   const [pending, setPending] = useState(false);
-  const isClinician = theme === 'clinician';
 
   const copy = copyForCategory(failureCategory);
   const isPermanent = failureCategory === 'permanent';
@@ -156,66 +142,42 @@ export function VisitFailedView({
 
   return (
     <div className="mx-auto flex max-w-xl flex-col items-center py-16 text-center sm:py-24">
-      {isClinician ? (
-        // Per CL-5: no theatrical Three.js orb in Clinician chrome.
-        // The visual moment is a quiet coral-tinted icon-in-card.
-        <div
-          aria-hidden
-          className="mb-8 inline-flex h-14 w-14 items-center justify-center rounded-2xl"
-          style={{
-            background: 'var(--coral-tint, rgba(201, 123, 110, 0.16))',
-            border:
-              '1px solid var(--coral-tint-strong, rgba(201, 123, 110, 0.24))',
-            color: 'var(--coral-deep, #7A3329)',
-          }}
-        >
-          <PrimaryIcon className="h-6 w-6" aria-hidden />
-        </div>
-      ) : (
-        <div className="relative mb-10 h-56 w-56">
-          <div
-            aria-hidden
-            className={cn(
-              'pointer-events-none absolute inset-0 -z-10 rounded-full',
-              "bg-[radial-gradient(ellipse_at_center,rgba(245,158,11,0.35)_0%,rgba(245,158,11,0.08)_40%,transparent_72%)]",
-              'orb-pulse'
-            )}
-            style={{ filter: 'blur(28px)' }}
-          />
-          <VioletOrb radius={1.1} state="processing" quiet reactive={0} />
-        </div>
-      )}
-
-      <div className="mb-3 flex items-center gap-2">
-        {isClinician ? null : (
-          <PrimaryIcon className="h-5 w-5 text-amber-400" aria-hidden />
-        )}
-        <h2
-          className={cn(
-            isClinician
-              ? 'qm-cl-serif text-[28px] font-medium leading-tight text-clinician-ink'
-              : 'type-h1 text-text-primary'
-          )}
-        >
-          {copy.headline}
-        </h2>
+      <div
+        aria-hidden
+        className="mb-8 inline-flex h-14 w-14 items-center justify-center rounded-2xl"
+        style={{
+          background: 'rgba(212,87,74,0.10)',
+          border: '1px solid rgba(212,87,74,0.32)',
+          color: 'var(--color-linear-danger)',
+        }}
+      >
+        <PrimaryIcon className="h-6 w-6" aria-hidden />
       </div>
 
+      <h2
+        style={{
+          margin: 0,
+          fontFamily: 'var(--font-sans)',
+          fontSize: 24,
+          fontWeight: 500,
+          letterSpacing: '-0.012em',
+          color: 'var(--color-linear-text)',
+        }}
+      >
+        {copy.headline}
+      </h2>
+
       <p
-        className={cn(
-          'mt-3 max-w-md text-[14px] leading-relaxed',
-          isClinician ? 'text-clinician-ink-2' : 'text-text-tertiary'
-        )}
+        className="mt-3 max-w-md text-[14px] leading-relaxed"
+        style={{ color: 'var(--color-linear-text-2)' }}
       >
         {reason ?? copy.body}
       </p>
 
       {copy.hint && (
         <p
-          className={cn(
-            'mt-2 max-w-md text-[12px] leading-relaxed',
-            isClinician ? 'text-clinician-ink-3' : 'text-text-muted'
-          )}
+          className="mt-2 max-w-md text-[12px] leading-relaxed"
+          style={{ color: 'var(--color-linear-text-3)' }}
         >
           {copy.hint}
         </p>
@@ -223,20 +185,18 @@ export function VisitFailedView({
 
       <div className="mt-10 flex items-center justify-center gap-3">
         {isPermanent && copy.ctaHref ? (
-          <SpecularButton
-            theme={theme}
+          <Link
             href={copy.ctaHref}
-            variant="primary"
-            size="md"
+            className="qm-lin-btn-primary"
+            style={{ textDecoration: 'none' }}
           >
             <Upload className="h-3.5 w-3.5" aria-hidden />
             {copy.ctaLabel}
-          </SpecularButton>
+          </Link>
         ) : (
-          <SpecularButton
-            theme={theme}
-            variant="primary"
-            size="md"
+          <button
+            type="button"
+            className="qm-lin-btn-primary"
             onClick={onRetry}
             disabled={isRetrying}
           >
@@ -251,17 +211,15 @@ export function VisitFailedView({
                 {copy.ctaLabel}
               </>
             )}
-          </SpecularButton>
+          </button>
         )}
-        <SpecularButton
-          theme={theme}
+        <Link
           href="/dashboard"
-          variant="secondary"
-          size="md"
-          sweep={false}
+          className="qm-lin-btn"
+          style={{ textDecoration: 'none' }}
         >
           Back to dashboard
-        </SpecularButton>
+        </Link>
       </div>
     </div>
   );
