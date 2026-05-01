@@ -967,3 +967,534 @@ body {
 .qm-warn-info .qm-warn-icon {
   color: var(--color-linear-info);
 }
+
+/* ============================================================================
+ * Phase 5.1 — Extras V4 Card Stream (visit-detail Extras tab)
+ * ----------------------------------------------------------------------------
+ * Single-column stack of category cards. Mirrors
+ * docs/design-directions-v9-tabs/extras-v4.html. Each card has a
+ * standard head (icon + title + sub-eyebrow + count pill + edit btn),
+ * a body region with category-specific layout, and an optional foot
+ * row.
+ *
+ * Strictly additive — only `.qm-lin-card-stream` and `.qm-lin-extras-*`
+ * classes. Existing Phase 5 utilities are not touched.
+ * ========================================================================== */
+
+.qm-lin-card-stream {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 920px;
+  margin: 0 auto;
+}
+
+.qm-lin-extras-card {
+  background: var(--color-linear-surface-1);
+  border: 1px solid var(--color-linear-hairline);
+  border-radius: 8px;
+  overflow: hidden;
+  transition: border-color 130ms ease-out, background-color 130ms ease-out;
+}
+.qm-lin-extras-card:hover {
+  border-color: var(--color-linear-hairline-strong);
+}
+.qm-lin-extras-card--focus {
+  border-left: 3px solid var(--color-linear-sage);
+}
+
+.qm-lin-extras-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px 12px;
+  border-bottom: 1px solid var(--color-linear-hairline);
+}
+.qm-lin-extras-head-left {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+}
+.qm-lin-extras-head-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.qm-lin-extras-icon {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--color-linear-hairline-strong);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+  font-size: 14px;
+  line-height: 1;
+}
+.qm-lin-extras-title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.qm-lin-extras-title {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  letter-spacing: -0.01em;
+  color: var(--color-linear-text);
+  font-weight: 600;
+  margin: 0;
+}
+.qm-lin-extras-sub {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-linear-text-3);
+}
+
+.qm-lin-extras-count-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-linear-text-2);
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--color-linear-hairline-strong);
+  font-weight: 500;
+}
+.qm-lin-extras-count-pill--sage {
+  color: var(--color-linear-sage-bright);
+  border-color: rgba(122, 166, 140, 0.25);
+  background: rgba(122, 166, 140, 0.06);
+}
+.qm-lin-extras-count-pill--warn {
+  color: var(--color-linear-warning);
+  border-color: rgba(212, 164, 55, 0.25);
+  background: rgba(212, 164, 55, 0.06);
+}
+.qm-lin-extras-count-pill--danger {
+  color: var(--color-linear-danger);
+  border-color: rgba(212, 87, 74, 0.25);
+  background: rgba(212, 87, 74, 0.06);
+}
+
+.qm-lin-extras-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-linear-text-3);
+  cursor: pointer;
+  transition: color 100ms ease-out, background-color 100ms ease-out, border-color 100ms ease-out;
+}
+.qm-lin-extras-edit-btn:hover:not(:disabled) {
+  color: var(--color-linear-sage-bright);
+  background: rgba(122, 166, 140, 0.05);
+  border-color: rgba(122, 166, 140, 0.18);
+}
+.qm-lin-extras-edit-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.qm-lin-extras-body {
+  padding: 14px 18px 16px;
+}
+.qm-lin-extras-foot {
+  padding: 10px 18px;
+  border-top: 1px solid var(--color-linear-hairline);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-linear-text-3);
+}
+
+/* Demographics + visit metadata — 2-column key/value grid. */
+.qm-lin-extras-kv-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 11px 24px;
+}
+@media (max-width: 600px) {
+  .qm-lin-extras-kv-grid {
+    grid-template-columns: 1fr;
+    gap: 9px;
+  }
+}
+.qm-lin-extras-kv {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.qm-lin-extras-kv-key {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-linear-text-3);
+}
+.qm-lin-extras-kv-val {
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  color: var(--color-linear-text);
+  letter-spacing: -0.005em;
+}
+.qm-lin-extras-kv-val .qm-lin-extras-kv-secondary {
+  color: var(--color-linear-text-3);
+  font-size: 12.5px;
+  margin-left: 4px;
+}
+.qm-lin-extras-kv-val .qm-lin-extras-kv-mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+}
+
+/* Vitals — 4-column tile grid. */
+.qm-lin-extras-vitals-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: var(--color-linear-hairline);
+  border: 1px solid var(--color-linear-hairline);
+  border-radius: 6px;
+  overflow: hidden;
+}
+@media (max-width: 760px) {
+  .qm-lin-extras-vitals-tiles {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+.qm-lin-extras-vt {
+  background: var(--color-linear-surface-1);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.qm-lin-extras-vt-lbl {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-linear-text-3);
+}
+.qm-lin-extras-vt-val {
+  font-family: var(--font-mono);
+  font-size: 14.5px;
+  color: var(--color-linear-text);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.qm-lin-extras-vt-val .qm-lin-extras-vt-unit {
+  color: var(--color-linear-text-3);
+  font-size: 11px;
+  margin-left: 3px;
+  font-weight: 400;
+}
+.qm-lin-extras-vt-ok {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-linear-sage-bright);
+}
+
+/* Allergies — danger-tinted card row. */
+.qm-lin-extras-allergy {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 11px 14px;
+  border: 1px solid rgba(212, 87, 74, 0.22);
+  background: rgba(212, 87, 74, 0.04);
+  border-left-width: 2px;
+  border-left-color: var(--color-linear-danger);
+  border-radius: 6px;
+}
+.qm-lin-extras-allergy + .qm-lin-extras-allergy {
+  margin-top: 8px;
+}
+.qm-lin-extras-allergy--moderate {
+  border-color: rgba(212, 164, 55, 0.22);
+  background: rgba(212, 164, 55, 0.04);
+  border-left-color: var(--color-linear-warning);
+}
+.qm-lin-extras-allergy--mild {
+  border-color: rgba(91, 141, 184, 0.22);
+  background: rgba(91, 141, 184, 0.04);
+  border-left-color: var(--color-linear-info);
+}
+.qm-lin-extras-allergy-sev {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 500;
+  color: var(--color-linear-danger);
+  background: rgba(212, 87, 74, 0.08);
+  border: 1px solid rgba(212, 87, 74, 0.3);
+  padding: 3px 7px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.qm-lin-extras-allergy--moderate .qm-lin-extras-allergy-sev {
+  color: var(--color-linear-warning);
+  background: rgba(212, 164, 55, 0.08);
+  border-color: rgba(212, 164, 55, 0.3);
+}
+.qm-lin-extras-allergy--mild .qm-lin-extras-allergy-sev {
+  color: var(--color-linear-info);
+  background: rgba(91, 141, 184, 0.08);
+  border-color: rgba(91, 141, 184, 0.3);
+}
+.qm-lin-extras-allergy-name {
+  font-size: 14.5px;
+  color: var(--color-linear-text);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-bottom: 2px;
+}
+.qm-lin-extras-allergy-detail {
+  font-size: 13px;
+  color: var(--color-linear-text-2);
+  line-height: 1.5;
+}
+.qm-lin-extras-allergy-meta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--color-linear-text-3);
+  margin-top: 4px;
+}
+
+/* Med rows. */
+.qm-lin-extras-med-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 10px 0;
+  border-top: 1px solid var(--color-linear-hairline);
+}
+.qm-lin-extras-med-row:first-child {
+  border-top: 0;
+  padding-top: 2px;
+}
+.qm-lin-extras-med-icon {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--color-linear-hairline-strong);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--color-linear-sage-bright);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+.qm-lin-extras-med-name {
+  font-size: 14px;
+  color: var(--color-linear-text);
+  font-weight: 500;
+  margin-bottom: 2px;
+  letter-spacing: -0.005em;
+}
+.qm-lin-extras-med-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 16px;
+  padding: 0 6px;
+  margin-left: 8px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  background: rgba(122, 166, 140, 0.06);
+  color: var(--color-linear-sage-bright);
+  border: 1px solid rgba(122, 166, 140, 0.22);
+  border-radius: 3px;
+  vertical-align: 1px;
+}
+.qm-lin-extras-med-detail {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--color-linear-text-3);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
+/* Problem rows. */
+.qm-lin-extras-problem-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 10px 0;
+  border-top: 1px solid var(--color-linear-hairline);
+}
+.qm-lin-extras-problem-row:first-child {
+  border-top: 0;
+  padding-top: 2px;
+}
+.qm-lin-extras-problem-dot {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--color-linear-hairline-strong);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.02);
+  font-size: 13px;
+  line-height: 1;
+}
+.qm-lin-extras-problem-row--active .qm-lin-extras-problem-dot {
+  color: var(--color-linear-sage-bright);
+  border-color: rgba(122, 166, 140, 0.22);
+  background: rgba(122, 166, 140, 0.04);
+}
+.qm-lin-extras-problem-row--draft .qm-lin-extras-problem-dot {
+  color: var(--color-linear-warning);
+  border-color: rgba(212, 164, 55, 0.22);
+  background: rgba(212, 164, 55, 0.04);
+}
+.qm-lin-extras-problem-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 2px;
+  flex-wrap: wrap;
+}
+.qm-lin-extras-problem-name {
+  font-size: 14px;
+  color: var(--color-linear-text);
+  font-weight: 500;
+}
+.qm-lin-extras-icd-pill {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(122, 166, 140, 0.06);
+  color: var(--color-linear-sage-bright);
+  border: 1px solid rgba(122, 166, 140, 0.22);
+}
+.qm-lin-extras-draft-pill {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(212, 164, 55, 0.06);
+  color: var(--color-linear-warning);
+  border: 1px solid rgba(212, 164, 55, 0.25);
+}
+.qm-lin-extras-problem-detail {
+  font-size: 12.5px;
+  color: var(--color-linear-text-3);
+  line-height: 1.5;
+}
+
+/* Audit stream. */
+.qm-lin-extras-audit {
+  display: flex;
+  flex-direction: column;
+}
+.qm-lin-extras-audit-ev {
+  display: grid;
+  grid-template-columns: 60px 22px 1fr;
+  gap: 10px;
+  padding: 9px 0;
+  border-top: 1px solid var(--color-linear-hairline);
+  align-items: flex-start;
+}
+.qm-lin-extras-audit-ev:first-child {
+  border-top: 0;
+  padding-top: 2px;
+}
+.qm-lin-extras-audit-ts {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-linear-text-3);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  padding-top: 2px;
+}
+.qm-lin-extras-audit-av {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  background: linear-gradient(135deg, #3a4a52 0%, #2a3036 100%);
+  color: #dde6ec;
+  font-size: 9px;
+  font-weight: 600;
+  display: grid;
+  place-items: center;
+  letter-spacing: 0.02em;
+  border: 1px solid var(--color-linear-hairline-strong);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.qm-lin-extras-audit-ev--system .qm-lin-extras-audit-av {
+  background: linear-gradient(135deg, #1f2a26 0%, #11201a 100%);
+  color: var(--color-linear-sage-bright);
+}
+.qm-lin-extras-audit-text {
+  font-size: 13px;
+  color: var(--color-linear-text);
+  line-height: 1.5;
+  letter-spacing: -0.005em;
+}
+.qm-lin-extras-audit-actor {
+  color: var(--color-linear-text);
+  font-weight: 500;
+}
+.qm-lin-extras-audit-ev--system .qm-lin-extras-audit-actor {
+  color: var(--color-linear-text-2);
+  font-weight: 400;
+}
+.qm-lin-extras-audit-verb {
+  color: var(--color-linear-text-2);
+}
+.qm-lin-extras-audit-obj {
+  color: var(--color-linear-text-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.01em;
+}
+
+/* Empty state — used by allergies / meds / problems when no data. */
+.qm-lin-extras-empty {
+  font-style: italic;
+  font-size: 13px;
+  color: var(--color-linear-text-3);
+  padding: 4px 0 2px;
+}
