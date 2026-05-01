@@ -9,142 +9,140 @@ export const metadata: Metadata = {
     'Ways to reach QuillMD for support, sales, compliance, and security.',
 };
 
+const ITEMS: { label: string; email: string; helper: React.ReactNode }[] = [
+  {
+    label: 'General support',
+    email: 'support@ashtechgroup.com',
+    helper: 'Account help, billing, questions about the product.',
+  },
+  {
+    label: 'Sales',
+    email: 'sales@ashtechgroup.com',
+    helper: 'Multi-seat deals, group practices, custom billing.',
+  },
+  {
+    label: 'Compliance & BAAs',
+    email: 'compliance@ashtechgroup.com',
+    helper: 'Business Associate Agreements, HIPAA questions.',
+  },
+  {
+    label: 'Security',
+    email: 'security@ashtechgroup.com',
+    helper:
+      'Vulnerability reports, coordinated disclosure. Please do not file GitHub issues for security.',
+  },
+  {
+    label: 'Privacy',
+    email: 'privacy@ashtechgroup.com',
+    helper: (
+      <>
+        Data requests (access / correction / deletion) per our{' '}
+        <a
+          href="/privacy"
+          style={{
+            color: 'var(--color-linear-sage-bright)',
+            textDecoration: 'underline',
+            textDecorationColor: 'rgba(122,166,140,0.4)',
+          }}
+        >
+          Privacy Policy
+        </a>
+        .
+      </>
+    ),
+  },
+  {
+    label: 'Legal',
+    email: 'legal@ashtechgroup.com',
+    helper: 'Contracts, IP, disputes.',
+  },
+];
+
 export default function ContactPage() {
   return (
     <>
       <NavBar />
       <main>
-        <section className="relative overflow-hidden pt-32 pb-16">
+        <section
+          className="relative overflow-hidden"
+          style={{ paddingTop: 96, paddingBottom: 64 }}
+        >
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-x-0 top-0 h-[500px]"
+            className="pointer-events-none absolute inset-x-0 top-0"
             style={{
+              height: 500,
               background:
                 'radial-gradient(ellipse 70% 50% at 50% 0%, rgba(122,166,140,0.18) 0%, transparent 65%)',
             }}
           />
-          <div className="relative mx-auto max-w-3xl px-6 lg:px-8">
+          <div className="container" style={{ maxWidth: 760, position: 'relative' }}>
             <Badge dot="violet">Contact</Badge>
-            <h1 className="mt-6 type-h1">Get in touch</h1>
-            <p className="mt-6 type-body">
+            <h1 className="hero-title" style={{ marginTop: 20, textAlign: 'left' }}>
+              Get in touch
+            </h1>
+            <p className="hero-sub" style={{ marginTop: 20, marginInline: 0, textAlign: 'left' }}>
               We&apos;re a small team. You&apos;ll reach a human, usually the
               same day.
             </p>
           </div>
         </section>
 
-        <section className="relative border-t border-border-subtle py-12">
-          <div className="mx-auto max-w-3xl px-6 lg:px-8">
-            <dl className="grid gap-8 md:grid-cols-2">
-              <div>
-                <dt className="text-[12px] font-semibold uppercase tracking-[0.1em] text-text-muted">
-                  General support
-                </dt>
-                <dd className="mt-2">
-                  <a
-                    href="mailto:support@ashtechgroup.com"
-                    className="text-[16px] text-[#2F5040] underline decoration-[rgba(122,166,140,0.35)] transition-colors hover:text-[#7AA68C]"
+        <section
+          style={{
+            position: 'relative',
+            borderTop: '1px solid var(--color-linear-hairline)',
+            paddingTop: 48,
+            paddingBottom: 96,
+          }}
+        >
+          <div className="container" style={{ maxWidth: 760 }}>
+            <dl
+              style={{
+                display: 'grid',
+                gap: 32,
+                gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+              }}
+            >
+              {ITEMS.map((item) => (
+                <div key={item.email}>
+                  <dt
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 600,
+                      letterSpacing: '0.08em',
+                      textTransform: 'uppercase',
+                      color: 'var(--color-linear-text-3)',
+                      fontFamily: 'var(--font-mono)',
+                    }}
                   >
-                    support@ashtechgroup.com
-                  </a>
-                </dd>
-                <p className="mt-2 text-[13px] text-text-tertiary">
-                  Account help, billing, questions about the product.
-                </p>
-              </div>
-
-              <div>
-                <dt className="text-[12px] font-semibold uppercase tracking-[0.1em] text-text-muted">
-                  Sales
-                </dt>
-                <dd className="mt-2">
-                  <a
-                    href="mailto:sales@ashtechgroup.com"
-                    className="text-[16px] text-[#2F5040] underline decoration-[rgba(122,166,140,0.35)] transition-colors hover:text-[#7AA68C]"
+                    {item.label}
+                  </dt>
+                  <dd style={{ marginTop: 8 }}>
+                    <a
+                      href={`mailto:${item.email}`}
+                      style={{
+                        fontSize: 15,
+                        color: 'var(--color-linear-sage-bright)',
+                        textDecoration: 'underline',
+                        textDecorationColor: 'rgba(122,166,140,0.4)',
+                      }}
+                    >
+                      {item.email}
+                    </a>
+                  </dd>
+                  <p
+                    style={{
+                      marginTop: 8,
+                      fontSize: 13,
+                      color: 'var(--color-linear-text-3)',
+                      lineHeight: 1.55,
+                    }}
                   >
-                    sales@ashtechgroup.com
-                  </a>
-                </dd>
-                <p className="mt-2 text-[13px] text-text-tertiary">
-                  Multi-seat deals, group practices, custom billing.
-                </p>
-              </div>
-
-              <div>
-                <dt className="text-[12px] font-semibold uppercase tracking-[0.1em] text-text-muted">
-                  Compliance &amp; BAAs
-                </dt>
-                <dd className="mt-2">
-                  <a
-                    href="mailto:compliance@ashtechgroup.com"
-                    className="text-[16px] text-[#2F5040] underline decoration-[rgba(122,166,140,0.35)] transition-colors hover:text-[#7AA68C]"
-                  >
-                    compliance@ashtechgroup.com
-                  </a>
-                </dd>
-                <p className="mt-2 text-[13px] text-text-tertiary">
-                  Business Associate Agreements, HIPAA questions.
-                </p>
-              </div>
-
-              <div>
-                <dt className="text-[12px] font-semibold uppercase tracking-[0.1em] text-text-muted">
-                  Security
-                </dt>
-                <dd className="mt-2">
-                  <a
-                    href="mailto:security@ashtechgroup.com"
-                    className="text-[16px] text-[#2F5040] underline decoration-[rgba(122,166,140,0.35)] transition-colors hover:text-[#7AA68C]"
-                  >
-                    security@ashtechgroup.com
-                  </a>
-                </dd>
-                <p className="mt-2 text-[13px] text-text-tertiary">
-                  Vulnerability reports, coordinated disclosure. Please do
-                  not file GitHub issues for security.
-                </p>
-              </div>
-
-              <div>
-                <dt className="text-[12px] font-semibold uppercase tracking-[0.1em] text-text-muted">
-                  Privacy
-                </dt>
-                <dd className="mt-2">
-                  <a
-                    href="mailto:privacy@ashtechgroup.com"
-                    className="text-[16px] text-[#2F5040] underline decoration-[rgba(122,166,140,0.35)] transition-colors hover:text-[#7AA68C]"
-                  >
-                    privacy@ashtechgroup.com
-                  </a>
-                </dd>
-                <p className="mt-2 text-[13px] text-text-tertiary">
-                  Data requests (access / correction / deletion) per our{' '}
-                  <a
-                    href="/privacy"
-                    className="underline decoration-[rgba(122,166,140,0.35)] hover:text-[#7AA68C]"
-                  >
-                    Privacy Policy
-                  </a>
-                  .
-                </p>
-              </div>
-
-              <div>
-                <dt className="text-[12px] font-semibold uppercase tracking-[0.1em] text-text-muted">
-                  Legal
-                </dt>
-                <dd className="mt-2">
-                  <a
-                    href="mailto:legal@ashtechgroup.com"
-                    className="text-[16px] text-[#2F5040] underline decoration-[rgba(122,166,140,0.35)] transition-colors hover:text-[#7AA68C]"
-                  >
-                    legal@ashtechgroup.com
-                  </a>
-                </dd>
-                <p className="mt-2 text-[13px] text-text-tertiary">
-                  Contracts, IP, disputes.
-                </p>
-              </div>
+                    {item.helper}
+                  </p>
+                </div>
+              ))}
             </dl>
           </div>
         </section>
