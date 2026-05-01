@@ -1,16 +1,13 @@
 'use client';
 
-// HANDOFF §2.3 live-recording client (Gate 9). Cinematic orb centre
-// with timer; right rail shows a placeholder transcript. MediaRecorder
-// captures audio in 250ms webm/opus chunks (same cadence as the
-// existing VoiceDictator) and uploads on stop.
+// Phase 5 — Linear V1 Faithful live-recording client.
+// Reference: docs/design-directions-v8-linear/recording.html
 //
-// Phase 2 (Clinician remodel) — Strategy A dual-theme via additive
-// `theme` prop. Default `'legacy'` keeps the LiveOrb + dark cinematic
-// scene byte-for-byte. `theme="clinician"` replaces the Three.js
-// LiveOrb with the calm class-driven chrome from
-// landing-and-recording.html (.qm-cl-halo + sage .qm-cl-mic-dot +
-// .qm-cl-wave-bar + .qm-cl-pill-sage timer + .qm-cl-transcript-line).
+// Two-column layout (440px ‖ 1fr): centered mic + sage halo + 40-bar
+// waveform + status row + actions on the left, live transcript on the
+// right. Dark canvas throughout, sage accent, JetBrains Mono uppercase
+// for status copy. The legacy LiveOrb dual-theme branch from Phase 2
+// is dropped — Linear V1 is single-theme.
 //
 // 🔴 PROTECTED: All MediaRecorder lifecycle code (start, stop, onstop,
 // ondataavailable, finalizeAndUpload, finalizeRef trampoline,
@@ -20,15 +17,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
-import { cn } from '@/lib/cn';
 import { Ic } from '@/components/ui/icon';
-import { SpecChip, type SpecialtyKind } from '@/components/ui/spec-chip';
-import { LiveOrb } from '@/components/recording/live-orb';
-import {
-  CinematicRecordingHero,
-  formatHeroElapsed,
-} from '@/components/visits/CinematicRecordingHero';
-import { runCinematicEntry } from '@/components/visits/cinematic-anim';
 
 type Phase = 'idle' | 'requesting' | 'recording' | 'uploading' | 'error';
 type RecordingClientTheme = 'legacy' | 'clinician';
@@ -36,19 +25,6 @@ type RecordingClientTheme = 'legacy' | 'clinician';
 const MIME = 'audio/webm;codecs=opus';
 const CHUNK_MS = 250;
 const MAX_SECONDS = 30 * 60;
-
-const KNOWN: readonly SpecialtyKind[] = [
-  'cardiology',
-  'pain',
-  'ortho',
-  'primary',
-  'pulmonology',
-  'ophthalmology',
-];
-function toSpecKind(raw: string): SpecialtyKind {
-  const lower = raw.toLowerCase() as SpecialtyKind;
-  return KNOWN.includes(lower) ? lower : 'primary';
-}
 
 function pad2(n: number): string {
   return n < 10 ? `0${n}` : String(n);
@@ -63,12 +39,11 @@ export function RecordingClient({
   visitId,
   patientName,
   specialty,
-  theme = 'legacy',
 }: {
   visitId: string;
   patientName: string;
   specialty: string;
-  /** Phase 2 (Clinician remodel) — additive theme prop. */
+  /** @deprecated kept for back-compat; Linear V1 is single-theme. */
   theme?: RecordingClientTheme;
 }) {
   const router = useRouter();
@@ -215,637 +190,480 @@ export function RecordingClient({
 
   const isRecording = phase === 'recording';
   const isUploading = phase === 'uploading';
+  const isError = phase === 'error';
+  const isRequesting = phase === 'requesting';
 
-  if (theme === 'clinician') {
-    return (
-      <ClinicianRecordingView
-        phase={phase}
-        elapsed={elapsed}
-        error={error}
-        patientName={patientName}
-        specialty={specialty}
-        onStart={start}
-        onStop={stop}
-      />
-    );
-  }
+  // Phase-aware status sentence rendered in JetBrains Mono uppercase.
+  const statusLabel: string = isRecording
+    ? 'RECORDING'
+    : isUploading
+      ? 'UPLOADING'
+      : isRequesting
+        ? 'REQUESTING PERMISSION'
+        : isError
+          ? 'ERROR'
+          : 'READY';
 
   return (
     <div
       style={{
-        height: '100%',
         display: 'grid',
-        gridTemplateColumns: '1fr 380px',
+        gridTemplateColumns: '440px 1fr',
+        height: 'calc(100vh - 48px)',
         minHeight: 0,
+        position: 'relative',
+        background: 'var(--color-linear-bg)',
       }}
     >
-      {/* Centre stage — orb + timer + controls */}
+      {/* Linear-style sage spotlight behind the left column. */}
       <div
+        aria-hidden
         style={{
-          position: 'relative',
+          position: 'absolute',
+          top: -120,
+          left: 60,
+          width: 560,
+          height: 560,
+          background:
+            'radial-gradient(closest-side, var(--color-linear-sage-glow), transparent 72%)',
+          filter: 'blur(8px)',
+          pointerEvents: 'none',
+          zIndex: 0,
+        }}
+      />
+
+      {/* LEFT — mic + halo + waveform + status + actions */}
+      <aside
+        style={{
+          background: 'var(--color-linear-surface-1)',
+          borderRight: '1px solid var(--color-linear-hairline)',
+          padding: '28px 28px 22px',
           display: 'flex',
           flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: 40,
-          gap: 32,
+          position: 'relative',
+          zIndex: 1,
         }}
       >
+        {/* Patient meta */}
+        <div style={{ marginBottom: 24 }}>
+          <h1
+            style={{
+              margin: '0 0 4px',
+              fontFamily: 'var(--font-sans)',
+              fontSize: 18,
+              fontWeight: 600,
+              letterSpacing: '-0.015em',
+              lineHeight: 1.25,
+              color: 'var(--color-linear-text)',
+            }}
+          >
+            {patientName}
+          </h1>
+          <div
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11.5,
+              color: 'var(--color-linear-text-3)',
+              fontVariantNumeric: 'tabular-nums',
+              letterSpacing: 0,
+              textTransform: 'capitalize',
+            }}
+          >
+            {specialty}
+          </div>
+        </div>
+
+        {/* Halo + mic centerpiece */}
+        <div
+          style={{
+            display: 'grid',
+            placeItems: 'center',
+            margin: '18px auto 26px',
+            width: 200,
+            height: 200,
+            position: 'relative',
+          }}
+        >
+          {/* concentric sage rings */}
+          <span
+            aria-hidden
+            style={{
+              position: 'absolute',
+              inset: 0,
+              borderRadius: '50%',
+              border: '1px solid rgba(122,166,140,0.18)',
+            }}
+          />
+          <span
+            aria-hidden
+            style={{
+              position: 'absolute',
+              inset: 24,
+              borderRadius: '50%',
+              border: '1px solid rgba(122,166,140,0.26)',
+            }}
+          />
+          <span
+            aria-hidden
+            style={{
+              position: 'absolute',
+              inset: 48,
+              borderRadius: '50%',
+              border: '1px solid rgba(122,166,140,0.36)',
+            }}
+          />
+          {/* Pulsing sage glow halo (active during recording / uploading) */}
+          {(isRecording || isUploading) && !reducedMotion && (
+            <span
+              aria-hidden
+              className="qm-lin-mic-halo"
+              style={{
+                position: 'absolute',
+                inset: 36,
+                borderRadius: '50%',
+                background:
+                  'radial-gradient(closest-side, rgba(155,196,168,0.32), rgba(122,166,140,0) 70%)',
+              }}
+            />
+          )}
+          {/* Mic dot (sage-bright) */}
+          <span
+            aria-hidden
+            className={isRecording && !reducedMotion ? 'qm-lin-mic-dot' : undefined}
+            style={{
+              position: 'relative',
+              width: 16,
+              height: 16,
+              borderRadius: '50%',
+              background: isError
+                ? 'var(--color-linear-danger)'
+                : 'var(--color-linear-sage-bright)',
+              boxShadow: isError
+                ? '0 0 18px rgba(212,87,74,0.65), 0 0 0 4px rgba(212,87,74,0.10)'
+                : '0 0 18px rgba(155,196,168,0.65), 0 0 0 4px rgba(155,196,168,0.10)',
+            }}
+          />
+        </div>
+
+        {/* 40-bar waveform */}
+        <Waveform
+          active={isRecording}
+          processing={isUploading}
+          reducedMotion={reducedMotion}
+        />
+
+        {/* Status row — sage pill + mono elapsed */}
         <div
           style={{
             display: 'flex',
-            flexDirection: 'column',
             alignItems: 'center',
-            gap: 14,
+            justifyContent: 'space-between',
+            padding: '10px 0 6px',
+            borderTop: '1px solid var(--color-linear-hairline)',
+            borderBottom: '1px solid var(--color-linear-hairline)',
+            marginBottom: 18,
           }}
         >
-          <SpecChip kind={toSpecKind(specialty)} size="md" />
-          <h1
-            className="qm-serif"
+          <span
+            className={
+              isUploading || isRequesting
+                ? 'qm-lin-pill qm-lin-pill--processing'
+                : isError
+                  ? 'qm-lin-pill qm-lin-pill--review'
+                  : 'qm-lin-pill qm-lin-pill--sage'
+            }
             style={{
-              margin: 0,
-              fontSize: 30,
-              fontWeight: 400,
-              letterSpacing: '-0.02em',
-              color: 'var(--fg)',
-              textAlign: 'center',
+              padding: '0 9px',
+              height: 22,
+              fontFamily: 'var(--font-sans)',
+              fontSize: 10.5,
+              letterSpacing: '0.07em',
+              textTransform: 'uppercase',
             }}
           >
-            Recording — <em style={{ color: 'var(--accent-bright)' }}>{patientName}</em>
-          </h1>
-        </div>
-
-        <LiveOrb paused={!isRecording} reducedMotion={reducedMotion} />
-
-        <div
-          style={{
-            fontFamily: 'var(--mono)',
-            fontSize: 28,
-            color: 'var(--fg)',
-            letterSpacing: '0.05em',
-          }}
-        >
-          {formatElapsed(elapsed)}
+            {/* Use the inline dot for the sage variant since pill--sage
+                doesn't include one; pill--processing has its own
+                ::before dot. */}
+            {!isUploading && !isRequesting && (
+              <span
+                aria-hidden
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: '50%',
+                  background: isError
+                    ? 'var(--color-linear-danger)'
+                    : 'var(--color-linear-sage)',
+                  boxShadow: isError
+                    ? '0 0 6px rgba(212,87,74,0.7)'
+                    : '0 0 6px rgba(122,166,140,0.7)',
+                }}
+              />
+            )}
+            {statusLabel}
+          </span>
+          <span
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 14,
+              color: 'var(--color-linear-text)',
+              fontVariantNumeric: 'tabular-nums',
+              letterSpacing: 0,
+              fontWeight: 500,
+            }}
+          >
+            {formatElapsed(elapsed)}
+          </span>
         </div>
 
         {error && (
           <p
             role="alert"
             style={{
-              margin: 0,
-              fontSize: 13,
-              color: 'var(--coral)',
+              margin: '0 0 14px',
+              fontSize: 12.5,
+              color: 'var(--color-linear-danger)',
+              lineHeight: 1.5,
             }}
           >
             {error}
           </p>
         )}
 
-        <div style={{ display: 'flex', gap: 10 }}>
-          {phase === 'idle' || phase === 'error' ? (
+        {/* Actions */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            marginTop: 'auto',
+            paddingTop: 18,
+          }}
+        >
+          {phase === 'idle' || isError ? (
             <button
               type="button"
               onClick={start}
-              className="qm-btn qm-btn-primary"
-              style={{ padding: '12px 22px', fontSize: 14 }}
+              className="qm-lin-btn-primary"
+              style={{ height: 38, padding: '0 14px', flex: 2, fontSize: 12.5 }}
             >
               <span
                 aria-hidden
                 style={{
                   width: 8,
                   height: 8,
-                  borderRadius: 999,
-                  background: '#FB7185',
-                  boxShadow: '0 0 8px #FB7185',
+                  borderRadius: '50%',
+                  background: '#0d1611',
                 }}
               />
               Start recording
             </button>
-          ) : phase === 'requesting' ? (
-            <button type="button" disabled className="qm-btn qm-btn-ghost">
+          ) : isRequesting ? (
+            <button
+              type="button"
+              disabled
+              className="qm-lin-btn"
+              style={{ height: 38, padding: '0 14px', flex: 1, fontSize: 12.5 }}
+            >
               Requesting mic…
             </button>
           ) : isRecording ? (
             <button
               type="button"
               onClick={stop}
-              className="qm-btn qm-btn-primary"
-              style={{ padding: '10px 18px' }}
+              className="qm-lin-btn-primary"
+              style={{ height: 38, padding: '0 14px', flex: 2, fontSize: 12.5 }}
             >
-              <Ic.stop width={14} height={14} />
-              Stop & transcribe
+              <Ic.stop width={12} height={12} aria-hidden />
+              Stop &amp; process
             </button>
           ) : isUploading ? (
-            <button type="button" disabled className="qm-btn qm-btn-ghost">
-              <span className="qm-spin" style={{ display: 'inline-block' }}>
-                <Ic.sparkle width={14} height={14} />
+            <button
+              type="button"
+              disabled
+              className="qm-lin-btn"
+              style={{ height: 38, padding: '0 14px', flex: 1, fontSize: 12.5 }}
+            >
+              <span
+                className={reducedMotion ? undefined : 'animate-spin'}
+                style={{ display: 'inline-flex' }}
+              >
+                <Ic.sparkle width={12} height={12} aria-hidden />
               </span>
               Uploading…
             </button>
           ) : null}
         </div>
-      </div>
-
-      {/* Right rail — transcript placeholder. Real live transcript
-         streams in once scribe-ws is wired (future pass). */}
-      <aside
-        style={{
-          borderLeft: '1px solid var(--line)',
-          background: 'rgba(12,10,22,0.4)',
-          overflow: 'auto',
-          padding: 24,
-        }}
-      >
-        <div className="qm-sectlabel" style={{ marginBottom: 14 }}>
-          § Live transcript
-        </div>
-        {isRecording ? (
-          <div
-            style={{
-              padding: '18px 16px',
-              borderRadius: 12,
-              border: '1px dashed var(--line)',
-              color: 'var(--fg-3)',
-              fontSize: 12.5,
-              lineHeight: 1.55,
-            }}
-          >
-            <div
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 8,
-                marginBottom: 8,
-                color: 'var(--accent-bright)',
-              }}
-            >
-              <span
-                style={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: 999,
-                  background: 'var(--accent-bright)',
-                }}
-                className="qm-pulse"
-              />
-              Listening…
-            </div>
-            <p style={{ margin: 0 }}>
-              Streaming transcription lands in a follow-up pass. Your audio
-              is being captured in 250 ms chunks and will be transcribed
-              the moment you stop.
-            </p>
-          </div>
-        ) : (
-          <div
-            style={{
-              color: 'var(--fg-4)',
-              fontSize: 12.5,
-              fontStyle: 'italic',
-            }}
-          >
-            Transcript will appear here once recording starts.
-          </div>
-        )}
       </aside>
-    </div>
-  );
-}
 
-// ----------------------------------------------------------------------------
-// Clinician variant — calm halo + sage mic-dot + class-driven waveform.
-// Mirrors the visit-recording widget in landing-and-recording.html. Per
-// CL-5: no Three.js orbs in Clinician, no springs, no bounces. The
-// initials avatar replaces SpecChip for the doctor's social-cue visual
-// identity (per the mockup's "EL — Mrs. Lopez" pattern).
-// ----------------------------------------------------------------------------
-
-function ClinicianRecordingView({
-  phase,
-  elapsed,
-  error,
-  patientName,
-  specialty,
-  onStart,
-  onStop,
-}: {
-  phase: Phase;
-  elapsed: number;
-  error: string | null;
-  patientName: string;
-  specialty: string;
-  onStart: () => void;
-  onStop: () => void;
-}) {
-  const isRecording = phase === 'recording';
-  const isUploading = phase === 'uploading';
-  const isError = phase === 'error';
-
-  // Twelve waveform bars, hand-tuned peaks per the mockup so the meter
-  // reads as alive rather than uniform.
-  const peaks = [12, 18, 14, 20, 16, 22, 12, 18, 14, 10, 17, 13];
-  const delays = [0, 0.1, 0.2, 0.3, 0.05, 0.15, 0.25, 0.4, 0.5, 0.35, 0.6, 0.55];
-
-  // Phase 4 — phase-aware label for the hero pill. The internal widget
-  // below (mic dot, halo, waveform, transcript bubbles, control row) is
-  // entirely unchanged; this label only feeds the cinematic band above.
-  const phaseLabel: string =
-    phase === 'recording'
-      ? 'RECORDING'
-      : phase === 'uploading'
-        ? 'UPLOADING'
-        : phase === 'requesting'
-          ? 'PREPARING'
-          : phase === 'error'
-            ? 'ERROR'
-            : 'READY';
-  const elapsedLabel = isRecording ? formatHeroElapsed(elapsed) : '';
-
-  // Phase 4 — slide-up entry for the OUTER recording-widget wrapper.
-  // We attach .av1-card.av1-card-up to the existing .qm-cl-card and
-  // fire runCinematicEntry on mount so the wrapper transitions from
-  // translateY(20px) blur(12px) → 0 blur(0). Internal content of the
-  // widget is byte-identical and is NOT animated (per spec).
-  const widgetWrapperRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    const el = widgetWrapperRef.current;
-    if (!el) return;
-    return runCinematicEntry(el);
-  }, []);
-
-  return (
-    <>
-      <CinematicRecordingHero
-        patientName={patientName}
-        elapsed={elapsedLabel}
-        phaseLabel={phaseLabel}
-      />
-      <div
-        ref={widgetWrapperRef}
+      {/* RIGHT — live transcript */}
+      <section
         style={{
           display: 'flex',
-          justifyContent: 'center',
-          padding: '32px 24px 56px',
-          minHeight: '100%',
+          flexDirection: 'column',
+          minWidth: 0,
+          height: '100%',
+          position: 'relative',
+          zIndex: 1,
         }}
       >
         <div
-          className="qm-cl-card av1-card av1-card-up"
-          data-d="200"
-          style={{
-            width: '100%',
-            maxWidth: 760,
-            padding: 40,
-            borderRadius: 20,
-          }}
-        >
-        {/* Patient header row: avatar + name + status pill */}
-        <div
           style={{
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: 28,
-            gap: 16,
-            flexWrap: 'wrap',
+            gap: 10,
+            padding: '14px 24px',
+            borderBottom: '1px solid var(--color-linear-hairline)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            letterSpacing: '0.10em',
+            textTransform: 'uppercase',
+            color: 'var(--color-linear-text-3)',
+            background: 'rgba(13,14,16,0.4)',
           }}
         >
-          <div
+          <span
+            aria-hidden
+            className={isRecording && !reducedMotion ? 'qm-lin-mic-dot' : undefined}
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 14,
-              minWidth: 0,
+              width: 6,
+              height: 6,
+              borderRadius: '50%',
+              background: 'var(--color-linear-sage-bright)',
+              boxShadow: '0 0 6px rgba(155,196,168,0.7)',
             }}
-          >
-            <div
-              className="qm-cl-avatar qm-cl-avatar-sage"
-              aria-hidden
-              style={{
-                width: 48,
-                height: 48,
-                borderRadius: 14,
-                fontSize: 18,
-              }}
-            >
-              {patientName.charAt(0).toUpperCase()}
-            </div>
-            <div style={{ minWidth: 0 }}>
-              <div
-                className="qm-cl-serif"
-                style={{
-                  fontSize: 22,
-                  fontWeight: 500,
-                  color: 'var(--ink)',
-                  lineHeight: 1.2,
-                  letterSpacing: '-0.005em',
-                }}
-              >
-                Recording with {patientName}
-              </div>
-              <div
-                style={{
-                  fontSize: 13,
-                  color: 'var(--ink-3)',
-                  marginTop: 4,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                }}
-              >
-                <span style={{ textTransform: 'capitalize' }}>{specialty}</span>
-              </div>
-            </div>
-          </div>
-
-          {isRecording && (
-            <span
-              className="qm-cl-pill qm-cl-pill-sage"
-              style={{ padding: '6px 14px', fontSize: 13 }}
-            >
-              <span className="qm-cl-pill-dot" />
-              Recording · {formatElapsed(elapsed)}
-            </span>
-          )}
-          {isUploading && (
-            <span
-              className="qm-cl-pill qm-cl-pill-teal"
-              style={{ padding: '6px 14px', fontSize: 13 }}
-            >
-              <span className="qm-cl-pill-dot" />
-              Uploading
-            </span>
-          )}
-          {isError && (
-            <span
-              className="qm-cl-pill qm-cl-pill-coral"
-              style={{ padding: '6px 14px', fontSize: 13 }}
-            >
-              <span className="qm-cl-pill-dot" />
-              Error
-            </span>
-          )}
+          />
+          <span>Live transcript</span>
         </div>
-
-        {/* Halo + mic centerpiece */}
         <div
           style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '32px 0 12px',
+            flex: 1,
+            overflow: 'auto',
+            padding: '24px',
           }}
         >
-          <div
-            style={{
-              position: 'relative',
-              width: 160,
-              height: 160,
-            }}
-          >
-            {(isRecording || isUploading) && (
-              <>
-                <div className="qm-cl-halo" aria-hidden />
-                <div className="qm-cl-halo qm-cl-halo-delayed" aria-hidden />
-              </>
-            )}
-            <div
-              style={{
-                position: 'absolute',
-                inset: 0,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <div
-                className={cn(isRecording && 'qm-cl-mic-dot')}
-                style={{
-                  width: 78,
-                  height: 78,
-                  borderRadius: 999,
-                  background: 'var(--cream-card)',
-                  border: `1.5px solid ${
-                    isError ? 'var(--coral)' : 'var(--sage)'
-                  }`,
-                  boxShadow: 'var(--shadow-card)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-                aria-hidden
-              >
-                <svg
-                  width="32"
-                  height="32"
-                  viewBox="0 0 32 32"
-                  fill="none"
-                  aria-hidden
-                >
-                  <rect
-                    x="12"
-                    y="6"
-                    width="8"
-                    height="14"
-                    rx="4"
-                    fill={isError ? 'var(--coral)' : 'var(--sage)'}
-                  />
-                  <path
-                    d="M8 17 q0 8 8 8 q8 0 8 -8"
-                    stroke={isError ? 'var(--coral)' : 'var(--sage)'}
-                    strokeWidth="1.6"
-                    strokeLinecap="round"
-                    fill="none"
-                  />
-                  <line
-                    x1="16"
-                    y1="25"
-                    x2="16"
-                    y2="29"
-                    stroke={isError ? 'var(--coral)' : 'var(--sage)'}
-                    strokeWidth="1.6"
-                    strokeLinecap="round"
-                  />
-                </svg>
-              </div>
-            </div>
-          </div>
-
-          {/* Subtle waveform — present but quiet */}
-          {isRecording && (
-            <div
-              className="flex items-end gap-[3px]"
-              style={{ height: 22, marginTop: 24 }}
-              aria-hidden
-            >
-              {peaks.map((p, i) => (
-                <span
-                  key={i}
-                  className="qm-cl-wave-bar"
-                  style={
-                    {
-                      '--peak': `${p}px`,
-                      animationDelay: `${delays[i]}s`,
-                    } as React.CSSProperties
-                  }
-                />
-              ))}
-            </div>
-          )}
-
-          <div
-            className="qm-cl-serif"
-            style={{
-              marginTop: 18,
-              fontSize: 14,
-              fontStyle: 'italic',
-              color: 'var(--ink-3)',
-              textAlign: 'center',
-              maxWidth: 460,
-            }}
-          >
-            {phase === 'idle'
-              ? 'Press start when you’re ready. You can stop whenever the visit ends.'
-              : phase === 'requesting'
-                ? 'Asking your browser for the microphone…'
-                : isRecording
-                  ? 'Listening. You can speak as you would in any other visit.'
-                  : isUploading
-                    ? 'Uploading and queuing the draft…'
-                    : 'Something went wrong. Please try again.'}
-          </div>
-        </div>
-
-        {error && (
-          <p
-            role="alert"
-            style={{
-              margin: '12px 0 0',
-              fontSize: 13,
-              color: 'var(--coral-deep)',
-              textAlign: 'center',
-            }}
-          >
-            {error}
-          </p>
-        )}
-
-        {/* Live transcript placeholder — quiet, italic */}
-        <div style={{ marginTop: 28 }}>
-          <div className="qm-cl-section-label" style={{ marginBottom: 12 }}>
-            Live transcript
-          </div>
           {isRecording ? (
             <div
-              className="qm-cl-serif"
+              className="qm-lin-fade-in"
               style={{
-                fontSize: 15,
-                lineHeight: 1.7,
-                color: 'var(--ink-3)',
-                fontStyle: 'italic',
-                padding: '14px 16px',
-                borderRadius: 12,
-                background: 'var(--cream-2)',
-                border: '1px dashed var(--line-strong)',
+                padding: '16px 18px',
+                background: 'var(--color-linear-surface-1)',
+                border: '1px solid var(--color-linear-border)',
+                borderRadius: 8,
+                color: 'var(--color-linear-text-3)',
+                fontFamily: 'var(--font-sans)',
+                fontSize: 13,
+                lineHeight: 1.6,
+                letterSpacing: '-0.005em',
               }}
             >
-              Streaming transcription lands in a follow-up pass. Your audio
-              is being captured in 250 ms chunks and will be transcribed the
-              moment you stop.
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginBottom: 8,
+                  color: 'var(--color-linear-sage-bright)',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 10,
+                  letterSpacing: '0.10em',
+                  textTransform: 'uppercase',
+                }}
+              >
+                <span
+                  aria-hidden
+                  className={!reducedMotion ? 'qm-lin-mic-dot' : undefined}
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: '50%',
+                    background: 'var(--color-linear-sage-bright)',
+                    boxShadow: '0 0 6px rgba(155,196,168,0.7)',
+                  }}
+                />
+                Listening
+              </div>
+              <p style={{ margin: 0 }}>
+                Streaming transcription lands in a follow-up pass. Your audio
+                is being captured in 250 ms chunks and will be transcribed
+                the moment you stop.
+              </p>
             </div>
           ) : (
             <div
-              className="qm-cl-serif"
               style={{
-                fontSize: 14,
+                color: 'var(--color-linear-text-3)',
+                fontFamily: 'var(--font-sans)',
+                fontSize: 12.5,
                 fontStyle: 'italic',
-                color: 'var(--ink-4)',
-                padding: '14px 16px',
+                letterSpacing: '-0.005em',
               }}
             >
               Transcript will appear here once recording starts.
             </div>
           )}
         </div>
+      </section>
+    </div>
+  );
+}
 
-        {/* Footer controls */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            paddingTop: 28,
-            marginTop: 28,
-            borderTop: '1px solid var(--line)',
-            gap: 12,
-            flexWrap: 'wrap',
-          }}
-        >
-          {phase === 'idle' || phase === 'error' ? (
-            <>
-              <span style={{ flex: 1 }} />
-              <button
-                type="button"
-                onClick={onStart}
-                className="qm-cl-btn qm-cl-btn-primary"
-              >
-                <span
-                  aria-hidden
-                  style={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: 999,
-                    background: 'var(--coral)',
-                    boxShadow: '0 0 0 3px var(--coral-tint)',
-                  }}
-                />
-                Start recording
-              </button>
-            </>
-          ) : phase === 'requesting' ? (
-            <>
-              <span style={{ flex: 1 }} />
-              <button
-                type="button"
-                disabled
-                className="qm-cl-btn qm-cl-btn-ghost"
-                style={{ opacity: 0.6 }}
-              >
-                Requesting mic…
-              </button>
-            </>
-          ) : isRecording ? (
-            <>
-              <span style={{ flex: 1 }} />
-              <button
-                type="button"
-                onClick={onStop}
-                className="qm-cl-btn qm-cl-btn-primary"
-              >
-                <Ic.stop width={14} height={14} />
-                End visit & draft note
-              </button>
-            </>
-          ) : isUploading ? (
-            <>
-              <span style={{ flex: 1 }} />
-              <button
-                type="button"
-                disabled
-                className="qm-cl-btn qm-cl-btn-ghost"
-                style={{ opacity: 0.6 }}
-              >
-                <span className="qm-spin" style={{ display: 'inline-block' }}>
-                  <Ic.sparkle width={14} height={14} />
-                </span>
-                Uploading…
-              </button>
-            </>
-          ) : null}
-        </div>
-      </div>
-      </div>
-    </>
+// ----------------------------------------------------------------------------
+// Waveform — 40 sage bars whose height jitters in a clamped random walk
+// (driven by the 80ms-tick CSS bar-pulse animation, with a modest
+// per-bar phase via animationDelay). The mockup pre-randomizes the
+// initial heights so the meter reads as alive on first paint. We
+// recreate that shape with a deterministic sin-based seed.
+// ----------------------------------------------------------------------------
+
+function Waveform({
+  active,
+  processing,
+  reducedMotion,
+}: {
+  active: boolean;
+  processing: boolean;
+  reducedMotion: boolean;
+}) {
+  const BARS = 40;
+  return (
+    <div
+      aria-hidden
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 3,
+        height: 40,
+        margin: '0 auto 22px',
+        width: '100%',
+        maxWidth: 340,
+      }}
+    >
+      {Array.from({ length: BARS }).map((_, i) => {
+        const seedHeight = 6 + Math.round(Math.abs(Math.sin(i * 1.7)) * 22);
+        const delay = (i * 47) % 1100;
+        const dur = 800 + ((i * 31) % 600);
+        return (
+          <span
+            key={i}
+            className={active && !reducedMotion ? 'qm-lin-wave-bar' : undefined}
+            style={{
+              width: 4,
+              height: seedHeight,
+              borderRadius: 2,
+              background: processing
+                ? 'var(--color-linear-warning)'
+                : 'var(--color-linear-sage)',
+              opacity: processing ? 0.4 : 0.85,
+              transition:
+                'height 80ms linear, background 200ms ease-out, opacity 200ms ease-out',
+              animationDelay: active && !reducedMotion ? `-${delay}ms` : undefined,
+              animationDuration: active && !reducedMotion ? `${dur}ms` : undefined,
+            }}
+          />
+        );
+      })}
+    </div>
   );
 }
