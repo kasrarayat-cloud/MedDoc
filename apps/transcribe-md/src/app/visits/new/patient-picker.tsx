@@ -10,16 +10,9 @@
 //      with score > 0.6 are found, render the DuplicateModal so the
 //      doctor can confirm. Otherwise POST /api/patients directly.
 //
-// Selecting an existing patient (either from the search list or from
-// the duplicate modal) calls onSelect(patient); the parent component
-// hands the patient off to Step 2.
-//
-// Phase 2 (Clinician remodel) — Strategy A dual-theme via additive
-// `theme` prop on both PatientPicker and PatientPickerCore. Default
-// `'legacy'` keeps the dark surface + violet ring chrome verbatim.
-// `theme="clinician"` swaps to a `.qm-cl-card` surface with sage
-// focus rings, `.qm-cl-avatar-sage` initial chips, and Source Serif 4
-// patient names — matching the visit-detail mockup's quiet card idiom.
+// Phase 5 — Linear V1 Faithful. The picker renders on a hairline-
+// bordered surface-1 surface; results rows use `.qm-lin-row` hover
+// styling. The `theme` prop is preserved as a no-op.
 // ============================================================================
 
 import { useCallback, useEffect, useState } from 'react';
@@ -60,46 +53,36 @@ interface FuzzyApiResponse {
 
 interface CoreProps {
   onSelect: (p: SelectedPatient) => void;
-  /** Phase 2 (Clinician remodel) — additive theme prop. */
+  /** @deprecated kept for back-compat; Linear V1 is single-theme. */
   theme?: PatientPickerTheme;
 }
 
+const FIELD_LABEL =
+  'mb-1.5 block font-mono text-[10.5px] font-medium uppercase tracking-[0.07em] text-linear-text-3';
+
+const INPUT_CLS =
+  'block w-full rounded-md border border-linear-border bg-linear-surface-1 px-3 py-2 text-[14px] text-linear-text placeholder:text-linear-text-3 outline-none transition-colors focus:border-linear-sage focus:ring-2 focus:ring-linear-sage/30';
+
 /** Full picker with the `/visits/new` "Who's this visit for?" card
  *  wrapper. Used as Step 1 of the new-visit flow. For callers that
- *  want the picker inside their own container (Edit-draft dialog,
- *  future command-palette entry), use PatientPickerCore instead. */
+ *  want the picker inside their own container, use PatientPickerCore. */
 export function PatientPicker(props: CoreProps) {
-  const isClinician = props.theme === 'clinician';
   return (
-    <div
-      className={cn(
-        'p-5',
-        isClinician
-          ? 'qm-cl-card'
-          : 'rounded-2xl border border-border-default bg-bg-surface-1/60'
-      )}
-      style={isClinician ? { padding: 24 } : undefined}
-    >
+    <div>
       <div className="mb-4 flex items-center gap-2">
         <UserPlus
-          className={cn(
-            'h-4 w-4',
-            isClinician ? 'text-clinician-sage' : 'text-violet-400'
-          )}
+          className="h-4 w-4 text-linear-sage-bright"
           aria-hidden
         />
         <h2
-          className={cn(
-            'tracking-tight',
-            isClinician
-              ? 'qm-cl-serif text-clinician-ink'
-              : 'text-[15px] font-semibold text-text-primary'
-          )}
-          style={
-            isClinician
-              ? { fontSize: 18, fontWeight: 500, letterSpacing: '-0.005em' }
-              : undefined
-          }
+          style={{
+            margin: 0,
+            fontFamily: 'var(--font-sans)',
+            fontSize: 17,
+            fontWeight: 500,
+            letterSpacing: '-0.012em',
+            color: 'var(--color-linear-text)',
+          }}
         >
           Who&apos;s this visit for?
         </h2>
@@ -114,10 +97,8 @@ function formatDob(iso: string | null): string {
 }
 
 /** Headless picker — search + results + inline create + duplicate
- *  modal. No outer card/header; callers supply their own framing.
- *  Contract: call onSelect with the chosen patient. */
-export function PatientPickerCore({ onSelect, theme = 'legacy' }: CoreProps) {
-  const isClinician = theme === 'clinician';
+ *  modal. */
+export function PatientPickerCore({ onSelect }: CoreProps) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<PatientListApiRow[]>([]);
   const [searching, setSearching] = useState(false);
@@ -129,10 +110,6 @@ export function PatientPickerCore({ onSelect, theme = 'legacy' }: CoreProps) {
   const [createError, setCreateError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // Duplicate-modal state — opened when fuzzy-match returns candidates
-  // with score > 0.6 for the just-typed name. Carries the unsaved
-  // inline form values so "Create new anyway" can proceed without the
-  // user re-typing.
   const [duplicates, setDuplicates] = useState<{
     matches: FuzzyMatch[];
     pendingName: string;
@@ -140,11 +117,6 @@ export function PatientPickerCore({ onSelect, theme = 'legacy' }: CoreProps) {
     pendingExternalId: string | null;
   } | null>(null);
 
-  // --- debounced search ---
-  // When the term is empty we skip the fetch entirely; the results
-  // container below is gated on `query.trim().length > 0` so stale
-  // state doesn't render. Clearing state synchronously inside the
-  // effect triggered react-hooks/set-state-in-effect.
   const term = query.trim();
   useEffect(() => {
     if (term === '') return;
@@ -229,9 +201,6 @@ export function PatientPickerCore({ onSelect, theme = 'legacy' }: CoreProps) {
 
     setSubmitting(true);
     try {
-      // Check for fuzzy duplicates before creating. If any match has
-      // score > 0.6 we show the duplicate modal; the doctor picks
-      // "Use existing" or "Create new anyway".
       const res = await fetch('/api/patients/fuzzy-match', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -250,7 +219,6 @@ export function PatientPickerCore({ onSelect, theme = 'legacy' }: CoreProps) {
           return;
         }
       }
-      // No strong matches → create immediately.
       await actuallyCreate(name, dob.iso, externalId);
     } finally {
       setSubmitting(false);
@@ -263,10 +231,7 @@ export function PatientPickerCore({ onSelect, theme = 'legacy' }: CoreProps) {
       <label className="relative block">
         <span className="sr-only">Search patients</span>
         <Search
-          className={cn(
-            'pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2',
-            isClinician ? 'text-clinician-ink-3' : 'text-text-muted'
-          )}
+          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-linear-text-3"
           aria-hidden
         />
         <input
@@ -274,22 +239,13 @@ export function PatientPickerCore({ onSelect, theme = 'legacy' }: CoreProps) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search by name or external ID…"
-          className={
-            isClinician
-              ? 'qm-cl-input block w-full pl-10 pr-10'
-              : 'block w-full rounded-lg border border-border-default bg-bg-surface-1/60 py-2.5 pl-10 pr-10 text-[14px] text-text-primary placeholder:text-text-muted outline-none transition-colors focus:border-violet-500 focus:ring-2 focus:ring-violet-500/30'
-          }
+          className={cn(INPUT_CLS, 'pl-10 pr-10')}
         />
         {query.length > 0 && (
           <button
             type="button"
             onClick={() => setQuery('')}
-            className={cn(
-              'absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 focus-visible:outline-none focus-visible:ring-2',
-              isClinician
-                ? 'text-clinician-ink-3 hover:text-clinician-ink-2 focus-visible:ring-clinician-sage'
-                : 'text-text-muted hover:text-text-secondary focus-visible:ring-violet-500'
-            )}
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-linear-text-3 hover:text-linear-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-linear-sage"
             aria-label="Clear search"
           >
             <X className="h-3.5 w-3.5" />
@@ -299,86 +255,43 @@ export function PatientPickerCore({ onSelect, theme = 'legacy' }: CoreProps) {
 
       {/* --- Results --- */}
       {query.trim().length > 0 && (
-        <div
-          className={cn(
-            'mt-3 overflow-hidden rounded-lg',
-            isClinician
-              ? 'border border-clinician-line bg-clinician-cream'
-              : 'border border-border-subtle bg-bg-surface-1/40'
-          )}
-        >
+        <div className="mt-3 overflow-hidden rounded-md border border-linear-border bg-linear-surface-2">
           {searching && results.length === 0 && (
-            <div
-              className={cn(
-                'flex items-center gap-2 px-4 py-3 text-[13px]',
-                isClinician ? 'text-clinician-ink-3' : 'text-text-muted'
-              )}
-            >
+            <div className="flex items-center gap-2 px-4 py-3 text-[13px] text-linear-text-3">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
               Searching…
             </div>
           )}
           {!searching && results.length === 0 && (
-            <div
-              className={cn(
-                'px-4 py-3 text-[13px]',
-                isClinician ? 'text-clinician-ink-3' : 'text-text-muted'
-              )}
-            >
+            <div className="px-4 py-3 text-[13px] text-linear-text-3">
               No matches. Create a new patient below.
             </div>
           )}
-          {results.map((p) => (
+          {results.map((p, i) => (
             <button
               key={p.id}
               type="button"
               onClick={() => selectExisting(p)}
               className={cn(
-                'flex w-full items-center gap-3 px-4 py-3 text-left transition-colors first:border-t-0 focus-visible:outline-none',
-                isClinician
-                  ? 'border-t border-clinician-line hover:bg-clinician-cream-2/60 focus-visible:bg-clinician-cream-2'
-                  : 'border-t border-border-subtle hover:bg-bg-surface-2/50 focus-visible:bg-bg-surface-2/70'
+                'flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-linear-row-hover focus-visible:outline-none focus-visible:bg-linear-row-active',
+                i > 0 && 'border-t border-linear-hairline'
               )}
             >
-              {isClinician ? (
-                <div
-                  aria-hidden
-                  className="qm-cl-avatar qm-cl-avatar-sage flex-none"
-                  style={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: 10,
-                    fontSize: 13,
-                  }}
-                >
-                  {p.name.charAt(0).toUpperCase()}
-                </div>
-              ) : (
-                <div
-                  aria-hidden
-                  className="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-[linear-gradient(135deg,#4C1D95_0%,#7C3AED_100%)] text-[12px] font-semibold text-white"
-                >
-                  {p.name.charAt(0).toUpperCase()}
-                </div>
-              )}
+              <div
+                aria-hidden
+                className="flex h-8 w-8 flex-none items-center justify-center rounded-md text-[12px] font-semibold"
+                style={{
+                  background: 'var(--color-linear-sage-tint)',
+                  color: 'var(--color-linear-sage-bright)',
+                }}
+              >
+                {p.name.charAt(0).toUpperCase()}
+              </div>
               <div className="min-w-0 flex-1">
-                <div
-                  className={cn(
-                    'truncate',
-                    isClinician
-                      ? 'qm-cl-serif text-clinician-ink'
-                      : 'text-[14px] text-text-primary'
-                  )}
-                  style={isClinician ? { fontSize: 15 } : undefined}
-                >
+                <div className="truncate text-[14px] font-medium text-linear-text">
                   {p.name}
                 </div>
-                <div
-                  className={cn(
-                    'text-[12px]',
-                    isClinician ? 'text-clinician-ink-3' : 'text-text-muted'
-                  )}
-                >
+                <div className="text-[12px] text-linear-text-3">
                   {formatDob(p.dateOfBirth)}
                   {p.externalId ? ` · ID ${p.externalId}` : ''}
                 </div>
@@ -394,16 +307,7 @@ export function PatientPickerCore({ onSelect, theme = 'legacy' }: CoreProps) {
           <button
             type="button"
             onClick={() => setCreating(true)}
-            className={
-              isClinician
-                ? 'qm-cl-btn qm-cl-btn-soft'
-                : 'inline-flex items-center gap-1.5 rounded-full border border-border-subtle bg-bg-surface-1/40 px-4 py-2 text-[13px] font-medium text-text-secondary transition-colors hover:border-violet-500/60 hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500'
-            }
-            style={
-              isClinician
-                ? { padding: '10px 18px', fontSize: 13.5 }
-                : undefined
-            }
+            className="qm-lin-btn"
           >
             <Plus className="h-3.5 w-3.5" />
             Create new patient
@@ -411,25 +315,11 @@ export function PatientPickerCore({ onSelect, theme = 'legacy' }: CoreProps) {
         ) : (
           <form
             onSubmit={onSubmitCreate}
-            className={cn(
-              'space-y-3 rounded-xl p-4',
-              isClinician
-                ? 'border border-clinician-line bg-clinician-cream'
-                : 'border border-border-subtle bg-bg-surface-1/40'
-            )}
+            className="space-y-3 rounded-lg border border-linear-border bg-linear-surface-2 p-4"
           >
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
-                <label
-                  className={cn(
-                    'mb-1 block text-[12px] font-medium tracking-tight',
-                    isClinician
-                      ? 'text-clinician-ink-2'
-                      : 'text-text-tertiary'
-                  )}
-                >
-                  Name
-                </label>
+                <label className={FIELD_LABEL}>Name</label>
                 <input
                   type="text"
                   value={newName}
@@ -437,52 +327,30 @@ export function PatientPickerCore({ onSelect, theme = 'legacy' }: CoreProps) {
                   maxLength={200}
                   autoFocus
                   placeholder="Jane Doe"
-                  className={
-                    isClinician
-                      ? 'qm-cl-input block w-full'
-                      : 'block w-full rounded-lg border border-border-default bg-bg-surface-1/80 px-3 py-2 text-[14px] text-text-primary placeholder:text-text-muted outline-none transition-colors focus:border-violet-500 focus:ring-2 focus:ring-violet-500/30'
-                  }
+                  className={INPUT_CLS}
                 />
               </div>
               <div>
-                <label
-                  className={cn(
-                    'mb-1 block text-[12px] font-medium tracking-tight',
-                    isClinician
-                      ? 'text-clinician-ink-2'
-                      : 'text-text-tertiary'
-                  )}
-                >
-                  Date of birth
-                </label>
+                <label className={FIELD_LABEL}>Date of birth</label>
                 <input
                   type="date"
                   value={newDob}
                   onChange={(e) => setNewDob(e.target.value)}
                   min={`${MIN_DOB_YEAR}-01-01`}
                   max={new Date().toISOString().slice(0, 10)}
-                  className={
-                    isClinician
-                      ? 'qm-cl-input block w-full'
-                      : 'block w-full rounded-lg border border-border-default bg-bg-surface-1/80 px-3 py-2 text-[14px] text-text-primary outline-none transition-colors focus:border-violet-500 focus:ring-2 focus:ring-violet-500/30'
-                  }
+                  className={INPUT_CLS}
                 />
               </div>
               <div className="sm:col-span-2">
-                <label
-                  className={cn(
-                    'mb-1 block text-[12px] font-medium tracking-tight',
-                    isClinician
-                      ? 'text-clinician-ink-2'
-                      : 'text-text-tertiary'
-                  )}
-                >
+                <label className={FIELD_LABEL}>
                   External ID{' '}
                   <span
-                    className={cn(
-                      'font-normal',
-                      isClinician ? 'text-clinician-ink-3' : 'text-text-muted'
-                    )}
+                    style={{
+                      color: 'var(--color-linear-text-3)',
+                      fontWeight: 400,
+                      textTransform: 'none',
+                      letterSpacing: '-0.005em',
+                    }}
                   >
                     (optional)
                   </span>
@@ -493,27 +361,13 @@ export function PatientPickerCore({ onSelect, theme = 'legacy' }: CoreProps) {
                   onChange={(e) => setNewExternalId(e.target.value)}
                   maxLength={100}
                   placeholder="EMR chart number or MRN"
-                  className={
-                    isClinician
-                      ? 'qm-cl-input block w-full'
-                      : 'block w-full rounded-lg border border-border-default bg-bg-surface-1/80 px-3 py-2 text-[14px] text-text-primary placeholder:text-text-muted outline-none transition-colors focus:border-violet-500 focus:ring-2 focus:ring-violet-500/30'
-                  }
+                  className={INPUT_CLS}
                 />
               </div>
             </div>
 
             {createError && (
-              <p
-                className={cn(
-                  'text-[12px]',
-                  isClinician ? 'text-clinician-coral-deep' : 'text-danger'
-                )}
-                style={
-                  isClinician ? { color: 'var(--coral-deep)' } : undefined
-                }
-              >
-                {createError}
-              </p>
+              <p className="text-[12px] text-linear-danger">{createError}</p>
             )}
 
             <div className="flex items-center justify-end gap-2">
@@ -526,36 +380,14 @@ export function PatientPickerCore({ onSelect, theme = 'legacy' }: CoreProps) {
                   setNewExternalId('');
                   setCreateError(null);
                 }}
-                className={
-                  isClinician
-                    ? 'qm-cl-btn qm-cl-btn-ghost'
-                    : 'rounded-full px-3 py-1.5 text-[13px] text-text-tertiary hover:text-text-secondary'
-                }
-                style={
-                  isClinician
-                    ? { padding: '8px 16px', fontSize: 13 }
-                    : undefined
-                }
+                className="qm-lin-btn"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={submitting}
-                className={
-                  isClinician
-                    ? 'qm-cl-btn qm-cl-btn-primary'
-                    : 'inline-flex items-center gap-1.5 rounded-full bg-[linear-gradient(135deg,#7C3AED_0%,#A855F7_100%)] px-4 py-2 text-[13px] font-medium text-white shadow-[0_0_0_1px_rgba(167,139,250,0.3)] transition-all hover:shadow-[0_0_0_1px_rgba(167,139,250,0.5)] disabled:opacity-50'
-                }
-                style={
-                  isClinician
-                    ? {
-                        padding: '10px 18px',
-                        fontSize: 13.5,
-                        opacity: submitting ? 0.6 : 1,
-                      }
-                    : undefined
-                }
+                className="qm-lin-btn-primary"
               >
                 {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                 Create &amp; continue
@@ -569,7 +401,6 @@ export function PatientPickerCore({ onSelect, theme = 'legacy' }: CoreProps) {
       {duplicates && (
         <DuplicateModal
           matches={duplicates.matches}
-          theme={theme}
           onClose={() => setDuplicates(null)}
           onUseExisting={(p) => {
             setDuplicates(null);

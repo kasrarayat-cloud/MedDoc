@@ -3,22 +3,11 @@
 // ============================================================================
 // Edit Draft dialog — /visits/[id] (T-M17.3 Phase 4 Commit 7)
 // ----------------------------------------------------------------------------
-// Radix Dialog that hits PATCH /api/visits/[id]. Four fields:
-//
-//   Patient       — PatientPickerCore from /visits/new, wrapped in a
-//                   "current patient pill + Change" pattern so the
-//                   full search/create UI only takes screen real estate
-//                   when the doctor actually wants to swap patients.
-//   Specialty     — SpecialtyDropdown (shared with the new-visit form).
-//   Chief complaint — single-line text input.
-//   Input mode    — three compact radio-style tiles. Not the new-visit
-//                   TiltCard/GlowCard tiles — those are styled to be
-//                   the page's CTA; inside a dialog a lighter
-//                   treatment reads right.
-//
-// Save button is gated on (form valid AND something actually changed
-// from initial values) — matches the T-M17.2 Edit Patient dialog
-// pattern so a no-op Save doesn't bump updatedAt.
+// Phase 5 — Linear V1 Faithful. Renders inside `.qm-lin-spotlight`
+// chrome with hairline-bordered surface-1 form fields. Specialty
+// dropdown, patient picker, chief complaint, and capture-mode tiles
+// all migrate to the dark canvas. Server PATCH semantics are
+// unchanged. The `theme` prop is preserved as a no-op.
 //
 // Server error codes map to user-facing copy per the Commit 5 contract:
 //   VISIT_NOT_DRAFT → "This visit is no longer a draft. Refresh."
@@ -30,7 +19,15 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import * as Dialog from '@radix-ui/react-dialog';
-import { Loader2, Mic, PenLine, Pencil, Radio, X, ArrowLeftRight } from 'lucide-react';
+import {
+  Loader2,
+  Mic,
+  PenLine,
+  Pencil,
+  Radio,
+  X,
+  ArrowLeftRight,
+} from 'lucide-react';
 import { toast } from 'sonner';
 
 import { SpecialtyDropdown } from '@/components/specialty-dropdown';
@@ -49,10 +46,7 @@ interface Props {
   initialSpecialty: string;
   initialChiefComplaint: string | null;
   initialInputMode: InputMode;
-  /** Phase 2 (Clinician remodel) — additive theme prop. Default
-   *  `'legacy'` keeps the dark dialog with violet ring + gradient
-   *  Save button. `'clinician'` swaps to the .qm-cl-card chrome on
-   *  cream + sage focus rings + sage-deep Save CTA. */
+  /** @deprecated kept for back-compat; Linear V1 is single-theme. */
   theme?: EditDraftDialogTheme;
 }
 
@@ -108,17 +102,18 @@ function mapErrorCode(code: string | undefined, fallback: string): string {
   }
 }
 
+const FIELD_LABEL =
+  'mb-1.5 block font-mono text-[10.5px] font-medium uppercase tracking-[0.07em] text-linear-text-3';
+
 export function EditDraftDialog({
   visitId,
   initialPatient,
   initialSpecialty,
   initialChiefComplaint,
   initialInputMode,
-  theme = 'legacy',
 }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const isClinician = theme === 'clinician';
 
   const [patient, setPatient] = useState<SelectedPatient>(initialPatient);
   const [changingPatient, setChangingPatient] = useState(false);
@@ -143,8 +138,7 @@ export function EditDraftDialog({
     normalizedCC !== initialChiefComplaint ||
     inputMode !== initialInputMode;
 
-  const canSubmit =
-    !submitting && nameOk && specialtyOk && hasChanged;
+  const canSubmit = !submitting && nameOk && specialtyOk && hasChanged;
 
   function resetToInitial() {
     setPatient(initialPatient);
@@ -204,15 +198,7 @@ export function EditDraftDialog({
       }}
     >
       <Dialog.Trigger asChild>
-        <button
-          type="button"
-          className={cn(
-            'inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-[13px] font-medium transition-colors',
-            isClinician
-              ? 'border border-clinician-line bg-clinician-cream-card text-clinician-ink-2 hover:bg-clinician-cream-2 hover:border-clinician-line-strong hover:text-clinician-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinician-sage focus-visible:ring-offset-2 focus-visible:ring-offset-clinician-cream'
-              : 'border border-border-default bg-bg-surface-1/60 text-text-secondary hover:bg-bg-surface-2/70 hover:border-border-emphasis focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500'
-          )}
-        >
+        <button type="button" className="qm-lin-btn">
           <Pencil className="h-3.5 w-3.5" aria-hidden />
           Edit draft
         </button>
@@ -220,45 +206,41 @@ export function EditDraftDialog({
       <Dialog.Portal>
         <Dialog.Overlay
           className={cn(
-            'fixed inset-0 z-40 backdrop-blur-sm data-[state=open]:animate-in data-[state=open]:fade-in',
-            isClinician
-              ? 'bg-[rgba(43,38,32,0.32)]'
-              : 'bg-black/70'
+            'qm-lin-spotlight',
+            'data-[state=open]:animate-in data-[state=open]:fade-in'
           )}
         />
         <Dialog.Content
           className={cn(
-            'fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-full max-w-xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl p-6 outline-none',
-            // Radix portals into <body> outside .qm-cl-app, so wrap
-            // here when theme="clinician" so the inner clinician-*
-            // utilities resolve.
-            isClinician
-              ? 'qm-cl-app border border-clinician-line bg-clinician-cream-card shadow-[0_32px_96px_-24px_rgba(43,38,32,0.18)]'
-              : 'border border-border-default bg-bg-surface-1 shadow-2xl'
+            'qm-lin-spotlight-panel qm-lin-blur-in',
+            'fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-full max-w-xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto outline-none'
           )}
+          style={{ padding: 0 }}
         >
-          <div className="mb-5 flex items-start justify-between gap-3">
+          <div
+            className="flex items-start justify-between gap-3"
+            style={{ padding: '20px 24px 8px' }}
+          >
             <div>
               <Dialog.Title
-                className={cn(
-                  'text-[16px] font-semibold tracking-tight',
-                  isClinician
-                    ? 'qm-cl-serif text-clinician-ink'
-                    : 'text-text-primary'
-                )}
-                style={
-                  isClinician
-                    ? { fontWeight: 500, letterSpacing: '-0.01em' }
-                    : undefined
-                }
+                style={{
+                  margin: 0,
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 16,
+                  fontWeight: 500,
+                  letterSpacing: '-0.01em',
+                  color: 'var(--color-linear-text)',
+                }}
               >
                 Edit draft
               </Dialog.Title>
               <Dialog.Description
-                className={cn(
-                  'mt-1 text-[13px]',
-                  isClinician ? 'text-clinician-ink-3' : 'text-text-tertiary'
-                )}
+                style={{
+                  marginTop: 6,
+                  marginBottom: 0,
+                  fontSize: 13,
+                  color: 'var(--color-linear-text-2)',
+                }}
               >
                 Adjust the patient, specialty, chief complaint, or
                 capture mode before any input is uploaded.
@@ -268,103 +250,52 @@ export function EditDraftDialog({
               <button
                 type="button"
                 aria-label="Close"
-                className={cn(
-                  'flex-none rounded-md p-1',
-                  isClinician
-                    ? 'text-clinician-ink-3 hover:text-clinician-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinician-sage'
-                    : 'text-text-muted hover:text-text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500'
-                )}
+                className="flex-none rounded-md p-1 text-linear-text-3 hover:text-linear-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-linear-sage"
               >
                 <X className="h-4 w-4" />
               </button>
             </Dialog.Close>
           </div>
 
-          <form onSubmit={onSubmit} className="space-y-4">
+          <form
+            onSubmit={onSubmit}
+            className="space-y-4"
+            style={{ padding: '4px 24px 16px' }}
+          >
             {/* Patient */}
             <div>
-              <label
-                className={cn(
-                  'mb-1 block text-[12px] font-medium tracking-tight',
-                  isClinician ? 'text-clinician-ink-3' : 'text-text-tertiary'
-                )}
-              >
-                Patient
-              </label>
+              <label className={FIELD_LABEL}>Patient</label>
               {!changingPatient ? (
-                <div
-                  className={cn(
-                    'flex items-center gap-3 rounded-lg px-3 py-2',
-                    isClinician
-                      ? 'border border-clinician-line bg-clinician-cream-card'
-                      : 'border border-border-default bg-bg-surface-1/80'
-                  )}
-                >
+                <div className="flex items-center gap-3 rounded-lg border border-linear-border bg-linear-surface-1 px-3 py-2">
                   <div
                     aria-hidden
-                    className={cn(
-                      'flex h-7 w-7 flex-none items-center justify-center rounded-full text-[11px] font-semibold',
-                      isClinician
-                        ? // Sage-tint avatar with sage-deep serif initial,
-                          // mirroring the .qm-cl-avatar-sage idiom from
-                          // the dashboard PatientCard.
-                          'qm-cl-serif text-clinician-sage-deep'
-                        : 'bg-[linear-gradient(135deg,#4C1D95_0%,#7C3AED_100%)] text-white'
-                    )}
-                    style={
-                      isClinician
-                        ? {
-                            background:
-                              'var(--sage-tint-strong, rgba(122, 166, 140, 0.22))',
-                          }
-                        : undefined
-                    }
+                    className="flex h-7 w-7 flex-none items-center justify-center rounded-full text-[11px] font-semibold"
+                    style={{
+                      background: 'var(--color-linear-sage-tint)',
+                      color: 'var(--color-linear-sage-bright)',
+                    }}
                   >
                     {patient.name.charAt(0).toUpperCase()}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div
-                      className={cn(
-                        'truncate text-[14px]',
-                        isClinician ? 'text-clinician-ink' : 'text-text-primary'
-                      )}
-                    >
+                    <div className="truncate text-[14px] text-linear-text">
                       {patient.name}
                     </div>
-                    <div
-                      className={cn(
-                        'text-[11px]',
-                        isClinician
-                          ? 'text-clinician-ink-3'
-                          : 'text-text-muted'
-                      )}
-                    >
+                    <div className="text-[11px] text-linear-text-3">
                       {formatDob(patient.dateOfBirth)}
                     </div>
                   </div>
                   <button
                     type="button"
                     onClick={() => setChangingPatient(true)}
-                    className={cn(
-                      'inline-flex items-center gap-1 rounded-full px-3 py-1 text-[12px] transition-colors',
-                      isClinician
-                        ? 'text-clinician-ink-3 hover:bg-clinician-cream-2 hover:text-clinician-ink'
-                        : 'text-text-tertiary hover:text-text-primary'
-                    )}
+                    className="qm-lin-btn"
                   >
                     <ArrowLeftRight className="h-3 w-3" aria-hidden />
                     Change
                   </button>
                 </div>
               ) : (
-                <div
-                  className={cn(
-                    'rounded-lg p-3',
-                    isClinician
-                      ? 'border border-clinician-line bg-clinician-cream-card'
-                      : 'border border-border-subtle bg-bg-surface-1/40'
-                  )}
-                >
+                <div className="rounded-lg border border-linear-border bg-linear-surface-1 p-3">
                   <PatientPickerCore
                     onSelect={(p) => {
                       setPatient(p);
@@ -377,14 +308,7 @@ export function EditDraftDialog({
 
             {/* Specialty */}
             <div>
-              <label
-                className={cn(
-                  'mb-1 block text-[12px] font-medium tracking-tight',
-                  isClinician ? 'text-clinician-ink-3' : 'text-text-tertiary'
-                )}
-              >
-                Specialty
-              </label>
+              <label className={FIELD_LABEL}>Specialty</label>
               <SpecialtyDropdown
                 options={SPECIALTIES}
                 name="specialty"
@@ -395,22 +319,9 @@ export function EditDraftDialog({
 
             {/* Chief complaint */}
             <div>
-              <label
-                htmlFor="edit-draft-cc"
-                className={cn(
-                  'mb-1 block text-[12px] font-medium tracking-tight',
-                  isClinician ? 'text-clinician-ink-3' : 'text-text-tertiary'
-                )}
-              >
+              <label htmlFor="edit-draft-cc" className={FIELD_LABEL}>
                 Chief complaint{' '}
-                <span
-                  className={cn(
-                    'font-normal',
-                    isClinician
-                      ? 'text-clinician-ink-4'
-                      : 'text-text-muted'
-                  )}
-                >
+                <span style={{ color: 'var(--color-linear-text-3)', fontWeight: 400, textTransform: 'none', letterSpacing: '-0.005em' }}>
                   (optional)
                 </span>
               </label>
@@ -421,25 +332,13 @@ export function EditDraftDialog({
                 onChange={(e) => setChiefComplaint(e.target.value)}
                 maxLength={500}
                 placeholder="e.g. Headache for 3 days"
-                className={cn(
-                  'block w-full rounded-lg px-3 py-2 text-[14px] outline-none transition-colors',
-                  isClinician
-                    ? 'border border-clinician-line bg-clinician-cream-card text-clinician-ink placeholder:text-clinician-ink-4 focus:border-clinician-sage focus:ring-2 focus:ring-clinician-sage/30'
-                    : 'border border-border-default bg-bg-surface-1/80 text-text-primary placeholder:text-text-muted focus:border-violet-500 focus:ring-2 focus:ring-violet-500/30'
-                )}
+                className="block w-full rounded-md border border-linear-border bg-linear-surface-1 px-3 py-2 text-[14px] text-linear-text placeholder:text-linear-text-3 outline-none transition-colors focus:border-linear-sage focus:ring-2 focus:ring-linear-sage/30"
               />
             </div>
 
             {/* Input mode */}
             <div>
-              <div
-                className={cn(
-                  'mb-2 text-[12px] font-medium tracking-tight',
-                  isClinician ? 'text-clinician-ink-3' : 'text-text-tertiary'
-                )}
-              >
-                Capture mode
-              </div>
+              <div className={FIELD_LABEL}>Capture mode</div>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                 {MODES.map((m) => {
                   const Icon = ICON_MAP[m.icon];
@@ -452,58 +351,24 @@ export function EditDraftDialog({
                       aria-pressed={active}
                       className={cn(
                         'flex flex-col gap-2 rounded-lg border p-3 text-left transition-colors',
-                        isClinician
-                          ? 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinician-sage focus-visible:ring-offset-2 focus-visible:ring-offset-clinician-cream'
-                          : 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500',
+                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-linear-sage focus-visible:ring-offset-2 focus-visible:ring-offset-linear-bg',
                         active
-                          ? isClinician
-                            ? 'border-clinician-sage'
-                            : 'border-violet-500 bg-violet-500/10'
-                          : isClinician
-                            ? 'border-clinician-line bg-clinician-cream-card hover:border-clinician-line-strong'
-                            : 'border-border-default bg-bg-surface-1/40 hover:border-border-emphasis'
+                          ? 'border-[rgba(122,166,140,0.45)] bg-linear-sage-tint'
+                          : 'border-linear-border bg-linear-surface-1 hover:border-linear-border-strong'
                       )}
-                      style={
-                        isClinician && active
-                          ? {
-                              background:
-                                'var(--sage-tint, rgba(122, 166, 140, 0.14))',
-                            }
-                          : undefined
-                      }
                     >
                       <Icon
                         className={cn(
                           'h-4 w-4',
-                          active
-                            ? isClinician
-                              ? 'text-clinician-sage-deep'
-                              : 'text-violet-300'
-                            : isClinician
-                              ? 'text-clinician-ink-3'
-                              : 'text-text-tertiary'
+                          active ? 'text-linear-sage-bright' : 'text-linear-text-3'
                         )}
                         aria-hidden
                       />
                       <div>
-                        <div
-                          className={cn(
-                            'text-[13px] font-medium',
-                            isClinician
-                              ? 'text-clinician-ink'
-                              : 'text-text-primary'
-                          )}
-                        >
+                        <div className="text-[13px] font-medium text-linear-text">
                           {m.title}
                         </div>
-                        <div
-                          className={cn(
-                            'mt-0.5 text-[11px] leading-relaxed',
-                            isClinician
-                              ? 'text-clinician-ink-3'
-                              : 'text-text-muted'
-                          )}
-                        >
+                        <div className="mt-0.5 text-[11px] leading-relaxed text-linear-text-3">
                           {m.description}
                         </div>
                       </div>
@@ -514,47 +379,29 @@ export function EditDraftDialog({
             </div>
 
             {error && (
-              <p
-                className={cn(
-                  'text-[12px]',
-                  isClinician ? 'text-clinician-coral-deep' : 'text-danger'
-                )}
-              >
-                {error}
-              </p>
+              <p className="text-[12px] text-linear-danger">{error}</p>
             )}
 
             <div
-              className={cn(
-                'flex items-center justify-end gap-2 border-t pt-4',
-                isClinician ? 'border-clinician-line' : 'border-border-subtle'
-              )}
+              className="flex items-center justify-end gap-2"
+              style={{
+                marginLeft: -24,
+                marginRight: -24,
+                marginBottom: -16,
+                borderTop: '1px solid var(--color-linear-hairline)',
+                background: 'var(--color-linear-surface-2)',
+                padding: '12px 24px',
+              }}
             >
               <Dialog.Close asChild>
-                <button
-                  type="button"
-                  className={cn(
-                    'rounded-full px-3 py-2 text-[13px]',
-                    isClinician
-                      ? 'text-clinician-ink-3 hover:bg-clinician-cream-2 hover:text-clinician-ink'
-                      : 'text-text-tertiary hover:text-text-secondary'
-                  )}
-                >
+                <button type="button" className="qm-lin-btn">
                   Cancel
                 </button>
               </Dialog.Close>
               <button
                 type="submit"
                 disabled={!canSubmit}
-                className={cn(
-                  'inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-[13px] font-medium transition-all disabled:cursor-not-allowed disabled:opacity-50',
-                  isClinician
-                    ? // Sage-deep CTA on cream — mirrors .qm-cl-btn-primary
-                      // chrome (sage solid bg + cream-card text + paper
-                      // shadow). No gradient.
-                      'qm-cl-btn qm-cl-btn-primary'
-                    : 'bg-[linear-gradient(135deg,#7C3AED_0%,#A855F7_100%)] text-white shadow-[0_0_0_1px_rgba(167,139,250,0.3)] hover:shadow-[0_0_0_1px_rgba(167,139,250,0.5)] disabled:hover:shadow-[0_0_0_1px_rgba(167,139,250,0.3)]'
-                )}
+                className="qm-lin-btn-primary"
               >
                 {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                 Save changes

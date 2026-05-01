@@ -3,13 +3,11 @@
 // ============================================================================
 // TextComposer — bullet/shorthand → SOAP entry surface.
 // ----------------------------------------------------------------------------
-// Phase 2 (Clinician remodel) — Strategy A dual-theme via additive
-// `theme` prop. Default `'legacy'` keeps the dark glass + violet ring
-// chrome verbatim. `theme="clinician"` swaps to a `.qm-cl-card`-bordered
-// textarea with warm cream surface, sage focus ring, Source Serif 4
-// title, and a primary `qm-cl-btn` submit. The fetch contract
-// (POST /api/visits/[id]/text), MIN/MAX char gates, and form submit
-// semantics are preserved byte-for-byte.
+// Phase 5 — Linear V1 Faithful. Hairline-bordered surface-1 textarea
+// frame with a sage focus ring and a mono shorthand body. CTA is
+// `.qm-lin-btn-primary`. The fetch contract (POST /api/visits/[id]/text),
+// MIN/MAX char gates, and form submit semantics are preserved
+// byte-for-byte. The `theme` prop is preserved as a no-op.
 // ============================================================================
 
 import { useCallback, useState, useTransition } from 'react';
@@ -18,7 +16,6 @@ import { PenLine, ArrowRight, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { cn } from '@/lib/cn';
-import { SpecularButton } from '@/components/specular-button';
 
 const MIN_CHARS = 30;
 const MAX_CHARS = 5000;
@@ -37,16 +34,15 @@ type TextComposerTheme = 'legacy' | 'clinician';
 
 interface TextComposerProps {
   visitId: string;
-  /** Phase 2 (Clinician remodel) — additive theme prop. */
+  /** @deprecated kept for back-compat; Linear V1 is single-theme. */
   theme?: TextComposerTheme;
 }
 
-export function TextComposer({ visitId, theme = 'legacy' }: TextComposerProps) {
+export function TextComposer({ visitId }: TextComposerProps) {
   const router = useRouter();
   const [text, setText] = useState('');
   const [submitting, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const isClinician = theme === 'clinician';
 
   const len = text.length;
   const canSubmit = len >= MIN_CHARS && len <= MAX_CHARS && !submitting;
@@ -90,106 +86,57 @@ export function TextComposer({ visitId, theme = 'legacy' }: TextComposerProps) {
     <div className="mx-auto w-full max-w-2xl">
       <div className="mb-6 text-center">
         <h2
-          className={
-            isClinician
-              ? 'qm-cl-serif'
-              : 'type-h1 text-text-primary'
-          }
-          style={
-            isClinician
-              ? {
-                  fontSize: 32,
-                  fontWeight: 400,
-                  lineHeight: 1.15,
-                  letterSpacing: '-0.015em',
-                  color: 'var(--ink)',
-                  margin: 0,
-                }
-              : undefined
-          }
+          style={{
+            margin: 0,
+            fontFamily: 'var(--font-sans)',
+            fontSize: 28,
+            fontWeight: 500,
+            lineHeight: 1.15,
+            letterSpacing: '-0.015em',
+            color: 'var(--color-linear-text)',
+          }}
         >
           Text to SOAP
         </h2>
         <p
-          className={cn(
-            'mt-2',
-            isClinician
-              ? 'qm-cl-serif text-clinician-ink-2'
-              : 'text-[14px] text-text-tertiary'
-          )}
-          style={
-            isClinician
-              ? {
-                  fontSize: 15,
-                  lineHeight: 1.55,
-                  fontStyle: 'italic',
-                }
-              : undefined
-          }
+          className="mt-2"
+          style={{
+            fontSize: 14,
+            lineHeight: 1.55,
+            color: 'var(--color-linear-text-2)',
+          }}
         >
           Paste bullet points or shorthand. We&apos;ll expand them into a
           complete SOAP note.
         </p>
       </div>
 
-      <div
-        className={cn(
-          'rounded-2xl p-4',
-          isClinician
-            ? 'qm-cl-card focus-within:border-clinician-sage focus-within:ring-2 focus-within:ring-[rgba(122,166,140,0.18)]'
-            : 'border border-border-default bg-bg-surface-1/60 transition-colors duration-200 focus-within:border-violet-500 focus-within:ring-2 focus-within:ring-violet-500/30'
-        )}
-      >
+      <div className="rounded-lg border border-linear-border bg-linear-surface-1 p-4 transition-colors duration-150 focus-within:border-linear-sage focus-within:ring-2 focus-within:ring-linear-sage/30">
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder={PLACEHOLDER}
           maxLength={MAX_CHARS}
           spellCheck
-          className={cn(
-            'min-h-[320px] w-full resize-y bg-transparent p-2 leading-relaxed outline-none',
-            isClinician
-              ? 'font-mono text-[13px] text-clinician-ink placeholder:text-clinician-ink-3/70'
-              : 'font-mono text-[13px] text-text-primary placeholder:text-text-muted/70'
-          )}
+          className="min-h-[320px] w-full resize-y bg-transparent p-2 font-mono text-[13px] leading-relaxed text-linear-text outline-none placeholder:text-linear-text-3/70"
           aria-label="Clinical shorthand"
         />
-        <div
-          className={cn(
-            'mt-2 flex flex-wrap items-center justify-between gap-2 px-2 text-[11px]',
-            isClinician ? 'text-clinician-ink-3' : 'text-text-muted'
-          )}
-        >
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 px-2 text-[11px] text-linear-text-3">
           <div>
             Use bullets, abbreviations, or shorthand. Common expansions:{' '}
-            <span
-              className={
-                isClinician ? 'text-clinician-ink-2' : 'text-text-tertiary'
-              }
-            >
+            <span className="text-linear-text-2">
               yo, f/u, RTC, ROS -, BP 148/92, A1c 6.8.
             </span>
           </div>
           <div
             className={cn(
               'tabular-nums',
-              isClinician
-                ? len < MIN_CHARS
-                  ? 'text-clinician-ink-3'
-                  : len > MAX_CHARS - 100
-                    ? 'text-clinician-amber-deep'
-                    : 'text-clinician-ink-2'
-                : len < MIN_CHARS
-                  ? 'text-text-muted'
-                  : len > MAX_CHARS - 100
-                    ? 'text-warning'
-                    : 'text-text-tertiary'
+              len < MIN_CHARS
+                ? 'text-linear-text-3'
+                : len > MAX_CHARS - 100
+                  ? 'text-linear-warning'
+                  : 'text-linear-text-2'
             )}
-            style={
-              isClinician && len > MAX_CHARS - 100
-                ? { color: 'var(--amber-deep)' }
-                : undefined
-            }
           >
             {len} / {MAX_CHARS}
             {len < MIN_CHARS && (
@@ -200,25 +147,18 @@ export function TextComposer({ visitId, theme = 'legacy' }: TextComposerProps) {
       </div>
 
       {error && (
-        <p
-          role="alert"
-          className={cn(
-            'mt-3 text-[13px]',
-            isClinician ? 'text-clinician-coral-deep' : 'text-danger'
-          )}
-          style={isClinician ? { color: 'var(--coral-deep)' } : undefined}
-        >
+        <p role="alert" className="mt-3 text-[13px] text-linear-danger">
           {error}
         </p>
       )}
 
       <div className="mt-6 flex items-center justify-center">
-        <SpecularButton
-          variant="primary"
-          size="lg"
+        <button
+          type="button"
           onClick={submit}
           disabled={!canSubmit}
-          theme={theme}
+          className="qm-lin-btn-primary"
+          style={{ padding: '10px 18px', height: 38 }}
         >
           <PenLine className="h-4 w-4" aria-hidden />
           {submitting ? (
@@ -232,7 +172,7 @@ export function TextComposer({ visitId, theme = 'legacy' }: TextComposerProps) {
               <ArrowRight className="h-4 w-4" aria-hidden />
             </>
           )}
-        </SpecularButton>
+        </button>
       </div>
     </div>
   );
