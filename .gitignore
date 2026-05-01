@@ -69,3 +69,7 @@ backups/
 # chosen to inform Phase 5 implementation.
 docs/design-directions-v5/
 docs/design-directions-v6/
+
+# qa-bug-hunter audio fixtures — synthesized at skill-run time
+# (~21 MB total, regenerated on demand from the skill spec).
+tests/fixtures/audio/
