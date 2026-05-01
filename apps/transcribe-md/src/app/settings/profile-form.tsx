@@ -4,6 +4,10 @@ import { useActionState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { updateProfileAction, type ProfileState } from '@/actions/profile';
 
+// Phase 5 — Linear V1 Faithful profile form. Server-action signature
+// (updateProfileAction, ProfileState) and field validation are
+// unchanged per PROTECTED_CONTRACTS.
+
 interface ProfileFormProps {
   defaultName: string;
   defaultSpecialty?: string;
@@ -22,6 +26,20 @@ const SPECIALTY_OPTIONS = [
   'ophthalmology',
 ] as const;
 
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  height: 32,
+  padding: '0 10px',
+  background: 'var(--color-linear-surface-2)',
+  border: '1px solid var(--color-linear-border)',
+  borderRadius: 6,
+  color: 'var(--color-linear-text)',
+  fontFamily: 'var(--font-sans)',
+  fontSize: 13,
+  outline: 'none',
+  transition: 'border-color 100ms ease',
+};
+
 export function ProfileForm({
   defaultName,
   defaultSpecialty = '',
@@ -31,7 +49,7 @@ export function ProfileForm({
 }: ProfileFormProps) {
   const [state, formAction, pending] = useActionState<ProfileState, FormData>(
     updateProfileAction,
-    null
+    null,
   );
   const showSaved = state?.ok === true;
 
@@ -100,25 +118,39 @@ export function ProfileForm({
         error={errors.timeZone}
       />
       {errors._form && (
-        <p role="alert" style={{ fontSize: 12, color: 'var(--coral)' }}>
+        <p
+          role="alert"
+          style={{
+            fontFamily: 'var(--font-sans)',
+            fontSize: 12,
+            color: 'var(--color-linear-coral)',
+          }}
+        >
           {errors._form}
         </p>
       )}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 4 }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          marginTop: 4,
+        }}
+      >
         <button
           type="submit"
           disabled={pending}
-          className="qm-btn qm-btn-primary"
-          style={{ padding: '9px 16px' }}
+          className="qm-lin-btn-primary"
+          style={{ height: 30, padding: '0 14px', fontSize: 12.5 }}
         >
           {pending ? 'Saving…' : 'Save profile'}
         </button>
         {showSaved && (
           <span
             style={{
-              fontSize: 12,
-              color: 'var(--mint)',
-              fontFamily: 'var(--mono)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+              color: 'var(--color-linear-sage-bright)',
             }}
           >
             Saved
@@ -170,22 +202,18 @@ function Field({
         style={{
           display: 'block',
           marginBottom: 6,
-          fontSize: 11.5,
-          color: 'var(--fg-3)',
-          letterSpacing: '0.04em',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10.5,
+          color: 'var(--color-linear-text-3)',
+          letterSpacing: '0.06em',
           textTransform: 'uppercase',
-          fontFamily: 'var(--mono)',
+          fontWeight: 500,
         }}
       >
         {label}
       </label>
       {as === 'select' ? (
-        <select
-          id={id}
-          name={name}
-          defaultValue={defaultValue}
-          className="qm-input"
-        >
+        <select id={id} name={name} defaultValue={defaultValue} style={inputStyle}>
           {options?.map((o) => (
             <option key={o.value} value={o.value}>
               {o.label}
@@ -200,13 +228,18 @@ function Field({
           defaultValue={defaultValue}
           required={required}
           placeholder={placeholder}
-          className="qm-input"
+          style={inputStyle}
         />
       )}
       {error && (
         <p
           role="alert"
-          style={{ marginTop: 6, fontSize: 12, color: 'var(--coral)' }}
+          style={{
+            marginTop: 6,
+            fontFamily: 'var(--font-sans)',
+            fontSize: 12,
+            color: 'var(--color-linear-coral)',
+          }}
         >
           {error}
         </p>

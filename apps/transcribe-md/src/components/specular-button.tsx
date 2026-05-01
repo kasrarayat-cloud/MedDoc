@@ -4,23 +4,35 @@ import Link from 'next/link';
 import { cn } from '@/lib/cn';
 
 /**
- * Linear-style button with a specular (light-sweep) effect on hover.
- * The sweep is a pseudo-element driven by .specular-button in globals.css.
+ * Phase 5 — Linear V1 Faithful CTA primitive.
  *
- * Supports three variants:
- *   - primary: solid violet gradient + white text (main CTA)
- *   - secondary: translucent surface + border (ghost)
- *   - ghost: fully transparent until hover
+ * Reference: docs/design-directions-v8-linear/dashboard-v1.html
+ * `.btn-primary` (sage solid) and the `.kbd-chip` ghost pattern.
  *
- * Renders as an <a> via next/link when `href` is given, otherwise a
- * <button>. Keyboard focus ring is violet, offset from the surface.
+ * The Phase 4 violet-gradient + specular-sweep treatment is gone. Linear
+ * V1 has no specular sheen, no purple gradient, no rounded-pill shape;
+ * buttons sit on a 6px radius with a subtle 1-pixel sage ring + a flat
+ * sage fill. We re-skin the three variants onto the `.qm-lin-btn(*)`
+ * family from globals.css so the rest of the app stays consistent.
  *
- * Theme — `'legacy'` (violet gradient + specular sweep) or `'clinician'`
- * (sage `.qm-cl-btn-primary` / cream `.qm-cl-btn-soft` / transparent
- * `.qm-cl-btn-ghost`, gentle 240 ms ease, no sweep). When
- * `theme="clinician"` and `sweep` is true, a `data-shine` attribute is
- * emitted so future CSS can opt in to a Clinician-toned shine without
- * changing the JS contract.
+ * Variants:
+ *   - primary   → sage solid (`.qm-lin-btn-primary`) — the only call to
+ *                 action, never more than one per surface
+ *   - secondary → ghost outline (`.qm-lin-btn`)
+ *   - ghost     → transparent ghost (also `.qm-lin-btn`); no separate
+ *                 utility in Linear V1, the visual difference is the
+ *                 absence of a border on hover and we just let the
+ *                 catalog handle it
+ *
+ * Sizes (sm/md/lg) tweak padding only — Linear V1 buttons are 28-32 px
+ * tall depending on density.
+ *
+ * The legacy `theme`, `sweep`, `data-shine` props remain in the type
+ * signature for back-compat — they're ignored at runtime, which keeps
+ * existing call sites compiling. Stage 5 cleanup will drop them in one
+ * sweep.
+ *
+ * Renders <a> via next/link when `href` is given, otherwise <button>.
  */
 type Variant = 'primary' | 'secondary' | 'ghost';
 type Size = 'sm' | 'md' | 'lg';
@@ -31,7 +43,9 @@ interface BaseProps {
   variant?: Variant;
   size?: Size;
   className?: string;
+  /** @deprecated kept for back-compat; Linear V1 has no specular sweep. */
   sweep?: boolean;
+  /** @deprecated kept for back-compat; Linear V1 is single-theme. */
   theme?: ButtonTheme;
 }
 
@@ -44,93 +58,27 @@ type SpecularButtonProps =
       disabled?: boolean;
     });
 
-const SIZE_CLASSES: Record<Size, string> = {
-  sm: 'px-4 py-2 text-[13px]',
-  md: 'px-5 py-2.5 text-[14px]',
-  lg: 'px-6 py-3 text-[15px]',
+const SIZE_STYLES: Record<Size, React.CSSProperties> = {
+  sm: { height: 26, padding: '0 10px', fontSize: 11.5 },
+  md: { height: 28, padding: '0 12px', fontSize: 12 },
+  lg: { height: 32, padding: '0 16px', fontSize: 13 },
 };
-
-const BASE = [
-  'inline-flex items-center justify-center gap-2',
-  'rounded-full font-medium tracking-tight',
-  'transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]',
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base',
-  'select-none',
-].join(' ');
 
 const VARIANT_CLASSES: Record<Variant, string> = {
-  primary: [
-    'text-white',
-    // Violet gradient; slightly deeper on hover.
-    'bg-[linear-gradient(135deg,#7C3AED_0%,#A855F7_100%)]',
-    'shadow-[0_0_0_1px_rgba(167,139,250,0.3),0_8px_32px_-8px_rgba(124,58,237,0.5)]',
-    'hover:shadow-[0_0_0_1px_rgba(167,139,250,0.5),0_12px_40px_-8px_rgba(124,58,237,0.7)]',
-    'hover:-translate-y-0.5',
-  ].join(' '),
-  secondary: [
-    'text-text-primary',
-    'bg-bg-surface-2/70 backdrop-blur',
-    'border border-border-default',
-    'hover:border-border-emphasis hover:bg-bg-surface-3/70',
-  ].join(' '),
-  ghost: [
-    'text-text-secondary',
-    'bg-transparent',
-    'border border-transparent',
-    'hover:text-text-primary hover:bg-bg-surface-2/50',
-  ].join(' '),
-};
-
-/* Clinician — pill-shaped, sage primary / cream soft / transparent
-   ghost, focus ring built into the .qm-cl-* CSS family above. We keep
-   the size modifiers minimal: `lg` adds `.qm-cl-btn-lg`; `sm` and `md`
-   are visually identical (the .qm-cl-btn baseline is sized for `md`,
-   `sm` is rare in the Clinician mockups). */
-const CLINICIAN_VARIANT_CLASSES: Record<Variant, string> = {
-  primary: 'qm-cl-btn qm-cl-btn-primary',
-  secondary: 'qm-cl-btn qm-cl-btn-soft',
-  ghost: 'qm-cl-btn qm-cl-btn-ghost',
-};
-
-const CLINICIAN_SIZE_CLASSES: Record<Size, string> = {
-  sm: '',
-  md: '',
-  lg: 'qm-cl-btn-lg',
+  primary: 'qm-lin-btn-primary',
+  secondary: 'qm-lin-btn',
+  ghost: 'qm-lin-btn',
 };
 
 export function SpecularButton(props: SpecularButtonProps) {
-  const {
-    children,
-    variant = 'primary',
-    size = 'md',
-    className,
-    sweep = true,
-    theme = 'legacy',
-  } = props;
+  const { children, variant = 'primary', size = 'md', className } = props;
 
-  const isClinician = theme === 'clinician';
-
-  const classes = isClinician
-    ? cn(
-        CLINICIAN_VARIANT_CLASSES[variant],
-        CLINICIAN_SIZE_CLASSES[size],
-        className
-      )
-    : cn(
-        BASE,
-        SIZE_CLASSES[size],
-        VARIANT_CLASSES[variant],
-        sweep && 'specular-button',
-        className
-      );
-
-  // In Clinician, expose `data-shine` so future CSS can opt in to a
-  // restrained sage-tinted shine without altering the JS API.
-  const dataShine = isClinician && sweep ? '' : undefined;
+  const classes = cn(VARIANT_CLASSES[variant], className);
+  const sizeStyle = SIZE_STYLES[size];
 
   if ('href' in props && props.href) {
     return (
-      <Link href={props.href} className={classes} data-shine={dataShine}>
+      <Link href={props.href} className={classes} style={sizeStyle}>
         {children}
       </Link>
     );
@@ -144,8 +92,8 @@ export function SpecularButton(props: SpecularButtonProps) {
       type={btnProps.type ?? 'button'}
       onClick={btnProps.onClick}
       disabled={btnProps.disabled}
-      data-shine={dataShine}
-      className={cn(classes, 'disabled:opacity-50 disabled:pointer-events-none')}
+      className={classes}
+      style={sizeStyle}
     >
       {children}
     </button>
