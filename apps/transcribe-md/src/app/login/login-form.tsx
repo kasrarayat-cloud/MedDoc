@@ -14,6 +14,33 @@ import { loginAction, type AuthActionState } from '@/actions/auth';
 
 const initialState: AuthActionState = null;
 
+// Phase 5 — Linear V1 Faithful login form. The AuthShell wraps the
+// page chrome; this component owns the form fields, submit CTA, and
+// inline cross-app + verification banners. Server-action contract
+// (loginAction signature, redirect handling, errors map) is unchanged
+// per PROTECTED_CONTRACTS.
+
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  height: 36,
+  padding: '0 12px',
+  background: 'var(--color-linear-surface-2)',
+  border: '1px solid var(--color-linear-border)',
+  borderRadius: 6,
+  color: 'var(--color-linear-text)',
+  fontFamily: 'var(--font-sans)',
+  fontSize: 13.5,
+  outline: 'none',
+  transition: 'border-color 100ms ease, background-color 100ms ease',
+};
+
+const linkStyle: React.CSSProperties = {
+  color: 'var(--color-linear-sage-bright)',
+  fontFamily: 'var(--font-sans)',
+  fontWeight: 500,
+  textDecoration: 'none',
+};
+
 export function LoginForm() {
   const [state, formAction, pending] = useActionState(loginAction, initialState);
   const router = useRouter();
@@ -79,8 +106,7 @@ export function LoginForm() {
           autoComplete="email"
           defaultValue={values.email ?? ''}
           required
-          className="qm-cl-input"
-          style={{ marginTop: 6 }}
+          style={{ ...inputStyle, marginTop: 6 }}
         />
         <AuthFieldError message={errors.email} />
       </div>
@@ -91,12 +117,7 @@ export function LoginForm() {
           hint={
             <Link
               href="/forgot-password"
-              style={{
-                fontSize: 11.5,
-                color: 'var(--sage-deep)',
-                fontFamily: 'var(--sans)',
-                fontWeight: 500,
-              }}
+              style={{ ...linkStyle, fontSize: 11.5 }}
             >
               Forgot?
             </Link>
@@ -110,8 +131,7 @@ export function LoginForm() {
           type="password"
           autoComplete="current-password"
           required
-          className="qm-cl-input"
-          style={{ marginTop: 6 }}
+          style={{ ...inputStyle, marginTop: 6 }}
         />
         <AuthFieldError message={errors.password} />
       </div>
@@ -123,24 +143,25 @@ export function LoginForm() {
           style={{
             marginTop: 14,
             padding: 12,
-            borderRadius: 12,
-            border: '1px solid rgba(123, 168, 196, 0.35)',
-            background: 'var(--sky-tint)',
-            color: 'var(--sky-deep)',
+            borderRadius: 8,
+            border: '1px solid rgba(116, 168, 201, 0.30)',
+            background: 'rgba(116, 168, 201, 0.06)',
+            color: 'var(--color-linear-text-2)',
+            fontFamily: 'var(--font-sans)',
             fontSize: 12.5,
             lineHeight: 1.5,
           }}
         >
-          <p style={{ margin: 0, color: 'var(--ink)' }}>
+          <p style={{ margin: 0, color: 'var(--color-linear-text)' }}>
             {crossAppRedirect.message}
           </p>
           <a
             href={crossAppRedirect.url}
-            className="qm-cl-btn qm-cl-btn-soft"
+            className="qm-lin-btn"
             style={{
               marginTop: 10,
-              fontSize: 12.5,
-              padding: '8px 14px',
+              fontSize: 12,
+              padding: '6px 12px',
               textDecoration: 'none',
             }}
           >
@@ -155,18 +176,21 @@ export function LoginForm() {
           style={{
             marginTop: 14,
             padding: 12,
-            borderRadius: 12,
-            border: '1px solid rgba(212, 165, 116, 0.4)',
-            background: 'var(--amber-tint)',
-            color: 'var(--amber-deep)',
+            borderRadius: 8,
+            border: '1px solid rgba(212, 165, 116, 0.30)',
+            background: 'rgba(212, 165, 116, 0.06)',
+            color: 'var(--color-linear-text-2)',
+            fontFamily: 'var(--font-sans)',
             fontSize: 12.5,
             lineHeight: 1.5,
           }}
         >
           <p style={{ margin: 0 }}>
             We sent a verification link to{' '}
-            <strong style={{ color: 'var(--ink)' }}>{needsVerificationFor}</strong>.
-            Click it, then sign in again.
+            <strong style={{ color: 'var(--color-linear-text)' }}>
+              {needsVerificationFor}
+            </strong>
+            . Click it, then sign in again.
           </p>
           <button
             type="button"
@@ -177,14 +201,14 @@ export function LoginForm() {
               background: 'none',
               border: 'none',
               padding: 0,
-              color: 'var(--amber-deep)',
+              color: 'var(--color-linear-amber)',
+              fontFamily: 'var(--font-sans)',
               fontSize: 12,
               fontWeight: 500,
               textDecoration: 'underline',
               textUnderlineOffset: 2,
               cursor: resendPending ? 'default' : 'pointer',
               opacity: resendPending ? 0.6 : 1,
-              fontFamily: 'var(--sans)',
             }}
           >
             {resendPending ? 'Sending…' : 'Resend the verification email'}
@@ -195,11 +219,12 @@ export function LoginForm() {
       <button
         type="submit"
         disabled={pending}
-        className="qm-cl-btn qm-cl-btn-primary qm-cl-btn-lg"
+        className="qm-lin-btn-primary"
         style={{
           width: '100%',
-          justifyContent: 'center',
           marginTop: 22,
+          height: 36,
+          fontSize: 13,
           opacity: pending ? 0.75 : 1,
         }}
       >
@@ -210,17 +235,14 @@ export function LoginForm() {
       <div
         style={{
           textAlign: 'center',
-          color: 'var(--ink-3)',
+          color: 'var(--color-linear-text-3)',
+          fontFamily: 'var(--font-sans)',
           fontSize: 12.5,
           marginTop: 18,
-          fontFamily: 'var(--sans)',
         }}
       >
         No account?{' '}
-        <Link
-          href="/signup"
-          style={{ color: 'var(--sage-deep)', fontWeight: 500 }}
-        >
+        <Link href="/signup" style={linkStyle}>
           Sign up →
         </Link>
       </div>

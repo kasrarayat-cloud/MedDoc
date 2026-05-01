@@ -1,20 +1,27 @@
 'use client';
 
 import Link from 'next/link';
-import { TiltCard } from '@/components/tilt-card';
 import { cn } from '@/lib/cn';
 
+/**
+ * Phase 5 — Linear V1 Faithful visit card.
+ *
+ * Reference: dashboard-v1.html `.row` (visit list row pattern). The
+ * Phase 4 violet-glow tilt-card is gone — Linear V1 uses a flat
+ * hairline-bordered card on linear-surface-1 with row-hover lift.
+ *
+ * Used by /patients/[id] (Subagent 5's surface) — we keep the JSX
+ * contract the same so that page renders correctly when subagent 5
+ * migrates around it.
+ */
 export interface VisitCardData {
   id: string;
   patientName: string | null;
   specialty: string;
   status: string;
   createdAt: Date;
-  /** T-M17.3: set when the visit has been archived (SIGNED-only
-   *  lifecycle state). Drives the muted card treatment + the
-   *  "Archived" chip in place of the status chip. Undefined when
-   *  the caller doesn't surface archived visits (all default
-   *  views). */
+  /** T-M17.3: set when the visit has been archived. Drives the muted
+   *  card treatment + the "Archived" chip in place of the status chip. */
   archivedAt?: Date | null;
 }
 
@@ -22,21 +29,19 @@ interface VisitCardProps {
   visit: VisitCardData;
 }
 
-/** Maps TranscribeVisit.status to a status dot + label. Statuses that
- *  don't ship in T-M2 ("processing", "ready") get sensible placeholders
- *  so the pipeline milestones don't need to touch this file. */
-function statusChip(status: string): { dot: string; label: string; pulse: boolean } {
+/** Maps TranscribeVisit.status to a status pill class + label. */
+function statusClass(status: string): { cls: string; label: string } {
   switch (status) {
     case 'draft':
-      return { dot: 'bg-text-muted', label: 'Draft', pulse: false };
+      return { cls: 'qm-lin-pill qm-lin-pill--draft', label: 'Draft' };
     case 'processing':
-      return { dot: 'bg-warning', label: 'Processing', pulse: true };
+      return { cls: 'qm-lin-pill qm-lin-pill--processing', label: 'Processing' };
     case 'ready':
-      return { dot: 'bg-cyan-400', label: 'Ready for review', pulse: false };
+      return { cls: 'qm-lin-pill qm-lin-pill--ready', label: 'Ready' };
     case 'signed':
-      return { dot: 'bg-success', label: 'Signed', pulse: false };
+      return { cls: 'qm-lin-pill qm-lin-pill--signed', label: 'Signed' };
     default:
-      return { dot: 'bg-text-muted', label: status, pulse: false };
+      return { cls: 'qm-lin-pill', label: status };
   }
 }
 
@@ -55,69 +60,59 @@ function relativeTime(d: Date): string {
 export function VisitCard({ visit }: VisitCardProps) {
   const displayName = visit.patientName?.trim() || 'Anonymous';
   const initial = displayName.charAt(0).toUpperCase();
-  const { dot, label, pulse } = statusChip(visit.status);
+  const { cls, label } = statusClass(visit.status);
   const isArchived = visit.archivedAt != null;
 
   return (
     <Link
       href={`/visits/${visit.id}`}
-      className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base rounded-xl"
+      className={cn(
+        'block rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-linear-sage/55 focus-visible:ring-offset-2 focus-visible:ring-offset-linear-bg',
+      )}
     >
-      <TiltCard className="h-full">
-        <div
-          className={cn(
-            'group glow-violet relative flex h-full flex-col gap-4 rounded-xl border border-border-default bg-bg-surface-1/60 p-5 transition-colors duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-border-emphasis',
-            // T-M17.3: archived rows render dimmed with a faint
-            // ring-on-hover — they're on the dashboard only when
-            // the "Show archived" toggle is on, and the visual
-            // muting signals "this is history, not current work".
-            isArchived && 'opacity-70 hover:opacity-100'
-          )}
-        >
-          <div className="flex items-start gap-3">
-            <div
-              aria-hidden
-              className={cn(
-                'flex h-10 w-10 flex-none items-center justify-center rounded-full bg-[linear-gradient(135deg,#4C1D95_0%,#7C3AED_50%,#A855F7_100%)] text-[14px] font-semibold text-white shadow-[0_0_0_1px_rgba(167,139,250,0.3)]',
-                isArchived && 'grayscale-[30%]'
-              )}
-            >
-              {initial}
-            </div>
-            <div className="min-w-0">
-              <div className="truncate text-[14px] font-medium text-text-primary">
-                {displayName}
-              </div>
-              <div className="mt-0.5 text-[12px] text-text-muted">
-                {relativeTime(visit.createdAt)}
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-auto flex items-center justify-between gap-3">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-border-subtle bg-bg-surface-2 px-2.5 py-0.5 text-[11px] font-medium tracking-tight text-text-tertiary">
-              {visit.specialty}
-            </span>
-            {isArchived ? (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-bg-surface-2 px-2.5 py-0.5 text-[11px] font-medium tracking-tight text-text-muted">
-                Archived
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 text-[11px] text-text-tertiary">
-                <span
-                  aria-hidden
-                  className={cn(
-                    'inline-block h-1.5 w-1.5 rounded-full',
-                    dot,
-                    pulse && 'animate-pulse'
-                  )}
-                />
-                {label}
-              </span>
+      <div
+        className={cn(
+          'group relative flex h-full flex-col gap-4 rounded-lg border border-linear-border bg-linear-surface-1 p-5 transition-colors duration-150',
+          'hover:border-linear-border-strong',
+          isArchived && 'opacity-70 hover:opacity-100',
+        )}
+      >
+        <div className="flex items-start gap-3">
+          <div
+            aria-hidden
+            className={cn(
+              'flex h-9 w-9 flex-none items-center justify-center rounded-md text-[13px] font-semibold text-white',
+              isArchived && 'grayscale-[30%]',
             )}
+            style={{
+              background:
+                'linear-gradient(135deg, var(--color-linear-sage-deep) 0%, var(--color-linear-sage) 100%)',
+            }}
+          >
+            {initial}
+          </div>
+          <div className="min-w-0">
+            <div className="truncate text-[13px] font-medium text-linear-text">
+              {displayName}
+            </div>
+            <div
+              className="mt-0.5 text-[11.5px] text-linear-text-3"
+              style={{ fontFamily: 'var(--font-mono)' }}
+            >
+              {relativeTime(visit.createdAt)}
+            </div>
           </div>
         </div>
-      </TiltCard>
+
+        <div className="mt-auto flex items-center justify-between gap-3">
+          <span className="qm-lin-pill">{visit.specialty}</span>
+          {isArchived ? (
+            <span className="qm-lin-pill qm-lin-pill--signed">Archived</span>
+          ) : (
+            <span className={cls}>{label}</span>
+          )}
+        </div>
+      </div>
     </Link>
   );
 }
