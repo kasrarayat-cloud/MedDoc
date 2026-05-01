@@ -1,17 +1,10 @@
 // ============================================================================
 // /visits — all-visits list (Gate 16).
 // ----------------------------------------------------------------------------
-// AppFrame shell + filter chips + grouped VisitList. Filter state is
-// URL-driven via ?filter=all|ready|review|signed|processing so a
-// bookmark or middle-click preserves the selection. Matches the
-// pattern used elsewhere in the redesign (Dashboard ?tab=, Patient
-// ?tab=, Visit ?tab=).
-//
-// Phase 2 (Clinician remodel) — this route opts in to the Clinician
-// chrome via `<AppFrame theme="clinician">` and threads
-// `theme="clinician"` to PageHeader, EmptyState, and VisitList. The
-// inline FilterBar + empty-message JSX is restyled in place rather
-// than extracted (it's route-only, no other call sites).
+// Phase 5 — Linear V1 Faithful. Filter pills row + grouped VisitList
+// on the dark canvas. Filter state is URL-driven via
+// ?filter=all|ready|review|signed|processing so a bookmark or
+// middle-click preserves the selection.
 // ============================================================================
 
 import type { Metadata } from 'next';
@@ -154,23 +147,10 @@ export default async function VisitsPage({
   const hasAny = totalCount > 0;
 
   return (
-    <AppFrame theme="clinician">
+    <AppFrame>
       <PageHeader
-        theme="clinician"
         eyebrow="Visits"
-        title={
-          <>
-            All{' '}
-            <em
-              style={{
-                color: 'var(--sage-deep, #2F5040)',
-                fontStyle: 'italic',
-              }}
-            >
-              visits
-            </em>
-          </>
-        }
+        title="All visits"
         subtitle={
           hasAny
             ? `${totalCount} active visit${totalCount === 1 ? '' : 's'} · most recent first`
@@ -179,7 +159,7 @@ export default async function VisitsPage({
         actions={
           <Link
             href="/visits/new"
-            className="qm-cl-btn qm-cl-btn-primary"
+            className="qm-lin-btn-primary"
             style={{ textDecoration: 'none' }}
           >
             <Ic.plus width={14} height={14} />
@@ -190,27 +170,14 @@ export default async function VisitsPage({
 
       {!hasAny ? (
         <EmptyState
-          theme="clinician"
           kind="stethoscope"
           eyebrow="No visits"
-          title={
-            <>
-              No visits{' '}
-              <em
-                style={{
-                  color: 'var(--sage-deep, #2F5040)',
-                  fontStyle: 'italic',
-                }}
-              >
-                yet
-              </em>
-            </>
-          }
+          title="No visits yet"
           body="Capture your first encounter — live recording, audio upload, or text."
           cta={
             <Link
               href="/visits/new"
-              className="qm-cl-btn qm-cl-btn-primary"
+              className="qm-lin-btn-primary"
               style={{ textDecoration: 'none' }}
             >
               <Ic.plus width={14} height={14} />
@@ -228,11 +195,11 @@ export default async function VisitsPage({
                 maxWidth: 420,
                 textAlign: 'center',
                 fontSize: 13,
-                color: 'var(--ink-3, #8A8278)',
+                color: 'var(--color-linear-text-3)',
               }}
             >
               No visits match{' '}
-              <strong style={{ color: 'var(--ink, #2B2620)' }}>
+              <strong style={{ color: 'var(--color-linear-text)' }}>
                 {FILTER_LABEL[filter]}
               </strong>
               .
@@ -258,44 +225,53 @@ function FilterBar({ active }: { active: Filter }) {
       href: '/visits?filter=processing',
     },
   ];
-  // Filter chips render as `.qm-cl-tab-row` + `.qm-cl-tab` chips so the
-  // active filter mirrors the visit-detail tab idiom (cream-card on
-  // cream-2, sage-deep ink, paper button shadow).
+  // Linear V1 filter chips: each pill is a standard `.qm-lin-pill` on
+  // the surface-2 background, with the active filter swapped to a sage
+  // tint via `.qm-lin-pill--sage`.
   return (
     <div
       style={{
-        padding: '4px 32px 0',
+        padding: '14px 24px 4px',
         display: 'flex',
-        gap: 12,
+        gap: 8,
         flexWrap: 'wrap',
         alignItems: 'center',
+        borderBottom: '1px solid var(--color-linear-hairline)',
       }}
     >
-      <span className="qm-cl-eyebrow" style={{ marginRight: 8 }}>
+      <span
+        style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10.5,
+          fontWeight: 500,
+          letterSpacing: '0.07em',
+          textTransform: 'uppercase',
+          color: 'var(--color-linear-text-3)',
+          marginRight: 4,
+        }}
+      >
         Filter
       </span>
-      <div className="qm-cl-tab-row">
-        {chips.map((c) => {
-          const isActive = c.id === active;
-          return (
-            <Link
-              key={c.id}
-              href={c.href}
-              scroll={false}
-              className={`qm-cl-tab${isActive ? ' qm-cl-active' : ''}`}
-              aria-current={isActive ? 'page' : undefined}
-              style={{
-                textDecoration: 'none',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-              }}
-            >
-              {c.label}
-            </Link>
-          );
-        })}
-      </div>
+      {chips.map((c) => {
+        const isActive = c.id === active;
+        return (
+          <Link
+            key={c.id}
+            href={c.href}
+            scroll={false}
+            className={
+              isActive ? 'qm-lin-pill qm-lin-pill--sage' : 'qm-lin-pill'
+            }
+            aria-current={isActive ? 'page' : undefined}
+            style={{
+              textDecoration: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            {c.label}
+          </Link>
+        );
+      })}
     </div>
   );
 }
