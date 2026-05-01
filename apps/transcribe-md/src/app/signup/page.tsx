@@ -23,6 +23,12 @@ export default async function SignupPage() {
         </>
       }
       subtitle="Free for 14 days. No credit card."
+      cinematic={{
+        eyebrow: 'New to QuillMD',
+        headlinePre: 'Get ',
+        headlineEm: 'started',
+        headlinePost: '.',
+      }}
     >
       <SignupForm />
     </AuthShell>
