@@ -1,23 +1,54 @@
 'use client';
 
 // ============================================================================
-// ExtrasTab — referrals + patient-summary panel.
+// ExtrasTab — Phase 5.1 EXTRAS V4 Card Stream.
 // ----------------------------------------------------------------------------
-// Phase 5 — Linear V1 Faithful. Hairline-bordered surface-1 cards on
-// the dark canvas. Urgency pills tinted via `.qm-lin-pill--sage` /
-// warning / danger. Patient-summary body uses Inter (no serif). The
-// `theme` prop is preserved on the public API as a no-op.
+// Source mockup: docs/design-directions-v9-tabs/extras-v4.html
+//
+// The Extras tab now renders a single column of 7 patient-/encounter-
+// scoped cards plus an 8th supplementary card for AI-generated extras
+// (referrals + patient summary, preserved from the previous
+// implementation):
+//
+//   1. Demographics      (DemographicsCard)
+//   2. Vitals            (VitalsCard)
+//   3. Allergies         (AllergiesCard)
+//   4. Current meds      (MedicationsCard)
+//   5. Problem list      (ProblemsCard)
+//   6. Visit metadata    (VisitMetaCard)
+//   7. Audit log         (AuditLogCard)
+//   8. AI extras         (referrals + patient summary, opt-in)
+//
+// Data discipline:
+//   * No new Prisma queries are added in this tab. Cards fall back to
+//     em-dash placeholders when their data isn't yet wired into the
+//     visit row.
+//   * `signedAt` (visit lifecycle) drives readonly mode — when set,
+//     every "Edit" affordance is hidden.
+//   * Audit log is READ-ONLY: this component derives a timeline from
+//     fields already on the visit (processingStartedAt, signedAt, …)
+//     and never writes to the audit_logs table.
+//
+// `extrasTabHasFlag` is preserved — visit-ready-view.tsx still calls
+// it to decide the Extras-tab dot-badge.
 // ============================================================================
 
 import { useCallback, useState } from 'react';
 import { Copy, Check } from 'lucide-react';
 import { toast } from 'sonner';
+
 import { cn } from '@/lib/cn';
 
-type ExtrasTabTheme = 'legacy' | 'clinician';
+import { DemographicsCard, type DemographicsCardData } from './extras/DemographicsCard';
+import { VitalsCard, type VitalsCardData } from './extras/VitalsCard';
+import { AllergiesCard, type Allergy } from './extras/AllergiesCard';
+import { MedicationsCard, type ChronicMedication } from './extras/MedicationsCard';
+import { ProblemsCard, type Problem } from './extras/ProblemsCard';
+import { VisitMetaCard, type VisitMetaData } from './extras/VisitMetaCard';
+import { AuditLogCard, type AuditEvent } from './extras/AuditLogCard';
 
 // ---------------------------------------------------------------------------
-// Wire types — mirror Layer 7d + 7e output.
+// Wire types
 // ---------------------------------------------------------------------------
 
 interface Referral {
@@ -32,50 +63,162 @@ export interface ReferralsBlob {
   referrals?: Referral[];
 }
 
+type ExtrasTabTheme = 'legacy' | 'clinician';
+
 interface ExtrasTabProps {
+  /** AI-generated referrals blob (preserved from the previous
+   *  ExtrasTab; rendered in the supplementary "AI extras" card). */
   referrals: unknown;
+  /** AI-generated patient-friendly summary. */
   patientSummary: string | null;
-  /** Grade level recorded by Layer 7e (stashed on confidenceScores). */
+  /** Flesch-Kincaid grade level for the patient summary. */
   fleschKincaid: number | null;
+  /** True when the summary tripped readability QA. */
   flagged: boolean;
+  /** When true, the visit is signed → all Edit buttons are hidden and
+   *  the cards render in display-only mode. */
+  readonly?: boolean;
+  /** Card 1 — Demographics. */
+  demographics?: DemographicsCardData;
+  /** Card 2 — Vitals. */
+  vitals?: VitalsCardData;
+  /** Card 3 — Allergies. */
+  allergies?: Allergy[];
+  /** Card 4 — Chronic medications. */
+  chronicMedications?: ChronicMedication[];
+  /** Card 5 — Problem list. */
+  problems?: Problem[];
+  /** Card 6 — Visit metadata. */
+  visitMeta?: VisitMetaData;
+  /** Card 7 — Audit timeline (caller-supplied, READ-ONLY). */
+  auditEvents?: AuditEvent[];
+  auditTotal?: number;
   /** @deprecated kept for back-compat; Linear V1 is single-theme. */
   theme?: ExtrasTabTheme;
 }
-
-const SECTION_LABEL =
-  'mb-3 text-[10.5px] font-medium uppercase tracking-[0.07em] font-mono text-linear-text-3';
 
 export function ExtrasTab({
   referrals,
   patientSummary,
   fleschKincaid,
   flagged,
+  readonly = false,
+  demographics,
+  vitals,
+  allergies,
+  chronicMedications,
+  problems,
+  visitMeta,
+  auditEvents,
+  auditTotal,
 }: ExtrasTabProps) {
   const refBlob = (referrals as ReferralsBlob | null) ?? null;
   const refs = refBlob?.referrals ?? [];
+  const hasAiExtras = refs.length > 0 || Boolean(patientSummary);
 
   return (
-    <div className="space-y-8">
-      <ReferralsSection referrals={refs} />
-      <SummarySection
-        summary={patientSummary}
-        fleschKincaid={fleschKincaid}
-        flagged={flagged}
-      />
+    <div className="qm-lin-card-stream">
+      {demographics && (
+        <DemographicsCard data={demographics} readonly={readonly} />
+      )}
+      {vitals && <VitalsCard data={vitals} readonly={readonly} />}
+      {allergies && (
+        <AllergiesCard allergies={allergies} readonly={readonly} />
+      )}
+      {chronicMedications && (
+        <MedicationsCard
+          medications={chronicMedications}
+          readonly={readonly}
+        />
+      )}
+      {problems && <ProblemsCard problems={problems} readonly={readonly} />}
+      {visitMeta && <VisitMetaCard data={visitMeta} />}
+      {auditEvents && (
+        <AuditLogCard events={auditEvents} totalEvents={auditTotal} />
+      )}
+      {hasAiExtras && (
+        <AiExtrasCard
+          referrals={refs}
+          patientSummary={patientSummary}
+          fleschKincaid={fleschKincaid}
+          flagged={flagged}
+        />
+      )}
+      {!demographics &&
+        !vitals &&
+        !allergies &&
+        !chronicMedications &&
+        !problems &&
+        !visitMeta &&
+        !auditEvents &&
+        !hasAiExtras && (
+          <div className="qm-lin-extras-card">
+            <div className="qm-lin-extras-body">
+              <div className="qm-lin-extras-empty">
+                No extras recorded for this visit yet.
+              </div>
+            </div>
+          </div>
+        )}
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Referrals
+// AI extras card — preserved from the previous implementation. Holds the
+// AI-generated referrals + patient-friendly summary (with copy + reading
+// level chip).
 // ---------------------------------------------------------------------------
+
+function AiExtrasCard({
+  referrals,
+  patientSummary,
+  fleschKincaid,
+  flagged,
+}: {
+  referrals: Referral[];
+  patientSummary: string | null;
+  fleschKincaid: number | null;
+  flagged: boolean;
+}) {
+  return (
+    <article className="qm-lin-extras-card">
+      <header className="qm-lin-extras-head">
+        <div className="qm-lin-extras-head-left">
+          <span className="qm-lin-extras-icon" aria-hidden>
+            ✨
+          </span>
+          <div className="qm-lin-extras-title-block">
+            <h2 className="qm-lin-extras-title">Visit AI extras</h2>
+            <span className="qm-lin-extras-sub">
+              Auto-drafted · review before sign
+            </span>
+          </div>
+        </div>
+      </header>
+      <div className="qm-lin-extras-body">
+        <div className="space-y-6">
+          <ReferralsSection referrals={referrals} />
+          <SummarySection
+            summary={patientSummary}
+            fleschKincaid={fleschKincaid}
+            flagged={flagged}
+          />
+        </div>
+      </div>
+    </article>
+  );
+}
+
+const SECTION_LABEL =
+  'mb-3 text-[10.5px] font-medium uppercase tracking-[0.07em] font-mono text-linear-text-3';
 
 function ReferralsSection({ referrals }: { referrals: Referral[] }) {
   return (
     <section>
       <h3 className={SECTION_LABEL}>Referrals</h3>
       {referrals.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-linear-border bg-linear-surface-1 p-6 text-center text-[13px] text-linear-text-3">
+        <div className="rounded-lg border border-dashed border-linear-border bg-linear-surface-1 p-4 text-center text-[13px] text-linear-text-3">
           No referrals documented in the plan.
         </div>
       ) : (
@@ -103,7 +246,7 @@ function ReferralCard({ referral }: { referral: Referral }) {
   }[referral.urgency];
 
   return (
-    <li className="rounded-lg border border-linear-border bg-linear-surface-1 p-5">
+    <li className="rounded-lg border border-linear-border bg-linear-surface-2 p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className={SECTION_LABEL.replace('mb-3', '')}>Refer to</div>
@@ -129,16 +272,12 @@ function ReferralCard({ referral }: { referral: Referral }) {
           </p>
         </div>
       </div>
-      <div className="mt-4 rounded-md border border-linear-hairline bg-linear-surface-2 p-2.5 text-[11px] italic text-linear-text-3">
+      <div className="mt-4 rounded-md border border-linear-hairline bg-linear-surface-1 p-2.5 text-[11px] italic text-linear-text-3">
         “{referral.evidence_quote}”
       </div>
     </li>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Patient summary
-// ---------------------------------------------------------------------------
 
 function SummarySection({
   summary,
@@ -157,7 +296,6 @@ function SummarySection({
       await navigator.clipboard.writeText(summary);
       setCopied(true);
       toast.success('Copied to clipboard');
-      // Don't setState inside an effect — just a plain timeout is fine.
       setTimeout(() => setCopied(false), 1500);
     } catch {
       toast.error('Could not copy — your browser blocked clipboard access.');
@@ -168,7 +306,7 @@ function SummarySection({
     return (
       <section>
         <h3 className={SECTION_LABEL}>Patient summary</h3>
-        <div className="rounded-lg border border-dashed border-linear-border bg-linear-surface-1 p-6 text-center text-[13px] text-linear-text-3">
+        <div className="rounded-lg border border-dashed border-linear-border bg-linear-surface-1 p-4 text-center text-[13px] text-linear-text-3">
           No patient summary generated for this visit.
         </div>
       </section>
@@ -206,7 +344,7 @@ function SummarySection({
           </button>
         </div>
       </div>
-      <div className="rounded-lg border border-linear-border bg-linear-surface-1 p-6">
+      <div className="rounded-lg border border-linear-border bg-linear-surface-2 p-5">
         <div className="whitespace-pre-wrap text-[14px] leading-relaxed text-linear-text-2">
           {summary}
         </div>
@@ -215,17 +353,26 @@ function SummarySection({
   );
 }
 
-// Exported helper: decide whether the Extras tab should badge.
+// ---------------------------------------------------------------------------
+// Exported helper — decides whether the Extras tab gets a dot badge in
+// the visit-ready-view tab bar. Logic preserved verbatim so the
+// upstream call site's behaviour is unchanged.
+// ---------------------------------------------------------------------------
+
 export function extrasTabHasFlag(
   confidenceScores: unknown,
   hasSummary: boolean
 ): boolean {
   const cs =
-    (confidenceScores as Record<string, { status?: string; metadata?: { flagged?: boolean } }> | null) ?? {};
+    (confidenceScores as Record<
+      string,
+      { status?: string; metadata?: { flagged?: boolean } }
+    > | null) ?? {};
   const summaryFlagged = Boolean(
     hasSummary && cs.patient_summary?.metadata?.flagged
   );
   const anyFailed =
-    cs.referrals?.status === 'failed' || cs.patient_summary?.status === 'failed';
+    cs.referrals?.status === 'failed' ||
+    cs.patient_summary?.status === 'failed';
   return summaryFlagged || anyFailed;
 }
