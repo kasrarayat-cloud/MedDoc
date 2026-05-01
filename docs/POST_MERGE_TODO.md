@@ -109,3 +109,36 @@ grep -rE 'AppFrame|gradient-violet|text-text-muted' \
 ```
 
 Should return 0 hits across all routes (not counting routes that legitimately render the legacy `<AppFrame theme="default">`). Add this as a CI check in a follow-up PR — a tiny `grep` step in the existing GitHub Actions workflow next to the a11y job is sufficient.
+
+---
+
+## 8. ✅ Phase 5 — Linear V1 Faithful — completed 2026-05-01
+
+Full visual replacement of Phases 2/3/4 with Linear V1 Faithful aesthetic. PR #90, 87 commits, ~$0 cost (pure CSS, no image gen).
+
+### What changed
+- Canvas: cream → dark (#08090a)
+- Accent: sage retained (#7AA68C, replacing Linear's purple)
+- Typography: Source Serif 4 fully removed; Inter + JetBrains Mono everywhere
+- Chrome: cinematic photo heroes deleted; Linear-style top bar + thin sidebar + Cmd+K everywhere
+- Tokens: `--color-clinician-*` / `qm-cl-*` / `qm-cin-*` / `av1-*` families fully removed; `--color-linear-*` / `qm-lin-*` canonical
+
+### What survived (functional contracts)
+- NextAuth, Server Actions, API routes, Prisma queries
+- MediaRecorder + WebSocket + AudioContext lifecycle (recording pipeline byte-identical, verified by Subagent 4 diff)
+- SUPER_ADMIN gate, RBAC, audit-log writes
+- Rx warning class family (`.qm-warn-*`) — re-themed dark, names preserved (180 refs intact)
+- Specialty templates, SOAP structure, visit lifecycle states
+
+### Live verification (post-deploy)
+- `#08090a` + 19 `--color-linear-*` tokens present in `/_next/static/chunks/*.css` on `quillmd.com`
+- 10+ `.qm-lin-*` utilities served (`.qm-lin-app`, `.qm-lin-btn-primary`, `.qm-lin-cmdk`, `.qm-lin-pill`, `.qm-lin-fade-in`, etc.)
+- 0 stale `qm-cl-app` / `qm-cin-` / `av1-` / `--color-clinician-` / `Source Serif` references in served CSS
+- External smoke: `app.quillmd.com` 307 (auth redirect, expected), `pro.quillmd.com` 200, `quillmd.com` 200, `app.quillmd.com/login` 200, `quillmd.com/pricing` 200
+- Deploy outage: ~11 seconds (UP-START 14:48:30Z → both healthy 14:48:41Z)
+
+### Lessons added
+- **Stage 2.5 (sequential shared-chrome migration before parallel surface fan-out) eliminated all merge conflicts** in Stage 4 (zero file overlap between any pair of 5 sibling branches). Fold this pattern into future large refactors: when N parallel subagents will all consume shared chrome, migrate the chrome sequentially first so the parallel agents work on isolated surface code only.
+- **Pre-flight image-prune saved deploy time** (53 MB freed before build).
+- **Worktree symlink quirk:** Turbopack rejects `node_modules` symlinks that cross filesystem boundaries (e.g. `/tmp/wt-…` → `/opt/meddoc-pro/node_modules`). Subagents must use `--webpack` flag in worktree builds, OR keep the worktree path inside the same filesystem as the project (e.g. `/opt/meddoc-pro/wt-…`). Production CI on `main` is unaffected (no symlinks).
+- **Backward-compatible deprecated props pattern:** When migrating shared components (AppFrame, TopNav, etc.), keep the old `theme` prop in the type signature as a no-op while collapsing the rendered branches to one. Lets parallel surface subagents proceed without TS errors at every call site; deprecated props can be removed in a follow-up sweep without coordinating across branches.
