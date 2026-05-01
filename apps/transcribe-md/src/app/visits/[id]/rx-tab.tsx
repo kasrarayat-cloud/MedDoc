@@ -1,30 +1,40 @@
 'use client';
 
 // ============================================================================
-// RxTab — prescriptions panel for the visit-detail Rx tab. Hosts the
-// RxWarningCard family.
+// RxTab — Phase 5.1 Linear V1 V3 split-pane
 // ----------------------------------------------------------------------------
-// Phase 5 — Linear V1 Faithful. Prescription cards render on
-// surface-1 with hairline borders, action pills mapped to sage /
-// neutral / sky / warning / danger tones. RxWarningCard owns the
-// `.qm-warn-*` class family and is intentionally NOT touched here —
-// those classes were rebuilt in Stage 2 to render correctly on the
-// dark canvas. The `theme` prop is preserved as a no-op.
+// Two-column layout. Left pane (~62-65%): Rx list — each prescription
+// renders as a Rx-ID-prefixed card with a four-cell dose/freq/qty/refills
+// grid, an action pill, and edit/copy hover affordances. Right pane
+// (~32-35%): the RxWarningsRail — a severity-grouped sidebar that uses
+// the protected `.qm-warn-{critical|serious|moderate|info}` classes
+// byte-identical.
+//
+// Below 1080px the layout collapses to a single column with the rail
+// flowing under the list.
+//
+// Active card → matching warnings highlight: clicking an Rx card sets
+// the card's left-border sage rail and dims non-matching warnings.
+// Clicking a warning focuses its corresponding Rx card.
+//
+// Read-only mode: when the visit is SIGNED, the "+ Add prescription"
+// tile and edit affordances are suppressed.
 // ============================================================================
 
-import { useState } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { useCallback, useId, useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import { cn } from '@/lib/cn';
+import { Ic } from '@/components/ui/icon';
 import {
-  RxWarningCard,
-  type RxWarning as RxWarningCardData,
-  type Severity as RxWarningSeverity,
-} from '@/components/rx/rx-warning-card';
+  RxWarningsRail,
+  type RailSeverity,
+  type RailWarning,
+} from './rx-warnings-rail';
 
 type RxTabTheme = 'legacy' | 'clinician';
 
 // ---------------------------------------------------------------------------
-// Wire types — mirror Layer 7c output.
+// Wire types — preserve the worker contract byte-identically.
 // ---------------------------------------------------------------------------
 
 type RxAction =
@@ -46,7 +56,8 @@ interface Prescription {
   evidence_quote: string;
 }
 
-interface RxWarning {
+/** Shape emitted by `07c-rx-drafting.ts` today. */
+interface WorkerWarning {
   severity: 'critical' | 'major' | 'minor';
   rx_drug: string;
   message: string;
@@ -55,25 +66,78 @@ interface RxWarning {
 
 export interface RxBlob {
   prescriptions?: Prescription[];
-  warnings?: RxWarning[];
+  warnings?: WorkerWarning[];
 }
 
-const SECTION_LABEL =
-  'mb-3 text-[10.5px] font-medium uppercase tracking-[0.07em] font-mono text-linear-text-3';
-
-export function RxTab({
-  rx,
-  visitId,
-}: {
+interface RxTabProps {
   rx: unknown;
   visitId: string;
+  /** Visit is SIGNED → suppress mutation affordances. */
+  readonly?: boolean;
   /** @deprecated kept for back-compat; Linear V1 is single-theme. */
   theme?: RxTabTheme;
-}) {
+}
+
+// Worker emits a 3-band severity; the rail expects a 4-band severity.
+// Map until the worker contract is tightened. (Backward compat.)
+function mapWorkerSeverity(s: WorkerWarning['severity']): RailSeverity {
+  if (s === 'critical') return 'critical';
+  if (s === 'major') return 'serious';
+  return 'info';
+}
+
+// Public component
+// ---------------------------------------------------------------------------
+
+export function RxTab({ rx, visitId, readonly = false }: RxTabProps) {
+  void visitId; // reserved for future server-action wiring
+
   const blob = (rx as RxBlob | null) ?? null;
   const prescriptions = blob?.prescriptions ?? [];
   const warnings = blob?.warnings ?? [];
 
+  // Build stable Rx IDs (R-001, R-002, …). The order in the wire
+  // determines the ID — preserved across renders so the rail's
+  // data-rxid stays stable.
+  const decoratedRx = useMemo(() => {
+    return prescriptions.map((p, i) => ({
+      ...p,
+      rxId: rxIdFor(i),
+      _ix: i,
+    }));
+  }, [prescriptions]);
+
+  // Materialise the rail warnings. Worker doesn't emit explicit Rx IDs
+  // yet, so match by `rx_drug` against the drug field; fall back to
+  // the first Rx ID when no match (defensive).
+  const railWarnings = useMemo<RailWarning[]>(() => {
+    return warnings.map((w, i) => {
+      const matched = decoratedRx.find(
+        (p) => p.drug?.toLowerCase() === w.rx_drug?.toLowerCase()
+      );
+      const rxId = matched?.rxId ?? decoratedRx[0]?.rxId ?? '—';
+      return {
+        id: `rx-warning-${i}`,
+        severity: mapWorkerSeverity(w.severity),
+        headline: w.rx_drug,
+        body: w.message + (w.evidence_quote ? ` "${w.evidence_quote}"` : ''),
+        rxId,
+      };
+    });
+  }, [warnings, decoratedRx]);
+
+  // Active card → matching warnings rail highlight.
+  const [activeRxId, setActiveRxId] = useState<string | null>(null);
+
+  const handleRxFocus = useCallback((rxId: string) => {
+    setActiveRxId((current) => (current === rxId ? null : rxId));
+  }, []);
+
+  const handleWarningFocus = useCallback((rxId: string) => {
+    setActiveRxId(rxId);
+  }, []);
+
+  // Empty state: zero prescriptions AND zero warnings.
   if (prescriptions.length === 0 && warnings.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-linear-border bg-linear-surface-1 p-8 text-center">
@@ -88,182 +152,292 @@ export function RxTab({
     );
   }
 
-  // Sort warnings by severity (critical → major → minor) so the most
-  // important ones are always above the fold.
-  const severityOrder: Record<RxWarning['severity'], number> = {
-    critical: 0,
-    major: 1,
-    minor: 2,
-  };
-  const sortedWarnings = [...warnings].sort(
-    (a, b) => severityOrder[a.severity] - severityOrder[b.severity]
-  );
+  const activeCount = decoratedRx.filter((p) => p.action !== 'unclear').length;
 
   return (
-    <div className="space-y-6">
-      {sortedWarnings.length > 0 && (
-        <div className="flex flex-col gap-3">
-          {sortedWarnings.map((w, i) => (
-            <RxWarningCard
-              key={`${w.rx_drug}-${i}`}
-              warning={mapWorkerWarning(w, i)}
-              visitId={visitId}
-            />
-          ))}
-        </div>
-      )}
-
+    <div className="qm-lin-rx-split">
+      {/* LEFT pane — Rx list */}
       <section>
-        <h3 className={SECTION_LABEL}>Prescriptions</h3>
-        <div className="space-y-3">
-          {prescriptions.map((p, i) => (
-            <PrescriptionCard key={`${p.drug}-${i}`} rx={p} />
-          ))}
-        </div>
-      </section>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Worker → component boundary mapping.
-// ---------------------------------------------------------------------------
-//
-// Worker currently emits `severity: 'critical' | 'major' | 'minor'`; the
-// RxWarningCard expects the design-spec enum `critical | warning | info`.
-// Map at the integration boundary so today's worker output still renders;
-// a follow-up PR will narrow the backend enum to match.
-// The worker doesn't emit the rich shape (risks / heard / guess / details)
-// yet — the card gracefully degrades to header + action tile.
-
-function severityToCardSev(s: RxWarning['severity']): RxWarningSeverity {
-  if (s === 'critical') return 'critical';
-  if (s === 'major') return 'warning';
-  return 'info';
-}
-
-function mapWorkerWarning(
-  w: RxWarning,
-  index: number
-): RxWarningCardData {
-  return {
-    // Worker doesn't emit stable IDs yet; fall back to a positional
-    // synthetic so the audit row (which requires an ID) has something
-    // deterministic to hash against. Real worker PR will replace this.
-    id: `worker-${index}-${w.rx_drug}`,
-    rxLineNumber: index + 1,
-    sev: severityToCardSev(w.severity),
-    headline: `${w.rx_drug} — ${w.message}`,
-    action: w.evidence_quote ? `"${w.evidence_quote}"` : undefined,
-    // All rich fields stay undefined until the worker is updated.
-  };
-}
-
-function PrescriptionCard({ rx }: { rx: Prescription }) {
-  const [showEvidence, setShowEvidence] = useState(false);
-  return (
-    <div className="rounded-lg border border-linear-border bg-linear-surface-1 p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="text-[17px] font-semibold text-linear-text">
-            {rx.drug}
-            {rx.strength && (
-              <span className="ml-2 text-[14px] text-linear-text-3">
-                {rx.strength}
-              </span>
-            )}
+        <div className="qm-lin-rx-pane-head">
+          <div className="qm-lin-rx-pane-title">
+            <span className="qm-lin-rx-pane-dot" aria-hidden />
+            Prescriptions
+            <span className="qm-lin-rx-pane-count">
+              {decoratedRx.length} total · {activeCount} active
+            </span>
           </div>
-          {rx.form && (
-            <div className="mt-0.5 text-[12px] text-linear-text-3">
-              {rx.form}
+          {!readonly && (
+            <div className="qm-lin-rx-pane-actions">
+              <button
+                type="button"
+                className="qm-lin-rx-ghost-sm qm-lin-rx-ghost-sm-sage"
+                disabled
+                title="Add prescription (coming in T-M21)"
+              >
+                + Add Rx
+              </button>
             </div>
           )}
         </div>
-        <ActionChip action={rx.action} />
+
+        <div className="qm-lin-rx-list">
+          {decoratedRx.map((p) => (
+            <PrescriptionCard
+              key={`${p.rxId}-${p._ix}`}
+              rx={p}
+              active={activeRxId === p.rxId}
+              readonly={readonly}
+              onActivate={() => handleRxFocus(p.rxId)}
+              warningTallies={tallyForRx(railWarnings, p.rxId)}
+            />
+          ))}
+
+          {!readonly && (
+            <button
+              type="button"
+              className="qm-lin-rx-add"
+              disabled
+              title="Add new prescription (coming in T-M21)"
+            >
+              <span className="plus" aria-hidden>+</span>
+              Add new prescription
+            </button>
+          )}
+        </div>
+      </section>
+
+      {/* RIGHT pane — Interactions rail */}
+      <RxWarningsRail
+        warnings={railWarnings}
+        activeRxId={activeRxId}
+        onWarningFocus={handleWarningFocus}
+      />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// PrescriptionCard — single Rx in the left list.
+// ---------------------------------------------------------------------------
+
+interface DecoratedRx extends Prescription {
+  rxId: string;
+  _ix: number;
+}
+
+function PrescriptionCard({
+  rx,
+  active,
+  readonly,
+  onActivate,
+  warningTallies,
+}: {
+  rx: DecoratedRx;
+  active: boolean;
+  readonly: boolean;
+  onActivate: () => void;
+  warningTallies: Record<RailSeverity, number>;
+}) {
+  const headlineId = useId();
+  const totalWarnings =
+    warningTallies.critical +
+    warningTallies.serious +
+    warningTallies.moderate +
+    warningTallies.info;
+
+  const onCopyRx = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const lines = [
+      `${rx.drug}${rx.strength ? ` ${rx.strength}` : ''}`,
+      rx.sig ? `Sig: ${rx.sig}` : null,
+      rx.quantity ? `Quantity: ${rx.quantity}` : null,
+      rx.refills ? `Refills: ${rx.refills}` : null,
+    ]
+      .filter(Boolean)
+      .join('\n');
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard
+        .writeText(lines)
+        .then(() => {
+          toast.success('Prescription copied to clipboard');
+        })
+        .catch(() => {
+          toast.error('Could not copy prescription');
+        });
+    }
+  };
+
+  return (
+    <article
+      className={cn('qm-lin-rx-row', active && 'qm-lin-rx-row-active')}
+      data-rxid={rx.rxId}
+      tabIndex={0}
+      role="button"
+      aria-pressed={active}
+      aria-labelledby={headlineId}
+      onClick={onActivate}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onActivate();
+        }
+      }}
+    >
+      <div className="qm-lin-rx-row-top">
+        <div className="qm-lin-rx-row-l">
+          <div className="qm-lin-rx-name" id={headlineId}>
+            {rx.drug}
+            {rx.strength && (
+              <span className="qm-lin-rx-strength">{rx.strength}</span>
+            )}
+          </div>
+          <div className="qm-lin-rx-meta">
+            <span className="qm-lin-rx-id">{rx.rxId}</span>
+            {rx.form && <span> · {rx.form}</span>}
+          </div>
+        </div>
+        <ActionPill action={rx.action} />
       </div>
 
-      <dl className="mt-4 grid grid-cols-1 gap-2 text-[13px] sm:grid-cols-3">
-        <DetailRow label="Sig" value={rx.sig} />
-        <DetailRow label="Quantity" value={rx.quantity} />
-        <DetailRow label="Refills" value={rx.refills} />
-      </dl>
+      <div className="qm-lin-rx-row-grid">
+        <div className="cell">
+          <span className="l">Dose</span>
+          <span className="v">{rx.sig ?? '—'}</span>
+        </div>
+        <div className="cell">
+          <span className="l">Freq</span>
+          <span className="v">{deriveFreq(rx.sig) ?? '—'}</span>
+        </div>
+        <div className="cell">
+          <span className="l">Qty</span>
+          <span className="v">{rx.quantity ?? '—'}</span>
+        </div>
+        <div className="cell">
+          <span className="l">Refills</span>
+          <span className="v">{rx.refills ?? '—'}</span>
+        </div>
+      </div>
 
-      <button
-        type="button"
-        onClick={() => setShowEvidence((v) => !v)}
-        className="mt-3 inline-flex items-center gap-1.5 rounded-md text-[11px] text-linear-text-3 hover:text-linear-text-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-linear-sage focus-visible:ring-offset-2 focus-visible:ring-offset-linear-bg"
-      >
-        {showEvidence ? 'Hide evidence' : 'Show evidence'}
-        <ChevronDown
-          className={cn(
-            'h-3 w-3 transition-transform',
-            showEvidence && 'rotate-180'
+      <div className="qm-lin-rx-row-foot">
+        {totalWarnings > 0 ? (
+          <div className="qm-lin-rx-warn-tally">
+            <span className="chips" aria-hidden>
+              {warningTallies.critical > 0 && (
+                <span className="chip critical" />
+              )}
+              {warningTallies.serious > 0 && <span className="chip serious" />}
+              {warningTallies.moderate > 0 && (
+                <span className="chip moderate" />
+              )}
+              {warningTallies.info > 0 && <span className="chip info" />}
+            </span>
+            <span>
+              {totalWarnings} warning{totalWarnings === 1 ? '' : 's'}
+            </span>
+          </div>
+        ) : (
+          <div className="qm-lin-rx-warn-tally qm-lin-rx-warn-tally-clean">
+            <Ic.check width={11} height={11} aria-hidden />
+            <span>Clean</span>
+          </div>
+        )}
+
+        <div className="qm-lin-rx-row-actions">
+          {!readonly && (
+            <button
+              type="button"
+              onClick={(e) => e.stopPropagation()}
+              disabled
+              title="Edit (coming in T-M21)"
+            >
+              Edit
+            </button>
           )}
-          aria-hidden
-        />
-      </button>
-      {showEvidence && (
-        <div className="mt-2 rounded-md border border-linear-hairline bg-linear-surface-2 p-2.5 text-[12px] italic text-linear-text-3">
-          “{rx.evidence_quote}”
+          <button type="button" onClick={onCopyRx} title="Copy prescription">
+            Copy
+          </button>
+        </div>
+      </div>
+
+      {/* Show evidence inline when the row is active. Quietly tucked
+          below the grid for transcript traceability. */}
+      {active && rx.evidence_quote && (
+        <div className="qm-lin-rx-evidence">
+          <span className="qm-lin-rx-evidence-label">Evidence</span>
+          <span className="qm-lin-rx-evidence-body">
+            “{rx.evidence_quote}”
+          </span>
         </div>
       )}
-    </div>
+    </article>
   );
 }
 
-function DetailRow({
-  label,
-  value,
-}: {
-  label: string;
-  value?: string | null;
-}) {
-  return (
-    <div>
-      <dt className="font-mono text-[10px] font-medium uppercase tracking-[0.07em] text-linear-text-3">
-        {label}
-      </dt>
-      <dd
-        className={cn(
-          'mt-0.5 text-[13px]',
-          value ? 'text-linear-text-2' : 'text-linear-text-3 italic'
-        )}
-      >
-        {value ?? 'not specified'}
-      </dd>
-    </div>
-  );
-}
+// ---------------------------------------------------------------------------
+// Action pill
+// ---------------------------------------------------------------------------
 
-function ActionChip({ action }: { action: RxAction }) {
-  // Linear V1 maps the action enum to neutral / sage / sky / warning /
-  // danger tints. NEW/sage = additive; CONTINUE = neutral pill; the
-  // remaining states gradient up the warning spectrum.
+function ActionPill({ action }: { action: RxAction }) {
   const meta: Record<RxAction, { label: string; cls: string }> = {
-    new: { label: 'NEW', cls: 'qm-lin-pill qm-lin-pill--sage' },
-    continue: { label: 'CONTINUE', cls: 'qm-lin-pill' },
-    increase: {
-      label: 'INCREASE',
-      cls: 'qm-lin-pill bg-linear-sky/15 text-linear-sky',
-    },
-    decrease: {
-      label: 'DECREASE',
-      cls: 'qm-lin-pill bg-linear-warning/15 text-linear-warning',
-    },
+    new: { label: 'New', cls: 'qm-lin-rx-tag qm-lin-rx-tag-new' },
+    continue: { label: 'Continue', cls: 'qm-lin-rx-tag qm-lin-rx-tag-active' },
+    increase: { label: 'Increase', cls: 'qm-lin-rx-tag qm-lin-rx-tag-info' },
+    decrease: { label: 'Decrease', cls: 'qm-lin-rx-tag qm-lin-rx-tag-warning' },
     discontinue: {
-      label: 'DISCONTINUE',
-      cls: 'qm-lin-pill bg-linear-danger/15 text-linear-danger',
+      label: 'Discontinue',
+      cls: 'qm-lin-rx-tag qm-lin-rx-tag-discontinued',
     },
-    unclear: {
-      label: 'UNCLEAR',
-      cls: 'qm-lin-pill bg-linear-danger/15 text-linear-danger',
-    },
+    unclear: { label: 'Unclear', cls: 'qm-lin-rx-tag qm-lin-rx-tag-pending' },
   };
   const m = meta[action];
   return <span className={m.cls}>{m.label}</span>;
 }
 
-// Exported helper: tells Tabs whether the Rx tab should badge.
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function rxIdFor(ix: number): string {
+  return `R-${String(ix + 1).padStart(3, '0')}`;
+}
+
+function tallyForRx(
+  warnings: RailWarning[],
+  rxId: string
+): Record<RailSeverity, number> {
+  const tally: Record<RailSeverity, number> = {
+    critical: 0,
+    serious: 0,
+    moderate: 0,
+    info: 0,
+  };
+  for (const w of warnings) {
+    if (w.rxId === rxId) tally[w.severity] += 1;
+  }
+  return tally;
+}
+
+// Best-effort frequency parse out of the `sig`. Worker doesn't yet
+// emit a structured `frequency` field, so we degrade gracefully.
+function deriveFreq(sig?: string | null): string | null {
+  if (!sig) return null;
+  const matches = [
+    /\b(BID|TID|QID|QHS|QAM|QPM|PRN|q\d+\s*(?:h|hr|hrs))\b/i,
+    /\bonce daily\b/i,
+    /\btwice daily\b/i,
+    /\bevery\s+\d+\s+hours?\b/i,
+  ];
+  for (const re of matches) {
+    const m = sig.match(re);
+    if (m) return m[0].toUpperCase();
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Exported helper kept for back-compat with the visit-ready-view tab bar.
+// ---------------------------------------------------------------------------
+
 export function rxTabWarningLevel(rx: unknown): 'critical' | 'any' | null {
   const blob = (rx as RxBlob | null) ?? null;
   const warnings = blob?.warnings ?? [];

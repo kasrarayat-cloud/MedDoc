@@ -1,0 +1,765 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QuillMD · Visit · Mei-Ling Park · v9 Extras V2 Power Table</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#08090a;
+  --surface-1:#0d0e10;
+  --surface-2:#131416;
+  --surface-3:#1a1c1e;
+  --border:#21232a;
+  --border-strong:#2c2f38;
+  --hairline:rgba(255,255,255,0.05);
+  --hairline-strong:rgba(255,255,255,0.08);
+  --text:#f7f8f8;
+  --text-2:#b4bcc8;
+  --text-3:#6c737f;
+  --text-4:#4b5159;
+  --sage:#7AA68C;
+  --sage-bright:#9BC4A8;
+  --sage-deep:#2F5040;
+  --sage-tint:rgba(122,166,140,0.13);
+  --sage-glow:rgba(122,166,140,0.18);
+  --row-hover:rgba(255,255,255,0.03);
+  --success:#4caf7d;
+  --warning:#d4a437;
+  --danger:#d4574a;
+  --info:#5b8db8;
+  --font-sans:'Inter', -apple-system, system-ui, sans-serif;
+  --font-mono:'JetBrains Mono', ui-monospace, Menlo, monospace;
+  --ease:cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text)}
+body{
+  font-family:var(--font-sans);
+  font-feature-settings:'cv11','ss01';
+  font-size:13px;
+  line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  letter-spacing:-0.005em;
+  min-height:100vh;
+}
+::selection{background:rgba(122,166,140,.25);color:var(--text)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+a{color:inherit;text-decoration:none}
+
+/* ─────────────── Top bar ─────────────── */
+.topbar{
+  position:sticky;top:0;z-index:30;
+  height:44px;
+  display:flex;align-items:center;gap:12px;
+  padding:0 16px;
+  background:rgba(8,9,10,.85);
+  backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--hairline);
+}
+.brand{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;letter-spacing:-0.01em}
+.brand-mark{
+  width:18px;height:18px;border-radius:5px;
+  background:linear-gradient(135deg,var(--sage) 0%,var(--sage-deep) 100%);
+  display:grid;place-items:center;color:#0c1410;font-size:10px;font-weight:700;
+  box-shadow:0 0 0 1px rgba(255,255,255,.06) inset;
+}
+.brand-mark::before{content:'Q'}
+.crumb-sep{color:var(--text-4);font-size:12px}
+.crumb{color:var(--text-2);font-size:13px;transition:color 100ms var(--ease)}
+.crumb:hover{color:var(--text)}
+.crumb-active{color:var(--text)}
+.spacer{flex:1}
+
+.status-pill-chrome{
+  display:inline-flex;align-items:center;gap:6px;
+  height:22px;padding:0 9px;
+  border-radius:4px;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.06em;text-transform:uppercase;font-weight:500;
+  border:1px solid rgba(122,166,140,.25);
+  color:var(--sage-bright);
+  background:rgba(122,166,140,.06);
+}
+.status-pill-chrome .pdot{
+  width:5px;height:5px;border-radius:50%;
+  background:var(--sage);
+  animation:idle-pulse 1.6s ease-in-out infinite;
+}
+@keyframes idle-pulse{
+  0%,100%{opacity:.7;transform:scale(1)}
+  50%{opacity:1;transform:scale(1.04)}
+}
+.btn-sage{
+  display:inline-flex;align-items:center;gap:8px;
+  height:30px;padding:0 14px;
+  background:var(--sage);
+  color:#0d1611;
+  border-radius:6px;
+  font-size:12.5px;font-weight:500;
+  letter-spacing:-0.005em;
+  transition:background 100ms var(--ease), transform 80ms var(--ease), box-shadow 200ms var(--ease);
+}
+.btn-sage:hover{background:#88b599;transform:scale(1.02);box-shadow:0 0 0 4px rgba(122,166,140,.18)}
+.btn-sage .shortcut{font-family:var(--font-mono);font-size:11px;color:rgba(13,22,17,.55)}
+
+.avatar-chip{
+  width:24px;height:24px;border-radius:6px;
+  background:linear-gradient(135deg,#3a4a52 0%,#2a3036 100%);
+  color:#dde6ec;font-size:10.5px;font-weight:600;
+  display:grid;place-items:center;letter-spacing:0.02em;
+  border:1px solid var(--hairline-strong);
+}
+
+/* ─────────────── Layout ─────────────── */
+.shell{
+  position:relative;
+  min-height:calc(100vh - 44px);
+  padding:18px 28px 80px;
+}
+.shell::before{
+  content:'';
+  position:absolute;
+  top:-100px;left:30%;
+  width:600px;height:380px;
+  background:radial-gradient(ellipse at center, rgba(122,166,140,.045) 0%, transparent 70%);
+  pointer-events:none;
+  z-index:0;
+}
+
+/* meta strip */
+.meta-strip{
+  display:flex;align-items:center;
+  padding:6px 0 14px;
+  margin-bottom:14px;
+  border-bottom:1px solid var(--hairline);
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--text-2);
+  position:relative;z-index:1;
+}
+.meta-strip .field{padding:0 14px;border-right:1px solid var(--hairline)}
+.meta-strip .field:first-child{padding-left:0;color:var(--text);font-weight:500}
+.meta-strip .field:last-child{border-right:0}
+.meta-strip .field .lbl{color:var(--text-4);margin-right:4px;font-weight:400}
+
+/* tabs */
+.tabs-row{
+  display:flex;align-items:center;gap:0;
+  margin-bottom:24px;
+  border-bottom:1px solid var(--hairline);
+  position:relative;z-index:1;
+}
+.tab{
+  position:relative;
+  padding:8px 16px 10px;
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.07em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  font-weight:500;
+  cursor:pointer;
+  transition:color 100ms var(--ease);
+}
+.tab:first-child{padding-left:0}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--sage-bright)}
+.tab.active::after{
+  content:'';position:absolute;
+  left:0;right:0;bottom:-1px;
+  height:1.5px;
+  background:var(--sage);
+  border-radius:1px 1px 0 0;
+}
+
+/* ─────────────── Toolbar ─────────────── */
+.tools{
+  position:relative;z-index:1;
+  display:flex;align-items:center;gap:10px;
+  margin-bottom:16px;
+  flex-wrap:wrap;
+}
+.tools-summary{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--text-3);
+}
+.tools-summary strong{color:var(--text);font-weight:500}
+.tools .spacer{flex:1}
+.btn-ghost{
+  display:inline-flex;align-items:center;gap:6px;
+  height:28px;padding:0 11px;
+  border:1px solid var(--hairline-strong);
+  border-radius:5px;
+  background:transparent;
+  color:var(--text-2);
+  font-size:12px;font-weight:500;
+  letter-spacing:-0.005em;
+  transition:background 100ms var(--ease), color 100ms var(--ease), border-color 100ms var(--ease);
+}
+.btn-ghost:hover{background:rgba(255,255,255,.04);color:var(--text);border-color:rgba(255,255,255,.14)}
+.btn-ghost .kbd{font-family:var(--font-mono);font-size:10.5px;color:var(--text-3);margin-left:4px}
+
+/* ─────────────── Sections / Tables ─────────────── */
+.power-frame{
+  position:relative;z-index:1;
+  display:flex;flex-direction:column;
+  gap:24px;
+}
+
+.tbl-section{
+  display:flex;flex-direction:column;
+}
+.tbl-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 0 8px;
+  margin-bottom:0;
+  border-bottom:1px solid var(--hairline-strong);
+}
+.tbl-head .left{display:flex;align-items:center;gap:10px}
+.tbl-head .title{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.14em;
+  text-transform:uppercase;
+  color:var(--text);
+  font-weight:500;
+}
+.tbl-head .num{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--text-3);
+}
+.tbl-head .num strong{color:var(--sage-bright);font-weight:500}
+.tbl-head .right{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--text-3);
+}
+.tbl-head .right .sage{color:var(--sage-bright)}
+.tbl-head .right .warn{color:var(--warning)}
+
+.ptbl{
+  width:100%;
+  border-collapse:collapse;
+  font-size:13px;
+}
+.ptbl thead th{
+  text-align:left;
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.12em;
+  text-transform:uppercase;
+  color:var(--text-4);
+  font-weight:500;
+  padding:8px 10px;
+  border-bottom:1px solid var(--hairline);
+  background:transparent;
+}
+.ptbl thead th:first-child{padding-left:0}
+.ptbl thead th:last-child{padding-right:0}
+.ptbl tbody td{
+  padding:7px 10px;
+  border-bottom:1px solid var(--hairline);
+  height:26px;
+  vertical-align:middle;
+  letter-spacing:-0.005em;
+}
+.ptbl tbody td:first-child{padding-left:0}
+.ptbl tbody td:last-child{padding-right:0}
+.ptbl tbody tr{
+  transition:background 100ms var(--ease);
+}
+.ptbl tbody tr:hover{background:var(--row-hover)}
+.ptbl tbody tr:last-child td{border-bottom:0}
+
+.ptbl .lbl{color:var(--text-3);font-size:12.5px}
+.ptbl .val{color:var(--text);font-weight:500}
+.ptbl .num{
+  font-family:var(--font-mono);
+  font-variant-numeric:tabular-nums;
+  font-size:12.5px;
+  color:var(--text);
+  font-weight:500;
+  letter-spacing:0.01em;
+}
+.ptbl .unit{
+  font-family:var(--font-mono);
+  font-size:11.5px;
+  color:var(--text-3);
+}
+.ptbl .range{
+  font-family:var(--font-mono);
+  font-size:11.5px;
+  color:var(--text-3);
+  font-variant-numeric:tabular-nums;
+}
+.ptbl .status{
+  display:inline-flex;align-items:center;gap:5px;
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  font-weight:500;
+}
+.ptbl .status.ok{color:var(--sage-bright)}
+.ptbl .status.ok::before{content:'✓';font-size:11px}
+.ptbl .status.warn{color:var(--warning)}
+.ptbl .status.warn::before{content:'!';font-size:11px}
+.ptbl .ts{
+  font-family:var(--font-mono);
+  font-size:11.5px;
+  color:var(--text-3);
+  font-variant-numeric:tabular-nums;
+  white-space:nowrap;
+}
+.ptbl .actor{
+  display:inline-flex;align-items:center;gap:6px;
+  color:var(--text);
+  font-size:12.5px;
+}
+.ptbl .actor .av{
+  width:18px;height:18px;border-radius:4px;
+  background:linear-gradient(135deg,#3a4a52 0%,#2a3036 100%);
+  color:#dde6ec;font-size:9px;font-weight:600;
+  display:grid;place-items:center;letter-spacing:0.02em;
+  border:1px solid var(--hairline-strong);
+  flex-shrink:0;
+}
+.ptbl .actor.system .av{background:linear-gradient(135deg,#1f2a26 0%,#11201a 100%);color:var(--sage-bright)}
+.ptbl .actor.system{color:var(--text-3)}
+.ptbl .verb{color:var(--text-2);font-size:12.5px}
+.ptbl .obj{
+  font-family:var(--font-mono);
+  font-size:11.5px;
+  color:var(--text);
+}
+.ptbl .pill{
+  display:inline-flex;align-items:center;
+  height:18px;padding:0 6px;
+  border-radius:3px;
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  font-weight:500;
+}
+.ptbl .pill.severe{background:rgba(212,87,74,.1);color:var(--danger);border:1px solid rgba(212,87,74,.25)}
+.ptbl .pill.icd{background:rgba(122,166,140,.06);color:var(--sage-bright);border:1px solid rgba(122,166,140,.22)}
+.ptbl .pill.draft{background:rgba(212,164,55,.06);color:var(--warning);border:1px solid rgba(212,164,55,.25)}
+.ptbl .pill.active{background:rgba(122,166,140,.06);color:var(--sage-bright);border:1px solid rgba(122,166,140,.22)}
+
+/* add row */
+.tbl-add{
+  display:flex;align-items:center;gap:6px;
+  padding:8px 0 0;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  cursor:pointer;
+  transition:color 100ms var(--ease);
+}
+.tbl-add:hover{color:var(--sage-bright)}
+.tbl-add .plus{
+  display:inline-grid;place-items:center;
+  width:14px;height:14px;
+  border:1px solid var(--hairline-strong);
+  border-radius:3px;
+  font-size:11px;
+  line-height:1;
+}
+.tbl-add:hover .plus{border-color:var(--sage);color:var(--sage-bright)}
+
+/* reduced motion */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;
+  }
+  .status-pill-chrome .pdot{animation:none}
+}
+
+/* responsive */
+@media (max-width:760px){
+  .meta-strip{flex-wrap:wrap;font-size:10px}
+  .meta-strip .field{padding:4px 10px}
+  .shell{padding:14px 16px 60px}
+  .tabs-row{overflow-x:auto;flex-wrap:nowrap}
+  .tab{flex-shrink:0}
+  .topbar{padding:0 12px;gap:8px;flex-wrap:wrap;height:auto;min-height:44px}
+  .crumb,.crumb-sep{display:none}
+  .crumb-active{display:inline}
+  .ptbl{font-size:12px}
+  .ptbl .range,.ptbl .unit{display:none}
+  .ptbl thead th.col-range,.ptbl thead th.col-unit{display:none}
+  .ptbl tbody td.col-range,.ptbl tbody td.col-unit{display:none}
+}
+@media (max-width:540px){
+  .ptbl tbody td{padding:6px 6px}
+  .ptbl thead th{padding:6px 6px}
+  .ptbl .actor .av{width:16px;height:16px;font-size:8px}
+}
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<header class="topbar">
+  <div class="brand"><span class="brand-mark"></span> QuillMD</div>
+  <span class="crumb-sep">/</span>
+  <span class="crumb">Patients</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb">Mei-Ling Park</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb crumb-active">Visit · Apr 30, 2026</span>
+  <div class="spacer"></div>
+  <div class="status-pill-chrome" aria-live="polite">
+    <span class="pdot"></span>
+    <span class="label">Ready</span>
+  </div>
+  <button class="btn-sage" type="button" aria-label="Sign and send note">
+    <span>Sign &amp; send</span>
+    <span class="shortcut">⌘ ↵</span>
+  </button>
+  <div class="avatar-chip" title="Dr. Sarah Chen">SC</div>
+</header>
+
+<div class="shell">
+
+  <!-- meta strip -->
+  <div class="meta-strip">
+    <div class="field">Mei-Ling Park</div>
+    <div class="field">34 F</div>
+    <div class="field"><span class="lbl">MRN</span>MP-007341</div>
+    <div class="field">J20.9 · Bronchitis follow-up</div>
+    <div class="field">99214</div>
+    <div class="field"><span class="lbl">Duration</span>24 min</div>
+  </div>
+
+  <!-- tabs -->
+  <div class="tabs-row" role="tablist">
+    <div class="tab" role="tab" aria-selected="false">Soap Note</div>
+    <div class="tab" role="tab" aria-selected="false">Transcript</div>
+    <div class="tab" role="tab" aria-selected="false">Codes</div>
+    <div class="tab" role="tab" aria-selected="false">Rx</div>
+    <div class="tab active" role="tab" aria-selected="true">Extras</div>
+  </div>
+
+  <!-- toolbar -->
+  <div class="tools">
+    <div class="tools-summary"><strong>7 tables</strong> · 8 vitals · 1 allergy · 1 chronic med · 1 active problem · 8 audit events</div>
+    <div class="spacer"></div>
+    <button class="btn-ghost" type="button">Filter</button>
+    <button class="btn-ghost" type="button">Export CSV</button>
+    <button class="btn-ghost" type="button">Density <span class="kbd">⌥D</span></button>
+  </div>
+
+  <!-- power tables -->
+  <div class="power-frame">
+
+    <!-- DEMOGRAPHICS -->
+    <section class="tbl-section">
+      <div class="tbl-head">
+        <div class="left">
+          <span class="title">Demographics</span>
+          <span class="num"><strong>7</strong> fields</span>
+        </div>
+        <div class="right"><span class="sage">verified Apr 28, 2026</span></div>
+      </div>
+      <table class="ptbl">
+        <thead>
+          <tr>
+            <th style="width:30%">Field</th>
+            <th style="width:50%">Value</th>
+            <th style="width:20%">Verified</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td class="lbl">Full name</td><td class="val">Mei-Ling Park</td><td class="ts">2018-03-12</td></tr>
+          <tr><td class="lbl">Date of birth</td><td class="val"><span class="num">1992-03-15</span> · 34 yo</td><td class="ts">2018-03-12</td></tr>
+          <tr><td class="lbl">MRN</td><td class="val"><span class="num">MP-007341</span></td><td class="ts">2018-03-12</td></tr>
+          <tr><td class="lbl">Address</td><td class="val">Newport Beach, CA</td><td class="ts">2025-11-04</td></tr>
+          <tr><td class="lbl">Insurance</td><td class="val">Anthem Blue Cross PPO</td><td class="ts">2026-04-28</td></tr>
+          <tr><td class="lbl">Preferred language</td><td class="val">English</td><td class="ts">2018-03-12</td></tr>
+          <tr><td class="lbl">Emergency contact</td><td class="val">Daniel Park <span class="lbl">· husband</span></td><td class="ts">2025-11-04</td></tr>
+        </tbody>
+      </table>
+      <button class="tbl-add" type="button"><span class="plus">+</span> Add field</button>
+    </section>
+
+    <!-- VITALS -->
+    <section class="tbl-section">
+      <div class="tbl-head">
+        <div class="left">
+          <span class="title">Vitals</span>
+          <span class="num"><strong>8</strong> metrics · today 11:18 am</span>
+        </div>
+        <div class="right"><span class="sage">8 / 8 in range</span></div>
+      </div>
+      <table class="ptbl">
+        <thead>
+          <tr>
+            <th style="width:24%">Metric</th>
+            <th style="width:14%">Value</th>
+            <th style="width:10%" class="col-unit">Unit</th>
+            <th style="width:32%" class="col-range">Reference range</th>
+            <th style="width:20%">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td class="lbl">Blood pressure</td><td class="num">118/74</td><td class="unit col-unit">mmHg</td><td class="range col-range">90/60 – 120/80</td><td><span class="status ok">Normal</span></td></tr>
+          <tr><td class="lbl">Heart rate</td><td class="num">88</td><td class="unit col-unit">bpm</td><td class="range col-range">60 – 100, regular</td><td><span class="status ok">Normal</span></td></tr>
+          <tr><td class="lbl">Respiratory rate</td><td class="num">18</td><td class="unit col-unit">/min</td><td class="range col-range">12 – 20</td><td><span class="status ok">Normal</span></td></tr>
+          <tr><td class="lbl">Temperature</td><td class="num">98.6</td><td class="unit col-unit">°F oral</td><td class="range col-range">97.8 – 99.0</td><td><span class="status ok">Normal</span></td></tr>
+          <tr><td class="lbl">SpO₂</td><td class="num">98</td><td class="unit col-unit">% RA</td><td class="range col-range">≥ 95%</td><td><span class="status ok">Normal</span></td></tr>
+          <tr><td class="lbl">Weight</td><td class="num">145</td><td class="unit col-unit">lb</td><td class="range col-range">baseline 142 lb</td><td><span class="status ok">Stable</span></td></tr>
+          <tr><td class="lbl">Height</td><td class="num">5′5″</td><td class="unit col-unit">—</td><td class="range col-range">last measured 2024</td><td><span class="status ok">Stable</span></td></tr>
+          <tr><td class="lbl">BMI</td><td class="num">24.1</td><td class="unit col-unit">kg/m²</td><td class="range col-range">18.5 – 24.9</td><td><span class="status ok">Normal</span></td></tr>
+        </tbody>
+      </table>
+      <button class="tbl-add" type="button"><span class="plus">+</span> Add metric</button>
+    </section>
+
+    <!-- ALLERGIES -->
+    <section class="tbl-section">
+      <div class="tbl-head">
+        <div class="left">
+          <span class="title">Allergies</span>
+          <span class="num"><strong>1</strong> active</span>
+        </div>
+        <div class="right">confirmed at intake</div>
+      </div>
+      <table class="ptbl">
+        <thead>
+          <tr>
+            <th style="width:24%">Substance</th>
+            <th style="width:30%">Reaction</th>
+            <th style="width:18%">Severity</th>
+            <th style="width:14%">Verified</th>
+            <th style="width:14%">Source</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="val">Penicillin</td>
+            <td class="lbl">Rash, hives</td>
+            <td><span class="pill severe">Severe</span></td>
+            <td class="ts">2018-05-14</td>
+            <td class="lbl">Patient report</td>
+          </tr>
+        </tbody>
+      </table>
+      <button class="tbl-add" type="button"><span class="plus">+</span> Add allergy</button>
+    </section>
+
+    <!-- CURRENT MEDS -->
+    <section class="tbl-section">
+      <div class="tbl-head">
+        <div class="left">
+          <span class="title">Current medications</span>
+          <span class="num"><strong>1</strong> chronic</span>
+        </div>
+        <div class="right">excludes today's Rx</div>
+      </div>
+      <table class="ptbl">
+        <thead>
+          <tr>
+            <th style="width:24%">Drug</th>
+            <th style="width:18%">Dose</th>
+            <th style="width:14%">Route</th>
+            <th style="width:24%">Indication</th>
+            <th style="width:10%">Started</th>
+            <th style="width:10%">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="val">Lisinopril</td>
+            <td class="num">10 mg daily</td>
+            <td class="lbl">PO</td>
+            <td class="lbl">Hypertension (I10)</td>
+            <td class="ts">2024-01-09</td>
+            <td><span class="pill active">Active</span></td>
+          </tr>
+        </tbody>
+      </table>
+      <button class="tbl-add" type="button"><span class="plus">+</span> Add medication</button>
+    </section>
+
+    <!-- PROBLEM LIST -->
+    <section class="tbl-section">
+      <div class="tbl-head">
+        <div class="left">
+          <span class="title">Problem list</span>
+          <span class="num"><strong>1</strong> active · <strong>1</strong> draft</span>
+        </div>
+        <div class="right"><span class="warn">1 pending sign-off</span></div>
+      </div>
+      <table class="ptbl">
+        <thead>
+          <tr>
+            <th style="width:14%">ICD-10</th>
+            <th style="width:38%">Problem</th>
+            <th style="width:18%">Onset</th>
+            <th style="width:18%">Treatment</th>
+            <th style="width:12%">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="pill icd">I10</span></td>
+            <td class="val">Hypertension</td>
+            <td class="ts">2024-01-09</td>
+            <td class="lbl">Lisinopril 10 mg</td>
+            <td><span class="pill active">Active</span></td>
+          </tr>
+          <tr>
+            <td><span class="pill icd">J20.9</span></td>
+            <td class="val">Acute bronchitis</td>
+            <td class="ts">2026-04-20</td>
+            <td class="lbl">Albuterol HFA</td>
+            <td><span class="pill draft">Draft</span></td>
+          </tr>
+        </tbody>
+      </table>
+      <button class="tbl-add" type="button"><span class="plus">+</span> Add problem</button>
+    </section>
+
+    <!-- VISIT METADATA -->
+    <section class="tbl-section">
+      <div class="tbl-head">
+        <div class="left">
+          <span class="title">Visit metadata</span>
+          <span class="num"><strong>7</strong> fields</span>
+        </div>
+        <div class="right">encounter ENC-2026-04-30-7341</div>
+      </div>
+      <table class="ptbl">
+        <thead>
+          <tr>
+            <th style="width:30%">Field</th>
+            <th style="width:70%">Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td class="lbl">Specialty</td><td class="val">Family Medicine</td></tr>
+          <tr><td class="lbl">Visit type</td><td class="val">Follow-up <span class="lbl">· telehealth → in-person</span></td></tr>
+          <tr><td class="lbl">Duration</td><td class="val"><span class="num">24 min</span> recorded · <span class="num">6 m 04 s</span> audio</td></tr>
+          <tr><td class="lbl">Location</td><td class="val">Suite 240, Newport Beach</td></tr>
+          <tr><td class="lbl">Billing provider</td><td class="val">Dr. Sarah Chen, MD <span class="lbl">· NPI <span class="num">1234567890</span></span></td></tr>
+          <tr><td class="lbl">Recorded by</td><td class="val">Dr. Sarah Chen</td></tr>
+          <tr><td class="lbl">Encounter ID</td><td class="val"><span class="num">ENC-2026-04-30-7341</span></td></tr>
+        </tbody>
+      </table>
+      <button class="tbl-add" type="button"><span class="plus">+</span> Add field</button>
+    </section>
+
+    <!-- AUDIT LOG -->
+    <section class="tbl-section">
+      <div class="tbl-head">
+        <div class="left">
+          <span class="title">Audit log</span>
+          <span class="num"><strong>8</strong> events</span>
+        </div>
+        <div class="right">last 24 h</div>
+      </div>
+      <table class="ptbl">
+        <thead>
+          <tr>
+            <th style="width:14%">Timestamp</th>
+            <th style="width:24%">Actor</th>
+            <th style="width:30%">Action</th>
+            <th style="width:32%">Target</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="ts">14:42:08</td>
+            <td><span class="actor"><span class="av">SC</span>Dr. Sarah Chen</span></td>
+            <td class="verb">drafted</td>
+            <td class="obj">SOAP / plan section</td>
+          </tr>
+          <tr>
+            <td class="ts">14:38:51</td>
+            <td><span class="actor"><span class="av">SC</span>Dr. Sarah Chen</span></td>
+            <td class="verb">accepted ICD code</td>
+            <td class="obj">J20.9 — Acute bronchitis</td>
+          </tr>
+          <tr>
+            <td class="ts">14:36:17</td>
+            <td><span class="actor system"><span class="av">·</span>System</span></td>
+            <td class="verb">generated SOAP draft</td>
+            <td class="obj">AI confidence 92%</td>
+          </tr>
+          <tr>
+            <td class="ts">14:36:02</td>
+            <td><span class="actor system"><span class="av">·</span>System</span></td>
+            <td class="verb">completed transcription</td>
+            <td class="obj">Whisper v3 · 6 m 04 s</td>
+          </tr>
+          <tr>
+            <td class="ts">14:30:11</td>
+            <td><span class="actor"><span class="av">SC</span>Dr. Sarah Chen</span></td>
+            <td class="verb">started recording</td>
+            <td class="obj">Encounter ENC-2026-04-30-7341</td>
+          </tr>
+          <tr>
+            <td class="ts">14:29:24</td>
+            <td><span class="actor"><span class="av">SC</span>Dr. Sarah Chen</span></td>
+            <td class="verb">opened patient chart</td>
+            <td class="obj">MRN MP-007341</td>
+          </tr>
+          <tr>
+            <td class="ts">14:28:00</td>
+            <td><span class="actor system"><span class="av">·</span>System</span></td>
+            <td class="verb">checked in patient</td>
+            <td class="obj">Front desk kiosk</td>
+          </tr>
+          <tr>
+            <td class="ts">09:14:32</td>
+            <td><span class="actor"><span class="av">SC</span>Dr. Sarah Chen <span class="lbl">(admin)</span></span></td>
+            <td class="verb">verified insurance</td>
+            <td class="obj">Anthem API · 200 OK</td>
+          </tr>
+        </tbody>
+      </table>
+      <button class="tbl-add" type="button"><span class="plus">+</span> Inspect event</button>
+    </section>
+
+  </div>
+
+</div>
+
+<script>
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => {
+      x.classList.remove('active');
+      x.setAttribute('aria-selected','false');
+    });
+    t.classList.add('active');
+    t.setAttribute('aria-selected','true');
+  });
+});
+</script>
+
+</body>
+</html>

@@ -3,17 +3,16 @@
 // ============================================================================
 // VisitReadyView — visit-detail body for READY/SIGNED states.
 // ----------------------------------------------------------------------------
-// Phase 5 — Linear V1 Faithful. A horizontal Linear-style underlined
-// tab bar drives the SOAP / Transcript / Codes / Rx / Extras /
-// Pipeline panels. Surfaces are hairline-bordered surface-1 cards on
-// the dark canvas; transcript turns render in floating doctor/patient
-// bubbles tinted sage and surface-2 respectively. The `theme` prop
+// Phase 5.1 V3 Split Pane edition. The horizontal tab bar drives the
+// SOAP / Transcript / Codes / Rx / Extras / Pipeline panels; the SOAP
+// and Transcript tabs each render their own V3 split-pane (sections |
+// sources rail, and turns | audio rail respectively). For audio_upload
+// visits we route to the new TranscriptTab; voice_dictation and
+// text_notes still use the simple inline blocks below. The `theme` prop
 // is preserved as a no-op for caller back-compat.
 // ============================================================================
 
-import { useMemo, useState, useTransition } from 'react';
-import { useRouter } from 'next/navigation';
-import { toast } from 'sonner';
+import { useMemo, useState } from 'react';
 import {
   FileText as FileTextIcon,
   MessageSquare as MessageSquareIcon,
@@ -21,18 +20,17 @@ import {
   Stethoscope,
   Pill,
   Sparkles,
-  Download,
   ChevronDown,
   Lock,
 } from 'lucide-react';
 
 import { cn } from '@/lib/cn';
 import { SoapEditor } from './soap-editor';
-import { reassignSpeakerAction } from '@/actions/soap';
 import { CodesTab, codesTabHasWarnings } from './codes-tab';
 import { RxTab, rxTabWarningLevel } from './rx-tab';
 import { ExtrasTab, extrasTabHasFlag } from './extras-tab';
 import { CopySectionButton } from './copy-section-button';
+import { TranscriptTab, utterancesToSources } from './transcript-tab';
 import type { VisitExportData } from '@/lib/visit-export';
 import {
   sectionSoap,
@@ -46,19 +44,6 @@ type VisitReadyViewTheme = 'legacy' | 'clinician';
 
 // T-M6: six tabs — SOAP, Transcript/Input, Codes, Rx, Extras, Pipeline.
 type TabKey = 'soap' | 'transcript' | 'codes' | 'rx' | 'extras' | 'pipeline';
-
-// Keep in sync with Layer 2's role enum. Changing this breaks the
-// speaker-reassign dropdown; update both.
-const ROLE_OPTIONS: { value: string; label: string }[] = [
-  { value: 'doctor', label: 'Doctor' },
-  { value: 'patient', label: 'Patient' },
-  { value: 'family', label: 'Family' },
-  { value: 'other', label: 'Other clinical staff' },
-  { value: 'unknown', label: 'Unknown' },
-];
-
-const SECTION_LABEL =
-  'mb-2 text-[10px] font-medium uppercase tracking-[0.07em] font-mono text-linear-text-3';
 
 export interface Utterance {
   speaker?: number;
@@ -120,6 +105,12 @@ export interface VisitReadyViewProps {
   signedAt: string | null;
   /** Batch H — display name of the signer. */
   signedByName: string | null;
+  /** Phase 5.1 — pretty-printed specialty for the Transcript V3
+   *  metadata rail. Optional for back-compat. */
+  specialtyLabel?: string;
+  /** Phase 5.1 — display name shown in the Transcript V3 "Recorded by"
+   *  metadata row. Optional for back-compat. */
+  recordedByName?: string | null;
   /** @deprecated kept for back-compat; Linear V1 is single-theme. */
   theme?: VisitReadyViewTheme;
 }
@@ -157,6 +148,30 @@ export function VisitReadyView(props: VisitReadyViewProps) {
   // sectionExtras don't touch patient header or clinician info, so
   // the placeholder fields below are never read.
   const sectionData = buildSectionData(props);
+
+  // Phase 5.1 — feed the SOAP V3 sources rail with diarised turns.
+  // For non-audio inputs this is empty and the rail collapses to the
+  // empty-state hint.
+  const soapSources = useMemo(
+    () =>
+      props.inputMode === 'audio_upload'
+        ? utterancesToSources(props.utterances, props.speakerMap)
+        : [],
+    [props.inputMode, props.utterances, props.speakerMap]
+  );
+
+  // Phase 5.1 — Transcript V3 audio source URL + duration label.
+  // audio_upload visits don't currently expose a streaming audio
+  // endpoint (only voice_dictation does, via /api/visits/[id]/dictation/
+  // audio). Until an audio_upload streaming route lands, the right
+  // rail still renders the metadata + waveform decoration without an
+  // <audio> element — visit-ready-view passes audioSrc=null in that
+  // case and TranscriptTab handles the fallback gracefully.
+  const audioSrc = null;
+  const durationLabel =
+    typeof props.durationSec === 'number' && props.durationSec > 0
+      ? formatDurationLabel(props.durationSec)
+      : null;
 
   return (
     <div className="w-full">
@@ -198,16 +213,22 @@ export function VisitReadyView(props: VisitReadyViewProps) {
               initialText={props.soapText}
               readonly={props.readonly}
               signedAt={props.signedAt}
+              sources={soapSources}
             />
           </div>
         )}
         {tab === 'transcript' &&
           (props.inputMode === 'audio_upload' ? (
-            <TranscriptView
+            <TranscriptTab
               visitId={props.visitId}
               utterances={props.utterances}
               speakerMap={props.speakerMap}
               readonly={props.readonly}
+              audioSrc={audioSrc}
+              durationLabel={durationLabel}
+              specialtyLabel={props.specialtyLabel}
+              recordedByName={props.recordedByName ?? null}
+              encounterId={props.visitId.slice(0, 8)}
             />
           ) : props.inputMode === 'voice_dictation' ? (
             <DictationTranscriptView
@@ -226,7 +247,11 @@ export function VisitReadyView(props: VisitReadyViewProps) {
                 section="Codes"
               />
             </div>
-            <CodesTab icd={props.icdCodes} cpt={props.cptCodes} />
+            <CodesTab
+              icd={props.icdCodes}
+              cpt={props.cptCodes}
+              readonly={props.readonly}
+            />
           </div>
         )}
         {tab === 'rx' && (
@@ -238,7 +263,11 @@ export function VisitReadyView(props: VisitReadyViewProps) {
                 section="Prescriptions"
               />
             </div>
-            <RxTab rx={props.rxDrafts} visitId={props.visitId} />
+            <RxTab
+              rx={props.rxDrafts}
+              visitId={props.visitId}
+              readonly={props.readonly}
+            />
           </div>
         )}
         {tab === 'extras' && (
@@ -441,169 +470,11 @@ function Tabs({
 }
 
 // ---------------------------------------------------------------------------
-// Transcript view — role-alternating layout, role reassign dropdown per
-// speaker, download-as-txt button.
+// Phase 5.1 — the legacy inline TranscriptView (role-alternating bubbles
+// for audio_upload visits) was extracted into ./transcript-tab.tsx as
+// the V3 split-pane TranscriptTab. Voice-dictation and text-notes
+// inputs still use the simple components further down.
 // ---------------------------------------------------------------------------
-function TranscriptView({
-  visitId,
-  utterances,
-  speakerMap,
-  readonly,
-}: {
-  visitId: string;
-  utterances: Utterance[];
-  speakerMap: Record<string, SpeakerInfo>;
-  readonly: boolean;
-}) {
-  const [pending, startTransition] = useTransition();
-  const router = useRouter();
-
-  const speakerIds = useMemo(() => {
-    const set = new Set<string>();
-    for (const u of utterances) {
-      if (typeof u.speaker === 'number') set.add(String(u.speaker));
-    }
-    return Array.from(set).sort();
-  }, [utterances]);
-
-  const reassign = (speakerId: string, role: string) => {
-    startTransition(async () => {
-      const res = await reassignSpeakerAction(visitId, speakerId, role);
-      if (!res.ok) {
-        toast.error('Could not reassign speaker', { description: res.error });
-        return;
-      }
-      toast.success('Speaker role updated', {
-        description: 'Re-running the SOAP pipeline will pick up the new roles.',
-      });
-      router.refresh();
-    });
-  };
-
-  const downloadTxt = () => {
-    const lines = utterances.map((u) => {
-      const key = typeof u.speaker === 'number' ? String(u.speaker) : 'unknown';
-      const role = speakerMap[key]?.role ?? 'unknown';
-      const ts = Math.max(0, Math.floor(u.start ?? 0));
-      const mm = Math.floor(ts / 60);
-      const ss = (ts % 60).toString().padStart(2, '0');
-      return `[${role} #${key}, ${mm}:${ss}]: ${u.transcript.trim()}`;
-    });
-    const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `transcript-${visitId}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  };
-
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex-1 text-[12px] text-linear-text-3">
-          {speakerIds.length} speaker{speakerIds.length === 1 ? '' : 's'},{' '}
-          {utterances.length} utterances
-        </div>
-        <button type="button" onClick={downloadTxt} className="qm-lin-btn">
-          <Download className="h-3.5 w-3.5" aria-hidden />
-          Download .txt
-        </button>
-      </div>
-
-      {!readonly && speakerIds.length > 0 && (
-        <div className="rounded-lg border border-linear-border bg-linear-surface-1 p-4">
-          <div className={SECTION_LABEL}>Speaker roles</div>
-          <div className="flex flex-wrap gap-3">
-            {speakerIds.map((sid) => {
-              const info = speakerMap[sid];
-              return (
-                <label
-                  key={sid}
-                  className="flex items-center gap-2 text-[12px] text-linear-text-2"
-                >
-                  <span className="font-medium text-linear-text">
-                    Speaker #{sid}
-                  </span>
-                  <div className="relative">
-                    <select
-                      disabled={pending}
-                      value={info?.role ?? 'unknown'}
-                      onChange={(e) => reassign(sid, e.target.value)}
-                      className="appearance-none rounded-md border border-linear-border bg-linear-surface-2 py-1 pl-2 pr-6 text-[12px] text-linear-text outline-none focus:border-linear-sage focus:ring-2 focus:ring-linear-sage/30"
-                    >
-                      {ROLE_OPTIONS.map((r) => (
-                        <option key={r.value} value={r.value}>
-                          {r.label}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown
-                      className="pointer-events-none absolute right-1.5 top-1/2 h-3 w-3 -translate-y-1/2 text-linear-text-3"
-                      aria-hidden
-                    />
-                  </div>
-                  <span className="text-linear-text-3">
-                    · conf {(info?.confidence ?? 0).toFixed(2)}
-                  </span>
-                </label>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      <div className="space-y-2">
-        {utterances.map((u, i) => {
-          const key = typeof u.speaker === 'number' ? String(u.speaker) : 'unknown';
-          const role = speakerMap[key]?.role ?? 'unknown';
-          const isDoctor = role === 'doctor';
-          const ts = Math.max(0, Math.floor(u.start ?? 0));
-          const mm = Math.floor(ts / 60);
-          const ss = (ts % 60).toString().padStart(2, '0');
-          return (
-            <div
-              key={i}
-              className={cn(
-                'flex gap-3',
-                isDoctor ? 'justify-end' : 'justify-start'
-              )}
-            >
-              <div
-                className="max-w-[85%] rounded-lg px-4 py-2.5 text-[13px] leading-relaxed"
-                style={{
-                  background: isDoctor
-                    ? 'var(--color-linear-sage-tint)'
-                    : 'var(--color-linear-surface-2)',
-                  border: isDoctor
-                    ? '1px solid rgba(122,166,140,0.32)'
-                    : '1px solid var(--color-linear-border)',
-                  color: isDoctor
-                    ? 'var(--color-linear-text)'
-                    : 'var(--color-linear-text-2)',
-                }}
-              >
-                <div
-                  className="mb-1 font-mono text-[10px] font-medium uppercase tracking-[0.07em]"
-                  style={{
-                    color: isDoctor
-                      ? 'var(--color-linear-sage-bright)'
-                      : 'var(--color-linear-text-3)',
-                  }}
-                >
-                  {role} #{key} · {mm}:{ss}
-                </div>
-                {u.transcript}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Pipeline view — inspection + debug.
@@ -864,4 +735,15 @@ function SignedStateCard({
       </div>
     </div>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5.1 — pretty-print a duration in seconds for the Transcript V3
+// metadata rail. Mirrors the "6m 04s" pattern from the mockup.
+// ---------------------------------------------------------------------------
+function formatDurationLabel(totalSec: number): string {
+  const t = Math.max(0, Math.floor(totalSec));
+  const m = Math.floor(t / 60);
+  const s = (t % 60).toString().padStart(2, '0');
+  return `${m}m ${s}s`;
 }
