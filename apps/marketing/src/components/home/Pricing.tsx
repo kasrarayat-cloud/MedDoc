@@ -1,68 +1,178 @@
 import { APP_SIGNUP_URL } from '@/lib/constants';
 
+/**
+ * Pricing card — Linear V1 (Faithful).
+ *
+ * Single sage-bordered card on dark canvas, $49 amount + 2-col feature
+ * checklist, sage primary CTA + mono "14 days free" caption. Mirrors
+ * landing-v1.html lines 998-1028; the .price-card / .price-list structure
+ * is already styled in Linear V1 via landing-v1.html's design language —
+ * we re-author with inline styles here since landing.css doesn't yet
+ * carry .price-card / .price-list rules (no need to add new CSS classes).
+ */
 const FEATURES = [
-  'Unlimited patient visits',
-  'SOAP, ICD‑10/CPT, Rx, referrals, patient summaries',
-  'Real‑time transcription with Deepgram Nova‑3 Medical',
-  '8 specialty templates · learns your style',
-  'Signed BAA · HIPAA‑aligned · US hosted',
-  'PDF / DOCX exports with your letterhead',
-  'Email support · live chat during business hours',
+  'Unlimited visits, no per-note caps',
+  'Real-time SOAP drafting',
+  'ICD-10 and CPT recommendations',
+  'Specialty packs (all 12)',
+  'HIPAA BAA, on file',
+  'US-hosted infrastructure',
+  'Cmd-K command palette',
+  'EHR-formatted exports (Epic, Athena, Cerner, eCW)',
+  'DOCX and PDF generation',
+  'Email and Slack support',
 ];
 
-function Check() {
+function CheckDot() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-      <path d="M20 6L9 17l-5-5" />
-    </svg>
+    <span
+      style={{
+        flexShrink: 0,
+        width: 14,
+        height: 14,
+        marginTop: 4,
+        borderRadius: '50%',
+        background: 'var(--color-linear-sage-tint)',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <svg
+        width="9"
+        height="9"
+        viewBox="0 0 14 14"
+        fill="none"
+        stroke="var(--color-linear-sage)"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <polyline points="3 7.5 6 10 11 4.5" />
+      </svg>
+    </span>
   );
 }
 
 export function Pricing() {
   return (
-    <section className="pricing" id="pricing">
-      <div className="container pricing-inner">
-        <div className="sec-label" style={{ maxWidth: 900, margin: '0 auto 40px' }}>
-          <span className="num">§ 06 / PRICING</span>
-          <span>One plan · Flat · Cancel anytime</span>
-        </div>
-        <h2 className="reveal">
-          A single plan, <em>for a single doctor.</em>
-        </h2>
-        <p className="lede reveal">
-          No seat tiers. No per‑visit fees. No annual commitment. Your budget should be as
-          predictable as your schedule.
-        </p>
-
-        <div className="price-hero reveal">
-          <span className="digit-stack">
-            <span className="currency">$</span>
-            <span className="digits">49</span>
-            <span className="per">/ month</span>
-          </span>
-        </div>
-        <div className="price-tagline reveal">
-          Flat rate. <em>Unlimited visits.</em> Cancel any time.
+    <section style={{ padding: '32px 0 96px' }} id="pricing">
+      <div className="container">
+        <div className="section-head reveal">
+          <div className="section-eyebrow">06 / Pricing</div>
+          <h2 className="section-title">One tier. Unlimited visits. No surprises.</h2>
         </div>
 
-        <div className="price-card reveal">
-          <ul className="price-features">
+        <div
+          className="reveal"
+          style={{
+            maxWidth: 540,
+            margin: '0 auto',
+            padding: 32,
+            background: 'var(--color-linear-surface-1)',
+            border: '1px solid var(--color-linear-border)',
+            borderRadius: 14,
+            position: 'relative',
+            boxShadow:
+              'inset 0 1px 0 rgba(122, 166, 140, 0.10), 0 30px 60px -30px rgba(0, 0, 0, 0.6)',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'baseline',
+              gap: 4,
+              marginBottom: 6,
+            }}
+          >
+            <span
+              style={{
+                fontSize: 36,
+                fontWeight: 600,
+                letterSpacing: '-0.022em',
+                color: 'var(--color-linear-text)',
+                fontFamily: 'var(--font-sans)',
+              }}
+            >
+              $49
+            </span>
+            <span style={{ fontSize: 14, color: 'var(--color-linear-text-3)' }}>
+              / month per physician
+            </span>
+          </div>
+          <p
+            style={{
+              fontSize: 14,
+              color: 'var(--color-linear-text-2)',
+              marginBottom: 22,
+            }}
+          >
+            Everything below, billed monthly. Cancel anytime.
+          </p>
+          <ul
+            style={{
+              listStyle: 'none',
+              margin: '0 0 24px',
+              padding: 0,
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: '9px 18px',
+            }}
+          >
             {FEATURES.map((f) => (
-              <li key={f}>
-                <Check />
-                {f}
+              <li
+                key={f}
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 8,
+                  fontSize: 13,
+                  color: 'var(--color-linear-text-2)',
+                  lineHeight: 1.5,
+                }}
+              >
+                <CheckDot />
+                <span>{f}</span>
               </li>
             ))}
           </ul>
-          <div className="price-cta-row">
+          <div
+            style={{
+              display: 'flex',
+              gap: 12,
+              alignItems: 'center',
+              flexWrap: 'wrap',
+            }}
+          >
             <a href={APP_SIGNUP_URL} className="btn btn-primary btn-lg">
-              Start 14‑day free trial <span className="arrow">→</span>
+              Start your trial
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path
+                  d="M5 12h14M13 5l7 7-7 7"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
             </a>
-            <a href="#demo" className="btn btn-outline btn-lg">
-              Watch demo
-            </a>
+            <span
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10.5,
+                color: 'var(--color-linear-text-3)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.06em',
+              }}
+            >
+              14 days free · no card
+            </span>
           </div>
-          <div className="price-guarantee">No credit card · No sales call · Cancel with one click</div>
         </div>
       </div>
     </section>
