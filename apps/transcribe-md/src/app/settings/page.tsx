@@ -1,13 +1,15 @@
 // ============================================================================
-// Settings — app-redesign-v1 (HANDOFF §2.2 Gate 12).
+// Phase 5 — Linear V1 Faithful settings.
 // ----------------------------------------------------------------------------
-// Full redesign shell with sticky left index + stacked Section cards.
-// Preserves all existing T-M16.2 / T-M17.3 form behaviour: profile,
-// password, email change, session status, data export, account delete.
-// New: clinician profile fields (specialty / NPI / clinic / timezone)
-// land in the Profile section; 2FA + multi-session UI are scaffolded
-// as "Coming soon" stubs since the backend wiring (otplib, session
-// list endpoints) is a Gate 14 item.
+// Reference: dashboard-v1.html chrome (linear-bg + hairline borders).
+//
+// Two-column layout: 200 px sticky section index on the left, single
+// stack of section cards on the right. Each section sits on
+// linear-surface-1 with a hairline border. The Phase 4 cream-paper
+// .qm-glass treatment is gone.
+//
+// Server actions + form behaviour (T-M16.2 / T-M17.3) are unchanged
+// per PROTECTED_CONTRACTS.
 // ============================================================================
 
 import type { Metadata } from 'next';
@@ -24,7 +26,6 @@ import {
 import { AppFrame } from '@/components/ui/app-frame';
 import { Ic } from '@/components/ui/icon';
 import { LocalTime } from '@/components/ui/local-time';
-import { PageHeader } from '@/components/ui/page-header';
 import { ProfileForm } from './profile-form';
 import { SessionPanel } from './session-panel';
 import { DeleteAccountDialog } from './delete-account-dialog';
@@ -90,22 +91,53 @@ export default async function SettingsPage() {
       <Suspense fallback={null}>
         <EmailChangeToast />
       </Suspense>
-      <PageHeader
-        eyebrow="§ You"
-        title={
-          <>
-            Your <em style={{ color: 'var(--accent-bright)' }}>settings</em>
-          </>
-        }
-        subtitle="Profile, security, session, exports, and the billing link."
-      />
+
+      <div style={{ padding: '18px 24px 0' }}>
+        <div
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10.5,
+            fontWeight: 500,
+            color: 'var(--color-linear-text-3)',
+            letterSpacing: '0.07em',
+            textTransform: 'uppercase',
+            marginBottom: 8,
+          }}
+        >
+          Account
+        </div>
+        <h1
+          style={{
+            margin: 0,
+            fontFamily: 'var(--font-sans)',
+            fontSize: 22,
+            fontWeight: 500,
+            color: 'var(--color-linear-text)',
+            letterSpacing: '-0.012em',
+            lineHeight: 1.2,
+          }}
+        >
+          Settings
+        </h1>
+        <p
+          style={{
+            margin: '6px 0 0',
+            fontFamily: 'var(--font-sans)',
+            fontSize: 13,
+            color: 'var(--color-linear-text-2)',
+            lineHeight: 1.5,
+          }}
+        >
+          Profile, security, session, exports, and the billing link.
+        </p>
+      </div>
 
       <div
         style={{
           display: 'grid',
           gridTemplateColumns: '200px 1fr',
           gap: 32,
-          padding: '0 32px 48px',
+          padding: '24px 24px 48px',
           alignItems: 'flex-start',
           maxWidth: 1200,
         }}
@@ -113,27 +145,44 @@ export default async function SettingsPage() {
         <aside
           style={{
             position: 'sticky',
-            top: 16,
+            top: 64,
             alignSelf: 'flex-start',
           }}
         >
-          <div className="qm-sectlabel" style={{ marginBottom: 10 }}>
-            § On this page
+          <div
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10.5,
+              fontWeight: 500,
+              color: 'var(--color-linear-text-3)',
+              letterSpacing: '0.07em',
+              textTransform: 'uppercase',
+              marginBottom: 10,
+              padding: '0 8px',
+            }}
+          >
+            On this page
           </div>
           <nav
-            style={{ display: 'flex', flexDirection: 'column', gap: 2 }}
+            aria-label="Settings sections"
+            style={{ display: 'flex', flexDirection: 'column', gap: 1 }}
           >
             {SECTIONS.map((s) => (
               <a
                 key={s.id}
                 href={`#${s.id}`}
                 style={{
-                  padding: '7px 10px',
+                  padding: '6px 8px',
+                  height: 28,
+                  display: 'flex',
+                  alignItems: 'center',
+                  fontFamily: 'var(--font-sans)',
                   fontSize: 13,
-                  color: 'var(--fg-3)',
-                  borderRadius: 8,
+                  color: 'var(--color-linear-text-2)',
+                  borderRadius: 5,
                   textDecoration: 'none',
-                  borderLeft: '2px solid transparent',
+                  transition:
+                    'background-color 80ms ease, color 80ms ease',
                 }}
               >
                 {s.label}
@@ -143,7 +192,7 @@ export default async function SettingsPage() {
         </aside>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-          <Section id="profile" eyebrow="§ 01 / Profile" title="Profile">
+          <Section id="profile" eyebrow="01 / Profile" title="Profile">
             <ProfileForm
               defaultName={user.name ?? ''}
               defaultSpecialty={user.specialty ?? ''}
@@ -158,7 +207,7 @@ export default async function SettingsPage() {
                 gap: 14,
                 marginTop: 18,
                 paddingTop: 16,
-                borderTop: '1px solid var(--line-soft)',
+                borderTop: '1px solid var(--color-linear-hairline)',
               }}
             >
               <EmailWithChangeButton email={user.email} />
@@ -176,7 +225,7 @@ export default async function SettingsPage() {
 
           <Section
             id="security"
-            eyebrow="§ 02 / Security"
+            eyebrow="02 / Security"
             title="Security"
             subtitle="Change your password. Other devices are signed out; this one stays."
           >
@@ -185,9 +234,9 @@ export default async function SettingsPage() {
               <div
                 style={{
                   padding: '14px 16px',
-                  borderRadius: 12,
-                  border: '1px dashed var(--line)',
-                  background: 'rgba(255,255,255,0.02)',
+                  borderRadius: 8,
+                  border: '1px dashed var(--color-linear-border-strong)',
+                  background: 'var(--color-linear-row-hover)',
                 }}
               >
                 <div
@@ -201,16 +250,23 @@ export default async function SettingsPage() {
                   <Ic.shield
                     width={14}
                     height={14}
-                    style={{ color: 'var(--accent-bright)' }}
+                    style={{ color: 'var(--color-linear-sage-bright)' }}
                   />
-                  <span style={{ fontSize: 13, fontWeight: 500 }}>
+                  <span
+                    style={{
+                      fontFamily: 'var(--font-sans)',
+                      fontSize: 13,
+                      fontWeight: 500,
+                      color: 'var(--color-linear-text)',
+                    }}
+                  >
                     Two-factor authentication
                   </span>
                   <span
                     className={
                       user.mfaEnabled
-                        ? 'qm-chip qm-chip-mint dot'
-                        : 'qm-chip qm-chip-amber'
+                        ? 'qm-lin-pill qm-lin-pill--ready'
+                        : 'qm-lin-pill qm-lin-pill--review'
                     }
                   >
                     {user.mfaEnabled ? 'Enabled' : 'Off'}
@@ -219,8 +275,9 @@ export default async function SettingsPage() {
                 <p
                   style={{
                     margin: 0,
+                    fontFamily: 'var(--font-sans)',
                     fontSize: 12.5,
-                    color: 'var(--fg-3)',
+                    color: 'var(--color-linear-text-2)',
                     lineHeight: 1.55,
                   }}
                 >
@@ -234,7 +291,7 @@ export default async function SettingsPage() {
 
           <Section
             id="sessions"
-            eyebrow="§ 03 / Sessions"
+            eyebrow="03 / Sessions"
             title="Active session"
             subtitle="One device at a time. Signing in elsewhere revokes this session automatically."
           >
@@ -249,7 +306,13 @@ export default async function SettingsPage() {
                 lastActiveAtIso={activeSession.lastActiveAt.toISOString()}
               />
             ) : (
-              <p style={{ fontSize: 13, color: 'var(--fg-3)' }}>
+              <p
+                style={{
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 13,
+                  color: 'var(--color-linear-text-2)',
+                }}
+              >
                 Your current session predates the single-device enforcement
                 rollout. Sign out and back in to enable it.
               </p>
@@ -259,7 +322,7 @@ export default async function SettingsPage() {
           {isDataExportEnabled() && (
             <Section
               id="data"
-              eyebrow="§ 04 / Data"
+              eyebrow="04 / Data"
               title="Your data"
               subtitle="Download a ZIP containing every visit, transcript, SOAP note, audio file, and signed PDF."
             >
@@ -275,8 +338,9 @@ export default async function SettingsPage() {
                 <p
                   style={{
                     margin: 0,
+                    fontFamily: 'var(--font-sans)',
                     fontSize: 13,
-                    color: 'var(--fg-2)',
+                    color: 'var(--color-linear-text-2)',
                     lineHeight: 1.55,
                     flex: 1,
                     minWidth: 220,
@@ -288,7 +352,7 @@ export default async function SettingsPage() {
                 </p>
                 <a
                   href="/api/settings/export-data"
-                  className="qm-btn qm-btn-ghost"
+                  className="qm-lin-btn"
                   style={{ textDecoration: 'none' }}
                 >
                   <Ic.download width={13} height={13} />
@@ -300,7 +364,7 @@ export default async function SettingsPage() {
 
           <Section
             id="billing"
-            eyebrow="§ 05 / Billing"
+            eyebrow="05 / Billing"
             title="Billing"
             subtitle="Manage your subscription and payment method."
           >
@@ -316,8 +380,9 @@ export default async function SettingsPage() {
               <p
                 style={{
                   margin: 0,
+                  fontFamily: 'var(--font-sans)',
                   fontSize: 13,
-                  color: 'var(--fg-3)',
+                  color: 'var(--color-linear-text-2)',
                   maxWidth: 400,
                 }}
               >
@@ -327,10 +392,10 @@ export default async function SettingsPage() {
               <button
                 type="button"
                 disabled
-                className="qm-btn qm-btn-ghost"
+                className="qm-lin-btn"
                 title="Coming soon"
                 style={{
-                  opacity: 0.55,
+                  opacity: 0.45,
                   cursor: 'not-allowed',
                 }}
               >
@@ -341,7 +406,7 @@ export default async function SettingsPage() {
 
           <Section
             id="danger"
-            eyebrow="§ 06 / Danger"
+            eyebrow="06 / Danger"
             title="Danger zone"
             subtitle="Delete your account. Every visit, transcript, and exported file gets erased."
             danger
@@ -358,8 +423,9 @@ export default async function SettingsPage() {
               <p
                 style={{
                   margin: 0,
+                  fontFamily: 'var(--font-sans)',
                   fontSize: 13,
-                  color: 'var(--fg-2)',
+                  color: 'var(--color-linear-text-2)',
                   lineHeight: 1.55,
                   maxWidth: 440,
                 }}
@@ -395,25 +461,40 @@ function Section({
   return (
     <section
       id={id}
-      className="qm-glass"
       style={{
-        padding: '24px 26px',
-        borderColor: danger ? 'rgba(251,113,133,0.3)' : undefined,
+        padding: '20px 22px',
+        background: 'var(--color-linear-surface-1)',
+        border: `1px solid ${
+          danger
+            ? 'rgba(212, 87, 74, 0.30)'
+            : 'var(--color-linear-border)'
+        }`,
+        borderRadius: 10,
       }}
     >
       <div
-        className="qm-sectlabel"
-        style={{ marginBottom: 8, color: danger ? 'var(--coral)' : undefined }}
+        style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10.5,
+          fontWeight: 500,
+          letterSpacing: '0.07em',
+          textTransform: 'uppercase',
+          color: danger
+            ? 'var(--color-linear-coral)'
+            : 'var(--color-linear-text-3)',
+          marginBottom: 8,
+        }}
       >
         {eyebrow}
       </div>
       <h3
-        className="qm-serif"
         style={{
           margin: 0,
-          fontSize: 22,
-          fontWeight: 400,
-          letterSpacing: '-0.015em',
+          fontFamily: 'var(--font-sans)',
+          fontSize: 18,
+          fontWeight: 500,
+          color: 'var(--color-linear-text)',
+          letterSpacing: '-0.012em',
         }}
       >
         {title}
@@ -422,8 +503,9 @@ function Section({
         <p
           style={{
             margin: '6px 0 18px',
+            fontFamily: 'var(--font-sans)',
             fontSize: 12.5,
-            color: 'var(--fg-3)',
+            color: 'var(--color-linear-text-2)',
             lineHeight: 1.55,
           }}
         >
@@ -447,17 +529,25 @@ function ReadOnlyRow({
     <div>
       <div
         style={{
-          fontSize: 11,
-          fontFamily: 'var(--mono)',
-          letterSpacing: '0.04em',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10.5,
+          letterSpacing: '0.06em',
           textTransform: 'uppercase',
-          color: 'var(--fg-4)',
+          color: 'var(--color-linear-text-3)',
           marginBottom: 4,
         }}
       >
         {label}
       </div>
-      <div style={{ fontSize: 13, color: 'var(--fg-2)' }}>{value}</div>
+      <div
+        style={{
+          fontFamily: 'var(--font-sans)',
+          fontSize: 13,
+          color: 'var(--color-linear-text)',
+        }}
+      >
+        {value}
+      </div>
     </div>
   );
 }
@@ -475,18 +565,25 @@ function EmailWithChangeButton({ email }: { email: string }) {
       >
         <div
           style={{
-            fontSize: 11,
-            fontFamily: 'var(--mono)',
-            letterSpacing: '0.04em',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10.5,
+            letterSpacing: '0.06em',
             textTransform: 'uppercase',
-            color: 'var(--fg-4)',
+            color: 'var(--color-linear-text-3)',
           }}
         >
           Email
         </div>
         <ChangeEmailDialog currentEmail={email} />
       </div>
-      <div style={{ fontSize: 13, color: 'var(--fg-2)', wordBreak: 'break-all' }}>
+      <div
+        style={{
+          fontFamily: 'var(--font-sans)',
+          fontSize: 13,
+          color: 'var(--color-linear-text)',
+          wordBreak: 'break-all',
+        }}
+      >
         {email}
       </div>
     </div>
