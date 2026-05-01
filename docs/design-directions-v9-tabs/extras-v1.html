@@ -1,0 +1,747 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QuillMD · Visit · Mei-Ling Park · v9 Extras V1 Editorial Density</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#08090a;
+  --surface-1:#0d0e10;
+  --surface-2:#131416;
+  --surface-3:#1a1c1e;
+  --border:#21232a;
+  --border-strong:#2c2f38;
+  --hairline:rgba(255,255,255,0.05);
+  --hairline-strong:rgba(255,255,255,0.08);
+  --text:#f7f8f8;
+  --text-2:#b4bcc8;
+  --text-3:#6c737f;
+  --text-4:#4b5159;
+  --sage:#7AA68C;
+  --sage-bright:#9BC4A8;
+  --sage-deep:#2F5040;
+  --sage-tint:rgba(122,166,140,0.13);
+  --sage-glow:rgba(122,166,140,0.18);
+  --row-hover:rgba(255,255,255,0.03);
+  --success:#4caf7d;
+  --warning:#d4a437;
+  --danger:#d4574a;
+  --info:#5b8db8;
+  --font-sans:'Inter', -apple-system, system-ui, sans-serif;
+  --font-mono:'JetBrains Mono', ui-monospace, Menlo, monospace;
+  --ease:cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text)}
+body{
+  font-family:var(--font-sans);
+  font-feature-settings:'cv11','ss01';
+  font-size:13px;
+  line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  letter-spacing:-0.005em;
+  min-height:100vh;
+}
+::selection{background:rgba(122,166,140,.25);color:var(--text)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+a{color:inherit;text-decoration:none}
+
+/* ─────────────── Top bar ─────────────── */
+.topbar{
+  position:sticky;top:0;z-index:30;
+  height:44px;
+  display:flex;align-items:center;gap:12px;
+  padding:0 16px;
+  background:rgba(8,9,10,.85);
+  backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--hairline);
+}
+.brand{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;letter-spacing:-0.01em}
+.brand-mark{
+  width:18px;height:18px;border-radius:5px;
+  background:linear-gradient(135deg,var(--sage) 0%,var(--sage-deep) 100%);
+  display:grid;place-items:center;color:#0c1410;font-size:10px;font-weight:700;
+  box-shadow:0 0 0 1px rgba(255,255,255,.06) inset;
+}
+.brand-mark::before{content:'Q'}
+.crumb-sep{color:var(--text-4);font-size:12px}
+.crumb{color:var(--text-2);font-size:13px;transition:color 100ms var(--ease)}
+.crumb:hover{color:var(--text)}
+.crumb-active{color:var(--text)}
+.spacer{flex:1}
+
+.status-pill-chrome{
+  display:inline-flex;align-items:center;gap:6px;
+  height:22px;padding:0 9px;
+  border-radius:4px;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.06em;text-transform:uppercase;font-weight:500;
+  border:1px solid rgba(122,166,140,.25);
+  color:var(--sage-bright);
+  background:rgba(122,166,140,.06);
+}
+.status-pill-chrome .pdot{
+  width:5px;height:5px;border-radius:50%;
+  background:var(--sage);
+  animation:idle-pulse 1.6s ease-in-out infinite;
+}
+@keyframes idle-pulse{
+  0%,100%{opacity:.7;transform:scale(1)}
+  50%{opacity:1;transform:scale(1.04)}
+}
+.btn-sage{
+  display:inline-flex;align-items:center;gap:8px;
+  height:30px;padding:0 14px;
+  background:var(--sage);
+  color:#0d1611;
+  border-radius:6px;
+  font-size:12.5px;font-weight:500;
+  letter-spacing:-0.005em;
+  transition:background 100ms var(--ease), transform 80ms var(--ease), box-shadow 200ms var(--ease);
+}
+.btn-sage:hover{background:#88b599;transform:scale(1.02);box-shadow:0 0 0 4px rgba(122,166,140,.18)}
+.btn-sage .shortcut{font-family:var(--font-mono);font-size:11px;color:rgba(13,22,17,.55)}
+
+.avatar-chip{
+  width:24px;height:24px;border-radius:6px;
+  background:linear-gradient(135deg,#3a4a52 0%,#2a3036 100%);
+  color:#dde6ec;font-size:10.5px;font-weight:600;
+  display:grid;place-items:center;letter-spacing:0.02em;
+  border:1px solid var(--hairline-strong);
+}
+
+/* ─────────────── Layout ─────────────── */
+.shell{
+  position:relative;
+  min-height:calc(100vh - 44px);
+  padding:18px 28px 80px;
+}
+.shell::before{
+  content:'';
+  position:absolute;
+  top:-100px;left:30%;
+  width:600px;height:380px;
+  background:radial-gradient(ellipse at center, rgba(122,166,140,.045) 0%, transparent 70%);
+  pointer-events:none;
+  z-index:0;
+}
+
+/* meta strip */
+.meta-strip{
+  display:flex;align-items:center;
+  padding:6px 0 14px;
+  margin-bottom:14px;
+  border-bottom:1px solid var(--hairline);
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--text-2);
+  position:relative;z-index:1;
+}
+.meta-strip .field{padding:0 14px;border-right:1px solid var(--hairline)}
+.meta-strip .field:first-child{padding-left:0;color:var(--text);font-weight:500}
+.meta-strip .field:last-child{border-right:0}
+.meta-strip .field .lbl{color:var(--text-4);margin-right:4px;font-weight:400}
+
+/* tabs */
+.tabs-row{
+  display:flex;align-items:center;gap:0;
+  margin-bottom:36px;
+  border-bottom:1px solid var(--hairline);
+  position:relative;z-index:1;
+}
+.tab{
+  position:relative;
+  padding:8px 16px 10px;
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.07em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  font-weight:500;
+  cursor:pointer;
+  transition:color 100ms var(--ease);
+}
+.tab:first-child{padding-left:0}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--sage-bright)}
+.tab.active::after{
+  content:'';position:absolute;
+  left:0;right:0;bottom:-1px;
+  height:1.5px;
+  background:var(--sage);
+  border-radius:1px 1px 0 0;
+}
+
+/* ─────────────── Editorial reading column ─────────────── */
+.reading-frame{
+  position:relative;z-index:1;
+  max-width:760px;
+  margin:0 auto;
+}
+
+.note-masthead{
+  padding:8px 0 28px;
+  border-bottom:1px solid var(--hairline);
+  margin-bottom:42px;
+}
+.note-eyebrow{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.14em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  margin-bottom:14px;
+}
+.note-eyebrow .sage-mark{color:var(--sage-bright);margin-right:6px}
+.note-title{
+  font-family:var(--font-sans);
+  font-size:30px;
+  line-height:1.18;
+  letter-spacing:-0.02em;
+  font-weight:600;
+  color:var(--text);
+  margin:0 0 12px;
+}
+.note-byline{
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+}
+.note-byline .dot{width:3px;height:3px;border-radius:50%;background:var(--text-4)}
+.note-byline strong{color:var(--text-2);font-weight:500}
+
+/* sections */
+.ed-section{
+  margin-bottom:42px;
+  padding-bottom:42px;
+  border-bottom:1px solid var(--hairline);
+  position:relative;
+}
+.ed-section:last-of-type{border-bottom:0;margin-bottom:0;padding-bottom:30px}
+.section-head{
+  display:flex;align-items:flex-start;justify-content:space-between;
+  gap:16px;
+  margin-bottom:18px;
+}
+.section-eyebrow{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.14em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  margin-bottom:8px;
+  display:flex;align-items:center;gap:8px;
+}
+.section-eyebrow .num{color:var(--sage-bright);font-weight:500}
+.section-eyebrow .sep{color:var(--text-4)}
+.section-eyebrow .verified{color:var(--text-4);text-transform:none;letter-spacing:0.04em}
+.section-heading{
+  font-family:var(--font-sans);
+  font-size:19px;
+  line-height:1.3;
+  letter-spacing:-0.012em;
+  font-weight:600;
+  color:var(--text);
+  margin:0;
+}
+
+.section-edit{
+  flex-shrink:0;
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.12em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  padding:2px 8px;
+  border-radius:3px;
+  margin-top:4px;
+  transition:color 100ms var(--ease), background 100ms var(--ease);
+}
+.section-edit:hover{color:var(--sage-bright);background:rgba(122,166,140,.06)}
+
+/* body */
+.section-body{
+  font-family:var(--font-sans);
+  font-size:14.5px;
+  line-height:1.72;
+  color:var(--text);
+  letter-spacing:-0.005em;
+}
+.section-body p{
+  margin:0;
+  padding:4px 0;
+}
+.section-body p + p{margin-top:6px}
+.section-body strong{color:var(--text);font-weight:500}
+.section-body em{font-style:italic;color:var(--text-2)}
+.section-body .lead{
+  font-style:italic;
+  color:var(--text-2);
+  font-size:14.5px;
+}
+.section-body .lead strong{color:var(--text);font-style:normal}
+.section-body .mono{
+  font-family:var(--font-mono);
+  font-size:13px;
+  font-variant-numeric:tabular-nums;
+}
+.section-body .v-name{color:var(--text);font-weight:500}
+.section-body .v-num{color:var(--text);font-weight:500}
+.section-body .v-unit{color:var(--text-3)}
+.section-body .annot{color:var(--text-3);font-size:13.5px}
+
+/* Demographics — 2-column layout */
+.demo-grid{
+  display:grid;
+  grid-template-columns:140px 1fr;
+  row-gap:9px;column-gap:18px;
+  margin-top:6px;
+}
+.demo-grid dt{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  padding-top:3px;
+}
+.demo-grid dd{
+  margin:0;
+  font-size:14px;
+  color:var(--text);
+  letter-spacing:-0.005em;
+}
+.demo-grid dd .secondary{color:var(--text-3);font-size:13px;margin-left:6px}
+
+/* Allergy callout */
+.allergy-line{
+  margin-top:8px;
+  padding:10px 12px;
+  border-left:2px solid var(--danger);
+  background:rgba(212,87,74,.05);
+  border-radius:0 4px 4px 0;
+  font-size:14px;
+  color:var(--text);
+  display:flex;align-items:baseline;gap:10px;
+}
+.allergy-line .sev{
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.12em;
+  text-transform:uppercase;
+  color:var(--danger);
+  font-weight:500;
+  flex-shrink:0;
+  padding-top:2px;
+}
+
+/* med entry */
+.med-entry{
+  font-size:14.5px;
+  margin-top:6px;
+  color:var(--text);
+}
+.med-entry .dose{
+  font-family:var(--font-mono);
+  font-size:13px;
+  color:var(--text-2);
+}
+
+/* problems list inline */
+.prob-line{
+  display:flex;align-items:baseline;gap:10px;
+  padding:8px 0;
+  border-top:1px solid var(--hairline);
+  font-size:14.5px;
+}
+.prob-line:first-of-type{border-top:0;padding-top:6px}
+.prob-line .icd{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.06em;
+  padding:1px 7px;
+  border:1px solid rgba(122,166,140,.22);
+  border-radius:3px;
+  color:var(--sage-bright);
+  background:rgba(122,166,140,.05);
+  flex-shrink:0;
+}
+.prob-line .icd.draft{
+  border-color:rgba(212,164,55,.3);
+  color:var(--warning);
+  background:rgba(212,164,55,.06);
+}
+.prob-line .label{color:var(--text);font-weight:500}
+.prob-line .annot{color:var(--text-3);font-size:13px;margin-left:4px}
+
+/* metadata grid same as demo */
+/* audit narrative */
+.audit-narrative{
+  margin-top:8px;
+}
+.audit-event{
+  display:grid;
+  grid-template-columns:64px 1fr;
+  gap:14px;
+  padding:9px 0;
+  border-top:1px solid var(--hairline);
+  align-items:baseline;
+}
+.audit-event:first-child{border-top:0;padding-top:4px}
+.audit-event .ts{
+  font-family:var(--font-mono);
+  font-size:11.5px;
+  letter-spacing:0.04em;
+  color:var(--text-3);
+  font-variant-numeric:tabular-nums;
+  padding-top:2px;
+}
+.audit-event .body{
+  font-size:14px;
+  color:var(--text);
+  line-height:1.55;
+}
+.audit-event .actor{color:var(--text);font-weight:500}
+.audit-event .verb{color:var(--text-2)}
+.audit-event .obj{color:var(--text-3)}
+.audit-event.system .actor{color:var(--text-3);font-weight:400}
+
+/* footer */
+.note-footer{
+  margin-top:22px;
+  padding-top:24px;
+  border-top:1px solid var(--hairline);
+  display:flex;align-items:center;justify-content:space-between;gap:16px;
+  flex-wrap:wrap;
+}
+.note-footer .meta{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--text-3);
+}
+.btn-ghost{
+  display:inline-flex;align-items:center;gap:8px;
+  height:34px;padding:0 14px;
+  border:1px solid var(--hairline-strong);
+  border-radius:6px;
+  background:transparent;
+  color:var(--text-2);
+  font-size:12.5px;font-weight:500;
+  letter-spacing:-0.005em;
+  transition:background 100ms var(--ease), color 100ms var(--ease), border-color 100ms var(--ease);
+}
+.btn-ghost:hover{background:rgba(255,255,255,.04);color:var(--text);border-color:rgba(255,255,255,.14)}
+
+/* reduced motion */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;
+  }
+  .status-pill-chrome .pdot{animation:none}
+}
+
+/* responsive */
+@media (max-width:760px){
+  .meta-strip{flex-wrap:wrap;font-size:10px}
+  .meta-strip .field{padding:4px 10px}
+  .shell{padding:14px 16px 60px}
+  .reading-frame{max-width:100%}
+  .note-title{font-size:24px}
+  .section-heading{font-size:17px}
+  .section-body{font-size:14px;line-height:1.7}
+  .demo-grid{grid-template-columns:1fr;row-gap:4px}
+  .demo-grid dt{padding-top:8px}
+  .audit-event{grid-template-columns:54px 1fr;gap:10px}
+  .tabs-row{overflow-x:auto;flex-wrap:nowrap}
+  .tab{flex-shrink:0}
+  .topbar{padding:0 12px;gap:8px;flex-wrap:wrap;height:auto;min-height:44px}
+  .crumb,.crumb-sep{display:none}
+  .crumb-active{display:inline}
+}
+@media (max-width:420px){
+  .note-byline{font-size:10px}
+  .audit-event .ts{font-size:10.5px}
+}
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<header class="topbar">
+  <div class="brand"><span class="brand-mark"></span> QuillMD</div>
+  <span class="crumb-sep">/</span>
+  <span class="crumb">Patients</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb">Mei-Ling Park</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb crumb-active">Visit · Apr 30, 2026</span>
+  <div class="spacer"></div>
+  <div class="status-pill-chrome" aria-live="polite">
+    <span class="pdot"></span>
+    <span class="label">Ready</span>
+  </div>
+  <button class="btn-sage" type="button" aria-label="Sign and send note">
+    <span>Sign &amp; send</span>
+    <span class="shortcut">⌘ ↵</span>
+  </button>
+  <div class="avatar-chip" title="Dr. Sarah Chen">SC</div>
+</header>
+
+<div class="shell">
+
+  <!-- meta strip -->
+  <div class="meta-strip">
+    <div class="field">Mei-Ling Park</div>
+    <div class="field">34 F</div>
+    <div class="field"><span class="lbl">MRN</span>MP-007341</div>
+    <div class="field">J20.9 · Bronchitis follow-up</div>
+    <div class="field">99214</div>
+    <div class="field"><span class="lbl">Duration</span>24 min</div>
+  </div>
+
+  <!-- tabs -->
+  <div class="tabs-row" role="tablist">
+    <div class="tab" role="tab" aria-selected="false">Soap Note</div>
+    <div class="tab" role="tab" aria-selected="false">Transcript</div>
+    <div class="tab" role="tab" aria-selected="false">Codes</div>
+    <div class="tab" role="tab" aria-selected="false">Rx</div>
+    <div class="tab active" role="tab" aria-selected="true">Extras</div>
+  </div>
+
+  <!-- editorial reading column -->
+  <div class="reading-frame">
+
+    <header class="note-masthead">
+      <div class="note-eyebrow"><span class="sage-mark">●</span>Patient context · supplementary record</div>
+      <h1 class="note-title">Everything around the visit, in plain prose.</h1>
+      <div class="note-byline">
+        <span><strong>Mei-Ling Park</strong></span>
+        <span class="dot"></span>
+        <span>34 F · DOB Mar 15, 1992</span>
+        <span class="dot"></span>
+        <span>MRN MP-007341</span>
+        <span class="dot"></span>
+        <span>Encounter Apr 30, 2026</span>
+      </div>
+    </header>
+
+    <!-- DEMOGRAPHICS -->
+    <section class="ed-section">
+      <div class="section-head">
+        <div>
+          <div class="section-eyebrow">
+            <span class="num">01</span><span class="sep">·</span><span>Demographics</span>
+          </div>
+          <h2 class="section-heading">Mei-Ling Park, 34, married, Newport Beach.</h2>
+        </div>
+        <button class="section-edit" type="button">Edit</button>
+      </div>
+      <div class="section-body">
+        <p class="lead">Established patient since <strong>2018</strong>. Returns today for a routine follow-up of acute bronchitis diagnosed 10 days ago. Insurance was re-verified two days before the visit; no demographic fields have changed since her last encounter in February.</p>
+        <dl class="demo-grid">
+          <dt>Full name</dt><dd>Mei-Ling Park</dd>
+          <dt>Date of birth</dt><dd>March 15, 1992 <span class="secondary">· Age 34</span></dd>
+          <dt>MRN</dt><dd><span class="mono">MP-007341</span></dd>
+          <dt>Address</dt><dd>Newport Beach, CA</dd>
+          <dt>Insurance</dt><dd>Anthem Blue Cross PPO <span class="secondary">· verified Apr 28, 2026</span></dd>
+          <dt>Language</dt><dd>English (preferred)</dd>
+          <dt>Emergency contact</dt><dd>Daniel Park <span class="secondary">· husband</span></dd>
+        </dl>
+      </div>
+    </section>
+
+    <!-- VITALS -->
+    <section class="ed-section">
+      <div class="section-head">
+        <div>
+          <div class="section-eyebrow">
+            <span class="num">02</span><span class="sep">·</span><span>Vitals</span><span class="sep">·</span><span class="verified">recorded 11:18 am</span>
+          </div>
+          <h2 class="section-heading">Today's vitals look unremarkable.</h2>
+        </div>
+        <button class="section-edit" type="button">Edit</button>
+      </div>
+      <div class="section-body">
+        <p><span class="mono"><span class="v-name">BP</span> <span class="v-num">118/74</span> <span class="v-unit">mmHg</span></span>. <span class="mono"><span class="v-name">HR</span> <span class="v-num">88</span> <span class="v-unit">bpm</span></span>, regular. <span class="mono"><span class="v-name">RR</span> <span class="v-num">18</span></span> per minute. <span class="mono"><span class="v-name">Temp</span> <span class="v-num">98.6 °F</span></span> oral. <span class="mono"><span class="v-name">SpO₂</span> <span class="v-num">98%</span></span> on room air. <span class="mono"><span class="v-name">Weight</span> <span class="v-num">145 lb</span></span>, <span class="mono"><span class="v-name">height</span> <span class="v-num">5′5″</span></span>, <span class="mono"><span class="v-name">BMI</span> <span class="v-num">24.1</span></span> <span class="annot">— within normal range, unchanged from her February visit</span>.</p>
+        <p class="lead">All metrics fall comfortably inside her established baselines. Oxygen saturation is back to 98% from a low of 95% during the acute phase ten days ago; respiratory rate has normalized.</p>
+      </div>
+    </section>
+
+    <!-- ALLERGIES -->
+    <section class="ed-section">
+      <div class="section-head">
+        <div>
+          <div class="section-eyebrow">
+            <span class="num">03</span><span class="sep">·</span><span>Allergies</span><span class="sep">·</span><span class="verified">1 active</span>
+          </div>
+          <h2 class="section-heading">Penicillin remains the only listed allergy.</h2>
+        </div>
+        <button class="section-edit" type="button">Edit</button>
+      </div>
+      <div class="section-body">
+        <p class="lead"><strong>Patient confirmed at intake</strong> — no new substances reported. The penicillin reaction was severe enough to be flagged at every prescribing screen; this fact has been part of her record since her first visit in 2018.</p>
+        <div class="allergy-line">
+          <span class="sev">Severe</span>
+          <span><strong>Penicillin</strong> — rash and hives. Reaction last documented and verified <em>May 2018</em>. Listed on every active prescribing screen.</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- CURRENT MEDS -->
+    <section class="ed-section">
+      <div class="section-head">
+        <div>
+          <div class="section-eyebrow">
+            <span class="num">04</span><span class="sep">·</span><span>Current medications</span><span class="sep">·</span><span class="verified">1 chronic</span>
+          </div>
+          <h2 class="section-heading">One chronic medication, taken without complaint.</h2>
+        </div>
+        <button class="section-edit" type="button">Edit</button>
+      </div>
+      <div class="section-body">
+        <p class="lead">Patient is on a single chronic medication — <strong>lisinopril 10 mg daily</strong> — for stage-1 hypertension diagnosed early 2024. Adherence has been excellent; she reports zero missed doses in the past month and no side effects. The albuterol HFA prescribed today appears in the Rx tab and is not mirrored here.</p>
+        <p class="med-entry"><strong>Lisinopril 10 mg</strong> <span class="dose">— PO daily, for hypertension. Started January 2024.</span></p>
+      </div>
+    </section>
+
+    <!-- PROBLEM LIST -->
+    <section class="ed-section">
+      <div class="section-head">
+        <div>
+          <div class="section-eyebrow">
+            <span class="num">05</span><span class="sep">·</span><span>Problem list</span><span class="sep">·</span><span class="verified">1 active · 1 draft</span>
+          </div>
+          <h2 class="section-heading">Hypertension stable; bronchitis pending sign-off.</h2>
+        </div>
+        <button class="section-edit" type="button">Edit</button>
+      </div>
+      <div class="section-body">
+        <p class="lead">Her chronic problem list has stayed identical for two years — well-controlled hypertension on a single ACE inhibitor. The acute bronchitis from this visit will join the list as a resolved problem once the note is signed.</p>
+        <div class="prob-line">
+          <span class="icd">I10</span>
+          <span class="label">Hypertension</span>
+          <span class="annot">— controlled, stable on lisinopril since Jan 2024</span>
+        </div>
+        <div class="prob-line">
+          <span class="icd draft">J20.9 · DRAFT</span>
+          <span class="label">Acute bronchitis</span>
+          <span class="annot">— added this visit, pending sign-off</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- VISIT METADATA -->
+    <section class="ed-section">
+      <div class="section-head">
+        <div>
+          <div class="section-eyebrow">
+            <span class="num">06</span><span class="sep">·</span><span>Visit metadata</span>
+          </div>
+          <h2 class="section-heading">A 24-minute family-medicine follow-up.</h2>
+        </div>
+        <button class="section-edit" type="button">Edit</button>
+      </div>
+      <div class="section-body">
+        <p class="lead">Originally booked as a telehealth follow-up; converted to in-person at the patient's request the night before. <strong>Dr. Sarah Chen</strong> recorded the encounter and is also the billing provider. Six minutes of the 24-minute visit were captured as audio and transcribed.</p>
+        <dl class="demo-grid">
+          <dt>Specialty</dt><dd>Family Medicine</dd>
+          <dt>Visit type</dt><dd>Follow-up <span class="secondary">· telehealth → in-person</span></dd>
+          <dt>Duration</dt><dd>24 minutes recorded <span class="secondary">· 6 m 04 s audio</span></dd>
+          <dt>Location</dt><dd>Suite 240, Newport Beach</dd>
+          <dt>Billing provider</dt><dd>Dr. Sarah Chen, MD <span class="secondary">· NPI 1234567890</span></dd>
+          <dt>Recorded by</dt><dd>Dr. Sarah Chen</dd>
+          <dt>Encounter ID</dt><dd><span class="mono">ENC-2026-04-30-7341</span></dd>
+        </dl>
+      </div>
+    </section>
+
+    <!-- AUDIT LOG -->
+    <section class="ed-section">
+      <div class="section-head">
+        <div>
+          <div class="section-eyebrow">
+            <span class="num">07</span><span class="sep">·</span><span>Audit log</span><span class="sep">·</span><span class="verified">last 8 events</span>
+          </div>
+          <h2 class="section-heading">A short, calm chain of custody.</h2>
+        </div>
+        <button class="section-edit" type="button">View all</button>
+      </div>
+      <div class="section-body">
+        <p class="lead">From check-in at 14:28 to the last AI draft acceptance at 14:42, the encounter unfolded in fourteen minutes of contiguous activity. <strong>No edits</strong> have been made by anyone other than Dr. Chen since.</p>
+        <div class="audit-narrative">
+          <div class="audit-event">
+            <span class="ts">14:42</span>
+            <span class="body"><span class="actor">Dr. Sarah Chen</span> <span class="verb">drafted the SOAP plan section</span>.</span>
+          </div>
+          <div class="audit-event">
+            <span class="ts">14:38</span>
+            <span class="body"><span class="actor">Dr. Sarah Chen</span> <span class="verb">accepted ICD code</span> <span class="obj">J20.9</span>.</span>
+          </div>
+          <div class="audit-event system">
+            <span class="ts">14:36</span>
+            <span class="body"><span class="actor">System</span> <span class="verb">generated the SOAP draft</span> <span class="obj">— AI confidence 92%</span>.</span>
+          </div>
+          <div class="audit-event system">
+            <span class="ts">14:36</span>
+            <span class="body"><span class="actor">System</span> <span class="verb">completed transcription</span> <span class="obj">via Whisper v3, 6 m 04 s</span>.</span>
+          </div>
+          <div class="audit-event">
+            <span class="ts">14:30</span>
+            <span class="body"><span class="actor">Dr. Sarah Chen</span> <span class="verb">started recording</span>.</span>
+          </div>
+          <div class="audit-event">
+            <span class="ts">14:29</span>
+            <span class="body"><span class="actor">Dr. Sarah Chen</span> <span class="verb">opened the patient chart</span>.</span>
+          </div>
+          <div class="audit-event system">
+            <span class="ts">14:28</span>
+            <span class="body"><span class="actor">System</span> <span class="verb">checked in</span> <span class="obj">the patient</span>.</span>
+          </div>
+          <div class="audit-event">
+            <span class="ts">09:14</span>
+            <span class="body"><span class="actor">Dr. Sarah Chen</span> <span class="verb">verified insurance</span> <span class="obj">via the Anthem API</span>.</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="note-footer">
+      <div class="meta">Auto-saved · Apr 30, 2026 · 14:42 PT</div>
+      <button class="btn-ghost" type="button">Export Extras as PDF</button>
+    </footer>
+
+  </div>
+
+</div>
+
+<script>
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => {
+      x.classList.remove('active');
+      x.setAttribute('aria-selected','false');
+    });
+    t.classList.add('active');
+    t.setAttribute('aria-selected','true');
+  });
+});
+</script>
+
+</body>
+</html>

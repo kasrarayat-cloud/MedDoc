@@ -1,0 +1,997 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QuillMD · Visit · Mei-Ling Park · v9 Extras V3 Split Pane</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#08090a;
+  --surface-1:#0d0e10;
+  --surface-2:#131416;
+  --surface-3:#1a1c1e;
+  --border:#21232a;
+  --border-strong:#2c2f38;
+  --hairline:rgba(255,255,255,0.05);
+  --hairline-strong:rgba(255,255,255,0.08);
+  --text:#f7f8f8;
+  --text-2:#b4bcc8;
+  --text-3:#6c737f;
+  --text-4:#4b5159;
+  --sage:#7AA68C;
+  --sage-bright:#9BC4A8;
+  --sage-deep:#2F5040;
+  --sage-tint:rgba(122,166,140,0.13);
+  --sage-glow:rgba(122,166,140,0.18);
+  --row-hover:rgba(255,255,255,0.03);
+  --success:#4caf7d;
+  --warning:#d4a437;
+  --danger:#d4574a;
+  --info:#5b8db8;
+  --font-sans:'Inter', -apple-system, system-ui, sans-serif;
+  --font-mono:'JetBrains Mono', ui-monospace, Menlo, monospace;
+  --ease:cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text)}
+body{
+  font-family:var(--font-sans);
+  font-feature-settings:'cv11','ss01';
+  font-size:13px;
+  line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  letter-spacing:-0.005em;
+  min-height:100vh;
+}
+::selection{background:rgba(122,166,140,.25);color:var(--text)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+a{color:inherit;text-decoration:none}
+
+/* ─────────────── Top bar ─────────────── */
+.topbar{
+  position:sticky;top:0;z-index:30;
+  height:44px;
+  display:flex;align-items:center;gap:12px;
+  padding:0 16px;
+  background:rgba(8,9,10,.85);
+  backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--hairline);
+}
+.brand{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;letter-spacing:-0.01em}
+.brand-mark{
+  width:18px;height:18px;border-radius:5px;
+  background:linear-gradient(135deg,var(--sage) 0%,var(--sage-deep) 100%);
+  display:grid;place-items:center;color:#0c1410;font-size:10px;font-weight:700;
+  box-shadow:0 0 0 1px rgba(255,255,255,.06) inset;
+}
+.brand-mark::before{content:'Q'}
+.crumb-sep{color:var(--text-4);font-size:12px}
+.crumb{color:var(--text-2);font-size:13px;transition:color 100ms var(--ease)}
+.crumb:hover{color:var(--text)}
+.crumb-active{color:var(--text)}
+.spacer{flex:1}
+
+.status-pill-chrome{
+  display:inline-flex;align-items:center;gap:6px;
+  height:22px;padding:0 9px;
+  border-radius:4px;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.06em;text-transform:uppercase;font-weight:500;
+  border:1px solid rgba(122,166,140,.25);
+  color:var(--sage-bright);
+  background:rgba(122,166,140,.06);
+}
+.status-pill-chrome .pdot{
+  width:5px;height:5px;border-radius:50%;
+  background:var(--sage);
+  animation:idle-pulse 1.6s ease-in-out infinite;
+}
+@keyframes idle-pulse{
+  0%,100%{opacity:.7;transform:scale(1)}
+  50%{opacity:1;transform:scale(1.04)}
+}
+.btn-sage{
+  display:inline-flex;align-items:center;gap:8px;
+  height:30px;padding:0 14px;
+  background:var(--sage);
+  color:#0d1611;
+  border-radius:6px;
+  font-size:12.5px;font-weight:500;
+  letter-spacing:-0.005em;
+  transition:background 100ms var(--ease), transform 80ms var(--ease), box-shadow 200ms var(--ease);
+}
+.btn-sage:hover{background:#88b599;transform:scale(1.02);box-shadow:0 0 0 4px rgba(122,166,140,.18)}
+.btn-sage .shortcut{font-family:var(--font-mono);font-size:11px;color:rgba(13,22,17,.55)}
+
+.avatar-chip{
+  width:24px;height:24px;border-radius:6px;
+  background:linear-gradient(135deg,#3a4a52 0%,#2a3036 100%);
+  color:#dde6ec;font-size:10.5px;font-weight:600;
+  display:grid;place-items:center;letter-spacing:0.02em;
+  border:1px solid var(--hairline-strong);
+}
+
+/* ─────────────── Layout ─────────────── */
+.shell{
+  position:relative;
+  min-height:calc(100vh - 44px);
+  padding:18px 28px 80px;
+}
+.shell::before{
+  content:'';
+  position:absolute;
+  top:-100px;left:30%;
+  width:600px;height:380px;
+  background:radial-gradient(ellipse at center, rgba(122,166,140,.045) 0%, transparent 70%);
+  pointer-events:none;
+  z-index:0;
+}
+
+/* meta strip */
+.meta-strip{
+  display:flex;align-items:center;
+  padding:6px 0 14px;
+  margin-bottom:14px;
+  border-bottom:1px solid var(--hairline);
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--text-2);
+  position:relative;z-index:1;
+}
+.meta-strip .field{padding:0 14px;border-right:1px solid var(--hairline)}
+.meta-strip .field:first-child{padding-left:0;color:var(--text);font-weight:500}
+.meta-strip .field:last-child{border-right:0}
+.meta-strip .field .lbl{color:var(--text-4);margin-right:4px;font-weight:400}
+
+/* tabs */
+.tabs-row{
+  display:flex;align-items:center;gap:0;
+  margin-bottom:24px;
+  border-bottom:1px solid var(--hairline);
+  position:relative;z-index:1;
+}
+.tab{
+  position:relative;
+  padding:8px 16px 10px;
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.07em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  font-weight:500;
+  cursor:pointer;
+  transition:color 100ms var(--ease);
+}
+.tab:first-child{padding-left:0}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--sage-bright)}
+.tab.active::after{
+  content:'';position:absolute;
+  left:0;right:0;bottom:-1px;
+  height:1.5px;
+  background:var(--sage);
+  border-radius:1px 1px 0 0;
+}
+
+/* ─────────────── Split layout ─────────────── */
+.split{
+  position:relative;z-index:1;
+  display:grid;
+  grid-template-columns:1fr 360px;
+  gap:32px;
+  align-items:start;
+}
+@media (max-width:1080px){
+  .split{grid-template-columns:1fr;gap:24px}
+}
+
+/* ─────────────── Left pane ─────────────── */
+.left-pane{
+  min-width:0;
+  display:flex;flex-direction:column;
+  gap:28px;
+}
+.lp-section{
+  position:relative;
+  padding-bottom:24px;
+  border-bottom:1px solid var(--hairline);
+}
+.lp-section:last-child{border-bottom:0;padding-bottom:0}
+.lp-head{
+  display:flex;align-items:baseline;justify-content:space-between;
+  gap:12px;
+  margin-bottom:14px;
+  padding-bottom:8px;
+  border-bottom:1px solid var(--hairline-strong);
+}
+.lp-head .left{display:flex;align-items:baseline;gap:10px}
+.lp-head .title{
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.14em;
+  text-transform:uppercase;
+  color:var(--text);
+  font-weight:500;
+}
+.lp-head .meta{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--text-3);
+}
+.lp-head .edit{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.12em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  cursor:pointer;
+  transition:color 100ms var(--ease);
+}
+.lp-head .edit:hover{color:var(--sage-bright)}
+
+/* demographics 2-col */
+.demo-grid{
+  display:grid;
+  grid-template-columns:repeat(2, 1fr);
+  gap:12px 24px;
+}
+@media (max-width:600px){
+  .demo-grid{grid-template-columns:1fr}
+}
+.demo-cell{
+  display:flex;flex-direction:column;
+  gap:3px;
+  min-width:0;
+}
+.demo-cell .k{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--text-3);
+}
+.demo-cell .v{
+  font-size:13.5px;
+  color:var(--text);
+  letter-spacing:-0.005em;
+}
+.demo-cell .v .secondary{color:var(--text-3);font-size:12.5px;margin-left:4px}
+.demo-cell .v .mono{
+  font-family:var(--font-mono);
+  font-size:13px;
+  font-variant-numeric:tabular-nums;
+}
+
+/* vitals tile grid */
+.vitals-grid{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:1px;
+  background:var(--hairline);
+  border:1px solid var(--hairline);
+  border-radius:6px;
+  overflow:hidden;
+}
+@media (max-width:760px){
+  .vitals-grid{grid-template-columns:repeat(2,1fr)}
+}
+.v-tile{
+  background:var(--surface-1);
+  padding:11px 12px;
+  display:flex;flex-direction:column;
+  gap:3px;
+  transition:background 100ms var(--ease);
+}
+.v-tile:hover{background:var(--surface-2)}
+.v-tile .lbl{
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.12em;
+  text-transform:uppercase;
+  color:var(--text-3);
+}
+.v-tile .val{
+  font-family:var(--font-mono);
+  font-size:15px;
+  color:var(--text);
+  font-weight:500;
+  font-variant-numeric:tabular-nums;
+  letter-spacing:0.01em;
+}
+.v-tile .val .unit{color:var(--text-3);font-size:11.5px;margin-left:3px;font-weight:400}
+.v-tile .ok{
+  font-family:var(--font-mono);
+  font-size:9px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--sage-bright);
+  display:inline-flex;align-items:center;gap:3px;
+}
+.v-tile .ok::before{content:'✓';font-size:10px}
+
+/* allergy block */
+.allergy-block{
+  border:1px solid rgba(212,87,74,.22);
+  background:rgba(212,87,74,.04);
+  border-left-width:2px;
+  border-left-color:var(--danger);
+  border-radius:6px;
+  padding:11px 14px;
+  display:flex;flex-direction:column;
+  gap:6px;
+}
+.allergy-block .row{
+  display:flex;align-items:baseline;gap:10px;
+  flex-wrap:wrap;
+}
+.allergy-block .name{
+  font-size:14.5px;
+  color:var(--text);
+  font-weight:600;
+  letter-spacing:-0.01em;
+}
+.allergy-block .sev{
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.12em;
+  text-transform:uppercase;
+  color:var(--danger);
+  background:rgba(212,87,74,.08);
+  border:1px solid rgba(212,87,74,.3);
+  border-radius:3px;
+  padding:1px 6px;
+  font-weight:500;
+}
+.allergy-block .body{
+  font-size:13px;
+  color:var(--text-2);
+  line-height:1.5;
+}
+.allergy-block .verified{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  color:var(--text-3);
+  letter-spacing:0.04em;
+}
+
+/* meds & problems list rows */
+.list-row{
+  display:flex;align-items:flex-start;gap:12px;
+  padding:10px 0;
+  border-top:1px solid var(--hairline);
+}
+.list-row:first-child{border-top:0;padding-top:2px}
+.list-row .icon{
+  flex-shrink:0;
+  width:28px;height:28px;
+  display:grid;place-items:center;
+  border:1px solid var(--hairline-strong);
+  border-radius:5px;
+  background:rgba(255,255,255,.02);
+  color:var(--sage-bright);
+  font-size:13px;
+}
+.list-row .icon.warn{color:var(--warning);border-color:rgba(212,164,55,.2);background:rgba(212,164,55,.04)}
+.list-row .body{flex:1;min-width:0}
+.list-row .name{
+  font-size:14px;
+  color:var(--text);
+  font-weight:500;
+  margin-bottom:2px;
+}
+.list-row .name .pill{
+  display:inline-flex;align-items:center;
+  height:16px;padding:0 6px;
+  font-family:var(--font-mono);
+  font-size:9px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  font-weight:500;
+  border-radius:3px;
+  margin-left:8px;
+  vertical-align:1px;
+}
+.list-row .name .pill.icd{background:rgba(122,166,140,.06);color:var(--sage-bright);border:1px solid rgba(122,166,140,.22)}
+.list-row .name .pill.draft{background:rgba(212,164,55,.06);color:var(--warning);border:1px solid rgba(212,164,55,.25)}
+.list-row .detail{
+  font-size:12.5px;
+  color:var(--text-3);
+  line-height:1.5;
+}
+.list-row .detail .mono{
+  font-family:var(--font-mono);
+  font-variant-numeric:tabular-nums;
+  color:var(--text-2);
+}
+
+/* metadata grid (re-uses demo grid) */
+
+/* ─────────────── Right pane (audit rail) ─────────────── */
+.right-pane{
+  position:sticky;top:60px;
+  background:var(--surface-1);
+  border:1px solid var(--hairline);
+  border-radius:8px;
+  max-height:calc(100vh - 80px);
+  overflow:auto;
+  display:flex;flex-direction:column;
+}
+.rp-head{
+  position:sticky;top:0;
+  background:var(--surface-1);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 16px 11px;
+  border-bottom:1px solid var(--hairline);
+  z-index:1;
+}
+.rp-head .title{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.14em;
+  text-transform:uppercase;
+  color:var(--text);
+  font-weight:500;
+}
+.rp-head .title .num{color:var(--sage-bright)}
+.rp-head .filters{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  cursor:pointer;
+}
+.rp-head .filters:hover{color:var(--sage-bright)}
+
+.audit-day{
+  padding:10px 16px 4px;
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.14em;
+  text-transform:uppercase;
+  color:var(--text-4);
+  background:rgba(255,255,255,.015);
+  border-top:1px solid var(--hairline);
+  border-bottom:1px solid var(--hairline);
+}
+.audit-day:first-of-type{border-top:0}
+
+.audit-list{
+  display:flex;flex-direction:column;
+}
+.audit-row{
+  display:grid;
+  grid-template-columns:50px 1fr;
+  gap:10px;
+  padding:10px 16px;
+  border-bottom:1px solid var(--hairline);
+  align-items:flex-start;
+  position:relative;
+  transition:background 100ms var(--ease);
+}
+.audit-row:hover{background:var(--row-hover)}
+.audit-row:last-child{border-bottom:0}
+.audit-row .ts{
+  font-family:var(--font-mono);
+  font-size:11px;
+  color:var(--text-3);
+  font-variant-numeric:tabular-nums;
+  letter-spacing:0.02em;
+  padding-top:1px;
+}
+.audit-row .body{
+  display:flex;align-items:flex-start;gap:8px;
+  min-width:0;
+}
+.audit-row .av{
+  width:20px;height:20px;border-radius:4px;
+  background:linear-gradient(135deg,#3a4a52 0%,#2a3036 100%);
+  color:#dde6ec;font-size:9px;font-weight:600;
+  display:grid;place-items:center;letter-spacing:0.02em;
+  border:1px solid var(--hairline-strong);
+  flex-shrink:0;
+  margin-top:1px;
+}
+.audit-row.system .av{
+  background:linear-gradient(135deg,#1f2a26 0%,#11201a 100%);
+  color:var(--sage-bright);
+}
+.audit-row .text{
+  flex:1;min-width:0;
+  font-size:12.5px;
+  color:var(--text);
+  line-height:1.5;
+}
+.audit-row .actor{color:var(--text);font-weight:500}
+.audit-row.system .actor{color:var(--text-2);font-weight:400}
+.audit-row .verb{color:var(--text-2);display:block;margin-top:1px}
+.audit-row .obj{
+  display:block;
+  font-family:var(--font-mono);
+  font-size:11px;
+  color:var(--text-3);
+  margin-top:2px;
+  letter-spacing:0.01em;
+}
+.audit-row .badge{
+  display:inline-flex;align-items:center;
+  height:16px;padding:0 5px;
+  margin-left:6px;
+  font-family:var(--font-mono);
+  font-size:9px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  border-radius:3px;
+  background:rgba(122,166,140,.06);
+  color:var(--sage-bright);
+  border:1px solid rgba(122,166,140,.22);
+}
+.audit-row .badge.amber{background:rgba(212,164,55,.06);color:var(--warning);border-color:rgba(212,164,55,.25)}
+
+.rp-foot{
+  padding:10px 16px;
+  border-top:1px solid var(--hairline);
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  display:flex;align-items:center;justify-content:space-between;
+}
+.rp-foot a{color:var(--sage-bright);cursor:pointer}
+.rp-foot a:hover{color:var(--text)}
+
+/* reduced motion */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;
+  }
+  .status-pill-chrome .pdot{animation:none}
+}
+
+/* responsive */
+@media (max-width:760px){
+  .meta-strip{flex-wrap:wrap;font-size:10px}
+  .meta-strip .field{padding:4px 10px}
+  .shell{padding:14px 16px 60px}
+  .tabs-row{overflow-x:auto;flex-wrap:nowrap}
+  .tab{flex-shrink:0}
+  .topbar{padding:0 12px;gap:8px;flex-wrap:wrap;height:auto;min-height:44px}
+  .crumb,.crumb-sep{display:none}
+  .crumb-active{display:inline}
+  .right-pane{position:static;max-height:none}
+}
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<header class="topbar">
+  <div class="brand"><span class="brand-mark"></span> QuillMD</div>
+  <span class="crumb-sep">/</span>
+  <span class="crumb">Patients</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb">Mei-Ling Park</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb crumb-active">Visit · Apr 30, 2026</span>
+  <div class="spacer"></div>
+  <div class="status-pill-chrome" aria-live="polite">
+    <span class="pdot"></span>
+    <span class="label">Ready</span>
+  </div>
+  <button class="btn-sage" type="button" aria-label="Sign and send note">
+    <span>Sign &amp; send</span>
+    <span class="shortcut">⌘ ↵</span>
+  </button>
+  <div class="avatar-chip" title="Dr. Sarah Chen">SC</div>
+</header>
+
+<div class="shell">
+
+  <!-- meta strip -->
+  <div class="meta-strip">
+    <div class="field">Mei-Ling Park</div>
+    <div class="field">34 F</div>
+    <div class="field"><span class="lbl">MRN</span>MP-007341</div>
+    <div class="field">J20.9 · Bronchitis follow-up</div>
+    <div class="field">99214</div>
+    <div class="field"><span class="lbl">Duration</span>24 min</div>
+  </div>
+
+  <!-- tabs -->
+  <div class="tabs-row" role="tablist">
+    <div class="tab" role="tab" aria-selected="false">Soap Note</div>
+    <div class="tab" role="tab" aria-selected="false">Transcript</div>
+    <div class="tab" role="tab" aria-selected="false">Codes</div>
+    <div class="tab" role="tab" aria-selected="false">Rx</div>
+    <div class="tab active" role="tab" aria-selected="true">Extras</div>
+  </div>
+
+  <!-- split -->
+  <div class="split">
+
+    <!-- LEFT: patient context -->
+    <div class="left-pane">
+
+      <!-- DEMOGRAPHICS -->
+      <section class="lp-section">
+        <div class="lp-head">
+          <div class="left">
+            <span class="title">Demographics</span>
+            <span class="meta">7 fields · verified Apr 28</span>
+          </div>
+          <button class="edit" type="button">Edit</button>
+        </div>
+        <div class="demo-grid">
+          <div class="demo-cell"><span class="k">Full name</span><span class="v">Mei-Ling Park</span></div>
+          <div class="demo-cell"><span class="k">Date of birth</span><span class="v"><span class="mono">Mar 15, 1992</span><span class="secondary">· 34 yo</span></span></div>
+          <div class="demo-cell"><span class="k">MRN</span><span class="v"><span class="mono">MP-007341</span></span></div>
+          <div class="demo-cell"><span class="k">Address</span><span class="v">Newport Beach, CA</span></div>
+          <div class="demo-cell"><span class="k">Insurance</span><span class="v">Anthem Blue Cross PPO<span class="secondary">· verified Apr 28</span></span></div>
+          <div class="demo-cell"><span class="k">Preferred language</span><span class="v">English</span></div>
+          <div class="demo-cell"><span class="k">Emergency contact</span><span class="v">Daniel Park<span class="secondary">· husband</span></span></div>
+          <div class="demo-cell"><span class="k">Encounter ID</span><span class="v"><span class="mono">ENC-2026-04-30-7341</span></span></div>
+        </div>
+      </section>
+
+      <!-- VITALS -->
+      <section class="lp-section">
+        <div class="lp-head">
+          <div class="left">
+            <span class="title">Vitals</span>
+            <span class="meta">today 11:18 am · 8 / 8 in range</span>
+          </div>
+          <button class="edit" type="button">Edit</button>
+        </div>
+        <div class="vitals-grid">
+          <div class="v-tile"><span class="lbl">BP</span><span class="val">118/74<span class="unit">mmHg</span></span><span class="ok">Normal</span></div>
+          <div class="v-tile"><span class="lbl">HR</span><span class="val">88<span class="unit">bpm</span></span><span class="ok">Normal</span></div>
+          <div class="v-tile"><span class="lbl">RR</span><span class="val">18<span class="unit">/min</span></span><span class="ok">Normal</span></div>
+          <div class="v-tile"><span class="lbl">Temp</span><span class="val">98.6<span class="unit">°F</span></span><span class="ok">Normal</span></div>
+          <div class="v-tile"><span class="lbl">SpO₂</span><span class="val">98<span class="unit">% RA</span></span><span class="ok">Normal</span></div>
+          <div class="v-tile"><span class="lbl">Weight</span><span class="val">145<span class="unit">lb</span></span><span class="ok">Stable</span></div>
+          <div class="v-tile"><span class="lbl">Height</span><span class="val">5′5″</span><span class="ok">Stable</span></div>
+          <div class="v-tile"><span class="lbl">BMI</span><span class="val">24.1<span class="unit">kg/m²</span></span><span class="ok">Normal</span></div>
+        </div>
+      </section>
+
+      <!-- ALLERGIES -->
+      <section class="lp-section">
+        <div class="lp-head">
+          <div class="left">
+            <span class="title">Allergies</span>
+            <span class="meta">1 active · confirmed at intake</span>
+          </div>
+          <button class="edit" type="button">Edit</button>
+        </div>
+        <div class="allergy-block">
+          <div class="row">
+            <span class="name">Penicillin</span>
+            <span class="sev">Severe</span>
+          </div>
+          <div class="body">Reaction: rash and hives. Listed on every active prescribing screen.</div>
+          <div class="verified">VERIFIED MAY 2018 · PATIENT REPORT</div>
+        </div>
+      </section>
+
+      <!-- CURRENT MEDS -->
+      <section class="lp-section">
+        <div class="lp-head">
+          <div class="left">
+            <span class="title">Current medications</span>
+            <span class="meta">1 chronic · excludes today's Rx</span>
+          </div>
+          <button class="edit" type="button">Edit</button>
+        </div>
+        <div class="list-row">
+          <span class="icon">Rx</span>
+          <div class="body">
+            <div class="name">Lisinopril 10 mg</div>
+            <div class="detail"><span class="mono">PO daily</span> for hypertension <span class="mono">(I10)</span> · started <span class="mono">Jan 2024</span> · adherence excellent</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- PROBLEM LIST -->
+      <section class="lp-section">
+        <div class="lp-head">
+          <div class="left">
+            <span class="title">Problem list</span>
+            <span class="meta">1 active · 1 draft</span>
+          </div>
+          <button class="edit" type="button">Edit</button>
+        </div>
+        <div class="list-row">
+          <span class="icon">●</span>
+          <div class="body">
+            <div class="name">Hypertension <span class="pill icd">I10</span></div>
+            <div class="detail">Controlled, stable on lisinopril since <span class="mono">Jan 2024</span>. Last BP reading <span class="mono">118/74</span>.</div>
+          </div>
+        </div>
+        <div class="list-row">
+          <span class="icon warn">○</span>
+          <div class="body">
+            <div class="name">Acute bronchitis <span class="pill icd">J20.9</span> <span class="pill draft">Draft</span></div>
+            <div class="detail">Added this visit, pending sign-off. Onset <span class="mono">Apr 20, 2026</span> · resolving on conservative care.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- VISIT METADATA -->
+      <section class="lp-section">
+        <div class="lp-head">
+          <div class="left">
+            <span class="title">Visit metadata</span>
+            <span class="meta">7 fields</span>
+          </div>
+          <button class="edit" type="button">Edit</button>
+        </div>
+        <div class="demo-grid">
+          <div class="demo-cell"><span class="k">Specialty</span><span class="v">Family Medicine</span></div>
+          <div class="demo-cell"><span class="k">Visit type</span><span class="v">Follow-up<span class="secondary">· tele → in-person</span></span></div>
+          <div class="demo-cell"><span class="k">Duration</span><span class="v"><span class="mono">24 min</span><span class="secondary">· 6 m 04 s audio</span></span></div>
+          <div class="demo-cell"><span class="k">Location</span><span class="v">Suite 240, Newport Beach</span></div>
+          <div class="demo-cell"><span class="k">Billing provider</span><span class="v">Dr. Sarah Chen, MD<span class="secondary">· NPI <span class="mono">1234567890</span></span></span></div>
+          <div class="demo-cell"><span class="k">Recorded by</span><span class="v">Dr. Sarah Chen</span></div>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- RIGHT: audit rail -->
+    <aside class="right-pane">
+      <div class="rp-head">
+        <span class="title">Audit · <span class="num">17 events</span></span>
+        <button class="filters" type="button">Filter</button>
+      </div>
+
+      <div class="audit-day">Today · Apr 30, 2026</div>
+      <div class="audit-list">
+
+        <div class="audit-row">
+          <span class="ts">14:42</span>
+          <div class="body">
+            <span class="av">SC</span>
+            <div class="text">
+              <span class="actor">Dr. Sarah Chen</span>
+              <span class="verb">drafted SOAP plan section</span>
+              <span class="obj">soap.plan · 4 paragraphs</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="audit-row">
+          <span class="ts">14:38</span>
+          <div class="body">
+            <span class="av">SC</span>
+            <div class="text">
+              <span class="actor">Dr. Sarah Chen</span>
+              <span class="verb">accepted ICD code <span class="badge">J20.9</span></span>
+              <span class="obj">codes.icd[0] = J20.9</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="audit-row system">
+          <span class="ts">14:36</span>
+          <div class="body">
+            <span class="av">·</span>
+            <div class="text">
+              <span class="actor">System</span>
+              <span class="verb">generated SOAP draft <span class="badge">AI 92%</span></span>
+              <span class="obj">soap.* (4 sections)</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="audit-row system">
+          <span class="ts">14:36</span>
+          <div class="body">
+            <span class="av">·</span>
+            <div class="text">
+              <span class="actor">System</span>
+              <span class="verb">completed transcription</span>
+              <span class="obj">Whisper v3 · 6 m 04 s</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="audit-row">
+          <span class="ts">14:30</span>
+          <div class="body">
+            <span class="av">SC</span>
+            <div class="text">
+              <span class="actor">Dr. Sarah Chen</span>
+              <span class="verb">started recording</span>
+              <span class="obj">encounter.audio · 6 m 04 s</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="audit-row">
+          <span class="ts">14:29</span>
+          <div class="body">
+            <span class="av">SC</span>
+            <div class="text">
+              <span class="actor">Dr. Sarah Chen</span>
+              <span class="verb">opened patient chart</span>
+              <span class="obj">MRN MP-007341</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="audit-row system">
+          <span class="ts">14:28</span>
+          <div class="body">
+            <span class="av">·</span>
+            <div class="text">
+              <span class="actor">System</span>
+              <span class="verb">checked in patient</span>
+              <span class="obj">Front-desk kiosk</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="audit-row">
+          <span class="ts">09:14</span>
+          <div class="body">
+            <span class="av">SC</span>
+            <div class="text">
+              <span class="actor">Dr. Sarah Chen <span class="badge amber">admin</span></span>
+              <span class="verb">verified insurance</span>
+              <span class="obj">Anthem API · 200 OK</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="audit-day">Yesterday · Apr 29, 2026</div>
+      <div class="audit-list">
+
+        <div class="audit-row system">
+          <span class="ts">22:14</span>
+          <div class="body">
+            <span class="av">·</span>
+            <div class="text">
+              <span class="actor">System</span>
+              <span class="verb">switched visit type</span>
+              <span class="obj">tele → in-person</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="audit-row">
+          <span class="ts">21:58</span>
+          <div class="body">
+            <span class="av">MP</span>
+            <div class="text">
+              <span class="actor">M. Park <span class="badge amber">patient</span></span>
+              <span class="verb">requested visit-type change</span>
+              <span class="obj">portal · message #4421</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="audit-row system">
+          <span class="ts">14:02</span>
+          <div class="body">
+            <span class="av">·</span>
+            <div class="text">
+              <span class="actor">System</span>
+              <span class="verb">sent intake reminder</span>
+              <span class="obj">SMS · delivered</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="audit-day">Apr 28, 2026</div>
+      <div class="audit-list">
+
+        <div class="audit-row">
+          <span class="ts">10:21</span>
+          <div class="body">
+            <span class="av">SC</span>
+            <div class="text">
+              <span class="actor">Dr. Sarah Chen</span>
+              <span class="verb">re-verified insurance</span>
+              <span class="obj">Anthem PPO active</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="audit-row system">
+          <span class="ts">09:40</span>
+          <div class="body">
+            <span class="av">·</span>
+            <div class="text">
+              <span class="actor">System</span>
+              <span class="verb">scheduled visit</span>
+              <span class="obj">Apr 30, 2026 · 14:30 PT</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="audit-day">Apr 20, 2026</div>
+      <div class="audit-list">
+
+        <div class="audit-row">
+          <span class="ts">11:08</span>
+          <div class="body">
+            <span class="av">SC</span>
+            <div class="text">
+              <span class="actor">Dr. Sarah Chen</span>
+              <span class="verb">documented initial bronchitis dx</span>
+              <span class="obj">prior visit · ENC-2026-04-20-7341</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="audit-row">
+          <span class="ts">10:41</span>
+          <div class="body">
+            <span class="av">SC</span>
+            <div class="text">
+              <span class="actor">Dr. Sarah Chen</span>
+              <span class="verb">prescribed albuterol HFA</span>
+              <span class="obj">90 mcg · PRN q4h</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="audit-row system">
+          <span class="ts">10:25</span>
+          <div class="body">
+            <span class="av">·</span>
+            <div class="text">
+              <span class="actor">System</span>
+              <span class="verb">created encounter</span>
+              <span class="obj">ENC-2026-04-20-7341</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="rp-foot">
+        <span>Showing 17 of 142</span>
+        <a>View all</a>
+      </div>
+
+    </aside>
+
+  </div>
+
+</div>
+
+<script>
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => {
+      x.classList.remove('active');
+      x.setAttribute('aria-selected','false');
+    });
+    t.classList.add('active');
+    t.setAttribute('aria-selected','true');
+  });
+});
+</script>
+
+</body>
+</html>
