@@ -46,6 +46,12 @@ export default async function LoginPage() {
           </>
         }
         subtitle="Continue to your clinical workspace."
+        cinematic={{
+          eyebrow: 'Welcome back',
+          headlinePre: 'Sign ',
+          headlineEm: 'in ',
+          headlinePost: 'to your visit.',
+        }}
       >
         <LoginForm />
       </AuthShell>
