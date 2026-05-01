@@ -29,6 +29,12 @@ export default async function ResetPasswordPage({ searchParams }: PageProps) {
         </>
       }
       subtitle="Pick a new password. You'll be signed out everywhere when it saves."
+      cinematic={{
+        eyebrow: 'Account recovery',
+        headlinePre: 'Set a ',
+        headlineEm: 'new ',
+        headlinePost: 'password.',
+      }}
     >
       <ResetPasswordForm token={token} />
     </AuthShell>

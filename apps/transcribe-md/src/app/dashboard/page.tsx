@@ -40,13 +40,20 @@ import {
   type DashboardVisit,
 } from '@/components/dashboard/visit-list';
 // Phase 3 Wave 2 (dashboard density). Brings the patients tab to mockup
-// fidelity — adds the time-of-day greeting at the top, the 11-row
-// PatientList projecting the same data the legacy <PatientCard> grid
-// used to consume, and a "Three drafts, ready when you are." section
-// of preview cards under the patient list. The legacy <PatientCard>
-// grid is no longer rendered from this page (the component itself
-// stays in /components/dashboard/ for /patients/[id] consumers).
-import { Greeting } from '@/components/dashboard/greeting';
+// fidelity — the 11-row PatientList projecting the same data the legacy
+// <PatientCard> grid used to consume, and a "Three drafts, ready when
+// you are." section of preview cards under the patient list. The
+// legacy <PatientCard> grid is no longer rendered from this page (the
+// component itself stays in /components/dashboard/ for /patients/[id]
+// consumers).
+//
+// Phase 4 (cinematic). The greeting line that lived inside the body
+// (Greeting component) is replaced by a full-width photo hero band
+// (CinematicDashboardHero) that swaps the photo + greeting word based
+// on the doctor's local Pacific-time bucket. The Greeting component
+// itself stays in components/dashboard/ in case a non-cinematic
+// surface wants it; this page simply doesn't render it anymore.
+import { CinematicDashboardHero, type DashboardTimeBucket } from '@/components/dashboard/CinematicDashboardHero';
 import {
   PatientList,
   type DashboardListPatient,
@@ -86,6 +93,13 @@ export default async function DashboardPage({
   const tabRaw = Array.isArray(params.tab) ? params.tab[0] : params.tab;
   const activeTab: ActiveTab = tabRaw === 'all' ? 'all' : 'patients';
 
+  // Phase 4 — compute the initial time-of-day bucket on the SERVER so
+  // the cinematic hero band's first paint matches the active photo
+  // exactly (no FOUC, no hydration mismatch). The client component
+  // re-checks every 60 s and crossfades when the bucket flips.
+  // US/Pacific is the launch market and the source of truth here.
+  const initialBucket = computeInitialPtBucket();
+
   return (
     <AppFrame theme="clinician">
       <Suspense fallback={<DashboardSkeleton />}>
@@ -94,10 +108,28 @@ export default async function DashboardPage({
           practiceId={user.practiceId}
           userName={user.name}
           activeTab={activeTab}
+          initialBucket={initialBucket}
         />
       </Suspense>
     </AppFrame>
   );
+}
+
+/** Server-side PT-hour → bucket mapping. Mirrored on the client side
+ *  inside <CinematicDashboardHero>; keeping the formula in both places
+ *  is intentional — the server pass renders the SSR-safe initial photo
+ *  and the client pass picks up any boundary crossings the SSR cache
+ *  missed. */
+function computeInitialPtBucket(): DashboardTimeBucket {
+  const ptNow = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Los_Angeles',
+    hour: 'numeric',
+    hour12: false,
+  }).format(new Date());
+  const ptHour = parseInt(ptNow, 10) % 24;
+  if (ptHour >= 5 && ptHour < 12) return 'morning';
+  if (ptHour >= 12 && ptHour < 18) return 'afternoon';
+  return 'evening';
 }
 
 async function DashboardBody({
@@ -105,11 +137,13 @@ async function DashboardBody({
   practiceId,
   userName,
   activeTab,
+  initialBucket,
 }: {
   userId: string;
   practiceId: string;
   userName: string | null;
   activeTab: ActiveTab;
+  initialBucket: DashboardTimeBucket;
 }) {
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -185,58 +219,40 @@ async function DashboardBody({
 
   return (
     <>
-      {/* Greeting + New visit CTA. Replaces the legacy <PageHeader>
-         which carried "Your workspace." — the mockup's greeting line
-         is the dashboard's primary header now (docs/design-directions-
-         v3/clinician/dashboard.html L487–496). The same density/CTA
-         contract is preserved: serif heading on the left, primary
-         "New visit" button right-aligned to match the previous
-         PageHeader rendering. */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'flex-end',
-          justifyContent: 'space-between',
-          gap: 24,
-          padding: '40px 40px 24px',
-        }}
-      >
-        <Greeting
-          firstName={firstName}
-          subtitle={
-            <>
-              {patientCount} patient{patientCount === 1 ? '' : 's'} ·{' '}
-              {activeVisitCount} total visit
-              {activeVisitCount === 1 ? '' : 's'}
-              {pendingReview > 0 && (
-                <>
-                  {' · '}
-                  <span style={{ color: 'var(--amber-deep)' }}>
-                    {pendingReview} awaiting your review
-                  </span>
-                </>
-              )}
-            </>
-          }
-        />
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <Link
-            href="/visits/new"
-            className="qm-cl-btn qm-cl-btn-primary"
-            style={{ textDecoration: 'none' }}
-          >
-            <Ic.plus width={14} height={14} />
-            New visit
-          </Link>
-        </div>
-      </div>
+      {/* Phase 4 — cinematic time-based hero band. Replaces the
+         in-page <Greeting> + "+ New visit" row. The greeting word
+         (morning / afternoon / evening) and matching photo are
+         driven by the doctor's Pacific-time bucket; the band silently
+         crossfades when the bucket flips during a long session.
+         The "+ New visit" CTA stays accessible from the top-nav
+         (rendered by <AppFrame>), so the button doesn't disappear
+         from the dashboard chrome — it's just hosted upstream. */}
+      <CinematicDashboardHero
+        initialBucket={initialBucket}
+        firstName={firstName}
+        subtitle={
+          <>
+            {patientCount} patient{patientCount === 1 ? '' : 's'} ·{' '}
+            {activeVisitCount} total visit
+            {activeVisitCount === 1 ? '' : 's'}
+            {pendingReview > 0 && (
+              <>
+                {' · '}
+                <span style={{ color: 'var(--color-clinician-sage-bright)' }}>
+                  {pendingReview} awaiting your review
+                </span>
+              </>
+            )}
+          </>
+        }
+      />
 
       <div
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(4, 1fr)',
           gap: 16,
-          padding: '0 40px 24px',
+          padding: '40px 40px 24px',
         }}
       >
         {/* Existing 4 metric cards stay unchanged. */}
