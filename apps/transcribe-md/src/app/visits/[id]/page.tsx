@@ -381,6 +381,7 @@ export default async function VisitPage({
           visitId={visit.id}
           doctorEmail={user.email}
           doctorName={user.name}
+          specialty={specialtyLabel(visit.specialty)}
           emailEnabled={isEmailDeliveryEnabled()}
           inputMode={visit.inputMode}
           status={visit.status}
@@ -422,6 +423,9 @@ interface VisitBodyProps {
    *  is the same person as the authed user per the ownership guard).
    *  Threaded into VisitReadyView for the "Signed at … by …" card. */
   doctorName: string | null;
+  /** Phase 5.1 — pretty-printed specialty for the Transcript V3
+   *  metadata rail. */
+  specialty: string;
   emailEnabled: boolean;
   inputMode: string;
   status: TranscribeVisitStatus;
@@ -567,6 +571,8 @@ function VisitBody(props: VisitBodyProps) {
         props.signedAt ? props.signedAt.toISOString() : null
       }
       signedByName={props.doctorName}
+      specialtyLabel={props.specialty}
+      recordedByName={props.doctorName}
     />
   );
 }
