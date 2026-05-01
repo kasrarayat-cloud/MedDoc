@@ -1,71 +1,115 @@
+/**
+ * Features grid — Linear V1 (Faithful).
+ *
+ * Six-cell hairline-divided grid on `--color-linear-surface-1`. Sage icons,
+ * Inter 600 title, body copy, no chip. Mirrors landing-v1.html lines
+ * 919-971; .feat-grid styling is in landing.css.
+ */
 type Feature = {
   title: string;
   body: string;
-  chip: string;
   icon: React.ReactNode;
 };
 
 const FEATURES: Feature[] = [
   {
-    title: 'SOAP notes',
-    body: 'Structured subjective, objective, assessment, and plan in your format. Adopts your shorthand over the first few visits.',
-    chip: '8 specialties',
+    title: 'Real-time SOAP draft',
+    body: 'Subjective, Objective, Assessment, Plan light up section-by-section as the visit unfolds. Edit inline; sign when ready.',
     icon: (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <rect x="4" y="4" width="16" height="16" rx="2" />
-        <path d="M8 9h8M8 13h8M8 17h5" />
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M3 12h3l3-9 4 18 3-9h5" />
       </svg>
     ),
   },
   {
-    title: 'ICD‑10 & CPT',
-    body: 'Suggested codes with confidence scores. Accept, edit, or swap in one click. Never auto‑submitted without review.',
-    chip: 'Billable day‑one',
+    title: 'ICD-10 + CPT auto-coded',
+    body: 'Diagnosis and procedure recommendations with confidence scores; the doctor approves or edits in one click.',
     icon: (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M4 7h16M4 12h16M4 17h10" />
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <rect x="3" y="4" width="18" height="16" rx="2" />
+        <path d="M7 8h10M7 12h6M7 16h8" />
       </svg>
     ),
   },
   {
-    title: 'Rx drafts',
-    body: 'Medication, dose, frequency, duration — pre‑filled from the conversation. Pipes to your e‑prescribing tool.',
-    chip: 'e‑Rx ready',
+    title: 'HIPAA, BAA on file',
+    body: 'Audit-logged at every layer. End-to-end encryption. PHI never leaves our US-hosted environment.',
     icon: (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <circle cx="12" cy="12" r="9" />
-        <path d="M12 3v18M7 8h10M7 16h10" />
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M12 2L4 6v6c0 5 3.5 9 8 10 4.5-1 8-5 8-10V6l-8-4z" />
+        <path d="M9 12l2 2 4-4" />
       </svg>
     ),
   },
   {
-    title: 'Referral letters',
-    body: 'Polished letters addressed to the specialist of your choice. Editable, signed, exportable as PDF.',
-    chip: 'PDF · DOCX',
+    title: 'Specialty-aware',
+    body: 'Family Medicine, Cardiology, Pediatrics, Psychiatry, Endo. The model adapts to your domain, not the reverse.',
     icon: (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M21 15a4 4 0 01-4 4H7l-4 4V7a4 4 0 014-4h10a4 4 0 014 4z" />
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <circle cx="12" cy="12" r="3" />
+        <path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2" />
       </svg>
     ),
   },
   {
-    title: 'Patient summaries',
-    body: 'Plain‑language recap in the patient\u2019s reading level. Auto‑send via email or portal. Cuts callbacks.',
-    chip: 'Multilingual',
+    title: 'Cmd-K everywhere',
+    body: 'Jump to any patient, any visit, any specialty pack. Never more than two keystrokes from the next note.',
     icon: (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <rect x="2" y="4" width="20" height="16" rx="2" />
+        <path d="M6 9h2v2H6zM10 9h2v2h-2zM14 9h2v2h-2zM6 13h12v2H6z" />
       </svg>
     ),
   },
   {
-    title: 'Polished exports',
-    body: 'Pixel‑perfect PDF and editable DOCX. Your letterhead, your signature, your logo. Ready to file.',
-    chip: 'Your brand',
+    title: 'Audit-logged + US-hosted',
+    body: 'Every action emits an immutable event. Servers in us-east-1. Your data never crosses a border.',
     icon: (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-        <path d="M14 2v6h6M8 13h8M8 17h5" />
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M21 12c0 5-4 9-9 9s-9-4-9-9 4-9 9-9c2.5 0 4.7 1 6.4 2.6" />
+        <path d="M21 4v5h-5" />
       </svg>
     ),
   },
@@ -73,32 +117,24 @@ const FEATURES: Feature[] = [
 
 export function Features() {
   return (
-    <section className="block compact" id="features">
+    <section className="features" id="features">
       <div className="container">
-        <div className="sec-label">
-          <span className="num">§ 02 / WHAT YOU GET</span>
-          <span>Features</span>
-        </div>
         <div className="section-head reveal">
-          <h2>
-            Everything you&apos;d <em>otherwise do at 9&nbsp;pm.</em>
+          <div className="section-eyebrow">02 / Built for the visit</div>
+          <h2 className="section-title">
+            Everything a working clinic needs. Nothing it doesn&apos;t.
           </h2>
-          <p className="lede">
-            Six things. All core. All included. No add‑ons, seat upgrades, or &ldquo;Contact
-            Sales&rdquo; tiers.
+          <p className="section-sub">
+            Six features that move the cursor from end-of-visit to next-patient.
           </p>
         </div>
 
         <div className="feat-grid">
           {FEATURES.map((f) => (
             <div key={f.title} className="feat reveal">
-              <div className="ico">{f.icon}</div>
-              <h4>{f.title}</h4>
-              <p>{f.body}</p>
-              <div className="foot">
-                <span>CORE</span>
-                <span className="chip">{f.chip}</span>
-              </div>
+              <div className="feat-icon">{f.icon}</div>
+              <h4 className="feat-title">{f.title}</h4>
+              <p className="feat-copy">{f.body}</p>
             </div>
           ))}
         </div>
