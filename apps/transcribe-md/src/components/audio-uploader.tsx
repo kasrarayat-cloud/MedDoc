@@ -3,13 +3,13 @@
 // ============================================================================
 // AudioUploader — drop-zone + XHR upload to /api/visits/[id]/upload.
 // ----------------------------------------------------------------------------
-// Phase 2 (Clinician remodel) — Strategy A dual-theme via additive
-// `theme` prop. Default `'legacy'` keeps the dark glass + violet
-// gradient chrome verbatim. `theme="clinician"` swaps to a soft cream
-// `.qm-cl-card` drop-zone, sage line-art icon chip, Source Serif 4
-// title, and a primary `qm-cl-btn`. The XHR upload pipeline (URL,
-// progress events, error categorization, 202 success path) is preserved
-// byte-for-byte — only JSX/className surfaces change.
+// Phase 5 — Linear V1 Faithful. Drop-zone renders as a hairline-
+// dashed surface-1 card with a sage icon chip; the picked-file
+// preview becomes a hairline surface-1 row with a sage progress
+// bar; the primary CTA is `.qm-lin-btn-primary`. The XHR upload
+// pipeline (URL, progress events, error categorization, 202 success
+// path) is preserved byte-for-byte — only JSX/className changes.
+// The `theme` prop is preserved as a no-op.
 // ============================================================================
 
 import { useCallback, useRef, useState } from 'react';
@@ -18,7 +18,6 @@ import { UploadCloud, Mic, File as FileIcon, X, ArrowRight } from 'lucide-react'
 import { toast } from 'sonner';
 
 import { cn } from '@/lib/cn';
-import { SpecularButton } from '@/components/specular-button';
 
 // Mirror the server-side allow-list. `audio/*` also covers provider-
 // specific variants like audio/x-wav; we re-validate on the server.
@@ -30,18 +29,17 @@ type AudioUploaderTheme = 'legacy' | 'clinician';
 
 interface AudioUploaderProps {
   visitId: string;
-  /** Phase 2 (Clinician remodel) — additive theme prop. */
+  /** @deprecated kept for back-compat; Linear V1 is single-theme. */
   theme?: AudioUploaderTheme;
 }
 
-export function AudioUploader({ visitId, theme = 'legacy' }: AudioUploaderProps) {
+export function AudioUploader({ visitId }: AudioUploaderProps) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const isClinician = theme === 'clinician';
 
   const pickFile = useCallback((f: File | null) => {
     if (!f) return;
@@ -98,18 +96,12 @@ export function AudioUploader({ visitId, theme = 'legacy' }: AudioUploaderProps)
         toast.success('Upload complete', {
           description: 'Transcribing and generating your SOAP note now.',
         });
-        // The parent page polls /status — a refresh flips the UI to
-        // the Processing state. Refresh() is sufficient; the visit
-        // page re-reads status and renders <ProcessingState/>.
         router.refresh();
         return;
       }
       let msg = `Upload failed (${xhr.status}).`;
       let toastTitle = 'Upload failed';
       let toastDescription = msg;
-      // T-M16.4: read optional {code, retry} from the error body so
-      // FILE_TOO_LARGE / UNSUPPORTED_FORMAT / STORAGE_* paths show the
-      // right user-facing CTA (contact support vs try again).
       try {
         const body = JSON.parse(xhr.responseText) as {
           error?: string;
@@ -169,38 +161,25 @@ export function AudioUploader({ visitId, theme = 'legacy' }: AudioUploaderProps)
     <div className="mx-auto w-full max-w-2xl">
       <div className="mb-6 text-center">
         <h2
-          className={
-            isClinician
-              ? 'qm-cl-serif'
-              : 'type-h1 text-text-primary'
-          }
-          style={
-            isClinician
-              ? {
-                  fontSize: 32,
-                  fontWeight: 400,
-                  lineHeight: 1.15,
-                  letterSpacing: '-0.015em',
-                  color: 'var(--ink)',
-                  margin: 0,
-                }
-              : undefined
-          }
+          style={{
+            margin: 0,
+            fontFamily: 'var(--font-sans)',
+            fontSize: 28,
+            fontWeight: 500,
+            lineHeight: 1.15,
+            letterSpacing: '-0.015em',
+            color: 'var(--color-linear-text)',
+          }}
         >
           Upload your visit audio
         </h2>
         <p
-          className={cn(
-            'mt-2',
-            isClinician
-              ? 'qm-cl-serif text-clinician-ink-2'
-              : 'text-[14px] text-text-tertiary'
-          )}
-          style={
-            isClinician
-              ? { fontSize: 15, fontStyle: 'italic', lineHeight: 1.55 }
-              : undefined
-          }
+          className="mt-2"
+          style={{
+            fontSize: 14,
+            lineHeight: 1.55,
+            color: 'var(--color-linear-text-2)',
+          }}
         >
           MP3, M4A, WAV, OGG, WebM, or FLAC — up to 500 MB.
         </p>
@@ -225,66 +204,29 @@ export function AudioUploader({ visitId, theme = 'legacy' }: AudioUploaderProps)
         aria-label="Upload audio file"
         className={cn(
           'relative flex cursor-pointer flex-col items-center justify-center',
-          'rounded-2xl border-2 border-dashed px-6 py-14 text-center',
-          'transition-colors duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]',
-          isClinician
-            ? cn(
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinician-sage focus-visible:ring-offset-2 focus-visible:ring-offset-clinician-cream',
-                dragging
-                  ? 'border-clinician-sage bg-clinician-cream-card'
-                  : 'border-clinician-line-strong bg-clinician-cream-card hover:border-clinician-sage/60 hover:bg-clinician-cream-2/50'
-              )
-            : cn(
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base',
-                dragging
-                  ? 'border-violet-400 bg-violet-500/8'
-                  : 'border-border-default hover:border-violet-500/50 hover:bg-bg-surface-1/40'
-              )
+          'rounded-lg border-2 border-dashed px-6 py-14 text-center',
+          'transition-colors duration-150 ease-out',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-linear-sage focus-visible:ring-offset-2 focus-visible:ring-offset-linear-bg',
+          dragging
+            ? 'border-linear-sage bg-linear-sage-tint'
+            : 'border-linear-border-strong bg-linear-surface-1 hover:border-[rgba(122,166,140,0.45)] hover:bg-linear-surface-2'
         )}
       >
         <div
           aria-hidden
-          className={cn(
-            'mb-4 flex h-14 w-14 items-center justify-center rounded-full'
-          )}
-          style={
-            isClinician
-              ? {
-                  background: 'var(--sage-tint-strong)',
-                  color: 'var(--sage-deep)',
-                }
-              : {
-                  backgroundImage:
-                    'linear-gradient(135deg,#4C1D95 0%,#7C3AED 100%)',
-                  boxShadow: '0 0 0 1px rgba(167,139,250,0.3)',
-                }
-          }
+          className="mb-4 flex h-14 w-14 items-center justify-center rounded-md"
+          style={{
+            background: 'var(--color-linear-sage-tint)',
+            border: '1px solid rgba(122,166,140,0.32)',
+            color: 'var(--color-linear-sage-bright)',
+          }}
         >
-          <UploadCloud
-            className={cn('h-6 w-6', isClinician ? '' : 'text-white')}
-            aria-hidden
-          />
+          <UploadCloud className="h-6 w-6" aria-hidden />
         </div>
-        <div
-          className={cn(
-            isClinician
-              ? 'qm-cl-serif text-clinician-ink'
-              : 'text-[15px] font-medium text-text-primary'
-          )}
-          style={
-            isClinician
-              ? { fontSize: 17, fontWeight: 500, letterSpacing: '-0.005em' }
-              : undefined
-          }
-        >
+        <div className="text-[15px] font-medium text-linear-text">
           Drop an audio file here, or click to browse
         </div>
-        <div
-          className={cn(
-            'mt-1.5 text-[12px]',
-            isClinician ? 'text-clinician-ink-3' : 'text-text-muted'
-          )}
-        >
+        <div className="mt-1.5 text-[12px] text-linear-text-3">
           Your recording stays private — uploaded directly to your workspace.
         </div>
         <input
@@ -297,82 +239,33 @@ export function AudioUploader({ visitId, theme = 'legacy' }: AudioUploaderProps)
       </div>
 
       {file && (
-        <div
-          className={cn(
-            'mt-5 rounded-xl p-4',
-            isClinician
-              ? 'qm-cl-card'
-              : 'border border-border-default bg-bg-surface-1/60'
-          )}
-        >
+        <div className="mt-5 rounded-lg border border-linear-border bg-linear-surface-1 p-4">
           <div className="flex items-start gap-3">
             <div
               aria-hidden
-              className={cn(
-                'flex h-9 w-9 flex-none items-center justify-center rounded-lg',
-                isClinician
-                  ? 'bg-clinician-cream-2 text-clinician-ink-2'
-                  : 'bg-bg-surface-3'
-              )}
+              className="flex h-9 w-9 flex-none items-center justify-center rounded-md bg-linear-surface-2 text-linear-text-2"
             >
-              <FileIcon
-                className={cn(
-                  'h-4 w-4',
-                  isClinician ? '' : 'text-text-tertiary'
-                )}
-                aria-hidden
-              />
+              <FileIcon className="h-4 w-4" aria-hidden />
             </div>
             <div className="min-w-0 flex-1">
-              <div
-                className={cn(
-                  'truncate text-[13px] font-medium',
-                  isClinician
-                    ? 'qm-cl-serif text-clinician-ink'
-                    : 'text-text-primary'
-                )}
-                style={isClinician ? { fontSize: 15 } : undefined}
-              >
+              <div className="truncate text-[14px] font-medium text-linear-text">
                 {file.name}
               </div>
-              <div
-                className={cn(
-                  'mt-0.5 text-[11px]',
-                  isClinician ? 'text-clinician-ink-3' : 'text-text-muted'
-                )}
-              >
+              <div className="mt-0.5 text-[11px] text-linear-text-3">
                 {(file.size / 1024 / 1024).toFixed(1)} MB · {file.type || 'audio'}
               </div>
               {progress !== null && (
                 <div className="mt-3 space-y-1.5">
-                  <div
-                    className={cn(
-                      'h-1.5 w-full overflow-hidden rounded-full',
-                      isClinician ? 'bg-clinician-cream-2' : 'bg-bg-surface-3'
-                    )}
-                  >
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-linear-surface-2">
                     <div
                       className="h-full rounded-full transition-[width]"
-                      style={
-                        isClinician
-                          ? {
-                              width: `${progress}%`,
-                              background: 'var(--sage)',
-                            }
-                          : {
-                              width: `${progress}%`,
-                              backgroundImage:
-                                'linear-gradient(90deg,#7C3AED,#A855F7)',
-                            }
-                      }
+                      style={{
+                        width: `${progress}%`,
+                        background: 'var(--color-linear-sage)',
+                      }}
                     />
                   </div>
-                  <div
-                    className={cn(
-                      'text-[11px]',
-                      isClinician ? 'text-clinician-ink-3' : 'text-text-muted'
-                    )}
-                  >
+                  <div className="text-[11px] text-linear-text-3">
                     {progress < 100
                       ? `Uploading… ${progress}%`
                       : 'Upload complete. Queuing for transcription…'}
@@ -385,12 +278,7 @@ export function AudioUploader({ visitId, theme = 'legacy' }: AudioUploaderProps)
                 type="button"
                 onClick={clearFile}
                 aria-label="Remove file"
-                className={cn(
-                  'flex-none rounded-md p-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
-                  isClinician
-                    ? 'text-clinician-ink-3 hover:bg-clinician-cream-2 hover:text-clinician-ink-2 focus-visible:ring-clinician-sage focus-visible:ring-offset-clinician-cream'
-                    : 'text-text-muted hover:bg-bg-surface-2 hover:text-text-primary focus-visible:ring-violet-500 focus-visible:ring-offset-bg-base'
-                )}
+                className="flex-none rounded-md p-1 text-linear-text-3 hover:bg-linear-surface-2 hover:text-linear-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-linear-sage focus-visible:ring-offset-2 focus-visible:ring-offset-linear-bg"
               >
                 <X className="h-4 w-4" aria-hidden />
               </button>
@@ -400,30 +288,23 @@ export function AudioUploader({ visitId, theme = 'legacy' }: AudioUploaderProps)
       )}
 
       {uploadError && (
-        <p
-          role="alert"
-          className={cn(
-            'mt-3 text-[13px]',
-            isClinician ? 'text-clinician-coral-deep' : 'text-danger'
-          )}
-          style={isClinician ? { color: 'var(--coral-deep)' } : undefined}
-        >
+        <p role="alert" className="mt-3 text-[13px] text-linear-danger">
           {uploadError}
         </p>
       )}
 
       <div className="mt-6 flex items-center justify-center">
-        <SpecularButton
+        <button
+          type="button"
           onClick={upload}
-          variant="primary"
-          size="lg"
           disabled={!file || uploading}
-          theme={theme}
+          className="qm-lin-btn-primary"
+          style={{ padding: '10px 18px', height: 38 }}
         >
           <Mic className="h-4 w-4" aria-hidden />
           {uploading ? 'Uploading…' : 'Upload & transcribe'}
           {!uploading && <ArrowRight className="h-4 w-4" aria-hidden />}
-        </SpecularButton>
+        </button>
       </div>
     </div>
   );
