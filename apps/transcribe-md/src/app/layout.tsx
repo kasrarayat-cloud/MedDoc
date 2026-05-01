@@ -1,11 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { GeistSans } from 'geist/font/sans';
 import { GeistMono } from 'geist/font/mono';
-import {
-  Source_Serif_4,
-  Inter_Tight,
-  JetBrains_Mono,
-} from 'next/font/google';
+import { Inter, JetBrains_Mono } from 'next/font/google';
 
 import { auth } from '@/lib/nextauth';
 import { CommandPalette } from '@/components/command-palette';
@@ -13,25 +9,22 @@ import { GlobalShortcuts } from '@/components/global-shortcuts';
 import { Toaster } from '@/components/toaster';
 import './globals.css';
 
-// App-redesign-v1 font trio (HANDOFF §1.2). Variables match the bare-name
-// tokens the ported .qm-* CSS references (var(--serif), var(--sans),
-// var(--mono)). Fallback stacks mirror the handoff values so the page
-// renders reasonably before the webfont finishes loading.
-const serif = Source_Serif_4({
+// Phase 5 Linear V1 font pair. Source Serif 4 + Inter Tight have been
+// retired — Linear V1 is Inter for chrome + body and JetBrains Mono for
+// IDs, codes, timestamps, and keyboard hints. The variable names line up
+// with `--font-sans` / `--font-mono` consumed by the @theme block in
+// globals.css and the ported .qm-lin-* utility classes.
+const sans = Inter({
   subsets: ['latin'],
-  variable: '--serif',
-  display: 'swap',
-  fallback: ['Charter', 'Iowan Old Style', 'Georgia', 'serif'],
-});
-const sans = Inter_Tight({
-  subsets: ['latin'],
-  variable: '--sans',
+  weight: ['400', '500', '600'],
+  variable: '--font-sans',
   display: 'swap',
   fallback: ['-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
 });
 const mono = JetBrains_Mono({
   subsets: ['latin'],
-  variable: '--mono',
+  weight: ['400', '500'],
+  variable: '--font-mono',
   display: 'swap',
   fallback: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
 });
@@ -51,7 +44,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#07060C',
+  themeColor: '#08090a',
   colorScheme: 'dark',
 };
 
@@ -71,7 +64,7 @@ export default async function RootLayout({
     <html
       lang="en"
       data-theme="dark"
-      className={`${GeistSans.variable} ${GeistMono.variable} ${serif.variable} ${sans.variable} ${mono.variable} dark`}
+      className={`${GeistSans.variable} ${GeistMono.variable} ${sans.variable} ${mono.variable} dark`}
       suppressHydrationWarning
     >
       <body className="min-h-screen antialiased">
