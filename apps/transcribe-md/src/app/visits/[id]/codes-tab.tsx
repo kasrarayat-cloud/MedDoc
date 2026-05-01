@@ -3,12 +3,10 @@
 // ============================================================================
 // CodesTab — ICD-10 / CPT codes panel for the visit-detail Codes tab
 // ----------------------------------------------------------------------------
-// Phase 2 (Clinician remodel) — Strategy A dual-theme via additive
-// `theme` prop. Default `'legacy'` keeps the existing dark
-// bg-bg-surface-1 / border-border-default cards verbatim. Migrated
-// surfaces (visit-detail) pass `theme="clinician"` to render the
-// .qm-cl-card surface + soft pill chips + cream-2 modifier rows that
-// match the visit-detail mockup's coding tab.
+// Phase 5 — Linear V1 Faithful. Hairline-bordered surface-1 cards on
+// the dark canvas. ICD pills tinted sage; CPT pills tinted sky. Code
+// numbers in JetBrains Mono; descriptions in Inter. The `theme` prop
+// is retained on the public API as a no-op for caller back-compat.
 // ============================================================================
 
 import { useState } from 'react';
@@ -67,10 +65,13 @@ export interface CptBlob {
 interface CodesTabProps {
   icd: unknown;
   cpt: unknown;
+  /** @deprecated kept for back-compat; Linear V1 is single-theme. */
   theme?: CodesTabTheme;
 }
 
-export function CodesTab({ icd, cpt, theme = 'legacy' }: CodesTabProps) {
+const SECTION_LABEL = 'mb-3 text-[10.5px] font-medium uppercase tracking-[0.07em] font-mono text-linear-text-3';
+
+export function CodesTab({ icd, cpt }: CodesTabProps) {
   const icdBlob = (icd as IcdBlob | null) ?? null;
   const cptBlob = (cpt as CptBlob | null) ?? null;
   const icdCodes = icdBlob?.codes ?? [];
@@ -89,21 +90,16 @@ export function CodesTab({ icd, cpt, theme = 'legacy' }: CodesTabProps) {
       <EmptyBlock
         title="No codes were generated"
         body="The pipeline didn’t return any ICD-10 or CPT codes for this visit. You can retry the visit or add codes manually in your EHR."
-        theme={theme}
       />
     );
   }
 
   return (
     <div className="space-y-8">
-      {em && <EmSection em={em} theme={theme} />}
-      {icdCodes.length > 0 && <IcdSection codes={icdCodes} theme={theme} />}
-      {procedures.length > 0 && (
-        <ProceduresSection items={procedures} theme={theme} />
-      )}
-      {modifiers.length > 0 && (
-        <ModifiersSection items={modifiers} theme={theme} />
-      )}
+      {em && <EmSection em={em} />}
+      {icdCodes.length > 0 && <IcdSection codes={icdCodes} />}
+      {procedures.length > 0 && <ProceduresSection items={procedures} />}
+      {modifiers.length > 0 && <ModifiersSection items={modifiers} />}
     </div>
   );
 }
@@ -112,67 +108,32 @@ export function CodesTab({ icd, cpt, theme = 'legacy' }: CodesTabProps) {
 // Sections
 // ---------------------------------------------------------------------------
 
-function EmSection({ em, theme }: { em: EmCode; theme: CodesTabTheme }) {
+function EmSection({ em }: { em: EmCode }) {
   const [showReasoning, setShowReasoning] = useState(false);
-  const isClinician = theme === 'clinician';
-  const riskTone = isClinician
-    ? em.reasoning.risk === 'high'
-      ? 'text-clinician-coral-deep'
+  const riskTone =
+    em.reasoning.risk === 'high'
+      ? 'text-linear-danger'
       : em.reasoning.risk === 'moderate'
-        ? 'text-clinician-amber-deep'
-        : 'text-clinician-ink-3'
-    : em.reasoning.risk === 'high'
-      ? 'text-danger'
-      : em.reasoning.risk === 'moderate'
-        ? 'text-warning'
-        : 'text-text-tertiary';
+        ? 'text-linear-warning'
+        : 'text-linear-text-3';
 
   return (
     <section>
-      <h3
-        className={cn(
-          'mb-3 text-[11px] font-semibold uppercase tracking-wider',
-          isClinician ? 'text-clinician-ink-3' : 'text-text-muted'
-        )}
-      >
-        Evaluation &amp; Management
-      </h3>
-      <div
-        className={cn(
-          'p-5',
-          isClinician
-            ? 'qm-cl-card'
-            : 'rounded-xl border border-border-default bg-bg-surface-1/60'
-        )}
-      >
+      <h3 className={SECTION_LABEL}>Evaluation &amp; Management</h3>
+      <div className="rounded-lg border border-linear-border bg-linear-surface-1 p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <div
-              className={cn(
-                'font-mono text-[32px] font-semibold',
-                isClinician ? 'text-clinician-ink' : 'text-text-primary'
-              )}
-            >
+            <div className="font-mono text-[28px] font-semibold tracking-tight text-linear-text">
               {em.code}
             </div>
-            <div
-              className={cn(
-                'mt-1 text-[13px]',
-                isClinician ? 'text-clinician-ink-2' : 'text-text-tertiary'
-              )}
-            >
+            <div className="mt-1 text-[13px] text-linear-text-2">
               {em.description}
             </div>
           </div>
           <button
             type="button"
             onClick={() => setShowReasoning((v) => !v)}
-            className={cn(
-              'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-medium transition-colors',
-              isClinician
-                ? 'border border-clinician-line bg-clinician-cream-card text-clinician-ink-3 hover:border-clinician-line-strong hover:text-clinician-ink-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinician-sage focus-visible:ring-offset-2 focus-visible:ring-offset-clinician-cream'
-                : 'border border-border-subtle bg-bg-surface-2/60 text-text-tertiary hover:border-border-default hover:text-text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base'
-            )}
+            className="qm-lin-btn"
           >
             {showReasoning ? 'Hide reasoning' : 'Show reasoning'}
             <ChevronDown
@@ -186,53 +147,18 @@ function EmSection({ em, theme }: { em: EmCode; theme: CodesTabTheme }) {
         </div>
 
         {showReasoning && (
-          <div
-            className={cn(
-              'mt-4 space-y-3 border-t pt-4',
-              isClinician ? 'border-clinician-line' : 'border-border-subtle'
-            )}
-          >
+          <div className="mt-4 space-y-3 border-t border-linear-hairline pt-4">
             <div>
-              <div
-                className={cn(
-                  'mb-1.5 text-[11px] font-semibold uppercase tracking-wider',
-                  isClinician ? 'text-clinician-ink-3' : 'text-text-muted'
-                )}
-              >
-                Problems addressed
-              </div>
-              <ul
-                className={cn(
-                  'space-y-1 text-[13px]',
-                  isClinician ? 'text-clinician-ink-2' : 'text-text-secondary'
-                )}
-              >
+              <div className={SECTION_LABEL}>Problems addressed</div>
+              <ul className="space-y-1 text-[13px] text-linear-text-2">
                 {em.reasoning.problems.length === 0 ? (
-                  <li
-                    className={cn(
-                      isClinician ? 'text-clinician-ink-4' : 'text-text-muted'
-                    )}
-                  >
-                    None listed.
-                  </li>
+                  <li className="text-linear-text-3">None listed.</li>
                 ) : (
                   em.reasoning.problems.map((p, i) => (
                     <li key={i} className="flex items-center gap-2">
-                      <span
-                        className={cn(
-                          'inline-block h-1.5 w-1.5 rounded-full',
-                          isClinician ? 'bg-clinician-sage' : 'bg-violet-400'
-                        )}
-                      />
+                      <span className="inline-block h-1.5 w-1.5 rounded-full bg-linear-sage" />
                       {p.description}
-                      <span
-                        className={cn(
-                          'text-[11px]',
-                          isClinician
-                            ? 'text-clinician-ink-4'
-                            : 'text-text-muted'
-                        )}
-                      >
+                      <span className="text-[11px] text-linear-text-3">
                         ({p.status})
                       </span>
                     </li>
@@ -241,52 +167,21 @@ function EmSection({ em, theme }: { em: EmCode; theme: CodesTabTheme }) {
               </ul>
             </div>
             <div>
-              <div
-                className={cn(
-                  'mb-1.5 text-[11px] font-semibold uppercase tracking-wider',
-                  isClinician ? 'text-clinician-ink-3' : 'text-text-muted'
-                )}
-              >
-                Data reviewed
-              </div>
-              <div
-                className={cn(
-                  'text-[13px]',
-                  isClinician ? 'text-clinician-ink-2' : 'text-text-secondary'
-                )}
-              >
+              <div className={SECTION_LABEL}>Data reviewed</div>
+              <div className="text-[13px] text-linear-text-2">
                 {em.reasoning.data || 'Not documented.'}
               </div>
             </div>
             <div>
-              <div
-                className={cn(
-                  'mb-1.5 text-[11px] font-semibold uppercase tracking-wider',
-                  isClinician ? 'text-clinician-ink-3' : 'text-text-muted'
-                )}
-              >
-                Risk
-              </div>
-              <div
-                className={cn(
-                  'text-[13px] font-medium capitalize',
-                  riskTone
-                )}
-              >
+              <div className={SECTION_LABEL}>Risk</div>
+              <div className={cn('text-[13px] font-medium capitalize', riskTone)}>
                 {em.reasoning.risk}
               </div>
             </div>
           </div>
         )}
 
-        <div
-          className={cn(
-            'mt-4 rounded-lg p-3 text-[12px] italic',
-            isClinician
-              ? 'border border-clinician-line bg-clinician-cream-2 text-clinician-ink-3'
-              : 'border border-border-subtle bg-bg-surface-2/40 text-text-tertiary'
-          )}
-        >
+        <div className="mt-4 rounded-md border border-linear-hairline bg-linear-surface-2 p-3 text-[12px] italic text-linear-text-3">
           “{em.evidence_quote}”
         </div>
       </div>
@@ -294,85 +189,37 @@ function EmSection({ em, theme }: { em: EmCode; theme: CodesTabTheme }) {
   );
 }
 
-function IcdSection({
-  codes,
-  theme,
-}: {
-  codes: IcdCode[];
-  theme: CodesTabTheme;
-}) {
-  const isClinician = theme === 'clinician';
+function IcdSection({ codes }: { codes: IcdCode[] }) {
   return (
     <section>
-      <h3
-        className={cn(
-          'mb-3 text-[11px] font-semibold uppercase tracking-wider',
-          isClinician ? 'text-clinician-ink-3' : 'text-text-muted'
-        )}
-      >
-        ICD-10 codes
-      </h3>
-      <div
-        className={cn(
-          'overflow-hidden rounded-xl border',
-          isClinician
-            ? 'border-clinician-line bg-clinician-cream-card'
-            : 'border-border-default'
-        )}
-      >
+      <h3 className={SECTION_LABEL}>ICD-10 codes</h3>
+      <div className="overflow-hidden rounded-lg border border-linear-border bg-linear-surface-1">
         <table className="w-full border-collapse text-left text-[13px]">
-          <thead
-            className={cn(
-              'text-[11px] uppercase tracking-wider',
-              isClinician
-                ? 'bg-clinician-cream-2 text-clinician-ink-3'
-                : 'bg-bg-surface-2/60 text-text-muted'
-            )}
-          >
+          <thead className="bg-linear-surface-2 font-mono text-[10.5px] uppercase tracking-[0.07em] text-linear-text-3">
             <tr>
               <th className="px-3 py-2 font-medium">Code</th>
               <th className="px-3 py-2 font-medium">Description</th>
               <th className="px-3 py-2 font-medium">Evidence</th>
-              <th className="px-3 py-2 font-medium text-right">Confidence</th>
+              <th className="px-3 py-2 text-right font-medium">Confidence</th>
             </tr>
           </thead>
           <tbody>
             {codes.map((c, i) => (
               <tr
                 key={`${c.code}-${i}`}
-                className={cn(
-                  'border-t',
-                  isClinician
-                    ? 'border-clinician-line'
-                    : 'border-border-subtle bg-bg-surface-1/40'
-                )}
+                className="border-t border-linear-hairline"
               >
-                <td
-                  className={cn(
-                    'px-3 py-2 align-top font-mono',
-                    isClinician ? 'text-clinician-ink' : 'text-text-primary'
-                  )}
-                >
+                <td className="px-3 py-2 align-top font-mono text-linear-text">
                   {c.code}
                 </td>
-                <td
-                  className={cn(
-                    'px-3 py-2 align-top',
-                    isClinician ? 'text-clinician-ink-2' : 'text-text-secondary'
-                  )}
-                >
+                <td className="px-3 py-2 align-top text-linear-text-2">
                   {c.description}
                 </td>
-                <td
-                  className={cn(
-                    'px-3 py-2 align-top text-[12px] italic',
-                    isClinician ? 'text-clinician-ink-3' : 'text-text-tertiary'
-                  )}
-                >
+                <td className="px-3 py-2 align-top text-[12px] italic text-linear-text-3">
                   “{c.evidence_quote}”
                 </td>
                 <td className="px-3 py-2 align-top text-right">
-                  <ConfidenceChip value={c.confidence} theme={theme} />
+                  <ConfidenceChip value={c.confidence} />
                 </td>
               </tr>
             ))}
@@ -383,63 +230,27 @@ function IcdSection({
   );
 }
 
-function ProceduresSection({
-  items,
-  theme,
-}: {
-  items: ProcedureCpt[];
-  theme: CodesTabTheme;
-}) {
-  const isClinician = theme === 'clinician';
+function ProceduresSection({ items }: { items: ProcedureCpt[] }) {
   return (
     <section>
-      <h3
-        className={cn(
-          'mb-3 text-[11px] font-semibold uppercase tracking-wider',
-          isClinician ? 'text-clinician-ink-3' : 'text-text-muted'
-        )}
-      >
-        Procedure CPT codes
-      </h3>
+      <h3 className={SECTION_LABEL}>Procedure CPT codes</h3>
       <ul className="space-y-2">
         {items.map((p, i) => (
           <li
             key={`${p.code}-${i}`}
-            className={cn(
-              'rounded-lg px-4 py-3',
-              isClinician
-                ? 'border border-clinician-line bg-clinician-cream-card'
-                : 'border border-border-subtle bg-bg-surface-1/40'
-            )}
+            className="rounded-lg border border-linear-border bg-linear-surface-1 px-4 py-3"
           >
             <div className="flex items-start justify-between gap-3">
               <div>
-                <div
-                  className={cn(
-                    'font-mono text-[14px] font-semibold',
-                    isClinician ? 'text-clinician-ink' : 'text-text-primary'
-                  )}
-                >
+                <div className="font-mono text-[14px] font-semibold text-linear-text">
                   {p.code}
                 </div>
-                <div
-                  className={cn(
-                    'mt-1 text-[12px]',
-                    isClinician
-                      ? 'text-clinician-ink-2'
-                      : 'text-text-secondary'
-                  )}
-                >
+                <div className="mt-1 text-[12px] text-linear-text-2">
                   {p.description}
                 </div>
               </div>
             </div>
-            <div
-              className={cn(
-                'mt-2 text-[11px] italic',
-                isClinician ? 'text-clinician-ink-3' : 'text-text-muted'
-              )}
-            >
+            <div className="mt-2 text-[11px] italic text-linear-text-3">
               “{p.evidence_quote}”
             </div>
           </li>
@@ -449,51 +260,20 @@ function ProceduresSection({
   );
 }
 
-function ModifiersSection({
-  items,
-  theme,
-}: {
-  items: Modifier[];
-  theme: CodesTabTheme;
-}) {
-  const isClinician = theme === 'clinician';
+function ModifiersSection({ items }: { items: Modifier[] }) {
   return (
     <section>
-      <h3
-        className={cn(
-          'mb-3 text-[11px] font-semibold uppercase tracking-wider',
-          isClinician ? 'text-clinician-ink-3' : 'text-text-muted'
-        )}
-      >
-        Suggested modifiers
-      </h3>
+      <h3 className={SECTION_LABEL}>Suggested modifiers</h3>
       <ul className="flex flex-wrap gap-2">
         {items.map((m, i) => (
           <li
             key={`${m.code}-${i}`}
-            className={cn(
-              'inline-flex items-center gap-2 rounded-full px-3 py-1',
-              isClinician
-                ? 'border border-clinician-line bg-clinician-cream-card'
-                : 'border border-border-default bg-bg-surface-2/60'
-            )}
+            className="inline-flex items-center gap-2 rounded-md border border-linear-border bg-linear-surface-2 px-3 py-1"
           >
-            <span
-              className={cn(
-                'font-mono text-[12px] font-semibold',
-                isClinician ? 'text-clinician-ink' : 'text-text-primary'
-              )}
-            >
+            <span className="font-mono text-[12px] font-semibold text-linear-text">
               -{m.code}
             </span>
-            <span
-              className={cn(
-                'text-[12px]',
-                isClinician ? 'text-clinician-ink-2' : 'text-text-tertiary'
-              )}
-            >
-              {m.rationale}
-            </span>
+            <span className="text-[12px] text-linear-text-2">{m.rationale}</span>
           </li>
         ))}
       </ul>
@@ -505,86 +285,40 @@ function ModifiersSection({
 // Atoms
 // ---------------------------------------------------------------------------
 
-function ConfidenceChip({
-  value,
-  theme,
-}: {
-  value: number;
-  theme: CodesTabTheme;
-}) {
-  const isClinician = theme === 'clinician';
-  // Clinician maps the three confidence bands to .qm-cl-pill-* tones —
-  // sage = high, amber = mid, coral = low. Same semantic ordering as
-  // the legacy success/warning/danger triad.
-  const tone = isClinician
-    ? value > 0.8
-      ? { cls: 'qm-cl-pill qm-cl-pill-sage', dot: 'qm-cl-pill-dot' }
+function ConfidenceChip({ value }: { value: number }) {
+  // Linear V1 maps the three confidence bands to sage / warning /
+  // danger tints. Same semantic ordering as before.
+  const tone =
+    value > 0.8
+      ? { bg: 'bg-linear-sage-tint', fg: 'text-linear-sage-bright' }
       : value >= 0.5
-        ? { cls: 'qm-cl-pill qm-cl-pill-amber', dot: 'qm-cl-pill-dot' }
-        : { cls: 'qm-cl-pill qm-cl-pill-coral', dot: 'qm-cl-pill-dot' }
-    : value > 0.8
-      ? { cls: 'bg-success/15 text-success', dot: 'bg-success' }
-      : value >= 0.5
-        ? { cls: 'bg-warning/15 text-warning', dot: 'bg-warning' }
-        : { cls: 'bg-danger/15 text-danger', dot: 'bg-danger' };
-
-  if (isClinician) {
-    return (
-      <span className={cn(tone.cls, 'tabular-nums')}>
-        <span className={tone.dot} />
-        {(value * 100).toFixed(0)}%
-      </span>
-    );
-  }
+        ? {
+            bg: 'bg-linear-warning/15',
+            fg: 'text-linear-warning',
+          }
+        : {
+            bg: 'bg-linear-danger/15',
+            fg: 'text-linear-danger',
+          };
 
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium tabular-nums',
-        tone.cls
+        'inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 font-mono text-[11px] font-medium tabular-nums',
+        tone.bg,
+        tone.fg
       )}
     >
-      <span className={cn('inline-block h-1.5 w-1.5 rounded-full', tone.dot)} />
       {(value * 100).toFixed(0)}%
     </span>
   );
 }
 
-function EmptyBlock({
-  title,
-  body,
-  theme,
-}: {
-  title: string;
-  body: string;
-  theme: CodesTabTheme;
-}) {
-  const isClinician = theme === 'clinician';
+function EmptyBlock({ title, body }: { title: string; body: string }) {
   return (
-    <div
-      className={cn(
-        'rounded-xl p-8 text-center',
-        isClinician
-          ? 'border border-dashed border-clinician-line bg-clinician-cream-card'
-          : 'border border-dashed border-border-subtle bg-bg-surface-1/30'
-      )}
-    >
-      <div
-        className={cn(
-          'text-[14px] font-medium',
-          isClinician ? 'text-clinician-ink' : 'text-text-primary'
-        )}
-      >
-        {title}
-      </div>
-      <div
-        className={cn(
-          'mt-2 text-[13px]',
-          isClinician ? 'text-clinician-ink-2' : 'text-text-tertiary'
-        )}
-      >
-        {body}
-      </div>
+    <div className="rounded-lg border border-dashed border-linear-border bg-linear-surface-1 p-8 text-center">
+      <div className="text-[14px] font-medium text-linear-text">{title}</div>
+      <div className="mt-2 text-[13px] text-linear-text-2">{body}</div>
     </div>
   );
 }
