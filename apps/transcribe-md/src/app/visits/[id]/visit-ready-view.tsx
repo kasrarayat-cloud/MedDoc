@@ -226,7 +226,11 @@ export function VisitReadyView(props: VisitReadyViewProps) {
                 section="Codes"
               />
             </div>
-            <CodesTab icd={props.icdCodes} cpt={props.cptCodes} />
+            <CodesTab
+              icd={props.icdCodes}
+              cpt={props.cptCodes}
+              readonly={props.readonly}
+            />
           </div>
         )}
         {tab === 'rx' && (
@@ -238,7 +242,11 @@ export function VisitReadyView(props: VisitReadyViewProps) {
                 section="Prescriptions"
               />
             </div>
-            <RxTab rx={props.rxDrafts} visitId={props.visitId} />
+            <RxTab
+              rx={props.rxDrafts}
+              visitId={props.visitId}
+              readonly={props.readonly}
+            />
           </div>
         )}
         {tab === 'extras' && (
