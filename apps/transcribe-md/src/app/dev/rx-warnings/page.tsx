@@ -8,6 +8,10 @@
 // Override flow runs against `recordOverride()` with a "dev-preview"
 // sentinel visitId that short-circuits the DB write (see
 // lib/rx-warning-audit.ts §Dev preview).
+//
+// Phase 5 (Linear V1 Faithful) — chrome around the warning card uses
+// the dark canvas + sage active chip pattern. The `.qm-warn-*` family
+// inside the cards themselves is owned by Stage 2 and stays as-is.
 // ============================================================================
 
 import type { Metadata } from 'next';
@@ -67,25 +71,12 @@ export default async function DevRxWarningsPage({
     <AppFrame>
       <PageHeader
         eyebrow="§ Dev / Rx warnings"
-        title={
-          <>
-            RxWarningCard <em style={{ color: 'var(--accent-bright)' }}>preview</em>
-          </>
-        }
+        title="Rx Warning Card Reference (DEV)"
         subtitle="Dev-only route. 404s in production. Use the chips to cycle variants."
       />
 
-      <div
-        style={{
-          padding: '4px 32px 0',
-          display: 'flex',
-          gap: 6,
-          flexWrap: 'wrap',
-          alignItems: 'center',
-          marginBottom: 20,
-        }}
-      >
-        <span className="qm-sectlabel" style={{ marginRight: 8 }}>
+      <div className="mb-5 flex flex-wrap items-center gap-1.5 px-8">
+        <span className="mr-2 font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-linear-text-3">
           § Variant
         </span>
         {chips.map((c) => {
@@ -95,9 +86,13 @@ export default async function DevRxWarningsPage({
               key={c.id}
               href={`/dev/rx-warnings?variant=${c.id}`}
               scroll={false}
-              className={`qm-chip${isActive ? ' qm-chip-accent' : ''}`}
               aria-current={isActive ? 'page' : undefined}
-              style={{ textDecoration: 'none', cursor: 'pointer' }}
+              className={
+                'inline-flex h-7 items-center rounded-full px-3 text-xs font-medium transition-colors no-underline ' +
+                (isActive
+                  ? 'bg-linear-sage-tint text-linear-sage-bright'
+                  : 'bg-linear-surface-2 text-linear-text-2 hover:bg-linear-surface-3 hover:text-linear-text')
+              }
             >
               {c.label}
             </Link>
@@ -105,15 +100,7 @@ export default async function DevRxWarningsPage({
         })}
       </div>
 
-      <div
-        style={{
-          padding: '0 32px 48px',
-          maxWidth: 820,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 20,
-        }}
-      >
+      <div className="flex max-w-[820px] flex-col gap-5 px-8 pb-12">
         <DevRxWarningsClient variant={variant} />
       </div>
     </AppFrame>
