@@ -967,3 +967,519 @@ body {
 .qm-warn-info .qm-warn-icon {
   color: var(--color-linear-info);
 }
+
+/* ============================================================================
+ * Phase 5.1 — Visit-detail split-pane utilities
+ * ----------------------------------------------------------------------------
+ * Used by the SOAP NOTE V3 (sections | sources rail) and Transcript V3
+ * (turns | audio rail) split-pane layouts. Mirrors
+ *   docs/design-directions-v9-tabs/soap-note-v3.html
+ *   docs/design-directions-v9-tabs/transcript-v3.html
+ *
+ * The split is a CSS grid that collapses to a single column at <=960px.
+ * Right-rail elements use `position: sticky` on desktop and fall back to
+ * static when the grid collapses.
+ * ========================================================================== */
+
+.qm-lin-split {
+  display: grid;
+  grid-template-columns: 1fr 1px 38%;
+  gap: 0;
+  min-height: 480px;
+}
+.qm-lin-split-divider {
+  background: var(--color-linear-hairline);
+  width: 1px;
+}
+.qm-lin-split-left {
+  padding: 8px 28px 18px 0;
+  min-width: 0;
+}
+.qm-lin-split-right {
+  padding: 8px 0 18px 24px;
+  position: sticky;
+  top: 60px;
+  align-self: start;
+  max-height: calc(100vh - 80px);
+  overflow: auto;
+  min-width: 0;
+}
+@media (max-width: 960px) {
+  .qm-lin-split {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+  .qm-lin-split-divider {
+    display: none;
+  }
+  .qm-lin-split-left {
+    padding-right: 0;
+  }
+  .qm-lin-split-right {
+    position: static;
+    padding: 18px 0 0;
+    max-height: none;
+    border-top: 1px solid var(--color-linear-hairline);
+  }
+}
+
+/* SOAP section block — left pane */
+.qm-lin-soap-section {
+  margin-bottom: 32px;
+}
+.qm-lin-soap-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--color-linear-hairline);
+}
+.qm-lin-soap-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-linear-text-3);
+  margin-bottom: 4px;
+}
+.qm-lin-soap-letter {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid rgba(122, 166, 140, 0.28);
+  background: rgba(122, 166, 140, 0.07);
+  border-radius: 4px;
+  color: var(--color-linear-sage-bright);
+  font-size: 10px;
+  letter-spacing: 0;
+  font-weight: 500;
+}
+.qm-lin-soap-title {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  color: var(--color-linear-text);
+  margin: 0;
+}
+.qm-lin-soap-body {
+  position: relative;
+  padding: 10px 14px;
+  margin: 0 -14px 4px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 14.5px;
+  line-height: 1.7;
+  color: var(--color-linear-text);
+  letter-spacing: -0.005em;
+  transition: background-color 130ms ease-out, border-color 130ms ease-out;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+.qm-lin-soap-body::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background: var(--color-linear-sage);
+  opacity: 0;
+  border-radius: 1px;
+  transition: opacity 130ms ease-out;
+}
+.qm-lin-soap-body:hover {
+  background: rgba(255, 255, 255, 0.022);
+  border-color: var(--color-linear-hairline);
+}
+.qm-lin-soap-body--active {
+  background: rgba(122, 166, 140, 0.05);
+  border-color: rgba(122, 166, 140, 0.22);
+}
+.qm-lin-soap-body--active::before {
+  opacity: 1;
+}
+
+/* Sources rail — SOAP V3 right pane */
+.qm-lin-rail-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding-bottom: 10px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--color-linear-hairline);
+}
+.qm-lin-rail-title {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-linear-text);
+  font-weight: 500;
+}
+.qm-lin-rail-meta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-linear-text-3);
+}
+.qm-lin-source-card {
+  position: relative;
+  padding: 10px 12px 10px 14px;
+  margin-bottom: 6px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  cursor: pointer;
+  transition: background-color 130ms ease-out, border-color 130ms ease-out;
+}
+.qm-lin-source-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background: var(--color-linear-sage);
+  opacity: 0;
+  border-radius: 1px;
+  transition: opacity 130ms ease-out;
+}
+.qm-lin-source-card:hover {
+  background: rgba(255, 255, 255, 0.02);
+  border-color: var(--color-linear-hairline);
+}
+.qm-lin-source-card--active {
+  background: rgba(122, 166, 140, 0.05);
+  border-color: rgba(122, 166, 140, 0.22);
+}
+.qm-lin-source-card--active::before {
+  opacity: 1;
+}
+.qm-lin-source-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  margin-bottom: 4px;
+}
+.qm-lin-source-time {
+  color: var(--color-linear-sage-bright);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.qm-lin-source-speaker {
+  color: var(--color-linear-text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.qm-lin-source-speaker--doctor {
+  color: var(--color-linear-info);
+}
+.qm-lin-source-text {
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--color-linear-text-2);
+  letter-spacing: -0.005em;
+}
+
+/* Transcript turn — Transcript V3 left pane */
+.qm-lin-tx-stream {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-linear-hairline);
+  border-radius: 8px;
+  background: var(--color-linear-surface-1);
+  overflow: hidden;
+}
+.qm-lin-tx-turn {
+  display: grid;
+  grid-template-columns: 76px 1fr;
+  gap: 14px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--color-linear-hairline);
+  cursor: pointer;
+  position: relative;
+  transition: background-color 130ms ease-out;
+}
+.qm-lin-tx-turn:first-child {
+  border-top: 0;
+}
+.qm-lin-tx-turn:hover {
+  background: var(--color-linear-row-hover);
+}
+.qm-lin-tx-turn::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--color-linear-sage);
+  opacity: 0;
+  transition: opacity 130ms ease-out;
+}
+.qm-lin-tx-turn--active {
+  background: rgba(122, 166, 140, 0.06);
+}
+.qm-lin-tx-turn--active::before {
+  opacity: 1;
+}
+.qm-lin-tx-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.qm-lin-tx-ts {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-linear-text-3);
+  font-variant-numeric: tabular-nums;
+}
+.qm-lin-tx-role {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+.qm-lin-tx-role--doctor {
+  color: var(--color-linear-sage-bright);
+}
+.qm-lin-tx-role--patient {
+  color: var(--color-linear-text-2);
+}
+.qm-lin-tx-role--other {
+  color: var(--color-linear-text-3);
+}
+.qm-lin-tx-body {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--color-linear-text);
+  letter-spacing: -0.005em;
+}
+.qm-lin-tx-lowconf {
+  border-bottom: 1px dotted var(--color-linear-text-3);
+}
+.qm-lin-tx-lowconf-tag {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(212, 165, 116, 0.07);
+  border: 1px solid rgba(212, 165, 116, 0.22);
+  color: var(--color-linear-amber);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 500;
+  vertical-align: 1px;
+}
+
+/* Search input — pinned at top of transcript pane */
+.qm-lin-tx-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 10px;
+  background: var(--color-linear-surface-2);
+  border: 1px solid var(--color-linear-border);
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--color-linear-text);
+  margin-bottom: 12px;
+  transition: border-color 100ms ease-out;
+}
+.qm-lin-tx-search:focus-within {
+  border-color: var(--color-linear-sage);
+}
+.qm-lin-tx-search input {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  color: inherit;
+  font: inherit;
+  min-width: 0;
+}
+.qm-lin-tx-search input::placeholder {
+  color: var(--color-linear-text-3);
+}
+.qm-lin-tx-search kbd {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-linear-text-3);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+/* Right-rail card — used by audio + jump-nav + metadata blocks */
+.qm-lin-rail-card {
+  background: var(--color-linear-surface-1);
+  border: 1px solid var(--color-linear-hairline);
+  border-radius: 8px;
+  padding: 14px;
+  margin-bottom: 16px;
+}
+.qm-lin-rail-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--color-linear-hairline);
+}
+
+/* Jump-to-section nav */
+.qm-lin-jump-row {
+  display: grid;
+  grid-template-columns: 54px 1fr;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--color-linear-hairline);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background-color 100ms ease-out;
+}
+.qm-lin-jump-row:last-child {
+  border-bottom: 0;
+}
+.qm-lin-jump-row:hover {
+  background: rgba(255, 255, 255, 0.025);
+}
+.qm-lin-jump-row--current {
+  background: rgba(122, 166, 140, 0.06);
+}
+.qm-lin-jump-ts {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-linear-text-3);
+  font-variant-numeric: tabular-nums;
+}
+.qm-lin-jump-row--current .qm-lin-jump-ts {
+  color: var(--color-linear-sage-bright);
+}
+.qm-lin-jump-label {
+  font-size: 13px;
+  color: var(--color-linear-text);
+  letter-spacing: -0.005em;
+}
+
+/* Audio waveform (mini) + scrubber */
+.qm-lin-wave {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 38px;
+  margin-bottom: 10px;
+  gap: 1.5px;
+}
+.qm-lin-wave-bar-static {
+  flex: 1;
+  background: var(--color-linear-surface-3);
+  border-radius: 1px;
+  min-width: 2px;
+}
+.qm-lin-wave-bar-static--played {
+  background: var(--color-linear-sage);
+}
+.qm-lin-wave-bar-static--cur {
+  background: var(--color-linear-sage-bright);
+}
+
+/* Speaker mini-pill (chip on transcript turn meta) */
+.qm-lin-speaker-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+/* Visit metadata block (transcript right rail) */
+.qm-lin-vm-row {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 10px;
+  align-items: baseline;
+  padding: 4px 0;
+}
+.qm-lin-vm-label {
+  color: var(--color-linear-text-3);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+.qm-lin-vm-value {
+  color: var(--color-linear-text);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  letter-spacing: -0.005em;
+}
+.qm-lin-vm-value--mono {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+/* Section status pill (DRAFTED / REVIEWED / SIGNED) — the SOAP eyebrow */
+.qm-lin-sec-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+.qm-lin-sec-status--reviewed {
+  border: 1px solid rgba(122, 166, 140, 0.28);
+  color: var(--color-linear-sage-bright);
+  background: rgba(122, 166, 140, 0.08);
+}
+.qm-lin-sec-status--drafted {
+  border: 1px solid rgba(212, 164, 55, 0.25);
+  color: var(--color-linear-warning);
+  background: rgba(212, 164, 55, 0.06);
+}
+.qm-lin-sec-status--signed {
+  border: 1px solid var(--color-linear-hairline);
+  color: var(--color-linear-text-3);
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qm-lin-soap-body,
+  .qm-lin-source-card,
+  .qm-lin-tx-turn,
+  .qm-lin-jump-row {
+    transition: none;
+  }
+}
