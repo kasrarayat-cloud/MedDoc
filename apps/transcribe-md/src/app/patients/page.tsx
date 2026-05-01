@@ -5,6 +5,21 @@
 // a truncated first-page view of the same data; this route is the
 // exhaustive list, sorted by updatedAt so doctors see their most-
 // recently-touched charts first.
+//
+// Phase 4 follow-up (Bug 2) — this route was missed in the Phase 2 / 3 / 4
+// Clinician migration and was still rendering in the legacy dark + violet
+// `app-redesign-v1` chrome. We now opt in to the Clinician shell via
+// `<AppFrame theme="clinician">` and `<PageHeader theme="clinician">`,
+// matching the pattern used by `/dashboard`, `/visits`, `/admin`, and
+// `/patients/[id]`. The page-level data fetches (auth, prisma queries,
+// redirects) are unchanged per PROTECTED_CONTRACTS.md — only chrome,
+// title typography, and child theme props change.
+//
+// No Phase 4 cinematic photo hero on this surface: `/patients` is a
+// list/search route and a tall photo band would push the search bar
+// and grid below the fold. Instead we use the slim Clinician
+// `<PageHeader theme="clinician">` (same component the `/visits` list
+// uses) with the "All <em>patients</em>." sage-italic title.
 // ============================================================================
 
 import type { Metadata } from 'next';
@@ -105,12 +120,22 @@ export default async function PatientsPage() {
   );
 
   return (
-    <AppFrame>
+    <AppFrame theme="clinician">
       <PageHeader
-        eyebrow="§ Patients"
+        theme="clinician"
+        eyebrow="Patients"
         title={
           <>
-            All <em style={{ color: 'var(--accent-bright)' }}>patients</em>
+            All{' '}
+            <em
+              style={{
+                color: 'var(--sage-deep, #2F5040)',
+                fontStyle: 'italic',
+              }}
+            >
+              patients
+            </em>
+            .
           </>
         }
         subtitle={
@@ -121,7 +146,7 @@ export default async function PatientsPage() {
         actions={
           <Link
             href="/visits/new"
-            className="qm-btn qm-btn-primary"
+            className="qm-cl-btn qm-cl-btn-primary"
             style={{ textDecoration: 'none' }}
           >
             <Ic.plus width={14} height={14} />
@@ -132,17 +157,27 @@ export default async function PatientsPage() {
 
       {patients.length === 0 ? (
         <EmptyState
-          eyebrow="§ No patients"
+          theme="clinician"
+          kind="sparkle"
+          eyebrow="No patients"
           title={
             <>
-              No patients <em style={{ color: 'var(--accent-bright)' }}>yet</em>
+              No patients{' '}
+              <em
+                style={{
+                  color: 'var(--sage-deep, #2F5040)',
+                  fontStyle: 'italic',
+                }}
+              >
+                yet
+              </em>
             </>
           }
           body="Start your first visit — we'll create the patient record along the way."
           cta={
             <Link
               href="/visits/new"
-              className="qm-btn qm-btn-primary"
+              className="qm-cl-btn qm-cl-btn-primary"
               style={{ textDecoration: 'none' }}
             >
               <Ic.plus width={14} height={14} />
