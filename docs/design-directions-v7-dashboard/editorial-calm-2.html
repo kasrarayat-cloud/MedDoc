@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>QuillMD — The Broadsheet · Wednesday Evening</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;1,8..60,400;1,8..60,500&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --cream:#F2EBDC; --cream-card:#FFFCF5; --cream-2:#F2EDE3;
+    --ink:#2B2620; --ink-2:#5C544A; --ink-3:#8A8278;
+    --sage:#7AA68C; --sage-deep:#2F5040;
+    --coral:#C97B6E; --amber:#D4A574; --teal:#5BA3B4;
+    --line:rgba(43,38,32,0.08);
+    --line-2:rgba(43,38,32,0.18);
+    --serif:'Source Serif 4',Georgia,serif;
+    --sans:'DM Sans',-apple-system,system-ui,sans-serif;
+    --mono:'JetBrains Mono',ui-monospace,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:14.5px;line-height:1.55;-webkit-font-smoothing:antialiased}
+  ::selection{background:rgba(122,166,140,.32);color:var(--ink)}
+  a{color:inherit;text-decoration:none}
+
+  .sheet{max-width:1280px;margin:0 auto;padding:24px 48px 100px;position:relative}
+
+  /* nameplate */
+  .nameplate{
+    display:flex;align-items:flex-end;justify-content:space-between;
+    border-top:3px double var(--ink); border-bottom:1px solid var(--ink);
+    padding:18px 0 14px;margin-top:6px;
+  }
+  .nameplate h1{
+    font-family:var(--serif);font-weight:500;font-size:46px;letter-spacing:-0.02em;line-height:1;color:var(--ink)
+  }
+  .nameplate h1 em{font-style:italic;color:var(--sage-deep);font-weight:400}
+  .nameplate .ribbon{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+  .nameplate .ribbon .a{font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-2)}
+  .nameplate .ribbon .b{font-family:var(--serif);font-style:italic;color:var(--ink-3);font-size:14px}
+
+  /* sub-rule */
+  .subrule{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:8px 0; font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-2);
+    border-bottom:1px solid var(--ink)
+  }
+  .subrule .seg{display:flex;gap:24px;align-items:center}
+  .subrule .seg b{color:var(--ink);font-weight:500}
+  .kbd{display:inline-flex;align-items:center;gap:5px;padding:4px 8px;border:1px solid var(--line-2);border-radius:5px;background:var(--cream-card);font-family:var(--mono);font-size:10px;color:var(--ink-2)}
+  .chip{display:inline-flex;align-items:center;gap:7px;padding:4px 5px 4px 9px;border:1px solid var(--line-2);border-radius:999px;background:var(--cream-card);font-size:11.5px;text-transform:none;letter-spacing:0}
+  .chip .ini{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:999px;background:var(--sage-deep);color:#FBF9F1;font-family:var(--mono);font-size:9px;letter-spacing:.04em}
+  .chip span{font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--ink-2)}
+
+  /* hero greeting strip */
+  .hero{
+    padding:34px 0 22px;border-bottom:1px solid var(--ink);
+  }
+  .hero h2{
+    font-family:var(--serif);font-weight:400;font-size:clamp(56px,8.4vw,108px);line-height:.9;letter-spacing:-0.03em;color:var(--ink);
+  }
+  .hero h2 em{font-style:italic;font-weight:400;color:var(--sage-deep);position:relative}
+  .hero h2 em::after{content:"";position:absolute;left:-1%;right:-1%;bottom:.06em;height:.42em;background:rgba(122,166,140,.18);border-radius:6px;z-index:-1}
+  .hero .standfirst{
+    display:grid;grid-template-columns:1.1fr 1fr 1fr;gap:36px;margin-top:22px
+  }
+  .hero .standfirst > *{font-family:var(--serif);font-size:16px;line-height:1.55;color:var(--ink-2)}
+  .hero .lede{font-style:italic;color:var(--ink)}
+  .hero .meta{display:block;font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3);margin-bottom:8px}
+  .hero .new-link{font-family:var(--serif);font-style:italic;color:var(--sage-deep);font-size:15px;border-bottom:1px solid rgba(47,80,64,.4)}
+
+  /* THREE COLUMN GRID */
+  .grid3{
+    display:grid;grid-template-columns:1.05fr 1fr 1fr;
+    column-gap:0;
+    border-top:0;
+    margin-top:0
+  }
+  .grid3 > .col{padding:22px 32px;border-right:1px solid var(--line);min-width:0}
+  .grid3 > .col:first-child{padding-left:0}
+  .grid3 > .col:last-child{padding-right:0;border-right:0}
+  .colhead{
+    display:flex;align-items:baseline;justify-content:space-between;
+    padding-bottom:12px;border-bottom:1px solid var(--ink);margin-bottom:18px
+  }
+  .colhead .kicker{font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3)}
+  .colhead h3{font-family:var(--serif);font-weight:500;font-size:22px;letter-spacing:-0.012em;color:var(--ink)}
+  .colhead h3 em{font-style:italic;color:var(--sage-deep);font-weight:400}
+
+  /* COL 1: Today */
+  .today-row{padding:16px 0;border-bottom:1px solid var(--line)}
+  .today-row:last-of-type{border-bottom:0}
+  .today-row .crumb{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3);display:flex;justify-content:space-between;align-items:center}
+  .today-row .crumb .st{font-weight:500}
+  .s-ready{color:var(--sage-deep)}
+  .s-needs{color:var(--coral)}
+  .s-drafting{color:var(--amber)}
+  .s-await{color:var(--ink-3)}
+  .s-signed{color:var(--ink-2)}
+  .today-row h4{font-family:var(--serif);font-weight:500;font-size:20px;letter-spacing:-0.01em;color:var(--ink);margin-top:6px;line-height:1.25}
+  .today-row h4 em{font-style:italic;color:var(--ink-2);font-weight:400;font-size:13.5px;margin-left:4px}
+  .today-row .blurb{font-family:var(--serif);font-style:italic;color:var(--ink-2);font-size:14.5px;line-height:1.5;margin-top:5px}
+  .today-row .codes{margin-top:7px;font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3)}
+  .today-row .codes b{color:var(--ink-2);font-weight:500}
+
+  /* COL 2: Drafts / Recent */
+  .item{padding:14px 0;border-bottom:1px solid var(--line);display:grid;grid-template-columns:54px 1fr auto;gap:12px;align-items:baseline}
+  .item:last-of-type{border-bottom:0}
+  .item .ts{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)}
+  .item .who{font-family:var(--serif);font-size:15.5px;color:var(--ink);line-height:1.35}
+  .item .who em{font-style:italic;color:var(--ink-2);font-size:13px;margin-left:4px}
+  .item .who .c{display:block;margin-top:3px;font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+  .item .st{font-family:var(--mono);font-size:9.5px;letter-spacing:.16em;text-transform:uppercase}
+  .col-drafts .pull{
+    border:1px solid var(--line);background:var(--cream-card);padding:14px 14px 12px;border-radius:6px;margin-bottom:14px;
+  }
+  .col-drafts .pull .lbl{font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--sage-deep)}
+  .col-drafts .pull .q{font-family:var(--serif);font-style:italic;font-size:16px;color:var(--ink);margin-top:6px;line-height:1.4}
+  .col-drafts .pull .src{margin-top:6px;font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)}
+
+  /* COL 3: numbers */
+  .nblock{padding:18px 0 22px;border-bottom:1px solid var(--line)}
+  .nblock:first-of-type{padding-top:0}
+  .nblock:last-of-type{border-bottom:0}
+  .nblock .lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3)}
+  .nblock .big{font-family:var(--serif);font-weight:400;font-size:clamp(64px,7.2vw,96px);line-height:.95;letter-spacing:-0.04em;color:var(--ink);margin-top:10px}
+  .nblock .big sup{font-family:var(--serif);font-style:italic;font-size:.32em;color:var(--ink-3);margin-left:4px;vertical-align:30%;letter-spacing:0}
+  .nblock .cap{margin-top:8px;font-family:var(--serif);font-style:italic;font-size:14px;color:var(--ink-2);line-height:1.45}
+  .nblock.sage .big{color:var(--sage-deep)}
+  .nblock.coral .big{color:var(--coral)}
+  .nblock .deltas{margin-top:8px;font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)}
+
+  /* tags banner */
+  .tags{
+    margin-top:18px;padding:14px 0;border-top:1px solid var(--ink);border-bottom:1px solid var(--ink);
+    display:flex;flex-wrap:wrap;gap:18px 26px;
+  }
+  .tag{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-2);cursor:pointer}
+  .tag b{color:var(--ink);font-weight:500}
+  .tag:hover{color:var(--sage-deep)}
+  .tag.act{color:var(--sage-deep)}
+
+  /* lower stream — full-width broadsheet ledger */
+  .below{margin-top:32px}
+  .below .hd{display:flex;align-items:baseline;justify-content:space-between;border-bottom:1px solid var(--ink);padding-bottom:10px;margin-bottom:14px}
+  .below h3{font-family:var(--serif);font-weight:500;font-size:22px;letter-spacing:-0.01em}
+  .below h3 em{font-style:italic;color:var(--sage-deep);font-weight:400}
+  .below .stream{
+    display:grid;grid-template-columns:repeat(2,1fr);column-gap:32px;
+  }
+  .below .stream > div{border-right:1px solid var(--line);padding-right:24px}
+  .below .stream > div + div{border-right:0;padding-right:0;padding-left:8px}
+  .lrow{display:grid;grid-template-columns:74px 1fr auto;gap:14px;align-items:baseline;padding:11px 0;border-bottom:1px solid var(--line)}
+  .lrow:last-of-type{border-bottom:0}
+  .lrow .t{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;color:var(--ink-3);text-transform:uppercase}
+  .lrow .w{font-family:var(--serif);font-size:15px;color:var(--ink);line-height:1.3}
+  .lrow .w em{font-style:italic;color:var(--ink-2);font-size:13px;margin-left:4px}
+  .lrow .w .c{display:block;margin-top:2px;font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+  .lrow .s{font-family:var(--mono);font-size:9.5px;letter-spacing:.16em;text-transform:uppercase}
+
+  .footer-rule{
+    margin-top:40px;padding:14px 0 0;border-top:1px solid var(--ink);
+    display:flex;justify-content:space-between;align-items:center;
+    font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3);
+  }
+  .footer-rule em{font-family:var(--serif);font-style:italic;letter-spacing:0;text-transform:none;color:var(--ink-2)}
+
+  @media (max-width:760px){
+    .sheet{padding:20px 20px 70px}
+    .nameplate{flex-direction:column;align-items:flex-start;gap:14px}
+    .hero h2{font-size:54px}
+    .hero .standfirst{grid-template-columns:1fr;gap:18px}
+    .grid3{grid-template-columns:1fr}
+    .grid3 > .col{padding:22px 0;border-right:0;border-bottom:1px solid var(--line)}
+    .below .stream{grid-template-columns:1fr}
+    .below .stream > div{border-right:0;padding-right:0}
+    .below .stream > div + div{padding-left:0}
+    .subrule{flex-wrap:wrap;gap:8px}
+  }
+</style>
+</head>
+<body>
+<main class="sheet">
+
+  <!-- NAMEPLATE -->
+  <header class="nameplate">
+    <h1>QuillMD <em>Broadsheet</em></h1>
+    <div class="ribbon">
+      <span class="a">Late edition · Wed 29 Apr 2026</span>
+      <span class="b">"All the notes that fit, signed."</span>
+    </div>
+  </header>
+
+  <!-- SUB RULE -->
+  <div class="subrule">
+    <div class="seg">
+      <span>Vol. IV</span>
+      <span>No. 119</span>
+      <span>5 patients on the schedule · <b>3 awaiting review</b></span>
+    </div>
+    <div class="seg">
+      <span class="kbd">⌘ K · search</span>
+      <span class="chip"><span>Dr. Park · Family Med</span><span class="ini">MP</span></span>
+    </div>
+  </div>
+
+  <!-- HERO STRIP -->
+  <section class="hero">
+    <h2>Good <em>evening</em>, Dr. Park.</h2>
+    <div class="standfirst">
+      <div>
+        <span class="meta">Above the fold</span>
+        <p class="lede">A quiet end to the round. Three drafts on your desk; one in particular wants reading before you sign anything else.</p>
+      </div>
+      <div>
+        <span class="meta">By the bell</span>
+        <p>Five appointments closed by half-three. Mr. Tran already signed; Mrs. Lopez's biopsy queued for Friday morning at the lab.</p>
+      </div>
+      <div>
+        <span class="meta">A note from the desk</span>
+        <p style="font-style:italic">If you only do one thing tonight: <a href="#" class="new-link">Open a new visit →</a></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- THREE COLUMNS -->
+  <section class="grid3">
+
+    <!-- COL 1: TODAY -->
+    <div class="col col-today">
+      <div class="colhead">
+        <h3>Today, <em>by the door</em></h3>
+        <span class="kicker">Five seen</span>
+      </div>
+
+      <article class="today-row">
+        <div class="crumb"><span>Mei-Ling Park · 42 F</span><span class="st s-ready">Ready</span></div>
+        <h4>A cough, three weeks long.</h4>
+        <p class="blurb">Worse at night, dry, sleep impaired. Chest clear; oxygen 98 on room air.</p>
+        <div class="codes">Family Med · <b>J20.9</b> · <b>99214</b> · drafted 0:38</div>
+      </article>
+
+      <article class="today-row">
+        <div class="crumb"><span>Aram Sahakian · 38 M</span><span class="st s-await">Awaiting note</span></div>
+        <h4>Pre-op, left rotator cuff.</h4>
+        <p class="blurb">Mild hypertension, otherwise unremarkable. Cardiology clearance owed by tomorrow noon.</p>
+        <div class="codes">Cardiology · <b>I10</b> · audio queued</div>
+      </article>
+
+      <article class="today-row">
+        <div class="crumb"><span>Daniel Tran · 27 M</span><span class="st s-signed">Signed 14:30</span></div>
+        <h4>Annual well-check, all clear.</h4>
+        <p class="blurb">Cleared to return to recreational soccer; routine labs sent.</p>
+        <div class="codes">Pediatrics · <b>Z00.129</b> · <b>99395</b></div>
+      </article>
+
+      <article class="today-row">
+        <div class="crumb"><span>Priya Gupta · 55 F</span><span class="st s-needs">Needs review</span></div>
+        <h4>Diabetes follow-up, A1c rising.</h4>
+        <p class="blurb">Two-point uptick in three months. Discussion of metformin titration owed.</p>
+        <div class="codes">Internal Med · <b>E11.9</b> · <b>99213</b></div>
+      </article>
+
+      <article class="today-row">
+        <div class="crumb"><span>Elena Lopez · 61 F</span><span class="st s-drafting">Drafting</span></div>
+        <h4>One spot worth a second look.</h4>
+        <p class="blurb">Asymmetric border, 7 mm, upper back. Biopsy queued for Friday's slot.</p>
+        <div class="codes">Dermatology · <b>D22.4</b> · biopsy</div>
+      </article>
+    </div>
+
+    <!-- COL 2: DRAFTS WAITING -->
+    <div class="col col-drafts">
+      <div class="colhead">
+        <h3>Drafts, <em>waiting on you</em></h3>
+        <span class="kicker">3 to read</span>
+      </div>
+
+      <div class="pull">
+        <span class="lbl">Lede · Gupta</span>
+        <p class="q">"Reports occasional polyuria, denies blurred vision. Adherent to metformin 1 g BID; reports recent dietary slippage over Ramadan."</p>
+        <span class="src">First line of draft · 22 minutes ago</span>
+      </div>
+
+      <div class="item">
+        <span class="ts">22m</span>
+        <div class="who">Priya Gupta <em>· Internal Med</em>
+          <span class="c">E11.9 · 99213 · 22 min</span>
+        </div>
+        <span class="st s-needs">Needs review</span>
+      </div>
+
+      <div class="item">
+        <span class="ts">38m</span>
+        <div class="who">Mei-Ling Park <em>· Family Med</em>
+          <span class="c">J20.9 · 99214 · 11 min</span>
+        </div>
+        <span class="st s-ready">Ready</span>
+      </div>
+
+      <div class="item">
+        <span class="ts">1h 04m</span>
+        <div class="who">Nathaniel Cho <em>· Cardiology</em>
+          <span class="c">I25.10 · 99214 · 26 min</span>
+        </div>
+        <span class="st s-ready">Ready</span>
+      </div>
+
+      <div style="margin-top:18px;border-top:1px solid var(--line);padding-top:14px">
+        <span class="kicker" style="font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3)">In the works</span>
+      </div>
+
+      <div class="item">
+        <span class="ts">Live</span>
+        <div class="who">Elena Lopez <em>· Dermatology</em>
+          <span class="c">D22.4 · drafting at layer 5</span>
+        </div>
+        <span class="st s-drafting">Drafting</span>
+      </div>
+
+      <div class="item">
+        <span class="ts">Queue</span>
+        <div class="who">Aram Sahakian <em>· Cardiology</em>
+          <span class="c">I10 · awaiting transcribe</span>
+        </div>
+        <span class="st s-await">Queued</span>
+      </div>
+
+    </div>
+
+    <!-- COL 3: NUMBERS -->
+    <div class="col col-numbers">
+      <div class="colhead">
+        <h3>The <em>numbers</em></h3>
+        <span class="kicker">MTD · Apr</span>
+      </div>
+
+      <div class="nblock">
+        <span class="lbl">Visits this month</span>
+        <div class="big">127</div>
+        <p class="cap">Pace is right. Last month: 138.</p>
+        <span class="deltas">▴ 6 vs same wk Mar</span>
+      </div>
+
+      <div class="nblock sage">
+        <span class="lbl">Avg drafted in</span>
+        <div class="big">38<sup>s</sup></div>
+        <p class="cap">From last word to first SOAP.</p>
+        <span class="deltas">▾ 4 s vs last week</span>
+      </div>
+
+      <div class="nblock coral">
+        <span class="lbl">Pending review</span>
+        <div class="big">3</div>
+        <p class="cap">Gupta · Lopez · Tuesday Singh.</p>
+        <span class="deltas">Hold steady · 1 over 24 h</span>
+      </div>
+
+      <div class="nblock">
+        <span class="lbl">Signed this week</span>
+        <div class="big">42</div>
+        <p class="cap">Eight ahead of last week.</p>
+        <span class="deltas">▴ 23% wow · Friday is reading day</span>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- TAGS -->
+  <div class="tags" aria-label="Filter by specialty">
+    <span class="tag act">All <b>11</b></span>
+    <span class="tag">Family Medicine <b>4</b></span>
+    <span class="tag">Internal <b>3</b></span>
+    <span class="tag">Cardiology <b>2</b></span>
+    <span class="tag">Pediatrics <b>1</b></span>
+    <span class="tag">Dermatology <b>1</b></span>
+  </div>
+
+  <!-- LOWER LEDGER -->
+  <section class="below">
+    <div class="hd">
+      <h3>Recently <em>filed</em>, by the hour</h3>
+      <span class="kicker" style="font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3)">Last 48 h · 12 visits</span>
+    </div>
+    <div class="stream">
+      <div>
+        <div class="lrow">
+          <span class="t">14:30</span>
+          <div class="w">Daniel Tran <em>· Pediatrics</em>
+            <span class="c">Z00.129 · 99395 · 17 min</span>
+          </div>
+          <span class="s s-signed">Signed</span>
+        </div>
+        <div class="lrow">
+          <span class="t">13:12</span>
+          <div class="w">Mei-Ling Park <em>· Family Med</em>
+            <span class="c">J20.9 · 99214 · 11 min</span>
+          </div>
+          <span class="s s-ready">Ready</span>
+        </div>
+        <div class="lrow">
+          <span class="t">11:48</span>
+          <div class="w">Priya Gupta <em>· Internal Med</em>
+            <span class="c">E11.9 · 99213 · 22 min</span>
+          </div>
+          <span class="s s-needs">Review</span>
+        </div>
+        <div class="lrow">
+          <span class="t">10:25</span>
+          <div class="w">Elena Lopez <em>· Dermatology</em>
+            <span class="c">D22.4 · 99213 · 14 min</span>
+          </div>
+          <span class="s s-drafting">Drafting</span>
+        </div>
+        <div class="lrow">
+          <span class="t">09:51</span>
+          <div class="w">Aram Sahakian <em>· Cardiology</em>
+            <span class="c">I10 · 99244 · 19 min</span>
+          </div>
+          <span class="s s-await">Processing</span>
+        </div>
+        <div class="lrow">
+          <span class="t">09:02</span>
+          <div class="w">Henry Okafor <em>· Family Med</em>
+            <span class="c">M54.5 · 99213 · 8 min</span>
+          </div>
+          <span class="s s-signed">Signed</span>
+        </div>
+      </div>
+      <div>
+        <div class="lrow">
+          <span class="t">YDA 16:42</span>
+          <div class="w">Beatrice Lin <em>· Family Med</em>
+            <span class="c">R05.9 · 99213 · 12 min</span>
+          </div>
+          <span class="s s-signed">Signed</span>
+        </div>
+        <div class="lrow">
+          <span class="t">YDA 15:18</span>
+          <div class="w">Marcus Devereaux <em>· Internal Med</em>
+            <span class="c">I50.9 · 99214 · 24 min</span>
+          </div>
+          <span class="s s-signed">Signed</span>
+        </div>
+        <div class="lrow">
+          <span class="t">YDA 14:03</span>
+          <div class="w">Anya Petrova <em>· Pediatrics</em>
+            <span class="c">J06.9 · 99213 · 9 min</span>
+          </div>
+          <span class="s s-needs">Review</span>
+        </div>
+        <div class="lrow">
+          <span class="t">YDA 11:36</span>
+          <div class="w">Jamal Carter <em>· Family Med</em>
+            <span class="c">E78.5 · 99213 · 16 min</span>
+          </div>
+          <span class="s s-signed">Signed</span>
+        </div>
+        <div class="lrow">
+          <span class="t">YDA 10:11</span>
+          <div class="w">Sophia Albright <em>· Dermatology</em>
+            <span class="c">L70.0 · 99202 · 11 min</span>
+          </div>
+          <span class="s s-signed">Signed</span>
+        </div>
+        <div class="lrow">
+          <span class="t">YDA 08:54</span>
+          <div class="w">Nathaniel Cho <em>· Cardiology</em>
+            <span class="c">I25.10 · 99214 · 26 min</span>
+          </div>
+          <span class="s s-ready">Ready</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="footer-rule">
+    <span><em>Set in Source Serif 4 &amp; DM Sans · printed in cream &amp; sage</em></span>
+    <span>QuillMD · Broadsheet · pp. 1 — 1</span>
+  </div>
+
+</main>
+</body>
+</html>

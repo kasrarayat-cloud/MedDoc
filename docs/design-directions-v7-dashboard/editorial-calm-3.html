@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>QuillMD — A Slow Read of the Day</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;1,8..60,400;1,8..60,500&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --cream:#F2EBDC; --cream-card:#FFFCF5; --cream-2:#F2EDE3;
+    --ink:#2B2620; --ink-2:#5C544A; --ink-3:#8A8278;
+    --sage:#7AA68C; --sage-deep:#2F5040;
+    --coral:#C97B6E; --amber:#D4A574; --teal:#5BA3B4;
+    --line:rgba(43,38,32,0.08);
+    --line-2:rgba(43,38,32,0.18);
+    --serif:'Source Serif 4',Georgia,serif;
+    --sans:'DM Sans',-apple-system,system-ui,sans-serif;
+    --mono:'JetBrains Mono',ui-monospace,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--cream);color:var(--ink);font-family:var(--serif);font-size:18px;line-height:1.65;-webkit-font-smoothing:antialiased}
+  ::selection{background:rgba(122,166,140,.32);color:var(--ink)}
+  a{color:inherit;text-decoration:none}
+
+  /* top crumb */
+  .crumb{
+    position:sticky;top:0;z-index:5;background:rgba(242,235,220,.92);backdrop-filter:saturate(140%) blur(6px);
+    -webkit-backdrop-filter:saturate(140%) blur(6px);
+    display:flex;justify-content:space-between;align-items:center;padding:14px 28px;border-bottom:1px solid var(--line);
+    font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-2)
+  }
+  .crumb .l{display:flex;gap:24px;align-items:center}
+  .crumb .l .wm{font-family:var(--serif);font-style:italic;letter-spacing:0;text-transform:none;font-size:16px;color:var(--ink)}
+  .crumb .r{display:flex;gap:14px;align-items:center}
+  .kbd{display:inline-flex;align-items:center;gap:5px;padding:4px 8px;border:1px solid var(--line-2);border-radius:5px;background:var(--cream-card);font-family:var(--mono);font-size:10px;color:var(--ink-2)}
+  .chip{display:inline-flex;align-items:center;gap:7px;padding:4px 5px 4px 9px;border:1px solid var(--line-2);border-radius:999px;background:var(--cream-card);text-transform:none;letter-spacing:0;font-size:11.5px}
+  .chip .ini{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:999px;background:var(--sage-deep);color:#FBF9F1;font-family:var(--mono);font-size:9px;letter-spacing:.04em}
+  .chip span{font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--ink-2)}
+
+  /* progress (reading line) */
+  .prog{position:fixed;left:0;top:0;height:2px;width:0;background:var(--sage-deep);z-index:9;transition:width .15s linear}
+
+  /* article container */
+  .article{max-width:680px;margin:0 auto;padding:60px 28px 140px}
+
+  .kicker{font-family:var(--mono);font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-3);display:block;margin-bottom:14px}
+
+  /* opener */
+  .opener h1{font-family:var(--serif);font-weight:400;font-size:clamp(54px,8vw,92px);line-height:.92;letter-spacing:-0.03em;color:var(--ink)}
+  .opener h1 em{font-style:italic;color:var(--sage-deep);position:relative;font-weight:400}
+  .opener h1 em::after{content:"";position:absolute;left:-2%;right:-2%;bottom:.07em;height:.42em;background:rgba(122,166,140,.18);border-radius:6px;z-index:-1}
+  .standfirst{margin-top:24px;font-family:var(--serif);font-style:italic;font-size:22px;line-height:1.5;color:var(--ink-2)}
+  .byline{margin-top:20px;font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3)}
+  .byline b{color:var(--ink);font-weight:500}
+
+  /* body prose */
+  .prose{margin-top:42px;font-family:var(--serif);font-size:18px;line-height:1.7;color:var(--ink)}
+  .prose p{margin-top:18px}
+  .prose p.dropcap::first-letter{
+    font-family:var(--serif);font-style:italic;font-weight:500;float:left;font-size:78px;line-height:.92;
+    padding:8px 12px 0 0;color:var(--sage-deep)
+  }
+  .new-link{font-style:italic;color:var(--sage-deep);border-bottom:1px solid rgba(47,80,64,.4);padding-bottom:1px}
+
+  /* big-number break */
+  .big-break{
+    margin:64px -40px;padding:36px 40px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+    text-align:center;
+  }
+  .big-break .lbl{font-family:var(--mono);font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-3)}
+  .big-break .num{font-family:var(--serif);font-weight:400;font-size:clamp(96px,14vw,144px);line-height:.92;letter-spacing:-0.04em;color:var(--ink);margin-top:16px}
+  .big-break .num sup{font-family:var(--serif);font-style:italic;font-size:.3em;color:var(--ink-3);margin-left:6px;vertical-align:30%;letter-spacing:0}
+  .big-break .cap{margin-top:14px;font-family:var(--serif);font-style:italic;font-size:18px;color:var(--ink-2)}
+  .big-break.sage .num{color:var(--sage-deep)}
+  .big-break.coral .num{color:var(--coral)}
+
+  /* patient chapter */
+  .chapter{margin-top:60px;padding-top:32px;border-top:1px solid var(--line)}
+  .chapter .ch-num{font-family:var(--serif);font-style:italic;font-size:18px;color:var(--ink-3);letter-spacing:.02em}
+  .chapter h2{font-family:var(--serif);font-weight:500;font-size:36px;letter-spacing:-0.014em;color:var(--ink);margin-top:6px;line-height:1.18}
+  .chapter h2 em{font-style:italic;color:var(--ink-2);font-weight:400;font-size:18px;margin-left:6px}
+  .chapter .sub{margin-top:8px;font-family:var(--serif);font-style:italic;color:var(--ink-2);font-size:18px;line-height:1.5}
+  .chapter .meta{margin-top:14px;font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);display:flex;flex-wrap:wrap;gap:18px}
+  .chapter .meta b{color:var(--ink-2);font-weight:500}
+  .chapter .meta .st-ready{color:var(--sage-deep);font-weight:500}
+  .chapter .meta .st-needs{color:var(--coral);font-weight:500}
+  .chapter .meta .st-drafting{color:var(--amber);font-weight:500}
+  .chapter .meta .st-await{color:var(--ink-3);font-weight:500}
+  .chapter .meta .st-signed{color:var(--ink-2);font-weight:500}
+
+  .chapter .quote{
+    margin-top:22px;padding:0 0 0 22px;border-left:1px solid var(--ink-3);
+    font-family:var(--serif);font-style:italic;font-size:19px;line-height:1.55;color:var(--ink)
+  }
+  .chapter .quote-src{display:block;margin-top:8px;font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3);font-style:normal}
+
+  /* tags inline */
+  .tags-inline{margin-top:48px;padding:18px 0;border-top:1px solid var(--ink);border-bottom:1px solid var(--ink);display:flex;flex-wrap:wrap;gap:16px 22px}
+  .tag{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-2);cursor:pointer}
+  .tag b{color:var(--ink);font-weight:500}
+  .tag:hover{color:var(--sage-deep)}
+
+  /* footer rolldown */
+  .rolldown{margin-top:64px;padding-top:30px;border-top:1px solid var(--line)}
+  .rolldown h3{font-family:var(--serif);font-weight:500;font-size:24px;letter-spacing:-0.012em;color:var(--ink)}
+  .rolldown h3 em{font-style:italic;color:var(--sage-deep);font-weight:400}
+  .rolldown .hint{margin-top:6px;font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3)}
+  .stream{margin-top:18px}
+  .row{display:grid;grid-template-columns:90px 1fr auto;gap:14px;align-items:baseline;padding:14px 0;border-bottom:1px solid var(--line)}
+  .row:last-of-type{border-bottom:0}
+  .row .t{font-family:var(--mono);font-size:11px;letter-spacing:.12em;color:var(--ink-3);text-transform:uppercase}
+  .row .w{font-family:var(--serif);font-size:16px;color:var(--ink);line-height:1.35}
+  .row .w em{font-style:italic;color:var(--ink-2);font-size:14px;margin-left:5px}
+  .row .w .c{display:block;margin-top:3px;font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+  .row .s{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase}
+  .s-ready{color:var(--sage-deep)}
+  .s-needs{color:var(--coral)}
+  .s-drafting{color:var(--amber)}
+  .s-await{color:var(--ink-3)}
+  .s-signed{color:var(--ink-2)}
+
+  /* end ornament */
+  .end{margin-top:80px;text-align:center;font-family:var(--serif);font-style:italic;color:var(--ink-3);letter-spacing:.06em}
+  .end::before{content:"·  ·  ·";display:block;margin-bottom:18px;letter-spacing:.4em;color:var(--ink-3)}
+  .end b{color:var(--ink-2);font-weight:500;font-style:normal;font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase}
+
+  @media (max-width:760px){
+    .article{padding:42px 22px 100px}
+    .opener h1{font-size:48px}
+    .standfirst{font-size:18px}
+    .big-break{margin:42px -16px;padding:24px 16px}
+    .big-break .num{font-size:80px}
+    .chapter h2{font-size:28px}
+    .crumb{padding:12px 16px;flex-wrap:wrap;gap:10px}
+    .crumb .r{flex-wrap:wrap}
+  }
+</style>
+</head>
+<body>
+<div class="prog" id="prog"></div>
+
+<header class="crumb">
+  <div class="l">
+    <span class="wm">QuillMD</span>
+    <span>Issue 119 · Wed 29 Apr</span>
+    <span>The Slow Read</span>
+  </div>
+  <div class="r">
+    <span class="kbd">⌘ K</span>
+    <span class="chip"><span>Dr. Park · Family Med</span><span class="ini">MP</span></span>
+  </div>
+</header>
+
+<article class="article">
+
+  <!-- OPENER -->
+  <section class="opener">
+    <span class="kicker">A diary of the round · Wed 29 Apr 2026</span>
+    <h1>Good <em>evening</em>, Dr. Park.</h1>
+    <p class="standfirst">The clinic has emptied; the rain has not. Five visits saw the door today. Three drafts are still warm and waiting on you.</p>
+    <p class="byline">Filed by <b>Dr. Mei Park</b> · 17:42 PT · <a href="#" class="new-link">+ open a new visit</a></p>
+  </section>
+
+  <!-- PROSE -->
+  <div class="prose">
+    <p class="dropcap">Wednesdays are quiet by tradition. Five appointments on the schedule, four of them seen before the long lunch, and one — Mr. Sahakian's pre-op clearance — pushed a half-hour late by the cardiology backlog. The drafted notes are honest tonight; the dictation kept up. There is a tea cooling on the desk and three notes that want your attention before you turn off the lamp.</p>
+  </div>
+
+  <!-- BIG NUMBER 1 -->
+  <div class="big-break">
+    <span class="lbl">Visits this month</span>
+    <div class="num">127</div>
+    <p class="cap">A steady cadence. Last April closed at one hundred and thirty-eight.</p>
+  </div>
+
+  <!-- CHAPTER 1 -->
+  <section class="chapter">
+    <span class="ch-num">Chapter I.</span>
+    <h2>Mei-Ling Park <em>· 42 F · Family Medicine</em></h2>
+    <p class="sub">Acute bronchitis. Three weeks of dry cough; sleep impaired. Chest clear; oxygen 98 on room air.</p>
+    <div class="meta">
+      <span><b>J20.9</b></span>
+      <span><b>99214</b></span>
+      <span>Drafted 0:38</span>
+      <span class="st-ready">● Ready</span>
+    </div>
+    <blockquote class="quote">
+      "She likely caught it from her son a fortnight back; he'd shaken it off in a week."
+      <span class="quote-src">From the SOAP draft, layer 6</span>
+    </blockquote>
+  </section>
+
+  <!-- BIG NUMBER 2 -->
+  <div class="big-break sage">
+    <span class="lbl">Avg drafted in</span>
+    <div class="num">38<sup>s</sup></div>
+    <p class="cap">From the last word of the room to the first SOAP draft on your screen.</p>
+  </div>
+
+  <!-- CHAPTER 2 -->
+  <section class="chapter">
+    <span class="ch-num">Chapter II.</span>
+    <h2>Aram Sahakian <em>· 38 M · Cardiology</em></h2>
+    <p class="sub">Pre-op clearance for left rotator-cuff repair. Mild hypertension on lisinopril; otherwise unremarkable.</p>
+    <div class="meta">
+      <span><b>I10</b></span>
+      <span>EKG attached</span>
+      <span class="st-await">○ Awaiting note</span>
+    </div>
+  </section>
+
+  <!-- CHAPTER 3 -->
+  <section class="chapter">
+    <span class="ch-num">Chapter III.</span>
+    <h2>Daniel Tran <em>· 27 M · Pediatrics</em></h2>
+    <p class="sub">Annual well-check. Cleared for return to recreational soccer; routine bloodwork sent for the morning.</p>
+    <div class="meta">
+      <span><b>Z00.129</b></span>
+      <span><b>99395</b></span>
+      <span class="st-signed">✓ Signed 14:30</span>
+    </div>
+  </section>
+
+  <!-- BIG NUMBER 3 -->
+  <div class="big-break coral">
+    <span class="lbl">Pending review</span>
+    <div class="num">3</div>
+    <p class="cap">Mrs. Gupta. Mrs. Lopez. The Singh chart from Tuesday morning, still patient.</p>
+  </div>
+
+  <!-- CHAPTER 4 -->
+  <section class="chapter">
+    <span class="ch-num">Chapter IV.</span>
+    <h2>Priya Gupta <em>· 55 F · Internal Medicine</em></h2>
+    <p class="sub">Quarterly diabetes follow-up. A1c trended up two points over the last three months; a discussion of metformin titration is owed.</p>
+    <div class="meta">
+      <span><b>E11.9</b></span>
+      <span><b>99213</b></span>
+      <span class="st-needs">▲ Needs review</span>
+    </div>
+    <blockquote class="quote">
+      "Reports occasional polyuria, denies blurred vision. Adherent to metformin 1 g BID; recent dietary slippage over Ramadan."
+      <span class="quote-src">First line of draft, 22 minutes ago</span>
+    </blockquote>
+  </section>
+
+  <!-- CHAPTER 5 -->
+  <section class="chapter">
+    <span class="ch-num">Chapter V.</span>
+    <h2>Elena Lopez <em>· 61 F · Dermatology</em></h2>
+    <p class="sub">Routine mole check. One asymmetric border on the upper back, 7 mm, worth a second look. Biopsy queued for Friday.</p>
+    <div class="meta">
+      <span><b>D22.4</b></span>
+      <span>Biopsy</span>
+      <span class="st-drafting">~ Drafting</span>
+    </div>
+  </section>
+
+  <!-- BIG NUMBER 4 -->
+  <div class="big-break">
+    <span class="lbl">Signed this week</span>
+    <div class="num">42</div>
+    <p class="cap">Eight ahead of last week. Friday is reading day, by tradition.</p>
+  </div>
+
+  <!-- TAGS -->
+  <div class="tags-inline" aria-label="Filter by specialty">
+    <span class="tag">All <b>11</b></span>
+    <span class="tag">Family Medicine <b>4</b></span>
+    <span class="tag">Internal <b>3</b></span>
+    <span class="tag">Cardiology <b>2</b></span>
+    <span class="tag">Pediatrics <b>1</b></span>
+    <span class="tag">Dermatology <b>1</b></span>
+  </div>
+
+  <!-- ROLLDOWN -->
+  <section class="rolldown">
+    <h3>An <em>appendix</em>, if you'll have it</h3>
+    <p class="hint">Last 48 hours · 12 visits</p>
+
+    <div class="stream">
+      <div class="row">
+        <span class="t">14:30</span>
+        <div class="w">Daniel Tran <em>· Pediatrics</em>
+          <span class="c">Z00.129 · 99395 · 17 min</span>
+        </div>
+        <span class="s s-signed">Signed</span>
+      </div>
+      <div class="row">
+        <span class="t">13:12</span>
+        <div class="w">Mei-Ling Park <em>· Family Med</em>
+          <span class="c">J20.9 · 99214 · 11 min</span>
+        </div>
+        <span class="s s-ready">Ready</span>
+      </div>
+      <div class="row">
+        <span class="t">11:48</span>
+        <div class="w">Priya Gupta <em>· Internal Med</em>
+          <span class="c">E11.9 · 99213 · 22 min</span>
+        </div>
+        <span class="s s-needs">Needs review</span>
+      </div>
+      <div class="row">
+        <span class="t">10:25</span>
+        <div class="w">Elena Lopez <em>· Dermatology</em>
+          <span class="c">D22.4 · 99213 · 14 min</span>
+        </div>
+        <span class="s s-drafting">Drafting</span>
+      </div>
+      <div class="row">
+        <span class="t">09:51</span>
+        <div class="w">Aram Sahakian <em>· Cardiology</em>
+          <span class="c">I10 · 99244 · 19 min</span>
+        </div>
+        <span class="s s-await">Processing</span>
+      </div>
+      <div class="row">
+        <span class="t">09:02</span>
+        <div class="w">Henry Okafor <em>· Family Med</em>
+          <span class="c">M54.5 · 99213 · 8 min</span>
+        </div>
+        <span class="s s-signed">Signed</span>
+      </div>
+      <div class="row">
+        <span class="t">YDA 16:42</span>
+        <div class="w">Beatrice Lin <em>· Family Med</em>
+          <span class="c">R05.9 · 99213 · 12 min</span>
+        </div>
+        <span class="s s-signed">Signed</span>
+      </div>
+      <div class="row">
+        <span class="t">YDA 15:18</span>
+        <div class="w">Marcus Devereaux <em>· Internal Med</em>
+          <span class="c">I50.9 · 99214 · 24 min</span>
+        </div>
+        <span class="s s-signed">Signed</span>
+      </div>
+      <div class="row">
+        <span class="t">YDA 14:03</span>
+        <div class="w">Anya Petrova <em>· Pediatrics</em>
+          <span class="c">J06.9 · 99213 · 9 min</span>
+        </div>
+        <span class="s s-needs">Needs review</span>
+      </div>
+      <div class="row">
+        <span class="t">YDA 11:36</span>
+        <div class="w">Jamal Carter <em>· Family Med</em>
+          <span class="c">E78.5 · 99213 · 16 min</span>
+        </div>
+        <span class="s s-signed">Signed</span>
+      </div>
+      <div class="row">
+        <span class="t">YDA 10:11</span>
+        <div class="w">Sophia Albright <em>· Dermatology</em>
+          <span class="c">L70.0 · 99202 · 11 min</span>
+        </div>
+        <span class="s s-signed">Signed</span>
+      </div>
+      <div class="row">
+        <span class="t">YDA 08:54</span>
+        <div class="w">Nathaniel Cho <em>· Cardiology</em>
+          <span class="c">I25.10 · 99214 · 26 min</span>
+        </div>
+        <span class="s s-ready">Ready</span>
+      </div>
+    </div>
+  </section>
+
+  <div class="end">
+    <span><b>End of Issue 119</b><br/>Sleep is medicine, too.</span>
+  </div>
+
+</article>
+
+<script>
+  // reading-progress bar (no other JS)
+  (function(){
+    var p=document.getElementById('prog');
+    function tick(){
+      var h=document.documentElement;
+      var t=h.scrollTop||document.body.scrollTop;
+      var sh=h.scrollHeight-h.clientHeight;
+      var pct=sh>0?(t/sh)*100:0;
+      p.style.width=pct.toFixed(2)+'%';
+    }
+    tick();
+    document.addEventListener('scroll',tick,{passive:true});
+    window.addEventListener('resize',tick);
+  })();
+</script>
+</body>
+</html>
