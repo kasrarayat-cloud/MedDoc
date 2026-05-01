@@ -683,10 +683,12 @@ nav.top {
   margin-right: 4px;
 }
 
-/* ── Hero illustration (replaces the 3D orb).
-   The HeroOrb component still mounts but its styles are now a calm
-   sage-tinted notebook + soft caption card lifted from the
-   landing-and-recording.html mockup. ── */
+/* ── Legacy orb illustration styles ──
+   Phase 4 deleted the HeroOrb / CursorAura / ShaderBackground components
+   in favour of a full-bleed cinematic photo (.qm-cin-bg). These orb-*
+   rules are no longer mounted by any landing component but are kept here
+   so any sub-page that copy-pasted the markup still resolves; the rules
+   are guarded by .display:none defaults further down. ── */
 .orb-stage {
   position: relative;
   width: 100%;
