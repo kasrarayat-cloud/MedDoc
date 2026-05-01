@@ -15,13 +15,13 @@ import { FinalCTA } from '@/components/home/FinalCTA';
 import { Footer } from '@/components/home/Footer';
 
 /**
- * Landing page — Phase 4 Apple Cinematic.
+ * Landing page — Phase 5 Linear V1 (Faithful).
  *
- * The full-bleed cinematic Hero replaces the legacy ShaderBackground
- * canvas + CursorAura mouse-follow blob (both display:none'd in Phase 3
- * already; now removed entirely to drop their JS bundle weight on first
- * paint). RevealMount is kept because the post-hero `.reveal` blocks
- * (Trust / Problem / Features / etc.) still rely on it.
+ * Centered hero on dark canvas, hairline-bordered grids, sage primary
+ * accents. The full-bleed Phase 4 cinematic photo + word-stagger and
+ * the legacy ShaderBackground canvas are gone; landing.css provides the
+ * radial sage spotlight + grain via body::before/::after. RevealMount
+ * is kept because the post-hero `.reveal` blocks still rely on it.
  */
 export default function HomePage() {
   return (
