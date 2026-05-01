@@ -24,6 +24,11 @@ import { cn } from '@/lib/cn';
 import { Ic } from '@/components/ui/icon';
 import { SpecChip, type SpecialtyKind } from '@/components/ui/spec-chip';
 import { LiveOrb } from '@/components/recording/live-orb';
+import {
+  CinematicRecordingHero,
+  formatHeroElapsed,
+} from '@/components/visits/CinematicRecordingHero';
+import { runCinematicEntry } from '@/components/visits/cinematic-anim';
 
 type Phase = 'idle' | 'requesting' | 'recording' | 'uploading' | 'error';
 type RecordingClientTheme = 'legacy' | 'clinician';
@@ -441,24 +446,59 @@ function ClinicianRecordingView({
   const peaks = [12, 18, 14, 20, 16, 22, 12, 18, 14, 10, 17, 13];
   const delays = [0, 0.1, 0.2, 0.3, 0.05, 0.15, 0.25, 0.4, 0.5, 0.35, 0.6, 0.55];
 
+  // Phase 4 — phase-aware label for the hero pill. The internal widget
+  // below (mic dot, halo, waveform, transcript bubbles, control row) is
+  // entirely unchanged; this label only feeds the cinematic band above.
+  const phaseLabel: string =
+    phase === 'recording'
+      ? 'RECORDING'
+      : phase === 'uploading'
+        ? 'UPLOADING'
+        : phase === 'requesting'
+          ? 'PREPARING'
+          : phase === 'error'
+            ? 'ERROR'
+            : 'READY';
+  const elapsedLabel = isRecording ? formatHeroElapsed(elapsed) : '';
+
+  // Phase 4 — slide-up entry for the OUTER recording-widget wrapper.
+  // We attach .av1-card.av1-card-up to the existing .qm-cl-card and
+  // fire runCinematicEntry on mount so the wrapper transitions from
+  // translateY(20px) blur(12px) → 0 blur(0). Internal content of the
+  // widget is byte-identical and is NOT animated (per spec).
+  const widgetWrapperRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = widgetWrapperRef.current;
+    if (!el) return;
+    return runCinematicEntry(el);
+  }, []);
+
   return (
-    <div
-      style={{
-        display: 'flex',
-        justifyContent: 'center',
-        padding: '32px 24px 56px',
-        minHeight: '100%',
-      }}
-    >
+    <>
+      <CinematicRecordingHero
+        patientName={patientName}
+        elapsed={elapsedLabel}
+        phaseLabel={phaseLabel}
+      />
       <div
-        className="qm-cl-card"
+        ref={widgetWrapperRef}
         style={{
-          width: '100%',
-          maxWidth: 760,
-          padding: 40,
-          borderRadius: 20,
+          display: 'flex',
+          justifyContent: 'center',
+          padding: '32px 24px 56px',
+          minHeight: '100%',
         }}
       >
+        <div
+          className="qm-cl-card av1-card av1-card-up"
+          data-d="200"
+          style={{
+            width: '100%',
+            maxWidth: 760,
+            padding: 40,
+            borderRadius: 20,
+          }}
+        >
         {/* Patient header row: avatar + name + status pill */}
         <div
           style={{
@@ -805,6 +845,7 @@ function ClinicianRecordingView({
           ) : null}
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }
