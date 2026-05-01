@@ -1,23 +1,29 @@
-// HANDOFF §2.1 — page header with optional eyebrow, serif title, subtitle,
-// and right-aligned actions. The `title` slot accepts JSX so callers can
-// drop the `<em>` italic-accent pattern (§1.2) inline.
+// Phase 5 — Linear V1 Faithful page header.
+// Reference: docs/design-directions-v8-linear/visit-detail.html (heading
+// + status pill + actions row).
 //
-// Phase 2 (Clinician remodel) — Strategy A dual-theme via additive
-// `theme` prop. Default `'legacy'` keeps the existing layout/typography
-// byte-for-byte. `theme="clinician"` swaps to the warm-cream variant:
-// `.qm-cl-eyebrow` (sage-deep ALL CAPS) above a serif title in `--ink`,
-// with subtitle in `--ink-2`. Same JSX contract; only token + class
-// scope changes so callers stay free of conditionals.
+// A horizontal strip with the page title in Inter (NOT serif),
+// optional eyebrow above, optional subtitle below, and right-aligned
+// actions. The serif italic accents from Phase 2 are dropped: titles
+// are sans, weight 500, with tight tracking.
+//
+// `theme` prop remains for back-compat; both values render the same
+// Linear V1 header.
 
 import type { ReactNode } from 'react';
 
 type PageHeaderTheme = 'legacy' | 'clinician';
 
 interface PageHeaderProps {
+  /** Small mono-uppercase eyebrow line above the title. */
   eyebrow?: ReactNode;
+  /** Page title — Inter sans, weight 500. JSX accepted. */
   title: ReactNode;
+  /** Optional secondary line below the title. */
   subtitle?: ReactNode;
+  /** Right-aligned action buttons (.qm-lin-btn / .qm-lin-btn-primary). */
   actions?: ReactNode;
+  /** @deprecated kept for back-compat; Linear V1 is single-theme. */
   theme?: PageHeaderTheme;
 }
 
@@ -26,34 +32,7 @@ export function PageHeader({
   title,
   subtitle,
   actions,
-  theme = 'legacy',
 }: PageHeaderProps) {
-  if (theme === 'clinician') {
-    return (
-      <ClinicianPageHeader
-        eyebrow={eyebrow}
-        title={title}
-        subtitle={subtitle}
-        actions={actions}
-      />
-    );
-  }
-  return (
-    <LegacyPageHeader
-      eyebrow={eyebrow}
-      title={title}
-      subtitle={subtitle}
-      actions={actions}
-    />
-  );
-}
-
-function LegacyPageHeader({
-  eyebrow,
-  title,
-  subtitle,
-  actions,
-}: Omit<PageHeaderProps, 'theme'>) {
   return (
     <div
       style={{
@@ -61,23 +40,35 @@ function LegacyPageHeader({
         alignItems: 'flex-end',
         justifyContent: 'space-between',
         gap: 24,
-        padding: '28px 32px 20px',
+        padding: '20px 24px 16px',
+        borderBottom: '1px solid var(--color-linear-hairline)',
       }}
     >
-      <div>
+      <div style={{ minWidth: 0 }}>
         {eyebrow && (
-          <div className="qm-sectlabel" style={{ marginBottom: 10 }}>
+          <div
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10.5,
+              fontWeight: 500,
+              letterSpacing: '0.07em',
+              textTransform: 'uppercase',
+              color: 'var(--color-linear-text-3)',
+              marginBottom: 8,
+            }}
+          >
             {eyebrow}
           </div>
         )}
         <h1
-          className="qm-serif"
           style={{
-            fontSize: 36,
             margin: 0,
-            fontWeight: 400,
-            lineHeight: 1.05,
-            letterSpacing: '-0.02em',
+            fontFamily: 'var(--font-sans)',
+            fontSize: 24,
+            fontWeight: 500,
+            lineHeight: 1.2,
+            letterSpacing: '-0.012em',
+            color: 'var(--color-linear-text)',
           }}
         >
           {title}
@@ -85,9 +76,13 @@ function LegacyPageHeader({
         {subtitle && (
           <div
             style={{
-              color: 'var(--fg-3)',
-              marginTop: 8,
-              fontSize: 13.5,
+              fontFamily: 'var(--font-sans)',
+              fontSize: 13,
+              color: 'var(--color-linear-text-2)',
+              marginTop: 6,
+              letterSpacing: '-0.005em',
+              lineHeight: 1.45,
+              maxWidth: 640,
             }}
           >
             {subtitle}
@@ -95,71 +90,14 @@ function LegacyPageHeader({
         )}
       </div>
       {actions && (
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          {actions}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Clinician branch ────────────────────────────────────────────
-// Mockup ref: docs/design-directions-v3/clinician/dashboard.html greeting
-// section + visit-detail.html patient header. Eyebrow uses
-// `.qm-cl-eyebrow` (sage-deep ALL CAPS), title uses `.qm-cl-serif` at
-// ~38px in `--ink`, subtitle is serif body in `--ink-2`.
-function ClinicianPageHeader({
-  eyebrow,
-  title,
-  subtitle,
-  actions,
-}: Omit<PageHeaderProps, 'theme'>) {
-  return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'flex-end',
-        justifyContent: 'space-between',
-        gap: 24,
-        padding: '40px 40px 24px',
-      }}
-    >
-      <div>
-        {eyebrow && (
-          <div className="qm-cl-eyebrow" style={{ marginBottom: 12 }}>
-            {eyebrow}
-          </div>
-        )}
-        <h1
-          className="qm-cl-serif"
+        <div
           style={{
-            fontSize: 38,
-            margin: 0,
-            fontWeight: 400,
-            lineHeight: 1.1,
-            letterSpacing: '-0.01em',
-            color: 'var(--ink)',
+            display: 'flex',
+            gap: 6,
+            alignItems: 'center',
+            flex: '0 0 auto',
           }}
         >
-          {title}
-        </h1>
-        {subtitle && (
-          <div
-            className="qm-cl-serif"
-            style={{
-              color: 'var(--ink-2)',
-              marginTop: 10,
-              fontSize: 16,
-              lineHeight: 1.55,
-              maxWidth: 560,
-            }}
-          >
-            {subtitle}
-          </div>
-        )}
-      </div>
-      {actions && (
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {actions}
         </div>
       )}
