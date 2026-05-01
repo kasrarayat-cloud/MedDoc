@@ -8,6 +8,17 @@ interface Props {
   email: string;
 }
 
+// Phase 5 — Linear V1 Faithful check-email resend block.
+// /api/auth/resend-verification contract is unchanged: 200 on success,
+// 429 on rate limit, anti-enumeration on unknown emails.
+
+const linkStyle: React.CSSProperties = {
+  color: 'var(--color-linear-sage-bright)',
+  fontFamily: 'var(--font-sans)',
+  fontWeight: 500,
+  textDecoration: 'none',
+};
+
 export function CheckEmailResend({ email }: Props) {
   const [pending, setPending] = useState(false);
   const [sent, setSent] = useState(false);
@@ -49,9 +60,7 @@ export function CheckEmailResend({ email }: Props) {
 
   return (
     <div style={{ marginTop: 18 }}>
-      {/* Soft sage line-art envelope — the warm illustration moment per
-         the Clinician landing-and-recording mockup's empty-state
-         vocabulary. Stroke 1.4 px, fill from --sage-tint-strong. */}
+      {/* Linear V1 envelope mark — outline glyph in linear-sage-bright. */}
       <div
         style={{
           display: 'flex',
@@ -60,35 +69,37 @@ export function CheckEmailResend({ email }: Props) {
         }}
       >
         <svg
-          width="96"
-          height="72"
-          viewBox="0 0 96 72"
+          width="64"
+          height="48"
+          viewBox="0 0 64 48"
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
           aria-hidden
         >
           <rect
-            x="6"
-            y="14"
-            width="84"
-            height="52"
-            rx="6"
-            className="qm-cl-illus-fill-cream qm-cl-illus-stroke"
+            x="4"
+            y="9"
+            width="56"
+            height="34"
+            rx="4"
+            stroke="var(--color-linear-sage-bright)"
             strokeWidth="1.4"
           />
           <path
-            d="M6 18 L48 44 L90 18"
-            className="qm-cl-illus-stroke"
+            d="M4 12 L32 30 L60 12"
+            stroke="var(--color-linear-sage-bright)"
             strokeWidth="1.4"
           />
           <path
-            d="M64 8 l6 6 -6 6"
-            className="qm-cl-illus-stroke"
+            d="M44 5 l4 4 -4 4"
+            stroke="var(--color-linear-sage-bright)"
             strokeWidth="1.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
           />
           <path
-            d="M48 14 l22 0"
-            className="qm-cl-illus-stroke"
+            d="M32 9 l16 0"
+            stroke="var(--color-linear-sage-bright)"
             strokeWidth="1.4"
             opacity="0.6"
           />
@@ -96,13 +107,12 @@ export function CheckEmailResend({ email }: Props) {
       </div>
 
       <p
-        className="qm-cl-serif"
         style={{
           margin: '0 0 18px',
-          fontSize: 14.5,
-          color: 'var(--ink-2)',
+          fontFamily: 'var(--font-sans)',
+          fontSize: 13.5,
+          color: 'var(--color-linear-text-2)',
           textAlign: 'center',
-          fontStyle: 'italic',
           lineHeight: 1.55,
         }}
       >
@@ -113,10 +123,11 @@ export function CheckEmailResend({ email }: Props) {
         type="button"
         disabled={!canSend}
         onClick={onResend}
-        className="qm-cl-btn qm-cl-btn-soft"
+        className="qm-lin-btn"
         style={{
           width: '100%',
-          justifyContent: 'center',
+          height: 36,
+          fontSize: 13,
           opacity: canSend ? 1 : 0.55,
           cursor: canSend ? 'pointer' : 'not-allowed',
         }}
@@ -131,13 +142,13 @@ export function CheckEmailResend({ email }: Props) {
       <div
         style={{
           textAlign: 'center',
-          color: 'var(--ink-3)',
+          color: 'var(--color-linear-text-3)',
+          fontFamily: 'var(--font-sans)',
           fontSize: 12.5,
           marginTop: 18,
-          fontFamily: 'var(--sans)',
         }}
       >
-        <Link href="/login" style={{ color: 'var(--sage-deep)', fontWeight: 500 }}>
+        <Link href="/login" style={linkStyle}>
           Back to sign in →
         </Link>
       </div>

@@ -9,6 +9,31 @@ import {
   AuthFieldLabel,
 } from '@/components/ui/auth-shell';
 
+// Phase 5 — Linear V1 Faithful forgot-password form. Server-side
+// /api/auth/forgot-password contract is unchanged: anti-enumeration,
+// 200 regardless of address existence, 429 on rate limit.
+
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  height: 36,
+  padding: '0 12px',
+  background: 'var(--color-linear-surface-2)',
+  border: '1px solid var(--color-linear-border)',
+  borderRadius: 6,
+  color: 'var(--color-linear-text)',
+  fontFamily: 'var(--font-sans)',
+  fontSize: 13.5,
+  outline: 'none',
+  transition: 'border-color 100ms ease, background-color 100ms ease',
+};
+
+const linkStyle: React.CSSProperties = {
+  color: 'var(--color-linear-sage-bright)',
+  fontFamily: 'var(--font-sans)',
+  fontWeight: 500,
+  textDecoration: 'none',
+};
+
 export function ForgotPasswordForm() {
   const [email, setEmail] = useState('');
   const [pending, setPending] = useState(false);
@@ -56,38 +81,31 @@ export function ForgotPasswordForm() {
         }}
       >
         <p
-          className="qm-cl-serif"
           style={{
             margin: 0,
-            fontSize: 15,
-            color: 'var(--ink-2)',
-            lineHeight: 1.6,
-            fontStyle: 'italic',
+            fontFamily: 'var(--font-sans)',
+            fontSize: 13.5,
+            color: 'var(--color-linear-text-2)',
+            lineHeight: 1.55,
           }}
         >
           If an account exists for{' '}
-          <strong style={{ color: 'var(--ink)', fontStyle: 'normal' }}>{email}</strong>,
+          <strong style={{ color: 'var(--color-linear-text)' }}>{email}</strong>,
           we&apos;ve sent a reset link. It expires in 1 hour.
         </p>
         <p
           style={{
             margin: 0,
-            fontSize: 12.5,
-            color: 'var(--ink-3)',
-            fontFamily: 'var(--sans)',
+            fontFamily: 'var(--font-sans)',
+            fontSize: 12,
+            color: 'var(--color-linear-text-3)',
           }}
         >
           Check your inbox — and your spam folder too.
         </p>
         <Link
           href="/login"
-          style={{
-            marginTop: 6,
-            fontSize: 12.5,
-            color: 'var(--sage-deep)',
-            fontFamily: 'var(--sans)',
-            fontWeight: 500,
-          }}
+          style={{ ...linkStyle, marginTop: 6, fontSize: 12.5 }}
         >
           ← Back to sign in
         </Link>
@@ -107,8 +125,7 @@ export function ForgotPasswordForm() {
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="qm-cl-input"
-          style={{ marginTop: 6 }}
+          style={{ ...inputStyle, marginTop: 6 }}
         />
       </div>
 
@@ -117,11 +134,12 @@ export function ForgotPasswordForm() {
       <button
         type="submit"
         disabled={pending || !email.trim()}
-        className="qm-cl-btn qm-cl-btn-primary qm-cl-btn-lg"
+        className="qm-lin-btn-primary"
         style={{
           width: '100%',
-          justifyContent: 'center',
           marginTop: 22,
+          height: 36,
+          fontSize: 13,
           opacity: pending || !email.trim() ? 0.6 : 1,
           cursor: pending || !email.trim() ? 'not-allowed' : 'pointer',
         }}
@@ -133,14 +151,14 @@ export function ForgotPasswordForm() {
       <div
         style={{
           textAlign: 'center',
-          color: 'var(--ink-3)',
+          color: 'var(--color-linear-text-3)',
+          fontFamily: 'var(--font-sans)',
           fontSize: 12.5,
           marginTop: 18,
-          fontFamily: 'var(--sans)',
         }}
       >
         Remembered it?{' '}
-        <Link href="/login" style={{ color: 'var(--sage-deep)', fontWeight: 500 }}>
+        <Link href="/login" style={linkStyle}>
           Back to sign in →
         </Link>
       </div>
