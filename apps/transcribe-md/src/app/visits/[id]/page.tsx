@@ -17,6 +17,10 @@ import { VisitReadyView, type Utterance, type SpeakerInfo } from './visit-ready-
 import { VisitFailedView } from './visit-failed-view';
 import { VisitLifecycleActions } from './visit-lifecycle-actions';
 import { EditDraftDialog } from './edit-draft-dialog';
+import {
+  CinematicVisitHero,
+  type CinematicVisitHeroStatus,
+} from '@/components/visits/CinematicVisitHero';
 
 import { isEmailDeliveryEnabled } from '@/lib/email-enabled';
 
@@ -55,6 +59,39 @@ const KNOWN_SPECIALTIES: readonly SpecialtyKind[] = [
 function toSpecKind(raw: string): SpecialtyKind {
   const lower = raw.toLowerCase() as SpecialtyKind;
   return KNOWN_SPECIALTIES.includes(lower) ? lower : 'primary';
+}
+
+// Phase 4 — pretty-print the raw specialty key into a hero pill label.
+// The dashboard pill chips already do this lower-casing; the cinematic
+// hero's pill is in the same family so we mirror the convention here.
+const SPECIALTY_LABEL: Record<string, string> = {
+  primary: 'Family Medicine',
+  cardiology: 'Cardiology',
+  pain: 'Pain Management',
+  ortho: 'Orthopedics',
+  pulmonology: 'Pulmonology',
+  ophthalmology: 'Ophthalmology',
+};
+function specialtyLabel(raw: string): string {
+  const key = raw.toLowerCase();
+  return (
+    SPECIALTY_LABEL[key] ??
+    raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase()
+  );
+}
+
+// Phase 4 — collapse the seven-state TranscribeVisitStatus into the
+// four labels the cinematic hero band exposes (Queued, Processing,
+// Ready, Signed, Failed). The mid-pipeline states (TRANSCRIBING,
+// EXTRACTING, …) all read as PROCESSING in the band's status pill.
+function heroStatus(
+  status: TranscribeVisitStatus
+): CinematicVisitHeroStatus {
+  if (status === TranscribeVisitStatus.READY) return 'READY';
+  if (status === TranscribeVisitStatus.SIGNED) return 'SIGNED';
+  if (status === TranscribeVisitStatus.FAILED) return 'FAILED';
+  if (status === TranscribeVisitStatus.QUEUED) return 'QUEUED';
+  return 'PROCESSING';
 }
 
 export default async function VisitPage({
@@ -175,11 +212,8 @@ export default async function VisitPage({
 
   const patientDisplayName =
     visit.patient?.name ?? visit.patientName ?? 'Patient';
-  const nameTrim = patientDisplayName.trim();
-  const nameSpaceIdx = nameTrim.lastIndexOf(' ');
-  const nameFirst =
-    nameSpaceIdx >= 0 ? nameTrim.slice(0, nameSpaceIdx) : nameTrim;
-  const nameLast = nameSpaceIdx >= 0 ? nameTrim.slice(nameSpaceIdx + 1) : '';
+  // Phase 4 — name splitting (head + sage-glowed tail) moved into
+  // <CinematicVisitHero>, which performs its own splitNameForGlow().
 
   return (
     // Phase 2 (Clinician remodel) — visit-detail opts in to the
@@ -230,30 +264,31 @@ export default async function VisitPage({
         </span>
       </div>
 
+      {/* Phase 4 — Apple Cinematic hero band replaces the legacy
+          VisitReadyHeader for READY/SIGNED states. The band carries
+          the breadcrumb + specialty/status pills + word-by-word
+          patient name with sage glow on the last token, and lives
+          BETWEEN the upper sliver breadcrumb and the lifecycle
+          actions strip. The legacy header is retained as a fallback
+          so reduced-motion + non-clinician routes don't break, but
+          on the clinician theme the cinematic band is the canonical
+          visual. */}
       {isReadyOrSigned && (
-        <VisitReadyHeader
-          title={
-            <>
-              {nameFirst}
-              {nameLast && (
-                <>
-                  {' '}
-                  <em
-                    style={{
-                      color: 'var(--sage-deep, #2F5040)',
-                      fontStyle: 'italic',
-                    }}
-                  >
-                    {nameLast}
-                  </em>
-                </>
-              )}
-            </>
+        <CinematicVisitHero
+          patientName={patientDisplayName}
+          specialty={specialtyLabel(visit.specialty)}
+          status={
+            visit.needsReview && visit.status === TranscribeVisitStatus.READY
+              ? 'READY'
+              : heroStatus(visit.status)
           }
-          specialty={visit.specialty}
           chiefComplaint={visit.chiefComplaint}
-          status={visit.status}
-          needsReview={visit.needsReview}
+          metaLine={
+            visit.patient?.externalId
+              ? `MRN-${visit.patient.externalId}`
+              : null
+          }
+          showBreadcrumb={true}
         />
       )}
 
