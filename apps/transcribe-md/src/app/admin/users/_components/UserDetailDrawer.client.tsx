@@ -19,18 +19,10 @@
 // The server already 403s self-revoke and self-suspend would just lock
 // the admin out; this is defense in depth + better UX.
 //
-// Phase 2 (Clinician remodel) — Strategy A dual-theme via additive
-// `theme` prop. Default `'legacy'` keeps the slate-on-white drawer.
-// Clinician branch swaps the canvas to cream-card, ink-toned text,
-// and recolors the AlertTriangle/CheckCircle accents to the soft
-// sage/amber/coral palette. State machine + server-action calls are
-// unchanged.
-//
-// Phase 3 (Wave 1 Subagent 4) — inner sections previously rendered
-// flat slate-* utility classes that bled through both themes. They
-// are now branched the same way the outer chrome was: Clinician
-// swaps to cream/ink/sage tokens via inline style + qm-cl-pill-*
-// utilities; legacy stays byte-for-byte (slate-on-white preserved).
+// Phase 5 (Linear V1 Faithful) — drawer renders against linear-surface-2
+// with a hairline left border, sage/warning/danger toned action chips,
+// and mono columns for IDs/timestamps. Earlier dual-theme branching has
+// been retired; the `theme` prop survives as an ignored compat shim.
 // ============================================================================
 
 import { useEffect, useMemo, useState } from 'react';
@@ -47,7 +39,6 @@ import {
 } from 'lucide-react';
 
 import {
-  avatarPalette,
   cls,
   daysSince,
   formatCount,
@@ -58,8 +49,6 @@ import {
 } from '../../_lib/admin-format';
 import type { ConfirmKind, UserDetail, UserListRow } from '../_types';
 
-type UserDetailDrawerTheme = 'legacy' | 'clinician';
-
 interface Props {
   user: UserListRow;
   currentUserId: string;
@@ -69,7 +58,8 @@ interface Props {
   refetchKey: number;
   /** Parent calls this after a non-confirm action so the list re-renders. */
   onActed: () => void;
-  theme?: UserDetailDrawerTheme;
+  /** Phase 4 dual-theme prop. Phase 5 ignores it; kept for caller compat. */
+  theme?: string;
 }
 
 export default function UserDetailDrawer({
@@ -79,7 +69,6 @@ export default function UserDetailDrawer({
   onConfirm,
   refetchKey,
   onActed,
-  theme = 'legacy',
 }: Props) {
   const [detail, setDetail] = useState<UserDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -103,9 +92,6 @@ export default function UserDetailDrawer({
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (cancelled || !data) return;
-        // The endpoint returns its own shape; merge what we need into the
-        // list-row baseline so the drawer always has both the list view
-        // (instant) and the detail view (after round-trip).
         const merged: UserDetail = {
           ...user,
           recentActivity: data.recentActivity ?? [],
@@ -176,96 +162,35 @@ export default function UserDetailDrawer({
     }
   }
 
-  const isClinician = theme === 'clinician';
-
   return (
     <>
       <div
         onClick={onClose}
-        className={
-          isClinician
-            ? 'fixed inset-0 z-30'
-            : 'fixed inset-0 z-30 bg-slate-900/20 backdrop-blur-[2px]'
-        }
-        style={
-          isClinician
-            ? {
-                background: 'rgba(43, 38, 32, 0.20)',
-                backdropFilter: 'blur(2px)',
-              }
-            : undefined
-        }
+        className="fixed inset-0 z-30 bg-black/60 backdrop-blur-[2px]"
         aria-hidden
       />
       <aside
         role="dialog"
         aria-label={`User detail: ${user.fullName}`}
-        className={
-          isClinician
-            ? 'fixed right-0 top-0 z-40 flex h-full w-full max-w-[480px] flex-col'
-            : 'fixed right-0 top-0 z-40 flex h-full w-full max-w-[480px] flex-col border-l border-slate-200 bg-white shadow-xl'
-        }
-        style={
-          isClinician
-            ? {
-                background: 'var(--cream-card)',
-                borderLeft: '1px solid var(--line)',
-                boxShadow: '-12px 0 32px rgba(43, 38, 32, 0.08)',
-                color: 'var(--ink)',
-              }
-            : undefined
-        }
+        className="fixed right-0 top-0 z-40 flex h-full w-full max-w-[480px] flex-col border-l border-linear-border bg-linear-surface-2 text-linear-text shadow-[-12px_0_32px_rgba(0,0,0,0.5)]"
       >
         {/* Header */}
-        <div
-          className={
-            isClinician
-              ? 'flex items-start justify-between px-5 py-4'
-              : 'flex items-start justify-between border-b border-slate-200 px-5 py-4'
-          }
-          style={isClinician ? { borderBottom: '1px solid var(--line)' } : undefined}
-        >
+        <div className="flex items-start justify-between border-b border-linear-border px-5 py-4">
           <div className="flex items-start gap-3">
-            <Avatar user={user} size={40} isClinician={isClinician} />
+            <Avatar user={user} size={40} />
             <div className="min-w-0">
-              <div
-                className="truncate"
-                style={
-                  isClinician
-                    ? { fontSize: 16, fontWeight: 600, color: 'var(--ink)' }
-                    : undefined
-                }
-              >
-                <span
-                  className={
-                    isClinician
-                      ? 'qm-cl-serif'
-                      : 'text-base font-semibold text-slate-900'
-                  }
-                  style={isClinician ? { fontSize: 18, color: 'var(--ink)' } : undefined}
-                >
-                  {user.fullName}
-                </span>
+              <div className="truncate text-base font-semibold text-linear-text">
+                {user.fullName}
               </div>
-              <div
-                className={isClinician ? 'truncate text-xs' : 'truncate text-xs text-slate-500'}
-                style={isClinician ? { color: 'var(--ink-3)' } : undefined}
-              >
+              <div className="truncate font-mono text-xs text-linear-text-3">
                 {user.email}
               </div>
-              <div
-                className={
-                  isClinician
-                    ? 'mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5'
-                    : 'mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-slate-600'
-                }
-                style={isClinician ? { fontSize: 11, color: 'var(--ink-2)' } : undefined}
-              >
-                <span className="font-medium uppercase tracking-wide">{user.role}</span>
-                <span style={isClinician ? { color: 'var(--ink-4)' } : undefined} className={isClinician ? '' : 'text-slate-300'}>·</span>
-                <StatusInline user={user} isClinician={isClinician} />
-                <span style={isClinician ? { color: 'var(--ink-4)' } : undefined} className={isClinician ? '' : 'text-slate-300'}>·</span>
-                <span style={isClinician ? { color: 'var(--ink-3)' } : undefined} className={isClinician ? '' : 'text-slate-500'}>{user.practiceName}</span>
+              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-linear-text-2">
+                <span className="font-mono font-medium uppercase tracking-[0.05em]">{user.role}</span>
+                <span className="text-linear-text-3">·</span>
+                <StatusInline user={user} />
+                <span className="text-linear-text-3">·</span>
+                <span className="text-linear-text-3">{user.practiceName}</span>
               </div>
             </div>
           </div>
@@ -273,12 +198,7 @@ export default function UserDetailDrawer({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className={
-              isClinician
-                ? 'rounded p-1'
-                : 'rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700'
-            }
-            style={isClinician ? { color: 'var(--ink-3)', background: 'transparent' } : undefined}
+            className="rounded p-1 text-linear-text-3 hover:bg-linear-row-hover hover:text-linear-text"
           >
             <X className="h-4 w-4" />
           </button>
@@ -286,8 +206,8 @@ export default function UserDetailDrawer({
 
         <div className="flex-1 overflow-y-auto">
           {/* Actions */}
-          <DrawerSection label="Actions" isClinician={isClinician}>
-            <ActionGroup label="Standard" isClinician={isClinician}>
+          <DrawerSection label="Actions">
+            <ActionGroup label="Standard">
               <ActionChip
                 icon={KeyRound}
                 label={busyAction === 'Reset password' ? 'Working…' : 'Reset password'}
@@ -296,7 +216,6 @@ export default function UserDetailDrawer({
                   actionPost('Reset password', 'reset-password')
                 }
                 disabled={busyAction !== null}
-                isClinician={isClinician}
               />
               <ActionChip
                 icon={LogOut}
@@ -304,10 +223,9 @@ export default function UserDetailDrawer({
                 tone="neutral"
                 onClick={() => actionPost('Force logout', 'force-logout')}
                 disabled={busyAction !== null}
-                isClinician={isClinician}
               />
             </ActionGroup>
-            <ActionGroup label="Reversible" isClinician={isClinician}>
+            <ActionGroup label="Reversible">
               {user.status === 'suspended' ? (
                 <ActionChip
                   icon={PlayCircle}
@@ -315,7 +233,6 @@ export default function UserDetailDrawer({
                   tone="neutral"
                   onClick={() => actionPost('Reinstate', 'unsuspend')}
                   disabled={busyAction !== null}
-                  isClinician={isClinician}
                 />
               ) : (
                 <ActionChip
@@ -333,11 +250,10 @@ export default function UserDetailDrawer({
                   }}
                   disabled={busyAction !== null || isSelf}
                   selfBlock={isSelf}
-                  isClinician={isClinician}
                 />
               )}
             </ActionGroup>
-            <ActionGroup label="Privileges" isClinician={isClinician}>
+            <ActionGroup label="Privileges">
               {isAdmin ? (
                 <ActionChip
                   icon={ShieldOff}
@@ -346,7 +262,6 @@ export default function UserDetailDrawer({
                   onClick={() => onConfirm('revoke_admin', user)}
                   disabled={busyAction !== null || isSelf}
                   selfBlock={isSelf}
-                  isClinician={isClinician}
                 />
               ) : (
                 <ActionChip
@@ -355,11 +270,10 @@ export default function UserDetailDrawer({
                   tone="amber"
                   onClick={() => onConfirm('grant_admin', user)}
                   disabled={busyAction !== null}
-                  isClinician={isClinician}
                 />
               )}
             </ActionGroup>
-            <ActionGroup label="Destructive — confirmation required" isClinician={isClinician}>
+            <ActionGroup label="Destructive — confirmation required">
               <ActionChip
                 icon={Trash2}
                 label="Soft delete account"
@@ -367,57 +281,27 @@ export default function UserDetailDrawer({
                 onClick={() => onConfirm('soft_delete', user)}
                 disabled={busyAction !== null || isSelf || user.status === 'soft_deleted'}
                 selfBlock={isSelf}
-                isClinician={isClinician}
               />
             </ActionGroup>
           </DrawerSection>
 
           {/* This month */}
-          <DrawerSection label="This month" isClinician={isClinician}>
+          <DrawerSection label="This month">
             <div className="mb-3 flex items-baseline justify-between">
-              <div
-                className={
-                  isClinician
-                    ? 'font-mono text-2xl font-semibold tabular-nums'
-                    : 'font-mono text-2xl font-semibold tabular-nums text-slate-900'
-                }
-                style={isClinician ? { color: 'var(--ink)' } : undefined}
-              >
+              <div className="font-mono text-2xl font-semibold tabular-nums text-linear-text">
                 {formatUsd(totalSpend)}
               </div>
-              <div
-                className={isClinician ? 'text-[11px]' : 'text-[11px] text-slate-500'}
-                style={isClinician ? { color: 'var(--ink-3)' } : undefined}
-              >
-                <span
-                  className={
-                    isClinician
-                      ? 'font-mono tabular-nums'
-                      : 'font-mono tabular-nums text-slate-700'
-                  }
-                  style={isClinician ? { color: 'var(--ink-2)' } : undefined}
-                >
+              <div className="text-[11px] text-linear-text-3">
+                <span className="font-mono tabular-nums text-linear-text-2">
                   {monthVisits}
                 </span>{' '}
                 visits
                 {monthVisits > 0 && (
                   <>
                     {' '}
-                    <span
-                      className={isClinician ? 'mx-1.5' : 'mx-1.5 text-slate-300'}
-                      style={isClinician ? { color: 'var(--ink-4)' } : undefined}
-                    >
-                      ·
-                    </span>
+                    <span className="mx-1.5 text-linear-text-3">·</span>
                     avg{' '}
-                    <span
-                      className={
-                        isClinician
-                          ? 'font-mono tabular-nums'
-                          : 'font-mono tabular-nums text-slate-700'
-                      }
-                      style={isClinician ? { color: 'var(--ink-2)' } : undefined}
-                    >
+                    <span className="font-mono tabular-nums text-linear-text-2">
                       ${avgPerVisit.toFixed(2)}
                     </span>{' '}
                     /visit
@@ -426,18 +310,7 @@ export default function UserDetailDrawer({
               </div>
             </div>
             {providerEntries.length === 0 ? (
-              <div
-                className={
-                  isClinician
-                    ? 'rounded-md border border-dashed px-3 py-4 text-center text-xs'
-                    : 'rounded-md border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-500'
-                }
-                style={
-                  isClinician
-                    ? { borderColor: 'var(--line)', color: 'var(--ink-3)' }
-                    : undefined
-                }
-              >
+              <div className="rounded-md border border-dashed border-linear-border px-3 py-4 text-center text-xs text-linear-text-3">
                 No usage this month
               </div>
             ) : (
@@ -449,7 +322,6 @@ export default function UserDetailDrawer({
                     cost={v.costUsd}
                     total={totalSpend}
                     sub={`${formatCount(v.unitCount)} ${v.unitLabel}`}
-                    isClinician={isClinician}
                   />
                 ))}
               </ul>
@@ -457,19 +329,15 @@ export default function UserDetailDrawer({
           </DrawerSection>
 
           {/* Account info */}
-          <DrawerSection label="Account info" isClinician={isClinician}>
+          <DrawerSection label="Account info">
             <DefList
-              isClinician={isClinician}
               rows={[
                 {
                   k: 'Created',
                   v: (
                     <>
                       {user.createdAt.slice(0, 10)}{' '}
-                      <span
-                        className={isClinician ? '' : 'text-slate-400'}
-                        style={isClinician ? { color: 'var(--ink-3)' } : undefined}
-                      >
+                      <span className="text-linear-text-3">
                         ({daysSince(user.createdAt)} days ago)
                       </span>
                     </>
@@ -482,21 +350,13 @@ export default function UserDetailDrawer({
                     <>
                       {relativeTime(user.lastLoginAt)}{' '}
                       {user.lastLoginIp && (
-                        <span
-                          className={isClinician ? '' : 'text-slate-400'}
-                          style={isClinician ? { color: 'var(--ink-3)' } : undefined}
-                        >
+                        <span className="text-linear-text-3">
                           from <span className="font-mono">{user.lastLoginIp}</span>
                         </span>
                       )}
                     </>
                   ) : (
-                    <span
-                      className={isClinician ? '' : 'text-slate-400'}
-                      style={isClinician ? { color: 'var(--ink-3)' } : undefined}
-                    >
-                      never
-                    </span>
+                    <span className="text-linear-text-3">never</span>
                   ),
                 },
                 {
@@ -512,62 +372,25 @@ export default function UserDetailDrawer({
           </DrawerSection>
 
           {/* IP history */}
-          <DrawerSection label="IP history (last 30 days)" isClinician={isClinician}>
+          <DrawerSection label="IP history (last 30 days)">
             {loading ? (
-              <div
-                className={isClinician ? 'text-xs' : 'text-xs text-slate-400'}
-                style={isClinician ? { color: 'var(--ink-3)' } : undefined}
-              >
-                Loading…
-              </div>
+              <div className="text-xs text-linear-text-3">Loading…</div>
             ) : !detail ? (
-              <div
-                className={isClinician ? 'text-xs' : 'text-xs text-rose-500'}
-                style={isClinician ? { color: 'var(--coral-deep)' } : undefined}
-              >
-                Could not load detail
-              </div>
+              <div className="text-xs text-linear-danger">Could not load detail</div>
             ) : detail.ipHistory.length === 0 ? (
-              <div
-                className={isClinician ? 'text-xs' : 'text-xs text-slate-500'}
-                style={isClinician ? { color: 'var(--ink-3)' } : undefined}
-              >
-                No login history
-              </div>
+              <div className="text-xs text-linear-text-3">No login history</div>
             ) : (
               <ul className="space-y-1.5 text-sm">
                 {detail.ipHistory.map((ip) => (
                   <li
                     key={ip.ipAddress}
-                    className={
-                      isClinician
-                        ? 'flex items-baseline justify-between border-b pb-1.5 last:border-b-0 last:pb-0'
-                        : 'flex items-baseline justify-between border-b border-slate-100 pb-1.5 last:border-b-0 last:pb-0'
-                    }
-                    style={isClinician ? { borderColor: 'var(--line)' } : undefined}
+                    className="flex items-baseline justify-between border-b border-linear-border pb-1.5 last:border-b-0 last:pb-0"
                   >
-                    <span
-                      className={
-                        isClinician
-                          ? 'font-mono text-xs tabular-nums'
-                          : 'font-mono text-xs tabular-nums text-slate-700'
-                      }
-                      style={isClinician ? { color: 'var(--ink-2)' } : undefined}
-                    >
+                    <span className="font-mono text-xs tabular-nums text-linear-text-2">
                       {ip.ipAddress}
                     </span>
-                    <span
-                      className={isClinician ? 'text-[11px]' : 'text-[11px] text-slate-500'}
-                      style={isClinician ? { color: 'var(--ink-3)' } : undefined}
-                    >
-                      <span
-                        className={
-                          isClinician
-                            ? 'font-mono tabular-nums'
-                            : 'font-mono tabular-nums text-slate-700'
-                        }
-                        style={isClinician ? { color: 'var(--ink-2)' } : undefined}
-                      >
+                    <span className="text-[11px] text-linear-text-3">
+                      <span className="font-mono tabular-nums text-linear-text-2">
                         {ip.count}
                       </span>{' '}
                       logins · last {relativeTime(ip.lastSeen)}
@@ -579,79 +402,35 @@ export default function UserDetailDrawer({
           </DrawerSection>
 
           {/* Recent activity */}
-          <DrawerSection label="Recent activity" isClinician={isClinician}>
+          <DrawerSection label="Recent activity">
             {loading ? (
-              <div
-                className={isClinician ? 'text-xs' : 'text-xs text-slate-400'}
-                style={isClinician ? { color: 'var(--ink-3)' } : undefined}
-              >
-                Loading…
-              </div>
+              <div className="text-xs text-linear-text-3">Loading…</div>
             ) : !detail ? (
-              <div
-                className={isClinician ? 'text-xs' : 'text-xs text-rose-500'}
-                style={isClinician ? { color: 'var(--coral-deep)' } : undefined}
-              >
-                Could not load detail
-              </div>
+              <div className="text-xs text-linear-danger">Could not load detail</div>
             ) : detail.recentActivity.length === 0 ? (
-              <div
-                className={isClinician ? 'text-xs' : 'text-xs text-slate-500'}
-                style={isClinician ? { color: 'var(--ink-3)' } : undefined}
-              >
-                No activity
-              </div>
+              <div className="text-xs text-linear-text-3">No activity</div>
             ) : (
               <ul className="space-y-1 font-mono text-[11px] tabular-nums">
                 {detail.recentActivity.slice(0, 20).map((a) => (
                   <li
                     key={a.id}
-                    className={
-                      isClinician
-                        ? 'flex items-baseline gap-3'
-                        : 'flex items-baseline gap-3 text-slate-700'
-                    }
-                    style={isClinician ? { color: 'var(--ink-2)' } : undefined}
+                    className="flex items-baseline gap-3 text-linear-text-2"
                   >
-                    <span
-                      className={
-                        isClinician
-                          ? 'w-12 shrink-0'
-                          : 'w-12 shrink-0 text-slate-400'
-                      }
-                      style={isClinician ? { color: 'var(--ink-3)' } : undefined}
-                    >
+                    <span className="w-12 shrink-0 text-linear-text-3">
                       {a.timestamp.slice(11, 16)}
                     </span>
                     <span
                       className={cls(
                         'w-44 shrink-0 truncate',
                         a.action === 'LOGIN_FAILED' || !a.success
-                          ? isClinician
-                            ? ''
-                            : 'text-rose-600'
-                          : isClinician
-                            ? ''
-                            : 'text-slate-700'
+                          ? 'text-linear-danger'
+                          : 'text-linear-text'
                       )}
-                      style={
-                        isClinician
-                          ? {
-                              color:
-                                a.action === 'LOGIN_FAILED' || !a.success
-                                  ? 'var(--coral-deep)'
-                                  : 'var(--ink-2)',
-                            }
-                          : undefined
-                      }
                     >
                       {a.action}
                     </span>
                     {a.targetType && a.targetId && (
-                      <span
-                        className={isClinician ? 'truncate' : 'truncate text-slate-500'}
-                        style={isClinician ? { color: 'var(--ink-3)' } : undefined}
-                      >
+                      <span className="truncate text-linear-text-3">
                         {a.targetType}:{a.targetId.slice(0, 8)}
                       </span>
                     )}
@@ -661,20 +440,10 @@ export default function UserDetailDrawer({
             )}
           </DrawerSection>
 
-          <div
-            className={
-              isClinician
-                ? 'px-5 pb-6 pt-2 text-[11px]'
-                : 'px-5 pb-6 pt-2 text-[11px] text-slate-400'
-            }
-            style={isClinician ? { color: 'var(--ink-3)' } : undefined}
-          >
+          <div className="px-5 pb-6 pt-2 text-[11px] text-linear-text-3">
             All admin actions on this user are logged to the audit trail.
             {isSelf && (
-              <span
-                className={isClinician ? 'ml-2' : 'ml-2 text-slate-500'}
-                style={isClinician ? { color: 'var(--ink-2)' } : undefined}
-              >
+              <span className="ml-2 text-linear-text-2">
                 You can&apos;t suspend, delete, or revoke your own admin access — ask
                 a peer.
               </span>
@@ -693,157 +462,80 @@ export default function UserDetailDrawer({
 function Avatar({
   user,
   size = 28,
-  isClinician = false,
 }: {
   user: { id: string; fullName: string; isSuperAdmin: boolean; status: string };
   size?: number;
-  isClinician?: boolean;
 }) {
-  const pal = avatarPalette(user.id);
   const isAdmin = user.isSuperAdmin;
   const isSuspended = user.status === 'suspended';
   const isDeleted = user.status === 'soft_deleted';
-  // Clinician indicator backgrounds map admin/suspended → --amber, deleted → --coral.
-  // Ring becomes cream-card (the drawer surface) so the indicator reads as a small lozenge
-  // floating on warm paper rather than a hard ring on white.
+  const tones: Array<{ bg: string; fg: string }> = [
+    { bg: 'linear-gradient(135deg,#9bc2ab,#6f9b85)', fg: '#0b1611' },
+    { bg: 'linear-gradient(135deg,#a5c8dd,#6e95ad)', fg: '#0a1820' },
+    { bg: 'linear-gradient(135deg,#e2bd92,#b88752)', fg: '#1c1409' },
+    { bg: 'linear-gradient(135deg,#d99a90,#b06b60)', fg: '#fff' },
+    { bg: 'linear-gradient(135deg,#b9b2d9,#7e76a8)', fg: '#fff' },
+  ];
+  const tone = tones[(user.id.charCodeAt(0) || 0) % tones.length]!;
   return (
     <div className="relative inline-block" style={{ width: size, height: size }}>
       <div
-        className={cls(
-          'flex h-full w-full items-center justify-center rounded-full ring-1',
-          pal.bg,
-          pal.text,
-          pal.ring
-        )}
-        style={{ fontSize: Math.max(10, size * 0.4) }}
+        className="flex h-full w-full items-center justify-center rounded-md font-semibold tracking-tight"
+        style={{
+          background: tone.bg,
+          color: tone.fg,
+          fontSize: Math.max(10, size * 0.4),
+        }}
       >
-        <span className="font-semibold tracking-tight">{initials(user.fullName)}</span>
+        {initials(user.fullName)}
       </div>
       {isAdmin && (
-        <span
-          className={
-            isClinician
-              ? 'absolute -right-0.5 -top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full ring-1'
-              : 'absolute -right-0.5 -top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-500 ring-1 ring-white'
-          }
-          style={
-            isClinician
-              ? { background: 'var(--amber)', boxShadow: '0 0 0 1px var(--cream-card)' }
-              : undefined
-          }
-        >
-          <Crown
-            className={isClinician ? 'h-2 w-2' : 'h-2 w-2 text-white'}
-            strokeWidth={2.5}
-            style={isClinician ? { color: '#FFFCF5' } : undefined}
-          />
+        <span className="absolute -right-0.5 -top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-linear-warning ring-1 ring-linear-surface-2">
+          <Crown className="h-2 w-2 text-linear-bg" strokeWidth={2.5} />
         </span>
       )}
       {isSuspended && (
-        <span
-          className={
-            isClinician
-              ? 'absolute -right-0.5 -bottom-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full ring-1'
-              : 'absolute -right-0.5 -bottom-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-500 ring-1 ring-white'
-          }
-          style={
-            isClinician
-              ? { background: 'var(--amber)', boxShadow: '0 0 0 1px var(--cream-card)' }
-              : undefined
-          }
-        >
-          <PauseCircle
-            className={isClinician ? 'h-2.5 w-2.5' : 'h-2.5 w-2.5 text-white'}
-            strokeWidth={2.5}
-            style={isClinician ? { color: '#FFFCF5' } : undefined}
-          />
+        <span className="absolute -right-0.5 -bottom-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-linear-warning ring-1 ring-linear-surface-2">
+          <PauseCircle className="h-2.5 w-2.5 text-linear-bg" strokeWidth={2.5} />
         </span>
       )}
       {isDeleted && (
-        <span
-          className={
-            isClinician
-              ? 'absolute -right-0.5 -bottom-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full ring-1'
-              : 'absolute -right-0.5 -bottom-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-rose-500 ring-1 ring-white'
-          }
-          style={
-            isClinician
-              ? { background: 'var(--coral)', boxShadow: '0 0 0 1px var(--cream-card)' }
-              : undefined
-          }
-        >
-          <X
-            className={isClinician ? 'h-2.5 w-2.5' : 'h-2.5 w-2.5 text-white'}
-            strokeWidth={2.5}
-            style={isClinician ? { color: '#FFFCF5' } : undefined}
-          />
+        <span className="absolute -right-0.5 -bottom-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-linear-danger ring-1 ring-linear-surface-2">
+          <X className="h-2.5 w-2.5 text-white" strokeWidth={2.5} />
         </span>
       )}
     </div>
   );
 }
 
-function StatusInline({
-  user,
-  isClinician = false,
-}: {
-  user: UserListRow;
-  isClinician?: boolean;
-}) {
-  // Clinician palette: emerald → sage, amber → amber, rose → coral.
+function StatusInline({ user }: { user: UserListRow }) {
   if (user.status === 'active')
     return (
-      <span
-        className={
-          isClinician
-            ? 'inline-flex items-center gap-1.5 text-[11px] font-medium'
-            : 'inline-flex items-center gap-1.5 text-[11px] font-medium text-emerald-700'
-        }
-        style={isClinician ? { color: 'var(--sage-deep)' } : undefined}
-      >
-        <span
-          className={isClinician ? 'h-1.5 w-1.5 rounded-full' : 'h-1.5 w-1.5 rounded-full bg-emerald-500'}
-          style={isClinician ? { background: 'var(--sage)' } : undefined}
-        />
+      <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-linear-sage-bright">
+        <span className="h-1.5 w-1.5 rounded-full bg-linear-sage" />
         Active
       </span>
     );
   if (user.status === 'suspended')
     return (
       <span
-        className={
-          isClinician
-            ? 'inline-flex items-center gap-1.5 text-[11px] font-medium'
-            : 'inline-flex items-center gap-1.5 text-[11px] font-medium text-amber-800'
-        }
-        style={isClinician ? { color: 'var(--amber-deep)' } : undefined}
+        className="inline-flex items-center gap-1.5 text-[11px] font-medium text-linear-warning"
         title={user.suspendedReason ?? undefined}
       >
-        <span
-          className={isClinician ? 'h-1.5 w-1.5 rounded-full' : 'h-1.5 w-1.5 rounded-full bg-amber-500'}
-          style={isClinician ? { background: 'var(--amber)' } : undefined}
-        />
+        <span className="h-1.5 w-1.5 rounded-full bg-linear-warning" />
         Suspended
       </span>
     );
   return (
     <span
-      className={
-        isClinician
-          ? 'inline-flex items-center gap-1.5 text-[11px] font-medium'
-          : 'inline-flex items-center gap-1.5 text-[11px] font-medium text-rose-700'
-      }
-      style={isClinician ? { color: 'var(--coral-deep)' } : undefined}
+      className="inline-flex items-center gap-1.5 text-[11px] font-medium text-linear-danger"
       title={
         user.softDeletedAt
           ? `Soft-deleted ${user.softDeletedAt.slice(0, 10)} by ${user.softDeletedBy ?? '—'}`
           : undefined
       }
     >
-      <span
-        className={isClinician ? 'h-1.5 w-1.5 rounded-full' : 'h-1.5 w-1.5 rounded-full bg-rose-500'}
-        style={isClinician ? { background: 'var(--coral)' } : undefined}
-      />
+      <span className="h-1.5 w-1.5 rounded-full bg-linear-danger" />
       Deleted
     </span>
   );
@@ -852,29 +544,13 @@ function StatusInline({
 function DrawerSection({
   label,
   children,
-  isClinician = false,
 }: {
   label: string;
   children: React.ReactNode;
-  isClinician?: boolean;
 }) {
   return (
-    <section
-      className={
-        isClinician
-          ? 'border-b px-5 py-4 last:border-b-0'
-          : 'border-b border-slate-100 px-5 py-4 last:border-b-0'
-      }
-      style={isClinician ? { borderColor: 'var(--line)' } : undefined}
-    >
-      <div
-        className={
-          isClinician
-            ? 'mb-3 text-[11px] font-medium uppercase tracking-wide'
-            : 'mb-3 text-[11px] font-medium uppercase tracking-wide text-slate-500'
-        }
-        style={isClinician ? { color: 'var(--ink-3)', letterSpacing: '0.08em' } : undefined}
-      >
+    <section className="border-b border-linear-border px-5 py-4 last:border-b-0">
+      <div className="mb-3 font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-linear-text-3">
         {label}
       </div>
       {children}
@@ -885,22 +561,13 @@ function DrawerSection({
 function ActionGroup({
   label,
   children,
-  isClinician = false,
 }: {
   label: string;
   children: React.ReactNode;
-  isClinician?: boolean;
 }) {
   return (
     <div className="mb-3 last:mb-0">
-      <div
-        className={
-          isClinician
-            ? 'mb-1.5 text-[10px] font-medium uppercase tracking-wider'
-            : 'mb-1.5 text-[10px] font-medium uppercase tracking-wider text-slate-400'
-        }
-        style={isClinician ? { color: 'var(--ink-4)', letterSpacing: '0.10em' } : undefined}
-      >
+      <div className="mb-1.5 font-mono text-[10px] font-medium uppercase tracking-[0.10em] text-linear-text-3">
         {label}
       </div>
       <div className="flex flex-wrap gap-1.5">{children}</div>
@@ -915,7 +582,6 @@ function ActionChip({
   onClick,
   disabled,
   selfBlock,
-  isClinician = false,
 }: {
   icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
   label: string;
@@ -923,36 +589,23 @@ function ActionChip({
   onClick: () => void;
   disabled?: boolean;
   selfBlock?: boolean;
-  isClinician?: boolean;
 }) {
-  // Legacy tone classes (slate-on-white).
-  const legacyTones: Record<string, string> = {
-    neutral:
-      'bg-slate-100 text-slate-800 ring-slate-200 hover:bg-slate-200/70 hover:ring-slate-300',
-    amber:
-      'bg-slate-100 text-slate-800 ring-slate-200 hover:bg-amber-50 hover:ring-amber-300',
-    rose: 'bg-slate-100 text-slate-800 ring-slate-200 hover:bg-rose-50 hover:text-rose-700 hover:ring-rose-300',
-  };
-  // Clinician inline-style chip per tone — cream-soft base for neutral,
-  // tinted for amber/coral. Hover background is bumped via a CSS var
-  // toggle in inline style; framework lacks `hover:` for inline styles
-  // so we settle for a one-step background and a thin ring that is the
-  // same colour family as the tone (sage/amber/coral) at rest.
-  const clinicianToneStyle: Record<string, React.CSSProperties> = {
+  // Linear V1 chip palette: neutral surface, warning amber, danger coral.
+  const toneStyle: Record<string, React.CSSProperties> = {
     neutral: {
-      background: 'var(--cream-2)',
-      color: 'var(--ink)',
-      boxShadow: 'inset 0 0 0 1px var(--line)',
+      background: 'var(--color-linear-surface-3)',
+      color: 'var(--color-linear-text)',
+      boxShadow: 'inset 0 0 0 1px var(--color-linear-border)',
     },
     amber: {
-      background: 'var(--amber-tint)',
-      color: 'var(--amber-deep)',
-      boxShadow: 'inset 0 0 0 1px rgba(212, 165, 116, 0.30)',
+      background: 'rgba(212, 164, 55, 0.15)',
+      color: 'var(--color-linear-warning)',
+      boxShadow: 'inset 0 0 0 1px rgba(212, 164, 55, 0.30)',
     },
     rose: {
-      background: 'var(--coral-tint)',
-      color: 'var(--coral-deep)',
-      boxShadow: 'inset 0 0 0 1px rgba(201, 123, 110, 0.28)',
+      background: 'rgba(212, 87, 74, 0.15)',
+      color: 'var(--color-linear-danger)',
+      boxShadow: 'inset 0 0 0 1px rgba(212, 87, 74, 0.30)',
     },
   };
   return (
@@ -963,11 +616,9 @@ function ActionChip({
       title={selfBlock ? 'Disabled — cannot act on your own account' : undefined}
       className={cls(
         'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
-        isClinician ? '' : 'ring-1',
-        isClinician ? '' : legacyTones[tone],
         disabled && 'cursor-not-allowed opacity-50'
       )}
-      style={isClinician ? clinicianToneStyle[tone] : undefined}
+      style={toneStyle[tone]}
     >
       <Icon className="h-3.5 w-3.5" strokeWidth={2} />
       {label}
@@ -980,62 +631,27 @@ function ProviderBar({
   cost,
   total,
   sub,
-  isClinician = false,
 }: {
   label: string;
   cost: number;
   total: number;
   sub: string;
-  isClinician?: boolean;
 }) {
   const pct = total > 0 ? (cost / total) * 100 : 0;
   return (
     <li>
       <div className="mb-1 flex items-baseline justify-between gap-3 text-xs">
-        <span
-          className={isClinician ? 'font-medium' : 'font-medium text-slate-700'}
-          style={isClinician ? { color: 'var(--ink-2)' } : undefined}
-        >
-          {label}
-        </span>
-        <span
-          className={isClinician ? '' : 'text-slate-500'}
-          style={isClinician ? { color: 'var(--ink-3)' } : undefined}
-        >
-          <span
-            className={
-              isClinician
-                ? 'font-mono tabular-nums'
-                : 'font-mono tabular-nums text-slate-800'
-            }
-            style={isClinician ? { color: 'var(--ink)' } : undefined}
-          >
-            ${cost.toFixed(2)}
-          </span>
-          <span
-            className={isClinician ? 'mx-1.5' : 'mx-1.5 text-slate-300'}
-            style={isClinician ? { color: 'var(--ink-4)' } : undefined}
-          >
-            ·
-          </span>
+        <span className="font-medium text-linear-text-2">{label}</span>
+        <span className="text-linear-text-3">
+          <span className="font-mono tabular-nums text-linear-text">${cost.toFixed(2)}</span>
+          <span className="mx-1.5 text-linear-text-3">·</span>
           <span className="font-mono tabular-nums">{sub}</span>
         </span>
       </div>
-      <div
-        className={
-          isClinician
-            ? 'h-1.5 overflow-hidden rounded-full'
-            : 'h-1.5 overflow-hidden rounded-full bg-slate-100'
-        }
-        style={isClinician ? { background: 'var(--cream-2)' } : undefined}
-      >
+      <div className="h-1.5 overflow-hidden rounded-full bg-linear-surface-3">
         <div
-          className={isClinician ? 'h-full rounded-full' : 'h-full rounded-full bg-slate-400'}
-          style={
-            isClinician
-              ? { width: `${pct}%`, background: 'var(--sage)' }
-              : { width: `${pct}%` }
-          }
+          className="h-full rounded-full bg-linear-sage"
+          style={{ width: `${pct}%` }}
         />
       </div>
     </li>
@@ -1044,31 +660,17 @@ function ProviderBar({
 
 function DefList({
   rows,
-  isClinician = false,
 }: {
   rows: { k: string; v: React.ReactNode }[];
-  isClinician?: boolean;
 }) {
   return (
     <dl className="grid grid-cols-[120px_1fr] gap-x-4 gap-y-2 text-sm">
       {rows.map((r, i) => (
         <div key={r.k + i} className="contents">
-          <dt
-            className={
-              isClinician
-                ? 'text-[11px] uppercase tracking-wide'
-                : 'text-[11px] uppercase tracking-wide text-slate-500'
-            }
-            style={isClinician ? { color: 'var(--ink-3)' } : undefined}
-          >
+          <dt className="font-mono text-[10px] uppercase tracking-[0.08em] text-linear-text-3">
             {r.k}
           </dt>
-          <dd
-            className={isClinician ? '' : 'text-slate-800'}
-            style={isClinician ? { color: 'var(--ink)' } : undefined}
-          >
-            {r.v}
-          </dd>
+          <dd className="text-linear-text">{r.v}</dd>
         </div>
       ))}
     </dl>
