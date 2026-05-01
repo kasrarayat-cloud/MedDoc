@@ -10,6 +10,16 @@
 // history uses the Gate-6 <VisitList> component. Problem list chips
 // sit on the header with a [Manage] drawer; MRN + insurance are now
 // editable through the existing Edit dialog.
+//
+// Phase 4 follow-up (Bug 2) — this route was missed in the Phase 2 / 3 / 4
+// Clinician migration and was still rendering the legacy dark + violet
+// `app-redesign-v1` chrome. We now opt in to the Clinician shell via
+// `<AppFrame theme="clinician">`, thread `theme="clinician"` to the
+// nested chrome children (StatCard, VisitList, Avatar), and re-style
+// the inline header card / breadcrumb / tab bar / empty messages to
+// the warm cream + sage + ink token catalog. The DB queries, RBAC
+// gates (auth + practiceId scope), notFound() short-circuit, and all
+// dialog components remain byte-identical.
 // ============================================================================
 
 import type { Metadata } from 'next';
@@ -29,7 +39,7 @@ import {
 import {
   parseProblemList,
   statusLabel,
-  statusTone,
+  type ProblemStatus,
 } from '@/lib/problem-list';
 import { EditPatientDialog } from './edit-patient-dialog';
 import { DeletePatientDialog } from './delete-patient-dialog';
@@ -76,6 +86,28 @@ function relTime(d: Date): string {
   if (diffD < 7) return `${Math.round(diffD)}d ago`;
   if (diffD < 30) return `${Math.round(diffD / 7)}w ago`;
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+/** Map the canonical problem-list status (`active | resolved | chronic`)
+ *  onto the Clinician pill catalog (`.qm-cl-pill-{tone}`). The legacy
+ *  pill mapping in `lib/problem-list.statusTone()` returns the older
+ *  `mint | amber | accent` tones used by the dark theme; we keep that
+ *  helper unmodified (it's pure logic, may be consumed elsewhere) and
+ *  do the Clinician mapping locally:
+ *    active   → amber  (caution / open issue)
+ *    resolved → sage   (closed / on-track)
+ *    chronic  → soft   (long-running / informational) */
+function clinicianProblemTone(
+  status: ProblemStatus
+): 'amber' | 'sage' | 'soft' {
+  switch (status) {
+    case 'active':
+      return 'amber';
+    case 'resolved':
+      return 'sage';
+    case 'chronic':
+      return 'soft';
+  }
 }
 
 export default async function PatientPage({
@@ -184,25 +216,30 @@ export default async function PatientPage({
   const problems = parseProblemList(patient.problemList);
 
   return (
-    <AppFrame>
+    <AppFrame theme="clinician">
       <div
         style={{
-          padding: '18px 32px 0',
+          padding: '18px 40px 0',
           display: 'flex',
           alignItems: 'center',
           gap: 8,
-          fontSize: 12.5,
-          color: 'var(--fg-3)',
+          fontSize: 13,
+          color: 'var(--ink-3)',
         }}
       >
         <Link
-          href="/dashboard"
-          style={{ color: 'var(--fg-3)', textDecoration: 'none' }}
+          href="/patients"
+          style={{ color: 'var(--ink-3)', textDecoration: 'none' }}
         >
           Patients
         </Link>
         <Ic.chevRight width={12} height={12} />
-        <span style={{ color: 'var(--fg)' }}>{patient.name}</span>
+        <span
+          className="qm-cl-serif"
+          style={{ color: 'var(--ink)' }}
+        >
+          {patient.name}
+        </span>
       </div>
 
       {isDeleted && <DeletedBanner />}
@@ -219,17 +256,19 @@ export default async function PatientPage({
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(4, 1fr)',
-          gap: 14,
-          padding: '22px 32px 6px',
+          gap: 16,
+          padding: '24px 40px 8px',
         }}
       >
         <StatCard
-          label="§ Total visits"
+          theme="clinician"
+          label="Total visits"
           value={activeCount}
           unit={activeCount === 1 ? 'visit' : 'visits'}
         />
         <StatCard
-          label="§ Last visit"
+          theme="clinician"
+          label="Last visit"
           value={latestVisit ? relTime(latestVisit.createdAt) : '—'}
           unit={latestVisit ? '' : 'none yet'}
           delta={
@@ -242,12 +281,14 @@ export default async function PatientPage({
           deltaTone="accent-bright"
         />
         <StatCard
-          label={`§ Visits / ${now.toLocaleString('en-US', { month: 'short' })}`}
+          theme="clinician"
+          label={`Visits / ${now.toLocaleString('en-US', { month: 'short' })}`}
           value={visitsThisMonth}
           unit="this month"
         />
         <StatCard
-          label="§ Signed"
+          theme="clinician"
+          label="Signed"
           value={signedCount}
           unit={signedCount === 1 ? 'note' : 'notes'}
         />
@@ -295,13 +336,14 @@ function DeletedBanner() {
     <div
       role="status"
       style={{
-        margin: '18px 32px 0',
-        padding: '10px 14px',
+        margin: '18px 40px 0',
+        padding: '12px 16px',
         borderRadius: 12,
         border: '1px solid var(--line)',
-        background: 'rgba(255, 255, 255, 0.02)',
-        fontSize: 12.5,
-        color: 'var(--fg-3)',
+        background: 'var(--cream-2)',
+        fontSize: 13,
+        color: 'var(--ink-3)',
+        fontFamily: 'var(--serif)',
       }}
     >
       This patient has been deleted. Visits below remain accessible, but new
@@ -332,8 +374,9 @@ function PatientHeaderCard({
   age: number | null;
   visitCount: number;
 }) {
-  // Italicise the last word of the name to match §1.2 signature move:
-  // "Linda K. <em>Ahmed</em>". Single-token names fall back to plain.
+  // Italicise the last word of the name with sage glow to match §1.2
+  // signature move and the dashboard greeting / cinematic-hero pattern
+  // ("Linda K. <em>Ahmed</em>"). Single-token names fall back to plain.
   const trimmed = patient.name.trim();
   const idx = trimmed.lastIndexOf(' ');
   const firstPart = idx >= 0 ? trimmed.slice(0, idx) : trimmed;
@@ -345,30 +388,38 @@ function PatientHeaderCard({
   return (
     <div
       style={{
-        padding: '16px 32px 24px',
+        padding: '20px 40px 28px',
         display: 'flex',
         alignItems: 'flex-start',
-        gap: 20,
+        gap: 22,
         borderBottom: '1px solid var(--line)',
       }}
     >
-      <Avatar name={patient.name} size={76} />
+      <Avatar name={patient.name} size={76} theme="clinician" />
       <div style={{ flex: 1, minWidth: 0 }}>
         <h1
-          className="qm-serif"
+          className="qm-cl-serif"
           style={{
             margin: 0,
-            fontSize: 32,
+            fontSize: 34,
             fontWeight: 400,
-            letterSpacing: '-0.02em',
+            letterSpacing: '-0.015em',
             lineHeight: 1.1,
+            color: 'var(--ink)',
           }}
         >
           {firstPart}
           {lastPart && (
             <>
               {' '}
-              <em style={{ color: 'var(--accent-bright)' }}>{lastPart}</em>
+              <em
+                style={{
+                  color: 'var(--sage-deep)',
+                  fontStyle: 'italic',
+                }}
+              >
+                {lastPart}
+              </em>
             </>
           )}
         </h1>
@@ -376,8 +427,8 @@ function PatientHeaderCard({
           style={{
             display: 'flex',
             gap: 18,
-            marginTop: 8,
-            color: 'var(--fg-3)',
+            marginTop: 10,
+            color: 'var(--ink-3)',
             fontSize: 12.5,
             fontFamily: 'var(--mono)',
             flexWrap: 'wrap',
@@ -393,7 +444,7 @@ function PatientHeaderCard({
           {patient.externalId && <span>ID {patient.externalId}</span>}
           {patient.insurance && <span>{patient.insurance}</span>}
           {!dobIso && !patient.mrn && !patient.externalId && !patient.insurance && (
-            <span style={{ fontStyle: 'italic', color: 'var(--fg-4)' }}>
+            <span style={{ fontStyle: 'italic', color: 'var(--ink-4)' }}>
               No MRN / DOB / insurance on file — edit to add
             </span>
           )}
@@ -403,25 +454,29 @@ function PatientHeaderCard({
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 6,
-            marginTop: 12,
+            gap: 8,
+            marginTop: 14,
             flexWrap: 'wrap',
           }}
         >
-          {problems.map((p, i) => (
-            <span
-              key={`${p.condition}-${i}`}
-              className={`qm-chip qm-chip-${statusTone(p.status)}`}
-              title={`${statusLabel(p.status)}${p.icd10 ? ` · ${p.icd10}` : ''}`}
-            >
-              {p.condition}
-            </span>
-          ))}
+          {problems.map((p, i) => {
+            const tone = clinicianProblemTone(p.status);
+            return (
+              <span
+                key={`${p.condition}-${i}`}
+                className={`qm-cl-pill qm-cl-pill-${tone}`}
+                title={`${statusLabel(p.status)}${p.icd10 ? ` · ${p.icd10}` : ''}`}
+              >
+                <span className="qm-cl-pill-dot" />
+                {p.condition}
+              </span>
+            );
+          })}
           {problems.length === 0 && (
             <span
               style={{
-                fontSize: 11.5,
-                color: 'var(--fg-4)',
+                fontSize: 12,
+                color: 'var(--ink-4)',
                 fontFamily: 'var(--mono)',
                 letterSpacing: '0.02em',
               }}
@@ -440,7 +495,7 @@ function PatientHeaderCard({
         {canNewVisit && (
           <Link
             href={`/visits/new?patientId=${patient.id}`}
-            className="qm-btn qm-btn-primary"
+            className="qm-cl-btn qm-cl-btn-primary"
             style={{ textDecoration: 'none' }}
           >
             <Ic.plus width={14} height={14} />
@@ -450,7 +505,7 @@ function PatientHeaderCard({
         {visitCount > 0 && (
           <a
             href={`/api/patients/${patient.id}/export`}
-            className="qm-btn qm-btn-ghost"
+            className="qm-cl-btn qm-cl-btn-ghost"
             style={{ textDecoration: 'none' }}
           >
             <Ic.download width={13} height={13} />
@@ -505,57 +560,51 @@ function TabBar({
       hidden: trashCount === 0,
     },
   ];
+  // Same `.qm-cl-tab-row` / `.qm-cl-tab` chips as the dashboard tab idiom.
   return (
     <div
       style={{
-        padding: '18px 32px 0',
+        padding: '20px 40px 4px',
         display: 'flex',
-        alignItems: 'center',
-        gap: 4,
-        borderBottom: '1px solid var(--line)',
+        justifyContent: 'flex-start',
       }}
     >
-      {tabs
-        .filter((t) => !t.hidden)
-        .map((t) => {
-          const active = t.id === activeTab;
-          return (
-            <Link
-              key={t.id}
-              href={t.href}
-              scroll={false}
-              aria-current={active ? 'page' : undefined}
-              style={{
-                padding: '10px 14px',
-                color: active ? 'var(--fg)' : 'var(--fg-3)',
-                borderBottom: `2px solid ${
-                  active ? 'var(--accent-bright)' : 'transparent'
-                }`,
-                fontFamily: 'var(--sans)',
-                fontSize: 13,
-                fontWeight: 500,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 8,
-                marginBottom: -1,
-                textDecoration: 'none',
-              }}
-            >
-              {t.label}
-              {t.count != null && (
-                <span
-                  style={{
-                    fontFamily: 'var(--mono)',
-                    fontSize: 10,
-                    color: 'var(--fg-4)',
-                  }}
-                >
-                  {t.count}
-                </span>
-              )}
-            </Link>
-          );
-        })}
+      <div className="qm-cl-tab-row">
+        {tabs
+          .filter((t) => !t.hidden)
+          .map((t) => {
+            const active = t.id === activeTab;
+            return (
+              <Link
+                key={t.id}
+                href={t.href}
+                scroll={false}
+                aria-current={active ? 'page' : undefined}
+                className={`qm-cl-tab${active ? ' qm-cl-active' : ''}`}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  textDecoration: 'none',
+                }}
+              >
+                {t.label}
+                {t.count != null && (
+                  <span
+                    style={{
+                      fontFamily: 'var(--mono)',
+                      fontSize: 11,
+                      color: active ? 'var(--sage-deep)' : 'var(--ink-4)',
+                      opacity: active ? 0.85 : 1,
+                    }}
+                  >
+                    {t.count}
+                  </span>
+                )}
+              </Link>
+            );
+          })}
+      </div>
     </div>
   );
 }
@@ -610,7 +659,7 @@ async function VisitsTab({
       audioDurationSec: v.audioDurationSec,
     })
   );
-  return <VisitList visits={visits} />;
+  return <VisitList visits={visits} theme="clinician" />;
 }
 
 async function TrashTab({
@@ -651,8 +700,9 @@ async function TrashTab({
           margin: '60px auto',
           maxWidth: 420,
           textAlign: 'center',
-          color: 'var(--fg-3)',
-          fontSize: 13,
+          color: 'var(--ink-3)',
+          fontSize: 13.5,
+          fontFamily: 'var(--serif)',
         }}
       >
         No deleted visits.
@@ -665,7 +715,7 @@ async function TrashTab({
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
         gap: 14,
-        padding: '22px 32px 32px',
+        padding: '24px 40px 40px',
       }}
     >
       {rows.map((v: Row) => (
@@ -689,18 +739,24 @@ function VisitsEmpty({
     <div
       style={{
         margin: '60px auto',
-        maxWidth: 420,
+        maxWidth: 440,
         textAlign: 'center',
-        color: 'var(--fg-3)',
-        fontSize: 13.5,
+        color: 'var(--ink-3)',
+        fontSize: 14,
+        fontFamily: 'var(--serif)',
+        lineHeight: 1.55,
       }}
     >
       <p style={{ margin: 0 }}>No visits for this patient yet.</p>
       {!deleted && (
-        <p style={{ marginTop: 10 }}>
+        <p style={{ marginTop: 12 }}>
           <Link
             href={`/visits/new?patientId=${patientId}`}
-            style={{ color: 'var(--accent-bright)', fontWeight: 500 }}
+            style={{
+              color: 'var(--sage-deep)',
+              fontWeight: 500,
+              textDecoration: 'none',
+            }}
           >
             Start a new visit →
           </Link>
@@ -717,30 +773,36 @@ function StubTab({ title, body }: { title: string; body: string }) {
         margin: '60px auto',
         maxWidth: 480,
         textAlign: 'center',
+        padding: '0 24px',
       }}
     >
-      <div
-        className="qm-sectlabel"
-        style={{ marginBottom: 12 }}
-      >{`§ ${title}`}</div>
+      <div className="qm-cl-eyebrow" style={{ marginBottom: 12 }}>
+        {title}
+      </div>
       <h2
-        className="qm-serif"
+        className="qm-cl-serif"
         style={{
           margin: 0,
-          fontSize: 22,
+          fontSize: 24,
           fontWeight: 400,
           letterSpacing: '-0.015em',
-          color: 'var(--fg-2)',
+          color: 'var(--ink)',
         }}
       >
-        Coming soon
+        Coming{' '}
+        <em style={{ color: 'var(--sage-deep)', fontStyle: 'italic' }}>
+          soon
+        </em>
       </h2>
       <p
+        className="qm-cl-serif"
         style={{
-          marginTop: 10,
-          fontSize: 13,
-          color: 'var(--fg-3)',
-          lineHeight: 1.55,
+          marginTop: 12,
+          fontSize: 14,
+          color: 'var(--ink-2)',
+          lineHeight: 1.6,
+          maxWidth: 380,
+          margin: '12px auto 0',
         }}
       >
         {body}
