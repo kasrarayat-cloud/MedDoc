@@ -1,0 +1,821 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QuillMD · Codes · Mei-Ling Park · v9 V2 Power Table</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#08090a;
+  --surface-1:#0d0e10;
+  --surface-2:#131416;
+  --surface-3:#1a1c1e;
+  --border:#21232a;
+  --border-strong:#2c2f38;
+  --hairline:rgba(255,255,255,0.05);
+  --hairline-strong:rgba(255,255,255,0.08);
+  --text:#f7f8f8;
+  --text-2:#b4bcc8;
+  --text-3:#6c737f;
+  --text-4:#4b5159;
+  --sage:#7AA68C;
+  --sage-bright:#9BC4A8;
+  --sage-deep:#2F5040;
+  --sage-tint:rgba(122,166,140,0.13);
+  --sage-glow:rgba(122,166,140,0.18);
+  --row-hover:rgba(255,255,255,0.025);
+  --row-active:rgba(255,255,255,0.04);
+  --success:#4caf7d;
+  --warning:#d4a437;
+  --danger:#d4574a;
+  --info:#5b8db8;
+  --font-sans:'Inter', -apple-system, system-ui, sans-serif;
+  --font-mono:'JetBrains Mono', ui-monospace, Menlo, monospace;
+  --ease:cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text)}
+body{
+  font-family:var(--font-sans);
+  font-feature-settings:'cv11','ss01';
+  font-size:13px;
+  line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  letter-spacing:-0.005em;
+  min-height:100vh;
+}
+::selection{background:rgba(122,166,140,.25);color:var(--text)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+a{color:inherit;text-decoration:none}
+
+/* ─────────────── Top bar ─────────────── */
+.topbar{
+  position:sticky;top:0;z-index:30;
+  height:44px;
+  display:flex;align-items:center;gap:12px;
+  padding:0 16px;
+  background:rgba(8,9,10,.85);
+  backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--hairline);
+}
+.brand{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;letter-spacing:-0.01em}
+.brand-mark{
+  width:18px;height:18px;border-radius:5px;
+  background:linear-gradient(135deg,var(--sage) 0%,var(--sage-deep) 100%);
+  display:grid;place-items:center;color:#0c1410;font-size:10px;font-weight:700;
+  box-shadow:0 0 0 1px rgba(255,255,255,.06) inset;
+}
+.brand-mark::before{content:'Q'}
+.crumb-sep{color:var(--text-4);font-size:12px}
+.crumb{color:var(--text-2);font-size:13px;transition:color 100ms var(--ease)}
+.crumb:hover{color:var(--text)}
+.crumb-active{color:var(--text)}
+.spacer{flex:1}
+
+.status-pill-chrome{
+  display:inline-flex;align-items:center;gap:6px;
+  height:22px;padding:0 9px;
+  border-radius:4px;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.06em;text-transform:uppercase;font-weight:500;
+  border:1px solid rgba(122,166,140,.25);
+  color:var(--sage-bright);
+  background:rgba(122,166,140,.06);
+}
+.status-pill-chrome .pdot{
+  width:5px;height:5px;border-radius:50%;
+  background:var(--sage);
+  animation:idle-pulse 1.6s ease-in-out infinite;
+}
+@keyframes idle-pulse{
+  0%,100%{opacity:.7;transform:scale(1)}
+  50%{opacity:1;transform:scale(1.04)}
+}
+.btn-sage{
+  display:inline-flex;align-items:center;gap:8px;
+  height:30px;padding:0 14px;
+  background:var(--sage);
+  color:#0d1611;
+  border-radius:6px;
+  font-size:12.5px;font-weight:500;
+  letter-spacing:-0.005em;
+  transition:background 100ms var(--ease), transform 80ms var(--ease), box-shadow 200ms var(--ease);
+}
+.btn-sage:hover{background:#88b599;transform:scale(1.02);box-shadow:0 0 0 4px rgba(122,166,140,.18)}
+.btn-sage .shortcut{font-family:var(--font-mono);font-size:11px;color:rgba(13,22,17,.55)}
+
+.avatar-chip{
+  width:24px;height:24px;border-radius:6px;
+  background:linear-gradient(135deg,#3a4a52 0%,#2a3036 100%);
+  color:#dde6ec;font-size:10.5px;font-weight:600;
+  display:grid;place-items:center;letter-spacing:0.02em;
+  border:1px solid var(--hairline-strong);
+}
+
+/* ─────────────── Layout ─────────────── */
+.shell{
+  position:relative;
+  min-height:calc(100vh - 44px);
+  padding:18px 28px 80px;
+}
+.shell::before{
+  content:'';
+  position:absolute;
+  top:-100px;left:30%;
+  width:600px;height:380px;
+  background:radial-gradient(ellipse at center, rgba(122,166,140,.045) 0%, transparent 70%);
+  pointer-events:none;
+  z-index:0;
+}
+
+/* meta strip */
+.meta-strip{
+  display:flex;align-items:center;
+  padding:6px 0 14px;
+  margin-bottom:14px;
+  border-bottom:1px solid var(--hairline);
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--text-2);
+  position:relative;z-index:1;
+}
+.meta-strip .field{padding:0 14px;border-right:1px solid var(--hairline)}
+.meta-strip .field:first-child{padding-left:0;color:var(--text);font-weight:500}
+.meta-strip .field:last-child{border-right:0}
+.meta-strip .field .lbl{color:var(--text-4);margin-right:4px;font-weight:400}
+
+/* tabs */
+.tabs-row{
+  display:flex;align-items:center;gap:0;
+  margin-bottom:24px;
+  border-bottom:1px solid var(--hairline);
+  position:relative;z-index:1;
+}
+.tab{
+  position:relative;
+  padding:8px 16px 10px;
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.07em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  font-weight:500;
+  cursor:pointer;
+  transition:color 100ms var(--ease);
+}
+.tab:first-child{padding-left:0}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--sage-bright)}
+.tab.active::after{
+  content:'';position:absolute;
+  left:0;right:0;bottom:-1px;
+  height:1.5px;
+  background:var(--sage);
+  border-radius:1px 1px 0 0;
+}
+
+/* ─────────────── Power table frame ─────────────── */
+.frame{
+  position:relative;z-index:1;
+  max-width:1200px;
+}
+
+/* toolbar */
+.toolbar{
+  display:flex;align-items:center;gap:12px;
+  padding:10px 0 18px;
+  margin-bottom:18px;
+  border-bottom:1px solid var(--hairline);
+}
+.toolbar .totals{
+  display:flex;align-items:baseline;gap:18px;
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--text-3);
+}
+.toolbar .totals .v{color:var(--text);font-weight:500;font-variant-numeric:tabular-nums}
+.toolbar .totals .charge{color:var(--sage-bright)}
+.toolbar .sp{flex:1}
+.toolbar .filter{
+  display:inline-flex;align-items:center;gap:6px;
+  height:28px;padding:0 10px;
+  border:1px solid var(--hairline-strong);
+  border-radius:5px;
+  background:transparent;
+  color:var(--text-2);
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  font-weight:500;
+  transition:color 100ms var(--ease), border-color 100ms var(--ease), background 100ms var(--ease);
+}
+.toolbar .filter:hover{color:var(--text);border-color:rgba(255,255,255,.14);background:rgba(255,255,255,.03)}
+.toolbar .search{
+  display:inline-flex;align-items:center;gap:8px;
+  height:28px;padding:0 10px;
+  border:1px solid var(--hairline-strong);
+  border-radius:5px;
+  background:rgba(255,255,255,.015);
+  color:var(--text-3);
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.04em;
+  width:220px;
+}
+.toolbar .search input{
+  flex:1;background:transparent;border:0;outline:0;color:var(--text);
+  font-family:var(--font-mono);font-size:11px;letter-spacing:0.02em;
+}
+.toolbar .search input::placeholder{color:var(--text-4)}
+
+/* table block */
+.table-block{
+  margin-bottom:32px;
+  background:var(--surface-1);
+  border:1px solid var(--border);
+  border-radius:8px;
+  overflow:hidden;
+}
+.table-head{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:14px;
+  padding:14px 18px;
+  border-bottom:1px solid var(--hairline);
+  background:linear-gradient(180deg,rgba(255,255,255,.012) 0%, transparent 100%);
+}
+.table-head-l{display:flex;align-items:baseline;gap:14px}
+.table-head .title{
+  font-family:var(--font-mono);
+  font-size:11.5px;
+  letter-spacing:0.12em;
+  text-transform:uppercase;
+  color:var(--text);
+  font-weight:600;
+}
+.table-head .sub{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.06em;
+  color:var(--text-3);
+  font-weight:500;
+}
+.table-head .sub strong{color:var(--text-2);font-weight:500}
+
+/* table */
+table.codes-table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:13px;
+}
+.codes-table thead th{
+  position:sticky;top:0;
+  background:var(--surface-1);
+  border-bottom:1px solid var(--border);
+  padding:8px 14px;
+  text-align:left;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  font-weight:500;
+  height:36px;
+  user-select:none;
+  cursor:pointer;
+  transition:color 100ms var(--ease);
+  white-space:nowrap;
+}
+.codes-table thead th:hover{color:var(--text-2)}
+.codes-table thead th.sorted{color:var(--sage-bright)}
+.codes-table thead th .sort-arrow{
+  display:inline-block;
+  margin-left:5px;
+  font-size:9px;
+  color:var(--text-4);
+  vertical-align:1px;
+}
+.codes-table thead th.sorted .sort-arrow{color:var(--sage)}
+.codes-table thead th.right{text-align:right}
+.codes-table thead th.center{text-align:center}
+
+.codes-table tbody tr{
+  height:32px;
+  border-bottom:1px solid var(--hairline);
+  cursor:pointer;
+  transition:background 100ms var(--ease);
+}
+.codes-table tbody tr:last-child{border-bottom:0}
+.codes-table tbody tr:hover{background:var(--row-hover)}
+.codes-table tbody tr.expanded{background:var(--row-active)}
+.codes-table tbody tr.expanded + tr.expand-row{display:table-row}
+
+.codes-table td{
+  padding:6px 14px;
+  vertical-align:middle;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.codes-table td.right{text-align:right}
+.codes-table td.center{text-align:center}
+
+/* cell types */
+.cell-code{
+  font-family:var(--font-mono);
+  font-size:12.5px;
+  font-weight:500;
+  color:var(--text);
+  letter-spacing:0.02em;
+  font-variant-numeric:tabular-nums;
+}
+.cell-desc{
+  font-family:var(--font-sans);
+  font-size:13px;
+  color:var(--text);
+  letter-spacing:-0.005em;
+  max-width:380px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.cell-mono{
+  font-family:var(--font-mono);
+  font-size:12px;
+  color:var(--text-2);
+  font-variant-numeric:tabular-nums;
+}
+.cell-mono.muted{color:var(--text-3)}
+.cell-charge{
+  font-family:var(--font-mono);
+  font-size:12.5px;
+  color:var(--sage-bright);
+  font-weight:500;
+  font-variant-numeric:tabular-nums;
+}
+
+/* confidence cell */
+.conf{
+  display:inline-flex;align-items:center;gap:8px;
+  font-family:var(--font-mono);
+  font-size:11.5px;
+  font-variant-numeric:tabular-nums;
+}
+.conf .bar{
+  width:48px;height:3px;
+  border-radius:2px;
+  background:rgba(255,255,255,.06);
+  overflow:hidden;
+  position:relative;
+}
+.conf .bar::after{
+  content:'';
+  position:absolute;left:0;top:0;bottom:0;
+  background:var(--sage);
+  border-radius:2px;
+  width:var(--w,80%);
+}
+.conf.low .bar::after{background:var(--warning)}
+.conf .v{color:var(--text);font-weight:500}
+.conf.low .v{color:var(--warning)}
+
+/* evidence preview cell */
+.cell-evidence{
+  font-family:var(--font-sans);
+  font-size:12.5px;
+  color:var(--text-3);
+  font-style:italic;
+  max-width:340px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  letter-spacing:-0.005em;
+}
+
+/* row actions */
+.row-actions{
+  display:flex;align-items:center;gap:4px;
+  justify-content:flex-end;
+}
+.icon-btn{
+  width:24px;height:24px;
+  border-radius:4px;
+  display:grid;place-items:center;
+  color:var(--text-3);
+  background:transparent;
+  border:1px solid transparent;
+  font-family:var(--font-mono);
+  font-size:13px;line-height:1;
+  transition:color 100ms var(--ease), background 100ms var(--ease), border-color 100ms var(--ease);
+}
+.icon-btn:hover{color:var(--text);background:rgba(255,255,255,.04);border-color:var(--hairline-strong)}
+.icon-btn.danger:hover{color:var(--danger);border-color:rgba(212,87,74,.3)}
+
+/* expand row */
+.expand-row{display:none;background:var(--surface-2)}
+.expand-row td{
+  padding:14px 18px;
+  border-bottom:1px solid var(--hairline);
+}
+.expand-grid{
+  display:grid;
+  grid-template-columns:1fr;
+  gap:14px;
+}
+.expand-block .lbl{
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.14em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  margin-bottom:6px;
+  display:flex;align-items:center;gap:6px;
+}
+.expand-block .lbl::before{
+  content:'';
+  width:5px;height:5px;border-radius:50%;background:var(--sage);
+}
+.expand-block .quote{
+  font-family:var(--font-sans);
+  font-size:13.5px;
+  color:var(--text);
+  font-style:italic;
+  line-height:1.6;
+  letter-spacing:-0.005em;
+  padding:10px 14px;
+  background:var(--surface-3);
+  border-left:2px solid var(--sage);
+  border-radius:0 5px 5px 0;
+}
+.expand-actions{
+  display:flex;align-items:center;gap:6px;
+}
+.expand-actions .ghost{
+  display:inline-flex;align-items:center;gap:6px;
+  height:26px;padding:0 10px;
+  border:1px solid var(--hairline-strong);
+  border-radius:5px;
+  background:transparent;
+  color:var(--text-2);
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  font-weight:500;
+  transition:color 100ms var(--ease), border-color 100ms var(--ease), background 100ms var(--ease);
+}
+.expand-actions .ghost:hover{color:var(--text);border-color:rgba(255,255,255,.14);background:rgba(255,255,255,.03)}
+.expand-actions .ghost.danger:hover{color:var(--danger);border-color:rgba(212,87,74,.3)}
+
+/* low-confidence row tint */
+tr.row-low td:first-child{
+  position:relative;
+}
+tr.row-low td:first-child::before{
+  content:'';
+  position:absolute;left:0;top:0;bottom:0;
+  width:2px;background:var(--warning);
+}
+
+/* add row */
+.table-foot{
+  padding:10px 14px;
+  background:var(--surface-1);
+  border-top:1px solid var(--hairline);
+  display:flex;align-items:center;justify-content:flex-start;
+}
+.btn-add{
+  display:inline-flex;align-items:center;gap:6px;
+  height:26px;padding:0 12px;
+  border:1px dashed var(--hairline-strong);
+  border-radius:5px;
+  background:transparent;
+  color:var(--text-2);
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  font-weight:500;
+  transition:color 100ms var(--ease), border-color 100ms var(--ease), background 100ms var(--ease);
+}
+.btn-add:hover{color:var(--sage-bright);border-color:rgba(122,166,140,.4);background:rgba(122,166,140,.05)}
+.btn-add .plus{font-size:13px;line-height:1}
+
+/* totals strip */
+.totals-strip{
+  margin-top:14px;
+  padding:12px 18px;
+  background:var(--surface-1);
+  border:1px solid var(--border);
+  border-radius:8px;
+  display:flex;align-items:center;justify-content:space-between;
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--text-3);
+}
+.totals-strip .v{color:var(--text);font-weight:500;font-variant-numeric:tabular-nums}
+.totals-strip .charge-final{color:var(--sage-bright);font-size:14px;font-weight:600}
+
+/* ─────────────── Reduced motion ─────────────── */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;
+  }
+  .status-pill-chrome .pdot{animation:none}
+}
+
+/* responsive */
+@media (max-width:900px){
+  .shell{padding:14px 16px 60px}
+  .meta-strip{flex-wrap:wrap;font-size:10px}
+  .meta-strip .field{padding:4px 10px}
+  .crumb:nth-child(2),.crumb-sep:nth-child(3){display:none}
+  .toolbar{flex-wrap:wrap}
+  .toolbar .search{width:100%;order:10}
+  .codes-table thead th.col-evidence,.codes-table td.col-evidence{display:none}
+  .cell-desc{max-width:200px}
+}
+@media (max-width:640px){
+  .codes-table thead th.col-conf,.codes-table td.col-conf{display:none}
+  .cell-desc{max-width:120px}
+}
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<header class="topbar">
+  <div class="brand"><span class="brand-mark"></span> QuillMD</div>
+  <span class="crumb-sep">/</span>
+  <span class="crumb">Patients</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb">Mei-Ling Park</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb crumb-active">Visit · Apr 30, 2026</span>
+  <div class="spacer"></div>
+  <div class="status-pill-chrome" aria-live="polite">
+    <span class="pdot"></span>
+    <span>Ready</span>
+  </div>
+  <button class="btn-sage" type="button">
+    Sign &amp; send
+    <span class="shortcut">⌘ ↵</span>
+  </button>
+  <div class="avatar-chip" title="Dr. Kalyani Park">KP</div>
+</header>
+
+<main class="shell">
+
+  <!-- Patient meta strip -->
+  <div class="meta-strip">
+    <div class="field">MEI-LING PARK</div>
+    <div class="field">34F</div>
+    <div class="field"><span class="lbl">MRN</span>77324</div>
+    <div class="field">J20.9</div>
+    <div class="field">99214</div>
+    <div class="field"><span class="lbl">Duration</span>22 min</div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs-row" role="tablist">
+    <div class="tab" role="tab" aria-selected="false">Soap Note</div>
+    <div class="tab" role="tab" aria-selected="false">Transcript</div>
+    <div class="tab active" role="tab" aria-selected="true">Codes</div>
+    <div class="tab" role="tab" aria-selected="false">Rx</div>
+    <div class="tab" role="tab" aria-selected="false">Extras</div>
+  </div>
+
+  <div class="frame">
+
+    <!-- toolbar -->
+    <div class="toolbar">
+      <div class="totals">
+        <span><span>Codes</span> · <span class="v">4</span></span>
+        <span><span>Avg conf</span> · <span class="v">85.5%</span></span>
+        <span><span>Charge</span> · <span class="v charge">$185.00</span></span>
+      </div>
+      <div class="sp"></div>
+      <div class="search">
+        <span style="color:var(--text-4)">⌕</span>
+        <input type="text" placeholder="search ICD / CPT…" />
+        <span style="color:var(--text-4);font-size:10px;letter-spacing:0.04em">⌘K</span>
+      </div>
+      <button class="filter" type="button">All payers</button>
+      <button class="filter" type="button">Conf · all</button>
+    </div>
+
+    <!-- ICD-10 table -->
+    <section class="table-block">
+      <div class="table-head">
+        <div class="table-head-l">
+          <div class="title">ICD-10-CM · Diagnoses</div>
+          <div class="sub"><strong>3</strong> codes · 1 needs review</div>
+        </div>
+        <div class="sub" style="color:var(--text-3);">click row to expand</div>
+      </div>
+
+      <table class="codes-table" role="grid">
+        <thead>
+          <tr>
+            <th style="width:14%" class="sorted">Code <span class="sort-arrow">▼</span></th>
+            <th style="width:42%">Description <span class="sort-arrow">·</span></th>
+            <th style="width:14%" class="col-conf">Confidence <span class="sort-arrow">·</span></th>
+            <th style="width:22%" class="col-evidence">Evidence <span class="sort-arrow">·</span></th>
+            <th style="width:8%" class="right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr data-row="1">
+            <td><span class="cell-code">J20.9</span></td>
+            <td><span class="cell-desc">Acute bronchitis, unspecified</span></td>
+            <td class="col-conf"><span class="conf" style="--w:94%"><span class="bar"></span><span class="v">94%</span></span></td>
+            <td class="col-evidence"><span class="cell-evidence">"lungs sound clear bilaterally..."</span></td>
+            <td class="right">
+              <div class="row-actions">
+                <button class="icon-btn" title="Edit" aria-label="Edit code">✎</button>
+                <button class="icon-btn danger" title="Remove" aria-label="Remove code">×</button>
+              </div>
+            </td>
+          </tr>
+          <tr class="expand-row">
+            <td colspan="5">
+              <div class="expand-grid">
+                <div class="expand-block">
+                  <div class="lbl">Evidence · transcript</div>
+                  <div class="quote">"Patient reports cough has improved significantly. Lungs sound clear bilaterally, no wheezing or rales. Day 10 of illness, post-viral course resolving as expected."</div>
+                </div>
+                <div class="expand-actions">
+                  <button class="ghost" type="button">Edit</button>
+                  <button class="ghost" type="button">View transcript</button>
+                  <button class="ghost" type="button">See alternatives</button>
+                  <button class="ghost danger" type="button">Remove</button>
+                </div>
+              </div>
+            </td>
+          </tr>
+
+          <tr data-row="2">
+            <td><span class="cell-code">R05.9</span></td>
+            <td><span class="cell-desc">Cough, unspecified</span></td>
+            <td class="col-conf"><span class="conf" style="--w:87%"><span class="bar"></span><span class="v">87%</span></span></td>
+            <td class="col-evidence"><span class="cell-evidence">"occasional cough, mostly morning"</span></td>
+            <td class="right">
+              <div class="row-actions">
+                <button class="icon-btn" title="Edit" aria-label="Edit code">✎</button>
+                <button class="icon-btn danger" title="Remove" aria-label="Remove code">×</button>
+              </div>
+            </td>
+          </tr>
+
+          <tr data-row="3" class="row-low expanded">
+            <td><span class="cell-code">Z00.121</span></td>
+            <td><span class="cell-desc">Encounter for routine child health examination with abnormal findings</span></td>
+            <td class="col-conf"><span class="conf low" style="--w:65%"><span class="bar"></span><span class="v">65%</span></span></td>
+            <td class="col-evidence"><span class="cell-evidence">"follow-up visit"</span></td>
+            <td class="right">
+              <div class="row-actions">
+                <button class="icon-btn" title="Edit" aria-label="Edit code">✎</button>
+                <button class="icon-btn danger" title="Remove" aria-label="Remove code">×</button>
+              </div>
+            </td>
+          </tr>
+          <tr class="expand-row" style="display:table-row;">
+            <td colspan="5">
+              <div class="expand-grid">
+                <div class="expand-block">
+                  <div class="lbl" style="color:var(--warning)"><span style="background:var(--warning) !important">⚠</span> Low confidence · review before sign</div>
+                  <div class="quote" style="border-left-color:var(--warning)">"Follow-up visit" — single weak match. AI flagged this code. Consider <strong>Z09</strong> (encounter for follow-up after completed treatment) — patient is adult, not pediatric.</div>
+                </div>
+                <div class="expand-actions">
+                  <button class="ghost" type="button">Replace with Z09</button>
+                  <button class="ghost" type="button">Edit</button>
+                  <button class="ghost" type="button">View transcript</button>
+                  <button class="ghost danger" type="button">Remove</button>
+                </div>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="table-foot">
+        <button class="btn-add" type="button">
+          <span class="plus">+</span>
+          <span>Add ICD-10 code</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- CPT table -->
+    <section class="table-block">
+      <div class="table-head">
+        <div class="table-head-l">
+          <div class="title">CPT-4 · Procedures</div>
+          <div class="sub"><strong>1</strong> code · $185.00</div>
+        </div>
+        <div class="sub" style="color:var(--text-3);">click row to expand</div>
+      </div>
+
+      <table class="codes-table" role="grid">
+        <thead>
+          <tr>
+            <th style="width:14%" class="sorted">Code <span class="sort-arrow">▼</span></th>
+            <th style="width:46%">Description <span class="sort-arrow">·</span></th>
+            <th style="width:8%" class="center">Units <span class="sort-arrow">·</span></th>
+            <th style="width:12%" class="center">Modifier <span class="sort-arrow">·</span></th>
+            <th style="width:12%" class="right">Charge <span class="sort-arrow">·</span></th>
+            <th style="width:8%" class="right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr data-row="cpt1">
+            <td><span class="cell-code">99214</span></td>
+            <td><span class="cell-desc">Office visit, established patient · level 4 (25–39 min MDM)</span></td>
+            <td class="center"><span class="cell-mono">1</span></td>
+            <td class="center"><span class="cell-mono muted">—</span></td>
+            <td class="right"><span class="cell-charge">$185.00</span></td>
+            <td class="right">
+              <div class="row-actions">
+                <button class="icon-btn" title="Edit" aria-label="Edit code">✎</button>
+                <button class="icon-btn danger" title="Remove" aria-label="Remove code">×</button>
+              </div>
+            </td>
+          </tr>
+          <tr class="expand-row">
+            <td colspan="6">
+              <div class="expand-grid">
+                <div class="expand-block">
+                  <div class="lbl">Justification · MDM time</div>
+                  <div class="quote">"Established patient, 22 minutes of MDM-time, moderate complexity (acute self-limited illness with prescription drug management). Counseling on inhaler technique, return precautions, and activity progression documented."</div>
+                </div>
+                <div class="expand-actions">
+                  <button class="ghost" type="button">Edit</button>
+                  <button class="ghost" type="button">Add modifier</button>
+                  <button class="ghost" type="button">Time audit</button>
+                  <button class="ghost danger" type="button">Remove</button>
+                </div>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="table-foot">
+        <button class="btn-add" type="button">
+          <span class="plus">+</span>
+          <span>Add CPT code</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- totals -->
+    <div class="totals-strip">
+      <span>Total · 4 codes · 1 procedure</span>
+      <span>Charge · <span class="charge-final">$185.00</span></span>
+    </div>
+
+  </div>
+
+</main>
+
+<script>
+(function(){
+  // Tab clicks — visual swap only
+  document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(x => {
+        x.classList.remove('active');
+        x.setAttribute('aria-selected','false');
+      });
+      t.classList.add('active');
+      t.setAttribute('aria-selected','true');
+    });
+  });
+
+  // Row expand on click
+  document.querySelectorAll('.codes-table tbody tr[data-row]').forEach(row => {
+    row.addEventListener('click', (e) => {
+      if(e.target.closest('.icon-btn')) return;
+      const next = row.nextElementSibling;
+      if(!next || !next.classList.contains('expand-row')) return;
+      const isOpen = row.classList.toggle('expanded');
+      next.style.display = isOpen ? 'table-row' : 'none';
+    });
+  });
+})();
+</script>
+
+</body>
+</html>
