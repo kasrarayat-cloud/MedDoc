@@ -3,10 +3,45 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 
+// Phase 5 — Linear V1 Faithful change-password form. /api/settings/
+// change-password contract is unchanged per PROTECTED_CONTRACTS.
+
 interface ApiError {
   error?: string;
   field?: string;
 }
+
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  height: 32,
+  padding: '0 10px',
+  background: 'var(--color-linear-surface-2)',
+  border: '1px solid var(--color-linear-border)',
+  borderRadius: 6,
+  color: 'var(--color-linear-text)',
+  fontFamily: 'var(--font-sans)',
+  fontSize: 13,
+  outline: 'none',
+  transition: 'border-color 100ms ease',
+};
+
+const labelStyle: React.CSSProperties = {
+  display: 'block',
+  marginBottom: 6,
+  fontFamily: 'var(--font-mono)',
+  fontSize: 10.5,
+  color: 'var(--color-linear-text-3)',
+  letterSpacing: '0.06em',
+  textTransform: 'uppercase',
+  fontWeight: 500,
+};
+
+const errorStyle: React.CSSProperties = {
+  marginTop: 6,
+  fontFamily: 'var(--font-sans)',
+  fontSize: 12,
+  color: 'var(--color-linear-coral)',
+};
 
 export function ChangePasswordForm() {
   const [currentPassword, setCurrentPassword] = useState('');
@@ -52,12 +87,13 @@ export function ChangePasswordForm() {
   const formError = error && !fieldError ? error.error : null;
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4" noValidate>
+    <form
+      onSubmit={onSubmit}
+      style={{ display: 'flex', flexDirection: 'column', gap: 14 }}
+      noValidate
+    >
       <div>
-        <label
-          htmlFor="currentPassword"
-          className="mb-1.5 block text-[12px] font-medium tracking-tight text-text-tertiary"
-        >
+        <label htmlFor="currentPassword" style={labelStyle}>
           Current password
         </label>
         <input
@@ -68,20 +104,17 @@ export function ChangePasswordForm() {
           value={currentPassword}
           onChange={(e) => setCurrentPassword(e.target.value)}
           disabled={pending}
-          className={inputClass}
+          style={inputStyle}
         />
         {fieldError === 'currentPassword' && (
-          <p role="alert" className="mt-1.5 text-[12px] text-danger">
+          <p role="alert" style={errorStyle}>
             {error?.error}
           </p>
         )}
       </div>
 
       <div>
-        <label
-          htmlFor="newPassword"
-          className="mb-1.5 block text-[12px] font-medium tracking-tight text-text-tertiary"
-        >
+        <label htmlFor="newPassword" style={labelStyle}>
           New password
         </label>
         <input
@@ -93,23 +126,27 @@ export function ChangePasswordForm() {
           value={newPassword}
           onChange={(e) => setNewPassword(e.target.value)}
           disabled={pending}
-          className={inputClass}
+          style={inputStyle}
         />
-        <p className="mt-1.5 text-[11px] text-text-muted">
+        <p
+          style={{
+            marginTop: 6,
+            fontFamily: 'var(--font-sans)',
+            fontSize: 11.5,
+            color: 'var(--color-linear-text-3)',
+          }}
+        >
           At least 10 characters, with upper + lowercase letters and a digit.
         </p>
         {fieldError === 'newPassword' && (
-          <p role="alert" className="mt-1.5 text-[12px] text-danger">
+          <p role="alert" style={errorStyle}>
             {error?.error}
           </p>
         )}
       </div>
 
       <div>
-        <label
-          htmlFor="confirmPassword"
-          className="mb-1.5 block text-[12px] font-medium tracking-tight text-text-tertiary"
-        >
+        <label htmlFor="confirmPassword" style={labelStyle}>
           Confirm new password
         </label>
         <input
@@ -121,28 +158,41 @@ export function ChangePasswordForm() {
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
           disabled={pending}
-          className={inputClass}
+          style={inputStyle}
         />
         {fieldError === 'confirmPassword' && (
-          <p role="alert" className="mt-1.5 text-[12px] text-danger">
+          <p role="alert" style={errorStyle}>
             {error?.error}
           </p>
         )}
       </div>
 
       {formError && (
-        <p role="alert" className="text-[12px] text-danger">
+        <p role="alert" style={errorStyle}>
           {formError}
         </p>
       )}
 
-      <div className="flex justify-end">
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
         <button
           type="submit"
           disabled={
             pending || !currentPassword || !newPassword || !confirmPassword
           }
-          className="inline-flex items-center gap-2 rounded-lg bg-violet-500 px-4 py-2 text-[13px] font-medium text-white shadow-[0_0_0_1px_rgba(139,92,246,0.3),0_8px_24px_-8px_rgba(124,58,237,0.5)] hover:bg-violet-600 transition-all disabled:opacity-50 disabled:pointer-events-none"
+          className="qm-lin-btn-primary"
+          style={{
+            height: 30,
+            padding: '0 14px',
+            fontSize: 12.5,
+            opacity:
+              pending || !currentPassword || !newPassword || !confirmPassword
+                ? 0.55
+                : 1,
+            cursor:
+              pending || !currentPassword || !newPassword || !confirmPassword
+                ? 'not-allowed'
+                : 'pointer',
+          }}
         >
           {pending ? 'Updating…' : 'Update password'}
         </button>
@@ -150,6 +200,3 @@ export function ChangePasswordForm() {
     </form>
   );
 }
-
-const inputClass =
-  'block w-full rounded-lg border border-border-default bg-bg-surface-1/60 px-3.5 py-2.5 text-[14px] text-text-primary outline-none transition-colors focus:border-violet-500 focus:ring-2 focus:ring-violet-500/30';
