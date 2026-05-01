@@ -83,3 +83,29 @@ Current dashboard renders 4 metric cards + 1 patient pill. The Clinician mockup 
 Implementation gap is content/data-emit, not visual — palette + typography 100% match the mockup. Phase 3 task: extend dashboard data layer to surface the mockup's content density.
 
 **Surfaced by:** merge-prep round 1 verdict `🟡 PASS-WITH-FLAGS` (report `merge-prep-20260430T001246Z.md`, Flag #2). Deferred per user decision at the merge-prep gate; merge-prep round 2 (`merge-prep-20260430T010915Z.md`) confirmed the deferral and proceeded to 🟢 PASS without it.
+
+---
+
+## 7. ✅ Phase 4 follow-up bugs — completed 2026-05-01
+
+Three post-deploy bugs from user QA fixed and deployed via PR #89:
+
+- **Bug 1 — visit-detail hero band too short.** `min-height` 280→360px on `.qm-cl-app .qm-cin-band-tall` so the cinematic photo crop opens up from ~30 % of vertical content to ~40 %. Recording band (`.qm-cin-band-short`, 200 px) unchanged. Commit `d153dc3`.
+- **Bug 2 — `/patients` route never migrated to Phase 2 Clinician.** `apps/transcribe-md/src/app/patients/page.tsx` and `[id]/page.tsx` were rendering the legacy dark navy + violet `app-redesign-v1` theme via `<AppFrame>` / `<PageHeader>` defaults. Both files now pass `theme="clinician"` to opt into the existing Clinician branches of those shared components — no new components created. `<PatientCard>`, server actions, Prisma queries, auth gates byte-identical. Commits `fff6460` + `cf9bea0`.
+- **Bug 3 — cream baseline too cool.** `--color-clinician-cream` `#FAF7F2 → #F2EBDC` in BOTH `apps/transcribe-md/src/app/globals.css` and `apps/marketing/src/app/globals.css`. Warmth +6 → +18; WCAG vs `--ink #2B2620`: 14.0:1 → 12.6:1 (still AAA Large + Normal). `--cream-card` and `--cream-2` tokens unchanged per user direction; revisit if section-band visibility looks off post-deploy. Commit `15d13f4`.
+
+**Live verification:**
+- `qm-cin-band-tall { min-height: 360px; padding: 32px 32px 28px; }` confirmed in `/_next/static/chunks/*.css` on `app.quillmd.com`.
+- `color-clinician-cream: #f2ebdc` confirmed in served CSS on both `app.quillmd.com` and `quillmd.com`.
+- `/patients` returns body class `qm-cl-app` (the Phase 2 Clinician scope marker; previously absent).
+
+### Lesson learned for pre-launch
+
+`docs/CLINICIAN_MIGRATION_ORDER.md` was incomplete — `/patients` slipped through Phase 2/3/4 without re-skin because it was never enumerated as an in-scope route. Before the pilot launch, do a full route inventory with this command and address any hits:
+
+```bash
+grep -rE 'AppFrame|gradient-violet|text-text-muted' \
+  apps/transcribe-md/src/app/ | grep -v '_components' | grep -v 'node_modules'
+```
+
+Should return 0 hits across all routes (not counting routes that legitimately render the legacy `<AppFrame theme="default">`). Add this as a CI check in a follow-up PR — a tiny `grep` step in the existing GitHub Actions workflow next to the a11y job is sufficient.
