@@ -140,6 +140,59 @@ export default function AdminOverview({ initial, userEmail, theme = 'legacy' }: 
     return () => es.close();
   }, []);
 
+  // Phase 4 — Apple Cinematic anim-1 reveal sweep.
+  //
+  // The CinematicAdminHero in admin/layout.tsx already drives the eyebrow
+  // + "Operations." word + downstream `.av1-*` animation timeline on the
+  // initial page load. But Next.js App Router keeps the layout mounted
+  // across in-app navigation between admin pages, so when a SUPER_ADMIN
+  // navigates /admin → /admin/users → /admin and lands back on the
+  // overview, the AdminOverview component re-mounts but the hero's
+  // useEffect (a one-shot on hero mount) doesn't re-fire. Without this
+  // sweep, the stat cards would render in their .av1-card initial state
+  // (blurred + translated) and never reveal.
+  //
+  // This effect runs on every AdminOverview mount and adds `.show` to
+  // every `.av1-*` element in this component's tree using the same
+  // staggered timeline as the hero. It is purely visual — does not
+  // touch SSE, mutations, or data fetching, and respects reduced motion.
+  useEffect(() => {
+    if (theme !== 'clinician') return;
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    if (reducedMotion) {
+      document
+        .querySelectorAll<HTMLElement>('.av1-word, .av1-fade, .av1-card, .av1-cta')
+        .forEach((el) => el.classList.add('show'));
+      return;
+    }
+
+    const timers: Array<ReturnType<typeof setTimeout>> = [];
+
+    const raf = requestAnimationFrame(() => {
+      document.querySelectorAll<HTMLElement>('.av1-card').forEach((c) => {
+        const d = parseInt(c.dataset.d ?? '600', 10);
+        timers.push(setTimeout(() => c.classList.add('show'), d));
+      });
+      document.querySelectorAll<HTMLElement>('.av1-fade').forEach((e, i) => {
+        timers.push(setTimeout(() => e.classList.add('show'), 1500 + i * 90));
+      });
+      document.querySelectorAll<HTMLElement>('.av1-word').forEach((w) => {
+        const d = parseInt(w.dataset.d ?? '0', 10);
+        timers.push(setTimeout(() => w.classList.add('show'), d + 80));
+      });
+      document.querySelectorAll<HTMLElement>('.av1-cta').forEach((c, i) => {
+        const d = parseInt(c.dataset.d ?? `${1400 + i * 100}`, 10);
+        timers.push(setTimeout(() => c.classList.add('show'), d));
+      });
+    });
+
+    return () => {
+      timers.forEach((t) => clearTimeout(t));
+      cancelAnimationFrame(raf);
+    };
+  }, [theme]);
+
   const lastUpdated = `${tick}s ago`;
 
   if (theme === 'clinician') {
@@ -153,26 +206,50 @@ export default function AdminOverview({ initial, userEmail, theme = 'legacy' }: 
         <AdminNav theme="clinician" />
 
         <main className="mx-auto max-w-[1440px] px-6 py-6" style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          {/* Phase 4 — Apple Cinematic anim-1 reveal stagger.
+              The CinematicAdminHero (mounted by admin/layout.tsx above this
+              tree) drives a single animation timeline that adds `.show` to
+              every `.av1-*` element on the page. The four stat cards reveal
+              at 600/700/800/900 ms with the .av1-card blur-to-sharp slide;
+              the tables + drawers below use .av1-fade for a 1500 ms+ late
+              reveal. Data fetching, mutation calls, and SSE subscription
+              are unchanged — only wrappers + class names are added. */}
           <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <ClinicianStatusCard icon={Database} label="Database" health={initial.systemHealth.database} />
-            <ClinicianStatusCard icon={Server} label="Redis" health={initial.systemHealth.redis} />
-            <ClinicianStatusCard icon={HardDrive} label="Object storage" health={initial.systemHealth.minio} />
-            <ClinicianStatusCard icon={Cloud} label="External APIs" health={initial.systemHealth.externalAPIs} />
+            <div className="av1-card" data-d="600">
+              <ClinicianStatusCard icon={Database} label="Database" health={initial.systemHealth.database} />
+            </div>
+            <div className="av1-card" data-d="700">
+              <ClinicianStatusCard icon={Server} label="Redis" health={initial.systemHealth.redis} />
+            </div>
+            <div className="av1-card" data-d="800">
+              <ClinicianStatusCard icon={HardDrive} label="Object storage" health={initial.systemHealth.minio} />
+            </div>
+            <div className="av1-card" data-d="900">
+              <ClinicianStatusCard icon={Cloud} label="External APIs" health={initial.systemHealth.externalAPIs} />
+            </div>
           </section>
 
-          <ClinicianThreatsBar
-            threats={initial.threats}
-            onViewAll={() => router.push('/admin/threats')}
-          />
+          <div className="av1-fade">
+            <ClinicianThreatsBar
+              threats={initial.threats}
+              onViewAll={() => router.push('/admin/threats')}
+            />
+          </div>
 
           <section className="grid grid-cols-1 gap-4 lg:grid-cols-5">
-            <div className="lg:col-span-3" ref={activityFeedRef}>
+            <div className="lg:col-span-3 av1-fade" ref={activityFeedRef}>
               <ClinicianActivityFeed rows={rows} filter={filter} onFilter={setFilter} connected={connected} />
             </div>
             <div className="space-y-4 lg:col-span-2">
-              <ClinicianPipelineMetricsCard data={initial.pipeline} />
-              <ClinicianTimelineChartCard data={initial.timeline} />
-              <ClinicianHipaaComplianceCard data={initial.hipaa} />
+              <div className="av1-fade">
+                <ClinicianPipelineMetricsCard data={initial.pipeline} />
+              </div>
+              <div className="av1-fade">
+                <ClinicianTimelineChartCard data={initial.timeline} />
+              </div>
+              <div className="av1-fade">
+                <ClinicianHipaaComplianceCard data={initial.hipaa} />
+              </div>
             </div>
           </section>
 
