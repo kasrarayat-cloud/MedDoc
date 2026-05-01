@@ -1,50 +1,24 @@
-// HANDOFF §2.1 — initials + deterministic tinted gradient. Ported from
-// shell.jsx `Avatar`. The tint is picked from a fixed 7-hue palette based
-// on the first character of the name, so the same doctor always gets the
-// same colour across the app.
+// Phase 5 — Linear V1 Faithful avatar.
+// Reference: docs/design-directions-v8-linear/dashboard-v1.html (.avatar-chip)
 //
-// Phase 2 (Clinician remodel) — Strategy A dual-theme via additive
-// `theme` prop. Default `'legacy'` keeps the 7-hue circular gradient
-// chip byte-for-byte. `theme="clinician"` swaps to a rounded-square
-// `.qm-cl-avatar` chip with serif initials, picking from the 5
-// specialty tints (sage/teal/amber/coral/sky) deterministically by
-// name. Same `name`/`size` API; the `tint` override only applies to
-// the legacy branch.
+// Round avatar on `--color-linear-surface-1` with hairline border and
+// initials in Inter weight 600. Hover state lifts the border to the
+// sage-bright tint with a subtle sage glow shadow. The legacy 7-hue
+// rainbow tinting is gone; Linear V1 is monochromatic.
+//
+// `theme` and `tint` props remain in the type signature for back-compat
+// with unmigrated callers (e.g. TopNav previously passed
+// theme="clinician"); both values render the same Linear V1 chip.
 
-const TINTS = [
-  '#8B5CFF',
-  '#D946EF',
-  '#60A5FA',
-  '#6EE7B7',
-  '#FBBF24',
-  '#FB7185',
-  '#A87CFF',
-] as const;
-
-const CL_TINTS = [
-  'sage',
-  'teal',
-  'amber',
-  'coral',
-  'sky',
-] as const;
+const SURFACE_GRADIENT =
+  'linear-gradient(135deg, var(--color-linear-surface-3) 0%, var(--color-linear-surface-1) 100%)';
 
 type AvatarTheme = 'legacy' | 'clinician';
-type ClinicianTint = (typeof CL_TINTS)[number];
-
-function pickTint(name: string): string {
-  const code = name.charCodeAt(0) || 0;
-  return TINTS[code % TINTS.length]!;
-}
-
-function pickClinicianTint(name: string): ClinicianTint {
-  const code = name.charCodeAt(0) || 0;
-  return CL_TINTS[code % CL_TINTS.length]!;
-}
 
 function initialsFrom(name: string): string {
   return name
     .split(/\s+/)
+    .filter(Boolean)
     .slice(0, 2)
     .map((s) => s[0] ?? '')
     .join('')
@@ -54,33 +28,21 @@ function initialsFrom(name: string): string {
 interface AvatarProps {
   name?: string;
   size?: number;
+  /** @deprecated kept for back-compat; Linear V1 has no per-name tint. */
   tint?: string;
+  /** @deprecated kept for back-compat; Linear V1 is single-theme. */
   theme?: AvatarTheme;
 }
 
 export function Avatar({
   name = 'JD',
-  size = 32,
-  tint,
-  theme = 'legacy',
+  size = 24,
 }: AvatarProps) {
-  if (theme === 'clinician') {
-    return <ClinicianAvatar name={name} size={size} />;
-  }
-  return <LegacyAvatar name={name} size={size} tint={tint} />;
-}
+  const initials = initialsFrom(name) || 'JD';
+  // Inter 12px medium per dashboard-v1; scale gracefully for larger
+  // sizes (settings page uses 36px etc.).
+  const fontSize = Math.max(10.5, Math.round(size * 0.42));
 
-function LegacyAvatar({
-  name = 'JD',
-  size = 32,
-  tint,
-}: {
-  name?: string;
-  size?: number;
-  tint?: string;
-}) {
-  const t = tint ?? pickTint(name);
-  const initials = initialsFrom(name);
   return (
     <div
       aria-hidden
@@ -89,51 +51,29 @@ function LegacyAvatar({
         height: size,
         flex: `0 0 ${size}px`,
         borderRadius: '50%',
-        background: `linear-gradient(135deg, ${t}33, ${t}0a)`,
-        border: `1px solid ${t}55`,
+        background: SURFACE_GRADIENT,
+        border: '1px solid var(--color-linear-hairline-strong)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontFamily: 'var(--sans)',
-        fontSize: size * 0.38,
+        fontFamily: 'var(--font-sans)',
+        fontSize,
         fontWeight: 600,
-        color: t,
-        letterSpacing: 0,
-        textTransform: 'uppercase',
+        color: 'var(--color-linear-text)',
+        letterSpacing: '0.02em',
+        transition:
+          'border-color 120ms ease-out, box-shadow 120ms ease-out',
       }}
-    >
-      {initials}
-    </div>
-  );
-}
-
-// ── Clinician branch ────────────────────────────────────────────
-// Mockup ref: docs/design-directions-v3/clinician/dashboard.html
-// (sidebar profile chip) + visit-detail.html (patient header chip).
-// Rounded-square (12px radius) chip with serif initials, picking
-// from `.qm-cl-avatar-{sage,teal,amber,coral,sky}` deterministically
-// by the first character of the name. Width/height respect `size`
-// while keeping the proportional 16px serif weight from the mockup.
-function ClinicianAvatar({
-  name = 'JD',
-  size = 44,
-}: {
-  name?: string;
-  size?: number;
-}) {
-  const tint = pickClinicianTint(name);
-  const initials = initialsFrom(name);
-  return (
-    <div
-      aria-hidden
-      className={`qm-cl-avatar qm-cl-avatar-${tint}`}
-      style={{
-        width: size,
-        height: size,
-        flex: `0 0 ${size}px`,
-        // Inline overrides on top of the class so `size` scales the
-        // chip while keeping the warm-tint background from the class.
-        fontSize: Math.max(11, size * 0.36),
+      onMouseEnter={(e) => {
+        e.currentTarget.style.borderColor =
+          'var(--color-linear-sage-bright)';
+        e.currentTarget.style.boxShadow =
+          '0 0 0 2px var(--color-linear-sage-glow)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.borderColor =
+          'var(--color-linear-hairline-strong)';
+        e.currentTarget.style.boxShadow = 'none';
       }}
     >
       {initials}
