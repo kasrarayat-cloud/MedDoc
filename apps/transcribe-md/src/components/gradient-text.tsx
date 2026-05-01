@@ -1,23 +1,23 @@
 import { cn } from '@/lib/cn';
 
 /**
- * Violet gradient text, used for emphasis inside headings.
- * The gradient itself lives in globals.css as .text-gradient-violet so
- * we get consistent stops everywhere the brand accent shows up.
+ * Phase 5 — Linear V1 Faithful gradient text.
  *
- * Variant — `'violet'` (default, Source-of-truth class
- * `.text-gradient-violet` for App-redesign-v1) or `'sage'` (Clinician
- * direction — sage-deep → sage → sage-bright). The sage gradient is
- * defined inline so it doesn't need a globals.css addition; we also
- * stamp `data-variant="sage"` on the rendered span so future CSS can
- * pick it up if a class definition is preferred later.
+ * Linear V1 has no purple/violet brand accent; the only gradient text
+ * we use is a subtle sage gradient (sage-deep → sage → sage-bright)
+ * for emphasis inside large headings on the not-found page and the
+ * AuthShell right pane.
+ *
+ * The legacy `variant="violet"` value remains in the type signature for
+ * back-compat with unmigrated callers; both values render the sage
+ * gradient. Stage 5 cleanup will drop the prop in one sweep.
  */
 type GradientVariant = 'violet' | 'sage';
 
 const SAGE_GRADIENT_STYLE: React.CSSProperties = {
-  // sage-deep #2F5040 → sage #7AA68C → sage-bright #95BCA4
+  // sage-deep #2F5040 → sage #7AA68C → sage-bright #9BC4A8
   backgroundImage:
-    'linear-gradient(135deg, #2F5040 0%, #7AA68C 60%, #95BCA4 100%)',
+    'linear-gradient(135deg, #2F5040 0%, #7AA68C 60%, #9BC4A8 100%)',
   WebkitBackgroundClip: 'text',
   backgroundClip: 'text',
   color: 'transparent',
@@ -27,27 +27,17 @@ const SAGE_GRADIENT_STYLE: React.CSSProperties = {
 export function GradientText({
   children,
   className,
-  variant = 'violet',
+  variant: _variant = 'sage',
 }: {
   children: React.ReactNode;
   className?: string;
   variant?: GradientVariant;
 }) {
-  if (variant === 'sage') {
-    return (
-      <span
-        data-variant="sage"
-        className={className}
-        style={SAGE_GRADIENT_STYLE}
-      >
-        {children}
-      </span>
-    );
-  }
   return (
     <span
-      data-variant="violet"
-      className={cn('text-gradient-violet', className)}
+      data-variant="sage"
+      className={cn(className)}
+      style={SAGE_GRADIENT_STYLE}
     >
       {children}
     </span>

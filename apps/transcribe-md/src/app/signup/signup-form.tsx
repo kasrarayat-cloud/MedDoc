@@ -15,6 +15,31 @@ import { MARKETING_URL } from '@/lib/constants';
 
 const initialState: AuthActionState = null;
 
+// Phase 5 — Linear V1 Faithful signup form. AuthShell owns the page
+// chrome; this component owns fields + submit + terms checkbox.
+// signupAction signature unchanged per PROTECTED_CONTRACTS.
+
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  height: 36,
+  padding: '0 12px',
+  background: 'var(--color-linear-surface-2)',
+  border: '1px solid var(--color-linear-border)',
+  borderRadius: 6,
+  color: 'var(--color-linear-text)',
+  fontFamily: 'var(--font-sans)',
+  fontSize: 13.5,
+  outline: 'none',
+  transition: 'border-color 100ms ease, background-color 100ms ease',
+};
+
+const linkStyle: React.CSSProperties = {
+  color: 'var(--color-linear-sage-bright)',
+  fontFamily: 'var(--font-sans)',
+  fontWeight: 500,
+  textDecoration: 'none',
+};
+
 export function SignupForm() {
   const [state, formAction, pending] = useActionState(signupAction, initialState);
   const router = useRouter();
@@ -43,10 +68,7 @@ export function SignupForm() {
   // Client-side confirm-password check. The server schema doesn't
   // validate confirmPassword, so we MUST block submission here —
   // otherwise a user with mismatched inputs would unknowingly create
-  // an account using the first password field. We intercept in the
-  // onSubmit handler below (toast + field focus) instead of silently
-  // disabling the button, which tested poorly (users clicked the
-  // disabled button, nothing happened, they got confused — audit H3).
+  // an account using the first password field.
   const mismatchMessage =
     confirmPassword.length > 0 && confirmPassword !== password
       ? 'Passwords do not match'
@@ -73,8 +95,7 @@ export function SignupForm() {
           autoComplete="name"
           defaultValue={values.name ?? ''}
           required
-          className="qm-cl-input"
-          style={{ marginTop: 6 }}
+          style={{ ...inputStyle, marginTop: 6 }}
         />
         <AuthFieldError message={errors.name} />
       </div>
@@ -88,8 +109,7 @@ export function SignupForm() {
           autoComplete="email"
           defaultValue={values.email ?? ''}
           required
-          className="qm-cl-input"
-          style={{ marginTop: 6 }}
+          style={{ ...inputStyle, marginTop: 6 }}
         />
         <AuthFieldError message={errors.email} />
       </div>
@@ -104,16 +124,15 @@ export function SignupForm() {
           required
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="qm-cl-input"
-          style={{ marginTop: 6 }}
+          style={{ ...inputStyle, marginTop: 6 }}
         />
         <p
           style={{
             marginTop: 6,
+            fontFamily: 'var(--font-sans)',
             fontSize: 11.5,
-            color: 'var(--ink-3)',
+            color: 'var(--color-linear-text-3)',
             lineHeight: 1.4,
-            fontFamily: 'var(--sans)',
           }}
         >
           At least 10 characters, with upper + lowercase letters and a digit.
@@ -131,8 +150,7 @@ export function SignupForm() {
           required
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
-          className="qm-cl-input"
-          style={{ marginTop: 6 }}
+          style={{ ...inputStyle, marginTop: 6 }}
         />
         <AuthFieldError message={mismatchMessage} />
       </div>
@@ -143,10 +161,10 @@ export function SignupForm() {
           alignItems: 'flex-start',
           gap: 10,
           marginTop: 18,
+          fontFamily: 'var(--font-sans)',
           fontSize: 12.5,
-          color: 'var(--ink-2)',
+          color: 'var(--color-linear-text-2)',
           lineHeight: 1.5,
-          fontFamily: 'var(--sans)',
         }}
       >
         <input
@@ -157,7 +175,7 @@ export function SignupForm() {
             marginTop: 3,
             width: 14,
             height: 14,
-            accentColor: 'var(--sage)',
+            accentColor: 'var(--color-linear-sage)',
           }}
         />
         <span>
@@ -166,7 +184,7 @@ export function SignupForm() {
             href={`${MARKETING_URL}/terms`}
             target="_blank"
             rel="noopener noreferrer"
-            style={{ color: 'var(--sage-deep)', fontWeight: 500 }}
+            style={linkStyle}
           >
             terms of service
           </a>{' '}
@@ -175,7 +193,7 @@ export function SignupForm() {
             href={`${MARKETING_URL}/privacy`}
             target="_blank"
             rel="noopener noreferrer"
-            style={{ color: 'var(--sage-deep)', fontWeight: 500 }}
+            style={linkStyle}
           >
             privacy policy
           </a>
@@ -189,11 +207,12 @@ export function SignupForm() {
         type="submit"
         disabled={pending}
         aria-disabled={pending || Boolean(mismatchMessage)}
-        className="qm-cl-btn qm-cl-btn-primary qm-cl-btn-lg"
+        className="qm-lin-btn-primary"
         style={{
           width: '100%',
-          justifyContent: 'center',
           marginTop: 22,
+          height: 36,
+          fontSize: 13,
           opacity: pending ? 0.6 : 1,
           cursor: pending ? 'not-allowed' : 'pointer',
         }}
@@ -205,14 +224,14 @@ export function SignupForm() {
       <div
         style={{
           textAlign: 'center',
-          color: 'var(--ink-3)',
+          color: 'var(--color-linear-text-3)',
+          fontFamily: 'var(--font-sans)',
           fontSize: 12.5,
           marginTop: 18,
-          fontFamily: 'var(--sans)',
         }}
       >
         Have an account?{' '}
-        <Link href="/login" style={{ color: 'var(--sage-deep)', fontWeight: 500 }}>
+        <Link href="/login" style={linkStyle}>
           Sign in →
         </Link>
       </div>
