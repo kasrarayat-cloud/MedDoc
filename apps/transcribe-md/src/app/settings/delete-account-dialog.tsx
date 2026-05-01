@@ -1,5 +1,5 @@
 // ============================================================================
-// Delete-account confirmation dialog (T-M16.2)
+// Phase 5 — Linear V1 Faithful delete-account dialog (T-M16.2)
 // ----------------------------------------------------------------------------
 // Two safeguards on top of the "this is irreversible" copy:
 //   1. Type the literal word DELETE to unlock the submit button.
@@ -7,9 +7,8 @@
 //      owner and not someone who sat down at an unlocked laptop.
 //
 // On success: NextAuth signOut (clears the JWT cookie) with a callback
-// URL pointing at the marketing site's `?deleted=1` banner. The sign-out
-// call still works even though the User row is already gone — we're
-// just blowing away the cookie + navigating away.
+// URL pointing at the marketing site's `?deleted=1` banner. Server-side
+// /api/settings/delete-account contract is unchanged.
 // ============================================================================
 
 'use client';
@@ -27,13 +26,44 @@ interface DeleteResponse {
   field?: string;
 }
 
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  height: 32,
+  padding: '0 10px',
+  background: 'var(--color-linear-surface-2)',
+  border: '1px solid var(--color-linear-border)',
+  borderRadius: 6,
+  color: 'var(--color-linear-text)',
+  fontFamily: 'var(--font-sans)',
+  fontSize: 13,
+  outline: 'none',
+};
+
+const labelStyle: React.CSSProperties = {
+  display: 'block',
+  marginBottom: 6,
+  fontFamily: 'var(--font-mono)',
+  fontSize: 10.5,
+  color: 'var(--color-linear-text-3)',
+  letterSpacing: '0.06em',
+  textTransform: 'uppercase',
+  fontWeight: 500,
+};
+
+const errorStyle: React.CSSProperties = {
+  marginTop: 6,
+  fontFamily: 'var(--font-sans)',
+  fontSize: 12,
+  color: 'var(--color-linear-coral)',
+};
+
 export function DeleteAccountDialog() {
   const [open, setOpen] = useState(false);
   const [password, setPassword] = useState('');
   const [confirmation, setConfirmation] = useState('');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<{ message: string; field?: string } | null>(
-    null
+    null,
   );
 
   const canSubmit =
@@ -56,8 +86,6 @@ export function DeleteAccountDialog() {
         });
         return;
       }
-      // Transaction committed + audit row written. Time to burn the
-      // session cookie and navigate away.
       toast.success('Account deleted');
       const fallback =
         body.redirectTo ?? `${window.location.origin}/?deleted=1`;
@@ -87,25 +115,83 @@ export function DeleteAccountDialog() {
       <Dialog.Trigger asChild>
         <button
           type="button"
-          className="inline-flex items-center gap-2 rounded-lg border border-red-500/50 bg-red-500/5 px-4 py-2 text-[13px] font-medium text-red-300 hover:bg-red-500/10 hover:border-red-500/70 transition-colors"
+          className="qm-lin-btn"
+          style={{
+            borderColor: 'rgba(212, 87, 74, 0.40)',
+            color: 'var(--color-linear-coral)',
+            background: 'rgba(212, 87, 74, 0.05)',
+          }}
         >
-          <AlertTriangle className="h-4 w-4" />
+          <AlertTriangle className="h-3.5 w-3.5" />
           Delete my account
         </button>
       </Dialog.Trigger>
 
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm animate-in fade-in duration-150" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(500px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border-default bg-bg-surface-1 p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <Dialog.Title className="text-[16px] font-semibold text-text-primary flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5 text-red-400" />
+        <Dialog.Overlay
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 50,
+            background: 'rgba(0, 0, 0, 0.55)',
+            backdropFilter: 'blur(2px)',
+          }}
+          className="data-[state=open]:animate-in data-[state=open]:fade-in-0"
+        />
+        <Dialog.Content
+          aria-describedby={undefined}
+          style={{
+            position: 'fixed',
+            left: '50%',
+            top: '50%',
+            transform: 'translate(-50%, -50%)',
+            zIndex: 50,
+            width: 'min(500px, calc(100vw - 32px))',
+            background: 'var(--color-linear-surface-1)',
+            border: '1px solid var(--color-linear-border-strong)',
+            borderRadius: 10,
+            padding: 24,
+            boxShadow:
+              '0 30px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.03)',
+            color: 'var(--color-linear-text)',
+          }}
+          className="data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95"
+        >
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+            <div style={{ flex: 1 }}>
+              <Dialog.Title
+                style={{
+                  margin: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 16,
+                  fontWeight: 500,
+                  color: 'var(--color-linear-text)',
+                  letterSpacing: '-0.01em',
+                }}
+              >
+                <AlertTriangle
+                  className="h-4 w-4"
+                  style={{ color: 'var(--color-linear-coral)' }}
+                />
                 Delete your account?
               </Dialog.Title>
-              <Dialog.Description className="mt-1.5 text-[13px] leading-relaxed text-text-tertiary">
-                This is <strong className="text-text-secondary">permanent</strong>.
-                Every visit, transcript, SOAP note, and exported file will be
+              <Dialog.Description
+                style={{
+                  margin: '6px 0 0',
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 12.5,
+                  color: 'var(--color-linear-text-2)',
+                  lineHeight: 1.5,
+                }}
+              >
+                This is{' '}
+                <strong style={{ color: 'var(--color-linear-text)' }}>
+                  permanent
+                </strong>
+                . Every visit, transcript, SOAP note, and exported file will be
                 erased. We keep a compliance record (email, deletion date,
                 visit count) for 90 days, then that goes too.
               </Dialog.Description>
@@ -114,19 +200,29 @@ export function DeleteAccountDialog() {
               <button
                 type="button"
                 aria-label="Close"
-                className="text-text-muted hover:text-text-primary transition-colors"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--color-linear-text-3)',
+                  cursor: 'pointer',
+                  padding: 4,
+                }}
               >
                 <X className="h-4 w-4" />
               </button>
             </Dialog.Close>
           </div>
 
-          <div className="mt-6 space-y-4">
+          <div
+            style={{
+              marginTop: 22,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 14,
+            }}
+          >
             <div>
-              <label
-                htmlFor="delete-password"
-                className="mb-1.5 block text-[12px] font-medium tracking-tight text-text-tertiary"
-              >
+              <label htmlFor="delete-password" style={labelStyle}>
                 Current password
               </label>
               <input
@@ -138,21 +234,22 @@ export function DeleteAccountDialog() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={pending}
-                className="block w-full rounded-lg border border-border-default bg-bg-surface-1/60 px-3.5 py-2.5 text-[14px] text-text-primary outline-none transition-colors focus:border-red-500/70 focus:ring-2 focus:ring-red-500/30"
+                style={inputStyle}
               />
               {error?.field === 'password' && (
-                <p role="alert" className="mt-1.5 text-[12px] text-danger">
+                <p role="alert" style={errorStyle}>
                   {error.message}
                 </p>
               )}
             </div>
 
             <div>
-              <label
-                htmlFor="delete-confirmation"
-                className="mb-1.5 block text-[12px] font-medium tracking-tight text-text-tertiary"
-              >
-                Type <strong className="text-text-primary">DELETE</strong> to confirm
+              <label htmlFor="delete-confirmation" style={labelStyle}>
+                Type{' '}
+                <strong style={{ color: 'var(--color-linear-text)' }}>
+                  DELETE
+                </strong>{' '}
+                to confirm
               </label>
               <input
                 id="delete-confirmation"
@@ -166,29 +263,33 @@ export function DeleteAccountDialog() {
                 value={confirmation}
                 onChange={(e) => setConfirmation(e.target.value)}
                 disabled={pending}
-                className="block w-full rounded-lg border border-border-default bg-bg-surface-1/60 px-3.5 py-2.5 text-[14px] text-text-primary outline-none transition-colors focus:border-red-500/70 focus:ring-2 focus:ring-red-500/30"
+                style={inputStyle}
               />
               {error?.field === 'confirmation' && (
-                <p role="alert" className="mt-1.5 text-[12px] text-danger">
+                <p role="alert" style={errorStyle}>
                   {error.message}
                 </p>
               )}
             </div>
 
             {error && !error.field && (
-              <p role="alert" className="text-[12px] text-danger">
+              <p role="alert" style={errorStyle}>
                 {error.message}
               </p>
             )}
           </div>
 
-          <div className="mt-6 flex items-center justify-end gap-2">
+          <div
+            style={{
+              marginTop: 22,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+              gap: 8,
+            }}
+          >
             <Dialog.Close asChild>
-              <button
-                type="button"
-                disabled={pending}
-                className="rounded-lg border border-border-default bg-bg-surface-1/60 px-4 py-2 text-[13px] font-medium text-text-secondary hover:bg-bg-surface-1 transition-colors disabled:opacity-50"
-              >
+              <button type="button" disabled={pending} className="qm-lin-btn">
                 Cancel
               </button>
             </Dialog.Close>
@@ -196,11 +297,17 @@ export function DeleteAccountDialog() {
               type="button"
               disabled={!canSubmit}
               onClick={onConfirm}
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-red-500 px-4 py-2 text-[13px] font-medium text-white shadow-[0_0_0_1px_rgba(239,68,68,0.4),0_8px_24px_-8px_rgba(239,68,68,0.5)] transition-all hover:bg-red-600 disabled:opacity-50 disabled:pointer-events-none"
+              className="qm-lin-btn-primary"
+              style={{
+                background: 'var(--color-linear-danger)',
+                boxShadow: '0 0 0 1px rgba(212, 87, 74, 0.45)',
+                opacity: canSubmit ? 1 : 0.5,
+                cursor: canSubmit ? 'pointer' : 'not-allowed',
+              }}
             >
               {pending ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   Deleting…
                 </>
               ) : (

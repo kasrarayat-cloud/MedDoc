@@ -3,17 +3,18 @@
 import { cn } from '@/lib/cn';
 
 /**
- * Card with a subtle sage halo behind it on hover. The halo lives in
- * globals.css as `.glow-violet` (legacy class name kept so existing
- * pricing-tiers callsites don't have to change); the colour was retoned
- * to sage in the Clinician remodel. `data-glow="on"` forces the halo
- * always-on for static showcase usage.
+ * Card with a subtle hover lift — Linear V1 (Faithful).
+ *
+ * Phase 4's sage halo glow on cream is replaced with a flat hairline
+ * card on dark canvas; hover state is a one-step border tint to the
+ * sage-bright. The `alwaysOn` prop becomes a no-op (kept for
+ * back-compat with call sites).
  */
 export function GlowCard({
   children,
   className,
   as: Tag = 'div',
-  alwaysOn = false,
+  alwaysOn: _alwaysOn = false,
   ...rest
 }: {
   children: React.ReactNode;
@@ -24,15 +25,11 @@ export function GlowCard({
   return (
     <Tag
       {...rest}
-      data-glow={alwaysOn ? 'on' : undefined}
-      className={cn(
-        'glow-violet relative isolate rounded-2xl',
-        'border border-[rgba(43,38,32,0.10)] bg-[#FFFCF5]',
-        'shadow-[0_4px_14px_rgba(43,38,32,0.04)]',
-        'transition-colors duration-300',
-        'hover:border-[rgba(122,166,140,0.35)]',
-        className
-      )}
+      className={cn('rounded-xl transition-colors duration-150', className)}
+      style={{
+        background: 'var(--color-linear-surface-1)',
+        border: '1px solid var(--color-linear-border)',
+      }}
     >
       {children}
     </Tag>

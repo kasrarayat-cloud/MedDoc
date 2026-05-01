@@ -3,18 +3,16 @@
 // ============================================================================
 // Top-bar nav for the /admin/* surface
 // ----------------------------------------------------------------------------
-// The Phase 3 Overview page didn't ship a nav (it was the only admin page).
-// Phase 6 adds /admin/users + /admin/usage, so we need a way to move
-// between them. Active link gets the slate-900 underline pattern.
+// Secondary nav strip below the main TopNav. Moves the operator between
+// Overview, Users, API Usage, Threats, and HIPAA. Active link is rendered
+// as a sage underline tab in the Linear V1 dark canvas.
 //
 // Placement: each page.tsx renders this just below its own header.
 // Lightweight client component — only `usePathname` makes it client-only.
 //
-// Phase 2 (Clinician remodel) — Strategy A dual-theme via additive
-// `theme` prop. Default `'legacy'` keeps the slate-on-white nav. Pages
-// opt in to the Clinician chrome by passing `theme="clinician"`, which
-// renders the same shape using the `.qm-cl-tab-row` + `.qm-cl-tab`
-// catalog (soft pill tabs in the cream-on-warm-charcoal palette).
+// Phase 5 (Linear V1 Faithful) — Phase 4's `theme` prop has been retired
+// because every surface now renders against the same dark canvas. The
+// prop is preserved as an optional no-op for caller-site compatibility.
 // ============================================================================
 
 import Link from 'next/link';
@@ -28,18 +26,18 @@ const ITEMS = [
   { href: '/admin/hipaa', label: 'HIPAA' },
 ] as const;
 
-type AdminNavTheme = 'legacy' | 'clinician';
-
 interface AdminNavProps {
-  theme?: AdminNavTheme;
+  /**
+   * Retained for caller-site compatibility from Phase 2's dual-theme
+   * Strategy A. In Phase 5 every admin surface uses the Linear V1 dark
+   * chrome; the prop is accepted but ignored.
+   */
+  theme?: string;
 }
 
-export default function AdminNav({ theme = 'legacy' }: AdminNavProps) {
+export default function AdminNav(_props: AdminNavProps = {}) {
   const pathname = usePathname();
-  if (theme === 'clinician') {
-    return <ClinicianAdminNav pathname={pathname} />;
-  }
-  return <LegacyAdminNav pathname={pathname} />;
+  return <LinearAdminNav pathname={pathname} />;
 }
 
 function isActive(href: string, pathname: string): boolean {
@@ -49,11 +47,13 @@ function isActive(href: string, pathname: string): boolean {
     : pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function LegacyAdminNav({ pathname }: { pathname: string }) {
+function LinearAdminNav({ pathname }: { pathname: string }) {
+  // Linear V1 secondary nav strip — sage underline on active tab,
+  // mono-cap labels match admin-v1.html's tabbar idiom.
   return (
-    <nav className="border-b border-slate-200 bg-white">
+    <nav className="border-b border-linear-border bg-linear-surface-1">
       <div className="mx-auto max-w-[1440px] px-6">
-        <ul className="-mb-px flex items-center gap-6">
+        <ul className="-mb-px flex items-center gap-1">
           {ITEMS.map((item) => {
             const active = isActive(item.href, pathname);
             return (
@@ -61,10 +61,10 @@ function LegacyAdminNav({ pathname }: { pathname: string }) {
                 <Link
                   href={item.href}
                   className={
-                    'inline-flex h-10 items-center border-b-2 text-sm font-medium transition-colors ' +
+                    'inline-flex h-10 items-center border-b-2 px-3 text-[13px] font-medium transition-colors ' +
                     (active
-                      ? 'border-slate-900 text-slate-900'
-                      : 'border-transparent text-slate-500 hover:text-slate-800')
+                      ? 'border-linear-sage text-linear-text'
+                      : 'border-transparent text-linear-text-3 hover:text-linear-text-2')
                   }
                 >
                   {item.label}
@@ -73,39 +73,6 @@ function LegacyAdminNav({ pathname }: { pathname: string }) {
             );
           })}
         </ul>
-      </div>
-    </nav>
-  );
-}
-
-function ClinicianAdminNav({ pathname }: { pathname: string }) {
-  // Solid nav strip across the page with a hairline bottom rule, sitting
-  // on cream-card. Tabs reuse the visit-detail Tabs idiom (.qm-cl-tab-row
-  // + .qm-cl-tab + .qm-cl-active) so the active state matches the rest
-  // of the Clinician surface.
-  return (
-    <nav
-      style={{
-        borderBottom: '1px solid var(--line)',
-        background: 'var(--cream-card)',
-      }}
-    >
-      <div className="mx-auto max-w-[1440px] px-6">
-        <div className="qm-cl-tab-row" style={{ borderBottom: 'none', paddingBottom: 0 }}>
-          {ITEMS.map((item) => {
-            const active = isActive(item.href, pathname);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`qm-cl-tab${active ? ' qm-cl-active' : ''}`}
-                style={{ textDecoration: 'none' }}
-              >
-                {item.label}
-              </Link>
-            );
-          })}
-        </div>
       </div>
     </nav>
   );

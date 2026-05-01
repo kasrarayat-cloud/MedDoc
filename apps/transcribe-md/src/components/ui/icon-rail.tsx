@@ -1,15 +1,23 @@
 'use client';
 
-// HANDOFF §2.1 — 64px left rail with icon-only nav. Templates was
-// removed from the product roadmap (T-M24 reverted); the rail reflects
-// the post-T-M24 nav (Dashboard / Patients / Visits) plus the bottom
-// Command + Settings pair.
+// Phase 5 — Linear V1 Faithful sidebar.
+// Reference: docs/design-directions-v8-linear/dashboard-v1.html (.sidebar)
 //
-// Phase 2 (Clinician remodel) — Strategy A dual-theme via additive
-// `theme` prop. Default `'legacy'` keeps the existing dark rail with
-// the violet active accent. `theme="clinician"` swaps to a cream-2
-// `.qm-cl-sidebar` surface using `.qm-cl-nav-item` rows with the
-// sage active state (ref: visit-detail.html compact sidebar).
+// 240px left rail on `--color-linear-surface-1`, hairline right border,
+// sticky to the top bar. Named rows (icon + label + optional badge),
+// not the legacy 64px icon-only rail.
+//
+// Active state per the mockup:
+//   - 3px sage left bar (::before) flush with the row's left edge
+//   - sage-tint background
+//   - text-1 label, sage-bright icon
+//
+// Inactive: text-2 label, text-3 icon, hover lifts to row-hover.
+//
+// `IconRail` keeps its name for back-compat even though the surface is
+// no longer icon-only. The `theme` prop is retained in the signature
+// for callers like AppFrame that still pass theme="clinician"; both
+// values render the same Linear V1 sidebar.
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -25,12 +33,12 @@ type RailItem = {
   href: string;
 };
 
-const ITEMS: readonly RailItem[] = [
+const PRIMARY: readonly RailItem[] = [
   { id: 'home', icon: Ic.home, label: 'Dashboard', href: '/dashboard' },
-  { id: 'patients', icon: Ic.users, label: 'Patients', href: '/patients' },
   { id: 'visits', icon: Ic.visits, label: 'Visits', href: '/visits' },
+  { id: 'patients', icon: Ic.users, label: 'Patients', href: '/patients' },
 ];
-const BOTTOM: readonly RailItem[] = [
+const SECONDARY: readonly RailItem[] = [
   { id: 'settings', icon: Ic.settings, label: 'Settings', href: '/settings' },
 ];
 
@@ -42,187 +50,137 @@ function isActive(pathname: string, href: string): boolean {
 }
 
 interface IconRailProps {
+  /** @deprecated kept for back-compat; Linear V1 is single-theme. */
   theme?: IconRailTheme;
 }
 
-export function IconRail({ theme = 'legacy' }: IconRailProps = {}) {
-  if (theme === 'clinician') {
-    return <ClinicianIconRail />;
-  }
-  return <LegacyIconRail />;
+export function IconRail(_props: IconRailProps = {}) {
+  const pathname = usePathname() ?? '/';
+
+  return (
+    <aside
+      className="qm-lin-sidebar"
+      aria-label="Primary navigation"
+      style={{
+        // The base `.qm-lin-sidebar` defines surface, border, padding,
+        // sticky positioning. We add the inner column gap here.
+        gap: 14,
+      }}
+    >
+      <nav
+        aria-label="Primary"
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 1,
+        }}
+      >
+        {PRIMARY.map((it) => (
+          <RailRow
+            key={it.id}
+            item={it}
+            active={isActive(pathname, it.href)}
+          />
+        ))}
+      </nav>
+
+      <div style={{ flex: 1 }} />
+
+      <nav
+        aria-label="Secondary"
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 1,
+          paddingTop: 8,
+          borderTop: '1px solid var(--color-linear-hairline)',
+        }}
+      >
+        {SECONDARY.map((it) => (
+          <RailRow
+            key={it.id}
+            item={it}
+            active={isActive(pathname, it.href)}
+          />
+        ))}
+      </nav>
+    </aside>
+  );
 }
 
-function LegacyRailButton({
-  item,
-  active,
-}: {
-  item: RailItem;
-  active: boolean;
-}) {
+function RailRow({ item, active }: { item: RailItem; active: boolean }) {
   const Icon = item.icon;
   return (
     <Link
       href={item.href}
-      title={item.label}
-      aria-label={item.label}
       aria-current={active ? 'page' : undefined}
       style={{
-        width: 40,
-        height: 40,
+        position: 'relative',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'center',
-        borderRadius: 10,
-        border: `1px solid ${
-          active ? 'rgba(139,92,255,0.28)' : 'transparent'
-        }`,
-        background: active ? 'rgba(139,92,255,0.1)' : 'transparent',
-        color: active ? 'var(--fg)' : 'var(--fg-3)',
-        cursor: 'pointer',
-        transition: 'all .15s',
-        position: 'relative',
+        gap: 8,
+        height: 28,
+        padding: '0 8px',
+        borderRadius: 5,
+        fontSize: 13,
+        letterSpacing: '-0.005em',
+        color: active
+          ? 'var(--color-linear-text)'
+          : 'var(--color-linear-text-2)',
+        background: active
+          ? 'var(--color-linear-sage-tint)'
+          : 'transparent',
+        textDecoration: 'none',
+        transition: 'background-color 80ms ease, color 80ms ease',
+        userSelect: 'none',
+      }}
+      onMouseEnter={(e) => {
+        if (!active) {
+          (e.currentTarget as HTMLAnchorElement).style.background =
+            'var(--color-linear-row-hover)';
+          (e.currentTarget as HTMLAnchorElement).style.color =
+            'var(--color-linear-text)';
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (!active) {
+          (e.currentTarget as HTMLAnchorElement).style.background =
+            'transparent';
+          (e.currentTarget as HTMLAnchorElement).style.color =
+            'var(--color-linear-text-2)';
+        }
       }}
     >
-      <Icon width={17} height={17} />
       {active && (
         <span
           aria-hidden
           style={{
             position: 'absolute',
-            left: -14,
-            top: 10,
-            bottom: 10,
-            width: 2,
-            background: 'var(--accent-bright)',
-            borderRadius: 2,
+            left: -8,
+            top: 6,
+            bottom: 6,
+            width: 3,
+            background: 'var(--color-linear-sage)',
+            borderRadius: '0 2px 2px 0',
           }}
         />
       )}
-    </Link>
-  );
-}
-
-function LegacyIconRail() {
-  const pathname = usePathname() ?? '/';
-  return (
-    <aside
-      style={{
-        width: 64,
-        padding: '16px 12px',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: 6,
-        borderRight: '1px solid var(--line)',
-        background: 'rgba(7,6,12,0.4)',
-        position: 'relative',
-        zIndex: 4,
-      }}
-    >
-      {ITEMS.map((it) => (
-        <LegacyRailButton
-          key={it.id}
-          item={it}
-          active={isActive(pathname, it.href)}
-        />
-      ))}
-      <div style={{ flex: 1 }} />
-      <div
+      <span
         aria-hidden
         style={{
-          width: 24,
-          height: 1,
-          background: 'var(--line)',
-          margin: '6px 0',
+          width: 14,
+          height: 14,
+          flex: '0 0 14px',
+          display: 'grid',
+          placeItems: 'center',
+          color: active
+            ? 'var(--color-linear-sage-bright)'
+            : 'var(--color-linear-text-3)',
         }}
-      />
-      {BOTTOM.map((it) => (
-        <LegacyRailButton
-          key={it.id}
-          item={it}
-          active={isActive(pathname, it.href)}
-        />
-      ))}
-    </aside>
-  );
-}
-
-// ── Clinician branch ────────────────────────────────────────────
-// Mockup ref: docs/design-directions-v3/clinician/visit-detail.html
-// (compact 64px aside). Cream-2 surface + hairline right border via
-// `.qm-cl-sidebar`. Each nav row uses `.qm-cl-nav-item` (icon-only
-// icon-square padding via `style="padding:10px"`) with `.qm-cl-active`
-// on the matched route. Icon glyphs inherit `.qm-cl-nav-icon` color
-// transitions.
-function ClinicianRailButton({
-  item,
-  active,
-}: {
-  item: RailItem;
-  active: boolean;
-}) {
-  const Icon = item.icon;
-  return (
-    <Link
-      href={item.href}
-      title={item.label}
-      aria-label={item.label}
-      aria-current={active ? 'page' : undefined}
-      className={
-        active ? 'qm-cl-nav-item qm-cl-active' : 'qm-cl-nav-item'
-      }
-      style={{
-        padding: 10,
-        textDecoration: 'none',
-        // Override the dot pseudo-element on the icon-only rail —
-        // we keep the active styling but suppress the ::after dot
-        // since there's no label to align it against.
-      }}
-    >
-      <Icon className="qm-cl-nav-icon" width={18} height={18} />
+      >
+        <Icon width={14} height={14} />
+      </span>
+      <span style={{ flex: 1 }}>{item.label}</span>
     </Link>
-  );
-}
-
-function ClinicianIconRail() {
-  const pathname = usePathname() ?? '/';
-  return (
-    <aside
-      className="qm-cl-sidebar"
-      style={{
-        width: 64,
-        padding: '20px 10px',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: 4,
-        flex: '0 0 auto',
-      }}
-    >
-      {ITEMS.map((it) => (
-        <ClinicianRailButton
-          key={it.id}
-          item={it}
-          active={isActive(pathname, it.href)}
-        />
-      ))}
-      <div style={{ flex: 1 }} />
-      <div
-        aria-hidden
-        style={{
-          width: 24,
-          height: 1,
-          background: 'var(--line)',
-          margin: '8px 0',
-        }}
-      />
-      {BOTTOM.map((it) => (
-        <ClinicianRailButton
-          key={it.id}
-          item={it}
-          active={isActive(pathname, it.href)}
-        />
-      ))}
-    </aside>
   );
 }

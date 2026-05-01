@@ -1,22 +1,32 @@
-// Settings page loading state — label + rows while the server fetches
-// user + session info.
+// Phase 5 — Linear V1 Faithful settings loading state.
 
-import { PageWrapper } from '@/components/page-wrapper';
 import { Skeleton, SkeletonSettingsRow } from '@/components/skeleton';
 
 export default function SettingsLoading() {
   return (
-    <PageWrapper>
-      <div className="h-14 border-b border-border-subtle" />
-      <main className="mx-auto max-w-3xl px-4 pb-24 pt-8 sm:px-6 lg:px-8 lg:pt-12">
-        <Skeleton className="mb-10 h-8 w-32" />
-        <div className="space-y-4">
-          <SkeletonSettingsRow />
-          <SkeletonSettingsRow />
-          <SkeletonSettingsRow />
-          <SkeletonSettingsRow />
-        </div>
-      </main>
-    </PageWrapper>
+    <div
+      className="qm-lin-fade-in"
+      style={{
+        padding: '18px 24px 64px',
+        maxWidth: 1200,
+      }}
+    >
+      <Skeleton className="mb-3 h-3 w-16" />
+      <Skeleton className="mb-2 h-7 w-32" />
+      <Skeleton className="mb-8 h-3 w-72" />
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 14,
+          maxWidth: 720,
+        }}
+      >
+        <SkeletonSettingsRow />
+        <SkeletonSettingsRow />
+        <SkeletonSettingsRow />
+        <SkeletonSettingsRow />
+      </div>
+    </div>
   );
 }

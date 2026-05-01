@@ -20,6 +20,30 @@ interface ApiError {
   field?: string;
 }
 
+// Phase 5 — Linear V1 Faithful reset-password form.
+// /api/auth/reset-password contract is unchanged.
+
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  height: 36,
+  padding: '0 12px',
+  background: 'var(--color-linear-surface-2)',
+  border: '1px solid var(--color-linear-border)',
+  borderRadius: 6,
+  color: 'var(--color-linear-text)',
+  fontFamily: 'var(--font-sans)',
+  fontSize: 13.5,
+  outline: 'none',
+  transition: 'border-color 100ms ease, background-color 100ms ease',
+};
+
+const linkStyle: React.CSSProperties = {
+  color: 'var(--color-linear-sage-bright)',
+  fontFamily: 'var(--font-sans)',
+  fontWeight: 500,
+  textDecoration: 'none',
+};
+
 export function ResetPasswordForm({ token }: Props) {
   const router = useRouter();
   const [password, setPassword] = useState('');
@@ -41,13 +65,12 @@ export function ResetPasswordForm({ token }: Props) {
         }}
       >
         <p
-          className="qm-cl-serif"
           style={{
             margin: 0,
-            fontSize: 15,
-            color: 'var(--ink-2)',
-            lineHeight: 1.6,
-            fontStyle: 'italic',
+            fontFamily: 'var(--font-sans)',
+            fontSize: 13.5,
+            color: 'var(--color-linear-text-2)',
+            lineHeight: 1.55,
           }}
         >
           This reset link is missing its token. Open the link from the email we
@@ -55,12 +78,7 @@ export function ResetPasswordForm({ token }: Props) {
         </p>
         <Link
           href="/forgot-password"
-          style={{
-            fontSize: 12.5,
-            color: 'var(--sage-deep)',
-            fontFamily: 'var(--sans)',
-            fontWeight: 500,
-          }}
+          style={{ ...linkStyle, fontSize: 12.5 }}
         >
           Send a new reset link →
         </Link>
@@ -101,13 +119,12 @@ export function ResetPasswordForm({ token }: Props) {
   if (done) {
     return (
       <p
-        className="qm-cl-serif"
         style={{
           marginTop: 22,
           textAlign: 'center',
-          fontSize: 15,
-          color: 'var(--ink-2)',
-          fontStyle: 'italic',
+          fontFamily: 'var(--font-sans)',
+          fontSize: 13.5,
+          color: 'var(--color-linear-text-2)',
           lineHeight: 1.6,
         }}
       >
@@ -132,16 +149,15 @@ export function ResetPasswordForm({ token }: Props) {
           minLength={10}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="qm-cl-input"
-          style={{ marginTop: 6 }}
+          style={{ ...inputStyle, marginTop: 6 }}
         />
         <p
           style={{
             marginTop: 6,
+            fontFamily: 'var(--font-sans)',
             fontSize: 11.5,
-            color: 'var(--ink-3)',
+            color: 'var(--color-linear-text-3)',
             lineHeight: 1.4,
-            fontFamily: 'var(--sans)',
           }}
         >
           At least 10 characters, with upper + lowercase letters and a digit.
@@ -162,8 +178,7 @@ export function ResetPasswordForm({ token }: Props) {
           minLength={10}
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
-          className="qm-cl-input"
-          style={{ marginTop: 6 }}
+          style={{ ...inputStyle, marginTop: 6 }}
         />
         {fieldError === 'confirmPassword' && (
           <AuthFieldError message={error?.error} />
@@ -175,11 +190,12 @@ export function ResetPasswordForm({ token }: Props) {
       <button
         type="submit"
         disabled={pending || !password || !confirmPassword}
-        className="qm-cl-btn qm-cl-btn-primary qm-cl-btn-lg"
+        className="qm-lin-btn-primary"
         style={{
           width: '100%',
-          justifyContent: 'center',
           marginTop: 22,
+          height: 36,
+          fontSize: 13,
           opacity: pending || !password || !confirmPassword ? 0.6 : 1,
           cursor:
             pending || !password || !confirmPassword ? 'not-allowed' : 'pointer',
@@ -192,13 +208,13 @@ export function ResetPasswordForm({ token }: Props) {
       <div
         style={{
           textAlign: 'center',
-          color: 'var(--ink-3)',
+          color: 'var(--color-linear-text-3)',
+          fontFamily: 'var(--font-sans)',
           fontSize: 12.5,
           marginTop: 18,
-          fontFamily: 'var(--sans)',
         }}
       >
-        <Link href="/login" style={{ color: 'var(--sage-deep)', fontWeight: 500 }}>
+        <Link href="/login" style={linkStyle}>
           Back to sign in →
         </Link>
       </div>

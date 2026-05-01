@@ -62,3 +62,10 @@ test-results/
 # and production user data — MUST NOT be committed under any circumstances.
 backups/
 .design-preview-phase-6.html
+
+# Phase 5 exploration dead-ends (kept on disk for reference, not in repo).
+# v5 = abandoned dark explorations; v6 = abandoned cinematic studio with 100MB+
+# of gpt-image-1 background renders. Only v7-dashboard and v8-linear were
+# chosen to inform Phase 5 implementation.
+docs/design-directions-v5/
+docs/design-directions-v6/

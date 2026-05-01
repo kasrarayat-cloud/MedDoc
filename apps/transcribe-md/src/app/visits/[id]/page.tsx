@@ -7,7 +7,7 @@ import { TranscribeVisitStatus } from '@prisma/client';
 import { auth } from '@/lib/nextauth';
 import { AppFrame } from '@/components/ui/app-frame';
 import { Ic } from '@/components/ui/icon';
-import { SpecChip, type SpecialtyKind } from '@/components/ui/spec-chip';
+import { type SpecialtyKind } from '@/components/ui/spec-chip';
 import { AudioUploader } from '@/components/audio-uploader';
 import { VoiceDictator } from '@/components/voice-dictator';
 import { TextComposer } from '@/components/text-composer';
@@ -17,10 +17,6 @@ import { VisitReadyView, type Utterance, type SpeakerInfo } from './visit-ready-
 import { VisitFailedView } from './visit-failed-view';
 import { VisitLifecycleActions } from './visit-lifecycle-actions';
 import { EditDraftDialog } from './edit-draft-dialog';
-import {
-  CinematicVisitHero,
-  type CinematicVisitHeroStatus,
-} from '@/components/visits/CinematicVisitHero';
 
 import { isEmailDeliveryEnabled } from '@/lib/email-enabled';
 
@@ -56,14 +52,8 @@ const KNOWN_SPECIALTIES: readonly SpecialtyKind[] = [
   'pulmonology',
   'ophthalmology',
 ];
-function toSpecKind(raw: string): SpecialtyKind {
-  const lower = raw.toLowerCase() as SpecialtyKind;
-  return KNOWN_SPECIALTIES.includes(lower) ? lower : 'primary';
-}
 
-// Phase 4 — pretty-print the raw specialty key into a hero pill label.
-// The dashboard pill chips already do this lower-casing; the cinematic
-// hero's pill is in the same family so we mirror the convention here.
+// Phase 5 — Linear V1 meta strip pretty-prints the specialty key.
 const SPECIALTY_LABEL: Record<string, string> = {
   primary: 'Family Medicine',
   cardiology: 'Cardiology',
@@ -80,18 +70,36 @@ function specialtyLabel(raw: string): string {
   );
 }
 
-// Phase 4 — collapse the seven-state TranscribeVisitStatus into the
-// four labels the cinematic hero band exposes (Queued, Processing,
-// Ready, Signed, Failed). The mid-pipeline states (TRANSCRIBING,
-// EXTRACTING, …) all read as PROCESSING in the band's status pill.
-function heroStatus(
-  status: TranscribeVisitStatus
-): CinematicVisitHeroStatus {
-  if (status === TranscribeVisitStatus.READY) return 'READY';
-  if (status === TranscribeVisitStatus.SIGNED) return 'SIGNED';
-  if (status === TranscribeVisitStatus.FAILED) return 'FAILED';
-  if (status === TranscribeVisitStatus.QUEUED) return 'QUEUED';
-  return 'PROCESSING';
+void KNOWN_SPECIALTIES;
+
+// Phase 5 — collapse the seven-state TranscribeVisitStatus into the
+// labels the meta strip + status pill exposes.
+function visitStatusLabel(status: TranscribeVisitStatus, needsReview: boolean) {
+  if (status === TranscribeVisitStatus.SIGNED) return 'Signed';
+  if (status === TranscribeVisitStatus.FAILED) return 'Failed';
+  if (status === TranscribeVisitStatus.READY)
+    return needsReview ? 'Needs review' : 'Ready';
+  if (status === TranscribeVisitStatus.QUEUED) return 'Queued';
+  return 'Processing';
+}
+
+function visitStatusPillClass(
+  status: TranscribeVisitStatus,
+  needsReview: boolean
+) {
+  if (status === TranscribeVisitStatus.SIGNED) {
+    return 'qm-lin-pill qm-lin-pill--signed';
+  }
+  if (status === TranscribeVisitStatus.FAILED) {
+    return 'qm-lin-pill bg-linear-danger/15 text-linear-danger';
+  }
+  if (status === TranscribeVisitStatus.READY) {
+    return needsReview ? 'qm-lin-pill qm-lin-pill--review' : 'qm-lin-pill qm-lin-pill--ready';
+  }
+  if (status === TranscribeVisitStatus.QUEUED) {
+    return 'qm-lin-pill qm-lin-pill--draft';
+  }
+  return 'qm-lin-pill qm-lin-pill--processing';
 }
 
 export default async function VisitPage({
@@ -206,50 +214,35 @@ export default async function VisitPage({
   if (!user) redirect('/login');
   if (!visit || visit.userId !== session.user.id) notFound();
 
-  const isReadyOrSigned =
-    visit.status === TranscribeVisitStatus.READY ||
-    visit.status === TranscribeVisitStatus.SIGNED;
-
-  // Phase 4 — the cinematic hero band also fronts the PROCESSING views
-  // (TRANSCRIBING / EXTRACTING / DRAFTING / CRITIQUING / POLISHING /
-  // AUTOMATING) and the QUEUED-with-input state that VisitBody routes
-  // through ProcessingState. The internal 7-step pipeline rail in
-  // <ProcessingState> renders BELOW the band, untouched.
   const hasInput =
     visit.audioKey !== null ||
     visit.dictationAudioKey !== null ||
     (visit.rawTextInput !== null && visit.rawTextInput.length > 0);
-  const isProcessing =
-    PROCESSING_STATES.includes(visit.status) ||
-    (visit.status === TranscribeVisitStatus.QUEUED && hasInput);
-  const showHeroBand = isReadyOrSigned || isProcessing;
 
   const patientDisplayName =
     visit.patient?.name ?? visit.patientName ?? 'Patient';
-  // Phase 4 — name splitting (head + sage-glowed tail) moved into
-  // <CinematicVisitHero>, which performs its own splitNameForGlow().
+  const statusLabel = visitStatusLabel(visit.status, visit.needsReview);
+  const statusPillCls = visitStatusPillClass(visit.status, visit.needsReview);
 
   return (
-    // Phase 2 (Clinician remodel) — visit-detail opts in to the
-    // Clinician chrome via `theme="clinician"`. Every visible child
-    // below is also threaded with theme="clinician" so the entire
-    // tree resolves against the warm cream / sage / serif token
-    // namespace.
-    <AppFrame theme="clinician">
+    <AppFrame>
+      {/* Linear V1 breadcrumb — sits at the top of the content
+          column, hairline-separated from the meta strip below. */}
       <div
         style={{
-          padding: '18px 32px 0',
+          padding: '14px 24px 0',
           display: 'flex',
           alignItems: 'center',
           gap: 8,
+          fontFamily: 'var(--font-sans)',
           fontSize: 13,
-          color: 'var(--ink-3, #8A8278)',
+          color: 'var(--color-linear-text-3)',
         }}
       >
         <Link
           href="/dashboard"
           style={{
-            color: 'var(--ink-3, #8A8278)',
+            color: 'var(--color-linear-text-3)',
             textDecoration: 'none',
           }}
         >
@@ -261,7 +254,7 @@ export default async function VisitPage({
             <Link
               href={`/patients/${visit.patient.id}`}
               style={{
-                color: 'var(--ink-3, #8A8278)',
+                color: 'var(--color-linear-text-3)',
                 textDecoration: 'none',
               }}
             >
@@ -270,44 +263,79 @@ export default async function VisitPage({
             <Ic.chevRight width={12} height={12} />
           </>
         ) : null}
-        <span
-          className="qm-cl-serif"
-          style={{ color: 'var(--ink, #2B2620)' }}
-        >
+        <span style={{ color: 'var(--color-linear-text), inherit' }}>
           Visit · {visit.status.toLowerCase()}
         </span>
       </div>
 
-      {/* Phase 4 — Apple Cinematic hero band fronts the visit-detail
-          for READY/SIGNED, every PROCESSING sub-state (TRANSCRIBING …
-          AUTOMATING), and QUEUED-with-input (the moment between
-          upload and the first pipeline tick). The band carries the
-          breadcrumb + specialty/status pills + word-by-word patient
-          name with sage glow on the last token, and lives BETWEEN
-          the upper sliver breadcrumb and the lifecycle actions row.
-          Below the band, every existing component (visit-ready-view,
-          processing-state's 7-step pipeline rail, etc.) renders
-          unchanged. */}
-      {showHeroBand && (
-        <CinematicVisitHero
-          patientName={patientDisplayName}
-          specialty={specialtyLabel(visit.specialty)}
-          status={
-            visit.needsReview && visit.status === TranscribeVisitStatus.READY
-              ? 'READY'
-              : heroStatus(visit.status)
-          }
-          chiefComplaint={visit.chiefComplaint}
-          metaLine={
-            visit.patient?.externalId
-              ? `MRN-${visit.patient.externalId}`
-              : null
-          }
-          showBreadcrumb={true}
-        />
-      )}
+      {/* Linear V1 patient meta strip — mono uppercase fields with
+          hairline dividers. Mirrors visit-detail.html. */}
+      <div
+        style={{
+          margin: '14px 24px 0',
+          padding: '10px 0 14px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 0,
+          flexWrap: 'wrap',
+          borderBottom: '1px solid var(--color-linear-hairline)',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 11,
+          letterSpacing: '0.06em',
+          textTransform: 'uppercase',
+          color: 'var(--color-linear-text-2)',
+        }}
+      >
+        <div
+          style={{
+            paddingRight: 14,
+            borderRight: '1px solid var(--color-linear-hairline)',
+            color: 'var(--color-linear-text)',
+            fontWeight: 500,
+          }}
+        >
+          {patientDisplayName.toUpperCase()}
+        </div>
+        <div
+          style={{
+            padding: '0 14px',
+            borderRight: '1px solid var(--color-linear-hairline)',
+          }}
+        >
+          {specialtyLabel(visit.specialty)}
+        </div>
+        {visit.patient?.externalId && (
+          <div
+            style={{
+              padding: '0 14px',
+              borderRight: '1px solid var(--color-linear-hairline)',
+            }}
+          >
+            <span style={{ color: 'var(--color-linear-text-3)' }}>MRN&nbsp;</span>
+            {visit.patient.externalId}
+          </div>
+        )}
+        {visit.chiefComplaint && (
+          <div
+            style={{
+              padding: '0 14px',
+              borderRight: '1px solid var(--color-linear-hairline)',
+            }}
+          >
+            <span style={{ color: 'var(--color-linear-text-3)' }}>CC&nbsp;</span>
+            <span style={{ textTransform: 'none', letterSpacing: '-0.005em' }}>
+              {visit.chiefComplaint}
+            </span>
+          </div>
+        )}
+        <div style={{ padding: '0 14px', marginLeft: 'auto' }}>
+          <span className={statusPillCls} style={{ textTransform: 'uppercase' }}>
+            {statusLabel}
+          </span>
+        </div>
+      </div>
 
-      <div style={{ padding: '12px 32px 0' }}>
+      <div style={{ padding: '14px 24px 0' }}>
         <VisitLifecycleActions
           visitId={visit.id}
           status={visit.status}
@@ -316,7 +344,6 @@ export default async function VisitPage({
             visit.archivedAt ? visit.archivedAt.toISOString() : null
           }
           hasInput={hasInput}
-          theme="clinician"
           editSlot={
             visit.status === TranscribeVisitStatus.QUEUED &&
             visit.audioKey === null &&
@@ -343,14 +370,13 @@ export default async function VisitPage({
                     | 'voice_dictation'
                     | 'text_notes'
                 }
-                theme="clinician"
               />
             ) : null
           }
         />
       </div>
 
-      <div style={{ padding: '18px 32px 48px' }}>
+      <div style={{ padding: '18px 24px 48px' }}>
         <VisitBody
           visitId={visit.id}
           doctorEmail={user.email}
@@ -386,97 +412,6 @@ export default async function VisitPage({
         />
       </div>
     </AppFrame>
-  );
-}
-
-function VisitReadyHeader({
-  title,
-  specialty,
-  chiefComplaint,
-  status,
-  needsReview,
-}: {
-  title: React.ReactNode;
-  specialty: string;
-  chiefComplaint: string | null;
-  status: TranscribeVisitStatus;
-  needsReview: boolean;
-}) {
-  const signed = status === TranscribeVisitStatus.SIGNED;
-  const statusLabel = signed ? 'Signed' : needsReview ? 'Needs review' : 'Ready';
-  // Clinician status pill mapping: signed → sage-deep, ready → sage,
-  // needs-review → amber. Same semantic ordering as the dashboard
-  // patient-row pills.
-  const statusPillCls = signed
-    ? 'qm-cl-pill qm-cl-pill-soft'
-    : needsReview
-      ? 'qm-cl-pill qm-cl-pill-amber'
-      : 'qm-cl-pill qm-cl-pill-sage';
-  return (
-    <div
-      style={{
-        padding: '16px 32px 24px',
-        display: 'flex',
-        alignItems: 'flex-end',
-        gap: 20,
-        borderBottom: '1px solid var(--line, rgba(43, 38, 32, 0.08))',
-        flexWrap: 'wrap',
-      }}
-    >
-      <div style={{ flex: 1, minWidth: 280 }}>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 12,
-            marginBottom: 10,
-          }}
-        >
-          <SpecChip kind={toSpecKind(specialty)} size="md" />
-          <span className={statusPillCls}>
-            <span className="qm-cl-pill-dot" />
-            {statusLabel}
-          </span>
-        </div>
-        <h1
-          className="qm-cl-serif"
-          style={{
-            margin: 0,
-            fontSize: 34,
-            fontWeight: 500,
-            letterSpacing: '-0.015em',
-            lineHeight: 1.1,
-            color: 'var(--ink, #2B2620)',
-          }}
-        >
-          {title}
-        </h1>
-        {chiefComplaint && (
-          <p
-            style={{
-              margin: '8px 0 0',
-              fontSize: 13.5,
-              color: 'var(--ink-3, #8A8278)',
-              lineHeight: 1.5,
-            }}
-          >
-            <span
-              style={{
-                fontFamily: 'var(--mono, ui-monospace)',
-                fontSize: 11.5,
-                letterSpacing: '0.04em',
-                textTransform: 'uppercase',
-                color: 'var(--ink-4, #B5AE9F)',
-                marginRight: 8,
-              }}
-            >
-              CC
-            </span>
-            {chiefComplaint}
-          </p>
-        )}
-      </div>
-    </div>
   );
 }
 
@@ -521,11 +456,8 @@ interface VisitBodyProps {
 
 function VisitBody(props: VisitBodyProps) {
   if (props.status === TranscribeVisitStatus.QUEUED) {
-    // Batch E (Phase 2 Clinician remodel) — the visit-creation
-    // primitives now accept a theme prop, so we thread "clinician"
-    // through to match the surrounding `<AppFrame theme="clinician">`.
     if (props.inputMode === 'audio_upload' && !props.audioKey) {
-      return <AudioUploader visitId={props.visitId} theme="clinician" />;
+      return <AudioUploader visitId={props.visitId} />;
     }
     if (
       props.inputMode === 'voice_dictation' &&
@@ -534,7 +466,7 @@ function VisitBody(props: VisitBodyProps) {
       return <VoiceDictator visitId={props.visitId} theme="clinician" />;
     }
     if (props.inputMode === 'text_notes' && !props.rawTextInput) {
-      return <TextComposer visitId={props.visitId} theme="clinician" />;
+      return <TextComposer visitId={props.visitId} />;
     }
   }
 
@@ -550,7 +482,6 @@ function VisitBody(props: VisitBodyProps) {
         visitId={props.visitId}
         initialStatus={props.status}
         initialHint={PROGRESS_HINT[props.status]}
-        theme="clinician"
       />
     );
   }
@@ -561,7 +492,6 @@ function VisitBody(props: VisitBodyProps) {
         visitId={props.visitId}
         reason={props.reviewReason}
         failureCategory={props.failureCategory}
-        theme="clinician"
       />
     );
   }
@@ -637,7 +567,6 @@ function VisitBody(props: VisitBodyProps) {
         props.signedAt ? props.signedAt.toISOString() : null
       }
       signedByName={props.doctorName}
-      theme="clinician"
     />
   );
 }

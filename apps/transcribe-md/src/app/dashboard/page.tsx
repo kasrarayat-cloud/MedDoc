@@ -1,27 +1,19 @@
 // ============================================================================
-// Dashboard — app-redesign-v1 (HANDOFF §2.2).
+// Phase 5 — Linear V1 Faithful dashboard.
 // ----------------------------------------------------------------------------
 // /dashboard                → Patients tab (default)
 // /dashboard?tab=all        → All visits tab (grouped by day)
 //
-// This is the first screen that mounts the new shell chrome — wraps
-// in <AppFrame> which owns TopNav + IconRail + the scrollable main
-// per §8.2. Stats + tab content run in parallel inside the same
-// server component; the page is re-rendered on tab change via Link.
+// The Phase 4 cinematic photo-band hero is gone. Linear V1 dashboard
+// opens with a single-line typographic greeting (Greeting component),
+// followed by an inline stats row, followed by the tab nav and the
+// active tab content. The 240 px sidebar lives upstream in
+// <AppFrame>; this page only renders the main column.
 //
-// The previous T-M18.2 "Trash" tab + archived toggle are not ported
-// yet — the new dashboard is deliberately two-tab per the redesign
-// brief. Global trash stays recoverable via /patients/[id] pages.
+// Reference: docs/design-directions-v8-linear/dashboard-v1.html.
 //
-// Phase 2 (Clinician remodel — Batch C): opts in to the new chrome
-// by passing `theme="clinician"` to <AppFrame> and threading the
-// same `theme` through every restyled child (PageHeader, StatCard,
-// PatientCard, VisitList). Inline JSX (TabBar, EmptyPatients,
-// EmptyVisits, DashboardSkeleton) is restyled in-place using the
-// `.qm-cl-*` class catalog — they aren't reused elsewhere so a
-// theme prop on each would just duplicate code paths nobody else
-// calls. Server-side data fetching (auth, prisma queries, redirect)
-// is unchanged per PROTECTED_CONTRACTS.md.
+// Server-side data fetching (auth, prisma queries, redirects) is
+// unchanged per PROTECTED_CONTRACTS.md.
 // ============================================================================
 
 import type { Metadata } from 'next';
@@ -33,27 +25,12 @@ import prisma from '@meddoc/db';
 import { TranscribeVisitStatus } from '@prisma/client';
 import { auth } from '@/lib/nextauth';
 import { AppFrame } from '@/components/ui/app-frame';
-import { Ic } from '@/components/ui/icon';
 import { StatCard } from '@/components/dashboard/stat-card';
+import { Greeting } from '@/components/dashboard/greeting';
 import {
   VisitList,
   type DashboardVisit,
 } from '@/components/dashboard/visit-list';
-// Phase 3 Wave 2 (dashboard density). Brings the patients tab to mockup
-// fidelity — the 11-row PatientList projecting the same data the legacy
-// <PatientCard> grid used to consume, and a "Three drafts, ready when
-// you are." section of preview cards under the patient list. The
-// legacy <PatientCard> grid is no longer rendered from this page (the
-// component itself stays in /components/dashboard/ for /patients/[id]
-// consumers).
-//
-// Phase 4 (cinematic). The greeting line that lived inside the body
-// (Greeting component) is replaced by a full-width photo hero band
-// (CinematicDashboardHero) that swaps the photo + greeting word based
-// on the doctor's local Pacific-time bucket. The Greeting component
-// itself stays in components/dashboard/ in case a non-cinematic
-// surface wants it; this page simply doesn't render it anymore.
-import { CinematicDashboardHero, type DashboardTimeBucket } from '@/components/dashboard/CinematicDashboardHero';
 import {
   PatientList,
   type DashboardListPatient,
@@ -68,8 +45,6 @@ export const metadata: Metadata = { title: 'Dashboard' };
 type SearchParams = Record<string, string | string[] | undefined>;
 type ActiveTab = 'patients' | 'all';
 
-// PATIENTS_PAGE_SIZE is gone — the patient panel is capped by
-// DASHBOARD_PATIENT_LIMIT (11) downstream to match the mockup.
 const VISITS_PAGE_SIZE = 20;
 
 export default async function DashboardPage({
@@ -80,9 +55,6 @@ export default async function DashboardPage({
   const session = await auth();
   if (!session?.user?.id) redirect('/login');
 
-  // Phase 3 Wave 2 — also pull `name` so the greeting can read
-  // "Good morning, Dr. {firstName}." downstream. The existing
-  // practiceId hand-off is unchanged.
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
     select: { practiceId: true, name: true },
@@ -93,43 +65,18 @@ export default async function DashboardPage({
   const tabRaw = Array.isArray(params.tab) ? params.tab[0] : params.tab;
   const activeTab: ActiveTab = tabRaw === 'all' ? 'all' : 'patients';
 
-  // Phase 4 — compute the initial time-of-day bucket on the SERVER so
-  // the cinematic hero band's first paint matches the active photo
-  // exactly (no FOUC, no hydration mismatch). The client component
-  // re-checks every 60 s and crossfades when the bucket flips.
-  // US/Pacific is the launch market and the source of truth here.
-  const initialBucket = computeInitialPtBucket();
-
   return (
-    <AppFrame theme="clinician">
+    <AppFrame>
       <Suspense fallback={<DashboardSkeleton />}>
         <DashboardBody
           userId={session.user.id}
           practiceId={user.practiceId}
           userName={user.name}
           activeTab={activeTab}
-          initialBucket={initialBucket}
         />
       </Suspense>
     </AppFrame>
   );
-}
-
-/** Server-side PT-hour → bucket mapping. Mirrored on the client side
- *  inside <CinematicDashboardHero>; keeping the formula in both places
- *  is intentional — the server pass renders the SSR-safe initial photo
- *  and the client pass picks up any boundary crossings the SSR cache
- *  missed. */
-function computeInitialPtBucket(): DashboardTimeBucket {
-  const ptNow = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/Los_Angeles',
-    hour: 'numeric',
-    hour12: false,
-  }).format(new Date());
-  const ptHour = parseInt(ptNow, 10) % 24;
-  if (ptHour >= 5 && ptHour < 12) return 'morning';
-  if (ptHour >= 12 && ptHour < 18) return 'afternoon';
-  return 'evening';
 }
 
 async function DashboardBody({
@@ -137,13 +84,11 @@ async function DashboardBody({
   practiceId,
   userName,
   activeTab,
-  initialBucket,
 }: {
   userId: string;
   practiceId: string;
   userName: string | null;
   activeTab: ActiveTab;
-  initialBucket: DashboardTimeBucket;
 }) {
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -208,82 +153,67 @@ async function DashboardBody({
   const avgDraftedSec = avgDraftedAgg._avg.draftedInSeconds;
   const avgDraftedMin = avgDraftedSec != null ? Math.round(avgDraftedSec / 60) : null;
 
-  // Brand-new account (no data yet) — first-session orb was the old
-  // empty state; here we fall through to the patients empty-state
-  // below. Stats row stays at zero so the doctor can see the scaffold
-  // before it fills in.
-
-  // Phase 3 Wave 2 — derive the doctor's first name for the greeting.
-  // Splits on whitespace so "Mei-Ling Chen" reads as "Mei-Ling".
   const firstName = userName ? userName.trim().split(/\s+/)[0] ?? null : null;
 
-  return (
+  // Greeting subtitle — sage-bright callout when there are pending
+  // reviews so the doctor sees the action signal at a glance.
+  const subtitleNode = (
     <>
-      {/* Phase 4 — cinematic time-based hero band. Replaces the
-         in-page <Greeting> + "+ New visit" row. The greeting word
-         (morning / afternoon / evening) and matching photo are
-         driven by the doctor's Pacific-time bucket; the band silently
-         crossfades when the bucket flips during a long session.
-         The "+ New visit" CTA stays accessible from the top-nav
-         (rendered by <AppFrame>), so the button doesn't disappear
-         from the dashboard chrome — it's just hosted upstream. */}
-      <CinematicDashboardHero
-        initialBucket={initialBucket}
-        firstName={firstName}
-        subtitle={
-          <>
-            {patientCount} patient{patientCount === 1 ? '' : 's'} ·{' '}
-            {activeVisitCount} total visit
-            {activeVisitCount === 1 ? '' : 's'}
-            {pendingReview > 0 && (
-              <>
-                {' · '}
-                <span style={{ color: 'var(--color-clinician-sage-bright)' }}>
-                  {pendingReview} awaiting your review
-                </span>
-              </>
-            )}
-          </>
-        }
-      />
+      {patientCount} patient{patientCount === 1 ? '' : 's'} ·{' '}
+      {activeVisitCount} visit{activeVisitCount === 1 ? '' : 's'}
+      {pendingReview > 0 && (
+        <>
+          {' · '}
+          <span style={{ color: 'var(--color-linear-sage-bright)' }}>
+            {pendingReview} awaiting review
+          </span>
+        </>
+      )}
+    </>
+  );
+
+  return (
+    <div style={{ padding: '18px 24px 80px' }}>
+      <Greeting firstName={firstName} subtitle={subtitleNode} />
 
       <div
         style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
-          gap: 16,
-          padding: '40px 40px 24px',
+          display: 'flex',
+          alignItems: 'flex-end',
+          gap: 0,
+          padding: '6px 0 14px',
+          marginBottom: 8,
+          borderBottom: '1px solid var(--color-linear-hairline)',
         }}
       >
-        {/* Existing 4 metric cards stay unchanged. */}
         <StatCard
-          theme="clinician"
           label={`Visits / ${now.toLocaleString('en-US', { month: 'short' })}`}
           value={visitsThisMonth}
           unit="this month"
         />
         <StatCard
-          theme="clinician"
           label="Avg drafted in"
           value={avgDraftedMin != null ? avgDraftedMin : '—'}
           unit={avgDraftedMin != null ? 'min / visit' : 'no data yet'}
         />
         <StatCard
-          theme="clinician"
           label="Pending review"
           value={pendingReview}
           unit={pendingReview === 1 ? 'visit' : 'visits'}
           deltaTone={pendingReview > 0 ? 'amber' : 'mint'}
         />
         <StatCard
-          theme="clinician"
           label="Signed this week"
           value={signedThisWeek}
           unit={signedThisWeek === 1 ? 'note' : 'notes'}
         />
       </div>
 
-      <TabBar activeTab={activeTab} patientCount={patientCount} visitCount={activeVisitCount} />
+      <TabBar
+        activeTab={activeTab}
+        patientCount={patientCount}
+        visitCount={activeVisitCount}
+      />
 
       {activeTab === 'patients' ? (
         <PatientsTab
@@ -294,7 +224,7 @@ async function DashboardBody({
       ) : (
         <AllVisitsTab userId={userId} visitCount={activeVisitCount} />
       )}
-    </>
+    </div>
   );
 }
 
@@ -311,50 +241,62 @@ function TabBar({
     { id: 'patients', label: 'Patients', count: patientCount, href: '/dashboard' },
     { id: 'all', label: 'All visits', count: visitCount, href: '/dashboard?tab=all' },
   ];
-  // Mockup ref: docs/design-directions-v3/clinician/dashboard.html L571–576.
-  // Soft tab pills (`.qm-cl-tab-row` / `.qm-cl-tab` + `.qm-cl-active`)
-  // sit on the page, not on a bottom-border underline like the legacy
-  // tabs. Counts ride alongside the label in muted ink-4.
+
   return (
     <div
       style={{
-        padding: '4px 40px 18px',
         display: 'flex',
-        justifyContent: 'flex-start',
+        alignItems: 'center',
+        gap: 6,
+        marginTop: 16,
+        marginBottom: 4,
       }}
     >
-      <div className="qm-cl-tab-row">
-        {tabs.map((t) => {
-          const active = t.id === activeTab;
-          return (
-            <Link
-              key={t.id}
-              href={t.href}
-              scroll={false}
-              className={`qm-cl-tab${active ? ' qm-cl-active' : ''}`}
+      {tabs.map((t) => {
+        const active = t.id === activeTab;
+        return (
+          <Link
+            key={t.id}
+            href={t.href}
+            scroll={false}
+            aria-current={active ? 'page' : undefined}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '6px 12px',
+              borderRadius: 6,
+              fontFamily: 'var(--font-sans)',
+              fontSize: 12.5,
+              color: active
+                ? 'var(--color-linear-text)'
+                : 'var(--color-linear-text-2)',
+              background: active
+                ? 'var(--color-linear-sage-tint)'
+                : 'transparent',
+              textDecoration: 'none',
+              transition:
+                'background-color 100ms ease, color 100ms ease',
+              fontWeight: active ? 500 : 400,
+              letterSpacing: '-0.005em',
+            }}
+          >
+            {t.label}
+            <span
               style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 8,
-                textDecoration: 'none',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                color: active
+                  ? 'var(--color-linear-sage-bright)'
+                  : 'var(--color-linear-text-3)',
+                fontVariantNumeric: 'tabular-nums',
               }}
-              aria-current={active ? 'page' : undefined}
             >
-              {t.label}
-              <span
-                style={{
-                  fontFamily: 'var(--mono)',
-                  fontSize: 11,
-                  color: active ? 'var(--sage-deep)' : 'var(--ink-4)',
-                  opacity: active ? 0.85 : 1,
-                }}
-              >
-                {t.count}
-              </span>
-            </Link>
-          );
-        })}
-      </div>
+              {t.count}
+            </span>
+          </Link>
+        );
+      })}
     </div>
   );
 }
@@ -370,19 +312,6 @@ async function PatientsTab({
 }) {
   if (patientCount === 0) return <EmptyPatients />;
 
-  // Phase 3 Wave 2 (dashboard density). Same two-query form as before,
-  // extended with two extra columns (`signedAt`, `chiefComplaint`)
-  // pulled from the latest visit so the new <PatientList> rows can
-  // render the Batch H "Signed · {date}" pill and the italic
-  // chief-complaint snippet from the mockup. A third parallel query
-  // grabs the most-recent READY-but-unsigned visits for the
-  // "Three drafts, ready when you are." section.
-  //
-  // Patient cap drops from 20 to 11 (PATIENTS_PAGE_SIZE → DASHBOARD_PATIENT_LIMIT)
-  // to match the mockup's "Eleven faces on the schedule." copy. The
-  // legacy 20-row scroll wasn't truly paginated upstream — this
-  // tightens the dashboard view without losing any patients (full list
-  // is at /patients).
   type LatestVisit = {
     id: string;
     createdAt: Date;
@@ -436,12 +365,6 @@ async function PatientsTab({
         },
       },
     }) as Promise<PatientRow[]>,
-    // Drafts query — READY status, not yet signed, ordered by most
-    // recently updated. Pull soapFinal AND soapDraft so we can prefer
-    // the post-Layer-6 polish but fall back to Layer 4 output if the
-    // pipeline stopped short. patient.name lives behind a relation
-    // include since the dashboard always wants the canonical name
-    // (visit.patientName is a legacy free-text fallback).
     prisma.transcribeVisit.findMany({
       where: {
         userId,
@@ -479,7 +402,7 @@ async function PatientsTab({
       })
     : [];
   const countByPatient = new Map<string, number>(
-    counts.map((c: CountRow) => [c.patientId, c._count._all])
+    counts.map((c: CountRow) => [c.patientId, c._count._all]),
   );
 
   const patients: DashboardListPatient[] = rows.map(
@@ -488,12 +411,10 @@ async function PatientsTab({
       return {
         id: r.id,
         name: r.name,
-        // DOB is a date — slice the ISO to avoid any TZ influence.
         dateOfBirth: r.dateOfBirth
           ? r.dateOfBirth.toISOString().slice(0, 10)
           : null,
         visitCount: countByPatient.get(r.id) ?? 0,
-        // Full ISO UTC — client formats in viewer's timezone.
         lastVisitAt: latest?.createdAt.toISOString() ?? null,
         lastVisitSpecialty: latest?.specialty ?? null,
         lastVisitStatus: latest?.status ?? null,
@@ -501,14 +422,11 @@ async function PatientsTab({
         lastVisitSignedAt: latest?.signedAt
           ? latest.signedAt.toISOString()
           : null,
-        // Clip on the server so a long chief complaint doesn't push the
-        // serialized payload up. ~80 chars matches the mockup's snippet
-        // budget (one-line italic).
         lastVisitChiefComplaint: clipChiefComplaint(
-          latest?.chiefComplaint ?? null
+          latest?.chiefComplaint ?? null,
         ),
       };
-    }
+    },
   );
 
   const drafts: DraftReadyVisit[] = draftRows.map(
@@ -520,7 +438,7 @@ async function PatientsTab({
       draftedAt: v.updatedAt.toISOString(),
       previewLine: firstLineFromSoap(v.soapFinal ?? v.soapDraft, v.chiefComplaint),
       needsReview: v.needsReview,
-    })
+    }),
   );
 
   return (
@@ -536,16 +454,9 @@ const DASHBOARD_DRAFT_LIMIT = 3;
 const SOAP_PREVIEW_MAX_CHARS = 160;
 const CHIEF_PREVIEW_MAX_CHARS = 80;
 
-/** Pick the first non-empty line of the SOAP body for the drafts-ready
- *  preview. Falls back to the visit's chief complaint when soapFinal /
- *  soapDraft are both empty (failed pipeline). Strips markdown headers
- *  ("S:", "Subjective:", "##") so the preview reads as prose, not as a
- *  section label. Server-side, no PHI redaction beyond what's already
- *  in the raw text — the dashboard rendering is in-session for the
- *  authed doctor. */
 function firstLineFromSoap(
   body: string | null | undefined,
-  chiefComplaint: string | null | undefined
+  chiefComplaint: string | null | undefined,
 ): string | null {
   const source = body && body.trim().length > 0 ? body : chiefComplaint ?? '';
   if (!source) return null;
@@ -565,9 +476,6 @@ function firstLineFromSoap(
   return null;
 }
 
-/** Clip the patient-list chief-complaint snippet to a single-line
- *  budget. Trims trailing punctuation that would render awkwardly
- *  inside curly quotes. */
 function clipChiefComplaint(raw: string | null | undefined): string | null {
   if (!raw) return null;
   const trimmed = raw.replace(/\s+/g, ' ').trim();
@@ -622,15 +530,13 @@ async function AllVisitsTab({
       specialty: v.specialty,
       status: v.status,
       needsReview: v.needsReview,
-      // ISO UTC — <VisitList> formats + buckets in viewer's local TZ.
       createdAt: v.createdAt.toISOString(),
-      // Batch H: surfaces "Signed · {date}" pill on the visit-list row.
       signedAt: v.signedAt ? v.signedAt.toISOString() : null,
       audioDurationSec: v.audioDurationSec,
-    })
+    }),
   );
 
-  return <VisitList visits={visits} theme="clinician" />;
+  return <VisitList visits={visits} />;
 }
 
 function EmptyPatients() {
@@ -648,42 +554,40 @@ function EmptyPatients() {
       <div
         aria-hidden
         style={{
-          width: 96,
-          height: 96,
-          borderRadius: 24,
-          background: 'var(--sage-tint)',
-          border: '1px solid var(--sage-tint-strong)',
+          width: 56,
+          height: 56,
+          borderRadius: 14,
+          background: 'var(--color-linear-sage-tint)',
+          border: '1px solid rgba(122, 166, 140, 0.3)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          marginBottom: 22,
+          marginBottom: 18,
+          color: 'var(--color-linear-sage-bright)',
+          fontSize: 22,
         }}
       >
-        <Ic.sparkle
-          width={36}
-          height={36}
-          style={{ color: 'var(--sage-deep)' }}
-        />
+        +
       </div>
       <h2
-        className="qm-cl-serif"
         style={{
           margin: 0,
-          fontSize: 28,
-          fontWeight: 400,
-          letterSpacing: '-0.01em',
-          color: 'var(--ink)',
+          fontFamily: 'var(--font-sans)',
+          fontSize: 22,
+          fontWeight: 500,
+          letterSpacing: '-0.012em',
+          color: 'var(--color-linear-text)',
           lineHeight: 1.2,
         }}
       >
-        No patients <em style={{ color: 'var(--sage-deep)' }}>yet</em>
+        No patients yet
       </h2>
       <p
-        className="qm-cl-serif"
         style={{
-          marginTop: 12,
-          fontSize: 15,
-          color: 'var(--ink-2)',
+          marginTop: 10,
+          fontFamily: 'var(--font-sans)',
+          fontSize: 13.5,
+          color: 'var(--color-linear-text-2)',
           lineHeight: 1.55,
           maxWidth: 360,
         }}
@@ -693,13 +597,15 @@ function EmptyPatients() {
       </p>
       <Link
         href="/visits/new"
-        className="qm-cl-btn qm-cl-btn-primary"
+        className="qm-lin-btn-primary"
         style={{
-          marginTop: 22,
+          marginTop: 18,
           textDecoration: 'none',
+          height: 32,
+          padding: '0 14px',
+          fontSize: 13,
         }}
       >
-        <Ic.plus width={14} height={14} />
         Start your first visit
       </Link>
     </div>
@@ -713,15 +619,19 @@ function EmptyVisits() {
         margin: '60px auto',
         maxWidth: 460,
         textAlign: 'center',
-        color: 'var(--ink-3)',
-        fontSize: 14.5,
-        fontFamily: 'var(--serif)',
+        color: 'var(--color-linear-text-3)',
+        fontFamily: 'var(--font-sans)',
+        fontSize: 13,
       }}
     >
       No visits yet for any patient.{' '}
       <Link
         href="/visits/new"
-        style={{ color: 'var(--sage-deep)', fontWeight: 500 }}
+        style={{
+          color: 'var(--color-linear-sage-bright)',
+          fontWeight: 500,
+          textDecoration: 'none',
+        }}
       >
         Start one →
       </Link>
@@ -730,57 +640,69 @@ function EmptyVisits() {
 }
 
 function DashboardSkeleton() {
-  // Cream-tinted skeleton tiles. The legacy `.qm-shimmer` animation
-  // is built around a violet-on-dark gradient, which reads off-key
-  // on the warm cream canvas. For the Clinician variant we just
-  // render quiet placeholder rectangles in cream-2 — restful, no
-  // theatrical motion (per direction CL-5).
+  // Linear V1 skeleton — quiet linear-surface-2 placeholders, no shimmer.
   const tile: React.CSSProperties = {
-    background: 'var(--cream-2)',
-    border: '1px solid var(--line)',
-    borderRadius: 16,
+    background: 'var(--color-linear-surface-2)',
+    border: '1px solid var(--color-linear-border)',
+    borderRadius: 8,
   };
   return (
-    <div style={{ padding: '40px 40px 0' }}>
+    <div style={{ padding: '18px 24px 0' }}>
       <div
         style={{
-          height: 38,
+          height: 18,
           width: 320,
-          marginBottom: 12,
-          ...tile,
-          borderRadius: 8,
-        }}
-      />
-      <div
-        style={{
-          height: 16,
-          width: 240,
-          marginBottom: 28,
+          marginBottom: 18,
           ...tile,
           borderRadius: 6,
         }}
       />
       <div
         style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
-          gap: 16,
-          marginBottom: 24,
+          display: 'flex',
+          gap: 0,
+          padding: '6px 0 14px',
+          marginBottom: 8,
+          borderBottom: '1px solid var(--color-linear-hairline)',
         }}
       >
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} style={{ height: 140, ...tile }} />
+          <div
+            key={i}
+            style={{
+              flex: 1,
+              padding: '0 18px',
+              borderRight:
+                i < 3
+                  ? '1px solid var(--color-linear-hairline)'
+                  : 'none',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 6,
+            }}
+          >
+            <div style={{ height: 22, width: 60, ...tile, borderRadius: 4 }} />
+            <div style={{ height: 10, width: 80, ...tile, borderRadius: 3 }} />
+          </div>
         ))}
       </div>
       <div
         style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-          gap: 16,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 0,
+          marginTop: 18,
         }}
       >
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} style={{ height: 140, ...tile }} />
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div
+            key={i}
+            style={{
+              height: 36,
+              borderBottom: '1px solid var(--color-linear-hairline)',
+              opacity: 0.6,
+            }}
+          />
         ))}
       </div>
     </div>

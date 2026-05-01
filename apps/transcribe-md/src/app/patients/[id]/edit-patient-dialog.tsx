@@ -1,13 +1,15 @@
 'use client';
 
 // ============================================================================
-// Edit Patient dialog (T-M17.2 Phase 3 Commit 10)
+// Edit Patient dialog
 // ----------------------------------------------------------------------------
-// Radix Dialog fronting PATCH /api/patients/[id]. Three editable fields:
+// Radix Dialog fronting PATCH /api/patients/[id]. Editable fields:
 //   name          required, trimmed, 1-200 chars
 //   dateOfBirth   optional — empty input means "unset", otherwise the
 //                 shared validateDob() helper catches typos (future,
 //                 pre-1900, calendar-impossible)
+//   mrn           optional, 0-50 chars
+//   insurance     optional, 0-200 chars
 //   externalId    optional, 0-100 chars
 //
 // Submit is gated on (form-valid AND something actually changed from
@@ -16,6 +18,10 @@
 //
 // On success: router.refresh() so the server component re-fetches and
 // the header's name/DOB/externalId re-render with the new values.
+//
+// Phase 5 (Linear V1 Faithful) — spotlight overlay on the dark canvas.
+// Form fields render against linear-surface-1 with sage focus ring; the
+// previous violet gradient CTA becomes the standard sage primary.
 // ============================================================================
 
 import { useMemo, useState } from 'react';
@@ -50,6 +56,9 @@ interface UpdateResponse {
   error?: string;
   field?: string;
 }
+
+const FIELD_INPUT_CLS =
+  'block w-full rounded-md border border-linear-border bg-linear-surface-1 px-3 py-2 text-[14px] text-linear-text placeholder:text-linear-text-3 outline-none transition-colors focus:border-linear-border-strong focus:ring-2 focus:ring-linear-sage/40';
 
 export function EditPatientDialog({
   patientId,
@@ -181,21 +190,21 @@ export function EditPatientDialog({
       <Dialog.Trigger asChild>
         <button
           type="button"
-          className="inline-flex items-center gap-1.5 rounded-full border border-border-default bg-bg-surface-1/60 px-4 py-2 text-[13px] font-medium text-text-secondary transition-colors hover:bg-bg-surface-2/70 hover:border-border-emphasis focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base"
+          className="inline-flex items-center gap-1.5 rounded-md border border-linear-border bg-transparent px-3 py-1.5 text-[12px] font-medium text-linear-text-2 transition-colors hover:border-linear-border-strong hover:text-linear-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-linear-sage/40"
         >
           <Pencil className="h-3.5 w-3.5" aria-hidden />
           Edit
         </button>
       </Dialog.Trigger>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm data-[state=open]:animate-in data-[state=open]:fade-in" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border-default bg-bg-surface-1 p-6 shadow-2xl outline-none">
+        <Dialog.Overlay className="fixed inset-0 z-40 bg-black/60 backdrop-blur-[2px] data-[state=open]:animate-in data-[state=open]:fade-in" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-lg border border-linear-border-strong bg-linear-surface-2 p-6 shadow-[0_30px_80px_rgba(0,0,0,0.6)] outline-none">
           <div className="mb-5 flex items-start justify-between gap-3">
             <div>
-              <Dialog.Title className="text-[16px] font-semibold tracking-tight text-text-primary">
+              <Dialog.Title className="text-[16px] font-semibold tracking-tight text-linear-text">
                 Edit patient
               </Dialog.Title>
-              <Dialog.Description className="mt-1 text-[13px] text-text-tertiary">
+              <Dialog.Description className="mt-1 text-[13px] text-linear-text-3">
                 Changes apply only to this patient record. Visit history
                 stays intact.
               </Dialog.Description>
@@ -204,7 +213,7 @@ export function EditPatientDialog({
               <button
                 type="button"
                 aria-label="Close"
-                className="flex-none rounded-md p-1 text-text-muted hover:text-text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                className="flex-none rounded-md p-1 text-linear-text-3 hover:text-linear-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-linear-sage/40"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -215,7 +224,7 @@ export function EditPatientDialog({
             <div>
               <label
                 htmlFor="edit-patient-name"
-                className="mb-1 block text-[12px] font-medium tracking-tight text-text-tertiary"
+                className="mb-1 block font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-linear-text-3"
               >
                 Name
               </label>
@@ -226,18 +235,18 @@ export function EditPatientDialog({
                 onChange={(e) => setName(e.target.value)}
                 maxLength={200}
                 autoFocus
-                className="block w-full rounded-lg border border-border-default bg-bg-surface-1/80 px-3 py-2 text-[14px] text-text-primary outline-none transition-colors focus:border-violet-500 focus:ring-2 focus:ring-violet-500/30"
+                className={FIELD_INPUT_CLS}
               />
             </div>
 
             <div>
               <label
                 htmlFor="edit-patient-dob"
-                className="mb-1 flex items-center justify-between text-[12px] font-medium tracking-tight text-text-tertiary"
+                className="mb-1 flex items-center justify-between font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-linear-text-3"
               >
                 <span>
                   Date of birth{' '}
-                  <span className="font-normal text-text-muted">
+                  <span className="font-normal lowercase tracking-normal text-linear-text-3">
                     (clear to remove)
                   </span>
                 </span>
@@ -249,17 +258,19 @@ export function EditPatientDialog({
                 onChange={(e) => setDob(e.target.value)}
                 min={`${MIN_DOB_YEAR}-01-01`}
                 max={today}
-                className="block w-full rounded-lg border border-border-default bg-bg-surface-1/80 px-3 py-2 text-[14px] text-text-primary outline-none transition-colors focus:border-violet-500 focus:ring-2 focus:ring-violet-500/30"
+                className={FIELD_INPUT_CLS}
               />
             </div>
 
             <div>
               <label
                 htmlFor="edit-patient-mrn"
-                className="mb-1 block text-[12px] font-medium tracking-tight text-text-tertiary"
+                className="mb-1 block font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-linear-text-3"
               >
                 MRN{' '}
-                <span className="font-normal text-text-muted">(optional)</span>
+                <span className="font-normal lowercase tracking-normal text-linear-text-3">
+                  (optional)
+                </span>
               </label>
               <input
                 id="edit-patient-mrn"
@@ -268,17 +279,19 @@ export function EditPatientDialog({
                 onChange={(e) => setMrn(e.target.value)}
                 maxLength={50}
                 placeholder="Medical record number"
-                className="block w-full rounded-lg border border-border-default bg-bg-surface-1/80 px-3 py-2 text-[14px] text-text-primary placeholder:text-text-muted outline-none transition-colors focus:border-violet-500 focus:ring-2 focus:ring-violet-500/30"
+                className={FIELD_INPUT_CLS}
               />
             </div>
 
             <div>
               <label
                 htmlFor="edit-patient-ins"
-                className="mb-1 block text-[12px] font-medium tracking-tight text-text-tertiary"
+                className="mb-1 block font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-linear-text-3"
               >
                 Insurance{' '}
-                <span className="font-normal text-text-muted">(optional)</span>
+                <span className="font-normal lowercase tracking-normal text-linear-text-3">
+                  (optional)
+                </span>
               </label>
               <input
                 id="edit-patient-ins"
@@ -287,17 +300,17 @@ export function EditPatientDialog({
                 onChange={(e) => setInsurance(e.target.value)}
                 maxLength={200}
                 placeholder="Aetna PPO, Medicare, Self-pay…"
-                className="block w-full rounded-lg border border-border-default bg-bg-surface-1/80 px-3 py-2 text-[14px] text-text-primary placeholder:text-text-muted outline-none transition-colors focus:border-violet-500 focus:ring-2 focus:ring-violet-500/30"
+                className={FIELD_INPUT_CLS}
               />
             </div>
 
             <div>
               <label
                 htmlFor="edit-patient-ext"
-                className="mb-1 block text-[12px] font-medium tracking-tight text-text-tertiary"
+                className="mb-1 block font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-linear-text-3"
               >
                 External ID{' '}
-                <span className="font-normal text-text-muted">
+                <span className="font-normal lowercase tracking-normal text-linear-text-3">
                   (optional; separate from MRN)
                 </span>
               </label>
@@ -308,25 +321,22 @@ export function EditPatientDialog({
                 onChange={(e) => setExternalId(e.target.value)}
                 maxLength={100}
                 placeholder="EMR chart number"
-                className="block w-full rounded-lg border border-border-default bg-bg-surface-1/80 px-3 py-2 text-[14px] text-text-primary placeholder:text-text-muted outline-none transition-colors focus:border-violet-500 focus:ring-2 focus:ring-violet-500/30"
+                className={FIELD_INPUT_CLS}
               />
             </div>
 
-            {error && <p className="text-[12px] text-danger">{error}</p>}
+            {error && <p className="text-[12px] text-linear-danger">{error}</p>}
 
-            <div className="flex items-center justify-end gap-2 border-t border-border-subtle pt-4">
+            <div className="flex items-center justify-end gap-2 border-t border-linear-border pt-4">
               <Dialog.Close asChild>
-                <button
-                  type="button"
-                  className="rounded-full px-3 py-2 text-[13px] text-text-tertiary hover:text-text-secondary"
-                >
+                <button type="button" className="qm-lin-btn">
                   Cancel
                 </button>
               </Dialog.Close>
               <button
                 type="submit"
                 disabled={!canSubmit}
-                className="inline-flex items-center gap-1.5 rounded-full bg-[linear-gradient(135deg,#7C3AED_0%,#A855F7_100%)] px-4 py-2 text-[13px] font-medium text-white shadow-[0_0_0_1px_rgba(167,139,250,0.3)] transition-all hover:shadow-[0_0_0_1px_rgba(167,139,250,0.5)] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:shadow-[0_0_0_1px_rgba(167,139,250,0.3)]"
+                className="qm-lin-btn-primary disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                 Save changes

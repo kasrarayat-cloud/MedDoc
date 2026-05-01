@@ -11,27 +11,46 @@ export const metadata: Metadata = {
 
 const LAST_UPDATED = '2026-04-20';
 
+const SECTION_TITLE: React.CSSProperties = {
+  color: 'var(--color-linear-text)',
+};
+const SECTION_BODY: React.CSSProperties = {
+  marginTop: 16,
+  fontSize: 15,
+  lineHeight: 1.7,
+  color: 'var(--color-linear-text-2)',
+};
+
 export default function HipaaPage() {
   return (
     <>
       <NavBar />
       <main>
-        <section className="relative overflow-hidden pt-32 pb-16">
-          <div className="relative mx-auto max-w-3xl px-6 lg:px-8">
+        <section
+          className="relative overflow-hidden"
+          style={{ paddingTop: 96, paddingBottom: 48 }}
+        >
+          <div className="container" style={{ maxWidth: 760, position: 'relative' }}>
             <Badge dot="violet">Compliance</Badge>
-            <h1 className="mt-6 type-h1 text-text-primary">HIPAA Compliance</h1>
-            <p className="mt-6 text-[14px] text-text-muted">
+            <h1 className="hero-title" style={{ marginTop: 20, textAlign: 'left' }}>
+              HIPAA Compliance
+            </h1>
+            <p
+              style={{
+                marginTop: 16,
+                fontSize: 13,
+                color: 'var(--color-linear-text-3)',
+                fontFamily: 'var(--font-mono)',
+                letterSpacing: '0.04em',
+              }}
+            >
               Last updated: {LAST_UPDATED}
             </p>
-
-            <div
-              className="mt-8 rounded-xl border border-[rgba(212,165,116,0.35)] bg-[rgba(212,165,116,0.10)] p-4 text-[13.5px] leading-relaxed text-[#7A4F1F]"
-              style={{ fontFamily: 'var(--font-serif), Georgia, serif' }}
-            >
-              <strong className="font-medium">
+            <div className="qm-warn-moderate" style={{ marginTop: 24 }}>
+              <strong style={{ fontWeight: 600, color: 'var(--color-linear-text)' }}>
                 [DRAFT — PENDING LEGAL REVIEW]
               </strong>
-              <p className="mt-1.5">
+              <p style={{ marginTop: 6 }}>
                 This page is a practical summary of our HIPAA posture for
                 prospective customers. A reviewed version and our signed BAA
                 template will replace this document before we onboard paid
@@ -41,19 +60,34 @@ export default function HipaaPage() {
           </div>
         </section>
 
-        <section className="relative border-t border-border-subtle py-12">
-          <div className="mx-auto max-w-3xl px-6 lg:px-8 space-y-10 text-[15px] leading-relaxed text-text-secondary">
+        <section
+          style={{
+            position: 'relative',
+            borderTop: '1px solid var(--color-linear-hairline)',
+            paddingTop: 48,
+            paddingBottom: 96,
+          }}
+        >
+          <div
+            className="container"
+            style={{
+              maxWidth: 760,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 40,
+            }}
+          >
             <div>
-              <h2 className="type-h2 text-text-primary">
+              <h2 className="section-title" style={SECTION_TITLE}>
                 Business Associate Agreements (BAAs)
               </h2>
-              <p className="mt-4">
+              <p style={SECTION_BODY}>
                 AshTech Group will execute a Business Associate Agreement with
                 any Covered Entity or Business Associate customer before PHI
                 is sent to QuillMD. Our subprocessors that process PHI on
                 our behalf have signed BAAs with us:
               </p>
-              <ul className="mt-3 list-disc space-y-2 pl-5">
+              <ul style={{ ...SECTION_BODY, paddingLeft: 20, listStyle: 'disc' }}>
                 <li>Anthropic (Claude models)</li>
                 <li>OpenAI (embeddings)</li>
                 <li>Deepgram (audio transcription, Nova-3 Medical model)</li>
@@ -62,10 +96,10 @@ export default function HipaaPage() {
             </div>
 
             <div>
-              <h2 className="type-h2 text-text-primary">
+              <h2 className="section-title" style={SECTION_TITLE}>
                 Encryption and transport
               </h2>
-              <p className="mt-4">
+              <p style={SECTION_BODY}>
                 PHI is encrypted in transit (TLS 1.2+ on every provider call
                 and to the browser once a domain with TLS is active). At
                 rest, PostgreSQL data and MinIO objects inherit host-level
@@ -75,10 +109,10 @@ export default function HipaaPage() {
             </div>
 
             <div>
-              <h2 className="type-h2 text-text-primary">
+              <h2 className="section-title" style={SECTION_TITLE}>
                 Access controls
               </h2>
-              <ul className="mt-4 list-disc space-y-2 pl-5">
+              <ul style={{ ...SECTION_BODY, paddingLeft: 20, listStyle: 'disc' }}>
                 <li>
                   Every clinical record is scoped to the user who created it.
                   Cross-user access is rejected with a 404 (anti-enumeration).
@@ -101,10 +135,10 @@ export default function HipaaPage() {
             </div>
 
             <div>
-              <h2 className="type-h2 text-text-primary">
+              <h2 className="section-title" style={SECTION_TITLE}>
                 Audit logging
               </h2>
-              <p className="mt-4">
+              <p style={SECTION_BODY}>
                 Every sensitive action (login, password change, data access,
                 note signing, export) writes a row to the audit log, scoped
                 to the practice tenant. Audit logs are retained for the
@@ -113,22 +147,18 @@ export default function HipaaPage() {
             </div>
 
             <div>
-              <h2 className="type-h2 text-text-primary">
+              <h2 className="section-title" style={SECTION_TITLE}>
                 Retention and deletion
               </h2>
-              <ul className="mt-4 list-disc space-y-2 pl-5">
+              <ul style={{ ...SECTION_BODY, paddingLeft: 20, listStyle: 'disc' }}>
                 <li>
                   Audio files: 90 days past visit completion. Configurable
                   per practice.
                 </li>
-                <li>
-                  Transcripts and signed notes: 7 years minimum.
-                </li>
-                <li>
-                  Account + audit logs: retained per HIPAA.
-                </li>
+                <li>Transcripts and signed notes: 7 years minimum.</li>
+                <li>Account + audit logs: retained per HIPAA.</li>
               </ul>
-              <p className="mt-3">
+              <p style={SECTION_BODY}>
                 You may request deletion of your account and associated data
                 at any time from Settings. Backups include PHI and are
                 retained for the shorter of 90 days or until next quarterly
@@ -137,10 +167,10 @@ export default function HipaaPage() {
             </div>
 
             <div>
-              <h2 className="type-h2 text-text-primary">
+              <h2 className="section-title" style={SECTION_TITLE}>
                 Breach notification
               </h2>
-              <p className="mt-4">
+              <p style={SECTION_BODY}>
                 If we become aware of a breach of unsecured PHI, we will
                 notify affected customers within 60 days as required by 45
                 CFR § 164.410, with a written description of what was
@@ -149,10 +179,10 @@ export default function HipaaPage() {
             </div>
 
             <div>
-              <h2 className="type-h2 text-text-primary">
+              <h2 className="section-title" style={SECTION_TITLE}>
                 De-identification for product improvement
               </h2>
-              <p className="mt-4">
+              <p style={SECTION_BODY}>
                 QuillMD captures anonymized edit patterns to improve AI
                 output for each doctor (the &quot;few-shot prompting&quot;
                 system). This data is scoped to the signed-in doctor and
@@ -162,12 +192,21 @@ export default function HipaaPage() {
             </div>
 
             <div>
-              <h2 className="type-h2 text-text-primary">
+              <h2 className="section-title" style={SECTION_TITLE}>
                 Contact
               </h2>
-              <p className="mt-4">
+              <p style={SECTION_BODY}>
                 BAA requests and compliance questions:{' '}
-                <code>compliance@ashtechgroup.com</code>.
+                <code
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 13,
+                    color: 'var(--color-linear-sage-bright)',
+                  }}
+                >
+                  compliance@ashtechgroup.com
+                </code>
+                .
               </p>
             </div>
           </div>
