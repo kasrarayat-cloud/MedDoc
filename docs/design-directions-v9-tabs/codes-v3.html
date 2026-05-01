@@ -1,0 +1,940 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QuillMD · Codes · Mei-Ling Park · v9 V3 Split Pane</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#08090a;
+  --surface-1:#0d0e10;
+  --surface-2:#131416;
+  --surface-3:#1a1c1e;
+  --border:#21232a;
+  --border-strong:#2c2f38;
+  --hairline:rgba(255,255,255,0.05);
+  --hairline-strong:rgba(255,255,255,0.08);
+  --text:#f7f8f8;
+  --text-2:#b4bcc8;
+  --text-3:#6c737f;
+  --text-4:#4b5159;
+  --sage:#7AA68C;
+  --sage-bright:#9BC4A8;
+  --sage-deep:#2F5040;
+  --sage-tint:rgba(122,166,140,0.13);
+  --sage-glow:rgba(122,166,140,0.18);
+  --row-hover:rgba(255,255,255,0.025);
+  --row-active:rgba(255,255,255,0.04);
+  --success:#4caf7d;
+  --warning:#d4a437;
+  --danger:#d4574a;
+  --info:#5b8db8;
+  --font-sans:'Inter', -apple-system, system-ui, sans-serif;
+  --font-mono:'JetBrains Mono', ui-monospace, Menlo, monospace;
+  --ease:cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text)}
+body{
+  font-family:var(--font-sans);
+  font-feature-settings:'cv11','ss01';
+  font-size:13px;
+  line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  letter-spacing:-0.005em;
+  min-height:100vh;
+}
+::selection{background:rgba(122,166,140,.25);color:var(--text)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+a{color:inherit;text-decoration:none}
+
+/* ─────────────── Top bar ─────────────── */
+.topbar{
+  position:sticky;top:0;z-index:30;
+  height:44px;
+  display:flex;align-items:center;gap:12px;
+  padding:0 16px;
+  background:rgba(8,9,10,.85);
+  backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--hairline);
+}
+.brand{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;letter-spacing:-0.01em}
+.brand-mark{
+  width:18px;height:18px;border-radius:5px;
+  background:linear-gradient(135deg,var(--sage) 0%,var(--sage-deep) 100%);
+  display:grid;place-items:center;color:#0c1410;font-size:10px;font-weight:700;
+  box-shadow:0 0 0 1px rgba(255,255,255,.06) inset;
+}
+.brand-mark::before{content:'Q'}
+.crumb-sep{color:var(--text-4);font-size:12px}
+.crumb{color:var(--text-2);font-size:13px;transition:color 100ms var(--ease)}
+.crumb:hover{color:var(--text)}
+.crumb-active{color:var(--text)}
+.spacer{flex:1}
+
+.status-pill-chrome{
+  display:inline-flex;align-items:center;gap:6px;
+  height:22px;padding:0 9px;
+  border-radius:4px;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.06em;text-transform:uppercase;font-weight:500;
+  border:1px solid rgba(122,166,140,.25);
+  color:var(--sage-bright);
+  background:rgba(122,166,140,.06);
+}
+.status-pill-chrome .pdot{
+  width:5px;height:5px;border-radius:50%;
+  background:var(--sage);
+  animation:idle-pulse 1.6s ease-in-out infinite;
+}
+@keyframes idle-pulse{
+  0%,100%{opacity:.7;transform:scale(1)}
+  50%{opacity:1;transform:scale(1.04)}
+}
+.btn-sage{
+  display:inline-flex;align-items:center;gap:8px;
+  height:30px;padding:0 14px;
+  background:var(--sage);
+  color:#0d1611;
+  border-radius:6px;
+  font-size:12.5px;font-weight:500;
+  letter-spacing:-0.005em;
+  transition:background 100ms var(--ease), transform 80ms var(--ease), box-shadow 200ms var(--ease);
+}
+.btn-sage:hover{background:#88b599;transform:scale(1.02);box-shadow:0 0 0 4px rgba(122,166,140,.18)}
+.btn-sage .shortcut{font-family:var(--font-mono);font-size:11px;color:rgba(13,22,17,.55)}
+
+.avatar-chip{
+  width:24px;height:24px;border-radius:6px;
+  background:linear-gradient(135deg,#3a4a52 0%,#2a3036 100%);
+  color:#dde6ec;font-size:10.5px;font-weight:600;
+  display:grid;place-items:center;letter-spacing:0.02em;
+  border:1px solid var(--hairline-strong);
+}
+
+/* ─────────────── Layout ─────────────── */
+.shell{
+  position:relative;
+  min-height:calc(100vh - 44px);
+  padding:18px 28px 80px;
+}
+.shell::before{
+  content:'';
+  position:absolute;
+  top:-100px;left:30%;
+  width:600px;height:380px;
+  background:radial-gradient(ellipse at center, rgba(122,166,140,.045) 0%, transparent 70%);
+  pointer-events:none;
+  z-index:0;
+}
+
+/* meta strip */
+.meta-strip{
+  display:flex;align-items:center;
+  padding:6px 0 14px;
+  margin-bottom:14px;
+  border-bottom:1px solid var(--hairline);
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--text-2);
+  position:relative;z-index:1;
+}
+.meta-strip .field{padding:0 14px;border-right:1px solid var(--hairline)}
+.meta-strip .field:first-child{padding-left:0;color:var(--text);font-weight:500}
+.meta-strip .field:last-child{border-right:0}
+.meta-strip .field .lbl{color:var(--text-4);margin-right:4px;font-weight:400}
+
+/* tabs */
+.tabs-row{
+  display:flex;align-items:center;gap:0;
+  margin-bottom:24px;
+  border-bottom:1px solid var(--hairline);
+  position:relative;z-index:1;
+}
+.tab{
+  position:relative;
+  padding:8px 16px 10px;
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.07em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  font-weight:500;
+  cursor:pointer;
+  transition:color 100ms var(--ease);
+}
+.tab:first-child{padding-left:0}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--sage-bright)}
+.tab.active::after{
+  content:'';position:absolute;
+  left:0;right:0;bottom:-1px;
+  height:1.5px;
+  background:var(--sage);
+  border-radius:1px 1px 0 0;
+}
+
+/* ─────────────── Split pane ─────────────── */
+.split{
+  display:grid;
+  grid-template-columns:1.65fr 1fr;
+  gap:24px;
+  position:relative;z-index:1;
+  align-items:flex-start;
+}
+
+/* ─────────── LEFT: final list ─────────── */
+.pane-final{
+  position:relative;
+}
+.pane-head{
+  display:flex;align-items:baseline;justify-content:space-between;
+  gap:14px;
+  padding-bottom:12px;
+  margin-bottom:16px;
+  border-bottom:1px solid var(--hairline);
+}
+.pane-head .title{
+  display:flex;align-items:baseline;gap:10px;
+  font-family:var(--font-mono);
+  font-size:11.5px;
+  letter-spacing:0.12em;
+  text-transform:uppercase;
+  color:var(--text);
+  font-weight:600;
+}
+.pane-head .title .accent{color:var(--sage-bright)}
+.pane-head .sub{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.06em;
+  color:var(--text-3);
+  font-weight:500;
+}
+.pane-head .sub strong{color:var(--text-2);font-weight:500}
+
+/* group within left pane */
+.code-group{
+  margin-bottom:24px;
+}
+.group-head{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:10px;
+  padding:0 4px;
+}
+.group-head .gtitle{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.12em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  font-weight:500;
+  display:flex;align-items:center;gap:8px;
+}
+.group-head .gtitle .dot{width:4px;height:4px;border-radius:50%;background:var(--sage)}
+.group-head .gmeta{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.06em;
+  color:var(--text-4);
+}
+
+.code-table{
+  width:100%;
+  border-collapse:collapse;
+  background:var(--surface-1);
+  border:1px solid var(--border);
+  border-radius:7px;
+  overflow:hidden;
+}
+.code-table thead th{
+  text-align:left;
+  padding:8px 14px;
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  font-weight:500;
+  border-bottom:1px solid var(--hairline);
+  background:rgba(255,255,255,.012);
+  height:32px;
+  white-space:nowrap;
+}
+.code-table thead th.right{text-align:right}
+.code-table thead th.center{text-align:center}
+.code-table tbody tr{
+  height:36px;
+  border-bottom:1px solid var(--hairline);
+  transition:background 100ms var(--ease);
+  cursor:pointer;
+}
+.code-table tbody tr:last-child{border-bottom:0}
+.code-table tbody tr:hover{background:var(--row-hover)}
+.code-table tbody tr.fresh{
+  animation:fresh-pop 800ms var(--ease);
+}
+@keyframes fresh-pop{
+  0%{background:var(--sage-tint);transform:translateX(-4px);opacity:.4}
+  35%{background:var(--sage-tint);transform:translateX(0);opacity:1}
+  100%{background:transparent;transform:translateX(0);opacity:1}
+}
+.code-table td{
+  padding:6px 14px;
+  vertical-align:middle;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.code-table td.right{text-align:right}
+.code-table td.center{text-align:center}
+.cell-code{
+  font-family:var(--font-mono);
+  font-size:12.5px;
+  font-weight:500;
+  color:var(--text);
+  letter-spacing:0.02em;
+  font-variant-numeric:tabular-nums;
+}
+.cell-desc{
+  font-family:var(--font-sans);
+  font-size:13px;
+  color:var(--text);
+  letter-spacing:-0.005em;
+  max-width:340px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.cell-mono{
+  font-family:var(--font-mono);
+  font-size:11.5px;
+  color:var(--text-2);
+  font-variant-numeric:tabular-nums;
+}
+.cell-mono.muted{color:var(--text-3)}
+.cell-charge{
+  font-family:var(--font-mono);
+  font-size:12px;
+  color:var(--sage-bright);
+  font-weight:500;
+  font-variant-numeric:tabular-nums;
+}
+.cell-conf{
+  font-family:var(--font-mono);
+  font-size:11px;
+  color:var(--text-2);
+  font-variant-numeric:tabular-nums;
+}
+.cell-conf.low{color:var(--warning)}
+
+/* row low-flag */
+tr.row-low td:first-child{position:relative}
+tr.row-low td:first-child::before{
+  content:'';
+  position:absolute;left:0;top:0;bottom:0;
+  width:2px;background:var(--warning);
+}
+
+.code-table tbody tr .row-actions{
+  display:flex;align-items:center;gap:4px;justify-content:flex-end;
+  opacity:0;
+  transition:opacity 100ms var(--ease);
+}
+.code-table tbody tr:hover .row-actions{opacity:1}
+.icon-btn{
+  width:22px;height:22px;
+  border-radius:4px;
+  display:grid;place-items:center;
+  color:var(--text-3);
+  background:transparent;
+  border:1px solid transparent;
+  font-family:var(--font-mono);
+  font-size:12px;line-height:1;
+  transition:color 100ms var(--ease), background 100ms var(--ease), border-color 100ms var(--ease);
+}
+.icon-btn:hover{color:var(--text);background:rgba(255,255,255,.04);border-color:var(--hairline-strong)}
+.icon-btn.danger:hover{color:var(--danger);border-color:rgba(212,87,74,.3)}
+
+.btn-add{
+  display:inline-flex;align-items:center;gap:6px;
+  height:26px;padding:0 12px;
+  border:1px dashed var(--hairline-strong);
+  border-radius:5px;
+  background:transparent;
+  color:var(--text-2);
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  font-weight:500;
+  margin-top:8px;
+  transition:color 100ms var(--ease), border-color 100ms var(--ease), background 100ms var(--ease);
+}
+.btn-add:hover{color:var(--sage-bright);border-color:rgba(122,166,140,.4);background:rgba(122,166,140,.05)}
+.btn-add .plus{font-size:13px;line-height:1}
+
+/* totals */
+.totals-strip{
+  margin-top:14px;
+  padding:12px 16px;
+  background:var(--surface-1);
+  border:1px solid var(--border);
+  border-radius:7px;
+  display:flex;align-items:center;justify-content:space-between;
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--text-3);
+}
+.totals-strip .charge-final{color:var(--sage-bright);font-size:14px;font-weight:600}
+
+/* ─────────── RIGHT: AI suggestions rail ─────────── */
+.pane-rail{
+  background:var(--surface-1);
+  border:1px solid var(--border);
+  border-radius:8px;
+  padding:18px;
+  position:sticky;
+  top:60px;
+  max-height:calc(100vh - 80px);
+  overflow:auto;
+}
+.rail-head{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:6px;
+}
+.rail-head .label{
+  display:inline-flex;align-items:center;gap:8px;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.14em;
+  text-transform:uppercase;
+  color:var(--text);
+  font-weight:600;
+}
+.rail-head .label .ai-mark{
+  width:18px;height:18px;border-radius:5px;
+  background:linear-gradient(135deg,rgba(122,166,140,.4) 0%,rgba(122,166,140,.1) 100%);
+  display:grid;place-items:center;
+  color:var(--sage-bright);
+  font-size:9px;font-weight:700;
+  border:1px solid rgba(122,166,140,.3);
+  letter-spacing:0;
+}
+.rail-head .label .ai-mark::before{content:'AI'}
+.rail-head .count{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:2px 8px;
+  border-radius:10px;
+  background:rgba(122,166,140,.1);
+  border:1px solid rgba(122,166,140,.25);
+  color:var(--sage-bright);
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  font-weight:500;
+  font-variant-numeric:tabular-nums;
+}
+.rail-head .count .pdot{
+  width:4px;height:4px;border-radius:50%;
+  background:var(--sage);
+  animation:idle-pulse 1.6s ease-in-out infinite;
+}
+.rail-blurb{
+  font-family:var(--font-sans);
+  font-size:11.5px;
+  color:var(--text-3);
+  line-height:1.5;
+  margin:0 0 16px;
+  padding-bottom:14px;
+  border-bottom:1px solid var(--hairline);
+}
+
+/* suggestion card */
+.suggest{
+  position:relative;
+  padding:14px 14px 12px;
+  border:1px solid var(--hairline-strong);
+  border-radius:6px;
+  background:var(--surface-2);
+  margin-bottom:10px;
+  transition:border-color 130ms var(--ease), background 130ms var(--ease), opacity 350ms var(--ease), transform 350ms var(--ease);
+}
+.suggest:hover{border-color:rgba(122,166,140,.25);background:var(--surface-3)}
+.suggest.accepted{
+  opacity:0;
+  transform:translateX(-30px);
+  pointer-events:none;
+}
+.suggest.rejected{
+  opacity:0;
+  transform:translateX(30px);
+  pointer-events:none;
+}
+.suggest-row{
+  display:flex;align-items:baseline;gap:8px;
+  margin-bottom:6px;
+}
+.suggest-code{
+  font-family:var(--font-mono);
+  font-size:14.5px;
+  font-weight:500;
+  color:var(--text);
+  letter-spacing:0.02em;
+  font-variant-numeric:tabular-nums;
+}
+.suggest-tag{
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  font-weight:500;
+  padding:2px 6px;
+  border-radius:3px;
+  border:1px solid rgba(122,166,140,.22);
+  color:var(--sage-bright);
+  background:rgba(122,166,140,.06);
+}
+.suggest-tag.cpt{border-color:rgba(116,168,201,.22);color:#9bc4d9;background:rgba(116,168,201,.05)}
+.suggest-desc{
+  font-family:var(--font-sans);
+  font-size:13px;
+  color:var(--text);
+  line-height:1.4;
+  letter-spacing:-0.005em;
+  margin:0 0 10px;
+  font-weight:500;
+}
+.suggest-conf{
+  display:flex;align-items:center;gap:8px;
+  margin-bottom:10px;
+}
+.suggest-conf .lbl{
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  font-weight:500;
+}
+.suggest-conf .bar{
+  flex:1;
+  height:3px;
+  border-radius:2px;
+  background:rgba(255,255,255,.06);
+  overflow:hidden;
+  position:relative;
+}
+.suggest-conf .bar::after{
+  content:'';
+  position:absolute;left:0;top:0;bottom:0;
+  background:var(--sage);
+  width:var(--w,72%);
+  border-radius:2px;
+}
+.suggest-conf.med .bar::after{background:var(--warning)}
+.suggest-conf .v{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  font-weight:500;
+  color:var(--text-2);
+  font-variant-numeric:tabular-nums;
+  min-width:32px;text-align:right;
+}
+.suggest-evidence{
+  font-family:var(--font-sans);
+  font-size:12px;
+  color:var(--text-3);
+  font-style:italic;
+  line-height:1.5;
+  letter-spacing:-0.003em;
+  margin:0 0 12px;
+  padding-left:10px;
+  border-left:2px solid var(--hairline-strong);
+}
+.suggest-actions{
+  display:flex;align-items:center;gap:6px;
+}
+.suggest-btn{
+  flex:1;
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  height:28px;
+  border-radius:5px;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  font-weight:500;
+  transition:background 100ms var(--ease), color 100ms var(--ease), border-color 100ms var(--ease), transform 80ms var(--ease);
+  border:1px solid transparent;
+}
+.suggest-btn.accept{
+  background:rgba(122,166,140,.1);
+  color:var(--sage-bright);
+  border-color:rgba(122,166,140,.3);
+}
+.suggest-btn.accept:hover{
+  background:rgba(122,166,140,.18);
+  border-color:rgba(122,166,140,.5);
+  transform:scale(1.02);
+}
+.suggest-btn.reject{
+  color:var(--text-3);
+  border-color:var(--hairline-strong);
+}
+.suggest-btn.reject:hover{color:var(--text-2);border-color:rgba(255,255,255,.14);background:rgba(255,255,255,.03)}
+.suggest-btn .check,.suggest-btn .ex{font-size:11px;line-height:1;font-family:var(--font-sans)}
+
+/* rail empty / footer */
+.rail-foot{
+  margin-top:14px;
+  padding-top:14px;
+  border-top:1px solid var(--hairline);
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  font-weight:500;
+}
+.rail-foot .reanalyze{
+  display:inline-flex;align-items:center;gap:6px;
+  color:var(--sage-bright);
+  cursor:pointer;
+  transition:color 100ms var(--ease);
+}
+.rail-foot .reanalyze:hover{color:var(--text)}
+.rail-foot .reanalyze .icon{font-size:11px;line-height:1}
+
+/* ─────────────── Reduced motion ─────────────── */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;
+  }
+  .status-pill-chrome .pdot,
+  .rail-head .count .pdot{animation:none}
+}
+
+/* responsive */
+@media (max-width:1080px){
+  .split{grid-template-columns:1fr}
+  .pane-rail{position:static;max-height:none}
+}
+@media (max-width:760px){
+  .shell{padding:14px 16px 60px}
+  .meta-strip{flex-wrap:wrap;font-size:10px}
+  .meta-strip .field{padding:4px 10px}
+  .crumb:nth-child(2),.crumb-sep:nth-child(3){display:none}
+  .cell-desc{max-width:160px}
+}
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<header class="topbar">
+  <div class="brand"><span class="brand-mark"></span> QuillMD</div>
+  <span class="crumb-sep">/</span>
+  <span class="crumb">Patients</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb">Mei-Ling Park</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb crumb-active">Visit · Apr 30, 2026</span>
+  <div class="spacer"></div>
+  <div class="status-pill-chrome" aria-live="polite">
+    <span class="pdot"></span>
+    <span>Ready</span>
+  </div>
+  <button class="btn-sage" type="button">
+    Sign &amp; send
+    <span class="shortcut">⌘ ↵</span>
+  </button>
+  <div class="avatar-chip" title="Dr. Kalyani Park">KP</div>
+</header>
+
+<main class="shell">
+
+  <!-- Patient meta strip -->
+  <div class="meta-strip">
+    <div class="field">MEI-LING PARK</div>
+    <div class="field">34F</div>
+    <div class="field"><span class="lbl">MRN</span>77324</div>
+    <div class="field">J20.9</div>
+    <div class="field">99214</div>
+    <div class="field"><span class="lbl">Duration</span>22 min</div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs-row" role="tablist">
+    <div class="tab" role="tab" aria-selected="false">Soap Note</div>
+    <div class="tab" role="tab" aria-selected="false">Transcript</div>
+    <div class="tab active" role="tab" aria-selected="true">Codes</div>
+    <div class="tab" role="tab" aria-selected="false">Rx</div>
+    <div class="tab" role="tab" aria-selected="false">Extras</div>
+  </div>
+
+  <div class="split">
+
+    <!-- LEFT PANE: final list -->
+    <section class="pane-final">
+      <div class="pane-head">
+        <div class="title">
+          <span class="accent">●</span>
+          <span>Final · ready to sign</span>
+        </div>
+        <div class="sub"><strong>4</strong> codes · <strong>$185.00</strong></div>
+      </div>
+
+      <!-- ICD group -->
+      <div class="code-group">
+        <div class="group-head">
+          <div class="gtitle"><span class="dot"></span>Diagnoses · ICD-10</div>
+          <div class="gmeta">3 codes</div>
+        </div>
+        <table class="code-table" id="finalIcd">
+          <thead>
+            <tr>
+              <th style="width:18%">Code</th>
+              <th style="width:48%">Description</th>
+              <th style="width:14%" class="center">Conf</th>
+              <th style="width:10%" class="center">Status</th>
+              <th style="width:10%" class="right">Act</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="cell-code">J20.9</span></td>
+              <td><span class="cell-desc">Acute bronchitis, unspecified</span></td>
+              <td class="center"><span class="cell-conf">94%</span></td>
+              <td class="center"><span class="cell-mono" style="color:var(--sage-bright)">●</span></td>
+              <td class="right"><div class="row-actions"><button class="icon-btn" title="Edit">✎</button><button class="icon-btn danger" title="Remove">×</button></div></td>
+            </tr>
+            <tr>
+              <td><span class="cell-code">R05.9</span></td>
+              <td><span class="cell-desc">Cough, unspecified</span></td>
+              <td class="center"><span class="cell-conf">87%</span></td>
+              <td class="center"><span class="cell-mono" style="color:var(--sage-bright)">●</span></td>
+              <td class="right"><div class="row-actions"><button class="icon-btn" title="Edit">✎</button><button class="icon-btn danger" title="Remove">×</button></div></td>
+            </tr>
+            <tr class="row-low">
+              <td><span class="cell-code">Z00.121</span></td>
+              <td><span class="cell-desc">Encounter for routine child health exam, abnormal findings</span></td>
+              <td class="center"><span class="cell-conf low">65%</span></td>
+              <td class="center"><span class="cell-mono" style="color:var(--warning)">⚠</span></td>
+              <td class="right"><div class="row-actions"><button class="icon-btn" title="Edit">✎</button><button class="icon-btn danger" title="Remove">×</button></div></td>
+            </tr>
+          </tbody>
+        </table>
+        <button class="btn-add" type="button"><span class="plus">+</span><span>Add ICD-10</span></button>
+      </div>
+
+      <!-- CPT group -->
+      <div class="code-group">
+        <div class="group-head">
+          <div class="gtitle"><span class="dot"></span>Procedures · CPT-4</div>
+          <div class="gmeta">1 code · $185.00</div>
+        </div>
+        <table class="code-table" id="finalCpt">
+          <thead>
+            <tr>
+              <th style="width:18%">Code</th>
+              <th style="width:46%">Description</th>
+              <th style="width:8%" class="center">Units</th>
+              <th style="width:10%" class="center">Mod</th>
+              <th style="width:10%" class="right">Charge</th>
+              <th style="width:8%" class="right">Act</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="cell-code">99214</span></td>
+              <td><span class="cell-desc">Office visit, est. patient · level 4 · 22 min</span></td>
+              <td class="center"><span class="cell-mono">1</span></td>
+              <td class="center"><span class="cell-mono muted">—</span></td>
+              <td class="right"><span class="cell-charge">$185.00</span></td>
+              <td class="right"><div class="row-actions"><button class="icon-btn" title="Edit">✎</button><button class="icon-btn danger" title="Remove">×</button></div></td>
+            </tr>
+          </tbody>
+        </table>
+        <button class="btn-add" type="button"><span class="plus">+</span><span>Add CPT</span></button>
+      </div>
+
+      <div class="totals-strip">
+        <span>Total · 4 codes</span>
+        <span>Charge · <span class="charge-final">$185.00</span></span>
+      </div>
+    </section>
+
+    <!-- RIGHT PANE: AI rail -->
+    <aside class="pane-rail">
+      <div class="rail-head">
+        <div class="label">
+          <span class="ai-mark"></span>
+          <span>AI suggestions</span>
+        </div>
+        <div class="count" id="suggestCount"><span class="pdot"></span><span><span id="countN">3</span> pending</span></div>
+      </div>
+      <p class="rail-blurb">Codes the AI surfaced from transcript signals but didn't auto-add. Accept to move into the final list, or reject to dismiss.</p>
+
+      <div id="suggestList">
+
+        <!-- R53.83 — fatigue -->
+        <article class="suggest" data-code="R53.83">
+          <div class="suggest-row">
+            <span class="suggest-code">R53.83</span>
+            <span class="suggest-tag">ICD-10</span>
+          </div>
+          <p class="suggest-desc">Other fatigue</p>
+          <div class="suggest-conf" style="--w:72%">
+            <span class="lbl">Conf</span>
+            <span class="bar"></span>
+            <span class="v">72%</span>
+          </div>
+          <p class="suggest-evidence">"I'm really wiped by 4 PM, that's not me normally — my energy hasn't bounced back since the chest cold."</p>
+          <div class="suggest-actions">
+            <button class="suggest-btn accept" type="button" data-action="accept">
+              <span class="check">✓</span><span>Accept</span>
+            </button>
+            <button class="suggest-btn reject" type="button" data-action="reject">
+              <span class="ex">✕</span><span>Reject</span>
+            </button>
+          </div>
+        </article>
+
+        <!-- G93.3 — postviral fatigue -->
+        <article class="suggest" data-code="G93.3">
+          <div class="suggest-row">
+            <span class="suggest-code">G93.3</span>
+            <span class="suggest-tag">ICD-10</span>
+          </div>
+          <p class="suggest-desc">Postviral fatigue syndrome</p>
+          <div class="suggest-conf med" style="--w:61%">
+            <span class="lbl">Conf</span>
+            <span class="bar"></span>
+            <span class="v">61%</span>
+          </div>
+          <p class="suggest-evidence">"Post-viral fatigue, expected resolution 1–2 weeks given Day 10 of bronchitis course."</p>
+          <div class="suggest-actions">
+            <button class="suggest-btn accept" type="button" data-action="accept">
+              <span class="check">✓</span><span>Accept</span>
+            </button>
+            <button class="suggest-btn reject" type="button" data-action="reject">
+              <span class="ex">✕</span><span>Reject</span>
+            </button>
+          </div>
+        </article>
+
+        <!-- Z71.89 — counseling -->
+        <article class="suggest" data-code="Z71.89">
+          <div class="suggest-row">
+            <span class="suggest-code">Z71.89</span>
+            <span class="suggest-tag">ICD-10</span>
+          </div>
+          <p class="suggest-desc">Other specified counseling</p>
+          <div class="suggest-conf med" style="--w:58%">
+            <span class="lbl">Conf</span>
+            <span class="bar"></span>
+            <span class="v">58%</span>
+          </div>
+          <p class="suggest-evidence">"Patient counseled on red flags — return precautions for worsening dyspnea, fever, hemoptysis. Inhaler technique reviewed."</p>
+          <div class="suggest-actions">
+            <button class="suggest-btn accept" type="button" data-action="accept">
+              <span class="check">✓</span><span>Accept</span>
+            </button>
+            <button class="suggest-btn reject" type="button" data-action="reject">
+              <span class="ex">✕</span><span>Reject</span>
+            </button>
+          </div>
+        </article>
+
+      </div>
+
+      <div class="rail-foot">
+        <span>3 surfaced · 0 accepted</span>
+        <span class="reanalyze"><span class="icon">↻</span> Re-analyze</span>
+      </div>
+    </aside>
+
+  </div>
+
+</main>
+
+<script>
+(function(){
+  // Tab clicks
+  document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(x => {
+        x.classList.remove('active');
+        x.setAttribute('aria-selected','false');
+      });
+      t.classList.add('active');
+      t.setAttribute('aria-selected','true');
+    });
+  });
+
+  // Suggestion accept/reject
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const countN = document.getElementById('countN');
+  const finalIcdBody = document.querySelector('#finalIcd tbody');
+  let pending = 3;
+  let accepted = 0;
+
+  function updateCount(){
+    countN.textContent = pending;
+    document.querySelector('.rail-foot span:first-child').textContent =
+      `3 surfaced · ${accepted} accepted`;
+  }
+
+  document.querySelectorAll('.suggest').forEach(s => {
+    const code = s.dataset.code;
+    const desc = s.querySelector('.suggest-desc').textContent;
+    const conf = s.querySelector('.suggest-conf .v').textContent;
+
+    s.querySelector('[data-action="accept"]').addEventListener('click', () => {
+      if(s.classList.contains('accepted') || s.classList.contains('rejected')) return;
+      // add to left list (ICD)
+      const tr = document.createElement('tr');
+      tr.classList.add('fresh');
+      tr.innerHTML = `
+        <td><span class="cell-code">${code}</span></td>
+        <td><span class="cell-desc">${desc}</span></td>
+        <td class="center"><span class="cell-conf">${conf}</span></td>
+        <td class="center"><span class="cell-mono" style="color:var(--sage-bright)">●</span></td>
+        <td class="right"><div class="row-actions"><button class="icon-btn" title="Edit">✎</button><button class="icon-btn danger" title="Remove">×</button></div></td>
+      `;
+      finalIcdBody.appendChild(tr);
+
+      // remove suggestion w/ animation
+      s.classList.add('accepted');
+      pending -= 1; accepted += 1;
+      updateCount();
+      setTimeout(() => { s.style.display='none'; }, reduceMotion ? 0 : 380);
+    });
+
+    s.querySelector('[data-action="reject"]').addEventListener('click', () => {
+      if(s.classList.contains('accepted') || s.classList.contains('rejected')) return;
+      s.classList.add('rejected');
+      pending -= 1;
+      updateCount();
+      setTimeout(() => { s.style.display='none'; }, reduceMotion ? 0 : 380);
+    });
+  });
+})();
+</script>
+
+</body>
+</html>
