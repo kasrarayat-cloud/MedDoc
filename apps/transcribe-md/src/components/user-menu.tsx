@@ -1,11 +1,19 @@
 'use client';
 
+// Phase 5 — Linear V1 Faithful user menu.
+// Reference: docs/design-directions-v8-linear/dashboard-v1.html (.avatar-chip)
+//
+// Avatar trigger → Radix dropdown with Settings + Sign out. The Linear
+// V1 chrome already lives in TopNav; this component is only used by the
+// admin overview client surface. Keep the keyboard nav + focus trap
+// from Radix; rebuild the trigger + content surfaces on the dark canvas
+// with hairline borders and sage hover.
+
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Settings, LogOut } from 'lucide-react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 
-import { cn } from '@/lib/cn';
 import { signOutAction } from '@/actions/session';
 
 interface UserMenuProps {
@@ -13,9 +21,6 @@ interface UserMenuProps {
   email: string;
 }
 
-/** Avatar circle + dropdown (Settings / Sign out). The name's first
- *  letter drives the avatar; the dropdown uses Radix primitives so
- *  keyboard nav + focus trap behave correctly out of the box. */
 export function UserMenu({ name, email }: UserMenuProps) {
   const router = useRouter();
   const initial = (name ?? email).trim().charAt(0).toUpperCase() || '?';
@@ -26,15 +31,31 @@ export function UserMenu({ name, email }: UserMenuProps) {
         <button
           type="button"
           aria-label="Open user menu"
-          className={cn(
-            'relative inline-flex h-9 w-9 items-center justify-center rounded-full',
-            'text-[14px] font-semibold text-white',
-            'bg-[linear-gradient(135deg,#7C3AED_0%,#A855F7_100%)]',
-            'shadow-[0_0_0_1px_rgba(167,139,250,0.3)]',
-            'transition-shadow duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]',
-            'hover:shadow-[0_0_0_1px_rgba(167,139,250,0.6),0_8px_24px_-8px_rgba(124,58,237,0.7)]',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base'
-          )}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 26,
+            height: 26,
+            borderRadius: 6,
+            background:
+              'linear-gradient(135deg, #3a4a52 0%, #2a3036 100%)',
+            color: '#dde6ec',
+            fontSize: 11,
+            fontWeight: 600,
+            letterSpacing: '0.02em',
+            border: '1px solid var(--color-linear-hairline-strong)',
+            cursor: 'pointer',
+            transition: 'border-color 100ms ease',
+          }}
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLButtonElement).style.borderColor =
+              'var(--color-linear-border-strong)';
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLButtonElement).style.borderColor =
+              'var(--color-linear-hairline-strong)';
+          }}
         >
           {initial}
         </button>
@@ -44,39 +65,79 @@ export function UserMenu({ name, email }: UserMenuProps) {
         <DropdownMenu.Content
           sideOffset={8}
           align="end"
-          className={cn(
-            'z-[100] min-w-[220px] overflow-hidden rounded-lg',
-            'border border-border-default bg-bg-surface-1/95 backdrop-blur',
-            'shadow-[0_16px_48px_-16px_rgba(0,0,0,0.7)]',
-            // T-M3: plugin + fallback utilities now exist, so the
-            // fade/zoom/slide entry animations work again.
-            'data-[state=open]:animate-in data-[state=open]:fade-in-0',
-            'data-[state=open]:zoom-in-95 data-[state=open]:slide-in-from-top-2'
-          )}
+          style={{
+            zIndex: 100,
+            minWidth: 220,
+            overflow: 'hidden',
+            borderRadius: 8,
+            border: '1px solid var(--color-linear-border-strong)',
+            background: 'var(--color-linear-surface-1)',
+            boxShadow:
+              '0 16px 48px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.03)',
+            color: 'var(--color-linear-text)',
+          }}
+          className="data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=open]:slide-in-from-top-2"
         >
-          <div className="border-b border-border-subtle px-3 py-2.5">
-            <div className="truncate text-[13px] font-medium text-text-primary">
+          <div
+            style={{
+              padding: '10px 12px',
+              borderBottom: '1px solid var(--color-linear-hairline)',
+            }}
+          >
+            <div
+              style={{
+                fontSize: 13,
+                fontWeight: 500,
+                color: 'var(--color-linear-text)',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
               {name ?? 'Unnamed'}
             </div>
-            <div className="truncate text-[11px] text-text-muted">{email}</div>
+            <div
+              style={{
+                marginTop: 2,
+                fontSize: 11,
+                color: 'var(--color-linear-text-3)',
+                fontFamily: 'var(--font-mono)',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {email}
+            </div>
           </div>
 
           <DropdownMenu.Item asChild>
             <Link
               href="/settings"
-              className={cn(
-                'flex items-center gap-2 px-3 py-2 text-[13px]',
-                'text-text-secondary outline-none',
-                'data-[highlighted]:bg-bg-surface-2 data-[highlighted]:text-text-primary',
-                'cursor-pointer'
-              )}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '8px 12px',
+                fontSize: 13,
+                color: 'var(--color-linear-text-2)',
+                textDecoration: 'none',
+                outline: 'none',
+                cursor: 'pointer',
+              }}
+              className="data-[highlighted]:!bg-linear-row-hover data-[highlighted]:!text-linear-text"
             >
               <Settings className="h-3.5 w-3.5" aria-hidden />
               Settings
             </Link>
           </DropdownMenu.Item>
 
-          <DropdownMenu.Separator className="h-px bg-border-subtle" />
+          <DropdownMenu.Separator
+            style={{
+              height: 1,
+              background: 'var(--color-linear-hairline)',
+            }}
+          />
 
           <DropdownMenu.Item
             onSelect={async (e) => {
@@ -85,12 +146,17 @@ export function UserMenu({ name, email }: UserMenuProps) {
               router.push('/login');
               router.refresh();
             }}
-            className={cn(
-              'flex items-center gap-2 px-3 py-2 text-[13px]',
-              'text-text-secondary outline-none',
-              'data-[highlighted]:bg-bg-surface-2 data-[highlighted]:text-text-primary',
-              'cursor-pointer'
-            )}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '8px 12px',
+              fontSize: 13,
+              color: 'var(--color-linear-text-2)',
+              outline: 'none',
+              cursor: 'pointer',
+            }}
+            className="data-[highlighted]:!bg-linear-row-hover data-[highlighted]:!text-linear-text"
           >
             <LogOut className="h-3.5 w-3.5" aria-hidden />
             Sign out
