@@ -21,8 +21,21 @@ import { Ic } from './icon';
 import { QuillLogo } from './quill-logo';
 import { ShaderBG } from './shader-bg';
 import { WordMark } from './word-mark';
+import { CinematicAuthHero } from '@/components/auth/CinematicAuthHero';
 
 export type AuthShellTheme = 'legacy' | 'clinician';
+
+/** Phase 4 — page-specific cinematic headline + eyebrow consumed by
+ *  the <CinematicAuthHero> band that sits above the form card. The
+ *  italic sage glow word lands on `headlineEm`. Whitespace in pre/em/
+ *  post strings is preserved so the three .av1-word inline-block
+ *  spans connect correctly. */
+export interface AuthShellCinematic {
+  eyebrow?: ReactNode;
+  headlinePre: string;
+  headlineEm: string;
+  headlinePost: string;
+}
 
 export function AuthShell({
   eyebrow,
@@ -30,6 +43,7 @@ export function AuthShell({
   subtitle,
   children,
   theme = 'legacy',
+  cinematic,
 }: {
   /** Small mono all-caps line above the title. */
   eyebrow?: ReactNode;
@@ -42,9 +56,14 @@ export function AuthShell({
   /** Visual variant. Defaults to `'legacy'` to keep any unmigrated
    *  caller working; Clinician auth routes pass `'clinician'`. */
   theme?: AuthShellTheme;
+  /** Phase 4 — when present, renders the cinematic photo band above
+   *  the form card and runs the anim-1 reveal sequence. The form card
+   *  picks up the .av1-card slide-in automatically. Clinician-theme
+   *  only; ignored on legacy. */
+  cinematic?: AuthShellCinematic;
 }) {
   if (theme === 'clinician') {
-    return <ClinicianAuthShell {...{ eyebrow, title, subtitle, children }} />;
+    return <ClinicianAuthShell {...{ eyebrow, title, subtitle, children, cinematic }} />;
   }
   return <LegacyAuthShell {...{ eyebrow, title, subtitle, children }} />;
 }
@@ -60,12 +79,21 @@ function ClinicianAuthShell({
   title,
   subtitle,
   children,
+  cinematic,
 }: {
   eyebrow?: ReactNode;
   title: ReactNode;
   subtitle?: ReactNode;
   children: ReactNode;
+  cinematic?: AuthShellCinematic;
 }) {
+  // Phase 4 — when a `cinematic` prop is passed, the layout becomes a
+  // vertical column: photo band (280px) on top, form card centered
+  // below. The card itself carries `.av1-card` + `data-cin-card` so
+  // <CinematicAuthHero>'s effect can sequence its slide-in alongside
+  // the headline reveal. Without `cinematic`, the legacy
+  // center-stacked card layout is preserved verbatim.
+  const hasCinematic = !!cinematic;
   return (
     <div
       className="qm-cl-app"
@@ -75,17 +103,34 @@ function ClinicianAuthShell({
         width: '100%',
         position: 'relative',
         display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '32px 20px',
+        flexDirection: 'column',
+        alignItems: 'stretch',
+        // Without the band on top, the card sits centered in the
+        // viewport. With the band, the card stacks below the band and
+        // the column starts at top-of-page so the band is full-bleed.
+        justifyContent: hasCinematic ? 'flex-start' : 'center',
+        padding: hasCinematic ? '0' : '32px 20px',
       }}
     >
+      {hasCinematic && cinematic && (
+        <CinematicAuthHero
+          eyebrow={cinematic.eyebrow}
+          headlinePre={cinematic.headlinePre}
+          headlineEm={cinematic.headlineEm}
+          headlinePost={cinematic.headlinePost}
+        />
+      )}
       <div
         style={{
           position: 'relative',
           zIndex: 1,
           width: '100%',
           maxWidth: 440,
+          // Center the card in the remaining viewport space when the
+          // band is present. Without the band, the parent flex
+          // already centers it.
+          margin: hasCinematic ? '36px auto 48px' : '0 auto',
+          padding: hasCinematic ? '0 20px' : '0',
         }}
       >
         {/* Wordmark — Source Serif 4 "Quill" with the sage ink-feather
@@ -105,9 +150,15 @@ function ClinicianAuthShell({
           </span>
         </div>
 
-        {/* Form card — warm cream-card surface, 16px radius, soft shadow */}
+        {/* Form card — warm cream-card surface, 16px radius, soft
+            shadow. Phase 4: when the cinematic band is rendered, the
+            card opts into the .av1-card blur-to-sharp + slide-from-
+            right reveal driven by <CinematicAuthHero>'s effect. The
+            data-cin-card attribute is the lookup hook the hero uses
+            to find this card across the tree. */}
         <div
-          className="qm-cl-card"
+          className={`qm-cl-card${hasCinematic ? ' av1-card' : ''}`}
+          {...(hasCinematic ? { 'data-cin-card': '' } : {})}
           style={{
             padding: '32px 32px 30px',
             textAlign: 'left',
