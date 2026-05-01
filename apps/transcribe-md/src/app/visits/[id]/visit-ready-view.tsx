@@ -111,6 +111,20 @@ export interface VisitReadyViewProps {
   /** Phase 5.1 — display name shown in the Transcript V3 "Recorded by"
    *  metadata row. Optional for back-compat. */
   recordedByName?: string | null;
+
+  // Phase 5.1.1 — V4 Extras card-stream wiring.
+  // Patient identity (powers DemographicsCard) + problem list (powers
+  // ProblemsCard) come from the patient row; the rest is derived from
+  // visit fields below. Optional for back-compat.
+  patientName?: string | null;
+  patientDob?: string | null;
+  patientMrn?: string | null;
+  patientInsurance?: string | null;
+  patientExternalId?: string | null;
+  patientProblemList?: unknown;
+  /** ISO 8601 — visit creation moment (powers AuditLogCard's first row). */
+  visitCreatedAt?: string | null;
+
   /** @deprecated kept for back-compat; Linear V1 is single-theme. */
   theme?: VisitReadyViewTheme;
 }
@@ -284,6 +298,45 @@ export function VisitReadyView(props: VisitReadyViewProps) {
               patientSummary={props.patientSummary}
               fleschKincaid={fleschKincaid}
               flagged={summaryFlagged}
+              readonly={props.readonly}
+              // Phase 5.1.1 — wire 7 V4 cards
+              demographics={
+                props.patientName
+                  ? {
+                      name: props.patientName,
+                      dateOfBirth: props.patientDob ?? null,
+                      externalId: props.patientExternalId ?? null,
+                      address: null,
+                      insurance: props.patientInsurance ?? null,
+                      insuranceVerified: null,
+                      preferredLanguage: null,
+                      emergencyContact: null,
+                      emergencyRelation: null,
+                    }
+                  : undefined
+              }
+              vitals={{}}
+              allergies={[]}
+              chronicMedications={[]}
+              problems={parseProblemList(props.patientProblemList)}
+              visitMeta={{
+                specialty:
+                  props.specialtyLabel ?? props.inputMode ?? 'Encounter',
+                durationSec: props.durationSec,
+                audioDurationSec: props.durationSec,
+                inputMode: props.inputMode,
+                billingProvider: props.recordedByName ?? null,
+                providerNpi: null,
+                encounterId: props.visitId,
+              }}
+              auditEvents={synthesizeAuditEvents({
+                createdAt: props.visitCreatedAt,
+                processingStartedAt: props.processingStartedAt,
+                processingFinishedAt: props.processingFinishedAt,
+                signedAt: props.signedAt,
+                signedByName: props.signedByName,
+                doctorName: props.recordedByName,
+              })}
             />
           </div>
         )}
@@ -300,6 +353,122 @@ export function VisitReadyView(props: VisitReadyViewProps) {
       </div>
     </div>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5.1.1 — V4 Extras card helpers.
+//
+// `parseProblemList` accepts the patient.problemList jsonb in either of two
+// shapes: a string array of names, or an array of `{ code, name?|label?,
+// status? }` objects (the Phase-1 free-text shape per schema comment). We
+// normalize to the ProblemsCard `Problem` shape with sensible status fallback.
+//
+// `synthesizeAuditEvents` derives a 5-event timeline from the visit's own
+// timestamp fields (createdAt → processingStartedAt → processingFinishedAt
+// → signedAt). No new Prisma query required — we never touch the audit_logs
+// table from this read-only display surface.
+// ---------------------------------------------------------------------------
+
+import type { Problem } from './extras/ProblemsCard';
+import type { AuditEvent } from './extras/AuditLogCard';
+
+function parseProblemList(raw: unknown): Problem[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((entry, i) => {
+    if (typeof entry === 'string') {
+      return { icd: null, name: entry, status: 'active' as const, detail: null };
+    }
+    if (entry && typeof entry === 'object') {
+      const obj = entry as Record<string, unknown>;
+      const name =
+        (typeof obj.name === 'string' && obj.name) ||
+        (typeof obj.label === 'string' && obj.label) ||
+        (typeof obj.title === 'string' && obj.title) ||
+        `Problem ${i + 1}`;
+      const code =
+        (typeof obj.icd === 'string' && obj.icd) ||
+        (typeof obj.icd10 === 'string' && obj.icd10) ||
+        (typeof obj.code === 'string' && obj.code) ||
+        null;
+      const status = (() => {
+        const s = typeof obj.status === 'string' ? obj.status.toLowerCase() : '';
+        if (s === 'resolved' || s === 'inactive') return 'resolved' as const;
+        if (s === 'draft' || s === 'pending') return 'draft' as const;
+        return 'active' as const;
+      })();
+      const detail =
+        (typeof obj.detail === 'string' && obj.detail) ||
+        (typeof obj.note === 'string' && obj.note) ||
+        null;
+      return { icd: code, name, status, detail };
+    }
+    return { icd: null, name: `Problem ${i + 1}`, status: 'active' as const, detail: null };
+  });
+}
+
+function initialsOf(name: string | null | undefined): string {
+  if (!name) return '·';
+  return (
+    name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((s) => s[0]?.toUpperCase() ?? '')
+      .join('') || '·'
+  );
+}
+
+function synthesizeAuditEvents(args: {
+  createdAt?: string | null;
+  processingStartedAt: string | null;
+  processingFinishedAt: string | null;
+  signedAt: string | null;
+  signedByName?: string | null;
+  doctorName?: string | null;
+}): AuditEvent[] {
+  const events: AuditEvent[] = [];
+  const doctor = args.doctorName ?? args.signedByName ?? 'Doctor';
+  const doctorInits = initialsOf(doctor);
+  if (args.createdAt) {
+    events.push({
+      at: args.createdAt,
+      actorInitials: doctorInits,
+      actorName: doctor,
+      verb: 'created visit',
+      obj: null,
+    });
+  }
+  if (args.processingStartedAt) {
+    events.push({
+      at: args.processingStartedAt,
+      actorInitials: '·',
+      actorName: 'System',
+      system: true,
+      verb: 'started processing pipeline',
+      obj: null,
+    });
+  }
+  if (args.processingFinishedAt) {
+    events.push({
+      at: args.processingFinishedAt,
+      actorInitials: '·',
+      actorName: 'System',
+      system: true,
+      verb: 'completed transcription + draft',
+      obj: null,
+    });
+  }
+  if (args.signedAt) {
+    events.push({
+      at: args.signedAt,
+      actorInitials: initialsOf(args.signedByName ?? doctor),
+      actorName: args.signedByName ?? doctor,
+      verb: 'signed visit',
+      obj: null,
+    });
+  }
+  // Most-recent first
+  return events.sort((a, b) => (a.at < b.at ? 1 : -1));
 }
 
 // ---------------------------------------------------------------------------
