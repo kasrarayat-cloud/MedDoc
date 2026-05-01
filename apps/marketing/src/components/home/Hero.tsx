@@ -9,7 +9,7 @@ import { APP_SIGNUP_URL } from '@/lib/constants';
  *
  * Source of truth: docs/design-directions-v8-linear/landing-v1.html lines 796–812.
  *
- * Phase 4's cinematic dusk-clinician photo + `.av1-word` stagger + scroll DOF
+ * Phase 4's cinematic dusk-clinician photo + word-stagger reveal + scroll DOF
  * blur are removed entirely. The HeroAnimator client component is gone with
  * them — Linear V1 is calm and immediate, no hold-and-reveal sequence.
  */
