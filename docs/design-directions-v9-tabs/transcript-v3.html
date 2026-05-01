@@ -1,0 +1,897 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QuillMD · Visit · Mei-Ling Park · Transcript V3 · Split Pane</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#08090a;
+  --surface-1:#0d0e10;
+  --surface-2:#131416;
+  --surface-3:#1a1c1e;
+  --border:#21232a;
+  --border-strong:#2c2f38;
+  --hairline:rgba(255,255,255,0.05);
+  --hairline-strong:rgba(255,255,255,0.08);
+  --row-hover:rgba(255,255,255,0.025);
+  --t1:#f7f8f8;
+  --t2:#b4bcc8;
+  --t3:#6c737f;
+  --t4:#4b5159;
+  --sage:#7AA68C;
+  --sage-bright:#9BC4A8;
+  --sage-deep:#2F5040;
+  --sage-tint:rgba(122,166,140,0.13);
+  --sage-glow:rgba(122,166,140,0.18);
+  --info:#5b8db8;
+  --info-bright:#74A8C9;
+  --amber:#D4A574;
+  --font-sans:'Inter', -apple-system, system-ui, sans-serif;
+  --font-mono:'JetBrains Mono', ui-monospace, Menlo, monospace;
+  --ease:cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--t1)}
+body{
+  font-family:var(--font-sans);
+  font-feature-settings:'cv11','ss01';
+  font-size:13px;
+  line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  letter-spacing:-0.005em;
+  min-height:100vh;
+}
+::selection{background:rgba(122,166,140,.25);color:var(--t1)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+a{color:inherit;text-decoration:none}
+
+/* ─── Top bar ─── */
+.topbar{
+  position:sticky;top:0;z-index:30;
+  height:44px;
+  display:flex;align-items:center;gap:12px;
+  padding:0 16px;
+  background:rgba(8,9,10,.85);
+  backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--hairline);
+  opacity:0;
+  animation:topbar-in 120ms var(--ease) forwards;
+}
+@keyframes topbar-in{to{opacity:1}}
+.brand{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;color:var(--t1);letter-spacing:-0.01em}
+.brand-mark{
+  width:18px;height:18px;border-radius:5px;
+  background:linear-gradient(135deg,var(--sage) 0%,var(--sage-deep) 100%);
+  display:grid;place-items:center;color:#0c1410;font-size:10px;font-weight:700;
+}
+.brand-mark::before{content:'Q'}
+.crumb-sep{color:var(--t4);font-size:12px}
+.crumb{color:var(--t2);font-size:13px;transition:color 100ms var(--ease)}
+.crumb:hover{color:var(--t1)}
+.crumb-active{color:var(--t1)}
+.spacer{flex:1}
+.status-pill-chrome{
+  display:inline-flex;align-items:center;gap:6px;
+  height:22px;padding:0 9px;
+  border-radius:4px;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.06em;text-transform:uppercase;font-weight:500;
+  border:1px solid rgba(122,166,140,.25);
+  color:var(--sage-bright);
+  background:rgba(122,166,140,.06);
+}
+.status-pill-chrome .pdot{
+  width:5px;height:5px;border-radius:50%;
+  background:var(--sage);
+  animation:idle-pulse 1.6s ease-in-out infinite;
+}
+@keyframes idle-pulse{
+  0%,100%{opacity:.7;transform:scale(1)}
+  50%{opacity:1;transform:scale(1.04)}
+}
+.btn-sage-sm{
+  display:inline-flex;align-items:center;gap:8px;
+  height:30px;padding:0 14px;
+  background:var(--sage);
+  color:#0d1611;
+  border-radius:6px;
+  font-size:12.5px;font-weight:500;
+  letter-spacing:-0.005em;
+  transition:background 100ms var(--ease),transform 80ms var(--ease),box-shadow 200ms var(--ease);
+}
+.btn-sage-sm:hover{background:#88b599;box-shadow:0 0 0 4px rgba(122,166,140,.18)}
+.btn-sage-sm .shortcut{font-family:var(--font-mono);font-size:10.5px;color:rgba(13,22,17,.55)}
+.avatar-chip{
+  width:24px;height:24px;border-radius:6px;
+  background:linear-gradient(135deg,#3a4a52 0%,#2a3036 100%);
+  color:#dde6ec;font-size:10.5px;font-weight:600;
+  display:grid;place-items:center;
+  border:1px solid var(--hairline-strong);
+}
+
+/* ─── Layout: split shell ─── */
+.shell{
+  max-width:1280px;
+  margin:0 auto;
+  padding:18px 28px 0;
+  position:relative;
+}
+.shell::before{
+  content:'';
+  position:absolute;
+  top:-100px;left:30%;
+  width:600px;height:380px;
+  background:radial-gradient(ellipse at center, rgba(122,166,140,.045) 0%, transparent 70%);
+  pointer-events:none;
+  z-index:0;
+}
+.left-col{position:relative;z-index:1;opacity:0;transform:translateY(8px);animation:col-in 200ms var(--ease) forwards}
+@keyframes col-in{to{opacity:1;transform:translateY(0)}}
+
+.meta-strip{
+  display:flex;align-items:center;
+  padding:6px 0 14px;
+  margin-bottom:14px;
+  border-bottom:1px solid var(--hairline);
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--t2);
+}
+.meta-strip .field{padding:0 14px;border-right:1px solid var(--hairline)}
+.meta-strip .field:first-child{padding-left:0;color:var(--t1);font-weight:500}
+.meta-strip .field:last-child{border-right:0}
+.meta-strip .field .lbl{color:var(--t4);margin-right:4px;font-weight:400}
+
+.tabs-row{
+  display:flex;align-items:center;gap:0;
+  margin-bottom:16px;
+  border-bottom:1px solid var(--hairline);
+}
+.tab{
+  position:relative;
+  padding:8px 16px 10px;
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.07em;
+  text-transform:uppercase;
+  color:var(--t3);
+  font-weight:500;
+  cursor:pointer;
+  transition:color 100ms var(--ease);
+}
+.tab:first-child{padding-left:0}
+.tab:hover{color:var(--t1)}
+.tab.active{color:var(--t1)}
+.tab.active::after{
+  content:'';position:absolute;
+  left:0;right:0;bottom:-1px;
+  height:1.5px;
+  background:var(--sage);
+  border-radius:1px 1px 0 0;
+}
+
+/* ─── Split layout ─── */
+.split{
+  display:grid;
+  grid-template-columns:1fr 360px;
+  gap:24px;
+  padding-bottom:60px;
+}
+@media (max-width:1080px){
+  .split{grid-template-columns:1fr;gap:16px}
+  .audio-rail{position:static !important;height:auto !important;order:-1}
+}
+
+/* ─── Transcript stream ─── */
+.tx-stream{
+  display:flex;flex-direction:column;
+  border:1px solid var(--hairline);
+  border-radius:8px;
+  background:var(--surface-1);
+  overflow:hidden;
+}
+.tx-turn{
+  display:grid;
+  grid-template-columns:64px 1fr;
+  gap:14px;
+  padding:14px 18px;
+  border-top:1px solid var(--hairline);
+  cursor:pointer;
+  position:relative;
+  transition:background 130ms var(--ease);
+  opacity:0;
+  animation:turn-in 240ms var(--ease) forwards;
+}
+.tx-turn:first-child{border-top:0}
+.tx-turn:nth-child(1){animation-delay:40ms}
+.tx-turn:nth-child(2){animation-delay:60ms}
+.tx-turn:nth-child(3){animation-delay:80ms}
+.tx-turn:nth-child(4){animation-delay:100ms}
+.tx-turn:nth-child(5){animation-delay:120ms}
+.tx-turn:nth-child(6){animation-delay:140ms}
+.tx-turn:nth-child(7){animation-delay:160ms}
+.tx-turn:nth-child(8){animation-delay:180ms}
+.tx-turn:nth-child(9){animation-delay:200ms}
+.tx-turn:nth-child(10){animation-delay:220ms}
+.tx-turn:nth-child(11){animation-delay:240ms}
+.tx-turn:nth-child(12){animation-delay:260ms}
+.tx-turn:nth-child(13){animation-delay:280ms}
+@keyframes turn-in{to{opacity:1}}
+
+.tx-turn:hover{background:var(--row-hover)}
+.tx-turn::before{
+  content:'';
+  position:absolute;
+  left:0;top:0;bottom:0;width:2px;
+  background:var(--sage);
+  opacity:0;
+  transition:opacity 130ms var(--ease);
+}
+.tx-turn.active{background:rgba(122,166,140,.06)}
+.tx-turn.active::before{opacity:1}
+
+.tx-meta{
+  display:flex;flex-direction:column;align-items:flex-start;gap:4px;
+}
+.tx-meta .ts{
+  font-family:var(--font-mono);
+  font-size:11px;
+  color:var(--t3);
+  font-variant-numeric:tabular-nums;
+}
+.tx-turn:hover .tx-meta .ts{color:var(--t2)}
+.tx-meta .role{
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  font-weight:500;
+}
+.tx-meta .role.doctor{color:var(--sage-bright)}
+.tx-meta .role.patient{color:var(--t2)}
+.tx-meta .role.other{color:var(--t3)}
+
+.tx-body{
+  font-family:var(--font-sans);
+  font-size:14px;
+  line-height:1.65;
+  color:var(--t1);
+  letter-spacing:-0.005em;
+}
+.tx-turn.active .tx-body{color:var(--t1)}
+
+.tx-body .lowconf{
+  border-bottom:1px dotted var(--t4);
+}
+.tx-body .lowconf-tag{
+  display:inline-flex;align-items:center;
+  margin-left:8px;
+  padding:1px 5px;
+  border-radius:3px;
+  background:rgba(212,165,116,.07);
+  border:1px solid rgba(212,165,116,.22);
+  color:var(--amber);
+  font-family:var(--font-mono);
+  font-size:9px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  font-weight:500;
+  vertical-align:1px;
+}
+
+/* ─── Right rail (audio + jump nav) ─── */
+.audio-rail{
+  position:sticky;
+  top:60px;
+  height:calc(100vh - 76px);
+  overflow:auto;
+  display:flex;flex-direction:column;gap:18px;
+  padding-bottom:20px;
+}
+.rail-card{
+  background:var(--surface-1);
+  border:1px solid var(--hairline);
+  border-radius:8px;
+  padding:16px;
+}
+.rail-hd{
+  display:flex;align-items:baseline;justify-content:space-between;
+  margin-bottom:12px;
+  padding-bottom:8px;
+  border-bottom:1px solid var(--hairline);
+}
+.rail-hd .title{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--t1);
+  font-weight:500;
+}
+.rail-hd .meta{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.06em;
+  color:var(--t4);
+}
+
+/* now-playing card */
+.np-speaker{
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--sage-bright);
+  margin-bottom:4px;
+  display:flex;align-items:center;gap:6px;
+}
+.np-speaker .live-dot{
+  width:6px;height:6px;border-radius:50%;
+  background:var(--sage);
+  box-shadow:0 0 6px rgba(122,166,140,.5);
+  animation:np-pulse 1.4s ease-in-out infinite;
+}
+@keyframes np-pulse{
+  0%,100%{transform:scale(1);opacity:.85}
+  50%{transform:scale(1.18);opacity:1}
+}
+.np-snip{
+  font-family:var(--font-sans);
+  font-size:13px;
+  line-height:1.5;
+  color:var(--t1);
+  margin-bottom:14px;
+  letter-spacing:-0.005em;
+}
+
+/* waveform */
+.waveform{
+  display:flex;align-items:center;justify-content:space-between;
+  height:42px;
+  margin-bottom:10px;
+  gap:1.5px;
+  position:relative;
+}
+.waveform .bar{
+  flex:1;
+  background:var(--surface-3);
+  border-radius:1px;
+  min-width:2px;
+}
+.waveform .bar.played{background:var(--sage)}
+.waveform .bar.cur{background:var(--sage-bright);box-shadow:0 0 6px rgba(155,196,168,.45)}
+
+.scrub-line{
+  position:relative;
+  height:3px;
+  background:var(--surface-3);
+  border-radius:99px;
+  cursor:pointer;
+  margin-bottom:10px;
+}
+.scrub-fill{
+  position:absolute;inset:0 auto 0 0;
+  width:42%;
+  background:var(--sage);
+  border-radius:99px 0 0 99px;
+}
+.scrub-fill::after{
+  content:'';
+  position:absolute;
+  right:-4px;top:50%;
+  width:9px;height:9px;
+  border-radius:50%;
+  background:var(--sage-bright);
+  transform:translateY(-50%);
+  box-shadow:0 0 0 3px rgba(122,166,140,.22);
+}
+
+.transport{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:8px;
+}
+.transport .ts-mono{
+  font-family:var(--font-mono);
+  font-size:11.5px;
+  color:var(--t1);
+  font-variant-numeric:tabular-nums;
+  letter-spacing:0.04em;
+}
+.transport .ts-mono .total{color:var(--t4)}
+.transport-ctrls{display:flex;align-items:center;gap:8px}
+.transport-ctrls button{
+  width:26px;height:26px;
+  border-radius:6px;
+  border:1px solid transparent;
+  color:var(--t2);
+  display:grid;place-items:center;
+  transition:background 100ms var(--ease),color 100ms var(--ease),border-color 100ms var(--ease);
+}
+.transport-ctrls button:hover{background:rgba(255,255,255,.04);color:var(--t1);border-color:var(--hairline-strong)}
+.transport-ctrls .play-big{
+  width:32px;height:32px;
+  background:var(--sage);
+  color:#0d1611;
+  border:0;
+}
+.transport-ctrls .play-big:hover{background:#88b599;box-shadow:0 0 0 4px rgba(122,166,140,.18)}
+.transport-ctrls svg{width:11px;height:11px}
+.transport-ctrls .play-big svg{width:9px;height:9px}
+
+.speed-row{
+  display:flex;align-items:center;justify-content:space-between;
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--t4);
+  padding-top:10px;
+  border-top:1px solid var(--hairline);
+}
+.speed-row .speeds{display:flex;align-items:center;gap:0}
+.speed-row .sp{
+  padding:3px 6px;
+  border-radius:3px;
+  color:var(--t3);
+  cursor:pointer;
+  transition:background 100ms var(--ease),color 100ms var(--ease);
+}
+.speed-row .sp:hover{color:var(--t1)}
+.speed-row .sp.active{color:var(--sage-bright);background:rgba(122,166,140,.08)}
+
+/* jump-to-section nav */
+.jump-list{display:flex;flex-direction:column}
+.jump-row{
+  display:grid;
+  grid-template-columns:54px 1fr auto;
+  gap:10px;align-items:center;
+  padding:9px 4px;
+  border-bottom:1px solid var(--hairline);
+  cursor:pointer;
+  transition:background 100ms var(--ease),color 100ms var(--ease);
+  border-radius:4px;
+}
+.jump-row:last-child{border-bottom:0}
+.jump-row:hover{background:rgba(255,255,255,.025)}
+.jump-row.current{background:rgba(122,166,140,.06)}
+.jump-row .jts{font-family:var(--font-mono);font-size:11px;color:var(--t3);font-variant-numeric:tabular-nums}
+.jump-row.current .jts{color:var(--sage-bright)}
+.jump-row .jt{font-size:13px;color:var(--t1);letter-spacing:-0.005em}
+.jump-row .jdur{font-family:var(--font-mono);font-size:10px;color:var(--t4);letter-spacing:0.04em}
+.jump-row .arrow{
+  width:12px;height:12px;
+  color:var(--t4);
+  opacity:0;transform:translateX(-3px);
+  transition:opacity 100ms var(--ease),transform 100ms var(--ease);
+}
+.jump-row:hover .arrow{opacity:1;transform:translateX(0)}
+
+/* visit metadata block */
+.visit-meta{display:flex;flex-direction:column;gap:8px}
+.vm-row{
+  display:grid;
+  grid-template-columns:96px 1fr;
+  gap:10px;align-items:baseline;
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.04em;
+}
+.vm-row .lbl{color:var(--t4);letter-spacing:0.08em;text-transform:uppercase;font-size:10px}
+.vm-row .val{color:var(--t1);font-family:var(--font-sans);font-size:12.5px;letter-spacing:-0.005em}
+.vm-row .val.mono{font-family:var(--font-mono);font-size:11px}
+
+/* reduced motion */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;
+  }
+  .topbar,.left-col,.tx-turn{opacity:1;transform:none}
+  .status-pill-chrome .pdot,.np-speaker .live-dot{animation:none}
+}
+
+/* responsive */
+@media (max-width:760px){
+  .shell{padding:14px 16px 0}
+  .meta-strip{flex-wrap:wrap;font-size:10px}
+  .tx-turn{grid-template-columns:1fr;gap:6px;padding:12px 14px}
+  .tx-meta{flex-direction:row;align-items:baseline;gap:10px}
+  .crumb,.crumb-sep{display:none}
+  .crumb-active{display:inline}
+  .topbar{gap:8px;padding:0 12px}
+}
+@media (max-width:480px){
+  .btn-sage-sm .shortcut{display:none}
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><span class="brand-mark"></span> QuillMD</div>
+  <span class="crumb-sep">/</span>
+  <span class="crumb">Patients</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb">Mei-Ling Park</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb crumb-active">Visit · Apr 30, 2026</span>
+  <div class="spacer"></div>
+  <div class="status-pill-chrome" aria-live="polite">
+    <span class="pdot"></span>
+    <span>READY</span>
+  </div>
+  <button class="btn-sage-sm" type="button">
+    <span>Sign &amp; send</span>
+    <span class="shortcut">⌘ ↵</span>
+  </button>
+  <div class="avatar-chip" title="Dr. Kalyani Park">KP</div>
+</header>
+
+<div class="shell">
+  <main class="left-col">
+
+    <div class="meta-strip">
+      <div class="field">MEI-LING PARK</div>
+      <div class="field">34F</div>
+      <div class="field"><span class="lbl">MRN</span>77324</div>
+      <div class="field">J20.9</div>
+      <div class="field"><span class="lbl">Recorded</span>Apr 30 · 11:14</div>
+      <div class="field"><span class="lbl">Length</span>6m 04s</div>
+    </div>
+
+    <div class="tabs-row" role="tablist">
+      <div class="tab" role="tab" aria-selected="false">Soap Note</div>
+      <div class="tab active" role="tab" aria-selected="true">Transcript</div>
+      <div class="tab" role="tab" aria-selected="false">Codes</div>
+      <div class="tab" role="tab" aria-selected="false">Rx</div>
+      <div class="tab" role="tab" aria-selected="false">Extras</div>
+    </div>
+
+    <div class="split">
+
+      <!-- TRANSCRIPT (left) -->
+      <section class="tx-stream" aria-label="Visit transcript">
+
+        <div class="tx-turn" data-ts="00:00">
+          <div class="tx-meta">
+            <span class="ts">00:00</span>
+            <span class="role doctor">Doctor</span>
+          </div>
+          <div class="tx-body">Hi Mei-Ling, good to see you back. How's that cough doing?</div>
+        </div>
+
+        <div class="tx-turn" data-ts="00:08">
+          <div class="tx-meta">
+            <span class="ts">00:08</span>
+            <span class="role patient">Patient</span>
+          </div>
+          <div class="tx-body">It's a lot better. Mostly just morning now, like a little tickle. Sputum's gone clear too.</div>
+        </div>
+
+        <div class="tx-turn" data-ts="00:21">
+          <div class="tx-meta">
+            <span class="ts">00:21</span>
+            <span class="role doctor">Doctor</span>
+          </div>
+          <div class="tx-body">Good. Any fever still?</div>
+        </div>
+
+        <div class="tx-turn" data-ts="00:24">
+          <div class="tx-meta">
+            <span class="ts">00:24</span>
+            <span class="role patient">Patient</span>
+          </div>
+          <div class="tx-body">No, hasn't spiked since Saturday.</div>
+        </div>
+
+        <div class="tx-turn" data-ts="00:30">
+          <div class="tx-meta">
+            <span class="ts">00:30</span>
+            <span class="role doctor">Doctor</span>
+          </div>
+          <div class="tx-body">Sleeping okay?</div>
+        </div>
+
+        <div class="tx-turn" data-ts="00:33">
+          <div class="tx-meta">
+            <span class="ts">00:33</span>
+            <span class="role patient">Patient</span>
+          </div>
+          <div class="tx-body">Yes, pretty much normal. I went back to work Monday.</div>
+        </div>
+
+        <div class="tx-turn" data-ts="00:40">
+          <div class="tx-meta">
+            <span class="ts">00:40</span>
+            <span class="role doctor">Doctor</span>
+          </div>
+          <div class="tx-body">Are you feeling tired in a way that's different from work tiredness?</div>
+        </div>
+
+        <div class="tx-turn active" data-ts="00:46">
+          <div class="tx-meta">
+            <span class="ts">00:46</span>
+            <span class="role patient">Patient</span>
+          </div>
+          <div class="tx-body">A little. Like — I'm fine in the morning but by 4 PM I'm really wiped. That's not me normally.</div>
+        </div>
+
+        <div class="tx-turn" data-ts="01:02">
+          <div class="tx-meta">
+            <span class="ts">01:02</span>
+            <span class="role doctor">Doctor</span>
+          </div>
+          <div class="tx-body"><span class="lowconf">That's expected after a viral chest infection. It usually takes another week or two for energy to come back.</span> Let me listen to your lungs.<span class="lowconf-tag">78%</span></div>
+        </div>
+
+        <div class="tx-turn" data-ts="01:14">
+          <div class="tx-meta">
+            <span class="ts">01:14</span>
+            <span class="role doctor">Doctor</span>
+          </div>
+          <div class="tx-body">Lungs sound clear bilaterally. No crackles. Throat's a little red but no pus. Heart sounds normal.</div>
+        </div>
+
+        <div class="tx-turn" data-ts="03:32">
+          <div class="tx-meta">
+            <span class="ts">03:32</span>
+            <span class="role doctor">Doctor</span>
+          </div>
+          <div class="tx-body">Okay, so the diagnosis is acute bronchitis, resolving — that's J20.9. I'm going to give you albuterol just in case the cough flares up overnight or before runs.</div>
+        </div>
+
+        <div class="tx-turn" data-ts="04:18">
+          <div class="tx-meta">
+            <span class="ts">04:18</span>
+            <span class="role patient">Patient</span>
+          </div>
+          <div class="tx-body">Do I need to come back?</div>
+        </div>
+
+        <div class="tx-turn" data-ts="04:21">
+          <div class="tx-meta">
+            <span class="ts">04:21</span>
+            <span class="role doctor">Doctor</span>
+          </div>
+          <div class="tx-body">If you're still coughing in seven days, or if you spike a fever, or you get short of breath — call. Otherwise, we're done.</div>
+        </div>
+
+      </section>
+
+      <!-- AUDIO RAIL (right) -->
+      <aside class="audio-rail">
+
+        <div class="rail-card">
+          <div class="rail-hd">
+            <span class="title">Now playing</span>
+            <span class="meta">00:46 · Patient</span>
+          </div>
+          <div class="np-speaker"><span class="live-dot"></span>Patient · Mei-Ling Park</div>
+          <div class="np-snip">"A little. Like — I'm fine in the morning but by 4 PM I'm really wiped. That's not me normally."</div>
+
+          <!-- Waveform -->
+          <div class="waveform" aria-hidden="true">
+            <span class="bar played" style="height:18%"></span>
+            <span class="bar played" style="height:34%"></span>
+            <span class="bar played" style="height:60%"></span>
+            <span class="bar played" style="height:42%"></span>
+            <span class="bar played" style="height:74%"></span>
+            <span class="bar played" style="height:30%"></span>
+            <span class="bar played" style="height:52%"></span>
+            <span class="bar played" style="height:88%"></span>
+            <span class="bar played" style="height:46%"></span>
+            <span class="bar played" style="height:64%"></span>
+            <span class="bar played" style="height:38%"></span>
+            <span class="bar played" style="height:72%"></span>
+            <span class="bar played" style="height:54%"></span>
+            <span class="bar cur" style="height:90%"></span>
+            <span class="bar" style="height:58%"></span>
+            <span class="bar" style="height:42%"></span>
+            <span class="bar" style="height:78%"></span>
+            <span class="bar" style="height:34%"></span>
+            <span class="bar" style="height:52%"></span>
+            <span class="bar" style="height:46%"></span>
+            <span class="bar" style="height:68%"></span>
+            <span class="bar" style="height:30%"></span>
+            <span class="bar" style="height:56%"></span>
+            <span class="bar" style="height:74%"></span>
+            <span class="bar" style="height:42%"></span>
+            <span class="bar" style="height:60%"></span>
+            <span class="bar" style="height:36%"></span>
+            <span class="bar" style="height:50%"></span>
+            <span class="bar" style="height:82%"></span>
+            <span class="bar" style="height:46%"></span>
+            <span class="bar" style="height:64%"></span>
+            <span class="bar" style="height:30%"></span>
+            <span class="bar" style="height:52%"></span>
+            <span class="bar" style="height:38%"></span>
+            <span class="bar" style="height:72%"></span>
+            <span class="bar" style="height:46%"></span>
+            <span class="bar" style="height:58%"></span>
+            <span class="bar" style="height:34%"></span>
+            <span class="bar" style="height:48%"></span>
+            <span class="bar" style="height:62%"></span>
+          </div>
+
+          <!-- Scrub line -->
+          <div class="scrub-line" role="slider" aria-label="Audio scrubber" aria-valuemin="0" aria-valuemax="364" aria-valuenow="154">
+            <div class="scrub-fill"></div>
+          </div>
+
+          <div class="transport">
+            <span class="ts-mono">02:34<span class="total"> / 06:04</span></span>
+            <div class="transport-ctrls">
+              <button type="button" aria-label="Skip back 10s">
+                <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
+                  <path d="M9 3l-3 4 3 4M6 7h6" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
+              <button class="play-big" type="button" aria-label="Play">
+                <svg viewBox="0 0 10 10" fill="currentColor" aria-hidden="true"><path d="M2 1l6 4-6 4z"/></svg>
+              </button>
+              <button type="button" aria-label="Skip forward 10s">
+                <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
+                  <path d="M5 3l3 4-3 4M2 7h6" stroke-linecap="round" stroke-linejoin="round" transform="translate(14,0) scale(-1,1)"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="speed-row">
+            <span>Speed</span>
+            <span class="speeds">
+              <span class="sp">0.75×</span>
+              <span class="sp active">1×</span>
+              <span class="sp">1.5×</span>
+              <span class="sp">2×</span>
+            </span>
+          </div>
+        </div>
+
+        <div class="rail-card">
+          <div class="rail-hd">
+            <span class="title">Jump to section</span>
+            <span class="meta">4 sections</span>
+          </div>
+          <div class="jump-list">
+            <div class="jump-row" data-ts="00:00">
+              <span class="jts">00:00</span>
+              <span class="jt">Intro &amp; greeting</span>
+              <svg class="arrow" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 3l3 3-3 3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div class="jump-row current" data-ts="00:08">
+              <span class="jts">00:08</span>
+              <span class="jt">Chief complaint &amp; HPI</span>
+              <svg class="arrow" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 3l3 3-3 3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div class="jump-row" data-ts="01:14">
+              <span class="jts">01:14</span>
+              <span class="jt">Physical exam</span>
+              <svg class="arrow" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 3l3 3-3 3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div class="jump-row" data-ts="03:32">
+              <span class="jts">03:32</span>
+              <span class="jt">Assessment &amp; plan</span>
+              <svg class="arrow" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 3l3 3-3 3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+          </div>
+        </div>
+
+        <div class="rail-card">
+          <div class="rail-hd">
+            <span class="title">Visit metadata</span>
+            <span class="meta">v3.2</span>
+          </div>
+          <div class="visit-meta">
+            <div class="vm-row">
+              <span class="lbl">Specialty</span>
+              <span class="val">Family Medicine</span>
+            </div>
+            <div class="vm-row">
+              <span class="lbl">Duration</span>
+              <span class="val mono">6m 04s</span>
+            </div>
+            <div class="vm-row">
+              <span class="lbl">Recorded by</span>
+              <span class="val">Dr. Kalyani Park</span>
+            </div>
+            <div class="vm-row">
+              <span class="lbl">Device</span>
+              <span class="val">iPad · 12.9"</span>
+            </div>
+            <div class="vm-row">
+              <span class="lbl">Format</span>
+              <span class="val mono">32 kHz · Opus · mono</span>
+            </div>
+            <div class="vm-row">
+              <span class="lbl">Speakers</span>
+              <span class="val">2 detected</span>
+            </div>
+          </div>
+        </div>
+
+      </aside>
+
+    </div>
+
+  </main>
+</div>
+
+<script>
+(function(){
+  document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(x => {
+        x.classList.remove('active');
+        x.setAttribute('aria-selected','false');
+      });
+      t.classList.add('active');
+      t.setAttribute('aria-selected','true');
+    });
+  });
+
+  // Click a turn -> mark active + update now-playing
+  const turns = document.querySelectorAll('.tx-turn');
+  const npSpeaker = document.querySelector('.np-speaker');
+  const npSnip = document.querySelector('.np-snip');
+  const npMeta = document.querySelector('.rail-card .meta');
+  turns.forEach(t => {
+    t.addEventListener('click', () => {
+      turns.forEach(x => x.classList.remove('active'));
+      t.classList.add('active');
+      const ts = t.dataset.ts;
+      const role = t.querySelector('.role').textContent;
+      const text = t.querySelector('.tx-body').textContent.replace(/\s*\d+%\s*$/,'').trim();
+      const speakerName = role === 'Doctor' ? 'Doctor · Dr. Park' : (role === 'Patient' ? 'Patient · Mei-Ling Park' : role);
+      npSpeaker.innerHTML = '<span class="live-dot"></span>' + speakerName;
+      npSnip.textContent = '"' + text + '"';
+      npMeta.textContent = ts + ' · ' + role;
+    });
+  });
+
+  // Jump to section
+  document.querySelectorAll('.jump-row').forEach(j => {
+    j.addEventListener('click', () => {
+      document.querySelectorAll('.jump-row').forEach(x => x.classList.remove('current'));
+      j.classList.add('current');
+      const ts = j.dataset.ts;
+      const matched = document.querySelector(`.tx-turn[data-ts="${ts}"]`);
+      if(matched){
+        matched.click();
+        matched.scrollIntoView({behavior:'smooth', block:'center'});
+      }
+    });
+  });
+
+  // Play big toggle
+  const playBig = document.querySelector('.play-big');
+  let playing = false;
+  playBig.addEventListener('click', () => {
+    playing = !playing;
+    playBig.querySelector('svg').innerHTML = playing
+      ? '<rect x="2.4" y="1.4" width="1.8" height="7" rx=".3"/><rect x="5.4" y="1.4" width="1.8" height="7" rx=".3"/>'
+      : '<path d="M2 1l6 4-6 4z"/>';
+  });
+
+  // Speed pick
+  document.querySelectorAll('.speed-row .sp').forEach(s => {
+    s.addEventListener('click', () => {
+      document.querySelectorAll('.speed-row .sp').forEach(x => x.classList.remove('active'));
+      s.classList.add('active');
+    });
+  });
+})();
+</script>
+
+</body>
+</html>

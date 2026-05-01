@@ -1,0 +1,811 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QuillMD · Visit · Mei-Ling Park · v9 SOAP V3 Split Pane</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#08090a;
+  --surface-1:#0d0e10;
+  --surface-2:#131416;
+  --surface-3:#1a1c1e;
+  --border:#21232a;
+  --border-strong:#2c2f38;
+  --hairline:rgba(255,255,255,0.05);
+  --hairline-strong:rgba(255,255,255,0.08);
+  --text:#f7f8f8;
+  --text-2:#b4bcc8;
+  --text-3:#6c737f;
+  --text-4:#4b5159;
+  --sage:#7AA68C;
+  --sage-bright:#9BC4A8;
+  --sage-deep:#2F5040;
+  --sage-tint:rgba(122,166,140,0.13);
+  --sage-glow:rgba(122,166,140,0.18);
+  --row-hover:rgba(255,255,255,0.03);
+  --row-active:rgba(255,255,255,0.05);
+  --warning:#d4a437;
+  --warning-bright:#e3b950;
+  --info:#5b8db8;
+  --font-sans:'Inter', -apple-system, system-ui, sans-serif;
+  --font-mono:'JetBrains Mono', ui-monospace, Menlo, monospace;
+  --ease:cubic-bezier(0.16, 1, 0.3, 1);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text)}
+body{
+  font-family:var(--font-sans);
+  font-feature-settings:'cv11','ss01';
+  font-size:13px;
+  line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  letter-spacing:-0.005em;
+  min-height:100vh;
+}
+::selection{background:rgba(122,166,140,.25);color:var(--text)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+a{color:inherit;text-decoration:none}
+
+/* topbar */
+.topbar{
+  position:sticky;top:0;z-index:30;
+  height:44px;
+  display:flex;align-items:center;gap:12px;
+  padding:0 16px;
+  background:rgba(8,9,10,.85);
+  backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--hairline);
+}
+.brand{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;letter-spacing:-0.01em}
+.brand-mark{
+  width:18px;height:18px;border-radius:5px;
+  background:linear-gradient(135deg,var(--sage) 0%,var(--sage-deep) 100%);
+  display:grid;place-items:center;color:#0c1410;font-size:10px;font-weight:700;
+  box-shadow:0 0 0 1px rgba(255,255,255,.06) inset;
+}
+.brand-mark::before{content:'Q'}
+.crumb-sep{color:var(--text-4);font-size:12px}
+.crumb{color:var(--text-2);font-size:13px;transition:color 100ms var(--ease)}
+.crumb:hover{color:var(--text)}
+.crumb-active{color:var(--text)}
+.spacer{flex:1}
+.status-pill-chrome{
+  display:inline-flex;align-items:center;gap:6px;
+  height:22px;padding:0 9px;
+  border-radius:4px;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.06em;text-transform:uppercase;font-weight:500;
+  border:1px solid rgba(122,166,140,.25);
+  color:var(--sage-bright);
+  background:rgba(122,166,140,.06);
+}
+.status-pill-chrome .pdot{
+  width:5px;height:5px;border-radius:50%;
+  background:var(--sage);
+  animation:idle-pulse 1.6s ease-in-out infinite;
+}
+@keyframes idle-pulse{
+  0%,100%{opacity:.7;transform:scale(1)}
+  50%{opacity:1;transform:scale(1.04)}
+}
+.btn-sage{
+  display:inline-flex;align-items:center;gap:8px;
+  height:30px;padding:0 14px;
+  background:var(--sage);
+  color:#0d1611;
+  border-radius:6px;
+  font-size:12.5px;font-weight:500;
+  letter-spacing:-0.005em;
+  transition:background 100ms var(--ease), transform 80ms var(--ease), box-shadow 200ms var(--ease);
+}
+.btn-sage:hover{background:#88b599;transform:scale(1.02);box-shadow:0 0 0 4px rgba(122,166,140,.18)}
+.btn-sage .shortcut{font-family:var(--font-mono);font-size:11px;color:rgba(13,22,17,.55)}
+.avatar-chip{
+  width:24px;height:24px;border-radius:6px;
+  background:linear-gradient(135deg,#3a4a52 0%,#2a3036 100%);
+  color:#dde6ec;font-size:10.5px;font-weight:600;
+  display:grid;place-items:center;letter-spacing:0.02em;
+  border:1px solid var(--hairline-strong);
+}
+
+.shell{
+  position:relative;
+  min-height:calc(100vh - 44px);
+  padding:18px 28px 14px;
+}
+
+.meta-strip{
+  display:flex;align-items:center;
+  padding:6px 0 14px;
+  margin-bottom:14px;
+  border-bottom:1px solid var(--hairline);
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--text-2);
+}
+.meta-strip .field{padding:0 14px;border-right:1px solid var(--hairline)}
+.meta-strip .field:first-child{padding-left:0;color:var(--text);font-weight:500}
+.meta-strip .field:last-child{border-right:0}
+.meta-strip .field .lbl{color:var(--text-4);margin-right:4px;font-weight:400}
+
+.tabs-row{
+  display:flex;align-items:center;gap:0;
+  margin-bottom:18px;
+  border-bottom:1px solid var(--hairline);
+}
+.tab{
+  position:relative;
+  padding:8px 16px 10px;
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.07em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  font-weight:500;
+  cursor:pointer;
+  transition:color 100ms var(--ease);
+}
+.tab:first-child{padding-left:0}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--sage-bright)}
+.tab.active::after{
+  content:'';position:absolute;
+  left:0;right:0;bottom:-1px;
+  height:1.5px;
+  background:var(--sage);
+  border-radius:1px 1px 0 0;
+}
+
+/* ─────────────── Split Pane ─────────────── */
+.split{
+  display:grid;
+  grid-template-columns:1fr 1px 38%;
+  gap:0;
+  min-height:calc(100vh - 250px);
+}
+.divider{
+  background:var(--hairline);
+  width:1px;
+}
+.note-pane{
+  padding:14px 32px 24px 0;
+  min-width:0;
+}
+.note-pane h3.section-title{
+  font-family:var(--font-sans);
+  font-size:18px;
+  font-weight:600;
+  letter-spacing:-0.015em;
+  color:var(--text);
+  margin:0 0 4px;
+}
+.section-eyebrow{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.14em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  display:flex;align-items:center;gap:8px;
+}
+.section-eyebrow .ltr{
+  display:inline-grid;place-items:center;
+  width:18px;height:18px;
+  border:1px solid rgba(122,166,140,.28);
+  background:rgba(122,166,140,.07);
+  border-radius:4px;
+  color:var(--sage-bright);
+  font-size:10px;
+  letter-spacing:0;
+  font-weight:500;
+}
+.note-pane .section-block{
+  margin-bottom:32px;
+}
+.note-pane .section-head{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  margin-bottom:14px;
+  padding-bottom:10px;
+  border-bottom:1px solid var(--hairline);
+}
+.note-pane .section-head .left{display:flex;flex-direction:column;gap:6px}
+.section-status{
+  display:inline-flex;align-items:center;gap:6px;
+  height:22px;padding:0 9px;
+  border-radius:4px;
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  font-weight:500;
+}
+.section-status .sdot{width:4px;height:4px;border-radius:50%;background:currentColor}
+.section-status.reviewed{
+  border:1px solid rgba(122,166,140,.28);
+  color:var(--sage-bright);
+  background:rgba(122,166,140,.08);
+}
+.section-status.drafted{
+  border:1px solid rgba(212,164,55,.25);
+  color:var(--warning-bright);
+  background:rgba(212,164,55,.06);
+}
+
+/* paragraphs - clickable for citation linking */
+.note-para{
+  padding:10px 14px;
+  margin:0 -14px 4px;
+  border-radius:6px;
+  border:1px solid transparent;
+  cursor:pointer;
+  position:relative;
+  font-size:14.5px;
+  line-height:1.7;
+  color:var(--text);
+  letter-spacing:-0.005em;
+  transition:background 130ms var(--ease), border-color 130ms var(--ease), padding 130ms var(--ease);
+}
+.note-para::before{
+  content:'';
+  position:absolute;
+  left:0;top:8px;bottom:8px;
+  width:2px;
+  background:var(--sage);
+  opacity:0;
+  border-radius:1px;
+  transition:opacity 130ms var(--ease);
+}
+.note-para:hover{background:rgba(255,255,255,.022);border-color:var(--hairline)}
+.note-para.linked{
+  background:rgba(122,166,140,.05);
+  border-color:rgba(122,166,140,.22);
+}
+.note-para.linked::before{opacity:1}
+.note-para .cite-counter{
+  position:absolute;
+  right:10px;top:9px;
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--text-4);
+  display:flex;align-items:center;gap:5px;
+  opacity:0;
+  transition:opacity 100ms var(--ease);
+}
+.note-para:hover .cite-counter,
+.note-para.linked .cite-counter{opacity:1}
+.note-para.linked .cite-counter{color:var(--sage-bright)}
+.note-para .cite-dot{width:4px;height:4px;border-radius:50%;background:var(--sage)}
+.note-para strong{color:var(--text);font-weight:600}
+.note-para em{color:var(--text-2);font-style:italic}
+
+.note-para .vitals-inline{
+  font-family:var(--font-mono);
+  font-size:13px;
+  color:var(--text);
+  font-variant-numeric:tabular-nums;
+  letter-spacing:0;
+}
+.note-para .vitals-inline .v-lbl{color:var(--text-4);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;margin-right:3px}
+
+/* numbered list */
+.dx-list{margin:0;padding:0;list-style:none}
+.dx-list li{
+  padding:6px 0 6px 28px;
+  position:relative;
+  counter-increment:dx;
+  font-size:14.5px;
+  line-height:1.65;
+  color:var(--text);
+}
+.dx-list{counter-reset:dx}
+.dx-list li::before{
+  content:counter(dx) ".";
+  position:absolute;
+  left:0;top:6px;
+  font-family:var(--font-mono);
+  font-size:11.5px;
+  color:var(--sage-bright);
+  font-weight:500;
+}
+.dx-list .dx-code{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  color:var(--text-3);
+  margin-left:6px;
+  padding:1px 5px;
+  border:1px solid var(--hairline-strong);
+  border-radius:3px;
+  letter-spacing:0.04em;
+  background:rgba(255,255,255,.02);
+}
+
+/* ─────────────── Right rail (citations) ─────────────── */
+.cites-pane{
+  padding:14px 0 24px 28px;
+  position:sticky;
+  top:60px;
+  align-self:start;
+  max-height:calc(100vh - 80px);
+  overflow:auto;
+  min-width:0;
+}
+.cites-head{
+  display:flex;align-items:flex-end;justify-content:space-between;
+  padding-bottom:10px;
+  margin-bottom:14px;
+  border-bottom:1px solid var(--hairline);
+}
+.cites-head .title{
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--text);
+  font-weight:500;
+}
+.cites-head .meta{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--text-3);
+}
+.cites-helper{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--text-4);
+  margin-bottom:14px;
+}
+
+.cite-group{margin-bottom:22px}
+.cite-group-label{
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.14em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  margin-bottom:8px;
+  padding-bottom:6px;
+  border-bottom:1px dashed var(--hairline);
+  display:flex;align-items:center;justify-content:space-between;
+}
+.cite-group-label .ltr{
+  display:inline-grid;place-items:center;
+  width:18px;height:18px;
+  border:1px solid rgba(122,166,140,.28);
+  background:rgba(122,166,140,.07);
+  border-radius:4px;
+  color:var(--sage-bright);
+  font-size:10px;
+  letter-spacing:0;
+  font-weight:500;
+  margin-right:6px;
+  vertical-align:-3px;
+}
+
+.cite-turn{
+  position:relative;
+  padding:10px 12px 10px 14px;
+  margin-bottom:6px;
+  border:1px solid transparent;
+  border-radius:5px;
+  background:transparent;
+  transition:background 130ms var(--ease), border-color 130ms var(--ease);
+  cursor:pointer;
+}
+.cite-turn::before{
+  content:'';
+  position:absolute;
+  left:0;top:8px;bottom:8px;
+  width:2px;
+  background:var(--sage);
+  opacity:0;
+  border-radius:1px;
+  transition:opacity 130ms var(--ease);
+}
+.cite-turn:hover{background:rgba(255,255,255,.02);border-color:var(--hairline)}
+.cite-turn.active{
+  background:rgba(122,166,140,.05);
+  border-color:rgba(122,166,140,.22);
+}
+.cite-turn.active::before{opacity:1}
+.cite-meta{
+  display:flex;align-items:center;gap:8px;
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.06em;
+  margin-bottom:4px;
+}
+.cite-time{
+  color:var(--sage-bright);
+  font-weight:500;
+  font-variant-numeric:tabular-nums;
+}
+.cite-speaker{
+  color:var(--text-3);
+  text-transform:uppercase;
+  letter-spacing:0.1em;
+}
+.cite-speaker.dr{color:var(--info)}
+.cite-text{
+  font-family:var(--font-sans);
+  font-size:12.5px;
+  line-height:1.55;
+  color:var(--text-2);
+  letter-spacing:-0.005em;
+}
+.cite-text .hl{
+  background:rgba(122,166,140,.12);
+  color:var(--text);
+  padding:0 2px;
+  border-radius:2px;
+}
+
+.cite-empty{
+  text-align:center;
+  padding:24px 14px;
+  color:var(--text-4);
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+}
+
+/* footer */
+.split-footer{
+  margin-top:14px;
+  padding:12px 0 0;
+  border-top:1px solid var(--hairline);
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+}
+.split-footer .meta{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--text-3);
+}
+.btn-ghost{
+  display:inline-flex;align-items:center;gap:8px;
+  height:32px;padding:0 14px;
+  border:1px solid var(--hairline-strong);
+  border-radius:6px;
+  background:transparent;
+  color:var(--text-2);
+  font-size:12.5px;font-weight:500;
+  transition:background 100ms var(--ease), color 100ms var(--ease), border-color 100ms var(--ease);
+}
+.btn-ghost:hover{background:rgba(255,255,255,.04);color:var(--text);border-color:rgba(255,255,255,.14)}
+
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;
+  }
+  .status-pill-chrome .pdot{animation:none}
+  .note-para:hover{background:transparent;border-color:transparent}
+  .cite-turn:hover{background:transparent;border-color:transparent}
+}
+
+/* responsive: split collapses to single column with cites inline */
+@media (max-width:960px){
+  .split{
+    grid-template-columns:1fr;
+    gap:18px;
+  }
+  .divider{display:none}
+  .note-pane{padding-right:0}
+  .cites-pane{
+    position:static;
+    padding:0;
+    max-height:none;
+    border-top:1px solid var(--hairline);
+    padding-top:18px;
+  }
+}
+@media (max-width:760px){
+  .meta-strip{flex-wrap:wrap;font-size:10px}
+  .meta-strip .field{padding:4px 10px}
+  .shell{padding:14px 14px 60px}
+  .topbar{padding:0 12px;gap:8px;flex-wrap:wrap;height:auto;min-height:44px}
+  .crumb,.crumb-sep{display:none}
+  .crumb-active{display:inline}
+  .tabs-row{overflow-x:auto;flex-wrap:nowrap}
+  .tab{flex-shrink:0}
+  .note-para{font-size:14px}
+  .note-pane .section-block{margin-bottom:24px}
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><span class="brand-mark"></span> QuillMD</div>
+  <span class="crumb-sep">/</span>
+  <span class="crumb">Patients</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb">Mei-Ling Park</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb crumb-active">Visit · Apr 30, 2026</span>
+  <div class="spacer"></div>
+  <div class="status-pill-chrome"><span class="pdot"></span><span>Ready</span></div>
+  <button class="btn-sage" type="button"><span>Sign &amp; send</span><span class="shortcut">⌘ ↵</span></button>
+  <div class="avatar-chip">KP</div>
+</header>
+
+<div class="shell">
+
+  <div class="meta-strip">
+    <div class="field">Mei-Ling Park</div>
+    <div class="field">34 F</div>
+    <div class="field"><span class="lbl">MRN</span>77324</div>
+    <div class="field">J20.9 · Bronchitis follow-up</div>
+    <div class="field">99214</div>
+    <div class="field"><span class="lbl">Duration</span>22 min</div>
+  </div>
+
+  <div class="tabs-row" role="tablist">
+    <div class="tab active" role="tab" aria-selected="true">Soap Note</div>
+    <div class="tab" role="tab" aria-selected="false">Transcript</div>
+    <div class="tab" role="tab" aria-selected="false">Codes</div>
+    <div class="tab" role="tab" aria-selected="false">Rx</div>
+    <div class="tab" role="tab" aria-selected="false">Extras</div>
+  </div>
+
+  <div class="split">
+
+    <!-- LEFT: NOTE -->
+    <div class="note-pane">
+
+      <!-- S -->
+      <section class="section-block" data-sec="S">
+        <div class="section-head">
+          <div class="left">
+            <div class="section-eyebrow"><span class="ltr">S</span><span>01 · Subjective</span></div>
+            <h3 class="section-title">Patient narrative</h3>
+          </div>
+          <span class="section-status reviewed"><span class="sdot"></span>Reviewed</span>
+        </div>
+
+        <div class="note-para linked" data-cites="s1,s2">
+          Patient reports cough has improved over past week — now occasional, mostly morning. <strong>No fever for 5 days.</strong> Sputum changed from yellow-green to clear. Sleep restored. Returned to work Mon.
+          <span class="cite-counter"><span class="cite-dot"></span>2 turns</span>
+        </div>
+        <div class="note-para" data-cites="s3,s4">
+          Concerned about ongoing fatigue. Denies SOB, chest pain, hemoptysis.
+          <span class="cite-counter"><span class="cite-dot"></span>2 turns</span>
+        </div>
+      </section>
+
+      <!-- O -->
+      <section class="section-block" data-sec="O">
+        <div class="section-head">
+          <div class="left">
+            <div class="section-eyebrow"><span class="ltr">O</span><span>02 · Objective</span></div>
+            <h3 class="section-title">Exam &amp; vitals</h3>
+          </div>
+          <span class="section-status reviewed"><span class="sdot"></span>Reviewed</span>
+        </div>
+
+        <div class="note-para" data-cites="o1">
+          <span class="vitals-inline"><span class="v-lbl">VS</span> BP 118/74 · HR 88 · RR 18 · T 98.6 °F · SpO₂ 98% on RA</span>
+          <span class="cite-counter"><span class="cite-dot"></span>1 turn</span>
+        </div>
+        <div class="note-para" data-cites="o2,o3">
+          <strong>Pulmonary:</strong> Lungs clear to auscultation bilaterally, no wheezes/rales/rhonchi. <strong>Throat:</strong> mildly erythematous, no exudate. <strong>Cervical LAD:</strong> none. <strong>Heart:</strong> RRR no m/r/g.
+          <span class="cite-counter"><span class="cite-dot"></span>2 turns</span>
+        </div>
+      </section>
+
+      <!-- A -->
+      <section class="section-block" data-sec="A">
+        <div class="section-head">
+          <div class="left">
+            <div class="section-eyebrow"><span class="ltr">A</span><span>03 · Assessment</span></div>
+            <h3 class="section-title">Clinical impression</h3>
+          </div>
+          <span class="section-status reviewed"><span class="sdot"></span>Reviewed</span>
+        </div>
+        <div class="note-para" data-cites="a1">
+          <ol class="dx-list">
+            <li>Acute bronchitis, resolving<span class="dx-code">J20.9</span></li>
+            <li>Post-viral fatigue, expected resolution 1–2 weeks</li>
+            <li>Cough variant — improving</li>
+          </ol>
+          <span class="cite-counter"><span class="cite-dot"></span>1 turn</span>
+        </div>
+      </section>
+
+      <!-- P -->
+      <section class="section-block" data-sec="P">
+        <div class="section-head">
+          <div class="left">
+            <div class="section-eyebrow"><span class="ltr">P</span><span>04 · Plan</span></div>
+            <h3 class="section-title">Plan &amp; follow-up</h3>
+          </div>
+          <span class="section-status drafted"><span class="sdot"></span>Drafted</span>
+        </div>
+        <div class="note-para" data-cites="p1">
+          Continue symptomatic care: humidified air, hydration. <strong>Albuterol HFA 90 mcg</strong>, 1–2 puffs q4–6h PRN cough/SOB.
+          <span class="cite-counter"><span class="cite-dot"></span>1 turn</span>
+        </div>
+        <div class="note-para" data-cites="p2,p3">
+          Return in 7 days if cough persists or worsens, or sooner if fever/SOB. Patient counseled on red flags. Resume normal activities.
+          <span class="cite-counter"><span class="cite-dot"></span>2 turns</span>
+        </div>
+      </section>
+
+      <div class="split-footer">
+        <div class="meta">Drafted from 22 min · 8 paragraphs · 12 cited turns</div>
+        <button class="btn-ghost" type="button">Copy SOAP</button>
+      </div>
+    </div>
+
+    <!-- DIVIDER -->
+    <div class="divider"></div>
+
+    <!-- RIGHT: CITATIONS -->
+    <aside class="cites-pane" id="citesPane">
+      <div class="cites-head">
+        <span class="title">Citations</span>
+        <span class="meta">12 turns · 22 min</span>
+      </div>
+      <div class="cites-helper">Click a paragraph ← to jump to its source turns</div>
+
+      <!-- SUBJECTIVE -->
+      <div class="cite-group">
+        <div class="cite-group-label">
+          <span><span class="ltr">S</span>Subjective citations</span>
+          <span>4</span>
+        </div>
+        <div class="cite-turn active" data-id="s1">
+          <div class="cite-meta"><span class="cite-time">02:14</span><span class="cite-speaker">Patient</span></div>
+          <div class="cite-text">"My cough is so much better — it's mostly just <span class="hl">in the mornings now</span> and only every once in a while."</div>
+        </div>
+        <div class="cite-turn active" data-id="s2">
+          <div class="cite-meta"><span class="cite-time">02:48</span><span class="cite-speaker">Patient</span></div>
+          <div class="cite-text">"I haven't had a fever for, I want to say, <span class="hl">five days</span>? And the gunk that's coming up is clear now, not green like it was."</div>
+        </div>
+        <div class="cite-turn" data-id="s3">
+          <div class="cite-meta"><span class="cite-time">04:32</span><span class="cite-speaker">Patient</span></div>
+          <div class="cite-text">"What I'm a little worried about is — I'm still <span class="hl">tired in the afternoons</span>. Should I be?"</div>
+        </div>
+        <div class="cite-turn" data-id="s4">
+          <div class="cite-meta"><span class="cite-time">05:11</span><span class="cite-speaker dr">Dr. Park</span></div>
+          <div class="cite-text">"And no shortness of breath, no chest pain, no blood when you cough?" — patient: "No, none of that."</div>
+        </div>
+      </div>
+
+      <!-- OBJECTIVE -->
+      <div class="cite-group">
+        <div class="cite-group-label">
+          <span><span class="ltr">O</span>Objective citations</span>
+          <span>3</span>
+        </div>
+        <div class="cite-turn" data-id="o1">
+          <div class="cite-meta"><span class="cite-time">07:02</span><span class="cite-speaker">MA · Vitals</span></div>
+          <div class="cite-text">Recorded: <span class="hl">BP 118 over 74, heart rate 88, respiratory 18, temp 98.6, sat 98 percent on room air</span>.</div>
+        </div>
+        <div class="cite-turn" data-id="o2">
+          <div class="cite-meta"><span class="cite-time">10:24</span><span class="cite-speaker dr">Dr. Park</span></div>
+          <div class="cite-text">"Lungs are <span class="hl">clear bilaterally — no wheezes, no rales</span>. Throat looks just slightly red, no exudate."</div>
+        </div>
+        <div class="cite-turn" data-id="o3">
+          <div class="cite-meta"><span class="cite-time">11:08</span><span class="cite-speaker dr">Dr. Park</span></div>
+          <div class="cite-text">"Heart is regular rate and rhythm, <span class="hl">no murmurs</span>. No swollen lymph nodes."</div>
+        </div>
+      </div>
+
+      <!-- ASSESSMENT -->
+      <div class="cite-group">
+        <div class="cite-group-label">
+          <span><span class="ltr">A</span>Assessment citations</span>
+          <span>2</span>
+        </div>
+        <div class="cite-turn" data-id="a1">
+          <div class="cite-meta"><span class="cite-time">14:52</span><span class="cite-speaker dr">Dr. Park</span></div>
+          <div class="cite-text">"This is your <span class="hl">acute bronchitis resolving</span> — exactly the trajectory I'd expect at day 10. The fatigue is normal post-viral, should clear in another week or two."</div>
+        </div>
+      </div>
+
+      <!-- PLAN -->
+      <div class="cite-group">
+        <div class="cite-group-label">
+          <span><span class="ltr">P</span>Plan citations</span>
+          <span>3</span>
+        </div>
+        <div class="cite-turn" data-id="p1">
+          <div class="cite-meta"><span class="cite-time">17:30</span><span class="cite-speaker dr">Dr. Park</span></div>
+          <div class="cite-text">"I'm going to keep you on the <span class="hl">albuterol — 1 to 2 puffs every four to six hours</span> as needed. Plus humidifier, hydration, the usual."</div>
+        </div>
+        <div class="cite-turn" data-id="p2">
+          <div class="cite-meta"><span class="cite-time">19:14</span><span class="cite-speaker dr">Dr. Park</span></div>
+          <div class="cite-text">"<span class="hl">Come back in a week if it's not better</span>, or sooner if you spike a fever or feel short of breath."</div>
+        </div>
+        <div class="cite-turn" data-id="p3">
+          <div class="cite-meta"><span class="cite-time">20:02</span><span class="cite-speaker dr">Dr. Park</span></div>
+          <div class="cite-text">"You're cleared to <span class="hl">resume your normal activity</span>. Use the inhaler before exercise if you feel tight."</div>
+        </div>
+      </div>
+
+    </aside>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  // tabs visual
+  document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(x => {
+        x.classList.remove('active');
+        x.setAttribute('aria-selected','false');
+      });
+      t.classList.add('active');
+      t.setAttribute('aria-selected','true');
+    });
+  });
+
+  // paragraph -> citations linking
+  const paras = document.querySelectorAll('.note-para');
+  const turns = document.querySelectorAll('.cite-turn');
+
+  function clearLinks(){
+    paras.forEach(p => p.classList.remove('linked'));
+    turns.forEach(t => t.classList.remove('active'));
+  }
+
+  paras.forEach(p => {
+    p.addEventListener('click', () => {
+      const ids = (p.dataset.cites || '').split(',').map(s => s.trim()).filter(Boolean);
+      clearLinks();
+      p.classList.add('linked');
+      ids.forEach(id => {
+        const turn = document.querySelector(`.cite-turn[data-id="${id}"]`);
+        if(turn){
+          turn.classList.add('active');
+          // scroll first match into view in right pane
+          if(id === ids[0]){
+            const pane = document.getElementById('citesPane');
+            const ty = turn.offsetTop - pane.offsetTop - 14;
+            if(window.matchMedia('(min-width: 961px)').matches){
+              pane.scrollTo({top: ty, behavior: 'smooth'});
+            }
+          }
+        }
+      });
+    });
+  });
+
+  // turn click -> highlight the paragraph
+  turns.forEach(t => {
+    t.addEventListener('click', () => {
+      const id = t.dataset.id;
+      const owner = Array.from(paras).find(p => (p.dataset.cites || '').split(',').map(s => s.trim()).includes(id));
+      if(owner){
+        clearLinks();
+        owner.classList.add('linked');
+        const ids = (owner.dataset.cites || '').split(',').map(s => s.trim()).filter(Boolean);
+        ids.forEach(i => document.querySelector(`.cite-turn[data-id="${i}"]`)?.classList.add('active'));
+        owner.scrollIntoView({behavior: 'smooth', block: 'center'});
+      }
+    });
+  });
+})();
+</script>
+
+</body>
+</html>

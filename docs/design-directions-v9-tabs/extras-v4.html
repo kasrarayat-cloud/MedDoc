@@ -1,0 +1,929 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QuillMD · Visit · Mei-Ling Park · v9 Extras V4 Card Stream</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#08090a;
+  --surface-1:#0d0e10;
+  --surface-2:#131416;
+  --surface-3:#1a1c1e;
+  --border:#21232a;
+  --border-strong:#2c2f38;
+  --hairline:rgba(255,255,255,0.05);
+  --hairline-strong:rgba(255,255,255,0.08);
+  --text:#f7f8f8;
+  --text-2:#b4bcc8;
+  --text-3:#6c737f;
+  --text-4:#4b5159;
+  --sage:#7AA68C;
+  --sage-bright:#9BC4A8;
+  --sage-deep:#2F5040;
+  --sage-tint:rgba(122,166,140,0.13);
+  --sage-glow:rgba(122,166,140,0.18);
+  --row-hover:rgba(255,255,255,0.03);
+  --success:#4caf7d;
+  --warning:#d4a437;
+  --danger:#d4574a;
+  --info:#5b8db8;
+  --font-sans:'Inter', -apple-system, system-ui, sans-serif;
+  --font-mono:'JetBrains Mono', ui-monospace, Menlo, monospace;
+  --ease:cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text)}
+body{
+  font-family:var(--font-sans);
+  font-feature-settings:'cv11','ss01';
+  font-size:13px;
+  line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  letter-spacing:-0.005em;
+  min-height:100vh;
+}
+::selection{background:rgba(122,166,140,.25);color:var(--text)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+a{color:inherit;text-decoration:none}
+
+/* ─────────────── Top bar ─────────────── */
+.topbar{
+  position:sticky;top:0;z-index:30;
+  height:44px;
+  display:flex;align-items:center;gap:12px;
+  padding:0 16px;
+  background:rgba(8,9,10,.85);
+  backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--hairline);
+}
+.brand{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;letter-spacing:-0.01em}
+.brand-mark{
+  width:18px;height:18px;border-radius:5px;
+  background:linear-gradient(135deg,var(--sage) 0%,var(--sage-deep) 100%);
+  display:grid;place-items:center;color:#0c1410;font-size:10px;font-weight:700;
+  box-shadow:0 0 0 1px rgba(255,255,255,.06) inset;
+}
+.brand-mark::before{content:'Q'}
+.crumb-sep{color:var(--text-4);font-size:12px}
+.crumb{color:var(--text-2);font-size:13px;transition:color 100ms var(--ease)}
+.crumb:hover{color:var(--text)}
+.crumb-active{color:var(--text)}
+.spacer{flex:1}
+
+.status-pill-chrome{
+  display:inline-flex;align-items:center;gap:6px;
+  height:22px;padding:0 9px;
+  border-radius:4px;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.06em;text-transform:uppercase;font-weight:500;
+  border:1px solid rgba(122,166,140,.25);
+  color:var(--sage-bright);
+  background:rgba(122,166,140,.06);
+}
+.status-pill-chrome .pdot{
+  width:5px;height:5px;border-radius:50%;
+  background:var(--sage);
+  animation:idle-pulse 1.6s ease-in-out infinite;
+}
+@keyframes idle-pulse{
+  0%,100%{opacity:.7;transform:scale(1)}
+  50%{opacity:1;transform:scale(1.04)}
+}
+.btn-sage{
+  display:inline-flex;align-items:center;gap:8px;
+  height:30px;padding:0 14px;
+  background:var(--sage);
+  color:#0d1611;
+  border-radius:6px;
+  font-size:12.5px;font-weight:500;
+  letter-spacing:-0.005em;
+  transition:background 100ms var(--ease), transform 80ms var(--ease), box-shadow 200ms var(--ease);
+}
+.btn-sage:hover{background:#88b599;transform:scale(1.02);box-shadow:0 0 0 4px rgba(122,166,140,.18)}
+.btn-sage .shortcut{font-family:var(--font-mono);font-size:11px;color:rgba(13,22,17,.55)}
+
+.avatar-chip{
+  width:24px;height:24px;border-radius:6px;
+  background:linear-gradient(135deg,#3a4a52 0%,#2a3036 100%);
+  color:#dde6ec;font-size:10.5px;font-weight:600;
+  display:grid;place-items:center;letter-spacing:0.02em;
+  border:1px solid var(--hairline-strong);
+}
+
+/* ─────────────── Layout ─────────────── */
+.shell{
+  position:relative;
+  min-height:calc(100vh - 44px);
+  padding:18px 28px 80px;
+}
+.shell::before{
+  content:'';
+  position:absolute;
+  top:-100px;left:30%;
+  width:600px;height:380px;
+  background:radial-gradient(ellipse at center, rgba(122,166,140,.045) 0%, transparent 70%);
+  pointer-events:none;
+  z-index:0;
+}
+
+/* meta strip */
+.meta-strip{
+  display:flex;align-items:center;
+  padding:6px 0 14px;
+  margin-bottom:14px;
+  border-bottom:1px solid var(--hairline);
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--text-2);
+  position:relative;z-index:1;
+}
+.meta-strip .field{padding:0 14px;border-right:1px solid var(--hairline)}
+.meta-strip .field:first-child{padding-left:0;color:var(--text);font-weight:500}
+.meta-strip .field:last-child{border-right:0}
+.meta-strip .field .lbl{color:var(--text-4);margin-right:4px;font-weight:400}
+
+/* tabs */
+.tabs-row{
+  display:flex;align-items:center;gap:0;
+  margin-bottom:24px;
+  border-bottom:1px solid var(--hairline);
+  position:relative;z-index:1;
+}
+.tab{
+  position:relative;
+  padding:8px 16px 10px;
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.07em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  font-weight:500;
+  cursor:pointer;
+  transition:color 100ms var(--ease);
+}
+.tab:first-child{padding-left:0}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--sage-bright)}
+.tab.active::after{
+  content:'';position:absolute;
+  left:0;right:0;bottom:-1px;
+  height:1.5px;
+  background:var(--sage);
+  border-radius:1px 1px 0 0;
+}
+
+/* ─────────────── Card stream ─────────────── */
+.card-stream{
+  position:relative;z-index:1;
+  display:flex;flex-direction:column;
+  gap:12px;
+  max-width:920px;
+  margin:0 auto;
+}
+
+.card{
+  background:var(--surface-1);
+  border:1px solid var(--hairline);
+  border-radius:8px;
+  overflow:hidden;
+  transition:border-color 130ms var(--ease), background 130ms var(--ease);
+}
+.card:hover{border-color:var(--hairline-strong)}
+
+.card-head{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:12px;
+  padding:14px 18px 12px;
+  border-bottom:1px solid var(--hairline);
+}
+.card-head .left{display:flex;align-items:center;gap:11px;min-width:0}
+.card-head .icon{
+  flex-shrink:0;
+  width:28px;height:28px;
+  display:grid;place-items:center;
+  border:1px solid var(--hairline-strong);
+  border-radius:6px;
+  background:rgba(255,255,255,.02);
+  font-size:14px;
+  line-height:1;
+}
+.card-head .icon.demo{color:var(--info)}
+.card-head .icon.vitals{color:var(--coral, #C97B6E)}
+.card-head .icon.allergies{color:var(--danger)}
+.card-head .icon.meds{color:var(--sage-bright)}
+.card-head .icon.problems{color:var(--warning)}
+.card-head .icon.metadata{color:var(--text-2)}
+.card-head .icon.audit{color:var(--sage)}
+.card-head .title-block{display:flex;flex-direction:column;gap:1px;min-width:0}
+.card-head .title{
+  font-family:var(--font-sans);
+  font-size:16px;
+  letter-spacing:-0.01em;
+  color:var(--text);
+  font-weight:600;
+}
+.card-head .sub{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--text-3);
+}
+.card-head .right{
+  display:flex;align-items:center;gap:8px;
+  flex-shrink:0;
+}
+.card-head .count-pill{
+  display:inline-flex;align-items:center;
+  height:22px;padding:0 9px;
+  border-radius:4px;
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--text-2);
+  background:rgba(255,255,255,.025);
+  border:1px solid var(--hairline-strong);
+  font-weight:500;
+}
+.card-head .count-pill.sage{color:var(--sage-bright);border-color:rgba(122,166,140,.25);background:rgba(122,166,140,.06)}
+.card-head .count-pill.warn{color:var(--warning);border-color:rgba(212,164,55,.25);background:rgba(212,164,55,.06)}
+.card-head .count-pill.danger{color:var(--danger);border-color:rgba(212,87,74,.25);background:rgba(212,87,74,.06)}
+.card-head .edit-btn{
+  display:inline-flex;align-items:center;
+  height:24px;padding:0 9px;
+  border-radius:4px;
+  border:1px solid transparent;
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  cursor:pointer;
+  transition:color 100ms var(--ease), background 100ms var(--ease), border-color 100ms var(--ease);
+}
+.card-head .edit-btn:hover{color:var(--sage-bright);background:rgba(122,166,140,.05);border-color:rgba(122,166,140,.18)}
+
+.card-body{
+  padding:14px 18px 16px;
+}
+
+/* demographics */
+.kv-grid{
+  display:grid;
+  grid-template-columns:repeat(2,1fr);
+  gap:11px 24px;
+}
+@media (max-width:600px){
+  .kv-grid{grid-template-columns:1fr;gap:9px}
+}
+.kv{display:flex;flex-direction:column;gap:2px;min-width:0}
+.kv .k{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--text-3);
+}
+.kv .v{
+  font-size:13.5px;
+  color:var(--text);
+  letter-spacing:-0.005em;
+}
+.kv .v .secondary{color:var(--text-3);font-size:12.5px;margin-left:4px}
+.kv .v .mono{
+  font-family:var(--font-mono);
+  font-variant-numeric:tabular-nums;
+  font-size:13px;
+}
+
+/* vitals — 4 column tile grid, row 2x4 */
+.vitals-tiles{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:1px;
+  background:var(--hairline);
+  border:1px solid var(--hairline);
+  border-radius:6px;
+  overflow:hidden;
+}
+@media (max-width:760px){
+  .vitals-tiles{grid-template-columns:repeat(2,1fr)}
+}
+.vt{
+  background:var(--surface-1);
+  padding:10px 12px;
+  display:flex;flex-direction:column;
+  gap:3px;
+}
+.vt .lbl{
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.12em;
+  text-transform:uppercase;
+  color:var(--text-3);
+}
+.vt .val{
+  font-family:var(--font-mono);
+  font-size:14.5px;
+  color:var(--text);
+  font-weight:500;
+  font-variant-numeric:tabular-nums;
+}
+.vt .val .unit{color:var(--text-3);font-size:11px;margin-left:3px;font-weight:400}
+.vt .ok{
+  font-family:var(--font-mono);
+  font-size:9px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--sage-bright);
+}
+.vt .ok::before{content:'✓ '}
+
+/* allergies */
+.allergy-card{
+  display:flex;align-items:flex-start;gap:14px;
+  padding:11px 14px;
+  border:1px solid rgba(212,87,74,.22);
+  background:rgba(212,87,74,.04);
+  border-left-width:2px;
+  border-left-color:var(--danger);
+  border-radius:6px;
+}
+.allergy-card .sev-tag{
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.12em;
+  text-transform:uppercase;
+  font-weight:500;
+  color:var(--danger);
+  background:rgba(212,87,74,.08);
+  border:1px solid rgba(212,87,74,.3);
+  padding:3px 7px;
+  border-radius:3px;
+  flex-shrink:0;
+}
+.allergy-card .body .name{
+  font-size:14.5px;
+  color:var(--text);
+  font-weight:600;
+  letter-spacing:-0.01em;
+  margin-bottom:2px;
+}
+.allergy-card .body .detail{
+  font-size:13px;
+  color:var(--text-2);
+  line-height:1.5;
+}
+.allergy-card .body .meta{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.06em;
+  color:var(--text-3);
+  margin-top:4px;
+}
+
+/* meds */
+.med-row{
+  display:flex;align-items:flex-start;gap:14px;
+  padding:10px 0;
+  border-top:1px solid var(--hairline);
+}
+.med-row:first-child{border-top:0;padding-top:2px}
+.med-row .icon-mini{
+  flex-shrink:0;
+  width:26px;height:26px;
+  display:grid;place-items:center;
+  border:1px solid var(--hairline-strong);
+  border-radius:5px;
+  background:rgba(255,255,255,.02);
+  color:var(--sage-bright);
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.04em;
+}
+.med-row .body{flex:1}
+.med-row .name{
+  font-size:14px;
+  color:var(--text);
+  font-weight:500;
+  margin-bottom:2px;
+  letter-spacing:-0.005em;
+}
+.med-row .name .pill{
+  display:inline-flex;align-items:center;
+  height:16px;padding:0 6px;
+  margin-left:8px;
+  font-family:var(--font-mono);
+  font-size:9px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  background:rgba(122,166,140,.06);
+  color:var(--sage-bright);
+  border:1px solid rgba(122,166,140,.22);
+  border-radius:3px;
+  vertical-align:1px;
+}
+.med-row .detail{
+  font-family:var(--font-mono);
+  font-size:11.5px;
+  color:var(--text-3);
+  font-variant-numeric:tabular-nums;
+  letter-spacing:0.01em;
+}
+
+/* problems */
+.problem-row{
+  display:flex;align-items:flex-start;gap:14px;
+  padding:10px 0;
+  border-top:1px solid var(--hairline);
+}
+.problem-row:first-child{border-top:0;padding-top:2px}
+.problem-row .dot-col{
+  flex-shrink:0;
+  width:26px;height:26px;
+  display:grid;place-items:center;
+  border:1px solid var(--hairline-strong);
+  border-radius:5px;
+  background:rgba(255,255,255,.02);
+  font-size:13px;
+  line-height:1;
+}
+.problem-row.active .dot-col{color:var(--sage-bright);border-color:rgba(122,166,140,.22);background:rgba(122,166,140,.04)}
+.problem-row.draft .dot-col{color:var(--warning);border-color:rgba(212,164,55,.22);background:rgba(212,164,55,.04)}
+.problem-row .body{flex:1}
+.problem-row .head{
+  display:flex;align-items:baseline;gap:8px;
+  margin-bottom:2px;
+  flex-wrap:wrap;
+}
+.problem-row .name{
+  font-size:14px;
+  color:var(--text);
+  font-weight:500;
+}
+.problem-row .icd-pill{
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  padding:1px 6px;
+  border-radius:3px;
+  background:rgba(122,166,140,.06);
+  color:var(--sage-bright);
+  border:1px solid rgba(122,166,140,.22);
+}
+.problem-row .draft-pill{
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  padding:1px 6px;
+  border-radius:3px;
+  background:rgba(212,164,55,.06);
+  color:var(--warning);
+  border:1px solid rgba(212,164,55,.25);
+}
+.problem-row .detail{
+  font-size:12.5px;
+  color:var(--text-3);
+  line-height:1.5;
+}
+.problem-row .detail .mono{
+  font-family:var(--font-mono);
+  font-variant-numeric:tabular-nums;
+  color:var(--text-2);
+}
+
+/* audit */
+.audit-stream{
+  display:flex;flex-direction:column;
+}
+.audit-stream .ev{
+  display:grid;
+  grid-template-columns:60px 22px 1fr;
+  gap:10px;
+  padding:9px 0;
+  border-top:1px solid var(--hairline);
+  align-items:flex-start;
+}
+.audit-stream .ev:first-child{border-top:0;padding-top:2px}
+.audit-stream .ev .ts{
+  font-family:var(--font-mono);
+  font-size:11px;
+  color:var(--text-3);
+  font-variant-numeric:tabular-nums;
+  letter-spacing:0.02em;
+  padding-top:2px;
+}
+.audit-stream .ev .av{
+  width:20px;height:20px;border-radius:4px;
+  background:linear-gradient(135deg,#3a4a52 0%,#2a3036 100%);
+  color:#dde6ec;font-size:9px;font-weight:600;
+  display:grid;place-items:center;letter-spacing:0.02em;
+  border:1px solid var(--hairline-strong);
+  flex-shrink:0;
+  margin-top:1px;
+}
+.audit-stream .ev.system .av{
+  background:linear-gradient(135deg,#1f2a26 0%,#11201a 100%);
+  color:var(--sage-bright);
+}
+.audit-stream .ev .text{
+  font-size:13px;
+  color:var(--text);
+  line-height:1.5;
+  letter-spacing:-0.005em;
+}
+.audit-stream .ev .actor{color:var(--text);font-weight:500}
+.audit-stream .ev.system .actor{color:var(--text-2);font-weight:400}
+.audit-stream .ev .verb{color:var(--text-2)}
+.audit-stream .ev .obj{color:var(--text-3);font-family:var(--font-mono);font-size:11px;letter-spacing:0.01em}
+
+.card-foot{
+  padding:10px 18px;
+  border-top:1px solid var(--hairline);
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--text-3);
+}
+.card-foot .add{
+  display:inline-flex;align-items:center;gap:6px;
+  cursor:pointer;
+  transition:color 100ms var(--ease);
+}
+.card-foot .add:hover{color:var(--sage-bright)}
+.card-foot .add .plus{
+  display:inline-grid;place-items:center;
+  width:14px;height:14px;
+  border:1px solid var(--hairline-strong);
+  border-radius:3px;
+  font-size:11px;line-height:1;
+}
+.card-foot .add:hover .plus{border-color:var(--sage);color:var(--sage-bright)}
+
+/* reduced motion */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;
+  }
+  .status-pill-chrome .pdot{animation:none}
+}
+
+/* responsive */
+@media (max-width:760px){
+  .meta-strip{flex-wrap:wrap;font-size:10px}
+  .meta-strip .field{padding:4px 10px}
+  .shell{padding:14px 16px 60px}
+  .tabs-row{overflow-x:auto;flex-wrap:nowrap}
+  .tab{flex-shrink:0}
+  .topbar{padding:0 12px;gap:8px;flex-wrap:wrap;height:auto;min-height:44px}
+  .crumb,.crumb-sep{display:none}
+  .crumb-active{display:inline}
+  .card-head{padding:12px 14px 10px}
+  .card-body{padding:12px 14px 14px}
+  .card-head .title{font-size:15px}
+  .audit-stream .ev{grid-template-columns:50px 20px 1fr;gap:8px}
+}
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<header class="topbar">
+  <div class="brand"><span class="brand-mark"></span> QuillMD</div>
+  <span class="crumb-sep">/</span>
+  <span class="crumb">Patients</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb">Mei-Ling Park</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb crumb-active">Visit · Apr 30, 2026</span>
+  <div class="spacer"></div>
+  <div class="status-pill-chrome" aria-live="polite">
+    <span class="pdot"></span>
+    <span class="label">Ready</span>
+  </div>
+  <button class="btn-sage" type="button" aria-label="Sign and send note">
+    <span>Sign &amp; send</span>
+    <span class="shortcut">⌘ ↵</span>
+  </button>
+  <div class="avatar-chip" title="Dr. Sarah Chen">SC</div>
+</header>
+
+<div class="shell">
+
+  <!-- meta strip -->
+  <div class="meta-strip">
+    <div class="field">Mei-Ling Park</div>
+    <div class="field">34 F</div>
+    <div class="field"><span class="lbl">MRN</span>MP-007341</div>
+    <div class="field">J20.9 · Bronchitis follow-up</div>
+    <div class="field">99214</div>
+    <div class="field"><span class="lbl">Duration</span>24 min</div>
+  </div>
+
+  <!-- tabs -->
+  <div class="tabs-row" role="tablist">
+    <div class="tab" role="tab" aria-selected="false">Soap Note</div>
+    <div class="tab" role="tab" aria-selected="false">Transcript</div>
+    <div class="tab" role="tab" aria-selected="false">Codes</div>
+    <div class="tab" role="tab" aria-selected="false">Rx</div>
+    <div class="tab active" role="tab" aria-selected="true">Extras</div>
+  </div>
+
+  <!-- card stream -->
+  <div class="card-stream">
+
+    <!-- DEMOGRAPHICS -->
+    <article class="card">
+      <header class="card-head">
+        <div class="left">
+          <span class="icon demo" aria-hidden="true">👤</span>
+          <div class="title-block">
+            <h2 class="title">Demographics</h2>
+            <span class="sub">Patient profile · 7 fields</span>
+          </div>
+        </div>
+        <div class="right">
+          <span class="count-pill sage">Verified Apr 28</span>
+          <button class="edit-btn" type="button">Edit</button>
+        </div>
+      </header>
+      <div class="card-body">
+        <div class="kv-grid">
+          <div class="kv"><span class="k">Full name</span><span class="v">Mei-Ling Park</span></div>
+          <div class="kv"><span class="k">Date of birth</span><span class="v"><span class="mono">Mar 15, 1992</span><span class="secondary">· 34 yo</span></span></div>
+          <div class="kv"><span class="k">MRN</span><span class="v"><span class="mono">MP-007341</span></span></div>
+          <div class="kv"><span class="k">Address</span><span class="v">Newport Beach, CA</span></div>
+          <div class="kv"><span class="k">Insurance</span><span class="v">Anthem Blue Cross PPO<span class="secondary">· verified Apr 28</span></span></div>
+          <div class="kv"><span class="k">Preferred language</span><span class="v">English</span></div>
+          <div class="kv"><span class="k">Emergency contact</span><span class="v">Daniel Park<span class="secondary">· husband</span></span></div>
+        </div>
+      </div>
+    </article>
+
+    <!-- VITALS -->
+    <article class="card">
+      <header class="card-head">
+        <div class="left">
+          <span class="icon vitals" aria-hidden="true">❤</span>
+          <div class="title-block">
+            <h2 class="title">Vitals</h2>
+            <span class="sub">Recorded today · 11:18 am</span>
+          </div>
+        </div>
+        <div class="right">
+          <span class="count-pill sage">8 / 8 in range</span>
+          <button class="edit-btn" type="button">Edit</button>
+        </div>
+      </header>
+      <div class="card-body">
+        <div class="vitals-tiles">
+          <div class="vt"><span class="lbl">BP</span><span class="val">118/74<span class="unit">mmHg</span></span><span class="ok">Normal</span></div>
+          <div class="vt"><span class="lbl">HR</span><span class="val">88<span class="unit">bpm</span></span><span class="ok">Normal</span></div>
+          <div class="vt"><span class="lbl">RR</span><span class="val">18<span class="unit">/min</span></span><span class="ok">Normal</span></div>
+          <div class="vt"><span class="lbl">Temp</span><span class="val">98.6<span class="unit">°F</span></span><span class="ok">Normal</span></div>
+          <div class="vt"><span class="lbl">SpO₂</span><span class="val">98<span class="unit">% RA</span></span><span class="ok">Normal</span></div>
+          <div class="vt"><span class="lbl">Weight</span><span class="val">145<span class="unit">lb</span></span><span class="ok">Stable</span></div>
+          <div class="vt"><span class="lbl">Height</span><span class="val">5′5″</span><span class="ok">Stable</span></div>
+          <div class="vt"><span class="lbl">BMI</span><span class="val">24.1</span><span class="ok">Normal</span></div>
+        </div>
+      </div>
+    </article>
+
+    <!-- ALLERGIES -->
+    <article class="card">
+      <header class="card-head">
+        <div class="left">
+          <span class="icon allergies" aria-hidden="true">⚠</span>
+          <div class="title-block">
+            <h2 class="title">Allergies</h2>
+            <span class="sub">1 active · confirmed at intake</span>
+          </div>
+        </div>
+        <div class="right">
+          <span class="count-pill danger">1 severe</span>
+          <button class="edit-btn" type="button">Edit</button>
+        </div>
+      </header>
+      <div class="card-body">
+        <div class="allergy-card">
+          <span class="sev-tag">Severe</span>
+          <div class="body">
+            <div class="name">Penicillin</div>
+            <div class="detail">Reaction: rash and hives. Listed on every active prescribing screen.</div>
+            <div class="meta">VERIFIED MAY 2018 · PATIENT REPORT</div>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <!-- CURRENT MEDS -->
+    <article class="card">
+      <header class="card-head">
+        <div class="left">
+          <span class="icon meds" aria-hidden="true">💊</span>
+          <div class="title-block">
+            <h2 class="title">Current medications</h2>
+            <span class="sub">Chronic only · today's Rx is in the Rx tab</span>
+          </div>
+        </div>
+        <div class="right">
+          <span class="count-pill">1 chronic</span>
+          <button class="edit-btn" type="button">Edit</button>
+        </div>
+      </header>
+      <div class="card-body">
+        <div class="med-row">
+          <span class="icon-mini">Rx</span>
+          <div class="body">
+            <div class="name">Lisinopril 10 mg <span class="pill">Active</span></div>
+            <div class="detail">PO daily · for hypertension (I10) · started Jan 2024 · adherence excellent</div>
+          </div>
+        </div>
+      </div>
+      <footer class="card-foot">
+        <span class="add"><span class="plus">+</span> Add medication</span>
+        <span>Reviewed today by Dr. Sarah Chen</span>
+      </footer>
+    </article>
+
+    <!-- PROBLEM LIST -->
+    <article class="card">
+      <header class="card-head">
+        <div class="left">
+          <span class="icon problems" aria-hidden="true">📋</span>
+          <div class="title-block">
+            <h2 class="title">Problem list</h2>
+            <span class="sub">Active diagnoses on this patient</span>
+          </div>
+        </div>
+        <div class="right">
+          <span class="count-pill warn">1 active · 1 draft</span>
+          <button class="edit-btn" type="button">Edit</button>
+        </div>
+      </header>
+      <div class="card-body">
+        <div class="problem-row active">
+          <span class="dot-col">●</span>
+          <div class="body">
+            <div class="head">
+              <span class="name">Hypertension</span>
+              <span class="icd-pill">I10</span>
+            </div>
+            <div class="detail">Controlled, stable on lisinopril since <span class="mono">Jan 2024</span>. Last BP <span class="mono">118/74</span>.</div>
+          </div>
+        </div>
+        <div class="problem-row draft">
+          <span class="dot-col">○</span>
+          <div class="body">
+            <div class="head">
+              <span class="name">Acute bronchitis</span>
+              <span class="icd-pill">J20.9</span>
+              <span class="draft-pill">Draft · pending sign-off</span>
+            </div>
+            <div class="detail">Onset <span class="mono">Apr 20, 2026</span>. Resolving on conservative care; albuterol HFA PRN.</div>
+          </div>
+        </div>
+      </div>
+      <footer class="card-foot">
+        <span class="add"><span class="plus">+</span> Add problem</span>
+        <span>Updates with Sign &amp; send</span>
+      </footer>
+    </article>
+
+    <!-- VISIT METADATA -->
+    <article class="card">
+      <header class="card-head">
+        <div class="left">
+          <span class="icon metadata" aria-hidden="true">ⓘ</span>
+          <div class="title-block">
+            <h2 class="title">Visit metadata</h2>
+            <span class="sub">Encounter · ENC-2026-04-30-7341</span>
+          </div>
+        </div>
+        <div class="right">
+          <span class="count-pill">7 fields</span>
+          <button class="edit-btn" type="button">Edit</button>
+        </div>
+      </header>
+      <div class="card-body">
+        <div class="kv-grid">
+          <div class="kv"><span class="k">Specialty</span><span class="v">Family Medicine</span></div>
+          <div class="kv"><span class="k">Visit type</span><span class="v">Follow-up<span class="secondary">· tele → in-person</span></span></div>
+          <div class="kv"><span class="k">Duration</span><span class="v"><span class="mono">24 min</span><span class="secondary">· 6 m 04 s audio</span></span></div>
+          <div class="kv"><span class="k">Location</span><span class="v">Suite 240, Newport Beach</span></div>
+          <div class="kv"><span class="k">Billing provider</span><span class="v">Dr. Sarah Chen, MD<span class="secondary">· NPI <span class="mono">1234567890</span></span></span></div>
+          <div class="kv"><span class="k">Recorded by</span><span class="v">Dr. Sarah Chen</span></div>
+          <div class="kv"><span class="k">Encounter ID</span><span class="v"><span class="mono">ENC-2026-04-30-7341</span></span></div>
+        </div>
+      </div>
+    </article>
+
+    <!-- AUDIT LOG -->
+    <article class="card">
+      <header class="card-head">
+        <div class="left">
+          <span class="icon audit" aria-hidden="true">📜</span>
+          <div class="title-block">
+            <h2 class="title">Audit log</h2>
+            <span class="sub">Last 8 events · most recent first</span>
+          </div>
+        </div>
+        <div class="right">
+          <span class="count-pill sage">8 events</span>
+          <button class="edit-btn" type="button">View all</button>
+        </div>
+      </header>
+      <div class="card-body">
+        <div class="audit-stream">
+
+          <div class="ev">
+            <span class="ts">14:42</span>
+            <span class="av">SC</span>
+            <span class="text"><span class="actor">Dr. Sarah Chen</span> <span class="verb">drafted SOAP plan section</span></span>
+          </div>
+
+          <div class="ev">
+            <span class="ts">14:38</span>
+            <span class="av">SC</span>
+            <span class="text"><span class="actor">Dr. Sarah Chen</span> <span class="verb">accepted ICD code</span> <span class="obj">J20.9</span></span>
+          </div>
+
+          <div class="ev system">
+            <span class="ts">14:36</span>
+            <span class="av">·</span>
+            <span class="text"><span class="actor">System</span> <span class="verb">generated SOAP draft</span> <span class="obj">AI confidence 92%</span></span>
+          </div>
+
+          <div class="ev system">
+            <span class="ts">14:36</span>
+            <span class="av">·</span>
+            <span class="text"><span class="actor">System</span> <span class="verb">completed transcription</span> <span class="obj">Whisper v3 · 6 m 04 s</span></span>
+          </div>
+
+          <div class="ev">
+            <span class="ts">14:30</span>
+            <span class="av">SC</span>
+            <span class="text"><span class="actor">Dr. Sarah Chen</span> <span class="verb">started recording</span></span>
+          </div>
+
+          <div class="ev">
+            <span class="ts">14:29</span>
+            <span class="av">SC</span>
+            <span class="text"><span class="actor">Dr. Sarah Chen</span> <span class="verb">opened patient chart</span></span>
+          </div>
+
+          <div class="ev system">
+            <span class="ts">14:28</span>
+            <span class="av">·</span>
+            <span class="text"><span class="actor">System</span> <span class="verb">checked in patient</span></span>
+          </div>
+
+          <div class="ev">
+            <span class="ts">09:14</span>
+            <span class="av">SC</span>
+            <span class="text"><span class="actor">Dr. Sarah Chen <span class="obj">(admin)</span></span> <span class="verb">verified insurance via Anthem API</span></span>
+          </div>
+
+        </div>
+      </div>
+      <footer class="card-foot">
+        <span class="add"><span class="plus">+</span> Inspect event</span>
+        <span>Auto-saved · 14:42 PT</span>
+      </footer>
+    </article>
+
+  </div>
+
+</div>
+
+<script>
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => {
+      x.classList.remove('active');
+      x.setAttribute('aria-selected','false');
+    });
+    t.classList.add('active');
+    t.setAttribute('aria-selected','true');
+  });
+});
+</script>
+
+</body>
+</html>

@@ -1,0 +1,718 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QuillMD · Visit · Mei-Ling Park · v9 SOAP V2 Power Table</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#08090a;
+  --surface-1:#0d0e10;
+  --surface-2:#131416;
+  --surface-3:#1a1c1e;
+  --border:#21232a;
+  --border-strong:#2c2f38;
+  --hairline:rgba(255,255,255,0.05);
+  --hairline-strong:rgba(255,255,255,0.08);
+  --text:#f7f8f8;
+  --text-2:#b4bcc8;
+  --text-3:#6c737f;
+  --text-4:#4b5159;
+  --sage:#7AA68C;
+  --sage-bright:#9BC4A8;
+  --sage-deep:#2F5040;
+  --sage-tint:rgba(122,166,140,0.13);
+  --sage-glow:rgba(122,166,140,0.18);
+  --row-hover:rgba(255,255,255,0.03);
+  --row-active:rgba(255,255,255,0.05);
+  --warning:#d4a437;
+  --warning-bright:#e3b950;
+  --font-sans:'Inter', -apple-system, system-ui, sans-serif;
+  --font-mono:'JetBrains Mono', ui-monospace, Menlo, monospace;
+  --ease:cubic-bezier(0.16, 1, 0.3, 1);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text)}
+body{
+  font-family:var(--font-sans);
+  font-feature-settings:'cv11','ss01';
+  font-size:13px;
+  line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  letter-spacing:-0.005em;
+  min-height:100vh;
+}
+::selection{background:rgba(122,166,140,.25);color:var(--text)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+a{color:inherit;text-decoration:none}
+
+/* topbar (shared) */
+.topbar{
+  position:sticky;top:0;z-index:30;
+  height:44px;
+  display:flex;align-items:center;gap:12px;
+  padding:0 16px;
+  background:rgba(8,9,10,.85);
+  backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--hairline);
+}
+.brand{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;letter-spacing:-0.01em}
+.brand-mark{
+  width:18px;height:18px;border-radius:5px;
+  background:linear-gradient(135deg,var(--sage) 0%,var(--sage-deep) 100%);
+  display:grid;place-items:center;color:#0c1410;font-size:10px;font-weight:700;
+  box-shadow:0 0 0 1px rgba(255,255,255,.06) inset;
+}
+.brand-mark::before{content:'Q'}
+.crumb-sep{color:var(--text-4);font-size:12px}
+.crumb{color:var(--text-2);font-size:13px;transition:color 100ms var(--ease)}
+.crumb:hover{color:var(--text)}
+.crumb-active{color:var(--text)}
+.spacer{flex:1}
+.status-pill-chrome{
+  display:inline-flex;align-items:center;gap:6px;
+  height:22px;padding:0 9px;
+  border-radius:4px;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.06em;text-transform:uppercase;font-weight:500;
+  border:1px solid rgba(122,166,140,.25);
+  color:var(--sage-bright);
+  background:rgba(122,166,140,.06);
+}
+.status-pill-chrome .pdot{
+  width:5px;height:5px;border-radius:50%;
+  background:var(--sage);
+  animation:idle-pulse 1.6s ease-in-out infinite;
+}
+@keyframes idle-pulse{
+  0%,100%{opacity:.7;transform:scale(1)}
+  50%{opacity:1;transform:scale(1.04)}
+}
+.btn-sage{
+  display:inline-flex;align-items:center;gap:8px;
+  height:30px;padding:0 14px;
+  background:var(--sage);
+  color:#0d1611;
+  border-radius:6px;
+  font-size:12.5px;font-weight:500;
+  letter-spacing:-0.005em;
+  transition:background 100ms var(--ease), transform 80ms var(--ease), box-shadow 200ms var(--ease);
+}
+.btn-sage:hover{background:#88b599;transform:scale(1.02);box-shadow:0 0 0 4px rgba(122,166,140,.18)}
+.btn-sage .shortcut{font-family:var(--font-mono);font-size:11px;color:rgba(13,22,17,.55)}
+.avatar-chip{
+  width:24px;height:24px;border-radius:6px;
+  background:linear-gradient(135deg,#3a4a52 0%,#2a3036 100%);
+  color:#dde6ec;font-size:10.5px;font-weight:600;
+  display:grid;place-items:center;letter-spacing:0.02em;
+  border:1px solid var(--hairline-strong);
+}
+
+/* shell */
+.shell{
+  position:relative;
+  min-height:calc(100vh - 44px);
+  padding:18px 28px 80px;
+}
+.shell::before{
+  content:'';
+  position:absolute;
+  top:-100px;left:30%;
+  width:600px;height:380px;
+  background:radial-gradient(ellipse at center, rgba(122,166,140,.045) 0%, transparent 70%);
+  pointer-events:none;
+  z-index:0;
+}
+
+.meta-strip{
+  display:flex;align-items:center;
+  padding:6px 0 14px;
+  margin-bottom:14px;
+  border-bottom:1px solid var(--hairline);
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--text-2);
+  position:relative;z-index:1;
+}
+.meta-strip .field{padding:0 14px;border-right:1px solid var(--hairline)}
+.meta-strip .field:first-child{padding-left:0;color:var(--text);font-weight:500}
+.meta-strip .field:last-child{border-right:0}
+.meta-strip .field .lbl{color:var(--text-4);margin-right:4px;font-weight:400}
+
+.tabs-row{
+  display:flex;align-items:center;gap:0;
+  margin-bottom:18px;
+  border-bottom:1px solid var(--hairline);
+  position:relative;z-index:1;
+}
+.tab{
+  position:relative;
+  padding:8px 16px 10px;
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.07em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  font-weight:500;
+  cursor:pointer;
+  transition:color 100ms var(--ease);
+}
+.tab:first-child{padding-left:0}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--sage-bright)}
+.tab.active::after{
+  content:'';position:absolute;
+  left:0;right:0;bottom:-1px;
+  height:1.5px;
+  background:var(--sage);
+  border-radius:1px 1px 0 0;
+}
+
+/* ─────────────── Power Table ─────────────── */
+.table-frame{
+  position:relative;z-index:1;
+  background:var(--surface-1);
+  border:1px solid var(--hairline);
+  border-radius:8px;
+  overflow:hidden;
+}
+
+.table-toolbar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 14px;
+  background:var(--surface-1);
+  border-bottom:1px solid var(--hairline);
+  gap:10px;
+}
+.table-toolbar .left{display:flex;align-items:center;gap:14px}
+.table-toolbar .title{
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--text);
+  font-weight:500;
+}
+.table-toolbar .meta{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  display:flex;align-items:center;gap:6px;
+}
+.table-toolbar .dot{width:3px;height:3px;border-radius:50%;background:var(--text-4)}
+.toolbar-right{display:flex;align-items:center;gap:8px}
+.tbtn{
+  display:inline-flex;align-items:center;gap:6px;
+  height:24px;padding:0 9px;
+  border:1px solid var(--hairline-strong);
+  border-radius:4px;
+  background:rgba(255,255,255,.015);
+  color:var(--text-2);
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  font-weight:500;
+  transition:background 100ms var(--ease), color 100ms var(--ease), border-color 100ms var(--ease);
+}
+.tbtn:hover{background:rgba(255,255,255,.04);color:var(--text);border-color:rgba(255,255,255,.14)}
+.tbtn kbd{font-family:var(--font-mono);color:var(--text-3)}
+
+.thead{
+  display:grid;
+  grid-template-columns:96px 1fr 132px 56px;
+  background:var(--surface-1);
+  border-bottom:1px solid var(--hairline);
+}
+.thead .th{
+  padding:9px 14px;
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.12em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  font-weight:500;
+}
+.thead .th + .th{border-left:1px solid var(--hairline)}
+
+.trow{
+  display:grid;
+  grid-template-columns:96px 1fr 132px 56px;
+  border-top:1px solid var(--hairline);
+  background:var(--surface-1);
+  transition:background 100ms var(--ease);
+}
+.trow:first-child{border-top:0}
+.trow:hover{background:rgba(255,255,255,.018)}
+.trow.editing{background:rgba(122,166,140,.04)}
+.tcell{
+  padding:14px;
+  border-left:1px solid var(--hairline);
+  min-width:0;
+}
+.tcell:first-child{border-left:0}
+
+/* label cell */
+.label-cell{
+  display:flex;align-items:flex-start;gap:10px;
+  font-family:var(--font-mono);
+}
+.label-cell .ltr{
+  display:inline-grid;place-items:center;
+  width:22px;height:22px;
+  background:rgba(122,166,140,.08);
+  border:1px solid rgba(122,166,140,.22);
+  border-radius:4px;
+  color:var(--sage-bright);
+  font-size:11px;
+  font-weight:500;
+  letter-spacing:0;
+  flex-shrink:0;
+}
+.label-cell .lname{
+  display:flex;flex-direction:column;
+  font-size:11px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--text);
+  font-weight:500;
+  padding-top:3px;
+}
+.label-cell .lsub{
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  color:var(--text-4);
+  letter-spacing:0.06em;
+  margin-top:2px;
+  text-transform:none;
+  font-weight:400;
+}
+
+/* content cell */
+.content-cell{
+  position:relative;
+  font-size:13.5px;
+  line-height:1.62;
+  color:var(--text);
+  letter-spacing:-0.005em;
+  padding:14px;
+  cursor:text;
+  border:1px solid transparent;
+  border-radius:4px;
+  margin:6px 8px;
+  padding:8px 10px;
+  transition:border-color 100ms var(--ease), background 100ms var(--ease);
+}
+.tcell.content-wrap{padding:0;border-left:1px solid var(--hairline)}
+.content-cell:hover{
+  background:rgba(255,255,255,.022);
+  border-color:var(--hairline-strong);
+}
+.content-cell:focus,
+.content-cell.focused{
+  background:rgba(122,166,140,.04);
+  border-color:rgba(122,166,140,.42);
+  outline:none;
+  box-shadow:0 0 0 3px rgba(122,166,140,.1);
+}
+.content-cell p{margin:0}
+.content-cell p + p{margin-top:6px}
+.content-cell strong{color:var(--text);font-weight:600}
+.content-cell em{color:var(--text-2);font-style:italic}
+
+/* vitals row */
+.vitals-grid{
+  display:grid;
+  grid-template-columns:repeat(6, auto);
+  gap:6px 14px;
+  font-family:var(--font-mono);
+  font-size:12px;
+  margin-bottom:6px;
+  font-variant-numeric:tabular-nums;
+}
+.vitals-grid .v-pair{display:flex;gap:5px;align-items:baseline}
+.vitals-grid .v-lbl{color:var(--text-4);font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase}
+.vitals-grid .v-val{color:var(--text);font-weight:500}
+
+/* dx chip */
+.dx-chip{
+  display:inline-flex;align-items:center;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.04em;
+  padding:1px 6px;
+  border:1px solid rgba(122,166,140,.25);
+  background:rgba(122,166,140,.05);
+  color:var(--sage-bright);
+  border-radius:3px;
+  margin-left:6px;
+  vertical-align:1px;
+}
+
+/* numbered list inside cell */
+.cell-list{margin:0;padding:0;list-style:none;counter-reset:n}
+.cell-list li{
+  counter-increment:n;
+  padding:3px 0 3px 22px;
+  position:relative;
+}
+.cell-list li::before{
+  content:counter(n) ".";
+  position:absolute;
+  left:0;top:3px;
+  font-family:var(--font-mono);
+  font-size:11px;
+  color:var(--sage-bright);
+  font-variant-numeric:tabular-nums;
+  font-weight:500;
+}
+
+/* status pill cell */
+.status-pill{
+  display:inline-flex;align-items:center;gap:6px;
+  height:22px;padding:0 9px;
+  border-radius:4px;
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  font-weight:500;
+}
+.status-pill .sdot{width:4px;height:4px;border-radius:50%;background:currentColor}
+.status-pill.reviewed{
+  border:1px solid rgba(122,166,140,.28);
+  color:var(--sage-bright);
+  background:rgba(122,166,140,.08);
+}
+.status-pill.drafted{
+  border:1px solid rgba(212,164,55,.25);
+  color:var(--warning-bright);
+  background:rgba(212,164,55,.06);
+}
+.status-pill.signed{
+  border:1px solid rgba(122,166,140,.4);
+  color:var(--sage-bright);
+  background:rgba(122,166,140,.14);
+}
+.status-cell{display:flex;align-items:center;justify-content:flex-start}
+
+/* actions cell */
+.actions-cell{display:flex;align-items:center;justify-content:center}
+.icon-btn{
+  width:24px;height:24px;
+  display:grid;place-items:center;
+  border-radius:4px;
+  color:var(--text-3);
+  transition:background 100ms var(--ease), color 100ms var(--ease);
+}
+.icon-btn:hover{background:rgba(255,255,255,.05);color:var(--text)}
+.icon-btn svg{width:13px;height:13px}
+
+/* footer summary */
+.table-footer{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 14px;
+  background:var(--surface-1);
+  border-top:1px solid var(--hairline);
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--text-3);
+}
+.table-footer .summary{display:flex;align-items:center;gap:14px}
+.table-footer .summary .pair{display:flex;align-items:center;gap:5px}
+.table-footer .summary .num{color:var(--text);font-weight:500}
+.table-footer .summary .dot{width:3px;height:3px;border-radius:50%;background:var(--text-4)}
+.table-footer .actions{display:flex;align-items:center;gap:8px}
+
+/* keyboard legend */
+.kbd-legend{
+  margin-top:14px;
+  padding:8px 14px;
+  display:flex;align-items:center;gap:18px;flex-wrap:wrap;
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--text-4);
+  position:relative;z-index:1;
+}
+.kbd-legend kbd{
+  display:inline-block;
+  padding:1px 5px;
+  border:1px solid var(--hairline-strong);
+  border-radius:3px;
+  font-size:9.5px;
+  background:rgba(255,255,255,.02);
+  color:var(--text-2);
+  margin-right:4px;
+  font-weight:500;
+}
+
+/* reduced motion */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;
+  }
+  .status-pill-chrome .pdot{animation:none}
+  .content-cell:hover{background:transparent;border-color:transparent}
+}
+
+/* responsive */
+@media (max-width:760px){
+  .meta-strip{flex-wrap:wrap;font-size:10px}
+  .meta-strip .field{padding:4px 10px}
+  .shell{padding:14px 12px 60px}
+  .thead{display:none}
+  .trow{
+    grid-template-columns:1fr;
+    border-top:0;
+    border-bottom:1px solid var(--hairline);
+    padding:6px 0;
+  }
+  .trow:last-child{border-bottom:0}
+  .tcell{border-left:0;padding:8px 12px}
+  .label-cell{margin-bottom:4px}
+  .content-cell{margin:0;padding:8px 10px}
+  .status-cell{padding:4px 12px 8px}
+  .actions-cell{justify-content:flex-start;padding:0 12px 8px}
+  .vitals-grid{grid-template-columns:repeat(3, auto);gap:4px 12px}
+  .topbar{padding:0 12px;gap:8px;flex-wrap:wrap;height:auto;min-height:44px}
+  .crumb,.crumb-sep{display:none}
+  .crumb-active{display:inline}
+  .tabs-row{overflow-x:auto;flex-wrap:nowrap}
+  .tab{flex-shrink:0}
+}
+@media (max-width:420px){
+  .vitals-grid{grid-template-columns:repeat(2, auto)}
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><span class="brand-mark"></span> QuillMD</div>
+  <span class="crumb-sep">/</span>
+  <span class="crumb">Patients</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb">Mei-Ling Park</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb crumb-active">Visit · Apr 30, 2026</span>
+  <div class="spacer"></div>
+  <div class="status-pill-chrome"><span class="pdot"></span><span>Ready</span></div>
+  <button class="btn-sage" type="button"><span>Sign &amp; send</span><span class="shortcut">⌘ ↵</span></button>
+  <div class="avatar-chip">KP</div>
+</header>
+
+<div class="shell">
+
+  <div class="meta-strip">
+    <div class="field">Mei-Ling Park</div>
+    <div class="field">34 F</div>
+    <div class="field"><span class="lbl">MRN</span>77324</div>
+    <div class="field">J20.9 · Bronchitis follow-up</div>
+    <div class="field">99214</div>
+    <div class="field"><span class="lbl">Duration</span>22 min</div>
+  </div>
+
+  <div class="tabs-row" role="tablist">
+    <div class="tab active" role="tab" aria-selected="true">Soap Note</div>
+    <div class="tab" role="tab" aria-selected="false">Transcript</div>
+    <div class="tab" role="tab" aria-selected="false">Codes</div>
+    <div class="tab" role="tab" aria-selected="false">Rx</div>
+    <div class="tab" role="tab" aria-selected="false">Extras</div>
+  </div>
+
+  <div class="table-frame">
+    <div class="table-toolbar">
+      <div class="left">
+        <span class="title">Clinical Note · S O A P</span>
+        <span class="meta">
+          <span>4 sections</span>
+          <span class="dot"></span>
+          <span>3 reviewed</span>
+          <span class="dot"></span>
+          <span>1 drafted</span>
+        </span>
+      </div>
+      <div class="toolbar-right">
+        <button class="tbtn" type="button"><span>Markdown</span></button>
+        <button class="tbtn" type="button"><span>Diff</span></button>
+        <button class="tbtn" type="button"><kbd>E</kbd><span>Edit</span></button>
+      </div>
+    </div>
+
+    <div class="thead">
+      <div class="th">Section</div>
+      <div class="th">Content (click to edit)</div>
+      <div class="th">Status</div>
+      <div class="th"></div>
+    </div>
+
+    <!-- S row -->
+    <div class="trow">
+      <div class="tcell">
+        <div class="label-cell">
+          <span class="ltr">S</span>
+          <span class="lname">Subjective<span class="lsub">3 paragraphs</span></span>
+        </div>
+      </div>
+      <div class="tcell content-wrap">
+        <div class="content-cell" tabindex="0" role="textbox" aria-multiline="true">
+          <p>Patient reports cough has improved over past week — now occasional, mostly morning. <strong>No fever for 5 days.</strong> Sputum changed from yellow-green to clear. Sleep restored. Returned to work Mon.</p>
+          <p>Concerned about ongoing fatigue. Denies SOB, chest pain, hemoptysis. No new exposures or sick household contacts.</p>
+        </div>
+      </div>
+      <div class="tcell status-cell"><span class="status-pill reviewed"><span class="sdot"></span>Reviewed</span></div>
+      <div class="tcell actions-cell">
+        <button class="icon-btn" aria-label="Row menu">
+          <svg viewBox="0 0 14 14" fill="none"><circle cx="3" cy="7" r="1" fill="currentColor"/><circle cx="7" cy="7" r="1" fill="currentColor"/><circle cx="11" cy="7" r="1" fill="currentColor"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- O row -->
+    <div class="trow">
+      <div class="tcell">
+        <div class="label-cell">
+          <span class="ltr">O</span>
+          <span class="lname">Objective<span class="lsub">vitals + 4 systems</span></span>
+        </div>
+      </div>
+      <div class="tcell content-wrap">
+        <div class="content-cell" tabindex="0" role="textbox" aria-multiline="true">
+          <div class="vitals-grid">
+            <div class="v-pair"><span class="v-lbl">BP</span><span class="v-val">118/74</span></div>
+            <div class="v-pair"><span class="v-lbl">HR</span><span class="v-val">88</span></div>
+            <div class="v-pair"><span class="v-lbl">RR</span><span class="v-val">18</span></div>
+            <div class="v-pair"><span class="v-lbl">T</span><span class="v-val">98.6 °F</span></div>
+            <div class="v-pair"><span class="v-lbl">SpO₂</span><span class="v-val">98% RA</span></div>
+            <div class="v-pair"><span class="v-lbl">Wt</span><span class="v-val">138</span></div>
+          </div>
+          <p><strong>Lungs:</strong> Clear to auscultation bilaterally; no wheezes/rales/rhonchi. <strong>Throat:</strong> mildly erythematous, no exudate. <strong>Cervical LAD:</strong> none. <strong>Heart:</strong> RRR no m/r/g.</p>
+        </div>
+      </div>
+      <div class="tcell status-cell"><span class="status-pill reviewed"><span class="sdot"></span>Reviewed</span></div>
+      <div class="tcell actions-cell">
+        <button class="icon-btn" aria-label="Row menu">
+          <svg viewBox="0 0 14 14" fill="none"><circle cx="3" cy="7" r="1" fill="currentColor"/><circle cx="7" cy="7" r="1" fill="currentColor"/><circle cx="11" cy="7" r="1" fill="currentColor"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- A row -->
+    <div class="trow">
+      <div class="tcell">
+        <div class="label-cell">
+          <span class="ltr">A</span>
+          <span class="lname">Assessment<span class="lsub">3 problems</span></span>
+        </div>
+      </div>
+      <div class="tcell content-wrap">
+        <div class="content-cell" tabindex="0" role="textbox" aria-multiline="true">
+          <ol class="cell-list">
+            <li>Acute bronchitis, resolving<span class="dx-chip">J20.9</span></li>
+            <li>Post-viral fatigue — expected resolution 1–2 weeks</li>
+            <li>Cough variant — improving</li>
+          </ol>
+        </div>
+      </div>
+      <div class="tcell status-cell"><span class="status-pill reviewed"><span class="sdot"></span>Reviewed</span></div>
+      <div class="tcell actions-cell">
+        <button class="icon-btn" aria-label="Row menu">
+          <svg viewBox="0 0 14 14" fill="none"><circle cx="3" cy="7" r="1" fill="currentColor"/><circle cx="7" cy="7" r="1" fill="currentColor"/><circle cx="11" cy="7" r="1" fill="currentColor"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- P row (focused state) -->
+    <div class="trow editing">
+      <div class="tcell">
+        <div class="label-cell">
+          <span class="ltr">P</span>
+          <span class="lname">Plan<span class="lsub">4 items · editing</span></span>
+        </div>
+      </div>
+      <div class="tcell content-wrap">
+        <div class="content-cell focused" tabindex="0" role="textbox" aria-multiline="true">
+          <ol class="cell-list">
+            <li>Continue symptomatic care: humidified air, hydration.</li>
+            <li><strong>Albuterol HFA 90 mcg</strong>, 1–2 puffs q4–6h PRN cough/SOB.</li>
+            <li>Return in 7 days if cough persists or worsens, or sooner if fever/SOB.</li>
+            <li>Patient counseled on red flags. Resume normal activities.</li>
+          </ol>
+        </div>
+      </div>
+      <div class="tcell status-cell"><span class="status-pill drafted"><span class="sdot"></span>Drafted</span></div>
+      <div class="tcell actions-cell">
+        <button class="icon-btn" aria-label="Row menu">
+          <svg viewBox="0 0 14 14" fill="none"><circle cx="3" cy="7" r="1" fill="currentColor"/><circle cx="7" cy="7" r="1" fill="currentColor"/><circle cx="11" cy="7" r="1" fill="currentColor"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="table-footer">
+      <div class="summary">
+        <div class="pair"><span class="num">4</span><span>sections</span></div>
+        <span class="dot"></span>
+        <div class="pair"><span class="num">412</span><span>words</span></div>
+        <span class="dot"></span>
+        <div class="pair"><span class="num">22</span><span>min audio</span></div>
+        <span class="dot"></span>
+        <div class="pair"><span class="num">0.94</span><span>confidence</span></div>
+      </div>
+      <div class="actions">
+        <button class="tbtn">Copy SOAP</button>
+        <button class="tbtn">Diff vs prev</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="kbd-legend">
+    <span><kbd>↑</kbd><kbd>↓</kbd>Move row</span>
+    <span><kbd>↵</kbd>Edit cell</span>
+    <span><kbd>Esc</kbd>Exit edit</span>
+    <span><kbd>⌘</kbd><kbd>S</kbd>Save</span>
+    <span><kbd>⌘</kbd><kbd>↵</kbd>Sign &amp; send</span>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(x => {
+        x.classList.remove('active');
+        x.setAttribute('aria-selected','false');
+      });
+      t.classList.add('active');
+      t.setAttribute('aria-selected','true');
+    });
+  });
+  // click-to-focus content cells (visual only)
+  document.querySelectorAll('.content-cell').forEach(cell => {
+    cell.addEventListener('focus', () => {
+      document.querySelectorAll('.content-cell').forEach(c => c.classList.remove('focused'));
+      document.querySelectorAll('.trow').forEach(r => r.classList.remove('editing'));
+      cell.classList.add('focused');
+      cell.closest('.trow')?.classList.add('editing');
+    });
+  });
+})();
+</script>
+
+</body>
+</html>

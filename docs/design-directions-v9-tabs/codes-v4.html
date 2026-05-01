@@ -1,0 +1,756 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QuillMD · Codes · Mei-Ling Park · v9 V4 Card Stream</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#08090a;
+  --surface-1:#0d0e10;
+  --surface-2:#131416;
+  --surface-3:#1a1c1e;
+  --border:#21232a;
+  --border-strong:#2c2f38;
+  --hairline:rgba(255,255,255,0.05);
+  --hairline-strong:rgba(255,255,255,0.08);
+  --text:#f7f8f8;
+  --text-2:#b4bcc8;
+  --text-3:#6c737f;
+  --text-4:#4b5159;
+  --sage:#7AA68C;
+  --sage-bright:#9BC4A8;
+  --sage-deep:#2F5040;
+  --sage-tint:rgba(122,166,140,0.13);
+  --sage-glow:rgba(122,166,140,0.18);
+  --row-hover:rgba(255,255,255,0.025);
+  --row-active:rgba(255,255,255,0.04);
+  --success:#4caf7d;
+  --warning:#d4a437;
+  --danger:#d4574a;
+  --info:#5b8db8;
+  --font-sans:'Inter', -apple-system, system-ui, sans-serif;
+  --font-mono:'JetBrains Mono', ui-monospace, Menlo, monospace;
+  --ease:cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text)}
+body{
+  font-family:var(--font-sans);
+  font-feature-settings:'cv11','ss01';
+  font-size:13px;
+  line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  letter-spacing:-0.005em;
+  min-height:100vh;
+}
+::selection{background:rgba(122,166,140,.25);color:var(--text)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+a{color:inherit;text-decoration:none}
+
+/* ─────────────── Top bar ─────────────── */
+.topbar{
+  position:sticky;top:0;z-index:30;
+  height:44px;
+  display:flex;align-items:center;gap:12px;
+  padding:0 16px;
+  background:rgba(8,9,10,.85);
+  backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--hairline);
+}
+.brand{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;letter-spacing:-0.01em}
+.brand-mark{
+  width:18px;height:18px;border-radius:5px;
+  background:linear-gradient(135deg,var(--sage) 0%,var(--sage-deep) 100%);
+  display:grid;place-items:center;color:#0c1410;font-size:10px;font-weight:700;
+  box-shadow:0 0 0 1px rgba(255,255,255,.06) inset;
+}
+.brand-mark::before{content:'Q'}
+.crumb-sep{color:var(--text-4);font-size:12px}
+.crumb{color:var(--text-2);font-size:13px;transition:color 100ms var(--ease)}
+.crumb:hover{color:var(--text)}
+.crumb-active{color:var(--text)}
+.spacer{flex:1}
+
+.status-pill-chrome{
+  display:inline-flex;align-items:center;gap:6px;
+  height:22px;padding:0 9px;
+  border-radius:4px;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.06em;text-transform:uppercase;font-weight:500;
+  border:1px solid rgba(122,166,140,.25);
+  color:var(--sage-bright);
+  background:rgba(122,166,140,.06);
+}
+.status-pill-chrome .pdot{
+  width:5px;height:5px;border-radius:50%;
+  background:var(--sage);
+  animation:idle-pulse 1.6s ease-in-out infinite;
+}
+@keyframes idle-pulse{
+  0%,100%{opacity:.7;transform:scale(1)}
+  50%{opacity:1;transform:scale(1.04)}
+}
+.btn-sage{
+  display:inline-flex;align-items:center;gap:8px;
+  height:30px;padding:0 14px;
+  background:var(--sage);
+  color:#0d1611;
+  border-radius:6px;
+  font-size:12.5px;font-weight:500;
+  letter-spacing:-0.005em;
+  transition:background 100ms var(--ease), transform 80ms var(--ease), box-shadow 200ms var(--ease);
+}
+.btn-sage:hover{background:#88b599;transform:scale(1.02);box-shadow:0 0 0 4px rgba(122,166,140,.18)}
+.btn-sage .shortcut{font-family:var(--font-mono);font-size:11px;color:rgba(13,22,17,.55)}
+
+.avatar-chip{
+  width:24px;height:24px;border-radius:6px;
+  background:linear-gradient(135deg,#3a4a52 0%,#2a3036 100%);
+  color:#dde6ec;font-size:10.5px;font-weight:600;
+  display:grid;place-items:center;letter-spacing:0.02em;
+  border:1px solid var(--hairline-strong);
+}
+
+/* ─────────────── Layout ─────────────── */
+.shell{
+  position:relative;
+  min-height:calc(100vh - 44px);
+  padding:18px 28px 80px;
+}
+.shell::before{
+  content:'';
+  position:absolute;
+  top:-100px;left:30%;
+  width:600px;height:380px;
+  background:radial-gradient(ellipse at center, rgba(122,166,140,.045) 0%, transparent 70%);
+  pointer-events:none;
+  z-index:0;
+}
+
+/* meta strip */
+.meta-strip{
+  display:flex;align-items:center;
+  padding:6px 0 14px;
+  margin-bottom:14px;
+  border-bottom:1px solid var(--hairline);
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--text-2);
+  position:relative;z-index:1;
+}
+.meta-strip .field{padding:0 14px;border-right:1px solid var(--hairline)}
+.meta-strip .field:first-child{padding-left:0;color:var(--text);font-weight:500}
+.meta-strip .field:last-child{border-right:0}
+.meta-strip .field .lbl{color:var(--text-4);margin-right:4px;font-weight:400}
+
+/* tabs */
+.tabs-row{
+  display:flex;align-items:center;gap:0;
+  margin-bottom:24px;
+  border-bottom:1px solid var(--hairline);
+  position:relative;z-index:1;
+}
+.tab{
+  position:relative;
+  padding:8px 16px 10px;
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.07em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  font-weight:500;
+  cursor:pointer;
+  transition:color 100ms var(--ease);
+}
+.tab:first-child{padding-left:0}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--sage-bright)}
+.tab.active::after{
+  content:'';position:absolute;
+  left:0;right:0;bottom:-1px;
+  height:1.5px;
+  background:var(--sage);
+  border-radius:1px 1px 0 0;
+}
+
+/* ─────────────── Card stream frame ─────────────── */
+.frame{
+  position:relative;z-index:1;
+  max-width:780px;
+}
+
+/* summary header */
+.summary-bar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 16px;
+  margin-bottom:24px;
+  background:var(--surface-1);
+  border:1px solid var(--border);
+  border-radius:7px;
+}
+.summary-bar .totals{
+  display:flex;align-items:baseline;gap:18px;flex-wrap:wrap;
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--text-3);
+}
+.summary-bar .totals .v{color:var(--text);font-weight:500;font-variant-numeric:tabular-nums}
+.summary-bar .totals .charge{color:var(--sage-bright);font-size:12.5px;font-weight:600}
+.summary-bar .actions{display:flex;align-items:center;gap:6px}
+.summary-bar .ghost{
+  display:inline-flex;align-items:center;gap:6px;
+  height:26px;padding:0 10px;
+  border:1px solid var(--hairline-strong);
+  border-radius:5px;
+  background:transparent;
+  color:var(--text-2);
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  font-weight:500;
+  transition:color 100ms var(--ease), border-color 100ms var(--ease), background 100ms var(--ease);
+}
+.summary-bar .ghost:hover{color:var(--text);border-color:rgba(255,255,255,.14);background:rgba(255,255,255,.03)}
+
+/* group */
+.card-group{margin-bottom:32px}
+.group-head{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:14px;
+  padding:0 4px;
+}
+.group-head .gtitle{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.14em;
+  text-transform:uppercase;
+  color:var(--text);
+  font-weight:600;
+  display:flex;align-items:center;gap:8px;
+}
+.group-head .gtitle .dot{
+  width:5px;height:5px;border-radius:50%;background:var(--sage);
+}
+.group-head .gmeta{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  font-weight:500;
+}
+
+/* card stack */
+.card-stack{display:flex;flex-direction:column;gap:12px}
+
+/* the card itself */
+.code-card{
+  position:relative;
+  background:var(--surface-1);
+  border:1px solid var(--hairline-strong);
+  border-radius:7px;
+  padding:16px 18px 14px;
+  transition:background 130ms var(--ease), border-color 130ms var(--ease), transform 130ms var(--ease);
+}
+.code-card::before{
+  content:'';
+  position:absolute;
+  left:-1px;top:-1px;bottom:-1px;
+  width:3px;
+  background:var(--sage);
+  border-radius:7px 0 0 7px;
+  opacity:0;
+  transform:translateX(-3px);
+  transition:opacity 130ms var(--ease), transform 130ms var(--ease);
+}
+.code-card:hover{
+  background:var(--surface-2);
+  border-color:rgba(255,255,255,.1);
+}
+.code-card:hover .card-actions{opacity:1}
+.code-card.active{
+  background:var(--surface-2);
+  border-color:rgba(122,166,140,.25);
+}
+.code-card.active::before{opacity:1;transform:translateX(0)}
+.code-card.active .recent-tag{display:inline-flex}
+
+/* low confidence card flag */
+.code-card.low{
+  border-color:rgba(212,164,55,.22);
+  background:linear-gradient(180deg, rgba(212,164,55,.025) 0%, var(--surface-1) 100%);
+}
+.code-card.low::before{background:var(--warning)}
+.code-card.low:hover{background:linear-gradient(180deg, rgba(212,164,55,.05) 0%, var(--surface-2) 100%);border-color:rgba(212,164,55,.35)}
+
+/* card top row */
+.card-top{
+  display:flex;align-items:flex-start;justify-content:space-between;
+  gap:14px;
+  margin-bottom:8px;
+}
+.card-top-l{
+  display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;
+  min-width:0;flex:1;
+}
+.card-code{
+  font-family:var(--font-mono);
+  font-size:18px;
+  font-weight:500;
+  color:var(--text);
+  letter-spacing:0.02em;
+  font-variant-numeric:tabular-nums;
+}
+.card-tag{
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  font-weight:500;
+  padding:2px 6px;
+  border-radius:3px;
+  border:1px solid rgba(122,166,140,.22);
+  color:var(--sage-bright);
+  background:rgba(122,166,140,.06);
+  white-space:nowrap;
+}
+.card-tag.cpt{border-color:rgba(116,168,201,.22);color:#9bc4d9;background:rgba(116,168,201,.05)}
+.recent-tag{
+  display:none;
+  align-items:center;gap:5px;
+  padding:2px 7px;
+  border-radius:3px;
+  border:1px solid rgba(122,166,140,.4);
+  background:rgba(122,166,140,.12);
+  color:var(--sage-bright);
+  font-family:var(--font-mono);
+  font-size:9px;
+  letter-spacing:0.12em;
+  text-transform:uppercase;
+  font-weight:500;
+}
+.recent-tag .pdot{
+  width:4px;height:4px;border-radius:50%;background:var(--sage);
+  animation:idle-pulse 1.6s ease-in-out infinite;
+}
+
+/* card actions */
+.card-actions{
+  display:flex;align-items:center;gap:4px;
+  opacity:0;
+  transition:opacity 100ms var(--ease);
+  flex-shrink:0;
+}
+.icon-btn{
+  width:24px;height:24px;
+  border-radius:4px;
+  display:grid;place-items:center;
+  color:var(--text-3);
+  background:transparent;
+  border:1px solid transparent;
+  font-family:var(--font-mono);
+  font-size:13px;line-height:1;
+  transition:color 100ms var(--ease), background 100ms var(--ease), border-color 100ms var(--ease);
+}
+.icon-btn:hover{color:var(--text);background:rgba(255,255,255,.04);border-color:var(--hairline-strong)}
+.icon-btn.danger:hover{color:var(--danger);border-color:rgba(212,87,74,.3)}
+
+/* description */
+.card-desc{
+  font-family:var(--font-sans);
+  font-size:16px;
+  color:var(--text);
+  line-height:1.42;
+  letter-spacing:-0.01em;
+  font-weight:500;
+  margin:0 0 14px;
+}
+
+/* confidence bar block */
+.card-conf{
+  display:flex;align-items:center;gap:10px;
+  margin-bottom:12px;
+}
+.card-conf .lbl{
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.12em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  font-weight:500;
+  min-width:42px;
+}
+.card-conf .bar{
+  flex:1;
+  height:4px;
+  border-radius:2px;
+  background:rgba(255,255,255,.06);
+  overflow:hidden;
+  position:relative;
+}
+.card-conf .bar::after{
+  content:'';
+  position:absolute;left:0;top:0;bottom:0;
+  background:var(--sage);
+  border-radius:2px;
+  width:var(--w,80%);
+  transition:width 200ms var(--ease);
+}
+.card-conf.low .bar::after{background:var(--warning)}
+.card-conf .v{
+  font-family:var(--font-mono);
+  font-size:11px;
+  font-weight:500;
+  color:var(--text-2);
+  font-variant-numeric:tabular-nums;
+  min-width:32px;text-align:right;
+}
+.card-conf.low .v{color:var(--warning)}
+
+/* evidence quote */
+.card-evidence{
+  font-family:var(--font-sans);
+  font-size:13px;
+  color:var(--text-2);
+  font-style:italic;
+  line-height:1.55;
+  letter-spacing:-0.003em;
+  margin:0;
+  padding:0 0 0 12px;
+  border-left:2px solid var(--hairline-strong);
+  position:relative;
+}
+.card-evidence .quote-mark{
+  font-family:var(--font-mono);
+  font-style:normal;
+  font-size:9.5px;
+  letter-spacing:0.12em;
+  text-transform:uppercase;
+  color:var(--text-4);
+  margin-right:6px;
+  font-weight:500;
+}
+
+/* CPT meta strip */
+.card-meta-row{
+  display:flex;align-items:center;gap:18px;flex-wrap:wrap;
+  margin-top:12px;
+  padding-top:12px;
+  border-top:1px solid var(--hairline);
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.04em;
+  color:var(--text-2);
+  font-variant-numeric:tabular-nums;
+}
+.card-meta-row .lbl{color:var(--text-4);margin-right:6px;text-transform:uppercase;letter-spacing:0.1em;font-size:9.5px;font-weight:500}
+.card-meta-row .charge{color:var(--sage-bright);font-weight:500;font-size:12px}
+
+/* low banner */
+.low-banner{
+  display:inline-flex;align-items:center;gap:6px;
+  margin-bottom:10px;
+  padding:5px 10px;
+  border-radius:4px;
+  background:rgba(212,164,55,.08);
+  border:1px solid rgba(212,164,55,.22);
+  color:var(--warning);
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.12em;
+  text-transform:uppercase;
+  font-weight:500;
+}
+
+/* add card */
+.add-card{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  height:48px;
+  border:1px dashed var(--hairline-strong);
+  border-radius:7px;
+  background:transparent;
+  color:var(--text-3);
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  font-weight:500;
+  width:100%;
+  margin-top:4px;
+  transition:color 100ms var(--ease), border-color 100ms var(--ease), background 100ms var(--ease);
+}
+.add-card:hover{color:var(--sage-bright);border-color:rgba(122,166,140,.4);background:rgba(122,166,140,.04)}
+.add-card .plus{font-size:14px;line-height:1}
+
+/* ─────────────── Reduced motion ─────────────── */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;
+  }
+  .status-pill-chrome .pdot,
+  .recent-tag .pdot{animation:none}
+  .card-actions{opacity:1}
+}
+
+/* responsive */
+@media (max-width:760px){
+  .shell{padding:14px 16px 60px}
+  .meta-strip{flex-wrap:wrap;font-size:10px}
+  .meta-strip .field{padding:4px 10px}
+  .crumb:nth-child(2),.crumb-sep:nth-child(3){display:none}
+  .summary-bar{flex-direction:column;align-items:stretch;gap:10px}
+  .card-actions{opacity:1}
+  .card-desc{font-size:14.5px}
+  .card-code{font-size:16px}
+}
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<header class="topbar">
+  <div class="brand"><span class="brand-mark"></span> QuillMD</div>
+  <span class="crumb-sep">/</span>
+  <span class="crumb">Patients</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb">Mei-Ling Park</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb crumb-active">Visit · Apr 30, 2026</span>
+  <div class="spacer"></div>
+  <div class="status-pill-chrome" aria-live="polite">
+    <span class="pdot"></span>
+    <span>Ready</span>
+  </div>
+  <button class="btn-sage" type="button">
+    Sign &amp; send
+    <span class="shortcut">⌘ ↵</span>
+  </button>
+  <div class="avatar-chip" title="Dr. Kalyani Park">KP</div>
+</header>
+
+<main class="shell">
+
+  <!-- Patient meta strip -->
+  <div class="meta-strip">
+    <div class="field">MEI-LING PARK</div>
+    <div class="field">34F</div>
+    <div class="field"><span class="lbl">MRN</span>77324</div>
+    <div class="field">J20.9</div>
+    <div class="field">99214</div>
+    <div class="field"><span class="lbl">Duration</span>22 min</div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs-row" role="tablist">
+    <div class="tab" role="tab" aria-selected="false">Soap Note</div>
+    <div class="tab" role="tab" aria-selected="false">Transcript</div>
+    <div class="tab active" role="tab" aria-selected="true">Codes</div>
+    <div class="tab" role="tab" aria-selected="false">Rx</div>
+    <div class="tab" role="tab" aria-selected="false">Extras</div>
+  </div>
+
+  <div class="frame">
+
+    <!-- summary -->
+    <div class="summary-bar">
+      <div class="totals">
+        <span><span>Codes</span> · <span class="v">4</span></span>
+        <span><span>Diagnoses</span> · <span class="v">3</span></span>
+        <span><span>Procedures</span> · <span class="v">1</span></span>
+        <span><span>Charge</span> · <span class="v charge">$185.00</span></span>
+      </div>
+      <div class="actions">
+        <button class="ghost" type="button">Sort · Confidence ▼</button>
+        <button class="ghost" type="button">Filter</button>
+      </div>
+    </div>
+
+    <!-- DIAGNOSES -->
+    <section class="card-group">
+      <div class="group-head">
+        <div class="gtitle"><span class="dot"></span>Diagnoses · ICD-10-CM</div>
+        <div class="gmeta">3 codes</div>
+      </div>
+
+      <div class="card-stack">
+
+        <!-- Card 1: J20.9 — recently edited / active -->
+        <article class="code-card active">
+          <div class="card-top">
+            <div class="card-top-l">
+              <span class="card-code">J20.9</span>
+              <span class="card-tag">ICD-10</span>
+              <span class="recent-tag"><span class="pdot"></span><span>Recently edited</span></span>
+            </div>
+            <div class="card-actions">
+              <button class="icon-btn" title="View evidence" aria-label="View evidence">⌖</button>
+              <button class="icon-btn" title="Edit" aria-label="Edit">✎</button>
+              <button class="icon-btn danger" title="Remove" aria-label="Remove">×</button>
+            </div>
+          </div>
+          <p class="card-desc">Acute bronchitis, unspecified</p>
+          <div class="card-conf" style="--w:94%">
+            <span class="lbl">Conf</span>
+            <span class="bar"></span>
+            <span class="v">94%</span>
+          </div>
+          <p class="card-evidence">
+            <span class="quote-mark">From transcript</span>
+            "Lungs sound clear bilaterally, no wheezing. Day 10, post-viral course resolving as expected — patient reports cough has improved significantly."
+          </p>
+        </article>
+
+        <!-- Card 2: R05.9 -->
+        <article class="code-card">
+          <div class="card-top">
+            <div class="card-top-l">
+              <span class="card-code">R05.9</span>
+              <span class="card-tag">ICD-10</span>
+            </div>
+            <div class="card-actions">
+              <button class="icon-btn" title="View evidence" aria-label="View evidence">⌖</button>
+              <button class="icon-btn" title="Edit" aria-label="Edit">✎</button>
+              <button class="icon-btn danger" title="Remove" aria-label="Remove">×</button>
+            </div>
+          </div>
+          <p class="card-desc">Cough, unspecified</p>
+          <div class="card-conf" style="--w:87%">
+            <span class="lbl">Conf</span>
+            <span class="bar"></span>
+            <span class="v">87%</span>
+          </div>
+          <p class="card-evidence">
+            <span class="quote-mark">From transcript</span>
+            "Occasional cough, mostly morning. Productive of small amounts of clear sputum. Down from severe coughing fits one week ago."
+          </p>
+        </article>
+
+        <!-- Card 3: Z00.121 — low confidence -->
+        <article class="code-card low">
+          <div class="card-top">
+            <div class="card-top-l">
+              <span class="card-code">Z00.121</span>
+              <span class="card-tag">ICD-10</span>
+            </div>
+            <div class="card-actions">
+              <button class="icon-btn" title="View evidence" aria-label="View evidence">⌖</button>
+              <button class="icon-btn" title="Edit" aria-label="Edit">✎</button>
+              <button class="icon-btn danger" title="Remove" aria-label="Remove">×</button>
+            </div>
+          </div>
+          <div class="low-banner">
+            <span>⚠</span>
+            <span>Low confidence · review before sign</span>
+          </div>
+          <p class="card-desc">Encounter for routine child health exam, with abnormal findings</p>
+          <div class="card-conf low" style="--w:65%">
+            <span class="lbl">Conf</span>
+            <span class="bar"></span>
+            <span class="v">65%</span>
+          </div>
+          <p class="card-evidence">
+            <span class="quote-mark">From transcript</span>
+            "Follow-up visit" — single weak match. Adult patient — consider <strong style="color:var(--text)">Z09</strong> (encounter for follow-up after completed treatment).
+          </p>
+        </article>
+
+        <button class="add-card" type="button">
+          <span class="plus">+</span>
+          <span>Add ICD-10 code</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- PROCEDURES -->
+    <section class="card-group">
+      <div class="group-head">
+        <div class="gtitle"><span class="dot"></span>Procedures · CPT-4</div>
+        <div class="gmeta">1 code · $185.00</div>
+      </div>
+
+      <div class="card-stack">
+
+        <!-- Card 4: 99214 -->
+        <article class="code-card">
+          <div class="card-top">
+            <div class="card-top-l">
+              <span class="card-code">99214</span>
+              <span class="card-tag cpt">CPT-4</span>
+            </div>
+            <div class="card-actions">
+              <button class="icon-btn" title="View evidence" aria-label="View evidence">⌖</button>
+              <button class="icon-btn" title="Edit" aria-label="Edit">✎</button>
+              <button class="icon-btn danger" title="Remove" aria-label="Remove">×</button>
+            </div>
+          </div>
+          <p class="card-desc">Office visit, established patient · level 4 (25–39 min)</p>
+          <div class="card-conf" style="--w:96%">
+            <span class="lbl">Conf</span>
+            <span class="bar"></span>
+            <span class="v">96%</span>
+          </div>
+          <p class="card-evidence">
+            <span class="quote-mark">Justification</span>
+            "Established patient · 22 minutes MDM-time · moderate complexity (acute self-limited illness with prescription drug management). Counseling on inhaler technique and return precautions documented."
+          </p>
+          <div class="card-meta-row">
+            <span><span class="lbl">Units</span>1</span>
+            <span><span class="lbl">Modifier</span>—</span>
+            <span><span class="lbl">Time</span>22 min</span>
+            <span><span class="lbl">Complexity</span>Moderate</span>
+            <span style="margin-left:auto"><span class="lbl">Charge</span><span class="charge">$185.00</span></span>
+          </div>
+        </article>
+
+        <button class="add-card" type="button">
+          <span class="plus">+</span>
+          <span>Add CPT code</span>
+        </button>
+      </div>
+    </section>
+
+  </div>
+
+</main>
+
+<script>
+(function(){
+  // Tab clicks
+  document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(x => {
+        x.classList.remove('active');
+        x.setAttribute('aria-selected','false');
+      });
+      t.classList.add('active');
+      t.setAttribute('aria-selected','true');
+    });
+  });
+
+  // Card click sets active (sage left-border)
+  document.querySelectorAll('.code-card').forEach(c => {
+    c.addEventListener('click', (e) => {
+      if(e.target.closest('.icon-btn')) return;
+      document.querySelectorAll('.code-card').forEach(x => x.classList.remove('active'));
+      c.classList.add('active');
+    });
+  });
+})();
+</script>
+
+</body>
+</html>
