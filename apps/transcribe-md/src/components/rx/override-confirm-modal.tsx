@@ -3,14 +3,10 @@
 // ============================================================================
 // Override confirm modal (DESIGN_SPEC §4.1 critical · override flow).
 // ----------------------------------------------------------------------------
-// Opened by the O key or the "Override & sign anyway" button on the
-// RxWarningCard's critical variant. Collects a 10–500 char reason,
-// then calls the `recordOverride` server action. The action returns a
-// discriminated union; success closes the modal + fires onSuccess,
-// failure keeps the modal open with an inline error.
-//
-// Focus moves to the textarea on open; returns to the trigger on
-// close via Radix's built-in `onCloseAutoFocus`. Escape cancels.
+// Phase 5 — Linear V1 Faithful. Renders inside `.qm-lin-spotlight`
+// chrome with hairline-bordered surface-1 panels and a danger-tinted
+// alert chip. Reason validation, recordOverride wiring, and onSuccess
+// fire are unchanged.
 // ============================================================================
 
 import { useRef, useState } from 'react';
@@ -99,17 +95,9 @@ export function OverrideConfirmModal({
       }}
     >
       <Dialog.Portal>
-        <Dialog.Overlay
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 40,
-            background: 'rgba(0, 0, 0, 0.7)',
-            backdropFilter: 'blur(4px)',
-          }}
-        />
+        <Dialog.Overlay className="qm-lin-spotlight" />
         <Dialog.Content
-          className="qm-app"
+          className="qm-lin-spotlight-panel qm-lin-blur-in"
           onOpenAutoFocus={(e) => {
             // Skip Radix's default focus-first-focusable — we want the
             // textarea, not the Cancel button.
@@ -124,12 +112,9 @@ export function OverrideConfirmModal({
             zIndex: 50,
             width: 'calc(100% - 40px)',
             maxWidth: 520,
-            borderRadius: 14,
-            border: '1px solid rgba(251, 113, 133, 0.3)',
-            background: 'var(--bg-1)',
-            padding: 24,
             outline: 'none',
-            boxShadow: 'var(--shadow-2)',
+            padding: 0,
+            border: '1px solid rgba(212, 87, 74, 0.32)',
           }}
         >
           <div
@@ -137,7 +122,7 @@ export function OverrideConfirmModal({
               display: 'flex',
               alignItems: 'flex-start',
               gap: 14,
-              marginBottom: 16,
+              padding: '20px 24px 4px',
             }}
           >
             <div
@@ -146,12 +131,12 @@ export function OverrideConfirmModal({
                 width: 36,
                 height: 36,
                 borderRadius: 10,
-                border: '1px solid rgba(251, 113, 133, 0.35)',
-                background: 'rgba(251, 113, 133, 0.08)',
+                border: '1px solid rgba(212, 87, 74, 0.32)',
+                background: 'rgba(212, 87, 74, 0.10)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: '#FB7185',
+                color: 'var(--color-linear-danger)',
                 flex: '0 0 36px',
               }}
             >
@@ -159,13 +144,13 @@ export function OverrideConfirmModal({
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <Dialog.Title
-                className="qm-serif"
                 style={{
                   margin: 0,
-                  fontSize: 20,
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 18,
                   fontWeight: 500,
-                  letterSpacing: '-0.015em',
-                  color: 'var(--fg)',
+                  letterSpacing: '-0.012em',
+                  color: 'var(--color-linear-text)',
                 }}
               >
                 {warning.headline}
@@ -175,7 +160,7 @@ export function OverrideConfirmModal({
                   style={{
                     marginTop: 6,
                     fontSize: 13,
-                    color: 'var(--fg-3)',
+                    color: 'var(--color-linear-text-2)',
                     lineHeight: 1.55,
                   }}
                 >
@@ -186,7 +171,7 @@ export function OverrideConfirmModal({
                 style={{
                   margin: '12px 0 0',
                   fontSize: 12.5,
-                  color: 'var(--fg-2)',
+                  color: 'var(--color-linear-text-2)',
                   lineHeight: 1.55,
                 }}
               >
@@ -197,88 +182,91 @@ export function OverrideConfirmModal({
             </div>
           </div>
 
-          <label
-            htmlFor="override-reason"
-            style={{
-              display: 'block',
-              marginBottom: 6,
-              fontSize: 11,
-              fontFamily: 'var(--mono)',
-              letterSpacing: '0.14em',
-              textTransform: 'uppercase',
-              color: 'var(--fg-3)',
-            }}
-          >
-            Reason for override
-          </label>
-          <textarea
-            id="override-reason"
-            ref={textareaRef}
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            maxLength={REASON_MAX}
-            rows={4}
-            placeholder="Why is it safe to sign past this warning?"
-            className="qm-input"
-            style={{
-              resize: 'vertical',
-              fontFamily: 'var(--sans)',
-              fontSize: 13.5,
-              lineHeight: 1.5,
-            }}
-            aria-describedby="override-reason-help"
-            aria-invalid={error ? 'true' : undefined}
-          />
-          <div
-            id="override-reason-help"
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              marginTop: 6,
-              fontSize: 11,
-              color: 'var(--fg-4)',
-              fontFamily: 'var(--mono)',
-            }}
-          >
-            <span>
-              {trimmed.length < REASON_MIN
-                ? `${REASON_MIN - trimmed.length} more character${
-                    REASON_MIN - trimmed.length === 1 ? '' : 's'
-                  } required`
-                : 'Ready'}
-            </span>
-            <span>
-              {reason.length}/{REASON_MAX}
-            </span>
-          </div>
-
-          {error && (
-            <p
-              role="alert"
+          <div style={{ padding: '12px 24px 4px' }}>
+            <label
+              htmlFor="override-reason"
               style={{
-                marginTop: 10,
-                fontSize: 12.5,
-                color: 'var(--coral)',
+                display: 'block',
+                marginBottom: 6,
+                fontSize: 10.5,
+                fontFamily: 'var(--font-mono)',
+                letterSpacing: '0.07em',
+                textTransform: 'uppercase',
+                fontWeight: 500,
+                color: 'var(--color-linear-text-3)',
               }}
             >
-              {error}
-            </p>
-          )}
+              Reason for override
+            </label>
+            <textarea
+              id="override-reason"
+              ref={textareaRef}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              maxLength={REASON_MAX}
+              rows={4}
+              placeholder="Why is it safe to sign past this warning?"
+              className="block w-full rounded-md border border-linear-border bg-linear-surface-2 px-3 py-2 text-[13.5px] text-linear-text placeholder:text-linear-text-3 outline-none transition-colors focus:border-linear-sage focus:ring-2 focus:ring-linear-sage/30"
+              style={{
+                resize: 'vertical',
+                fontFamily: 'var(--font-sans)',
+                lineHeight: 1.5,
+              }}
+              aria-describedby="override-reason-help"
+              aria-invalid={error ? 'true' : undefined}
+            />
+            <div
+              id="override-reason-help"
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                marginTop: 6,
+                fontSize: 11,
+                color: 'var(--color-linear-text-3)',
+                fontFamily: 'var(--font-mono)',
+              }}
+            >
+              <span>
+                {trimmed.length < REASON_MIN
+                  ? `${REASON_MIN - trimmed.length} more character${
+                      REASON_MIN - trimmed.length === 1 ? '' : 's'
+                    } required`
+                  : 'Ready'}
+              </span>
+              <span>
+                {reason.length}/{REASON_MAX}
+              </span>
+            </div>
+
+            {error && (
+              <p
+                role="alert"
+                style={{
+                  marginTop: 10,
+                  fontSize: 12.5,
+                  color: 'var(--color-linear-danger)',
+                }}
+              >
+                {error}
+              </p>
+            )}
+          </div>
 
           <div
             style={{
               display: 'flex',
               justifyContent: 'flex-end',
               gap: 8,
-              marginTop: 18,
-              paddingTop: 14,
-              borderTop: '1px solid var(--line-soft)',
+              marginTop: 14,
+              padding: '12px 24px',
+              borderTop: '1px solid var(--color-linear-hairline)',
+              background: 'var(--color-linear-surface-2)',
             }}
           >
             <Dialog.Close asChild>
               <button
                 type="button"
-                className="qm-btn qm-btn-ghost"
+                className="qm-lin-btn"
                 disabled={submitting}
               >
                 Cancel
@@ -288,12 +276,11 @@ export function OverrideConfirmModal({
               type="button"
               onClick={onConfirm}
               disabled={!canSubmit}
-              className="qm-btn"
+              className="qm-lin-btn"
               style={{
-                background:
-                  'linear-gradient(180deg, rgba(251, 113, 133, 0.28), rgba(251, 113, 133, 0.14))',
-                border: '1px solid rgba(251, 113, 133, 0.55)',
-                color: canSubmit ? '#FDA4AF' : '#B79494',
+                background: 'rgba(212, 87, 74, 0.16)',
+                borderColor: 'rgba(212, 87, 74, 0.45)',
+                color: 'var(--color-linear-danger)',
                 opacity: canSubmit ? 1 : 0.55,
                 cursor: canSubmit ? 'pointer' : 'not-allowed',
               }}

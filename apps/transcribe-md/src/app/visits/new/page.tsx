@@ -1,16 +1,9 @@
 // ============================================================================
-// /visits/new — Clinician shell (Phase 2 Batch E, was Gate 8 / HANDOFF §2.3).
+// /visits/new — Linear V1 shell.
 // ----------------------------------------------------------------------------
 // The underlying flow (PatientPicker → VisitFormStep2 → createVisitAction)
-// is preserved end-to-end — we wrap it in AppFrame + stepper + visit-summary
-// rail. Step state is driven by the selected patient (absent → step 1,
-// present → step 2). Full three-step URL routing lands in a later pass.
-//
-// Phase 2 (Clinician remodel) — this route opts in to the Clinician
-// chrome via `<AppFrame theme="clinician">`. PageHeader + NewVisitClient
-// are threaded with `theme="clinician"` so the full visual chain — top
-// nav, page header, stepper, picker, form, summary rail — resolves
-// against the warm cream + sage palette.
+// is preserved end-to-end. Step state is driven by the selected patient
+// (absent → step 1, present → step 2).
 // ============================================================================
 
 import type { Metadata } from 'next';
@@ -108,14 +101,10 @@ export default async function NewVisitPage({
     mostRecentVisit?.specialty ?? SPECIALTIES[0]?.displayName ?? '';
 
   return (
-    <AppFrame theme="clinician">
+    <AppFrame>
       <PageHeader
         eyebrow="New visit"
-        title={
-          <>
-            Start a <em>new visit</em>
-          </>
-        }
+        title="Start a new visit"
         subtitle={
           initialPatient
             ? 'Pick a capture mode below and we\u2019ll take it from there.'
@@ -124,26 +113,20 @@ export default async function NewVisitPage({
         actions={
           <a
             href="/dashboard"
-            className="qm-cl-btn qm-cl-btn-ghost"
-            style={{
-              textDecoration: 'none',
-              padding: '10px 18px',
-              fontSize: 13.5,
-            }}
+            className="qm-lin-btn"
+            style={{ textDecoration: 'none' }}
           >
             <Ic.close width={13} height={13} />
             Cancel
           </a>
         }
-        theme="clinician"
       />
 
-      <div style={{ padding: '0 32px 48px', maxWidth: 1280 }}>
+      <div style={{ padding: '24px 24px 48px', maxWidth: 1280 }}>
         <NewVisitClient
           initialPatient={initialPatient}
           specialties={SPECIALTIES}
           defaultSpecialty={defaultSpecialty}
-          theme="clinician"
         />
       </div>
     </AppFrame>
