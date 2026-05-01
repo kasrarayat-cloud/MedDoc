@@ -6,8 +6,21 @@ import { Badge } from '@/components/badge';
 
 export const metadata: Metadata = {
   title: 'About',
-  description:
-    'The story, the reason, and the approach behind QuillMD.',
+  description: 'The story, the reason, and the approach behind QuillMD.',
+};
+
+const SECTION_BODY: React.CSSProperties = {
+  marginTop: 24,
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 18,
+  fontSize: 15,
+  lineHeight: 1.7,
+  color: 'var(--color-linear-text-2)',
+};
+
+const SECTION_TITLE: React.CSSProperties = {
+  color: 'var(--color-linear-text)',
 };
 
 export default function AboutPage() {
@@ -15,31 +28,47 @@ export default function AboutPage() {
     <>
       <NavBar />
       <main>
-        <section className="relative overflow-hidden pt-32 pb-16">
+        <section
+          className="relative overflow-hidden"
+          style={{ paddingTop: 96, paddingBottom: 64 }}
+        >
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-x-0 top-0 h-[500px]"
+            className="pointer-events-none absolute inset-x-0 top-0"
             style={{
+              height: 500,
               background:
                 'radial-gradient(ellipse 70% 50% at 50% 0%, rgba(122,166,140,0.18) 0%, transparent 65%)',
             }}
           />
-          <div className="relative mx-auto max-w-3xl px-6 lg:px-8">
+          <div
+            className="container"
+            style={{ maxWidth: 760, position: 'relative' }}
+          >
             <Badge dot="violet">About us</Badge>
-            <h1 className="mt-6 type-h1">
+            <h1 className="hero-title" style={{ marginTop: 20, textAlign: 'left' }}>
               Built for the <GradientText>doctor at the desk</GradientText> at
               7 p.m.
             </h1>
-            <p className="mt-6 type-body">
+            <p className="hero-sub" style={{ marginTop: 20, marginInline: 0, textAlign: 'left' }}>
               The one who stayed late to finish their charts. Again.
             </p>
           </div>
         </section>
 
-        <section className="relative border-t border-border-subtle py-16">
-          <div className="mx-auto max-w-3xl px-6 lg:px-8">
-            <h2 className="type-h2 text-text-primary">The story</h2>
-            <div className="mt-6 space-y-5 text-[16px] leading-relaxed text-text-secondary">
+        <section
+          style={{
+            position: 'relative',
+            borderTop: '1px solid var(--color-linear-hairline)',
+            paddingTop: 64,
+            paddingBottom: 64,
+          }}
+        >
+          <div className="container" style={{ maxWidth: 760 }}>
+            <h2 className="section-title" style={SECTION_TITLE}>
+              The story
+            </h2>
+            <div style={SECTION_BODY}>
               <p>
                 A friend of ours is a solo family-practice doctor. Every
                 Thursday night we&apos;d hear the same thing: &quot;I still
@@ -63,10 +92,20 @@ export default function AboutPage() {
           </div>
         </section>
 
-        <section className="relative border-t border-border-subtle bg-bg-surface-1/30 py-16">
-          <div className="mx-auto max-w-3xl px-6 lg:px-8">
-            <h2 className="type-h2 text-text-primary">Why we built this</h2>
-            <div className="mt-6 space-y-5 text-[16px] leading-relaxed text-text-secondary">
+        <section
+          style={{
+            position: 'relative',
+            borderTop: '1px solid var(--color-linear-hairline)',
+            background: 'var(--color-linear-surface-1)',
+            paddingTop: 64,
+            paddingBottom: 64,
+          }}
+        >
+          <div className="container" style={{ maxWidth: 760 }}>
+            <h2 className="section-title" style={SECTION_TITLE}>
+              Why we built this
+            </h2>
+            <div style={SECTION_BODY}>
               <p>
                 Because the existing options for solo doctors are bad. India-
                 based transcription is slow and impersonal. Enterprise AI
@@ -84,10 +123,19 @@ export default function AboutPage() {
           </div>
         </section>
 
-        <section className="relative border-t border-border-subtle py-16">
-          <div className="mx-auto max-w-3xl px-6 lg:px-8">
-            <h2 className="type-h2 text-text-primary">Our approach</h2>
-            <div className="mt-6 space-y-5 text-[16px] leading-relaxed text-text-secondary">
+        <section
+          style={{
+            position: 'relative',
+            borderTop: '1px solid var(--color-linear-hairline)',
+            paddingTop: 64,
+            paddingBottom: 64,
+          }}
+        >
+          <div className="container" style={{ maxWidth: 760 }}>
+            <h2 className="section-title" style={SECTION_TITLE}>
+              Our approach
+            </h2>
+            <div style={SECTION_BODY}>
               <p>
                 Self-serve signup. Transparent pricing. Cancellation as a
                 button. Nothing about using software for your practice should
@@ -109,10 +157,26 @@ export default function AboutPage() {
           </div>
         </section>
 
-        <section className="relative border-t border-border-subtle bg-bg-surface-1/30 py-16 pb-24">
-          <div className="mx-auto max-w-3xl px-6 lg:px-8">
-            <h2 className="type-h2 text-text-primary">Team</h2>
-            <p className="mt-4 text-[14px] text-text-muted">
+        <section
+          style={{
+            position: 'relative',
+            borderTop: '1px solid var(--color-linear-hairline)',
+            background: 'var(--color-linear-surface-1)',
+            paddingTop: 64,
+            paddingBottom: 96,
+          }}
+        >
+          <div className="container" style={{ maxWidth: 760 }}>
+            <h2 className="section-title" style={SECTION_TITLE}>
+              Team
+            </h2>
+            <p
+              style={{
+                marginTop: 16,
+                fontSize: 14,
+                color: 'var(--color-linear-text-3)',
+              }}
+            >
               Small and senior. Engineers, product, and clinical advisors.
               More here soon.
             </p>

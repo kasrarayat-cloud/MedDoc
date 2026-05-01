@@ -8,47 +8,56 @@ import { GradientText } from '@/components/gradient-text';
 import { SpecularButton } from '@/components/specular-button';
 import { APP_SIGNUP_URL } from '@/lib/constants';
 
+/**
+ * 404 page — Linear V1 (Faithful).
+ *
+ * Centered eyebrow + Inter 600 heading + body copy + sage primary "Back
+ * to home" + sage outline "Start free trial". No serif italic accent;
+ * GradientText now resolves to sage-bright Inter.
+ */
 export default function NotFound() {
   return (
     <>
       <NavBar />
       <main>
-        <section className="relative flex min-h-[80vh] items-center overflow-hidden pt-32 pb-24">
-          {/* Soft sage halo — the "missing" thing. Drifts gently per the
-             Clinician motion vocabulary (240–600ms ease-out, no springs). */}
+        <section
+          className="relative flex items-center overflow-hidden"
+          style={{ minHeight: '80vh', paddingTop: 96, paddingBottom: 64 }}
+        >
           <motion.div
             aria-hidden
             initial={{ y: 0, opacity: 0 }}
             animate={{
               y: [0, -10, 0],
-              opacity: [0.5, 0.75, 0.5],
+              opacity: [0.4, 0.7, 0.4],
             }}
             transition={{
               duration: 6,
               repeat: Infinity,
-              ease: [0.22, 1, 0.36, 1],
+              ease: [0.16, 1, 0.3, 1],
             }}
             className="absolute left-1/2 top-[30%] h-[360px] w-[360px] -translate-x-1/2"
             style={{
               background:
                 'radial-gradient(circle, rgba(122,166,140,0.28) 0%, rgba(122,166,140,0.08) 45%, transparent 70%)',
               filter: 'blur(24px)',
+              pointerEvents: 'none',
             }}
           />
-          <div className="relative mx-auto max-w-3xl px-6 text-center lg:px-8">
-            <motion.p
+          <div className="container" style={{ textAlign: 'center', position: 'relative' }}>
+            <motion.div
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-              className="qm-cl-eyebrow"
+              transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
             >
-              404
-            </motion.p>
+              <div className="section-eyebrow">404</div>
+            </motion.div>
             <motion.h1
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
-              className="mt-4 type-display"
+              transition={{ duration: 0.5, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
+              className="hero-title"
+              style={{ marginTop: 16 }}
             >
               This page <GradientText>slipped through</GradientText>
               <br />
@@ -58,8 +67,8 @@ export default function NotFound() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.5, delay: 0.25 }}
-              className="mx-auto mt-8 max-w-md text-[16px] text-[#5C544A]"
-              style={{ fontFamily: 'var(--font-serif), Georgia, serif' }}
+              className="hero-sub"
+              style={{ marginTop: 24 }}
             >
               Nothing lives at this URL. Very rare for our models — we&apos;ll
               flag it for review.
@@ -68,7 +77,15 @@ export default function NotFound() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.5, delay: 0.35 }}
-              className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row"
+              style={{
+                marginTop: 32,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 12,
+              }}
+              className="sm:flex-row"
             >
               <SpecularButton href="/" variant="primary" size="lg">
                 <ArrowLeft className="h-4 w-4" />

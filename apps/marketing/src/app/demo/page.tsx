@@ -18,53 +18,114 @@ export default function DemoPage() {
     <>
       <NavBar />
       <main>
-        <section className="relative overflow-hidden pt-32 pb-24">
+        <section
+          className="relative overflow-hidden"
+          style={{ paddingTop: 96, paddingBottom: 96 }}
+        >
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-x-0 top-0 h-[600px]"
+            className="pointer-events-none absolute inset-x-0 top-0"
             style={{
+              height: 600,
               background:
                 'radial-gradient(ellipse 70% 50% at 50% 0%, rgba(122,166,140,0.18) 0%, transparent 65%)',
             }}
           />
-          <div className="relative mx-auto max-w-4xl px-6 text-center lg:px-8">
-            <div className="flex justify-center">
+          <div
+            className="container"
+            style={{ maxWidth: 880, textAlign: 'center', position: 'relative' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
               <Badge dot="violet">Coming soon</Badge>
             </div>
-            <h1 className="mt-6 type-h1">
+            <h1 className="hero-title" style={{ marginTop: 20 }}>
               A <GradientText>60-second</GradientText> walkthrough.
             </h1>
-            <p
-              className="mx-auto mt-6 max-w-xl text-[18px] leading-relaxed text-[#5C544A]"
-              style={{ fontFamily: 'var(--font-serif), Georgia, serif' }}
-            >
+            <p className="hero-sub" style={{ marginTop: 20 }}>
               We&apos;re shooting the demo this sprint. Start the free trial in
               the meantime — you&apos;ll be signed into the real product in
               under a minute.
             </p>
 
-            <GradientBorder className="mx-auto mt-14 aspect-video max-w-3xl" angle="135deg">
-              <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-[15px] bg-[#FFFCF5]">
+            <div style={{ marginTop: 48, marginInline: 'auto', maxWidth: 760 }}>
+              <GradientBorder>
                 <div
-                  aria-hidden
-                  className="absolute inset-0"
                   style={{
-                    background:
-                      'radial-gradient(ellipse at center, rgba(122,166,140,0.14) 0%, transparent 70%)',
+                    position: 'relative',
+                    aspectRatio: '16 / 9',
+                    overflow: 'hidden',
+                    borderRadius: 11,
+                    background: 'var(--color-linear-surface-2)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
                   }}
-                />
-                <div className="relative flex flex-col items-center gap-4">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[rgba(122,166,140,0.18)]">
-                    <Play className="h-6 w-6 text-[#2F5040]" />
+                >
+                  <div
+                    aria-hidden
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      background:
+                        'radial-gradient(ellipse at center, rgba(122,166,140,0.14) 0%, transparent 70%)',
+                    }}
+                  />
+                  <div
+                    style={{
+                      position: 'relative',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: 16,
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        height: 64,
+                        width: 64,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderRadius: '50%',
+                        background: 'var(--color-linear-sage-tint)',
+                        border: '1px solid rgba(122, 166, 140, 0.3)',
+                      }}
+                    >
+                      <Play
+                        style={{
+                          height: 22,
+                          width: 22,
+                          color: 'var(--color-linear-sage-bright)',
+                        }}
+                      />
+                    </div>
+                    <p
+                      style={{
+                        fontSize: 13,
+                        color: 'var(--color-linear-text-3)',
+                        fontFamily: 'var(--font-mono)',
+                        letterSpacing: '0.06em',
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      Video coming soon
+                    </p>
                   </div>
-                  <p className="text-[14px] text-[#5C544A]">
-                    Video coming soon
-                  </p>
                 </div>
-              </div>
-            </GradientBorder>
+              </GradientBorder>
+            </div>
 
-            <div className="mt-12 flex flex-col items-center justify-center gap-3 sm:flex-row">
+            <div
+              style={{
+                marginTop: 40,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 12,
+              }}
+              className="sm:flex-row"
+            >
               <SpecularButton href={APP_SIGNUP_URL} variant="primary" size="lg">
                 Start free trial instead
               </SpecularButton>
