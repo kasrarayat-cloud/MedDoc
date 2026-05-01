@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>QuillMD — The Index, Wednesday Late</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;1,8..60,400;1,8..60,500&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --cream:#F2EBDC; --cream-card:#FFFCF5; --cream-2:#F2EDE3;
+    --ink:#2B2620; --ink-2:#5C544A; --ink-3:#8A8278;
+    --sage:#7AA68C; --sage-deep:#2F5040;
+    --coral:#C97B6E; --amber:#D4A574; --teal:#5BA3B4;
+    --line:rgba(43,38,32,0.08);
+    --line-2:rgba(43,38,32,0.18);
+    --serif:'Source Serif 4',Georgia,serif;
+    --sans:'DM Sans',-apple-system,system-ui,sans-serif;
+    --mono:'JetBrains Mono',ui-monospace,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:14.5px;line-height:1.55;-webkit-font-smoothing:antialiased}
+  ::selection{background:rgba(122,166,140,.32);color:var(--ink)}
+  a{color:inherit;text-decoration:none}
+
+  .layout{
+    display:grid;grid-template-columns:300px 1fr;gap:0;
+    max-width:1320px;margin:0 auto;min-height:100vh;
+  }
+
+  /* TOP STRIP (full width above grid) */
+  .top{
+    grid-column:1/-1;
+    display:flex;justify-content:space-between;align-items:center;
+    padding:16px 36px;border-bottom:1px solid var(--ink);
+    font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-2)
+  }
+  .top .l{display:flex;gap:22px;align-items:baseline}
+  .top .l .wm{font-family:var(--serif);font-style:italic;font-size:18px;letter-spacing:0;text-transform:none;color:var(--ink)}
+  .top .r{display:flex;gap:14px;align-items:center}
+  .kbd{display:inline-flex;align-items:center;gap:5px;padding:5px 9px;border:1px solid var(--line-2);border-radius:5px;background:var(--cream-card);font-family:var(--mono);font-size:10.5px;color:var(--ink-2)}
+  .chip{display:inline-flex;align-items:center;gap:7px;padding:5px 6px 5px 10px;border:1px solid var(--line-2);border-radius:999px;background:var(--cream-card);font-size:11.5px;text-transform:none;letter-spacing:0}
+  .chip .ini{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:999px;background:var(--sage-deep);color:#FBF9F1;font-family:var(--mono);font-size:9.5px;letter-spacing:.04em}
+  .chip span{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;color:var(--ink-2)}
+
+  /* SIDEBAR (numbers rail) */
+  aside.rail{
+    border-right:1px solid var(--line);
+    padding:48px 28px 60px;
+    background:linear-gradient(180deg,rgba(255,252,245,.4),transparent 200px);
+    position:sticky;top:0;align-self:start;height:max-content
+  }
+  .rail .running-foot{
+    font-family:var(--mono);font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-3);
+    writing-mode:vertical-rl;transform:rotate(180deg);position:absolute;left:14px;top:60px;
+  }
+  .rail-title{font-family:var(--mono);font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-3);margin-bottom:6px}
+  .rail-sub{font-family:var(--serif);font-style:italic;color:var(--ink-2);font-size:14px;line-height:1.45;margin-bottom:30px}
+
+  .metric{padding:20px 0 22px;border-top:1px solid var(--line);position:relative}
+  .metric:first-of-type{border-top:1px solid var(--ink)}
+  .metric:last-of-type{border-bottom:1px solid var(--ink)}
+  .metric .lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3);display:flex;justify-content:space-between;align-items:baseline}
+  .metric .lbl .delta{color:var(--ink-2);font-size:10px;letter-spacing:.14em}
+  .metric .num{font-family:var(--serif);font-weight:400;font-size:74px;line-height:.94;letter-spacing:-0.04em;color:var(--ink);margin-top:8px}
+  .metric .num sup{font-family:var(--serif);font-style:italic;font-size:.3em;color:var(--ink-3);margin-left:4px;vertical-align:30%;letter-spacing:0;font-weight:400}
+  .metric .cap{margin-top:6px;font-family:var(--serif);font-style:italic;font-size:14px;color:var(--ink-2);line-height:1.45}
+  .metric.sage .num{color:var(--sage-deep)}
+  .metric.coral .num{color:var(--coral)}
+
+  .new-link{
+    display:inline-flex;align-items:center;gap:8px;margin-top:24px;
+    font-family:var(--serif);font-style:italic;color:var(--sage-deep);font-size:15px;
+    border-bottom:1px solid rgba(47,80,64,.4);padding-bottom:1px
+  }
+
+  /* tags in rail */
+  .rail-tags{margin-top:30px;border-top:1px solid var(--line);padding-top:20px}
+  .rail-tags .h{font-family:var(--mono);font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-3);margin-bottom:14px}
+  .rail-tags .tags{display:flex;flex-direction:column;gap:10px}
+  .tag{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-2);cursor:pointer;display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--line)}
+  .tag:last-of-type{border-bottom:0}
+  .tag b{color:var(--ink);font-weight:500}
+  .tag:hover{color:var(--sage-deep)}
+
+  /* MAIN COLUMN */
+  main.body{padding:48px 56px 80px}
+
+  .greeting{padding-bottom:30px;border-bottom:1px solid var(--ink)}
+  .greeting .kicker{font-family:var(--mono);font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-3);margin-bottom:14px;display:block}
+  .greeting h1{
+    font-family:var(--serif);font-weight:400;font-size:clamp(56px,7.5vw,96px);line-height:.92;letter-spacing:-0.03em;color:var(--ink);
+  }
+  .greeting h1 em{font-style:italic;color:var(--sage-deep);position:relative;font-weight:400}
+  .greeting h1 em::after{content:"";position:absolute;left:-1%;right:-1%;bottom:.07em;height:.42em;background:rgba(122,166,140,.18);border-radius:6px;z-index:-1}
+  .greeting .standfirst{margin-top:18px;font-family:var(--serif);font-style:italic;color:var(--ink-2);font-size:18px;line-height:1.55;max-width:54ch}
+  .greeting .standfirst em{font-style:normal;color:var(--ink)}
+
+  /* INDEX header */
+  .index-h{display:flex;align-items:baseline;justify-content:space-between;padding:36px 0 14px;border-bottom:1px solid var(--ink)}
+  .index-h h2{font-family:var(--serif);font-weight:500;font-size:24px;letter-spacing:-0.012em}
+  .index-h h2 em{font-style:italic;color:var(--sage-deep);font-weight:400}
+  .index-h .right{font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3)}
+
+  /* literary index — leader-dot rows */
+  .index-list{padding-top:6px}
+  .ix-row{
+    display:grid;grid-template-columns:54px 1fr 110px;gap:16px;align-items:baseline;
+    padding:18px 0;border-bottom:1px solid var(--line);position:relative
+  }
+  .ix-row .pg{font-family:var(--serif);font-style:italic;font-size:18px;color:var(--ink-3);letter-spacing:.02em}
+  .ix-row .head{font-family:var(--serif);font-size:18px;color:var(--ink);font-weight:500;letter-spacing:-0.01em;line-height:1.3;position:relative}
+  .ix-row .head em{font-style:italic;color:var(--ink-2);font-weight:400;font-size:14px;margin-left:5px}
+  .ix-row .blurb{margin-top:5px;font-family:var(--serif);font-style:italic;color:var(--ink-2);font-size:14.5px;line-height:1.5}
+  .ix-row .meta{margin-top:6px;font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3)}
+  .ix-row .meta b{color:var(--ink-2);font-weight:500}
+  .ix-row .meta .sep{color:var(--line-2);margin:0 8px}
+  .ix-row .st{justify-self:end;font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;align-self:start;padding-top:3px}
+  .ix-row .st .age{display:block;color:var(--ink-3);margin-top:4px;font-size:9.5px;letter-spacing:.12em}
+  .s-ready{color:var(--sage-deep)}
+  .s-needs{color:var(--coral)}
+  .s-drafting{color:var(--amber)}
+  .s-await{color:var(--ink-3)}
+  .s-signed{color:var(--ink-2)}
+
+  /* leader dots between head and page-status: use a flex-like trick by extending the head with an after */
+  .ix-row .head::after{
+    content:"";position:absolute;left:calc(100% + 14px);right:-118px;
+    bottom:.5em;border-bottom:1px dotted var(--ink-3);opacity:.45
+  }
+
+  /* secondary index — recent-stream as appendix */
+  .appendix{margin-top:42px;padding-top:18px;border-top:1px solid var(--ink)}
+  .appendix h3{font-family:var(--serif);font-weight:500;font-size:20px;letter-spacing:-0.01em;margin-bottom:14px}
+  .appendix h3 em{font-style:italic;color:var(--sage-deep);font-weight:400}
+  .appendix .grid{display:grid;grid-template-columns:1fr 1fr;column-gap:48px}
+  .ap-row{display:grid;grid-template-columns:80px 1fr auto;gap:14px;align-items:baseline;padding:11px 0;border-bottom:1px solid var(--line)}
+  .ap-row:last-child{border-bottom:0}
+  .ap-row .t{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;color:var(--ink-3);text-transform:uppercase}
+  .ap-row .w{font-family:var(--serif);font-size:15px;color:var(--ink);line-height:1.3}
+  .ap-row .w em{font-style:italic;color:var(--ink-2);font-size:13px;margin-left:4px}
+  .ap-row .w .c{display:block;margin-top:2px;font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+  .ap-row .s{font-family:var(--mono);font-size:9.5px;letter-spacing:.16em;text-transform:uppercase}
+
+  .colophon{
+    grid-column:1/-1;border-top:1px solid var(--line);padding:18px 36px;
+    display:flex;justify-content:space-between;align-items:center;
+    font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3)
+  }
+  .colophon em{font-family:var(--serif);font-style:italic;letter-spacing:0;text-transform:none;color:var(--ink-2)}
+
+  @media (max-width:900px){
+    .layout{grid-template-columns:1fr}
+    aside.rail{position:static;border-right:0;border-bottom:1px solid var(--line);padding:32px 22px}
+    .rail .running-foot{display:none}
+    main.body{padding:32px 22px 70px}
+    .ix-row{grid-template-columns:36px 1fr;gap:10px}
+    .ix-row .st{grid-column:2/3;justify-self:start;margin-top:6px}
+    .ix-row .head::after{display:none}
+    .appendix .grid{grid-template-columns:1fr}
+    .top{flex-wrap:wrap;gap:10px}
+    .top .l{flex-wrap:wrap}
+    .top .r{flex-wrap:wrap}
+    .greeting h1{font-size:48px}
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- TOP -->
+  <header class="top">
+    <div class="l">
+      <span class="wm">QuillMD</span>
+      <span>The Index · Issue 119</span>
+      <span>Wed 29 Apr 2026 · 17:42 PT</span>
+    </div>
+    <div class="r">
+      <span class="kbd">⌘ K · find a patient</span>
+      <span class="chip"><span>Dr. Park · Family Med</span><span class="ini">MP</span></span>
+    </div>
+  </header>
+
+  <!-- LEFT RAIL: numbers & tags -->
+  <aside class="rail">
+    <span class="running-foot">A quiet column of numbers · April</span>
+
+    <div class="rail-title">The numbers</div>
+    <p class="rail-sub">A small column of figures, kept where you can see them without having to look.</p>
+
+    <div class="metric">
+      <div class="lbl"><span>Visits / month</span><span class="delta">▴ 6</span></div>
+      <div class="num">127</div>
+      <p class="cap">Pace is right; April closes Friday.</p>
+    </div>
+
+    <div class="metric sage">
+      <div class="lbl"><span>Avg drafted in</span><span class="delta">▾ 4 s</span></div>
+      <div class="num">38<sup>s</sup></div>
+      <p class="cap">From last word to first SOAP.</p>
+    </div>
+
+    <div class="metric coral">
+      <div class="lbl"><span>Pending review</span><span class="delta">·</span></div>
+      <div class="num">3</div>
+      <p class="cap">Gupta. Lopez. The Singh chart.</p>
+    </div>
+
+    <div class="metric">
+      <div class="lbl"><span>Signed this week</span><span class="delta">▴ 8</span></div>
+      <div class="num">42</div>
+      <p class="cap">Eight ahead of last week.</p>
+    </div>
+
+    <a href="#" class="new-link">+ open a new visit →</a>
+
+    <!-- TAGS -->
+    <div class="rail-tags" aria-label="Filter by specialty">
+      <div class="h">By specialty · today</div>
+      <div class="tags">
+        <span class="tag"><span>Family Medicine</span><b>4</b></span>
+        <span class="tag"><span>Internal</span><b>3</b></span>
+        <span class="tag"><span>Cardiology</span><b>2</b></span>
+        <span class="tag"><span>Pediatrics</span><b>1</b></span>
+        <span class="tag"><span>Dermatology</span><b>1</b></span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="body">
+
+    <!-- GREETING -->
+    <section class="greeting">
+      <span class="kicker">A diary of the round · entry no. 119</span>
+      <h1>Good <em>evening</em>, Dr. Park.</h1>
+      <p class="standfirst">Five names, four hours, one biopsy queued for Friday morning. The kettle's been on twice. <em>Three drafts wait on you tonight.</em></p>
+    </section>
+
+    <!-- INDEX HEADER -->
+    <div class="index-h">
+      <h2>An <em>index</em> of today's chapters</h2>
+      <span class="right">Five entries</span>
+    </div>
+
+    <!-- INDEX -->
+    <section class="index-list">
+
+      <article class="ix-row">
+        <div class="pg">i.</div>
+        <div>
+          <div class="head">Mei-Ling Park <em>· 42 F</em></div>
+          <p class="blurb">Acute bronchitis; three weeks of dry cough, worse at night. Chest clear; SpO₂ 98 %.</p>
+          <p class="meta">Family Medicine <span class="sep">·</span> <b>J20.9</b> <span class="sep">·</span> <b>99214</b> <span class="sep">·</span> drafted 0:38</p>
+        </div>
+        <div class="st s-ready">Ready<span class="age">38 min ago</span></div>
+      </article>
+
+      <article class="ix-row">
+        <div class="pg">ii.</div>
+        <div>
+          <div class="head">Aram Sahakian <em>· 38 M</em></div>
+          <p class="blurb">Pre-op clearance for left rotator-cuff repair. Mild HTN on lisinopril; EKG attached, awaits cardiology stamp.</p>
+          <p class="meta">Cardiology <span class="sep">·</span> <b>I10</b> <span class="sep">·</span> audio queued</p>
+        </div>
+        <div class="st s-await">Awaiting<span class="age">live</span></div>
+      </article>
+
+      <article class="ix-row">
+        <div class="pg">iii.</div>
+        <div>
+          <div class="head">Daniel Tran <em>· 27 M</em></div>
+          <p class="blurb">Annual well-check. Cleared to return to recreational soccer; routine bloodwork sent.</p>
+          <p class="meta">Pediatrics <span class="sep">·</span> <b>Z00.129</b> <span class="sep">·</span> <b>99395</b></p>
+        </div>
+        <div class="st s-signed">Signed<span class="age">at 14:30</span></div>
+      </article>
+
+      <article class="ix-row">
+        <div class="pg">iv.</div>
+        <div>
+          <div class="head">Priya Gupta <em>· 55 F</em></div>
+          <p class="blurb">Quarterly diabetes follow-up. A1c trended up two points; medication review and dietary counseling owed.</p>
+          <p class="meta">Internal Medicine <span class="sep">·</span> <b>E11.9</b> <span class="sep">·</span> <b>99213</b></p>
+        </div>
+        <div class="st s-needs">Needs review<span class="age">22 min ago</span></div>
+      </article>
+
+      <article class="ix-row">
+        <div class="pg">v.</div>
+        <div>
+          <div class="head">Elena Lopez <em>· 61 F</em></div>
+          <p class="blurb">Routine mole check; one asymmetric border on the upper back, 7 mm. Biopsy queued for Friday's slot.</p>
+          <p class="meta">Dermatology <span class="sep">·</span> <b>D22.4</b> <span class="sep">·</span> biopsy</p>
+        </div>
+        <div class="st s-drafting">Drafting<span class="age">layer 5</span></div>
+      </article>
+
+    </section>
+
+    <!-- APPENDIX -->
+    <section class="appendix">
+      <h3>An <em>appendix</em>, recently filed</h3>
+      <div class="grid">
+        <div>
+          <div class="ap-row">
+            <span class="t">14:30</span>
+            <div class="w">Daniel Tran <em>· Pediatrics</em>
+              <span class="c">Z00.129 · 99395 · 17 min</span>
+            </div>
+            <span class="s s-signed">Signed</span>
+          </div>
+          <div class="ap-row">
+            <span class="t">13:12</span>
+            <div class="w">Mei-Ling Park <em>· Family Med</em>
+              <span class="c">J20.9 · 99214 · 11 min</span>
+            </div>
+            <span class="s s-ready">Ready</span>
+          </div>
+          <div class="ap-row">
+            <span class="t">11:48</span>
+            <div class="w">Priya Gupta <em>· Internal Med</em>
+              <span class="c">E11.9 · 99213 · 22 min</span>
+            </div>
+            <span class="s s-needs">Review</span>
+          </div>
+          <div class="ap-row">
+            <span class="t">10:25</span>
+            <div class="w">Elena Lopez <em>· Dermatology</em>
+              <span class="c">D22.4 · 99213 · 14 min</span>
+            </div>
+            <span class="s s-drafting">Drafting</span>
+          </div>
+          <div class="ap-row">
+            <span class="t">09:51</span>
+            <div class="w">Aram Sahakian <em>· Cardiology</em>
+              <span class="c">I10 · 99244 · 19 min</span>
+            </div>
+            <span class="s s-await">Processing</span>
+          </div>
+          <div class="ap-row">
+            <span class="t">09:02</span>
+            <div class="w">Henry Okafor <em>· Family Med</em>
+              <span class="c">M54.5 · 99213 · 8 min</span>
+            </div>
+            <span class="s s-signed">Signed</span>
+          </div>
+        </div>
+        <div>
+          <div class="ap-row">
+            <span class="t">YDA 16:42</span>
+            <div class="w">Beatrice Lin <em>· Family Med</em>
+              <span class="c">R05.9 · 99213 · 12 min</span>
+            </div>
+            <span class="s s-signed">Signed</span>
+          </div>
+          <div class="ap-row">
+            <span class="t">YDA 15:18</span>
+            <div class="w">Marcus Devereaux <em>· Internal Med</em>
+              <span class="c">I50.9 · 99214 · 24 min</span>
+            </div>
+            <span class="s s-signed">Signed</span>
+          </div>
+          <div class="ap-row">
+            <span class="t">YDA 14:03</span>
+            <div class="w">Anya Petrova <em>· Pediatrics</em>
+              <span class="c">J06.9 · 99213 · 9 min</span>
+            </div>
+            <span class="s s-needs">Review</span>
+          </div>
+          <div class="ap-row">
+            <span class="t">YDA 11:36</span>
+            <div class="w">Jamal Carter <em>· Family Med</em>
+              <span class="c">E78.5 · 99213 · 16 min</span>
+            </div>
+            <span class="s s-signed">Signed</span>
+          </div>
+          <div class="ap-row">
+            <span class="t">YDA 10:11</span>
+            <div class="w">Sophia Albright <em>· Dermatology</em>
+              <span class="c">L70.0 · 99202 · 11 min</span>
+            </div>
+            <span class="s s-signed">Signed</span>
+          </div>
+          <div class="ap-row">
+            <span class="t">YDA 08:54</span>
+            <div class="w">Nathaniel Cho <em>· Cardiology</em>
+              <span class="c">I25.10 · 99214 · 26 min</span>
+            </div>
+            <span class="s s-ready">Ready</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="colophon">
+    <span><em>"The chart is patient. The patient is not."</em></span>
+    <span>QuillMD · The Index · pp. 1 — 1</span>
+  </footer>
+
+</div>
+</body>
+</html>
