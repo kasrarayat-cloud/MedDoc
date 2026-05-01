@@ -2216,3 +2216,272 @@ body {
     animation-iteration-count: 1 !important;
   }
 }
+
+/* ============================================================================
+   Phase 4 — Apple Cinematic hero band primitives
+   ----------------------------------------------------------------------------
+   Source of truth: docs/design-directions-v6/studio-variations/
+       landing-11-anim-1.html
+       visit-detail-04.html
+       recording-04.html
+   Used by:
+     - <CinematicVisitHero>     (apps/transcribe-md/src/components/visits/)
+     - <CinematicRecordingHero> (apps/transcribe-md/src/components/visits/)
+   Scoped under .qm-cl-app so the warm cream tokens (--cream, --ink,
+   --sage, --serif, --mono, --ease-clinician, etc.) defined on that
+   scope are in scope when the hero band renders. The .av1-* class
+   family (av1-word, av1-fade, av1-card, av1-cta) is intentionally
+   scoped under .qm-cl-app so it doesn't bleed into the dark App-
+   redesign-v1 (.qm-app) routes that have their own animation idiom.
+   ========================================================================== */
+
+/* ── Hero band (visit-detail = 280px tall, recording = 200px tall) ── */
+.qm-cl-app .qm-cin-band {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  color: var(--cream-card);
+  display: flex;
+  align-items: flex-end;
+}
+.qm-cl-app .qm-cin-band-tall { min-height: 280px; padding: 28px 32px 24px; }
+.qm-cl-app .qm-cin-band-short { min-height: 200px; padding: 24px 32px 20px; }
+
+/* Background photo + parallax-ready transform/filter target.
+   The .qm-cin-bg-visit and .qm-cin-bg-recording variants set the
+   image-set; the bare .qm-cin-bg carries the layout + transition. */
+.qm-cl-app .qm-cin-bg {
+  position: absolute;
+  inset: -10% 0 -10% 0;
+  z-index: 0;
+  background-size: cover;
+  background-position: center;
+  will-change: transform, filter;
+  transform: scale(1) translateZ(0);
+  transition: transform 220ms var(--ease-clinician),
+              filter 220ms var(--ease-clinician);
+}
+.qm-cl-app .qm-cin-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg,
+      rgba(20, 16, 12, 0.30) 0%,
+      rgba(20, 16, 12, 0.10) 35%,
+      rgba(20, 16, 12, 0.55) 100%),
+    radial-gradient(ellipse at 25% 35%,
+      rgba(122, 166, 140, 0.16) 0%,
+      transparent 55%);
+  pointer-events: none;
+}
+.qm-cl-app .qm-cin-bg-visit {
+  background-image: url('/images/cinematic/visit-detail-hero.jpg');
+  background-image: -webkit-image-set(
+    url('/images/cinematic/visit-detail-hero.webp') type('image/webp'),
+    url('/images/cinematic/visit-detail-hero.jpg') type('image/jpeg')
+  );
+  background-image: image-set(
+    url('/images/cinematic/visit-detail-hero.webp') type('image/webp'),
+    url('/images/cinematic/visit-detail-hero.jpg') type('image/jpeg')
+  );
+}
+.qm-cl-app .qm-cin-bg-recording {
+  background-image: url('/images/cinematic/recording-hero.jpg');
+  background-image: -webkit-image-set(
+    url('/images/cinematic/recording-hero.webp') type('image/webp'),
+    url('/images/cinematic/recording-hero.jpg') type('image/jpeg')
+  );
+  background-image: image-set(
+    url('/images/cinematic/recording-hero.webp') type('image/webp'),
+    url('/images/cinematic/recording-hero.jpg') type('image/jpeg')
+  );
+}
+
+.qm-cl-app .qm-cin-inner {
+  position: relative;
+  z-index: 2;
+  max-width: 1080px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* ── Breadcrumb (mono, faded cream, sits inside the band) ── */
+.qm-cl-app .qm-cin-breadcrumb {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 252, 245, 0.76);
+  margin-bottom: 14px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.40);
+}
+
+/* ── Pills row (Family Medicine · Ready · J20.9) ── */
+.qm-cl-app .qm-cin-pills {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.qm-cl-app .qm-cin-pill {
+  background: rgba(255, 252, 245, 0.18);
+  border: 1px solid rgba(255, 252, 245, 0.30);
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-family: var(--sans);
+  font-size: 12px;
+  color: var(--cream-card);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.qm-cl-app .qm-cin-pill .qm-cin-pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--sage-bright);
+}
+
+/* ── Recording variant — coral pulsing dot + mono pill ── */
+.qm-cl-app .qm-cin-rec-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px;
+  background: rgba(255, 252, 245, 0.18);
+  border: 1px solid rgba(255, 252, 245, 0.30);
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--cream-card);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  margin-bottom: 14px;
+}
+.qm-cl-app .qm-cin-rec-eyebrow .qm-cin-rec-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--coral);
+  animation: qm-cin-rec-pulse 1.4s ease-in-out infinite;
+}
+@keyframes qm-cin-rec-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(201, 123, 110, 0.6); }
+  50%      { box-shadow: 0 0 0 8px rgba(201, 123, 110, 0); }
+}
+
+/* ── Headline (cinematic serif + sage glow on em token) ── */
+.qm-cl-app .qm-cin-headline {
+  font-family: var(--serif);
+  font-size: clamp(36px, 5vw, 56px);
+  line-height: 1.06;
+  letter-spacing: -0.012em;
+  font-weight: 500;
+  margin: 0;
+  color: var(--cream-card);
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.30);
+}
+.qm-cl-app .qm-cin-headline-rec {
+  font-size: clamp(32px, 4.4vw, 48px);
+}
+.qm-cl-app .qm-cin-meta {
+  margin-top: 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: rgba(255, 252, 245, 0.78);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.40);
+  letter-spacing: 0.06em;
+}
+
+/* ── Apple Cinematic animation primitives — verbatim from
+   landing-11-anim-1.html. Scoped under .qm-cl-app to avoid bleeding
+   into the dark .qm-app routes. ── */
+.qm-cl-app .av1-word {
+  display: inline-block;
+  opacity: 0;
+  filter: blur(14px);
+  transform: translateY(14px);
+  transition:
+    opacity 720ms var(--ease-clinician),
+    filter 720ms var(--ease-clinician),
+    transform 720ms var(--ease-clinician);
+}
+.qm-cl-app .av1-word.show {
+  opacity: 1;
+  filter: blur(0);
+  transform: none;
+}
+.qm-cl-app .av1-word.em {
+  font-style: italic;
+  color: var(--sage-bright);
+  font-weight: 400;
+}
+.qm-cl-app .av1-word.em.glow.show {
+  text-shadow:
+    0 0 36px rgba(149, 188, 164, 0.55),
+    0 2px 12px rgba(0, 0, 0, 0.30);
+}
+.qm-cl-app .av1-fade {
+  opacity: 0;
+  transform: translateY(8px);
+  transition:
+    opacity 800ms var(--ease-clinician),
+    transform 800ms var(--ease-clinician);
+}
+.qm-cl-app .av1-fade.show {
+  opacity: 1;
+  transform: none;
+}
+.qm-cl-app .av1-card {
+  opacity: 0;
+  filter: blur(12px);
+  transform: translate3d(40px, 0, 0);
+  transition:
+    opacity 900ms var(--ease-clinician),
+    filter 900ms var(--ease-clinician),
+    transform 900ms var(--ease-clinician);
+}
+.qm-cl-app .av1-card.show {
+  opacity: 1;
+  filter: blur(0);
+  transform: none;
+}
+/* Recording widget variant — slide up from translateY(20px) instead of
+   from the right, per the spec. */
+.qm-cl-app .av1-card-up {
+  transform: translate3d(0, 20px, 0);
+}
+.qm-cl-app .av1-card-up.show {
+  transform: none;
+}
+.qm-cl-app .av1-cta {
+  opacity: 0;
+  transform: scale(0.95);
+  transition:
+    opacity 600ms var(--ease-clinician),
+    transform 600ms var(--ease-clinician);
+}
+.qm-cl-app .av1-cta.show {
+  opacity: 1;
+  transform: scale(1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .qm-cl-app .av1-word,
+  .qm-cl-app .av1-fade,
+  .qm-cl-app .av1-card,
+  .qm-cl-app .av1-card-up,
+  .qm-cl-app .av1-cta {
+    opacity: 1 !important;
+    filter: none !important;
+    transform: none !important;
+    transition: none !important;
+  }
+  .qm-cl-app .qm-cin-rec-eyebrow .qm-cin-rec-dot {
+    animation: none !important;
+  }
+}
