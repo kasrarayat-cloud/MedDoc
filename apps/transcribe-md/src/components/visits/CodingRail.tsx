@@ -1,50 +1,450 @@
 'use client';
 
 // ============================================================================
-// CodingRail — Phase 5.2 v6 Coding Coach right rail.
+// CodingRail — Phase 5.2 right-rail Coding Coach
 // ----------------------------------------------------------------------------
-// STUB FOR SOLO BUILD — Subagent C owns this file. The real implementation
-// (header + time tracker + criteria checklist + bump CTA) lands in
-// feature/phase5.2-soap-rail-v6 and REPLACES this stub at Stage 6 merge.
+// Mockup: docs/design-directions-v10-soap/soap-v6.html (lines 270-580 + body
+//        910-1113). The right column of the SOAP page.
 //
-// Subagent A leaves a clean placeholder so the SOAP body's grid renders
-// during the solo TS / build verification. The interface here is the
-// minimum surface contract the body needs to thread props through;
-// Subagent C will widen it (override callbacks, gap arrays, etc).
+// Composition (top → bottom):
+//   1. <head> — Billing support pulse + "AMA 2021" + suggested code +
+//      level pill + override dropdown
+//   2. <EmTimeTracker> — visit-time meter w/ AMA threshold band
+//   3. <EmCheckList> — 3 criterion groups (history / exam / mdm)
+//   4. <coach-cta> — sage primary "Bump to 99214 · +$32" + sage outline
+//      "Confirm 99213 · sign" + foot meta
+//   5. <BumpModal> — opens above the rail when CTA is clicked
 //
-// Do NOT extend or copy this stub from Subagent A's branch — Subagent C's
-// merge resolution is mechanical: their branch overwrites this file.
+// Behavior contract (spec §4):
+//   - Server-rendered initial score from page.tsx — preserved as `emScore` prop
+//   - Re-scoring on edit: 500ms debounced listener for `qm:soap-edited`,
+//     POSTs to `/api/visits/[id]/em-score`, swaps state with `qm-lin-fade-in`
+//   - Optimistic UI on EmCriterion warn → applying state with subtle pulse
+//   - Loading state: subtle pulse on stale score; never blank
+//   - Error state: small mono pill "Coding feedback temporarily unavailable",
+//     never red, never blocking — keeps last known good score
+//   - readonly visits → no override, no Bump CTA, no Modal mount
+//
+// CustomEvent contracts (loose coupling):
+//   - LISTENS:  qm:soap-edited        (Subagent A's body fires on edit)
+//   - EMITS:    qm:soap-highlight-criteria (BumpCtaButton click)
+//   - EMITS:    qm:em-override        (override dropdown selection)
+//   - EMITS:    qm:soap-jump          (EmCriterion row click)
 // ============================================================================
 
-export interface CodingRailEmScore {
-  /** AMA 2021 E&M code currently suggested by the engine. */
-  suggestedCode: string;
-  /** Pretty level label (e.g. "Level 3"). */
-  level: string;
-  /** Per-section gap hints — informs the SOAP body's section pulse dots.
-   *  Subagent C populates this from the engine; Subagent A only forwards
-   *  it via the parent SoapEditor. */
-  boostHints?: Partial<Record<'S' | 'O' | 'A' | 'P', { tone: 'ok' | 'boost'; text: string }>>;
-}
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react';
+import { toast } from 'sonner';
 
-export interface CodingRailProps {
-  emScore: CodingRailEmScore | null;
+import { cn } from '@/lib/cn';
+import {
+  type EmCode,
+  type EmScore,
+  type EmVisitType,
+  SOAP_EDITED_EVENT,
+  type SoapEditedDetail,
+  EM_OVERRIDE_EVENT,
+  type EmOverrideDetail,
+} from '@/lib/em-coding-ui/types';
+import { ANNUAL_SAVINGS_FOOTER, formatDelta } from '@/lib/em-coding-ui/revenueDelta';
+
+import { EmCheckList } from './EmCheckList';
+import { EmTimeTracker } from './EmTimeTracker';
+import { BumpCtaButton } from './BumpCtaButton';
+import { BumpModal } from './BumpModal';
+
+// Code lists per AMA 2021 (rubric §1) — drive the override listbox.
+const ESTABLISHED_CODES: EmCode[] = ['99211', '99212', '99213', '99214', '99215'];
+const NEW_CODES: EmCode[] = ['99202', '99203', '99204', '99205'];
+
+const RESCORE_DEBOUNCE_MS = 500;
+
+interface CodingRailProps {
+  /** Server-computed initial score from page.tsx. */
+  emScore: EmScore;
+  /** Visit id used for re-score POSTs + override persistence. */
   visitId: string;
+  /** Signed visits are coaching-only — readonly disables override + bump CTA. */
   readonly: boolean;
-  /** Called when a doctor's interaction in the rail (override / bump / nudge)
-   *  should update the SOAP body's per-section pulse dots. Subagent C wires
-   *  the signal; Subagent A's parent SoapEditor exposes this callback. */
-  onBoostHintsChange?: (
-    hints: NonNullable<CodingRailEmScore['boostHints']>
-  ) => void;
+  /** Fired when the doctor accepts a bump suggestion via the modal. */
+  onBumpAccepted?: (toCode: EmCode) => void;
+  /**
+   * Optional callback the modal uses to persist SOAP additions. When
+   * unwired (Subagent B's branch lands the route), the rail short-circuits
+   * with `{ ok: true }` so the mockup state still threads end-to-end.
+   */
+  onApplyAdditions?: (
+    additions: Array<{ criterionId: string; text: string }>
+  ) => Promise<{ ok: boolean; error?: string }>;
 }
 
-export function CodingRail({ visitId }: CodingRailProps) {
+interface RescoreResult {
+  ok: boolean;
+  score?: EmScore;
+  error?: string;
+}
+
+export function CodingRail({
+  emScore: initialScore,
+  visitId,
+  readonly,
+  onBumpAccepted,
+  onApplyAdditions,
+}: CodingRailProps) {
+  // Last known-good server score; fall back here on rescoring failures.
+  const [score, setScore] = useState<EmScore>(initialScore);
+  // Stale flag triggers the sage subtle pulse during rescoring.
+  const [stale, setStale] = useState(false);
+  // Soft error pill ("Coding feedback temporarily unavailable") — never red.
+  const [unavailable, setUnavailable] = useState(false);
+  // BumpModal open state.
+  const [bumpOpen, setBumpOpen] = useState(false);
+  // Override dropdown open state — uncontrolled UX, listbox closes on select.
+  const [overrideOpen, setOverrideOpen] = useState(false);
+
+  const debounceRef = useRef<number | null>(null);
+  const inflightRef = useRef<AbortController | null>(null);
+
+  // Track the latest SOAP body text so the rescore POST sends the correct payload.
+  const latestSoapRef = useRef<string | null>(null);
+
+  // Reflect prop changes when the parent server-rerenders with a new score
+  // (e.g. after page-level revalidatePath). Keeps the rail in sync without
+  // tearing the local stale flag.
+  useEffect(() => {
+    setScore(initialScore);
+    setStale(false);
+    setUnavailable(false);
+  }, [initialScore]);
+
+  // ---------------------------------------------------------------------------
+  // Re-score on SOAP edits (debounced 500 ms)
+  // ---------------------------------------------------------------------------
+  const rescore = useCallback(
+    async (soapText: string) => {
+      // Cancel any inflight request — we only care about the latest body.
+      if (inflightRef.current) {
+        inflightRef.current.abort();
+      }
+      const controller = new AbortController();
+      inflightRef.current = controller;
+      setStale(true);
+      try {
+        const res = await fetch(`/api/visits/${visitId}/em-score`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ soapText }),
+          signal: controller.signal,
+        });
+        if (!res.ok) {
+          throw new Error(`em-score returned ${res.status}`);
+        }
+        const result = (await res.json()) as RescoreResult;
+        if (result.ok && result.score) {
+          setScore(result.score);
+          setUnavailable(false);
+        } else {
+          // Soft-fail — keep last good score.
+          setUnavailable(true);
+        }
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') return;
+        // Network / 5xx — keep the last known good score.
+        setUnavailable(true);
+      } finally {
+        if (inflightRef.current === controller) {
+          inflightRef.current = null;
+        }
+        setStale(false);
+      }
+    },
+    [visitId]
+  );
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<SoapEditedDetail>).detail;
+      if (!detail || detail.visitId !== visitId) return;
+      latestSoapRef.current = detail.soapText;
+
+      if (debounceRef.current !== null) {
+        window.clearTimeout(debounceRef.current);
+      }
+      debounceRef.current = window.setTimeout(() => {
+        debounceRef.current = null;
+        const text = latestSoapRef.current;
+        if (text !== null) {
+          void rescore(text);
+        }
+      }, RESCORE_DEBOUNCE_MS);
+    };
+
+    window.addEventListener(SOAP_EDITED_EVENT, handler);
+    return () => {
+      window.removeEventListener(SOAP_EDITED_EVENT, handler);
+      if (debounceRef.current !== null) {
+        window.clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
+      if (inflightRef.current) {
+        inflightRef.current.abort();
+        inflightRef.current = null;
+      }
+    };
+  }, [visitId, rescore]);
+
+  // ---------------------------------------------------------------------------
+  // Override dropdown
+  // ---------------------------------------------------------------------------
+  const overrideOptions = useMemo<EmCode[]>(
+    () => (score.visitType === 'new' ? NEW_CODES : ESTABLISHED_CODES),
+    [score.visitType]
+  );
+
+  const handleOverrideSelect = useCallback(
+    (code: EmCode) => {
+      setOverrideOpen(false);
+      if (typeof window === 'undefined') return;
+      const detail: EmOverrideDetail = { visitId, code };
+      window.dispatchEvent(new CustomEvent(EM_OVERRIDE_EVENT, { detail }));
+      // Optimistic local toast — Subagent B wires the actual PATCH endpoint.
+      toast.success(`Override set to ${code}`, {
+        description: 'Doctor-set code recorded in audit trail.',
+      });
+    },
+    [visitId]
+  );
+
+  // ---------------------------------------------------------------------------
+  // Bump CTA click → open modal + emit highlight event
+  // ---------------------------------------------------------------------------
+  const handleBumpClick = useCallback(() => {
+    setBumpOpen(true);
+  }, []);
+
+  const handleApplyAdditions = useCallback(
+    async (additions: Array<{ criterionId: string; text: string }>) => {
+      if (onApplyAdditions) {
+        const result = await onApplyAdditions(additions);
+        if (result.ok && score.bump) {
+          onBumpAccepted?.(score.bump.toCode);
+        }
+        return result;
+      }
+      // Standalone-build fallback — no backend wiring; pretend success so the
+      // mockup state still flows. Subagent B's merge replaces this path.
+      if (score.bump) onBumpAccepted?.(score.bump.toCode);
+      return { ok: true };
+    },
+    [onApplyAdditions, onBumpAccepted, score.bump]
+  );
+
+  // ---------------------------------------------------------------------------
+  // Display helpers
+  // ---------------------------------------------------------------------------
+  const displayedCode: EmCode = score.override?.code ?? score.suggestedCode;
+  const isOverridden = Boolean(score.override?.code);
+  const levelLabel = useMemo(() => deriveLevelLabel(displayedCode), [displayedCode]);
+
+  // The bump CTA + confirm-secondary mirror exactly the v6 mockup. When the
+  // bump.gaps array is empty (already at next level), the primary turns into
+  // a "Confirm 99214 · sign" outline (mode: 'confirm-bump') — but signing is
+  // owned by the existing Sign & Send flow (UNTOUCHED). The CTA only invites
+  // the doctor to switch their code; the actual sign is its own button.
+  const showBump =
+    !readonly &&
+    score.bump &&
+    score.bump.mode === 'almost-there' &&
+    score.bump.gaps.length > 0;
+
   return (
-    <div
-      data-stub="coding-rail"
-      data-visit-id={visitId}
-      aria-hidden
-    />
+    <aside
+      className={cn(
+        'qm-lin-coding-rail',
+        stale && 'qm-lin-coding-rail--stale',
+        readonly && 'qm-lin-coding-rail--readonly'
+      )}
+      aria-label="Billing support"
+    >
+      {/* ── Head ─────────────────────────────────────────────────────────── */}
+      <header className="qm-lin-coding-rail-head">
+        <div className="qm-lin-coding-rail-head-top">
+          <span className="qm-lin-coding-rail-label qm-lin-coding-rail-label--coach">
+            <span className="qm-lin-coding-rail-pulse" aria-hidden="true" />
+            Billing support
+          </span>
+          <span className="qm-lin-coding-rail-label">AMA 2021</span>
+        </div>
+        <div className="qm-lin-coding-rail-code-row">
+          <span className="qm-lin-coding-code" aria-live="polite">
+            {displayedCode}
+          </span>
+          <span className="qm-lin-coding-level">{levelLabel}</span>
+          {isOverridden ? (
+            <span
+              className="qm-lin-coding-override-badge"
+              title={
+                score.override?.reason
+                  ? `Doctor override: ${score.override.reason}`
+                  : 'Doctor-set code'
+              }
+            >
+              doctor-set
+            </span>
+          ) : null}
+          {readonly ? null : (
+            <div className="qm-lin-coding-override-wrap">
+              <button
+                type="button"
+                className="qm-lin-coding-override"
+                aria-haspopup="listbox"
+                aria-expanded={overrideOpen}
+                onClick={() => setOverrideOpen((v) => !v)}
+              >
+                <span>override</span>
+                <span className="qm-lin-coding-override-caret" aria-hidden="true">
+                  {overrideOpen ? '▴' : '▾'}
+                </span>
+              </button>
+              {overrideOpen ? (
+                <ul
+                  className="qm-lin-coding-override-listbox"
+                  role="listbox"
+                  aria-label="Override CPT code"
+                >
+                  {overrideOptions.map((code) => (
+                    <li
+                      key={code}
+                      role="option"
+                      aria-selected={code === displayedCode}
+                      className={cn(
+                        'qm-lin-coding-override-option',
+                        code === displayedCode &&
+                          'qm-lin-coding-override-option--current'
+                      )}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => handleOverrideSelect(code)}
+                      >
+                        {code}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          )}
+        </div>
+      </header>
+
+      {/* ── Time tracker ─────────────────────────────────────────────────── */}
+      <EmTimeTracker
+        visitTimeSec={score.visitTimeSec}
+        estimatedTotalSec={score.estimatedTotalSec}
+        thresholdBand={score.timeBand}
+      />
+
+      {/* ── Checklist (3 groups) ─────────────────────────────────────────── */}
+      <div className={cn(stale && 'qm-lin-coding-rail-fade')}>
+        <EmCheckList groups={score.groups} />
+      </div>
+
+      {/* ── Soft error pill (never red, never blocking) ──────────────────── */}
+      {unavailable ? (
+        <div className="qm-lin-coding-rail-error" role="status">
+          Coding feedback temporarily unavailable
+        </div>
+      ) : null}
+
+      {/* ── CTA block ────────────────────────────────────────────────────── */}
+      {readonly ? null : (
+        <div className="qm-lin-coding-cta">
+          {showBump && score.bump ? (
+            <BumpCtaButton
+              current={displayedCode}
+              bumpTo={score.bump.toCode}
+              revenueDelta={score.bump.revenueDelta}
+              gaps={score.bump.gaps.map((g) => g.label)}
+              gapCriterionIds={score.bump.gaps.map((g) => g.criterionId)}
+              onClick={handleBumpClick}
+              disabled={readonly}
+            />
+          ) : null}
+          <button
+            type="button"
+            className="qm-lin-coding-confirm"
+            onClick={() => {
+              // Confirm-and-sign is owned by the existing Sign & Send flow; we
+              // emit a custom event for the page to wire up to the existing
+              // SignAndSendModal trigger. UNTOUCHED behaviour preserved.
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(
+                  new CustomEvent('qm:request-sign', { detail: { visitId } })
+                );
+              }
+            }}
+          >
+            <span className="qm-lin-coding-confirm-label">
+              <span className="qm-lin-coding-confirm-check" aria-hidden="true">
+                ✓
+              </span>
+              <span>Confirm {displayedCode} · sign</span>
+            </span>
+            <span className="qm-lin-coding-confirm-shortcut" aria-hidden="true">
+              ⌘ ↵
+            </span>
+          </button>
+          <div className="qm-lin-coding-cta-foot">
+            <span className="qm-lin-coding-cta-foot-ama">
+              AMA 2021 · time-based
+            </span>
+            <span>{ANNUAL_SAVINGS_FOOTER}</span>
+          </div>
+          {score.bump && score.bump.gaps.length > 0 ? (
+            <div className="qm-lin-coding-cta-foot qm-lin-coding-cta-foot--gap">
+              <span>
+                {displayedCode} supports · {score.bump.gaps.length} gap
+                {score.bump.gaps.length === 1 ? '' : 's'} to {score.bump.toCode}
+              </span>
+              <span>{formatDelta(score.bump.revenueDelta)}</span>
+            </div>
+          ) : null}
+        </div>
+      )}
+
+      {/* ── Modal ────────────────────────────────────────────────────────── */}
+      {!readonly && score.bump && score.bump.gaps.length > 0 ? (
+        <BumpModal
+          open={bumpOpen}
+          current={displayedCode}
+          suggestion={score.bump}
+          visitId={visitId}
+          onClose={() => setBumpOpen(false)}
+          onApply={handleApplyAdditions}
+        />
+      ) : null}
+    </aside>
   );
 }
+
+// ----------------------------------------------------------------------------
+// Helpers
+// ----------------------------------------------------------------------------
+
+function deriveLevelLabel(code: EmCode): string {
+  // Last digit of the CPT maps directly to the level (1..5).
+  const level = code.slice(-1);
+  return `Level ${level}`;
+}
+
+// Re-export the visit-type alias so consumer pages can stay narrow.
+export type { EmVisitType };

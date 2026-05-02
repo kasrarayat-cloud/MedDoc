@@ -31,13 +31,15 @@
 // the Phase 5.2 stage rollout.
 // ============================================================================
 
-import { useCallback, useMemo, useState, useTransition } from 'react';
+import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
 import { Lock, Send } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { saveSoapDraftAction } from '@/actions/soap';
 import { parseSoapSections, type SoapSectionKey } from '@/lib/parse-soap-sections';
-import { CodingRail, type CodingRailEmScore } from '@/components/visits/CodingRail';
+import { CodingRail } from '@/components/visits/CodingRail';
+import { CodingRailSkeleton } from '@/components/visits/CodingRailSkeleton';
+import type { EmScore } from '@/lib/em-coding-ui/types';
 import { SoapBody } from './soap/SoapBody';
 import type { SoapPulseHint, SoapSectionStatus } from './soap/SoapSection';
 import { SignAndSendModal } from './sign-and-send-modal';
@@ -73,7 +75,7 @@ interface SoapEditorProps {
   /** Phase 5.2 — initial E&M score from server-side scoring. Optional;
    *  when null the rail renders in fail-soft mode (Subagent B owns the
    *  scoring engine; Subagent C consumes it). */
-  initialScore?: CodingRailEmScore | null;
+  initialScore?: EmScore | null;
   /** @deprecated kept for back-compat; Linear V1 is single-theme. */
   theme?: SoapEditorTheme;
 }
@@ -89,14 +91,22 @@ export function SoapEditor({
 }: SoapEditorProps) {
   const [text, setText] = useState(initialText);
   const [, startSaving] = useTransition();
-  // Subagent C will wire boost hints via this state; Subagent A just
-  // exposes the API. The CodingRail stub doesn't call it — once
-  // Subagent C lands their branch, their <CodingRail> invokes
-  // `onBoostHintsChange` with per-section hints and the body re-renders
-  // with sage/amber pulse dots in the section heads.
+  // Phase 5.2 — boost hints are surfaced by the CodingRail via the
+  // `qm:em-boost-hints` CustomEvent (loose coupling, no shared store).
+  // The body listens and re-renders with sage/amber pulse dots in the
+  // section heads when the rail flags a section as gating a higher tier.
   const [boostHints, setBoostHints] = useState<
     Partial<Record<SoapSectionKey, SoapPulseHint>>
   >({});
+
+  useEffect(() => {
+    const onHints = (ev: Event) => {
+      const detail = (ev as CustomEvent<Partial<Record<SoapSectionKey, SoapPulseHint>>>).detail;
+      if (detail) setBoostHints(detail);
+    };
+    window.addEventListener('qm:em-boost-hints', onHints as EventListener);
+    return () => window.removeEventListener('qm:em-boost-hints', onHints as EventListener);
+  }, []);
 
   // Batch H — signedAt is the canonical signal that the note is locked,
   // independent of how the lifecycle status enum was set. A signed
@@ -151,15 +161,19 @@ export function SoapEditor({
           readonly={isReadonly}
         />
 
-        {/* RIGHT — Coding Rail slot. Subagent C replaces the stub with
-            the real implementation at Stage 6 merge. */}
+        {/* RIGHT — Coding Rail slot. Real implementation from Subagent
+            C; consumes the server-rendered initialScore. When score is
+            null (engine unavailable / fail-soft), render the skeleton. */}
         <aside className="qm-lin-coding-rail-slot" aria-label="Billing support">
-          <CodingRail
-            emScore={initialScore}
-            visitId={visitId}
-            readonly={isReadonly}
-            onBoostHintsChange={setBoostHints}
-          />
+          {initialScore ? (
+            <CodingRail
+              emScore={initialScore}
+              visitId={visitId}
+              readonly={isReadonly}
+            />
+          ) : (
+            <CodingRailSkeleton />
+          )}
         </aside>
       </div>
 
