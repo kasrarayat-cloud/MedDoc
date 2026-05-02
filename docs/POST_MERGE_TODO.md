@@ -331,7 +331,7 @@ docker compose up -d transcribe-md transcribe-md-worker meddoc-pro postgres-back
 
 This swaps the bind-mount line back to the original `pgdata:/var/lib/postgresql/data` and removes the `PGDATA` env var. Old data on the named volume picks up immediately; encrypted volume can be removed later with `cryptsetup close pg-encrypted && rm /opt/meddoc-pro/secrets/pgdata.luks`.
 
-Insurance dump: `/tmp/migration/meddoc-pre-h8-20260502T230142Z.dump` (2.1 MB, custom format, `pg_restore`-able). **ACTION: move to `/opt/meddoc-pro/backups/migration/` for long-term retention** (`/tmp` is volatile across reboots).
+Insurance dump: `/opt/meddoc-pro/backups/migration/meddoc-pre-h8-20260502T230142Z.dump` (2.1 MB, custom format, `pg_restore`-able). Owner `dnsmasq:systemd-journal`, mode 0640 — matches the rest of the postgres-backup tree. Original `/tmp/migration/` copy left on disk; tmpwatch will sweep it eventually.
 
 ### Lessons added
 - **Sparse-file LUKS works fine on a single-partition VPS.** No repartition, no reboot, clean rollback. Loopback overhead is invisible at our scale (75 MB postgres data dir).
@@ -340,5 +340,5 @@ Insurance dump: `/tmp/migration/meddoc-pre-h8-20260502T230142Z.dump` (2.1 MB, cu
 
 ### Open follow-ups
 - Reboot test (recommended Sun 04:00 UTC; can also schedule via host at-job)
-- Move pre-migration dump from `/tmp` to `/opt/meddoc-pro/backups/migration/` — needs sudo because that dir is owned by the postgres-backup sidecar's uid (`dnsmasq:systemd-journal`)
+- ~~Move pre-migration dump from `/tmp` to `/opt/meddoc-pro/backups/migration/`~~ → DONE 2026-05-02. File at `/opt/meddoc-pro/backups/migration/meddoc-pre-h8-20260502T230142Z.dump`, owner `dnsmasq:systemd-journal`, mode 0640.
 - Phase 6.2 (deferred): S3 keyfile (compromise-resistance bump) — currently keyfile is on the VPS root partition, which is HIPAA-acceptable but not best-in-class
