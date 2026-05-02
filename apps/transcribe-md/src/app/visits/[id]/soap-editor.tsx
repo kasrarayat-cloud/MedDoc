@@ -1,31 +1,19 @@
 'use client';
 
 // ============================================================================
-// SoapEditor — visit-detail SOAP note editor pane (Phase 5.1 V3 Split Pane).
+// SoapEditor — visit-detail SOAP note pane (Phase 5.2 v6 Coding Coach).
 // ----------------------------------------------------------------------------
-// Mockup: docs/design-directions-v9-tabs/soap-note-v3.html.
+// Mockup: docs/design-directions-v10-soap/soap-v6.html (left + right column).
 //
-// LAYOUT — left ~62% / 1px hairline / right ~38%.
-//   Left pane:  S / O / A / P sections stacked. Each section has a mono
-//               eyebrow ("S · SUBJECTIVE"), an Inter title, a status pill,
-//               and a click-target body block. Clicking a section makes
-//               that section the "active" one; the right rail filters
-//               its source list to the matching turns. A pencil hover
-//               affordance reveals a "Click to edit" hint that opens a
-//               raw-markdown textarea inline (legacy edit flow). Save
-//               persists soapFinal via saveSoapDraftAction unchanged.
-//   Right rail: Sources list. Each source is a 1-2 line excerpt with a
-//               mono timestamp + speaker chip (sage when Doctor). Title
-//               is "SOURCES · N TURNS". When `utterances` is empty (i.e.
-//               voice_dictation / text_notes) we show an empty-state hint
-//               and skip the right rail.
+// LAYOUT — 1fr / 340 px grid (.qm-lin-coach-grid). The left column is the
+// new <SoapBody> (4 hairline-bordered S/O/A/P section blocks + bottom
+// action strip). The right column is a SLOT that hosts <CodingRail> —
+// owned by Subagent C. Subagent A renders the rail with a
+// minimum-surface contract; Subagent C's branch widens it.
 //
-// CITATIONS FALLBACK — the SOAP schema is currently plain markdown; no
-// per-section citation IDs are stored on the visit. Until that data
-// model lands (TODO: Phase 5.2 schema extension), the right rail simply
-// shows ALL transcript turns and the "active section" highlight is a
-// visual cue only. The click handler is wired so once citation IDs land
-// we just thread them in.
+// At ≤1080 px the grid collapses to a single column (.qm-lin-coach-grid
+// media query) and Subagent C's CodingRail handles its own bottom-drawer
+// behaviour.
 //
 // PRESERVED CONTRACTS:
 //   - saveSoapDraftAction(visitId, text) — server action unchanged
@@ -33,33 +21,38 @@
 //   - signedAt gate — unchanged (Batch H)
 //   - readonly behaviour — unchanged
 //   - The single soapFinal markdown text remains the source of truth;
-//     edits go to the textarea (full markdown) and persist back as one
-//     blob, byte-identical to before.
+//     edits go to a textarea (full markdown blob) and persist back as
+//     one blob, byte-identical to before.
+//
+// V3 "Sources rail" code path is DROPPED — v6 puts the source/transcript
+// surface on the dedicated Transcript tab, which already has its own V3
+// split-pane. The legacy `sources` prop is kept on the interface as
+// optional so callers (visit-ready-view) compile without churn during
+// the Phase 5.2 stage rollout.
 // ============================================================================
 
-import { useMemo, useState, useTransition } from 'react';
-import { Lock, Loader2, Check, PencilLine, Send } from 'lucide-react';
+import { useCallback, useMemo, useState, useTransition } from 'react';
+import { Lock, Send } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { cn } from '@/lib/cn';
 import { saveSoapDraftAction } from '@/actions/soap';
-import { parseSoapSections, type SoapSection, type SoapSectionKey } from '@/lib/parse-soap-sections';
+import { parseSoapSections, type SoapSectionKey } from '@/lib/parse-soap-sections';
+import { CodingRail, type CodingRailEmScore } from '@/components/visits/CodingRail';
+import { SoapBody } from './soap/SoapBody';
+import type { SoapPulseHint, SoapSectionStatus } from './soap/SoapSection';
 import { SignAndSendModal } from './sign-and-send-modal';
 
 type SoapEditorTheme = 'legacy' | 'clinician';
 
-/** Source-rail entry — abstracted from `Utterance` so this file doesn't
- *  pull in the worker speakerMap shape; the consumer adapts. */
+/** Source-rail entry — kept on the interface for caller back-compat
+ *  (visit-ready-view still computes `soapSources` from utterances).
+ *  v6 no longer renders these in the SOAP pane; the Transcript tab is
+ *  where transcript turns live. */
 export interface SoapSource {
   id: string;
-  /** Display label, e.g. "Doctor", "Patient". */
   speaker: string;
-  /** mm:ss timestamp string. */
   timestamp: string;
-  /** 1-3 sentences of source text. */
   text: string;
-  /** Whether this source counts as the doctor's voice (sage-tinted
-   *  speaker chip). */
   isDoctor: boolean;
 }
 
@@ -67,22 +60,20 @@ interface SoapEditorProps {
   visitId: string;
   /** Doctor's email — pre-filled in the Sign & Send modal. */
   doctorEmail: string;
-  /** T-M9 — whether Email delivery is configured. Hides the checkbox
-   *  from Sign & Send when false so users can't request an
-   *  un-shippable destination. */
+  /** T-M9 — whether Email delivery is configured. */
   emailEnabled: boolean;
   initialText: string;
   /** Readonly when the visit is SIGNED. The signed copy lives in
    *  signedSoap; the client passes that value as initialText. */
   readonly?: boolean;
-  /** Batch H — ISO 8601 UTC moment the doctor signed the note, or
-   *  null while still drafting. The Sign & Send CTA is hidden when
-   *  this is set so a doctor can't re-sign a locked note. */
+  /** Batch H — ISO 8601 UTC moment the doctor signed the note. */
   signedAt?: string | null;
-  /** Phase 5.1 — transcript turns shown in the right rail. Until the
-   *  citations field lands, all turns are displayed regardless of
-   *  active section. */
+  /** Phase 5.1 — kept for caller back-compat; v6 ignores. */
   sources?: SoapSource[];
+  /** Phase 5.2 — initial E&M score from server-side scoring. Optional;
+   *  when null the rail renders in fail-soft mode (Subagent B owns the
+   *  scoring engine; Subagent C consumes it). */
+  initialScore?: CodingRailEmScore | null;
   /** @deprecated kept for back-compat; Linear V1 is single-theme. */
   theme?: SoapEditorTheme;
 }
@@ -94,125 +85,88 @@ export function SoapEditor({
   initialText,
   readonly = false,
   signedAt = null,
-  sources = [],
+  initialScore = null,
 }: SoapEditorProps) {
   const [text, setText] = useState(initialText);
-  const [editing, setEditing] = useState(false);
-  const [saving, startSaving] = useTransition();
-  // Active section drives the right-rail filter. Subjective by default
-  // because it's the section a doctor most often re-checks first.
-  const [activeKey, setActiveKey] = useState<SoapSectionKey>('S');
-  // Batch H — the signed-state visual gate. Used directly (over the
-  // existing `readonly` flag) per the brief: signedAt is the canonical
-  // signal that the note is locked, regardless of how the lifecycle
-  // status enum was set. A signed visit MUST NOT show the Sign & Send
-  // CTA — that's the clinical-safety bug Batch H exists to fix.
+  const [, startSaving] = useTransition();
+  // Subagent C will wire boost hints via this state; Subagent A just
+  // exposes the API. The CodingRail stub doesn't call it — once
+  // Subagent C lands their branch, their <CodingRail> invokes
+  // `onBoostHintsChange` with per-section hints and the body re-renders
+  // with sage/amber pulse dots in the section heads.
+  const [boostHints, setBoostHints] = useState<
+    Partial<Record<SoapSectionKey, SoapPulseHint>>
+  >({});
+
+  // Batch H — signedAt is the canonical signal that the note is locked,
+  // independent of how the lifecycle status enum was set. A signed
+  // visit MUST NOT show the Sign & Send CTA — that's the clinical-
+  // safety bug Batch H exists to fix.
   const isSigned = signedAt !== null;
+  const isReadonly = readonly || isSigned;
 
+  // Parse once for status-pill computation; <SoapBody> re-parses for
+  // its own render but the cost is trivial and keeps responsibilities
+  // localised.
   const sections = useMemo(() => parseSoapSections(text), [text]);
+  const statusFor = useCallback(
+    (key: SoapSectionKey): SoapSectionStatus => {
+      if (isSigned) return 'signed';
+      const sec = sections.find((s) => s.key === key);
+      return sec && sec.body.trim() ? 'reviewed' : 'drafted';
+    },
+    [sections, isSigned]
+  );
 
-  const onSave = () => {
-    startSaving(async () => {
-      const res = await saveSoapDraftAction(visitId, text);
-      if (!res.ok) {
-        toast.error('Could not save', { description: res.error });
-        return;
-      }
-      toast.success('Saved');
-      setEditing(false);
-    });
-  };
+  /** PROTECTED CONTRACT — saveSoapDraftAction signature + behaviour
+   *  must remain byte-identical to Phase 5.1. We wrap it once here so
+   *  every section's inline-edit calls the same path. */
+  const onEdit = useCallback(
+    async (next: string): Promise<{ ok: boolean; error?: string }> => {
+      return await new Promise<{ ok: boolean; error?: string }>((resolve) => {
+        startSaving(async () => {
+          const res = await saveSoapDraftAction(visitId, next);
+          if (!res.ok) {
+            toast.error('Save failed — try again', { description: res.error });
+            resolve({ ok: false, error: res.error });
+            return;
+          }
+          setText(next);
+          resolve({ ok: true });
+        });
+      });
+    },
+    [visitId]
+  );
 
-  // When editing, fall back to the textarea — same flow as Phase 5.
-  if (editing && !readonly) {
-    return (
-      <div className="space-y-4">
-        <textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          className="min-h-[40vh] w-full resize-y rounded-lg border border-linear-border bg-linear-surface-1 p-4 font-mono text-[13px] leading-relaxed text-linear-text outline-none focus:border-linear-sage focus:ring-2 focus:ring-linear-sage/30"
-          aria-label="Edit SOAP note"
-        />
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <button
-            type="button"
-            className="qm-lin-btn"
-            onClick={() => {
-              setEditing(false);
-              setText(initialText);
-            }}
-            disabled={saving}
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="qm-lin-btn-primary"
-            onClick={onSave}
-            disabled={saving}
-          >
-            {saving ? (
-              <>
-                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-                Saving…
-              </>
-            ) : (
-              <>
-                <Check className="h-3.5 w-3.5" aria-hidden />
-                Save edits
-              </>
-            )}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // Display mode — V3 split pane.
   return (
     <div className="space-y-4">
-      <div className="qm-lin-split">
-        {/* LEFT — SOAP sections */}
-        <div className="qm-lin-split-left">
-          {sections.map((section) => (
-            <SoapSectionBlock
-              key={section.key}
-              section={section}
-              isActive={activeKey === section.key}
-              isSigned={isSigned}
-              readonly={readonly}
-              onClick={() => setActiveKey(section.key)}
-              onEdit={() => !readonly && setEditing(true)}
-            />
-          ))}
-        </div>
+      <div className="qm-lin-coach-grid">
+        {/* LEFT — v6 SOAP body (4 section blocks + bottom strip). */}
+        <SoapBody
+          text={text}
+          statusFor={statusFor}
+          pulseHints={boostHints}
+          onEdit={onEdit}
+          readonly={isReadonly}
+        />
 
-        <div className="qm-lin-split-divider" aria-hidden />
-
-        {/* RIGHT — Sources rail */}
-        <aside className="qm-lin-split-right" aria-label="Source transcript turns">
-          <SourcesRail
-            sources={sources}
-            sectionLabel={
-              sections.find((s) => s.key === activeKey)?.label ?? 'Subjective'
-            }
+        {/* RIGHT — Coding Rail slot. Subagent C replaces the stub with
+            the real implementation at Stage 6 merge. */}
+        <aside className="qm-lin-coding-rail-slot" aria-label="Billing support">
+          <CodingRail
+            emScore={initialScore}
+            visitId={visitId}
+            readonly={isReadonly}
+            onBoostHintsChange={setBoostHints}
           />
         </aside>
       </div>
 
-      {/* Bottom action bar — Sign & Send / Export-again. */}
+      {/* Bottom action bar — Sign & Send / Export-again.
+          The Copy SOAP button moved INTO <SoapBody>'s notebody-foot,
+          per the v6 mockup. */}
       <div className="flex flex-wrap items-center justify-end gap-2 border-t border-linear-hairline pt-4">
-        {!readonly && (
-          <button
-            type="button"
-            className="qm-lin-btn"
-            onClick={() => setEditing(true)}
-          >
-            <PencilLine className="h-3.5 w-3.5" aria-hidden />
-            Edit markdown
-          </button>
-        )}
-
         {/* Batch H — the Sign & Send CTA renders ONLY when the visit
             is unsigned (signedAt == null). Once a note has a sign
             timestamp it's locked. */}
@@ -242,241 +196,5 @@ export function SoapEditor({
         )}
       </div>
     </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// SoapSectionBlock — one of the four S/O/A/P blocks in the left pane.
-// ---------------------------------------------------------------------------
-function SoapSectionBlock({
-  section,
-  isActive,
-  isSigned,
-  readonly,
-  onClick,
-  onEdit,
-}: {
-  section: SoapSection;
-  isActive: boolean;
-  isSigned: boolean;
-  readonly: boolean;
-  onClick: () => void;
-  onEdit: () => void;
-}) {
-  const status: 'reviewed' | 'drafted' | 'signed' = isSigned
-    ? 'signed'
-    : section.body.trim()
-      ? 'reviewed'
-      : 'drafted';
-
-  return (
-    <section className="qm-lin-soap-section" data-section={section.key}>
-      <div className="qm-lin-soap-section-head">
-        <div>
-          <div className="qm-lin-soap-eyebrow">
-            <span className="qm-lin-soap-letter">{section.letter}</span>
-            <span>
-              {section.key === 'S'
-                ? '01'
-                : section.key === 'O'
-                  ? '02'
-                  : section.key === 'A'
-                    ? '03'
-                    : '04'}{' '}
-              · {section.label}
-            </span>
-          </div>
-          <h3 className="qm-lin-soap-title">{section.label}</h3>
-        </div>
-        <span
-          className={cn(
-            'qm-lin-sec-status',
-            status === 'reviewed' && 'qm-lin-sec-status--reviewed',
-            status === 'drafted' && 'qm-lin-sec-status--drafted',
-            status === 'signed' && 'qm-lin-sec-status--signed'
-          )}
-        >
-          {status === 'reviewed'
-            ? 'Reviewed'
-            : status === 'drafted'
-              ? 'Drafted'
-              : 'Signed'}
-        </span>
-      </div>
-
-      <button
-        type="button"
-        onClick={(e) => {
-          // Section click selects the section; we only open the editor
-          // via the explicit pencil affordance to avoid losing scroll
-          // when toggling between sections.
-          if ((e.target as HTMLElement).closest('[data-edit-affordance]')) {
-            onEdit();
-            return;
-          }
-          onClick();
-        }}
-        className={cn(
-          'qm-lin-soap-body group block w-full text-left',
-          isActive && 'qm-lin-soap-body--active'
-        )}
-        aria-pressed={isActive}
-        aria-label={`${section.label} section`}
-      >
-        {section.body.trim() ? (
-          <SoapMarkdown text={section.body} />
-        ) : (
-          <span className="text-linear-text-3 italic">
-            {section.label} section is empty.
-          </span>
-        )}
-
-        {!readonly && (
-          <span
-            data-edit-affordance
-            className="mt-3 inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.08em] text-linear-text-3 opacity-0 transition-opacity group-hover:opacity-100"
-          >
-            <PencilLine className="h-3 w-3" aria-hidden />
-            Click to edit
-          </span>
-        )}
-      </button>
-    </section>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// SourcesRail — the right pane. Until the SOAP citation field lands the
-// rail shows all turns; the active-section banner up top still updates.
-// ---------------------------------------------------------------------------
-function SourcesRail({
-  sources,
-  sectionLabel,
-}: {
-  sources: SoapSource[];
-  sectionLabel: string;
-}) {
-  return (
-    <>
-      <div className="qm-lin-rail-head">
-        <span className="qm-lin-rail-title">Sources</span>
-        <span className="qm-lin-rail-meta">
-          {sources.length} turn{sources.length === 1 ? '' : 's'}
-        </span>
-      </div>
-
-      <div className="mb-3 font-mono text-[10px] uppercase tracking-[0.1em] text-linear-text-3">
-        Active · {sectionLabel}
-      </div>
-
-      {sources.length === 0 ? (
-        <div className="rounded-md border border-dashed border-linear-border p-4 text-center font-mono text-[10px] uppercase tracking-[0.1em] text-linear-text-3">
-          No transcript turns
-        </div>
-      ) : (
-        <div>
-          {sources.map((s) => (
-            <div key={s.id} className="qm-lin-source-card">
-              <div className="qm-lin-source-meta">
-                <span className="qm-lin-source-time">{s.timestamp}</span>
-                <span
-                  className={cn(
-                    'qm-lin-source-speaker',
-                    s.isDoctor && 'qm-lin-source-speaker--doctor'
-                  )}
-                >
-                  {s.speaker}
-                </span>
-              </div>
-              <div className="qm-lin-source-text">{s.text}</div>
-            </div>
-          ))}
-        </div>
-      )}
-    </>
-  );
-}
-
-/** Very lightweight markdown renderer — bold, headings, bullets, line
- *  breaks. We deliberately avoid a full library: clinicians rarely
- *  need tables/images here and a 30-line shim preserves bundle size.
- *  Linear V1 — Inter for prose, JetBrains Mono for the H2 eyebrow. */
-function SoapMarkdown({ text }: { text: string }) {
-  const lines = text.split('\n');
-  const out: React.ReactNode[] = [];
-  let listBuffer: string[] = [];
-  const flushList = (k: number) => {
-    if (listBuffer.length === 0) return;
-    out.push(
-      <ul
-        key={`ul-${k}`}
-        className="my-2 list-disc space-y-1 pl-5 text-[14px] text-linear-text-2"
-      >
-        {listBuffer.map((l, i) => (
-          <li key={i}>{renderInline(l)}</li>
-        ))}
-      </ul>
-    );
-    listBuffer = [];
-  };
-  lines.forEach((raw, k) => {
-    const l = raw.trimEnd();
-    if (l.startsWith('## ')) {
-      flushList(k);
-      out.push(
-        <h2
-          key={k}
-          className="mt-4 font-mono text-[10.5px] font-medium uppercase tracking-[0.07em] text-linear-sage-bright"
-        >
-          {l.slice(3)}
-        </h2>
-      );
-      return;
-    }
-    if (l.startsWith('# ')) {
-      flushList(k);
-      out.push(
-        <h1
-          key={k}
-          className="mt-4 text-[16px] font-semibold tracking-tight text-linear-text"
-        >
-          {l.slice(2)}
-        </h1>
-      );
-      return;
-    }
-    if (/^\s*[-*]\s+/.test(l)) {
-      listBuffer.push(l.replace(/^\s*[-*]\s+/, ''));
-      return;
-    }
-    flushList(k);
-    if (l.trim() === '') {
-      out.push(<div key={k} className="h-2" />);
-      return;
-    }
-    out.push(
-      <p
-        key={k}
-        className="text-[14px] leading-relaxed text-linear-text"
-      >
-        {renderInline(l)}
-      </p>
-    );
-  });
-  flushList(lines.length);
-  return <div className="space-y-0.5">{out}</div>;
-}
-
-/** Inline markdown: **bold** only. Everything else stays verbatim. */
-function renderInline(s: string): React.ReactNode {
-  const parts = s.split(/(\*\*[^*]+\*\*)/g);
-  return parts.map((p, i) =>
-    p.startsWith('**') && p.endsWith('**') ? (
-      <strong key={i} className="font-semibold text-linear-text">
-        {p.slice(2, -2)}
-      </strong>
-    ) : (
-      <span key={i}>{p}</span>
-    )
   );
 }
