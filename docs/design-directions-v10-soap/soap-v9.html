@@ -1,0 +1,966 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QuillMD · Visit · Mei-Ling Park · v10 SOAP V9 · Compare to Last Visit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #08090a;
+  --surface-1: #0d0e10;
+  --surface-2: #131416;
+  --surface-3: #1a1c1e;
+  --border: #21232a;
+  --border-strong: #2c2f38;
+  --hairline: rgba(255,255,255,0.05);
+  --hairline-strong: rgba(255,255,255,0.08);
+  --text: #f7f8f8;
+  --text-2: #b4bcc8;
+  --text-3: #6c737f;
+  --text-4: #4b5159;
+  --sage: #7AA68C;
+  --sage-bright: #9BC4A8;
+  --sage-deep: #2F5040;
+  --sage-tint: rgba(122,166,140,0.13);
+  --sage-glow: rgba(122,166,140,0.18);
+  --warning: #d4a437;
+  --danger: #d4574a;
+  --info: #5b8db8;
+  --font-sans: 'Inter', -apple-system, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text)}
+body{
+  font-family:var(--font-sans);
+  font-feature-settings:'cv11','ss01';
+  font-size:13px;
+  line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  letter-spacing:-0.005em;
+  min-height:100vh;
+}
+::selection{background:rgba(122,166,140,.25);color:var(--text)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+a{color:inherit;text-decoration:none}
+
+/* ───────── Top bar ───────── */
+.topbar{
+  position:sticky;top:0;z-index:30;
+  height:44px;
+  display:flex;align-items:center;gap:12px;
+  padding:0 16px;
+  background:rgba(8,9,10,.85);
+  backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--hairline);
+}
+.brand{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;letter-spacing:-0.01em}
+.brand-mark{
+  width:18px;height:18px;border-radius:5px;
+  background:linear-gradient(135deg,var(--sage) 0%,var(--sage-deep) 100%);
+  display:grid;place-items:center;color:#0c1410;font-size:10px;font-weight:700;
+  box-shadow:0 0 0 1px rgba(255,255,255,.06) inset;
+}
+.brand-mark::before{content:'Q'}
+.crumb-sep{color:var(--text-4);font-size:12px}
+.crumb{color:var(--text-2);font-size:13px;transition:color 100ms var(--ease)}
+.crumb:hover{color:var(--text)}
+.crumb-active{color:var(--text)}
+.spacer{flex:1}
+.status-pill-chrome{
+  display:inline-flex;align-items:center;gap:6px;
+  height:22px;padding:0 9px;
+  border-radius:4px;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.06em;text-transform:uppercase;font-weight:500;
+  border:1px solid rgba(122,166,140,.25);
+  color:var(--sage-bright);
+  background:rgba(122,166,140,.06);
+}
+.status-pill-chrome .pdot{
+  width:5px;height:5px;border-radius:50%;
+  background:var(--sage);
+  animation:idle-pulse 1.6s ease-in-out infinite;
+}
+@keyframes idle-pulse{
+  0%,100%{opacity:.7;transform:scale(1)}
+  50%{opacity:1;transform:scale(1.04)}
+}
+.btn-sage{
+  display:inline-flex;align-items:center;gap:8px;
+  height:30px;padding:0 14px;
+  background:var(--sage);
+  color:#0d1611;
+  border-radius:6px;
+  font-size:12.5px;font-weight:500;
+  letter-spacing:-0.005em;
+  transition:background 100ms var(--ease), transform 80ms var(--ease), box-shadow 200ms var(--ease);
+}
+.btn-sage:hover{background:#88b599;transform:scale(1.02);box-shadow:0 0 0 4px rgba(122,166,140,.18)}
+.btn-sage .shortcut{font-family:var(--font-mono);font-size:11px;color:rgba(13,22,17,.55)}
+.avatar-chip{
+  width:24px;height:24px;border-radius:6px;
+  background:linear-gradient(135deg,#3a4a52 0%,#2a3036 100%);
+  color:#dde6ec;font-size:10.5px;font-weight:600;
+  display:grid;place-items:center;letter-spacing:0.02em;
+  border:1px solid var(--hairline-strong);
+}
+
+/* ───────── Shell ───────── */
+.shell{
+  display:grid;
+  grid-template-columns:1fr 340px;
+  min-height:calc(100vh - 44px);
+}
+.shell.collapsed{grid-template-columns:1fr}
+
+.left-col{
+  padding:18px 28px 80px;
+  min-width:0;
+}
+
+/* meta strip */
+.meta-strip{
+  display:flex;align-items:center;
+  padding:6px 0 14px;
+  margin-bottom:14px;
+  border-bottom:1px solid var(--hairline);
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--text-2);
+}
+.meta-strip .field{padding:0 14px;border-right:1px solid var(--hairline)}
+.meta-strip .field:first-child{padding-left:0;color:var(--text);font-weight:500}
+.meta-strip .field:last-child{border-right:0}
+.meta-strip .field .lbl{color:var(--text-4);margin-right:4px;font-weight:400}
+
+/* tabs */
+.tabs-row{
+  display:flex;align-items:center;gap:0;
+  margin-bottom:18px;
+  border-bottom:1px solid var(--hairline);
+}
+.tab{
+  position:relative;
+  padding:8px 16px 10px;
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.07em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  font-weight:500;
+  cursor:pointer;
+  transition:color 100ms var(--ease);
+}
+.tab:first-child{padding-left:0}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--sage-bright)}
+.tab.active::after{
+  content:'';position:absolute;
+  left:0;right:0;bottom:-1px;
+  height:1.5px;
+  background:var(--sage);
+  border-radius:1px 1px 0 0;
+}
+
+/* mobile drawer trigger */
+.drawer-trigger{
+  display:none;
+  align-items:center;gap:8px;
+  height:32px;padding:0 12px;
+  border:1px solid var(--hairline-strong);
+  border-radius:6px;
+  background:rgba(255,255,255,.02);
+  color:var(--text-2);
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  margin-bottom:14px;
+  cursor:pointer;
+  transition:background 100ms var(--ease), color 100ms var(--ease), border-color 100ms var(--ease);
+}
+.drawer-trigger:hover{background:rgba(255,255,255,.04);color:var(--text);border-color:rgba(255,255,255,.14)}
+.drawer-trigger .arrow{font-family:var(--font-mono);color:var(--sage-bright);transition:transform 130ms var(--ease)}
+.drawer-trigger.open .arrow{transform:rotate(180deg)}
+
+/* SOAP body */
+.soap-stack{display:flex;flex-direction:column;gap:14px}
+.soap-section{
+  position:relative;
+  background:var(--surface-1);
+  border:1px solid var(--hairline);
+  border-radius:6px;
+  padding:16px 18px 18px;
+  transition:background 130ms var(--ease), border-color 130ms var(--ease);
+}
+.soap-section:hover{background:var(--surface-2)}
+.soap-hd{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:10px;
+}
+.soap-hd-l{display:flex;align-items:center;gap:8px}
+.soap-hd-l .sage-dot{
+  width:6px;height:6px;border-radius:50%;
+  background:var(--sage);
+  box-shadow:0 0 6px rgba(122,166,140,.4);
+}
+.soap-hd-l .title{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--text);
+  font-weight:500;
+}
+.soap-hd-r{
+  display:flex;align-items:center;gap:8px;
+}
+.confidence{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.06em;
+  color:var(--text-3);
+}
+.confidence .pct{color:var(--sage-bright);font-weight:500}
+.soap-body{
+  font-family:var(--font-sans);
+  font-size:14px;
+  line-height:1.6;
+  color:var(--text);
+  letter-spacing:-0.005em;
+}
+.soap-body p{margin:0}
+.soap-body p + p{margin-top:8px}
+.soap-body strong{color:var(--text);font-weight:500}
+.soap-body em{font-style:italic;color:var(--text-2)}
+.soap-body .vital{
+  font-family:var(--font-mono);
+  font-size:13px;
+  color:var(--text);
+  font-variant-numeric:tabular-nums;
+}
+.soap-body .vital-label{color:var(--text-3)}
+.soap-body ol{margin:0;padding-left:18px}
+.soap-body ol li{margin:4px 0;padding-left:4px}
+.soap-body ol li::marker{color:var(--text-3);font-family:var(--font-mono);font-size:11px}
+
+/* dx pills inline in assessment */
+.dx-pill{
+  display:inline-flex;align-items:center;gap:5px;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.04em;
+  color:var(--sage-bright);
+  background:rgba(122,166,140,.06);
+  border:1px solid rgba(122,166,140,.22);
+  border-radius:3px;
+  padding:1px 6px;
+  margin-left:6px;
+  vertical-align:1px;
+}
+
+/* action row */
+.action-row{
+  display:flex;align-items:center;justify-content:flex-end;gap:10px;
+  margin-top:22px;
+  padding-top:18px;
+  border-top:1px solid var(--hairline);
+}
+.btn-ghost{
+  display:inline-flex;align-items:center;gap:8px;
+  height:36px;padding:0 14px;
+  border:1px solid var(--hairline-strong);
+  border-radius:6px;
+  background:transparent;
+  color:var(--text-2);
+  font-size:13px;font-weight:500;
+  letter-spacing:-0.005em;
+  transition:background 100ms var(--ease), color 100ms var(--ease), border-color 100ms var(--ease);
+}
+.btn-ghost:hover{background:rgba(255,255,255,.04);color:var(--text);border-color:rgba(255,255,255,.14)}
+.action-row .btn-sage{height:36px;padding:0 18px;font-size:13px}
+
+/* ───────── Right rail · Compare to last visit ───────── */
+.compare-rail{
+  background:var(--surface-1);
+  border-left:1px solid var(--hairline);
+  padding:18px 18px 80px;
+  position:sticky;top:44px;
+  height:calc(100vh - 44px);
+  overflow:auto;
+  display:flex;flex-direction:column;gap:20px;
+  scrollbar-width:thin;
+  scrollbar-color:rgba(255,255,255,.08) transparent;
+  animation:rail-in 220ms var(--ease);
+}
+.compare-rail::-webkit-scrollbar{width:6px}
+.compare-rail::-webkit-scrollbar-track{background:transparent}
+.compare-rail::-webkit-scrollbar-thumb{background:rgba(255,255,255,.06);border-radius:3px}
+@keyframes rail-in{
+  from{opacity:0;transform:translateX(8px)}
+  to{opacity:1;transform:translateX(0)}
+}
+
+.rail-hd{
+  display:flex;flex-direction:column;gap:4px;
+  padding-bottom:14px;
+  border-bottom:1px solid var(--hairline);
+}
+.rail-hd-row{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+}
+.rail-hd .eyebrow{
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.14em;
+  text-transform:uppercase;
+  color:var(--text-4);
+  font-weight:500;
+}
+.rail-hd .date-line{
+  display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;
+}
+.rail-hd .date{
+  font-family:var(--font-mono);
+  font-size:13px;
+  color:var(--text);
+  font-weight:500;
+  letter-spacing:0.01em;
+  font-variant-numeric:tabular-nums;
+}
+.rail-hd .ago{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  color:var(--text-3);
+  letter-spacing:0.04em;
+}
+.rail-hd .view-full{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--sage-bright);
+  cursor:pointer;
+  white-space:nowrap;
+  padding:3px 7px;
+  border:1px solid rgba(122,166,140,.18);
+  border-radius:3px;
+  background:rgba(122,166,140,.04);
+  transition:background 100ms var(--ease), border-color 100ms var(--ease);
+}
+.rail-hd .view-full:hover{
+  background:rgba(122,166,140,.1);
+  border-color:rgba(122,166,140,.32);
+}
+
+/* diff legend */
+.diff-legend{
+  display:flex;align-items:center;gap:14px;
+  margin-top:6px;
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.06em;
+  color:var(--text-4);
+}
+.legend-item{display:flex;align-items:center;gap:5px}
+.legend-mark{
+  width:10px;height:2px;border-radius:1px;
+}
+.legend-mark.add{background:var(--sage)}
+.legend-mark.same{background:var(--text-3)}
+.legend-mark.gone{background:var(--text-4);position:relative}
+.legend-mark.gone::after{content:'';position:absolute;left:0;right:0;top:50%;height:1px;background:var(--text-3);transform:translateY(-50%)}
+
+/* diff section */
+.diff-block{
+  display:flex;flex-direction:column;gap:10px;
+}
+.block-title{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.14em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  font-weight:500;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.block-title .meta{
+  font-size:9.5px;
+  letter-spacing:0.06em;
+  color:var(--text-4);
+  text-transform:none;
+}
+
+.diff-list{display:flex;flex-direction:column;gap:6px}
+.diff-row{
+  position:relative;
+  padding:8px 11px 8px 13px;
+  font-size:12.5px;
+  line-height:1.5;
+  border-radius:4px;
+  border:1px solid transparent;
+  transition:background 130ms var(--ease), border-color 130ms var(--ease);
+}
+.diff-row::before{
+  content:'';
+  position:absolute;
+  left:0;top:6px;bottom:6px;
+  width:2px;
+  border-radius:1px;
+}
+.diff-row.add{
+  background:rgba(122,166,140,.06);
+  color:var(--text);
+}
+.diff-row.add::before{background:var(--sage)}
+.diff-row.add:hover{background:rgba(122,166,140,.1);border-color:rgba(122,166,140,.22)}
+.diff-row.same{color:var(--text-2)}
+.diff-row.same::before{background:rgba(255,255,255,.08)}
+.diff-row.same:hover{background:rgba(255,255,255,.025)}
+.diff-row.gone{color:var(--text-3);text-decoration:line-through;text-decoration-color:rgba(255,255,255,.18);text-decoration-thickness:1px}
+.diff-row.gone::before{background:var(--text-4)}
+.diff-row.gone:hover{color:var(--text-2)}
+.diff-tag{
+  display:inline-block;
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  margin-left:6px;
+  vertical-align:1px;
+  padding:0 5px;
+  height:14px;
+  line-height:14px;
+  border-radius:2px;
+}
+.diff-row.add .diff-tag{
+  color:var(--sage-bright);
+  background:rgba(122,166,140,.12);
+  border:1px solid rgba(122,166,140,.25);
+}
+.diff-row.gone .diff-tag{
+  color:var(--text-3);
+  background:rgba(255,255,255,.025);
+  border:1px solid var(--hairline-strong);
+}
+.diff-row .code{
+  font-family:var(--font-mono);
+  font-size:11px;
+  color:var(--text-3);
+  letter-spacing:0.02em;
+  font-weight:400;
+  margin-left:4px;
+}
+.diff-row.add .code{color:var(--sage-bright)}
+
+.diff-note{
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.06em;
+  color:var(--text-4);
+  margin-top:2px;
+  display:block;
+}
+
+/* plan diff */
+.plan-diff{display:flex;flex-direction:column;gap:5px}
+.plan-row{
+  font-size:12px;
+  line-height:1.5;
+  padding:6px 11px 6px 13px;
+  position:relative;
+  border-radius:4px;
+}
+.plan-row::before{
+  content:'';
+  position:absolute;left:0;top:5px;bottom:5px;width:2px;border-radius:1px;
+}
+.plan-row.add{color:var(--text);background:rgba(122,166,140,.05)}
+.plan-row.add::before{background:var(--sage)}
+.plan-row.same{color:var(--text-2)}
+.plan-row.same::before{background:rgba(255,255,255,.08)}
+.plan-row.gone{color:var(--text-3);text-decoration:line-through;text-decoration-color:rgba(255,255,255,.18)}
+.plan-row.gone::before{background:var(--text-4)}
+
+/* vitals trend */
+.trend-block{
+  background:var(--surface-2);
+  border:1px solid var(--hairline);
+  border-radius:6px;
+  padding:14px 14px 12px;
+  display:flex;flex-direction:column;gap:8px;
+}
+.trend-hd{
+  display:flex;align-items:center;justify-content:space-between;
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.14em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  font-weight:500;
+  margin-bottom:4px;
+}
+.trend-hd .col-labels{
+  display:flex;align-items:center;gap:6px;
+  font-size:9px;
+  color:var(--text-4);
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+}
+.trend-hd .col-labels span{
+  display:inline-block;
+  width:46px;text-align:right;
+}
+.trend-hd .col-labels span:first-child{width:32px}
+
+.trend-row{
+  display:grid;
+  grid-template-columns:38px 1fr 50px 50px 18px;
+  align-items:center;
+  gap:8px;
+  padding:5px 0;
+  font-family:var(--font-mono);
+  font-size:11.5px;
+  border-bottom:1px solid var(--hairline);
+}
+.trend-row:last-child{border-bottom:0}
+.trend-label{
+  color:var(--text-3);
+  font-size:10.5px;
+  letter-spacing:0.04em;
+  text-transform:uppercase;
+}
+.trend-spark{
+  height:20px;width:100%;
+  position:relative;
+}
+.trend-spark svg{display:block;width:100%;height:100%;overflow:visible}
+.trend-val{
+  text-align:right;
+  font-variant-numeric:tabular-nums;
+  letter-spacing:0;
+  white-space:nowrap;
+}
+.trend-val.last{color:var(--text-3)}
+.trend-val.now{color:var(--text);font-weight:500}
+.trend-arrow{
+  width:18px;height:18px;
+  display:grid;place-items:center;
+  font-size:11px;
+  font-family:var(--font-mono);
+}
+.trend-arrow.improve{color:var(--sage-bright)}
+.trend-arrow.stable{color:var(--text-3)}
+.trend-arrow.worse{color:var(--warning)}
+
+/* last rx */
+.last-rx{
+  background:var(--surface-2);
+  border:1px solid var(--hairline);
+  border-radius:6px;
+  padding:11px 14px;
+  display:flex;flex-direction:column;gap:5px;
+}
+.last-rx .rx-eyebrow{
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.14em;
+  text-transform:uppercase;
+  color:var(--text-4);
+  font-weight:500;
+}
+.last-rx .rx-line{
+  font-family:var(--font-mono);
+  font-size:11.5px;
+  color:var(--text);
+  letter-spacing:0.01em;
+  font-variant-numeric:tabular-nums;
+}
+.last-rx .rx-line .name{color:var(--text);font-weight:500}
+.last-rx .rx-line .meta{color:var(--text-3)}
+.last-rx .rx-line .duration{color:var(--sage-bright)}
+
+/* rail footer summary */
+.rail-summary{
+  margin-top:auto;
+  padding-top:14px;
+  border-top:1px solid var(--hairline);
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.06em;
+  color:var(--text-4);
+  display:flex;align-items:center;justify-content:space-between;
+}
+.rail-summary .arc{color:var(--sage-bright);letter-spacing:0.08em;text-transform:uppercase}
+
+/* ───────── iPad landscape (1024px) ───────── */
+@media (max-width: 1080px){
+  .shell{grid-template-columns:1fr}
+  .compare-rail{
+    position:fixed;
+    bottom:0;left:0;right:0;
+    top:auto;
+    height:auto;
+    max-height:60vh;
+    border-left:0;
+    border-top:1px solid var(--border-strong);
+    transform:translateY(calc(100% - 0px));
+    transition:transform 220ms var(--ease);
+    z-index:25;
+    background:var(--surface-1);
+    box-shadow:0 -1px 0 var(--hairline-strong);
+    padding:18px 18px 24px;
+    animation:none;
+  }
+  .compare-rail.drawer-open{
+    transform:translateY(0);
+  }
+  .drawer-trigger{display:inline-flex}
+  .left-col{padding-bottom:120px}
+  .rail-hd{padding-bottom:10px}
+  .rail-summary{padding-top:10px}
+}
+@media (max-width: 720px){
+  .meta-strip{flex-wrap:wrap}
+  .meta-strip .field{padding:4px 10px}
+  .left-col{padding:14px 16px 120px}
+}
+
+/* reduced motion */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;
+  }
+  .compare-rail{animation:none}
+  .status-pill-chrome .pdot{animation:none}
+}
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<header class="topbar">
+  <div class="brand"><span class="brand-mark"></span> QuillMD</div>
+  <span class="crumb-sep">/</span>
+  <span class="crumb">Dashboard</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb">Patients</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb">Mei-Ling Park</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb crumb-active">Visit · Apr 30</span>
+  <div class="spacer"></div>
+  <div class="status-pill-chrome">
+    <span class="pdot"></span>
+    <span>READY</span>
+  </div>
+  <button class="btn-sage" type="button">
+    Sign &amp; send
+    <span class="shortcut">⌘ ↵</span>
+  </button>
+  <div class="avatar-chip" title="Dr. Kalyani Park">KP</div>
+</header>
+
+<div class="shell" id="shell">
+
+  <!-- LEFT COLUMN — SOAP body -->
+  <main class="left-col">
+
+    <div class="meta-strip">
+      <div class="field">MEI-LING PARK</div>
+      <div class="field">34F</div>
+      <div class="field"><span class="lbl">MRN</span>77324</div>
+      <div class="field"><span class="lbl">Visit</span>Apr 30, 2026</div>
+      <div class="field"><span class="lbl">Specialty</span>Family Med</div>
+      <div class="field"><span class="lbl">Visit #</span>4 of 4</div>
+    </div>
+
+    <div class="tabs-row" role="tablist">
+      <div class="tab active" role="tab" aria-selected="true">Soap Note</div>
+      <div class="tab" role="tab" aria-selected="false">Transcript</div>
+      <div class="tab" role="tab" aria-selected="false">Codes</div>
+      <div class="tab" role="tab" aria-selected="false">Rx</div>
+      <div class="tab" role="tab" aria-selected="false">Extras</div>
+    </div>
+
+    <button class="drawer-trigger" id="drawerTrigger" type="button" aria-expanded="false">
+      <span>Compare to last visit · Apr 16</span>
+      <span class="arrow">⌃</span>
+    </button>
+
+    <!-- SOAP body -->
+    <div class="soap-stack" id="soapStack">
+
+      <section class="soap-section">
+        <div class="soap-hd">
+          <div class="soap-hd-l">
+            <span class="sage-dot"></span>
+            <span class="title">Subjective</span>
+          </div>
+          <div class="soap-hd-r">
+            <span class="confidence">Conf <span class="pct">91%</span></span>
+          </div>
+        </div>
+        <div class="soap-body">
+          <p>3-day h/o productive cough, mostly clear-yellow sputum. URI symptoms (rhinorrhea, mild sore throat) resolving. Denies fever, dyspnea, chest pain, hemoptysis.</p>
+          <p><strong>PMH:</strong> HTN (controlled on lisinopril 10mg), penicillin allergy. <strong>Tobacco:</strong> never. <strong>EtOH:</strong> occasional.</p>
+        </div>
+      </section>
+
+      <section class="soap-section">
+        <div class="soap-hd">
+          <div class="soap-hd-l">
+            <span class="sage-dot"></span>
+            <span class="title">Objective</span>
+          </div>
+          <div class="soap-hd-r">
+            <span class="confidence">Conf <span class="pct">97%</span></span>
+          </div>
+        </div>
+        <div class="soap-body">
+          <p><span class="vital"><span class="vital-label">VS · </span>BP 118/74 · HR 88 · RR 18 · T 98.6°F · SpO₂ 98% RA</span></p>
+          <p><strong>Gen:</strong> NAD, alert, conversational. <strong>HEENT:</strong> mild posterior pharyngeal erythema, no exudate; TMs clear b/l.</p>
+          <p><strong>Lungs:</strong> scattered rhonchi b/l, clearing with cough; no wheezing or crackles. <strong>Cardiac:</strong> RRR, no m/r/g.</p>
+        </div>
+      </section>
+
+      <section class="soap-section">
+        <div class="soap-hd">
+          <div class="soap-hd-l">
+            <span class="sage-dot"></span>
+            <span class="title">Assessment</span>
+          </div>
+          <div class="soap-hd-r">
+            <span class="confidence">Conf <span class="pct">89%</span></span>
+          </div>
+        </div>
+        <div class="soap-body">
+          <ol>
+            <li>Acute bronchitis, viral etiology likely <span class="dx-pill">J20.9</span></li>
+            <li>URI, resolving <span class="dx-pill">J06.9</span></li>
+            <li>HTN, controlled <span class="dx-pill">I10</span></li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="soap-section">
+        <div class="soap-hd">
+          <div class="soap-hd-l">
+            <span class="sage-dot"></span>
+            <span class="title">Plan</span>
+          </div>
+          <div class="soap-hd-r">
+            <span class="confidence">Conf <span class="pct">86%</span></span>
+          </div>
+        </div>
+        <div class="soap-body">
+          <p>Symptomatic care: hydration, rest, OTC dextromethorphan for cough.</p>
+          <p>Albuterol HFA inhaler 1–2 puffs q4–6h PRN wheezing (limit 8 puffs/24h).</p>
+          <p>F/u 7–10 days if symptoms persist or worsen. Continue lisinopril; recheck BP in 6 months.</p>
+          <p><em>Patient education:</em> viral URI, antibiotic stewardship discussed.</p>
+        </div>
+      </section>
+
+    </div>
+
+    <div class="action-row">
+      <button class="btn-ghost" type="button">Copy SOAP</button>
+      <button class="btn-sage" type="button">
+        Sign &amp; send
+        <span class="shortcut">⌘ ↵</span>
+      </button>
+    </div>
+
+  </main>
+
+  <!-- RIGHT RAIL — Compare to last visit -->
+  <aside class="compare-rail" id="compareRail" aria-label="Compare to last visit">
+
+    <div class="rail-hd">
+      <div class="rail-hd-row">
+        <span class="eyebrow">Last Visit</span>
+        <span class="view-full" role="button" tabindex="0">View full ↗</span>
+      </div>
+      <div class="date-line">
+        <span class="date">Apr 16, 2026</span>
+        <span class="ago">· 2 weeks ago</span>
+      </div>
+      <div class="diff-legend" aria-label="Diff legend">
+        <div class="legend-item"><span class="legend-mark add"></span><span>New</span></div>
+        <div class="legend-item"><span class="legend-mark same"></span><span>Unchanged</span></div>
+        <div class="legend-item"><span class="legend-mark gone"></span><span>Resolved</span></div>
+      </div>
+    </div>
+
+    <!-- Assessment diff -->
+    <div class="diff-block">
+      <div class="block-title">
+        <span>Assessment Diff</span>
+        <span class="meta">3 active · 1 resolved</span>
+      </div>
+      <div class="diff-list">
+        <div class="diff-row add">
+          <span>Acute bronchitis, viral etiology likely</span>
+          <span class="code">J20.9</span>
+          <span class="diff-tag">New</span>
+        </div>
+        <div class="diff-row gone">
+          <span>URI, acute</span>
+          <span class="code">J06.9</span>
+          <span class="diff-tag">Resolving</span>
+        </div>
+        <div class="diff-row same">
+          <span>HTN, controlled</span>
+          <span class="code">I10</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Plan diff -->
+    <div class="diff-block">
+      <div class="block-title">
+        <span>Plan Diff</span>
+      </div>
+      <div class="plan-diff">
+        <div class="plan-row gone">Tessalon Perles 100mg TID PRN cough × 5 days</div>
+        <div class="plan-row add">Albuterol HFA 1–2 puffs q4–6h PRN wheezing</div>
+        <div class="plan-row add">F/u 7–10 days if persists</div>
+        <div class="plan-row gone">F/u PRN</div>
+        <div class="plan-row same">Continue lisinopril 10mg</div>
+        <div class="plan-row same">Recheck BP in 6 months</div>
+      </div>
+    </div>
+
+    <!-- Vitals trend -->
+    <div class="trend-block">
+      <div class="trend-hd">
+        <span>Vitals Trend</span>
+        <span class="col-labels"><span>Apr 16</span><span>Today</span></span>
+      </div>
+      <div class="trend-row">
+        <span class="trend-label">BP</span>
+        <span class="trend-spark" aria-hidden="true">
+          <svg viewBox="0 0 100 20" preserveAspectRatio="none">
+            <polyline points="2,6 50,8 98,12" fill="none" stroke="#7AA68C" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="2" cy="6" r="1.6" fill="#6c737f"/>
+            <circle cx="98" cy="12" r="1.8" fill="#7AA68C"/>
+          </svg>
+        </span>
+        <span class="trend-val last">124/78</span>
+        <span class="trend-val now">118/74</span>
+        <span class="trend-arrow improve" title="Improving">↘</span>
+      </div>
+      <div class="trend-row">
+        <span class="trend-label">HR</span>
+        <span class="trend-spark" aria-hidden="true">
+          <svg viewBox="0 0 100 20" preserveAspectRatio="none">
+            <polyline points="2,8 50,9 98,10" fill="none" stroke="#6c737f" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="2" cy="8" r="1.6" fill="#6c737f"/>
+            <circle cx="98" cy="10" r="1.8" fill="#b4bcc8"/>
+          </svg>
+        </span>
+        <span class="trend-val last">92</span>
+        <span class="trend-val now">88</span>
+        <span class="trend-arrow stable" title="Stable">→</span>
+      </div>
+      <div class="trend-row">
+        <span class="trend-label">Wt</span>
+        <span class="trend-spark" aria-hidden="true">
+          <svg viewBox="0 0 100 20" preserveAspectRatio="none">
+            <polyline points="2,10 50,10 98,10" fill="none" stroke="#6c737f" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="2" cy="10" r="1.6" fill="#6c737f"/>
+            <circle cx="98" cy="10" r="1.8" fill="#b4bcc8"/>
+          </svg>
+        </span>
+        <span class="trend-val last">138 lb</span>
+        <span class="trend-val now">138 lb</span>
+        <span class="trend-arrow stable" title="Stable">→</span>
+      </div>
+      <div class="trend-row">
+        <span class="trend-label">BMI</span>
+        <span class="trend-spark" aria-hidden="true">
+          <svg viewBox="0 0 100 20" preserveAspectRatio="none">
+            <polyline points="2,10 50,10 98,10" fill="none" stroke="#6c737f" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="2" cy="10" r="1.6" fill="#6c737f"/>
+            <circle cx="98" cy="10" r="1.8" fill="#b4bcc8"/>
+          </svg>
+        </span>
+        <span class="trend-val last">22.4</span>
+        <span class="trend-val now">22.4</span>
+        <span class="trend-arrow stable" title="Stable">→</span>
+      </div>
+    </div>
+
+    <!-- Last Rx -->
+    <div class="last-rx">
+      <span class="rx-eyebrow">Last Rx · Chronic</span>
+      <div class="rx-line">
+        <span class="name">Lisinopril 10mg</span> <span class="meta">· daily</span>
+      </div>
+      <div class="rx-line">
+        <span class="meta">started</span> <span class="duration">Jan 2026</span> <span class="meta">· ongoing</span>
+      </div>
+    </div>
+
+    <div class="rail-summary">
+      <span>Visit history · 4 visits</span>
+      <span class="arc">→ Trajectory: Stable</span>
+    </div>
+
+  </aside>
+
+</div>
+
+<script>
+(function(){
+  // Tab clicks - visual swap only
+  document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(x => {
+        x.classList.remove('active');
+        x.setAttribute('aria-selected','false');
+      });
+      t.classList.add('active');
+      t.setAttribute('aria-selected','true');
+    });
+  });
+
+  // iPad/mobile drawer toggle
+  const trigger = document.getElementById('drawerTrigger');
+  const rail = document.getElementById('compareRail');
+  trigger?.addEventListener('click', () => {
+    const open = rail.classList.toggle('drawer-open');
+    trigger.classList.toggle('open', open);
+    trigger.setAttribute('aria-expanded', String(open));
+  });
+
+  // Diff row hover focus -> dim others (tactile)
+  const rows = document.querySelectorAll('.diff-row, .plan-row');
+  rows.forEach(r => {
+    r.addEventListener('mouseenter', () => {
+      rows.forEach(x => { if(x !== r) x.style.opacity = '0.55'; });
+    });
+    r.addEventListener('mouseleave', () => {
+      rows.forEach(x => { x.style.opacity = ''; });
+    });
+  });
+
+  // View full -> visual cue only
+  document.querySelector('.view-full')?.addEventListener('click', () => {});
+})();
+</script>
+
+</body>
+</html>
