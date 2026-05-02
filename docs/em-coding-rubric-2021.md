@@ -236,7 +236,7 @@ User prompt: the SOAP body in markdown form. Nothing else.
 
 Two layers stack: a 5-min Anthropic prompt cache on the rubric system prompt (in front of the model) and a 7-day Redis cache on the JUDGEMENT (in front of the API call entirely).
 
-- **Anthropic prompt cache (provider layer)**: the rubric system prompt block sets `cache_control: { type: 'ephemeral' }`. Within the 5-minute Anthropic cache window, repeat calls reuse the cached system tokens at ~10% of normal input cost. The same ~1.5K-token rubric on every call → typical re-score traffic hits this warm.
+- **Anthropic prompt cache (provider layer)**: the rubric system prompt block sets `cache_control: { type: 'ephemeral' }`. Within the 5-minute Anthropic cache window, repeat calls reuse the cached system tokens at ~10% of normal input cost. The rubric is intentionally sized at ~2.6K tokens — empirical probing on `claude-sonnet-4-6` (Anthropic SDK 0.85.0) showed the actual cache eligibility threshold is ~2048 tokens, NOT the 1024-token figure quoted in older docs. A 1591-token version of this prompt was tested and silently no-op'd (zero `cache_creation_input_tokens`). The current size leaves comfortable headroom above the threshold and the additional content is substantive (worked examples, common documentation traps), not filler.
 - **Cache key (Redis layer)**: SHA-256 of the normalized SOAP body (collapse whitespace, lowercase, strip line numbers).
 - **Cache duration (Redis layer)**: 7 days (visits don't typically get re-scored long after sign).
 - **Cache layer (Redis)**: hash `em_mdm_cache:<sha256>`.
