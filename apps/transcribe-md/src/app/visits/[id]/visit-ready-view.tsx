@@ -13,6 +13,7 @@
 // ============================================================================
 
 import { useMemo, useState } from 'react';
+import type { EmScore } from '@/lib/em-coding-ui/types';
 import {
   FileText as FileTextIcon,
   MessageSquare as MessageSquareIcon,
@@ -111,6 +112,10 @@ export interface VisitReadyViewProps {
   /** Phase 5.1 — display name shown in the Transcript V3 "Recorded by"
    *  metadata row. Optional for back-compat. */
   recordedByName?: string | null;
+
+  /** Phase 5.2 — server-rendered initial E&M score for the Coding Coach
+   *  rail. Null when the engine fail-soft'd (rail renders skeleton). */
+  initialEmScore?: EmScore | null;
 
   // Phase 5.1.1 — V4 Extras card-stream wiring.
   // Patient identity (powers DemographicsCard) + problem list (powers
@@ -228,6 +233,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
               readonly={props.readonly}
               signedAt={props.signedAt}
               sources={soapSources}
+              initialScore={props.initialEmScore}
             />
           </div>
         )}
