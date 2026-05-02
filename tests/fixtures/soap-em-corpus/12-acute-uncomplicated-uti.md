@@ -4,10 +4,10 @@ category: acute
 expected:
   code: 99213
   mdmTier: low
-  hpiElements: 5
-  rosSystems: 3
+  hpiElements: 7
+  rosSystems: 2
   pfshCategories: 2
-  examSystems: 3
+  examSystems: 2
   problems: low
   data: low
   risk: moderate

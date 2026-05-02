@@ -5,11 +5,11 @@ expected:
   code: 99213
   mdmTier: low
   hpiElements: 3
-  rosSystems: 5
+  rosSystems: 14
   pfshCategories: 2
   examSystems: 6
   problems: low
-  data: minimal
+  data: low
   risk: low
 visitType: established
 bumpableTo: null
