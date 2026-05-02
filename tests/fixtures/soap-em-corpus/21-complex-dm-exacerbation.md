@@ -5,9 +5,9 @@ expected:
   code: 99215
   mdmTier: high
   hpiElements: 6
-  rosSystems: 6
+  rosSystems: 4
   pfshCategories: 3
-  examSystems: 7
+  examSystems: 8
   problems: high
   data: moderate
   risk: high
