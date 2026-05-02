@@ -234,18 +234,22 @@ User prompt: the SOAP body in markdown form. Nothing else.
 
 ### 4.2 Caching strategy
 
-- **Cache key**: SHA-256 of the normalized SOAP body (collapse whitespace, lowercase, strip line numbers).
-- **Cache duration**: 7 days (visits don't typically get re-scored long after sign).
-- **Cache layer**: Redis hash `em_mdm_cache:<sha256>`.
-- **Cache hit path**: deserialize the prior judgement, return immediately. Track cache-hit rate as a metric.
-- **Cache miss path**: call Claude, store result in Redis with 7d TTL.
+Two layers stack: a 5-min Anthropic prompt cache on the rubric system prompt (in front of the model) and a 7-day Redis cache on the JUDGEMENT (in front of the API call entirely).
+
+- **Anthropic prompt cache (provider layer)**: the rubric system prompt block sets `cache_control: { type: 'ephemeral' }`. Within the 5-minute Anthropic cache window, repeat calls reuse the cached system tokens at ~10% of normal input cost. The same ~1.5K-token rubric on every call → typical re-score traffic hits this warm.
+- **Cache key (Redis layer)**: SHA-256 of the normalized SOAP body (collapse whitespace, lowercase, strip line numbers).
+- **Cache duration (Redis layer)**: 7 days (visits don't typically get re-scored long after sign).
+- **Cache layer (Redis)**: hash `em_mdm_cache:<sha256>`.
+- **Cache hit path (Redis)**: deserialize the prior judgement, return immediately. Track cache-hit rate as a metric.
+- **Cache miss path (Redis)**: call Claude (with prompt-cache control attached), store result in Redis with 7d TTL.
 - **Bypass**: if SOAP edit changes >20% of characters since last cached judgement, force re-judge. Otherwise reuse cached.
+- **Timeout policy**: 30s soft cap on the LLM call (the 5.2 hotfix bumped this from 8s after corpus runs showed cold calls realistically take 6-10s; 8s missed ~50% of cold calls and silently degraded Path C → Path A). Bail to deterministic if the call is genuinely stuck rather than block the UI.
 
 ### 4.3 Failure modes
 
 - **Claude API down** (5xx) → return deterministic-MDM fallback (heuristic combining problem count + Rx presence + chronic-disease detection) with `llmJudged: false`. Rail shows mono "MDM auto-judged · refresh to re-score" subtle hint.
 - **JSON parse error** → log to telemetry, retry once with stricter system message, then fall back to deterministic.
-- **Timeout (>8s)** → cancel, return deterministic fallback.
+- **Timeout (>30s)** → cancel, return deterministic fallback.
 - **Refused / empty response** → fallback.
 
 ### 4.4 Deterministic-MDM fallback heuristic
