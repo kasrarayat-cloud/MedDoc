@@ -3252,3 +3252,864 @@ body {
     transition: none;
   }
 }
+
+/* =====================================================================
+ * Phase 5.2 — Coding Coach right rail (CodingRail.tsx + friends)
+ * ---------------------------------------------------------------------
+ * Append-only utilities for the v6 right-rail surface. CSS classes use
+ * the `.qm-lin-coding-*` and `.qm-lin-em-*` namespaces (per spec §5).
+ * Visual rules trace 1:1 to docs/design-directions-v10-soap/soap-v6.html
+ * lines 270-580 + 581-660 (modal). Do NOT edit existing utilities above.
+ * ===================================================================== */
+
+/* ── Rail container ─────────────────────────────────────────────────── */
+.qm-lin-coding-rail {
+  position: sticky;
+  top: 60px;
+  align-self: start;
+  width: 340px;
+  max-height: calc(100vh - 80px);
+  display: flex;
+  flex-direction: column;
+  background: var(--color-linear-surface-1);
+  border: 1px solid var(--color-linear-hairline);
+  border-radius: 8px;
+  padding: 0;
+  overflow: hidden;
+  font-family: var(--font-sans);
+  color: var(--color-linear-text);
+}
+.qm-lin-coding-rail--stale {
+  /* Subtle pulse on stale score (during re-scoring); never blanks out. */
+  position: sticky;
+}
+.qm-lin-coding-rail-fade {
+  animation: qm-lin-fade-in 120ms ease-out;
+}
+.qm-lin-coding-rail--readonly .qm-lin-coding-cta {
+  display: none;
+}
+
+/* Skeleton variant — server fail-soft */
+.qm-lin-coding-rail--skeleton {
+  min-height: 120px;
+}
+.qm-lin-coding-rail-skeleton-msg {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-linear-text-3);
+  margin-left: 8px;
+}
+
+/* ── Head (label row + code row) ────────────────────────────────────── */
+.qm-lin-coding-rail-head {
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--color-linear-hairline);
+}
+.qm-lin-coding-rail-head-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.qm-lin-coding-rail-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-linear-text-3);
+  font-weight: 500;
+}
+.qm-lin-coding-rail-label--coach {
+  color: var(--color-linear-sage-bright);
+}
+.qm-lin-coding-rail-label--ghost {
+  color: var(--color-linear-text-3);
+}
+.qm-lin-coding-rail-pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-linear-sage);
+  box-shadow: 0 0 0 3px rgba(122, 166, 140, 0.15);
+  animation: qm-lin-coding-pulse 2s ease-in-out infinite;
+}
+@keyframes qm-lin-coding-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px rgba(122, 166, 140, 0.10);
+    opacity: 0.7;
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(122, 166, 140, 0.18);
+    opacity: 1;
+  }
+}
+.qm-lin-coding-rail-code-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+  flex-wrap: wrap;
+}
+.qm-lin-coding-code {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  color: var(--color-linear-text);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.qm-lin-coding-level {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-linear-sage-bright);
+  font-weight: 500;
+  padding: 2px 6px;
+  border: 1px solid rgba(122, 166, 140, 0.28);
+  border-radius: 3px;
+  background: rgba(122, 166, 140, 0.07);
+}
+.qm-lin-coding-override-badge {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-linear-warning);
+  padding: 2px 6px;
+  border: 1px solid rgba(212, 164, 55, 0.32);
+  border-radius: 3px;
+  background: rgba(212, 164, 55, 0.07);
+}
+.qm-lin-coding-override-wrap {
+  position: relative;
+  margin-left: auto;
+}
+.qm-lin-coding-override {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-linear-text-3);
+  padding: 3px 6px;
+  border: 1px solid var(--color-linear-hairline-strong);
+  border-radius: 3px;
+  background: transparent;
+  cursor: pointer;
+  transition: color 100ms ease, border-color 100ms ease, background 100ms ease;
+}
+.qm-lin-coding-override:hover {
+  color: var(--color-linear-text);
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.025);
+}
+.qm-lin-coding-override-caret {
+  font-size: 9px;
+  line-height: 1;
+}
+.qm-lin-coding-override-listbox {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 5;
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  min-width: 96px;
+  background: var(--color-linear-surface-2);
+  border: 1px solid var(--color-linear-hairline-strong);
+  border-radius: 5px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+}
+.qm-lin-coding-override-option {
+  display: block;
+}
+.qm-lin-coding-override-option button {
+  display: block;
+  width: 100%;
+  padding: 5px 10px;
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--color-linear-text-2);
+  background: transparent;
+  border: 0;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background 100ms ease, color 100ms ease;
+}
+.qm-lin-coding-override-option button:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--color-linear-text);
+}
+.qm-lin-coding-override-option--current button {
+  color: var(--color-linear-sage-bright);
+  background: rgba(122, 166, 140, 0.06);
+}
+
+/* ── Time tracker ───────────────────────────────────────────────────── */
+.qm-lin-coding-time {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--color-linear-hairline);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: var(--color-linear-text-2);
+  background: rgba(122, 166, 140, 0.025);
+}
+.qm-lin-coding-time-clock {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  color: var(--color-linear-sage-bright);
+  flex: 0 0 auto;
+}
+.qm-lin-coding-time-label {
+  flex: 0 0 auto;
+}
+.qm-lin-coding-time-num {
+  color: var(--color-linear-text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.qm-lin-coding-time-meter {
+  position: relative;
+  flex: 1 1 auto;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-linear-hairline-strong);
+  overflow: hidden;
+  margin-left: 6px;
+}
+.qm-lin-coding-time-meter-fill {
+  position: absolute;
+  inset: 0;
+  width: var(--fill, 0%);
+  background: linear-gradient(
+    90deg,
+    var(--color-linear-sage-deep),
+    var(--color-linear-sage)
+  );
+  border-radius: 2px;
+  transition: width 220ms ease;
+}
+.qm-lin-coding-time-rule {
+  color: var(--color-linear-text-4);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 9.5px;
+  flex: 0 0 auto;
+}
+
+/* ── Checklist body ─────────────────────────────────────────────────── */
+.qm-lin-em-checklist {
+  flex: 1;
+  overflow: auto;
+  padding: 12px 14px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.qm-lin-em-criterion-group {
+  display: flex;
+  flex-direction: column;
+}
+.qm-lin-em-criterion-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  padding-bottom: 5px;
+  border-bottom: 1px dashed var(--color-linear-hairline);
+}
+.qm-lin-em-criterion-group-title {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-linear-text);
+  font-weight: 600;
+}
+.qm-lin-em-criterion-group-summary {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  color: var(--color-linear-text-4);
+}
+.qm-lin-em-criterion-group-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-linear-text-4);
+}
+.qm-lin-em-criterion-group-foot-satisfied {
+  color: var(--color-linear-sage-bright);
+}
+
+/* Single criterion row */
+.qm-lin-em-criterion {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 5px 4px;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--color-linear-text-2);
+  letter-spacing: -0.005em;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid transparent;
+  transition: background 100ms ease;
+}
+.qm-lin-em-criterion:hover {
+  background: rgba(255, 255, 255, 0.022);
+}
+.qm-lin-em-criterion:focus-visible {
+  outline: none;
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+.qm-lin-em-criterion--applying {
+  animation: qm-lin-em-criterion-pulse 1.4s ease-in-out infinite;
+}
+@keyframes qm-lin-em-criterion-pulse {
+  0%,
+  100% {
+    background: rgba(122, 166, 140, 0.03);
+  }
+  50% {
+    background: rgba(122, 166, 140, 0.10);
+  }
+}
+.qm-lin-em-criterion-icon {
+  flex: 0 0 14px;
+  display: inline-grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  margin-top: 2px;
+}
+.qm-lin-em-criterion-icon--ok {
+  background: rgba(122, 166, 140, 0.14);
+  color: var(--color-linear-sage-bright);
+  border: 1px solid rgba(122, 166, 140, 0.32);
+}
+.qm-lin-em-criterion-icon--warn {
+  background: rgba(212, 164, 55, 0.10);
+  color: var(--color-linear-warning);
+  border: 1px solid rgba(212, 164, 55, 0.36);
+}
+.qm-lin-em-criterion-icon svg {
+  width: 8px;
+  height: 8px;
+}
+.qm-lin-em-criterion-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.qm-lin-em-criterion-head {
+  color: var(--color-linear-text);
+  font-weight: 500;
+  font-size: 12.5px;
+}
+.qm-lin-em-criterion-sub {
+  color: var(--color-linear-text-3);
+  font-size: 11.5px;
+  margin-top: 1px;
+  display: block;
+}
+.qm-lin-em-criterion--warn .qm-lin-em-criterion-head {
+  color: var(--color-linear-warning);
+}
+.qm-lin-em-criterion--warn .qm-lin-em-criterion-sub {
+  color: var(--color-linear-warning);
+  opacity: 0.85;
+}
+.qm-lin-em-nudge {
+  display: inline-block;
+  align-self: flex-start;
+  margin-top: 3px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-linear-warning);
+  cursor: pointer;
+  padding: 2px 5px;
+  border: 1px solid rgba(212, 164, 55, 0.32);
+  border-radius: 3px;
+  background: rgba(212, 164, 55, 0.06);
+  transition: background 100ms ease, border-color 100ms ease;
+}
+.qm-lin-em-nudge:hover {
+  background: rgba(212, 164, 55, 0.12);
+  border-color: rgba(212, 164, 55, 0.5);
+}
+.qm-lin-em-criterion-jump {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 3px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-linear-text-3);
+  cursor: pointer;
+  padding: 2px 0;
+  background: transparent;
+  border: 0;
+  transition: color 100ms ease;
+}
+.qm-lin-em-criterion-jump:hover {
+  color: var(--color-linear-text);
+}
+
+/* ── Soft error pill ────────────────────────────────────────────────── */
+.qm-lin-coding-rail-error {
+  margin: 0 14px 8px;
+  padding: 6px 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-linear-text-3);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--color-linear-hairline);
+  border-radius: 4px;
+}
+
+/* ── CTA block ──────────────────────────────────────────────────────── */
+.qm-lin-coding-cta {
+  border-top: 1px solid var(--color-linear-hairline);
+  padding: 12px 14px 14px;
+  background: linear-gradient(
+    180deg,
+    rgba(122, 166, 140, 0.018),
+    rgba(122, 166, 140, 0.05)
+  );
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.qm-lin-coding-bump {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 14px;
+  background: var(--color-linear-sage);
+  color: #0d1611;
+  border: 0;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  cursor: pointer;
+  transition: background 100ms ease, transform 80ms ease, box-shadow 200ms ease;
+}
+.qm-lin-coding-bump:hover {
+  background: #88b599;
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 4px rgba(122, 166, 140, 0.18);
+}
+.qm-lin-coding-bump--disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.qm-lin-coding-bump--disabled:hover {
+  background: var(--color-linear-sage);
+  transform: none;
+  box-shadow: none;
+}
+.qm-lin-coding-bump-lhs {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+}
+.qm-lin-coding-bump-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.qm-lin-coding-bump-arrow {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 13px;
+}
+.qm-lin-coding-bump-sub {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(13, 22, 17, 0.62);
+  font-weight: 500;
+}
+.qm-lin-coding-bump-delta {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.qm-lin-coding-confirm {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border: 1px solid var(--color-linear-hairline-strong);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--color-linear-text-2);
+  font-size: 12px;
+  letter-spacing: -0.005em;
+  cursor: pointer;
+  transition: color 100ms ease, background 100ms ease, border-color 100ms ease;
+}
+.qm-lin-coding-confirm:hover {
+  color: var(--color-linear-text);
+  background: rgba(255, 255, 255, 0.025);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+.qm-lin-coding-confirm-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.qm-lin-coding-confirm-check {
+  color: var(--color-linear-sage-bright);
+  font-weight: 600;
+}
+.qm-lin-coding-confirm-shortcut {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--color-linear-text-3);
+}
+
+.qm-lin-coding-cta-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-linear-text-4);
+  padding-top: 4px;
+}
+.qm-lin-coding-cta-foot-ama {
+  color: var(--color-linear-text-3);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.qm-lin-coding-cta-foot-ama::before {
+  content: '';
+  width: 3.5px;
+  height: 3.5px;
+  border-radius: 50%;
+  background: var(--color-linear-sage);
+  opacity: 0.6;
+}
+.qm-lin-coding-cta-foot--gap {
+  color: var(--color-linear-warning);
+  opacity: 0.85;
+}
+
+/* ── Bump modal ─────────────────────────────────────────────────────── */
+.qm-lin-bump-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(8, 9, 10, 0.74);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: qm-lin-bump-modal-in 180ms ease-out;
+}
+@keyframes qm-lin-bump-modal-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.qm-lin-bump-modal {
+  width: min(440px, calc(100% - 32px));
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
+  background: var(--color-linear-surface-1);
+  border: 1px solid var(--color-linear-hairline-strong);
+  border-radius: 8px;
+  padding: 18px 20px 16px;
+  color: var(--color-linear-text);
+  font-family: var(--font-sans);
+}
+.qm-lin-bump-modal-title {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.qm-lin-bump-modal-sub {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: var(--color-linear-text-3);
+  text-transform: uppercase;
+  margin-bottom: 14px;
+}
+.qm-lin-bump-modal-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.qm-lin-bump-modal-step {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-linear-hairline);
+  font-size: 13px;
+  color: var(--color-linear-text-2);
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  opacity: 0.5;
+  transition: opacity 130ms ease;
+}
+.qm-lin-bump-modal-step:last-child {
+  border-bottom: 0;
+}
+.qm-lin-bump-modal-step--active {
+  opacity: 1;
+}
+.qm-lin-bump-modal-step-num {
+  font-family: var(--font-mono);
+  color: var(--color-linear-sage-bright);
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  flex: 0 0 auto;
+  padding-top: 1px;
+}
+.qm-lin-bump-modal-step strong {
+  color: var(--color-linear-text);
+  font-weight: 600;
+}
+.qm-lin-bump-modal-step-body {
+  flex: 1;
+  min-width: 0;
+}
+.qm-lin-bump-modal-gap-list {
+  margin: 4px 0 0;
+  padding-left: 16px;
+}
+.qm-lin-bump-modal-gap-list li {
+  font-size: 12.5px;
+  color: var(--color-linear-text-2);
+  line-height: 1.5;
+  padding: 1px 0;
+}
+.qm-lin-bump-modal-suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+}
+.qm-lin-bump-modal-suggestion {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.qm-lin-bump-modal-suggestion-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-linear-text-3);
+}
+.qm-lin-bump-modal-suggestion-input {
+  width: 100%;
+  resize: vertical;
+  min-height: 44px;
+  padding: 8px 10px;
+  background: var(--color-linear-surface-2);
+  border: 1px solid var(--color-linear-hairline-strong);
+  border-radius: 5px;
+  color: var(--color-linear-text);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  line-height: 1.45;
+  letter-spacing: -0.005em;
+  outline: none;
+  transition: border-color 100ms ease;
+}
+.qm-lin-bump-modal-suggestion-input:focus {
+  border-color: rgba(122, 166, 140, 0.5);
+}
+.qm-lin-bump-modal-suggestion-input:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+.qm-lin-bump-modal-error {
+  margin-top: 10px;
+  padding: 6px 8px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: var(--color-linear-warning);
+  background: rgba(212, 164, 55, 0.06);
+  border: 1px solid rgba(212, 164, 55, 0.32);
+  border-radius: 4px;
+}
+.qm-lin-bump-modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+.qm-lin-bump-modal-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--color-linear-hairline-strong);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--color-linear-text-2);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 100ms ease, background 100ms ease;
+}
+.qm-lin-bump-modal-btn-ghost:hover {
+  color: var(--color-linear-text);
+  background: rgba(255, 255, 255, 0.04);
+}
+.qm-lin-bump-modal-btn-ghost:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.qm-lin-bump-modal-btn-prim {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 14px;
+  background: var(--color-linear-sage);
+  color: #0d1611;
+  border: 0;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 100ms ease;
+}
+.qm-lin-bump-modal-btn-prim:hover {
+  background: #88b599;
+}
+.qm-lin-bump-modal-btn-prim:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ── iPad / compact: rail collapses to bottom drawer ────────────────── */
+@media (max-width: 1080px) {
+  .qm-lin-coding-rail {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    width: auto;
+    z-index: 35;
+    max-height: 78vh;
+    border-radius: 10px 10px 0 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-right: 0;
+    background: rgba(13, 14, 16, 0.97);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    box-shadow: 0 -1px 0 var(--color-linear-hairline-strong);
+    transform: translateY(calc(100% - 60px));
+    transition: transform 220ms ease;
+  }
+  .qm-lin-coding-rail--open {
+    transform: translateY(0);
+  }
+  .qm-lin-coding-rail::before {
+    content: '';
+    position: absolute;
+    top: 6px;
+    left: 50%;
+    width: 36px;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--color-linear-text-4);
+    opacity: 0.4;
+    transform: translateX(-50%);
+  }
+  .qm-lin-coding-rail-head {
+    padding-top: 18px;
+    cursor: pointer;
+  }
+}
+
+/* ── Reduced motion ─────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .qm-lin-coding-rail-pulse {
+    animation: none;
+  }
+  .qm-lin-em-criterion--applying {
+    animation: none;
+  }
+  .qm-lin-coding-time-meter-fill {
+    transition: none;
+  }
+  .qm-lin-coding-bump {
+    transition: none;
+  }
+  .qm-lin-coding-bump:hover {
+    transform: none;
+  }
+  .qm-lin-coding-rail {
+    transition: none;
+  }
+  .qm-lin-coding-rail-fade {
+    animation: none;
+  }
+  .qm-lin-bump-modal-backdrop {
+    animation: none;
+  }
+  .qm-lin-bump-modal-step {
+    transition: none;
+  }
+}
