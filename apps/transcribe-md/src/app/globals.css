@@ -3263,17 +3263,27 @@ body {
  * Mockup source: docs/design-directions-v10-soap/soap-v6.html (lines 167-264).
  * ========================================================================== */
 
-/* Grid container — left column (note pane) + right column (coding rail). */
+/* Grid container — left column (note pane) + right column (coding rail).
+   Phase 5.2 layout-density fix (post-iPad review): 720 px body cap was
+   leaving 92 px of dead space between body and rail on 1440-class
+   monitors. Approach: drop the per-body max-width, widen the gap to
+   32 px (matches Linear/Stripe column rhythm), cap the whole grid at
+   1480 px and center-align so >1920 px monitors don't sprawl. The 1fr
+   note column now stretches up to 1108 px (1480 − 340 rail − 32 gap)
+   with no internal slack. */
 .qm-lin-coach-grid {
   display: grid;
   grid-template-columns: 1fr 340px;
-  gap: 24px;
+  gap: 32px;
   align-items: start;
+  max-width: 1480px;
+  margin-inline: auto;
 }
 @media (max-width: 1080px) {
   .qm-lin-coach-grid {
     grid-template-columns: 1fr;
     gap: 14px;
+    max-width: 100%;
   }
 }
 
@@ -3285,11 +3295,13 @@ body {
   min-width: 0;
 }
 
-/* Left-column wrapper — the SOAP body. Capped to ~720 px so prose
-   stays readable on wide displays. */
+/* Left-column wrapper — the SOAP body. The 720-px cap was removed in
+   the layout-density fix so the body fills the 1fr column up to the
+   1480-px grid cap. Prose readability is preserved by the right-rail
+   forcing the column to wrap at sensible line lengths on common
+   viewports (≈1012 px on 1440 monitors, ≈1108 px on 1920+ monitors). */
 .qm-lin-soap-body-v6 {
   min-width: 0;
-  max-width: 720px;
 }
 
 /* Section block — hairline-bordered card on --surface-1. */
