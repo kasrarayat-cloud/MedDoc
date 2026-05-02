@@ -19,8 +19,30 @@ import { VisitLifecycleActions } from './visit-lifecycle-actions';
 import { EditDraftDialog } from './edit-draft-dialog';
 
 import { isEmailDeliveryEnabled } from '@/lib/email-enabled';
+import type { IcdCodeRow, RxDraftRow } from '@/lib/em-coding/fallback-mdm';
 
 export const metadata: Metadata = { title: 'Visit' };
+
+/** Phase 5.2 — coerce icdCodes jsonb into the engine's row shape. */
+function extractIcdCodesForEngine(raw: unknown): IcdCodeRow[] {
+  const blob = raw as { codes?: Array<{ code?: string; description?: string }> } | null;
+  const codes = blob?.codes ?? [];
+  return codes
+    .filter((c): c is { code: string; description?: string } => typeof c?.code === 'string')
+    .map((c) => ({ code: c.code, description: c.description }));
+}
+
+/** Phase 5.2 — coerce rxDrafts jsonb into the engine's row shape. */
+function extractRxForEngine(raw: unknown): RxDraftRow[] {
+  const blob = raw as {
+    prescriptions?: Array<{ drug?: string; action?: string }>;
+  } | null;
+  const rx = blob?.prescriptions ?? [];
+  return rx.map((r) => ({
+    drug: typeof r?.drug === 'string' ? r.drug : undefined,
+    action: typeof r?.action === 'string' ? r.action : undefined,
+  }));
+}
 
 const PROGRESS_HINT: Record<TranscribeVisitStatus, string> = {
   QUEUED: 'Queued — waiting for a worker',
@@ -485,7 +507,7 @@ interface VisitBodyProps {
   createdAt: Date;
 }
 
-function VisitBody(props: VisitBodyProps) {
+async function VisitBody(props: VisitBodyProps) {
   if (props.status === TranscribeVisitStatus.QUEUED) {
     if (props.inputMode === 'audio_upload' && !props.audioKey) {
       return <AudioUploader visitId={props.visitId} />;
@@ -561,6 +583,25 @@ function VisitBody(props: VisitBodyProps) {
   const showPipelineTab =
     process.env.NEXT_PUBLIC_SHOW_PIPELINE_TAB === 'true';
 
+  // Phase 5.2 — server-side initial E&M score for the Coding Coach rail.
+  // Pass mdmCachedJudgement: null to force the deterministic-only fast path
+  // on initial render (<10ms p95). The client re-scores on edit via the
+  // /api/visits/[id]/em-score POST which CAN call the LLM and cache.
+  // Fail-soft: if scoring throws, render the rail in skeleton mode.
+  let initialEmScore: import('@/lib/em-coding-ui/types').EmScore | null = null;
+  try {
+    const { computeEmScore } = await import('@/lib/em-coding/score');
+    const { engineToUiScore } = await import('@/lib/em-coding/to-ui-score');
+    const engineScore = await computeEmScore(soapText, {
+      mdmCachedJudgement: null,
+      icdCodes: extractIcdCodesForEngine(props.icdCodes),
+      rxDrafts: extractRxForEngine(props.rxDrafts),
+    });
+    initialEmScore = engineToUiScore(engineScore, durationSec ?? 0);
+  } catch (e) {
+    console.error('[em-score] initial render failed:', e);
+  }
+
   return (
     <VisitReadyView
       visitId={props.visitId}
@@ -600,6 +641,8 @@ function VisitBody(props: VisitBodyProps) {
       signedByName={props.doctorName}
       specialtyLabel={props.specialty}
       recordedByName={props.doctorName}
+      // Phase 5.2 — server-rendered initial E&M score for the Coding Coach
+      initialEmScore={initialEmScore}
       // Phase 5.1.1 — V4 Extras card-stream wiring
       patientName={props.patient?.name ?? props.patientName}
       patientDob={

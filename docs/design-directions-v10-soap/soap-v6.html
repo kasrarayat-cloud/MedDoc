@@ -1,0 +1,1221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QuillMD · SOAP · Mei-Ling Park · v6 Coding Coach</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #08090a;
+  --surface-1: #0d0e10;
+  --surface-2: #131416;
+  --surface-3: #1a1c1e;
+  --border: #21232a;
+  --hairline: rgba(255,255,255,0.05);
+  --hairline-strong: rgba(255,255,255,0.08);
+  --text: #f7f8f8;
+  --text-2: #b4bcc8;
+  --text-3: #6c737f;
+  --text-4: #4b5159;
+  --sage: #7AA68C;
+  --sage-bright: #9BC4A8;
+  --sage-deep: #2F5040;
+  --sage-tint: rgba(122,166,140,0.13);
+  --sage-glow: rgba(122,166,140,0.18);
+  --warning: #d4a437;
+  --warning-bright: #e3b950;
+  --warning-tint: rgba(212,164,55,0.10);
+  --danger: #d4574a;
+  --info: #5b8db8;
+  --font-sans: 'Inter', -apple-system, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text)}
+body{
+  font-family:var(--font-sans);
+  font-feature-settings:'cv11','ss01';
+  font-size:13px;
+  line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  letter-spacing:-0.005em;
+  min-height:100vh;
+}
+::selection{background:rgba(122,166,140,.25);color:var(--text)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+a{color:inherit;text-decoration:none}
+
+/* ───────────── Top bar ───────────── */
+.topbar{
+  position:sticky;top:0;z-index:30;
+  height:44px;
+  display:flex;align-items:center;gap:12px;
+  padding:0 16px;
+  background:rgba(8,9,10,.86);
+  backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--hairline);
+}
+.brand{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;letter-spacing:-0.01em}
+.brand-mark{
+  width:18px;height:18px;border-radius:5px;
+  background:linear-gradient(135deg,var(--sage) 0%,var(--sage-deep) 100%);
+  display:grid;place-items:center;color:#0c1410;font-size:10px;font-weight:700;
+  box-shadow:0 0 0 1px rgba(255,255,255,.06) inset;
+}
+.brand-mark::before{content:'Q'}
+.crumb-sep{color:var(--text-4);font-size:12px}
+.crumb{color:var(--text-2);font-size:13px;transition:color 100ms var(--ease)}
+.crumb:hover{color:var(--text)}
+.crumb-active{color:var(--text)}
+.spacer{flex:1}
+.status-pill-chrome{
+  display:inline-flex;align-items:center;gap:6px;
+  height:22px;padding:0 9px;
+  border-radius:4px;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.06em;text-transform:uppercase;font-weight:500;
+  border:1px solid rgba(122,166,140,.25);
+  color:var(--sage-bright);
+  background:rgba(122,166,140,.06);
+}
+.status-pill-chrome .pdot{
+  width:5px;height:5px;border-radius:50%;
+  background:var(--sage);
+  animation:idle-pulse 1.6s ease-in-out infinite;
+}
+@keyframes idle-pulse{
+  0%,100%{opacity:.7;transform:scale(1)}
+  50%{opacity:1;transform:scale(1.04)}
+}
+.btn-sage-sm{
+  display:inline-flex;align-items:center;gap:8px;
+  height:30px;padding:0 14px;
+  background:var(--sage);
+  color:#0d1611;
+  border-radius:6px;
+  font-size:12.5px;font-weight:500;
+  letter-spacing:-0.005em;
+  transition:background 100ms var(--ease), transform 80ms var(--ease), box-shadow 200ms var(--ease);
+}
+.btn-sage-sm:hover{background:#88b599;transform:scale(1.02);box-shadow:0 0 0 4px rgba(122,166,140,.18)}
+.btn-sage-sm .shortcut{font-family:var(--font-mono);font-size:11px;color:rgba(13,22,17,.55)}
+.avatar-chip{
+  width:24px;height:24px;border-radius:6px;
+  background:linear-gradient(135deg,#3a4a52 0%,#2a3036 100%);
+  color:#dde6ec;font-size:10.5px;font-weight:600;
+  display:grid;place-items:center;letter-spacing:0.02em;
+  border:1px solid var(--hairline-strong);
+}
+
+/* ───────────── Shell ───────────── */
+.shell{
+  position:relative;
+  min-height:calc(100vh - 44px);
+  padding:18px 28px 18px;
+}
+
+.meta-strip{
+  display:flex;align-items:center;
+  padding:6px 0 14px;
+  margin-bottom:14px;
+  border-bottom:1px solid var(--hairline);
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--text-2);
+}
+.meta-strip .field{padding:0 14px;border-right:1px solid var(--hairline)}
+.meta-strip .field:first-child{padding-left:0;color:var(--text);font-weight:500}
+.meta-strip .field:last-child{border-right:0}
+.meta-strip .field .lbl{color:var(--text-4);margin-right:4px;font-weight:400}
+
+.tabs-row{
+  display:flex;align-items:center;gap:0;
+  margin-bottom:18px;
+  border-bottom:1px solid var(--hairline);
+}
+.tab{
+  position:relative;
+  padding:8px 16px 10px;
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.07em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  font-weight:500;
+  cursor:pointer;
+  transition:color 100ms var(--ease);
+}
+.tab:first-child{padding-left:0}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--sage-bright)}
+.tab.active::after{
+  content:'';position:absolute;
+  left:0;right:0;bottom:-1px;
+  height:1.5px;
+  background:var(--sage);
+  border-radius:1px 1px 0 0;
+}
+
+/* ───────────── Coach grid ───────────── */
+.coach-grid{
+  display:grid;
+  grid-template-columns:1fr 340px;
+  gap:24px;
+  align-items:start;
+}
+
+/* ───────────── Note pane ───────────── */
+.note-pane{min-width:0}
+
+.section-block{
+  margin-bottom:22px;
+  border:1px solid var(--hairline);
+  border-radius:6px;
+  background:var(--surface-1);
+  padding:14px 16px 16px;
+  position:relative;
+  transition:border-color 130ms var(--ease), background 130ms var(--ease);
+}
+.section-block:hover{border-color:var(--hairline-strong)}
+
+.section-head{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:10px;
+  padding-bottom:8px;
+  border-bottom:1px solid var(--hairline);
+}
+.section-head .left{display:flex;align-items:center;gap:10px}
+.section-eyebrow{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--text-2);
+  font-weight:500;
+  display:inline-flex;align-items:center;gap:7px;
+}
+.section-eyebrow .glyph{
+  display:inline-grid;place-items:center;
+  width:18px;height:18px;
+  background:rgba(122,166,140,.10);
+  border:1px solid rgba(122,166,140,.28);
+  color:var(--sage-bright);
+  font-size:10px;
+  border-radius:4px;
+  font-weight:600;
+  letter-spacing:0;
+}
+.section-pulse{
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--text-4);
+  display:inline-flex;align-items:center;gap:5px;
+}
+.section-pulse.boost{color:var(--warning-bright)}
+.section-pulse.boost .pulse-dot{background:var(--warning)}
+.section-pulse .pulse-dot{
+  width:5px;height:5px;border-radius:50%;
+  background:var(--sage);
+}
+
+.section-body{
+  font-size:14px;
+  line-height:1.6;
+  color:var(--text);
+  letter-spacing:-0.005em;
+}
+.section-body p{margin:0}
+.section-body p + p{margin-top:7px}
+.section-body strong{color:var(--text);font-weight:600}
+.section-body em{color:var(--text-2);font-style:italic}
+.section-body .vital-tok{
+  font-family:var(--font-mono);
+  font-size:13px;
+  font-variant-numeric:tabular-nums;
+  letter-spacing:0;
+  color:var(--text);
+}
+.section-body .vital-tok .v-lbl{color:var(--text-4);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;margin-right:3px}
+
+/* highlightable elements that match billing criteria */
+.section-body .crit{
+  background:rgba(122,166,140,.08);
+  border-bottom:1px solid rgba(122,166,140,.32);
+  padding:0 1px;
+  cursor:help;
+  transition:background 100ms var(--ease);
+}
+.section-body .crit:hover{background:rgba(122,166,140,.16)}
+.section-body .gap{
+  background:rgba(212,164,55,.10);
+  border-bottom:1px dashed rgba(212,164,55,.42);
+  padding:0 1px;
+  font-style:italic;
+  color:var(--warning-bright);
+  cursor:help;
+}
+
+/* dx list */
+.dx-list{margin:0;padding:0;list-style:none;counter-reset:dxc}
+.dx-list li{
+  position:relative;
+  padding:5px 0 5px 26px;
+  counter-increment:dxc;
+  font-size:14px;line-height:1.55;
+}
+.dx-list li::before{
+  content:counter(dxc) ".";
+  position:absolute;left:0;top:5px;
+  font-family:var(--font-mono);
+  color:var(--sage-bright);font-weight:600;
+  font-size:12px;
+}
+.dx-list .dx-code{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  color:var(--sage-bright);
+  margin-left:6px;
+  padding:1px 5px;
+  border:1px solid rgba(122,166,140,.28);
+  border-radius:3px;
+  letter-spacing:0.04em;
+  background:rgba(122,166,140,.06);
+  font-weight:500;
+}
+
+/* ───────────── Coach rail ───────────── */
+.coach-rail{
+  background:var(--surface-1);
+  border:1px solid var(--hairline);
+  border-radius:8px;
+  padding:0;
+  position:sticky;
+  top:60px;
+  align-self:start;
+  display:flex;flex-direction:column;
+  max-height:calc(100vh - 80px);
+  overflow:hidden;
+}
+
+.coach-head{
+  padding:12px 14px 10px;
+  border-bottom:1px solid var(--hairline);
+}
+.coach-head-top{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:6px;
+}
+.coach-head-top .label{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.12em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  font-weight:500;
+}
+.coach-head-top .label-coach{color:var(--sage-bright)}
+.coach-pulse{
+  width:6px;height:6px;border-radius:50%;
+  background:var(--sage);
+  box-shadow:0 0 0 3px rgba(122,166,140,.15);
+  animation:coach-pulse 2s ease-in-out infinite;
+}
+@keyframes coach-pulse{
+  0%,100%{box-shadow:0 0 0 3px rgba(122,166,140,.10);opacity:.7}
+  50%{box-shadow:0 0 0 5px rgba(122,166,140,.18);opacity:1}
+}
+.coach-code-row{
+  display:flex;align-items:center;gap:8px;
+  margin-top:2px;
+}
+.coach-code{
+  font-family:var(--font-mono);
+  font-size:18px;
+  color:var(--text);
+  font-weight:600;
+  letter-spacing:0.01em;
+}
+.coach-level{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--sage-bright);
+  font-weight:500;
+  padding:2px 6px;
+  border:1px solid rgba(122,166,140,.28);
+  border-radius:3px;
+  background:rgba(122,166,140,.07);
+}
+.coach-override{
+  margin-left:auto;
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  display:inline-flex;align-items:center;gap:4px;
+  cursor:pointer;
+  padding:3px 6px;
+  border:1px solid var(--hairline-strong);
+  border-radius:3px;
+  background:transparent;
+  transition:color 100ms var(--ease), border-color 100ms var(--ease), background 100ms var(--ease);
+}
+.coach-override:hover{color:var(--text);border-color:rgba(255,255,255,.16);background:rgba(255,255,255,.025)}
+.coach-override .caret{font-size:9px;line-height:1}
+
+/* time tracker */
+.coach-time{
+  display:flex;align-items:center;gap:8px;
+  padding:9px 14px;
+  border-bottom:1px solid var(--hairline);
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.06em;
+  color:var(--text-2);
+  background:rgba(122,166,140,.025);
+}
+.coach-time .clock{
+  display:inline-grid;place-items:center;
+  width:16px;height:16px;
+  color:var(--sage-bright);
+}
+.coach-time .num{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums}
+.coach-time .rule{color:var(--text-4);text-transform:uppercase;letter-spacing:0.08em;font-size:9.5px}
+.coach-time .meter{
+  flex:1;height:4px;border-radius:2px;
+  background:var(--hairline-strong);
+  position:relative;overflow:hidden;
+  margin-left:6px;
+}
+.coach-time .meter::before{
+  content:'';
+  position:absolute;
+  inset:0 38% 0 0;
+  background:linear-gradient(90deg,var(--sage-deep),var(--sage));
+  border-radius:2px;
+}
+
+/* checklist body */
+.checklist{
+  flex:1;overflow:auto;
+  padding:12px 14px 4px;
+  display:flex;flex-direction:column;gap:14px;
+}
+.crit-group{
+  display:flex;flex-direction:column;
+}
+.crit-group-head{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:6px;
+  padding-bottom:5px;
+  border-bottom:1px dashed var(--hairline);
+}
+.crit-group-head .ttl{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--text);
+  font-weight:600;
+}
+.crit-group-head .level{
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.08em;
+  color:var(--text-4);
+}
+
+.crit-item{
+  display:flex;align-items:flex-start;gap:8px;
+  padding:5px 4px;
+  border-radius:4px;
+  font-size:12px;
+  line-height:1.45;
+  color:var(--text-2);
+  letter-spacing:-0.005em;
+  cursor:pointer;
+  transition:background 100ms var(--ease);
+}
+.crit-item:hover{background:rgba(255,255,255,.022)}
+.crit-icon{
+  flex:0 0 14px;
+  display:inline-grid;place-items:center;
+  width:14px;height:14px;
+  border-radius:50%;
+  margin-top:2px;
+}
+.crit-icon.ok{
+  background:rgba(122,166,140,.14);
+  color:var(--sage-bright);
+  border:1px solid rgba(122,166,140,.32);
+}
+.crit-icon.warn{
+  background:rgba(212,164,55,.10);
+  color:var(--warning-bright);
+  border:1px solid rgba(212,164,55,.36);
+}
+.crit-icon svg{width:8px;height:8px}
+.crit-text{flex:1;min-width:0}
+.crit-text .head{color:var(--text);font-weight:500;font-size:12.5px}
+.crit-text .sub{color:var(--text-3);font-size:11.5px;margin-top:1px;display:block}
+.crit-item.warn .crit-text .head{color:var(--warning-bright)}
+.crit-item.warn .crit-text .sub{color:var(--warning)}
+.crit-text .nudge{
+  display:inline-block;
+  margin-top:3px;
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--warning-bright);
+  cursor:pointer;
+  padding:2px 5px;
+  border:1px solid rgba(212,164,55,.32);
+  border-radius:3px;
+  background:rgba(212,164,55,.06);
+  transition:background 100ms var(--ease), border-color 100ms var(--ease);
+}
+.crit-text .nudge:hover{background:rgba(212,164,55,.12);border-color:rgba(212,164,55,.5)}
+
+/* group footers - small math summary */
+.crit-group-foot{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-top:6px;
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--text-4);
+}
+.crit-group-foot .satisfied{color:var(--sage-bright)}
+
+/* CTA block at the bottom of the rail */
+.coach-cta{
+  border-top:1px solid var(--hairline);
+  padding:12px 14px 14px;
+  background:linear-gradient(180deg, rgba(122,166,140,.018), rgba(122,166,140,.05));
+  display:flex;flex-direction:column;gap:8px;
+}
+.cta-bump{
+  position:relative;
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:11px 14px;
+  background:var(--sage);
+  color:#0d1611;
+  border-radius:6px;
+  font-size:13px;font-weight:600;
+  letter-spacing:-0.005em;
+  cursor:pointer;
+  transition:background 100ms var(--ease), transform 80ms var(--ease), box-shadow 200ms var(--ease);
+}
+.cta-bump:hover{
+  background:#88b599;
+  transform:translateY(-1px);
+  box-shadow:0 0 0 4px rgba(122,166,140,.18);
+}
+.cta-bump .lhs{display:flex;flex-direction:column;align-items:flex-start;gap:1px}
+.cta-bump .top{display:flex;align-items:center;gap:6px}
+.cta-bump .arrow{
+  font-family:var(--font-mono);
+  font-weight:600;
+  font-size:13px;
+  color:#0d1611;
+}
+.cta-bump .delta{
+  font-family:var(--font-mono);
+  font-size:14px;
+  font-weight:600;
+  color:#0d1611;
+  letter-spacing:-0.01em;
+}
+.cta-bump .sub{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:rgba(13,22,17,.62);
+  font-weight:500;
+}
+
+.cta-confirm{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:8px 12px;
+  border:1px solid var(--hairline-strong);
+  border-radius:5px;
+  background:transparent;
+  color:var(--text-2);
+  font-size:12px;
+  letter-spacing:-0.005em;
+  cursor:pointer;
+  transition:color 100ms var(--ease), background 100ms var(--ease), border-color 100ms var(--ease);
+}
+.cta-confirm:hover{color:var(--text);background:rgba(255,255,255,.025);border-color:rgba(255,255,255,.16)}
+.cta-confirm .label{display:inline-flex;align-items:center;gap:6px}
+.cta-confirm .check{color:var(--sage-bright);font-weight:600}
+.cta-confirm .shortcut{font-family:var(--font-mono);font-size:10.5px;color:var(--text-3)}
+
+.cta-foot{
+  display:flex;align-items:center;justify-content:space-between;
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--text-4);
+  padding-top:4px;
+}
+.cta-foot .ama{color:var(--text-3);display:inline-flex;align-items:center;gap:4px}
+.cta-foot .ama::before{content:'';width:3.5px;height:3.5px;border-radius:50%;background:var(--sage);opacity:.6}
+
+/* ───────────── Modal-style overlay (simulated, behind the rail) ───────────── */
+.modal-backdrop{
+  display:none;
+  position:fixed;inset:0;z-index:50;
+  background:rgba(8,9,10,.74);
+  backdrop-filter:blur(6px);
+  align-items:center;justify-content:center;
+  animation:modal-in 180ms var(--ease) forwards;
+}
+.modal-backdrop.show{display:flex}
+@keyframes modal-in{from{opacity:0}to{opacity:1}}
+.modal{
+  width:min(440px, calc(100% - 32px));
+  background:var(--surface-1);
+  border:1px solid var(--hairline-strong);
+  border-radius:8px;
+  padding:18px 20px 16px;
+}
+.modal h4{
+  margin:0 0 4px;
+  font-size:14px;
+  font-weight:600;
+  letter-spacing:-0.01em;
+}
+.modal .modal-sub{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.06em;
+  color:var(--text-3);
+  text-transform:uppercase;
+  margin-bottom:14px;
+}
+.modal-step{
+  padding:10px 0;
+  border-bottom:1px solid var(--hairline);
+  font-size:13px;
+  color:var(--text-2);
+  display:flex;align-items:flex-start;gap:10px;
+}
+.modal-step:last-child{border-bottom:0}
+.modal-step .step-num{
+  font-family:var(--font-mono);
+  color:var(--sage-bright);
+  font-weight:600;
+  font-size:11px;
+  letter-spacing:0.04em;
+  flex:0 0 auto;
+  padding-top:1px;
+}
+.modal-step strong{color:var(--text);font-weight:600}
+.modal-actions{
+  display:flex;align-items:center;justify-content:flex-end;gap:8px;
+  margin-top:14px;
+}
+.modal-actions .btn-ghost{
+  display:inline-flex;align-items:center;
+  height:30px;padding:0 12px;
+  border:1px solid var(--hairline-strong);
+  border-radius:5px;
+  background:transparent;
+  color:var(--text-2);
+  font-size:12px;
+  font-weight:500;
+  cursor:pointer;
+  transition:color 100ms var(--ease), background 100ms var(--ease);
+}
+.modal-actions .btn-ghost:hover{color:var(--text);background:rgba(255,255,255,.04)}
+.modal-actions .btn-prim{
+  display:inline-flex;align-items:center;gap:6px;
+  height:30px;padding:0 14px;
+  background:var(--sage);
+  color:#0d1611;
+  border-radius:5px;
+  font-size:12px;font-weight:500;
+  cursor:pointer;
+  transition:background 100ms var(--ease);
+}
+.modal-actions .btn-prim:hover{background:#88b599}
+
+/* Bottom of note-pane: sign action */
+.note-actions{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  margin-top:18px;
+  padding-top:14px;
+  border-top:1px solid var(--hairline);
+}
+.note-actions .lh-meta{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  display:inline-flex;align-items:center;gap:8px;
+}
+.note-actions .lh-meta .dot{width:4px;height:4px;border-radius:50%;background:var(--sage);opacity:.7}
+.note-actions .actions{display:flex;align-items:center;gap:8px}
+.btn-ghost-md{
+  display:inline-flex;align-items:center;gap:6px;
+  height:32px;padding:0 14px;
+  border:1px solid var(--hairline-strong);
+  border-radius:5px;
+  color:var(--text-2);
+  font-size:12.5px;
+  font-weight:500;
+  cursor:pointer;
+  transition:color 100ms var(--ease), background 100ms var(--ease), border-color 100ms var(--ease);
+}
+.btn-ghost-md:hover{color:var(--text);background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.16)}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;
+  }
+  .status-pill-chrome .pdot{animation:none}
+  .coach-pulse{animation:none}
+}
+
+/* ───────────── iPad landscape: rail collapses to a bottom drawer ───────────── */
+@media (max-width: 1080px){
+  .coach-grid{grid-template-columns:1fr;gap:14px}
+  .coach-rail{
+    position:fixed;
+    left:0;right:0;
+    bottom:0;
+    top:auto;
+    z-index:35;
+    max-height:78vh;
+    border-radius:10px 10px 0 0;
+    border-bottom:0;
+    border-left:0;border-right:0;
+    transform:translateY(calc(100% - 60px));
+    transition:transform 220ms var(--ease);
+    background:rgba(13,14,16,.97);
+    backdrop-filter:blur(14px);
+    box-shadow:0 -1px 0 var(--hairline-strong);
+  }
+  .coach-rail.open{
+    transform:translateY(0);
+  }
+  .coach-rail::before{
+    content:'';
+    position:absolute;
+    top:6px;left:50%;
+    width:36px;height:3px;
+    border-radius:2px;
+    background:var(--text-4);
+    opacity:.4;
+    transform:translateX(-50%);
+  }
+  .coach-head{
+    padding-top:18px;
+    cursor:pointer;
+  }
+  .drawer-trigger{
+    display:flex !important;
+  }
+  .shell{padding:18px 22px 80px}
+}
+@media (min-width: 1081px){
+  .drawer-trigger{display:none}
+}
+
+.drawer-trigger{
+  display:none;
+  position:fixed;left:0;right:0;bottom:0;
+  z-index:30;
+  height:54px;
+  align-items:center;justify-content:space-between;
+  padding:0 18px;
+  background:rgba(13,14,16,.97);
+  backdrop-filter:blur(14px);
+  border-top:1px solid var(--hairline-strong);
+  cursor:pointer;
+}
+.drawer-trigger.hide{display:none !important}
+.drawer-trigger .left{
+  display:flex;align-items:center;gap:10px;
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--text);
+  font-weight:600;
+}
+.drawer-trigger .left .lvl{
+  color:var(--sage-bright);
+  padding:2px 6px;
+  border:1px solid rgba(122,166,140,.28);
+  background:rgba(122,166,140,.07);
+  border-radius:3px;
+  font-size:10px;
+}
+.drawer-trigger .right{
+  display:flex;align-items:center;gap:8px;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--warning-bright);
+}
+.drawer-trigger .right .arrow{
+  color:var(--text-2);
+  font-size:11px;
+}
+
+@media (max-width: 760px){
+  .meta-strip{flex-wrap:wrap;font-size:10px}
+  .meta-strip .field{padding:3px 8px}
+  .topbar{padding:0 10px;gap:6px}
+  .crumb,.crumb-sep{display:none}
+  .crumb-active{display:inline}
+  .tabs-row{overflow-x:auto;flex-wrap:nowrap}
+  .tab{flex-shrink:0}
+  .shell{padding:14px 14px 80px}
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><span class="brand-mark"></span> QuillMD</div>
+  <span class="crumb-sep">/</span>
+  <span class="crumb">Patients</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb">Mei-Ling Park</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb crumb-active">Visit · Apr 30, 2026</span>
+  <div class="spacer"></div>
+  <div class="status-pill-chrome"><span class="pdot"></span><span>Ready</span></div>
+  <button class="btn-sage-sm" type="button"><span>Sign &amp; send</span><span class="shortcut">⌘ ↵</span></button>
+  <div class="avatar-chip">KP</div>
+</header>
+
+<div class="shell">
+
+  <div class="meta-strip">
+    <div class="field">Mei-Ling Park</div>
+    <div class="field">34 F</div>
+    <div class="field"><span class="lbl">MRN</span>77324</div>
+    <div class="field">J20.9 · Bronchitis F/U</div>
+    <div class="field">99213</div>
+    <div class="field"><span class="lbl">Visit</span>24 min</div>
+  </div>
+
+  <div class="tabs-row" role="tablist">
+    <div class="tab active" role="tab" aria-selected="true">Soap Note</div>
+    <div class="tab" role="tab" aria-selected="false">Transcript</div>
+    <div class="tab" role="tab" aria-selected="false">Codes</div>
+    <div class="tab" role="tab" aria-selected="false">Rx</div>
+    <div class="tab" role="tab" aria-selected="false">Extras</div>
+  </div>
+
+  <div class="coach-grid">
+
+    <!-- LEFT: SOAP body -->
+    <div class="note-pane">
+
+      <section class="section-block">
+        <div class="section-head">
+          <div class="left">
+            <span class="section-eyebrow"><span class="glyph">S</span>Subjective</span>
+          </div>
+          <span class="section-pulse"><span class="pulse-dot"></span>HPI · 4 elements</span>
+        </div>
+        <div class="section-body">
+          <p>3-day h/o productive cough, mostly clear-yellow sputum. URI symptoms (rhinorrhea, mild sore throat) <em>resolving</em>. <span class="crit" data-tip="HPI: location, quality, duration, timing all present">Cough <strong>productive</strong> for 3 days, worse in morning</span>. Denies fever, dyspnea, chest pain, hemoptysis.</p>
+          <p><strong>PMH:</strong> HTN (controlled on lisinopril 10mg), penicillin allergy. <strong>Social:</strong> Tobacco never. EtOH occasional. <span class="gap" data-tip="Past family social history (PFSH) needs 1 more line for 99214">— PFSH not documented (family hx)</span>.</p>
+          <p><span class="crit">ROS pertinent: respiratory, constitutional, ENT — denies fever, chills, weight loss, dyspnea</span>.</p>
+        </div>
+      </section>
+
+      <section class="section-block">
+        <div class="section-head">
+          <div class="left">
+            <span class="section-eyebrow"><span class="glyph">O</span>Objective</span>
+          </div>
+          <span class="section-pulse"><span class="pulse-dot"></span>Exam · 4 systems</span>
+        </div>
+        <div class="section-body">
+          <p><span class="vital-tok"><span class="v-lbl">VS</span>BP 118/74 · HR 88 · RR 18 · T 98.6°F · SpO₂ 98% RA</span></p>
+          <p><span class="crit"><strong>Constitutional:</strong> NAD, alert, conversational</span>. <span class="crit"><strong>HEENT:</strong> mild posterior pharyngeal erythema, no exudate; TMs clear b/l</span>. <span class="crit"><strong>Respiratory:</strong> scattered rhonchi b/l, clearing with cough; no wheezing or crackles</span>. <span class="crit"><strong>Cardiovascular:</strong> RRR, no m/r/g</span>.</p>
+        </div>
+      </section>
+
+      <section class="section-block">
+        <div class="section-head">
+          <div class="left">
+            <span class="section-eyebrow"><span class="glyph">A</span>Assessment</span>
+          </div>
+          <span class="section-pulse boost"><span class="pulse-dot"></span>MDM · moderate w/ gap</span>
+        </div>
+        <div class="section-body">
+          <ol class="dx-list">
+            <li><span class="crit">Acute bronchitis, viral etiology likely — established problem, worsening</span><span class="dx-code">J20.9</span></li>
+            <li><span class="crit">URI, resolving</span><span class="dx-code">J06.9</span></li>
+            <li><span class="crit">HTN, controlled — established problem, stable</span><span class="dx-code">I10</span></li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="section-block">
+        <div class="section-head">
+          <div class="left">
+            <span class="section-eyebrow"><span class="glyph">P</span>Plan</span>
+          </div>
+          <span class="section-pulse"><span class="pulse-dot"></span>Rx · counseling</span>
+        </div>
+        <div class="section-body">
+          <p><strong>Symptomatic care:</strong> hydration, rest, OTC dextromethorphan for cough. <strong>Albuterol HFA</strong> inhaler 1–2 puffs q4–6h PRN wheezing (limit 8 puffs/24h).</p>
+          <p>F/u 7–10 days if symptoms persist or worsen. Continue lisinopril; recheck BP in 6 months.</p>
+          <p><em>Patient education:</em> viral URI, antibiotic stewardship discussed. <span class="gap">— No labs/imaging cited (would bump MDM data complexity)</span>.</p>
+        </div>
+      </section>
+
+      <div class="note-actions">
+        <div class="lh-meta">
+          <span class="dot"></span>
+          <span>4 sections · last edit 4m ago</span>
+        </div>
+        <div class="actions">
+          <button class="btn-ghost-md" type="button">Copy SOAP</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Coding Coach rail -->
+    <aside class="coach-rail" id="coachRail" aria-label="Billing support">
+
+      <div class="coach-head">
+        <div class="coach-head-top">
+          <span class="label label-coach">
+            <span class="coach-pulse" aria-hidden="true" style="display:inline-block;vertical-align:0;margin-right:6px"></span>
+            Billing support
+          </span>
+          <span class="label">AMA 2021</span>
+        </div>
+        <div class="coach-code-row">
+          <span class="coach-code">99213</span>
+          <span class="coach-level">Level 3</span>
+          <button class="coach-override" type="button" aria-haspopup="listbox">
+            <span>override</span><span class="caret">▾</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="coach-time">
+        <span class="clock" aria-hidden="true">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+            <circle cx="8" cy="8" r="6" />
+            <path d="M8 4.5V8l2.5 1.5" stroke-linecap="round"/>
+          </svg>
+        </span>
+        <span>Visit time: <span class="num">24m</span></span>
+        <span class="meter" aria-hidden="true"></span>
+        <span class="rule">99213 · 20–29m</span>
+      </div>
+
+      <div class="checklist">
+
+        <div class="crit-group">
+          <div class="crit-group-head">
+            <span class="ttl">History (HPI)</span>
+            <span class="level">3 satisfied · 1 gap</span>
+          </div>
+
+          <div class="crit-item">
+            <span class="crit-icon ok" aria-hidden="true">
+              <svg viewBox="0 0 8 8" fill="none" stroke="currentColor" stroke-width="1.6">
+                <path d="M1.5 4l1.8 1.8L6.5 2.2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <span class="crit-text">
+              <span class="head">4+ HPI elements detected</span>
+              <span class="sub">location · quality · duration · timing</span>
+            </span>
+          </div>
+
+          <div class="crit-item">
+            <span class="crit-icon ok" aria-hidden="true">
+              <svg viewBox="0 0 8 8" fill="none" stroke="currentColor" stroke-width="1.6">
+                <path d="M1.5 4l1.8 1.8L6.5 2.2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <span class="crit-text">
+              <span class="head">Pertinent ROS</span>
+              <span class="sub">respiratory, constitutional, ENT (3 systems)</span>
+            </span>
+          </div>
+
+          <div class="crit-item warn">
+            <span class="crit-icon warn" aria-hidden="true">
+              <svg viewBox="0 0 8 8" fill="none" stroke="currentColor" stroke-width="1.4">
+                <path d="M4 1.4L7 6.6H1L4 1.4z" stroke-linejoin="round"/>
+                <path d="M4 3.4v1.7M4 5.7v.3" stroke-linecap="round"/>
+              </svg>
+            </span>
+            <span class="crit-text">
+              <span class="head">PFSH not documented</span>
+              <span class="sub">add 1 family / social hx line for 99214 boost</span>
+              <span class="nudge" data-tip="Add: Family hx HTN, mother. Lives with husband + 6yo son.">+ add 1 line</span>
+            </span>
+          </div>
+        </div>
+
+        <div class="crit-group">
+          <div class="crit-group-head">
+            <span class="ttl">Exam</span>
+            <span class="level">4 organ systems</span>
+          </div>
+
+          <div class="crit-item">
+            <span class="crit-icon ok" aria-hidden="true">
+              <svg viewBox="0 0 8 8" fill="none" stroke="currentColor" stroke-width="1.6">
+                <path d="M1.5 4l1.8 1.8L6.5 2.2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <span class="crit-text">
+              <span class="head">Constitutional</span>
+              <span class="sub">NAD, alert, conversational</span>
+            </span>
+          </div>
+
+          <div class="crit-item">
+            <span class="crit-icon ok" aria-hidden="true">
+              <svg viewBox="0 0 8 8" fill="none" stroke="currentColor" stroke-width="1.6">
+                <path d="M1.5 4l1.8 1.8L6.5 2.2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <span class="crit-text">
+              <span class="head">HEENT</span>
+              <span class="sub">posterior pharyngeal erythema · TMs clear</span>
+            </span>
+          </div>
+
+          <div class="crit-item">
+            <span class="crit-icon ok" aria-hidden="true">
+              <svg viewBox="0 0 8 8" fill="none" stroke="currentColor" stroke-width="1.6">
+                <path d="M1.5 4l1.8 1.8L6.5 2.2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <span class="crit-text">
+              <span class="head">Respiratory</span>
+              <span class="sub">scattered rhonchi b/l, no wheezes/crackles</span>
+            </span>
+          </div>
+
+          <div class="crit-item">
+            <span class="crit-icon ok" aria-hidden="true">
+              <svg viewBox="0 0 8 8" fill="none" stroke="currentColor" stroke-width="1.6">
+                <path d="M1.5 4l1.8 1.8L6.5 2.2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <span class="crit-text">
+              <span class="head">Cardiovascular</span>
+              <span class="sub">RRR, no m/r/g</span>
+            </span>
+          </div>
+
+          <div class="crit-group-foot">
+            <span class="satisfied">99213 ✓ expanded prob-focused</span>
+            <span>99214 needs 8+</span>
+          </div>
+        </div>
+
+        <div class="crit-group">
+          <div class="crit-group-head">
+            <span class="ttl">Medical Decision Making</span>
+            <span class="level">2 satisfied · 1 gap</span>
+          </div>
+
+          <div class="crit-item">
+            <span class="crit-icon ok" aria-hidden="true">
+              <svg viewBox="0 0 8 8" fill="none" stroke="currentColor" stroke-width="1.6">
+                <path d="M1.5 4l1.8 1.8L6.5 2.2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <span class="crit-text">
+              <span class="head">Established problem worsening</span>
+              <span class="sub">Bronchitis (J20.9) — new acute episode</span>
+            </span>
+          </div>
+
+          <div class="crit-item">
+            <span class="crit-icon ok" aria-hidden="true">
+              <svg viewBox="0 0 8 8" fill="none" stroke="currentColor" stroke-width="1.6">
+                <path d="M1.5 4l1.8 1.8L6.5 2.2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <span class="crit-text">
+              <span class="head">Established problem stable</span>
+              <span class="sub">HTN (I10) — controlled on lisinopril</span>
+            </span>
+          </div>
+
+          <div class="crit-item warn">
+            <span class="crit-icon warn" aria-hidden="true">
+              <svg viewBox="0 0 8 8" fill="none" stroke="currentColor" stroke-width="1.4">
+                <path d="M4 1.4L7 6.6H1L4 1.4z" stroke-linejoin="round"/>
+                <path d="M4 3.4v1.7M4 5.7v.3" stroke-linecap="round"/>
+              </svg>
+            </span>
+            <span class="crit-text">
+              <span class="head">Limited data review</span>
+              <span class="sub">no labs / imaging cited — add 1 to bump complexity</span>
+              <span class="nudge">+ cite prior labs</span>
+            </span>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="coach-cta">
+        <button class="cta-bump" type="button" id="bumpBtn">
+          <span class="lhs">
+            <span class="top"><span>Bump to 99214</span> <span class="arrow">→</span></span>
+            <span class="sub">close 2 gaps · 30 sec</span>
+          </span>
+          <span class="delta">+ $32</span>
+        </button>
+        <button class="cta-confirm" type="button">
+          <span class="label"><span class="check">✓</span><span>Confirm 99213 · sign</span></span>
+          <span class="shortcut">⌘ ↵</span>
+        </button>
+        <div class="cta-foot">
+          <span class="ama">AMA 2021 · time-based</span>
+          <span>Saves $7,800/yr · avg PCP</span>
+        </div>
+      </div>
+
+    </aside>
+
+  </div>
+
+</div>
+
+<!-- Modal -->
+<div class="modal-backdrop" id="bumpModal" role="dialog" aria-modal="true" aria-labelledby="bumpModalTtl">
+  <div class="modal">
+    <h4 id="bumpModalTtl">Bump 99213 → 99214</h4>
+    <div class="modal-sub">2 quick adds · ~30 sec · +$32</div>
+    <div class="modal-step">
+      <span class="step-num">01</span>
+      <span><strong>Add PFSH line.</strong> Suggested: "Family hx HTN (mother). Lives with husband + 6yo son. Works as software engineer; no occupational exposure."</span>
+    </div>
+    <div class="modal-step">
+      <span class="step-num">02</span>
+      <span><strong>Cite prior labs.</strong> Suggested: "BMP from 03/2026 within normal limits; no new labs ordered today (clinical dx)."</span>
+    </div>
+    <div class="modal-step">
+      <span class="step-num">03</span>
+      <span><strong>Auto-recheck.</strong> Coach will re-evaluate criteria and confirm 99214 once both lines are added.</span>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-ghost" type="button" id="bumpCancel">Not now</button>
+      <button class="btn-prim" type="button" id="bumpApply">Apply both · recheck</button>
+    </div>
+  </div>
+</div>
+
+<!-- Drawer trigger (iPad landscape only) -->
+<button class="drawer-trigger" id="drawerTrigger" type="button">
+  <span class="left">
+    <span>Billing</span>
+    <span class="lvl">99213</span>
+  </span>
+  <span class="right">
+    <span>2 gaps · +$32</span>
+    <span class="arrow">↑</span>
+  </span>
+</button>
+
+<script>
+(function(){
+  // tabs visual
+  document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(x => {
+        x.classList.remove('active');
+        x.setAttribute('aria-selected','false');
+      });
+      t.classList.add('active');
+      t.setAttribute('aria-selected','true');
+    });
+  });
+
+  // Bump modal
+  const bumpBtn = document.getElementById('bumpBtn');
+  const bumpModal = document.getElementById('bumpModal');
+  const bumpCancel = document.getElementById('bumpCancel');
+  const bumpApply = document.getElementById('bumpApply');
+  if(bumpBtn && bumpModal){
+    bumpBtn.addEventListener('click', () => bumpModal.classList.add('show'));
+    bumpCancel.addEventListener('click', () => bumpModal.classList.remove('show'));
+    bumpApply.addEventListener('click', () => bumpModal.classList.remove('show'));
+    bumpModal.addEventListener('click', (e) => {
+      if(e.target === bumpModal) bumpModal.classList.remove('show');
+    });
+    document.addEventListener('keydown', (e) => {
+      if(e.key === 'Escape') bumpModal.classList.remove('show');
+    });
+  }
+
+  // iPad drawer toggle
+  const rail = document.getElementById('coachRail');
+  const trigger = document.getElementById('drawerTrigger');
+  if(rail && trigger){
+    function isCompact(){ return window.matchMedia('(max-width: 1080px)').matches; }
+    function setOpen(open){
+      if(open){
+        rail.classList.add('open');
+        trigger.classList.add('hide');
+      } else {
+        rail.classList.remove('open');
+        trigger.classList.remove('hide');
+      }
+    }
+    trigger.addEventListener('click', () => setOpen(true));
+    // Tap on the rail head when open closes it
+    const head = rail.querySelector('.coach-head');
+    head.addEventListener('click', () => {
+      if(isCompact() && rail.classList.contains('open')){
+        setOpen(false);
+      }
+    });
+    window.addEventListener('resize', () => {
+      if(!isCompact()) setOpen(false);
+    });
+  }
+
+  // Hover-tip — light, no full popovers, native title
+  document.querySelectorAll('[data-tip]').forEach(el => {
+    el.setAttribute('title', el.dataset.tip);
+  });
+})();
+</script>
+
+</body>
+</html>
