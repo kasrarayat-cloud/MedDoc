@@ -259,3 +259,86 @@ PR #94, 18 commits, ~3.5K LOC. Merge SHA `7f8e351`. Tag `phase-5.2-soap-coding-c
 - "Silent degradation" is the worst failure mode for AI features: Path C silently became Path A on every cold call until the timeout fix landed. Add `llmJudged: true` assertion to the smoke layer
 - Layout density check on iPad before merging any information-dense feature — desktop browsers hide gap problems that show up immediately on tablet
 - CI pre-existing failures (meddoc-pro tenancy/admin e2e) are NOT a merge blocker for changes scoped to a different app, but they DO obscure regression detection. Consider scope-tagged CI labels or moving meddoc-pro tenancy tests to a parallel job that doesn't gate transcribe-md merges.
+
+## 12. ✅ Phase 6.1 (h8) — Postgres encrypted volume migration — completed 2026-05-02
+
+HIPAA encryption-at-rest blocker cleared. Migrated postgres data from the plaintext `pgdata` named volume to a LUKS2-encrypted sparse file at `/opt/meddoc-pro/secrets/pgdata.luks`, opened as `/dev/mapper/pg-encrypted`, ext4 inside, mounted at `/mnt/pgdata-encrypted`, bind-mounted into the postgres compose service.
+
+### Cipher
+- LUKS2 + AES-256-XTS + SHA-256 + Argon2id PBKDF
+- Keyfile: `/etc/quillmd/pg-luks.key` (root:root 0400, 512 bytes /dev/urandom)
+- LUKS file: `/opt/meddoc-pro/secrets/pgdata.luks` (1 GB sparse, root:root 0600)
+- Mount: `/mnt/pgdata-encrypted` (owner uid 999:999, mode 700)
+
+### Boot auto-mount
+- systemd unit: `/etc/systemd/system/pgdata-encrypted.service`
+- Runs `Before=docker.service`, opens LUKS + mounts before postgres container starts
+- **Reboot test PENDING — must reboot VPS once in next 30 days during low-traffic window to verify the unit actually fires before docker.service**
+- Recommended window: Sun 04:00 UTC (lowest doctor traffic globally)
+
+### Compose adjustment beyond the original brief
+The original brief swapped one volume line. We also added one env var:
+
+```yaml
+environment:
+  PGDATA: /var/lib/postgresql/data/pgdata
+```
+
+Reason: ext4's `lost+found` directory at the mount root blocks `initdb` (it refuses non-empty data dirs). Pointing `PGDATA` at a subdir of the mount is the standard postgres-image pattern when bind-mounting an ext4 filesystem. No behavioral change beyond that — postgres internal layout is identical to a docker-volume install.
+
+### Downtime
+- DOWNTIME-START: 2026-05-02T23:06:13Z
+- DOWNTIME-END:   2026-05-02T23:10:08Z
+- **Total: 3m 55s** (budget was 15 min; 19 MB DB → restore was sub-second)
+
+### Row counts pre vs post (verified identical)
+| Table | Rows |
+|---|---|
+| ai_calls | 507 |
+| api_usage_events | 118 |
+| patients (CRM) | 4 |
+| transcribe_md_patients | 43 |
+| transcribe_visits | 46 |
+| users | 30 |
+| **TOTAL** | **748** |
+
+### Encryption proof (Stage 3.7)
+- 11/11 plaintext markers searched in raw LUKS bytes — **0 hits**
+  - Tested needles: `Mei-Ling`, `Park`, `transcribe_visits`, `bronchitis`, `lisinopril`, `qa-iPad`, `qa-ipad`, `SUBJECTIVE`, `OBJECTIVE`, `@quillmd.com`, `@quillmd-test.local`
+- LUKS2 header magic valid at offset 0
+- Decrypted view (`/dev/mapper/pg-encrypted`) contains postgres internals as expected → decrypt path healthy
+
+### Production smoke
+- `app.quillmd.com/login` 200, `/dashboard` 307 (auth redirect)
+- `quillmd.com` 200, `pro.quillmd.com` 200
+- Phase 5.2 sentinels live: `qm-lin-coach-grid`, `qm-lin-coding-rail`, `qm-lin-em-criterion`
+- Phase 5.1 baseline: `qm-lin-card-stream`
+- Phase 5.0 baseline: `qm-lin-app`
+- 9/9 containers healthy
+
+### Rollback recipe (kept for 30+ days)
+
+The old plaintext `pgdata` named volume is preserved (NOT deleted). To revert:
+
+```bash
+cd /opt/meddoc-pro
+docker compose stop transcribe-md transcribe-md-worker meddoc-pro postgres-backup postgres
+cp docker-compose.yml.pre-h8 docker-compose.yml
+docker compose up -d postgres
+# Wait healthy, then bring dependents back
+docker compose up -d transcribe-md transcribe-md-worker meddoc-pro postgres-backup
+```
+
+This swaps the bind-mount line back to the original `pgdata:/var/lib/postgresql/data` and removes the `PGDATA` env var. Old data on the named volume picks up immediately; encrypted volume can be removed later with `cryptsetup close pg-encrypted && rm /opt/meddoc-pro/secrets/pgdata.luks`.
+
+Insurance dump: `/tmp/migration/meddoc-pre-h8-20260502T230142Z.dump` (2.1 MB, custom format, `pg_restore`-able). **ACTION: move to `/opt/meddoc-pro/backups/migration/` for long-term retention** (`/tmp` is volatile across reboots).
+
+### Lessons added
+- **Sparse-file LUKS works fine on a single-partition VPS.** No repartition, no reboot, clean rollback. Loopback overhead is invisible at our scale (75 MB postgres data dir).
+- **ext4 `lost+found` blocks `initdb` when bind-mounting an ext4 filesystem root.** Always bind-mount a subdir or set `PGDATA` env. Discovered live during Stage 3.4; restart-loop visible in logs within 30 s.
+- **The `claude` host user has no passwordless sudo.** Privileged ops (cryptsetup, mkfs, mount, systemctl, chown 999:999) require an interactive sudo step from the operator. Pattern that worked: write a self-contained idempotent shell script to `/tmp`, ask the operator to run `! sudo bash /tmp/script.sh` once, surface output back into Claude session, continue. Repeat for the encryption-proof step (read `/dev/mapper/*` requires root). Two interactive sudo handoffs total for a non-trivial migration is acceptable; document the script paths so the operator can audit before running.
+
+### Open follow-ups
+- Reboot test (recommended Sun 04:00 UTC; can also schedule via host at-job)
+- Move pre-migration dump from `/tmp` to `/opt/meddoc-pro/backups/migration/` — needs sudo because that dir is owned by the postgres-backup sidecar's uid (`dnsmasq:systemd-journal`)
+- Phase 6.2 (deferred): S3 keyfile (compromise-resistance bump) — currently keyfile is on the VPS root partition, which is HIPAA-acceptable but not best-in-class
