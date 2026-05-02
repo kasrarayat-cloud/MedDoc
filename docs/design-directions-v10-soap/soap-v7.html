@@ -1,0 +1,876 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QuillMD · Visit · Mei-Ling Park · v10 SOAP V7 Voice Annotation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#08090a;
+  --surface-1:#0d0e10;
+  --surface-2:#131416;
+  --surface-3:#1a1c1e;
+  --border:#21232a;
+  --hairline:rgba(255,255,255,0.05);
+  --hairline-strong:rgba(255,255,255,0.08);
+  --text:#f7f8f8;
+  --text-2:#b4bcc8;
+  --text-3:#6c737f;
+  --text-4:#4b5159;
+  --sage:#7AA68C;
+  --sage-bright:#9BC4A8;
+  --sage-deep:#2F5040;
+  --sage-tint:rgba(122,166,140,0.13);
+  --sage-glow:rgba(122,166,140,0.18);
+  --warning:#d4a437;
+  --warning-bright:#e3b950;
+  --danger:#d4574a;
+  --info:#5b8db8;
+  --font-sans:'Inter', -apple-system, system-ui, sans-serif;
+  --font-mono:'JetBrains Mono', ui-monospace, Menlo, monospace;
+  --ease:cubic-bezier(0.16, 1, 0.3, 1);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text)}
+body{
+  font-family:var(--font-sans);
+  font-feature-settings:'cv11','ss01';
+  font-size:13px;
+  line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  letter-spacing:-0.005em;
+  min-height:100vh;
+}
+::selection{background:rgba(122,166,140,.25);color:var(--text)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+a{color:inherit;text-decoration:none}
+
+/* ─────────────── Top bar (matches v8-linear) ─────────────── */
+.topbar{
+  position:sticky;top:0;z-index:30;
+  height:44px;
+  display:flex;align-items:center;gap:12px;
+  padding:0 16px;
+  background:rgba(8,9,10,.85);
+  backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--hairline);
+}
+.brand{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;letter-spacing:-0.01em}
+.brand-mark{
+  width:18px;height:18px;border-radius:5px;
+  background:linear-gradient(135deg,var(--sage) 0%,var(--sage-deep) 100%);
+  display:grid;place-items:center;color:#0c1410;font-size:10px;font-weight:700;
+}
+.brand-mark::before{content:'Q'}
+.crumb-sep{color:var(--text-4);font-size:12px}
+.crumb{color:var(--text-2);font-size:13px;transition:color 100ms var(--ease)}
+.crumb:hover{color:var(--text)}
+.crumb-active{color:var(--text)}
+.spacer{flex:1}
+.status-pill-chrome{
+  display:inline-flex;align-items:center;gap:6px;
+  height:22px;padding:0 9px;
+  border-radius:4px;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.06em;text-transform:uppercase;font-weight:500;
+  border:1px solid rgba(122,166,140,.25);
+  color:var(--sage-bright);
+  background:rgba(122,166,140,.06);
+}
+.status-pill-chrome .pdot{
+  width:5px;height:5px;border-radius:50%;
+  background:var(--sage);
+  animation:idle-pulse 1.6s ease-in-out infinite;
+}
+@keyframes idle-pulse{
+  0%,100%{opacity:.7;transform:scale(1)}
+  50%{opacity:1;transform:scale(1.04)}
+}
+.btn-sage{
+  display:inline-flex;align-items:center;gap:8px;
+  height:30px;padding:0 14px;
+  background:var(--sage);
+  color:#0d1611;
+  border-radius:6px;
+  font-size:12.5px;font-weight:500;
+  letter-spacing:-0.005em;
+  transition:background 100ms var(--ease), transform 80ms var(--ease), box-shadow 200ms var(--ease);
+}
+.btn-sage:hover{background:#88b599;transform:scale(1.02);box-shadow:0 0 0 4px rgba(122,166,140,.18)}
+.btn-sage .shortcut{font-family:var(--font-mono);font-size:11px;color:rgba(13,22,17,.55)}
+.avatar-chip{
+  width:24px;height:24px;border-radius:6px;
+  background:linear-gradient(135deg,#3a4a52 0%,#2a3036 100%);
+  color:#dde6ec;font-size:10.5px;font-weight:600;
+  display:grid;place-items:center;letter-spacing:0.02em;
+  border:1px solid var(--hairline-strong);
+}
+
+.shell{
+  position:relative;
+  min-height:calc(100vh - 44px);
+  padding:18px 28px 14px;
+  max-width:1240px;
+  margin:0 auto;
+}
+
+/* meta strip */
+.meta-strip{
+  display:flex;align-items:center;
+  padding:6px 0 14px;
+  margin-bottom:14px;
+  border-bottom:1px solid var(--hairline);
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--text-2);
+}
+.meta-strip .field{padding:0 14px;border-right:1px solid var(--hairline)}
+.meta-strip .field:first-child{padding-left:0;color:var(--text);font-weight:500}
+.meta-strip .field:last-child{border-right:0}
+.meta-strip .field .lbl{color:var(--text-4);margin-right:4px;font-weight:400}
+
+/* tabs */
+.tabs-row{
+  display:flex;align-items:center;gap:0;
+  margin-bottom:18px;
+  border-bottom:1px solid var(--hairline);
+}
+.tab{
+  position:relative;
+  padding:8px 16px 10px;
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.07em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  font-weight:500;
+  cursor:pointer;
+  transition:color 100ms var(--ease);
+}
+.tab:first-child{padding-left:0}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--sage-bright)}
+.tab.active::after{
+  content:'';position:absolute;
+  left:0;right:0;bottom:-1px;
+  height:1.5px;
+  background:var(--sage);
+  border-radius:1px 1px 0 0;
+}
+
+/* ─────────────── Voice annotation top hint strip ─────────────── */
+.hint-strip{
+  display:flex;align-items:center;gap:10px;
+  padding:10px 14px;
+  margin-bottom:18px;
+  border:1px solid var(--hairline);
+  border-left:2px solid var(--sage);
+  border-radius:5px;
+  background:rgba(122,166,140,.035);
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--text-2);
+}
+.hint-strip .icon{
+  flex:0 0 14px;
+  color:var(--sage-bright);
+  display:inline-flex;align-items:center;
+}
+.hint-strip strong{color:var(--text);font-weight:500}
+.hint-strip .kbd{
+  margin-left:auto;
+  display:inline-flex;align-items:center;gap:5px;
+  color:var(--text-3);
+}
+.hint-strip .kbd kbd{
+  font-family:var(--font-mono);
+  font-size:10px;
+  padding:1px 5px;
+  border:1px solid var(--hairline-strong);
+  border-radius:3px;
+  background:rgba(255,255,255,.02);
+  color:var(--text-2);
+}
+
+/* ─────────────── SOAP layout (single column ~720px centered) ─────────────── */
+.soap-stack{
+  display:flex;flex-direction:column;gap:24px;
+  max-width:780px;
+}
+
+.soap-section{
+  position:relative;
+}
+
+/* heading row — section letter chip + name + eyebrow + mic button */
+.section-head{
+  display:flex;align-items:center;gap:12px;
+  padding:0 0 12px;
+  border-bottom:1px solid var(--hairline);
+  margin-bottom:14px;
+}
+.sec-chip{
+  flex:0 0 28px;
+  display:inline-grid;place-items:center;
+  width:28px;height:28px;
+  border:1px solid rgba(122,166,140,.28);
+  background:rgba(122,166,140,.07);
+  border-radius:6px;
+  color:var(--sage-bright);
+  font-family:var(--font-mono);
+  font-size:13px;
+  font-weight:500;
+}
+.sec-titles{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
+.sec-name{
+  font-family:var(--font-sans);
+  font-size:18px;
+  font-weight:600;
+  letter-spacing:-0.015em;
+  color:var(--text);
+}
+.sec-eyebrow{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.14em;
+  text-transform:uppercase;
+  color:var(--text-3);
+}
+
+/* mic button — sage, touch-friendly 44px */
+.mic-btn{
+  display:inline-flex;align-items:center;gap:8px;
+  height:44px;
+  padding:0 14px 0 12px;
+  border:1px solid rgba(122,166,140,.28);
+  background:rgba(122,166,140,.06);
+  border-radius:8px;
+  color:var(--sage-bright);
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  font-weight:500;
+  cursor:pointer;
+  transition:background 130ms var(--ease), border-color 130ms var(--ease), color 130ms var(--ease), transform 80ms var(--ease);
+  -webkit-tap-highlight-color:transparent;
+}
+.mic-btn:hover{
+  background:rgba(122,166,140,.13);
+  border-color:rgba(122,166,140,.45);
+  color:var(--text);
+}
+.mic-btn:active{transform:scale(.97)}
+.mic-btn .mic-icon{
+  flex:0 0 18px;
+  width:18px;height:18px;
+  display:grid;place-items:center;
+}
+.mic-btn .mic-icon svg{width:14px;height:14px}
+.mic-btn.recording{
+  border-color:rgba(212,87,74,.45);
+  background:rgba(212,87,74,.08);
+  color:#e3756a;
+}
+.mic-btn.recording .mic-icon{color:#e3756a}
+
+/* paragraphs */
+.note-para{
+  font-size:14.5px;
+  line-height:1.7;
+  color:var(--text);
+  letter-spacing:-0.005em;
+  margin:0 0 10px;
+}
+.note-para strong{color:var(--text);font-weight:600}
+.note-para em{color:var(--text-2);font-style:italic}
+
+.vitals-inline{
+  font-family:var(--font-mono);
+  font-size:13.5px;
+  color:var(--text);
+  font-variant-numeric:tabular-nums;
+}
+.vitals-inline .v-lbl{color:var(--text-4);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;margin-right:4px}
+
+/* numbered list */
+.dx-list{margin:6px 0;padding:0;list-style:none;counter-reset:dx}
+.dx-list li{
+  padding:5px 0 5px 28px;
+  position:relative;
+  counter-increment:dx;
+  font-size:14.5px;
+  line-height:1.65;
+}
+.dx-list li::before{
+  content:counter(dx) ".";
+  position:absolute;
+  left:0;top:5px;
+  font-family:var(--font-mono);
+  font-size:11.5px;
+  color:var(--sage-bright);
+  font-weight:500;
+}
+.dx-list .dx-code{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  color:var(--text-3);
+  margin-left:6px;
+  padding:1px 5px;
+  border:1px solid var(--hairline-strong);
+  border-radius:3px;
+  letter-spacing:0.04em;
+  background:rgba(255,255,255,.02);
+}
+
+/* meta line under section */
+.section-meta{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  margin-top:14px;
+  display:flex;align-items:center;gap:10px;
+}
+.section-meta .dot-sep{color:var(--text-4)}
+.section-meta strong{color:var(--sage-bright);font-weight:500}
+
+/* idle (no annotations) */
+.section-meta-idle{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--text-4);
+  margin-top:14px;
+}
+
+/* ─────────────── Voice annotation insertion (Plan section demo) ─────────────── */
+.voice-annotation{
+  position:relative;
+  margin:14px -2px 0;
+  padding:14px 16px 12px 18px;
+  border:1px solid rgba(122,166,140,.22);
+  background:rgba(122,166,140,.05);
+  border-radius:6px;
+}
+.voice-annotation::before{
+  content:'';
+  position:absolute;
+  left:-1px;top:6px;bottom:6px;
+  width:2px;
+  background:var(--sage);
+  border-radius:1px;
+}
+.va-meta{
+  display:flex;align-items:center;gap:10px;
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--sage-bright);
+  margin-bottom:8px;
+  font-weight:500;
+}
+.va-meta .va-icon{
+  flex:0 0 14px;
+  width:14px;height:14px;
+  display:grid;place-items:center;
+  color:var(--sage-bright);
+}
+.va-meta .va-icon svg{width:11px;height:11px}
+.va-meta .va-time{color:var(--text-3);margin-left:auto}
+.va-text{
+  font-style:italic;
+  font-size:14.5px;
+  line-height:1.65;
+  color:var(--text);
+  margin:0 0 12px;
+  letter-spacing:-0.005em;
+}
+.va-text::before{content:'\201C';color:var(--sage-bright);margin-right:1px}
+.va-text::after{content:'\201D';color:var(--sage-bright);margin-left:1px}
+.va-actions{display:flex;align-items:center;gap:8px}
+.va-btn{
+  display:inline-flex;align-items:center;gap:6px;
+  height:32px;padding:0 14px;
+  border-radius:5px;
+  font-family:var(--font-sans);
+  font-size:12.5px;
+  font-weight:500;
+  letter-spacing:-0.005em;
+  cursor:pointer;
+  transition:background 100ms var(--ease), border-color 100ms var(--ease), color 100ms var(--ease), transform 80ms var(--ease);
+  -webkit-tap-highlight-color:transparent;
+}
+.va-btn:active{transform:scale(.97)}
+.va-btn-primary{
+  background:var(--sage);
+  color:#0d1611;
+  border:1px solid var(--sage);
+}
+.va-btn-primary:hover{background:#88b599}
+.va-btn-ghost{
+  border:1px solid rgba(122,166,140,.3);
+  color:var(--sage-bright);
+  background:transparent;
+}
+.va-btn-ghost:hover{background:rgba(122,166,140,.08);border-color:rgba(122,166,140,.5);color:var(--text)}
+.va-spacer{flex:1}
+.va-source{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--text-4);
+}
+
+/* ─────────────── Recording overlay (initially hidden) ─────────────── */
+.rec-overlay{
+  display:none;
+  margin:14px 0 0;
+  padding:14px 16px;
+  border:1px solid rgba(212,87,74,.3);
+  background:rgba(212,87,74,.05);
+  border-radius:6px;
+  align-items:center;gap:14px;
+  position:relative;
+}
+.rec-overlay.show{display:flex}
+.rec-overlay .rec-status{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:#e3756a;
+  font-weight:500;
+  flex:0 0 auto;
+  display:flex;align-items:center;gap:8px;
+}
+.rec-overlay .rec-dot{
+  width:8px;height:8px;border-radius:50%;
+  background:#e3756a;
+  animation:rec-pulse 1s ease-in-out infinite;
+}
+@keyframes rec-pulse{
+  0%,100%{opacity:.5;transform:scale(.85)}
+  50%{opacity:1;transform:scale(1.15)}
+}
+
+/* 12-bar waveform */
+.waveform{
+  flex:1;
+  display:flex;align-items:center;gap:3px;
+  height:32px;
+  min-width:0;
+}
+.waveform .bar{
+  flex:1;
+  height:6px;
+  background:rgba(122,166,140,.45);
+  border-radius:1.5px;
+  animation:wave-pulse 900ms ease-in-out infinite;
+}
+.waveform .bar:nth-child(1){animation-delay:0ms;height:8px}
+.waveform .bar:nth-child(2){animation-delay:60ms;height:14px}
+.waveform .bar:nth-child(3){animation-delay:120ms;height:22px}
+.waveform .bar:nth-child(4){animation-delay:180ms;height:18px}
+.waveform .bar:nth-child(5){animation-delay:240ms;height:26px}
+.waveform .bar:nth-child(6){animation-delay:300ms;height:14px}
+.waveform .bar:nth-child(7){animation-delay:360ms;height:22px}
+.waveform .bar:nth-child(8){animation-delay:420ms;height:30px}
+.waveform .bar:nth-child(9){animation-delay:480ms;height:16px}
+.waveform .bar:nth-child(10){animation-delay:540ms;height:24px}
+.waveform .bar:nth-child(11){animation-delay:600ms;height:10px}
+.waveform .bar:nth-child(12){animation-delay:660ms;height:18px}
+@keyframes wave-pulse{
+  0%,100%{transform:scaleY(.5);opacity:.55}
+  50%{transform:scaleY(1.4);opacity:1}
+}
+.rec-cancel{
+  flex:0 0 auto;
+  display:inline-flex;align-items:center;
+  height:32px;padding:0 14px;
+  border:1px solid var(--hairline-strong);
+  border-radius:5px;
+  background:transparent;
+  color:var(--text-2);
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  font-weight:500;
+  transition:background 100ms var(--ease), color 100ms var(--ease);
+  -webkit-tap-highlight-color:transparent;
+}
+.rec-cancel:hover{background:rgba(255,255,255,.04);color:var(--text)}
+
+/* footer */
+.soap-footer{
+  display:flex;align-items:center;justify-content:space-between;gap:14px;
+  margin-top:36px;
+  padding:14px 0 0;
+  border-top:1px solid var(--hairline);
+  max-width:780px;
+}
+.soap-footer .meta{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  display:flex;align-items:center;gap:8px;
+}
+.soap-footer .meta strong{color:var(--sage-bright);font-weight:500}
+.btn-ghost{
+  display:inline-flex;align-items:center;gap:8px;
+  height:32px;padding:0 14px;
+  border:1px solid var(--hairline-strong);
+  border-radius:6px;
+  background:transparent;
+  color:var(--text-2);
+  font-size:12.5px;font-weight:500;
+  transition:background 100ms var(--ease), color 100ms var(--ease), border-color 100ms var(--ease);
+}
+.btn-ghost:hover{background:rgba(255,255,255,.04);color:var(--text);border-color:rgba(255,255,255,.14)}
+
+/* reduced motion */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;
+  }
+  .status-pill-chrome .pdot{animation:none}
+  .waveform .bar{animation:none;transform:none}
+  .rec-overlay .rec-dot{animation:none}
+}
+
+/* responsive — iPad landscape (1024px) lands here */
+@media (max-width:1080px){
+  .shell{padding:16px 24px 14px;max-width:none}
+  .soap-stack{max-width:none;margin:0 auto;max-width:780px}
+}
+@media (max-width:760px){
+  .meta-strip{flex-wrap:wrap;font-size:10px}
+  .meta-strip .field{padding:4px 10px}
+  .shell{padding:14px 14px 60px}
+  .topbar{padding:0 12px;gap:8px;flex-wrap:wrap;height:auto;min-height:44px}
+  .crumb,.crumb-sep{display:none}
+  .crumb-active{display:inline}
+  .tabs-row{overflow-x:auto;flex-wrap:nowrap}
+  .tab{flex-shrink:0}
+  .section-head{flex-wrap:wrap;gap:10px}
+  .mic-btn{width:auto;flex-shrink:0}
+  .sec-titles{flex-basis:calc(100% - 130px)}
+  .note-para{font-size:14px}
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><span class="brand-mark"></span> QuillMD</div>
+  <span class="crumb-sep">/</span>
+  <span class="crumb">Patients</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb">Mei-Ling Park</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb crumb-active">Visit · Apr 30, 2026</span>
+  <div class="spacer"></div>
+  <div class="status-pill-chrome"><span class="pdot"></span><span>Ready</span></div>
+  <button class="btn-sage" type="button"><span>Sign &amp; send</span><span class="shortcut">⌘ ↵</span></button>
+  <div class="avatar-chip">KP</div>
+</header>
+
+<div class="shell">
+
+  <div class="meta-strip">
+    <div class="field">Mei-Ling Park</div>
+    <div class="field">34 F</div>
+    <div class="field"><span class="lbl">MRN</span>77324</div>
+    <div class="field">J20.9 · Bronchitis follow-up</div>
+    <div class="field">99214</div>
+    <div class="field"><span class="lbl">Duration</span>22 min</div>
+  </div>
+
+  <div class="tabs-row" role="tablist">
+    <div class="tab active" role="tab" aria-selected="true">Soap Note</div>
+    <div class="tab" role="tab" aria-selected="false">Transcript</div>
+    <div class="tab" role="tab" aria-selected="false">Codes</div>
+    <div class="tab" role="tab" aria-selected="false">Rx</div>
+    <div class="tab" role="tab" aria-selected="false">Extras</div>
+  </div>
+
+  <div class="hint-strip">
+    <span class="icon" aria-hidden="true">
+      <svg viewBox="0 0 14 14" fill="none">
+        <rect x="5" y="2" width="4" height="7" rx="2" stroke="currentColor" stroke-width="1.2"/>
+        <path d="M3 7a4 4 0 008 0M7 11v2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+      </svg>
+    </span>
+    <span>Tap any <strong>microphone</strong> on a section to dictate an addition. Voice goes to that section.</span>
+    <span class="kbd"><kbd>⌥</kbd><kbd>V</kbd> any section</span>
+  </div>
+
+  <div class="soap-stack">
+
+    <!-- SUBJECTIVE -->
+    <section class="soap-section" data-sec="S">
+      <div class="section-head">
+        <span class="sec-chip">S</span>
+        <div class="sec-titles">
+          <div class="sec-eyebrow">01 · Subjective</div>
+          <div class="sec-name">Patient narrative</div>
+        </div>
+        <button class="mic-btn" type="button" data-sec="S" aria-label="Add voice note to Subjective">
+          <span class="mic-icon" aria-hidden="true">
+            <svg viewBox="0 0 14 14" fill="none">
+              <rect x="5" y="2" width="4" height="7" rx="2" stroke="currentColor" stroke-width="1.3"/>
+              <path d="M3 7a4 4 0 008 0M7 11v2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+            </svg>
+          </span>
+          <span>Add note</span>
+        </button>
+      </div>
+
+      <div class="rec-overlay" data-rec="S">
+        <div class="rec-status"><span class="rec-dot"></span>Listening…</div>
+        <div class="waveform" aria-hidden="true">
+          <span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span>
+          <span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span>
+          <span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span>
+        </div>
+        <button class="rec-cancel" type="button">Cancel</button>
+      </div>
+
+      <p class="note-para">3-day h/o productive cough, mostly clear-yellow sputum. URI symptoms (rhinorrhea, mild sore throat) resolving. <strong>Denies fever, dyspnea, chest pain, hemoptysis.</strong></p>
+      <p class="note-para"><strong>PMH:</strong> HTN (controlled on lisinopril 10 mg), penicillin allergy. <strong>Tobacco:</strong> never. <strong>EtOH:</strong> occasional.</p>
+
+      <div class="section-meta-idle">No voice annotations · tap mic to add</div>
+    </section>
+
+    <!-- OBJECTIVE -->
+    <section class="soap-section" data-sec="O">
+      <div class="section-head">
+        <span class="sec-chip">O</span>
+        <div class="sec-titles">
+          <div class="sec-eyebrow">02 · Objective</div>
+          <div class="sec-name">Exam &amp; vitals</div>
+        </div>
+        <button class="mic-btn" type="button" data-sec="O" aria-label="Add voice note to Objective">
+          <span class="mic-icon" aria-hidden="true">
+            <svg viewBox="0 0 14 14" fill="none">
+              <rect x="5" y="2" width="4" height="7" rx="2" stroke="currentColor" stroke-width="1.3"/>
+              <path d="M3 7a4 4 0 008 0M7 11v2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+            </svg>
+          </span>
+          <span>Add note</span>
+        </button>
+      </div>
+
+      <div class="rec-overlay" data-rec="O">
+        <div class="rec-status"><span class="rec-dot"></span>Listening…</div>
+        <div class="waveform" aria-hidden="true">
+          <span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span>
+          <span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span>
+          <span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span>
+        </div>
+        <button class="rec-cancel" type="button">Cancel</button>
+      </div>
+
+      <p class="note-para"><span class="vitals-inline"><span class="v-lbl">VS</span>BP 118/74 · HR 88 · RR 18 · T 98.6°F · SpO₂ 98% RA</span></p>
+      <p class="note-para"><strong>Gen:</strong> NAD, alert, conversational. <strong>HEENT:</strong> mild posterior pharyngeal erythema, no exudate; TMs clear b/l.</p>
+      <p class="note-para"><strong>Lungs:</strong> scattered rhonchi b/l, clearing with cough; no wheezing or crackles. <strong>Cardiac:</strong> RRR, no m/r/g.</p>
+
+      <div class="section-meta-idle">No voice annotations · tap mic to add</div>
+    </section>
+
+    <!-- ASSESSMENT -->
+    <section class="soap-section" data-sec="A">
+      <div class="section-head">
+        <span class="sec-chip">A</span>
+        <div class="sec-titles">
+          <div class="sec-eyebrow">03 · Assessment</div>
+          <div class="sec-name">Clinical impression</div>
+        </div>
+        <button class="mic-btn" type="button" data-sec="A" aria-label="Add voice note to Assessment">
+          <span class="mic-icon" aria-hidden="true">
+            <svg viewBox="0 0 14 14" fill="none">
+              <rect x="5" y="2" width="4" height="7" rx="2" stroke="currentColor" stroke-width="1.3"/>
+              <path d="M3 7a4 4 0 008 0M7 11v2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+            </svg>
+          </span>
+          <span>Add note</span>
+        </button>
+      </div>
+
+      <div class="rec-overlay" data-rec="A">
+        <div class="rec-status"><span class="rec-dot"></span>Listening…</div>
+        <div class="waveform" aria-hidden="true">
+          <span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span>
+          <span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span>
+          <span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span>
+        </div>
+        <button class="rec-cancel" type="button">Cancel</button>
+      </div>
+
+      <ol class="dx-list">
+        <li>Acute bronchitis, viral etiology likely<span class="dx-code">J20.9</span></li>
+        <li>URI, resolving<span class="dx-code">J06.9</span></li>
+        <li>HTN, controlled<span class="dx-code">I10</span></li>
+      </ol>
+
+      <div class="section-meta-idle">No voice annotations · tap mic to add</div>
+    </section>
+
+    <!-- PLAN — has 1 voice annotation already -->
+    <section class="soap-section" data-sec="P">
+      <div class="section-head">
+        <span class="sec-chip">P</span>
+        <div class="sec-titles">
+          <div class="sec-eyebrow">04 · Plan</div>
+          <div class="sec-name">Plan &amp; follow-up</div>
+        </div>
+        <button class="mic-btn" type="button" data-sec="P" aria-label="Add voice note to Plan">
+          <span class="mic-icon" aria-hidden="true">
+            <svg viewBox="0 0 14 14" fill="none">
+              <rect x="5" y="2" width="4" height="7" rx="2" stroke="currentColor" stroke-width="1.3"/>
+              <path d="M3 7a4 4 0 008 0M7 11v2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+            </svg>
+          </span>
+          <span>Add note</span>
+        </button>
+      </div>
+
+      <div class="rec-overlay" data-rec="P">
+        <div class="rec-status"><span class="rec-dot"></span>Listening…</div>
+        <div class="waveform" aria-hidden="true">
+          <span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span>
+          <span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span>
+          <span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span>
+        </div>
+        <button class="rec-cancel" type="button">Cancel</button>
+      </div>
+
+      <p class="note-para"><strong>Symptomatic care:</strong> hydration, rest, OTC dextromethorphan for cough.</p>
+      <p class="note-para"><strong>Albuterol HFA inhaler</strong> 1–2 puffs q4–6h PRN wheezing (limit 8 puffs / 24h).</p>
+      <p class="note-para"><strong>F/u 7–10 days</strong> if symptoms persist or worsen. Continue lisinopril; recheck BP in 6 months.</p>
+      <p class="note-para"><strong>Patient education:</strong> viral URI, antibiotic stewardship discussed.</p>
+
+      <!-- Pending voice annotation (just finished) -->
+      <div class="voice-annotation" id="planAnnotation">
+        <div class="va-meta">
+          <span class="va-icon" aria-hidden="true">
+            <svg viewBox="0 0 12 12" fill="none">
+              <rect x="4.2" y="1.6" width="3.6" height="6" rx="1.8" stroke="currentColor" stroke-width="1.1"/>
+              <path d="M2.4 5.6a3.6 3.6 0 007.2 0M6 9.6v1.6" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/>
+            </svg>
+          </span>
+          <span>Voice add · 4 sec</span>
+          <span class="va-time">just now · Dr. Park</span>
+        </div>
+        <p class="va-text">also rule out asthma exacerbation given prior history</p>
+        <div class="va-actions">
+          <button class="va-btn va-btn-primary" type="button">Confirm</button>
+          <button class="va-btn va-btn-ghost" type="button">Edit</button>
+          <span class="va-spacer"></span>
+          <span class="va-source">→ inserts into Plan</span>
+        </div>
+      </div>
+
+      <div class="section-meta">
+        <span><strong>Voice annotations: 2</strong></span>
+        <span class="dot-sep">·</span>
+        <span>last 4 m ago</span>
+        <span class="dot-sep">·</span>
+        <span>1 pending review</span>
+      </div>
+    </section>
+
+  </div>
+
+  <div class="soap-footer">
+    <div class="meta">
+      <span>Drafted from 22 min audio</span>
+      <span class="dot-sep">·</span>
+      <span>Confidence <strong>S 91 · O 97 · A 89 · P 86</strong></span>
+    </div>
+    <button class="btn-ghost" type="button">Copy SOAP</button>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  // Tabs visual swap
+  document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(x => {
+        x.classList.remove('active');
+        x.setAttribute('aria-selected','false');
+      });
+      t.classList.add('active');
+      t.setAttribute('aria-selected','true');
+    });
+  });
+
+  // Mic toggle — opens the recording overlay for that section
+  const micBtns = document.querySelectorAll('.mic-btn');
+  const overlays = document.querySelectorAll('.rec-overlay');
+
+  function closeAll(){
+    overlays.forEach(o => o.classList.remove('show'));
+    micBtns.forEach(b => b.classList.remove('recording'));
+  }
+
+  micBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const sec = btn.dataset.sec;
+      const overlay = document.querySelector(`.rec-overlay[data-rec="${sec}"]`);
+      const isOpen = overlay && overlay.classList.contains('show');
+      closeAll();
+      if(!isOpen && overlay){
+        overlay.classList.add('show');
+        btn.classList.add('recording');
+        btn.querySelector('span:last-child').textContent = 'Recording…';
+      } else {
+        btn.querySelector('span:last-child').textContent = 'Add note';
+      }
+    });
+  });
+
+  // Cancel buttons
+  document.querySelectorAll('.rec-cancel').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeAll();
+      micBtns.forEach(m => m.querySelector('span:last-child').textContent = 'Add note');
+    });
+  });
+
+  // Plan annotation actions (visual only)
+  const annotation = document.getElementById('planAnnotation');
+  if(annotation){
+    annotation.querySelector('.va-btn-primary')?.addEventListener('click', () => {
+      annotation.style.transition = 'opacity 200ms ease, transform 200ms ease';
+      annotation.style.opacity = '0';
+      annotation.style.transform = 'translateY(-4px)';
+      setTimeout(() => { annotation.style.display = 'none'; }, 240);
+    });
+  }
+})();
+</script>
+
+</body>
+</html>
