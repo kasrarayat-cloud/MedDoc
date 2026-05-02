@@ -1,0 +1,971 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QuillMD · SOAP · Confidence Heatmap · v10 V3</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #08090a;
+  --surface-1: #0d0e10;
+  --surface-2: #131416;
+  --surface-3: #1a1c1e;
+  --border: #21232a;
+  --hairline: rgba(255,255,255,0.05);
+  --hairline-strong: rgba(255,255,255,0.08);
+  --text: #f7f8f8;
+  --text-2: #b4bcc8;
+  --text-3: #6c737f;
+  --text-4: #4b5159;
+  --sage: #7AA68C;
+  --sage-bright: #9BC4A8;
+  --sage-deep: #2F5040;
+  --sage-tint: rgba(122,166,140,0.13);
+  --sage-glow: rgba(122,166,140,0.18);
+  --warning: #d4a437;
+  --warning-bright: #e3b950;
+  --danger: #d4574a;
+  --info: #5b8db8;
+  --font-sans: 'Inter', -apple-system, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text)}
+body{
+  font-family:var(--font-sans);
+  font-feature-settings:'cv11','ss01';
+  font-size:13px;
+  line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  letter-spacing:-0.005em;
+  min-height:100vh;
+}
+::selection{background:rgba(122,166,140,.25);color:var(--text)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+a{color:inherit;text-decoration:none}
+
+/* ─────────────── Top bar (chrome) ─────────────── */
+.topbar{
+  position:sticky;top:0;z-index:30;
+  height:44px;
+  display:flex;align-items:center;gap:12px;
+  padding:0 16px;
+  background:rgba(8,9,10,.85);
+  backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--hairline);
+}
+.brand{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;letter-spacing:-0.01em}
+.brand-mark{
+  width:18px;height:18px;border-radius:5px;
+  background:linear-gradient(135deg,var(--sage) 0%,var(--sage-deep) 100%);
+  display:grid;place-items:center;color:#0c1410;font-size:10px;font-weight:700;
+  box-shadow:0 0 0 1px rgba(255,255,255,.06) inset;
+}
+.brand-mark::before{content:'Q'}
+.crumb-sep{color:var(--text-4);font-size:12px}
+.crumb{color:var(--text-2);font-size:13px;transition:color 100ms var(--ease)}
+.crumb:hover{color:var(--text)}
+.crumb-active{color:var(--text)}
+.spacer{flex:1}
+.status-pill-chrome{
+  display:inline-flex;align-items:center;gap:6px;
+  height:22px;padding:0 9px;
+  border-radius:4px;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.06em;text-transform:uppercase;font-weight:500;
+  border:1px solid rgba(122,166,140,.25);
+  color:var(--sage-bright);
+  background:rgba(122,166,140,.06);
+}
+.status-pill-chrome .pdot{
+  width:5px;height:5px;border-radius:50%;
+  background:var(--sage);
+  animation:idle-pulse 1.6s ease-in-out infinite;
+}
+@keyframes idle-pulse{
+  0%,100%{opacity:.7;transform:scale(1)}
+  50%{opacity:1;transform:scale(1.04)}
+}
+.btn-sage{
+  display:inline-flex;align-items:center;gap:8px;
+  height:30px;padding:0 14px;
+  background:var(--sage);
+  color:#0d1611;
+  border-radius:6px;
+  font-size:12.5px;font-weight:500;
+  letter-spacing:-0.005em;
+  transition:background 100ms var(--ease), transform 80ms var(--ease), box-shadow 200ms var(--ease);
+}
+.btn-sage:hover{background:#88b599;transform:scale(1.02);box-shadow:0 0 0 4px rgba(122,166,140,.18)}
+.btn-sage .shortcut{font-family:var(--font-mono);font-size:11px;color:rgba(13,22,17,.55)}
+.avatar-chip{
+  width:24px;height:24px;border-radius:6px;
+  background:linear-gradient(135deg,#3a4a52 0%,#2a3036 100%);
+  color:#dde6ec;font-size:10.5px;font-weight:600;
+  display:grid;place-items:center;letter-spacing:0.02em;
+  border:1px solid var(--hairline-strong);
+}
+
+/* ─────────────── Shell ─────────────── */
+.shell{
+  position:relative;
+  min-height:calc(100vh - 44px);
+  padding:18px 28px 14px;
+  max-width:1100px;
+  margin:0 auto;
+}
+.shell::before{
+  content:'';
+  position:absolute;
+  top:-100px;left:30%;
+  width:600px;height:380px;
+  background:radial-gradient(ellipse at center, rgba(122,166,140,.04) 0%, transparent 70%);
+  pointer-events:none;
+}
+
+.meta-strip{
+  display:flex;align-items:center;
+  padding:6px 0 14px;
+  margin-bottom:14px;
+  border-bottom:1px solid var(--hairline);
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--text-2);
+}
+.meta-strip .field{padding:0 14px;border-right:1px solid var(--hairline)}
+.meta-strip .field:first-child{padding-left:0;color:var(--text);font-weight:500}
+.meta-strip .field:last-child{border-right:0}
+.meta-strip .field .lbl{color:var(--text-4);margin-right:4px;font-weight:400}
+
+.tabs-row{
+  display:flex;align-items:center;gap:0;
+  margin-bottom:14px;
+  border-bottom:1px solid var(--hairline);
+}
+.tab{
+  position:relative;
+  padding:8px 16px 10px;
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.07em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  font-weight:500;
+  cursor:pointer;
+  transition:color 100ms var(--ease);
+}
+.tab:first-child{padding-left:0}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--sage-bright)}
+.tab.active::after{
+  content:'';position:absolute;
+  left:0;right:0;bottom:-1px;
+  height:1.5px;
+  background:var(--sage);
+  border-radius:1px 1px 0 0;
+}
+
+/* ─────────────── Heatmap legend ─────────────── */
+.heatmap-legend{
+  display:flex;align-items:center;justify-content:space-between;gap:14px;
+  padding:10px 12px;
+  margin-bottom:20px;
+  background:var(--surface-1);
+  border:1px solid var(--hairline);
+  border-radius:6px;
+}
+.legend-l{
+  display:flex;align-items:center;gap:10px;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--text-3);
+}
+.legend-l .legend-title{color:var(--text-2);font-weight:500}
+.legend-bar{
+  display:inline-block;
+  width:160px;height:6px;
+  border-radius:1px;
+  background:linear-gradient(to right,
+    rgba(122,166,140,0.18) 0%,
+    rgba(122,166,140,0.45) 30%,
+    rgba(122,166,140,0.75) 65%,
+    rgba(122,166,140,1) 100%);
+}
+.legend-r{
+  display:flex;align-items:center;gap:14px;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.04em;
+  color:var(--text-3);
+}
+.legend-r .v{color:var(--text);font-variant-numeric:tabular-nums}
+
+/* ─────────────── SOAP sections ─────────────── */
+.section-block{margin-bottom:30px}
+.section-head{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  margin-bottom:12px;
+  padding-bottom:10px;
+  border-bottom:1px solid var(--hairline);
+}
+.section-eyebrow{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.14em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  display:flex;align-items:center;gap:8px;
+  margin-bottom:4px;
+}
+.section-eyebrow .ltr{
+  display:inline-grid;place-items:center;
+  width:18px;height:18px;
+  border:1px solid rgba(122,166,140,.28);
+  background:rgba(122,166,140,.07);
+  border-radius:4px;
+  color:var(--sage-bright);
+  font-size:10px;
+  letter-spacing:0;
+  font-weight:500;
+}
+.section-title{
+  font-family:var(--font-sans);
+  font-size:18px;
+  font-weight:600;
+  letter-spacing:-0.015em;
+  color:var(--text);
+  margin:0;
+}
+
+/* confidence rollup pill */
+.conf-rollup{
+  display:inline-flex;align-items:center;gap:6px;
+  height:24px;padding:0 10px;
+  border-radius:4px;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  font-weight:500;
+}
+.conf-rollup .cdot{width:5px;height:5px;border-radius:50%;background:currentColor}
+.conf-rollup.high{
+  border:1px solid rgba(122,166,140,.32);
+  color:var(--sage-bright);
+  background:rgba(122,166,140,.10);
+}
+.conf-rollup.mid{
+  border:1px solid rgba(122,166,140,.20);
+  color:var(--sage);
+  background:rgba(122,166,140,.05);
+}
+.conf-rollup.low{
+  border:1px solid rgba(212,164,55,.30);
+  color:var(--warning-bright);
+  background:rgba(212,164,55,.07);
+}
+
+/* ─────────────── Confidence sentence + heatmap bar ─────────────── */
+.conf-stack{display:flex;flex-direction:column;gap:0}
+.conf-line{
+  position:relative;
+  display:flex;align-items:flex-start;gap:14px;
+  padding:7px 12px 7px 14px;
+  margin:0 -12px;
+  border-radius:5px;
+  border:1px solid transparent;
+  transition:background 130ms var(--ease), border-color 130ms var(--ease);
+  cursor:default;
+}
+.conf-line:hover{background:rgba(255,255,255,.022);border-color:var(--hairline)}
+.conf-bar{
+  flex:0 0 3px;
+  width:3px;
+  align-self:stretch;
+  margin-top:4px;
+  margin-bottom:4px;
+  border-radius:1.5px;
+  background:var(--sage);
+  /* opacity controlled inline via --conf */
+  opacity:var(--conf,1);
+}
+.conf-text{
+  flex:1;min-width:0;
+  font-family:var(--font-sans);
+  font-size:14.5px;
+  line-height:1.7;
+  color:var(--text);
+  letter-spacing:-0.005em;
+}
+.conf-text strong{font-weight:600;color:var(--text)}
+.conf-text .vitals-inline{
+  font-family:var(--font-mono);
+  font-size:13.5px;
+  color:var(--text);
+  font-variant-numeric:tabular-nums;
+  letter-spacing:0;
+}
+.conf-text .vitals-inline .v-lbl{
+  color:var(--text-4);
+  font-size:10px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  margin-right:3px;
+}
+/* low-confidence ALSO italicized so cue is multi-modal */
+.conf-line.low .conf-text{
+  font-style:italic;
+  color:var(--text-2);
+}
+.conf-line.low .conf-text strong{font-style:normal;color:var(--text)}
+
+/* score readout, mono, far right */
+.conf-score{
+  flex:0 0 auto;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.04em;
+  color:var(--text-4);
+  font-variant-numeric:tabular-nums;
+  margin-left:8px;
+  margin-top:8px;
+  align-self:flex-start;
+  opacity:0;
+  transition:opacity 130ms var(--ease);
+  white-space:nowrap;
+}
+.conf-line:hover .conf-score{opacity:1}
+.conf-line.low .conf-score{color:var(--warning-bright);opacity:.6}
+
+/* numbered diagnoses list */
+.dx-list{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:0}
+.dx-list .conf-line{padding-left:48px}
+.dx-list .conf-line .dx-num{
+  position:absolute;
+  left:32px;top:11px;
+  font-family:var(--font-mono);
+  font-size:11.5px;
+  color:var(--sage-bright);
+  font-weight:500;
+}
+.dx-list .conf-line .dx-code{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  color:var(--text-3);
+  margin-left:8px;
+  padding:1px 5px;
+  border:1px solid var(--hairline-strong);
+  border-radius:3px;
+  letter-spacing:0.04em;
+  background:rgba(255,255,255,.02);
+  vertical-align:1px;
+  white-space:nowrap;
+}
+
+/* ─────────────── Hover popover ─────────────── */
+.conf-popover{
+  position:absolute;
+  z-index:50;
+  left:18px;
+  top:calc(100% + 6px);
+  min-width:300px;
+  max-width:380px;
+  padding:11px 12px 11px 13px;
+  background:var(--surface-2);
+  border:1px solid var(--hairline-strong);
+  border-radius:6px;
+  pointer-events:none;
+  opacity:0;
+  transform:translateY(-3px);
+  transition:opacity 130ms var(--ease), transform 130ms var(--ease);
+}
+.conf-line:hover .conf-popover{opacity:1;transform:translateY(0);pointer-events:auto}
+.conf-popover::before{
+  content:'';
+  position:absolute;
+  left:0;top:8px;bottom:8px;
+  width:2px;
+  background:var(--sage);
+  border-radius:1px;
+}
+.pop-meta{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  margin-bottom:5px;
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.06em;
+}
+.pop-meta .pop-turn{color:var(--sage-bright);font-weight:500}
+.pop-meta .pop-time{color:var(--text-2);font-variant-numeric:tabular-nums}
+.pop-meta .pop-conf{
+  color:var(--text-3);
+  text-transform:uppercase;
+  letter-spacing:0.08em;
+}
+.pop-meta .pop-conf.high{color:var(--sage-bright)}
+.pop-meta .pop-conf.mid{color:var(--sage)}
+.pop-meta .pop-conf.low{color:var(--warning-bright)}
+.pop-body{
+  font-family:var(--font-sans);
+  font-size:12.5px;
+  line-height:1.55;
+  color:var(--text-2);
+  letter-spacing:-0.005em;
+  margin-bottom:8px;
+}
+.pop-body .hl{
+  background:rgba(122,166,140,.10);
+  color:var(--text);
+  padding:0 2px;
+  border-radius:2px;
+}
+.pop-actions{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding-top:7px;
+  border-top:1px dashed var(--hairline);
+}
+.pop-actions .pa-edit{
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.10em;
+  text-transform:uppercase;
+  color:var(--sage-bright);
+  font-weight:500;
+}
+.pop-actions .pa-edit:hover{color:var(--text)}
+.pop-actions .pa-edit::before{content:'⌘';margin-right:6px;color:var(--text-3)}
+.pop-actions .pa-cite{
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.10em;
+  text-transform:uppercase;
+  color:var(--text-3);
+}
+
+/* ─────────────── Footer / actions ─────────────── */
+.action-row{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  margin-top:22px;
+  padding-top:18px;
+  border-top:1px solid var(--hairline);
+}
+.action-row .meta{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.10em;
+  text-transform:uppercase;
+  color:var(--text-3);
+}
+.action-row .meta .trust{color:var(--sage-bright);font-weight:500}
+.btn-ghost{
+  display:inline-flex;align-items:center;gap:8px;
+  height:32px;padding:0 14px;
+  border:1px solid var(--hairline-strong);
+  border-radius:6px;
+  background:transparent;
+  color:var(--text-2);
+  font-size:12.5px;font-weight:500;
+  transition:background 100ms var(--ease), color 100ms var(--ease), border-color 100ms var(--ease);
+}
+.btn-ghost:hover{background:rgba(255,255,255,.04);color:var(--text);border-color:rgba(255,255,255,.14)}
+
+/* ─────────────── Reduced motion ─────────────── */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;
+  }
+  .status-pill-chrome .pdot{animation:none}
+  .conf-line:hover{background:transparent;border-color:transparent}
+  .conf-line:hover .conf-popover{opacity:0;transform:translateY(-3px);pointer-events:none}
+  .conf-line:hover .conf-score{opacity:0}
+}
+
+/* ─────────────── iPad / 1024 reflow ─────────────── */
+@media (max-width:1080px){
+  .shell{padding:16px 22px 60px;max-width:100%}
+  .conf-popover{min-width:260px;max-width:90vw}
+}
+@media (max-width:880px){
+  .conf-line{padding:8px 8px 8px 10px;margin:0 -8px}
+  .conf-text{font-size:14px}
+  .conf-score{font-size:10px}
+  .heatmap-legend{flex-wrap:wrap;gap:10px}
+  .legend-bar{width:100%}
+  /* On narrower screens, popovers anchor below at full-row width */
+  .conf-popover{
+    left:0;right:0;
+    width:auto;max-width:100%;
+  }
+}
+@media (max-width:760px){
+  .meta-strip{flex-wrap:wrap;font-size:10px}
+  .meta-strip .field{padding:4px 10px}
+  .topbar{padding:0 12px;gap:8px;flex-wrap:wrap}
+  .crumb,.crumb-sep{display:none}
+  .crumb-active{display:inline}
+  .tabs-row{overflow-x:auto;flex-wrap:nowrap}
+  .tab{flex-shrink:0}
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><span class="brand-mark"></span> QuillMD</div>
+  <span class="crumb-sep">/</span>
+  <span class="crumb">Patients</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb">Mei-Ling Park</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb crumb-active">Visit · Apr 30, 2026</span>
+  <div class="spacer"></div>
+  <div class="status-pill-chrome"><span class="pdot"></span><span>Ready</span></div>
+  <button class="btn-sage" type="button"><span>Sign &amp; send</span><span class="shortcut">⌘ ↵</span></button>
+  <div class="avatar-chip">KP</div>
+</header>
+
+<div class="shell">
+
+  <div class="meta-strip">
+    <div class="field">Mei-Ling Park</div>
+    <div class="field">34 F</div>
+    <div class="field"><span class="lbl">MRN</span>77324</div>
+    <div class="field">J20.9 · Acute bronchitis</div>
+    <div class="field">99214</div>
+    <div class="field"><span class="lbl">Duration</span>22 min</div>
+  </div>
+
+  <div class="tabs-row" role="tablist">
+    <div class="tab active" role="tab" aria-selected="true">Soap Note</div>
+    <div class="tab" role="tab" aria-selected="false">Transcript</div>
+    <div class="tab" role="tab" aria-selected="false">Codes</div>
+    <div class="tab" role="tab" aria-selected="false">Rx</div>
+    <div class="tab" role="tab" aria-selected="false">Extras</div>
+  </div>
+
+  <!-- Heatmap legend — explains the visual contract -->
+  <div class="heatmap-legend">
+    <div class="legend-l">
+      <span class="legend-title">Confidence Heatmap</span>
+      <span class="legend-bar" aria-hidden="true"></span>
+    </div>
+    <div class="legend-r">
+      <span>Low <span class="v">70%</span></span>
+      <span>·</span>
+      <span>High <span class="v">100%</span></span>
+      <span>·</span>
+      <span class="v">Hover for source</span>
+    </div>
+  </div>
+
+  <!-- ─────────────── SUBJECTIVE ─────────────── -->
+  <section class="section-block">
+    <div class="section-head">
+      <div>
+        <div class="section-eyebrow"><span class="ltr">S</span><span>01 · Subjective</span></div>
+        <h3 class="section-title">Patient narrative</h3>
+      </div>
+      <span class="conf-rollup high"><span class="cdot"></span>Subjective · 91% confidence</span>
+    </div>
+
+    <div class="conf-stack">
+      <!-- 95% -->
+      <div class="conf-line" style="--conf:0.95">
+        <span class="conf-bar" aria-hidden="true"></span>
+        <div class="conf-text">3-day history of productive cough, mostly clear-yellow sputum.</div>
+        <span class="conf-score">95%</span>
+        <div class="conf-popover" role="tooltip">
+          <div class="pop-meta">
+            <span><span class="pop-turn">T-01</span> · <span class="pop-time">00:00:14</span></span>
+            <span class="pop-conf high">95% · High</span>
+          </div>
+          <div class="pop-body">Patient: "I've had this <span class="hl">cough for about three days now</span>. There's stuff coming up — mostly clear, kinda yellowish."</div>
+          <div class="pop-actions"><span class="pa-cite">Subjective · Sentence 1</span><button class="pa-edit">Edit</button></div>
+        </div>
+      </div>
+
+      <!-- 92% -->
+      <div class="conf-line" style="--conf:0.88">
+        <span class="conf-bar" aria-hidden="true"></span>
+        <div class="conf-text">URI symptoms (rhinorrhea, mild sore throat) resolving.</div>
+        <span class="conf-score">88%</span>
+        <div class="conf-popover" role="tooltip">
+          <div class="pop-meta">
+            <span><span class="pop-turn">T-02</span> · <span class="pop-time">00:00:42</span></span>
+            <span class="pop-conf high">88% · High</span>
+          </div>
+          <div class="pop-body">Patient: "My nose was runny and my <span class="hl">throat was sore at first</span>, but those are getting better."</div>
+          <div class="pop-actions"><span class="pa-cite">Subjective · Sentence 2</span><button class="pa-edit">Edit</button></div>
+        </div>
+      </div>
+
+      <!-- 96% -->
+      <div class="conf-line" style="--conf:0.96">
+        <span class="conf-bar" aria-hidden="true"></span>
+        <div class="conf-text">Denies fever, dyspnea, chest pain, hemoptysis.</div>
+        <span class="conf-score">96%</span>
+        <div class="conf-popover" role="tooltip">
+          <div class="pop-meta">
+            <span><span class="pop-turn">T-03</span> · <span class="pop-time">00:01:08</span></span>
+            <span class="pop-conf high">96% · High</span>
+          </div>
+          <div class="pop-body">Dr. Park: "Any fever, shortness of breath, chest pain, blood in the cough?" Patient: "<span class="hl">No, none of those</span>."</div>
+          <div class="pop-actions"><span class="pa-cite">Subjective · Sentence 3</span><button class="pa-edit">Edit</button></div>
+        </div>
+      </div>
+
+      <!-- 92% -->
+      <div class="conf-line" style="--conf:0.92">
+        <span class="conf-bar" aria-hidden="true"></span>
+        <div class="conf-text"><strong>PMH:</strong> HTN (controlled on lisinopril 10 mg), penicillin allergy.</div>
+        <span class="conf-score">92%</span>
+        <div class="conf-popover" role="tooltip">
+          <div class="pop-meta">
+            <span><span class="pop-turn">T-04</span> · <span class="pop-time">00:01:36</span></span>
+            <span class="pop-conf high">92% · High</span>
+          </div>
+          <div class="pop-body">Patient: "I'm on <span class="hl">lisinopril, ten milligrams</span>, for my blood pressure. And I'm allergic to penicillin — gives me hives."</div>
+          <div class="pop-actions"><span class="pa-cite">Subjective · Sentence 4</span><button class="pa-edit">Edit</button></div>
+        </div>
+      </div>
+
+      <!-- 97% -->
+      <div class="conf-line" style="--conf:0.97">
+        <span class="conf-bar" aria-hidden="true"></span>
+        <div class="conf-text"><strong>Tobacco:</strong> never.</div>
+        <span class="conf-score">97%</span>
+        <div class="conf-popover" role="tooltip">
+          <div class="pop-meta">
+            <span><span class="pop-turn">T-05</span> · <span class="pop-time">00:01:58</span></span>
+            <span class="pop-conf high">97% · High</span>
+          </div>
+          <div class="pop-body">Patient: "<span class="hl">I've never smoked</span>, no."</div>
+          <div class="pop-actions"><span class="pa-cite">Subjective · Sentence 5</span><button class="pa-edit">Edit</button></div>
+        </div>
+      </div>
+
+      <!-- 82% — visibly lower -->
+      <div class="conf-line low" style="--conf:0.40">
+        <span class="conf-bar" aria-hidden="true"></span>
+        <div class="conf-text"><strong>EtOH:</strong> occasional.</div>
+        <span class="conf-score">82%</span>
+        <div class="conf-popover" role="tooltip">
+          <div class="pop-meta">
+            <span><span class="pop-turn">T-06</span> · <span class="pop-time">00:02:14</span></span>
+            <span class="pop-conf low">82% · Verify</span>
+          </div>
+          <div class="pop-body">Patient: "<span class="hl">A glass of wine here and there</span>. Maybe a couple a week — I don't really keep track." <em>Inferred quantity; verify if precise frequency required.</em></div>
+          <div class="pop-actions"><span class="pa-cite">Subjective · Sentence 6</span><button class="pa-edit">Edit</button></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────── OBJECTIVE ─────────────── -->
+  <section class="section-block">
+    <div class="section-head">
+      <div>
+        <div class="section-eyebrow"><span class="ltr">O</span><span>02 · Objective</span></div>
+        <h3 class="section-title">Exam &amp; vitals</h3>
+      </div>
+      <span class="conf-rollup high"><span class="cdot"></span>Objective · 97% confidence</span>
+    </div>
+
+    <div class="conf-stack">
+      <!-- 99% — vitals -->
+      <div class="conf-line" style="--conf:0.99">
+        <span class="conf-bar" aria-hidden="true"></span>
+        <div class="conf-text"><span class="vitals-inline"><span class="v-lbl">VS</span>BP 118/74 · HR 88 · RR 18 · T 98.6 °F · SpO₂ 98% on RA</span></div>
+        <span class="conf-score">99%</span>
+        <div class="conf-popover" role="tooltip">
+          <div class="pop-meta">
+            <span><span class="pop-turn">T-07</span> · <span class="pop-time">00:02:48</span></span>
+            <span class="pop-conf high">99% · Verbatim</span>
+          </div>
+          <div class="pop-body">MA: "<span class="hl">Blood pressure 118 over 74, heart rate 88, respiratory 18, temp 98.6, sat 98% on room air</span>."</div>
+          <div class="pop-actions"><span class="pa-cite">Objective · Vitals</span><button class="pa-edit">Edit</button></div>
+        </div>
+      </div>
+
+      <!-- 96% -->
+      <div class="conf-line" style="--conf:0.96">
+        <span class="conf-bar" aria-hidden="true"></span>
+        <div class="conf-text"><strong>Gen:</strong> NAD, alert, conversational.</div>
+        <span class="conf-score">96%</span>
+        <div class="conf-popover" role="tooltip">
+          <div class="pop-meta">
+            <span><span class="pop-turn">T-08</span> · <span class="pop-time">00:03:22</span></span>
+            <span class="pop-conf high">96% · High</span>
+          </div>
+          <div class="pop-body">Dr. Park: "She's <span class="hl">alert, conversational, no acute distress</span>."</div>
+          <div class="pop-actions"><span class="pa-cite">Objective · General</span><button class="pa-edit">Edit</button></div>
+        </div>
+      </div>
+
+      <!-- 98% -->
+      <div class="conf-line" style="--conf:0.98">
+        <span class="conf-bar" aria-hidden="true"></span>
+        <div class="conf-text"><strong>HEENT:</strong> mild posterior pharyngeal erythema, no exudate; TMs clear b/l.</div>
+        <span class="conf-score">98%</span>
+        <div class="conf-popover" role="tooltip">
+          <div class="pop-meta">
+            <span><span class="pop-turn">T-09</span> · <span class="pop-time">00:03:54</span></span>
+            <span class="pop-conf high">98% · Verbatim</span>
+          </div>
+          <div class="pop-body">Dr. Park: "Throat is <span class="hl">a little red in the back, no exudate</span>. Ears look clear both sides."</div>
+          <div class="pop-actions"><span class="pa-cite">Objective · HEENT</span><button class="pa-edit">Edit</button></div>
+        </div>
+      </div>
+
+      <!-- 94% -->
+      <div class="conf-line" style="--conf:0.94">
+        <span class="conf-bar" aria-hidden="true"></span>
+        <div class="conf-text"><strong>Lungs:</strong> scattered rhonchi b/l, clearing with cough; no wheezing or crackles.</div>
+        <span class="conf-score">94%</span>
+        <div class="conf-popover" role="tooltip">
+          <div class="pop-meta">
+            <span><span class="pop-turn">T-10</span> · <span class="pop-time">00:04:32</span></span>
+            <span class="pop-conf high">94% · High</span>
+          </div>
+          <div class="pop-body">Dr. Park: "I hear <span class="hl">some scattered rhonchi on both sides — clears when she coughs</span>. No wheezes, no crackles."</div>
+          <div class="pop-actions"><span class="pa-cite">Objective · Lungs</span><button class="pa-edit">Edit</button></div>
+        </div>
+      </div>
+
+      <!-- 97% -->
+      <div class="conf-line" style="--conf:0.97">
+        <span class="conf-bar" aria-hidden="true"></span>
+        <div class="conf-text"><strong>Cardiac:</strong> RRR, no m/r/g.</div>
+        <span class="conf-score">97%</span>
+        <div class="conf-popover" role="tooltip">
+          <div class="pop-meta">
+            <span><span class="pop-turn">T-11</span> · <span class="pop-time">00:05:08</span></span>
+            <span class="pop-conf high">97% · High</span>
+          </div>
+          <div class="pop-body">Dr. Park: "Heart's <span class="hl">regular rate and rhythm, no murmurs, rubs, or gallops</span>."</div>
+          <div class="pop-actions"><span class="pa-cite">Objective · Cardiac</span><button class="pa-edit">Edit</button></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────── ASSESSMENT ─────────────── -->
+  <section class="section-block">
+    <div class="section-head">
+      <div>
+        <div class="section-eyebrow"><span class="ltr">A</span><span>03 · Assessment</span></div>
+        <h3 class="section-title">Clinical impression</h3>
+      </div>
+      <span class="conf-rollup mid"><span class="cdot"></span>Assessment · 89% confidence</span>
+    </div>
+
+    <ol class="dx-list">
+      <!-- 79% — visibly lower opacity, italics, the inference-heavy claim -->
+      <li class="conf-line low" style="--conf:0.38">
+        <span class="conf-bar" aria-hidden="true"></span>
+        <span class="dx-num">1.</span>
+        <div class="conf-text">Acute bronchitis, viral etiology likely <span class="dx-code">J20.9</span></div>
+        <span class="conf-score">79%</span>
+        <div class="conf-popover" role="tooltip">
+          <div class="pop-meta">
+            <span><span class="pop-turn">T-08</span> · <span class="pop-time">00:03:22</span></span>
+            <span class="pop-conf low">79% · Verify</span>
+          </div>
+          <div class="pop-body">Dr. Park: "<span class="hl">Probably bronchitis — viral, given the picture</span>." <em>Etiology inferred from symptom pattern; no lab confirmation present.</em></div>
+          <div class="pop-actions"><span class="pa-cite">Assessment · Item 1</span><button class="pa-edit">Edit</button></div>
+        </div>
+      </li>
+
+      <!-- 92% -->
+      <li class="conf-line" style="--conf:0.92">
+        <span class="conf-bar" aria-hidden="true"></span>
+        <span class="dx-num">2.</span>
+        <div class="conf-text">URI, resolving <span class="dx-code">J06.9</span></div>
+        <span class="conf-score">92%</span>
+        <div class="conf-popover" role="tooltip">
+          <div class="pop-meta">
+            <span><span class="pop-turn">T-02</span> · <span class="pop-time">00:00:42</span></span>
+            <span class="pop-conf high">92% · High</span>
+          </div>
+          <div class="pop-body">Dr. Park: "Sounds like a <span class="hl">URI that's now mostly cleared up</span>."</div>
+          <div class="pop-actions"><span class="pa-cite">Assessment · Item 2</span><button class="pa-edit">Edit</button></div>
+        </div>
+      </li>
+
+      <!-- 95% -->
+      <li class="conf-line" style="--conf:0.95">
+        <span class="conf-bar" aria-hidden="true"></span>
+        <span class="dx-num">3.</span>
+        <div class="conf-text">HTN, controlled <span class="dx-code">I10</span></div>
+        <span class="conf-score">95%</span>
+        <div class="conf-popover" role="tooltip">
+          <div class="pop-meta">
+            <span><span class="pop-turn">T-04</span> · <span class="pop-time">00:01:36</span></span>
+            <span class="pop-conf high">95% · High</span>
+          </div>
+          <div class="pop-body">Dr. Park: "Her <span class="hl">blood pressure today is 118/74 — well controlled on the lisinopril</span>."</div>
+          <div class="pop-actions"><span class="pa-cite">Assessment · Item 3</span><button class="pa-edit">Edit</button></div>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <!-- ─────────────── PLAN ─────────────── -->
+  <section class="section-block">
+    <div class="section-head">
+      <div>
+        <div class="section-eyebrow"><span class="ltr">P</span><span>04 · Plan</span></div>
+        <h3 class="section-title">Plan &amp; follow-up</h3>
+      </div>
+      <span class="conf-rollup mid"><span class="cdot"></span>Plan · 86% confidence</span>
+    </div>
+
+    <div class="conf-stack">
+      <!-- 91% -->
+      <div class="conf-line" style="--conf:0.91">
+        <span class="conf-bar" aria-hidden="true"></span>
+        <div class="conf-text">Symptomatic care: hydration, rest, OTC dextromethorphan for cough.</div>
+        <span class="conf-score">91%</span>
+        <div class="conf-popover" role="tooltip">
+          <div class="pop-meta">
+            <span><span class="pop-turn">T-12</span> · <span class="pop-time">00:05:48</span></span>
+            <span class="pop-conf high">91% · High</span>
+          </div>
+          <div class="pop-body">Dr. Park: "<span class="hl">Stay hydrated, rest, you can take Robitussin DM</span> for the cough."</div>
+          <div class="pop-actions"><span class="pa-cite">Plan · Sentence 1</span><button class="pa-edit">Edit</button></div>
+        </div>
+      </div>
+
+      <!-- 76% — Albuterol PRN wheezing inference, lower confidence -->
+      <div class="conf-line low" style="--conf:0.32">
+        <span class="conf-bar" aria-hidden="true"></span>
+        <div class="conf-text">Albuterol HFA inhaler 1–2 puffs q4–6h PRN wheezing (limit 8 puffs/24h).</div>
+        <span class="conf-score">76%</span>
+        <div class="conf-popover" role="tooltip">
+          <div class="pop-meta">
+            <span><span class="pop-turn">T-10</span> · <span class="pop-time">00:04:32</span></span>
+            <span class="pop-conf low">76% · Verify</span>
+          </div>
+          <div class="pop-body">Dr. Park: "If you do start <span class="hl">wheezing or feel tight</span>, I'll give you a rescue inhaler — albuterol, one or two puffs as needed." <em>Dosage interval and 24-hour cap inferred from standard guidance; verify before signing.</em></div>
+          <div class="pop-actions"><span class="pa-cite">Plan · Sentence 2</span><button class="pa-edit">Edit</button></div>
+        </div>
+      </div>
+
+      <!-- 90% -->
+      <div class="conf-line" style="--conf:0.90">
+        <span class="conf-bar" aria-hidden="true"></span>
+        <div class="conf-text">F/u 7–10 days if symptoms persist or worsen.</div>
+        <span class="conf-score">90%</span>
+        <div class="conf-popover" role="tooltip">
+          <div class="pop-meta">
+            <span><span class="pop-turn">T-12</span> · <span class="pop-time">00:05:48</span></span>
+            <span class="pop-conf high">90% · High</span>
+          </div>
+          <div class="pop-body">Dr. Park: "<span class="hl">Come back in a week to ten days if it's not better, sooner if it gets worse</span>."</div>
+          <div class="pop-actions"><span class="pa-cite">Plan · Sentence 3</span><button class="pa-edit">Edit</button></div>
+        </div>
+      </div>
+
+      <!-- 88% -->
+      <div class="conf-line" style="--conf:0.88">
+        <span class="conf-bar" aria-hidden="true"></span>
+        <div class="conf-text">Continue lisinopril; recheck BP in 6 months.</div>
+        <span class="conf-score">88%</span>
+        <div class="conf-popover" role="tooltip">
+          <div class="pop-meta">
+            <span><span class="pop-turn">T-04</span> · <span class="pop-time">00:01:36</span></span>
+            <span class="pop-conf high">88% · High</span>
+          </div>
+          <div class="pop-body">Dr. Park: "Stay on the lisinopril. <span class="hl">Let's recheck blood pressure at the six-month mark</span>."</div>
+          <div class="pop-actions"><span class="pa-cite">Plan · Sentence 4</span><button class="pa-edit">Edit</button></div>
+        </div>
+      </div>
+
+      <!-- 85% — patient ed phrasing inference -->
+      <div class="conf-line low" style="--conf:0.50">
+        <span class="conf-bar" aria-hidden="true"></span>
+        <div class="conf-text">Patient education: viral URI, antibiotic stewardship discussed.</div>
+        <span class="conf-score">85%</span>
+        <div class="conf-popover" role="tooltip">
+          <div class="pop-meta">
+            <span><span class="pop-turn">T-12</span> · <span class="pop-time">00:05:48</span></span>
+            <span class="pop-conf low">85% · Verify</span>
+          </div>
+          <div class="pop-body">Dr. Park: "<span class="hl">Antibiotics aren't going to help with this — it's viral</span>." <em>"Stewardship" framing is template-rendered; original wording was conversational.</em></div>
+          <div class="pop-actions"><span class="pa-cite">Plan · Sentence 5</span><button class="pa-edit">Edit</button></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="action-row">
+    <div class="meta">12 sentences · <span class="trust">11 high</span> · 4 verify · 12 cited turns</div>
+    <button class="btn-ghost" type="button">Copy SOAP</button>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  // Tabs visual swap only
+  document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(x => {
+        x.classList.remove('active');
+        x.setAttribute('aria-selected','false');
+      });
+      t.classList.add('active');
+      t.setAttribute('aria-selected','true');
+    });
+  });
+
+  // Inline edit affordance — clicking the sage [Edit] button in the
+  // popover swaps the conf-text to a contenteditable span outlined sage.
+  document.querySelectorAll('.pa-edit').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const line = btn.closest('.conf-line');
+      const txt = line?.querySelector('.conf-text');
+      if(!txt) return;
+      txt.setAttribute('contenteditable', 'true');
+      txt.style.outline = '1px solid var(--sage)';
+      txt.style.outlineOffset = '2px';
+      txt.style.borderRadius = '3px';
+      txt.style.backgroundColor = 'rgba(122,166,140,0.04)';
+      txt.focus();
+      const range = document.createRange();
+      range.selectNodeContents(txt);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      const finish = () => {
+        txt.removeAttribute('contenteditable');
+        txt.style.outline = '';
+        txt.style.outlineOffset = '';
+        txt.style.borderRadius = '';
+        txt.style.backgroundColor = '';
+        txt.removeEventListener('blur', finish);
+        txt.removeEventListener('keydown', onKey);
+      };
+      const onKey = (ev) => { if(ev.key === 'Escape' || (ev.key === 'Enter' && !ev.shiftKey)) { ev.preventDefault(); txt.blur(); } };
+      txt.addEventListener('blur', finish);
+      txt.addEventListener('keydown', onKey);
+    });
+  });
+})();
+</script>
+
+</body>
+</html>

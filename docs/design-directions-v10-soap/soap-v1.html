@@ -1,0 +1,930 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QuillMD · Visit · Mei-Ling Park · v10 SOAP V1 · Focused Reading</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #08090a;
+  --surface-1: #0d0e10;
+  --surface-2: #131416;
+  --surface-3: #1a1c1e;
+  --border: #21232a;
+  --border-strong: #2c2f38;
+  --hairline: rgba(255,255,255,0.05);
+  --hairline-strong: rgba(255,255,255,0.08);
+  --text: #f7f8f8;
+  --text-2: #b4bcc8;
+  --text-3: #6c737f;
+  --text-4: #4b5159;
+  --sage: #7AA68C;
+  --sage-bright: #9BC4A8;
+  --sage-deep: #2F5040;
+  --sage-tint: rgba(122,166,140,0.13);
+  --sage-glow: rgba(122,166,140,0.18);
+  --warning: #d4a437;
+  --danger: #d4574a;
+  --info: #5b8db8;
+  --font-sans: 'Inter', -apple-system, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text)}
+body{
+  font-family:var(--font-sans);
+  font-feature-settings:'cv11','ss01';
+  font-size:13px;
+  line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  letter-spacing:-0.005em;
+  min-height:100vh;
+}
+::selection{background:rgba(122,166,140,.25);color:var(--text)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+a{color:inherit;text-decoration:none}
+
+/* ───────── Top bar (matches v8 chrome baseline) ───────── */
+.topbar{
+  position:sticky;top:0;z-index:30;
+  height:44px;
+  display:flex;align-items:center;gap:12px;
+  padding:0 16px;
+  background:rgba(8,9,10,.85);
+  backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--hairline);
+}
+.brand{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;letter-spacing:-0.01em}
+.brand-mark{
+  width:18px;height:18px;border-radius:5px;
+  background:linear-gradient(135deg,var(--sage) 0%,var(--sage-deep) 100%);
+  display:grid;place-items:center;color:#0c1410;font-size:10px;font-weight:700;
+  box-shadow:0 0 0 1px rgba(255,255,255,.06) inset;
+}
+.brand-mark::before{content:'Q'}
+.crumb-sep{color:var(--text-4);font-size:12px}
+.crumb{color:var(--text-2);font-size:13px;transition:color 100ms var(--ease)}
+.crumb:hover{color:var(--text)}
+.crumb-active{color:var(--text)}
+.spacer{flex:1}
+.status-pill-chrome{
+  display:inline-flex;align-items:center;gap:6px;
+  height:22px;padding:0 9px;
+  border-radius:4px;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.06em;text-transform:uppercase;font-weight:500;
+  border:1px solid rgba(122,166,140,.25);
+  color:var(--sage-bright);
+  background:rgba(122,166,140,.06);
+}
+.status-pill-chrome .pdot{
+  width:5px;height:5px;border-radius:50%;
+  background:var(--sage);
+  animation:idle-pulse 1.6s ease-in-out infinite;
+}
+@keyframes idle-pulse{
+  0%,100%{opacity:.7;transform:scale(1)}
+  50%{opacity:1;transform:scale(1.04)}
+}
+.btn-sage{
+  display:inline-flex;align-items:center;gap:8px;
+  height:30px;padding:0 14px;
+  background:var(--sage);
+  color:#0d1611;
+  border-radius:6px;
+  font-size:12.5px;font-weight:500;
+  letter-spacing:-0.005em;
+  transition:background 100ms var(--ease), transform 80ms var(--ease), box-shadow 200ms var(--ease);
+}
+.btn-sage:hover{background:#88b599;transform:scale(1.02);box-shadow:0 0 0 4px rgba(122,166,140,.18)}
+.btn-sage .shortcut{font-family:var(--font-mono);font-size:11px;color:rgba(13,22,17,.55)}
+.avatar-chip{
+  width:24px;height:24px;border-radius:6px;
+  background:linear-gradient(135deg,#3a4a52 0%,#2a3036 100%);
+  color:#dde6ec;font-size:10.5px;font-weight:600;
+  display:grid;place-items:center;letter-spacing:0.02em;
+  border:1px solid var(--hairline-strong);
+}
+
+/* ───────── Shell ───────── */
+.shell{
+  position:relative;
+  min-height:calc(100vh - 44px);
+  padding:18px 28px 120px;
+  max-width:1200px;
+  margin:0 auto;
+}
+.shell::before{
+  content:'';
+  position:absolute;
+  top:-60px;left:50%;
+  transform:translateX(-50%);
+  width:720px;height:380px;
+  background:radial-gradient(ellipse at center, rgba(122,166,140,.045) 0%, transparent 70%);
+  pointer-events:none;
+  z-index:0;
+}
+
+/* meta strip */
+.meta-strip{
+  display:flex;align-items:center;
+  padding:6px 0 14px;
+  margin-bottom:14px;
+  border-bottom:1px solid var(--hairline);
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--text-2);
+  position:relative;
+  z-index:1;
+}
+.meta-strip .field{padding:0 14px;border-right:1px solid var(--hairline)}
+.meta-strip .field:first-child{padding-left:0;color:var(--text);font-weight:500}
+.meta-strip .field:last-child{border-right:0}
+.meta-strip .field .lbl{color:var(--text-4);margin-right:4px;font-weight:400}
+
+/* tabs */
+.tabs-row{
+  display:flex;align-items:center;gap:0;
+  margin-bottom:36px;
+  border-bottom:1px solid var(--hairline);
+  position:relative;
+  z-index:1;
+}
+.tab{
+  position:relative;
+  padding:8px 16px 10px;
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.07em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  font-weight:500;
+  cursor:pointer;
+  transition:color 100ms var(--ease);
+}
+.tab:first-child{padding-left:0}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--sage-bright)}
+.tab.active::after{
+  content:'';position:absolute;
+  left:0;right:0;bottom:-1px;
+  height:1.5px;
+  background:var(--sage);
+  border-radius:1px 1px 0 0;
+}
+
+/* ───────── Article column ───────── */
+.article{
+  max-width:680px;
+  margin:0 auto;
+  padding:8px 0 60px;
+  position:relative;
+  z-index:1;
+}
+
+/* article header */
+.article-eyebrow{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.16em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  margin-bottom:12px;
+  display:flex;align-items:center;gap:10px;
+}
+.article-eyebrow .dot{width:3px;height:3px;border-radius:50%;background:var(--text-4)}
+.article-eyebrow .sage-token{color:var(--sage-bright)}
+.article-title{
+  font-family:var(--font-sans);
+  font-size:32px;
+  font-weight:700;
+  line-height:1.15;
+  letter-spacing:-0.025em;
+  color:var(--text);
+  margin:0 0 14px;
+}
+.article-deck{
+  font-size:15px;
+  line-height:1.6;
+  color:var(--text-2);
+  margin:0 0 22px;
+  max-width:600px;
+  font-weight:400;
+  letter-spacing:-0.005em;
+}
+.article-deck em{color:var(--text);font-style:italic}
+.byline{
+  display:flex;align-items:center;gap:14px;
+  padding:14px 0 22px;
+  margin-bottom:36px;
+  border-top:1px solid var(--hairline);
+  border-bottom:1px solid var(--hairline);
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--text-3);
+}
+.byline .author{color:var(--text)}
+.byline .pipe{color:var(--text-4)}
+.confidence-strip{
+  display:inline-flex;align-items:center;gap:10px;
+  margin-left:auto;
+  font-size:9.5px;
+  letter-spacing:0.1em;
+}
+.conf-cell{display:inline-flex;align-items:center;gap:5px}
+.conf-cell .lbl{color:var(--text-4)}
+.conf-cell .val{color:var(--sage-bright);font-variant-numeric:tabular-nums}
+
+/* section numbering */
+.sec{margin-bottom:48px;scroll-margin-top:80px}
+.sec-num{
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.16em;
+  color:var(--sage-bright);
+  font-weight:500;
+  display:flex;align-items:center;gap:10px;
+  margin-bottom:8px;
+}
+.sec-num .rule{flex:1;height:1px;background:var(--hairline)}
+.sec-num .conf{
+  color:var(--text-4);
+  font-size:10px;
+  letter-spacing:0.1em;
+}
+.sec-h{
+  font-family:var(--font-sans);
+  font-size:22px;
+  font-weight:700;
+  letter-spacing:-0.02em;
+  line-height:1.2;
+  color:var(--text);
+  margin:0 0 18px;
+}
+.sec-h .lede{
+  display:block;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.16em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  font-weight:500;
+  margin-bottom:6px;
+}
+
+/* prose */
+.prose{
+  font-size:16px;
+  line-height:1.75;
+  color:var(--text);
+  letter-spacing:-0.005em;
+  font-weight:400;
+}
+.prose p{margin:0 0 1.1em}
+.prose strong{color:var(--text);font-weight:600}
+.prose em{color:var(--text-2);font-style:italic}
+.prose .mono{
+  font-family:var(--font-mono);
+  font-size:14px;
+  font-variant-numeric:tabular-nums;
+  letter-spacing:0;
+}
+
+/* dropcap on first paragraph of S */
+.sec.s .prose > p:first-child::first-letter{
+  font-family:var(--font-sans);
+  font-size:54px;
+  font-weight:700;
+  float:left;
+  line-height:0.95;
+  margin:6px 8px -2px 0;
+  color:var(--sage-bright);
+  letter-spacing:-0.04em;
+}
+
+/* sentence — clickable for inline edit */
+.sent{
+  position:relative;
+  display:inline;
+  border-radius:3px;
+  padding:1px 2px;
+  margin:0 -2px;
+  cursor:text;
+  transition:background 130ms var(--ease), box-shadow 130ms var(--ease);
+}
+.sent:hover{
+  background:rgba(122,166,140,.05);
+  box-shadow:inset 0 0 0 1px rgba(122,166,140,.22);
+}
+.sent.editing{
+  background:rgba(122,166,140,.07);
+  box-shadow:inset 0 0 0 1px var(--sage);
+  outline:none;
+}
+
+/* citation superscript */
+.cite{
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  font-weight:500;
+  color:var(--sage-bright);
+  vertical-align:super;
+  letter-spacing:0;
+  padding:0 1px 0 2px;
+  cursor:pointer;
+  transition:color 100ms var(--ease);
+  font-variant-numeric:tabular-nums;
+}
+.cite:hover{color:var(--text)}
+.cite::before{content:''}
+
+/* vitals styled as a definition row */
+.vitals-row{
+  display:grid;
+  grid-template-columns:repeat(5, 1fr);
+  gap:14px;
+  padding:14px 16px;
+  margin:6px 0 18px;
+  border:1px solid var(--hairline);
+  border-radius:6px;
+  background:rgba(255,255,255,.012);
+}
+.vitals-row .vc{
+  display:flex;flex-direction:column;gap:4px;
+}
+.vitals-row .vc .lb{
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.14em;
+  text-transform:uppercase;
+  color:var(--text-4);
+  font-weight:500;
+}
+.vitals-row .vc .vl{
+  font-family:var(--font-mono);
+  font-size:14px;
+  color:var(--text);
+  font-variant-numeric:tabular-nums;
+  font-weight:500;
+  letter-spacing:0;
+}
+
+/* exam list — small, structured */
+.exam-list{
+  margin:0;padding:0;list-style:none;
+  font-size:15.5px;
+  line-height:1.65;
+}
+.exam-list li{
+  padding:7px 0;
+  border-bottom:1px dashed var(--hairline);
+  display:grid;
+  grid-template-columns:120px 1fr;
+  gap:14px;
+}
+.exam-list li:last-child{border-bottom:0}
+.exam-list .ex-lbl{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  padding-top:3px;
+  font-weight:500;
+}
+.exam-list .ex-val{color:var(--text)}
+
+/* assessment numbered DX list (editorial style) */
+.dx{
+  list-style:none;
+  margin:0;padding:0;
+  counter-reset:dxi;
+}
+.dx li{
+  position:relative;
+  padding:14px 0 14px 56px;
+  border-bottom:1px solid var(--hairline);
+  font-size:16.5px;
+  line-height:1.55;
+  letter-spacing:-0.005em;
+  counter-increment:dxi;
+}
+.dx li:last-child{border-bottom:0}
+.dx li::before{
+  content:counter(dxi, decimal-leading-zero);
+  position:absolute;
+  left:0;top:14px;
+  font-family:var(--font-mono);
+  font-size:13px;
+  color:var(--sage-bright);
+  font-weight:500;
+  font-variant-numeric:tabular-nums;
+  letter-spacing:0.04em;
+}
+.dx .dx-title{font-weight:600;color:var(--text)}
+.dx .dx-code{
+  font-family:var(--font-mono);
+  font-size:11px;
+  color:var(--text-3);
+  margin-left:8px;
+  padding:2px 7px;
+  border:1px solid var(--hairline-strong);
+  border-radius:3px;
+  letter-spacing:0.05em;
+  background:rgba(255,255,255,.02);
+  vertical-align:1px;
+}
+.dx .dx-note{
+  display:block;
+  margin-top:6px;
+  font-size:14px;
+  color:var(--text-2);
+  font-style:italic;
+}
+
+/* plan list — editorial */
+.plan-list{
+  list-style:none;
+  margin:0;padding:0;
+}
+.plan-list li{
+  position:relative;
+  padding:12px 0 12px 28px;
+  font-size:16px;
+  line-height:1.65;
+  border-bottom:1px solid var(--hairline);
+}
+.plan-list li:last-child{border-bottom:0}
+.plan-list li::before{
+  content:'';
+  position:absolute;
+  left:6px;top:23px;
+  width:8px;height:1.5px;
+  background:var(--sage);
+}
+.plan-list strong{color:var(--text);font-weight:600}
+.plan-list em{color:var(--text-2);font-style:italic}
+
+/* end mark */
+.end-mark{
+  display:flex;align-items:center;justify-content:center;
+  margin:48px 0 12px;
+  gap:10px;
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.2em;
+  text-transform:uppercase;
+  color:var(--text-4);
+}
+.end-mark .em-rule{flex:1;height:1px;background:var(--hairline);max-width:120px}
+
+/* citation footnotes block at end */
+.foot-block{
+  margin-top:48px;
+  padding:22px 0 0;
+  border-top:1px solid var(--hairline);
+}
+.foot-head{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.16em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  margin-bottom:14px;
+  display:flex;align-items:center;gap:10px;
+}
+.foot-head .rule{flex:1;height:1px;background:var(--hairline)}
+.foot-list{
+  list-style:none;margin:0;padding:0;
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px 24px;
+}
+.foot-item{
+  display:grid;
+  grid-template-columns:auto auto 1fr;
+  gap:8px;
+  padding:6px 0;
+  font-size:12.5px;
+  align-items:start;
+  cursor:pointer;
+  border-radius:4px;
+  transition:background 100ms var(--ease);
+  padding:6px 8px;
+  margin:0 -8px;
+}
+.foot-item:hover{background:rgba(255,255,255,.022)}
+.foot-item .fid{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  color:var(--sage-bright);
+  font-weight:500;
+  font-variant-numeric:tabular-nums;
+  letter-spacing:0.04em;
+  padding-top:1px;
+}
+.foot-item .ftime{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  color:var(--text-3);
+  font-variant-numeric:tabular-nums;
+  letter-spacing:0;
+  padding-top:1px;
+}
+.foot-item .fbody{color:var(--text-2);line-height:1.5}
+.foot-item .fbody .spk{
+  color:var(--text-3);
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  margin-right:4px;
+}
+
+/* ───────── Floating sign chrome ───────── */
+.float-sign{
+  position:fixed;
+  bottom:22px;right:22px;
+  z-index:25;
+  display:flex;align-items:center;gap:10px;
+}
+.float-sign-pill{
+  display:inline-flex;align-items:center;gap:8px;
+  height:36px;padding:0 16px;
+  background:var(--sage);
+  color:#0d1611;
+  border-radius:18px;
+  font-size:13px;font-weight:500;
+  letter-spacing:-0.005em;
+  box-shadow:0 0 0 1px rgba(122,166,140,.45),
+             0 0 24px rgba(122,166,140,.18);
+  transition:background 100ms var(--ease), transform 80ms var(--ease), box-shadow 200ms var(--ease);
+}
+.float-sign-pill:hover{
+  background:#88b599;
+  transform:scale(1.03);
+  box-shadow:0 0 0 1px rgba(122,166,140,.55),
+             0 0 32px rgba(122,166,140,.28);
+}
+.float-sign-pill .shortcut{
+  font-family:var(--font-mono);
+  font-size:11px;
+  color:rgba(13,22,17,.6);
+}
+.float-sign-mini{
+  width:36px;height:36px;
+  display:grid;place-items:center;
+  border-radius:18px;
+  background:rgba(13,14,16,.85);
+  border:1px solid var(--hairline-strong);
+  color:var(--text-2);
+  backdrop-filter:blur(8px);
+  transition:color 100ms var(--ease), border-color 100ms var(--ease);
+}
+.float-sign-mini:hover{color:var(--text);border-color:rgba(255,255,255,.18)}
+.float-sign-mini svg{width:14px;height:14px}
+
+/* ───────── Reduced motion ───────── */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;
+  }
+  .status-pill-chrome .pdot{animation:none}
+  .sent:hover{background:transparent;box-shadow:none}
+  .float-sign-pill:hover{transform:none}
+  .btn-sage:hover{transform:none}
+}
+
+/* ───────── Responsive (iPad landscape 1024px) ───────── */
+@media (max-width:1080px){
+  .shell{padding:18px 24px 120px}
+  .article{max-width:640px}
+  .foot-list{grid-template-columns:1fr}
+  .article-title{font-size:28px}
+}
+@media (max-width:760px){
+  .shell{padding:14px 14px 100px}
+  .article{padding:6px 0 40px}
+  .article-title{font-size:24px}
+  .article-deck{font-size:14px}
+  .meta-strip{flex-wrap:wrap;font-size:10px;gap:0}
+  .meta-strip .field{padding:4px 10px}
+  .crumb,.crumb-sep{display:none}
+  .crumb-active{display:inline}
+  .topbar{padding:0 12px;gap:8px}
+  .vitals-row{grid-template-columns:repeat(2,1fr)}
+  .exam-list li{grid-template-columns:1fr;gap:2px}
+  .float-sign-pill .shortcut{display:none}
+  .prose{font-size:15px}
+  .sec-h{font-size:19px}
+  .dx li{font-size:15px}
+  .plan-list li{font-size:14.5px}
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><span class="brand-mark"></span> QuillMD</div>
+  <span class="crumb-sep">/</span>
+  <span class="crumb">Patients</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb">Mei-Ling Park</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb crumb-active">Visit · Apr 30, 2026</span>
+  <div class="spacer"></div>
+  <div class="status-pill-chrome"><span class="pdot"></span><span>Ready</span></div>
+  <button class="btn-sage" type="button"><span>Sign &amp; send</span><span class="shortcut">⌘ ↵</span></button>
+  <div class="avatar-chip">KP</div>
+</header>
+
+<div class="shell">
+
+  <div class="meta-strip">
+    <div class="field">Mei-Ling Park</div>
+    <div class="field">34 F</div>
+    <div class="field"><span class="lbl">MRN</span>77324</div>
+    <div class="field">J20.9 · Bronchitis follow-up</div>
+    <div class="field">99214</div>
+    <div class="field"><span class="lbl">Duration</span>22 min</div>
+  </div>
+
+  <div class="tabs-row" role="tablist">
+    <div class="tab active" role="tab" aria-selected="true">Soap Note</div>
+    <div class="tab" role="tab" aria-selected="false">Transcript</div>
+    <div class="tab" role="tab" aria-selected="false">Codes</div>
+    <div class="tab" role="tab" aria-selected="false">Rx</div>
+    <div class="tab" role="tab" aria-selected="false">Extras</div>
+  </div>
+
+  <article class="article">
+
+    <!-- Article-style heading -->
+    <div class="article-eyebrow">
+      <span>Family Medicine</span>
+      <span class="dot"></span>
+      <span>Established Patient · Visit Note</span>
+      <span class="dot"></span>
+      <span class="sage-token">Apr 30, 2026 · 09:14 PT</span>
+    </div>
+    <h1 class="article-title">Acute viral bronchitis with intermittent bronchospasm, day 3.</h1>
+    <p class="article-deck">A 34-year-old woman presents with a three-day productive cough on a background of resolving upper-respiratory symptoms. Lungs reveal scattered rhonchi that clear with cough; vitals are unremarkable. <em>Plan: symptomatic care, rescue inhaler PRN, and a seven-to-ten-day check-in.</em></p>
+    <div class="byline">
+      <span class="author">Dr. K. Park, MD</span>
+      <span class="pipe">·</span>
+      <span>Family Medicine</span>
+      <span class="pipe">·</span>
+      <span>Drafted from 06:18 transcript</span>
+      <div class="confidence-strip">
+        <span class="conf-cell"><span class="lbl">S</span><span class="val">91</span></span>
+        <span class="conf-cell"><span class="lbl">O</span><span class="val">97</span></span>
+        <span class="conf-cell"><span class="lbl">A</span><span class="val">89</span></span>
+        <span class="conf-cell"><span class="lbl">P</span><span class="val">86</span></span>
+      </div>
+    </div>
+
+    <!-- 1.0 Subjective -->
+    <section class="sec s" id="sec-s">
+      <div class="sec-num">
+        <span>1.0 · SUBJECTIVE</span>
+        <span class="rule"></span>
+        <span class="conf">CONFIDENCE 91%</span>
+      </div>
+      <h2 class="sec-h"><span class="lede">In her own words</span>Three days of productive cough; URI symptoms resolving.</h2>
+      <div class="prose">
+        <p><span class="sent" tabindex="0" data-cite="T-01">Mei-Ling Park presents at three-day follow-up of a productive cough that began with mild upper-respiratory symptoms.<sup class="cite" data-target="T-01">¹</sup></span> <span class="sent" tabindex="0" data-cite="T-02">Sputum is mostly clear-yellow and brought up several times an hour, more with deep breaths.<sup class="cite" data-target="T-02">²</sup></span> <span class="sent" tabindex="0" data-cite="T-03">Rhinorrhea and mild sore throat have been resolving over the past forty-eight hours.<sup class="cite" data-target="T-03">³</sup></span></p>
+        <p><span class="sent" tabindex="0" data-cite="T-04">She <strong>denies fever, dyspnea, chest pain, or hemoptysis</strong>, and reports no recent travel or sick contacts at home.<sup class="cite" data-target="T-04">⁴</sup></span> <span class="sent" tabindex="0" data-cite="T-05">Past medical history is notable for hypertension, well-controlled on lisinopril 10 mg daily, and a documented penicillin allergy (childhood urticaria).<sup class="cite" data-target="T-05">⁵</sup></span> <span class="sent" tabindex="0" data-cite="T-05">She is a lifelong nonsmoker; alcohol is occasional and social.<sup class="cite" data-target="T-05">⁵</sup></span></p>
+      </div>
+    </section>
+
+    <!-- 2.0 Objective -->
+    <section class="sec o" id="sec-o">
+      <div class="sec-num">
+        <span>2.0 · OBJECTIVE</span>
+        <span class="rule"></span>
+        <span class="conf">CONFIDENCE 97%</span>
+      </div>
+      <h2 class="sec-h"><span class="lede">Examined by</span>Vitals stable; chest with scattered rhonchi clearing on cough.</h2>
+
+      <div class="vitals-row" aria-label="Vital signs">
+        <div class="vc"><span class="lb">BP</span><span class="vl">118/74</span></div>
+        <div class="vc"><span class="lb">HR</span><span class="vl">88</span></div>
+        <div class="vc"><span class="lb">RR</span><span class="vl">18</span></div>
+        <div class="vc"><span class="lb">Temp</span><span class="vl">98.6°F</span></div>
+        <div class="vc"><span class="lb">SpO₂</span><span class="vl">98% RA</span></div>
+      </div>
+
+      <ul class="exam-list">
+        <li>
+          <span class="ex-lbl">General</span>
+          <span class="ex-val sent" tabindex="0" data-cite="T-06">No acute distress; alert and conversational throughout.<sup class="cite" data-target="T-06">⁶</sup></span>
+        </li>
+        <li>
+          <span class="ex-lbl">HEENT</span>
+          <span class="ex-val sent" tabindex="0" data-cite="T-06">Mild posterior pharyngeal erythema, no exudate; tympanic membranes clear bilaterally.<sup class="cite" data-target="T-06">⁶</sup></span>
+        </li>
+        <li>
+          <span class="ex-lbl">Lungs</span>
+          <span class="ex-val sent" tabindex="0" data-cite="T-07"><strong>Scattered rhonchi bilaterally, clearing with cough;</strong> no wheezing or crackles.<sup class="cite" data-target="T-07">⁷</sup></span>
+        </li>
+        <li>
+          <span class="ex-lbl">Cardiac</span>
+          <span class="ex-val sent" tabindex="0" data-cite="T-07">Regular rate and rhythm, no murmurs, rubs, or gallops.<sup class="cite" data-target="T-07">⁷</sup></span>
+        </li>
+      </ul>
+    </section>
+
+    <!-- 3.0 Assessment -->
+    <section class="sec a" id="sec-a">
+      <div class="sec-num">
+        <span>3.0 · ASSESSMENT</span>
+        <span class="rule"></span>
+        <span class="conf">CONFIDENCE 89%</span>
+      </div>
+      <h2 class="sec-h"><span class="lede">Clinical impression</span>Three concurrent problems; viral course supported by exam.</h2>
+
+      <ol class="dx">
+        <li>
+          <span class="dx-title sent" tabindex="0" data-cite="T-08">Acute bronchitis, viral etiology likely<sup class="cite" data-target="T-08">⁸</sup></span><span class="dx-code">J20.9</span>
+          <span class="dx-note">Productive cough with auscultatory rhonchi, afebrile, no constitutional symptoms — <em>antibiotics not indicated.</em></span>
+        </li>
+        <li>
+          <span class="dx-title sent" tabindex="0" data-cite="T-08">Upper respiratory infection, resolving<sup class="cite" data-target="T-08">⁸</sup></span><span class="dx-code">J06.9</span>
+          <span class="dx-note">Rhinorrhea and pharyngeal symptoms on a downtrend over forty-eight hours.</span>
+        </li>
+        <li>
+          <span class="dx-title sent" tabindex="0" data-cite="T-09">Hypertension, controlled<sup class="cite" data-target="T-09">⁹</sup></span><span class="dx-code">I10</span>
+          <span class="dx-note">Continues lisinopril 10 mg daily; today's reading 118/74. <em>Recheck in six months.</em></span>
+        </li>
+      </ol>
+    </section>
+
+    <!-- 4.0 Plan -->
+    <section class="sec p" id="sec-p">
+      <div class="sec-num">
+        <span>4.0 · PLAN</span>
+        <span class="rule"></span>
+        <span class="conf">CONFIDENCE 86%</span>
+      </div>
+      <h2 class="sec-h"><span class="lede">Disposition</span>Symptomatic care; rescue inhaler PRN; recheck if not better in 7–10 days.</h2>
+
+      <ul class="plan-list">
+        <li><span class="sent" tabindex="0" data-cite="T-10"><strong>Symptomatic care:</strong> hydration, rest, and OTC dextromethorphan for cough as needed.<sup class="cite" data-target="T-10">¹⁰</sup></span></li>
+        <li><span class="sent" tabindex="0" data-cite="T-10"><strong>Albuterol HFA</strong> inhaler, 1–2 puffs every 4–6 hours PRN wheezing; maximum 8 puffs per 24 hours.<sup class="cite" data-target="T-10">¹⁰</sup></span></li>
+        <li><span class="sent" tabindex="0" data-cite="T-11"><strong>Follow-up:</strong> 7–10 days if symptoms persist, worsen, or new dyspnea/fever appears.<sup class="cite" data-target="T-11">¹¹</sup></span></li>
+        <li><span class="sent" tabindex="0" data-cite="T-09">Continue lisinopril 10 mg daily; <em>recheck blood pressure in six months.</em><sup class="cite" data-target="T-09">⁹</sup></span></li>
+        <li><span class="sent" tabindex="0" data-cite="T-12"><strong>Patient education:</strong> viral URI course discussed; antibiotic-stewardship rationale reviewed and acknowledged.<sup class="cite" data-target="T-12">¹²</sup></span></li>
+      </ul>
+    </section>
+
+    <div class="end-mark">
+      <span class="em-rule"></span>
+      <span>End of note</span>
+      <span class="em-rule"></span>
+    </div>
+
+    <!-- Citation footnotes -->
+    <div class="foot-block" id="footBlock">
+      <div class="foot-head">
+        <span>Transcript provenance · 12 turns · 06:18 total</span>
+        <span class="rule"></span>
+        <span>T-01 → T-12</span>
+      </div>
+      <ol class="foot-list">
+        <li class="foot-item" id="T-01"><span class="fid">¹ T-01</span><span class="ftime">00:00:14</span><span class="fbody"><span class="spk">PT</span>"It's been about three days now — coughing, lots of phlegm, kind of yellowish."</span></li>
+        <li class="foot-item" id="T-02"><span class="fid">² T-02</span><span class="ftime">00:00:42</span><span class="fbody"><span class="spk">PT</span>"It's worse when I take a deep breath. Mostly clear-yellow stuff, a few times an hour."</span></li>
+        <li class="foot-item" id="T-03"><span class="fid">³ T-03</span><span class="ftime">00:01:18</span><span class="fbody"><span class="spk">PT</span>"My nose was running and throat was scratchy at first, but that's almost gone now."</span></li>
+        <li class="foot-item" id="T-04"><span class="fid">⁴ T-04</span><span class="ftime">00:01:55</span><span class="fbody"><span class="spk">DR</span>"Any fever, shortness of breath, chest pain, blood in what you cough up?" — patient: "No, none of that."</span></li>
+        <li class="foot-item" id="T-05"><span class="fid">⁵ T-05</span><span class="ftime">00:02:30</span><span class="fbody"><span class="spk">PT</span>"I take lisinopril 10. Penicillin gave me hives as a kid. I don't smoke, drink maybe once a week."</span></li>
+        <li class="foot-item" id="T-06"><span class="fid">⁶ T-06</span><span class="ftime">00:03:12</span><span class="fbody"><span class="spk">DR</span>"Throat's a little pink in the back, no white stuff. Ears look fine. You're not in distress."</span></li>
+        <li class="foot-item" id="T-07"><span class="fid">⁷ T-07</span><span class="ftime">00:03:54</span><span class="fbody"><span class="spk">DR</span>"I hear some scattered rhonchi — it clears when you cough. Heart sounds regular, no murmur."</span></li>
+        <li class="foot-item" id="T-08"><span class="fid">⁸ T-08</span><span class="ftime">00:04:36</span><span class="fbody"><span class="spk">DR</span>"This is acute bronchitis, almost certainly viral, plus a tail end of an URI. You don't need antibiotics."</span></li>
+        <li class="foot-item" id="T-09"><span class="fid">⁹ T-09</span><span class="ftime">00:04:58</span><span class="fbody"><span class="spk">DR</span>"Your blood pressure's perfect today — keep on the lisinopril. Six months for the next BP check."</span></li>
+        <li class="foot-item" id="T-10"><span class="fid">¹⁰ T-10</span><span class="ftime">00:05:24</span><span class="fbody"><span class="spk">DR</span>"Hydration, rest, dextromethorphan if the cough bugs you. Albuterol 1–2 puffs every 4 to 6 hours if you wheeze."</span></li>
+        <li class="foot-item" id="T-11"><span class="fid">¹¹ T-11</span><span class="ftime">00:05:50</span><span class="fbody"><span class="spk">DR</span>"Come back in 7 to 10 days if it's not better, or sooner if you spike a fever or get short of breath."</span></li>
+        <li class="foot-item" id="T-12"><span class="fid">¹² T-12</span><span class="ftime">00:06:11</span><span class="fbody"><span class="spk">PT</span>"Got it. No antibiotics, that makes sense. I'll keep an eye on it."</span></li>
+      </ol>
+    </div>
+
+  </article>
+
+</div>
+
+<!-- Floating sign chrome -->
+<div class="float-sign" aria-hidden="false">
+  <button class="float-sign-mini" type="button" aria-label="Copy SOAP">
+    <svg viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <rect x="3.5" y="3.5" width="7" height="8.5" rx="1" stroke="currentColor" stroke-width="1.2"/>
+      <path d="M5.5 3.5V2.5a1 1 0 011-1h4a1 1 0 011 1v8.5a1 1 0 01-1 1h-1" stroke="currentColor" stroke-width="1.2"/>
+    </svg>
+  </button>
+  <button class="float-sign-pill" type="button" aria-label="Sign and send note">
+    <span>Sign &amp; send</span>
+    <span class="shortcut">⌘ ↵</span>
+  </button>
+</div>
+
+<script>
+(function(){
+  // tabs visual
+  document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(x => {
+        x.classList.remove('active');
+        x.setAttribute('aria-selected','false');
+      });
+      t.classList.add('active');
+      t.setAttribute('aria-selected','true');
+    });
+  });
+
+  // sentence inline-edit (sage outline appears, Esc/blur saves)
+  const sents = document.querySelectorAll('.sent');
+  sents.forEach(s => {
+    s.addEventListener('click', (e) => {
+      // don't enter edit mode if click was on a citation superscript
+      if(e.target.classList && e.target.classList.contains('cite')) return;
+      sents.forEach(x => { x.classList.remove('editing'); x.removeAttribute('contenteditable'); });
+      s.classList.add('editing');
+      s.setAttribute('contenteditable','true');
+      s.focus();
+      // place caret at end
+      const range = document.createRange();
+      range.selectNodeContents(s);
+      range.collapse(false);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    });
+    s.addEventListener('blur', () => {
+      s.classList.remove('editing');
+      s.removeAttribute('contenteditable');
+    });
+    s.addEventListener('keydown', (e) => {
+      if(e.key === 'Escape'){
+        s.blur();
+      }
+      if(e.key === 'Enter' && (e.metaKey || e.ctrlKey)){
+        s.blur();
+      }
+    });
+  });
+
+  // citation superscript -> scroll to footnote
+  document.querySelectorAll('.cite').forEach(c => {
+    c.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = c.dataset.target;
+      const tgt = document.getElementById(id);
+      if(tgt){
+        // briefly highlight
+        tgt.style.background = 'rgba(122,166,140,.10)';
+        tgt.style.transition = 'background 600ms cubic-bezier(0.16, 1, 0.3, 1)';
+        tgt.scrollIntoView({behavior:'smooth', block:'center'});
+        setTimeout(() => { tgt.style.background = ''; }, 1400);
+      }
+    });
+  });
+
+  // footnote -> scroll back to first sentence with that cite
+  document.querySelectorAll('.foot-item').forEach(f => {
+    f.addEventListener('click', () => {
+      const id = f.id;
+      const sent = document.querySelector(`.sent[data-cite="${id}"]`);
+      if(sent){
+        sent.style.background = 'rgba(122,166,140,.08)';
+        sent.style.boxShadow = 'inset 0 0 0 1px rgba(122,166,140,.4)';
+        sent.scrollIntoView({behavior:'smooth', block:'center'});
+        setTimeout(() => { sent.style.background = ''; sent.style.boxShadow = ''; }, 1400);
+      }
+    });
+  });
+
+  // ⌘+↵ sign shortcut visual hint
+  document.addEventListener('keydown', (e) => {
+    if((e.metaKey || e.ctrlKey) && e.key === 'Enter'){
+      const btn = document.querySelector('.float-sign-pill');
+      if(btn){
+        btn.style.transform = 'scale(0.96)';
+        setTimeout(() => btn.style.transform = '', 120);
+      }
+    }
+  });
+})();
+</script>
+
+</body>
+</html>

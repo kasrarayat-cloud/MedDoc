@@ -1,0 +1,976 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QuillMD · Visit · Mei-Ling Park · v10 SOAP V8 Source Linked</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#08090a;
+  --surface-1:#0d0e10;
+  --surface-2:#131416;
+  --surface-3:#1a1c1e;
+  --border:#21232a;
+  --hairline:rgba(255,255,255,0.05);
+  --hairline-strong:rgba(255,255,255,0.08);
+  --text:#f7f8f8;
+  --text-2:#b4bcc8;
+  --text-3:#6c737f;
+  --text-4:#4b5159;
+  --sage:#7AA68C;
+  --sage-bright:#9BC4A8;
+  --sage-deep:#2F5040;
+  --sage-tint:rgba(122,166,140,0.13);
+  --sage-glow:rgba(122,166,140,0.18);
+  --warning:#d4a437;
+  --warning-bright:#e3b950;
+  --info:#5b8db8;
+  --font-sans:'Inter', -apple-system, system-ui, sans-serif;
+  --font-mono:'JetBrains Mono', ui-monospace, Menlo, monospace;
+  --ease:cubic-bezier(0.16, 1, 0.3, 1);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text)}
+body{
+  font-family:var(--font-sans);
+  font-feature-settings:'cv11','ss01';
+  font-size:13px;
+  line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  letter-spacing:-0.005em;
+  min-height:100vh;
+}
+::selection{background:rgba(122,166,140,.25);color:var(--text)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+a{color:inherit;text-decoration:none}
+
+/* topbar — match v8-linear */
+.topbar{
+  position:sticky;top:0;z-index:30;
+  height:44px;
+  display:flex;align-items:center;gap:12px;
+  padding:0 16px;
+  background:rgba(8,9,10,.85);
+  backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--hairline);
+}
+.brand{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;letter-spacing:-0.01em}
+.brand-mark{
+  width:18px;height:18px;border-radius:5px;
+  background:linear-gradient(135deg,var(--sage) 0%,var(--sage-deep) 100%);
+  display:grid;place-items:center;color:#0c1410;font-size:10px;font-weight:700;
+}
+.brand-mark::before{content:'Q'}
+.crumb-sep{color:var(--text-4);font-size:12px}
+.crumb{color:var(--text-2);font-size:13px;transition:color 100ms var(--ease)}
+.crumb:hover{color:var(--text)}
+.crumb-active{color:var(--text)}
+.spacer{flex:1}
+.status-pill-chrome{
+  display:inline-flex;align-items:center;gap:6px;
+  height:22px;padding:0 9px;
+  border-radius:4px;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.06em;text-transform:uppercase;font-weight:500;
+  border:1px solid rgba(122,166,140,.25);
+  color:var(--sage-bright);
+  background:rgba(122,166,140,.06);
+}
+.status-pill-chrome .pdot{
+  width:5px;height:5px;border-radius:50%;
+  background:var(--sage);
+  animation:idle-pulse 1.6s ease-in-out infinite;
+}
+@keyframes idle-pulse{
+  0%,100%{opacity:.7;transform:scale(1)}
+  50%{opacity:1;transform:scale(1.04)}
+}
+.btn-sage{
+  display:inline-flex;align-items:center;gap:8px;
+  height:30px;padding:0 14px;
+  background:var(--sage);
+  color:#0d1611;
+  border-radius:6px;
+  font-size:12.5px;font-weight:500;
+  letter-spacing:-0.005em;
+  transition:background 100ms var(--ease), transform 80ms var(--ease), box-shadow 200ms var(--ease);
+}
+.btn-sage:hover{background:#88b599;transform:scale(1.02);box-shadow:0 0 0 4px rgba(122,166,140,.18)}
+.btn-sage .shortcut{font-family:var(--font-mono);font-size:11px;color:rgba(13,22,17,.55)}
+.avatar-chip{
+  width:24px;height:24px;border-radius:6px;
+  background:linear-gradient(135deg,#3a4a52 0%,#2a3036 100%);
+  color:#dde6ec;font-size:10.5px;font-weight:600;
+  display:grid;place-items:center;letter-spacing:0.02em;
+  border:1px solid var(--hairline-strong);
+}
+
+.shell{
+  position:relative;
+  min-height:calc(100vh - 44px);
+  padding:18px 28px 14px;
+  max-width:1240px;
+  margin:0 auto;
+}
+.meta-strip{
+  display:flex;align-items:center;
+  padding:6px 0 14px;
+  margin-bottom:14px;
+  border-bottom:1px solid var(--hairline);
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--text-2);
+}
+.meta-strip .field{padding:0 14px;border-right:1px solid var(--hairline)}
+.meta-strip .field:first-child{padding-left:0;color:var(--text);font-weight:500}
+.meta-strip .field:last-child{border-right:0}
+.meta-strip .field .lbl{color:var(--text-4);margin-right:4px;font-weight:400}
+.tabs-row{
+  display:flex;align-items:center;gap:0;
+  margin-bottom:18px;
+  border-bottom:1px solid var(--hairline);
+}
+.tab{
+  position:relative;
+  padding:8px 16px 10px;
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.07em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  font-weight:500;
+  cursor:pointer;
+  transition:color 100ms var(--ease);
+}
+.tab:first-child{padding-left:0}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--sage-bright)}
+.tab.active::after{
+  content:'';position:absolute;
+  left:0;right:0;bottom:-1px;
+  height:1.5px;
+  background:var(--sage);
+  border-radius:1px 1px 0 0;
+}
+
+/* ─────────────── Layout ─────────────── */
+.layout{
+  display:grid;
+  grid-template-columns:1fr;
+  gap:0;
+  position:relative;
+  min-height:calc(100vh - 250px);
+  transition:grid-template-columns 200ms var(--ease);
+}
+.layout.split-open{
+  grid-template-columns:60% 40%;
+  gap:24px;
+}
+
+/* note column — centered ~720px with 60px right gutter for citations */
+.note-col{
+  position:relative;
+  display:flex;
+  justify-content:center;
+  padding:0 0 30px;
+  min-width:0;
+}
+.note-inner{
+  width:100%;
+  max-width:780px;
+  padding-right:60px;
+  position:relative;
+  transition:padding-right 200ms var(--ease);
+}
+.layout.split-open .note-inner{
+  max-width:none;
+  padding-right:24px;
+}
+
+/* trust ribbon */
+.trust-strip{
+  display:flex;align-items:center;gap:12px;
+  padding:10px 14px;
+  margin-bottom:24px;
+  border:1px solid var(--hairline);
+  border-left:2px solid var(--sage);
+  border-radius:5px;
+  background:rgba(122,166,140,.03);
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--text-2);
+}
+.trust-strip .icon{color:var(--sage-bright);display:inline-flex;align-items:center}
+.trust-strip strong{color:var(--text);font-weight:500}
+.trust-strip .meta{
+  margin-left:auto;
+  color:var(--text-3);
+  font-variant-numeric:tabular-nums;
+  letter-spacing:0.06em;
+}
+
+/* section heading */
+.section-block{margin-bottom:32px}
+.section-head{
+  display:flex;align-items:center;gap:12px;
+  padding:0 0 12px;
+  border-bottom:1px solid var(--hairline);
+  margin-bottom:14px;
+}
+.sec-chip{
+  flex:0 0 28px;
+  display:inline-grid;place-items:center;
+  width:28px;height:28px;
+  border:1px solid rgba(122,166,140,.28);
+  background:rgba(122,166,140,.07);
+  border-radius:6px;
+  color:var(--sage-bright);
+  font-family:var(--font-mono);
+  font-size:13px;
+  font-weight:500;
+}
+.sec-titles{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
+.sec-name{
+  font-family:var(--font-sans);
+  font-size:18px;
+  font-weight:600;
+  letter-spacing:-0.015em;
+  color:var(--text);
+}
+.sec-eyebrow{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.14em;
+  text-transform:uppercase;
+  color:var(--text-3);
+}
+.sec-conf{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--text-3);
+}
+.sec-conf strong{color:var(--sage-bright);font-weight:500}
+
+/* ─────────────── Sentence with right-margin citation ─────────────── */
+.sentence-row{
+  position:relative;
+  margin:0 0 8px;
+  padding:0;
+}
+.sentence{
+  font-size:14.5px;
+  line-height:1.7;
+  color:var(--text);
+  letter-spacing:-0.005em;
+  display:block;
+  padding-right:0;
+}
+.sentence strong{color:var(--text);font-weight:600}
+.sentence em{color:var(--text-2);font-style:italic}
+
+.cite-tag{
+  position:absolute;
+  right:-60px;
+  top:4px;
+  display:inline-flex;align-items:center;gap:4px;
+  height:22px;padding:0 8px;
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.04em;
+  color:var(--sage);
+  border:1px solid rgba(122,166,140,.18);
+  border-radius:3px;
+  background:rgba(122,166,140,.03);
+  font-variant-numeric:tabular-nums;
+  cursor:pointer;
+  transition:background 130ms var(--ease), border-color 130ms var(--ease), color 130ms var(--ease), transform 80ms var(--ease);
+  white-space:nowrap;
+  -webkit-tap-highlight-color:transparent;
+}
+.cite-tag:hover{
+  background:rgba(122,166,140,.12);
+  border-color:rgba(122,166,140,.42);
+  color:var(--sage-bright);
+}
+.cite-tag.active{
+  background:rgba(122,166,140,.18);
+  border-color:rgba(122,166,140,.55);
+  color:var(--sage-bright);
+}
+.cite-tag .dot{
+  width:4px;height:4px;border-radius:50%;
+  background:currentColor;
+  opacity:.65;
+}
+.cite-empty{
+  position:absolute;
+  right:-60px;top:4px;
+  height:22px;
+  display:inline-flex;align-items:center;
+  font-family:var(--font-mono);
+  font-size:13px;
+  color:var(--text-4);
+  padding:0 8px;
+  font-variant-numeric:tabular-nums;
+  cursor:default;
+}
+
+/* In split mode, citations move to inline trailing position */
+.layout.split-open .cite-tag,
+.layout.split-open .cite-empty{
+  position:static;
+  display:inline-flex;
+  margin-left:8px;
+  vertical-align:1px;
+  top:auto;right:auto;
+}
+.layout.split-open .sentence{display:inline}
+
+/* sentence highlighted because its citation is open */
+.sentence-row.linked .sentence{
+  background:rgba(122,166,140,.05);
+  border-radius:3px;
+  padding:1px 4px;
+  margin:-1px -4px;
+}
+
+.vitals-inline{
+  font-family:var(--font-mono);
+  font-size:13.5px;
+  color:var(--text);
+  font-variant-numeric:tabular-nums;
+}
+.vitals-inline .v-lbl{color:var(--text-4);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;margin-right:4px}
+
+/* numbered list */
+.dx-list{margin:6px 0;padding:0;list-style:none;counter-reset:dx}
+.dx-list li{
+  position:relative;
+  padding:5px 0 5px 28px;
+  counter-increment:dx;
+  font-size:14.5px;
+  line-height:1.65;
+}
+.dx-list li::before{
+  content:counter(dx) ".";
+  position:absolute;
+  left:0;top:5px;
+  font-family:var(--font-mono);
+  font-size:11.5px;
+  color:var(--sage-bright);
+  font-weight:500;
+}
+.dx-list .dx-code{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  color:var(--text-3);
+  margin-left:6px;
+  padding:1px 5px;
+  border:1px solid var(--hairline-strong);
+  border-radius:3px;
+  letter-spacing:0.04em;
+  background:rgba(255,255,255,.02);
+}
+.dx-list li .cite-tag{right:-60px;top:6px}
+.dx-list li .cite-empty{right:-60px;top:6px}
+
+/* ─────────────── Transcript split pane (right 40%) ─────────────── */
+.transcript-pane{
+  display:none;
+  background:var(--surface-1);
+  border:1px solid var(--hairline);
+  border-radius:8px;
+  padding:14px 0 16px;
+  position:sticky;
+  top:60px;
+  align-self:start;
+  max-height:calc(100vh - 80px);
+  overflow:hidden;
+  flex-direction:column;
+  min-width:0;
+}
+.layout.split-open .transcript-pane{display:flex}
+.tp-head{
+  padding:0 16px 12px;
+  border-bottom:1px solid var(--hairline);
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+}
+.tp-head .title{
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--text);
+  font-weight:500;
+}
+.tp-head .close-btn{
+  width:28px;height:28px;
+  display:grid;place-items:center;
+  border:1px solid var(--hairline-strong);
+  border-radius:5px;
+  color:var(--text-3);
+  font-family:var(--font-mono);
+  font-size:14px;
+  font-weight:500;
+  transition:background 100ms var(--ease), color 100ms var(--ease), border-color 100ms var(--ease);
+  -webkit-tap-highlight-color:transparent;
+}
+.tp-head .close-btn:hover{background:rgba(255,255,255,.04);color:var(--text);border-color:rgba(255,255,255,.14)}
+
+/* audio scrubber strip */
+.tp-scrubber{
+  padding:12px 16px;
+  border-bottom:1px solid var(--hairline);
+  display:flex;align-items:center;gap:10px;
+  background:rgba(122,166,140,.03);
+}
+.tp-scrubber .play-btn{
+  flex:0 0 auto;
+  display:inline-flex;align-items:center;gap:6px;
+  height:32px;padding:0 12px;
+  background:var(--sage);
+  color:#0d1611;
+  border-radius:5px;
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  font-weight:500;
+  transition:background 100ms var(--ease), transform 80ms var(--ease);
+  -webkit-tap-highlight-color:transparent;
+}
+.tp-scrubber .play-btn:hover{background:#88b599}
+.tp-scrubber .play-btn:active{transform:scale(.97)}
+.tp-scrubber .play-btn svg{width:9px;height:9px;fill:currentColor}
+.tp-scrubber .timing{
+  flex:0 0 auto;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.06em;
+  color:var(--text-3);
+  font-variant-numeric:tabular-nums;
+}
+.tp-scrubber .timing strong{color:var(--text);font-weight:500}
+.tp-scrubber .track{
+  flex:1;
+  height:3px;
+  background:var(--surface-3);
+  border-radius:2px;
+  position:relative;
+  overflow:hidden;
+  min-width:0;
+}
+.tp-scrubber .track .fill{
+  position:absolute;
+  left:0;top:0;bottom:0;
+  width:38%;
+  background:var(--sage);
+  border-radius:2px;
+}
+.tp-scrubber .track .head{
+  position:absolute;
+  left:38%;top:50%;
+  transform:translate(-50%,-50%);
+  width:9px;height:9px;
+  border-radius:50%;
+  background:var(--sage-bright);
+  box-shadow:0 0 0 2px var(--bg);
+}
+
+/* turn list */
+.tp-turns{
+  flex:1;
+  padding:14px 16px;
+  overflow:auto;
+  min-height:0;
+  display:flex;flex-direction:column;gap:10px;
+}
+.tp-turn{
+  position:relative;
+  padding:10px 12px 10px 14px;
+  border:1px solid transparent;
+  border-radius:5px;
+  transition:background 130ms var(--ease), border-color 130ms var(--ease);
+  cursor:default;
+}
+.tp-turn::before{
+  content:'';
+  position:absolute;
+  left:0;top:8px;bottom:8px;
+  width:2px;
+  background:var(--sage);
+  opacity:0;
+  border-radius:1px;
+  transition:opacity 130ms var(--ease);
+}
+.tp-turn.active{
+  background:rgba(122,166,140,.06);
+  border-color:rgba(122,166,140,.22);
+}
+.tp-turn.active::before{opacity:1}
+.tp-meta{
+  display:flex;align-items:center;gap:8px;
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.06em;
+  margin-bottom:4px;
+}
+.tp-time{
+  color:var(--sage-bright);
+  font-weight:500;
+  font-variant-numeric:tabular-nums;
+}
+.tp-speaker{
+  color:var(--text-3);
+  text-transform:uppercase;
+  letter-spacing:0.1em;
+}
+.tp-speaker.dr{color:var(--info)}
+.tp-text{
+  font-family:var(--font-sans);
+  font-size:13px;
+  line-height:1.55;
+  color:var(--text-2);
+  letter-spacing:-0.005em;
+}
+.tp-turn.active .tp-text{color:var(--text)}
+
+/* footer */
+.note-footer{
+  display:flex;align-items:center;justify-content:space-between;gap:14px;
+  margin-top:24px;
+  padding:14px 0 0;
+  border-top:1px solid var(--hairline);
+  max-width:780px;
+}
+.layout.split-open .note-footer{max-width:none}
+.note-footer .meta{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  display:flex;align-items:center;gap:8px;
+}
+.note-footer .meta strong{color:var(--sage-bright);font-weight:500}
+.note-footer .dot-sep{color:var(--text-4)}
+.btn-ghost{
+  display:inline-flex;align-items:center;gap:8px;
+  height:32px;padding:0 14px;
+  border:1px solid var(--hairline-strong);
+  border-radius:6px;
+  background:transparent;
+  color:var(--text-2);
+  font-size:12.5px;font-weight:500;
+  transition:background 100ms var(--ease), color 100ms var(--ease), border-color 100ms var(--ease);
+}
+.btn-ghost:hover{background:rgba(255,255,255,.04);color:var(--text);border-color:rgba(255,255,255,.14)}
+
+/* reduced motion */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;
+  }
+  .status-pill-chrome .pdot{animation:none}
+}
+
+/* ─────────────── Responsive ─────────────── */
+/* Below 1080 (iPad landscape included): split becomes a drawer at bottom */
+@media (max-width:1080px){
+  .shell{padding:16px 24px 14px;max-width:none}
+  .layout.split-open{
+    grid-template-columns:1fr;
+    gap:20px;
+  }
+  .layout.split-open .note-inner{padding-right:24px}
+  .layout.split-open .cite-tag,
+  .layout.split-open .cite-empty{
+    position:absolute;
+    right:0;top:4px;
+    margin-left:0;
+  }
+  .layout.split-open .sentence{display:block;padding-right:74px}
+  .layout.split-open .dx-list li{padding-right:74px}
+  .note-inner{padding-right:74px}
+  .cite-tag,.cite-empty{right:0}
+  .sentence{padding-right:0}
+  .transcript-pane{
+    position:relative;top:auto;
+    max-height:520px;
+    border-top:1px solid var(--hairline-strong);
+  }
+}
+@media (max-width:760px){
+  .meta-strip{flex-wrap:wrap;font-size:10px}
+  .meta-strip .field{padding:4px 10px}
+  .shell{padding:14px 14px 60px}
+  .topbar{padding:0 12px;gap:8px;flex-wrap:wrap;height:auto;min-height:44px}
+  .crumb,.crumb-sep{display:none}
+  .crumb-active{display:inline}
+  .tabs-row{overflow-x:auto;flex-wrap:nowrap}
+  .tab{flex-shrink:0}
+  .note-inner{padding-right:0}
+  .cite-tag,.cite-empty{
+    position:static;
+    margin-left:6px;
+    margin-top:2px;
+    height:18px;
+    font-size:10px;
+  }
+  .sentence{padding-right:0;display:inline}
+  .sentence-row{margin-bottom:14px}
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><span class="brand-mark"></span> QuillMD</div>
+  <span class="crumb-sep">/</span>
+  <span class="crumb">Patients</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb">Mei-Ling Park</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb crumb-active">Visit · Apr 30, 2026</span>
+  <div class="spacer"></div>
+  <div class="status-pill-chrome"><span class="pdot"></span><span>Ready</span></div>
+  <button class="btn-sage" type="button"><span>Sign &amp; send</span><span class="shortcut">⌘ ↵</span></button>
+  <div class="avatar-chip">KP</div>
+</header>
+
+<div class="shell">
+
+  <div class="meta-strip">
+    <div class="field">Mei-Ling Park</div>
+    <div class="field">34 F</div>
+    <div class="field"><span class="lbl">MRN</span>77324</div>
+    <div class="field">J20.9 · Bronchitis follow-up</div>
+    <div class="field">99214</div>
+    <div class="field"><span class="lbl">Duration</span>22 min</div>
+  </div>
+
+  <div class="tabs-row" role="tablist">
+    <div class="tab active" role="tab" aria-selected="true">Soap Note</div>
+    <div class="tab" role="tab" aria-selected="false">Transcript</div>
+    <div class="tab" role="tab" aria-selected="false">Codes</div>
+    <div class="tab" role="tab" aria-selected="false">Rx</div>
+    <div class="tab" role="tab" aria-selected="false">Extras</div>
+  </div>
+
+  <div class="layout" id="layout">
+
+    <!-- LEFT: NOTE -->
+    <div class="note-col">
+      <div class="note-inner">
+
+        <div class="trust-strip">
+          <span class="icon" aria-hidden="true">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M7 1.5l5 2.2v3.6c0 2.7-2.1 4.9-5 5.7-2.9-.8-5-3-5-5.7V3.7L7 1.5z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
+              <path d="M4.5 7l1.8 1.8L9.5 5.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </span>
+          <span>Every sentence shows its <strong>transcript timestamp</strong>. Tap a citation to verify the source.</span>
+          <span class="meta">12 turns · 5:48</span>
+        </div>
+
+        <!-- SUBJECTIVE -->
+        <section class="section-block" data-sec="S">
+          <div class="section-head">
+            <span class="sec-chip">S</span>
+            <div class="sec-titles">
+              <div class="sec-eyebrow">01 · Subjective</div>
+              <div class="sec-name">Patient narrative</div>
+            </div>
+            <div class="sec-conf">Confidence <strong>91%</strong></div>
+          </div>
+
+          <div class="sentence-row" data-cite="t-01">
+            <span class="sentence">3-day history of productive cough, mostly clear-yellow sputum.</span>
+            <button class="cite-tag" type="button" data-cite="t-01"><span class="dot"></span>T-01 · 00:14</button>
+          </div>
+          <div class="sentence-row" data-cite="t-02">
+            <span class="sentence">URI symptoms (rhinorrhea, mild sore throat) reported as resolving.</span>
+            <button class="cite-tag" type="button" data-cite="t-02"><span class="dot"></span>T-02 · 00:38</button>
+          </div>
+          <div class="sentence-row" data-cite="t-03">
+            <span class="sentence"><strong>Denies fever, dyspnea, chest pain, hemoptysis.</strong></span>
+            <button class="cite-tag" type="button" data-cite="t-03"><span class="dot"></span>T-03 · 01:02</button>
+          </div>
+          <div class="sentence-row" data-cite="t-04">
+            <span class="sentence"><strong>PMH:</strong> HTN (controlled on lisinopril 10 mg), penicillin allergy. <strong>Tobacco:</strong> never. <strong>EtOH:</strong> occasional.</span>
+            <button class="cite-tag" type="button" data-cite="t-04"><span class="dot"></span>T-04 · 02:14</button>
+          </div>
+        </section>
+
+        <!-- OBJECTIVE -->
+        <section class="section-block" data-sec="O">
+          <div class="section-head">
+            <span class="sec-chip">O</span>
+            <div class="sec-titles">
+              <div class="sec-eyebrow">02 · Objective</div>
+              <div class="sec-name">Exam &amp; vitals</div>
+            </div>
+            <div class="sec-conf">Confidence <strong>97%</strong></div>
+          </div>
+
+          <div class="sentence-row" data-cite="t-05">
+            <span class="sentence"><span class="vitals-inline"><span class="v-lbl">VS</span>BP 118/74 · HR 88 · RR 18 · T 98.6°F · SpO₂ 98% RA</span></span>
+            <button class="cite-tag" type="button" data-cite="t-05"><span class="dot"></span>T-05 · 02:46</button>
+          </div>
+          <div class="sentence-row" data-cite="t-06">
+            <span class="sentence"><strong>Gen:</strong> NAD, alert, conversational. <strong>HEENT:</strong> mild posterior pharyngeal erythema, no exudate; TMs clear b/l.</span>
+            <button class="cite-tag" type="button" data-cite="t-06"><span class="dot"></span>T-06 · 03:11</button>
+          </div>
+          <div class="sentence-row" data-cite="t-07">
+            <span class="sentence"><strong>Lungs:</strong> scattered rhonchi b/l, clearing with cough; no wheezing or crackles. <strong>Cardiac:</strong> RRR, no m/r/g.</span>
+            <button class="cite-tag" type="button" data-cite="t-07"><span class="dot"></span>T-07 · 03:42</button>
+          </div>
+        </section>
+
+        <!-- ASSESSMENT -->
+        <section class="section-block" data-sec="A">
+          <div class="section-head">
+            <span class="sec-chip">A</span>
+            <div class="sec-titles">
+              <div class="sec-eyebrow">03 · Assessment</div>
+              <div class="sec-name">Clinical impression</div>
+            </div>
+            <div class="sec-conf">Confidence <strong>89%</strong></div>
+          </div>
+
+          <ol class="dx-list">
+            <li>
+              Acute bronchitis, viral etiology likely<span class="dx-code">J20.9</span>
+              <button class="cite-tag" type="button" data-cite="t-08"><span class="dot"></span>T-08 · 04:18</button>
+            </li>
+            <li>
+              URI, resolving<span class="dx-code">J06.9</span>
+              <button class="cite-tag" type="button" data-cite="t-09"><span class="dot"></span>T-09 · 04:31</button>
+            </li>
+            <li>
+              HTN, controlled<span class="dx-code">I10</span>
+              <button class="cite-tag" type="button" data-cite="t-10"><span class="dot"></span>T-10 · 04:47</button>
+            </li>
+          </ol>
+        </section>
+
+        <!-- PLAN -->
+        <section class="section-block" data-sec="P">
+          <div class="section-head">
+            <span class="sec-chip">P</span>
+            <div class="sec-titles">
+              <div class="sec-eyebrow">04 · Plan</div>
+              <div class="sec-name">Plan &amp; follow-up</div>
+            </div>
+            <div class="sec-conf">Confidence <strong>86%</strong></div>
+          </div>
+
+          <div class="sentence-row" data-cite="t-11">
+            <span class="sentence"><strong>Symptomatic care:</strong> hydration, rest, OTC dextromethorphan for cough.</span>
+            <button class="cite-tag" type="button" data-cite="t-11"><span class="dot"></span>T-11 · 05:12</button>
+          </div>
+          <div class="sentence-row" data-cite="t-12">
+            <span class="sentence"><strong>Albuterol HFA inhaler</strong> 1–2 puffs q4–6h PRN wheezing (limit 8 puffs / 24h).</span>
+            <button class="cite-tag" type="button" data-cite="t-12"><span class="dot"></span>T-12 · 05:48</button>
+          </div>
+          <div class="sentence-row" data-cite="">
+            <span class="sentence"><strong>F/u 7–10 days</strong> if symptoms persist or worsen. Continue lisinopril; recheck BP in 6 months.</span>
+            <span class="cite-empty" title="Boilerplate plan — no transcript citation">—</span>
+          </div>
+          <div class="sentence-row" data-cite="">
+            <span class="sentence"><strong>Patient education:</strong> viral URI, antibiotic stewardship discussed.</span>
+            <span class="cite-empty" title="Boilerplate plan — no transcript citation">—</span>
+          </div>
+        </section>
+
+        <div class="note-footer">
+          <div class="meta">
+            <span><strong>10 of 12</strong> sentences cited</span>
+            <span class="dot-sep">·</span>
+            <span>2 boilerplate</span>
+            <span class="dot-sep">·</span>
+            <span>22 min audio</span>
+          </div>
+          <button class="btn-ghost" type="button">Copy SOAP</button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- RIGHT: TRANSCRIPT (split pane) -->
+    <aside class="transcript-pane" id="transcriptPane" aria-live="polite">
+      <div class="tp-head">
+        <span class="title">Transcript · audio source</span>
+        <button class="close-btn" type="button" id="closeBtn" aria-label="Close transcript">×</button>
+      </div>
+
+      <div class="tp-scrubber">
+        <button class="play-btn" type="button">
+          <svg viewBox="0 0 9 9"><path d="M1 0v9l8-4.5z"/></svg>
+          <span id="playLabel">Play from 02:14</span>
+        </button>
+        <span class="timing"><strong id="curTime">02:14</strong> / 05:48</span>
+        <div class="track" aria-hidden="true">
+          <div class="fill"></div>
+          <div class="head"></div>
+        </div>
+      </div>
+
+      <div class="tp-turns" id="turnList">
+        <div class="tp-turn" data-cite="t-01">
+          <div class="tp-meta"><span class="tp-time">T-01 · 00:14</span><span class="tp-speaker dr">Dr. Park</span></div>
+          <div class="tp-text">"What's been going on the last few days, Mei-Ling?"</div>
+        </div>
+        <div class="tp-turn" data-cite="t-02">
+          <div class="tp-meta"><span class="tp-time">T-02 · 00:38</span><span class="tp-speaker">Patient</span></div>
+          <div class="tp-text">"For about three days I've had this productive cough — yellow-ish stuff, runny nose, sore throat. The throat and runny nose are getting better."</div>
+        </div>
+        <div class="tp-turn" data-cite="t-03">
+          <div class="tp-meta"><span class="tp-time">T-03 · 01:02</span><span class="tp-speaker">Patient</span></div>
+          <div class="tp-text">"No fever, no shortness of breath, no chest pain. No blood when I cough."</div>
+        </div>
+        <div class="tp-turn active" data-cite="t-04">
+          <div class="tp-meta"><span class="tp-time">T-04 · 02:14</span><span class="tp-speaker">Patient</span></div>
+          <div class="tp-text">"I'm still on the lisinopril, ten milligrams. Allergic to penicillin. Never smoked. Glass of wine maybe once a week."</div>
+        </div>
+        <div class="tp-turn" data-cite="t-05">
+          <div class="tp-meta"><span class="tp-time">T-05 · 02:46</span><span class="tp-speaker">MA · Vitals</span></div>
+          <div class="tp-text">Recorded: BP 118/74, HR 88, RR 18, temp 98.6, sat 98% on room air.</div>
+        </div>
+        <div class="tp-turn" data-cite="t-06">
+          <div class="tp-meta"><span class="tp-time">T-06 · 03:11</span><span class="tp-speaker dr">Dr. Park</span></div>
+          <div class="tp-text">"Throat's a little red back there, no exudate. Ears look fine. You're alert, talking comfortably."</div>
+        </div>
+        <div class="tp-turn" data-cite="t-07">
+          <div class="tp-meta"><span class="tp-time">T-07 · 03:42</span><span class="tp-speaker dr">Dr. Park</span></div>
+          <div class="tp-text">"I'm hearing some scattered rhonchi — clears when you cough. No wheezing, no crackles. Heart's regular, no murmur."</div>
+        </div>
+        <div class="tp-turn" data-cite="t-08">
+          <div class="tp-meta"><span class="tp-time">T-08 · 04:18</span><span class="tp-speaker dr">Dr. Park</span></div>
+          <div class="tp-text">"This is acute bronchitis — almost certainly viral, not bacterial. We'll let it run its course."</div>
+        </div>
+        <div class="tp-turn" data-cite="t-09">
+          <div class="tp-meta"><span class="tp-time">T-09 · 04:31</span><span class="tp-speaker dr">Dr. Park</span></div>
+          <div class="tp-text">"The upper respiratory piece is already on its way out, so just supportive there."</div>
+        </div>
+        <div class="tp-turn" data-cite="t-10">
+          <div class="tp-meta"><span class="tp-time">T-10 · 04:47</span><span class="tp-speaker dr">Dr. Park</span></div>
+          <div class="tp-text">"BP today is 118 over 74 — your hypertension is well controlled on the lisinopril."</div>
+        </div>
+        <div class="tp-turn" data-cite="t-11">
+          <div class="tp-meta"><span class="tp-time">T-11 · 05:12</span><span class="tp-speaker dr">Dr. Park</span></div>
+          <div class="tp-text">"Hydrate, rest, dextromethorphan over the counter for the cough — that should be plenty."</div>
+        </div>
+        <div class="tp-turn" data-cite="t-12">
+          <div class="tp-meta"><span class="tp-time">T-12 · 05:48</span><span class="tp-speaker dr">Dr. Park</span></div>
+          <div class="tp-text">"And I'll give you an albuterol inhaler — one to two puffs every four to six hours if you start wheezing. Cap it at eight in a day."</div>
+        </div>
+      </div>
+    </aside>
+
+  </div>
+
+</div>
+
+<script>
+(function(){
+  // tabs visual swap
+  document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(x => {
+        x.classList.remove('active');
+        x.setAttribute('aria-selected','false');
+      });
+      t.classList.add('active');
+      t.setAttribute('aria-selected','true');
+    });
+  });
+
+  // citation tag → open split pane, scroll/highlight that turn
+  const layout = document.getElementById('layout');
+  const tagButtons = document.querySelectorAll('.cite-tag');
+  const turns = document.querySelectorAll('.tp-turn');
+  const sentenceRows = document.querySelectorAll('.sentence-row');
+  const playLabel = document.getElementById('playLabel');
+  const curTime = document.getElementById('curTime');
+  const turnList = document.getElementById('turnList');
+
+  function clearAll(){
+    tagButtons.forEach(b => b.classList.remove('active'));
+    turns.forEach(t => t.classList.remove('active'));
+    sentenceRows.forEach(s => s.classList.remove('linked'));
+  }
+
+  // initialize: pane closed, T-04 default-active inside (visual cue when pane opens first time)
+  layout.classList.remove('split-open');
+
+  tagButtons.forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.cite;
+      const turn = document.querySelector(`.tp-turn[data-cite="${id}"]`);
+      const ownerRow = btn.closest('.sentence-row, li');
+
+      clearAll();
+      btn.classList.add('active');
+      ownerRow?.classList.add('linked');
+      if(turn) turn.classList.add('active');
+
+      // open split if not yet
+      layout.classList.add('split-open');
+
+      // sync scrubber meta
+      const time = btn.textContent.split('·')[1]?.trim() || '';
+      if(playLabel && time) playLabel.textContent = `Play from ${time}`;
+      if(curTime && time) curTime.textContent = time;
+
+      // scroll the turn into view (after a short delay for layout shift)
+      setTimeout(() => {
+        if(turn && turnList){
+          const ty = turn.offsetTop - turnList.offsetTop - 8;
+          turnList.scrollTo({top: ty, behavior: 'smooth'});
+        }
+      }, 240);
+    });
+  });
+
+  // close button → collapse pane
+  document.getElementById('closeBtn')?.addEventListener('click', () => {
+    layout.classList.remove('split-open');
+    clearAll();
+  });
+
+  // turn click → highlight matching sentence
+  turns.forEach(turn => {
+    turn.addEventListener('click', () => {
+      const id = turn.dataset.cite;
+      const tag = document.querySelector(`.cite-tag[data-cite="${id}"]`);
+      const ownerRow = tag?.closest('.sentence-row, li');
+      clearAll();
+      turn.classList.add('active');
+      tag?.classList.add('active');
+      ownerRow?.classList.add('linked');
+      if(ownerRow){
+        ownerRow.scrollIntoView({behavior: 'smooth', block: 'center'});
+      }
+    });
+  });
+})();
+</script>
+
+</body>
+</html>
