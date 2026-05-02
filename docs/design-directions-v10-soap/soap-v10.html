@@ -1,0 +1,834 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QuillMD · Visit · Mei-Ling Park · v10 SOAP V10 · Pre-flight Checklist</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #08090a;
+  --surface-1: #0d0e10;
+  --surface-2: #131416;
+  --surface-3: #1a1c1e;
+  --border: #21232a;
+  --border-strong: #2c2f38;
+  --hairline: rgba(255,255,255,0.05);
+  --hairline-strong: rgba(255,255,255,0.08);
+  --text: #f7f8f8;
+  --text-2: #b4bcc8;
+  --text-3: #6c737f;
+  --text-4: #4b5159;
+  --sage: #7AA68C;
+  --sage-bright: #9BC4A8;
+  --sage-deep: #2F5040;
+  --sage-tint: rgba(122,166,140,0.13);
+  --sage-glow: rgba(122,166,140,0.18);
+  --warning: #d4a437;
+  --warning-bright: #e3b950;
+  --warning-tint: rgba(212,164,55,0.10);
+  --danger: #d4574a;
+  --info: #5b8db8;
+  --font-sans: 'Inter', -apple-system, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text)}
+body{
+  font-family:var(--font-sans);
+  font-feature-settings:'cv11','ss01';
+  font-size:13px;
+  line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  letter-spacing:-0.005em;
+  min-height:100vh;
+}
+::selection{background:rgba(122,166,140,.25);color:var(--text)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+a{color:inherit;text-decoration:none}
+
+/* ───────── Top bar ───────── */
+.topbar{
+  position:sticky;top:0;z-index:30;
+  height:44px;
+  display:flex;align-items:center;gap:12px;
+  padding:0 16px;
+  background:rgba(8,9,10,.85);
+  backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--hairline);
+}
+.brand{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;letter-spacing:-0.01em}
+.brand-mark{
+  width:18px;height:18px;border-radius:5px;
+  background:linear-gradient(135deg,var(--sage) 0%,var(--sage-deep) 100%);
+  display:grid;place-items:center;color:#0c1410;font-size:10px;font-weight:700;
+  box-shadow:0 0 0 1px rgba(255,255,255,.06) inset;
+}
+.brand-mark::before{content:'Q'}
+.crumb-sep{color:var(--text-4);font-size:12px}
+.crumb{color:var(--text-2);font-size:13px;transition:color 100ms var(--ease)}
+.crumb:hover{color:var(--text)}
+.crumb-active{color:var(--text)}
+.spacer{flex:1}
+.status-pill-chrome{
+  display:inline-flex;align-items:center;gap:6px;
+  height:22px;padding:0 9px;
+  border-radius:4px;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.06em;text-transform:uppercase;font-weight:500;
+  border:1px solid rgba(212,164,55,.30);
+  color:var(--warning-bright);
+  background:rgba(212,164,55,.06);
+}
+.status-pill-chrome .pdot{
+  width:5px;height:5px;border-radius:50%;
+  background:var(--warning);
+  animation:idle-pulse 1.6s ease-in-out infinite;
+}
+@keyframes idle-pulse{
+  0%,100%{opacity:.7;transform:scale(1)}
+  50%{opacity:1;transform:scale(1.04)}
+}
+.btn-sage{
+  display:inline-flex;align-items:center;gap:8px;
+  height:30px;padding:0 14px;
+  background:var(--sage);
+  color:#0d1611;
+  border-radius:6px;
+  font-size:12.5px;font-weight:500;
+  letter-spacing:-0.005em;
+  transition:background 100ms var(--ease), transform 80ms var(--ease), box-shadow 200ms var(--ease);
+}
+.btn-sage:hover{background:#88b599;transform:scale(1.02);box-shadow:0 0 0 4px rgba(122,166,140,.18)}
+.btn-sage .shortcut{font-family:var(--font-mono);font-size:11px;color:rgba(13,22,17,.55)}
+.btn-sage.outline{
+  background:transparent;
+  color:var(--sage-bright);
+  border:1px solid rgba(122,166,140,.45);
+  box-shadow:0 0 0 1px rgba(122,166,140,.0) inset;
+}
+.btn-sage.outline:hover{
+  background:rgba(122,166,140,.08);
+  color:var(--sage-bright);
+  box-shadow:0 0 0 4px rgba(122,166,140,.10);
+}
+.btn-sage.outline .shortcut{color:rgba(155,196,168,.6)}
+.avatar-chip{
+  width:24px;height:24px;border-radius:6px;
+  background:linear-gradient(135deg,#3a4a52 0%,#2a3036 100%);
+  color:#dde6ec;font-size:10.5px;font-weight:600;
+  display:grid;place-items:center;letter-spacing:0.02em;
+  border:1px solid var(--hairline-strong);
+}
+
+/* ───────── Shell ───────── */
+.shell{
+  position:relative;
+  min-height:calc(100vh - 44px);
+  padding:18px 28px 0;
+  display:flex;flex-direction:column;
+}
+
+.meta-strip{
+  display:flex;align-items:center;
+  padding:6px 0 14px;
+  margin-bottom:14px;
+  border-bottom:1px solid var(--hairline);
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--text-2);
+}
+.meta-strip .field{padding:0 14px;border-right:1px solid var(--hairline)}
+.meta-strip .field:first-child{padding-left:0;color:var(--text);font-weight:500}
+.meta-strip .field:last-child{border-right:0}
+.meta-strip .field .lbl{color:var(--text-4);margin-right:4px;font-weight:400}
+
+.tabs-row{
+  display:flex;align-items:center;gap:0;
+  margin-bottom:18px;
+  border-bottom:1px solid var(--hairline);
+}
+.tab{
+  position:relative;
+  padding:8px 16px 10px;
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.07em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  font-weight:500;
+  cursor:pointer;
+  transition:color 100ms var(--ease);
+}
+.tab:first-child{padding-left:0}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--sage-bright)}
+.tab.active::after{
+  content:'';position:absolute;
+  left:0;right:0;bottom:-1px;
+  height:1.5px;
+  background:var(--sage);
+  border-radius:1px 1px 0 0;
+}
+
+/* ───────── SOAP body (top ~70%) ───────── */
+.soap-area{
+  flex:1;
+  padding-bottom:30px;
+}
+.soap-stack{display:flex;flex-direction:column;gap:14px}
+.soap-section{
+  position:relative;
+  background:var(--surface-1);
+  border:1px solid var(--hairline);
+  border-radius:6px;
+  padding:14px 18px 16px;
+  transition:background 130ms var(--ease), border-color 130ms var(--ease), box-shadow 130ms var(--ease);
+}
+.soap-section.linked{
+  background:rgba(122,166,140,.04);
+  border-color:rgba(122,166,140,.22);
+  box-shadow:0 0 0 1px rgba(122,166,140,.08) inset;
+}
+.soap-section.flag{
+  background:rgba(212,164,55,.03);
+  border-color:rgba(212,164,55,.18);
+}
+.soap-section:hover{background:var(--surface-2)}
+.soap-section.linked:hover{background:rgba(122,166,140,.06)}
+.soap-section.flag:hover{background:rgba(212,164,55,.06)}
+.soap-hd{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:8px;
+}
+.soap-hd-l{display:flex;align-items:center;gap:8px}
+.soap-hd-l .sage-dot{
+  width:6px;height:6px;border-radius:50%;
+  background:var(--sage);
+  box-shadow:0 0 6px rgba(122,166,140,.4);
+}
+.soap-hd-l .title{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--text);
+  font-weight:500;
+}
+.soap-hd-r{
+  display:flex;align-items:center;gap:8px;
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.06em;
+  color:var(--text-3);
+}
+.soap-hd-r .pct{color:var(--sage-bright);font-weight:500}
+.soap-body{
+  font-family:var(--font-sans);
+  font-size:13.5px;
+  line-height:1.55;
+  color:var(--text);
+  letter-spacing:-0.005em;
+}
+.soap-body p{margin:0}
+.soap-body p + p{margin-top:6px}
+.soap-body strong{color:var(--text);font-weight:500}
+.soap-body em{font-style:italic;color:var(--text-2)}
+.soap-body .vital{
+  font-family:var(--font-mono);
+  font-size:12.5px;
+  color:var(--text);
+  font-variant-numeric:tabular-nums;
+}
+.soap-body .vital-label{color:var(--text-3)}
+.soap-body ol{margin:2px 0;padding-left:18px}
+.soap-body ol li{margin:3px 0;padding-left:4px}
+.soap-body ol li::marker{color:var(--text-3);font-family:var(--font-mono);font-size:11px}
+
+.dx-pill{
+  display:inline-flex;align-items:center;gap:5px;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.04em;
+  color:var(--sage-bright);
+  background:rgba(122,166,140,.06);
+  border:1px solid rgba(122,166,140,.22);
+  border-radius:3px;
+  padding:1px 6px;
+  margin-left:6px;
+  vertical-align:1px;
+}
+
+/* highlight markers in body for warnings */
+.warn-mark{
+  background:rgba(212,164,55,.10);
+  border-bottom:1px dashed rgba(212,164,55,.5);
+  padding:0 2px;
+  border-radius:2px;
+  cursor:help;
+}
+
+/* ───────── Pre-flight checklist (sticky bottom) ───────── */
+.preflight{
+  position:sticky;
+  bottom:0;
+  z-index:20;
+  background:var(--surface-1);
+  border-top:1px solid var(--hairline-strong);
+  margin:0 -28px;
+  padding:14px 28px 18px;
+  backdrop-filter:blur(12px);
+  box-shadow:0 -1px 0 var(--hairline-strong);
+}
+.preflight::before{
+  content:'';
+  position:absolute;
+  top:-12px;left:0;right:0;
+  height:12px;
+  background:linear-gradient(to top, rgba(8,9,10,.6) 0%, transparent 100%);
+  pointer-events:none;
+}
+.pf-hd{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:14px;
+  margin-bottom:11px;
+}
+.pf-hd-l{
+  display:flex;align-items:center;gap:14px;
+  flex:1;
+  min-width:0;
+}
+.pf-title{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.14em;
+  text-transform:uppercase;
+  color:var(--text);
+  font-weight:500;
+  white-space:nowrap;
+}
+.pf-progress{
+  display:flex;align-items:center;gap:10px;
+  flex:1;
+  max-width:380px;
+}
+.pf-count{
+  font-family:var(--font-mono);
+  font-size:11px;
+  color:var(--text-2);
+  letter-spacing:0.04em;
+  white-space:nowrap;
+  font-variant-numeric:tabular-nums;
+}
+.pf-count strong{color:var(--text);font-weight:500}
+.pf-count .warn-c{color:var(--warning-bright);font-weight:500}
+.pf-bar{
+  flex:1;
+  height:4px;
+  border-radius:2px;
+  background:rgba(255,255,255,.06);
+  overflow:hidden;
+  position:relative;
+}
+.pf-bar-fill{
+  height:100%;
+  background:linear-gradient(90deg, var(--sage) 0%, var(--sage-bright) 100%);
+  border-radius:2px;
+  transition:width 280ms var(--ease);
+  width:62.5%;
+  box-shadow:0 0 8px rgba(122,166,140,.4);
+}
+.pf-actions{
+  display:flex;align-items:center;gap:10px;
+}
+.btn-ghost{
+  display:inline-flex;align-items:center;gap:8px;
+  height:34px;padding:0 14px;
+  border:1px solid var(--hairline-strong);
+  border-radius:6px;
+  background:transparent;
+  color:var(--text-2);
+  font-size:12.5px;font-weight:500;
+  letter-spacing:-0.005em;
+  transition:background 100ms var(--ease), color 100ms var(--ease), border-color 100ms var(--ease);
+}
+.btn-ghost:hover{background:rgba(255,255,255,.04);color:var(--text);border-color:rgba(255,255,255,.14)}
+.btn-sign-gated{
+  height:34px;
+  padding:0 16px;
+  font-size:12.5px;
+  display:inline-flex;align-items:center;gap:8px;
+}
+.btn-sign-gated .warn-icon{
+  width:14px;height:14px;
+  display:grid;place-items:center;
+  color:var(--warning-bright);
+  font-size:13px;
+  line-height:1;
+}
+.btn-sign-gated .warn-count{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  color:var(--warning-bright);
+  letter-spacing:0.04em;
+  padding-left:6px;
+  margin-left:6px;
+  border-left:1px solid rgba(122,166,140,.18);
+  font-weight:500;
+}
+
+/* checklist grid */
+.pf-grid{
+  display:grid;
+  grid-template-columns:repeat(4, minmax(0,1fr));
+  gap:8px;
+}
+.pf-item{
+  position:relative;
+  display:flex;align-items:flex-start;gap:9px;
+  padding:8px 12px 9px 11px;
+  background:var(--surface-2);
+  border:1px solid var(--hairline);
+  border-radius:5px;
+  cursor:pointer;
+  transition:background 130ms var(--ease), border-color 130ms var(--ease), transform 130ms var(--ease);
+  font-size:11.5px;
+  line-height:1.4;
+  letter-spacing:-0.003em;
+  min-height:48px;
+}
+.pf-item:hover{
+  background:var(--surface-3);
+  transform:translateY(-1px);
+  border-color:rgba(255,255,255,.08);
+}
+.pf-item.warn{
+  background:rgba(212,164,55,.04);
+  border-color:rgba(212,164,55,.22);
+}
+.pf-item.warn:hover{
+  background:rgba(212,164,55,.08);
+  border-color:rgba(212,164,55,.35);
+}
+.pf-icon{
+  flex:0 0 16px;
+  width:16px;height:16px;
+  border-radius:50%;
+  display:grid;place-items:center;
+  margin-top:1px;
+  font-family:var(--font-mono);
+  font-size:10px;
+  font-weight:600;
+}
+.pf-item .pf-icon{
+  background:rgba(122,166,140,.15);
+  color:var(--sage-bright);
+  border:1px solid rgba(122,166,140,.35);
+}
+.pf-item.warn .pf-icon{
+  background:rgba(212,164,55,.15);
+  color:var(--warning-bright);
+  border:1px solid rgba(212,164,55,.4);
+}
+.pf-content{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.pf-text{
+  color:var(--text);
+  font-weight:500;
+}
+.pf-item:not(.warn) .pf-text{color:var(--text-2)}
+.pf-meta{
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.06em;
+  color:var(--text-4);
+  text-transform:uppercase;
+}
+.pf-item.warn .pf-meta{color:var(--warning-bright)}
+.pf-action-tag{
+  position:absolute;
+  right:8px;top:8px;
+  font-family:var(--font-mono);
+  font-size:9px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--sage-bright);
+  opacity:0;
+  transition:opacity 100ms var(--ease);
+  padding:2px 5px;
+  background:rgba(122,166,140,.12);
+  border:1px solid rgba(122,166,140,.3);
+  border-radius:2px;
+}
+.pf-item.warn:hover .pf-action-tag{opacity:1}
+
+/* popover (sample shown anchored to the Rx warn item) */
+.pf-popover{
+  position:absolute;
+  bottom:calc(100% + 8px);
+  left:0;
+  width:280px;
+  background:var(--surface-3);
+  border:1px solid var(--border-strong);
+  border-radius:7px;
+  padding:12px 14px 12px;
+  box-shadow:0 0 0 1px var(--hairline) inset;
+  z-index:25;
+  display:none;
+  animation:popover-in 150ms var(--ease);
+}
+.pf-popover.show{display:block}
+@keyframes popover-in{
+  from{opacity:0;transform:translateY(4px)}
+  to{opacity:1;transform:translateY(0)}
+}
+.pf-popover-title{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--warning-bright);
+  margin-bottom:6px;
+}
+.pf-popover-body{
+  font-size:12.5px;
+  line-height:1.5;
+  color:var(--text);
+  margin-bottom:10px;
+}
+.pf-popover-body code{
+  font-family:var(--font-mono);
+  font-size:11.5px;
+  color:var(--text);
+  background:rgba(255,255,255,.04);
+  padding:1px 5px;
+  border-radius:3px;
+  border:1px solid var(--hairline);
+}
+.pf-popover-actions{display:flex;align-items:center;gap:8px}
+.pf-confirm{
+  height:28px;padding:0 12px;
+  background:var(--sage);
+  color:#0d1611;
+  border-radius:5px;
+  font-size:12px;font-weight:500;
+  cursor:pointer;
+  transition:background 100ms var(--ease);
+}
+.pf-confirm:hover{background:#88b599}
+.pf-skip{
+  height:28px;padding:0 10px;
+  color:var(--text-3);
+  font-size:11.5px;
+  cursor:pointer;
+  font-family:var(--font-mono);
+  letter-spacing:0.04em;
+}
+.pf-skip:hover{color:var(--text-2)}
+
+/* ───────── iPad landscape (1024px) ───────── */
+@media (max-width: 1080px){
+  .pf-grid{grid-template-columns:repeat(2, minmax(0,1fr))}
+  .pf-hd{flex-wrap:wrap}
+  .pf-hd-l{order:1;width:100%}
+  .pf-actions{order:2;width:100%;justify-content:flex-end}
+  .pf-progress{max-width:none}
+}
+@media (max-width: 720px){
+  .pf-grid{grid-template-columns:1fr}
+  .meta-strip{flex-wrap:wrap}
+  .meta-strip .field{padding:4px 10px}
+  .shell{padding:14px 16px 0}
+  .preflight{margin:0 -16px;padding:12px 16px 14px}
+}
+
+/* reduced motion */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;
+  }
+  .status-pill-chrome .pdot{animation:none}
+  .pf-popover{animation:none}
+}
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<header class="topbar">
+  <div class="brand"><span class="brand-mark"></span> QuillMD</div>
+  <span class="crumb-sep">/</span>
+  <span class="crumb">Dashboard</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb">Patients</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb">Mei-Ling Park</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb crumb-active">Visit · Apr 30</span>
+  <div class="spacer"></div>
+  <div class="status-pill-chrome" title="3 warnings to review before signing">
+    <span class="pdot"></span>
+    <span>Pre-flight · 3 warn</span>
+  </div>
+  <button class="btn-sage outline" type="button" title="3 warnings remain">
+    <span class="warn-icon" aria-hidden="true">⚠</span>
+    Sign anyway
+    <span class="shortcut">⌘ ↵</span>
+  </button>
+  <div class="avatar-chip" title="Dr. Kalyani Park">KP</div>
+</header>
+
+<div class="shell">
+
+  <div class="meta-strip">
+    <div class="field">MEI-LING PARK</div>
+    <div class="field">34F</div>
+    <div class="field"><span class="lbl">MRN</span>77324</div>
+    <div class="field"><span class="lbl">Visit</span>Apr 30, 2026</div>
+    <div class="field"><span class="lbl">Specialty</span>Family Med</div>
+    <div class="field"><span class="lbl">Duration</span>18 min</div>
+  </div>
+
+  <div class="tabs-row" role="tablist">
+    <div class="tab active" role="tab" aria-selected="true">Soap Note</div>
+    <div class="tab" role="tab" aria-selected="false">Transcript</div>
+    <div class="tab" role="tab" aria-selected="false">Codes</div>
+    <div class="tab" role="tab" aria-selected="false">Rx</div>
+    <div class="tab" role="tab" aria-selected="false">Extras</div>
+  </div>
+
+  <!-- SOAP body -->
+  <div class="soap-area">
+    <div class="soap-stack">
+
+      <section class="soap-section" id="sec-s">
+        <div class="soap-hd">
+          <div class="soap-hd-l">
+            <span class="sage-dot"></span>
+            <span class="title">Subjective</span>
+          </div>
+          <div class="soap-hd-r"><span>Conf <span class="pct">91%</span></span></div>
+        </div>
+        <div class="soap-body">
+          <p>3-day h/o productive cough, mostly clear-yellow sputum. URI symptoms (rhinorrhea, mild sore throat) resolving. Denies fever, dyspnea, chest pain, hemoptysis.</p>
+          <p><strong>PMH:</strong> HTN (controlled on lisinopril 10mg), penicillin allergy. <strong>Tobacco:</strong> never. <strong>EtOH:</strong> occasional.</p>
+        </div>
+      </section>
+
+      <section class="soap-section" id="sec-o">
+        <div class="soap-hd">
+          <div class="soap-hd-l">
+            <span class="sage-dot"></span>
+            <span class="title">Objective</span>
+          </div>
+          <div class="soap-hd-r"><span>Conf <span class="pct">97%</span></span></div>
+        </div>
+        <div class="soap-body">
+          <p><span class="vital"><span class="vital-label">VS · </span>BP 118/74 · HR 88 · RR 18 · T 98.6°F · SpO₂ 98% RA</span></p>
+          <p><strong>Gen:</strong> NAD, alert, conversational. <strong>HEENT:</strong> mild posterior pharyngeal erythema, no exudate; TMs clear b/l.</p>
+          <p><strong>Lungs:</strong> scattered rhonchi b/l, clearing with cough; no wheezing or crackles. <strong>Cardiac:</strong> RRR, no m/r/g.</p>
+        </div>
+      </section>
+
+      <section class="soap-section" id="sec-a">
+        <div class="soap-hd">
+          <div class="soap-hd-l">
+            <span class="sage-dot"></span>
+            <span class="title">Assessment</span>
+          </div>
+          <div class="soap-hd-r"><span>Conf <span class="pct">89%</span></span></div>
+        </div>
+        <div class="soap-body">
+          <ol>
+            <li>Acute bronchitis, viral etiology likely <span class="dx-pill">J20.9</span></li>
+            <li>URI, resolving <span class="dx-pill">J06.9</span></li>
+            <li>HTN, controlled <span class="dx-pill">I10</span></li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="soap-section flag" id="sec-p">
+        <div class="soap-hd">
+          <div class="soap-hd-l">
+            <span class="sage-dot"></span>
+            <span class="title">Plan</span>
+          </div>
+          <div class="soap-hd-r"><span>Conf <span class="pct">86%</span></span></div>
+        </div>
+        <div class="soap-body">
+          <p>Symptomatic care: hydration, rest, OTC dextromethorphan for cough.</p>
+          <p><span class="warn-mark" title="Mentioned but no Rx draft created">Albuterol HFA inhaler 1–2 puffs q4–6h PRN wheezing</span> (limit 8 puffs/24h).</p>
+          <p><span class="warn-mark" title="F/u mentioned but no calendar event scheduled">F/u 7–10 days</span> if symptoms persist or worsen. Continue lisinopril; recheck BP in 6 months.</p>
+          <p><em>Patient education:</em> <span class="warn-mark" title="No specific handout linked">antibiotic stewardship discussed</span>.</p>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- ───────── Pre-flight checklist (sticky bottom panel) ───────── -->
+  <section class="preflight" aria-label="Pre-sign checklist">
+    <div class="pf-hd">
+      <div class="pf-hd-l">
+        <span class="pf-title">Pre-flight</span>
+        <div class="pf-progress">
+          <div class="pf-bar"><div class="pf-bar-fill"></div></div>
+          <span class="pf-count"><strong>5 of 8</strong> checks passed · <span class="warn-c">3 warnings</span></span>
+        </div>
+      </div>
+      <div class="pf-actions">
+        <button class="btn-ghost" type="button">Copy SOAP</button>
+        <button class="btn-sage outline btn-sign-gated" type="button" title="Override 3 warnings to sign">
+          <span class="warn-icon" aria-hidden="true">⚠</span>
+          Sign anyway
+          <span class="warn-count">3 warnings</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="pf-grid">
+      <div class="pf-item" tabindex="0" data-target="all">
+        <div class="pf-icon">✓</div>
+        <div class="pf-content">
+          <div class="pf-text">All 4 sections drafted</div>
+          <div class="pf-meta">S · O · A · P</div>
+        </div>
+      </div>
+
+      <div class="pf-item" tabindex="0" data-target="sec-a">
+        <div class="pf-icon">✓</div>
+        <div class="pf-content">
+          <div class="pf-text">ICD-10 codes attached</div>
+          <div class="pf-meta">3 codes · J20.9 · J06.9 · I10</div>
+        </div>
+      </div>
+
+      <div class="pf-item" tabindex="0" data-target="sec-p">
+        <div class="pf-icon">✓</div>
+        <div class="pf-content">
+          <div class="pf-text">Follow-up timeframe in Plan</div>
+          <div class="pf-meta">"F/u 7–10 days"</div>
+        </div>
+      </div>
+
+      <div class="pf-item" tabindex="0" data-target="sec-a">
+        <div class="pf-icon">✓</div>
+        <div class="pf-content">
+          <div class="pf-text">Assessment confidence</div>
+          <div class="pf-meta">89% · above 80% threshold</div>
+        </div>
+      </div>
+
+      <div class="pf-item warn" tabindex="0" data-popover="popRx" data-target="sec-p">
+        <div class="pf-icon">⚠</div>
+        <div class="pf-content">
+          <div class="pf-text">Rx mentioned, no draft created</div>
+          <div class="pf-meta">Plan → Albuterol HFA</div>
+        </div>
+        <span class="pf-action-tag">Fix</span>
+
+        <!-- Popover, anchored to this warn item; shown by default to demo state -->
+        <div class="pf-popover show" id="popRx" role="dialog" aria-label="Rx mismatch">
+          <div class="pf-popover-title">Rx mismatch</div>
+          <div class="pf-popover-body">
+            Plan says <code>Albuterol HFA 1–2 puffs q4–6h PRN</code> but the Rx tab has no draft. Create the Rx automatically from Plan text?
+          </div>
+          <div class="pf-popover-actions">
+            <button class="pf-confirm" type="button">Create Rx draft</button>
+            <button class="pf-skip" type="button">Skip</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="pf-item warn" tabindex="0" data-target="sec-p">
+        <div class="pf-icon">⚠</div>
+        <div class="pf-content">
+          <div class="pf-text">Education noted, no handout linked</div>
+          <div class="pf-meta">"antibiotic stewardship"</div>
+        </div>
+        <span class="pf-action-tag">Add link</span>
+      </div>
+
+      <div class="pf-item" tabindex="0" data-target="sec-o">
+        <div class="pf-icon">✓</div>
+        <div class="pf-content">
+          <div class="pf-text">Vitals captured</div>
+          <div class="pf-meta">5 of 5 · BP HR RR T SpO₂</div>
+        </div>
+      </div>
+
+      <div class="pf-item warn" tabindex="0" data-target="sec-p">
+        <div class="pf-icon">⚠</div>
+        <div class="pf-content">
+          <div class="pf-text">F/u mentioned, no appointment</div>
+          <div class="pf-meta">7–10 days · calendar empty</div>
+        </div>
+        <span class="pf-action-tag">Schedule</span>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+(function(){
+  // Tab clicks - visual swap only
+  document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(x => {
+        x.classList.remove('active');
+        x.setAttribute('aria-selected','false');
+      });
+      t.classList.add('active');
+      t.setAttribute('aria-selected','true');
+    });
+  });
+
+  // Pre-flight item -> highlight target SOAP section
+  const items = document.querySelectorAll('.pf-item');
+  items.forEach(item => {
+    item.addEventListener('mouseenter', () => {
+      const tgt = item.getAttribute('data-target');
+      if(!tgt || tgt === 'all') return;
+      const el = document.getElementById(tgt);
+      if(el) el.classList.add('linked');
+    });
+    item.addEventListener('mouseleave', () => {
+      document.querySelectorAll('.soap-section.linked').forEach(s => s.classList.remove('linked'));
+    });
+    item.addEventListener('click', (e) => {
+      const tgt = item.getAttribute('data-target');
+      if(!tgt || tgt === 'all') return;
+      const el = document.getElementById(tgt);
+      if(el){
+        el.scrollIntoView({behavior:'smooth', block:'center'});
+        el.classList.add('linked');
+        setTimeout(() => el.classList.remove('linked'), 1400);
+      }
+    });
+  });
+
+  // Popover skip -> hide
+  document.querySelector('#popRx .pf-skip')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.getElementById('popRx').classList.remove('show');
+  });
+  document.querySelector('#popRx .pf-confirm')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    // visual cue only - not wired
+    document.getElementById('popRx').classList.remove('show');
+  });
+})();
+</script>
+
+</body>
+</html>

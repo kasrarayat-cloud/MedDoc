@@ -1,0 +1,1065 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QuillMD · Visit · Mei-Ling Park · v10 SOAP V2 · Sign &amp; Scan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #08090a;
+  --surface-1: #0d0e10;
+  --surface-2: #131416;
+  --surface-3: #1a1c1e;
+  --border: #21232a;
+  --border-strong: #2c2f38;
+  --hairline: rgba(255,255,255,0.05);
+  --hairline-strong: rgba(255,255,255,0.08);
+  --text: #f7f8f8;
+  --text-2: #b4bcc8;
+  --text-3: #6c737f;
+  --text-4: #4b5159;
+  --sage: #7AA68C;
+  --sage-bright: #9BC4A8;
+  --sage-deep: #2F5040;
+  --sage-tint: rgba(122,166,140,0.13);
+  --sage-glow: rgba(122,166,140,0.18);
+  --warning: #d4a437;
+  --danger: #d4574a;
+  --info: #5b8db8;
+  --font-sans: 'Inter', -apple-system, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text)}
+body{
+  font-family:var(--font-sans);
+  font-feature-settings:'cv11','ss01';
+  font-size:13px;
+  line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  letter-spacing:-0.005em;
+  min-height:100vh;
+}
+::selection{background:rgba(122,166,140,.25);color:var(--text)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+a{color:inherit;text-decoration:none}
+
+/* ───────── Top bar (matches v8 chrome) ───────── */
+.topbar{
+  position:sticky;top:0;z-index:30;
+  height:44px;
+  display:flex;align-items:center;gap:12px;
+  padding:0 16px;
+  background:rgba(8,9,10,.85);
+  backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--hairline);
+}
+.brand{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;letter-spacing:-0.01em}
+.brand-mark{
+  width:18px;height:18px;border-radius:5px;
+  background:linear-gradient(135deg,var(--sage) 0%,var(--sage-deep) 100%);
+  display:grid;place-items:center;color:#0c1410;font-size:10px;font-weight:700;
+  box-shadow:0 0 0 1px rgba(255,255,255,.06) inset;
+}
+.brand-mark::before{content:'Q'}
+.crumb-sep{color:var(--text-4);font-size:12px}
+.crumb{color:var(--text-2);font-size:13px;transition:color 100ms var(--ease)}
+.crumb:hover{color:var(--text)}
+.crumb-active{color:var(--text)}
+.spacer{flex:1}
+.status-pill-chrome{
+  display:inline-flex;align-items:center;gap:6px;
+  height:22px;padding:0 9px;
+  border-radius:4px;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.06em;text-transform:uppercase;font-weight:500;
+  border:1px solid rgba(122,166,140,.25);
+  color:var(--sage-bright);
+  background:rgba(122,166,140,.06);
+}
+.status-pill-chrome .pdot{
+  width:5px;height:5px;border-radius:50%;
+  background:var(--sage);
+  animation:idle-pulse 1.6s ease-in-out infinite;
+}
+@keyframes idle-pulse{
+  0%,100%{opacity:.7;transform:scale(1)}
+  50%{opacity:1;transform:scale(1.04)}
+}
+.btn-sage{
+  display:inline-flex;align-items:center;gap:8px;
+  height:30px;padding:0 14px;
+  background:var(--sage);
+  color:#0d1611;
+  border-radius:6px;
+  font-size:12.5px;font-weight:500;
+  letter-spacing:-0.005em;
+  transition:background 100ms var(--ease), transform 80ms var(--ease), box-shadow 200ms var(--ease);
+}
+.btn-sage:hover{background:#88b599;transform:scale(1.02);box-shadow:0 0 0 4px rgba(122,166,140,.18)}
+.btn-sage .shortcut{font-family:var(--font-mono);font-size:11px;color:rgba(13,22,17,.55)}
+.avatar-chip{
+  width:24px;height:24px;border-radius:6px;
+  background:linear-gradient(135deg,#3a4a52 0%,#2a3036 100%);
+  color:#dde6ec;font-size:10.5px;font-weight:600;
+  display:grid;place-items:center;letter-spacing:0.02em;
+  border:1px solid var(--hairline-strong);
+}
+
+/* ───────── Shell ───────── */
+.shell{
+  position:relative;
+  min-height:calc(100vh - 44px);
+  padding:18px 28px 60px;
+  max-width:1240px;
+  margin:0 auto;
+}
+
+/* meta strip */
+.meta-strip{
+  display:flex;align-items:center;
+  padding:6px 0 14px;
+  margin-bottom:14px;
+  border-bottom:1px solid var(--hairline);
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--text-2);
+}
+.meta-strip .field{padding:0 14px;border-right:1px solid var(--hairline)}
+.meta-strip .field:first-child{padding-left:0;color:var(--text);font-weight:500}
+.meta-strip .field:last-child{border-right:0}
+.meta-strip .field .lbl{color:var(--text-4);margin-right:4px;font-weight:400}
+
+/* tabs */
+.tabs-row{
+  display:flex;align-items:center;gap:0;
+  margin-bottom:22px;
+  border-bottom:1px solid var(--hairline);
+}
+.tab{
+  position:relative;
+  padding:8px 16px 10px;
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.07em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  font-weight:500;
+  cursor:pointer;
+  transition:color 100ms var(--ease);
+}
+.tab:first-child{padding-left:0}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--sage-bright)}
+.tab.active::after{
+  content:'';position:absolute;
+  left:0;right:0;bottom:-1px;
+  height:1.5px;
+  background:var(--sage);
+  border-radius:1px 1px 0 0;
+}
+
+/* ───────── Triage banner ───────── */
+.triage{
+  display:flex;align-items:center;gap:14px;
+  padding:10px 14px;
+  margin-bottom:18px;
+  border-radius:6px;
+  border:1px solid rgba(122,166,140,.22);
+  background:rgba(122,166,140,.045);
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.05em;
+}
+.triage .tg-flag{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:3px 9px;
+  border:1px solid rgba(122,166,140,.4);
+  border-radius:3px;
+  background:rgba(122,166,140,.1);
+  color:var(--sage-bright);
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  font-weight:500;
+}
+.triage .tg-flag .dot{width:4px;height:4px;border-radius:50%;background:var(--sage-bright)}
+.triage .tg-text{color:var(--text-2);flex:1;letter-spacing:0;font-family:var(--font-sans);font-size:12.5px}
+.triage .tg-text strong{color:var(--text);font-weight:500}
+.triage .tg-meta{color:var(--text-4);font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase}
+
+/* ───────── ABOVE THE FOLD: Assessment + Plan panel ───────── */
+.ap-panel{
+  position:relative;
+  border:1px solid rgba(122,166,140,.22);
+  border-radius:8px;
+  background:linear-gradient(180deg, rgba(122,166,140,.055) 0%, rgba(122,166,140,.025) 100%);
+  padding:24px 26px 22px;
+  margin-bottom:18px;
+  overflow:hidden;
+}
+.ap-panel::before{
+  content:'';
+  position:absolute;
+  inset:0;
+  background:radial-gradient(ellipse at 30% 0%, rgba(122,166,140,.08) 0%, transparent 60%);
+  pointer-events:none;
+}
+.ap-panel > *{position:relative;z-index:1}
+
+.ap-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:24px;
+}
+.ap-col{display:flex;flex-direction:column;min-width:0}
+.ap-head{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:14px;
+  padding-bottom:10px;
+  border-bottom:1px solid rgba(122,166,140,.16);
+}
+.ap-head-l{display:flex;align-items:center;gap:10px}
+.ap-letter{
+  display:inline-grid;place-items:center;
+  width:24px;height:24px;
+  border:1px solid rgba(122,166,140,.4);
+  background:rgba(122,166,140,.12);
+  border-radius:5px;
+  color:var(--sage-bright);
+  font-family:var(--font-mono);
+  font-size:11px;
+  font-weight:600;
+  letter-spacing:0;
+}
+.ap-title{
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.16em;
+  text-transform:uppercase;
+  color:var(--text);
+  font-weight:500;
+}
+.ap-sub{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.1em;
+  color:var(--text-3);
+  text-transform:uppercase;
+}
+.ap-conf{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.1em;
+  color:var(--sage-bright);
+  font-variant-numeric:tabular-nums;
+  display:inline-flex;align-items:center;gap:5px;
+}
+.ap-conf .cdot{width:4px;height:4px;border-radius:50%;background:var(--sage)}
+
+/* Assessment list — bigger */
+.dx{
+  list-style:none;margin:0;padding:0;
+  counter-reset:dxi;
+}
+.dx li{
+  position:relative;
+  padding:9px 0 9px 38px;
+  font-size:16.5px;
+  line-height:1.45;
+  letter-spacing:-0.01em;
+  border-bottom:1px dashed rgba(122,166,140,.13);
+  counter-increment:dxi;
+  color:var(--text);
+  font-weight:500;
+}
+.dx li:last-child{border-bottom:0}
+.dx li::before{
+  content:counter(dxi);
+  position:absolute;
+  left:0;top:11px;
+  width:22px;height:22px;
+  display:grid;place-items:center;
+  border:1px solid rgba(122,166,140,.32);
+  border-radius:4px;
+  background:rgba(122,166,140,.06);
+  color:var(--sage-bright);
+  font-family:var(--font-mono);
+  font-size:11px;
+  font-weight:500;
+  font-variant-numeric:tabular-nums;
+}
+.dx-code{
+  font-family:var(--font-mono);
+  font-size:11px;
+  color:var(--sage-bright);
+  margin-left:8px;
+  padding:2px 7px;
+  border:1px solid rgba(122,166,140,.28);
+  border-radius:3px;
+  letter-spacing:0.05em;
+  background:rgba(122,166,140,.06);
+  vertical-align:1px;
+  font-weight:500;
+}
+
+/* Plan list — bigger */
+.plan{
+  list-style:none;margin:0;padding:0;
+  display:flex;flex-direction:column;gap:0;
+}
+.plan li{
+  position:relative;
+  padding:9px 0 9px 26px;
+  font-size:15px;
+  line-height:1.5;
+  letter-spacing:-0.005em;
+  border-bottom:1px dashed rgba(122,166,140,.13);
+  color:var(--text);
+}
+.plan li:last-child{border-bottom:0}
+.plan li::before{
+  content:'';
+  position:absolute;
+  left:6px;top:18px;
+  width:9px;height:1.5px;
+  background:var(--sage);
+}
+.plan strong{color:var(--text);font-weight:600}
+.plan em{color:var(--text-2);font-style:italic}
+.plan .rx-tag{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--sage-bright);
+  padding:1px 6px;
+  border:1px solid rgba(122,166,140,.28);
+  border-radius:3px;
+  background:rgba(122,166,140,.06);
+  margin-right:6px;
+  vertical-align:1px;
+  font-weight:500;
+}
+
+/* big sage CTA */
+.looks-good{
+  margin-top:22px;
+  padding-top:20px;
+  border-top:1px solid rgba(122,166,140,.18);
+  display:flex;align-items:center;justify-content:space-between;gap:18px;
+  flex-wrap:wrap;
+}
+.lg-meta{
+  display:flex;flex-direction:column;gap:4px;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--text-3);
+}
+.lg-meta .l1{color:var(--text-2)}
+.lg-meta .l1 .editc{color:var(--sage-bright);font-variant-numeric:tabular-nums}
+.lg-meta .l2{color:var(--text-4)}
+
+.lg-actions{display:flex;align-items:center;gap:10px}
+.btn-review{
+  display:inline-flex;align-items:center;gap:8px;
+  height:42px;padding:0 18px;
+  background:transparent;
+  border:1px solid var(--hairline-strong);
+  color:var(--text-2);
+  border-radius:7px;
+  font-size:13.5px;
+  font-weight:500;
+  letter-spacing:-0.005em;
+  transition:background 100ms var(--ease), color 100ms var(--ease), border-color 100ms var(--ease);
+}
+.btn-review:hover{background:rgba(255,255,255,.04);color:var(--text);border-color:rgba(255,255,255,.16)}
+
+.btn-looks-good{
+  display:inline-flex;align-items:center;gap:10px;
+  height:42px;padding:0 22px;
+  background:var(--sage);
+  color:#0d1611;
+  border-radius:7px;
+  font-size:14px;
+  font-weight:600;
+  letter-spacing:-0.005em;
+  transition:background 100ms var(--ease), transform 80ms var(--ease), box-shadow 200ms var(--ease);
+  box-shadow:0 0 0 1px rgba(122,166,140,.32),
+             0 0 18px rgba(122,166,140,.12);
+}
+.btn-looks-good:hover{
+  background:#88b599;
+  transform:scale(1.02);
+  box-shadow:0 0 0 1px rgba(122,166,140,.5),
+             0 0 28px rgba(122,166,140,.22);
+}
+.btn-looks-good:active{transform:scale(.98)}
+.btn-looks-good .shortcut{
+  font-family:var(--font-mono);
+  font-size:11px;
+  color:rgba(13,22,17,.55);
+  font-weight:500;
+}
+.btn-looks-good svg{width:14px;height:14px}
+
+/* ───────── BELOW THE FOLD: collapsed S/O ───────── */
+.so-stack{
+  display:flex;flex-direction:column;gap:10px;
+}
+.so-row{
+  border:1px solid var(--hairline);
+  border-radius:6px;
+  background:var(--surface-1);
+  overflow:hidden;
+  transition:border-color 130ms var(--ease);
+}
+.so-row.open{border-color:var(--hairline-strong)}
+.so-summary{
+  display:flex;align-items:center;gap:14px;
+  padding:12px 16px;
+  cursor:pointer;
+  position:relative;
+  transition:background 100ms var(--ease);
+}
+.so-summary:hover{background:rgba(255,255,255,.018)}
+.so-letter{
+  display:inline-grid;place-items:center;
+  width:22px;height:22px;
+  border:1px solid var(--hairline-strong);
+  background:rgba(255,255,255,.02);
+  border-radius:4px;
+  color:var(--text-2);
+  font-family:var(--font-mono);
+  font-size:11px;
+  font-weight:500;
+  flex-shrink:0;
+}
+.so-row.open .so-letter{
+  border-color:rgba(122,166,140,.35);
+  background:rgba(122,166,140,.08);
+  color:var(--sage-bright);
+}
+.so-label{
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.12em;
+  text-transform:uppercase;
+  color:var(--text-2);
+  font-weight:500;
+  flex-shrink:0;
+}
+.so-row.open .so-label{color:var(--text)}
+.so-bullet{color:var(--text-4);font-family:var(--font-mono);font-size:11px}
+.so-tldr{
+  flex:1;
+  font-size:13.5px;
+  color:var(--text-2);
+  letter-spacing:-0.005em;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  min-width:0;
+  line-height:1.4;
+}
+.so-tldr strong{color:var(--text);font-weight:500}
+.so-meta{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--text-4);
+  flex-shrink:0;
+  display:flex;align-items:center;gap:10px;
+}
+.so-meta .conf-val{color:var(--sage-bright);font-variant-numeric:tabular-nums}
+.so-chev{
+  width:18px;height:18px;
+  display:grid;place-items:center;
+  color:var(--text-3);
+  flex-shrink:0;
+  transition:transform 130ms var(--ease), color 100ms var(--ease);
+}
+.so-chev svg{width:10px;height:10px}
+.so-row.open .so-chev{transform:rotate(180deg);color:var(--sage-bright)}
+
+.so-body{
+  display:none;
+  padding:0 16px 16px 52px;
+  border-top:1px solid var(--hairline);
+  margin-top:0;
+}
+.so-row.open .so-body{
+  display:block;
+  padding-top:12px;
+}
+.so-body .prose{
+  font-size:14px;
+  line-height:1.65;
+  color:var(--text);
+  letter-spacing:-0.005em;
+}
+.so-body .prose p{margin:0 0 0.7em}
+.so-body .prose p:last-child{margin-bottom:0}
+.so-body .prose strong{color:var(--text);font-weight:600}
+.so-body .prose em{color:var(--text-2);font-style:italic}
+
+/* vitals chip-row */
+.vitals-chips{
+  display:flex;flex-wrap:wrap;gap:8px;
+  margin:6px 0 12px;
+}
+.vchip{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:5px 10px;
+  border:1px solid var(--hairline);
+  border-radius:4px;
+  background:rgba(255,255,255,.015);
+  font-family:var(--font-mono);
+  font-size:11.5px;
+  color:var(--text);
+  letter-spacing:0;
+  font-variant-numeric:tabular-nums;
+}
+.vchip .lb{color:var(--text-4);font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase}
+
+.exam-mini{
+  margin:6px 0 0;
+  padding:0;
+  list-style:none;
+  display:flex;flex-direction:column;gap:5px;
+  font-size:13.5px;
+  line-height:1.55;
+}
+.exam-mini li{
+  display:grid;
+  grid-template-columns:90px 1fr;
+  gap:12px;
+}
+.exam-mini .ex-lbl{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  padding-top:2px;
+  font-weight:500;
+}
+.exam-mini .ex-val{color:var(--text-2)}
+.exam-mini .ex-val strong{color:var(--text);font-weight:500}
+
+/* ───────── Diff confirmation modal ───────── */
+.modal-veil{
+  position:fixed;inset:0;
+  background:rgba(8,9,10,.78);
+  backdrop-filter:blur(6px);
+  z-index:50;
+  display:none;
+  align-items:flex-start;justify-content:center;
+  padding:80px 20px 20px;
+  overflow:auto;
+  opacity:0;
+  transition:opacity 150ms var(--ease);
+}
+.modal-veil.open{display:flex;opacity:1}
+.modal-card{
+  width:100%;
+  max-width:720px;
+  background:var(--surface-1);
+  border:1px solid var(--hairline-strong);
+  border-radius:10px;
+  padding:24px 26px 22px;
+  transform:translateY(8px);
+  transition:transform 150ms var(--ease);
+  position:relative;
+}
+.modal-veil.open .modal-card{transform:translateY(0)}
+.modal-head{
+  display:flex;align-items:flex-start;justify-content:space-between;gap:14px;
+  margin-bottom:18px;
+  padding-bottom:14px;
+  border-bottom:1px solid var(--hairline);
+}
+.modal-head .htitle{
+  font-size:16px;
+  font-weight:600;
+  letter-spacing:-0.012em;
+  color:var(--text);
+  margin:0;
+}
+.modal-head .hsub{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  margin-top:5px;
+}
+.modal-close{
+  width:24px;height:24px;
+  display:grid;place-items:center;
+  border-radius:5px;
+  color:var(--text-3);
+  transition:background 100ms var(--ease), color 100ms var(--ease);
+}
+.modal-close:hover{background:rgba(255,255,255,.05);color:var(--text)}
+.modal-close svg{width:11px;height:11px}
+
+.diff-list{
+  display:flex;flex-direction:column;gap:14px;
+  margin-bottom:16px;
+}
+.diff-row{
+  border:1px solid var(--hairline);
+  border-radius:6px;
+  padding:12px 14px;
+}
+.diff-meta{
+  display:flex;align-items:center;gap:10px;
+  margin-bottom:8px;
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--text-3);
+}
+.diff-meta .sec-tag{
+  color:var(--sage-bright);
+  font-weight:500;
+}
+.diff-meta .turn-cite{
+  color:var(--text-4);
+  margin-left:auto;
+}
+.diff-old, .diff-new{
+  font-size:13.5px;
+  line-height:1.55;
+  padding:8px 11px;
+  border-radius:4px;
+  letter-spacing:-0.005em;
+}
+.diff-old{
+  color:var(--text-3);
+  background:rgba(212,87,74,.045);
+  border-left:2px solid rgba(212,87,74,.4);
+  text-decoration:line-through;
+  text-decoration-color:rgba(212,87,74,.4);
+  margin-bottom:6px;
+}
+.diff-new{
+  color:var(--text);
+  background:rgba(122,166,140,.06);
+  border-left:2px solid var(--sage);
+}
+.diff-new strong{color:var(--text);font-weight:500;background:rgba(122,166,140,.12);padding:0 2px;border-radius:2px}
+
+.diff-empty{
+  text-align:center;
+  padding:14px;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--text-4);
+  border:1px dashed var(--hairline-strong);
+  border-radius:6px;
+  margin-bottom:16px;
+}
+
+.modal-foot{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding-top:14px;
+  border-top:1px solid var(--hairline);
+  flex-wrap:wrap;
+}
+.modal-foot .legalese{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  max-width:340px;
+  line-height:1.5;
+  flex:1;
+  min-width:200px;
+}
+.modal-foot .legalese strong{color:var(--text-2);font-weight:500}
+.modal-actions{display:flex;align-items:center;gap:10px;flex-shrink:0}
+
+.btn-modal-cancel{
+  display:inline-flex;align-items:center;gap:8px;
+  height:36px;padding:0 16px;
+  background:transparent;
+  border:1px solid var(--hairline-strong);
+  color:var(--text-2);
+  border-radius:6px;
+  font-size:13px;
+  font-weight:500;
+  transition:background 100ms var(--ease), color 100ms var(--ease), border-color 100ms var(--ease);
+}
+.btn-modal-cancel:hover{background:rgba(255,255,255,.04);color:var(--text);border-color:rgba(255,255,255,.16)}
+.btn-modal-confirm{
+  display:inline-flex;align-items:center;gap:8px;
+  height:36px;padding:0 18px;
+  background:var(--sage);
+  color:#0d1611;
+  border-radius:6px;
+  font-size:13.5px;
+  font-weight:600;
+  letter-spacing:-0.005em;
+  transition:background 100ms var(--ease), transform 80ms var(--ease), box-shadow 200ms var(--ease);
+}
+.btn-modal-confirm:hover{
+  background:#88b599;
+  transform:scale(1.02);
+  box-shadow:0 0 0 4px rgba(122,166,140,.18);
+}
+.btn-modal-confirm svg{width:13px;height:13px}
+
+/* ───────── Reduced motion ───────── */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;
+  }
+  .status-pill-chrome .pdot{animation:none}
+  .so-summary:hover{background:transparent}
+  .btn-looks-good:hover, .btn-modal-confirm:hover, .btn-sage:hover{transform:none}
+  .modal-card{transform:none}
+}
+
+/* ───────── Responsive: iPad landscape (1024px) ───────── */
+@media (max-width:1080px){
+  .ap-grid{grid-template-columns:1fr;gap:18px}
+  .ap-col + .ap-col{padding-top:18px;border-top:1px solid rgba(122,166,140,.16)}
+  .shell{padding:18px 24px 60px}
+}
+@media (max-width:760px){
+  .shell{padding:14px 14px 60px}
+  .meta-strip{flex-wrap:wrap;font-size:10px}
+  .meta-strip .field{padding:4px 10px}
+  .crumb,.crumb-sep{display:none}
+  .crumb-active{display:inline}
+  .topbar{padding:0 12px;gap:8px}
+  .ap-panel{padding:18px 18px 16px}
+  .dx li{font-size:15px;padding-left:34px}
+  .plan li{font-size:14px}
+  .looks-good{flex-direction:column;align-items:stretch}
+  .lg-actions{justify-content:space-between}
+  .so-tldr{display:none}
+  .modal-card{padding:18px 18px 16px}
+  .modal-foot{flex-direction:column;align-items:stretch}
+  .modal-actions{justify-content:flex-end}
+  .triage{flex-wrap:wrap}
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><span class="brand-mark"></span> QuillMD</div>
+  <span class="crumb-sep">/</span>
+  <span class="crumb">Patients</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb">Mei-Ling Park</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb crumb-active">Visit · Apr 30, 2026</span>
+  <div class="spacer"></div>
+  <div class="status-pill-chrome"><span class="pdot"></span><span>Ready</span></div>
+  <button class="btn-sage" type="button"><span>Sign &amp; send</span><span class="shortcut">⌘ ↵</span></button>
+  <div class="avatar-chip">KP</div>
+</header>
+
+<div class="shell">
+
+  <div class="meta-strip">
+    <div class="field">Mei-Ling Park</div>
+    <div class="field">34 F</div>
+    <div class="field"><span class="lbl">MRN</span>77324</div>
+    <div class="field">J20.9 · Bronchitis follow-up</div>
+    <div class="field">99214</div>
+    <div class="field"><span class="lbl">Duration</span>22 min</div>
+  </div>
+
+  <div class="tabs-row" role="tablist">
+    <div class="tab active" role="tab" aria-selected="true">Soap Note</div>
+    <div class="tab" role="tab" aria-selected="false">Transcript</div>
+    <div class="tab" role="tab" aria-selected="false">Codes</div>
+    <div class="tab" role="tab" aria-selected="false">Rx</div>
+    <div class="tab" role="tab" aria-selected="false">Extras</div>
+  </div>
+
+  <!-- Triage banner -->
+  <div class="triage" role="status">
+    <span class="tg-flag"><span class="dot"></span>Routine</span>
+    <span class="tg-text"><strong>No red flags.</strong> No new Rx interactions. 3 problems · 5 plan items · 2 sentences edited from AI draft.</span>
+    <span class="tg-meta">Drafted in 06:18</span>
+  </div>
+
+  <!-- ─── ABOVE THE FOLD: Assessment + Plan ─── -->
+  <div class="ap-panel">
+    <div class="ap-grid">
+
+      <!-- A -->
+      <div class="ap-col">
+        <div class="ap-head">
+          <div class="ap-head-l">
+            <span class="ap-letter">A</span>
+            <div>
+              <div class="ap-title">Assessment</div>
+              <div class="ap-sub">3 problems · ICD-10</div>
+            </div>
+          </div>
+          <span class="ap-conf"><span class="cdot"></span>89% conf</span>
+        </div>
+        <ol class="dx">
+          <li>Acute bronchitis, viral etiology likely<span class="dx-code">J20.9</span></li>
+          <li>URI, resolving<span class="dx-code">J06.9</span></li>
+          <li>HTN, controlled<span class="dx-code">I10</span></li>
+        </ol>
+      </div>
+
+      <!-- P -->
+      <div class="ap-col">
+        <div class="ap-head">
+          <div class="ap-head-l">
+            <span class="ap-letter">P</span>
+            <div>
+              <div class="ap-title">Plan</div>
+              <div class="ap-sub">5 items · 1 Rx · F/U 7–10d</div>
+            </div>
+          </div>
+          <span class="ap-conf"><span class="cdot"></span>86% conf</span>
+        </div>
+        <ul class="plan">
+          <li><strong>Symptomatic care:</strong> hydration, rest, OTC dextromethorphan PRN.</li>
+          <li><span class="rx-tag">Rx</span><strong>Albuterol HFA</strong> 1–2 puffs q4–6h PRN wheezing <em>(max 8/24h).</em></li>
+          <li><strong>F/U 7–10d</strong> if symptoms persist or worsen.</li>
+          <li>Continue lisinopril; <em>recheck BP in 6 months.</em></li>
+          <li><strong>Pt education:</strong> viral URI · antibiotic stewardship discussed.</li>
+        </ul>
+      </div>
+
+    </div>
+
+    <!-- Sign CTA -->
+    <div class="looks-good">
+      <div class="lg-meta">
+        <div class="l1"><span class="editc">2</span> sentences edited · 12 turn citations · 86–97% conf</div>
+        <div class="l2">Last edit 14s ago · Autosaved</div>
+      </div>
+      <div class="lg-actions">
+        <button class="btn-review" type="button" aria-label="Review full transcript">Review transcript</button>
+        <button class="btn-looks-good" type="button" id="lgBtn" aria-label="Looks good — sign">
+          <svg viewBox="0 0 14 14" fill="none" aria-hidden="true">
+            <path d="M3 7.5l3 3 5-7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span>Looks good — sign</span>
+          <span class="shortcut">⌘ ↵</span>
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ─── BELOW THE FOLD: collapsed S/O ─── -->
+  <div class="so-stack">
+
+    <div class="so-row" data-row="s">
+      <div class="so-summary" tabindex="0" role="button" aria-expanded="false" aria-controls="so-body-s">
+        <span class="so-letter">S</span>
+        <span class="so-label">Subjective</span>
+        <span class="so-bullet">·</span>
+        <span class="so-tldr"><strong>3-day productive cough,</strong> URI symptoms resolving, denies fever/SOB. PMH: HTN, PCN allergy.</span>
+        <span class="so-meta"><span>91% conf</span><span class="conf-val">5 turns</span></span>
+        <span class="so-chev" aria-hidden="true">
+          <svg viewBox="0 0 10 10" fill="none"><path d="M2 4l3 3 3-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+      </div>
+      <div class="so-body" id="so-body-s">
+        <div class="prose">
+          <p><strong>HPI:</strong> 3-day h/o productive cough, mostly clear-yellow sputum. URI symptoms (rhinorrhea, mild sore throat) resolving. <strong>Denies</strong> fever, dyspnea, chest pain, hemoptysis.</p>
+          <p><strong>PMH:</strong> HTN (controlled on lisinopril 10 mg). <strong>Allergies:</strong> penicillin (childhood urticaria). <strong>Tobacco:</strong> never. <strong>EtOH:</strong> occasional.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="so-row" data-row="o">
+      <div class="so-summary" tabindex="0" role="button" aria-expanded="false" aria-controls="so-body-o">
+        <span class="so-letter">O</span>
+        <span class="so-label">Objective</span>
+        <span class="so-bullet">·</span>
+        <span class="so-tldr"><strong>VS stable</strong> (BP 118/74, SpO₂ 98% RA). Lungs: scattered rhonchi clearing on cough. No wheeze.</span>
+        <span class="so-meta"><span>97% conf</span><span class="conf-val">2 turns</span></span>
+        <span class="so-chev" aria-hidden="true">
+          <svg viewBox="0 0 10 10" fill="none"><path d="M2 4l3 3 3-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+      </div>
+      <div class="so-body" id="so-body-o">
+        <div class="vitals-chips">
+          <span class="vchip"><span class="lb">BP</span>118/74</span>
+          <span class="vchip"><span class="lb">HR</span>88</span>
+          <span class="vchip"><span class="lb">RR</span>18</span>
+          <span class="vchip"><span class="lb">T</span>98.6°F</span>
+          <span class="vchip"><span class="lb">SpO₂</span>98% RA</span>
+        </div>
+        <ul class="exam-mini">
+          <li><span class="ex-lbl">General</span><span class="ex-val">NAD, alert, conversational.</span></li>
+          <li><span class="ex-lbl">HEENT</span><span class="ex-val">Mild posterior pharyngeal erythema, no exudate; TMs clear b/l.</span></li>
+          <li><span class="ex-lbl">Lungs</span><span class="ex-val"><strong>Scattered rhonchi b/l, clearing with cough;</strong> no wheezing or crackles.</span></li>
+          <li><span class="ex-lbl">Cardiac</span><span class="ex-val">RRR, no m/r/g.</span></li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<!-- ─── Diff confirmation modal ─── -->
+<div class="modal-veil" id="diffModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+  <div class="modal-card">
+    <div class="modal-head">
+      <div>
+        <h2 class="htitle" id="modalTitle">Confirm signature — 2 edits since AI draft</h2>
+        <div class="hsub">You'll be signing the version on the right · 12 turn citations attached</div>
+      </div>
+      <button class="modal-close" type="button" id="modalCloseBtn" aria-label="Close">
+        <svg viewBox="0 0 11 11" fill="none" aria-hidden="true">
+          <path d="M1 1l9 9M10 1l-9 9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="diff-list">
+      <div class="diff-row">
+        <div class="diff-meta">
+          <span class="sec-tag">PLAN · ITEM 2</span>
+          <span class="turn-cite">Cited · T-10 · 00:05:24</span>
+        </div>
+        <div class="diff-old">Albuterol HFA inhaler 1-2 puffs q4-6h PRN wheezing.</div>
+        <div class="diff-new">Albuterol HFA 1–2 puffs q4–6h PRN wheezing <strong>(max 8/24h).</strong></div>
+      </div>
+
+      <div class="diff-row">
+        <div class="diff-meta">
+          <span class="sec-tag">SUBJECTIVE · SENTENCE 2</span>
+          <span class="turn-cite">Cited · T-04 · 00:01:55</span>
+        </div>
+        <div class="diff-old">Denies fever, SOB, chest pain, hemoptysis.</div>
+        <div class="diff-new">She <strong>denies fever, dyspnea, chest pain, or hemoptysis</strong>, and reports no recent travel or sick contacts at home.</div>
+      </div>
+    </div>
+
+    <div class="modal-foot">
+      <div class="legalese"><strong>Signing freezes the note.</strong> Provenance (12 transcript turns) and edit history will be attached to the signed record.</div>
+      <div class="modal-actions">
+        <button class="btn-modal-cancel" type="button" id="modalCancel">Cancel</button>
+        <button class="btn-modal-confirm" type="button" id="modalConfirm">
+          <svg viewBox="0 0 14 14" fill="none" aria-hidden="true">
+            <path d="M3 7.5l3 3 5-7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span>Sign now</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  // tabs visual
+  document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(x => {
+        x.classList.remove('active');
+        x.setAttribute('aria-selected','false');
+      });
+      t.classList.add('active');
+      t.setAttribute('aria-selected','true');
+    });
+  });
+
+  // S/O collapse/expand
+  document.querySelectorAll('.so-summary').forEach(s => {
+    const row = s.closest('.so-row');
+    const toggle = () => {
+      row.classList.toggle('open');
+      s.setAttribute('aria-expanded', row.classList.contains('open') ? 'true' : 'false');
+    };
+    s.addEventListener('click', toggle);
+    s.addEventListener('keydown', (e) => {
+      if(e.key === 'Enter' || e.key === ' '){
+        e.preventDefault();
+        toggle();
+      }
+    });
+  });
+
+  // Looks good -> open modal
+  const modal = document.getElementById('diffModal');
+  const lgBtn = document.getElementById('lgBtn');
+  const closeBtn = document.getElementById('modalCloseBtn');
+  const cancelBtn = document.getElementById('modalCancel');
+  const confirmBtn = document.getElementById('modalConfirm');
+
+  function openModal(){
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden','false');
+  }
+  function closeModal(){
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden','true');
+  }
+  lgBtn.addEventListener('click', openModal);
+  closeBtn.addEventListener('click', closeModal);
+  cancelBtn.addEventListener('click', closeModal);
+  modal.addEventListener('click', (e) => {
+    if(e.target === modal) closeModal();
+  });
+
+  confirmBtn.addEventListener('click', () => {
+    // Visual confirmation only
+    confirmBtn.style.transform = 'scale(0.96)';
+    setTimeout(() => {
+      // flip the chrome status pill to SIGNED
+      const pill = document.querySelector('.status-pill-chrome');
+      if(pill){
+        pill.style.background = 'rgba(122,166,140,.14)';
+        pill.style.borderColor = 'rgba(122,166,140,.45)';
+        pill.querySelector('span:last-child').textContent = 'Signed';
+        const dot = pill.querySelector('.pdot');
+        if(dot){ dot.style.animation = 'none'; dot.style.background = 'var(--sage-bright)'; }
+      }
+      confirmBtn.innerHTML = '<svg viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M3 7.5l3 3 5-7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Signed</span>';
+      confirmBtn.style.transform = '';
+      setTimeout(closeModal, 600);
+    }, 80);
+  });
+
+  // ⌘+↵ shortcut → opens modal
+  document.addEventListener('keydown', (e) => {
+    if((e.metaKey || e.ctrlKey) && e.key === 'Enter'){
+      e.preventDefault();
+      if(!modal.classList.contains('open')) openModal();
+    }
+    if(e.key === 'Escape' && modal.classList.contains('open')){
+      closeModal();
+    }
+  });
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,1036 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QuillMD · SOAP · Diff View · v10 V4</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #08090a;
+  --surface-1: #0d0e10;
+  --surface-2: #131416;
+  --surface-3: #1a1c1e;
+  --border: #21232a;
+  --hairline: rgba(255,255,255,0.05);
+  --hairline-strong: rgba(255,255,255,0.08);
+  --text: #f7f8f8;
+  --text-2: #b4bcc8;
+  --text-3: #6c737f;
+  --text-4: #4b5159;
+  --sage: #7AA68C;
+  --sage-bright: #9BC4A8;
+  --sage-deep: #2F5040;
+  --sage-tint: rgba(122,166,140,0.13);
+  --sage-glow: rgba(122,166,140,0.18);
+  --sage-strong: rgba(122,166,140,0.22);
+  --warning: #d4a437;
+  --warning-bright: #e3b950;
+  --danger: #d4574a;
+  --info: #5b8db8;
+  --font-sans: 'Inter', -apple-system, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text)}
+body{
+  font-family:var(--font-sans);
+  font-feature-settings:'cv11','ss01';
+  font-size:13px;
+  line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  letter-spacing:-0.005em;
+  min-height:100vh;
+}
+::selection{background:rgba(122,166,140,.25);color:var(--text)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+a{color:inherit;text-decoration:none}
+
+/* ─────────────── Top bar (chrome) ─────────────── */
+.topbar{
+  position:sticky;top:0;z-index:30;
+  height:44px;
+  display:flex;align-items:center;gap:12px;
+  padding:0 16px;
+  background:rgba(8,9,10,.85);
+  backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--hairline);
+}
+.brand{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;letter-spacing:-0.01em}
+.brand-mark{
+  width:18px;height:18px;border-radius:5px;
+  background:linear-gradient(135deg,var(--sage) 0%,var(--sage-deep) 100%);
+  display:grid;place-items:center;color:#0c1410;font-size:10px;font-weight:700;
+  box-shadow:0 0 0 1px rgba(255,255,255,.06) inset;
+}
+.brand-mark::before{content:'Q'}
+.crumb-sep{color:var(--text-4);font-size:12px}
+.crumb{color:var(--text-2);font-size:13px;transition:color 100ms var(--ease)}
+.crumb:hover{color:var(--text)}
+.crumb-active{color:var(--text)}
+.spacer{flex:1}
+.status-pill-chrome{
+  display:inline-flex;align-items:center;gap:6px;
+  height:22px;padding:0 9px;
+  border-radius:4px;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.06em;text-transform:uppercase;font-weight:500;
+  border:1px solid rgba(122,166,140,.25);
+  color:var(--sage-bright);
+  background:rgba(122,166,140,.06);
+}
+.status-pill-chrome .pdot{
+  width:5px;height:5px;border-radius:50%;
+  background:var(--sage);
+  animation:idle-pulse 1.6s ease-in-out infinite;
+}
+@keyframes idle-pulse{
+  0%,100%{opacity:.7;transform:scale(1)}
+  50%{opacity:1;transform:scale(1.04)}
+}
+.btn-sage{
+  display:inline-flex;align-items:center;gap:8px;
+  height:30px;padding:0 14px;
+  background:var(--sage);
+  color:#0d1611;
+  border-radius:6px;
+  font-size:12.5px;font-weight:500;
+  letter-spacing:-0.005em;
+  transition:background 100ms var(--ease), transform 80ms var(--ease), box-shadow 200ms var(--ease);
+}
+.btn-sage:hover{background:#88b599;transform:scale(1.02);box-shadow:0 0 0 4px rgba(122,166,140,.18)}
+.btn-sage .shortcut{font-family:var(--font-mono);font-size:11px;color:rgba(13,22,17,.55)}
+.avatar-chip{
+  width:24px;height:24px;border-radius:6px;
+  background:linear-gradient(135deg,#3a4a52 0%,#2a3036 100%);
+  color:#dde6ec;font-size:10.5px;font-weight:600;
+  display:grid;place-items:center;letter-spacing:0.02em;
+  border:1px solid var(--hairline-strong);
+}
+
+/* ─────────────── Shell ─────────────── */
+.shell{
+  position:relative;
+  min-height:calc(100vh - 44px);
+  padding:18px 28px 14px;
+  max-width:1100px;
+  margin:0 auto;
+}
+.shell::before{
+  content:'';
+  position:absolute;
+  top:-100px;left:30%;
+  width:600px;height:380px;
+  background:radial-gradient(ellipse at center, rgba(122,166,140,.04) 0%, transparent 70%);
+  pointer-events:none;
+}
+
+.meta-strip{
+  display:flex;align-items:center;
+  padding:6px 0 14px;
+  margin-bottom:14px;
+  border-bottom:1px solid var(--hairline);
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--text-2);
+}
+.meta-strip .field{padding:0 14px;border-right:1px solid var(--hairline)}
+.meta-strip .field:first-child{padding-left:0;color:var(--text);font-weight:500}
+.meta-strip .field:last-child{border-right:0}
+.meta-strip .field .lbl{color:var(--text-4);margin-right:4px;font-weight:400}
+
+.tabs-row{
+  display:flex;align-items:center;gap:0;
+  margin-bottom:18px;
+  border-bottom:1px solid var(--hairline);
+}
+.tab{
+  position:relative;
+  padding:8px 16px 10px;
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:0.07em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  font-weight:500;
+  cursor:pointer;
+  transition:color 100ms var(--ease);
+}
+.tab:first-child{padding-left:0}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--sage-bright)}
+.tab.active::after{
+  content:'';position:absolute;
+  left:0;right:0;bottom:-1px;
+  height:1.5px;
+  background:var(--sage);
+  border-radius:1px 1px 0 0;
+}
+
+/* ─────────────── Diff toolbar ─────────────── */
+.diff-toolbar{
+  display:flex;align-items:center;justify-content:space-between;gap:14px;
+  padding:10px 12px;
+  margin-bottom:20px;
+  background:var(--surface-1);
+  border:1px solid var(--hairline);
+  border-radius:6px;
+}
+.diff-l{
+  display:flex;align-items:center;gap:14px;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--text-3);
+}
+.diff-l .diff-title{color:var(--text-2);font-weight:500}
+.diff-l .swatch{
+  display:inline-flex;align-items:center;gap:6px;
+  color:var(--text-3);
+}
+.diff-l .swatch::before{
+  content:'';
+  width:10px;height:10px;border-radius:2px;
+  background:var(--sage-strong);
+  border:1px solid rgba(122,166,140,.32);
+}
+.diff-l .swatch.removed::before{
+  background:transparent;
+  border:1px dashed var(--text-4);
+}
+.diff-l .swatch.removed{position:relative}
+
+/* segmented toggle: Show edits | Show clean */
+.diff-toggle{
+  display:inline-flex;align-items:center;
+  height:28px;
+  border:1px solid var(--hairline-strong);
+  border-radius:6px;
+  background:rgba(255,255,255,.015);
+  padding:2px;
+  position:relative;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  font-weight:500;
+}
+.diff-toggle button{
+  position:relative;
+  z-index:2;
+  padding:0 12px;
+  height:22px;
+  color:var(--text-3);
+  border-radius:4px;
+  transition:color 100ms var(--ease);
+}
+.diff-toggle button.active{color:var(--text)}
+.diff-toggle button:hover{color:var(--text-2)}
+.diff-toggle .slider{
+  position:absolute;
+  top:2px;
+  left:2px;
+  height:22px;
+  background:var(--sage-tint);
+  border:1px solid rgba(122,166,140,.32);
+  border-radius:4px;
+  transition:left 130ms var(--ease), width 130ms var(--ease);
+}
+
+/* ─────────────── SOAP sections ─────────────── */
+.section-block{margin-bottom:30px}
+.section-head{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  margin-bottom:12px;
+  padding-bottom:10px;
+  border-bottom:1px solid var(--hairline);
+}
+.section-eyebrow{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.14em;
+  text-transform:uppercase;
+  color:var(--text-3);
+  display:flex;align-items:center;gap:8px;
+  margin-bottom:4px;
+}
+.section-eyebrow .ltr{
+  display:inline-grid;place-items:center;
+  width:18px;height:18px;
+  border:1px solid rgba(122,166,140,.28);
+  background:rgba(122,166,140,.07);
+  border-radius:4px;
+  color:var(--sage-bright);
+  font-size:10px;
+  letter-spacing:0;
+  font-weight:500;
+}
+.section-title{
+  font-family:var(--font-sans);
+  font-size:18px;
+  font-weight:600;
+  letter-spacing:-0.015em;
+  color:var(--text);
+  margin:0;
+}
+.section-edit-count{
+  display:inline-flex;align-items:center;gap:6px;
+  height:24px;padding:0 10px;
+  border:1px solid var(--hairline-strong);
+  border-radius:4px;
+  background:rgba(255,255,255,.02);
+  color:var(--text-2);
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.10em;
+  text-transform:uppercase;
+  font-weight:500;
+}
+.section-edit-count.has-substantive{
+  border-color:rgba(122,166,140,.30);
+  color:var(--sage-bright);
+  background:rgba(122,166,140,.07);
+}
+.section-edit-count.zero{color:var(--text-4)}
+.section-edit-count .ec-dot{
+  width:5px;height:5px;border-radius:50%;
+  background:currentColor;
+}
+
+/* paragraphs */
+.note-stack{display:flex;flex-direction:column;gap:0}
+.note-line{
+  position:relative;
+  padding:10px 14px;
+  margin:0 -14px 2px;
+  border-radius:5px;
+  border:1px solid transparent;
+  font-size:14.5px;
+  line-height:1.7;
+  color:var(--text);
+  letter-spacing:-0.005em;
+  transition:background 130ms var(--ease), border-color 130ms var(--ease);
+  cursor:text;
+}
+.note-line:hover{background:rgba(255,255,255,.02);border-color:var(--hairline)}
+.note-line strong{color:var(--text);font-weight:600}
+.note-line .vitals-inline{
+  font-family:var(--font-mono);
+  font-size:13.5px;
+  color:var(--text);
+  font-variant-numeric:tabular-nums;
+  letter-spacing:0;
+}
+.note-line .vitals-inline .v-lbl{
+  color:var(--text-4);
+  font-size:10px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  margin-right:3px;
+}
+
+/* sage left marker for any line that has substantive edits */
+.note-line.has-edit::before{
+  content:'';
+  position:absolute;
+  left:0;top:8px;bottom:8px;
+  width:2px;
+  background:var(--sage);
+  border-radius:1px;
+}
+
+/* numbered list */
+.dx-list{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:0}
+.dx-list .note-line{padding-left:42px}
+.dx-list .note-line .dx-num{
+  position:absolute;
+  left:18px;top:11px;
+  font-family:var(--font-mono);
+  font-size:11.5px;
+  color:var(--sage-bright);
+  font-weight:500;
+}
+.dx-list .note-line .dx-code{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  color:var(--text-3);
+  margin-left:8px;
+  padding:1px 5px;
+  border:1px solid var(--hairline-strong);
+  border-radius:3px;
+  letter-spacing:0.04em;
+  background:rgba(255,255,255,.02);
+  vertical-align:1px;
+  white-space:nowrap;
+}
+
+/* ─────────────── Diff token styling ─────────────── */
+/* Doctor's added text — sage tint background + slight underline tone */
+.add{
+  background:var(--sage-tint);
+  color:var(--text);
+  padding:1px 3px;
+  border-radius:2px;
+  box-shadow:inset 0 -1px 0 rgba(122,166,140,.5);
+  cursor:help;
+  position:relative;
+  transition:background 100ms var(--ease);
+}
+.add:hover{background:rgba(122,166,140,.20)}
+
+/* Doctor's removed AI text — strikethrough + dim */
+.rem{
+  color:var(--text-4);
+  text-decoration:line-through;
+  text-decoration-color:var(--text-4);
+  text-decoration-thickness:1px;
+  cursor:help;
+  position:relative;
+  transition:color 100ms var(--ease);
+  /* Soften the strikethrough so it never reads as urgent/red */
+  background:rgba(255,255,255,0.012);
+  padding:0 2px;
+  border-radius:2px;
+}
+.rem:hover{color:var(--text-3);background:rgba(255,255,255,.025)}
+
+/* Show-clean mode: hide removals, drop sage backgrounds */
+.show-clean .rem{display:none}
+.show-clean .add{
+  background:transparent;
+  box-shadow:none;
+  padding:0;
+  cursor:text;
+}
+.show-clean .note-line.has-edit::before{display:none}
+
+/* ─────────────── Edit popover ─────────────── */
+.edit-popover{
+  position:absolute;
+  z-index:50;
+  bottom:calc(100% + 6px);
+  left:0;
+  min-width:300px;
+  max-width:380px;
+  padding:11px 12px 11px 13px;
+  background:var(--surface-2);
+  border:1px solid var(--hairline-strong);
+  border-radius:6px;
+  pointer-events:none;
+  opacity:0;
+  transform:translateY(4px);
+  transition:opacity 130ms var(--ease), transform 130ms var(--ease);
+}
+.add:hover .edit-popover,
+.rem:hover .edit-popover{opacity:1;transform:translateY(0);pointer-events:auto}
+.edit-popover::before{
+  content:'';
+  position:absolute;
+  left:0;top:8px;bottom:8px;
+  width:2px;
+  background:var(--sage);
+  border-radius:1px;
+}
+.ep-meta{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  margin-bottom:6px;
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:0.06em;
+}
+.ep-meta-l{display:flex;align-items:center;gap:7px}
+.ep-avatar{
+  width:18px;height:18px;border-radius:4px;
+  background:linear-gradient(135deg,#3a4a52 0%,#2a3036 100%);
+  color:#dde6ec;
+  font-size:9px;font-weight:600;
+  display:grid;place-items:center;letter-spacing:0.02em;
+  border:1px solid var(--hairline-strong);
+  font-family:var(--font-mono);
+}
+.ep-author{color:var(--text);font-weight:500;letter-spacing:0.02em;text-transform:none}
+.ep-time{color:var(--text-3);font-variant-numeric:tabular-nums}
+.ep-kind{
+  text-transform:uppercase;
+  letter-spacing:0.10em;
+  font-weight:500;
+}
+.ep-kind.substantive{color:var(--sage-bright)}
+.ep-kind.style{color:var(--text-3)}
+.ep-original-label{
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.10em;
+  text-transform:uppercase;
+  color:var(--text-4);
+  margin-bottom:3px;
+}
+.ep-original{
+  font-family:var(--font-sans);
+  font-size:12px;
+  line-height:1.55;
+  color:var(--text-3);
+  letter-spacing:-0.005em;
+  padding:6px 8px;
+  background:rgba(255,255,255,.022);
+  border-radius:3px;
+  border-left:2px solid var(--text-4);
+  font-style:italic;
+}
+.ep-original .strikeword{
+  text-decoration:line-through;
+  text-decoration-color:var(--text-4);
+}
+
+/* ─────────────── Footer / edit summary ─────────────── */
+.diff-footer{
+  display:flex;align-items:center;justify-content:space-between;gap:14px;
+  margin-top:22px;
+  padding:12px 14px;
+  background:var(--surface-1);
+  border:1px solid var(--hairline);
+  border-radius:6px;
+}
+.diff-footer-l{
+  display:flex;align-items:center;gap:14px;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--text-3);
+}
+.diff-footer-l .total{
+  color:var(--sage-bright);
+  font-weight:500;
+}
+.diff-footer-l .sub{color:var(--text)}
+.diff-footer-l .style{color:var(--text-2)}
+.diff-footer-r{
+  display:flex;align-items:center;gap:10px;
+}
+.btn-link{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.10em;
+  text-transform:uppercase;
+  color:var(--sage-bright);
+  font-weight:500;
+  padding:0 6px;
+  height:24px;
+  display:inline-flex;align-items:center;
+  border-radius:3px;
+  transition:color 100ms var(--ease), background 100ms var(--ease);
+}
+.btn-link:hover{color:var(--text);background:rgba(255,255,255,.03)}
+.btn-link::after{content:'→';margin-left:6px;color:var(--text-3);font-family:var(--font-mono)}
+
+.btn-ghost{
+  display:inline-flex;align-items:center;gap:8px;
+  height:28px;padding:0 12px;
+  border:1px solid var(--hairline-strong);
+  border-radius:6px;
+  background:transparent;
+  color:var(--text-2);
+  font-size:12px;font-weight:500;
+  transition:background 100ms var(--ease), color 100ms var(--ease), border-color 100ms var(--ease);
+}
+.btn-ghost:hover{background:rgba(255,255,255,.04);color:var(--text);border-color:rgba(255,255,255,.14)}
+
+/* ─────────────── Edit-log modal ─────────────── */
+.modal-backdrop{
+  position:fixed;inset:0;z-index:80;
+  background:rgba(8,9,10,.72);
+  backdrop-filter:blur(6px);
+  display:none;
+  align-items:flex-start;justify-content:center;
+  padding:60px 20px 20px;
+  overflow:auto;
+}
+.modal-backdrop.open{display:flex}
+.modal{
+  width:100%;
+  max-width:680px;
+  background:var(--surface-1);
+  border:1px solid var(--hairline-strong);
+  border-radius:8px;
+  overflow:hidden;
+  position:relative;
+}
+.modal-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 18px;
+  border-bottom:1px solid var(--hairline);
+}
+.modal-head .mh-l{display:flex;align-items:center;gap:10px}
+.modal-head .mh-title{
+  font-family:var(--font-sans);
+  font-size:14px;
+  font-weight:600;
+  color:var(--text);
+  letter-spacing:-0.01em;
+}
+.modal-head .mh-meta{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--text-3);
+}
+.modal-close{
+  width:24px;height:24px;
+  display:grid;place-items:center;
+  color:var(--text-3);
+  font-family:var(--font-mono);
+  font-size:14px;
+  border-radius:4px;
+  transition:background 100ms var(--ease), color 100ms var(--ease);
+}
+.modal-close:hover{background:rgba(255,255,255,.05);color:var(--text)}
+.modal-body{padding:6px 0 12px}
+.log-entry{
+  display:grid;
+  grid-template-columns:64px 1fr 80px;
+  gap:14px;
+  padding:10px 18px;
+  border-bottom:1px solid var(--hairline);
+  align-items:flex-start;
+}
+.log-entry:last-child{border-bottom:0}
+.log-time{
+  font-family:var(--font-mono);
+  font-size:11px;
+  color:var(--text-3);
+  font-variant-numeric:tabular-nums;
+  letter-spacing:0.02em;
+  padding-top:1px;
+}
+.log-body{font-size:12.5px;line-height:1.55;color:var(--text-2);letter-spacing:-0.005em}
+.log-body .log-from{
+  text-decoration:line-through;
+  color:var(--text-4);
+  text-decoration-color:var(--text-4);
+}
+.log-body .log-to{
+  background:var(--sage-tint);
+  color:var(--text);
+  padding:0 3px;
+  border-radius:2px;
+}
+.log-body .log-arrow{color:var(--text-4);margin:0 6px;font-family:var(--font-mono)}
+.log-body .log-section{
+  font-family:var(--font-mono);
+  font-size:10px;
+  color:var(--text-4);
+  letter-spacing:0.10em;
+  text-transform:uppercase;
+  margin-top:3px;
+  display:block;
+}
+.log-kind{
+  font-family:var(--font-mono);
+  font-size:9.5px;
+  letter-spacing:0.10em;
+  text-transform:uppercase;
+  font-weight:500;
+  text-align:right;
+  padding-top:3px;
+}
+.log-kind.substantive{color:var(--sage-bright)}
+.log-kind.style{color:var(--text-3)}
+
+/* ─────────────── Reduced motion ─────────────── */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;
+  }
+  .status-pill-chrome .pdot{animation:none}
+  .note-line:hover{background:transparent;border-color:transparent}
+  .add:hover .edit-popover,
+  .rem:hover .edit-popover{opacity:0;transform:translateY(4px);pointer-events:none}
+}
+
+/* ─────────────── iPad / 1024 reflow ─────────────── */
+@media (max-width:1080px){
+  .shell{padding:16px 22px 60px;max-width:100%}
+  .edit-popover{min-width:240px;max-width:90vw}
+}
+@media (max-width:880px){
+  .note-line{padding:9px 10px;margin:0 -10px 2px}
+  .note-line{font-size:14px}
+  .diff-toolbar{flex-wrap:wrap;gap:10px}
+  .diff-l{flex-wrap:wrap;gap:8px 14px}
+  .diff-footer{flex-wrap:wrap;gap:10px}
+  .edit-popover{
+    /* Bottom-sheet-ish on narrow viewports */
+    left:0;right:0;
+    width:auto;max-width:100%;
+    bottom:auto;
+    top:calc(100% + 6px);
+  }
+  .edit-popover::before{top:0;bottom:auto;height:2px;width:auto;left:8px;right:8px}
+}
+@media (max-width:760px){
+  .meta-strip{flex-wrap:wrap;font-size:10px}
+  .meta-strip .field{padding:4px 10px}
+  .topbar{padding:0 12px;gap:8px;flex-wrap:wrap}
+  .crumb,.crumb-sep{display:none}
+  .crumb-active{display:inline}
+  .tabs-row{overflow-x:auto;flex-wrap:nowrap}
+  .tab{flex-shrink:0}
+  .log-entry{grid-template-columns:1fr;gap:4px}
+  .log-kind{text-align:left}
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><span class="brand-mark"></span> QuillMD</div>
+  <span class="crumb-sep">/</span>
+  <span class="crumb">Patients</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb">Mei-Ling Park</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb crumb-active">Visit · Apr 30, 2026</span>
+  <div class="spacer"></div>
+  <div class="status-pill-chrome"><span class="pdot"></span><span>Ready · 12 edits</span></div>
+  <button class="btn-sage" type="button"><span>Sign &amp; send</span><span class="shortcut">⌘ ↵</span></button>
+  <div class="avatar-chip">KP</div>
+</header>
+
+<div class="shell">
+
+  <div class="meta-strip">
+    <div class="field">Mei-Ling Park</div>
+    <div class="field">34 F</div>
+    <div class="field"><span class="lbl">MRN</span>77324</div>
+    <div class="field">J20.9 · Acute bronchitis</div>
+    <div class="field">99214</div>
+    <div class="field"><span class="lbl">Duration</span>22 min</div>
+  </div>
+
+  <div class="tabs-row" role="tablist">
+    <div class="tab active" role="tab" aria-selected="true">Soap Note</div>
+    <div class="tab" role="tab" aria-selected="false">Transcript</div>
+    <div class="tab" role="tab" aria-selected="false">Codes</div>
+    <div class="tab" role="tab" aria-selected="false">Rx</div>
+    <div class="tab" role="tab" aria-selected="false">Extras</div>
+  </div>
+
+  <!-- Diff toolbar -->
+  <div class="diff-toolbar">
+    <div class="diff-l">
+      <span class="diff-title">Diff View</span>
+      <span class="swatch">Doctor added</span>
+      <span class="swatch removed">AI struck</span>
+    </div>
+    <div class="diff-toggle" id="diffToggle" role="tablist">
+      <span class="slider" id="diffSlider"></span>
+      <button type="button" class="active" data-mode="edits">Show edits</button>
+      <button type="button" data-mode="clean">Show clean</button>
+    </div>
+  </div>
+
+  <!-- ─────────────── SUBJECTIVE ─────────────── -->
+  <section class="section-block">
+    <div class="section-head">
+      <div>
+        <div class="section-eyebrow"><span class="ltr">S</span><span>01 · Subjective</span></div>
+        <h3 class="section-title">Patient narrative</h3>
+      </div>
+      <span class="section-edit-count"><span class="ec-dot"></span>3 edits · style</span>
+    </div>
+
+    <div class="note-stack">
+      <div class="note-line has-edit">
+        3-day h/o productive cough, mostly clear-yellow sputum.<!--
+        --> URI symptoms (rhinorrhea, mild sore throat) <span class="rem">improving<span class="edit-popover" role="tooltip"><div class="ep-meta"><span class="ep-meta-l"><span class="ep-avatar">KP</span><span class="ep-author">Dr. Park</span><span class="ep-time">14:22</span></span><span class="ep-kind style">Style</span></div><div class="ep-original-label">AI original</div><div class="ep-original">"URI symptoms <span class="strikeword">improving</span>"</div></span></span><span class="add">resolving<span class="edit-popover" role="tooltip"><div class="ep-meta"><span class="ep-meta-l"><span class="ep-avatar">KP</span><span class="ep-author">Dr. Park</span><span class="ep-time">14:22</span></span><span class="ep-kind style">Style</span></div><div class="ep-original-label">AI original</div><div class="ep-original">"URI symptoms <span class="strikeword">improving</span>"</div></span></span>.<!--
+        --> Denies fever, dyspnea, chest pain, hemoptysis.
+      </div>
+      <div class="note-line has-edit">
+        <strong>PMH:</strong> HTN <span class="add">(controlled on lisinopril 10 mg)<span class="edit-popover" role="tooltip"><div class="ep-meta"><span class="ep-meta-l"><span class="ep-avatar">KP</span><span class="ep-author">Dr. Park</span><span class="ep-time">14:23</span></span><span class="ep-kind style">Clarification</span></div><div class="ep-original-label">AI original</div><div class="ep-original">"HTN, on lisinopril"</div></span></span>, penicillin allergy.<!--
+        --> <strong>Tobacco:</strong> never.<!--
+        --> <strong>EtOH:</strong> <span class="rem">none<span class="edit-popover" role="tooltip"><div class="ep-meta"><span class="ep-meta-l"><span class="ep-avatar">KP</span><span class="ep-author">Dr. Park</span><span class="ep-time">14:24</span></span><span class="ep-kind style">Typo / accuracy</span></div><div class="ep-original-label">AI original</div><div class="ep-original">"EtOH: <span class="strikeword">none</span>" — patient stated "occasional"</div></span></span><span class="add">occasional<span class="edit-popover" role="tooltip"><div class="ep-meta"><span class="ep-meta-l"><span class="ep-avatar">KP</span><span class="ep-author">Dr. Park</span><span class="ep-time">14:24</span></span><span class="ep-kind style">Typo / accuracy</span></div><div class="ep-original-label">AI original</div><div class="ep-original">"EtOH: <span class="strikeword">none</span>" — patient stated "occasional"</div></span></span>.
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────── OBJECTIVE ─────────────── -->
+  <section class="section-block">
+    <div class="section-head">
+      <div>
+        <div class="section-eyebrow"><span class="ltr">O</span><span>02 · Objective</span></div>
+        <h3 class="section-title">Exam &amp; vitals</h3>
+      </div>
+      <span class="section-edit-count zero"><span class="ec-dot"></span>0 edits</span>
+    </div>
+
+    <div class="note-stack">
+      <div class="note-line">
+        <span class="vitals-inline"><span class="v-lbl">VS</span>BP 118/74 · HR 88 · RR 18 · T 98.6 °F · SpO₂ 98% on RA</span>
+      </div>
+      <div class="note-line">
+        <strong>Gen:</strong> NAD, alert, conversational.<!--
+        --> <strong>HEENT:</strong> mild posterior pharyngeal erythema, no exudate; TMs clear b/l.
+      </div>
+      <div class="note-line">
+        <strong>Lungs:</strong> scattered rhonchi b/l, clearing with cough; no wheezing or crackles.<!--
+        --> <strong>Cardiac:</strong> RRR, no m/r/g.
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────── ASSESSMENT ─────────────── -->
+  <section class="section-block">
+    <div class="section-head">
+      <div>
+        <div class="section-eyebrow"><span class="ltr">A</span><span>03 · Assessment</span></div>
+        <h3 class="section-title">Clinical impression</h3>
+      </div>
+      <span class="section-edit-count has-substantive"><span class="ec-dot"></span>2 edits · 1 substantive</span>
+    </div>
+
+    <ol class="dx-list">
+      <li class="note-line has-edit">
+        <span class="dx-num">1.</span>
+        Acute bronchitis<span class="add">, viral etiology likely<span class="edit-popover" role="tooltip"><div class="ep-meta"><span class="ep-meta-l"><span class="ep-avatar">KP</span><span class="ep-author">Dr. Park</span><span class="ep-time">14:26</span></span><span class="ep-kind substantive">Substantive</span></div><div class="ep-original-label">AI original</div><div class="ep-original">"Acute bronchitis"</div></span></span><span class="dx-code">J20.9</span>
+      </li>
+      <li class="note-line has-edit">
+        <span class="dx-num">2.</span>
+        URI<span class="rem">, recently active<span class="edit-popover" role="tooltip"><div class="ep-meta"><span class="ep-meta-l"><span class="ep-avatar">KP</span><span class="ep-author">Dr. Park</span><span class="ep-time">14:27</span></span><span class="ep-kind style">Style</span></div><div class="ep-original-label">AI original</div><div class="ep-original">"URI, <span class="strikeword">recently active</span>"</div></span></span><span class="add">, resolving<span class="edit-popover" role="tooltip"><div class="ep-meta"><span class="ep-meta-l"><span class="ep-avatar">KP</span><span class="ep-author">Dr. Park</span><span class="ep-time">14:27</span></span><span class="ep-kind style">Style</span></div><div class="ep-original-label">AI original</div><div class="ep-original">"URI, <span class="strikeword">recently active</span>"</div></span></span><span class="dx-code">J06.9</span>
+      </li>
+      <li class="note-line">
+        <span class="dx-num">3.</span>
+        HTN, controlled<span class="dx-code">I10</span>
+      </li>
+    </ol>
+  </section>
+
+  <!-- ─────────────── PLAN ─────────────── -->
+  <section class="section-block">
+    <div class="section-head">
+      <div>
+        <div class="section-eyebrow"><span class="ltr">P</span><span>04 · Plan</span></div>
+        <h3 class="section-title">Plan &amp; follow-up</h3>
+      </div>
+      <span class="section-edit-count has-substantive"><span class="ec-dot"></span>7 edits · 2 substantive</span>
+    </div>
+
+    <div class="note-stack">
+      <div class="note-line has-edit">
+        Symptomatic care: hydration, rest, OTC <span class="rem">guaifenesin<span class="edit-popover" role="tooltip"><div class="ep-meta"><span class="ep-meta-l"><span class="ep-avatar">KP</span><span class="ep-author">Dr. Park</span><span class="ep-time">14:28</span></span><span class="ep-kind style">Typo / accuracy</span></div><div class="ep-original-label">AI original</div><div class="ep-original">"OTC <span class="strikeword">guaifenesin</span> for cough" — clinician chose dextromethorphan</div></span></span><span class="add">dextromethorphan<span class="edit-popover" role="tooltip"><div class="ep-meta"><span class="ep-meta-l"><span class="ep-avatar">KP</span><span class="ep-author">Dr. Park</span><span class="ep-time">14:28</span></span><span class="ep-kind style">Typo / accuracy</span></div><div class="ep-original-label">AI original</div><div class="ep-original">"OTC <span class="strikeword">guaifenesin</span> for cough" — clinician chose dextromethorphan</div></span></span> for cough.
+      </div>
+      <!-- THE substantive edit: rule out asthma → no concern for asthma at this time -->
+      <div class="note-line has-edit">
+        Albuterol HFA inhaler 1–2 puffs q4–6h PRN wheezing (limit 8 puffs/24h);<!--
+        --> <span class="rem">rule out asthma<span class="edit-popover" role="tooltip"><div class="ep-meta"><span class="ep-meta-l"><span class="ep-avatar">KP</span><span class="ep-author">Dr. Park</span><span class="ep-time">14:30</span></span><span class="ep-kind substantive">Substantive · accuracy</span></div><div class="ep-original-label">AI original</div><div class="ep-original">"<span class="strikeword">rule out asthma</span>" — exam unremarkable; no clinical reason to invoke an asthma w/u</div></span></span><span class="add">no concern for asthma at this time given normal airflow<span class="edit-popover" role="tooltip"><div class="ep-meta"><span class="ep-meta-l"><span class="ep-avatar">KP</span><span class="ep-author">Dr. Park</span><span class="ep-time">14:30</span></span><span class="ep-kind substantive">Substantive · accuracy</span></div><div class="ep-original-label">AI original</div><div class="ep-original">"<span class="strikeword">rule out asthma</span>" — exam unremarkable; no clinical reason to invoke an asthma w/u</div></span></span>.
+      </div>
+      <div class="note-line has-edit">
+        F/u <span class="rem">if<span class="edit-popover" role="tooltip"><div class="ep-meta"><span class="ep-meta-l"><span class="ep-avatar">KP</span><span class="ep-author">Dr. Park</span><span class="ep-time">14:31</span></span><span class="ep-kind style">Typo</span></div><div class="ep-original-label">AI original</div><div class="ep-original">"F/u <span class="strikeword">if</span> 7-10 days"</div></span></span><span class="add">in<span class="edit-popover" role="tooltip"><div class="ep-meta"><span class="ep-meta-l"><span class="ep-avatar">KP</span><span class="ep-author">Dr. Park</span><span class="ep-time">14:31</span></span><span class="ep-kind style">Typo</span></div><div class="ep-original-label">AI original</div><div class="ep-original">"F/u <span class="strikeword">if</span> 7-10 days"</div></span></span> 7–10 days if symptoms persist or worsen.<!--
+        --> Continue lisinopril; recheck BP <span class="rem">at next visit<span class="edit-popover" role="tooltip"><div class="ep-meta"><span class="ep-meta-l"><span class="ep-avatar">KP</span><span class="ep-author">Dr. Park</span><span class="ep-time">14:32</span></span><span class="ep-kind substantive">Substantive · timing</span></div><div class="ep-original-label">AI original</div><div class="ep-original">"recheck BP <span class="strikeword">at next visit</span>" — clinician set 6-month interval</div></span></span><span class="add">in 6 months<span class="edit-popover" role="tooltip"><div class="ep-meta"><span class="ep-meta-l"><span class="ep-avatar">KP</span><span class="ep-author">Dr. Park</span><span class="ep-time">14:32</span></span><span class="ep-kind substantive">Substantive · timing</span></div><div class="ep-original-label">AI original</div><div class="ep-original">"recheck BP <span class="strikeword">at next visit</span>" — clinician set 6-month interval</div></span></span>.
+      </div>
+      <div class="note-line has-edit">
+        Patient education: viral URI, antibiotic <span class="rem">avoidance<span class="edit-popover" role="tooltip"><div class="ep-meta"><span class="ep-meta-l"><span class="ep-avatar">KP</span><span class="ep-author">Dr. Park</span><span class="ep-time">14:33</span></span><span class="ep-kind style">Style</span></div><div class="ep-original-label">AI original</div><div class="ep-original">"antibiotic <span class="strikeword">avoidance</span> discussed"</div></span></span><span class="add">stewardship<span class="edit-popover" role="tooltip"><div class="ep-meta"><span class="ep-meta-l"><span class="ep-avatar">KP</span><span class="ep-author">Dr. Park</span><span class="ep-time">14:33</span></span><span class="ep-kind style">Style</span></div><div class="ep-original-label">AI original</div><div class="ep-original">"antibiotic <span class="strikeword">avoidance</span> discussed"</div></span></span> discussed.
+      </div>
+    </div>
+  </section>
+
+  <!-- Diff footer summary -->
+  <div class="diff-footer">
+    <div class="diff-footer-l">
+      <span><span class="total">12 edits</span> made</span>
+      <span>·</span>
+      <span><span class="sub">3 substantive</span></span>
+      <span>·</span>
+      <span><span class="style">9 typo/style</span></span>
+      <span>·</span>
+      <span>by Dr. Park · 14:22 – 14:33</span>
+    </div>
+    <div class="diff-footer-r">
+      <button class="btn-link" type="button" id="openLogBtn">View edit log</button>
+      <button class="btn-ghost" type="button">Copy SOAP</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- Edit-log modal -->
+<div class="modal-backdrop" id="logBackdrop" role="dialog" aria-modal="true" aria-labelledby="logTitle">
+  <div class="modal" role="document">
+    <div class="modal-head">
+      <div class="mh-l">
+        <span class="mh-title" id="logTitle">Edit log</span>
+        <span class="mh-meta">12 changes · Dr. Park · Apr 30, 2026 · 14:22 – 14:33</span>
+      </div>
+      <button class="modal-close" id="closeLogBtn" aria-label="Close">×</button>
+    </div>
+    <div class="modal-body">
+
+      <div class="log-entry">
+        <div class="log-time">14:22</div>
+        <div class="log-body">
+          <span class="log-from">improving</span><span class="log-arrow">→</span><span class="log-to">resolving</span>
+          <span class="log-section">Subjective</span>
+        </div>
+        <div class="log-kind style">Style</div>
+      </div>
+      <div class="log-entry">
+        <div class="log-time">14:23</div>
+        <div class="log-body">
+          <span class="log-from">on lisinopril</span><span class="log-arrow">→</span><span class="log-to">controlled on lisinopril 10 mg</span>
+          <span class="log-section">Subjective · PMH</span>
+        </div>
+        <div class="log-kind style">Style</div>
+      </div>
+      <div class="log-entry">
+        <div class="log-time">14:24</div>
+        <div class="log-body">
+          <span class="log-from">EtOH: none</span><span class="log-arrow">→</span><span class="log-to">EtOH: occasional</span>
+          <span class="log-section">Subjective</span>
+        </div>
+        <div class="log-kind style">Typo</div>
+      </div>
+      <div class="log-entry">
+        <div class="log-time">14:26</div>
+        <div class="log-body">
+          <span class="log-from">Acute bronchitis</span><span class="log-arrow">→</span><span class="log-to">Acute bronchitis, viral etiology likely</span>
+          <span class="log-section">Assessment · 1</span>
+        </div>
+        <div class="log-kind substantive">Substantive</div>
+      </div>
+      <div class="log-entry">
+        <div class="log-time">14:27</div>
+        <div class="log-body">
+          <span class="log-from">URI, recently active</span><span class="log-arrow">→</span><span class="log-to">URI, resolving</span>
+          <span class="log-section">Assessment · 2</span>
+        </div>
+        <div class="log-kind style">Style</div>
+      </div>
+      <div class="log-entry">
+        <div class="log-time">14:28</div>
+        <div class="log-body">
+          <span class="log-from">guaifenesin</span><span class="log-arrow">→</span><span class="log-to">dextromethorphan</span>
+          <span class="log-section">Plan · OTC</span>
+        </div>
+        <div class="log-kind style">Typo</div>
+      </div>
+      <div class="log-entry">
+        <div class="log-time">14:30</div>
+        <div class="log-body">
+          <span class="log-from">rule out asthma</span><span class="log-arrow">→</span><span class="log-to">no concern for asthma at this time given normal airflow</span>
+          <span class="log-section">Plan · Albuterol</span>
+        </div>
+        <div class="log-kind substantive">Substantive</div>
+      </div>
+      <div class="log-entry">
+        <div class="log-time">14:31</div>
+        <div class="log-body">
+          <span class="log-from">F/u if 7-10 days</span><span class="log-arrow">→</span><span class="log-to">F/u in 7-10 days</span>
+          <span class="log-section">Plan · F/u</span>
+        </div>
+        <div class="log-kind style">Typo</div>
+      </div>
+      <div class="log-entry">
+        <div class="log-time">14:32</div>
+        <div class="log-body">
+          <span class="log-from">recheck BP at next visit</span><span class="log-arrow">→</span><span class="log-to">recheck BP in 6 months</span>
+          <span class="log-section">Plan · HTN</span>
+        </div>
+        <div class="log-kind substantive">Substantive</div>
+      </div>
+      <div class="log-entry">
+        <div class="log-time">14:33</div>
+        <div class="log-body">
+          <span class="log-from">antibiotic avoidance discussed</span><span class="log-arrow">→</span><span class="log-to">antibiotic stewardship discussed</span>
+          <span class="log-section">Plan · Education</span>
+        </div>
+        <div class="log-kind style">Style</div>
+      </div>
+      <div class="log-entry">
+        <div class="log-time">14:33</div>
+        <div class="log-body">
+          <span class="log-from">en-dashes (—)</span><span class="log-arrow">→</span><span class="log-to">en-dashes preserved</span>
+          <span class="log-section">Plan · whitespace</span>
+        </div>
+        <div class="log-kind style">Whitespace</div>
+      </div>
+      <div class="log-entry">
+        <div class="log-time">14:33</div>
+        <div class="log-body">
+          <span class="log-from">"limit 8 puffs / 24h"</span><span class="log-arrow">→</span><span class="log-to">"limit 8 puffs/24h"</span>
+          <span class="log-section">Plan · Albuterol</span>
+        </div>
+        <div class="log-kind style">Style</div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // Tab visual swap only
+  document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(x => {
+        x.classList.remove('active');
+        x.setAttribute('aria-selected','false');
+      });
+      t.classList.add('active');
+      t.setAttribute('aria-selected','true');
+    });
+  });
+
+  // Diff toggle
+  const toggle = document.getElementById('diffToggle');
+  const slider = document.getElementById('diffSlider');
+  const buttons = toggle.querySelectorAll('button');
+
+  function positionSlider(){
+    const active = toggle.querySelector('button.active');
+    if(!active) return;
+    slider.style.left = active.offsetLeft + 'px';
+    slider.style.width = active.offsetWidth + 'px';
+  }
+  positionSlider();
+  window.addEventListener('resize', positionSlider);
+
+  buttons.forEach(b => {
+    b.addEventListener('click', () => {
+      buttons.forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      positionSlider();
+      const mode = b.dataset.mode;
+      if(mode === 'clean'){
+        document.body.classList.add('show-clean');
+      } else {
+        document.body.classList.remove('show-clean');
+      }
+    });
+  });
+
+  // Edit-log modal
+  const backdrop = document.getElementById('logBackdrop');
+  const openBtn = document.getElementById('openLogBtn');
+  const closeBtn = document.getElementById('closeLogBtn');
+  openBtn.addEventListener('click', () => backdrop.classList.add('open'));
+  closeBtn.addEventListener('click', () => backdrop.classList.remove('open'));
+  backdrop.addEventListener('click', (e) => { if(e.target === backdrop) backdrop.classList.remove('open'); });
+  document.addEventListener('keydown', (e) => { if(e.key === 'Escape') backdrop.classList.remove('open'); });
+})();
+</script>
+
+</body>
+</html>
