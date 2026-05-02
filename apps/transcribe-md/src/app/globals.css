@@ -3252,3 +3252,327 @@ body {
     transition: none;
   }
 }
+
+/* =============================================================================
+ * Phase 5.2 — v6 Coding Coach: SOAP body utilities (Subagent A scope).
+ * ----------------------------------------------------------------------------
+ * These are ADDITIVE. Phase 5.1's `.qm-lin-soap-section` / `.qm-lin-soap-body`
+ * remain in place for the legacy V3 split-pane code path; v6 introduces
+ * `--v6` suffixes to avoid collisions during the staged rollout.
+ *
+ * Mockup source: docs/design-directions-v10-soap/soap-v6.html (lines 167-264).
+ * ========================================================================== */
+
+/* Grid container — left column (note pane) + right column (coding rail). */
+.qm-lin-coach-grid {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 24px;
+  align-items: start;
+}
+@media (max-width: 1080px) {
+  .qm-lin-coach-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+}
+
+/* Right-column slot — Subagent C's <CodingRail> sits here. We don't
+   style the rail itself (that's their scope); we only reserve the
+   sticky alignment so the slot doesn't collapse when the stub renders. */
+.qm-lin-coding-rail-slot {
+  align-self: start;
+  min-width: 0;
+}
+
+/* Left-column wrapper — the SOAP body. Capped to ~720 px so prose
+   stays readable on wide displays. */
+.qm-lin-soap-body-v6 {
+  min-width: 0;
+  max-width: 720px;
+}
+
+/* Section block — hairline-bordered card on --surface-1. */
+.qm-lin-soap-section-v6 {
+  margin-bottom: 22px;
+  border: 1px solid var(--color-linear-hairline);
+  border-radius: 6px;
+  background: var(--color-linear-surface-1);
+  padding: 14px 16px 16px;
+  position: relative;
+  transition: border-color 130ms cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 130ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.qm-lin-soap-section-v6:hover {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+/* Section head — letter chip + eyebrow + status pill on left, optional
+   pulse meta on right. We override the legacy `.qm-lin-soap-section-head`
+   selector here only when nested inside the v6 wrapper, leaving Phase 5.1
+   behaviour untouched. */
+.qm-lin-soap-section-v6 .qm-lin-soap-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--color-linear-hairline);
+}
+.qm-lin-soap-section-head-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.qm-lin-soap-section-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-linear-text-2);
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+/* Sage-tint chip with sage-bright glyph S/O/A/P. Scoped under the v6
+   wrapper so the legacy `.qm-lin-soap-letter` shape is preserved. */
+.qm-lin-soap-section-v6 .qm-lin-soap-section-letter {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  background: rgba(122, 166, 140, 0.10);
+  border: 1px solid rgba(122, 166, 140, 0.28);
+  color: var(--color-linear-sage-bright);
+  font-size: 10px;
+  border-radius: 4px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+/* Per-section pulse — small dot + mono micro-meta. Sage when the
+   section's E&M criteria are satisfied, amber when this section is
+   the gating constraint for a higher code. */
+.qm-lin-soap-section-pulse {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-linear-text-3);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+.qm-lin-soap-section-pulse .pulse-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--color-linear-sage);
+}
+.qm-lin-soap-section-pulse--boost {
+  color: #e3b950;
+}
+.qm-lin-soap-section-pulse--boost .pulse-dot {
+  background: var(--color-linear-warning);
+}
+
+/* Section body — Inter 14 / 1.6, vital tokens nested as .vital-tok. */
+.qm-lin-soap-section-body {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--color-linear-text);
+  letter-spacing: -0.005em;
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  padding: 6px 8px;
+  margin: 0 -8px;
+  cursor: default;
+  transition: border-color 130ms cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 130ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.qm-lin-soap-section-body--editable {
+  cursor: text;
+}
+.qm-lin-soap-section-body--editable:hover {
+  background: rgba(255, 255, 255, 0.022);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+.qm-lin-soap-section-body--editable:focus-visible {
+  outline: none;
+  border-color: rgba(122, 166, 140, 0.42);
+  background: rgba(122, 166, 140, 0.04);
+}
+.qm-lin-soap-section-empty {
+  color: var(--color-linear-text-3);
+  font-style: italic;
+}
+
+/* Hover-only edit hint — appears on the editable body. */
+.qm-lin-soap-section-edit-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-linear-text-3);
+  opacity: 0;
+  transition: opacity 100ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.qm-lin-soap-section-body--editable:hover .qm-lin-soap-section-edit-hint,
+.qm-lin-soap-section-body--editable:focus-visible .qm-lin-soap-section-edit-hint {
+  opacity: 1;
+}
+
+/* Inline-edit textarea — sage outline, mono 13/1.55 for readability. */
+.qm-lin-soap-inline-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.qm-lin-soap-inline-edit-ta {
+  width: 100%;
+  min-height: 240px;
+  resize: vertical;
+  background: var(--color-linear-surface-1);
+  color: var(--color-linear-text);
+  border: 1px solid rgba(122, 166, 140, 0.42);
+  border-radius: 6px;
+  padding: 12px 14px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.55;
+  letter-spacing: 0;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(122, 166, 140, 0.12);
+  transition: border-color 100ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 100ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.qm-lin-soap-inline-edit-ta:focus {
+  border-color: var(--color-linear-sage);
+  box-shadow: 0 0 0 3px rgba(122, 166, 140, 0.20);
+}
+.qm-lin-soap-inline-edit-foot {
+  display: flex;
+  justify-content: flex-end;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-linear-text-3);
+}
+.qm-lin-soap-inline-edit-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Markdown shim styles — Inter prose with mono H2 eyebrow. Carried over
+   from Phase 5.1 unchanged so read-mode looks the same pixel-for-pixel. */
+.qm-lin-soap-md {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.qm-lin-soap-md-h1 {
+  margin-top: 14px;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  color: var(--color-linear-text);
+}
+.qm-lin-soap-md-h2 {
+  margin-top: 14px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--color-linear-sage-bright);
+}
+.qm-lin-soap-md-p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--color-linear-text);
+}
+.qm-lin-soap-md-p strong {
+  font-weight: 600;
+  color: var(--color-linear-text);
+}
+.qm-lin-soap-md-ul {
+  margin: 6px 0;
+  padding-left: 22px;
+  list-style: disc;
+  color: var(--color-linear-text-2);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.qm-lin-soap-md-ul li + li {
+  margin-top: 4px;
+}
+.qm-lin-soap-md-spacer {
+  height: 6px;
+}
+
+/* Vital token — mono numeric chunk inside section bodies (BP/HR/etc). */
+.qm-lin-soap-section-body .vital-tok {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  color: var(--color-linear-text);
+}
+.qm-lin-soap-section-body .vital-tok .v-lbl {
+  color: var(--color-linear-text-3);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-right: 3px;
+}
+
+/* Bottom action strip — last edit meta + Copy SOAP ghost button. */
+.qm-lin-soap-notebody-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--color-linear-hairline);
+}
+.qm-lin-soap-notebody-foot-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-linear-text-3);
+}
+.qm-lin-soap-notebody-foot-meta .dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--color-linear-sage);
+  opacity: 0.7;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qm-lin-soap-section-v6,
+  .qm-lin-soap-section-body,
+  .qm-lin-soap-section-edit-hint {
+    transition: none;
+  }
+}
