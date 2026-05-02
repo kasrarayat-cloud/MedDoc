@@ -44,6 +44,11 @@ services:
       POSTGRES_DB: meddoc
       POSTGRES_USER: meddoc
       POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme_in_production}
+      # Phase 6.1 (h8): PGDATA points at a subdir of the LUKS-encrypted
+      # mount because ext4's `lost+found` at the mount root blocks
+      # initdb. Standard postgres-image pattern when bind-mounting an
+      # ext4 filesystem.
+      PGDATA: /var/lib/postgresql/data/pgdata
     # Phase 3 / HIPAA h8 — encryption-at-rest. The bind-mount to the
     # encrypted /var/lib/meddoc-postgres-data path is gated on the
     # operator running infra/setup-encrypted-volume.sh in a maintenance
@@ -53,7 +58,7 @@ services:
     # to `- /var/lib/meddoc-postgres-data:/var/lib/postgresql/data` as
     # the final activation step after rsyncing data into the new mount.
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - /mnt/pgdata-encrypted:/var/lib/postgresql/data
     ports:
       - "127.0.0.1:5432:5432"   # only accessible from localhost
     healthcheck:

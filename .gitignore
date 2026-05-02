@@ -73,3 +73,12 @@ docs/design-directions-v6/
 # qa-bug-hunter audio fixtures — synthesized at skill-run time
 # (~21 MB total, regenerated on demand from the skill spec).
 tests/fixtures/audio/
+
+# Phase 6.1 (h8) — host-only encryption-at-rest artifacts. Contains the
+# LUKS-encrypted postgres data file (1+ GB sparse). MUST NOT be committed
+# even though encrypted at rest — git history would balloon and the file
+# is per-host anyway (each VPS has its own keyfile + sparse file).
+secrets/
+
+# Local rollback snapshots taken before risky compose changes.
+docker-compose.yml.pre-*
