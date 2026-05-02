@@ -215,3 +215,47 @@ Cards render correctly with empty-state UI for now.
 - **Smoke checks (no errors, HTTP 200) are NECESSARY but NOT SUFFICIENT.** A tab can render the WRONG chrome cleanly with 0 errors. Always assert STRUCTURAL DOM presence for the chosen design variation per tab. v1.0 of qa-bug-hunter missed Phase 5.1 Extras because the empty-state legacy card rendered cleanly; the user spotted it on iPad before any automation did. v1.1's structural-DOM-count assertions catch this regression class at the smoke layer.
 - **Subagent claims need orchestrator-side verification.** Subagent C's report said "the 7 cards are wired through new optional props on `ExtrasTab`; the existing call site in `visit-ready-view.tsx` is untouched." That's literally true — they shipped the cards but didn't update the call site. Future subagent briefs should require the orchestrator wiring as part of the same commit, OR the lead's verification step should specifically check that new component props are actually being PASSED, not just declared.
 - **Audit-log without a new Prisma query is fine.** The Subagent C design comment "derive from visit fields" is the right call — read-only display surfaces should synthesize timelines from existing data rather than load the full audit_logs table (which has its own RBAC/query-cost concerns).
+
+## 11. ✅ Phase 5.2 — SOAP Coding Coach (V6 hybrid) — completed 2026-05-02
+
+First production feature in QuillMD with real LLM cost in the chart-review path. Live AMA 2021 E&M scoring rail next to the SOAP body — competitive moat vs Athena/Epic/Cerner which only show coding feedback POST-sign.
+
+PR #94, 18 commits, ~3.5K LOC. Merge SHA `7f8e351`. Tag `phase-5.2-soap-coding-coach`.
+
+### Architecture
+- Path C (hybrid): deterministic for HPI/ROS/exam/PFSH counts; LLM-judged for MDM tier; both layers cached
+- Anthropic prompt cache (5-min ephemeral) on the ~2.6K-token rubric system prompt
+- Redis 7-day cache on the JUDGEMENT (cache key: SHA-256 of normalized SOAP body, 20% drift bypass)
+- 30s LLM timeout (8s missed ~50% of cold calls)
+- Fail-soft: rail renders skeleton if engine throws
+
+### Cost shape
+- Cold: ~$0.003/call
+- Warm (Anthropic cache): ~$0.0003/call (90% input cost off)
+- Cached judgement (Redis): $0
+- Weighted average: ~$0.001-0.003/visit
+- Vs. ~$30 upcoding delta per accepted Bump CTA → ROI 10000:1+
+
+### Calibration findings worth remembering
+- Anthropic prompt cache threshold for Sonnet 4.6 is EMPIRICALLY ~2048 tokens, NOT the 1024 figure in older docs. A 1591-token prompt silently no-op'd cache_creation. Verify via response.usage.cache_creation_input_tokens > 0 on first call.
+- LLM-MDM cold-call latency on Sonnet 4.6 with structured JSON output and full rubric: 6-10s typical. Set timeouts >= 30s.
+
+### Deploy timeline
+- BUILD-START: 2026-05-02T21:16:52Z
+- BUILD-EXIT (0): 2026-05-02T21:18:09Z (1m17s)
+- UP-START: 2026-05-02T21:18:16Z
+- HEALTHY: ~2026-05-02T21:18:25Z (~9s outage)
+
+### Verification
+- 9/9 containers healthy post-deploy
+- HTTP 200 on /login, 307 on /dashboard (auth redirect)
+- Phase 5.2 sentinels live in prod CSS: `qm-lin-coach-grid`, `qm-lin-coding-bump`, `qm-lin-coding-rail`, `qm-lin-em-criterion`, `qm-lin-soap-section-v6` (5/5)
+- Phase 5.1 baseline preserved: `qm-lin-card-stream`, `qm-lin-codes-frame`, `qm-lin-extras-card`, `qm-lin-rx-split` (4/4)
+- Phase 5.0 baseline preserved: `qm-lin-app`, `qm-lin-cmdk`, `#08090a`, `--color-linear-sage`
+- 0 renewed avatar errors (4024354389), 0 Server-Component handler errors, 0 em-mdm timeouts in last 1 min
+
+### Lessons added
+- Always probe cache eligibility empirically with `response.usage.cache_creation_input_tokens`, never trust documented thresholds blindly
+- "Silent degradation" is the worst failure mode for AI features: Path C silently became Path A on every cold call until the timeout fix landed. Add `llmJudged: true` assertion to the smoke layer
+- Layout density check on iPad before merging any information-dense feature — desktop browsers hide gap problems that show up immediately on tablet
+- CI pre-existing failures (meddoc-pro tenancy/admin e2e) are NOT a merge blocker for changes scoped to a different app, but they DO obscure regression detection. Consider scope-tagged CI labels or moving meddoc-pro tenancy tests to a parallel job that doesn't gate transcribe-md merges.
