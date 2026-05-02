@@ -4,9 +4,9 @@ category: routine-pcp
 expected:
   code: 99213
   mdmTier: low
-  hpiElements: 2
+  hpiElements: 3
   rosSystems: 2
-  pfshCategories: 2
+  pfshCategories: 0
   examSystems: 3
   problems: low
   data: minimal
