@@ -4,10 +4,10 @@ category: acute
 expected:
   code: 99214
   mdmTier: moderate
-  hpiElements: 7
-  rosSystems: 4
+  hpiElements: 8
+  rosSystems: 3
   pfshCategories: 3
-  examSystems: 6
+  examSystems: 7
   problems: moderate
   data: moderate
   risk: moderate

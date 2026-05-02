@@ -5,9 +5,9 @@ expected:
   code: 99212
   mdmTier: straightforward
   hpiElements: 4
-  rosSystems: 2
-  pfshCategories: 1
-  examSystems: 3
+  rosSystems: 3
+  pfshCategories: 2
+  examSystems: 4
   problems: minimal
   data: minimal
   risk: minimal

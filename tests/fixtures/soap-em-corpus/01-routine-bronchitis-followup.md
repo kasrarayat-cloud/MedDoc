@@ -4,7 +4,7 @@ category: routine-pcp
 expected:
   code: 99213
   mdmTier: low
-  hpiElements: 5
+  hpiElements: 6
   rosSystems: 3
   pfshCategories: 2
   examSystems: 5
