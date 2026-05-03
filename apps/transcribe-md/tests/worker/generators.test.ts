@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import JSZip from 'jszip';
 import type { VisitExportData } from '@/lib/visit-export';
 import { generateVisitPdf } from '@/lib/pdf-generator';
 import { generateVisitDocx } from '@/lib/docx-generator';
@@ -102,5 +103,141 @@ describe('generateVisitDocx', () => {
       })
     );
     expect(buf.subarray(0, 2).toString('ascii')).toBe('PK');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Metadata-PHI guards. The PDF /Info dictionary and the DOCX
+// docProps/core.xml entries persist in OS file-preview surfaces
+// (Spotlight, Explorer) and survive forwarding the file. Anything
+// that lands here leaks the moment a doctor shares the export.
+// These tests pin Title to the opaque visitId and Author/Creator to
+// the brand name — and fail loudly if patient or clinician names
+// ever sneak back in.
+// ---------------------------------------------------------------------------
+
+const PHI_PATIENT = 'METADATA TEST PATIENT';
+const PHI_CLINICIAN = 'METADATA TEST CLINICIAN';
+const PHI_VISIT_ID = 'vmeta-test-001';
+
+function extractPdfInfoDict(buf: Buffer): Record<string, string> {
+  // pdfkit serializes each /Info entry as an indirect object reference
+  // (e.g. `/Title 13 0 R`) and stores the actual literal-string body
+  // in object 13 under `13 0 obj\n(Visit vmeta-test-001)\nendobj`.
+  // Two-step: collect refs from the /Info dict, then resolve each.
+  // lastIndexOf-on-')' tolerates inner parens (e.g. the Producer
+  // string "QuillMD PDF Generator (pdfkit)").
+  const text = buf.toString('latin1');
+  const refs: Array<[string, number]> = [];
+  const refRe = /\/(Title|Author|Creator|Producer)\s+(\d+)\s+0\s+R/g;
+  let m: RegExpExecArray | null;
+  while ((m = refRe.exec(text)) !== null) {
+    refs.push([m[1], Number(m[2])]);
+  }
+  const out: Record<string, string> = {};
+  for (const [key, objNum] of refs) {
+    const startMarker = `${objNum} 0 obj`;
+    const objStart = text.indexOf(startMarker);
+    if (objStart < 0) continue;
+    const objEnd = text.indexOf('endobj', objStart);
+    if (objEnd < 0) continue;
+    const body = text.slice(objStart + startMarker.length, objEnd);
+    const open = body.indexOf('(');
+    const close = body.lastIndexOf(')');
+    if (open >= 0 && close > open) {
+      out[key] = body.slice(open + 1, close);
+    }
+  }
+  return out;
+}
+
+describe('generateVisitPdf — metadata PHI guard', () => {
+  it('puts only visitId in /Title and brand in /Author', async () => {
+    const buf = await generateVisitPdf(
+      mkVisit({
+        visitId: PHI_VISIT_ID,
+        patientName: PHI_PATIENT,
+        clinicianName: PHI_CLINICIAN,
+      })
+    );
+    const info = extractPdfInfoDict(buf);
+    expect(info.Title).toBe(`Visit ${PHI_VISIT_ID}`);
+    expect(info.Author).toBe('QuillMD');
+    expect(info.Creator).toBe('QuillMD');
+    expect(info.Producer).toMatch(/QuillMD/);
+  });
+
+  it('never embeds the patient name in any /Info field', async () => {
+    const buf = await generateVisitPdf(
+      mkVisit({
+        visitId: PHI_VISIT_ID,
+        patientName: PHI_PATIENT,
+        clinicianName: PHI_CLINICIAN,
+      })
+    );
+    const info = extractPdfInfoDict(buf);
+    for (const value of Object.values(info)) {
+      expect(value).not.toContain(PHI_PATIENT);
+    }
+  });
+
+  it('never embeds the clinician name in any /Info field', async () => {
+    const buf = await generateVisitPdf(
+      mkVisit({
+        visitId: PHI_VISIT_ID,
+        patientName: PHI_PATIENT,
+        clinicianName: PHI_CLINICIAN,
+      })
+    );
+    const info = extractPdfInfoDict(buf);
+    for (const value of Object.values(info)) {
+      expect(value).not.toContain(PHI_CLINICIAN);
+    }
+  });
+});
+
+async function readDocxCoreXml(buf: Buffer): Promise<string> {
+  const zip = await JSZip.loadAsync(buf);
+  const entry = zip.file('docProps/core.xml');
+  if (!entry) throw new Error('docProps/core.xml not found in DOCX');
+  return entry.async('text');
+}
+
+describe('generateVisitDocx — metadata PHI guard', () => {
+  it('puts only visitId in <dc:title> and brand in <dc:creator>', async () => {
+    const buf = await generateVisitDocx(
+      mkVisit({
+        visitId: PHI_VISIT_ID,
+        patientName: PHI_PATIENT,
+        clinicianName: PHI_CLINICIAN,
+      })
+    );
+    const xml = await readDocxCoreXml(buf);
+    expect(xml).toContain(`<dc:title>Visit ${PHI_VISIT_ID}</dc:title>`);
+    expect(xml).toContain('<dc:creator>QuillMD</dc:creator>');
+  });
+
+  it('never embeds the patient name in docProps/core.xml', async () => {
+    const buf = await generateVisitDocx(
+      mkVisit({
+        visitId: PHI_VISIT_ID,
+        patientName: PHI_PATIENT,
+        clinicianName: PHI_CLINICIAN,
+      })
+    );
+    const xml = await readDocxCoreXml(buf);
+    expect(xml).not.toContain(PHI_PATIENT);
+  });
+
+  it('never embeds the clinician name in docProps/core.xml', async () => {
+    const buf = await generateVisitDocx(
+      mkVisit({
+        visitId: PHI_VISIT_ID,
+        patientName: PHI_PATIENT,
+        clinicianName: PHI_CLINICIAN,
+      })
+    );
+    const xml = await readDocxCoreXml(buf);
+    expect(xml).not.toContain(PHI_CLINICIAN);
   });
 });
