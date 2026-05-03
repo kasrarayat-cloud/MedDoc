@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
 import prisma from '@meddoc/db';
+import { SPECIALTY_IDS } from '@meddoc/shared/specialties';
 import { requireSession } from '@/lib/auth';
 import {
   DASHBOARD_PAGE_SIZE,
@@ -40,7 +41,10 @@ const CreateVisitSchema = z.object({
     .transform((v) => (v === '' ? null : v))
     .nullable()
     .optional(),
-  specialty: z.string().min(1, 'Pick a specialty'),
+  // Bound to the canonical catalog so the column can only ever hold
+  // an enum value. New writes are normalized at the source — legacy
+  // display-name rows are mapped at read time via findSpecialty().
+  specialty: z.enum(SPECIALTY_IDS, { message: 'Pick a specialty' }),
   chiefComplaint: z
     .string()
     .trim()
