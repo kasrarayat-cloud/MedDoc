@@ -9,6 +9,7 @@ import { AuthTokenPurpose, Product, UserRole } from '@prisma/client';
 import { signIn as nextAuthSignIn } from '@/lib/nextauth';
 import { createAuthToken } from '@/lib/auth-tokens';
 import { isEmailDeliveryEnabled } from '@/lib/email-enabled';
+import { isAutoConfirmDomain } from '@/lib/email-auto-confirm';
 import { sendEmailVerification } from '@/lib/email';
 import { APP_URL } from '@/lib/constants';
 import {
@@ -367,7 +368,21 @@ export async function signupAction(
   // → they can sign in). When RESEND is unavailable we stamp
   // createdAt so the unverified-login gate (also conditional on
   // isEmailDeliveryEnabled) doesn't block them.
-  const verifyEnabled = isEmailDeliveryEnabled();
+  //
+  // Phase 7-QA: QA-only bypass. If the email's domain is on the
+  // EMAIL_AUTO_CONFIRM_DOMAINS allowlist (production: only
+  // `quillmd-test.local`), treat it as if email delivery were disabled
+  // — stamp emailVerified at create time, skip the verify-email
+  // dispatch, auto-login via the no-verification path. Real-mail
+  // domains are denylisted inside isAutoConfirmDomain as a defensive
+  // safeguard against misconfiguration.
+  const autoConfirm = isAutoConfirmDomain(emailLower);
+  if (autoConfirm) {
+    console.warn(
+      `[QA-BYPASS] auto-confirmed email for ${emailLower} (domain on EMAIL_AUTO_CONFIRM_DOMAINS allowlist)`
+    );
+  }
+  const verifyEnabled = isEmailDeliveryEnabled() && !autoConfirm;
   const nowForVerified = verifyEnabled ? null : new Date();
 
   // Synthetic Practice + User in one transaction so we don't orphan
