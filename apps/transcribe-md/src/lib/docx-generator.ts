@@ -291,8 +291,12 @@ export async function generateVisitDocx(
   );
 
   const doc = new Document({
-    creator: data.clinicianName ?? 'QuillMD',
-    title: `Visit — ${data.patientName ?? 'Anonymous'}`,
+    // docProps/core.xml survives every Word/Pages/LibreOffice
+    // round-trip and shows up in Spotlight / Explorer previews —
+    // keep it PHI-free. visitId is opaque; clinician name belongs
+    // in the body footer, not metadata.
+    creator: 'QuillMD',
+    title: `Visit ${data.visitId}`,
     description: `QuillMD visit note exported ${formatVisitDate(new Date())}`,
     // T-M22.4: Charter as the document-level default body font.
     // Every TextRun inherits it unless a specific run overrides
