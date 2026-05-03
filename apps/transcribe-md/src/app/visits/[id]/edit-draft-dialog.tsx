@@ -31,7 +31,7 @@ import {
 import { toast } from 'sonner';
 
 import { SpecialtyDropdown } from '@/components/specialty-dropdown';
-import { SPECIALTIES } from '@/lib/specialties';
+import { SPECIALTIES_FOR_VISIT_CREATE, findSpecialty } from '@meddoc/shared/specialties';
 import { cn } from '@/lib/cn';
 import { PatientPickerCore } from '@/app/visits/new/patient-picker';
 import type { SelectedPatient } from '@/app/visits/new/patient-types';
@@ -117,7 +117,13 @@ export function EditDraftDialog({
 
   const [patient, setPatient] = useState<SelectedPatient>(initialPatient);
   const [changingPatient, setChangingPatient] = useState(false);
-  const [specialty, setSpecialty] = useState(initialSpecialty);
+  // Normalize initialSpecialty to a canonical id so the dropdown
+  // displays the right option even when the visit row still holds
+  // a legacy display name ('Cardiology') or short id ('pain').
+  // Typed as `string` (not SpecialtyId) so the SpecialtyDropdown's
+  // generic onChange signature matches without an unsafe cast.
+  const initialSpecialtyId: string = findSpecialty(initialSpecialty).id;
+  const [specialty, setSpecialty] = useState<string>(initialSpecialtyId);
   const [chiefComplaint, setChiefComplaint] = useState(
     initialChiefComplaint ?? ''
   );
@@ -134,7 +140,7 @@ export function EditDraftDialog({
 
   const hasChanged =
     patient.id !== initialPatient.id ||
-    specialty.trim() !== initialSpecialty ||
+    specialty.trim() !== initialSpecialtyId ||
     normalizedCC !== initialChiefComplaint ||
     inputMode !== initialInputMode;
 
@@ -143,7 +149,7 @@ export function EditDraftDialog({
   function resetToInitial() {
     setPatient(initialPatient);
     setChangingPatient(false);
-    setSpecialty(initialSpecialty);
+    setSpecialty(initialSpecialtyId);
     setChiefComplaint(initialChiefComplaint ?? '');
     setInputMode(initialInputMode);
     setSubmitting(false);
@@ -161,7 +167,7 @@ export function EditDraftDialog({
       inputMode?: InputMode;
     } = {};
     if (patient.id !== initialPatient.id) body.patientId = patient.id;
-    if (specialty.trim() !== initialSpecialty) body.specialty = specialty.trim();
+    if (specialty.trim() !== initialSpecialtyId) body.specialty = specialty.trim();
     if (normalizedCC !== initialChiefComplaint) {
       body.chiefComplaint = normalizedCC;
     }
@@ -310,7 +316,7 @@ export function EditDraftDialog({
             <div>
               <label className={FIELD_LABEL}>Specialty</label>
               <SpecialtyDropdown
-                options={SPECIALTIES}
+                options={SPECIALTIES_FOR_VISIT_CREATE}
                 name="specialty"
                 defaultValue={specialty}
                 onChange={setSpecialty}

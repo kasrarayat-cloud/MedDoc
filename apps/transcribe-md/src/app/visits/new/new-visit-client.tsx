@@ -16,14 +16,12 @@ import { Avatar } from '@/components/ui/avatar';
 import { PatientPicker } from './patient-picker';
 import { VisitFormStep2 } from './visit-form-step2';
 import type { SelectedPatient } from './patient-types';
-import type { SPECIALTIES } from '@/lib/specialties';
-
-type Specialty = (typeof SPECIALTIES)[number];
+import { findSpecialty, type Specialty } from '@meddoc/shared/specialties';
 type NewVisitClientTheme = 'legacy' | 'clinician';
 
 interface Props {
   initialPatient: SelectedPatient | null;
-  specialties: Specialty[];
+  specialties: readonly Specialty[];
   defaultSpecialty: string;
   /** @deprecated kept for back-compat; Linear V1 is single-theme. */
   theme?: NewVisitClientTheme;
@@ -218,7 +216,7 @@ function VisitSummary({
           )}
         </SummaryRow>
         <SummaryRow label="Specialty">
-          <span className="qm-lin-pill">{specialty}</span>
+          <span className="qm-lin-pill">{findSpecialty(specialty).label}</span>
         </SummaryRow>
         <SummaryRow label="Capture mode">
           <span style={{ fontSize: 13.5, color: 'var(--color-linear-text-2)' }}>

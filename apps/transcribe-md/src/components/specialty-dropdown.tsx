@@ -15,16 +15,17 @@ import { ChevronDown, Check } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
 export interface SpecialtyOption {
-  slug: string;
-  displayName: string;
+  id: string;
+  label: string;
 }
 
 type DropdownTheme = 'legacy' | 'clinician';
 
 interface SpecialtyDropdownProps {
-  options: SpecialtyOption[];
-  /** Form field name — the selected displayName is what gets submitted so
-   *  the TranscribeVisit.specialty column stays human-readable. */
+  options: readonly SpecialtyOption[];
+  /** Form field name — the selected canonical id is submitted so the
+   *  DB column carries a stable enum value. The display label is
+   *  derived at render time via findSpecialty(id).label. */
   name: string;
   defaultValue?: string;
   placeholder?: string;
@@ -101,11 +102,11 @@ export function SpecialtyDropdown({
             <Select.Viewport className="p-1">
               {options.map((opt) => (
                 <Select.Item
-                  key={opt.slug}
-                  value={opt.displayName}
+                  key={opt.id}
+                  value={opt.id}
                   className={cn(ITEM)}
                 >
-                  <Select.ItemText>{opt.displayName}</Select.ItemText>
+                  <Select.ItemText>{opt.label}</Select.ItemText>
                   <Select.ItemIndicator className="absolute right-2">
                     <Check
                       className="h-3.5 w-3.5 text-linear-sage-bright"

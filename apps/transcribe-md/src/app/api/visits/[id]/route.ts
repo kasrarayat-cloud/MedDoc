@@ -30,6 +30,7 @@ import { NextResponse } from 'next/server';
 
 import prisma from '@meddoc/db';
 import { TranscribeVisitStatus } from '@prisma/client';
+import { SPECIALTY_IDS } from '@meddoc/shared/specialties';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { auth } from '@/lib/nextauth';
@@ -43,7 +44,7 @@ const INPUT_MODES = ['audio_upload', 'voice_dictation', 'text_notes'] as const;
 
 const BodySchema = z.object({
   patientId: z.string().trim().min(1).optional(),
-  specialty: z.string().trim().min(1, 'Pick a specialty').max(120).optional(),
+  specialty: z.enum(SPECIALTY_IDS, { message: 'Pick a specialty' }).optional(),
   chiefComplaint: z
     .union([z.string().trim().max(500), z.null()])
     .optional()

@@ -12,6 +12,7 @@
 
 import prisma from '@meddoc/db';
 import type { TranscribeVisitStatus } from '@prisma/client';
+import { findSpecialty } from '@meddoc/shared/specialties';
 import type {
   CptEm,
   CptModifier,
@@ -81,7 +82,12 @@ export async function loadVisitExportData(
   return {
     visitId: visit.id,
     patientName: visit.patientName,
-    specialty: visit.specialty,
+    // PDF/DOCX/EHR formatters render `data.specialty` directly into
+    // document headers — we want the human label ("Cardiology"), not
+    // the canonical id ("cardiology"). findSpecialty also resolves
+    // legacy display-name rows so old visits export with the right
+    // label instead of "Unspecified".
+    specialty: findSpecialty(visit.specialty).label,
     chiefComplaint: visit.chiefComplaint,
     status: visit.status as TranscribeVisitStatus,
     createdAt: visit.createdAt,
