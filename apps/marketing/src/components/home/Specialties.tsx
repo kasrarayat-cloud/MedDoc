@@ -2,18 +2,14 @@
  * Specialties — Phase 7 v6 (Apple Product).
  *
  * Centred stage with 8 huge rounded pills. Hover lifts each pill with sage
- * tint background + glow.
+ * tint background + glow. Pill labels are derived from the shared
+ * specialty catalog (packages/shared) so adding a specialty updates
+ * the marketing site, the in-app dropdowns, and the AI pipeline in
+ * one PR — no triplicate vocab drift.
  */
-const PILLS = [
-  'Primary care',
-  'Cardiology',
-  'Pain management',
-  'Urgent care',
-  'Pediatrics',
-  'Dermatology',
-  'Psychiatry',
-  'Orthopedics',
-];
+import { SPECIALTIES_FOR_VISIT_CREATE } from '@meddoc/shared/specialties';
+
+const PILLS = SPECIALTIES_FOR_VISIT_CREATE.map((s) => s.label);
 
 export function Specialties() {
   return (
