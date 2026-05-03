@@ -1,8 +1,8 @@
 /**
- * Specialty packs row — Linear V1 (Faithful).
+ * Specialties — Phase 7 v6 (Apple Product).
  *
- * Centered eyebrow + Inter 600 heading + body copy + mono pill cluster.
- * Pills use the .qm-lin-pill primitive directly (defined in globals.css).
+ * Centred stage with 8 huge rounded pills. Hover lifts each pill with sage
+ * tint background + glow.
  */
 const PILLS = [
   'Primary care',
@@ -17,29 +17,22 @@ const PILLS = [
 
 export function Specialties() {
   return (
-    <section style={{ padding: '32px 0 96px' }}>
-      <div className="container">
-        <div className="section-head reveal">
-          <div className="section-eyebrow">Tuned per specialty</div>
-          <h2 className="section-title">Eight specialty templates. More every month.</h2>
-          <p className="section-sub">
-            Each template adapts to your charting shorthand and preferred note structure within
-            the first five visits.
-          </p>
+    <section className="stage" id="specialties">
+      <div className="container stage-inner">
+        <div className="reveal">
+          <span className="eyebrow-tiny">Tuned per specialty</span>
         </div>
-        <div
-          className="reveal"
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            justifyContent: 'center',
-            gap: 8,
-            maxWidth: 720,
-            margin: '0 auto',
-          }}
-        >
+        <h2 className="stage-h2 reveal delay-1">
+          Eight specialty templates. <span className="quiet">More every month.</span>
+        </h2>
+        <p className="stage-sub reveal delay-2">
+          Each template adapts to your charting shorthand and preferred note structure within the
+          first five visits.
+        </p>
+
+        <div className="specs-pills reveal delay-3">
           {PILLS.map((p) => (
-            <span key={p} className="qm-lin-pill">
+            <span key={p} className="qm-pill">
               {p}
             </span>
           ))}

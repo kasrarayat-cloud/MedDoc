@@ -1,16 +1,14 @@
 import Link from 'next/link';
 
-type FooterLink = { href: string; label: string; external?: boolean };
-
 /**
- * Home page footer — Linear V1 (Faithful).
+ * Footer — Phase 7 v6 (Apple Product).
  *
- * Mirrors landing-v1.html lines 1067-1126: brand block + 4 columns + a
- * mono compliance footer at the bottom. Drop the QuillMark SVG (Linear
- * V1 wordmark uses .brand-quill::after's flat sage square). landing.css
- * already styles .foot/.foot-grid/.foot-bottom to Linear V1 tokens.
+ * 5-column grid (brand 1.6fr + 4 link cols 1fr each). Mobile collapses to
+ * 1fr 1fr (and then 1fr at ≤640px). Mono compliance line at the bottom.
  */
-const COLUMNS: { title: string; links: FooterLink[] }[] = [
+type FooterCol = { title: string; links: { href: string; label: string }[] };
+
+const COLUMNS: FooterCol[] = [
   {
     title: 'Product',
     links: [
@@ -49,56 +47,34 @@ export function Footer() {
     <footer className="foot">
       <div className="container">
         <div className="foot-grid">
-          <div>
+          <div className="foot-brand">
             <Link href="/" className="brand">
               <span className="brand-quill" aria-hidden />
               <span>QuillMD</span>
             </Link>
-            <p
-              style={{
-                marginTop: 14,
-                fontSize: 13,
-                color: 'var(--color-linear-text-3)',
-                lineHeight: 1.55,
-                maxWidth: 220,
-              }}
-            >
+            <p>
               The medical scribe that practitioners actually use. Made in the US, audited
               end-to-end.
             </p>
           </div>
           {COLUMNS.map((col) => (
             <div key={col.title} className="foot-col">
-              <h4>{col.title}</h4>
-              <ul>
-                {col.links.map((link) =>
-                  link.external ? (
-                    <li key={link.href}>
-                      <a href={link.href} target="_blank" rel="noopener noreferrer">
-                        {link.label}
-                      </a>
-                    </li>
-                  ) : (
-                    <li key={link.href}>
-                      <Link href={link.href}>{link.label}</Link>
-                    </li>
-                  ),
-                )}
-              </ul>
+              <div className="foot-col-title" aria-hidden>
+                {col.title}
+              </div>
+              <nav aria-label={col.title}>
+                {col.links.map((link) => (
+                  <Link key={link.href} href={link.href}>
+                    {link.label}
+                  </Link>
+                ))}
+              </nav>
             </div>
           ))}
         </div>
         <div className="foot-bottom">
-          <span>© {new Date().getFullYear()} QuillMD, Inc. All rights reserved.</span>
-          <div
-            className="legal"
-            style={{
-              display: 'flex',
-              gap: 14,
-              fontFamily: 'var(--font-mono)',
-              letterSpacing: '0.04em',
-            }}
-          >
+          <div>© {new Date().getFullYear()} QuillMD, Inc. All rights reserved.</div>
+          <div className="legal">
             <span>HIPAA</span>
             <span>·</span>
             <span>SOC 2 TYPE II</span>

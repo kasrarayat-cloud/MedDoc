@@ -15,13 +15,13 @@ import { FinalCTA } from '@/components/home/FinalCTA';
 import { Footer } from '@/components/home/Footer';
 
 /**
- * Landing page — Phase 5 Linear V1 (Faithful).
+ * Landing page — Phase 7 v6 (Apple Product Page).
  *
- * Centered hero on dark canvas, hairline-bordered grids, sage primary
- * accents. The full-bleed Phase 4 cinematic photo + word-stagger and
- * the legacy ShaderBackground canvas are gone; landing.css provides the
- * radial sage spotlight + grain via body::before/::after. RevealMount
- * is kept because the post-hero `.reveal` blocks still rely on it.
+ * Hero-led full-viewport stages on dark canvas with sage accents. Massive
+ * 108px headline with sage gradient on the middle line, floating 3D SOAP
+ * card with mouse-move parallax (HeroVisual), then sentence-per-section
+ * stages for HowItWorks (3) and Features (6). landing.css drives the
+ * grammar; RevealMount wires the IntersectionObserver fade-up triggers.
  */
 export default function HomePage() {
   return (

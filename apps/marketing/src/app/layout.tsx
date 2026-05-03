@@ -10,7 +10,7 @@ import './landing.css';
 // globals.css and the .qm-lin-* utility classes.
 const sans = Inter({
   subsets: ['latin'],
-  weight: ['400', '500', '600'],
+  weight: ['400', '500', '600', '700'],
   variable: '--font-sans',
   display: 'swap',
 });

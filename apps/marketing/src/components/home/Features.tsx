@@ -1,142 +1,245 @@
 /**
- * Features grid — Linear V1 (Faithful).
+ * Features — Phase 7 v6 (Apple Product).
  *
- * Six-cell hairline-divided grid on `--color-linear-surface-1`. Sage icons,
- * Inter 600 title, body copy, no chip. Mirrors landing-v1.html lines
- * 919-971; .feat-grid styling is in landing.css.
+ * Intro stage + 6 sequential full-row stages (alternating left/right). Each
+ * has a custom feature visual:
+ *  - 01: 4-cell SOAP grid with 3 lit
+ *  - 02: ICD/CPT code chips with confidence pills
+ *  - 03: shield icon + 3 pulsing rings (HIPAA)
+ *  - 04: specialty stack list with one row active
+ *  - 05: cmdk palette mock with input + cursor + 4 results
+ *  - 06: audit log with mono timestamp/event/id rows
  */
-type Feature = {
-  title: string;
-  body: string;
-  icon: React.ReactNode;
-};
-
-const FEATURES: Feature[] = [
-  {
-    title: 'Real-time SOAP draft',
-    body: 'Subjective, Objective, Assessment, Plan light up section-by-section as the visit unfolds. Edit inline; sign when ready.',
-    icon: (
-      <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M3 12h3l3-9 4 18 3-9h5" />
-      </svg>
-    ),
-  },
-  {
-    title: 'ICD-10 + CPT auto-coded',
-    body: 'Diagnosis and procedure recommendations with confidence scores; the doctor approves or edits in one click.',
-    icon: (
-      <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <rect x="3" y="4" width="18" height="16" rx="2" />
-        <path d="M7 8h10M7 12h6M7 16h8" />
-      </svg>
-    ),
-  },
-  {
-    title: 'HIPAA, BAA on file',
-    body: 'Audit-logged at every layer. End-to-end encryption. PHI never leaves our US-hosted environment.',
-    icon: (
-      <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M12 2L4 6v6c0 5 3.5 9 8 10 4.5-1 8-5 8-10V6l-8-4z" />
-        <path d="M9 12l2 2 4-4" />
-      </svg>
-    ),
-  },
-  {
-    title: 'Specialty-aware',
-    body: 'Family Medicine, Cardiology, Pediatrics, Psychiatry, Endo. The model adapts to your domain, not the reverse.',
-    icon: (
-      <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <circle cx="12" cy="12" r="3" />
-        <path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2" />
-      </svg>
-    ),
-  },
-  {
-    title: 'Cmd-K everywhere',
-    body: 'Jump to any patient, any visit, any specialty pack. Never more than two keystrokes from the next note.',
-    icon: (
-      <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <rect x="2" y="4" width="20" height="16" rx="2" />
-        <path d="M6 9h2v2H6zM10 9h2v2h-2zM14 9h2v2h-2zM6 13h12v2H6z" />
-      </svg>
-    ),
-  },
-  {
-    title: 'Audit-logged + US-hosted',
-    body: 'Every action emits an immutable event. Servers in us-east-1. Your data never crosses a border.',
-    icon: (
-      <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M21 12c0 5-4 9-9 9s-9-4-9-9 4-9 9-9c2.5 0 4.7 1 6.4 2.6" />
-        <path d="M21 4v5h-5" />
-      </svg>
-    ),
-  },
-];
-
 export function Features() {
   return (
-    <section className="features" id="features">
-      <div className="container">
-        <div className="section-head reveal">
-          <div className="section-eyebrow">02 / Built for the visit</div>
-          <h2 className="section-title">
-            Everything a working clinic needs. Nothing it doesn&apos;t.
+    <section id="features" className="features-stage">
+      <div className="stage" style={{ minHeight: '60vh', padding: '60px 0 30px' }}>
+        <div className="container stage-inner">
+          <div className="reveal">
+            <span className="eyebrow-tiny">02 / Built for the visit</span>
+          </div>
+          <h2 className="stage-h2 reveal delay-1">
+            Everything a working clinic needs.{' '}
+            <span className="quiet">Nothing it doesn&apos;t.</span>
           </h2>
-          <p className="section-sub">
+          <p className="stage-sub reveal delay-2">
             Six features that move the cursor from end-of-visit to next-patient.
           </p>
         </div>
+      </div>
 
-        <div className="feat-grid">
-          {FEATURES.map((f) => (
-            <div key={f.title} className="feat reveal">
-              <div className="feat-icon">{f.icon}</div>
-              <h4 className="feat-title">{f.title}</h4>
-              <p className="feat-copy">{f.body}</p>
+      <div className="feature-row">
+        <div className="feature-text reveal">
+          <div className="feature-num">Feature 01</div>
+          <h3 className="feature-h">Real-time SOAP draft.</h3>
+          <p className="feature-body">
+            Subjective, Objective, Assessment, Plan light up section-by-section as the visit
+            unfolds. Edit inline; sign when ready.
+          </p>
+        </div>
+        <div className="feature-visual reveal delay-1">
+          <div className="fv-soap-grid">
+            <div className="fv-soap-cell lit">
+              <span className="fv-soap-letter">S</span>
+              <span className="fv-soap-line" />
+              <span className="fv-soap-line short" />
             </div>
-          ))}
+            <div className="fv-soap-cell lit">
+              <span className="fv-soap-letter">O</span>
+              <span className="fv-soap-line" />
+              <span className="fv-soap-line" />
+            </div>
+            <div className="fv-soap-cell lit">
+              <span className="fv-soap-letter">A</span>
+              <span className="fv-soap-line" />
+              <span className="fv-soap-line short" />
+            </div>
+            <div className="fv-soap-cell">
+              <span className="fv-soap-letter">P</span>
+              <span className="fv-soap-line" />
+              <span className="fv-soap-line short" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="feature-row flip">
+        <div className="feature-text reveal">
+          <div className="feature-num">Feature 02</div>
+          <h3 className="feature-h">ICD-10 + CPT auto-coded.</h3>
+          <p className="feature-body">
+            Diagnosis and procedure recommendations with confidence scores; the doctor approves or
+            edits in one click.
+          </p>
+        </div>
+        <div className="feature-visual reveal delay-1">
+          <div className="fv-codes">
+            <span className="fv-chip">R07.89</span>
+            <span className="fv-chip confidence">98%</span>
+            <span className="fv-chip">J45.40</span>
+            <span className="fv-chip confidence">94%</span>
+            <span className="fv-chip cpt">99214</span>
+            <span className="fv-chip confidence">99%</span>
+            <span className="fv-chip cpt">93000</span>
+            <span className="fv-chip confidence">96%</span>
+            <span className="fv-chip">I10</span>
+            <span className="fv-chip confidence">88%</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="feature-row">
+        <div className="feature-text reveal">
+          <div className="feature-num">Feature 03</div>
+          <h3 className="feature-h">HIPAA, BAA on file.</h3>
+          <p className="feature-body">
+            Audit-logged at every layer. End-to-end encryption. PHI never leaves our US-hosted
+            environment.
+          </p>
+        </div>
+        <div className="feature-visual reveal delay-1">
+          <div className="fv-shield">
+            <div className="fv-shield-rings">
+              <div className="fv-shield-ring" />
+              <div className="fv-shield-ring" />
+              <div className="fv-shield-ring" />
+            </div>
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+              <path d="M9 12l2 2 4-4" />
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <div className="feature-row flip">
+        <div className="feature-text reveal">
+          <div className="feature-num">Feature 04</div>
+          <h3 className="feature-h">Specialty-aware.</h3>
+          <p className="feature-body">
+            Family Medicine, Cardiology, Pediatrics, Psychiatry, Endo. The model adapts to your
+            domain, not the reverse.
+          </p>
+        </div>
+        <div className="feature-visual reveal delay-1">
+          <div className="fv-stack">
+            <div className="fv-stack-row">
+              <span className="fv-stack-dot" /> Family Medicine
+            </div>
+            <div className="fv-stack-row active">
+              <span className="fv-stack-dot" /> Cardiology · loaded
+            </div>
+            <div className="fv-stack-row">
+              <span className="fv-stack-dot" /> Pediatrics
+            </div>
+            <div className="fv-stack-row">
+              <span className="fv-stack-dot" /> Psychiatry
+            </div>
+            <div className="fv-stack-row">
+              <span className="fv-stack-dot" /> Endocrinology
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="feature-row">
+        <div className="feature-text reveal">
+          <div className="feature-num">Feature 05</div>
+          <h3 className="feature-h">Cmd-K everywhere.</h3>
+          <p className="feature-body">
+            Jump to any patient, any visit, any specialty pack. Never more than two keystrokes
+            from the next note.
+          </p>
+        </div>
+        <div className="feature-visual reveal delay-1">
+          <div className="fv-cmdk">
+            <div className="fv-cmdk-input">
+              {' '}
+              Sarah Mitchell
+              <span className="fv-cmdk-cursor" />
+            </div>
+            <div className="fv-cmdk-list">
+              <div className="fv-cmdk-item sel">
+                <span className="ico">P</span> Sarah Mitchell — last visit Apr 28
+                <span className="kbd">↵</span>
+              </div>
+              <div className="fv-cmdk-item">
+                <span className="ico">N</span> New visit — Cardiology<span className="kbd">⌘N</span>
+              </div>
+              <div className="fv-cmdk-item">
+                <span className="ico">T</span> Switch template — Psychiatry
+                <span className="kbd">⌘T</span>
+              </div>
+              <div className="fv-cmdk-item">
+                <span className="ico">S</span> Search all visits<span className="kbd">⌘F</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="feature-row flip">
+        <div className="feature-text reveal">
+          <div className="feature-num">Feature 06</div>
+          <h3 className="feature-h">Audit-logged + US-hosted.</h3>
+          <p className="feature-body">
+            Every action emits an immutable event. Servers in us-east-1. Your data never crosses a
+            border.
+          </p>
+        </div>
+        <div className="feature-visual reveal delay-1">
+          <div className="fv-audit">
+            <div className="fv-audit-row">
+              <span className="fv-audit-time">14:32:08</span>
+              <span className="fv-audit-event">
+                <span className="verb">SIGNED</span> visit-7K2A
+              </span>
+              <span className="fv-audit-id">u-091</span>
+            </div>
+            <div className="fv-audit-row">
+              <span className="fv-audit-time">14:31:54</span>
+              <span className="fv-audit-event">
+                <span className="verb">EDITED</span> soap.assessment
+              </span>
+              <span className="fv-audit-id">u-091</span>
+            </div>
+            <div className="fv-audit-row">
+              <span className="fv-audit-time">14:31:12</span>
+              <span className="fv-audit-event">
+                <span className="verb">CODED</span> R07.89 · J45.40
+              </span>
+              <span className="fv-audit-id">sys</span>
+            </div>
+            <div className="fv-audit-row">
+              <span className="fv-audit-time">14:30:48</span>
+              <span className="fv-audit-event">
+                <span className="verb">DRAFTED</span> SOAP note
+              </span>
+              <span className="fv-audit-id">sys</span>
+            </div>
+            <div className="fv-audit-row">
+              <span className="fv-audit-time">14:28:14</span>
+              <span className="fv-audit-event">
+                <span className="verb">STARTED</span> visit recording
+              </span>
+              <span className="fv-audit-id">u-091</span>
+            </div>
+            <div className="fv-audit-row">
+              <span className="fv-audit-time">14:27:02</span>
+              <span className="fv-audit-event">
+                <span className="verb">OPENED</span> patient · Mitchell
+              </span>
+              <span className="fv-audit-id">u-091</span>
+            </div>
+          </div>
         </div>
       </div>
     </section>
