@@ -1,0 +1,137 @@
+[
+  {
+    "id": "apostrophe",
+    "email": "qa-r2-apo1777839763'a@quillmd-test.local",
+    "expect": "reject (HTML5 email format)",
+    "browserValidity": {
+      "valid": true,
+      "message": ""
+    },
+    "urlChanged": true,
+    "afterUrl": "https://app.quillmd.com/dashboard",
+    "visibleErrors": [],
+    "consoleErrs": [
+      "console: Failed to load resource: the server responded with a status of 404 ()"
+    ],
+    "networkErrs": []
+  },
+  {
+    "id": "plus-real-domain",
+    "email": "qa-test+round21777839763@gmail.com",
+    "expect": "should NOT auto-confirm (gmail in denylist) — proceeds to /check-email",
+    "browserValidity": {
+      "valid": true,
+      "message": ""
+    },
+    "urlChanged": true,
+    "afterUrl": "https://app.quillmd.com/check-email?email=qa-test%2Bround21777839763%40gmail.com",
+    "afterH1": "Check your email",
+    "visibleErrors": [],
+    "consoleErrs": [],
+    "networkErrs": []
+  },
+  {
+    "id": "unicode",
+    "email": "ünïcödé1777839763@quillmd-test.local",
+    "expect": "IDN handling — likely accepted",
+    "browserValidity": {
+      "valid": false,
+      "message": "A part followed by '@' should not contain the symbol 'ü'."
+    },
+    "urlChanged": false,
+    "afterUrl": "https://app.quillmd.com/signup",
+    "afterH1": "Create your account",
+    "visibleErrors": [],
+    "consoleErrs": [],
+    "networkErrs": []
+  },
+  {
+    "id": "long-prefix",
+    "email": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-1777839763@quillmd-test.local",
+    "expect": "depends on length cap",
+    "browserValidity": {
+      "valid": true,
+      "message": ""
+    },
+    "urlChanged": true,
+    "afterUrl": "https://app.quillmd.com/dashboard",
+    "visibleErrors": [],
+    "consoleErrs": [],
+    "networkErrs": []
+  },
+  {
+    "id": "empty-local",
+    "email": "@quillmd-test.local",
+    "expect": "reject (HTML5 email format)",
+    "browserValidity": {
+      "valid": false,
+      "message": "Please enter a part followed by '@'. '@quillmd-test.local' is incomplete."
+    },
+    "urlChanged": false,
+    "afterUrl": "https://app.quillmd.com/signup",
+    "afterH1": "Create your account",
+    "visibleErrors": [],
+    "consoleErrs": [],
+    "networkErrs": []
+  },
+  {
+    "id": "no-at",
+    "email": "invalidemail1777839763.com",
+    "expect": "reject (HTML5 email format)",
+    "browserValidity": {
+      "valid": false,
+      "message": "Please include an '@' in the email address. 'invalidemail1777839763.com' is missing an '@'."
+    },
+    "urlChanged": false,
+    "afterUrl": "https://app.quillmd.com/signup",
+    "afterH1": "Create your account",
+    "visibleErrors": [],
+    "consoleErrs": [],
+    "networkErrs": []
+  },
+  {
+    "id": "two-at",
+    "email": "a@b@quillmd-test.local",
+    "expect": "browser may reject; bypass fires on right-of-last-@",
+    "browserValidity": {
+      "valid": false,
+      "message": "A part following '@' should not contain the symbol '@'."
+    },
+    "urlChanged": false,
+    "afterUrl": "https://app.quillmd.com/signup",
+    "afterH1": "Create your account",
+    "visibleErrors": [],
+    "consoleErrs": [],
+    "networkErrs": []
+  },
+  {
+    "id": "space-in",
+    "email": "bad email1777839763@quillmd-test.local",
+    "expect": "reject (HTML5 email format)",
+    "browserValidity": {
+      "valid": false,
+      "message": "A part followed by '@' should not contain the symbol ' '."
+    },
+    "urlChanged": false,
+    "afterUrl": "https://app.quillmd.com/signup",
+    "afterH1": "Create your account",
+    "visibleErrors": [],
+    "consoleErrs": [],
+    "networkErrs": []
+  },
+  {
+    "id": "newline-in",
+    "email": "bad\nemail1777839763@quillmd-test.local",
+    "expect": "reject (HTML5 email format)",
+    "browserValidity": {
+      "valid": false,
+      "message": "A part followed by '@' should not contain the symbol ' '."
+    },
+    "urlChanged": false,
+    "afterUrl": "https://app.quillmd.com/signup",
+    "afterH1": "Create your account",
+    "visibleErrors": [],
+    "consoleErrs": [],
+    "networkErrs": []
+  }
+]

@@ -1,0 +1,55 @@
+{
+  "tests": [
+    {
+      "name": "K1-signup-rate",
+      "statuses": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200
+      ],
+      "firstLimitAt": -1
+    },
+    {
+      "name": "K2-login-rate",
+      "statuses": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200
+      ],
+      "firstLimitAt": -1
+    },
+    {
+      "name": "K3-forgot-pw-rate",
+      "statuses": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        429
+      ],
+      "firstLimitAt": 5
+    },
+    {
+      "name": "K6-admin-no-session",
+      "status": 404,
+      "bodyExcerpt": "Not Found"
+    }
+  ]
+}

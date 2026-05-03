@@ -1,0 +1,189 @@
+{
+  "tests": [
+    {
+      "name": "D-01-specialty-options",
+      "info": {
+        "currentValue": "",
+        "options": [
+          {
+            "value": "",
+            "label": "Unspecified"
+          },
+          {
+            "value": "cardiology",
+            "label": "Cardiology"
+          },
+          {
+            "value": "pain",
+            "label": "Pain"
+          },
+          {
+            "value": "ortho",
+            "label": "Ortho"
+          },
+          {
+            "value": "primary",
+            "label": "Primary"
+          },
+          {
+            "value": "pulmonology",
+            "label": "Pulmonology"
+          },
+          {
+            "value": "ophthalmology",
+            "label": "Ophthalmology"
+          }
+        ]
+      }
+    },
+    {
+      "name": "D-02-specialty-saved",
+      "from": "",
+      "to": "cardiology",
+      "after": {
+        "successMsg": [
+          "Profile updatedYour changes are saved."
+        ],
+        "currentValue": ""
+      }
+    },
+    {
+      "name": "D-03-persistence",
+      "expected": "cardiology",
+      "actual": "cardiology",
+      "persisted": true
+    },
+    {
+      "name": "F1-name-save",
+      "original": "QA Bypass Updated",
+      "new": "R2 Round2 Test 3qjx",
+      "after": [
+        "Profile updatedYour changes are saved.Profile updatedYour changes are saved."
+      ]
+    },
+    {
+      "name": "F2-weak-password",
+      "errors": [
+        "Password must be at least 10 characters"
+      ]
+    },
+    {
+      "name": "F3-admin-as-doctor",
+      "http": 404,
+      "state": {
+        "url": "https://app.quillmd.com/admin",
+        "h1": "Not here.",
+        "bodyExcerpt": "404 Not here. We couldn't find that page. It may have moved, or you may not have access. Go to dashboard Sign in"
+      }
+    },
+    {
+      "name": "F4-data-export",
+      "status": 200
+    },
+    {
+      "name": "F5-delete-route-GET",
+      "status": 405
+    },
+    {
+      "name": "E-01-coach-inventory",
+      "info": {
+        "allButtons": [
+          {
+            "text": "Search patients, visits, codes…⌘K",
+            "disabled": false
+          },
+          {
+            "text": "QB",
+            "disabled": false
+          },
+          {
+            "text": "Delete",
+            "disabled": false
+          },
+          {
+            "text": "SOAP Note",
+            "disabled": false
+          },
+          {
+            "text": "Transcript",
+            "disabled": false
+          },
+          {
+            "text": "Codes",
+            "disabled": false
+          },
+          {
+            "text": "Rx",
+            "disabled": false
+          },
+          {
+            "text": "Extras",
+            "disabled": false
+          },
+          {
+            "text": "Copy SOAP",
+            "disabled": false
+          },
+          {
+            "text": "Chief Complaint: Chest pain returned, started approximately ",
+            "disabled": false
+          },
+          {
+            "text": "Vitals:Blood pressure: 128/82 mmHgHeart rate: 76 bpm, regula",
+            "disabled": false
+          },
+          {
+            "text": "Primary Clinical Consideration: Chest pain of uncertain etio",
+            "disabled": false
+          },
+          {
+            "text": "1. Diagnostics: Obtain ECG today; review results at follow-u",
+            "disabled": false
+          },
+          {
+            "text": "Copy SOAP",
+            "disabled": false
+          },
+          {
+            "text": "override▾",
+            "disabled": false
+          },
+          {
+            "text": "+ add 1 element",
+            "disabled": false
+          },
+          {
+            "text": "✓Confirm 99214 · sign⌘ ↵",
+            "disabled": false
+          },
+          {
+            "text": "Sign & Send",
+            "disabled": false
+          }
+        ],
+        "chipCount": 0,
+        "chips": []
+      }
+    },
+    {
+      "name": "E-02-add-element",
+      "clicked": true,
+      "xhrFromAdd": []
+    },
+    {
+      "name": "E-03-confirm-sign",
+      "clicked": true,
+      "xhrFromConfirm": []
+    },
+    {
+      "name": "E-04-codes-tab-cmdk",
+      "clicked": true,
+      "cmdkOpened": true
+    }
+  ],
+  "consoleErrs": [
+    "console: Failed to load resource: the server responded with a status of 404 ()",
+    "console: Failed to load resource: the server responded with a status of 400 ()",
+    "console: Failed to load resource: the server responded with a status of 404 ()"
+  ]
+}

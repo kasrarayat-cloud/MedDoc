@@ -1,0 +1,92 @@
+[
+  {
+    "id": "apostrophe",
+    "name": "QA-TEST O'Brien",
+    "urlChanged": false,
+    "bodyExcerpt": "Dashboard Visits Patients Settings Q QuillMD / Visits Search patients, visits, codes… ⌘ K New visit QR NEW VISIT Start a new visit Pick the patient, then choose how you want to capture the encounter. Cancel Patient 2 Visit details 3 Capture Q VISIT FOR QA-TEST O'Brien b. 1980-01-01 Change patient SPECIALTY Cardiology Cardiology Dermatology Internal Medicine Obstetrics & Gynecology Orthopedics Pedi",
+    "visibleErrors": [],
+    "consoleErrsAfter": 0,
+    "networkErrsAfter": 0
+  },
+  {
+    "id": "sql-drop",
+    "name": "QA-TEST'; DROP TABLE patients; --",
+    "urlChanged": false,
+    "bodyExcerpt": "Dashboard Visits Patients Settings Q QuillMD / Visits Search patients, visits, codes… ⌘ K New visit QR NEW VISIT Start a new visit Pick the patient, then choose how you want to capture the encounter. Cancel Patient 2 Visit details 3 Capture Q VISIT FOR QA-TEST'; DROP TABLE patients; -- b. 1980-01-02 Change patient SPECIALTY Cardiology Cardiology Dermatology Internal Medicine Obstetrics & Gynecolog",
+    "visibleErrors": [],
+    "consoleErrsAfter": 0,
+    "networkErrsAfter": 0
+  },
+  {
+    "id": "xss-script",
+    "name": "QA-TEST <script>alert(1)</script>",
+    "urlChanged": false,
+    "bodyExcerpt": "Dashboard Visits Patients Settings Q QuillMD / Visits Search patients, visits, codes… ⌘ K New visit QR NEW VISIT Start a new visit Pick the patient, then choose how you want to capture the encounter. Cancel Patient 2 Visit details 3 Capture Q VISIT FOR QA-TEST <script>alert(1)</script> b. 1980-01-03 Change patient SPECIALTY Cardiology Cardiology Dermatology Internal Medicine Obstetrics & Gynecolog",
+    "visibleErrors": [],
+    "consoleErrsAfter": 0,
+    "networkErrsAfter": 0
+  },
+  {
+    "id": "xss-img",
+    "name": "QA-TEST <img src=x onerror=alert(1)>",
+    "urlChanged": false,
+    "bodyExcerpt": "Dashboard Visits Patients Settings Q QuillMD / Visits Search patients, visits, codes… ⌘ K New visit QR NEW VISIT Start a new visit Pick the patient, then choose how you want to capture the encounter. Cancel Patient 2 Visit details 3 Capture Q VISIT FOR QA-TEST <img src=x onerror=alert(1)> b. 1980-01-04 Change patient SPECIALTY Cardiology Cardiology Dermatology Internal Medicine Obstetrics & Gyneco",
+    "visibleErrors": [],
+    "consoleErrsAfter": 0,
+    "networkErrsAfter": 0
+  },
+  {
+    "id": "emoji",
+    "name": "QA-TEST 👨‍⚕️ Doctor",
+    "urlChanged": false,
+    "bodyExcerpt": "Dashboard Visits Patients Settings Q QuillMD / Visits Search patients, visits, codes… ⌘ K New visit QR NEW VISIT Start a new visit Pick the patient, then choose how you want to capture the encounter. Cancel Patient 2 Visit details 3 Capture Q VISIT FOR QA-TEST 👨‍⚕️ Doctor b. 1980-01-05 Change patient SPECIALTY Cardiology Cardiology Dermatology Internal Medicine Obstetrics & Gynecology Orthopedics",
+    "visibleErrors": [],
+    "consoleErrsAfter": 0,
+    "networkErrsAfter": 0
+  },
+  {
+    "id": "unicode",
+    "name": "QA-TEST Müller-Søndergård",
+    "urlChanged": false,
+    "bodyExcerpt": "Dashboard Visits Patients Settings Q QuillMD / Visits Search patients, visits, codes… ⌘ K New visit QR NEW VISIT Start a new visit Pick the patient, then choose how you want to capture the encounter. Cancel 1 Patient 2 Visit details 3 Capture Who's this visit for? Search patients NAME DATE OF BIRTH EXTERNAL ID (optional) Too many requests. Try again later. Cancel Create & continue VISIT SUMMARY ",
+    "visibleErrors": [],
+    "consoleErrsAfter": 2,
+    "networkErrsAfter": 2
+  },
+  {
+    "id": "mongo-op",
+    "name": "QA-TEST {\"$gt\": \"\"}",
+    "urlChanged": false,
+    "bodyExcerpt": "Dashboard Visits Patients Settings Q QuillMD / Visits Search patients, visits, codes… ⌘ K New visit QR NEW VISIT Start a new visit Pick the patient, then choose how you want to capture the encounter. Cancel 1 Patient 2 Visit details 3 Capture Who's this visit for? Search patients NAME DATE OF BIRTH EXTERNAL ID (optional) Too many requests. Try again later. Cancel Create & continue VISIT SUMMARY ",
+    "visibleErrors": [],
+    "consoleErrsAfter": 2,
+    "networkErrsAfter": 2
+  },
+  {
+    "id": "null-byte",
+    "name": "QA-TEST\u0000NullByte",
+    "urlChanged": false,
+    "bodyExcerpt": "Dashboard Visits Patients Settings Q QuillMD / Visits Search patients, visits, codes… ⌘ K New visit QR NEW VISIT Start a new visit Pick the patient, then choose how you want to capture the encounter. Cancel 1 Patient 2 Visit details 3 Capture Who's this visit for? Search patients NAME DATE OF BIRTH EXTERNAL ID (optional) Too many requests. Try again later. Cancel Create & continue VISIT SUMMARY ",
+    "visibleErrors": [],
+    "consoleErrsAfter": 2,
+    "networkErrsAfter": 2
+  },
+  {
+    "id": "long",
+    "name": "QA-TEST AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "urlChanged": false,
+    "bodyExcerpt": "Dashboard Visits Patients Settings Q QuillMD / Visits Search patients, visits, codes… ⌘ K New visit QR NEW VISIT Start a new visit Pick the patient, then choose how you want to capture the encounter. Cancel 1 Patient 2 Visit details 3 Capture Who's this visit for? Search patients NAME DATE OF BIRTH EXTERNAL ID (optional) Too many requests. Try again later. Cancel Create & continue VISIT SUMMARY ",
+    "visibleErrors": [],
+    "consoleErrsAfter": 2,
+    "networkErrsAfter": 2
+  },
+  {
+    "id": "rtl",
+    "name": "QA-TEST ‮gnirtsdesreveṙ",
+    "urlChanged": false,
+    "bodyExcerpt": "Dashboard Visits Patients Settings Q QuillMD / Visits Search patients, visits, codes… ⌘ K New visit QR NEW VISIT Start a new visit Pick the patient, then choose how you want to capture the encounter. Cancel 1 Patient 2 Visit details 3 Capture Who's this visit for? Search patients NAME DATE OF BIRTH EXTERNAL ID (optional) Too many requests. Try again later. Cancel Create & continue VISIT SUMMARY ",
+    "visibleErrors": [],
+    "consoleErrsAfter": 2,
+    "networkErrsAfter": 2
+  }
+]
