@@ -456,6 +456,16 @@ services:
       # container — no rebuild needed because /visits/[id]/page.tsx
       # is a server component reading process.env at request time.
       NEXT_PUBLIC_SHOW_PIPELINE_TAB: ${NEXT_PUBLIC_SHOW_PIPELINE_TAB:-}
+      # Phase 7-QA: comma-separated allowlist of email domains whose
+      # signups skip the verification-email dispatch and stamp
+      # emailVerified immediately. Production should hold ONLY the
+      # RFC-6762 reserved test domain (`quillmd-test.local`) so the
+      # automated QA harness can complete the authenticated-flow
+      # sweep against a non-deliverable mailbox. Real-mail providers
+      # (gmail/outlook/yahoo/quillmd.com/etc) are hard-denylisted
+      # inside isAutoConfirmDomain() — listing them here will not
+      # bypass verification. Empty / unset ⇒ bypass never fires.
+      EMAIL_AUTO_CONFIRM_DOMAINS: ${EMAIL_AUTO_CONFIRM_DOMAINS:-}
     ports:
       # Loopback only — public traffic arrives via Caddy on :9020.
       - "127.0.0.1:3011:3011"

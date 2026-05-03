@@ -459,3 +459,86 @@ V6-distinctive strings present in served HTML:
   layout.tsx if a real-mobile Lighthouse run still scores <92 — would
   shave the LCP webfont-swap delay further.
 
+## 14. ✅ Phase 7-QA — email auto-confirm bypass (QA harness only) — completed 2026-05-03
+
+### Why
+The QA sweep at `docs/qa-sweep-2026-05-03/` could not complete Stages 3-6
+(authenticated app, core flow, Coding Coach, settings) because the
+synthetic test email `*@quillmd-test.local` is non-deliverable. The
+production Resend API key is correctly scoped send-only (cannot list
+dispatched emails), and `auth_tokens` only stores the hash of the
+verification token, so QA had no way to retrieve the plaintext token
+and complete email verification.
+
+### What
+Added a narrowly-scoped, env-gated bypass that auto-confirms email at
+signup time for an allowlisted RESERVED test domain only. Production
+sets `EMAIL_AUTO_CONFIRM_DOMAINS=quillmd-test.local` (RFC 6762 reserved
+TLD). All real-mail domains (gmail.com / outlook.com / yahoo.com /
+icloud.com / quillmd.com / etc.) are **hard-denylisted** inside the
+helper as a defense-in-depth guard against env-var misconfiguration.
+
+### Files
+- **NEW**: `apps/transcribe-md/src/lib/email-auto-confirm.ts`
+  - `isAutoConfirmDomain(email): boolean` — returns true iff:
+    - env `EMAIL_AUTO_CONFIRM_DOMAINS` is non-empty
+    - email's domain (right of last `@`, lowercased) is in the env allowlist
+    - AND domain is NOT in `REAL_MAIL_DENYLIST` (gmail/outlook/yahoo/icloud/quillmd.com/...)
+  - 28-line denylist; positive opt-in; case-insensitive; substring match never used
+- **NEW**: `apps/transcribe-md/src/lib/email-auto-confirm.test.ts`
+  - vitest, 9 cases:
+    1. `quillmd-test.local` allowlisted → fires
+    2. `gmail.com` in env (defensive) → does NOT fire
+    3. `quillmd.com` in env (production domain) → does NOT fire
+    4. env unset → never fires
+    5. env empty/whitespace → never fires
+    6. domain not in allowlist → does not fire
+    7. comma-separated parsing with whitespace
+    8. case-insensitive matching
+    9. malformed input + non-string defensive guards
+- **EDIT**: `apps/transcribe-md/src/actions/auth.ts`
+  - signupAction: `verifyEnabled = isEmailDeliveryEnabled() && !autoConfirm`
+  - When bypass fires, emits a `console.warn` with `[QA-BYPASS]` prefix +
+    the email so it shows up in `docker logs transcribe-md`
+- **EDIT**: `docker-compose.yml`
+  - Plumbed `EMAIL_AUTO_CONFIRM_DOMAINS: ${EMAIL_AUTO_CONFIRM_DOMAINS:-}`
+    into the `transcribe-md` service environment block (next to the
+    pipeline-tab gate)
+- **EDIT**: `/opt/meddoc-pro/.env` (host)
+  - Added `EMAIL_AUTO_CONFIRM_DOMAINS=quillmd-test.local`
+
+### Safety reasoning
+1. **Default is safe.** Empty env var → bypass never fires. Existing
+   real-user signups behave identically to before this PR.
+2. **Denylist trumps allowlist.** Even if env is mis-set to
+   `gmail.com,quillmd-test.local`, only the second domain bypasses;
+   gmail.com is refused.
+3. **Reserved TLD only.** `.local` is RFC 6762 reserved (mDNS); no
+   real mailboxes can exist there. Same for `.test`, `.example`,
+   `.invalid` if added later.
+4. **Visible.** Every bypass fires emits a `[QA-BYPASS]` warning in
+   the container log; auditable from `docker compose logs transcribe-md`.
+5. **Localised.** The bypass only affects the signup path (one
+   `if`-branch in `signupAction`). Login, password-reset, change-email,
+   Resend dispatch, audit-log emission are all unchanged.
+
+### Verification
+- Unit tests: 9/9 pass via `pnpm --filter transcribe-md test:unit`
+- Production smoke (post-deploy):
+  - Signup with `qa-bypass-${ts}@quillmd-test.local` → DB shows
+    `emailVerified` set to NOW(), no `auth_tokens.EMAIL_VERIFICATION`
+    row, container log shows `[QA-BYPASS] auto-confirmed email for ...`
+  - Signup with `qa-control@example.com` (control, not on allowlist)
+    → DB shows `emailVerified=NULL`, `auth_tokens.EMAIL_VERIFICATION`
+    row exists, normal verify-email flow taken (no bypass log line)
+
+### Cleanup
+- The Phase 7-QA bypass is intended to STAY ON in production (gated
+  on the reserved test domain only). Future QA sweeps can re-use it
+  by signing up with any `*@quillmd-test.local` address.
+- If we ever want to retire it, just unset `EMAIL_AUTO_CONFIRM_DOMAINS`
+  on the host and `docker compose up -d --force-recreate transcribe-md`
+  (no rebuild needed; the env var is read at request time, not
+  compile time).
+
+
