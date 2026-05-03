@@ -5,3 +5,5 @@ node_modules
 .env.production
 *.md
 .claude
+backups
+docs
