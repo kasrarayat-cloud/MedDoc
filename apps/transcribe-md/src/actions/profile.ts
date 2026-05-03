@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
 import prisma from '@meddoc/db';
+import { SPECIALTY_IDS } from '@meddoc/shared/specialties';
 import { requireSession } from '@/lib/auth';
 
 // Gate 1 added User.specialty + npi + clinicName + timeZone columns to
@@ -12,7 +13,11 @@ import { requireSession } from '@/lib/auth';
 // the navbar + avatar never render a blank.
 const UpdateProfileSchema = z.object({
   name: z.string().trim().min(1, 'Name is required').max(120),
-  specialty: z.string().trim().max(60).optional().default(''),
+  // Settings dropdown includes 'unspecified' as the no-default sentinel,
+  // so the enum is the full SPECIALTY_IDS list (visit-create's enum
+  // would have rejected it). Saving 'unspecified' clears the column to
+  // NULL via the unspecifiedToNull helper below.
+  specialty: z.enum(SPECIALTY_IDS).optional().default('unspecified'),
   npi: z
     .string()
     .trim()
@@ -31,6 +36,10 @@ export type ProfileState =
 
 function orNull(v: string): string | null {
   return v.length === 0 ? null : v;
+}
+
+function unspecifiedToNull(v: string): string | null {
+  return v === 'unspecified' || v === '' ? null : v;
 }
 
 export async function updateProfileAction(
@@ -55,7 +64,7 @@ export async function updateProfileAction(
       where: { id: session.user.id },
       data: {
         name: parsed.data.name,
-        specialty: orNull(parsed.data.specialty),
+        specialty: unspecifiedToNull(parsed.data.specialty),
         npi: orNull(parsed.data.npi),
         clinicName: orNull(parsed.data.clinicName),
         timeZone: orNull(parsed.data.timeZone),

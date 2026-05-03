@@ -1,9 +1,13 @@
 // ============================================================================
 // TranscribeMD worker — specialty-specific SOAP guidance (T-M4 Layer 4)
 // ----------------------------------------------------------------------------
-// Appended to the SOAP-generation system prompt. Keys match the slug in
-// ScribeSpecialtyTemplate so we don't need a second mapping table. Any
-// unlisted slug falls back to empty string → the generic SOAP prompt.
+// Appended to the SOAP-generation system prompt. Keys MUST be the
+// SpecialtyId values from packages/shared/src/specialties.ts (templateId
+// field). Any unlisted slug falls back to empty string → the generic
+// SOAP prompt. The pair (catalog row, guidance entry) is what the
+// generators-test.ts coverage check enforces — adding a specialty to
+// the catalog without adding guidance here is a soft regression but
+// not a build failure (the SOAP just falls back to generic).
 // ============================================================================
 
 export const SPECIALTY_GUIDANCE: Record<string, string> = {
@@ -68,6 +72,24 @@ export const SPECIALTY_GUIDANCE: Record<string, string> = {
     "regularity, contraception, and any pregnancy-related symptoms. " +
     "Note Pap/HPV screening status if discussed. For prenatal visits, " +
     "document fundal height and fetal heart tones when stated.",
+
+  'urgent-care':
+    "Document chief complaint precisely with duration and severity. " +
+    "Capture vital signs and red-flag symptoms explicitly (chest pain, " +
+    "shortness of breath, neuro deficits, severe headache, syncope). " +
+    "Note disposition decision (discharge home, referral to ED, " +
+    "follow-up timing) and the rationale. Capture return precautions " +
+    "if discussed.",
+
+  'pain-management':
+    "Document pain location, character (sharp / dull / burning / " +
+    "radiating), 0-10 severity, duration, exacerbating + alleviating " +
+    "factors. Note functional impact (sleep, work, ADLs). Capture " +
+    "medication history including doses, frequency, prior trials and " +
+    "outcomes. Document non-pharmacologic modalities tried (PT, " +
+    "injections, behavioral). Note any controlled-substance prescribing " +
+    "decisions and the documented rationale. Be cautious about " +
+    "diagnostic specificity unless the doctor stated a clear diagnosis.",
 };
 
 /** Return specialty-specific guidance or an empty string if none
