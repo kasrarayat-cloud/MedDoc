@@ -106,7 +106,12 @@ jobs:
           cache: 'npm'
 
       - name: Install workspace deps
-        run: npm ci --no-audit --no-fund
+        # --include=dev forces devDeps in even though job-level
+        # NODE_ENV=production would otherwise tell npm to skip them.
+        # @tailwindcss/postcss, eslint, @playwright/test all live in
+        # devDependencies and are needed for `next build` + the axe
+        # sweep that follows.
+        run: npm ci --include=dev --no-audit --no-fund
 
       - name: Generate Prisma client
         run: npm run db:generate

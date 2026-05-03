@@ -28,7 +28,11 @@ export async function signupFreshUser(
   await page.goto('/signup');
   await page.getByLabel('Full name').fill(name);
   await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(TEST_PASSWORD);
+  // exact:true disambiguates "Password" from "Confirm password" — the
+  // signup form has both, and the unqualified label match resolves to
+  // two elements and throws under Playwright strict mode.
+  await page.getByLabel('Password', { exact: true }).fill(TEST_PASSWORD);
+  await page.getByLabel('Confirm password').fill(TEST_PASSWORD);
   await page.getByRole('checkbox').check(); // accept terms
   await page.getByRole('button', { name: /create account/i }).click();
 
