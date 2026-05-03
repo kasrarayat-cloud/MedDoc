@@ -342,3 +342,120 @@ Insurance dump: `/opt/meddoc-pro/backups/migration/meddoc-pre-h8-20260502T230142
 - Reboot test (recommended Sun 04:00 UTC; can also schedule via host at-job)
 - ~~Move pre-migration dump from `/tmp` to `/opt/meddoc-pro/backups/migration/`~~ → DONE 2026-05-02. File at `/opt/meddoc-pro/backups/migration/meddoc-pre-h8-20260502T230142Z.dump`, owner `dnsmasq:systemd-journal`, mode 0640.
 - Phase 6.2 (deferred): S3 keyfile (compromise-resistance bump) — currently keyfile is on the VPS root partition, which is HIPAA-acceptable but not best-in-class
+
+## 13. ✅ Phase 7 — Landing v6 (Apple Product Page) — completed 2026-05-03
+
+The marketing site `quillmd.com` was redesigned from the Phase 5 Linear V1
+("Faithful") grammar to the Phase 7 v6 "Apple Product Page" design picked
+from the 10-variant designer-mode exploration in
+`docs/design-directions-v5-designer/`. Hero-led, full-viewport stages,
+sentence-per-section pacing. Same brand identity (sage palette, dark canvas,
+Inter + JetBrains Mono); same content (every headline / sub / feature blurb
+/ dialogue line / SOAP body / ICD-CPT code / FAQ / footer link byte-identical
+to the production source-of-truth content map).
+
+### PR + tag + release SHAs
+- PR: [#95](https://github.com/kasrarayat-cloud/MedDoc/pull/95) — squash-merged 2026-05-03
+- Squash SHA on main: `e4644dc`
+- Hotfix during deploy (May-3 backups dir blocking docker context): `dc4e36f`
+  added `backups/` + `docs/` to `.dockerignore`
+- Tag: `phase-7-landing-v6-live` (pushed to origin)
+
+### Files changed
+- 17 modified components in `apps/marketing/src/components/home/` + `app/`
+- New: `apps/marketing/src/app/icon.svg` (sage gradient brand-quill favicon —
+  also kills the pre-existing `/favicon.ico` 404)
+- New: `apps/marketing/src/components/home/HeroVisual.tsx` (the only new
+  client component — mouse-move 3D parallax on the floating SOAP card,
+  desktop ≥961px, reduced-motion respected)
+- Full rewrite: `apps/marketing/src/app/landing.css` (Phase 5 Linear V1
+  grammar replaced with Phase 7 v6 grammar)
+- `next/font` Inter weights extended to `{400,500,600,700}` (700 for the
+  v6 hero h1; weight 800 dropped — was unused)
+
+### Lighthouse 12 (against local prod build before deploy)
+| Category | Mobile (sim 4G + 4× CPU) | Desktop |
+|---|---|---|
+| Performance | 88 (target ≥95) | **100** |
+| Accessibility | **100** | **100** |
+| Best Practices | **100** | **100** |
+| SEO | **100** | **100** |
+
+Mobile 88 is render-delay-bound on the giant hero h1 (clamp 44-108px,
+weight 700, gradient text); already optimized (LCP-friendly anim,
+content-visibility on offscreen sections, dropped Inter 800, removed
+filter:drop-shadow on giant text on mobile). Real-device mid-range
+Android expected 92-97. Desktop nails 100 on every metric.
+
+### Production smoke (post-deploy)
+| Path | HTTP |
+|---|---|
+| `https://quillmd.com/` | 200 |
+| `https://quillmd.com/privacy` | 200 |
+| `https://quillmd.com/terms` | 200 |
+| `https://quillmd.com/pricing` | 200 |
+| `https://quillmd.com/icon.svg` | 200 |
+| `https://app.quillmd.com/login` | 200 |
+
+V6-distinctive strings present in served HTML:
+- "actually use" (hero h1)
+- "Solo physician" (pricing card badge)
+- "Real visit. Real note." (demo section)
+- `/icon.svg` `<link rel="icon">` reference
+
+0 console errors at 1440×900 + 375×812 (Playwright headless against live URL).
+
+### Visual fidelity
+- Production = source mockup (`docs/design-directions-v5-designer/v6-apple-product.html`)
+  pixel-faithful at both viewports — within sub-pixel font rendering tolerance
+- Before/after pairs at `docs/landing-v6-migration/screenshots/` (before-* vs
+  prod-* / post-deploy-*)
+- Per-section walkthrough at `docs/landing-v6-migration/screenshots/walkthrough/`
+  (29 mobile shots covering every section)
+
+### What was preserved byte-identical
+- `layout.tsx` metadata (title, description, openGraph, viewport)
+- `next.config.ts` (output: standalone, optimizePackageImports)
+- `lib/constants.ts` (`APP_URL` + `APP_SIGNUP_URL`)
+- All other pages (about, contact, demo, hipaa, pricing, privacy,
+  security, signup, terms) — verified HTTP 200 on each
+- Reused intact: `useReveal` hook, `useCounter` hook, `RevealMount`
+  invisible client component, `globals.css` `@theme` Linear V1 sage tokens
+- 0 analytics / tracking pixels existed before; none added
+  (no funnel-break risk)
+
+### Animation strategy
+- Scroll fade-up `.reveal` → `.in`: existing `useReveal` IntersectionObserver
+- Hero `2.0` counter: existing `useCounter` hook
+- Hero card 3D float (9s loop): pure CSS `@keyframes float`
+- Hero card mouse-move parallax: `HeroVisual.tsx` (only new client logic)
+- Live-dot pulse, wave bars, doc-line draw, ring-pulse, orb breath, blink
+  cursor: pure CSS keyframes
+- `prefers-reduced-motion` honoured throughout
+
+### Deploy lessons added
+- **`/opt/meddoc-pro/backups/migration/` is mode 0750 owned by
+  `dnsmasq:systemd-journal`.** The May-3 daily backup process writes new
+  subdirs there, and the `claude` host user can't read them. This blocks
+  `docker compose build` because the build context loader walks the
+  whole repo. Permanent fix: `backups/` (and `docs/`) added to
+  `.dockerignore`. Future ops: any new sibling dir that the postgres-backup
+  container creates with restrictive perms will need the same exclusion.
+- **`docker compose build <service>` runs serially even on this VPS.**
+  Did NOT need to disable parallel — only one service was passed. The
+  "no parallel docker builds" rule (in user memory) applies when running
+  `docker compose build` with no service argument (which builds all 3
+  app services concurrently).
+- **`gh pr merge --squash --delete-branch` switches local checkout to
+  `main` automatically and deletes the local feature branch.** No need
+  to run `git checkout main` manually after the merge — but harmless.
+
+### Open follow-ups
+- `framer-motion` is still in `apps/marketing/package.json` from earlier
+  phases but the v6 landing components do not import it. Could be removed
+  in a small cleanup PR (would shave ~50KB from `node_modules` install
+  time but no runtime impact since tree-shaken out). Low priority.
+- Consider preloading the Inter 700 weight via `<link rel="preload">` in
+  layout.tsx if a real-mobile Lighthouse run still scores <92 — would
+  shave the LCP webfont-swap delay further.
+
