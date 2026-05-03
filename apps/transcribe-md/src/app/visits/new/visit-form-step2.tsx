@@ -20,10 +20,8 @@ import { ArrowLeftRight } from 'lucide-react';
 import { SpecialtyDropdown } from '@/components/specialty-dropdown';
 import { createVisitAction } from '@/actions/visits';
 import { ModeTileWithForm } from './mode-tile-with-form';
-import type { SPECIALTIES } from '@/lib/specialties';
+import type { Specialty } from '@meddoc/shared/specialties';
 import type { SelectedPatient } from './patient-types';
-
-type Specialty = (typeof SPECIALTIES)[number];
 type VisitFormStep2Theme = 'legacy' | 'clinician';
 
 interface Props {
@@ -33,7 +31,7 @@ interface Props {
    *  unlocked flow). Defined when the caller picked via Step 1 — the
    *  link becomes a purely client-side "go back". */
   onChangePatient?: () => void;
-  specialties: Specialty[];
+  specialties: readonly Specialty[];
   defaultSpecialty: string;
   /** @deprecated kept for back-compat; Linear V1 is single-theme. */
   theme?: VisitFormStep2Theme;

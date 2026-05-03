@@ -14,7 +14,7 @@ import { auth } from '@/lib/nextauth';
 import { AppFrame } from '@/components/ui/app-frame';
 import { Ic } from '@/components/ui/icon';
 import { PageHeader } from '@/components/ui/page-header';
-import { SPECIALTIES } from '@/lib/specialties';
+import { SPECIALTIES_FOR_VISIT_CREATE, findSpecialty } from '@meddoc/shared/specialties';
 import { NewVisitClient } from './new-visit-client';
 import type { SelectedPatient } from './patient-types';
 
@@ -97,8 +97,12 @@ export default async function NewVisitPage({
     };
   }
 
-  const defaultSpecialty =
-    mostRecentVisit?.specialty ?? SPECIALTIES[0]?.displayName ?? '';
+  // Default to the doctor's most recent visit's specialty, normalized
+  // through the legacy-value table so a row that still holds a display
+  // name maps onto the canonical id the dropdown expects.
+  const defaultSpecialty = mostRecentVisit?.specialty
+    ? findSpecialty(mostRecentVisit.specialty).id
+    : SPECIALTIES_FOR_VISIT_CREATE[0].id;
 
   return (
     <AppFrame>
@@ -125,7 +129,7 @@ export default async function NewVisitPage({
       <div style={{ padding: '24px 24px 48px', maxWidth: 1280 }}>
         <NewVisitClient
           initialPatient={initialPatient}
-          specialties={SPECIALTIES}
+          specialties={SPECIALTIES_FOR_VISIT_CREATE}
           defaultSpecialty={defaultSpecialty}
         />
       </div>
