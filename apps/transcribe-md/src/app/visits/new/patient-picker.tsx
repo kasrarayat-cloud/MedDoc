@@ -60,8 +60,11 @@ interface CoreProps {
 const FIELD_LABEL =
   'mb-1.5 block font-mono text-[10.5px] font-medium uppercase tracking-[0.07em] text-linear-text-3';
 
+// Round-2 audit P3-R2-004: bumped from text-[14px] to text-[16px].
+// iOS Safari zooms in on focused inputs whose font-size is below 16px
+// — disorients mobile doctors at the start of every visit-create flow.
 const INPUT_CLS =
-  'block w-full rounded-md border border-linear-border bg-linear-surface-1 px-3 py-2 text-[14px] text-linear-text placeholder:text-linear-text-3 outline-none transition-colors focus:border-linear-sage focus:ring-2 focus:ring-linear-sage/30';
+  'block w-full rounded-md border border-linear-border bg-linear-surface-1 px-3 py-2 text-[16px] text-linear-text placeholder:text-linear-text-3 outline-none transition-colors focus:border-linear-sage focus:ring-2 focus:ring-linear-sage/30';
 
 /** Full picker with the `/visits/new` "Who's this visit for?" card
  *  wrapper. Used as Step 1 of the new-visit flow. For callers that
