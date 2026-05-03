@@ -1,19 +1,22 @@
-import { Fragment } from 'react';
-
 /**
- * Compare table — Linear V1 (Faithful).
+ * Compare — Phase 7 v6 (Apple Product).
  *
- * 4-column compare-grid (label + 3 competitor cols + us). Hairline-bordered,
- * surface-1 background, sage-bright "yes" + muted "no". Mirrors landing.css
- * .compare-grid; the .col-head + .row-label + .cell.us classes are already
- * mapped to Linear V1 tokens.
+ * Bold 5-column compare table with sage glow + heavy dark shadow. Mobile
+ * collapses to 2 columns (label + QuillMD only) via landing.css media query.
  */
+type Cell = {
+  value: string;
+  isStrong?: boolean;
+  mark?: 'yes' | 'no';
+  className?: string;
+};
+
 type Row = {
   label: string;
-  us: { value: string; isStrong?: boolean; mark?: 'yes' | 'no' };
-  abridge: { value: string; mark?: 'yes' | 'no' };
-  suki: { value: string; mark?: 'yes' | 'no' };
-  nabla: { value: string; mark?: 'yes' | 'no' };
+  us: Cell;
+  abridge: Cell;
+  suki: Cell;
+  nabla: Cell;
 };
 
 const ROWS: Row[] = [
@@ -54,51 +57,57 @@ const ROWS: Row[] = [
   },
 ];
 
-function Mark({ kind }: { kind?: 'yes' | 'no' }) {
-  if (!kind) return null;
-  return <span>{kind === 'yes' ? '✓ ' : '✗ '}</span>;
+function UsCell({ cell }: { cell: Cell }) {
+  const className = cell.isStrong ? 'compare-cell us strong' : 'compare-cell us';
+  return (
+    <div className={className}>
+      {cell.mark === 'yes' && <span className="check">✓</span>}
+      {cell.value}
+    </div>
+  );
+}
+
+function OtherCell({ cell }: { cell: Cell }) {
+  const className = cell.mark === 'no' ? 'compare-cell no' : 'compare-cell';
+  return (
+    <div className={className}>
+      {cell.mark === 'no' && <span className="x">✗</span>}
+      {cell.value}
+    </div>
+  );
 }
 
 export function Compare() {
   return (
-    <section className="compare" id="compare">
-      <div className="container">
-        <div className="section-head reveal">
-          <div className="section-eyebrow">03 / Difference</div>
-          <h2 className="section-title">Built for the doctor, not the health system.</h2>
-          <p className="section-sub">
-            Other scribes are sold to hospitals with procurement officers. QuillMD is sold to
-            you — at a price that makes sense for one clinician.
-          </p>
+    <section className="stage" id="compare">
+      <div className="container stage-inner">
+        <div className="reveal">
+          <span className="eyebrow-tiny">03 / Difference</span>
         </div>
+        <h2 className="stage-h2 reveal delay-1">
+          Built for the doctor, <span className="quiet">not the health system.</span>
+        </h2>
+        <p className="stage-sub reveal delay-2">
+          Other scribes are sold to hospitals with procurement officers. QuillMD is sold to you —
+          at a price that makes sense for one clinician.
+        </p>
 
-        <div className="compare-grid reveal">
-          <div className="cell head" />
-          <div className="cell head brand">QuillMD</div>
-          <div className="cell head">Abridge</div>
-          <div className="cell head">Suki</div>
-          <div className="cell head">Nabla</div>
-
-          {ROWS.map((r) => (
-            <Fragment key={r.label}>
-              <div className="cell row-label">{r.label}</div>
-              <div className={r.us.mark === 'yes' ? 'cell yes' : 'cell'}>
-                <Mark kind={r.us.mark} />
-                {r.us.isStrong ? <strong>{r.us.value}</strong> : r.us.value}
-              </div>
-              <div className={r.abridge.mark === 'no' ? 'cell no' : 'cell'}>
-                <Mark kind={r.abridge.mark} />
-                {r.abridge.value}
-              </div>
-              <div className={r.suki.mark === 'no' ? 'cell no' : 'cell'}>
-                <Mark kind={r.suki.mark} />
-                {r.suki.value}
-              </div>
-              <div className={r.nabla.mark === 'no' ? 'cell no' : 'cell'}>
-                <Mark kind={r.nabla.mark} />
-                {r.nabla.value}
-              </div>
-            </Fragment>
+        <div className="compare-table reveal delay-3">
+          <div className="compare-row head">
+            <div className="compare-cell" />
+            <div className="compare-cell us">QuillMD</div>
+            <div className="compare-cell">Abridge</div>
+            <div className="compare-cell">Suki</div>
+            <div className="compare-cell">Nabla</div>
+          </div>
+          {ROWS.map((row) => (
+            <div key={row.label} className="compare-row">
+              <div className="compare-cell label">{row.label}</div>
+              <UsCell cell={row.us} />
+              <OtherCell cell={row.abridge} />
+              <OtherCell cell={row.suki} />
+              <OtherCell cell={row.nabla} />
+            </div>
           ))}
         </div>
       </div>
