@@ -95,10 +95,12 @@ export async function generateVisitPdf(
       right: PAGE.margin,
     },
     info: {
-      Title: `Visit — ${data.patientName ?? 'Anonymous'} — ${formatVisitDate(
-        data.signedAt ?? data.createdAt
-      )}`,
-      Author: data.clinicianName ?? 'QuillMD',
+      // /Info persists in every viewer (Preview, Acrobat, finder
+      // previews, Spotlight) and survives forwarding — keep it
+      // PHI-free. visitId is opaque; clinician name belongs in the
+      // body footer, not metadata.
+      Title: `Visit ${data.visitId}`,
+      Author: 'QuillMD',
       Creator: 'QuillMD',
       Producer: 'QuillMD PDF Generator (pdfkit)',
     },
