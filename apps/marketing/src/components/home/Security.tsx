@@ -1,68 +1,73 @@
 /**
- * Security section — Linear V1 (Faithful).
+ * Security — Phase 7 v6 (Apple Product).
  *
- * Two-column on wide screens (intro left, 6-cell grid right). Uses the
- * .features/.feat-grid surface vocabulary so the security card is visually
- * consistent with the main features grid. Drop Source Serif italic, drop
- * the cinematic-era inline styles.
+ * Stage with intro + secondary CTA, then a 3-col grid of 6 cells (each
+ * with a sage-tinted icon square + heading + body + optional vendor pills).
  */
-type SecItem = {
+type Item = {
   title: string;
   body: string;
+  pills?: string[];
   icon: React.ReactNode;
-  logos?: string[];
 };
 
-const ITEMS: SecItem[] = [
+const ITEMS: Item[] = [
   {
     title: 'HIPAA-aligned',
-    body: 'Technical, administrative, and physical safeguards per 45 CFR § 164. On request BAA with your practice.',
+    body:
+      'Technical, administrative, and physical safeguards per 45 CFR § 164. On request BAA with your practice.',
     icon: (
       <svg
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
-        strokeWidth="1.5"
+        strokeWidth="1.6"
         strokeLinecap="round"
         strokeLinejoin="round"
+        aria-hidden
       >
-        <path d="M12 2 L 4 6 v 6 c 0 5 3.5 8 8 10 c 4.5 -2 8 -5 8 -10 V 6 z" />
-        <path d="M9 12l2 2 4-4" />
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
       </svg>
     ),
   },
   {
     title: 'End-to-end encryption',
-    body: 'TLS 1.3 in transit. AES-256 at rest. Per-tenant key isolation. Keys rotate every 90 days.',
+    body:
+      'TLS 1.3 in transit. AES-256 at rest. Per-tenant key isolation. Keys rotate every 90 days.',
     icon: (
       <svg
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
-        strokeWidth="1.5"
+        strokeWidth="1.6"
         strokeLinecap="round"
         strokeLinejoin="round"
+        aria-hidden
       >
-        <rect x="4" y="11" width="16" height="10" rx="2" />
-        <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+        <rect x="3" y="11" width="18" height="11" rx="2" />
+        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
       </svg>
     ),
   },
   {
     title: 'No training on your data',
-    body: 'Model vendors run under standard no-retention terms for API data. Nothing you send is used to train foundation models.',
-    logos: ['Anthropic', 'OpenAI', 'Deepgram'],
+    body:
+      'Model vendors run under standard no-retention terms for API data. Nothing you send is used to train foundation models.',
+    pills: ['Anthropic', 'OpenAI', 'Deepgram'],
     icon: (
       <svg
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
-        strokeWidth="1.5"
+        strokeWidth="1.6"
         strokeLinecap="round"
         strokeLinejoin="round"
+        aria-hidden
       >
-        <path d="M4 7h16v12H4z" />
-        <path d="M8 3v4M16 3v4M4 11h16" />
+        <path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0z" />
+        <path d="M3 12h18" />
+        <path d="M12 3a14 14 0 0 1 0 18" />
+        <path d="M12 3a14 14 0 0 0 0 18" />
       </svg>
     ),
   },
@@ -74,46 +79,54 @@ const ITEMS: SecItem[] = [
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
-        strokeWidth="1.5"
+        strokeWidth="1.6"
         strokeLinecap="round"
         strokeLinejoin="round"
+        aria-hidden
       >
-        <circle cx="12" cy="12" r="9" />
-        <path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />
+        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+        <circle cx="12" cy="10" r="3" />
       </svg>
     ),
   },
   {
     title: 'Full audit log',
-    body: 'Every read, write, and export logged with user, timestamp, and IP. Exportable to your compliance team.',
+    body:
+      'Every read, write, and export logged with user, timestamp, and IP. Exportable to your compliance team.',
     icon: (
       <svg
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
-        strokeWidth="1.5"
+        strokeWidth="1.6"
         strokeLinecap="round"
         strokeLinejoin="round"
+        aria-hidden
       >
-        <path d="M3 7h18v12H3zM3 7l9-4 9 4" />
-        <path d="M8 11h8M8 15h5" />
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <path d="M14 2v6h6" />
+        <path d="M9 13h6" />
+        <path d="M9 17h4" />
       </svg>
     ),
   },
   {
     title: 'Data portability',
-    body: 'Export all your notes as PDF, DOCX, or FHIR JSON in one click. No lock-in. Your patients, your data.',
+    body:
+      'Export all your notes as PDF, DOCX, or FHIR JSON in one click. No lock-in. Your patients, your data.',
     icon: (
       <svg
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
-        strokeWidth="1.5"
+        strokeWidth="1.6"
         strokeLinecap="round"
         strokeLinejoin="round"
+        aria-hidden
       >
-        <path d="M4 6h16M4 12h10M4 18h16" />
-        <path d="M18 9l3 3-3 3" />
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+        <polyline points="7 10 12 15 17 10" />
+        <line x1="12" y1="15" x2="12" y2="3" />
       </svg>
     ),
   },
@@ -121,66 +134,37 @@ const ITEMS: SecItem[] = [
 
 export function Security() {
   return (
-    <section className="features" id="security" style={{ padding: '32px 0 96px' }}>
-      <div className="container">
-        <div className="section-head reveal">
-          <div className="section-eyebrow">05 / Trust</div>
-          <h2 className="section-title">We handle PHI the way you would.</h2>
-          <p className="section-sub">
-            Every byte is encrypted in transit and at rest. Nothing you send is used to train
-            foundation models. A signed BAA is available on request. You own the audit log and
-            you can delete any visit, any time.
-          </p>
-          <div style={{ marginTop: 24 }}>
-            <a href="/security" className="btn btn-secondary">
-              Read security whitepaper
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <path
-                  d="M5 12h14M13 5l7 7-7 7"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </a>
-          </div>
+    <section className="stage" id="security">
+      <div className="container stage-inner">
+        <div className="reveal">
+          <span className="eyebrow-tiny">05 / Trust</span>
+        </div>
+        <h2 className="stage-h2 reveal delay-1">
+          We handle PHI <span className="quiet">the way you would.</span>
+        </h2>
+        <p className="stage-sub reveal delay-2">
+          Every byte is encrypted in transit and at rest. Nothing you send is used to train
+          foundation models. A signed BAA is available on request. You own the audit log and you
+          can delete any visit, any time.
+        </p>
+
+        <div className="reveal delay-3" style={{ marginTop: 24 }}>
+          <a href="/security" className="btn btn-secondary">
+            Read security whitepaper →
+          </a>
         </div>
 
-        <div className="feat-grid reveal">
+        <div className="sec-list reveal delay-4">
           {ITEMS.map((item) => (
-            <div key={item.title} className="feat">
-              <div className="feat-icon">{item.icon}</div>
-              <h4 className="feat-title">{item.title}</h4>
-              <p className="feat-copy">{item.body}</p>
-              {item.logos && (
-                <div
-                  style={{
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    gap: 8,
-                    marginTop: 12,
-                  }}
-                >
-                  {item.logos.map((l) => (
-                    <span
-                      key={l}
-                      style={{
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: 10.5,
-                        color: 'var(--color-linear-text-3)',
-                        padding: '2px 7px',
-                        border: '1px solid var(--color-linear-hairline)',
-                        borderRadius: 4,
-                        letterSpacing: '0.04em',
-                      }}
-                    >
-                      {l}
+            <div key={item.title} className="sec-cell">
+              <div className="sec-icon">{item.icon}</div>
+              <h3 className="sec-h">{item.title}</h3>
+              <p className="sec-body">{item.body}</p>
+              {item.pills && (
+                <div className="sec-pills">
+                  {item.pills.map((p) => (
+                    <span key={p} className="sec-pill">
+                      {p}
                     </span>
                   ))}
                 </div>
