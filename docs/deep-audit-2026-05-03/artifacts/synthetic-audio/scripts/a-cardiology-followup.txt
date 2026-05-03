@@ -1,0 +1,29 @@
+PATIENT: QA-TEST Mei-Ling Park
+DOB: 1968-03-14
+SPECIALTY: Cardiology
+SCENARIO: 3-month follow-up for chest pain. Atypical presentation, asthma history.
+EXPECTED CODES: R07.89 (atypical chest pain), J45.40 (asthma uncontrolled), 99214 (E/M established level 4), possibly 93000 (ECG)
+
+DIALOGUE:
+
+Doctor: Good morning Ms Park, how have you been since I saw you last in February?
+
+Patient: Not great doctor. The chest pain is back, started about three days ago. Dull, behind the sternum, worse when I lie down at night.
+
+Doctor: Any radiation to the jaw or arm? Any shortness of breath?
+
+Patient: No jaw pain. A little tight when I climb stairs, but I have asthma so I can not tell.
+
+Doctor: Are you using your albuterol inhaler more than usual?
+
+Patient: Yes. Last week I think I used it five or six times. Normally maybe twice a week.
+
+Doctor: Let me check your vitals. Blood pressure one twenty eight over eighty two, heart rate seventy six, regular rhythm. Lungs are clear bilaterally. No swelling in your ankles.
+
+Patient: Should I be worried?
+
+Doctor: I want to be cautious. Let us get an electrocardiogram today and a follow-up next Tuesday. I will also start you on a proton pump inhibitor for two weeks, omeprazole twenty milligrams once daily, in case this is reflux. And let us step up your inhaled corticosteroid since you are using rescue more often. Continue albuterol as needed.
+
+Patient: Okay. Anything else?
+
+Doctor: Take it easy this week. If the chest pain is severe, radiates, or comes with shortness of breath, go to the emergency department immediately. See you Tuesday.

@@ -1,0 +1,35 @@
+=== madge transcribe-md ===
+- Finding files
+Processed 325 files (4.1s) (2 warnings)
+
+✖ Found 4 circular dependencies!
+
+1) ../../../packages/ai/src/deepgram-batch.ts > ../../../packages/ai/src/mock.ts
+2) ../../../packages/ai/src/mock.ts > ../../../packages/ai/src/embed.ts
+3) lib/nextauth.ts > lib/audit.ts
+4) app/visits/[id]/visit-ready-view.tsx > app/visits/[id]/transcript-tab.tsx
+
+
+=== madge meddoc-pro ===
+- Finding files
+Processed 105 files (2.4s) (1 warning)
+
+✖ Found 9 circular dependencies!
+
+1) lib/audit.ts > lib/auth.ts > lib/nextauth.ts
+2) lib/auth.ts > lib/nextauth.ts > lib/session-log.ts
+3) app/system-admin/AddUserModal.tsx > app/system-admin/actions.ts > app/system-admin/mock-users.ts > app/system-admin/page.tsx > app/system-admin/AdminUsersTableClient.tsx
+4) app/system-admin/actions.ts > app/system-admin/mock-users.ts > app/system-admin/page.tsx > app/system-admin/AdminUsersTableClient.tsx > app/system-admin/EditUserModal.tsx
+5) app/system-admin/actions.ts > app/system-admin/mock-users.ts > app/system-admin/page.tsx > app/system-admin/AdminUsersTableClient.tsx > app/system-admin/ResetPasswordModal.tsx
+6) app/system-admin/actions.ts > app/system-admin/mock-users.ts > app/system-admin/page.tsx > app/system-admin/AdminUsersTableClient.tsx > app/system-admin/UserSessionsModal.tsx
+7) app/system-admin/actions.ts > app/system-admin/mock-users.ts > app/system-admin/page.tsx > app/system-admin/AdminUsersTableClient.tsx
+8) app/system-admin/page.tsx > app/system-admin/AdminUsersTableClient.tsx
+9) app/system-admin/mock-users.ts > app/system-admin/page.tsx
+
+
+=== madge marketing ===
+- Finding files
+Processed 46 files (1.1s) (1 warning)
+
+✔ No circular dependency found!
+
