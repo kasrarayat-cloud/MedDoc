@@ -1,11 +1,10 @@
 /**
- * FAQ — Linear V1 (Faithful).
+ * FAQ — Phase 7 v6 (Apple Product).
  *
- * Single-column hairline-bordered list on surface-1, plain Q + A blocks
- * (no <details>/<summary> toggle) per landing-v1.html lines 1031-1064.
- * Drop the two-column intro card layout; keep the same content.
+ * Single hairline-bordered list panel. 7 plain Q + A blocks (not toggle-able)
+ * to match the production source-of-truth content.
  */
-type QA = { q: string; a: React.ReactNode };
+type QA = { q: string; a: string };
 
 const ITEMS: QA[] = [
   {
@@ -14,7 +13,7 @@ const ITEMS: QA[] = [
   },
   {
     q: 'Where does the audio go after the visit?',
-    a: 'Audio is stored encrypted in our US-east-1 MinIO cluster, retained per your practice’s policy (default 30 days), and then permanently deleted. The transcript and SOAP note remain. You can purge audio earlier from any visit detail view.',
+    a: "Audio is stored encrypted in our US-east-1 MinIO cluster, retained per your practice's policy (default 30 days), and then permanently deleted. The transcript and SOAP note remain. You can purge audio earlier from any visit detail view.",
   },
   {
     q: 'Which EHRs do you export to?',
@@ -34,23 +33,26 @@ const ITEMS: QA[] = [
   },
   {
     q: 'Who is behind QuillMD?',
-    a: 'Solo founder, son of an internist who dictated until midnight for 30 years. Built this so the next generation doesn’t have to.',
+    a: "Solo founder, son of an internist who dictated until midnight for 30 years. Built this so the next generation doesn't have to.",
   },
 ];
 
 export function FAQ() {
   return (
-    <section className="faq" id="faq">
-      <div className="container">
-        <div className="section-head reveal">
-          <div className="section-eyebrow">07 / FAQ</div>
-          <h2 className="section-title">Short answers to the questions doctors ask first.</h2>
+    <section className="stage" id="faq">
+      <div className="container stage-inner">
+        <div className="reveal">
+          <span className="eyebrow-tiny">07 / FAQ</span>
         </div>
-        <div className="faq-list reveal">
+        <h2 className="stage-h2 reveal delay-1">
+          Short answers <span className="quiet">to the questions doctors ask first.</span>
+        </h2>
+
+        <div className="faq-list reveal delay-2">
           {ITEMS.map((item) => (
             <div key={item.q} className="faq-item">
-              <div className="faq-q">{item.q}</div>
-              <div className="faq-a">{item.a}</div>
+              <h3 className="faq-q">{item.q}</h3>
+              <p className="faq-a">{item.a}</p>
             </div>
           ))}
         </div>

@@ -4,11 +4,13 @@ import { useRef } from 'react';
 import { useCounter } from '@/hooks/useCounter';
 
 /**
- * Problem stat panel — Linear V1 (Faithful).
+ * Problem stage — Phase 7 v6 (Apple Product).
  *
- * "2.0 hours of charting per hour of patient care" — sage stat, bar chart
- * comparing eras. Built from inline-styled boxes on Linear V1 tokens; no
- * Source Serif italic accent, sage-bright span replaces the old <em>.
+ * Centred full-viewport stage. Massive 2.0 number (clamp 180-460px) with
+ * gradient text-fill, sub copy, source citation, then the 4-bar comparison
+ * chart at the bottom (sage on the QuillMD bar).
+ *
+ * The 2.0 number animates from 0.0 once it scrolls into view via useCounter.
  */
 const BARS = [
   { label: 'Paper (1990)', value: '0.4h', heightPct: 30 },
@@ -19,114 +21,42 @@ const BARS = [
 
 export function Problem() {
   const statRef = useRef<HTMLDivElement>(null);
-  useCounter(statRef, 2.0, 1400);
+  useCounter(statRef, 2.0, 1600);
 
   return (
-    <section className="reveal" style={{ padding: '64px 0 96px' }}>
-      <div className="container">
-        <div className="section-head">
-          <div className="section-eyebrow">The real cost of charting</div>
-          <h2 className="section-title">
-            <span ref={statRef} style={{ fontFamily: 'var(--font-mono)' }} id="statBig">
-              0.0
-            </span>
-            <span
-              style={{
-                fontSize: 18,
-                color: 'var(--color-linear-text-3)',
-                fontFamily: 'var(--font-mono)',
-              }}
-            >
-              {' '}
-              hours
-            </span>
-          </h2>
-          <p className="section-sub">
-            Hours of charting for every hour of patient care.{' '}
-            <span className="text-linear-sage-bright" style={{ color: 'var(--color-linear-sage-bright)' }}>
-              Half your day spent on paperwork.
-            </span>
-          </p>
-          <div
-            style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 10.5,
-              color: 'var(--color-linear-text-3)',
-              marginTop: 6,
-              letterSpacing: '0.04em',
-            }}
-          >
-            JAMA Intern Med · Sinsky et al. · Ann Int Med 2017
-          </div>
+    <section className="stage" id="problem">
+      <div className="container stage-inner">
+        <div className="reveal">
+          <span className="eyebrow-tiny">The real cost of charting</span>
         </div>
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: `repeat(${BARS.length}, 1fr)`,
-            gap: 16,
-            maxWidth: 720,
-            margin: '0 auto',
-            padding: '0 0 0 0',
-            alignItems: 'end',
-            height: 220,
-          }}
-        >
-          {BARS.map((b) => {
-            const sage = b.us;
-            return (
+
+        <div className="reveal delay-1">
+          <div className="problem-num" ref={statRef}>
+            0.0
+          </div>
+          <span className="problem-unit">hours of charting · per hour of patient care</span>
+        </div>
+
+        <p className="stage-sub reveal delay-2" style={{ marginTop: 48 }}>
+          Hours of charting for every hour of patient care.{' '}
+          <span className="sage">Half your day spent on paperwork.</span>
+        </p>
+
+        <div className="problem-source reveal delay-3">
+          JAMA Intern Med · Sinsky et al. · Ann Int Med 2017
+        </div>
+
+        <div className="problem-bars reveal delay-4">
+          {BARS.map((b) => (
+            <div key={b.label} className={b.us ? 'pbar us' : 'pbar'}>
+              <div className="pbar-num">{b.value}</div>
               <div
-                key={b.label}
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: 8,
-                  height: '100%',
-                  justifyContent: 'flex-end',
-                }}
-              >
-                <span
-                  style={{
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: 11,
-                    color: sage
-                      ? 'var(--color-linear-sage-bright)'
-                      : 'var(--color-linear-text-2)',
-                  }}
-                >
-                  {b.value}
-                </span>
-                <div
-                  style={{
-                    width: '100%',
-                    height: `${Math.max(b.heightPct, 6)}%`,
-                    background: sage
-                      ? 'var(--color-linear-sage)'
-                      : 'var(--color-linear-surface-2)',
-                    border: `1px solid ${
-                      sage
-                        ? 'rgba(122, 166, 140, 0.4)'
-                        : 'var(--color-linear-hairline)'
-                    }`,
-                    borderRadius: 6,
-                    transition: 'background-color 200ms ease-out',
-                  }}
-                />
-                <span
-                  style={{
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: 10.5,
-                    color: 'var(--color-linear-text-3)',
-                    textAlign: 'center',
-                    letterSpacing: '0.04em',
-                    textTransform: 'uppercase',
-                  }}
-                >
-                  {b.label}
-                </span>
-              </div>
-            );
-          })}
+                className={b.us ? 'pbar-bar us' : 'pbar-bar'}
+                style={{ height: `${b.heightPct}%` }}
+              />
+              <div className="pbar-label">{b.label}</div>
+            </div>
+          ))}
         </div>
       </div>
     </section>

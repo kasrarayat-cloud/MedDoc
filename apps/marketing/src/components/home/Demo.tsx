@@ -1,32 +1,48 @@
 /**
- * Demo product preview — Linear V1 (Faithful).
+ * Demo — Phase 7 v6 (Apple Product).
  *
- * Replaces the MacBook frame with Linear V1's product chrome: 3-dot window
- * controls, mono visit-id tabs, sage live-dot indicator, two-pane body
- * (transcript + SOAP). Mirrors landing-v1.html lines 815-915 byte-for-byte
- * in markup, leveraging .product/.product-chrome/.pane/.soap-* styling
- * already in landing.css.
+ * Full-bleed product mockup centred in a stage. Window chrome, two panes
+ * (Transcript / SOAP draft), 6 dialogue turns, 4 SOAP sections with status
+ * badges + ICD/CPT code chips. The 2deg X tilt on the shell + sage glow
+ * shadow make it feel like a floating product still.
  */
+const TURNS: { role: 'pt' | 'dr'; text: React.ReactNode }[] = [
+  { role: 'pt', text: 'It started about three days ago. Dull, behind the sternum, worse when I lie down.' },
+  { role: 'dr', text: 'Any radiation to the jaw or arm, shortness of breath?' },
+  { role: 'pt', text: 'No jaw. A little tight when I climb stairs, but I have asthma.' },
+  { role: 'dr', text: 'BP one-twenty-eight over eighty-two, heart rate seventy-six, regular rhythm. Lungs clear bilaterally.' },
+  { role: 'pt', text: 'My albuterol — I think I was using it more last week.' },
+  {
+    role: 'dr',
+    text: (
+      <>
+        Let&apos;s get an ECG today and a follow-up next Tuesday. I&apos;ll also re-check your peak
+        flow
+        <span className="typing-cursor" />
+      </>
+    ),
+  },
+];
+
 export function Demo() {
   return (
-    <section className="features" id="demo" style={{ padding: '32px 0 96px' }}>
-      <div className="container">
-        <div className="section-head reveal">
-          <div className="section-eyebrow">04 / See it</div>
-          <h2 className="section-title">Real visit. Real note. Ninety seconds.</h2>
-          <p className="section-sub">
-            A three-month HTN follow-up, transcribed and documented live. Patient data is
-            synthetic.
-          </p>
+    <section className="stage" id="demo">
+      <div className="container stage-inner">
+        <div className="reveal">
+          <span className="eyebrow-tiny">04 / See it</span>
         </div>
+        <h2 className="stage-h2 reveal delay-1">
+          Real visit. Real note. <span className="quiet">Ninety seconds.</span>
+        </h2>
+        <p className="stage-sub reveal delay-2">
+          A three-month HTN follow-up, transcribed and documented live. Patient data is synthetic.
+        </p>
 
-        <div className="product reveal">
+        <div className="product-shell reveal delay-3">
           <div className="product-chrome">
-            <div className="chrome-dots">
-              <span className="chrome-dot" />
-              <span className="chrome-dot" />
-              <span className="chrome-dot" />
-            </div>
+            <span className="chrome-dot" />
+            <span className="chrome-dot" />
+            <span className="chrome-dot" />
             <div className="chrome-tabs">
               <span className="chrome-tab">visit-7K2A</span>
               <span className="chrome-tab active">live</span>
@@ -34,61 +50,24 @@ export function Demo() {
             </div>
             <div className="chrome-meta">
               <span className="live-dot" />
-              <span>recording · 01:42</span>
+              recording · 01:42
             </div>
           </div>
-
           <div className="product-body">
             <div className="pane transcript">
               <div className="pane-label">
-                <span>Transcript</span>
-                <span className="meta">Deepgram · diarized</span>
+                Transcript <span className="src">/ Deepgram · diarized</span>
               </div>
-              <div className="turn">
-                <span className="turn-speaker">Pt</span>
-                <span className="turn-text">
-                  It started about three days ago. Dull, behind the sternum, worse when I lie down.
-                </span>
-              </div>
-              <div className="turn">
-                <span className="turn-speaker dr">Dr</span>
-                <span className="turn-text">
-                  Any radiation to the jaw or arm, shortness of breath?
-                </span>
-              </div>
-              <div className="turn">
-                <span className="turn-speaker">Pt</span>
-                <span className="turn-text">
-                  No jaw. A little tight when I climb stairs, but I have asthma.
-                </span>
-              </div>
-              <div className="turn">
-                <span className="turn-speaker dr">Dr</span>
-                <span className="turn-text">
-                  BP one-twenty-eight over eighty-two, heart rate seventy-six, regular rhythm.
-                  Lungs clear bilaterally.
-                </span>
-              </div>
-              <div className="turn">
-                <span className="turn-speaker">Pt</span>
-                <span className="turn-text">
-                  My albuterol — I think I was using it more last week.
-                </span>
-              </div>
-              <div className="turn">
-                <span className="turn-speaker dr">Dr</span>
-                <span className="turn-text">
-                  Let&apos;s get an ECG today and a follow-up next Tuesday. I&apos;ll also re-check
-                  your peak flow
-                  <span className="typing-cursor" />
-                </span>
-              </div>
+              {TURNS.map((turn, i) => (
+                <div key={i} className={`turn ${turn.role}`}>
+                  <span className="who">{turn.role === 'dr' ? 'Dr' : 'Pt'}</span>
+                  <div className="said">{turn.text}</div>
+                </div>
+              ))}
             </div>
-
             <div className="pane">
               <div className="pane-label">
-                <span>SOAP draft</span>
-                <span className="meta">claude-sonnet-4.6 · validated</span>
+                SOAP draft <span className="src">/ claude-sonnet-4.6 · validated</span>
               </div>
               <div className="soap-section lit">
                 <div className="soap-head">
@@ -119,12 +98,12 @@ export function Demo() {
                   <span className="soap-status">coded</span>
                 </div>
                 <div className="soap-body">
-                  Atypical chest pain, likely esophageal vs. musculoskeletal. Asthma —
-                  uncontrolled per albuterol overuse.
+                  Atypical chest pain, likely esophageal vs. musculoskeletal. Asthma — uncontrolled
+                  per albuterol overuse.
                 </div>
-                <div className="soap-code-row">
-                  <span className="soap-code">R07.89</span>
-                  <span className="soap-code">J45.40</span>
+                <div className="soap-codes">
+                  <span className="code-chip">R07.89</span>
+                  <span className="code-chip">J45.40</span>
                 </div>
               </div>
               <div className="soap-section lit">
@@ -136,9 +115,9 @@ export function Demo() {
                 <div className="soap-body">
                   ECG today. Trial PPI × 2 wks. Step-up ICS, peak-flow review. F/U Tue.
                 </div>
-                <div className="soap-code-row">
-                  <span className="soap-code">99214</span>
-                  <span className="soap-code">93000</span>
+                <div className="soap-codes">
+                  <span className="code-chip">99214</span>
+                  <span className="code-chip">93000</span>
                 </div>
               </div>
             </div>
