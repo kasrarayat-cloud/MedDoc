@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
+import { SPECIALTIES, findSpecialty } from '@meddoc/shared/specialties';
 import { updateProfileAction, type ProfileState } from '@/actions/profile';
 
 // Phase 5 — Linear V1 Faithful profile form. Server-action signature
@@ -15,16 +16,6 @@ interface ProfileFormProps {
   defaultClinicName?: string;
   defaultTimeZone?: string;
 }
-
-const SPECIALTY_OPTIONS = [
-  '',
-  'cardiology',
-  'pain',
-  'ortho',
-  'primary',
-  'pulmonology',
-  'ophthalmology',
-] as const;
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
@@ -85,12 +76,12 @@ export function ProfileForm({
         <Field
           label="Specialty"
           name="specialty"
-          defaultValue={defaultSpecialty}
+          // findSpecialty normalizes legacy DB values (e.g. 'pain',
+          // 'ortho') and the empty-string sentinel into a real id;
+          // anything unknown lands on 'unspecified'.
+          defaultValue={findSpecialty(defaultSpecialty).id}
           as="select"
-          options={SPECIALTY_OPTIONS.map((s) => ({
-            value: s,
-            label: s === '' ? 'Unspecified' : s[0].toUpperCase() + s.slice(1),
-          }))}
+          options={SPECIALTIES.map((s) => ({ value: s.id, label: s.label }))}
           error={errors.specialty}
         />
       </Row>

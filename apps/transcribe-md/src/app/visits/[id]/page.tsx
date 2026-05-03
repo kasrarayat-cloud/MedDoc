@@ -4,6 +4,7 @@ import { notFound, redirect } from 'next/navigation';
 
 import prisma from '@meddoc/db';
 import { TranscribeVisitStatus } from '@prisma/client';
+import { findSpecialty } from '@meddoc/shared/specialties';
 import { auth } from '@/lib/nextauth';
 import { AppFrame } from '@/components/ui/app-frame';
 import { Ic } from '@/components/ui/icon';
@@ -75,21 +76,11 @@ const KNOWN_SPECIALTIES: readonly SpecialtyKind[] = [
   'ophthalmology',
 ];
 
-// Phase 5 — Linear V1 meta strip pretty-prints the specialty key.
-const SPECIALTY_LABEL: Record<string, string> = {
-  primary: 'Family Medicine',
-  cardiology: 'Cardiology',
-  pain: 'Pain Management',
-  ortho: 'Orthopedics',
-  pulmonology: 'Pulmonology',
-  ophthalmology: 'Ophthalmology',
-};
+// findSpecialty (shared) handles canonical ids, legacy display names
+// ('Cardiology'), and legacy short ids ('pain') — returning the
+// catalog entry whose .label is the human-readable form.
 function specialtyLabel(raw: string): string {
-  const key = raw.toLowerCase();
-  return (
-    SPECIALTY_LABEL[key] ??
-    raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase()
-  );
+  return findSpecialty(raw).label;
 }
 
 void KNOWN_SPECIALTIES;
