@@ -1,0 +1,7 @@
+{"phase":"C","label":"15-edit-plan","status":"PASS","durationMs":6892,"error":null}
+{"phase":"C","label":"16-codes-tab","status":"PASS","durationMs":1331,"error":null}
+{"phase":"C","label":"17-rx-tab","status":"PASS","durationMs":1248,"error":null}
+{"phase":"C","label":"18-sign-visit","status":"PASS","durationMs":6794,"error":null}
+{"phase":"C","label":"19-pdf-export","status":"PASS","durationMs":1173,"error":null}
+{"phase":"C","label":"20-docx-export","status":"PASS","durationMs":541,"error":null}
+{"phase":"C","label":"21-email-export-api","status":"PASS","durationMs":26,"error":null}

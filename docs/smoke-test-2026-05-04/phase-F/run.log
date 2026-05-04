@@ -1,0 +1,5 @@
+{"phase":"F","label":"33-dashboard-multi-patient","status":"PASS","durationMs":3804,"error":null}
+{"phase":"F","label":"34-patients-list","status":"PASS","durationMs":3478,"error":null}
+{"phase":"F","label":"35-search","status":"PASS","durationMs":1636,"error":null}
+{"phase":"F","label":"36-patient-detail","status":"PASS","durationMs":3588,"error":null}
+{"phase":"F","label":"37-visits-list","status":"PASS","durationMs":3788,"error":null}

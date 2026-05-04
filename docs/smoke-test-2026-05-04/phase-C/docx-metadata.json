@@ -1,0 +1,7 @@
+{
+  "bytes": 14005,
+  "coreXml": "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><cp:coreProperties xmlns:cp=\"http://schemas.openxmlformats.org/package/2006/metadata/core-properties\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\" xmlns:dcterms=\"http://purl.org/dc/terms/\" xmlns:dcmitype=\"http://purl.org/dc/dcmitype/\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><dc:title>Visit cmoqn96fe001501l543vfe1u2</dc:title><dc:creator>QuillMD</dc:creator><dc:description>QuillMD visit note exported 2026-05-04</dc:description><cp:lastModifiedBy>Un-named</cp:lastModifiedBy><cp:revision>1</cp:revision><dcterms:created xsi:type=\"dcterms:W3CDTF\">2026-05-04T03:44:45.719Z</dcterms:created><dcterms:modified xsi:type=\"dcterms:W3CDTF\">2026-05-04T03:44:45.719Z</dcterms:modified></cp:coreProperties>",
+  "patientNameInCore": false,
+  "hasVisitIdTitle": true,
+  "hasQuillMDCreator": true
+}
