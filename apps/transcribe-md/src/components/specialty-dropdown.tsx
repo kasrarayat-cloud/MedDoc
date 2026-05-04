@@ -36,6 +36,7 @@ interface SpecialtyDropdownProps {
 }
 
 const TRIGGER = [
+  'qm-tap-44-input',
   'inline-flex w-full items-center justify-between gap-2 rounded-md',
   'border border-linear-border bg-linear-surface-2 px-3 py-2.5',
   'text-[14px] text-linear-text',

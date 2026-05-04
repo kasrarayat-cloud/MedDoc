@@ -46,7 +46,7 @@ export function PatientsListClient({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Filter by name…"
-          className="block h-10 w-full rounded-md border border-linear-border bg-linear-surface-1 pl-10 pr-3 text-[13.5px] text-linear-text placeholder:text-linear-text-3 focus-visible:border-linear-border-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-linear-sage/40"
+          className="qm-tap-44-input block h-10 w-full rounded-md border border-linear-border bg-linear-surface-1 pl-10 pr-3 text-[13.5px] text-linear-text placeholder:text-linear-text-3 focus-visible:border-linear-border-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-linear-sage/40"
           autoComplete="off"
           aria-label="Filter patients by name"
         />

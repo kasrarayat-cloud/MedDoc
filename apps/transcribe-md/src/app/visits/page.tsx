@@ -260,7 +260,9 @@ function FilterBar({ active }: { active: Filter }) {
             href={c.href}
             scroll={false}
             className={
-              isActive ? 'qm-lin-pill qm-lin-pill--sage' : 'qm-lin-pill'
+              isActive
+                ? 'qm-lin-pill qm-lin-pill--sage qm-tap-44'
+                : 'qm-lin-pill qm-tap-44'
             }
             aria-current={isActive ? 'page' : undefined}
             style={{
