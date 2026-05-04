@@ -135,6 +135,7 @@ export default function ConfirmationModal({ kind, user, onCancel, onConfirm }: P
           <input
             ref={inputRef}
             type="email"
+            maxLength={254}
             value={typed}
             onChange={(e) => setTyped(e.target.value)}
             onKeyDown={(e) => {

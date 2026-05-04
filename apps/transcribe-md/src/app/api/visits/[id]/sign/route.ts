@@ -63,7 +63,7 @@ const Destination = z.enum([
 
 const BodySchema = z.object({
   destinations: z.array(Destination).max(10).default([]),
-  emailTo: z.string().email().optional(),
+  emailTo: z.string().email().max(254).optional(),
 });
 
 const FORMAT_FOR_CHANNEL: Partial<

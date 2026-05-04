@@ -48,33 +48,12 @@ async function actionRateLimitOrError(
   };
 }
 
-/** Strongly-typed login input. Passwords are NEVER echoed back in errors. */
-const LoginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(1, 'Password is required'),
-});
-
-/** Signup: stricter password policy + requires ToS.
- *
- *  T-M9: dropped the specialty field. The dropdown was captured but
- *  never persisted (no User.specialty column), so collecting it at
- *  signup was a UX no-op. Users pick specialty per-visit on
- *  /visits/new (which now defaults to the first specialty in the
- *  catalog so it's never empty). Future: if we add User.specialty,
- *  bring the field back and persist it. */
-const SignupSchema = z.object({
-  email: z.string().email(),
-  password: z
-    .string()
-    .min(10, 'Password must be at least 10 characters')
-    .regex(/[a-z]/, 'Password must contain a lowercase letter')
-    .regex(/[A-Z]/, 'Password must contain an uppercase letter')
-    .regex(/\d/, 'Password must contain a digit'),
-  name: z.string().min(1, 'Name is required').max(120),
-  acceptTerms: z.literal('on', {
-    message: 'You must accept the terms of service',
-  }),
-});
+// LoginSchema + SignupSchema live in ./auth-schemas so the unit
+// tests can import them without pulling in this file's prisma +
+// next-auth chain. Importable directly from '@/actions/auth-schemas'
+// — not re-exported here because Next's "use server" boundary only
+// allows async-function exports from a server-actions file.
+import { LoginSchema, SignupSchema } from './auth-schemas';
 
 export interface FormErrorState {
   ok: false;

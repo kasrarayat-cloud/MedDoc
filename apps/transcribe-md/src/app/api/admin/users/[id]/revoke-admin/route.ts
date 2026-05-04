@@ -18,7 +18,7 @@ import { Product } from '@prisma/client';
 import { adminApi } from '@/lib/admin-api-gate';
 import { logAudit } from '@/lib/audit';
 
-const Body = z.object({ confirmEmail: z.string().email() });
+const Body = z.object({ confirmEmail: z.string().email().max(254) });
 
 export const dynamic = 'force-dynamic';
 
