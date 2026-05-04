@@ -1016,6 +1016,86 @@ Zero rows currently exceed the new cap — no migration SQL required for this fi
 - The User model's Prisma `email` column is `String` (PostgreSQL `TEXT`). PostgreSQL stores `TEXT` and `VARCHAR(254)` identically; no schema migration is needed because the API edge enforces the cap. If you ever want a hard column-level guarantee, add `@db.VarChar(254)` to the Prisma model and run `prisma migrate diff` — it'll generate a `CHECK (length(email) <= 254)` since pgvector-on-Postgres treats `VARCHAR(n)` as a constraint, not storage.
 
 
+## 19. ✅ CI — restore axe-core baseline (Coding Coach a11y) — completed 2026-05-04
+
+### Why
+
+Pre-existing axe-core failure that's been red on every PR since Phase 5.2 landed (PR #94, 2026-05-01). The 5 PRs shipped in the prior 24h (#99 / #100 / #101 / #102 / #103) all matched this baseline and had to be merged through `gh pr merge --admin` because branch protection blocked on the failing `axe-core sweep` check.
+
+This PR clears the baseline so future merges flow normally — `--squash` now works without `--admin`.
+
+### What
+
+Two structural a11y bugs in the Phase 5.2 Coding Coach side-rail, both on `/visits/[id]` desktop:
+
+**1. `[critical] aria-required-children` — `EmCheckList.tsx`**
+
+```tsx
+// before
+<div role="list" aria-label="Coding criteria">
+  <section aria-labelledby="em-group-history">  ← not <li> / role="listitem"
+    ...
+  </section>
+</div>
+
+// after
+<div aria-label="Coding criteria">
+  <section aria-labelledby="em-group-history">
+    ...
+  </section>
+</div>
+```
+
+The wrapper isn't a flat list — it's three grouped sections (History / Exam / MDM). Each `<section>` already has its own `aria-labelledby` so screen readers navigate them as titled regions without the `role="list"` lying about the shape.
+
+**2. `[serious] nested-interactive` (3 nodes) — `EmCriterion.tsx`**
+
+Pre-fix the row was `role="button" tabIndex={0} onClick={...}` and contained the inner nudge `<button>` — button-in-button. Per the task spec **Option A**, dropped the row click affordance entirely:
+
+```tsx
+// before
+<div role="button" tabIndex={0} onClick={handleClick} onKeyDown={...}>
+  <icon />
+  <text>{head} {sub} <button onClick={handleNudge}>+ add 1 line</button></text>
+</div>
+
+// after
+<div data-criterion-id={criterion.id}>     {/* no role, no tabIndex, no handlers */}
+  <icon />
+  <text>{head} {sub} <button onClick={handleNudge}>+ add 1 line</button></text>
+</div>
+```
+
+Click, keyboard, and screen-reader focus all flow through the explicit nudge button now — one clear interactive control per row.
+
+### Trade-off
+
+Pre-fix UX let doctors click anywhere on a criterion row to jump to the matching SOAP section (via `qm:soap-jump` custom event). That feature is gone. If we want jump-to-section back, it should land as a sibling button next to the nudge OR as a SoapSection-side click — either keeps the two interactive elements as siblings rather than nested. The supporting plumbing (`SOAP_JUMP_EVENT`, `SoapJumpDetail`) is left in `lib/em-coding-ui/types.ts` for the next iteration; only the EmCriterion-side dispatch was removed.
+
+### Tag + PR + release SHA
+
+- PR: https://github.com/kasrarayat-cloud/MedDoc/pull/104
+- Squash-merge SHA: `de40409`
+- Tag: `ci-axe-baseline-restored`
+- **Merged with `gh pr merge --squash` — no `--admin` override.** First clean merge through this gate since 2026-05-01.
+
+### Verification
+
+PR #104 axe-core sweep result:
+```
+axe-core sweep (chromium x desktop+mobile)    pass    2m52s
+```
+
+All 7 routes × 2 viewports cleared, including `/visits/:READY` desktop where the EmCheckList + EmCriterion violations had been firing.
+
+### Open follow-ups
+
+- The `test` job is still red on the same 5 pre-existing meddoc-pro e2e tests (auth admin sign-in, chart-id auto-assignment, 3× tenancy isolation). These are unrelated to Coding Coach — likely PR #96 auth-bypass fallout. Track separately under `fix/meddoc-pro-e2e-baseline`.
+- Jump-to-SOAP-section affordance — when design has time, add it back as a sibling button next to the nudge. Pattern: `<text>{head} {sub} <button>Jump</button> <button>Add nudge</button></text>` — sibling buttons, no nesting.
+
+
+
+
 
 
 
