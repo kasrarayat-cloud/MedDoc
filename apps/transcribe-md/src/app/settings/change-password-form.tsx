@@ -104,7 +104,7 @@ export function ChangePasswordForm() {
           value={currentPassword}
           onChange={(e) => setCurrentPassword(e.target.value)}
           disabled={pending}
-          style={inputStyle}
+          className="qm-tap-44-input" style={inputStyle}
         />
         {fieldError === 'currentPassword' && (
           <p role="alert" style={errorStyle}>
@@ -126,7 +126,7 @@ export function ChangePasswordForm() {
           value={newPassword}
           onChange={(e) => setNewPassword(e.target.value)}
           disabled={pending}
-          style={inputStyle}
+          className="qm-tap-44-input" style={inputStyle}
         />
         <p
           style={{
@@ -158,7 +158,7 @@ export function ChangePasswordForm() {
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
           disabled={pending}
-          style={inputStyle}
+          className="qm-tap-44-input" style={inputStyle}
         />
         {fieldError === 'confirmPassword' && (
           <p role="alert" style={errorStyle}>

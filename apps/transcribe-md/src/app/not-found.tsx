@@ -102,8 +102,10 @@ export default function NotFound() {
               color: 'var(--color-linear-text-3)',
               textDecoration: 'none',
               transition: 'color 120ms ease',
+              display: 'inline-flex',
+              alignItems: 'center',
             }}
-            className="hover:!text-linear-text-2"
+            className="qm-tap-44 hover:!text-linear-text-2"
           >
             Sign in
           </Link>

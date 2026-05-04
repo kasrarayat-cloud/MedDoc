@@ -82,6 +82,7 @@ export function TopNav({
       <Link
         href="/dashboard"
         aria-label="QuillMD — Dashboard"
+        className="qm-tap-44"
         style={{
           display: 'inline-flex',
           alignItems: 'center',
@@ -182,6 +183,7 @@ export function TopNav({
           <button
             type="button"
             aria-label={`Account menu for ${userName}`}
+            className="qm-tap-44"
             style={{
               display: 'flex',
               alignItems: 'center',

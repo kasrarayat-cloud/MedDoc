@@ -264,9 +264,12 @@ export default async function VisitPage({
       >
         <Link
           href="/dashboard"
+          className="qm-tap-44"
           style={{
             color: 'var(--color-linear-text-3)',
             textDecoration: 'none',
+            display: 'inline-flex',
+            alignItems: 'center',
           }}
         >
           Dashboard
@@ -276,9 +279,12 @@ export default async function VisitPage({
           <>
             <Link
               href={`/patients/${visit.patient.id}`}
+              className="qm-tap-44"
               style={{
                 color: 'var(--color-linear-text-3)',
                 textDecoration: 'none',
+                display: 'inline-flex',
+                alignItems: 'center',
               }}
             >
               {visit.patient.name}
