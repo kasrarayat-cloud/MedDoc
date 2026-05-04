@@ -822,3 +822,110 @@ Same labels, same count, same order as the dropdown.
   meaningful.)
 
 
+## 17. ✅ Phase 7-QA — P2-003 mobile tap targets (Apple HIG 44pt) — completed 2026-05-04
+
+### Why
+
+Round 2 deep audit P2-003: on iPhone 13 (390×844), 17 of 17 sampled
+interactive elements on `/dashboard` failed Apple HIG's 44pt minimum
+tap target. The wider audit run as part of this fix found **118 of
+138** interactive elements across the auth shell were sub-44 with no
+tappable ancestor large enough to credit either. Doctors in clinic
+on a phone are stated target audience; mistapping the nav bar /
+recent-visit row / Cmd-K trigger compounds.
+
+### What
+
+Layered fix at the shell level instead of editing 50 leaf files.
+
+**`globals.css` — 7 base classes get `@media (max-width: 639px) { min-height: 44px }`:**
+- `.qm-lin-row` — recent-visit rows + list rows → 17 wins
+- `.qm-lin-btn` — secondary buttons → 11 wins
+- `.qm-lin-btn-primary` — primary CTAs (New Visit, Sign & Send, etc.) → 12 wins
+- `.qm-lin-cmdk` — Cmd-K trigger (overrides hardcoded `height: 26px`) → 6 wins
+- `.qm-lin-em-nudge` / `.qm-lin-coding-override` / `.qm-lin-coding-confirm` — Phase 5.2 Coding Coach controls → 3 wins
+
+**`globals.css` — two new utility classes for inline-styled chrome:**
+```css
+@media (max-width: 639px) {
+  .qm-tap-44       { min-height: 44px; }
+  .qm-tap-44-input { min-height: 44px; font-size: 16px; }
+}
+```
+
+`.qm-tap-44-input`'s 16px font-size on mobile kills the iOS Safari
+focus-zoom — same pattern PR #98 used for the patient-picker.
+
+**Applied via `className` to:**
+- `components/ui/icon-rail.tsx` — sidebar nav rows (Dashboard / Visits / Patients / Settings)
+- `components/ui/top-nav.tsx` — brand link + avatar dropdown trigger
+- `app/dashboard/page.tsx` — TabBar (Patients / All visits)
+- `app/visits/page.tsx` — filter pills (All / Ready / Needs review / Signed)
+- `app/visits/[id]/page.tsx` — breadcrumb links (Dashboard / Patient name)
+- `app/visits/[id]/visit-ready-view.tsx` — SOAP / Transcript / Codes / Rx / Extras tabs
+- `app/settings/page.tsx` — settings sub-nav (Profile / Security / Active sessions / Your data / Billing / Danger zone)
+- `app/not-found.tsx` — "Sign in" link
+- `app/settings/profile-form.tsx` — Field input + select
+- `app/settings/change-password-form.tsx` — current/new/confirm password
+- `app/visits/new/visit-form-step2.tsx` — INPUT_CLS for chief-complaint
+- `app/patients/patients-list-client.tsx` — filter input
+- `components/specialty-dropdown.tsx` — Radix Select trigger
+
+### Constraints respected
+
+- Zero typography weight changes
+- Zero color changes
+- Zero desktop layout changes (every floor is `@media (max-width: 639px)`)
+- Marketing site untouched
+- All button/link text labels preserved on every viewport
+
+The `min-height` floor wins over the original hardcoded `height: 26-36px`
+on mobile (browser computes element height as `max(min-height, height)`);
+the `@media` gate keeps desktop chrome unchanged at ≥640px.
+
+### Coverage gate
+
+`apps/transcribe-md/tests/e2e/mobile-tap-targets.spec.ts`:
+- iPhone 13 device profile
+- Walks every authenticated route (`/dashboard`, `/visits`, `/visits/new`, `/visits/[id]`, `/patients`, `/settings`, `/settings/security`)
+- Asserts every visible interactive element has measured height ≥44 OR a tappable ancestor (5-deep) ≥44 either
+- Skips Radix Select hidden form-shims (`<select>` h<4) and elements opt-ed out via `[data-tap-target-skip]`
+
+### Tag + PR + release SHAs
+
+- PR: https://github.com/kasrarayat-cloud/MedDoc/pull/102
+- Squash-merge SHA: `42e3d06`
+- Tag: `phase-7-qa-p2-003-fix`
+
+### Verification (post-deploy, against production)
+
+iPhone 13 device profile, walked every authed route as the qa-bypass
+owner. Counts match the e2e gate's `measureRoute` algorithm.
+
+| Route                  | Total | Pre-fix | Post-fix |   Δ |
+|------------------------|------:|--------:|---------:|----:|
+| `/dashboard`           |    20 |      20 |        0 | −20 |
+| `/visits`              |    21 |      21 |        0 | −21 |
+| `/visits/new` step 2   |    15 |      13 |        0 | −13 |
+| `/visits/[id]`         |    33 |      22 |        0 | −22 |
+| `/patients`            |    17 |      10 |        0 | −10 |
+| `/settings`            |    30 |      30 |        0 | −30 |
+| `/settings/security`   |     2 |       2 |        0 |  −2 |
+| **Total**              | **138** | **118** |    **0** | **−118** |
+
+Per-element JSON for both passes: `docs/deep-audit-round2-2026-05-03/artifacts/p2-003-{audit,after}/`. Per-route summary table: `docs/deep-audit-round2-2026-05-03/artifacts/p2-003-before-after.md`.
+
+### Open follow-ups
+
+- Tablet breakpoint (640-1023px) currently inherits desktop chrome
+  (small targets). Per audit scope, P2-003 was iPhone-first; broaden
+  the `@media` floor to `(max-width: 1023px)` once the Phase 5.2
+  Coding Coach rail's mobile layout settles.
+- Visual regression check on Coding Coach side-rail at iPhone width:
+  the 21px → 44px nudge buttons inflate the rail noticeably; design
+  may want to compress the eyebrow + label vertical rhythm to claim
+  some of that space back.
+
+
+
+
