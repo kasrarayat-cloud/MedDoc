@@ -143,19 +143,33 @@ find_latest_dump() {
 }
 
 # ---------------------------------------------------------------------------
-# Generate age keypair on first run. Idempotent — if PRIVATE_KEY already
-# exists, do nothing. The keypair is generated locally (no network) so
-# rotating it later doesn't require external coordination, but operators
-# MUST archive the old private key before generating a new one (see runbook
-# "Rotation").
+# Phase 6.2 threat model: the private key NEVER touches the VPS. It is
+# generated on an offline laptop, multi-located in 1Password + a fireproof
+# safe, and only the public key is scp'd onto the host at PUBLIC_KEY. So the
+# early-return check below is "public key present" only — that is sufficient
+# for encryption, and PRIVATE_KEY missing on the VPS is the *expected* state.
+#
+# The fall-through (auto-generate) branch is a safety net for the legacy
+# h16-era flow where both keys were created on the VPS. In Phase 6.2 it
+# should NEVER fire in production. If it does, the operator skipped runbook
+# §22 step 3 (scp public key onto VPS before first backup run) — discard
+# the VPS-generated keypair and re-deploy the offline keypair before any
+# further backup runs, otherwise blobs encrypted to the wrong public key
+# are unrecoverable.
 # ---------------------------------------------------------------------------
 ensure_keypair() {
-  if [[ -f "$PRIVATE_KEY" && -f "$PUBLIC_KEY" ]]; then
+  if [[ -f "$PUBLIC_KEY" ]]; then
+    # Phase 6.2: private key lives offline by design;
+    # public key is the only thing we need on the VPS.
     return 0
   fi
 
-  log "WARN: age keypair not found — generating new pair at ${KEY_DIR}/"
-  log "WARN: archive ${PRIVATE_KEY} OFFLINE — without it, encrypted blobs cannot be restored."
+  log "WARN: ${PUBLIC_KEY} not found — falling back to local keypair generation."
+  log "WARN: This branch should NOT fire in Phase 6.2 production. Expected flow:"
+  log "WARN:   1) age-keygen on an offline laptop"
+  log "WARN:   2) scp <pub-key> root@vps:/etc/meddoc/offsite-backup-public.age"
+  log "WARN: If you see this in prod, discard the generated keypair AND re-deploy"
+  log "WARN: the offline keypair before any further backup runs."
 
   mkdir -p "$KEY_DIR"
 
@@ -325,8 +339,12 @@ main() {
 
   ensure_keypair
 
+  # Phase 6.2: optional positional arg lets a host-side cron pass the dump
+  # path explicitly — the host backup dir doesn't match the in-container
+  # /backups path the auto-discovery uses. Falls back to find_latest_dump
+  # when invoked from inside the postgres-backup sidecar (no arg).
   local dump_path
-  dump_path="$(find_latest_dump)"
+  dump_path="${1:-$(find_latest_dump)}"
   log "INFO: latest dump: ${dump_path}"
 
   b2_authorize
