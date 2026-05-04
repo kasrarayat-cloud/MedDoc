@@ -1094,6 +1094,87 @@ All 7 routes × 2 viewports cleared, including `/visits/:READY` desktop where th
 - Jump-to-SOAP-section affordance — when design has time, add it back as a sibling button next to the nudge. Pattern: `<text>{head} {sub} <button>Jump</button> <button>Add nudge</button></text>` — sibling buttons, no nesting.
 
 
+## 20. ✅ CI — restore test e2e baseline (meddoc-pro auth + tenancy + chart-id) — completed 2026-05-04
+
+### Why
+
+The `test` job has been red on every CI run for 100+ runs (back to at least 2026-04-26). The 5 failing specs:
+- `tests/e2e/auth.spec.ts:11` — admin sign-in flow
+- `tests/e2e/chart-id.spec.ts:26` — auto-assignment
+- `tests/e2e/tenancy.spec.ts:34` — cross-tenant list isolation
+- `tests/e2e/tenancy.spec.ts:52` — direct URL probe 404
+- `tests/e2e/tenancy.spec.ts:72` — SUPER_ADMIN sees-all on `/system-admin`
+
+All 5 used the same `signIn(page, email, password)` helper, all timed out at `page.waitForURL` after 30s.
+
+Phase 13 (`b1710d6`, h9-meddoc-e2e-residual) tried to fix this — added the `[authorize:deny]` console.error debug helper and added a loopback rate-limit skip inside `authorize()` itself. **The fix was incomplete** — the same gate exists in a separate route that was overlooked.
+
+### What
+
+Pulled the playwright artifacts from PR #104's failed run. The page snapshot at the timeout moment showed:
+
+```yaml
+- generic [ref=e19]: Too many attempts. Try again in 15 minutes.
+```
+
+The form rendered the rate-limit error and never navigated. The "Too many attempts" message comes from `LoginPage`'s pre-check call to `/api/auth/check-entitlement`, which gates on caller IP at 5 attempts / 15 min. CI's e2e suite logs in 5+ times per run from loopback (5 specs × 3 Playwright retries trips it easily).
+
+### Fix
+
+`apps/meddoc-pro/src/app/api/auth/check-entitlement/route.ts` — mirror Phase 13's loopback-skip pattern from `nextauth.ts authorize()`:
+
+```ts
+// before
+const ipGate = checkRateLimit(callerIp, RATE_LIMITS.loginIp);
+
+// after
+const isLoopback =
+  callerIp === '127.0.0.1' ||
+  callerIp === '::1' ||
+  callerIp === 'unknown';
+const skipResult = { ok: true, count: 0, limit: 0, retryAfterSeconds: 0 };
+const ipGate = isLoopback
+  ? skipResult
+  : checkRateLimit(callerIp, RATE_LIMITS.loginIp);
+```
+
+Single-file diff, 15 lines (mostly comment).
+
+### Production safety
+
+`127.0.0.1` / `::1` / `unknown` IPs don't reach the live domain through Caddy — they're a CI / local-dev shape. Production traffic (real client IPs via X-Forwarded-For) hits the rate-limit unchanged.
+
+The per-account brute-force protection in `authorize()` step 4 (`failedLoginCount` + `lockedUntil`) still fires regardless of origin and is the authoritative defense. The IP gate is a noise filter for external attackers, not the primary lockout.
+
+### Tag + PR + release SHA
+
+- PR: https://github.com/kasrarayat-cloud/MedDoc/pull/105
+- Squash-merge SHA: `cacd957`
+- Tag: `ci-test-baseline-restored`
+- **Merged with `gh pr merge --squash` — no `--admin`. Both `axe-core sweep` and `test` checks went GREEN before merge.**
+
+### Verification
+
+PR #105 CI result:
+```
+axe-core sweep (chromium x desktop+mobile)    pass    3m4s
+test                                           pass    2m32s
+```
+
+Both green for the first time since the workflow has captured runs. Test step ran in 2m32s vs the historical 10m on every-spec-retry-3x baseline — confirms the fix landed correctly (no retries needed).
+
+### Combined with §19 (PR #104, axe-core baseline)
+
+Together with `de40409` (axe-core EmCheckList + EmCriterion fix) and `cacd957` (this PR), CI is fully green for the first time since at least 2026-04-26. Future PRs flow through normal `--squash` without `--admin`.
+
+### Open follow-ups
+
+- The `denyAuth` debug helper added in Phase 13 (`apps/meddoc-pro/src/lib/nextauth.ts`) and `AUTH_DEBUG: "true"` in `.github/workflows/test.yml` were added specifically to diagnose this — now resolved. They can stay (cheap diagnostic for the next regression) or be removed (less log noise). Low priority either way.
+- The "Sign In" form rate-limit message stays generic per anti-enumeration principle. Real production users who genuinely hit 5 wrong-password attempts in 15 min from a single IP still see this — that's working as designed.
+
+
+
+
 
 
 
