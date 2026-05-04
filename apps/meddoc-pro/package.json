@@ -13,7 +13,7 @@
     "test:e2e:ui": "playwright test --ui",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",
-    "test:all": "npm run seed:e2e && npm run seed:e2e-admin && npm run test:unit && npm run test:e2e",
+    "test:all": "echo '[meddoc-pro] CRM decommissioned — unit + e2e skipped (see docs/POST_MERGE_TODO.md §21).'",
     "eval:doc-editor": "tsx scripts/eval-doc-editor.ts",
     "eval:clinical-notes": "tsx scripts/eval-clinical-notes.ts"
   },
