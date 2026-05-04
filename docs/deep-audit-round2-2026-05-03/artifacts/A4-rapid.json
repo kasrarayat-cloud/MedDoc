@@ -1,0 +1,93 @@
+{
+  "tests": [
+    {
+      "name": "A4a-create-new-patient-5x",
+      "xhrCount": 0,
+      "xhrs": []
+    },
+    {
+      "name": "A4b-create-continue-5x",
+      "patientApiHits": 10,
+      "xhrs": [
+        {
+          "status": 429,
+          "method": "POST",
+          "url": "https://app.quillmd.com/api/patients/fuzzy-match",
+          "at": 1777840853071
+        },
+        {
+          "status": 429,
+          "method": "POST",
+          "url": "https://app.quillmd.com/api/patients/fuzzy-match",
+          "at": 1777840853073
+        },
+        {
+          "status": 429,
+          "method": "POST",
+          "url": "https://app.quillmd.com/api/patients/fuzzy-match",
+          "at": 1777840853073
+        },
+        {
+          "status": 429,
+          "method": "POST",
+          "url": "https://app.quillmd.com/api/patients/fuzzy-match",
+          "at": 1777840853077
+        },
+        {
+          "status": 429,
+          "method": "POST",
+          "url": "https://app.quillmd.com/api/patients/fuzzy-match",
+          "at": 1777840853094
+        },
+        {
+          "status": 429,
+          "method": "POST",
+          "url": "https://app.quillmd.com/api/patients",
+          "at": 1777840853130
+        },
+        {
+          "status": 429,
+          "method": "POST",
+          "url": "https://app.quillmd.com/api/patients",
+          "at": 1777840853133
+        },
+        {
+          "status": 429,
+          "method": "POST",
+          "url": "https://app.quillmd.com/api/patients",
+          "at": 1777840853134
+        },
+        {
+          "status": 429,
+          "method": "POST",
+          "url": "https://app.quillmd.com/api/patients",
+          "at": 1777840853160
+        },
+        {
+          "status": 429,
+          "method": "POST",
+          "url": "https://app.quillmd.com/api/patients",
+          "at": 1777840853161
+        }
+      ]
+    },
+    {
+      "name": "A4c-sign-in-5x",
+      "authHits": 0,
+      "xhrs": []
+    }
+  ],
+  "consoleErrs": [
+    "console: Failed to load resource: the server responded with a status of 404 ()",
+    "console: Failed to load resource: the server responded with a status of 429 ()",
+    "console: Failed to load resource: the server responded with a status of 429 ()",
+    "console: Failed to load resource: the server responded with a status of 429 ()",
+    "console: Failed to load resource: the server responded with a status of 429 ()",
+    "console: Failed to load resource: the server responded with a status of 429 ()",
+    "console: Failed to load resource: the server responded with a status of 429 ()",
+    "console: Failed to load resource: the server responded with a status of 429 ()",
+    "console: Failed to load resource: the server responded with a status of 429 ()",
+    "console: Failed to load resource: the server responded with a status of 429 ()",
+    "console: Failed to load resource: the server responded with a status of 429 ()"
+  ]
+}
