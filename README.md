@@ -1,9 +1,9 @@
-# MedDoc Pro + TranscribeMD
+# QuillMD (TranscribeMD) + MedDoc Pro [decommissioned]
 
-Two products, one monorepo:
+One monorepo, two products — but only one in active scope:
 
-- **MedDoc Pro** — HIPAA-compliant clinical CRM for small practices. Patient files, clinical notes, document editor, voice intake, audit log.
-- **TranscribeMD** — solo-doctor AI scribe. Upload audio / dictate / paste notes → SOAP note + ICD/CPT codes + Rx drafts + referrals + patient summary, all signed and exported to the EHR of choice.
+- **QuillMD / TranscribeMD** — solo-doctor AI scribe. Upload audio / dictate / paste notes → SOAP note + ICD/CPT codes + Rx drafts + referrals + patient summary, all signed and exported to the EHR of choice. **Active development.**
+- **MedDoc Pro** — HIPAA-compliant clinical CRM for small practices. Patient files, clinical notes, document editor, voice intake, audit log. **Decommissioned** as of 2026-05-04 — production container still serves legacy traffic on `pro.quillmd.com`/`admin.quillmd.com`, but no new development, no CI tests, no audits. See `docs/POST_MERGE_TODO.md` §21.
 
 Both share infrastructure: Postgres, NextAuth, shared types, same VPS. A third app (`marketing`) is the static landing site that points new users at TranscribeMD signup.
 
