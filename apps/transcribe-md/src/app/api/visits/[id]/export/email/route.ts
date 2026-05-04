@@ -29,7 +29,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 const BodySchema = z.object({
-  to: z.string().email().optional(),
+  to: z.string().email().max(254).optional(),
 });
 
 export const POST = withApiHandler<{ id: string }>(

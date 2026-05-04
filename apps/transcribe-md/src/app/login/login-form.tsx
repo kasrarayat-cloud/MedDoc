@@ -106,6 +106,7 @@ export function LoginForm() {
           autoComplete="email"
           defaultValue={values.email ?? ''}
           required
+          maxLength={254}
           style={{ ...inputStyle, marginTop: 6 }}
         />
         <AuthFieldError message={errors.email} />
