@@ -1243,6 +1243,102 @@ If MedDoc Pro CRM ever re-enters active development:
 4. The Phase 13 + PR #105 loopback-skip fixes in `nextauth.ts` and `check-entitlement/route.ts` keep working — CI will pass clean on revival.
 
 
+## 22. ⏳ Phase 6.2 — Backblaze B2 offsite encrypted backup (MinIO + restore drill) — scripts shipped 2026-05-04, activation pending
+
+### Why
+
+Second layer of QuillMD's HIPAA technical safeguard stack (Phase 6.1 = LUKS at-rest; Phase 6.2 = encrypted offsite). Phase 17 / **h16-offsite-backup** had already shipped the **Postgres** half (`infra/backup-offsite-sync.sh` + `docs/RUNBOOK_OFFSITE_BACKUP.md`). Phase 6.2 closes the two h16 didn't cover: **MinIO offsite backup** + **automated restore drill**.
+
+### What ships in this PR (4 files, ~600 lines, scripts + docs only)
+
+- `infra/minio-offsite-sync.sh` — MinIO bucket → mc cp → tar → age → b2 upload, with `b2 file info` post-write verification + cleanup trap on the staging dir. Mirrors the h16 pattern; reuses the same age public key at `/etc/meddoc/offsite-backup-public.age`.
+- `scripts/minio-offsite-cron.sh` — host-crontab wrapper; logs to `/var/log/quillmd-backups/minio-<UTC-date>.log`, optional Slack webhook alert on failure (graceful no-op if `QUILLMD_BACKUP_ALERT_WEBHOOK` unset), 30-day log rotation.
+- `scripts/restore-drill.sh` — operator-run proof-of-restore. Pulls latest Postgres encrypted blob from B2, decrypts with offline private key (validates the key shape first), restores into a temp Postgres on `:5433`, asserts row counts on `users` / `transcribe_visits` / `audit_logs`, tears down. Cleanup trap fires on every exit path. Run quarterly + before declaring Phase 6.2 active.
+- `scripts/phase-6.2/README.md` + `docs/phase-6.2-backup-strategy.md` — navigation index + RTO/RPO + disaster scenarios + bold private-key-loss warning.
+
+**Zero changes** to running production containers, app code, or `docker-compose.yml`. Pure scripts + docs.
+
+### Activation sequence (operator-run, in order)
+
+1. **Generate the age keypair OFFLINE.** On an air-gapped laptop:
+   ```bash
+   age-keygen -o offsite-backup-private.age
+   # The "Public key: age1..." line printed to stderr is the public key.
+   grep '^# public key:' offsite-backup-private.age | sed 's/^# public key: //' \
+     > offsite-backup-public.age
+   ```
+   Skip if h16 already activated (the keypair lives at `/etc/meddoc/offsite-backup-public.age` on the VPS already).
+
+2. **Multi-locate the private key.** Minimum two storage locations:
+   - 1Password Vault (entry name: `QuillMD offsite backup private key`)
+   - Paper printout (4 lines of base64, fits on a single page) in a fireproof / waterproof safe physically separate from your home/office.
+   - Optional third copy: encrypted USB in safety deposit box.
+
+3. **Copy ONLY the public key to the VPS** (`scp offsite-backup-public.age root@vps:/etc/meddoc/`). The private key stays in your offline secret store; the VPS never sees it. **Wipe the workstation copy of the private key after** (1Password sync handles persistence going forward).
+
+4. **Sign BAA with Backblaze + create B2 bucket + application key.** Detailed steps in `docs/RUNBOOK_OFFSITE_BACKUP.md` § A.1-A.3. Required because uploading PHI to a non-BAA-covered B2 bucket is a HIPAA breach even with client-side age encryption.
+
+5. **Add env vars to `/opt/meddoc-pro/.env` on the VPS:**
+   ```
+   BACKBLAZE_KEY_ID=<from B2 console>
+   BACKBLAZE_APPLICATION_KEY=<from B2 console>
+   BACKBLAZE_BUCKET=<bucket name>
+   # MINIO_ROOT_USER + MINIO_ROOT_PASSWORD already set by app config.
+   # Optional:
+   QUILLMD_BACKUP_ALERT_WEBHOOK=<Slack incoming-webhook URL>
+   ```
+
+6. **Install the new CLIs on the VPS** (only `mc` is new for Phase 6.2 — `age`, `b2`, `python3`, `sha256sum` already on box for h16):
+   ```bash
+   curl -fsSL https://dl.min.io/client/mc/release/linux-amd64/mc -o /usr/local/bin/mc
+   sudo chmod +x /usr/local/bin/mc
+   ```
+
+7. **Manual MinIO sync test:**
+   ```bash
+   sudo bash /opt/meddoc-pro/infra/minio-offsite-sync.sh
+   # Verify: b2 ls --recursive $BACKBLAZE_BUCKET meddoc-pro/minio/
+   # should show today's dated blob.
+   ```
+
+8. **First restore drill.** From an operator workstation (NOT the VPS):
+   ```bash
+   # Pull the private key from 1Password to the workstation.
+   export BACKBLAZE_KEY_ID=... BACKBLAZE_APPLICATION_KEY=... BACKBLAZE_BUCKET=...
+   ./scripts/restore-drill.sh ~/Downloads/offsite-backup-private.age
+   # Expect "DRILL PASSED" with users >= 1, transcribe_visits >= 1, audit_logs >= 0.
+   # Wipe the local private-key copy when done.
+   ```
+
+9. **Install host crontab for MinIO sync:**
+   ```cron
+   0 3 * * *  /opt/meddoc-pro/scripts/minio-offsite-cron.sh
+   ```
+
+10. **Wait 24h. Verify MinIO blob landed in B2:**
+    ```bash
+    b2 ls --recursive $BACKBLAZE_BUCKET meddoc-pro/minio/
+    # Should show yesterday's tar.age blob with sha256 + minio_bucket file-info tags.
+    ```
+
+11. **Update §22 status here from ⏳ pending → ✅ active** with the activation date + first-drill-pass timestamp.
+
+### Tag
+
+- PR: <will-be-filled-on-merge>
+- Squash-merge SHA: <will-be-filled-on-merge>
+- Tag: `phase-6.2-backup-scripts-shipped` (NOT `phase-6.2-live` — that tag waits for activation step 11)
+
+### Open follow-ups
+
+- **MinIO restore drill** — `restore-drill.sh` covers Postgres only today. A MinIO restore drill is a separate operator task: pull the latest `meddoc-pro/minio/<date>/transcribe-md-audio-*.tar.age` from B2, decrypt, untar, mc-cp into a fresh MinIO bucket on a non-production port, sample-verify a known audio file plays. Document as a runbook addendum when first MinIO restore is exercised.
+- **Tighter RPO** — daily cadence accepts up to 24h data loss. To go to <1h, add Postgres point-in-time recovery (wal-g or pgBackRest streaming WAL to B2). Out of pilot scope; revisit at the user-count inflection that makes 24h loss material.
+- **Backup-state monitoring dashboard** — currently the only signal that backups are landing is "I checked B2 console" or the Slack webhook on failure. A small status endpoint that reads B2 `file info` for the most recent blob and surfaces "last successful backup: N hours ago" would close the silent-failure window.
+- **Quarterly drill cadence** — calendar entry for Kasra to run `restore-drill.sh` on the first business day of each quarter. Without scheduled drills the offsite copy slowly becomes "untrusted by default."
+
+
+
+
 
 
 
