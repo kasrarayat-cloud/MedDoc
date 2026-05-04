@@ -1,0 +1,25 @@
+PATIENT: QA-TEST Lucas Brennan (4 yo male)
+DOB: 2022-07-08
+SPECIALTY: Pediatrics
+SCENARIO: New patient, acute otitis media right ear
+EXPECTED CODES: H66.001 (acute otitis media right), 99202 or 99203 (new patient E/M)
+
+DIALOGUE:
+
+Doctor: Hi, you must be Lucas. I am Doctor Smith. Mom, how can I help today?
+
+Mother: He has been pulling on his right ear since yesterday morning. Was up crying last night. He had a runny nose for about a week before that.
+
+Doctor: Any fever?
+
+Mother: I checked this morning. One hundred point four.
+
+Doctor: How is he eating and drinking?
+
+Mother: Drinking okay. He did not want his cereal this morning, said his ear hurts when he chews.
+
+Doctor: Lucas can you open your mouth for me, big yawn. Good. Let me look in your ears with this light. Right ear shows the tympanic membrane is bulging and erythematous. Some purulent fluid behind it. Left ear is normal. Throat is mildly red, no exudate. Lungs clear, heart regular.
+
+Mother: Is it an infection?
+
+Doctor: Yes, acute otitis media on the right. We will start amoxicillin, four hundred milligrams per five milliliter suspension. Give him five milliliters twice a day for ten days. Acetaminophen for the pain and fever. He should feel better in two to three days. If he gets worse, runs a fever over a hundred and three, or develops drainage from the ear, bring him back.

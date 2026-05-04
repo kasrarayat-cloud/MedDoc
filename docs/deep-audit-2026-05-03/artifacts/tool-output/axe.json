@@ -1,0 +1,39 @@
+{
+  "login": [
+    {
+      "id": "color-contrast",
+      "impact": "serious",
+      "help": "Elements must meet minimum color contrast ratio thresholds",
+      "count": 7,
+      "sample": [
+        {
+          "html": "<div style=\"font-family:var(--font-mono);font-size:10.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--color-linear-text-3);margin-bottom:12px\">Welcome back</div>",
+          "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 4.17 (foreground color: #6c737f, background color: #08090a, font size: 7.9pt (10.5px), font weight: normal). Expected contrast ra"
+        },
+        {
+          "html": "<label for=\"email\" style=\"font-family:var(--font-mono);font-size:10.5px;font-weight:500;color:var(--color-linear-text-3);letter-spacing:0.06em;text-transform:uppercase\">Email</label>",
+          "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 4.17 (foreground color: #6c737f, background color: #08090a, font size: 7.9pt (10.5px), font weight: normal). Expected contrast ra"
+        }
+      ]
+    }
+  ],
+  "signup": [
+    {
+      "id": "color-contrast",
+      "impact": "serious",
+      "help": "Elements must meet minimum color contrast ratio thresholds",
+      "count": 10,
+      "sample": [
+        {
+          "html": "<div style=\"font-family:var(--font-mono);font-size:10.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--color-linear-text-3);margin-bottom:12px\">New to QuillMD</div>",
+          "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 4.17 (foreground color: #6c737f, background color: #08090a, font size: 7.9pt (10.5px), font weight: normal). Expected contrast ra"
+        },
+        {
+          "html": "<label for=\"name\" style=\"font-family:var(--font-mono);font-size:10.5px;font-weight:500;color:var(--color-linear-text-3);letter-spacing:0.06em;text-transform:uppercase\">Full name</label>",
+          "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 4.17 (foreground color: #6c737f, background color: #08090a, font size: 7.9pt (10.5px), font weight: normal). Expected contrast ra"
+        }
+      ]
+    }
+  ],
+  "marketing-home": []
+}
