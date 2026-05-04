@@ -1,0 +1,16 @@
+PATIENT: QA-TEST Marcus Reilly
+DOB: 1991-04-18
+SPECIALTY: Primary Care
+SCENARIO: Very short check-in (~25 sec dialogue) — tests pipeline behavior on minimal content
+
+DIALOGUE:
+
+Doctor: Marcus, how is the rash on your forearm?
+
+Patient: Almost gone. The hydrocortisone worked.
+
+Doctor: Good. Keep using it once a day for three more days, then stop. If it comes back, give us a call. Anything else today?
+
+Patient: No, that was it.
+
+Doctor: See you next time.
