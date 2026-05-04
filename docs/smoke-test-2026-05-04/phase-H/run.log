@@ -1,0 +1,6 @@
+{"phase":"H","label":"41-zero-byte-audio","status":"PASS","durationMs":235,"error":null}
+{"phase":"H","label":"42-non-audio-file","status":"PASS","durationMs":29,"error":null}
+{"phase":"H","label":"43-silent-audio","status":"PASS","durationMs":0,"error":null}
+{"phase":"H","label":"44-sign-empty-soap","status":"PASS","durationMs":98,"error":null}
+{"phase":"H","label":"45-foreign-visit-url","status":"PASS","durationMs":20,"error":null}
+{"phase":"H","label":"46-signed-out-redirect","status":"PASS","durationMs":401,"error":null}
