@@ -684,3 +684,141 @@ no "Mei-Ling", no "QA Bypass", no clinician name. ✅
   UX change; needs design review before bundling.
 
 
+## 16. ✅ Phase 7-QA — P2-002 specialty single-source-of-truth — completed 2026-05-04
+
+### Why
+
+Round 2 deep audit (`docs/deep-audit-round2-2026-05-03/`) finding
+P2-002: four different specialty vocabularies were drifting
+independently. Doctor sets `specialty='cardiology'` in Settings,
+opens `/visits/new` step 2 → dropdown is keyed off display names
+('Cardiology'); doctor in Pain Management has no Settings option
+(Settings catalog had 7 short ids; Pain Management wasn't one);
+marketing pills advertised 8 specialties, none of which matched
+either dropdown 1:1. The DB cemented the drift: `users.specialty`
+held lowercase short ids, `transcribe_visits.specialty` held
+display-name strings.
+
+Pre-fix counts (audit): 11 distinct specialties across the two
+dropdowns; only 2 fully overlapped (Cardiology) and 2 overlapped
+with mismatched labels (Ortho/Orthopedics, Primary/Primary Care).
+
+### What
+
+Single source of truth at `packages/shared/src/specialties.ts`:
+
+```ts
+export const SPECIALTIES = [
+  { id: 'unspecified',     label: 'Unspecified',     templateId: 'generic' },
+  { id: 'primary-care',    label: 'Primary Care',    templateId: 'primary-care' },
+  { id: 'cardiology',      label: 'Cardiology',      templateId: 'cardiology' },
+  { id: 'psychiatry',      label: 'Psychiatry',      templateId: 'psychiatry' },
+  { id: 'pediatrics',      label: 'Pediatrics',      templateId: 'pediatrics' },
+  { id: 'dermatology',     label: 'Dermatology',     templateId: 'dermatology' },
+  { id: 'orthopedics',     label: 'Orthopedics',     templateId: 'orthopedics' },
+  { id: 'urgent-care',     label: 'Urgent Care',     templateId: 'urgent-care' },
+  { id: 'pain-management', label: 'Pain Management', templateId: 'pain-management' },
+] as const;
+```
+
+Plus three exported helpers:
+- `SPECIALTY_IDS` — tuple form for `z.enum()` at the API edge
+- `SPECIALTIES_FOR_VISIT_CREATE` — filters out `'unspecified'`
+  for flows where the doctor must pick a real specialty
+- `findSpecialty(id)` — resolves canonical ids, legacy display
+  names (`'Cardiology'`), and legacy short ids (`'pain'`) so
+  pre-fix DB rows render correctly until the migration runs
+
+### Files
+
+- `packages/shared/{package.json,src/index.ts,src/specialties.ts}` — new workspace
+- `apps/transcribe-md/package.json` + `apps/marketing/package.json` — `@meddoc/shared` dep
+- `apps/transcribe-md/src/app/settings/profile-form.tsx` — uses `SPECIALTIES`
+- `apps/transcribe-md/src/app/visits/new/{page,visit-form-step2,new-visit-client}.tsx` — `SPECIALTIES_FOR_VISIT_CREATE`
+- `apps/transcribe-md/src/app/visits/[id]/edit-draft-dialog.tsx` — same, plus state typed as `string` to match the dropdown's onChange
+- `apps/transcribe-md/src/app/visits/[id]/page.tsx` — replaced local `specialtyLabel` map with `findSpecialty(id).label`
+- `apps/transcribe-md/src/lib/visit-export-server.ts` — `loadVisitExportData` resolves `visit.specialty` → human label so PDF/DOCX/EHR formatters render the human form
+- `apps/transcribe-md/src/components/specialty-dropdown.tsx` — `SpecialtyOption` shape changed `{slug, displayName}` → `{id, label}`; submits canonical id (was display name)
+- `apps/transcribe-md/src/actions/{profile,visits}.ts` + `apps/transcribe-md/src/app/api/visits/[id]/route.ts` — `z.enum(SPECIALTY_IDS)` validation
+- `apps/transcribe-md/src/worker/prompts/specialty-guidance.ts` — added `urgent-care` + `pain-management` guidance text
+- `apps/marketing/src/components/home/Specialties.tsx` — pills derived from `SPECIALTIES_FOR_VISIT_CREATE`
+- `apps/transcribe-md/src/lib/specialties.ts` — DELETED (consumers migrated)
+- `apps/transcribe-md/tests/worker/specialty-catalog.test.ts` — 17 cases (snapshot, guidance coverage, Zod accept/reject, findSpecialty legacy fallback)
+- `scripts/migrate-specialty-vocab.sql` — one-time DB normalization (NOT executed)
+
+### DB migration (NOT run)
+
+`scripts/migrate-specialty-vocab.sql` normalizes 53 pre-fix
+`transcribe_visits.specialty` rows + defensive UPDATEs on
+`users.specialty` (no rows currently affected). Wrapped in
+`BEGIN/COMMIT` with a final assertion that no non-canonical values
+remain. The app keeps working pre-migration via `findSpecialty()`
+legacy fallback — the migration just makes the column carry a
+single enum value for analytics/reporting.
+
+Post-fix DB audit (read-only):
+```sql
+SELECT specialty, COUNT(*) FROM transcribe_visits GROUP BY specialty ORDER BY 2 DESC;
+-- Orthopedics                     | 26
+-- Cardiology                      | 22
+-- Primary Care / Family Medicine  |  3
+-- Internal Medicine               |  2
+SELECT specialty, COUNT(*) FROM users GROUP BY specialty;
+-- NULL        | 36
+-- cardiology  |  1
+```
+
+After migration: 53 visit rows + 0 user rows updated. Run when
+you're ready: `docker exec -i meddoc-pro-postgres-1 psql -U meddoc -d meddoc < scripts/migrate-specialty-vocab.sql`.
+
+### Tag + PR + release SHAs
+
+- PR: https://github.com/kasrarayat-cloud/MedDoc/pull/101
+- Squash-merge SHA: `08c5be4`
+- Tag: `phase-7-qa-p2-002-fix`
+
+### Verification (post-deploy, against production)
+
+`/settings` profile dropdown options (live DOM):
+```json
+[
+  { "value": "unspecified",     "label": "Unspecified" },
+  { "value": "primary-care",    "label": "Primary Care" },
+  { "value": "cardiology",      "label": "Cardiology" },
+  { "value": "psychiatry",      "label": "Psychiatry" },
+  { "value": "pediatrics",      "label": "Pediatrics" },
+  { "value": "dermatology",     "label": "Dermatology" },
+  { "value": "orthopedics",     "label": "Orthopedics" },
+  { "value": "urgent-care",     "label": "Urgent Care" },
+  { "value": "pain-management", "label": "Pain Management" }
+]
+```
+
+`/visits/new` step-2 dropdown (with patient pinned via
+`?patientId=...`): identical to the above list with `'Unspecified'`
+filtered out. Programmatic equality assert: PASS.
+
+`quillmd.com` Specialties pills (curl + grep):
+```
+Cardiology | Dermatology | Orthopedics | Pain Management
+Pediatrics | Primary Care | Psychiatry | Urgent Care
+```
+Same labels, same count, same order as the dropdown.
+
+### Open follow-ups
+
+- `apps/transcribe-md/src/components/ui/spec-chip.tsx` still has a
+  6-id `SpecialtyKind` taxonomy (icons + tints for patient-card
+  badges). New canonical ids without an icon (`psychiatry`,
+  `pediatrics`, `dermatology`, `urgent-care`) fall back to the
+  default tint. Add icons + tints when design has time.
+- DB migration sits in `scripts/` waiting for review/run. No
+  functional pressure — `findSpecialty()` keeps the app working
+  on legacy rows — but normalizing makes
+  `SELECT specialty, COUNT(*)` reports honest.
+- Marketing H2 copy "Eight specialty templates." is hardcoded; the
+  catalog snapshot test will trip if the count changes, prompting
+  a copy update. (Not auto-derived to keep the snapshot test
+  meaningful.)
+
+
