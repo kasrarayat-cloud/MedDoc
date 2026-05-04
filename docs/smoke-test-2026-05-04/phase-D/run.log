@@ -1,0 +1,19 @@
+{"phase":"D","label":"22-start-dictation-visit","status":"FAIL","durationMs":208,"error":"POST /api/patients 429"}
+{"phase":"D","label":"23-start-recording","status":"FAIL","durationMs":55,"error":"No record-start button found"}
+{"phase":"D","label":"24-stop-recording","status":"PASS","durationMs":10009,"error":null}
+{"phase":"D","label":"25-submit-recording","status":"PASS","durationMs":74,"error":null}
+{"phase":"D","label":"26-27-pipeline-state","status":"FAIL","durationMs":176425,"error":"page.waitForTimeout: Target page, context or browser has been closed"}
+{"phase":"D","label":"22-start-dictation-visit","status":"PASS","durationMs":2602,"error":null}
+{"phase":"D","label":"23-start-recording","status":"FAIL","durationMs":6,"error":"No record-start button found"}
+{"phase":"D","label":"24-stop-recording","status":"PASS","durationMs":10011,"error":null}
+{"phase":"D","label":"25-submit-recording","status":"PASS","durationMs":3098,"error":null}
+{"phase":"D","label":"26-27-pipeline-state","status":"FAIL","durationMs":98193,"error":"page.waitForTimeout: Target page, context or browser has been closed"}
+{"phase":"D","label":"22-start-dictation-visit","status":"PASS","durationMs":1825,"error":null}
+{"phase":"D","label":"23-start-recording","status":"FAIL","durationMs":7,"error":"No record-start button found"}
+{"phase":"D","label":"24-stop-recording","status":"PASS","durationMs":10027,"error":null}
+{"phase":"D","label":"25-submit-recording","status":"PASS","durationMs":190,"error":null}
+{"phase":"D","label":"22-start-dictation-visit","status":"PASS","durationMs":2703,"error":null}
+{"phase":"D","label":"23-start-recording","status":"PASS","durationMs":2490,"error":null}
+{"phase":"D","label":"24-stop-recording","status":"PASS","durationMs":11254,"error":null}
+{"phase":"D","label":"25-submit-recording","status":"PASS","durationMs":127,"error":null}
+{"phase":"D","label":"26-27-pipeline-state","status":"FAIL","durationMs":91338,"error":"page.waitForTimeout: Target page, context or browser has been closed"}
