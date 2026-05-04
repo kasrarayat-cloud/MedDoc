@@ -1,0 +1,17 @@
+Doctor: Mr Chen, good to see you. We have your latest labs back. Hemoglobin A1c is seven point eight, up from seven point two three months ago. Creatinine stable at one point one. LDL ninety six.
+
+Patient: That is going the wrong way doctor.
+
+Doctor: It is. How has your diet been? And your exercise routine?
+
+Patient: Honestly the holidays were rough. I have been walking less. My wife is making rice with most meals again.
+
+Doctor: That accounts for most of it. Are you taking your metformin twice a day, five hundred milligrams?
+
+Patient: Most days. I miss the evening dose maybe twice a week.
+
+Doctor: Let us bump you to one thousand milligrams twice a day with food, and I want to add empagliflozin ten milligrams once a day. For your blood pressure, today it is one fifty two over ninety four. Your lisinopril is still ten milligrams. Let us go up to twenty milligrams.
+
+Patient: Are these new medicines safe with my other ones?
+
+Doctor: Yes. Empagliflozin can sometimes cause urinary tract infections so let me know if you have any burning or frequency. Repeat A1c, blood pressure, and basic metabolic panel in three months.

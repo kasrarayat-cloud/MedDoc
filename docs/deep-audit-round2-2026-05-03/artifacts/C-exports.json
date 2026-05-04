@@ -1,0 +1,49 @@
+{
+  "tests": [
+    {
+      "name": "C1-pdf-export",
+      "status": 200,
+      "contentType": "application/pdf",
+      "bytes": 47415
+    },
+    {
+      "name": "C2-docx-export",
+      "status": 200,
+      "contentType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "bytes": 13747
+    },
+    {
+      "name": "C3-fhir-export",
+      "status": 404
+    },
+    {
+      "name": "C4-clipboard-epic",
+      "status": 405,
+      "bodyExcerpt": ""
+    },
+    {
+      "name": "C4-clipboard-athena",
+      "status": 405,
+      "bodyExcerpt": ""
+    },
+    {
+      "name": "C4-clipboard-cerner",
+      "status": 405,
+      "bodyExcerpt": ""
+    },
+    {
+      "name": "C4-clipboard-eclinicalworks",
+      "status": 405,
+      "bodyExcerpt": ""
+    },
+    {
+      "name": "C4-clipboard-generic",
+      "status": 405,
+      "bodyExcerpt": ""
+    },
+    {
+      "name": "C5-tenancy-pdf",
+      "status": 404
+    }
+  ]
+}

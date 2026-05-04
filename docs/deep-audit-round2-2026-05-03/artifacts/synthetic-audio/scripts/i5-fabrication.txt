@@ -1,0 +1,13 @@
+Doctor: Mrs Garcia, how have you been since your fall last week?
+
+Patient: My ankle is much better. I can walk on it now without much pain.
+
+Doctor: Good. Let me listen to your heart and check your blood pressure today.
+
+Patient: Okay.
+
+Doctor: Take a deep breath for me.
+
+Patient: Okay.
+
+Doctor: Alright, I will write up the visit. Come back in two weeks if anything changes.

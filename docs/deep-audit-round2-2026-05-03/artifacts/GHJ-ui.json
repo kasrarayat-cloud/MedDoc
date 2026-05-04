@@ -1,0 +1,222 @@
+{
+  "G": [
+    {
+      "name": "G7-enter-submits-login",
+      "url": "https://app.quillmd.com/dashboard",
+      "success": true
+    },
+    {
+      "name": "G1-tab-order-dashboard",
+      "tabOrder": [
+        {
+          "tag": "A",
+          "text": "Dashboard",
+          "name": null,
+          "aria": null
+        },
+        {
+          "tag": "A",
+          "text": "Visits",
+          "name": null,
+          "aria": null
+        },
+        {
+          "tag": "A",
+          "text": "Patients",
+          "name": null,
+          "aria": null
+        },
+        {
+          "tag": "A",
+          "text": "Settings",
+          "name": null,
+          "aria": null
+        },
+        {
+          "tag": "A",
+          "text": "QQuillMD",
+          "name": null,
+          "aria": "QuillMD — Dashboard"
+        },
+        {
+          "tag": "BUTTON",
+          "text": "Search patients, visits, codes…⌘K",
+          "name": null,
+          "aria": "Open command palette"
+        },
+        {
+          "tag": "A",
+          "text": "New visit",
+          "name": null,
+          "aria": null
+        },
+        {
+          "tag": "BUTTON",
+          "text": "QB",
+          "name": null,
+          "aria": "Account menu for QA Bypass Updated"
+        }
+      ]
+    },
+    {
+      "name": "G3-cmdk-open",
+      "state": {
+        "hasPalette": true,
+        "shortcuts": [
+          "⌘",
+          "K",
+          "esc",
+          "N",
+          "D",
+          "S",
+          "↑",
+          "↓",
+          "↵",
+          "esc"
+        ],
+        "bodyExcerpt": "Dashboard Visits Patients Settings Q QuillMD / Dashboard Search patients, visits, codes… ⌘ K New visit QB Good evening, Dr. QA. · 4 patients · 4 visits · 4 awaiting review · Sunday, May 3 · 8:59 PM 4 this month VISITS / MAY — no data yet AVG DRAFTED IN 4 visits PENDING REVIEW 0 notes SIGNED THIS WEEK Patients 4 All visits 4 Patients 4 on the schedule May 3, 2026 QA-TEST Marcus Reilly 35 · 1 visit Cardiology QA test scenario E Needs review May 3, 2026 QA-TEST Aisha Williams 29 · 1 visit Cardiology QA test scenario D Needs review May 3, 2026 QA-TEST Mei-Ling Park 58 · 1 visit Cardiology QA test "
+      }
+    },
+    {
+      "name": "G2-esc-closes-cmdk",
+      "closed": true
+    }
+  ],
+  "H": [
+    {
+      "name": "H1-tap-targets-dashboard",
+      "tapTargets": {
+        "totalInteractives": 17,
+        "smallCount": 17,
+        "samples": [
+          {
+            "tag": "A",
+            "text": "Dashboard",
+            "w": 373,
+            "h": 28,
+            "name": null
+          },
+          {
+            "tag": "A",
+            "text": "Visits",
+            "w": 373,
+            "h": 28,
+            "name": null
+          },
+          {
+            "tag": "A",
+            "text": "Patients",
+            "w": 373,
+            "h": 28,
+            "name": null
+          },
+          {
+            "tag": "A",
+            "text": "Settings",
+            "w": 373,
+            "h": 28,
+            "name": null
+          },
+          {
+            "tag": "A",
+            "text": "QQuillMD",
+            "w": 75,
+            "h": 19,
+            "name": "QuillMD — Dashboard"
+          },
+          {
+            "tag": "BUTTON",
+            "text": "Search patients, visits, codes…⌘K",
+            "w": 220,
+            "h": 26,
+            "name": "Open command palette"
+          },
+          {
+            "tag": "A",
+            "text": "New visit",
+            "w": 95,
+            "h": 28,
+            "name": null
+          },
+          {
+            "tag": "BUTTON",
+            "text": "QB",
+            "w": 54,
+            "h": 32,
+            "name": "Account menu for QA Bypass Updated"
+          },
+          {
+            "tag": "A",
+            "text": "Patients4",
+            "w": 86,
+            "h": 30,
+            "name": null
+          },
+          {
+            "tag": "A",
+            "text": "All visits4",
+            "w": 86,
+            "h": 30,
+            "name": null
+          },
+          {
+            "tag": "A",
+            "text": "May 3, 2026QA-TEST Marcus Reilly35 · 1 v",
+            "w": 294,
+            "h": 36,
+            "name": null
+          },
+          {
+            "tag": "A",
+            "text": "May 3, 2026QA-TEST Aisha Williams29 · 1 ",
+            "w": 294,
+            "h": 36,
+            "name": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "H2-pinch-zoom-blocked",
+      "viewportMeta": "width=device-width, initial-scale=1",
+      "zoomBlocked": false
+    },
+    {
+      "name": "H3-input-zoom-bug",
+      "inputsWithZoomBug": [
+        {
+          "name": "Search by name or external ID…",
+          "fontSize": "14px",
+          "ok": false
+        }
+      ],
+      "totalChecked": 1
+    }
+  ],
+  "J": [
+    {
+      "name": "J1-404-app",
+      "state": {
+        "http": 404,
+        "bodyExcerpt": "404 Not here. We couldn't find that page. It may have moved, or you may not have access. Go to dashboard Sign in"
+      }
+    },
+    {
+      "name": "J1b-404-marketing",
+      "state": {
+        "http": 404,
+        "bodyExcerpt": "QuillMD How Features Pricing About Sign in Get started 404 This page slipped through our AI. Nothing lives at this URL. Very rare for our models — we'll flag it for review. Back to home Start free trial QuillMD Made for doctors who deserve better tools. Product Features Pricing Demo Docs Company About Contact Legal Privacy Terms HIPAA Security Social GitHub © 2026 QuillMD. All rights reserved."
+      }
+    },
+    {
+      "name": "J2-malformed-json",
+      "status": 400,
+      "body": "{\"error\":\"invalid destinations payload\"}"
+    },
+    {
+      "name": "J5-content-length-overlimit",
+      "status": 409,
+      "body": "{\"error\":\"visit is already processing or finalized\"}"
+    }
+  ]
+}

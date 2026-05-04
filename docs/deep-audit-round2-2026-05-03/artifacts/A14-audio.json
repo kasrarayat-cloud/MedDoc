@@ -1,0 +1,66 @@
+[
+  {
+    "id": "zero",
+    "path": "/tmp/r2-audio/zero.wav",
+    "expect": "reject (0 bytes)",
+    "fileInputCount": 0,
+    "transcribeClicked": false,
+    "afterUrl": "https://app.quillmd.com/visits/new",
+    "afterBodyExcerpt": "Dashboard Visits Patients Settings Q QuillMD / Visits Search patients, visits, codes… ⌘ K New visit QR NEW VISIT Start a new visit Pick the patient, then choose how you want to capture the encounter. Cancel 1 Patient 2 Visit details 3 Capture Who's this visit for? Search patients No matches. Create a new patient below. NAME DATE OF BIRTH EXTERNAL ID (optional) Too many requests. Try again later. Cancel Create & continue VISIT SUMMARY PATIENT Not picked yet SPECIALTY Cardiology CAPTURE MODE Chosen on step 2 ESTIMATED ~30 sec processing · draft ready immediately after",
+    "visibleErrors": []
+  },
+  {
+    "id": "text-as-wav",
+    "path": "/tmp/r2-audio/text-as-wav.wav",
+    "expect": "reject (not audio)",
+    "fileInputCount": 0,
+    "transcribeClicked": false,
+    "afterUrl": "https://app.quillmd.com/visits/new",
+    "afterBodyExcerpt": "Dashboard Visits Patients Settings Q QuillMD / Visits Search patients, visits, codes… ⌘ K New visit QR NEW VISIT Start a new visit Pick the patient, then choose how you want to capture the encounter. Cancel 1 Patient 2 Visit details 3 Capture Who's this visit for? Search patients No matches. Create a new patient below. NAME DATE OF BIRTH EXTERNAL ID (optional) Too many requests. Try again later. Cancel Create & continue VISIT SUMMARY PATIENT Not picked yet SPECIALTY Cardiology CAPTURE MODE Chosen on step 2 ESTIMATED ~30 sec processing · draft ready immediately after",
+    "visibleErrors": []
+  },
+  {
+    "id": "corrupt",
+    "path": "/tmp/r2-audio/corrupt.wav",
+    "expect": "reject (corrupt header)",
+    "fileInputCount": 0,
+    "transcribeClicked": false,
+    "afterUrl": "https://app.quillmd.com/visits/new",
+    "afterBodyExcerpt": "Dashboard Visits Patients Settings Q QuillMD / Visits Search patients, visits, codes… ⌘ K New visit QR NEW VISIT Start a new visit Pick the patient, then choose how you want to capture the encounter. Cancel 1 Patient 2 Visit details 3 Capture Who's this visit for? Search patients No matches. Create a new patient below. NAME DATE OF BIRTH EXTERNAL ID (optional) Too many requests. Try again later. Cancel Create & continue VISIT SUMMARY PATIENT Not picked yet SPECIALTY Cardiology CAPTURE MODE Chosen on step 2 ESTIMATED ~30 sec processing · draft ready immediately after",
+    "visibleErrors": []
+  },
+  {
+    "id": "100ms",
+    "path": "/tmp/r2-audio/100ms.wav",
+    "expect": "pipeline produces \"no content\" SOAP",
+    "fileInputCount": 0,
+    "transcribeClicked": false,
+    "afterUrl": "https://app.quillmd.com/visits/new",
+    "afterBodyExcerpt": "Dashboard Visits Patients Settings Q QuillMD / Visits Search patients, visits, codes… ⌘ K New visit QR NEW VISIT Start a new visit Pick the patient, then choose how you want to capture the encounter. Cancel 1 Patient 2 Visit details 3 Capture Who's this visit for? Search patients No matches. Create a new patient below. NAME DATE OF BIRTH EXTERNAL ID (optional) Too many requests. Try again later. Cancel Create & continue VISIT SUMMARY PATIENT Not picked yet SPECIALTY Cardiology CAPTURE MODE Chosen on step 2 ESTIMATED ~30 sec processing · draft ready immediately after",
+    "visibleErrors": []
+  },
+  {
+    "id": "8khz",
+    "path": "/tmp/r2-audio/8khz.wav",
+    "expect": "Deepgram may reject 8kHz",
+    "fatalError": "page.waitForTimeout: Target page, context or browser has been closed"
+  },
+  {
+    "id": "48khz",
+    "path": "/tmp/r2-audio/48khz.wav",
+    "expect": "Deepgram should accept (resamples)",
+    "fatalError": "page.goto: Target page, context or browser has been closed"
+  },
+  {
+    "id": "stereo",
+    "path": "/tmp/r2-audio/stereo.wav",
+    "expect": "Deepgram should accept",
+    "fatalError": "page.goto: Target page, context or browser has been closed"
+  },
+  {
+    "id": "5min",
+    "path": "/tmp/r2-audio/5min.wav",
+    "expect": "long pipeline run; should complete",
+    "fatalError": "page.goto: Target page, context or browser has been closed"
+  }
+]

@@ -1,0 +1,34 @@
+{
+  "tests": [
+    {
+      "name": "B-tenancy",
+      "httpStatus": 200,
+      "after": {
+        "url": "https://app.quillmd.com/visits/cmoq6q5s4000p01qqhdngm77n",
+        "title": "Visit · QuillMD",
+        "h1": "Visit not found",
+        "bodyExcerpt": "404 Visit not found This visit doesn't exist or you don't have access to it. Back to dashboard",
+        "hasMeiLing": false
+      }
+    }
+  ],
+  "consoleErrs": [
+    "console: Failed to load resource: the server responded with a status of 404 ()",
+    "console: Failed to load resource: the server responded with a status of 429 ()",
+    "console: Failed to load resource: the server responded with a status of 429 ()"
+  ],
+  "allXhr": [
+    {
+      "status": 429,
+      "method": "POST",
+      "url": "https://app.quillmd.com/api/patients/fuzzy-match",
+      "at": 1777841547655
+    },
+    {
+      "status": 429,
+      "method": "POST",
+      "url": "https://app.quillmd.com/api/patients",
+      "at": 1777841547673
+    }
+  ]
+}
