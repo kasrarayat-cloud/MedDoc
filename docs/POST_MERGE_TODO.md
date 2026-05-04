@@ -1173,6 +1173,78 @@ Together with `de40409` (axe-core EmCheckList + EmCriterion fix) and `cacd957` (
 - The "Sign In" form rate-limit message stays generic per anti-enumeration principle. Real production users who genuinely hit 5 wrong-password attempts in 15 min from a single IP still see this — that's working as designed.
 
 
+## 21. ✅ Decommission — apps/meddoc-pro CRM tests retired — completed 2026-05-04
+
+### Why
+
+apps/meddoc-pro is the legacy clinical CRM. Production container still serves legacy traffic on `pro.quillmd.com` / `admin.quillmd.com`, but no new development happens. PR #105 (§20) had just patched the rate-limit gate to make the 5 e2e tests pass tactically — this PR is the strategic follow-up: retire the test suite outright so CI never has to think about a frozen surface again.
+
+Going forward, all audits, fixes, tests, and active development scope is **QuillMD only** — `apps/transcribe-md` + `apps/marketing`.
+
+### What — three surgical changes (13-line diff)
+
+**1. `apps/meddoc-pro/playwright.config.ts` — `testIgnore: '**/*.spec.ts'`**
+Spec files stay on disk for posterity and reversibility. Playwright now reports `0 tests in 0 files` when invoked. The 5 e2e specs are inert.
+
+**2. `apps/meddoc-pro/package.json` — `test:all` becomes a no-op echo**
+```json
+"test:all": "echo '[meddoc-pro] CRM decommissioned — unit + e2e skipped (see docs/POST_MERGE_TODO.md §21).'"
+```
+CI runs `npm run test:all -w meddoc-pro` per `.github/workflows/test.yml`; the echo prints the decommission notice and exits 0. Skips both the 9 vitest unit tests AND the 5 playwright specs in one move.
+
+**3. `README.md` — top-line decommission flag**
+`MedDoc Pro` flagged as decommissioned-as-of-2026-05-04 with the production-traffic footnote. Anyone landing on the repo sees the boundary immediately.
+
+### Tests retired (kept here for grep-ability)
+
+| Spec | Test |
+|---|---|
+| `tests/e2e/auth.spec.ts:11` | admin can sign in and lands on /system-admin |
+| `tests/e2e/chart-id.spec.ts:26` | Add Patient modal auto-assigns C-<n> |
+| `tests/e2e/tenancy.spec.ts:34` | cross-tenant list isolation |
+| `tests/e2e/tenancy.spec.ts:52` | direct URL probe DOCTOR-A → Practice-B 404 |
+| `tests/e2e/tenancy.spec.ts:72` | SUPER_ADMIN sees-all on /system-admin |
+| `tests/e2e/add-patient-form.spec.ts` | (was passing — also retired per scope) |
+| `tests/e2e/assistant.spec.ts` | (was passing — also retired per scope) |
+| `tests/unit/*.test.ts` (9 files) | (were passing — also retired per scope) |
+
+### Out-of-scope confirmations
+
+- ✅ `.github/workflows/a11y.yml` only walks transcribe-md routes (`/login`, `/signup`, `/dashboard`, `/visits/*`, `/patients`, `/settings`) on app.quillmd.com — no meddoc-pro paths. No workflow change needed.
+- ✅ Production meddoc-pro Docker container (`meddoc-pro-meddoc-pro-1`) left running; legacy traffic continues to flow on `pro.quillmd.com` / `admin.quillmd.com`.
+- ✅ Test files NOT deleted from disk — `apps/meddoc-pro/tests/{unit,e2e}/` stays for reversibility.
+- ✅ Did not touch meddoc-pro app code itself.
+- ✅ Did not investigate root cause of failures — irrelevant under decommission.
+
+### Tag + PR + release SHA
+
+- PR: https://github.com/kasrarayat-cloud/MedDoc/pull/106
+- Squash-merge SHA: `c4efdd9`
+- Tag: `ci-fully-green`
+- **Merged with `gh pr merge --squash` — no `--admin`. Both CI checks green.**
+
+### Verification
+
+PR #106 CI result:
+```
+axe-core sweep (chromium x desktop+mobile)    pass    2m49s
+test                                           pass    1m36s
+```
+
+Test step ran in 1m36s (vs 2m32s on PR #105 — seed + vitest are now skipped too). Both CI gates pass cleanly. Future PRs to this repo should flow through `--squash` without ever needing `--admin` for these baselines.
+
+### Reversibility
+
+If MedDoc Pro CRM ever re-enters active development:
+1. Remove `testIgnore: '**/*.spec.ts'` from `apps/meddoc-pro/playwright.config.ts`
+2. Restore the original `test:all` script in `apps/meddoc-pro/package.json`:
+   `"test:all": "npm run seed:e2e && npm run seed:e2e-admin && npm run test:unit && npm run test:e2e"`
+3. Drop the decommission note from `README.md`
+4. The Phase 13 + PR #105 loopback-skip fixes in `nextauth.ts` and `check-entitlement/route.ts` keep working — CI will pass clean on revival.
+
+
+
+
 
 
 
