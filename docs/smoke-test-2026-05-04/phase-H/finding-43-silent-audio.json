@@ -1,0 +1,4 @@
+{
+  "skip": "pipeline run takes 3-5 min per upload; defer to Round 2 I-001 finding which already validated no-fabrication on a no-values dictation.",
+  "roundTwoReference": "docs/deep-audit-round2-2026-05-03/findings/ + I-001 in executive-summary"
+}

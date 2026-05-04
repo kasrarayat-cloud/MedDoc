@@ -1,0 +1,66 @@
+Dashboard
+Visits
+Patients
+Settings
+Q
+QuillMD
+/
+Dashboard
+Search patients, visits, codes…
+⌘
+K
+New visit
+DS
+Good morning, Dr. Dr..
+·
+4 patients · 1 visit · 1 awaiting review
+·
+Monday, May 4
+·
+3:46 AM
+1
+this month
+VISITS / MAY
+—
+no data yet
+AVG DRAFTED IN
+1
+visit
+PENDING REVIEW
+0
+notes
+SIGNED THIS WEEK
+Patients
+4
+All visits
+1
+Patients
+4 on the schedule
+—
+Smoke Empty Test 1777866270919
+46
+—
+No visits yet
+May 4, 2026
+Smoke TestPatient OneCardiology 1777863896718
+61 · 1 visit
+primary-care
+Chest pain x 2 hours, radiation to left arm
+Needs review
+—
+Smoke TestPatient OneCardiology 1777863896718
+61
+—
+No visits yet
+—
+Smoke TestPatient OneCardiology
+61
+—
+No visits yet
+Drafts ready to sign
+1 draft
+Smoke TestPatient OneCardiology 1777863896718
+primary-care
+Subjective
+Needs review
+Drafted 4m ago

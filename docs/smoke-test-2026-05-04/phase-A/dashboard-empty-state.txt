@@ -1,0 +1,47 @@
+hasEmptyStateText=true
+
+Full body text (first 800 chars):
+Dashboard
+Visits
+Patients
+Settings
+Q
+QuillMD
+/
+Dashboard
+Search patients, visits, codes…
+⌘
+K
+New visit
+DS
+Good morning, Dr. Dr..
+·
+0 patients · 0 visits
+·
+Monday, May 4
+·
+3:05 AM
+0
+this month
+VISITS / MAY
+—
+no data yet
+AVG DRAFTED IN
+0
+visits
+PENDING REVIEW
+0
+notes
+SIGNED THIS WEEK
+Patients
+0
+All visits
+0
++
+No patients yet
+
+Start your first visit — we'll create a patient record for you along the way.
+
+Start your first visit
+Welcome to QuillMD
+You're in. Start your first visit whenever you're ready.
