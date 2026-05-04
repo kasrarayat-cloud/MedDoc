@@ -1,0 +1,22 @@
+{
+  "scenarios": [
+    {
+      "id": "B",
+      "name": "pediatric-ear",
+      "fatalError": "page.click: Timeout 4000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button:has-text(\"Upload audio\")')\u001b[22m\n"
+    },
+    {
+      "id": "C",
+      "name": "diabetes-htn",
+      "fatalError": "page.click: Timeout 4000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button:has-text(\"Upload audio\")')\u001b[22m\n"
+    },
+    {
+      "id": "I5",
+      "name": "fabrication-test",
+      "uploadFiredAt": 7783,
+      "pipelineMs": 93983,
+      "ready": true,
+      "visitId": "cmoq9eqgi003301qq3pg97kdw"
+    }
+  ]
+}

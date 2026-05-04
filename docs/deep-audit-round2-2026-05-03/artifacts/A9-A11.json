@@ -1,0 +1,54 @@
+{
+  "A9": [
+    {
+      "id": "future",
+      "dob": "2099-01-01",
+      "afterBody": "Dashboard Visits Patients Settings Q QuillMD / Visits Search patients, visits, codes… ⌘ K New visit QR NEW VISIT Start a new visit Pick the patient, then choose how you want to capture the encounter. Cancel 1 Patient 2 Visit details 3 Capture Who's this visit for? Search patients NAME DATE OF BIRTH EXTERNAL ID (optional) Cancel Create & continue VISIT SUMMARY PATIENT Not picked yet SPECIALTY Cardi",
+      "errorVisible": true
+    },
+    {
+      "id": "old",
+      "dob": "1900-01-01",
+      "afterBody": "Dashboard Visits Patients Settings Q QuillMD / Visits Search patients, visits, codes… ⌘ K New visit QR NEW VISIT Start a new visit Pick the patient, then choose how you want to capture the encounter. Cancel 1 Patient 2 Visit details 3 Capture Who's this visit for? Search patients NAME DATE OF BIRTH EXTERNAL ID (optional) Too many requests. Try again later. Cancel Create & continue VISIT SUMMARY ",
+      "errorVisible": true
+    },
+    {
+      "id": "epoch",
+      "dob": "0001-01-01",
+      "afterBody": "Dashboard Visits Patients Settings Q QuillMD / Visits Search patients, visits, codes… ⌘ K New visit QR NEW VISIT Start a new visit Pick the patient, then choose how you want to capture the encounter. Cancel 1 Patient 2 Visit details 3 Capture Who's this visit for? Search patients NAME DATE OF BIRTH EXTERNAL ID (optional) Cancel Create & continue VISIT SUMMARY PATIENT Not picked yet SPECIALTY Cardi",
+      "errorVisible": true
+    },
+    {
+      "id": "today",
+      "dob": "2026-05-03",
+      "afterBody": "Dashboard Visits Patients Settings Q QuillMD / Visits Search patients, visits, codes… ⌘ K New visit QR NEW VISIT Start a new visit Pick the patient, then choose how you want to capture the encounter. Cancel 1 Patient 2 Visit details 3 Capture Who's this visit for? Search patients NAME DATE OF BIRTH EXTERNAL ID (optional) Too many requests. Try again later. Cancel Create & continue VISIT SUMMARY ",
+      "errorVisible": true
+    },
+    {
+      "id": "empty",
+      "dob": "",
+      "afterBody": "Dashboard Visits Patients Settings Q QuillMD / Visits Search patients, visits, codes… ⌘ K New visit QR NEW VISIT Start a new visit Pick the patient, then choose how you want to capture the encounter. Cancel 1 Patient 2 Visit details 3 Capture Who's this visit for? Search patients NAME DATE OF BIRTH EXTERNAL ID (optional) Date of birth is required. Cancel Create & continue VISIT SUMMARY PATIENT N",
+      "errorVisible": true
+    }
+  ],
+  "A10": [
+    {
+      "field": "patient-name (10k char)",
+      "after": "Dashboard Visits Patients Settings Q QuillMD / Visits Search patients, visits, codes… ⌘ K New visit QR NEW VISIT Start a new visit Pick the patient, then choose how you want to capture the encounter. Cancel 1 Patient 2 Visit details 3 Capture Who's this visit for? Search patients NAME DATE OF BIRTH EXTERNAL ID (optional) Too many requests. Try again later. Cancel Create & continue VISIT SUMMARY "
+    }
+  ],
+  "A11": [
+    {
+      "form": "patient-create-empty",
+      "body": "Dashboard Visits Patients Settings Q QuillMD / Visits Search patients, visits, codes… ⌘ K New visit QR NEW VISIT Start a new visit Pick the patient, then choose how you want to capture the encounter. Cancel 1 Patient 2 Visit details 3 Capture Who's this visit for? Search patients NAME DATE OF BIRTH EXTERNAL ID (optional) Name is required. Cancel Create & continue VISIT SUMMARY PATIENT Not picked yet SPECIALTY Cardiology CAPTURE MODE Chosen on step 2 ESTIMATED ~30 sec processing · draft ready immediately after"
+    },
+    {
+      "form": "signup-empty",
+      "body": "Q QuillMD NEW TO QUILLMD Create your account Free for 14 days. No credit card. FULL NAME EMAIL PASSWORD At least 10 characters, with upper + lowercase letters and a digit. CONFIRM PASSWORD I agree to the terms of service and privacy policy. Create account Have an account? Sign in → HIPAA ready · BAA included · US-hosted QUILLMD · CLINICAL WORKSPACE Notes drafted in seconds. Signed by the clinician. SOAP, ICD-10, and CPT pulled from the encounter audio. Reviewable, exportable, HIPAA-eligible."
+    },
+    {
+      "form": "login-empty",
+      "body": "Q QuillMD WELCOME BACK Sign in Continue to your clinical workspace. EMAIL PASSWORD Forgot? Sign in No account? Sign up → HIPAA ready · BAA included · US-hosted QUILLMD · CLINICAL WORKSPACE Notes drafted in seconds. Signed by the clinician. SOAP, ICD-10, and CPT pulled from the encounter audio. Reviewable, exportable, HIPAA-eligible."
+    }
+  ]
+}
