@@ -70,6 +70,12 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
+# Standalone `docker run` healthcheck (compose-level healthcheck in
+# docker-compose.yml provides the same signal for the orchestrator;
+# this line covers `docker run` users + makes the image self-describing).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD wget --quiet --tries=1 --spider http://127.0.0.1:3000/api/health || exit 1
+
 # Standalone output puts server.js at apps/meddoc-pro/server.js when the
 # source app lives under apps/meddoc-pro in the workspace.
 CMD ["node", "apps/meddoc-pro/server.js"]
