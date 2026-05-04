@@ -80,7 +80,21 @@ export async function POST(req: Request): Promise<NextResponse> {
   const xff = hdrs.get('x-forwarded-for') ?? '';
   const realIp = hdrs.get('x-real-ip') ?? '';
   const callerIp = xff.split(',')[0]?.trim() || realIp || 'unknown';
-  const ipGate = checkRateLimit(callerIp, RATE_LIMITS.loginIp);
+  // Mirror of the loopback skip in nextauth.ts's authorize() (Phase 13
+  // h9-meddoc-e2e-residual). The pre-check fires once per signIn
+  // attempt; CI's e2e suite logs in 5+ times per run from loopback,
+  // which would re-trip the IP gate without this skip and surface as
+  // a "Too many attempts" error on the login page. The per-account
+  // brute-force protection in authorize itself (failedLoginCount +
+  // lockedUntil) still fires regardless of origin.
+  const isLoopback =
+    callerIp === '127.0.0.1' ||
+    callerIp === '::1' ||
+    callerIp === 'unknown';
+  const skipResult = { ok: true, count: 0, limit: 0, retryAfterSeconds: 0 };
+  const ipGate = isLoopback
+    ? skipResult
+    : checkRateLimit(callerIp, RATE_LIMITS.loginIp);
   if (!ipGate.ok) {
     const body: EntitlementResponse = {
       ok: false,
