@@ -10,6 +10,14 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests/e2e',
+  // apps/meddoc-pro is the legacy CRM — decommissioned (see
+  // docs/POST_MERGE_TODO.md §21). Active development is in
+  // apps/transcribe-md (QuillMD) and apps/marketing. testIgnore here
+  // keeps the spec files on disk for posterity (and reversibility if
+  // we ever revive the CRM) but stops Playwright from picking any of
+  // them up — the e2e suite reports 0 tests and exits 0 instead of
+  // dragging CI through the red baseline.
+  testIgnore: '**/*.spec.ts',
   // Phase 19 (h13-meddoc-e2e-tenancy-residual): pre-warm Turbopack
   // routes after webServer is ready but before tests start, so the
   // first cross-tenant page.goto() doesn't time out waiting for a
