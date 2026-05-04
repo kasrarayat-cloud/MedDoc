@@ -15,23 +15,25 @@
 //   - status='warn' → amber triangle, head warning-bright, sub warning, nudge
 //
 // Interaction:
-//   - Whole row is clickable → fires `qm:soap-jump` so Subagent A's body
-//     scrolls + sage edge-glows the matching SOAP section. Loose coupling.
-//   - Nudge button stops propagation + fires its own intent (the parent
-//     BumpModal flow uses suggestion text from `nudge.suggestion`).
+//   - Nudge button is the ONLY interactive element. Click / keyboard /
+//     screen-reader focus all flow through that one explicit control.
+//
+// HISTORICAL §P5.2 a11y restore: the row used to be `role="button"` with
+// its own onClick that fired `qm:soap-jump` → Subagent A scrolled the
+// SOAP body. axe-core flagged that as `nested-interactive` because the
+// nudge `<button>` lives inside the row. The whole-row click was a
+// nice-to-have; doctors interact with the explicit nudge button. The
+// jump-to-section affordance can come back as a separate action later
+// (a sibling button next to the nudge, or a SoapSection click rather
+// than EmCriterion → SoapSection coupling).
 // ============================================================================
 
 import { useCallback } from 'react';
 import { cn } from '@/lib/cn';
-import type { EmCriterion as EmCriterionType, SoapSectionKey } from '@/lib/em-coding-ui/types';
-import { SOAP_JUMP_EVENT, type SoapJumpDetail } from '@/lib/em-coding-ui/types';
+import type { EmCriterion as EmCriterionType } from '@/lib/em-coding-ui/types';
 
 interface EmCriterionProps {
   criterion: EmCriterionType;
-  /** Which SOAP section this criterion lives in (for jump-to-section). */
-  jumpTarget?: SoapSectionKey;
-  /** Optional explicit click handler — when set, replaces the default jump. */
-  onJump?: () => void;
   /** Optional nudge handler — called when "+ add 1 line" is clicked. */
   onNudge?: (suggestion: string) => void;
   /** Optimistic "applying..." state — adds a subtle pulse before server confirms. */
@@ -40,33 +42,14 @@ interface EmCriterionProps {
 
 export function EmCriterion({
   criterion,
-  jumpTarget,
-  onJump,
   onNudge,
   applying,
 }: EmCriterionProps) {
-  const handleClick = useCallback(() => {
-    if (onJump) {
-      onJump();
-      return;
+  const handleNudge = useCallback(() => {
+    if (onNudge && criterion.nudge) {
+      onNudge(criterion.nudge.suggestion);
     }
-    if (typeof window === 'undefined' || !jumpTarget) return;
-    const detail: SoapJumpDetail = {
-      section: jumpTarget,
-      criterionId: criterion.id,
-    };
-    window.dispatchEvent(new CustomEvent(SOAP_JUMP_EVENT, { detail }));
-  }, [onJump, jumpTarget, criterion.id]);
-
-  const handleNudge = useCallback(
-    (event: React.MouseEvent) => {
-      event.stopPropagation();
-      if (onNudge && criterion.nudge) {
-        onNudge(criterion.nudge.suggestion);
-      }
-    },
-    [onNudge, criterion.nudge]
-  );
+  }, [onNudge, criterion.nudge]);
 
   const isWarn = criterion.status === 'warn';
 
@@ -77,16 +60,6 @@ export function EmCriterion({
         isWarn && 'qm-lin-em-criterion--warn',
         applying && 'qm-lin-em-criterion--applying'
       )}
-      role="button"
-      tabIndex={0}
-      onClick={handleClick}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault();
-          handleClick();
-        }
-      }}
-      aria-label={`${criterion.head}. ${criterion.sub}`}
       data-criterion-id={criterion.id}
     >
       <span
