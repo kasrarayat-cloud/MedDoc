@@ -927,5 +927,96 @@ Per-element JSON for both passes: `docs/deep-audit-round2-2026-05-03/artifacts/p
   some of that space back.
 
 
+## 18. ✅ Phase 7-QA — P2-001 RFC 5321 email cap (.max(254)) — completed 2026-05-04
+
+### Why
+
+Round 2 deep audit P2-001: the signup `Zod` schema accepted any-length
+email — the QA bypass auto-confirmed a 180-char-local email straight
+into `users.email`. The 210-char DB row from that audit still sits
+there today (under the new cap, but originally let through unchecked).
+
+RFC 5321 caps `user@domain` at 254 chars. Without that floor:
+1. Pathological inputs grow the `users.email` column index unbounded
+2. Resend's `to:` length pre-flight 4xx's silently for real users
+3. Long emails wrap weirdly in nav / breadcrumbs / audit-log surfaces
+
+### What
+
+**Server-side `.max(254)` on every `z.string().email()` call across the auth + admin + visit surface (7 new + 3 already-capped):**
+
+| File | Field |
+|---|---|
+| `actions/auth-schemas.ts` `SignupSchema` | `email` |
+| `actions/auth-schemas.ts` `LoginSchema` | `email` |
+| `api/admin/users/[id]/grant-admin/route.ts` | `Body.confirmEmail` |
+| `api/admin/users/[id]/revoke-admin/route.ts` | `Body.confirmEmail` |
+| `api/admin/users/[id]/soft-delete/route.ts` | `Body.confirmEmail` |
+| `api/visits/[id]/export/email/route.ts` | `BodySchema.to` |
+| `api/visits/[id]/sign/route.ts` | `BodySchema.emailTo` |
+| `api/auth/forgot-password/route.ts` | `BodySchema.email` (already had it) |
+| `api/auth/resend-verification/route.ts` | `BodySchema.email` (already had it) |
+| `api/settings/change-email/route.ts` | `BodySchema.newEmail` (already had it) |
+
+**Client-side `maxLength={254}` on every `<input type="email">`:**
+`signup-form.tsx`, `login-form.tsx`, `forgot-password-form.tsx`, `settings/change-email-dialog.tsx`, `admin/users/_components/ConfirmationModal.client.tsx`. Hint only — the server schema is the real gate.
+
+### Schema extraction
+
+`LoginSchema` + `SignupSchema` extracted to `actions/auth-schemas.ts` so unit tests can import them without dragging in the prisma + next-auth runtime chain. `auth.ts` (a `'use server'` file) imports them internally; **not** re-exported because Next's server-actions boundary only allows async-function exports from a server-actions file (caught in CI by Turbopack on the first PR push).
+
+### Tests
+
+`apps/transcribe-md/tests/worker/auth-schemas.test.ts` — 8 cases:
+- Signup accepts a normal-length email
+- Signup accepts email at exactly 254 chars (RFC boundary)
+- Signup rejects 255 chars (one over the cap), and the issue is keyed to `.email`
+- Signup rejects 1024-char pathological local-part (DB-pollution sentinel — the 210-char audit row is below cap, so the sentinel uses the multi-KB shape an attacker would actually use)
+- Signup still rejects malformed emails regardless of length
+- Login accepts a normal email
+- Login rejects an email over 254 chars
+- **Static check** — greps every `z.string().email()` call across the 8 server-side Zod schemas (`auth/admin/visits` API surface) and asserts `.max(254)` chains on the same line. Catches the next dev who adds a new email field without the cap.
+
+### Tag + PR + release SHAs
+
+- PR: https://github.com/kasrarayat-cloud/MedDoc/pull/103
+- Squash-merge SHA: `343ef02`
+- Tag: `phase-7-qa-p2-001-fix`
+
+### Verification (post-deploy, against production)
+
+Headless Playwright: load `app.quillmd.com/signup`, set the email field to a 300-char string (bypassing the client `maxLength={254}` via DOM removal so we exercise the server gate), fill name/password/confirm/accept, submit.
+
+```
+[smoke] crafted email length=300
+[smoke] post-submit url: https://app.quillmd.com/signup
+[smoke] validation errors (1):
+  - Too big: expected string to have <=254 characters
+[smoke] PASS: 300-char email rejected, stayed on /signup with validation error.
+```
+
+### DB state
+
+```sql
+SELECT COUNT(*) FROM users WHERE length(email) > 254;
+-- 0 rows
+```
+
+Zero rows currently exceed the new cap — no migration SQL required for this fix.
+
+### Open follow-ups
+
+- The 210-char QA test row from the original Round 2 audit (`aaaa...@quillmd-test.local`, id `cmoq7wjfo001c01qqo6yn3tjy`) sits below the new cap so the schema doesn't flag it. It's harmless DB pollution from the audit run; clean it separately if you want a tidy `users` table:
+  ```sql
+  DELETE FROM users
+  WHERE length(email) > 80
+    AND email LIKE '%@quillmd-test.local'
+    AND id = 'cmoq7wjfo001c01qqo6yn3tjy';
+  ```
+- The User model's Prisma `email` column is `String` (PostgreSQL `TEXT`). PostgreSQL stores `TEXT` and `VARCHAR(254)` identically; no schema migration is needed because the API edge enforces the cap. If you ever want a hard column-level guarantee, add `@db.VarChar(254)` to the Prisma model and run `prisma migrate diff` — it'll generate a `CHECK (length(email) <= 254)` since pgvector-on-Postgres treats `VARCHAR(n)` as a constraint, not storage.
+
+
+
+
 
 
