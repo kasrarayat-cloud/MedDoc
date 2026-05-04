@@ -1337,6 +1337,48 @@ Second layer of QuillMD's HIPAA technical safeguard stack (Phase 6.1 = LUKS at-r
 - **Quarterly drill cadence** — calendar entry for Kasra to run `restore-drill.sh` on the first business day of each quarter. Without scheduled drills the offsite copy slowly becomes "untrusted by default."
 
 
+## 23. ✅ Ops — IP migration (5.231.107.93 → 147.189.172.8) + landing-page DNS cleanup — restored 2026-05-04
+
+### Why
+
+VPS provider Zap reassigned the public IP on the morning of 2026-05-04. After Kasra's first DNS edit at Namecheap, `https://quillmd.com/` failed for ~30% of external clients: the apex `quillmd.com` A record retained the old `5.231.107.93` alongside the new `147.189.172.8`, so Namecheap's authoritative nameservers were round-robining the two IPs and ~3 in 10 client lookups got the dead IP and timed out. Symptom on Kasra's laptop: "sometimes timeout, sometimes TLS error" — exactly the signature of intermittent dead-IP selection.
+
+### What
+
+Server-side: zero changes. Stack remained healthy throughout — 9/9 containers up, Caddy auto-TLS list already included `quillmd.com`, marketing container returned 200 to direct internal probes (`docker exec caddy wget http://marketing:3010/` and `curl --resolve quillmd.com:443:147.189.172.8 https://quillmd.com/`). Cause was purely DNS records at Namecheap.
+
+Kasra cleaned up the duplicate A records via the Namecheap dashboard. After cleanup, apex + www + pro converged to a single `147.189.172.8` record on both authoritative NS; app + admin still showed athena lag (see Open follow-ups).
+
+### Tag
+
+- Observation: `landing-page-restored`
+- Resolution timestamp (apex 200 from external DNS path): `2026-05-04T09:17:53Z`
+
+### Verification (at resolution)
+
+Authoritative state from each Namecheap NS:
+
+| Hostname | athena | apollo |
+|---|---|---|
+| `quillmd.com` (apex) | 147.189.172.8 | 147.189.172.8 ✅ |
+| `www.quillmd.com` | 147.189.172.8 | 147.189.172.8 ✅ |
+| `pro.quillmd.com` | 147.189.172.8 | 147.189.172.8 ✅ |
+| `app.quillmd.com` | 5.231.107.93 ⏳ | 147.189.172.8 |
+| `admin.quillmd.com` | 5.231.107.93 ⏳ | 147.189.172.8 |
+
+Public resolvers `1.1.1.1` / `8.8.8.8` / `9.9.9.9`: all return `147.189.172.8` for apex/www/app.
+
+External `curl` over real DNS (no `--resolve`):
+- `https://quillmd.com/` → HTTP/2 200 ✅
+- `https://www.quillmd.com/` → HTTP/2 200 ✅
+- `https://app.quillmd.com/` → HTTP/2 307 → `/login` ✅
+
+### Open follow-ups
+
+- **`app.quillmd.com` + `admin.quillmd.com` athena lag.** Apollo NS already serves new IP for both; athena still serves `5.231.107.93`. Public resolvers happen to have cached from apollo, so external clients are currently fine — but fragile: any resolver that expires its cache and queries athena would re-cache the dead IP. Wait 5–15 min for Namecheap edge propagation; if athena still wrong after 15 min, re-check the Namecheap UI for leftover `5.231.107.93` entries on the `app` and `admin` host records.
+- **TTL is `14400` (4 hr)** on the parked-DNS A records. Lower to `300` in Namecheap before any future planned IP change — would shrink the propagation tail from "hours" to "minutes" and largely avoid the round-robin window that caused this morning's outage.
+- **DNS-API-less ops.** The meddoc-pro VPS has no Namecheap/Cloudflare API token in any `.env*` file, so DNS edits remain manual via the Namecheap UI. If more IP migrations or DNS edits are anticipated, provision a Namecheap API token (Namecheap requires whitelisting the requesting IP — VPS public IP fits) and store it alongside other credentials. Bonus: enables Caddy DNS-01 ACME for wildcard certs, dropping HTTP-01 challenges on every new subdomain.
+- **Host user `claude` has no passwordless sudo** (recorded in §12). UFW-disable and `iptables -P FORWARD ACCEPT` during this morning's recovery required Kasra's root SSH session; the same constraint applies to any future privileged ops. Pattern from §12 (write idempotent script to `/tmp`, ask operator to `! sudo bash /tmp/script.sh`, surface output) remains the workaround.
 
 
 
@@ -1349,3 +1391,15 @@ Second layer of QuillMD's HIPAA technical safeguard stack (Phase 6.1 = LUKS at-r
 
 
 
+
+
+
+## 11.5 Phase 5.2 — 48h cache verification
+
+Verdict: 🟡 NO_DATA — zero judge calls in last 48h. Either nobody opened a SOAP tab, or the engine is still falling back to deterministic-only.
+
+Total judge calls: 0  |  Cache-engaged calls: 0  |  Cold (full-system): 0
+Avg input/output tokens: 0/0  |  Avg latency: 0ms
+Avg cost per call: $0  |  Total 48h cost: $0
+
+Full report: `docs/cache-verify-reports/cache-verify-20260504T220001Z.md`.
