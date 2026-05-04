@@ -14,14 +14,8 @@
 // ============================================================================
 
 import { useState, useCallback } from 'react';
-import type { EmCriterionGroup, SoapSectionKey } from '@/lib/em-coding-ui/types';
+import type { EmCriterionGroup } from '@/lib/em-coding-ui/types';
 import { EmCriterion } from './EmCriterion';
-
-const GROUP_TO_SOAP_SECTION: Record<EmCriterionGroup['id'], SoapSectionKey> = {
-  history: 'subjective',
-  exam: 'objective',
-  mdm: 'assessment',
-};
 
 interface EmCheckListProps {
   groups: EmCriterionGroup[];
@@ -49,7 +43,12 @@ export function EmCheckList({ groups, onNudge, applyingIds }: EmCheckListProps) 
   );
 
   return (
-    <div className="qm-lin-em-checklist" role="list" aria-label="Coding criteria">
+    // P5.2 hot-fix: dropped `role="list"` here. axe-core flagged it
+    // critical because the role demands `<li>` / `role="listitem"`
+    // children, and we render `<section>` groups instead. The
+    // sections already carry their own `aria-labelledby`, so screen
+    // readers still navigate them as titled regions.
+    <div className="qm-lin-em-checklist" aria-label="Coding criteria">
       {groups.map((group) => (
         <section
           key={group.id}
@@ -66,7 +65,6 @@ export function EmCheckList({ groups, onNudge, applyingIds }: EmCheckListProps) 
             <EmCriterion
               key={item.id}
               criterion={item}
-              jumpTarget={GROUP_TO_SOAP_SECTION[group.id]}
               onNudge={(suggestion) => handleNudge(item.id, suggestion)}
               applying={applyingIds?.has(item.id) ?? false}
             />
