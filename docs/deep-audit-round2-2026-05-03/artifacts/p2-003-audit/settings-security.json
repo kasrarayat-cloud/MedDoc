@@ -1,0 +1,52 @@
+{
+  "route": {
+    "path": "/settings/security",
+    "label": "settings-security"
+  },
+  "items": [
+    {
+      "tag": "a",
+      "role": null,
+      "type": null,
+      "name": null,
+      "id": null,
+      "text": "Go to dashboard",
+      "ariaLabel": null,
+      "className": "qm-lin-btn-primary",
+      "width": 118,
+      "height": 28,
+      "fontSize": "12px",
+      "paddingTop": "0px",
+      "paddingBottom": "0px",
+      "paddingLeft": "12px",
+      "paddingRight": "12px",
+      "parentTag": "div",
+      "parentClassName": "",
+      "parentHeight": 28,
+      "failsHigHeight": true,
+      "failsHigBoth": true
+    },
+    {
+      "tag": "a",
+      "role": null,
+      "type": null,
+      "name": null,
+      "id": null,
+      "text": "Sign in",
+      "ariaLabel": null,
+      "className": "hover:!text-linear-text-2",
+      "width": 40,
+      "height": 18,
+      "fontSize": "12.5px",
+      "paddingTop": "0px",
+      "paddingBottom": "0px",
+      "paddingLeft": "0px",
+      "paddingRight": "0px",
+      "parentTag": "div",
+      "parentClassName": "",
+      "parentHeight": 28,
+      "failsHigHeight": true,
+      "failsHigBoth": true
+    }
+  ]
+}

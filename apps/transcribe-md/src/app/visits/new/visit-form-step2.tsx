@@ -41,7 +41,7 @@ const FIELD_LABEL =
   'mb-1.5 block font-mono text-[10.5px] font-medium uppercase tracking-[0.07em] text-linear-text-3';
 
 const INPUT_CLS =
-  'block w-full rounded-md border border-linear-border bg-linear-surface-2 px-3 py-2.5 text-[14px] text-linear-text placeholder:text-linear-text-3 outline-none transition-colors focus:border-linear-sage focus:ring-2 focus:ring-linear-sage/30';
+  'qm-tap-44-input block w-full rounded-md border border-linear-border bg-linear-surface-2 px-3 py-2.5 text-[14px] text-linear-text placeholder:text-linear-text-3 outline-none transition-colors focus:border-linear-sage focus:ring-2 focus:ring-linear-sage/30';
 
 function formatDob(iso: string | null): string {
   return iso ? `b. ${iso.slice(0, 10)}` : 'No DOB on file';
