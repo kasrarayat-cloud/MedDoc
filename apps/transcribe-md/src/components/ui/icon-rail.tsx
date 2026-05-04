@@ -114,6 +114,7 @@ function RailRow({ item, active }: { item: RailItem; active: boolean }) {
     <Link
       href={item.href}
       aria-current={active ? 'page' : undefined}
+      className="qm-tap-44"
       style={{
         position: 'relative',
         display: 'flex',

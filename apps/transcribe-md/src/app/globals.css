@@ -207,6 +207,37 @@ body {
   cursor: pointer;
   transition: background-color 100ms ease, border-color 100ms ease, color 100ms ease;
 }
+/* Apple HIG 44pt mobile tap target — `min-height` wins over `height: 26px`
+ * on phone-width viewports so the trigger reaches the floor without
+ * disturbing the desktop chrome. */
+@media (max-width: 639px) {
+  .qm-lin-cmdk {
+    min-height: 44px;
+  }
+}
+
+/* --- Mobile tap-target utility (P2-003) ----------------------------------
+ * Add `qm-tap-44` to any inline-styled link/button whose desktop chrome
+ * is shorter than 44px. min-height wins over inline `height: X` because
+ * the two cooperate (computed height = max(min-height, height)) without
+ * specificity conflict. Desktop is untouched: the @media gate is mobile-
+ * only, so the original height passes through at >=640px.
+ *
+ * Use it on inert wrapper components (IconRail rail rows, TopNav brand
+ * link, dashboard tabs, profile-form inputs) where a Tailwind responsive
+ * prefix isn't available because the chrome is set inline. */
+@media (max-width: 639px) {
+  .qm-tap-44 {
+    min-height: 44px;
+  }
+  /* For text inputs/selects the same floor PLUS a 16px font-size keeps
+   * iOS Safari from auto-zooming on focus. Apply via `qm-tap-44-input`
+   * (kept distinct so chrome elements don't get a font-size override). */
+  .qm-tap-44-input {
+    min-height: 44px;
+    font-size: 16px;
+  }
+}
 .qm-lin-cmdk:hover {
   background: var(--color-linear-surface-3);
   border-color: var(--color-linear-border-strong);
@@ -315,6 +346,16 @@ body {
 .qm-lin-row--active {
   background: var(--color-linear-row-active);
 }
+/* Apple HIG 44pt floor on mobile. The desktop Linear-density 36px row
+ * stays untouched at >=640px; on phone, padding alone gets us close
+ * (10+10+content), min-height pushes the rest. */
+@media (max-width: 639px) {
+  .qm-lin-row {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+  }
+}
 
 /* --- Buttons -------------------------------------------------------------
  * `.qm-lin-btn` is the ghost / outline button used for every secondary
@@ -349,6 +390,12 @@ body {
   opacity: 0.45;
   cursor: not-allowed;
 }
+/* Apple HIG mobile floor. */
+@media (max-width: 639px) {
+  .qm-lin-btn {
+    min-height: 44px;
+  }
+}
 
 .qm-lin-btn-primary {
   display: inline-flex;
@@ -378,6 +425,12 @@ body {
 .qm-lin-btn-primary:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+/* Apple HIG mobile floor. */
+@media (max-width: 639px) {
+  .qm-lin-btn-primary {
+    min-height: 44px;
+  }
 }
 
 /* --- Spotlight — Cmd+K modal overlay -------------------------------------
@@ -3749,6 +3802,12 @@ body {
   border-color: rgba(255, 255, 255, 0.16);
   background: rgba(255, 255, 255, 0.025);
 }
+/* Apple HIG mobile floor (P2-003). */
+@media (max-width: 639px) {
+  .qm-lin-coding-override {
+    min-height: 44px;
+  }
+}
 .qm-lin-coding-override-caret {
   font-size: 9px;
   line-height: 1;
@@ -4005,6 +4064,14 @@ body {
   background: rgba(212, 164, 55, 0.12);
   border-color: rgba(212, 164, 55, 0.5);
 }
+/* Apple HIG mobile floor (P2-003). */
+@media (max-width: 639px) {
+  .qm-lin-em-nudge {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+}
 .qm-lin-em-criterion-jump {
   display: inline-flex;
   align-items: center;
@@ -4132,6 +4199,12 @@ body {
   color: var(--color-linear-text);
   background: rgba(255, 255, 255, 0.025);
   border-color: rgba(255, 255, 255, 0.16);
+}
+/* Apple HIG mobile floor (P2-003). */
+@media (max-width: 639px) {
+  .qm-lin-coding-confirm {
+    min-height: 44px;
+  }
 }
 .qm-lin-coding-confirm-label {
   display: inline-flex;
