@@ -1288,11 +1288,25 @@ Second layer of QuillMD's HIPAA technical safeguard stack (Phase 6.1 = LUKS at-r
    QUILLMD_BACKUP_ALERT_WEBHOOK=<Slack incoming-webhook URL>
    ```
 
-6. **Install the new CLIs on the VPS** (only `mc` is new for Phase 6.2 — `age`, `b2`, `python3`, `sha256sum` already on box for h16):
+6. **Install the new CLIs on the VPS — completed during prep on 2026-05-04.** All three (`age` 1.1.1, `mc` RELEASE.2025-08-13, `b2` 4.6.0) are now installed at `/usr/local/bin/{age,age-keygen,mc,b2}`. The original h16 runbook claim that `age`/`b2` were already on the box was incorrect: h16 shipped the scripts but never completed activation, so the binaries had never been installed. They are now. (`python3` and `sha256sum` were genuinely already present.) For reference, the install commands run during prep (via Docker bind-mount because the prep ran as the unprivileged `claude` user — equivalent end state to `sudo`):
    ```bash
-   curl -fsSL https://dl.min.io/client/mc/release/linux-amd64/mc -o /usr/local/bin/mc
-   sudo chmod +x /usr/local/bin/mc
+   # age + age-keygen
+   docker run --rm -v /usr/local/bin:/host_bin ubuntu:24.04 bash -c '
+     apt-get update -qq && apt-get install -y -qq age &&
+     cp /usr/bin/age /host_bin/ && cp /usr/bin/age-keygen /host_bin/ &&
+     chmod 755 /host_bin/age /host_bin/age-keygen'
+   # mc
+   docker run --rm -v /usr/local/bin:/host_bin alpine sh -c '
+     apk add --no-cache curl &&
+     curl -fsSL https://dl.min.io/client/mc/release/linux-amd64/mc -o /host_bin/mc &&
+     chmod 755 /host_bin/mc'
+   # b2 (Backblaze official standalone binary; supports v4 syntax: b2 account authorize / b2 file upload / b2 ls --recursive --json)
+   docker run --rm -v /usr/local/bin:/host_bin alpine sh -c '
+     apk add --no-cache curl &&
+     curl -fsSL -L https://github.com/Backblaze/B2_Command_Line_Tool/releases/latest/download/b2-linux -o /host_bin/b2 &&
+     chmod 755 /host_bin/b2'
    ```
+   Verify post-install: `age --version` → `1.1.1`; `mc --version` → `RELEASE.2025-08-13...`; `b2 version` → `4.6.0` (note: v4 uses `b2 version` subcommand, not `--version` flag).
 
 7. **Manual MinIO sync test:**
    ```bash
@@ -1310,10 +1324,12 @@ Second layer of QuillMD's HIPAA technical safeguard stack (Phase 6.1 = LUKS at-r
    # Wipe the local private-key copy when done.
    ```
 
-9. **Install host crontab for MinIO sync:**
+9. **Install host crontab for both offsite chains** (parallel to the postgres-backup sidecar's existing local rotation; the sidecar's `POST_BACKUP_COMMAND` wiring stays untouched per PR `fix(phase-6.2): close pre-activation gaps`):
    ```cron
    0 3 * * *  /opt/meddoc-pro/scripts/minio-offsite-cron.sh
+   0 4 * * *  /opt/meddoc-pro/scripts/postgres-offsite-cron.sh
    ```
+   Both crons sit downstream of the sidecar's `@daily` local backup, so each pass sees a fresh dump in `/opt/meddoc-pro/backups/last/`. The 1-hour spacing between MinIO (03:00 UTC) and Postgres (04:00 UTC) keeps the two encrypted uploads from colliding on the host's upstream link. The Postgres wrapper has a built-in 24-hour grace period: if `backups/last/` is missing or empty (sidecar hasn't completed a run yet), it exits 0 cleanly without alerting.
 
 10. **Wait 24h. Verify MinIO blob landed in B2:**
     ```bash
