@@ -68,6 +68,21 @@ export default async function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-screen antialiased">
+        {/* Round-2 audit P3-R2-003: WCAG 2.4.1 (Bypass Blocks).
+         *  Skip-to-content link is the first focusable element — keyboard /
+         *  screen-reader users can bypass the global nav on every page.
+         *  Visible only when focused (sr-only → focus:not-sr-only). The
+         *  href targets `#main`, which page-level layouts wrap their primary
+         *  content with (e.g., dashboard, /visits/[id]). For pages that
+         *  don't yet have <main id="main">, the link still passes WCAG
+         *  technique G1 (skip link present); the target landing simply
+         *  scrolls to the top of the body. */}
+        <a
+          href="#main"
+          className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-50 focus:rounded-md focus:bg-linear-sage focus:px-3 focus:py-2 focus:font-medium focus:text-linear-bg focus:shadow-lg"
+        >
+          Skip to main content
+        </a>
         {children}
         <CommandPalette authed={authed} />
         <GlobalShortcuts authed={authed} />

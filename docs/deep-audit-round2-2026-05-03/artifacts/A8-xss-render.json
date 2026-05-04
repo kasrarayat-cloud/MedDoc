@@ -1,0 +1,15 @@
+{
+  "alertFired": false,
+  "scriptInDom": {
+    "maliciousScripts": 1,
+    "maliciousImgs": 0,
+    "bodyContainsLiteralPayload": true,
+    "bodyContainsImgOnerror": true
+  },
+  "finalCheck": {
+    "url": "https://app.quillmd.com/patients",
+    "maliciousScripts": 1,
+    "maliciousImgs": 0,
+    "h1": "All patients"
+  }
+}

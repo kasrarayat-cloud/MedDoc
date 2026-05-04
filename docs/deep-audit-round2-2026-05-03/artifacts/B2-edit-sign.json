@@ -1,0 +1,61 @@
+{
+  "tests": [
+    {
+      "name": "B0-visit-state",
+      "state": {
+        "url": "https://app.quillmd.com/visits/cmoq6q5s4000p01qqhdngm77n",
+        "title": "Visit · QuillMD",
+        "bodyExcerpt": "Dashboard Visits Patients Settings Q QuillMD / Visits Search patients, visits, codes… ⌘ K New visit QB Dashboard QA-TEST Mei-Ling Park Visit · ready QA-TEST MEI-LING PARK CARDIOLOGY MRN QA-A-001 CC QA test scenario A NEEDS REVIEW Delete SOAP NOTE TRANSCRIPT CODES RX EXTRAS Copy SOAP S SUBJECTIVE REVIEWED Chief Complaint: Chest pain returned, started approximately three days ago. HPI: Ms. Park is a returning patient (last seen in February) who presents with a three-day history of dull, retroste",
+        "hasSignButton": true,
+        "hasEditButton": true,
+        "hasSignedBadge": false
+      }
+    },
+    {
+      "name": "B1-edit-draft-clicked",
+      "clicked": false
+    },
+    {
+      "name": "B1-edit-state",
+      "state": {
+        "hasTextarea": false,
+        "taValue": null,
+        "bodyExcerpt": "Dashboard\nVisits\nPatients\nSettings\nQ\nQuillMD\n/\nVisits\nSearch patients, visits, codes…\n⌘\nK\nNew visit\nQB\nDashboard\nQA-TEST Mei-Ling Park\nVisit · ready\nQA-TEST MEI-LING PARK\nCARDIOLOGY\nMRN QA-A-001\nCC QA test scenario A\nNEEDS REVIEW\nDelete\nSOAP NOTE\nTRANSCRIPT\nCODES\nRX\nEXTRAS\nCopy SOAP\nS\nSUBJECTIVE\nREVIEWED\n\nChief Complaint: Chest pain returned, started approximately three days ago.\n\nHPI: Ms. Park is"
+      }
+    },
+    {
+      "name": "B4-sign-modal",
+      "clicked": true,
+      "state": {
+        "hasModal": true,
+        "bodyExcerpt": "Dashboard Visits Patients Settings Q QuillMD / Visits Search patients, visits, codes… ⌘ K New visit QB Dashboard QA-TEST Mei-Ling Park Visit · ready QA-TEST MEI-LING PARK CARDIOLOGY MRN QA-A-001 CC QA test scenario A NEEDS REVIEW Delete SOAP NOTE TRANSCRIPT CODES RX EXTRAS Copy SOAP S SUBJECTIVE REVIEWED Chief Complaint: Chest pain returned, started approximately three days ago. HPI: Ms. Park is a returning patient (last seen in February) who presents with a three-day history of dull, retrosternal chest pain. Patient reports this is a recurrence of chest pain previously evaluated in February [prior workup/diagnosis not documented in this note — to be retrieved from chart]. Per patient, the pain is worse when lying down at night. She also reports chest tightness with stair climbing, which",
+        "buttons": [
+          "Search patients, visits, codes…⌘K",
+          "QB",
+          "Delete",
+          "SOAP Note",
+          "Transcript",
+          "Codes",
+          "Rx",
+          "Extras",
+          "Copy SOAP",
+          "Chief Complaint: Chest pain returned, started appr",
+          "Vitals:Blood pressure: 128/82 mmHgHeart rate: 76 b",
+          "Primary Clinical Consideration: Chest pain of unce",
+          "1. Diagnostics: Obtain ECG today; review results a",
+          "Copy SOAP",
+          "override▾",
+          "+ add 1 element",
+          "✓Confirm 99214 · sign⌘ ↵",
+          "Sign & Send",
+          "Copy for Epic",
+          "Copy for Athena"
+        ]
+      }
+    }
+  ],
+  "consoleErrs": [
+    "console: Failed to load resource: the server responded with a status of 404 ()"
+  ],
+  "allXhr": []
+}
