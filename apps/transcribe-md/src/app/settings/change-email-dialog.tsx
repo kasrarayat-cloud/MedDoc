@@ -266,6 +266,7 @@ export function ChangeEmailDialog({ currentEmail }: Props) {
                   type="email"
                   autoComplete="email"
                   required
+                  maxLength={254}
                   value={newEmail}
                   onChange={(e) => setNewEmail(e.target.value)}
                   disabled={pending}
