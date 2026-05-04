@@ -1,11 +1,19 @@
 // ============================================================================
-// PATCH /api/visits/[id] (T-M17.3 Phase 3 Commit 5)
+// GET   /api/visits/[id]  — full visit shape (smoke F-B-003 fix)
+// PATCH /api/visits/[id]  (T-M17.3 Phase 3 Commit 5)
 // ----------------------------------------------------------------------------
-// Edit a draft QUEUED visit — the small window between "I clicked a
-// capture-mode tile by mistake" and "the pipeline is actually running".
-// Once any input lands (audioKey, dictationAudioKey, or rawTextInput),
-// the visit becomes immutable via this route and the doctor's
-// corrective action is Delete-and-retry instead.
+// GET returns the same prisma row that /visits/[id]/page.tsx loads
+// server-side, so API consumers (Playwright harnesses, future
+// integrations) can read a visit without screen-scraping. Slim
+// status-only data still lives at /api/visits/[id]/status; this
+// route is the full object.
+//
+// PATCH edits a draft QUEUED visit — the small window between "I
+// clicked a capture-mode tile by mistake" and "the pipeline is
+// actually running". Once any input lands (audioKey,
+// dictationAudioKey, or rawTextInput), the visit becomes immutable
+// via this route and the doctor's corrective action is
+// Delete-and-retry instead.
 //
 // Editable fields: patientId, specialty, chiefComplaint, inputMode.
 // All optional in the body (undefined = leave unchanged, null clears
@@ -55,6 +63,80 @@ const BodySchema = z.object({
     }),
   inputMode: z.enum(INPUT_MODES).optional(),
 });
+
+export const GET = withApiHandler<{ id: string }>(
+  'api:visits:get',
+  async (_req, { params }) => {
+    const { id: visitId } = await params;
+
+    const session = await auth();
+    const userId = session?.user?.id;
+    if (!userId) return apiError('unauthorized', 401);
+
+    const visit = await prisma.transcribeVisit.findUnique({
+      where: { id: visitId },
+      select: {
+        id: true,
+        userId: true,
+        patientId: true,
+        patientName: true,
+        specialty: true,
+        chiefComplaint: true,
+        inputMode: true,
+        status: true,
+        signedAt: true,
+        deletedAt: true,
+        archivedAt: true,
+        patient: {
+          select: {
+            id: true,
+            name: true,
+            dateOfBirth: true,
+            externalId: true,
+            mrn: true,
+            insurance: true,
+            problemList: true,
+          },
+        },
+        createdAt: true,
+        updatedAt: true,
+        audioKey: true,
+        audioMimeType: true,
+        audioSizeBytes: true,
+        audioDurationSec: true,
+        audioUploadedAt: true,
+        dictationAudioKey: true,
+        dictationDurationSec: true,
+        rawTextInput: true,
+        transcriptRaw: true,
+        transcriptText: true,
+        speakerMap: true,
+        entities: true,
+        soapDraft: true,
+        critique: true,
+        soapFinal: true,
+        signedSoap: true,
+        needsReview: true,
+        reviewReason: true,
+        failureCategory: true,
+        manualRetryCount: true,
+        processingStartedAt: true,
+        processingFinishedAt: true,
+        processingCostCents: true,
+        icdCodes: true,
+        cptCodes: true,
+        rxDrafts: true,
+        referrals: true,
+        patientSummary: true,
+        confidenceScores: true,
+      },
+    });
+    // 404 on both "not found" AND "not yours" prevents ID enumeration.
+    if (!visit || visit.userId !== userId) return apiError('not found', 404);
+
+    return NextResponse.json({ visit }, { status: 200 });
+  }
+);
 
 export const PATCH = withApiHandler<{ id: string }>(
   'api:visits:edit',
