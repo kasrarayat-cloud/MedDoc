@@ -1,0 +1,4 @@
+{
+  "status": 403,
+  "body": "{\"error\":\"Email destination must match your account email.\",\"code\":\"INVALID_DESTINATION\",\"retry\":false}"
+}

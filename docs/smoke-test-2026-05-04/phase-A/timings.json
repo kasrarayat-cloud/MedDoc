@@ -1,0 +1,14 @@
+{
+  "phase": "A",
+  "email": "qa-smoke-1777863896718@quillmd-test.local",
+  "timings": [
+    {
+      "step": "01-marketing-load",
+      "ms": 1793
+    },
+    {
+      "step": "03-signup-to-dashboard",
+      "ms": 4627
+    }
+  ]
+}

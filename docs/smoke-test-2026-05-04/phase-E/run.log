@@ -1,0 +1,11 @@
+{"phase":"E","label":"28-create-paste-text-visit","status":"FAIL","durationMs":33094,"error":"page.fill: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('input[name=\"chiefComplaint\"]')\u001b[22m\n"}
+{"phase":"E","label":"29-paste-text-content","status":"FAIL","durationMs":1513,"error":"No textarea found on paste-text page"}
+{"phase":"E","label":"28-create-paste-text-visit","status":"FAIL","durationMs":320,"error":"POST /api/patients 429: {\"error\":\"Too many requests. Try again later.\"}"}
+{"phase":"E","label":"29-paste-text-content","status":"FAIL","durationMs":1568,"error":"No textarea found on paste-text page"}
+{"phase":"E","label":"28-create-paste-text-visit","status":"FAIL","durationMs":2887,"error":"patientId is not defined"}
+{"phase":"E","label":"29-paste-text-content","status":"PASS","durationMs":3873,"error":null}
+{"phase":"E","label":"30-31-32-pipeline-and-outputs","status":"FAIL","durationMs":203358,"error":"page.waitForTimeout: Target page, context or browser has been closed"}
+{"phase":"E","label":"30-31-32-pipeline-and-outputs","status":"FAIL","durationMs":274317,"error":"page.waitForTimeout: Target page, context or browser has been closed"}
+{"phase":"E","label":"28-create-paste-text-visit","status":"PASS","durationMs":3813,"error":null}
+{"phase":"E","label":"29-paste-text-content","status":"PASS","durationMs":4327,"error":null}
+{"phase":"E","label":"30-31-32-pipeline-and-outputs","status":"FAIL","durationMs":274132,"error":"page.waitForTimeout: Target page, context or browser has been closed"}
