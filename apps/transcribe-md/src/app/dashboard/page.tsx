@@ -260,6 +260,7 @@ function TabBar({
             href={t.href}
             scroll={false}
             aria-current={active ? 'page' : undefined}
+            className="qm-tap-44"
             style={{
               display: 'inline-flex',
               alignItems: 'center',

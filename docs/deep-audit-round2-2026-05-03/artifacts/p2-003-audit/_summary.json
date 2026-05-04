@@ -1,0 +1,47 @@
+{
+  "variant": "before",
+  "summary": [
+    {
+      "route": "dashboard",
+      "path": "/dashboard",
+      "total": 20,
+      "small": 20
+    },
+    {
+      "route": "visits",
+      "path": "/visits",
+      "total": 21,
+      "small": 21
+    },
+    {
+      "route": "visits-new-step2",
+      "path": "/visits/new?patientId=cmopi3c2j000d01qqwuhsfea0",
+      "total": 16,
+      "small": 13
+    },
+    {
+      "route": "visit-detail",
+      "path": "/visits/cmoq6q5s4000p01qqhdngm77n",
+      "total": 33,
+      "small": 22
+    },
+    {
+      "route": "patients",
+      "path": "/patients",
+      "total": 17,
+      "small": 10
+    },
+    {
+      "route": "settings",
+      "path": "/settings",
+      "total": 30,
+      "small": 30
+    },
+    {
+      "route": "settings-security",
+      "path": "/settings/security",
+      "total": 2,
+      "small": 2
+    }
+  ]
+}

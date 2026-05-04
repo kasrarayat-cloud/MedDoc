@@ -578,6 +578,7 @@ function Tabs({
             aria-selected={active}
             onClick={() => onChange(t.key)}
             aria-label={t.label}
+            className="qm-tap-44"
             style={{
               position: 'relative',
               padding: i === 0 ? '8px 14px 10px 0' : '8px 14px 10px',

@@ -204,7 +204,13 @@ function Field({
         {label}
       </label>
       {as === 'select' ? (
-        <select id={id} name={name} defaultValue={defaultValue} style={inputStyle}>
+        <select
+          id={id}
+          name={name}
+          defaultValue={defaultValue}
+          className="qm-tap-44-input"
+          style={inputStyle}
+        >
           {options?.map((o) => (
             <option key={o.value} value={o.value}>
               {o.label}
@@ -219,6 +225,7 @@ function Field({
           defaultValue={defaultValue}
           required={required}
           placeholder={placeholder}
+          className="qm-tap-44-input"
           style={inputStyle}
         />
       )}

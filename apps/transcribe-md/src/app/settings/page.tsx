@@ -171,6 +171,7 @@ export default async function SettingsPage() {
               <a
                 key={s.id}
                 href={`#${s.id}`}
+                className="qm-tap-44"
                 style={{
                   padding: '6px 8px',
                   height: 28,
