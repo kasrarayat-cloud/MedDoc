@@ -101,4 +101,10 @@ EXPOSE 3011
 ENV PORT=3011
 ENV HOSTNAME="0.0.0.0"
 
+# Standalone `docker run` healthcheck (compose-level healthcheck in
+# docker-compose.yml provides the same signal for the orchestrator;
+# this line covers `docker run` users + makes the image self-describing).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD wget --quiet --tries=1 --spider http://127.0.0.1:3011/api/health || exit 1
+
 CMD ["node", "apps/transcribe-md/server.js"]
