@@ -1,0 +1,6 @@
+{"phase":"A","label":"01-marketing-land","status":"PASS","durationMs":1793,"error":null}
+{"phase":"A","label":"02-find-signup-cta","status":"PASS","durationMs":119,"error":null}
+{"phase":"A","label":"03-signup","status":"PASS","durationMs":4772,"error":null}
+{"phase":"A","label":"04-dashboard-empty-state","status":"PASS","durationMs":10,"error":null}
+{"phase":"A","label":"05-settings-fill","status":"PASS","durationMs":4677,"error":null}
+{"phase":"A","label":"06-settings-persist","status":"PASS","durationMs":1127,"error":null}

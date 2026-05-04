@@ -1,0 +1,40 @@
+{"phase":"B","label":"07-add-patient","status":"FAIL","durationMs":46939,"error":"locator.click: Timeout 45000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: /add patient|new patient/i }).first()\u001b[22m\n"}
+{"phase":"B","label":"08-10-start-visit","status":"FAIL","durationMs":47498,"error":"locator.click: Timeout 45000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByLabel('Specialty')\u001b[22m\n"}
+{"phase":"B","label":"11-upload-audio","status":"FAIL","durationMs":45010,"error":"locator.setInputFiles: Timeout 45000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('input[type=\"file\"]').first()\u001b[22m\n"}
+{"phase":"B","label":"12-pipeline-wait","status":"FAIL","durationMs":482203,"error":"pipeline did not complete in 8 min (last status: null)"}
+{"phase":"B","label":"13-14-verify-outputs","status":"PASS","durationMs":17929,"error":null}
+{"phase":"B","label":"07-create-patient-inline","status":"FAIL","durationMs":50386,"error":"locator.fill: Timeout 45000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('input[name=\"name\"]')\u001b[22m\n"}
+{"phase":"B","label":"08-10-start-visit","status":"FAIL","durationMs":47638,"error":"locator.click: Timeout 45000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByLabel('Specialty')\u001b[22m\n"}
+{"phase":"B","label":"11-upload-audio","status":"FAIL","durationMs":45009,"error":"locator.setInputFiles: Timeout 45000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('input[type=\"file\"]').first()\u001b[22m\n"}
+{"phase":"B","label":"07-create-patient-inline","status":"FAIL","durationMs":49462,"error":"locator.fill: Timeout 45000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('input[placeholder=\"Jane Doe\"]')\u001b[22m\n"}
+{"phase":"B","label":"08-10-start-visit","status":"SKIP","durationMs":0,"error":"aborted after prior FAIL"}
+{"phase":"B","label":"11-upload-audio","status":"SKIP","durationMs":0,"error":"aborted after prior FAIL"}
+{"phase":"B","label":"12-pipeline-wait","status":"SKIP","durationMs":0,"error":"aborted after prior FAIL"}
+{"phase":"B","label":"13-14-verify-outputs","status":"SKIP","durationMs":0,"error":"aborted after prior FAIL"}
+{"phase":"B","label":"07-create-patient-inline","status":"FAIL","durationMs":30324,"error":"page.waitForURL: Timeout 25000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================"}
+{"phase":"B","label":"08-10-start-visit","status":"SKIP","durationMs":0,"error":"aborted after prior FAIL"}
+{"phase":"B","label":"11-upload-audio","status":"SKIP","durationMs":0,"error":"aborted after prior FAIL"}
+{"phase":"B","label":"12-pipeline-wait","status":"SKIP","durationMs":0,"error":"aborted after prior FAIL"}
+{"phase":"B","label":"13-14-verify-outputs","status":"SKIP","durationMs":0,"error":"aborted after prior FAIL"}
+{"phase":"B","label":"12-pipeline-wait","status":"FAIL","durationMs":482272,"error":"pipeline did not complete in 8 min (last status: null)"}
+{"phase":"B","label":"13-14-verify-outputs","status":"PASS","durationMs":17243,"error":null}
+{"phase":"B","label":"07-create-patient-inline","status":"FAIL","durationMs":28722,"error":"locator.waitFor: Timeout 25000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('heading', { name: /possible duplicate|already exist/i }) to be visible\u001b[22m\n"}
+{"phase":"B","label":"08-10-start-visit","status":"SKIP","durationMs":0,"error":"aborted after prior FAIL"}
+{"phase":"B","label":"11-upload-audio","status":"SKIP","durationMs":0,"error":"aborted after prior FAIL"}
+{"phase":"B","label":"12-pipeline-wait","status":"SKIP","durationMs":0,"error":"aborted after prior FAIL"}
+{"phase":"B","label":"13-14-verify-outputs","status":"SKIP","durationMs":0,"error":"aborted after prior FAIL"}
+{"phase":"B","label":"07-create-patient-via-api","status":"PASS","durationMs":4229,"error":null}
+{"phase":"B","label":"08-10-start-visit","status":"FAIL","durationMs":46847,"error":"locator.click: Timeout 45000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('option', { name: 'Cardiology' })\u001b[22m\n"}
+{"phase":"B","label":"11-upload-audio","status":"SKIP","durationMs":0,"error":"aborted after prior FAIL"}
+{"phase":"B","label":"12-pipeline-wait","status":"SKIP","durationMs":0,"error":"aborted after prior FAIL"}
+{"phase":"B","label":"13-14-verify-outputs","status":"SKIP","durationMs":0,"error":"aborted after prior FAIL"}
+{"phase":"B","label":"07-create-patient-via-api","status":"PASS","durationMs":3990,"error":null}
+{"phase":"B","label":"08-10-start-visit","status":"PASS","durationMs":2091,"error":null}
+{"phase":"B","label":"11-upload-audio","status":"PASS","durationMs":5475,"error":null}
+{"phase":"B","label":"12-pipeline-wait","status":"FAIL","durationMs":301300,"error":"pipeline did not complete in 8 min (last status: null)"}
+{"phase":"B","label":"13-14-verify-outputs","status":"SKIP","durationMs":0,"error":"aborted after prior FAIL"}
+{"phase":"B","label":"11-upload-audio-retry","status":"FAIL","durationMs":33225,"error":"audioKey did not appear in DB after upload click"}
+{"phase":"B","label":"12-pipeline-wait","status":"PASS","durationMs":903,"error":null}
+{"phase":"B","label":"13-14-verify-outputs","status":"PASS","durationMs":10026,"error":null}
+{"phase":"B","label":"12-pipeline-wait","status":"FAIL","durationMs":483224,"error":"pipeline did not complete in 8 min (last status: null)"}
+{"phase":"B","label":"13-14-verify-outputs","status":"PASS","durationMs":10515,"error":null}

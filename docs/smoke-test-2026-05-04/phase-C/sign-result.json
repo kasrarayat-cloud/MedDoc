@@ -1,0 +1,10 @@
+{
+  "visitId": "cmoqn96fe001501l543vfe1u2",
+  "status": "READY",
+  "progressHint": "Ready to review",
+  "needsReview": true,
+  "reviewReason": "Auto-polish could not fix 1 critical issue: Missing red-flag screening documentation for chest pain. Although the classic ACS symptoms are present, the note does not document screening for diaphoresis, syncope/presyncope, palpitations, or prior similar episodes — all standard red-flag screens for acute chest pain in a primary care setting. The transcript also contains no evidence these were asked.",
+  "audioDurationSec": 56,
+  "deletedAt": null,
+  "archivedAt": null
+}

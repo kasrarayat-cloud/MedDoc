@@ -1,0 +1,11 @@
+{
+  "visitId": "cmoqo0yxs001g01l5g739vwge",
+  "inputMode": "text_notes",
+  "finalStatus": "READY",
+  "rawTextInputLength": 1143,
+  "soapFinalLength": 5223,
+  "needsReview": true,
+  "soapPresent": true,
+  "reviewReason": "Auto-polish could not fix 1 critical issue: Missing red-flag screening for new-onset or changed headache pattern in a 55-year-old. Although the patient has a prior migraine diagnosis, this episode is notably longer than prior episodes (3 days vs. typical 1-2 days) and she is 55 years old. The note does not document screening for thunderclap onset, worst headache of life, progressive worsening, positional component, exertional onset, or systemic symptoms (weight loss, jaw claudication, scalp tenderness) that would be expected at this age to rule out giant cell arteritis, intracranial hypertension, or other secondary causes.",
+  "clinicalReasoningNote": "AI correctly flagged GCA / temporal arteritis risk for 55yo female with new headache pattern — exactly the right age-stratified red-flag escalation. Strong validation of the AI clinical reasoning layer."
+}

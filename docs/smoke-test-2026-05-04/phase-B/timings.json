@@ -1,0 +1,11 @@
+{
+  "phase": "B",
+  "patientId": "cmoqn951h001301l51ityvjgh",
+  "visitId": "cmoqn96fe001501l543vfe1u2",
+  "timings": [
+    {
+      "step": "11-audio-upload",
+      "ms": 5475
+    }
+  ]
+}

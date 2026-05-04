@@ -1,0 +1,3 @@
+{"phase":"G","label":"38-mobile-dashboard","status":"PASS","durationMs":4603,"error":null}
+{"phase":"G","label":"39-mobile-visit-detail","status":"PASS","durationMs":6728,"error":null}
+{"phase":"G","label":"40-mobile-navigation","status":"PASS","durationMs":5364,"error":null}
