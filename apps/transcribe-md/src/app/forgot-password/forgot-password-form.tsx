@@ -123,6 +123,7 @@ export function ForgotPasswordForm() {
           type="email"
           autoComplete="email"
           required
+          maxLength={254}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           style={{ ...inputStyle, marginTop: 6 }}
