@@ -168,7 +168,10 @@ export async function runLayer5SelfCritique(
     user,
     schema: CritiqueReport,
     maxTokens: 4096,
-    temperature: 0.2,
+    // Q2 fix-pack §08.2 — critique is the audit pass. Same SOAP audited
+    // twice should produce the same critique. Tightened from 0.2 to 0.1
+    // so safe_to_sign_without_review doesn't oscillate run-to-run.
+    temperature: 0.1,
   });
 
   await prisma.transcribeVisit.update({
