@@ -1502,9 +1502,9 @@ P2/P3 findings should land in subsequent batched-cleanup PRs (analogous to PRs #
 | PR-C | HIPAA tech — PHI-read audit + audit_logs REVOKE + MinIO SSE + backup fingerprint | #114 | ✅ MERGED — closes A05-P0-001..004; A09-P0-002 PARTIAL (REVOKE shipped + bypassed by bootstrap-user; see §24.C.1) |
 | PR-C.1 | audit_logs immutability — separate runtime role + drop meddoc superuser | — | 🟡 DEFERRED to Phase 7 (Postgres bootstrap-user constraint blocks pre-pilot fix; see §24.C.1) |
 | **PR-D** | AI safety — empty-transcript guard + ICD/CPT allowlist + pharmacology + weight | (this PR) | 🚧 OPEN — closes A06-P0-001 + A06-P0-002 fully; A06-P0-004 partial (RxNav deferred to Phase 7) |
-| PR-E | Data integrity — Rx warning unique + SOAP optimistic concurrency | — | pending |
-| PR-F | Auth hardening — disable `EMAIL_AUTO_CONFIRM` in prod + signup anti-enum + NextAuth GA pin | — | pending |
-| PR-G | Compliance docs — BAA reality + IR runbook + DR runbook | — | pending |
+| PR-E | Data integrity — Rx warning unique + SOAP optimistic concurrency | #118 | ✅ MERGED — closes A09-P0-001 + A09-P0-003 (migration applied live, smoke tests pass) |
+| PR-F | Auth hardening — disable `EMAIL_AUTO_CONFIRM` in prod + signup anti-enum + NextAuth pin | #119 | ✅ MERGED — closes A02-P0-001 + A02-P1-001 + A02-P1-004 (NextAuth pinned to 5.0.0-beta.31; v5 GA upgrade deferred — no GA tag yet on npm) |
+| **PR-G** | Compliance docs — BAA reality + IR runbook + DR runbook | (this PR) | 🚧 OPEN — closes A12-P0-001 + A12-P0-002 |
 | PR-H | Observability — Sentry source maps + Redis AOF + worker healthcheck + marketing | — | pending |
 | PR-I | A11y — color-contrast token + skip-link target + transcript audio keyboard | — | pending |
 | PR-J | Input validation — prompt-injection delimiters + audio magic-byte sniff | — | pending |
@@ -1793,3 +1793,58 @@ Closes Round 3 audit findings:
 2. Redeploy the worker container so the new pipeline guards + allowlist filters are live.
 3. Smoke: upload a 1-second silent clip → visit lands FAILED with reviewReason "Recording is 1.0s; need at least 3s of audio. Re-record with the conversation captured." The audit log shows `PIPELINE_REJECTED_TOO_SHORT`.
 4. Pre-pilot: pharmacist clinical review of `packages/ai/src/data/dose-ranges.ts` row-by-row before relying on the validator in production.
+
+---
+
+## 24.E 🛠 PR-E — Data integrity — 2026-05-05 (live + structural)
+
+Branch: `fix/round-3-pr-e-data-integrity` → MERGED as #118 (`9b0c42a`). Tag `round-3-pr-e-complete`.
+
+Closes:
+- **A09-P0-001** — RxWarningOverride compound `@@unique([visitId, warningId])` constraint added; existing rows deduped (oldest retained); `recordOverride()` catches Prisma P2002 + returns existing-row id idempotently. Sign gate's distinct-warning count cannot be inflated by re-clicking.
+- **A09-P0-003** — `transcribe_visits.soapVersion` column added; `saveSoapDraftAction(visitId, text, expectedVersion?)` uses atomic `updateMany WHERE soapVersion = expected`, returns 'conflict' shape on mismatch with `currentVersion + currentText`. Editor handles conflict with sticky toast + Reload action. Legacy fallback (no expectedVersion) preserved for deploy window.
+
+Live verification (this run):
+- Migration `20260505055900_round_3_pr_e_data_integrity` in `_prisma_migrations`
+- `tests/integrity/pr-e-data-integrity.test.sh` → all 5 assertions PASS
+
+---
+
+## 24.F 🛠 PR-F — Auth hardening — 2026-05-05
+
+Branch: `fix/round-3-pr-f-auth-hardening` → MERGED as #119 (`d063025`). Tag `round-3-pr-f-complete`.
+
+Closes:
+- **A02-P0-001** — `EMAIL_AUTO_CONFIRM` in production. `isAutoConfirmDomain()` now requires `NODE_ENV !== 'production'` OR explicit opt-in via `EMAIL_AUTO_CONFIRM_ALLOW_IN_PROD=true`. Default fails closed; QA harness can still opt in deliberately. 4 new vitest cases verify the gate.
+- **A02-P1-001** — Signup endpoint enumerated existing emails. `signupAction()` existing-email path now returns SAME `{ ok: true, redirect: '/check-email?…' }` shape as new-signup; bcrypt-equalized timing; sends "you have an account, sign in" email to the real user. Attacker probing existing accounts sees identical response + identical timing.
+- **A02-P1-004** — NextAuth pinned `^5.0.0-beta.30` → `5.0.0-beta.31` (exact). v5 GA upgrade DEFERRED — no GA tag on npm yet (`latest=4.24.14`, `beta=5.0.0-beta.31`).
+
+Operator step post-merge: confirm `EMAIL_AUTO_CONFIRM_ALLOW_IN_PROD` is NOT set in production `.env`; optionally remove `EMAIL_AUTO_CONFIRM_DOMAINS=quillmd-test.local` entirely (defense in depth).
+
+---
+
+## 24.G 🛠 PR-G — Compliance docs — 2026-05-05 (docs only)
+
+Branch: `docs/round-3-pr-g-compliance` (this PR).
+
+Closes:
+- **A12-P0-001** — Marketing claimed "have signed BAAs" while internal `BAA_CHECKLIST.md` showed every row "☐ NOT YET". Misrepresentation gap to pre-pilot covered-entity prospects.
+- **A12-P0-002** — No incident response runbook documented. HIPAA §164.308(a)(6) requires it.
+
+What ships:
+
+1. **`docs/COMPLIANCE_REGISTER.md`** — single source of truth for subprocessor BAA + DPA status. 9 subprocessor rows (Anthropic, OpenAI, Deepgram, Resend, Backblaze, Sentry, Zap Hosting, GitHub, DrChrono) with honest current status: every BAA marked 🟡 Pending pre-pilot. Pre-pilot launch gate listed explicitly: 6 subprocessors must move 🟡 → ✅ before first pilot customer.
+
+2. **`docs/runbooks/incident-response.md`** — 10-section runbook covering §1 severity classification, §2 detection signals, §3 first-15-minutes triage, §4 containment (PHI exposure path), §5 investigation (audit-log walks, Caddy logs, Sentry breadcrumbs), §6 HIPAA breach notification rules (60-day decision tree per 45 CFR §164.402-§164.408), §7 remediation, §8 blameless post-mortem template, §9 specific scenarios (suspicious admin, stuck worker, DB connection storm, Caddy 5xx storm), §10 escalation paths.
+
+3. **`docs/runbooks/disaster-recovery.md`** — RTO/RPO targets (pre-pilot: <4h/<24h; post-launch: <1h/<1h), backup inventory matrix, 7 recovery scenarios (single container down, Postgres data corrupt, MinIO bucket lost, full VPS lost, DNS hijack, region outage, B2 compromised), pre-pilot mandatory drill + quarterly post-pilot drill cadence.
+
+4. **Marketing copy reconciled** — `apps/marketing/src/app/hipaa/page.tsx` and `apps/marketing/src/app/pricing/pricing-faq.tsx` updated to honest forward-looking framing: "BAAs will be in place before your covered-entity PHI flows through" instead of "have signed BAAs". Reference to compliance register added.
+
+What's NOT in this PR:
+- ❌ Live BAA negotiations (operator-only; tracked in `COMPLIANCE_REGISTER.md`)
+- ❌ Breach-notification letter template (Phase 7; `docs/incidents/templates/`)
+- ❌ Quarterly compliance review runbook (Phase 7+ when team grows)
+- ❌ Per-finding-file updates in `docs/round-3-deep-audit-2026-05-04/findings/agent-12/` (the findings registry stays as-is; this PR's deferral notes in §24.G are the canonical resolution)
+
+Operator step post-merge: marketing copy is now defensible; BAA work continues per `COMPLIANCE_REGISTER.md` pre-pilot launch gate.
