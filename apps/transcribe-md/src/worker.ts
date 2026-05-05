@@ -249,6 +249,17 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       specialty: true,
       inputMode: true,
       user: { select: { practiceId: true } },
+      // Fix-Pack 1 Q0-2 / audit Finding 01.1 — pull patient demographic
+      // + safety context for L7c pediatric framing. Round 3 PR-D added
+      // weightKg + allergies to TranscribeMdPatient; the FK is
+      // NOT NULL since T-M17.2 so this select always populates.
+      patient: {
+        select: {
+          dateOfBirth: true,
+          weightKg: true,
+          allergies: true,
+        },
+      },
     },
   });
   if (!visit) throw new Error(`Visit ${visitId} not found`);
@@ -624,6 +635,16 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
             userId: visit.userId,
             soapFinal: soapFinalForFanout,
             entitiesJson,
+            // Fix-Pack 1 Q0-2 / audit Finding 01.1 — patient context
+            // for pediatric mg/kg/day framing. `patient` is non-null
+            // because TranscribeVisit.patientId is NOT NULL since
+            // T-M17.2; the field-level guards (DOB, weight) are
+            // resolved inside the layer.
+            patient: {
+              dateOfBirth: visit.patient.dateOfBirth,
+              weightKg: visit.patient.weightKg,
+              allergies: visit.patient.allergies,
+            },
           }),
       },
       {
