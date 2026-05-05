@@ -14,7 +14,7 @@ import { specialtyGuidance } from '../prompts/specialty-guidance';
 import type { ExtractedEntities } from './03-extract-entities';
 import { logAudit } from '@/lib/audit';
 
-const MODEL = 'claude-sonnet-4-6';
+const MODEL = 'claude-opus-4-7';
 
 export interface Layer4Input {
   visitId: string;
