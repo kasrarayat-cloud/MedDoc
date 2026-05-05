@@ -1534,6 +1534,16 @@ model TranscribeVisit {
   /// the capture hook skips those.
   soapL6Original String? @db.Text
 
+  /// Round 3 PR-E (A09-P0-003) — optimistic-concurrency token for
+  /// soapFinal edits. Two doctors editing the same SOAP in parallel
+  /// previously overwrote each other silently (last-write-wins).
+  /// `saveSoapDraftAction()` now passes the loaded version as
+  /// `expectedSoapVersion`; the update uses an atomic `updateMany`
+  /// with `WHERE soapVersion = expected` and increments on success.
+  /// A mismatch returns a 409-shaped result so the client can
+  /// surface "another edit happened, reload to see".
+  soapVersion Int @default(1)
+
   // ── T-M4: review flag ──
   /// Layer 5/6 can set this when critical issues can't be auto-fixed,
   /// or Layer 2 can set it when any speaker's confidence < 0.7.
@@ -1820,6 +1830,13 @@ model RxWarningOverride {
 
   overriddenAt DateTime @default(now()) @db.Timestamptz(6)
 
+  /// Round 3 PR-E (A09-P0-001) — same (visit, warning) pair can be
+  /// re-clicked by an anxious doctor or a flaky network retry. Without
+  /// this constraint the sign-gate's `count(distinct visit)` could be
+  /// fooled into permitting a sign by inflating the override count
+  /// while leaving warnings actually un-overridden. Enforced at the
+  /// DB layer; recordOverride() upserts on this key.
+  @@unique([visitId, warningId], name: "rx_warning_overrides_visit_warning_unique", map: "rx_warning_overrides_visitId_warningId_key")
   @@index([visitId])
   @@index([overriddenBy])
   @@map("rx_warning_overrides")
