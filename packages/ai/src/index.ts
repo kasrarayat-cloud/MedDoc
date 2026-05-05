@@ -18,9 +18,13 @@ export {
 } from './embed';
 export {
   claudeSonnet46CostCents,
+  claudeOpus47CostCents,
+  claudeCostCents,
   deepgramBatchCostCents,
   sonnetInputCentsPerM,
   sonnetOutputCentsPerM,
+  opusInputCentsPerM,
+  opusOutputCentsPerM,
   deepgramCentsPerMin,
   openaiEmbedSmallCentsPerM,
   openaiEmbedSmallCostCents,

@@ -11,7 +11,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { z } from 'zod';
 import { hashPrompt } from './prompt-hash';
 import { logAiCall } from './log';
-import { claudeSonnet46CostCents } from './pricing';
+import { claudeCostCents } from './pricing';
 import type { AiLogContext } from './types';
 import { logApiUsage, buildAnthropicUsage } from './api-usage';
 
@@ -99,7 +99,8 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
         latencyMs,
         inputTokens: response.usage.input_tokens,
         outputTokens: response.usage.output_tokens,
-        costUsdCents: claudeSonnet46CostCents(
+        costUsdCents: claudeCostCents(
+          args.model,
           response.usage.input_tokens,
           response.usage.output_tokens
         ),
@@ -119,7 +120,8 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
         latencyMs,
         inputTokens: response.usage.input_tokens,
         outputTokens: response.usage.output_tokens,
-        costUsdCents: claudeSonnet46CostCents(
+        costUsdCents: claudeCostCents(
+          args.model,
           response.usage.input_tokens,
           response.usage.output_tokens
         ),
@@ -145,7 +147,8 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
       latencyMs,
       inputTokens: response.usage.input_tokens,
       outputTokens: response.usage.output_tokens,
-      costUsdCents: claudeSonnet46CostCents(
+      costUsdCents: claudeCostCents(
+        args.model,
         response.usage.input_tokens,
         response.usage.output_tokens
       ),
@@ -241,7 +244,8 @@ export async function anthropicCompleteText(
       latencyMs,
       inputTokens: response.usage.input_tokens,
       outputTokens: response.usage.output_tokens,
-      costUsdCents: claudeSonnet46CostCents(
+      costUsdCents: claudeCostCents(
+        args.model,
         response.usage.input_tokens,
         response.usage.output_tokens
       ),

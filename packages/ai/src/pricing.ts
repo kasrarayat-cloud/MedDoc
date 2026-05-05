@@ -7,6 +7,7 @@
 //
 // Defaults reflect published rates as of the T-M4 implementation:
 //   Claude Sonnet 4.6   $3 / M input, $15 / M output
+//   Claude Opus 4.7     $15 / M input, $75 / M output
 //   Deepgram Nova-3 Med $0.0145 / min
 //   (OpenAI: not used in T-M4; left unset)
 //
@@ -15,6 +16,8 @@
 
 const DEFAULT_SONNET_INPUT_CENTS_PER_M = 300;   // $3.00 / M tokens
 const DEFAULT_SONNET_OUTPUT_CENTS_PER_M = 1500; // $15.00 / M tokens
+const DEFAULT_OPUS_INPUT_CENTS_PER_M = 1500;    // $15.00 / M tokens
+const DEFAULT_OPUS_OUTPUT_CENTS_PER_M = 7500;   // $75.00 / M tokens
 const DEFAULT_DEEPGRAM_CENTS_PER_MIN = 1.45;    // $0.0145 / min
 
 function envFloat(name: string, fallback: number): number {
@@ -42,6 +45,40 @@ export function claudeSonnet46CostCents(inputTokens: number, outputTokens: numbe
   const inCents = (inputTokens / 1_000_000) * sonnetInputCentsPerM();
   const outCents = (outputTokens / 1_000_000) * sonnetOutputCentsPerM();
   return Math.round(inCents + outCents);
+}
+
+/** Per-million-tokens rate for Claude Opus 4.7 input. */
+export function opusInputCentsPerM(): number {
+  return envFloat('CLAUDE_OPUS_47_INPUT_CENTS_PER_M', DEFAULT_OPUS_INPUT_CENTS_PER_M);
+}
+
+/** Per-million-tokens rate for Claude Opus 4.7 output. */
+export function opusOutputCentsPerM(): number {
+  return envFloat('CLAUDE_OPUS_47_OUTPUT_CENTS_PER_M', DEFAULT_OPUS_OUTPUT_CENTS_PER_M);
+}
+
+/** Integer cents for a Claude Opus 4.7 call. Mirrors `claudeSonnet46CostCents`:
+ *  rounded half-up so we never under-report; micro-token calls round to 0
+ *  but accumulate honestly across summed rows. */
+export function claudeOpus47CostCents(inputTokens: number, outputTokens: number): number {
+  const inCents = (inputTokens / 1_000_000) * opusInputCentsPerM();
+  const outCents = (outputTokens / 1_000_000) * opusOutputCentsPerM();
+  return Math.round(inCents + outCents);
+}
+
+/** Per-model dispatcher. Used by `anthropic.ts` so the AiCall row's
+ *  `costUsdCents` reflects the model that actually ran. Unknown models
+ *  return 0 (don't fabricate cost — let AiCall rows show $0 until
+ *  pricing for the new model is added explicitly). */
+export function claudeCostCents(model: string, inputTokens: number, outputTokens: number): number {
+  switch (model) {
+    case 'claude-opus-4-7':
+      return claudeOpus47CostCents(inputTokens, outputTokens);
+    case 'claude-sonnet-4-6':
+      return claudeSonnet46CostCents(inputTokens, outputTokens);
+    default:
+      return 0;
+  }
 }
 
 /** Per-minute rate for Deepgram Nova-3 Medical (batch or streaming). */
