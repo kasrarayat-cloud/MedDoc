@@ -1,5 +1,6 @@
 import path from 'node:path';
 import type { NextConfig } from 'next';
+import { withSentryConfig } from '@sentry/nextjs';
 
 const nextConfig: NextConfig = {
   output: 'standalone',
@@ -15,4 +16,25 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// Round 3 PR-H — A11-P1 source-map upload + release tagging.
+// withSentryConfig wraps the Next config so the build:
+//   1. uploads sourcemaps to Sentry (gated on SENTRY_AUTH_TOKEN)
+//   2. tags every event with the release ref so /releases shows commits
+//   3. hides the maps from the public bundle (silent: false → CI logs)
+// When SENTRY_AUTH_TOKEN is unset (dev / first deploy), the wrapper
+// degrades gracefully — events still flow but stack traces stay
+// minified. See docs/runbooks/sentry-setup.md.
+const sentryBuildOptions = {
+  org: process.env.SENTRY_ORG?.trim() || undefined,
+  project: process.env.SENTRY_PROJECT_TRANSCRIBE_MD?.trim() || undefined,
+  authToken: process.env.SENTRY_AUTH_TOKEN?.trim() || undefined,
+  silent: !process.env.CI,
+  widenClientFileUpload: true,
+  hideSourceMaps: true,
+  disableLogger: true,
+  // Skip the wrapper entirely when no auth token — avoids "missing
+  // SENTRY_AUTH_TOKEN" warnings during local pnpm dev.
+  dryRun: !process.env.SENTRY_AUTH_TOKEN,
+};
+
+export default withSentryConfig(nextConfig, sentryBuildOptions);
