@@ -19,13 +19,15 @@
 //     screen-reader focus all flow through that one explicit control.
 //
 // HISTORICAL §P5.2 a11y restore: the row used to be `role="button"` with
-// its own onClick that fired `qm:soap-jump` → Subagent A scrolled the
-// SOAP body. axe-core flagged that as `nested-interactive` because the
-// nudge `<button>` lives inside the row. The whole-row click was a
-// nice-to-have; doctors interact with the explicit nudge button. The
-// jump-to-section affordance can come back as a separate action later
-// (a sibling button next to the nudge, or a SoapSection click rather
-// than EmCriterion → SoapSection coupling).
+// its own onClick that fired a `qm:soap-jump` window CustomEvent. axe-core
+// flagged that as `nested-interactive` because the nudge `<button>` lives
+// inside the row. The whole-row click was a nice-to-have; doctors
+// interact with the explicit nudge button. The constant + interface for
+// that event were removed in the Phase-5.2 orphan-completion PR (see
+// em-coding-ui/types.ts header). The jump-to-section affordance can
+// come back as a separate action later (a sibling button next to the
+// nudge, or a SoapSection click rather than EmCriterion → SoapSection
+// coupling).
 // ============================================================================
 
 import { useCallback } from 'react';

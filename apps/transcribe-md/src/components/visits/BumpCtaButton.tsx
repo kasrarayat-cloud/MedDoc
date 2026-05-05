@@ -11,19 +11,17 @@
 //
 // On click:
 //   1. Calls `onClick` so the parent rail opens BumpModal (3-step apply)
-//   2. ALSO emits `qm:soap-highlight-criteria` so Subagent A's body applies
-//      the sage edge-glow + auto-scrolls to the first missing criterion.
-//      Loose coupling — no shared store.
+//   2. ALSO calls `onHighlight(criterionIds)` so the parent SoapEditor
+//      can flash the SOAP sections that contain the missing criteria.
+//      Direct prop coupling (replaces the orphan
+//      qm:soap-highlight-criteria CustomEvent — see
+//      em-coding-ui/types.ts header for the removal context).
 // ============================================================================
 
 import { useCallback } from 'react';
 import { cn } from '@/lib/cn';
 import { formatDelta } from '@/lib/em-coding-ui/revenueDelta';
-import {
-  SOAP_HIGHLIGHT_CRITERIA_EVENT,
-  type SoapHighlightCriteriaDetail,
-  type EmCode,
-} from '@/lib/em-coding-ui/types';
+import { type EmCode } from '@/lib/em-coding-ui/types';
 
 interface BumpCtaButtonProps {
   /** Currently suggested CPT (e.g. '99213'). */
@@ -34,10 +32,14 @@ interface BumpCtaButtonProps {
   revenueDelta: number;
   /** Human-readable gap descriptors — drives the secondary line. */
   gaps: string[];
-  /** Criterion ids of the gaps — emitted via the highlight event. */
+  /** Criterion ids of the gaps — passed to onHighlight so the parent
+   *  can map them to SOAP sections. */
   gapCriterionIds: string[];
   /** Open the BumpModal. */
   onClick: () => void;
+  /** Optional — parent uses this to pulse the SOAP sections that
+   *  contain the gap criteria. Silently no-ops when undefined. */
+  onHighlight?: (criterionIds: string[]) => void;
   /** Disabled in readonly (signed) visits. */
   disabled?: boolean;
 }
@@ -49,20 +51,16 @@ export function BumpCtaButton({
   gaps,
   gapCriterionIds,
   onClick,
+  onHighlight,
   disabled,
 }: BumpCtaButtonProps) {
   const handleClick = useCallback(() => {
     if (disabled) return;
-    if (typeof window !== 'undefined' && gapCriterionIds.length > 0) {
-      const detail: SoapHighlightCriteriaDetail = {
-        criterionIds: gapCriterionIds,
-      };
-      window.dispatchEvent(
-        new CustomEvent(SOAP_HIGHLIGHT_CRITERIA_EVENT, { detail })
-      );
+    if (gapCriterionIds.length > 0) {
+      onHighlight?.(gapCriterionIds);
     }
     onClick();
-  }, [onClick, disabled, gapCriterionIds]);
+  }, [onClick, onHighlight, disabled, gapCriterionIds]);
 
   // Sub-line uses gap count — language stays close to the mockup.
   const subLine =

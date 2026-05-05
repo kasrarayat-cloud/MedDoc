@@ -17,17 +17,18 @@
 //
 //   Step 3 — Confirm
 //     Doctor reviews the staged edits. "Apply & save" persists via the
-//     existing `saveSoapDraftAction` server action — the modal mutates
-//     the SOAP body the parent rail listens to (`qm:soap-edited`),
-//     triggering an immediate re-score.
+//     existing apply-additions endpoint (PR #132) — the modal mutates
+//     the SOAP body and the parent's CodingRail re-scores via the
+//     `currentSoapText` prop the SoapEditor passes down.
 //
 // HONORED contracts:
 //   - prefers-reduced-motion: reduce → no slide-in (CSS handles this)
 //   - Sign & Send is UNTOUCHED — the modal NEVER signs; it only stages
 //     SOAP additions and surfaces them to the doctor.
-//   - When backend wiring is incomplete (Subagent B's branch owns the
-//     `/api/visits/[id]/em-score` endpoint), `onApply` returns a stub
-//     OK and the rail performs an optimistic re-render.
+//   - `onApply` is wired by the parent (CodingRail.handleApplyAdditions
+//     in PR #132) to POST /api/visits/[id]/em-score/apply-additions.
+//     A failure response keeps the modal open with the server's error
+//     surfaced — there is no "pretend success" fallback.
 // ============================================================================
 
 import { useCallback, useEffect, useState } from 'react';
