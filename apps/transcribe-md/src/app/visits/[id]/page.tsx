@@ -161,6 +161,7 @@ export default async function VisitPage({
     critique: unknown;
     soapFinal: string | null;
     signedSoap: string | null;
+    soapVersion: number;
     needsReview: boolean;
     reviewReason: string | null;
     failureCategory: string | null;
@@ -219,6 +220,7 @@ export default async function VisitPage({
         critique: true,
         soapFinal: true,
         signedSoap: true,
+        soapVersion: true,
         needsReview: true,
         reviewReason: true,
         failureCategory: true,
@@ -438,6 +440,7 @@ export default async function VisitPage({
           critique={visit.critique}
           soapFinal={visit.soapFinal}
           signedSoap={visit.signedSoap}
+          soapVersion={visit.soapVersion}
           needsReview={visit.needsReview}
           reviewReason={visit.reviewReason}
           failureCategory={visit.failureCategory}
@@ -488,6 +491,7 @@ interface VisitBodyProps {
   critique: unknown;
   soapFinal: string | null;
   signedSoap: string | null;
+  soapVersion: number;
   needsReview: boolean;
   reviewReason: string | null;
   failureCategory: string | null;
@@ -615,6 +619,7 @@ async function VisitBody(props: VisitBodyProps) {
       visitId={props.visitId}
       inputMode={props.inputMode}
       soapText={soapText}
+      soapVersion={props.soapVersion}
       readonly={props.status === TranscribeVisitStatus.SIGNED}
       utterances={utterances}
       speakerMap={speakerMap}
