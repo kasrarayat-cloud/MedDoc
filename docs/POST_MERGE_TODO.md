@@ -1492,3 +1492,48 @@ P2/P3 findings should land in subsequent batched-cleanup PRs (analogous to PRs #
 - No fixes shipped in this PR. Audit-only.
 - Production code/config unmodified. Only writes are under `docs/round-3-deep-audit-2026-05-04/` and this section.
 - Verification of prior-audit fixes: Round-1 PDF/DOCX metadata fix (P1-001) confirmed held in both formats; Round-2 axe-color-contrast "clearance" debunked (rule globally suppressed in `a11y.spec.ts:113-119`, not fixed); Round-2 Zod-bounds (P2-001) partially held — password fields still unbounded.
+
+### Follow-up PR status
+
+| # | Title | PR | Status |
+|---|---|---|---|
+| **PR-A** | Secrets sweep — `.dockerignore` + `.env` cleanup + image rebuild + CI guard | (this PR) | 🚧 OPEN — closes A01-P0-001..003 + A02-P0-002 + A07-P3-001 |
+| PR-B | Edge security — sshd + UFW + fail2ban + evict ai-deal-hunter | — | pending |
+| PR-C | HIPAA tech — PHI-read audit + audit_logs REVOKE + MinIO SSE + backup fingerprint | — | pending |
+| PR-D | AI safety — empty-transcript guard + ICD/CPT allowlist + pharmacology + weight | — | pending |
+| PR-E | Data integrity — Rx warning unique + SOAP optimistic concurrency | — | pending |
+| PR-F | Auth hardening — disable `EMAIL_AUTO_CONFIRM` in prod + signup anti-enum + NextAuth GA pin | — | pending |
+| PR-G | Compliance docs — BAA reality + IR runbook + DR runbook | — | pending |
+| PR-H | Observability — Sentry source maps + Redis AOF + worker healthcheck + marketing | — | pending |
+| PR-I | A11y — color-contrast token + skip-link target + transcript audio keyboard | — | pending |
+| PR-J | Input validation — prompt-injection delimiters + audio magic-byte sniff | — | pending |
+| PR-K | Supply chain — NextAuth pin + base-image SHA + Dependabot + audit-ci allowlist | — | pending |
+| PR-L | Clinical resilience — Whisper fallback + BullMQ DLQ + bull-board | — | pending |
+
+---
+
+## 24.A 🛠 PR-A — Secrets sweep — 2026-05-04 (in-flight)
+
+Branch: `fix/round-3-pr-a-secrets-sweep` (off `chore/round-3-deep-audit-2026-05-04` because PR #111 is mergeable but not yet merged — PR-A auto-rebases clean once #111 lands).
+
+Closes Round 3 audit findings:
+- **A01-P0-001** Live secrets baked into shipped Docker images (root cause: `.dockerignore` whitelist gap)
+- **A01-P0-002** Leaked OpenAI key still on disk, rotation not completed
+- **A01-P0-003** World-writable `.env` files with live secrets
+- **A02-P0-002** `.env.backup` and `.env.local` mode 0755, readable by every local UNIX account
+- **A07-P3-001** `.env` mode 640 (now 600)
+
+### Structural changes
+
+1. **`.dockerignore`** rewritten to exclude `.env`, `.env.*`, `tests/**/.env.test`, `apps/*/.env`, `apps/*/.next/standalone/**/.env`, plus `.pem`/`.key`/`id_rsa*` and other secret-bearing patterns. Explicit re-allow of placeholder/template files only.
+2. **On-disk leftovers deleted** from the VPS: `/opt/meddoc-pro/.env.backup`, `/opt/meddoc-pro/.env.local`, `/opt/meddoc-pro/apps/meddoc-pro/.env.local` (all three were duplicates / dangling symlinks of the canonical `.env`).
+3. **`.env` mode tightened** from 0640 → 0600. Owner kept `claude:claude` (not `root:root`) because `docker compose` is invoked by the `claude` user and reads `env_file:` on the client side at parse time — `root:root + 600` would break compose for the operator. The security goal (no other UNIX user can read) is achieved by `0600` with `claude` owner.
+4. **All five COPY-`. .`-bearing images rebuilt** `--no-cache` against the new `.dockerignore`: `marketing`, `transcribe-md`, `transcribe-md-worker`, `meddoc-pro`, `db-migrate`. Each verified via `docker save … | tar -tvf - | grep .env` returning empty.
+5. **CI guard added** — `.github/workflows/secrets-scan.yml` runs `trufflesecurity/trufflehog@main` with `--only-verified` on every PR and on push to main. Diff-scan mode by design (does not re-scan history; old commits with rotated-and-now-dead values are not the threat model).
+6. **`docs/LAUNCH_CHECKLIST.md` §6** rewritten to reflect rotation done at vendor for all 8 secrets (OpenAI, Anthropic, Deepgram, Resend, AUTH_SECRET, DB_PASSWORD, MINIO_ROOT_PASSWORD, SCRIBE_SERVICE_TOKEN). The `.env` paste step is documented as the post-merge operator action.
+
+### Things explicitly NOT done in this PR
+
+- **Did not rebase / rewrite git history.** Rotated keys are dead values at the vendor; rebase doesn't help and creates merge headaches. The CI guard is diff-only so historical secrets don't block future PRs.
+- **Did not paste new secret values into `.env`.** That happens post-merge by the operator (Kasra) per the rewritten LAUNCH_CHECKLIST §6.
+- **Did not commit any `.env*` file.** Verify via `git diff --cached --stat | grep -E '\.env'` (must be empty).
