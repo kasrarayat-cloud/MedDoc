@@ -19,11 +19,15 @@ import { enqueueProcessVisit } from '@/lib/queue';
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 import { redactPhi } from '@meddoc/ai';
+import { logAudit } from '@/lib/audit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const MIN_CHARS = 30;
+// Round 3 PR-J — A07-P1 server-side ceiling. 5000 chars covers a
+// dense paragraph of typed shorthand; anything past that is either
+// pasted PHI (probably accidental) or an attack surface.
 const MAX_CHARS = 5000;
 
 const BodySchema = z.object({
@@ -50,6 +54,25 @@ export const POST = withApiHandler<{ id: string }>(
     }
     const parsed = BodySchema.safeParse(body);
     if (!parsed.success) {
+      // Round 3 PR-J — audit the rejection so a flood of oversize
+      // attempts surfaces in the audit log even when no DB write
+      // occurs. Length-only metadata; never log the rejected
+      // content (could be partial PHI).
+      const rawLen =
+        typeof (body as { text?: unknown })?.text === 'string'
+          ? ((body as { text: string }).text.length)
+          : null;
+      const tooLong = typeof rawLen === 'number' && rawLen > MAX_CHARS;
+      if (tooLong) {
+        void logAudit({
+          action: 'TEXT_INPUT_REJECTED_TOO_LARGE',
+          targetType: 'transcribe_visit',
+          targetId: visitId,
+          success: false,
+          errorCode: 'TEXT_TOO_LONG',
+          metadata: { length: rawLen, maxChars: MAX_CHARS },
+        });
+      }
       return apiError(`text must be ${MIN_CHARS}-${MAX_CHARS} characters`, 400);
     }
 
