@@ -75,13 +75,21 @@ interface CodingRailProps {
   /** Fired when the doctor accepts a bump suggestion via the modal. */
   onBumpAccepted?: (toCode: EmCode) => void;
   /**
-   * Optional callback the modal uses to persist SOAP additions. When
-   * unwired (Subagent B's branch lands the route), the rail short-circuits
-   * with `{ ok: true }` so the mockup state still threads end-to-end.
+   * Persists SOAP additions when the doctor accepts a bump suggestion.
+   * Wired to POST /api/visits/[id]/em-score/apply-additions by the
+   * parent (soap-editor.tsx). When the response carries a `newScore`,
+   * the rail re-renders with the bumped code.
    */
   onApplyAdditions?: (
     additions: Array<{ criterionId: string; text: string }>
-  ) => Promise<{ ok: boolean; error?: string }>;
+  ) => Promise<{ ok: boolean; error?: string; newScore?: EmScore }>;
+  /**
+   * Fired when the doctor clicks "Confirm <code> · sign". Parent
+   * opens its lifted SignAndSendModal (controlled-open mode). When
+   * undefined, the button is hidden — there's no fallback signing
+   * path inside the rail.
+   */
+  onConfirmSign?: () => void;
 }
 
 interface RescoreResult {
@@ -96,6 +104,7 @@ export function CodingRail({
   readonly,
   onBumpAccepted,
   onApplyAdditions,
+  onConfirmSign,
 }: CodingRailProps) {
   // Last known-good server score; fall back here on rescoring failures.
   const [score, setScore] = useState<EmScore>(initialScore);
@@ -232,17 +241,34 @@ export function CodingRail({
 
   const handleApplyAdditions = useCallback(
     async (additions: Array<{ criterionId: string; text: string }>) => {
-      if (onApplyAdditions) {
-        const result = await onApplyAdditions(additions);
-        if (result.ok && score.bump) {
-          onBumpAccepted?.(score.bump.toCode);
-        }
-        return result;
+      // Phase 5.2 stub completion — the parent (soap-editor.tsx) wires
+      // onApplyAdditions to POST /api/visits/[id]/em-score/apply-
+      // additions. The route returns the new UI EmScore so the rail
+      // re-renders with the bumped code without a full page reload.
+      // When the prop is unwired (e.g. unit tests), the modal still
+      // sees an error and stays open — no more silent "pretend success"
+      // fallback (that was the bug we shipped this PR to fix).
+      if (!onApplyAdditions) {
+        return {
+          ok: false,
+          error:
+            'Apply path is not wired. Reload the page or contact support.',
+        };
       }
-      // Standalone-build fallback — no backend wiring; pretend success so the
-      // mockup state still flows. Subagent B's merge replaces this path.
-      if (score.bump) onBumpAccepted?.(score.bump.toCode);
-      return { ok: true };
+      const result = await onApplyAdditions(additions);
+      if (result.ok) {
+        if (result.newScore) {
+          // Server-derived new score includes the post-merge code +
+          // groups + bump suggestion. Updating local state here means
+          // the rail flips from 99213 → 99214 (or whatever the new
+          // tier is) the moment the modal closes.
+          setScore(result.newScore);
+          setStale(false);
+          setUnavailable(false);
+        }
+        if (score.bump) onBumpAccepted?.(score.bump.toCode);
+      }
+      return result;
     },
     [onApplyAdditions, onBumpAccepted, score.bump]
   );
@@ -379,19 +405,25 @@ export function CodingRail({
               disabled={readonly}
             />
           ) : null}
+          {/* Phase 5.2 stub completion — confirm-sign now calls the
+              `onConfirmSign` prop which the parent wires to its lifted
+              SignAndSendModal open state. Pre-fix this dispatched a
+              `qm:request-sign` window event that had no listener (the
+              integration was deferred to "Subagent B's merge" that
+              never landed). When the prop is missing the button is
+              hidden — there is no fallback signing path inside the
+              rail. */}
+          {onConfirmSign ? (
           <button
             type="button"
             className="qm-lin-coding-confirm"
-            onClick={() => {
-              // Confirm-and-sign is owned by the existing Sign & Send flow; we
-              // emit a custom event for the page to wire up to the existing
-              // SignAndSendModal trigger. UNTOUCHED behaviour preserved.
-              if (typeof window !== 'undefined') {
-                window.dispatchEvent(
-                  new CustomEvent('qm:request-sign', { detail: { visitId } })
-                );
-              }
-            }}
+            onClick={() => onConfirmSign()}
+            disabled={readonly}
+            title={
+              readonly
+                ? 'This visit is read-only.'
+                : undefined
+            }
           >
             <span className="qm-lin-coding-confirm-label">
               <span className="qm-lin-coding-confirm-check" aria-hidden="true">
@@ -403,6 +435,7 @@ export function CodingRail({
               ⌘ ↵
             </span>
           </button>
+          ) : null}
           <div className="qm-lin-coding-cta-foot">
             <span className="qm-lin-coding-cta-foot-ama">
               AMA 2021 · time-based
