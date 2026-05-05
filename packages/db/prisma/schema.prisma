@@ -1521,6 +1521,23 @@ model TranscribeVisit {
   audioDurationSec Int?
   audioUploadedAt  DateTime?
 
+  /// Aggregated Deepgram per-utterance confidence — populated by Layer 1
+  /// after batch transcribe. Null for non-audio modes (text_notes) and
+  /// dictation runs that disabled utterance segmentation. Round 3 quality
+  /// fix-pack Q0-5. Shape:
+  ///   { mean: number,            // 0..1
+  ///     median: number,          // 0..1
+  ///     p10: number,             // 0..1 — bottom-decile utterance
+  ///     lowConfPct: number,      // 0..100 — utterances < threshold
+  ///     lowConfCount: number,
+  ///     totalUtterances: number,
+  ///     threshold: number }      // = LOW_CONFIDENCE_THRESHOLD (0.6)
+  /// L4 + L5 read this through the worker; when median < 0.55 OR
+  /// lowConfPct > 30, those layers expand their prompts to hedge
+  /// language and the worker also flips needsReview so the doctor
+  /// sees a banner before signing. Closes audit Findings 02.5 + 07.3.
+  audioConfidenceStats Json?
+
   // ── T-M5: dictation + text inputs ──
   /// MinIO object key for a voice dictation recording (inputMode
   /// voice_dictation). Separate column from audioKey so a future

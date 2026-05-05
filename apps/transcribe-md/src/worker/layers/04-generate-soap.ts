@@ -13,6 +13,11 @@ import prisma from '@meddoc/db';
 import { specialtyGuidance } from '../prompts/specialty-guidance';
 import type { ExtractedEntities } from './03-extract-entities';
 import { logAudit } from '@/lib/audit';
+import {
+  shouldFlagForReview,
+  LOW_CONFIDENCE_THRESHOLD,
+  type AudioConfidenceStats,
+} from './audio-confidence';
 
 const MODEL = 'claude-opus-4-7';
 
@@ -23,6 +28,14 @@ export interface Layer4Input {
   specialty: string;
   roleLabeledTranscript: string;
   entities: ExtractedEntities;
+  /** Round 3 quality fix-pack Q0-5 — visit-level Deepgram confidence
+   *  signal. When set AND `shouldFlagForReview(...)` is true, the L4
+   *  prompt is expanded with a hedge instruction so SOAP content
+   *  built on garbled transcript reads as "patient appears to
+   *  report …" rather than direct assertion. Null for text_notes
+   *  and for dictation runs without utterance segmentation. Closes
+   *  audit Findings 02.5 + 07.3. */
+  audioConfidenceStats: AudioConfidenceStats | null;
 }
 
 export async function runLayer4GenerateSoap(
@@ -57,11 +70,36 @@ export async function runLayer4GenerateSoap(
     });
   }
 
+  // Round 3 quality fix-pack Q0-5 (audit Findings 02.5 + 07.3) —
+  // when L1 reports the audio was mostly low-confidence, expand the
+  // prompt with a hedge instruction. Stronger model (Opus 4.7) is
+  // already on L4 per SA3 — the prompt change shapes how it phrases
+  // uncertainty rather than asking it to invent uncertainty out of
+  // thin air.
+  const audioStats = input.audioConfidenceStats;
+  const lowConfidence = audioStats ? shouldFlagForReview(audioStats) : false;
+  const audioQualityAlert =
+    lowConfidence && audioStats
+      ? [
+          'AUDIO QUALITY ALERT: this transcript was produced from audio',
+          `with median confidence ${audioStats.median.toFixed(2)} and`,
+          `${audioStats.lowConfPct.toFixed(0)}% of utterances below ${LOW_CONFIDENCE_THRESHOLD} confidence.`,
+          'When SOAP content derives heavily from low-confidence segments,',
+          'hedge the language: prefer "patient appears to report …" /',
+          '"audio suggests …" over direct assertions. Mark uncertain',
+          'quotes with "[unclear in recording]" inline. Do not fabricate',
+          'specifics — when a number/dose/duration is unclear in the',
+          'recording, write "[unclear in recording]" rather than guessing.',
+        ].join('\n')
+      : null;
+
   const system = [
     'You are a senior clinician writing a SOAP note from a clinical',
     'visit. Use ONLY the entities provided and the transcript as',
     'evidence. Write in a professional medical tone.',
     '',
+    audioQualityAlert,
+    audioQualityAlert ? '' : null,
     'Structure the note with these markdown headings exactly:',
     '',
     '## Subjective',
