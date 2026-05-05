@@ -1499,7 +1499,8 @@ P2/P3 findings should land in subsequent batched-cleanup PRs (analogous to PRs #
 |---|---|---|---|
 | PR-A | Secrets sweep — `.dockerignore` + `.env` cleanup + image rebuild + CI guard | #112 | 🚧 OPEN — closes A01-P0-001..003 + A02-P0-002 + A07-P3-001 |
 | PR-B | Edge security — sshd + UFW + fail2ban + evict ai-deal-hunter | #113 | 🚧 OPEN — closes A07-P0-001..003 |
-| PR-C | HIPAA tech — PHI-read audit + audit_logs REVOKE + MinIO SSE + backup fingerprint | #114 | 🚧 OPEN — closes A05-P0-001..004 + A09-P0-002 |
+| PR-C | HIPAA tech — PHI-read audit + audit_logs REVOKE + MinIO SSE + backup fingerprint | #114 | ✅ MERGED — closes A05-P0-001..004; A09-P0-002 PARTIAL (REVOKE shipped + bypassed by bootstrap-user; see §24.C.1) |
+| PR-C.1 | audit_logs immutability — separate runtime role + drop meddoc superuser | — | 🟡 DEFERRED to Phase 7 (Postgres bootstrap-user constraint blocks pre-pilot fix; see §24.C.1) |
 | **PR-D** | AI safety — empty-transcript guard + ICD/CPT allowlist + pharmacology + weight | (this PR) | 🚧 OPEN — closes A06-P0-001 + A06-P0-002 fully; A06-P0-004 partial (RxNav deferred to Phase 7) |
 | PR-E | Data integrity — Rx warning unique + SOAP optimistic concurrency | — | pending |
 | PR-F | Auth hardening — disable `EMAIL_AUTO_CONFIRM` in prod + signup anti-enum + NextAuth GA pin | — | pending |
@@ -1661,6 +1662,74 @@ Closes Round 3 audit findings:
 - ❌ **Did not re-encrypt existing MinIO objects.** SSE-S3 only encrypts NEW PUTs; pre-pilot has <100 audio files; sweep deferred to next maint window.
 - ❌ **Did not move MinIO to a LUKS-encrypted volume.** Phase 6.3 / post-pilot scope.
 - ❌ **Did not audit polling endpoints** (`/api/visits/[id]/progress`, `/api/visits/[id]/status`). They poll every few seconds during processing — auditing each call would create thousands of rows per visit. The page-level RSC audit covers the underlying read.
+
+---
+
+## 24.C.1 🛑 PR-C.1 — DEFERRED to Phase 7 — `audit_logs` immutability cannot be fully closed pre-pilot
+
+**Status:** 🟡 deferred. Round 3 audit finding **A09-P0-002** (audit_logs application-mutable, HIPAA §164.312(c) integrity safeguard) is partially closed by PR-C and **cannot be fully closed without a separate runtime DB role + container restart**, which is post-pilot scope.
+
+### What PR-C did + why it's not enough
+
+PR-C (#114) shipped `REVOKE UPDATE, DELETE, TRUNCATE ON audit_logs FROM meddoc`. Correct SQL — committed and verified in `_prisma_migrations`. But `meddoc` has TWO bypasses that make the REVOKE functionally a no-op:
+
+1. `meddoc` is the **bootstrap superuser** (cluster was initdb'd with `POSTGRES_USER=meddoc`). Postgres superusers bypass all access checks regardless of GRANT/REVOKE.
+2. `meddoc` is the **owner** of `audit_logs` (Prisma migrations create tables with the connecting role as owner). Owners bypass GRANT/REVOKE on their own tables.
+
+Lead caught this during the mega-merge live-run of `tests/integrity/audit-logs-immutable.test.sh` — the DELETE that should have errored "permission denied" instead succeeded.
+
+### Why PR-C.1 was deferred (cannot be applied as a simple migration)
+
+Lead drafted a fix: change owner to `audit_log_owner NOLOGIN` + drop meddoc to NOSUPERUSER. The migration was composed and run live in a single transaction. **Postgres rejected it:**
+
+```
+ERROR:  permission denied to alter role
+DETAIL:  The bootstrap user must have the SUPERUSER attribute.
+```
+
+This is a hardcoded constraint in `src/backend/commands/user.c` — `ALTER ROLE meddoc NOSUPERUSER` is rejected regardless of which superuser runs it, because `meddoc` is permanently flagged in `pg_authid` as the bootstrap user. No superuser, including itself, can override the flag. The transaction rolled back cleanly; live state is unchanged.
+
+**The proper fix (Option B) requires a separate runtime app role:**
+
+```sql
+CREATE ROLE meddoc_app WITH NOSUPERUSER LOGIN PASSWORD '<placeholder>';
+GRANT USAGE ON SCHEMA public TO meddoc_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO meddoc_app;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO meddoc_app;
+REVOKE UPDATE, DELETE, TRUNCATE ON TABLE audit_logs FROM meddoc_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE meddoc IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO meddoc_app;
+```
+
+Plus:
+- New `DB_PASSWORD_APP` secret in Bitwarden custody
+- `.env` line `DATABASE_URL=postgresql://meddoc_app:NEW_PW@postgres:5432/meddoc?schema=public`
+- `docker compose up -d --force-recreate` for transcribe-md + transcribe-md-worker + meddoc-pro + marketing
+- Every existing + future Prisma migration audited for `ALTER DEFAULT PRIVILEGES` forward-compat — if a future migration creates a table not granted to `meddoc_app`, the app silently can't read/write it
+
+### Why post-pilot is acceptable
+
+The audit's threat model for A09-P0-002 (audit_logs immutability) is **defense-in-depth against insider tampering with the integrity log**, not a primary attack surface. Pre-pilot, the residual risk is bounded by:
+
+- ✅ **No live PHI yet** — pilot launch is the inflection point; until then, `audit_logs` rows are mostly synthetic from smoke tests
+- ✅ **Small user count** — single-engineer team, no contractors with prod DB credentials
+- ✅ **DB credentials never leave operator custody** — `meddoc` `DB_PASSWORD` is in Kasra's Bitwarden + container env, no third-party access
+- ✅ **PR-C application-layer fixes still active** — `logAudit()` calls in 9 PHI-read paths, no UPDATE/DELETE/TRUNCATE endpoints in the API surface, REVOKE statement is committed (active against any non-bootstrap role)
+- ✅ **Multiple integrity signals corroborate audit_logs** — Sentry events, Caddy access logs, application structured logs
+
+The threat that remains: a malicious actor with `meddoc` DB credentials AND who knows to bypass the application code path can mutate `audit_logs`. That's a "compromise from inside the credential perimeter" scenario — significant if it happens, but the perimeter itself is the primary defense.
+
+### Tracking
+
+- **Ticket:** open a follow-up tracking issue referencing finding **A09-P0-002** + this deferral
+- **Owner:** Phase 7 (post-pilot)
+- **Pre-condition:** pilot launches successfully; if it doesn't, threat model re-evaluation may downgrade urgency further
+- **Reference:** `docs/runbooks/postgres-recovery.md` §4 — bootstrap-user constraint background
+- **Reference:** Lead's investigation findings inline in this PR (`docs/round-3-pr-c1-deferral`)
+
+### Bug also documented in PR-C row
+
+The **PR-C row** at the top of §24 should be read as: "**closes A05-P0-001..004 + A09-P0-002 PARTIALLY** (REVOKE statement committed; bypassed by bootstrap-user superuser; full closure deferred to Phase 7 PR-C.1)."
 
 ---
 
