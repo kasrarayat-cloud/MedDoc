@@ -80,13 +80,38 @@ interface SignAndSendModalProps {
   triggerVariant?: 'primary' | 'secondary';
   /** Disable the trigger while parent is saving edits, etc. */
   disabled?: boolean;
+  /** Phase 5.2 stub completion — optional controlled-open mode. When
+   *  `controlledOpen` is provided, the modal honors it as the source
+   *  of truth and ignores its internal state; the `Dialog.Trigger` and
+   *  any external opener (e.g. the CodingRail "Confirm <code> · sign"
+   *  button calling `onControlledOpenChange(true)`) both flip the
+   *  same parent state. When undefined, the modal uses its internal
+   *  state (existing behavior — backward compatible). */
+  controlledOpen?: boolean;
+  onControlledOpenChange?: (open: boolean) => void;
   /** @deprecated kept for back-compat; Linear V1 is single-theme. */
   theme?: SignAndSendModalTheme;
 }
 
 export function SignAndSendModal(props: SignAndSendModalProps) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  // Phase 5.2 stub completion — controlled-open mode lets the parent
+  // (soap-editor.tsx) lift state and open the modal from another
+  // button (CodingRail's "Confirm <code> · sign"). When the controlled
+  // props are absent, fall back to internal state (existing behavior).
+  const isControlled = props.controlledOpen !== undefined;
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = isControlled ? props.controlledOpen! : internalOpen;
+  const setOpen = useCallback(
+    (next: boolean) => {
+      if (isControlled) {
+        props.onControlledOpenChange?.(next);
+      } else {
+        setInternalOpen(next);
+      }
+    },
+    [isControlled, props]
+  );
   const [selected, setSelected] = useState<Set<Destination>>(
     () => new Set(['clipboard_epic', 'pdf'])
   );
