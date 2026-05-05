@@ -6,6 +6,7 @@ import prisma from '@meddoc/db';
 import { TranscribeVisitStatus } from '@prisma/client';
 import { findSpecialty } from '@meddoc/shared/specialties';
 import { auth } from '@/lib/nextauth';
+import { logAudit } from '@/lib/audit';
 import { AppFrame } from '@/components/ui/app-frame';
 import { Ic } from '@/components/ui/icon';
 import { type SpecialtyKind } from '@/components/ui/spec-chip';
@@ -236,6 +237,16 @@ export default async function VisitPage({
 
   if (!user) redirect('/login');
   if (!visit || visit.userId !== session.user.id) notFound();
+
+  // Round 3 PR-C — §164.312(b) PHI-read audit (A05-P0-004). Single
+  // visit detail page is the highest-volume PHI surface — every doctor
+  // visit-detail load lands a row.
+  void logAudit({
+    action: 'VIEWED_VISIT',
+    targetId: visit.id,
+    targetType: 'TranscribeVisit',
+    metadata: { source: 'rsc:/visits/[id]', status: visit.status },
+  });
 
   const hasInput =
     visit.audioKey !== null ||

@@ -14,6 +14,7 @@ import { redirect } from 'next/navigation';
 import prisma from '@meddoc/db';
 import { TranscribeVisitStatus } from '@prisma/client';
 import { auth } from '@/lib/nextauth';
+import { logAudit } from '@/lib/audit';
 import { AppFrame } from '@/components/ui/app-frame';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Ic } from '@/components/ui/icon';
@@ -128,6 +129,20 @@ export default async function VisitsPage({
       },
     }),
   ])) as [VisitRow[], number];
+
+  // Round 3 PR-C — §164.312(b) PHI-read audit (A05-P0-004). RSC reads
+  // PHI directly via prisma; the audit row records the doctor seeing
+  // the visit list, with the active filter as searchable metadata.
+  void logAudit({
+    action: 'VIEWED_VISIT_LIST',
+    targetType: 'TranscribeVisit',
+    metadata: {
+      source: 'rsc:/visits',
+      filter,
+      count: rows.length,
+      totalCount,
+    },
+  });
 
   const visits: DashboardVisit[] = rows.map(
     (v: VisitRow): DashboardVisit => ({

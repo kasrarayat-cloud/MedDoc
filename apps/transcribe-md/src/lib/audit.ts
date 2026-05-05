@@ -85,7 +85,17 @@ export type AuditAction =
   | 'AUDIO_UPLOADED'
   | 'DOC_EDITOR_SAVED'
   | 'DOC_EDITOR_AI_SUGGESTED'
-  | 'PHI_EXTRACTED_FROM_VOICE';
+  | 'PHI_EXTRACTED_FROM_VOICE'
+  // Round 3 PR-C — §164.312(b) PHI-READ audit gap (A05-P0-004)
+  | 'VIEWED_VISIT'
+  | 'VIEWED_VISIT_LIST'
+  | 'VIEWED_VISIT_AUDIO'
+  // Round 3 PR-C — read actions for VIEWED_PATIENT_LIST and
+  // VIEWED_PATIENT_FILE already exist in the Prisma enum (Phase 1
+  // legacy), but were never emitted by transcribe-md's PHI reads.
+  // Mirror them into the TS union so the call sites typecheck.
+  | 'VIEWED_PATIENT_LIST'
+  | 'VIEWED_PATIENT_FILE';
 
 export interface AuditLogInput {
   action: AuditAction;
