@@ -191,6 +191,13 @@ enum AuditAction {
   // mark session boundaries + duration only — no transcript content.
   REALTIME_SESSION_STARTED
   REALTIME_SESSION_ENDED
+
+  // Round 3 PR-C — close §164.312(b) PHI-READ audit gap (audit
+  // finding A05-P0-004). Every doctor-side PHI read now emits a
+  // row; mutations were already covered by Phase 17.
+  VIEWED_VISIT
+  VIEWED_VISIT_LIST
+  VIEWED_VISIT_AUDIO
 }
 
 /// Document lifecycle status

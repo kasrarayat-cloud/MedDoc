@@ -116,6 +116,43 @@ require_pubkey() {
 }
 
 # ---------------------------------------------------------------------------
+# Round 3 PR-C (audit A05-P1-004): verify the public key on disk matches
+# the operator-deployed expected fingerprint. Mirrors the same function in
+# infra/backup-offsite-sync.sh — same expected-file path, same fail-closed-
+# on-mismatch / warn-on-missing semantics. See that file for the full
+# rationale + recovery procedure.
+# ---------------------------------------------------------------------------
+verify_public_key_fingerprint() {
+  local expected_file="${EXPECTED_FINGERPRINT_FILE:-/etc/meddoc/expected-public-key-fingerprint.sha256}"
+  if [[ ! -f "$expected_file" ]]; then
+    log "WARN: ${expected_file} not present — fingerprint check SKIPPED."
+    log "WARN: Round 3 PR-C requires this file. Operator must run, ONCE,"
+    log "WARN: after deploying the canonical public key (one bootstrap step"
+    log "WARN: covers BOTH this script and backup-offsite-sync.sh):"
+    log "WARN:   sha256sum ${PUBLIC_KEY} | awk '{print \$1}' > ${expected_file}"
+    log "WARN:   chmod 644 ${expected_file}"
+    log "WARN: Continuing without fingerprint check (transition mode)."
+    return 0
+  fi
+
+  local actual expected
+  actual="$(sha256sum "$PUBLIC_KEY" | awk '{print $1}')"
+  expected="$(tr -d '[:space:]' < "$expected_file")"
+
+  if [[ "$actual" != "$expected" ]]; then
+    log "ERROR: public key fingerprint MISMATCH — refusing to encrypt."
+    log "ERROR:   path:     ${PUBLIC_KEY}"
+    log "ERROR:   actual:   ${actual}"
+    log "ERROR:   expected: ${expected} (from ${expected_file})"
+    log "ERROR: See infra/backup-offsite-sync.sh verify_public_key_fingerprint()"
+    log "ERROR: for the full failure-mode taxonomy + recovery procedure."
+    exit 1
+  fi
+
+  log "INFO: public key fingerprint verified (${actual:0:16}...)"
+}
+
+# ---------------------------------------------------------------------------
 # Stage the bucket. Uses `mc` against the MinIO API endpoint exposed on the
 # Docker bridge. The alias is set per-run so credential rotations take
 # effect on the next cycle without operator action.
@@ -253,6 +290,9 @@ main() {
   require_cli "tar"       "ships in coreutils"
 
   require_pubkey
+
+  # Round 3 PR-C — A05-P1-004 fingerprint check.
+  verify_public_key_fingerprint
 
   local stage_dir
   stage_dir="$(mktemp -d -p /var/tmp meddoc-minio-stage.XXXXXX)"
