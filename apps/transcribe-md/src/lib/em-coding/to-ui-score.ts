@@ -23,14 +23,27 @@ import type {
   EmScore as UiEmScore,
   EmCriterion,
   EmCriterionGroup,
+  EmOverride,
   EmTimeBand,
   BumpSuggestion as UiBumpSuggestion,
+  SectionPulseHint,
+  SoapSectionKey,
 } from '../em-coding-ui/types';
 import { revenueDelta } from '../em-coding-ui/revenueDelta';
 import {
   criterionIdForGapLabel,
+  sectionTargetFor,
   suggestionForCriterionId,
 } from './criterion-to-section';
+
+/** Engine `S/O/A/P` letter → UI section key. Used when projecting
+ *  bump-gap criterion ids onto SOAP-section pulse hints. */
+const LETTER_TO_KEY: Record<'S' | 'O' | 'A' | 'P', SoapSectionKey> = {
+  S: 'subjective',
+  O: 'objective',
+  A: 'assessment',
+  P: 'plan',
+};
 
 /** AMA 2021 time bands (rubric §1.1/§1.2). Returned in seconds for UI consistency. */
 const TIME_BANDS: Record<string, { min: number; max: number }> = {
@@ -251,8 +264,38 @@ function deriveBump(score: EngineEmScore): UiBumpSuggestion | null {
   };
 }
 
-/** The integration adapter. */
-export function engineToUiScore(engine: EngineEmScore, visitTimeSec = 0): UiEmScore {
+/** Derive the per-section pulse hints from the engine's bump gaps:
+ *  every section that contains at least one gap-bearing criterion is
+ *  marked `'boost'`. The SOAP body listens to this map (via the parent
+ *  `<SoapEditor>` props chain — no runtime CustomEvent) and renders
+ *  amber pulse dots on the relevant section heads.
+ *
+ *  Pre-2026-05-05 this map was always undefined and the body listened
+ *  for an orphan `qm:em-boost-hints` event that nothing dispatched.
+ *  See em-coding-ui/types.ts header for the full removal context. */
+function deriveSectionPulseHints(
+  engine: EngineEmScore
+): Partial<Record<SoapSectionKey, SectionPulseHint>> | undefined {
+  if (!engine.bumpGaps || engine.bumpGaps.length === 0) return undefined;
+  const hints: Partial<Record<SoapSectionKey, SectionPulseHint>> = {};
+  for (const label of engine.bumpGaps) {
+    const id = criterionIdForGapLabel(label);
+    const target = sectionTargetFor(id);
+    if (!target) continue;
+    hints[LETTER_TO_KEY[target.section]] = 'boost';
+  }
+  return Object.keys(hints).length > 0 ? hints : undefined;
+}
+
+/** The integration adapter.
+ *  `existingOverride` lets the caller hydrate the doctor-set override
+ *  from `transcribe_visits.cptCodes.em.override` so the rail renders
+ *  the doctor's chosen code on initial load + after re-scores. */
+export function engineToUiScore(
+  engine: EngineEmScore,
+  visitTimeSec = 0,
+  existingOverride?: EmOverride
+): UiEmScore {
   return {
     suggestedCode: engine.code,
     visitType: engine.visitType,
@@ -270,7 +313,8 @@ export function engineToUiScore(engine: EngineEmScore, visitTimeSec = 0): UiEmSc
       : undefined,
     groups: deriveGroups(engine),
     bump: deriveBump(engine),
-    override: undefined,
+    override: existingOverride,
+    sectionPulseHints: deriveSectionPulseHints(engine),
     computedAt: new Date().toISOString(),
   };
 }

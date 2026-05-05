@@ -111,7 +111,9 @@ export type AuditAction =
   | 'AUDIO_REJECTED_FILE_TOO_LARGE'
   | 'TEXT_INPUT_REJECTED_TOO_LARGE'
   // Coding-coach bump persistence (Phase 5.2 stub completion)
-  | 'EM_BUMP_APPLIED';
+  | 'EM_BUMP_APPLIED'
+  // Coding-coach override persistence (Phase 5.2 orphan-completion)
+  | 'EM_OVERRIDE_APPLIED';
 
 export interface AuditLogInput {
   action: AuditAction;

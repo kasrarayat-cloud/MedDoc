@@ -239,6 +239,14 @@ enum AuditAction {
   // the server merges the additions into the SOAP draft + re-runs the
   // L7b CPT scorer.
   EM_BUMP_APPLIED
+
+  // Coding-coach override persistence (Phase 5.2 orphan-completion
+  // follow-up to PR #132). Emitted when the doctor uses the override
+  // dropdown to set a CPT code different from the AI suggestion.
+  // Metadata carries { fromCode, toCode, reason? }; the human-readable
+  // override is also persisted at `cptCodes.em.override` for the next
+  // page load.
+  EM_OVERRIDE_APPLIED
 }
 
 /// Document lifecycle status

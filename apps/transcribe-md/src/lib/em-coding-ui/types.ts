@@ -145,39 +145,29 @@ export interface EmScore {
 }
 
 // ============================================================================
-// CustomEvent contracts — loose coupling between rail + SOAP body
+// Rail ↔ SOAP body coupling — direct prop callbacks, NOT window CustomEvents.
+// ----------------------------------------------------------------------------
+// The Phase-5.2 design originally used `window.dispatchEvent(...)` for loose
+// coupling between rail + body, but every dispatcher landed without a
+// listener (and vice versa) because Subagent A's branch never merged. The
+// QA Interaction Auditor caught five orphan endpoints in 2026-05-05's
+// audit. We removed the CustomEvent constants entirely and switched to
+// direct prop coupling — same shape PR #132 used for the bump-additions
+// flow:
+//
+//   - SOAP edits → parent `soap-editor.tsx` passes `currentSoapText` to
+//     `<CodingRail>`; the rail debounces and calls POST /em-score
+//     itself. (Replaces the SOAP_EDITED_EVENT contract.)
+//   - Bump-CTA highlight → `<BumpCtaButton>` calls `onHighlight(criterionIds)`;
+//     parent maps to SOAP section keys + sets `highlightedSections`
+//     state. (Replaces SOAP_HIGHLIGHT_CRITERIA_EVENT.)
+//   - Override → `<CodingRail>` calls `onApplyOverride(code, reason?)`;
+//     parent fetches POST /em-score/override + updates emScore on
+//     success. (Replaces EM_OVERRIDE_EVENT — also adds the missing
+//     server route + EM_OVERRIDE_APPLIED audit row.)
+//   - Boost hints / section pulse dots → derived from
+//     `EmScore.sectionPulseHints` (server-computed); no runtime event.
+//
+// SOAP_JUMP_EVENT was deliberately removed in the §P5.2 a11y restore
+// (see EmCriterion.tsx) — the constant + interface are now gone too.
 // ============================================================================
-
-/** Fired by the SOAP body whenever its content meaningfully changes. */
-export const SOAP_EDITED_EVENT = 'qm:soap-edited';
-export interface SoapEditedDetail {
-  visitId: string;
-  /** The current full SOAP markdown body. */
-  soapText: string;
-}
-
-/** Fired by the rail when the doctor accepts a bump → SOAP body highlights gap criteria. */
-export const SOAP_HIGHLIGHT_CRITERIA_EVENT = 'qm:soap-highlight-criteria';
-export interface SoapHighlightCriteriaDetail {
-  /** Criterion ids that need the doctor's attention. */
-  criterionIds: string[];
-  /** Optional first-section to scroll to (subjective / plan / etc). */
-  scrollTo?: SoapSectionKey;
-}
-
-/** Fired by the override dropdown — backend wiring belongs to Subagent B. */
-export const EM_OVERRIDE_EVENT = 'qm:em-override';
-export interface EmOverrideDetail {
-  visitId: string;
-  code: EmCode;
-  reason?: string;
-}
-
-/** Fired by an EmCriterion row's "Jump to section" link. */
-export const SOAP_JUMP_EVENT = 'qm:soap-jump';
-export interface SoapJumpDetail {
-  /** Target section (subjective / objective / assessment / plan). */
-  section: SoapSectionKey;
-  /** Optional criterion id to highlight inside the section. */
-  criterionId?: string;
-}
