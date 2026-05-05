@@ -20,6 +20,11 @@ const SECTION_BODY: React.CSSProperties = {
   lineHeight: 1.7,
   color: 'var(--color-linear-text-2)',
 };
+const LINK: React.CSSProperties = {
+  color: 'var(--color-linear-sage-bright)',
+  textDecoration: 'underline',
+  textDecorationColor: 'rgba(122,166,140,0.4)',
+};
 
 export default function HipaaPage() {
   return (
@@ -84,15 +89,26 @@ export default function HipaaPage() {
               <p style={SECTION_BODY}>
                 AshTech Group will execute a Business Associate Agreement with
                 any Covered Entity or Business Associate customer before PHI
-                is sent to QuillMD. Our subprocessors that process PHI on
-                our behalf have signed BAAs with us:
+                is sent to QuillMD. Each subprocessor that processes PHI on
+                our behalf will have an executed BAA in place before that
+                customer&apos;s PHI flows through their integration:
               </p>
               <ul style={{ ...SECTION_BODY, paddingLeft: 20, listStyle: 'disc' }}>
                 <li>Anthropic (Claude models)</li>
                 <li>OpenAI (embeddings)</li>
                 <li>Deepgram (audio transcription, Nova-3 Medical model)</li>
                 <li>Resend (email delivery)</li>
+                <li>Backblaze B2 (encrypted offsite backup)</li>
+                <li>Sentry (error monitoring; PHI redacted at source)</li>
               </ul>
+              <p style={SECTION_BODY}>
+                We maintain an internal compliance register that tracks BAA
+                status for every subprocessor. Pre-pilot, the BAA execution
+                step is part of customer onboarding rather than a one-time
+                vendor sign-off; the per-subprocessor status is reviewable
+                by covered-entity prospects upon request via{' '}
+                <a href="/contact" style={LINK}>contact@quillmd.com</a>.
+              </p>
             </div>
 
             <div>
