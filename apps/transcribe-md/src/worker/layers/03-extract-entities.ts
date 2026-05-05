@@ -13,9 +13,15 @@
 // ============================================================================
 
 import { z } from 'zod';
-import { modelClient, type DeepgramUtterance } from '@meddoc/ai';
+import {
+  modelClient,
+  type DeepgramUtterance,
+  wrapAsData,
+  delimiterSystemSuffix,
+} from '@meddoc/ai';
 import prisma from '@meddoc/db';
 import type { SpeakerMap } from './02-speaker-roles';
+import { logAudit } from '@/lib/audit';
 
 const MODEL = 'claude-sonnet-4-6';
 
@@ -378,7 +384,28 @@ export async function runLayer3ExtractEntities(
     prompts = buildTextPrompt();
   }
 
-  const user = [prompts.userPrefix, '', contextText].join('\n');
+  // Round 3 PR-J — A07-P0 prompt-injection delimiter. L3 is the
+  // first layer that touches user-supplied content (transcript /
+  // dictation / typed text), so wrapping here makes the boundary
+  // visible to L4/L5 readers via contextText reuse.
+  const wrap = wrapAsData(contextText, 'transcript');
+  if (wrap.injectionAttemptDetected) {
+    void logAudit({
+      action: 'PIPELINE_REJECTED_INJECTION_DELIMITER',
+      targetType: 'transcribe_visit',
+      targetId: input.visitId,
+      success: false,
+      errorCode: 'INJECTION_DELIMITER_DETECTED',
+      metadata: { layer: 'L3', mode: input.mode, suffix: wrap.suffix },
+    });
+  }
+  const user = [
+    prompts.userPrefix,
+    '',
+    wrap.wrapped,
+    '',
+    delimiterSystemSuffix('transcript'),
+  ].join('\n');
 
   const entities = await modelClient.complete({
     practiceId: input.practiceId,
