@@ -65,6 +65,14 @@ interface SoapEditorProps {
   /** T-M9 — whether Email delivery is configured. */
   emailEnabled: boolean;
   initialText: string;
+  /**
+   * Round 3 PR-E (A09-P0-003) — optimistic-concurrency token. The
+   * server-side RSC loads `transcribe_visits.soapVersion` and passes
+   * it here. We track it client-side, send with each save, and bump
+   * on success. A conflict response triggers a "another edit
+   * happened — reload to see" toast.
+   */
+  initialSoapVersion: number;
   /** Readonly when the visit is SIGNED. The signed copy lives in
    *  signedSoap; the client passes that value as initialText. */
   readonly?: boolean;
@@ -85,11 +93,13 @@ export function SoapEditor({
   doctorEmail,
   emailEnabled,
   initialText,
+  initialSoapVersion,
   readonly = false,
   signedAt = null,
   initialScore = null,
 }: SoapEditorProps) {
   const [text, setText] = useState(initialText);
+  const [soapVersion, setSoapVersion] = useState(initialSoapVersion);
   const [, startSaving] = useTransition();
   // Phase 5.2 — boost hints are surfaced by the CodingRail via the
   // `qm:em-boost-hints` CustomEvent (loose coupling, no shared store).
@@ -128,25 +138,46 @@ export function SoapEditor({
     [sections, isSigned]
   );
 
-  /** PROTECTED CONTRACT — saveSoapDraftAction signature + behaviour
-   *  must remain byte-identical to Phase 5.1. We wrap it once here so
-   *  every section's inline-edit calls the same path. */
+  /** PROTECTED CONTRACT — saveSoapDraftAction signature evolved in
+   *  Round 3 PR-E to accept an optional `expectedVersion` for
+   *  optimistic concurrency (A09-P0-003). The wrapper keeps the
+   *  per-section onEdit shape identical for callers; conflict-handling
+   *  is internal. */
   const onEdit = useCallback(
     async (next: string): Promise<{ ok: boolean; error?: string }> => {
       return await new Promise<{ ok: boolean; error?: string }>((resolve) => {
         startSaving(async () => {
-          const res = await saveSoapDraftAction(visitId, next);
+          const res = await saveSoapDraftAction(visitId, next, soapVersion);
           if (!res.ok) {
+            // Conflict-shape result: another save landed first. Show a
+            // distinct toast and offer reload — do NOT silently
+            // overwrite the conflicting copy.
+            if (res.error === 'conflict' && res.conflict) {
+              toast.error(
+                'Another edit happened on this note — reload to see the latest version before saving again.',
+                {
+                  description: 'Your unsaved changes are still in this tab; reloading will replace them.',
+                  action: {
+                    label: 'Reload',
+                    onClick: () => window.location.reload(),
+                  },
+                  duration: 10_000,
+                }
+              );
+              resolve({ ok: false, error: 'conflict' });
+              return;
+            }
             toast.error('Save failed — try again', { description: res.error });
             resolve({ ok: false, error: res.error });
             return;
           }
           setText(next);
+          if (res.newVersion !== undefined) setSoapVersion(res.newVersion);
           resolve({ ok: true });
         });
       });
     },
-    [visitId]
+    [visitId, soapVersion]
   );
 
   return (
