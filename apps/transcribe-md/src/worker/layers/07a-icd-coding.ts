@@ -8,8 +8,9 @@
 // ============================================================================
 
 import { z } from 'zod';
-import { modelClient } from '@meddoc/ai';
+import { modelClient, isValidIcd10 } from '@meddoc/ai';
 import prisma from '@meddoc/db';
+import { logAudit } from '@/lib/audit';
 
 const MODEL = 'claude-sonnet-4-6';
 
@@ -100,10 +101,43 @@ export async function runLayer7aIcdCoding(
     temperature: 0.1,
   });
 
+  // Round 3 PR-D — A06-P0-002 deterministic ICD-10 allowlist floor.
+  // Filter Claude's output through the canonical starter set; drop any
+  // code that doesn't match. Each rejection emits an audit row so the
+  // admin dashboard can reason about how often the model emits invalid
+  // codes (signal for prompt-tightening or expanding the allowlist).
+  const accepted: typeof result.codes = [];
+  const rejected: Array<{ code: string; description: string }> = [];
+  for (const c of result.codes) {
+    if (isValidIcd10(c.code)) {
+      accepted.push(c);
+    } else {
+      rejected.push({ code: c.code, description: c.description });
+    }
+  }
+  if (rejected.length > 0) {
+    void logAudit({
+      action: 'CODING_COACH_REJECTED_INVALID_ICD',
+      targetId: input.visitId,
+      targetType: 'TranscribeVisit',
+      userId: input.userId,
+      practiceId: input.practiceId,
+      success: false,
+      metadata: {
+        rejectedCount: rejected.length,
+        // Only the codes (NOT the AI-emitted descriptions which can
+        // include patient context). Codes alone are non-PHI structured
+        // billing data.
+        rejectedCodes: rejected.map((r) => r.code),
+      },
+    });
+  }
+  const filtered: typeof result = { codes: accepted };
+
   await prisma.transcribeVisit.update({
     where: { id: input.visitId },
-    data: { icdCodes: result as unknown as object },
+    data: { icdCodes: filtered as unknown as object },
   });
 
-  return result;
+  return filtered;
 }

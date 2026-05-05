@@ -27,6 +27,31 @@ export {
 } from './pricing';
 export { hashPrompt } from './prompt-hash';
 export { logAiCall, redactPhi } from './log';
+// Round 3 PR-D — deterministic AI safety backstops (audit findings
+// A06-P0-002, A06-P0-004). Allowlist + dose-range validators live in
+// ./data and are consumed by the worker's 07a/07b/07c layers.
+export {
+  ICD10_ALLOWLIST,
+  ICD10_ALLOWLIST_SIZE,
+  isValidIcd10,
+} from './data/icd10-allowlist';
+export {
+  CPT_ALLOWLIST,
+  CPT_ALLOWLIST_SIZE,
+  isValidCpt,
+} from './data/cpt-allowlist';
+export {
+  DOSE_RANGES,
+  DOSE_RANGE_TABLE_SIZE,
+  getDoseRange,
+  isInDoseRangeTable,
+  type DoseRangeEntry,
+} from './data/dose-ranges';
+export {
+  validateRxDose,
+  type RxValidationResult,
+  type RxValidationWarning,
+} from './data/dose-ranges-validator';
 // Phase 6 — per-call usage events (separate table from ai_calls; this
 // one carries the cost rollups for the admin usage dashboard).
 export {

@@ -1499,8 +1499,8 @@ P2/P3 findings should land in subsequent batched-cleanup PRs (analogous to PRs #
 |---|---|---|---|
 | PR-A | Secrets sweep — `.dockerignore` + `.env` cleanup + image rebuild + CI guard | #112 | 🚧 OPEN — closes A01-P0-001..003 + A02-P0-002 + A07-P3-001 |
 | PR-B | Edge security — sshd + UFW + fail2ban + evict ai-deal-hunter | #113 | 🚧 OPEN — closes A07-P0-001..003 |
-| **PR-C** | HIPAA tech — PHI-read audit + audit_logs REVOKE + MinIO SSE + backup fingerprint | (this PR) | 🚧 OPEN — closes A05-P0-001..004 + A09-P0-002 |
-| PR-D | AI safety — empty-transcript guard + ICD/CPT allowlist + pharmacology + weight | — | pending |
+| PR-C | HIPAA tech — PHI-read audit + audit_logs REVOKE + MinIO SSE + backup fingerprint | #114 | 🚧 OPEN — closes A05-P0-001..004 + A09-P0-002 |
+| **PR-D** | AI safety — empty-transcript guard + ICD/CPT allowlist + pharmacology + weight | (this PR) | 🚧 OPEN — closes A06-P0-001 + A06-P0-002 fully; A06-P0-004 partial (RxNav deferred to Phase 7) |
 | PR-E | Data integrity — Rx warning unique + SOAP optimistic concurrency | — | pending |
 | PR-F | Auth hardening — disable `EMAIL_AUTO_CONFIRM` in prod + signup anti-enum + NextAuth GA pin | — | pending |
 | PR-G | Compliance docs — BAA reality + IR runbook + DR runbook | — | pending |
@@ -1661,3 +1661,66 @@ Closes Round 3 audit findings:
 - ❌ **Did not re-encrypt existing MinIO objects.** SSE-S3 only encrypts NEW PUTs; pre-pilot has <100 audio files; sweep deferred to next maint window.
 - ❌ **Did not move MinIO to a LUKS-encrypted volume.** Phase 6.3 / post-pilot scope.
 - ❌ **Did not audit polling endpoints** (`/api/visits/[id]/progress`, `/api/visits/[id]/status`). They poll every few seconds during processing — auditing each call would create thousands of rows per visit. The page-level RSC audit covers the underlying read.
+
+---
+
+## 24.D 🛠 PR-D — AI safety deterministic backstops — 2026-05-05
+
+Branch: `fix/round-3-pr-d-ai-safety` (stacked on `fix/round-3-pr-c-hipaa-tech`).
+
+Closes Round 3 audit findings:
+- **A06-P0-001** (FULLY) — empty-transcript guard. Pipeline now refuses to generate a SOAP from <3s audio or <10-word transcript.
+- **A06-P0-002** (FULLY) — ICD-10 + CPT allowlist. Hallucinated codes are dropped before persisting; rejection emits an audit row.
+- **A06-P0-004** (PARTIALLY) — clinical-pharmacology backstop via deterministic dose-range table (29 drugs, FDA package-insert values; complex-dosing drugs marked individually). RxNav / RxNorm live API + drug-drug interaction database remain Phase 7 scope.
+
+### Six structural pieces
+
+1. **`packages/ai/src/data/icd10-allowlist.ts`** — curated starter set (~120 codes covering pilot specialties). `isValidIcd10()` exported. `Z99.999` and `99999` correctly rejected.
+2. **`packages/ai/src/data/cpt-allowlist.ts`** — curated top-N (~75 codes) covering E&M + common procedures + vaccines. `isValidCpt()` accepts `99213-25` etc, rejects invalid modifiers.
+3. **`packages/ai/src/data/dose-ranges.ts` + `dose-ranges-validator.ts`** — 29 drugs with FDA package-insert dose ceilings; `complexDosing: true` for warfarin/levothyroxine/insulin/prednisone/etc; brand aliases (tylenol → acetaminophen, eliquis → apixaban). Validator emits 4 warning codes (RX_DOSE_EXCEEDS_VERIFIED_RANGE, RX_CONTRAINDICATION_MATCH, RX_DRUG_NOT_IN_VERIFIED_DATABASE, RX_COMPLEX_DOSING_VERIFY_INDIVIDUALLY).
+4. **`apps/transcribe-md/src/worker/layers/guards.ts`** — `assertSufficientTranscript()` + `PipelineRejectError` class. Wired into `worker.ts` after both L1 and L1b. Rejection writes `needsReview=true + reviewReason=<doctor-actionable string>` via the existing FAILED-state writer in worker's catch block.
+5. **`07a-icd-coding.ts` + `07b-cpt-coding.ts`** — output is filtered through the allowlist; rejected codes dropped from persisted result. Single audit row aggregating per-visit rejections.
+6. **Schema additions** (migration `20260505012317_round_3_pr_d_ai_safety`):
+   - 8 new `AuditAction` enum values
+   - `transcribe_md_patients.weightKg` (Float, nullable)
+   - `transcribe_md_patients.allergies` (TEXT[], default `'{}'`)
+
+### Tests
+
+| Test | Result |
+|---|---|
+| `apps/transcribe-md/src/lib/__tests__/icd10-allowlist.test.ts` | ✅ 5/5 pass |
+| `apps/transcribe-md/src/lib/__tests__/cpt-allowlist.test.ts` | ✅ 7/7 pass |
+| `apps/transcribe-md/src/lib/__tests__/dose-range.test.ts` | ✅ 14/14 pass (adversarial: amoxicillin 5g/day adult flagged; 100 mg/kg/day toddler flagged; tylenol→acetaminophen alias resolves; xyzpharmadrug → fail-closed warning) |
+| `apps/transcribe-md/src/worker/layers/__tests__/guards.test.ts` | ✅ 11/11 pass |
+
+`tsc --noEmit` over apps/transcribe-md → clean.
+
+### What is NOT done in this PR (intentional Phase 7 deferrals)
+
+- ❌ **No live RxNav / RxNorm API integration.** Phase 7. Fall-through warning shipped: drugs not in the 29-row table emit `RX_DRUG_NOT_IN_VERIFIED_DATABASE` rather than silent pass.
+- ❌ **No drug-drug interaction database.** Phase 7.
+- ❌ **No 07c-rx-drafting validator wiring.** Validator exists + tested; integrating into the layer's output is a small follow-up PR. Pre-pilot pharmacist review of the 29-drug table can land alongside.
+- ❌ **No SOAP fabrication-detection check (Guard D).** Substring-match-with-negation-handling is high-false-positive; deferred until we have a real fabrication-detection eval set.
+- ❌ **No Patient-edit UI for weightKg + allergies.** Schema + migration ship; UI is a small follow-up.
+- ❌ **No expansion of the ICD-10 starter set to full CMS list.** ~120 codes ship; `isValidIcd10` semantics stay the same when expanded. Path: download `icd10cm_codes_2026.txt`, replace the array literal in `icd10-allowlist.ts`.
+- ❌ **No live VPS changes.** Migrations apply via `npm run db:migrate:deploy` in the deploy pipeline.
+
+### Top 5 dose-table entries (for clinical reviewer convenience)
+
+| Drug | Adult max mg/day | Peds mg/kg/day | Common contraindications |
+|---|---|---|---|
+| acetaminophen | 4000 | 10–75 | severe hepatic impairment |
+| amoxicillin | 4000 | 20–90 | penicillin/beta-lactam allergy |
+| atorvastatin | 80 | (not approved <10 yr) | active liver disease, pregnancy |
+| ibuprofen | 3200 | 5–40 | NSAID/aspirin allergy, active GI bleed |
+| metformin | 2550 | (specialist only) | eGFR <30 |
+
+(Full table: 29 drugs in `packages/ai/src/data/dose-ranges.ts`. Every value needs pharmacist sign-off before pilot go-live; track in `docs/CLINICAL_DATA_REVIEW.md`.)
+
+### Operator step post-merge (Kasra)
+
+1. Apply migration: `cd /opt/meddoc-pro && npm run db:migrate:deploy`
+2. Redeploy the worker container so the new pipeline guards + allowlist filters are live.
+3. Smoke: upload a 1-second silent clip → visit lands FAILED with reviewReason "Recording is 1.0s; need at least 3s of audio. Re-record with the conversation captured." The audit log shows `PIPELINE_REJECTED_TOO_SHORT`.
+4. Pre-pilot: pharmacist clinical review of `packages/ai/src/data/dose-ranges.ts` row-by-row before relying on the validator in production.

@@ -123,6 +123,12 @@ function getProvider(err: unknown): Provider {
  *  triples the noise. */
 function isPermanentInputError(msg: string, err: unknown): boolean {
   if (err instanceof Error && err.constructor?.name === 'ZodError') return true;
+  // Round 3 PR-D — A06-P0-001 empty-transcript guard. PipelineRejectError
+  // is thrown by the deterministic pipeline-entry guards (audio too
+  // short, transcript too short). Same audio means same outcome —
+  // BullMQ retries cannot help. Mark permanent so the worker's
+  // shouldFailNow short-circuit fires immediately.
+  if (err instanceof Error && err.name === 'PipelineRejectError') return true;
   const lower = msg.toLowerCase();
   if (
     /unsupported( (audio|file))? format/.test(lower) ||
