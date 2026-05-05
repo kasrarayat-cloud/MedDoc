@@ -1,0 +1,103 @@
+# /etc/ufw/after.rules — DOCKER-USER chain integration fragment.
+#
+# Round 3 PR-B (edge security hardening). Closes Round 3 audit
+# A07-P0-002 partial: re-enable UFW without breaking Docker.
+#
+# THE PROBLEM
+# -----------
+# Docker manages its own iptables rules in the DOCKER and DOCKER-USER chains.
+# These rules apply BEFORE UFW's INPUT/FORWARD chains for traffic destined
+# to Docker-published ports — which means a vanilla UFW config either:
+#   (a) does nothing about Docker-published ports (UFW rules ignored), OR
+#   (b) breaks all Docker traffic if FORWARD policy is set to DROP.
+#
+# THE FIX (chaifeng/ufw-docker pattern)
+# -------------------------------------
+# Append the block below to /etc/ufw/after.rules, BEFORE the final COMMIT
+# line. This:
+#   - Whitelists private RFC1918 ranges (containers can talk to each other
+#     and to the host LAN)
+#   - Allows DNS replies (UDP src=53)
+#   - Hands control to a `ufw-user-forward` chain so UFW rules apply
+#   - Drops outside attempts to reach private RFC1918 from the public net
+#     (defense-in-depth — Docker shouldn't be exposing those, but if a
+#     misconfig ever does, this catches it)
+#
+# ALTERNATIVE: install via upstream tool
+# --------------------------------------
+#   curl -fsSL https://github.com/chaifeng/ufw-docker/raw/master/ufw-docker \
+#     -o /usr/local/bin/ufw-docker
+#   chmod +x /usr/local/bin/ufw-docker
+#   ufw-docker install
+# This appends the SAME rules to /etc/ufw/after.rules. The fragment below
+# is what `ufw-docker install` produces — provided here for repo audit
+# trail and for environments where the upstream curl is undesirable.
+#
+# WHERE TO PASTE
+# --------------
+# /etc/ufw/after.rules already has this structure:
+#
+#   #
+#   # rules.input-after
+#   # ...
+#   *filter
+#   :ufw-after-input - [0:0]
+#   ...
+#   COMMIT      <-- BEFORE this final COMMIT, paste the block below.
+#
+# After pasting, run:
+#   sudo ufw reload
+#   sudo iptables -L DOCKER-USER -n   # verify the chain is populated
+
+# === BEGIN ufw-docker DOCKER-USER fragment ===
+
+# Allow forwarded traffic to/from Docker private subnets (the docker0 bridge
+# and any user-defined bridge networks docker-compose creates).
+:DOCKER-USER - [0:0]
+:ufw-user-forward - [0:0]
+
+# Container-to-container (RFC1918) — allow.
+-A DOCKER-USER -j RETURN -s 10.0.0.0/8
+-A DOCKER-USER -j RETURN -s 172.16.0.0/12
+-A DOCKER-USER -j RETURN -s 192.168.0.0/16
+
+# DNS replies (clients made the query, server replies on src 53).
+-A DOCKER-USER -p udp -m udp --sport 53 --dport 1024:65535 -j RETURN
+
+# Hand off to the UFW user-rule chain so `ufw allow 80/tcp` etc. apply to
+# Docker-published ports.
+-A DOCKER-USER -j ufw-user-forward
+
+# Defense-in-depth: drop SYNs from the public net to RFC1918 destinations.
+# A correctly-configured docker-compose never exposes a private subnet
+# externally, but a future misconfig could; these rules block it.
+-A DOCKER-USER -j DROP -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN -d 192.168.0.0/16
+-A DOCKER-USER -j DROP -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN -d 10.0.0.0/8
+-A DOCKER-USER -j DROP -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN -d 172.16.0.0/12
+
+# Same for UDP (avoid DNS amplification reflectors).
+-A DOCKER-USER -j DROP -p udp -m udp --dport 0:32767 -d 192.168.0.0/16
+-A DOCKER-USER -j DROP -p udp -m udp --dport 0:32767 -d 10.0.0.0/8
+-A DOCKER-USER -j DROP -p udp -m udp --dport 0:32767 -d 172.16.0.0/12
+
+# === END ufw-docker DOCKER-USER fragment ===
+#
+# After pasting and reloading UFW, verify Docker compose containers can
+# still:
+#   - Reach each other over their compose network (postgres ↔ transcribe-md)
+#   - Reach the public net for outbound API calls (Anthropic, Deepgram, …)
+#   - Be reached by the host on their published ports (curl localhost:3001)
+#
+# Expected `ufw status verbose` after rule + this fragment:
+#   Status: active
+#   Logging: on (low)
+#   Default: deny (incoming), allow (outgoing), disabled (routed)
+#   To                         Action      From
+#   --                         ------      ----
+#   22/tcp                     ALLOW IN    Anywhere
+#   80/tcp                     ALLOW IN    Anywhere
+#   443/tcp                    ALLOW IN    Anywhere
+#
+# If Docker breaks after enabling UFW, IMMEDIATELY run:
+#   sudo ufw disable
+# then debug. Do NOT leave production broken trying to fix forward.
