@@ -263,14 +263,27 @@ export function TranscriptTab({
               aria-label="Replay visit audio"
             />
 
-            <div className="mt-3 flex items-center justify-between border-t border-linear-hairline pt-3 font-mono text-[10px] uppercase tracking-[0.08em] text-linear-text-3">
-              <span>Speed</span>
+            {/* Round 3 PR-I — A09-P1 a11y. The audio element above is
+                native <audio controls> — keyboard support (Space=play/
+                pause, ←/→=seek, M=mute, ↑/↓=volume) is handled by the
+                browser when the player has focus. The speed buttons
+                form a toggle group: aria-pressed surfaces the active
+                state to screen readers, group role gives them a
+                labeled container. */}
+            <div
+              role="group"
+              aria-label="Playback speed"
+              className="mt-3 flex items-center justify-between border-t border-linear-hairline pt-3 font-mono text-[10px] uppercase tracking-[0.08em] text-linear-text-3"
+            >
+              <span aria-hidden>Speed</span>
               <span className="flex items-center gap-1">
                 {PLAYBACK_SPEEDS.map((s) => (
                   <button
                     type="button"
                     key={s}
                     onClick={() => setSpeed(s)}
+                    aria-pressed={s === speed}
+                    aria-label={`Set playback speed to ${s}×`}
                     className={cn(
                       'rounded-sm px-1.5 py-0.5 transition-colors',
                       s === speed
