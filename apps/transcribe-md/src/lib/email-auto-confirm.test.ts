@@ -106,4 +106,59 @@ describe('isAutoConfirmDomain', () => {
     // @ts-expect-error
     expect(isAutoConfirmDomain(42)).toBe(false);
   });
+
+  // ──────────────────────────────────────────────────────────────────
+  // Round 3 PR-F (A02-P0-001) — production safety gate
+  // ──────────────────────────────────────────────────────────────────
+  describe('NODE_ENV === production gate', () => {
+    let originalNodeEnv: string | undefined;
+    let originalAllowInProd: string | undefined;
+
+    beforeEach(() => {
+      originalNodeEnv = process.env.NODE_ENV;
+      originalAllowInProd = process.env.EMAIL_AUTO_CONFIRM_ALLOW_IN_PROD;
+      delete process.env.EMAIL_AUTO_CONFIRM_ALLOW_IN_PROD;
+    });
+
+    afterEach(() => {
+      if (originalNodeEnv === undefined) delete (process.env as Record<string, string | undefined>).NODE_ENV;
+      else (process.env as Record<string, string | undefined>).NODE_ENV = originalNodeEnv;
+      if (originalAllowInProd === undefined) delete process.env.EMAIL_AUTO_CONFIRM_ALLOW_IN_PROD;
+      else process.env.EMAIL_AUTO_CONFIRM_ALLOW_IN_PROD = originalAllowInProd;
+    });
+
+    it('returns false in production even with valid allowlist (no opt-in flag)', () => {
+      (process.env as Record<string, string | undefined>).NODE_ENV = 'production';
+      process.env[ENV_KEY] = 'quillmd-test.local';
+      expect(isAutoConfirmDomain('qa@quillmd-test.local')).toBe(false);
+    });
+
+    it('returns true in production WITH the opt-in flag', () => {
+      (process.env as Record<string, string | undefined>).NODE_ENV = 'production';
+      process.env[ENV_KEY] = 'quillmd-test.local';
+      process.env.EMAIL_AUTO_CONFIRM_ALLOW_IN_PROD = 'true';
+      expect(isAutoConfirmDomain('qa@quillmd-test.local')).toBe(true);
+    });
+
+    it('returns false in production with opt-in flag set to anything other than "true"', () => {
+      (process.env as Record<string, string | undefined>).NODE_ENV = 'production';
+      process.env[ENV_KEY] = 'quillmd-test.local';
+      process.env.EMAIL_AUTO_CONFIRM_ALLOW_IN_PROD = '1';
+      expect(isAutoConfirmDomain('qa@quillmd-test.local')).toBe(false);
+      process.env.EMAIL_AUTO_CONFIRM_ALLOW_IN_PROD = 'yes';
+      expect(isAutoConfirmDomain('qa@quillmd-test.local')).toBe(false);
+      process.env.EMAIL_AUTO_CONFIRM_ALLOW_IN_PROD = 'TRUE';
+      expect(isAutoConfirmDomain('qa@quillmd-test.local')).toBe(false);
+    });
+
+    it('returns true in test/dev/non-prod environments without the opt-in flag (back-compat)', () => {
+      process.env[ENV_KEY] = 'quillmd-test.local';
+      (process.env as Record<string, string | undefined>).NODE_ENV = 'development';
+      expect(isAutoConfirmDomain('qa@quillmd-test.local')).toBe(true);
+      (process.env as Record<string, string | undefined>).NODE_ENV = 'test';
+      expect(isAutoConfirmDomain('qa@quillmd-test.local')).toBe(true);
+      delete (process.env as Record<string, string | undefined>).NODE_ENV;
+      expect(isAutoConfirmDomain('qa@quillmd-test.local')).toBe(true);
+    });
+  });
 });

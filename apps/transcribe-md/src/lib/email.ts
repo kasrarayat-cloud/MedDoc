@@ -319,6 +319,48 @@ export async function sendEmailVerification(
 }
 
 // ---------------------------------------------------------------------------
+// Round 3 PR-F (A02-P1-001) — signup anti-enumeration: "you already have an
+// account" email sent in lieu of verification when signup hits an existing
+// email. Same 200/redirect response goes to the signup form regardless;
+// the real account holder receives this nudge so they aren't left thinking
+// their signup attempt vanished. An attacker probing for existing accounts
+// sees the same 200 + same response timing + no inbox feedback.
+// ---------------------------------------------------------------------------
+
+export interface SendAccountExistsArgs {
+  toEmail: string;
+  userName: string | null;
+  signInUrl: string;
+}
+
+export async function sendAccountExistsEmail(
+  args: SendAccountExistsArgs
+): Promise<SenderResult> {
+  const greeting = greetingFor(args.userName);
+  const subject = 'You already have a QuillMD account';
+  const html = [
+    `<p>${greeting}</p>`,
+    `<p>Someone (hopefully you) just tried to sign up for QuillMD with this email — but you already have an account here. There's no new account to verify; just sign in with the password you set when you first registered:</p>`,
+    `<p><a href="${args.signInUrl}" style="display:inline-block;padding:10px 18px;background:#7C3AED;color:#fff;border-radius:6px;text-decoration:none;">Sign in</a></p>`,
+    `<p style="color:#666;font-size:13px;">If you don't remember your password, use the "Forgot password" link on the sign-in page. If you didn't try to sign up, you can safely ignore this email — your account is unchanged.</p>`,
+    `<hr style="border:none;border-top:1px solid #eee;margin:24px 0;" />`,
+    `<p style="color:#999;font-size:12px;">QuillMD · account security</p>`,
+  ].join('\n');
+  const text = [
+    greeting,
+    '',
+    "Someone (hopefully you) just tried to sign up for QuillMD with this email — but you already have an account. Sign in with the password you set when you first registered:",
+    '',
+    args.signInUrl,
+    '',
+    'If you don\'t remember your password, use the "Forgot password" link on the sign-in page. If you didn\'t try to sign up, you can safely ignore this email.',
+    '',
+    '— QuillMD',
+  ].join('\n');
+  return sendOne({ to: args.toEmail, subject, html, text });
+}
+
+// ---------------------------------------------------------------------------
 // Email change — confirm link sent to the NEW address
 // ---------------------------------------------------------------------------
 
