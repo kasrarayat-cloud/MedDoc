@@ -47,15 +47,30 @@ Sentry.init({
 
 /** Capture a pipeline error with visitId + layer tags, BEFORE the
  *  caller re-throws to BullMQ (so retry semantics are preserved). No-op
- *  when Sentry DSN is unset — keeps dev quiet. */
+ *  when Sentry DSN is unset — keeps dev quiet.
+ *
+ *  Round 3 PR-H — A11-P1 user/practice context.
+ *  PHI guard: only IDs (UUIDs) are passed through. Never log patient
+ *  name, MRN, DOB, email, or transcript content. The redactPhi
+ *  beforeSend hook is a backstop; primary defense is never sending
+ *  PHI in the first place. The {userId, practiceId} tags let ops
+ *  filter "all errors for this practice" without re-reading audit. */
 export function captureWorkerException(
   err: unknown,
-  ctx: { visitId: string; layer: string }
+  ctx: {
+    visitId: string;
+    layer: string;
+    userId?: string | null;
+    practiceId?: string | null;
+  }
 ): void {
   Sentry.captureException(err, {
     tags: {
       visitId: ctx.visitId,
       layer: ctx.layer,
+      ...(ctx.userId ? { userId: ctx.userId } : {}),
+      ...(ctx.practiceId ? { practiceId: ctx.practiceId } : {}),
     },
+    user: ctx.userId ? { id: ctx.userId } : undefined,
   });
 }

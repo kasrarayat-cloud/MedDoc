@@ -145,6 +145,19 @@ services:
     # writes /data as uid 999. No default cap is required.
     cap_drop:
       - ALL
+    # Round 3 PR-H — A11-P1 BullMQ durability.
+    # AOF (append-only file) with `everysec` fsync gives at-most-1s
+    # job loss if the host hard-crashes. RDB snapshots alone (the
+    # default) lose every job between snapshots — for a job queue
+    # holding in-flight medical-visit pipelines that's unacceptable.
+    # On startup Redis replays the AOF so any in-flight visit
+    # survives a restart and BullMQ picks it up where it left off.
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
     mem_limit: 128m
     cpus: '0.5'
     volumes:
@@ -369,6 +382,22 @@ services:
       MINIO_ORPHAN_CLEANUP_DRY_RUN: ${MINIO_ORPHAN_CLEANUP_DRY_RUN:-true}
       MINIO_ORPHAN_CLEANUP_RETENTION_DAYS: ${MINIO_ORPHAN_CLEANUP_RETENTION_DAYS:-30}
       MINIO_ORPHAN_CLEANUP_CRON: ${MINIO_ORPHAN_CLEANUP_CRON:-0 3 * * 0}
+    # Round 3 PR-H — A11-P1 worker liveness probe.
+    # The worker writes /tmp/worker-heartbeat (Unix-ms timestamp)
+    # every 15s via setInterval. The probe rejects a heartbeat
+    # older than 60s — that catches a deadlocked event loop, a
+    # hung Anthropic stream, or an OOM-stuck worker that hasn't
+    # been killed yet. start_period: 60s gives the boot sequence
+    # (ensureBucket + queue connect + scheduler register) time
+    # to land before the first probe.
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "test -f /tmp/worker-heartbeat && [ $(($(date +%s%3N) - $(cat /tmp/worker-heartbeat))) -lt 60000 ]"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
 
   # ── TranscribeMD Solo App (T-M2) ──
   # The real product surface — sign up, log in, create visits. Shares
