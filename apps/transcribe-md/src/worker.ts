@@ -59,6 +59,10 @@ import {
 import { runLayer1Transcribe } from '@/worker/layers/01-transcribe';
 import { runLayer1bTranscribeDictation } from '@/worker/layers/01b-transcribe-dictation';
 import {
+  assertSufficientTranscript,
+  isPipelineRejectError,
+} from '@/worker/layers/guards';
+import {
   runLayer2SpeakerRoles,
   type SpeakerMap,
 } from '@/worker/layers/02-speaker-roles';
@@ -331,13 +335,33 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       // downstream layers need the utterances.
       const withTranscript = await prisma.transcribeVisit.findUnique({
         where: { id: visitId },
-        select: { transcriptRaw: true, speakerMap: true },
+        select: {
+          transcriptRaw: true,
+          speakerMap: true,
+          // Round 3 PR-D — A06-P0-001 empty-transcript guard reads
+          // these two columns. L1 wrote them; if they're missing the
+          // guard fails the visit before L2 burns Anthropic budget.
+          audioDurationSec: true,
+          transcriptText: true,
+        },
       });
       const raw = withTranscript?.transcriptRaw as
         | DeepgramBatchResponse
         | null
         | undefined;
       const utterances: DeepgramUtterance[] = raw?.results?.utterances ?? [];
+
+      // Round 3 PR-D — A06-P0-001 empty-transcript guard. Throws
+      // PipelineRejectError on insufficient audio/transcript; the
+      // outer catch maps it to FAILED + needsReview with the
+      // doctor-actionable humanReason rendered in the visit banner.
+      await assertSufficientTranscript({
+        visitId,
+        practiceId,
+        userId: visit.userId,
+        durationSec: withTranscript?.audioDurationSec ?? 0,
+        transcriptText: withTranscript?.transcriptText ?? '',
+      });
 
       // ── L2 — speaker roles ──────────────────────────────────────
       await prisma.transcribeVisit.update({
@@ -402,6 +426,21 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         });
         dictationText = r.transcript;
       }
+
+      // Round 3 PR-D — A06-P0-001 empty-transcript guard (dictation
+      // path). Read the duration L1b just wrote and run the same
+      // assertion the audio_upload path uses.
+      const withDictationDuration = await prisma.transcribeVisit.findUnique({
+        where: { id: visitId },
+        select: { dictationDurationSec: true },
+      });
+      await assertSufficientTranscript({
+        visitId,
+        practiceId,
+        userId: visit.userId,
+        durationSec: withDictationDuration?.dictationDurationSec ?? 0,
+        transcriptText: dictationText,
+      });
 
       // ── L3 — dictation entities ─────────────────────────────────
       await prisma.transcribeVisit.update({
@@ -791,7 +830,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
           // Prisma/Deepgram/Anthropic error can quote patient content
           // (PHI in the DB + UI). Instead, write a phase-tagged
           // user-friendly string derived only from currentLayer.
-          reviewReason: buildUserFacingFailureReason(currentLayer, category),
+          reviewReason: buildUserFacingFailureReason(currentLayer, category, err),
           failureCategory: category,
         },
       })
@@ -848,8 +887,21 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
  *  match. */
 function buildUserFacingFailureReason(
   currentLayer: string,
-  category: ErrorCategory = 'transient'
+  category: ErrorCategory = 'transient',
+  err?: unknown
 ): string {
+  // Round 3 PR-D — A06-P0-001 empty-transcript guard. PipelineRejectError
+  // carries a doctor-actionable humanReason ("Recording is 1.4s; need at
+  // least 3s ..."). Use it verbatim so the visit banner tells the doctor
+  // exactly what happened, not the generic "audio may be corrupt" copy.
+  if (
+    err instanceof Error &&
+    err.name === 'PipelineRejectError' &&
+    typeof (err as unknown as { humanReason?: unknown }).humanReason === 'string'
+  ) {
+    return (err as unknown as { humanReason: string }).humanReason;
+  }
+
   const phraseByLayer: Record<string, string> = {
     init: 'setup',
     L1: 'transcription',

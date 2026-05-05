@@ -8,8 +8,9 @@
 // ============================================================================
 
 import { z } from 'zod';
-import { modelClient } from '@meddoc/ai';
+import { modelClient, isValidCpt } from '@meddoc/ai';
 import prisma from '@meddoc/db';
+import { logAudit } from '@/lib/audit';
 
 const MODEL = 'claude-sonnet-4-6';
 
@@ -146,10 +147,46 @@ export async function runLayer7bCptCoding(
     temperature: 0.1,
   });
 
+  // Round 3 PR-D — A06-P0-002 deterministic CPT allowlist floor.
+  // Filter the E&M code + each procedure code through the curated
+  // pilot-specialty allowlist. Drop invalid codes; emit one audit
+  // row aggregating all rejections per visit. Modifiers are
+  // validated as part of the codes (e.g. "99213-25") via isValidCpt.
+  const rejectedCodes: string[] = [];
+  let filteredEm = result.em;
+  if (result.em && !isValidCpt(result.em.code)) {
+    rejectedCodes.push(result.em.code);
+    filteredEm = null;
+  }
+  const filteredProcedures = result.procedures.filter((p) => {
+    const ok = isValidCpt(p.code);
+    if (!ok) rejectedCodes.push(p.code);
+    return ok;
+  });
+  if (rejectedCodes.length > 0) {
+    void logAudit({
+      action: 'CODING_COACH_REJECTED_INVALID_CPT',
+      targetId: input.visitId,
+      targetType: 'TranscribeVisit',
+      userId: input.userId,
+      practiceId: input.practiceId,
+      success: false,
+      metadata: {
+        rejectedCount: rejectedCodes.length,
+        rejectedCodes,
+      },
+    });
+  }
+  const filtered: typeof result = {
+    em: filteredEm,
+    procedures: filteredProcedures,
+    modifiers: result.modifiers,
+  };
+
   await prisma.transcribeVisit.update({
     where: { id: input.visitId },
-    data: { cptCodes: result as unknown as object },
+    data: { cptCodes: filtered as unknown as object },
   });
 
-  return result;
+  return filtered;
 }
