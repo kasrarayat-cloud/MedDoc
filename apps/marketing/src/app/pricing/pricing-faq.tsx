@@ -18,7 +18,7 @@ const FAQ = [
   },
   {
     q: 'Is this HIPAA-compliant?',
-    a: 'Yes. Data is encrypted at rest and in transit. Every AI processor in the pipeline (Anthropic, OpenAI, Deepgram) has a signed BAA before production traffic flows. Every action on every patient record is logged to an immutable audit trail.',
+    a: 'QuillMD is designed for HIPAA compliance: data is encrypted at rest and in transit, every patient-record action is logged to an immutable audit trail, and every AI subprocessor (Anthropic, OpenAI, Deepgram) will have a signed BAA in place before your covered-entity PHI flows through our pipeline. We track BAA status per-subprocessor in our internal compliance register, available to prospective covered-entity customers on request.',
   },
   {
     q: 'Which EHRs do you support?',
