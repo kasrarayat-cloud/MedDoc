@@ -17,7 +17,7 @@ import prisma from '@meddoc/db';
 import type { ExtractedEntities } from './03-extract-entities';
 import { logAudit } from '@/lib/audit';
 
-const MODEL = 'claude-sonnet-4-6';
+const MODEL = 'claude-opus-4-7';
 
 export const CritiqueIssue = z.object({
   severity: z.enum(['critical', 'major', 'minor']),
