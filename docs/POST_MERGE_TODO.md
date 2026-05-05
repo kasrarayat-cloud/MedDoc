@@ -1989,3 +1989,161 @@ Recommended next operator window:
 2. Walk through `sentry-setup.md` (PR-H operator steps)
 3. Resume vendor BAA outreach per `COMPLIANCE_REGISTER.md` pre-pilot gate
 4. Schedule the mandatory pre-pilot DR drill (`disaster-recovery.md` §6)
+
+---
+
+## 26. 🧠 AI Pipeline Quality Fix-Pack 1 — 2026-05-05
+
+Closes 4 of the 5 Q0 findings from the AI Pipeline Phase 1 Audit
+(`docs/ai-pipeline-audit-phase-1-2026-05-05/`). The fifth Q0
+(psychiatry structured outputs — Finding 03.2) is deferred to
+Phase 2 pending the synthetic eval suite, since structured-score
+extraction touches L3 schema and is risky to ship without a
+regression baseline.
+
+Multi-agent dispatch with 4 sequential sub-agents (RAM was at
+~360 Mi available — below the 2GB parallel threshold). Each
+sub-agent owned its fix end-to-end including PR creation, CI
+wait, squash-merge, and tag.
+
+| PR | SHA | Tag | Sub-agent | Closes |
+|---|---|---|---|---|
+| [#125](https://github.com/kasrarayat-cloud/MedDoc/pull/125) | `e5e257e` | `quality-fix-q0-2-complete` | SA2 | Finding 01.1 — L7c pediatric Rx framing |
+| [#126](https://github.com/kasrarayat-cloud/MedDoc/pull/126) | `86e2eea` | `quality-fix-q0-1-complete` | SA1 | Finding 06.1 — `validateRxDose` wiring |
+| [#127](https://github.com/kasrarayat-cloud/MedDoc/pull/127) | `4479285` | `quality-fix-q0-3-complete` | SA3 | Finding 04.1 — Opus 4.7 at L4/L5/L7c |
+| [#128](https://github.com/kasrarayat-cloud/MedDoc/pull/128) | `407c3dd` | `quality-fix-q0-5-complete` | SA4 | Findings 07.3 + 02.5 — Deepgram confidence propagation |
+
+### 26.1 SA2 — L7c pediatric framing (PR #125)
+
+L7c (`07c-rx-drafting.ts`) was specialty-blind on pediatric
+dosing. The system prompt mentioned peds once in parens; nowhere
+did it tell the model to compute mg/kg or read patient weight.
+
+What landed:
+- `Layer7cInput` extended with `patient: { dateOfBirth, weightKg, allergies }`
+- worker.ts visit fetch pulls patient relation + threads context
+- Age computed at top of `runLayer7cRxDrafting`
+- Three-branch pediatric awareness block in user message:
+  - Peds + unknown weight → "refuse to draft numeric dose"
+  - Peds + known weight → mg/kg/day computation required
+  - Adult → adult ceilings
+- `apps/transcribe-md/src/worker/prompts/rx-pediatric-examples.ts`
+  with 2 anchor examples (4yo + 16kg amox; 6yo + 22kg ibuprofen)
+- 3-test suite in `__tests__/07c-rx-drafting.peds.test.ts`
+
+### 26.2 SA1 — `validateRxDose` wired into L7c (PR #126)
+
+The deterministic dose validator from Round 3 PR-D was inert
+in production. `grep -rln validateRxDose` found only tests +
+docs + index re-export. Audit's highest-impact single fix.
+
+What landed:
+- `apps/transcribe-md/src/worker/layers/rx-sig-parser.ts` —
+  parses strength + sig → mg/day. Handles QD/BID/TID/QID/Q4H/
+  Q6H/Q8H/Q12H/weekly. PRN returns null (variable dosing).
+- L7c iterates `result.prescriptions` post-model, calls
+  `validateRxDose` with patient context, appends warnings to
+  `result.warnings` with severity mapping
+  (RX_DOSE_EXCEEDS_VERIFIED_RANGE → critical;
+  RX_CONTRAINDICATION_MATCH → critical;
+  RX_DRUG_NOT_IN_VERIFIED_DATABASE → major;
+  RX_COMPLEX_DOSING_VERIFY_INDIVIDUALLY → minor)
+- Audit-row emit per warning using PR-D's existing AuditAction
+  enum values
+- `[deterministic]` prefix on validator-emitted messages so the
+  Rx panel can distinguish them from the model's own warnings
+- Tests: 8-case sig parser + 3-case L7c integration (peds
+  overdose, penicillin contra, drug-not-in-DB)
+
+### 26.3 SA3 — Opus 4.7 at L4 / L5 / L7c (PR #127)
+
+Every layer hit Sonnet 4.6. The strongest model in the family
+wasn't called anywhere. Audit's structural quality cap.
+
+What landed:
+- L4 (`04-generate-soap.ts`): `MODEL = 'claude-opus-4-7'`
+- L5 (`05-self-critique.ts`): same
+- L7c (`07c-rx-drafting.ts`): same
+- `packages/ai/src/pricing.ts`: added `claudeOpus47CostCents`
+  (env-overridable: CLAUDE_OPUS_47_INPUT_CENTS_PER_M default 1500;
+  CLAUDE_OPUS_47_OUTPUT_CENTS_PER_M default 7500) plus
+  `claudeCostCents(model, input, output)` dispatcher
+- `packages/ai/src/anthropic.ts`: replaced both hardcoded
+  `claudeSonnet46CostCents` calls with the dispatcher
+- `packages/ai/src/api-usage.ts`: same migration
+- `packages/ai/src/__tests__/pricing.test.ts`: dispatcher
+  correctness tests
+
+L1 / L1b / L2 / L3 / L6 / L7a / L7b / L7d / L7e remain on
+Sonnet 4.6 per the audit's recommendation.
+
+### 26.4 SA4 — Deepgram confidence propagation (PR #128)
+
+L1 persisted `transcriptRaw` but per-utterance confidence
+wasn't propagated. Heavy-accent / mumbled audio produced
+overconfident SOAPs because L4 had no signal that the
+transcript was uncertain.
+
+What landed:
+- Migration `20260505190100_round_3_quality_q0_5_audio_confidence`
+  adding `transcribe_visits.audioConfidenceStats Json?`
+  (applied live before push)
+- `audio-confidence.ts` helper: `computeAudioConfidenceStats`
+  returns `{mean, median, p10, lowConfPct, lowConfCount,
+  totalUtterances, threshold}`. `shouldFlagForReview` triggers
+  on `median < 0.55` OR `lowConfPct > 30%`
+- L1 + L1b populate the column post-Deepgram; auto-set
+  `needsReview: true` with diagnostic `reviewReason` when
+  `shouldFlagForReview` returns true
+- L4 + L5 prompts gain an "AUDIO QUALITY ALERT" block when
+  stats are present and below threshold:
+  - L4: "hedge the language: prefer 'patient appears to
+    report …' / 'audio suggests …' over direct assertions"
+  - L5: "be MORE willing to flag SOAP content that asserts as
+    fact something the audio doesn't clearly support"
+- 19 tests across helper unit + L1 integration
+
+### 26.5 Q0 closure status
+
+| Q0 finding | Status | PR |
+|---|---|---|
+| 01.1 — L7c pediatric framing | ✅ CLOSED | #125 |
+| 06.1 — validateRxDose not wired | ✅ CLOSED | #126 |
+| 04.1 — Opus 4.7 not used | ✅ CLOSED | #127 |
+| 07.3 + 02.5 — confidence not propagated | ✅ CLOSED | #128 |
+| 03.2 — psychiatry structured outputs | 🟡 DEFERRED to Phase 2 (eval suite needed) |
+
+### 26.6 What NOT in this fix-pack
+
+- ❌ Q0 #5 (psychiatry structured PHQ-9/GAD-7/MSE/safety
+  extraction) — deferred to Phase 2 pending the synthetic
+  eval suite. Schema additions need a regression baseline.
+- ❌ Any Q1 finding — those land in Fix-Pack 2 (recommend
+  shipping Phase 2 eval suite first; see audit recommendations
+  §10).
+- ❌ Cost framing in any PR body — quality > cost discipline
+  per memory #14.
+
+### 26.7 Operator steps post-merge
+
+None required for SA1-SA3. SA4 (PR #128) migration was applied
+live during the merge sequence; no operator action needed.
+
+The Opus 4.7 upgrade is live as soon as the production worker
+container is recreated (next operator `docker compose up -d
+transcribe-md-worker`) — pre-existing in-flight visits keep
+their pinned model selection.
+
+### 26.8 Recommended next step
+
+**Phase 2: synthetic eval suite.** Build the 15 scenarios
+listed in `docs/ai-pipeline-audit-phase-1-2026-05-05/findings/10-recommendations.md`
+§Phase 2 preview. The eval suite is the gate that lets
+Fix-Pack 2 (Q1 batch) ship with confidence — including the
+deferred Q0 #5 (psychiatry structured outputs).
+
+Alternative if Kasra wants more pipeline hardening before
+eval: Fix-Pack 2 quick-win Q2 bundle from audit §10
+(temperature tightening + L1b keyterms + L3 schema `.min(1)`
++ confidence floor on L7a/L7b + RxAction enum expansion).
+~10 trivial / small changes in a single PR. Low risk.
