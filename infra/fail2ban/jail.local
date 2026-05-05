@@ -1,0 +1,69 @@
+# /etc/fail2ban/jail.local — Round 3 PR-B (edge security hardening).
+#
+# Closes Round 3 audit A07-P0-002 supplement: fail2ban brute-force defense.
+#
+# DROP-IN PATH
+#   /etc/fail2ban/jail.local
+#
+# This file overrides /etc/fail2ban/jail.conf. The .conf file is shipped by
+# the package and gets overwritten on upgrade; .local is operator-owned and
+# survives. Never edit jail.conf directly.
+#
+# Apply:
+#   sudo systemctl enable --now fail2ban
+#   sudo fail2ban-client status               # should list jails: sshd
+#   sudo fail2ban-client status sshd          # detail per jail
+#
+# Verify ban behavior (from a disposable IP — DO NOT brute-force from your
+# operator IP, you will get banned):
+#   ssh wrong@vps.ip                           # 3× wrong creds
+#   sudo fail2ban-client banned                # the disposable IP appears
+#   sudo iptables -L f2b-sshd -n               # the IP shows as DROP
+#
+# Unban an IP if needed (e.g., your home IP after a typo storm):
+#   sudo fail2ban-client unban <IP>
+
+[DEFAULT]
+# Default ban duration: 1 hour. Long enough to deter, short enough that
+# typos clear themselves overnight.
+bantime = 3600
+
+# Window for counting failures: 10 minutes. Combined with the per-jail
+# maxretry, this defines the brute-force budget.
+findtime = 600
+
+# Default failure threshold across all jails (overridden per jail below).
+maxretry = 5
+
+# Use systemd journal as the log source on Ubuntu 24.04 / Debian 12+ where
+# /var/log/auth.log may be journald-only on a fresh install. If the file-
+# based log exists, this still works (systemd reads from both).
+backend = systemd
+
+# Ignore loopback and the host's own IPs by default — fail2ban should never
+# ban the box from itself.
+ignoreip = 127.0.0.1/8 ::1
+
+# === Jails ===
+
+[sshd]
+enabled  = true
+port     = 22
+logpath  = /var/log/auth.log
+# Tighter than DEFAULT: 3 failed connections in 10 minutes → 1h ban. With
+# sshd_config MaxAuthTries=3, each connection only gets 3 password tries
+# (which all fail anyway because PasswordAuthentication=no), so this
+# effectively means 3 attempts total per source IP per hour.
+maxretry = 3
+
+# === Notes ===
+#
+# We do NOT enable any of the bundled web-application jails (nginx-*,
+# apache-*) — Caddy is the public-facing web server, fail2ban does not
+# ship a stock Caddy filter, and the threat model for QuillMD's web tier
+# is rate-limit + WAF (covered in PR-G's edge layer), not blacklist-IP.
+#
+# We do NOT enable [recidive] — it bans IPs already banned multiple times
+# permanently. Risk: a misconfigured network can permanently lock out the
+# operator's office IP after a single bad week. Add only when there is
+# verified need.
