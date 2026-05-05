@@ -238,6 +238,84 @@ All eight secrets were considered compromised and rotated through the vendor con
 
 ---
 
+## 6.5. Edge security hardening — Round 3 PR-B (2026-05-04)
+
+**Status:** 🚧 PR-B open — runbook + recommended configs in repo; live execution is the operator step below.
+
+Closes Round 3 audit findings A07-P0-001 (sshd `PermitRootLogin yes`), A07-P0-002 (UFW disabled, no nftables, fail2ban absent), A07-P0-003 (root `ai-deal-hunter` uvicorn cohabits PHI VPS).
+
+The runbook lives at [`docs/runbooks/edge-security.md`](runbooks/edge-security.md). Execute it from a root shell with the Zap Hosting web console open as a fallback path. Wall time ~25-35 min.
+
+### Pre-flight (operator)
+
+- [ ] Zap Hosting web console open in browser tab (lockout fallback)
+- [ ] Second SSH session as `root@<vps>` open in a separate terminal
+- [ ] All 9 containers healthy
+- [ ] No active visit being processed (`bull:transcribe-md:active` LLEN = 0)
+
+### §1. Prerequisites — non-root sudo user with key auth
+
+- [ ] `/home/ubuntu/.ssh/authorized_keys` contains operator's public key (mode 0600, owner `ubuntu:ubuntu`)
+- [ ] `groups ubuntu` includes `sudo`
+- [ ] **Verified `ssh ubuntu@<vps>` succeeds from operator's laptop in a NEW terminal**
+- [ ] **Verified `sudo -n true` succeeds as `ubuntu`**
+
+### §3. SSH hardening (after §2 pre-stage)
+
+- [ ] `/etc/ssh/sshd_config` replaced with `infra/ssh/sshd_config.recommended`
+- [ ] `sshd -t` exits 0
+- [ ] `systemctl reload sshd` succeeds; sshd `active (running)`
+- [ ] `ssh root@<vps>` rejected from laptop
+- [ ] `ssh ubuntu@<vps>` succeeds; `ssh claude@<vps>` succeeds
+
+### §4. UFW + Docker compatibility
+
+- [ ] `infra/ufw/after.rules.fragment` appended to `/etc/ufw/after.rules` before final COMMIT
+- [ ] `ufw default deny incoming` + `ufw default allow outgoing` set
+- [ ] `ufw allow 22/tcp`, `ufw allow 80/tcp`, `ufw allow 443/tcp` configured
+- [ ] `ufw --force enable` succeeds
+- [ ] `ufw status verbose` shows the 3 allow rules + `Status: active`
+- [ ] `curl https://app.quillmd.com` returns 307 (smoke external)
+- [ ] `curl https://pro.quillmd.com` returns 200
+- [ ] `curl https://quillmd.com` returns 200
+- [ ] All 9 containers still `(healthy)` in `docker compose ps`
+- [ ] Container-to-internet works (`docker exec transcribe-md wget -qO- https://api.anthropic.com/v1/messages`)
+- [ ] `systemctl enable ufw` (persists across reboot)
+
+### §5. fail2ban
+
+- [ ] `apt-get install -y fail2ban` succeeds
+- [ ] `infra/fail2ban/jail.local` installed at `/etc/fail2ban/jail.local`
+- [ ] `systemctl enable --now fail2ban` succeeds
+- [ ] `fail2ban-client status` lists `sshd`
+- [ ] `fail2ban-client status sshd` shows `Currently failed: 0`, jail active
+
+### §6. Evict `ai-deal-hunter`
+
+- [ ] Identified launch mechanism (systemd unit / shell / cron)
+- [ ] Process stopped (and disabled if systemd)
+- [ ] `/root/ai-deal-hunter/` moved to `/root/archive-2026-05-04/ai-deal-hunter/`
+- [ ] `ss -tlnp | grep :8000` empty
+- [ ] `ps -ef | grep ai-deal` empty (no orphan)
+- [ ] `curl -m 3 http://<vps>:8000` connection refused / timeout (UFW + process gone = defense in depth)
+
+### §7. Final verification (must all pass)
+
+- [ ] `ssh root@<vps>` rejected
+- [ ] `ssh ubuntu@<vps>` succeeds
+- [ ] `ssh claude@<vps>` succeeds
+- [ ] All 9 containers healthy
+- [ ] `/api/health` from inside transcribe-md returns 200
+- [ ] `app.quillmd.com` 307; `pro.quillmd.com` 200; `quillmd.com` 200; `<vps>:8000` refused
+
+### Sign-off
+
+- [ ] All boxes above ticked
+- [ ] PR-B merged + tagged `round-3-pr-b-complete`
+- [ ] `POST_MERGE_TODO.md §24` PR-B row updated to ✅ MERGED with PR link
+
+---
+
 ## 7. Legal review
 
 **Status:** all four documents TODO. Requires outside counsel — allocate

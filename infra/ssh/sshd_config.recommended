@@ -1,0 +1,133 @@
+# Recommended /etc/ssh/sshd_config — Round 3 PR-B (edge security hardening)
+#
+# Closes Round 3 audit finding A07-P0-001 (PermitRootLogin yes, no AllowUsers,
+# password auth not explicitly disabled).
+#
+# This file is the canonical spec. The LIVE file is /etc/ssh/sshd_config on
+# the VPS — it is updated by the operator following the runbook at
+# docs/runbooks/edge-security.md §3 (SSH hardening). After every live change,
+# the operator runs `sshd -t -f /etc/ssh/sshd_config` to validate before
+# reload.
+#
+# Rationale for each non-default directive is inline. Defaults from the
+# OpenSSH 9.6 / Ubuntu 24.04 distribution are kept where they are already
+# secure.
+
+# === Network ===
+
+# Listen on the IANA-standard port. We deliberately do NOT change the port:
+# port-shifting is security theatre, breaks every existing tool, and does not
+# defeat a port-scanner.
+Port 22
+
+# IPv4 only — the VPS does not currently route IPv6, and listening on `::`
+# without firewall coverage is a needless attack surface.
+AddressFamily inet
+ListenAddress 0.0.0.0
+
+# === Authentication ===
+
+# Disable root login entirely. Operator (Kasra) uses a non-root sudo user
+# (`ubuntu`) for interactive work; `claude` is the unattended automation
+# user. Both have authorized_keys + sudo OR docker-group membership as
+# appropriate. Audit finding A07-P0-001 root cause.
+PermitRootLogin no
+
+# Public-key only. PasswordAuthentication is the highest-leverage hardening
+# on a public-IP SSH endpoint — it eliminates brute-force attempts entirely.
+PasswordAuthentication no
+PubkeyAuthentication yes
+
+# Disable the legacy challenge-response stack. Modern OpenSSH calls this
+# KbdInteractiveAuthentication; the old name is retained for back-compat
+# with admin muscle-memory.
+ChallengeResponseAuthentication no
+KbdInteractiveAuthentication no
+
+# Pluggable Authentication Modules — keep enabled because system services
+# (e.g., login motd) hook in via PAM. This does NOT re-enable password auth
+# because PasswordAuthentication=no overrides PAM password queries for SSH.
+UsePAM yes
+
+# Authorized-keys file location is the user-home default; spelled out for
+# auditability.
+AuthorizedKeysFile .ssh/authorized_keys
+
+# Strict permission checks on key files — prevents key reuse from a
+# world-readable .ssh/.
+StrictModes yes
+
+# === Authorization ===
+
+# Whitelist of users permitted to authenticate. Limits blast radius of any
+# future key compromise. Audit Q1 decision: ubuntu + claude only.
+#  - ubuntu : Kasra's interactive sudo account (uid 1001)
+#  - claude : automation account, no sudo, docker-group only (uid 1000)
+# `cortex` is intentionally excluded — provenance unconfirmed; if needed
+# later, a 1-line addition.
+AllowUsers ubuntu claude
+
+# === Brute-force defenses ===
+
+# Three failed auth attempts per connection, then disconnect. Combined with
+# fail2ban (3 failed CONNECTIONS within 600s = 1h ban), this caps the
+# brute-force budget to 9 password tries per hour per source IP — and
+# password auth is disabled anyway, so this only matters for misconfigured
+# key attempts.
+MaxAuthTries 3
+
+# 30 seconds to complete the auth handshake. Default is 120s; 30s is enough
+# for any legitimate key + agent + 2FA flow but cuts the window for
+# resource-exhaustion attacks.
+LoginGraceTime 30
+
+# Max concurrent unauthenticated connections (from any source). 10 is the
+# OpenSSH default and adequate.
+MaxStartups 10:30:100
+
+# === Idle session policy ===
+
+# Send a keepalive every 5 minutes; disconnect after 2 missed (= 10min idle).
+# Prevents abandoned sessions from sitting open on the audit log.
+ClientAliveInterval 300
+ClientAliveCountMax 2
+
+# === Forwarding & tunnels ===
+
+# X11 forwarding is unused on a headless VPS.
+X11Forwarding no
+
+# Allow TCP port forwarding for ad-hoc tunnels (e.g., `ssh -L 5432:localhost:5432`
+# for safe psql access from operator's laptop). This is a Kasra-only
+# capability gated by the AllowUsers directive above.
+AllowTcpForwarding yes
+
+# Disallow generic Unix socket / agent forwarding by default. Operator can
+# enable per-session with `ssh -A`/`-R` when required.
+AllowAgentForwarding no
+AllowStreamLocalForwarding no
+PermitTunnel no
+
+# === Logging ===
+
+# Log via syslog auth facility (default), at INFO level — fail2ban reads
+# /var/log/auth.log. VERBOSE would help forensics but spams the logs;
+# revisit if a breach is ever investigated.
+SyslogFacility AUTH
+LogLevel INFO
+
+# === Subsystems ===
+
+# SFTP via the OpenSSH-provided handler. Default Ubuntu path.
+Subsystem sftp /usr/lib/openssh/sftp-server
+
+# === Banner ===
+
+# Pre-auth banner — discourages casual port-knocking and asserts authorized-
+# use only. The file is created in the runbook §3.
+Banner /etc/issue.net
+
+# === End ===
+# Validation: sshd -t -f /etc/ssh/sshd_config (must exit 0).
+# Apply: systemctl reload sshd (NOT restart — reload preserves existing
+# sessions; restart would kick the operator off mid-config).
