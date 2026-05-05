@@ -198,6 +198,21 @@ enum AuditAction {
   VIEWED_VISIT
   VIEWED_VISIT_LIST
   VIEWED_VISIT_AUDIO
+
+  // Round 3 PR-D — AI safety deterministic backstops (audit findings
+  // A06-P0-001 empty-transcript guard, A06-P0-002 ICD/CPT allowlist,
+  // A06-P0-004 dose-range fail-closed validator). Every rejection or
+  // fall-through warning emits an audit row so the admin dashboard
+  // and forensics can reconstruct exactly why a visit landed in
+  // needsReview.
+  PIPELINE_REJECTED_TOO_SHORT
+  PIPELINE_REJECTED_INSUFFICIENT_TRANSCRIPT
+  PIPELINE_FABRICATION_FLAGGED
+  CODING_COACH_REJECTED_INVALID_ICD
+  CODING_COACH_REJECTED_INVALID_CPT
+  RX_DOSE_EXCEEDS_VERIFIED_RANGE
+  RX_CONTRAINDICATION_MATCH
+  RX_DRUG_NOT_IN_VERIFIED_DATABASE
 }
 
 /// Document lifecycle status
@@ -1393,6 +1408,19 @@ model TranscribeMdPatient {
   /// icd10?: string }]. Phase 1 writes plain-text `icd10` from a free-
   /// text input; the ICD-10 lookup UI lands in a later pass.
   problemList Json?
+
+  /// Round 3 PR-D — patient weight in kilograms. Required for peds
+  /// mg/kg dose validation in the Rx safety floor (audit A06-P0-004).
+  /// Nullable: legacy patients have no weight, and adult patients can
+  /// skip weight without blocking the pipeline. Range guard at write
+  /// time: 0.5 .. 200 kg (covers neonate → bariatric).
+  weightKg Float?
+
+  /// Round 3 PR-D — explicit allergy list for Rx safety class match
+  /// (audit A06-P0-004). Free-text strings for now; structured RxNorm
+  /// allergen-class lookup is Phase 7 scope. Empty array = "no known
+  /// allergies"; null = "not asked yet" (distinct from "none").
+  allergies String[] @default([])
 
   /// Soft-delete marker. Deleted patients are hidden from the
   /// dashboard + search, but their visits remain intact. Hard delete

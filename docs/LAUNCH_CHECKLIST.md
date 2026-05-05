@@ -356,6 +356,55 @@ Closes Round 3 audit findings A05-P0-001..004 (encryption-at-rest gaps; PHI-read
 
 ---
 
+## 6.7. AI safety deterministic backstops — Round 3 PR-D (2026-05-05)
+
+**Status:** 🚧 PR-D open — code + migrations + 29-drug dose table in repo; clinical data review + 07c integration are operator steps.
+
+Closes Round 3 audit findings A06-P0-001 (empty-transcript guard, FULLY), A06-P0-002 (ICD/CPT allowlist, FULLY), A06-P0-004 (clinical-pharmacology backstop, PARTIALLY — RxNav/drug-drug interactions deferred to Phase 7).
+
+### Migration (apply via deploy pipeline)
+
+- [ ] `npm run db:migrate:deploy` runs to completion — applies `20260505012317_round_3_pr_d_ai_safety` (8 enum values + weightKg + allergies columns)
+
+### Worker redeploy
+
+- [ ] `docker compose up -d --force-recreate transcribe-md-worker` so new guards + allowlist filters go live
+
+### Empty-transcript guard verification
+
+- [ ] Upload a 1-second silent clip → visit lands FAILED with reviewReason "Recording is 1.0s; need at least 3s of audio…"
+- [ ] Audit log shows row with `action='PIPELINE_REJECTED_TOO_SHORT'`
+- [ ] Upload a 30-second silent clip → visit lands FAILED with reviewReason mentioning word count
+- [ ] Audit log shows `PIPELINE_REJECTED_INSUFFICIENT_TRANSCRIPT`
+
+### ICD-10 / CPT allowlist verification
+
+- [ ] Run a normal visit through to completion → ICD-10 codes in `visit.icdCodes.codes[]` are all valid (in `ICD10_ALLOWLIST`)
+- [ ] If Claude ever emits a fabricated code, audit log shows `CODING_COACH_REJECTED_INVALID_ICD` / `_CPT` and the rejected code is dropped from the persisted result
+
+### Pre-pilot clinical data review (REQUIRED before pilot go-live)
+
+- [ ] Pharmacist reviews every row in `packages/ai/src/data/dose-ranges.ts` against current local protocols
+- [ ] Sign-off captured in `docs/CLINICAL_DATA_REVIEW.md` (create file)
+- [ ] ICD-10 starter set reviewed against pilot specialties' billing experience; gaps documented
+
+### Phase 7 follow-ups (post-pilot)
+
+- [ ] RxNav / RxNorm live API integration
+- [ ] Drug-drug interaction database
+- [ ] 07c-rx-drafting integration of `validateRxDose()`
+- [ ] Patient-edit UI for weightKg + allergies
+- [ ] Expand ICD-10 starter set to full CMS canonical list
+- [ ] Expand CPT allowlist via AMA license OR CMS PFS RVU file
+
+### Sign-off
+
+- [ ] All required boxes above ticked
+- [ ] PR-D merged + tagged `round-3-pr-d-complete`
+- [ ] `POST_MERGE_TODO.md §24` PR-D row updated to ✅ MERGED with PR link
+
+---
+
 ## 7. Legal review
 
 **Status:** all four documents TODO. Requires outside counsel — allocate

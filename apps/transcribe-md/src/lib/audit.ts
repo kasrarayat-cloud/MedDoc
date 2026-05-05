@@ -95,7 +95,16 @@ export type AuditAction =
   // legacy), but were never emitted by transcribe-md's PHI reads.
   // Mirror them into the TS union so the call sites typecheck.
   | 'VIEWED_PATIENT_LIST'
-  | 'VIEWED_PATIENT_FILE';
+  | 'VIEWED_PATIENT_FILE'
+  // Round 3 PR-D — AI safety deterministic-backstop audit emits
+  | 'PIPELINE_REJECTED_TOO_SHORT'
+  | 'PIPELINE_REJECTED_INSUFFICIENT_TRANSCRIPT'
+  | 'PIPELINE_FABRICATION_FLAGGED'
+  | 'CODING_COACH_REJECTED_INVALID_ICD'
+  | 'CODING_COACH_REJECTED_INVALID_CPT'
+  | 'RX_DOSE_EXCEEDS_VERIFIED_RANGE'
+  | 'RX_CONTRAINDICATION_MATCH'
+  | 'RX_DRUG_NOT_IN_VERIFIED_DATABASE';
 
 export interface AuditLogInput {
   action: AuditAction;
