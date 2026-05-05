@@ -15,6 +15,7 @@ import { downloadAudio } from '@/lib/minio';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { redactPhi } from '@meddoc/ai';
+import { logAudit } from '@/lib/audit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -51,6 +52,21 @@ export const GET = withApiHandler<{ id: string }>(
       );
       return apiError('storage read failed', 502);
     }
+
+    // Round 3 PR-C — §164.312(b) PHI-read audit (A05-P0-004). Audio
+    // download is the highest-risk PHI-read surface: full patient voice
+    // exits the server. Audited even though the session+ownership gate
+    // already protects it.
+    void logAudit({
+      action: 'VIEWED_VISIT_AUDIO',
+      targetId: visitId,
+      targetType: 'TranscribeVisit',
+      metadata: {
+        source: 'api:GET /api/visits/[id]/dictation/audio',
+        bytes: buf.byteLength,
+        mimeType: visit.audioMimeType ?? 'audio/webm',
+      },
+    });
 
     // For 10-min webm clips we return the whole buffer — cheaper to
     // render in one shot than to stream for the browser's audio element.

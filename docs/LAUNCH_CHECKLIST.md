@@ -316,6 +316,46 @@ The runbook lives at [`docs/runbooks/edge-security.md`](runbooks/edge-security.m
 
 ---
 
+## 6.6. HIPAA technical safeguards — Round 3 PR-C (2026-05-05)
+
+**Status:** 🚧 PR-C open — code + migrations + scripts in repo; operator steps below.
+
+Closes Round 3 audit findings A05-P0-001..004 (encryption-at-rest gaps; PHI-read audit gap), A09-P0-002 (audit_logs application-mutable), A05-P1-004 (backup public-key fingerprint not validated). Implements HIPAA §164.312(b) (audit controls) and §164.312(c) (integrity).
+
+### Migrations (apply via deploy pipeline)
+
+- [ ] `npm run db:migrate:deploy` runs to completion — applies `20260505010200_round_3_pr_c_phi_read_audit_actions` (enum +3 values) and `20260505010210_round_3_pr_c_revoke_audit_mutation` (REVOKE on audit_logs).
+- [ ] `bash tests/integrity/audit-logs-immutable.test.sh` returns PASS (was SKIP before deploy).
+
+### MinIO SSE-S3 bootstrap
+
+- [ ] `set -a && . /opt/meddoc-pro/.env && set +a` in operator shell
+- [ ] `bash /opt/meddoc-pro/scripts/minio-enable-sse.sh` succeeds (`OK - SSE-S3 active on local/transcribe-md-audio`)
+- [ ] `mc encrypt info local/transcribe-md-audio` shows SSE-S3 enabled
+
+### Expected-fingerprint file deploy (one-time)
+
+- [ ] Canonical `/etc/meddoc/offsite-backup-public.age` is in place (deployed during Phase 6.2 §22 step 3 — confirm)
+- [ ] `sudo sh -c 'sha256sum /etc/meddoc/offsite-backup-public.age | awk "{print \$1}" > /etc/meddoc/expected-public-key-fingerprint.sha256'`
+- [ ] `sudo chmod 644 /etc/meddoc/expected-public-key-fingerprint.sha256`
+- [ ] Next `backup-offsite-sync.sh` run logs `INFO: public key fingerprint verified (...)` instead of the transition-mode WARN
+
+### PHI-read audit emit verification
+
+- [ ] Load `/visits` from operator's browser → check admin audit-log dashboard for a fresh `VIEWED_VISIT_LIST` row
+- [ ] Open a visit detail → check for `VIEWED_VISIT` row
+- [ ] Load `/patients` → check for `VIEWED_PATIENT_LIST` row
+- [ ] Open a patient detail → check for `VIEWED_PATIENT_FILE` row
+- [ ] Click "Play" on a transcript audio → check for `VIEWED_VISIT_AUDIO` row
+
+### Sign-off
+
+- [ ] All boxes above ticked
+- [ ] PR-C merged + tagged `round-3-pr-c-complete`
+- [ ] `POST_MERGE_TODO.md §24` PR-C row updated to ✅ MERGED with PR link
+
+---
+
 ## 7. Legal review
 
 **Status:** all four documents TODO. Requires outside counsel — allocate

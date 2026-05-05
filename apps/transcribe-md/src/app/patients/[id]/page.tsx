@@ -24,6 +24,7 @@ import { notFound, redirect } from 'next/navigation';
 
 import prisma from '@meddoc/db';
 import { auth } from '@/lib/nextauth';
+import { logAudit } from '@/lib/audit';
 import { AppFrame } from '@/components/ui/app-frame';
 import { Avatar } from '@/components/ui/avatar';
 import { Ic } from '@/components/ui/icon';
@@ -163,6 +164,15 @@ export default async function PatientPage({
     },
   });
   if (!patient || patient.practiceId !== user.practiceId) notFound();
+
+  // Round 3 PR-C — §164.312(b) PHI-read audit (A05-P0-004). Single
+  // patient detail RSC. Audited at the page-level fetch boundary.
+  void logAudit({
+    action: 'VIEWED_PATIENT_FILE',
+    targetId: patient.id,
+    targetType: 'TranscribeMdPatient',
+    metadata: { source: 'rsc:/patients/[id]' },
+  });
 
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
