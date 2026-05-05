@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
+import * as Sentry from '@sentry/nextjs';
 
 import prisma from '@meddoc/db';
 import { TranscribeVisitStatus } from '@prisma/client';
@@ -124,6 +125,14 @@ export default async function VisitPage({
   const { id } = await params;
   const session = await auth();
   if (!session?.user?.id) redirect('/login');
+
+  // Round 3 PR-H — A11-P1 Sentry context.
+  // PHI guard: visitId is a UUID — safe. NEVER set patient name, MRN,
+  // DOB, email, or transcript content as Sentry tags or context. The
+  // redactPhi beforeSend hook is a backstop; primary defense is
+  // never sending PHI in the first place.
+  Sentry.setTag('visitId', id);
+  Sentry.setUser({ id: session.user.id });
 
   type UserRow = { name: string | null; email: string };
   type VisitRow = {
