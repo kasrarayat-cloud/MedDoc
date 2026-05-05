@@ -28,7 +28,7 @@ export default function HomePage() {
     <>
       <RevealMount />
       <Nav />
-      <main>
+      <main id="main" tabIndex={-1} style={{ outline: 'none' }}>
         <Hero />
         <Trust />
         <Problem />

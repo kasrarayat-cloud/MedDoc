@@ -19,7 +19,7 @@ export default function NotFound() {
   return (
     <>
       <NavBar />
-      <main>
+      <main id="main" tabIndex={-1} style={{ outline: 'none' }}>
         <section
           className="relative flex items-center overflow-hidden"
           style={{ minHeight: '80vh', paddingTop: 96, paddingBottom: 64 }}

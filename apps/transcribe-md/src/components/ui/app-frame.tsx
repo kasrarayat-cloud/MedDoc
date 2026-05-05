@@ -55,12 +55,20 @@ export async function AppFrame({ children }: AppFrameProps) {
       >
         <TopNav userName={userName} userEmail={userEmail} />
         {/* §8.2: this <main> is the direct overflow parent so any
-            position: sticky inside `children` resolves here. */}
+            position: sticky inside `children` resolves here.
+            Round 3 PR-I — A09-P1 a11y. id="main" matches the skip-link
+            target in layout.tsx; tabIndex={-1} makes the element
+            programmatically focusable so the skip link's :target jump
+            actually moves keyboard focus (browsers don't focus a
+            <main> on a fragment hop unless tabIndex is set). */}
         <main
+          id="main"
+          tabIndex={-1}
           style={{
             flex: 1,
             minWidth: 0,
             position: 'relative',
+            outline: 'none',
           }}
         >
           {children}
