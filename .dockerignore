@@ -1,9 +1,53 @@
+# Build context exclusions for `docker build`. Anything listed here is
+# NOT shipped into image layers, even if `COPY . .` appears in a Dockerfile.
+#
+# Round 3 / PR-A — secrets sweep.
+# Root cause of A01-P0-001: the prior allowlist only covered `.env.local`
+# and `.env.production`, leaving `.env`, `.env.backup`, and
+# `tests/**/.env.test` to be baked into images via `COPY . .`. The block
+# below excludes every env-bearing path and explicitly re-allows only
+# placeholder/template files.
+
 node_modules
 .next
 .git
-.env.local
-.env.production
-*.md
 .claude
 backups
 docs
+
+# Env-family — exclude EVERYTHING by default, allow only documented placeholders.
+.env
+.env.*
+*.env
+*.env.local
+*.env.backup
+tests/**/.env.test
+apps/*/.env
+apps/*/.env.local
+apps/*/.env.backup
+apps/*/.next/standalone/**/.env
+!.env.example
+!.env.test.example
+!.env.production.example
+!.env.phase-6.2.template
+
+# Secret-bearing build artefacts that have leaked before.
+*.pem
+*.key
+*.p12
+id_rsa*
+id_ed25519*
+.aws/
+.gnupg/
+**/*.bak
+
+# Other build-context noise that should never ship.
+*.md
+test-results
+playwright-report
+coverage
+.vitest-cache
+.turbo
+.cache
+tmp
+out
