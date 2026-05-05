@@ -1498,8 +1498,8 @@ P2/P3 findings should land in subsequent batched-cleanup PRs (analogous to PRs #
 | # | Title | PR | Status |
 |---|---|---|---|
 | PR-A | Secrets sweep — `.dockerignore` + `.env` cleanup + image rebuild + CI guard | #112 | 🚧 OPEN — closes A01-P0-001..003 + A02-P0-002 + A07-P3-001 |
-| **PR-B** | Edge security — sshd + UFW + fail2ban + evict ai-deal-hunter | (this PR) | 🚧 OPEN — closes A07-P0-001..003 |
-| PR-C | HIPAA tech — PHI-read audit + audit_logs REVOKE + MinIO SSE + backup fingerprint | — | pending |
+| PR-B | Edge security — sshd + UFW + fail2ban + evict ai-deal-hunter | #113 | 🚧 OPEN — closes A07-P0-001..003 |
+| **PR-C** | HIPAA tech — PHI-read audit + audit_logs REVOKE + MinIO SSE + backup fingerprint | (this PR) | 🚧 OPEN — closes A05-P0-001..004 + A09-P0-002 |
 | PR-D | AI safety — empty-transcript guard + ICD/CPT allowlist + pharmacology + weight | — | pending |
 | PR-E | Data integrity — Rx warning unique + SOAP optimistic concurrency | — | pending |
 | PR-F | Auth hardening — disable `EMAIL_AUTO_CONFIRM` in prod + signup anti-enum + NextAuth GA pin | — | pending |
@@ -1583,3 +1583,81 @@ PR-B is **structural only — no live VPS changes from this session.** The Lead 
 4. Tick all boxes in `LAUNCH_CHECKLIST.md §6.5`.
 5. Update §24.B in this file: 🚧 OPEN → ✅ MERGED with merge link.
 6. `git tag round-3-pr-b-complete && git push origin round-3-pr-b-complete`.
+
+---
+
+## 24.C 🛠 PR-C — HIPAA technical safeguards — 2026-05-05 (live + structural)
+
+Branch: `fix/round-3-pr-c-hipaa-tech` (stacked on `fix/round-3-pr-b-edge-security`; auto-rebases as PR-A → PR-B → audit branch → main lands).
+
+Closes Round 3 audit findings:
+- **A05-P0-001** MinIO has no SSE on the audio bucket
+- **A05-P0-002** Postgres backups unencrypted on disk (mitigated via Phase 6.1 LUKS already; this PR closes the offsite-leg gap)
+- **A05-P0-003** `postscript.sh` ships plaintext pg_dumps to remote S3 if env vars populated
+- **A05-P0-004** Every PHI-READ endpoint emits zero audit rows (HIPAA §164.312(b) failure)
+- **A09-P0-002** `audit_logs` is application-mutable; no DB-role REVOKE (HIPAA §164.312(c) failure)
+- **A05-P1-004** (covered as part of A05-P0-003) backup-offsite-sync.sh has no public-key fingerprint validation
+
+### Five structural fixes
+
+1. **PHI-read audit logging.** `logAudit()` calls added to 5 API routes + 4 RSC pages, covering every PHI-returning surface in transcribe-md:
+   - `GET /api/visits/[id]` → `VIEWED_VISIT`
+   - `GET /api/visits/[id]/dictation/audio` → `VIEWED_VISIT_AUDIO`
+   - `GET /api/patients` → `VIEWED_PATIENT_LIST`
+   - `GET /api/patients/[id]` → `VIEWED_PATIENT_FILE`
+   - `POST /api/patients/fuzzy-match` → `VIEWED_PATIENT_LIST`
+   - `/visits` RSC → `VIEWED_VISIT_LIST`
+   - `/visits/[id]` RSC → `VIEWED_VISIT`
+   - `/patients` RSC → `VIEWED_PATIENT_LIST`
+   - `/patients/[id]` RSC → `VIEWED_PATIENT_FILE`
+
+   Pattern: `void logAudit({...})` (fire-and-forget; helper never throws). metadata uses field NAMES never values (e.g., `{ source: 'rsc:/visits', filter, count }` — no patient name, no transcript content). Polling endpoints (`/progress`, `/status`) deliberately not audited — they would generate thousands of rows; the page-level RSC audit covers the underlying read.
+
+2. **Three new `AuditAction` enum values** + a hand-written migration `20260505010200_round_3_pr_c_phi_read_audit_actions/migration.sql` adds them to the live DB enum. `prisma migrate dev` is blocked by the t_m24_smart_inject checksum drift (per memory note); migration shipped via `migrate diff` + hand-write + `migrate deploy` in CI. Mirrored into the `AuditAction` TS union in `apps/transcribe-md/src/lib/audit.ts` so call sites typecheck.
+
+3. **`audit_logs` REVOKE migration** — `20260505010210_round_3_pr_c_revoke_audit_mutation/migration.sql`:
+   ```sql
+   REVOKE UPDATE, DELETE, TRUNCATE ON TABLE audit_logs FROM meddoc;
+   GRANT INSERT, SELECT ON TABLE audit_logs TO meddoc;
+   REVOKE TRUNCATE ON ALL TABLES IN SCHEMA public FROM meddoc;
+   ```
+   The app role retains INSERT (logAudit) + SELECT (admin dashboard). HIPAA §164.312(c) integrity safeguard: the same code path that reads PHI cannot delete the audit trail of having read it. Smoke-tested by `tests/integrity/audit-logs-immutable.test.sh` (skip-or-pass: skips when migration not yet deployed; passes after deploy by trying DELETE/UPDATE/TRUNCATE and asserting "permission denied").
+
+4. **MinIO SSE bootstrap** — `scripts/minio-enable-sse.sh` runs `mc encrypt set sse-s3 local/transcribe-md-audio`, idempotent, with verification via `mc encrypt info`. Operator-step (post-merge): source `.env`, run the script. Header documents two known limitations: (a) SSE-S3 only encrypts NEW PUTs (existing objects need a one-shot rewrite sweep — pre-pilot we have <100 audio files so deferred to next maint window) and (b) the `/var/lib/docker` filesystem is still unencrypted at the disk level (Phase 6.3 / post-pilot LUKS migration).
+
+5. **Backup encryption fingerprint check.** `verify_public_key_fingerprint()` added to both `infra/backup-offsite-sync.sh` and `infra/minio-offsite-sync.sh`. Compares `sha256sum /etc/meddoc/offsite-backup-public.age` to the operator-deployed `/etc/meddoc/expected-public-key-fingerprint.sha256`. Failure mode taxonomy:
+   - **Mismatch** → fail-fast (exit 1). Catches the ensure_keypair() auto-regenerate fall-through (PR #110 made it less likely but not impossible) AND key-swap attack scenarios.
+   - **File missing** → warn-and-continue (transition mode). PR-C ships the function but the operator deploys the fingerprint file on next bootstrap; runs continue with a loud reminder until deploy.
+
+6. **`infra/postgres-backup/postscript.sh` neutered** — replaced its body with `exit 0`. The Phase 6.2 host-cron (`scripts/postgres-offsite-cron.sh`, PR #110) is now the canonical encrypted offsite leg. Postscript was shipping plaintext pg_dumps to remote S3 if `REMOTE_BACKUP_S3_*` env vars were populated — defense-in-depth removed by gutting the path entirely.
+
+### Tests
+
+| Test | Type | Result |
+|---|---|---|
+| `tests/audit/phi-read-audit.test.sh` | static (grep-based) regression guard for the 9 logAudit call sites + enum + TS union | ✅ 17/17 assertions pass |
+| `tests/integrity/audit-logs-immutable.test.sh` | live DB test (skip-or-pass) — INSERT/SELECT pass, DELETE/UPDATE/TRUNCATE permission-denied | ✅ SKIP currently (migration not deployed); will PASS after `npm run db:migrate:deploy` |
+| `tests/infra/backup-fingerprint.test.sh` | sandbox harness exercising verify_public_key_fingerprint() — missing-file/match/mismatch | ✅ all 8 assertions pass |
+
+### Operator steps post-merge (Kasra)
+
+1. **Apply migrations:** `cd /opt/meddoc-pro && npm run db:migrate:deploy`. This applies both new migrations (enum-add then REVOKE).
+2. **Re-run audit-logs-immutable test:** `bash tests/integrity/audit-logs-immutable.test.sh` — should PASS (not SKIP).
+3. **Enable MinIO SSE:** `set -a && . /opt/meddoc-pro/.env && set +a && bash scripts/minio-enable-sse.sh`. Idempotent; verify with `mc encrypt info`.
+4. **Deploy expected fingerprint file** (one-time, after canonical public key is in place):
+   ```
+   sudo sha256sum /etc/meddoc/offsite-backup-public.age | awk '{print $1}' \
+     | sudo tee /etc/meddoc/expected-public-key-fingerprint.sha256
+   sudo chmod 644 /etc/meddoc/expected-public-key-fingerprint.sha256
+   ```
+   Verify next backup-offsite-sync.sh run logs `INFO: public key fingerprint verified (...)` instead of the WARN-skip.
+5. **Spot-check audit emit:** load `/visits` and `/patients` from the dashboard; verify rows appear in admin audit-log dashboard with the new `VIEWED_*` actions.
+
+### Things explicitly NOT done in this PR
+
+- ❌ **Did not apply migrations live.** `claude` doesn't have `npm run db:migrate:deploy` access pre-deploy (deploy pipeline runs it). The two migration files ship in this PR; the apply step is operator-driven.
+- ❌ **Did not enable MinIO SSE live.** Same reason — script ships, run is operator-driven.
+- ❌ **Did not write `/etc/meddoc/expected-public-key-fingerprint.sha256`.** Requires sudo (`/etc/meddoc/` is root-owned); operator step.
+- ❌ **Did not re-encrypt existing MinIO objects.** SSE-S3 only encrypts NEW PUTs; pre-pilot has <100 audio files; sweep deferred to next maint window.
+- ❌ **Did not move MinIO to a LUKS-encrypted volume.** Phase 6.3 / post-pilot scope.
+- ❌ **Did not audit polling endpoints** (`/api/visits/[id]/progress`, `/api/visits/[id]/status`). They poll every few seconds during processing — auditing each call would create thousands of rows per visit. The page-level RSC audit covers the underlying read.

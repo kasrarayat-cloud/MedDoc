@@ -76,6 +76,14 @@ export const GET = withApiHandler<{ id: string }>(
       _max: { createdAt: true },
     });
 
+    // Round 3 PR-C — §164.312(b) PHI-read audit (A05-P0-004).
+    void logAudit({
+      action: 'VIEWED_PATIENT_FILE',
+      targetId: patient.id,
+      targetType: 'TranscribeMdPatient',
+      metadata: { source: 'api:GET /api/patients/[id]' },
+    });
+
     return NextResponse.json({
       patient: {
         id: patient.id,

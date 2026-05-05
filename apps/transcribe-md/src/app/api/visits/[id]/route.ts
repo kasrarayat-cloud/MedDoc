@@ -44,6 +44,7 @@ import { apiError, withApiHandler } from '@/lib/api-error';
 import { auth } from '@/lib/nextauth';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 import { log } from '@/lib/log';
+import { logAudit } from '@/lib/audit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -133,6 +134,16 @@ export const GET = withApiHandler<{ id: string }>(
     });
     // 404 on both "not found" AND "not yours" prevents ID enumeration.
     if (!visit || visit.userId !== userId) return apiError('not found', 404);
+
+    // Round 3 PR-C — §164.312(b) PHI-read audit (A05-P0-004). Fire-and-
+    // forget; logAudit never throws and pulls userId/IP/UA from session
+    // + headers internally. metadata uses field NAMES only, never PHI.
+    void logAudit({
+      action: 'VIEWED_VISIT',
+      targetId: visit.id,
+      targetType: 'TranscribeVisit',
+      metadata: { source: 'api:GET /api/visits/[id]' },
+    });
 
     return NextResponse.json({ visit }, { status: 200 });
   }

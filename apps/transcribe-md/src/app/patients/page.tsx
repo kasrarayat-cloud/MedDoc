@@ -19,6 +19,7 @@ import { redirect } from 'next/navigation';
 
 import prisma from '@meddoc/db';
 import { auth } from '@/lib/nextauth';
+import { logAudit } from '@/lib/audit';
 import { AppFrame } from '@/components/ui/app-frame';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Ic } from '@/components/ui/icon';
@@ -91,6 +92,17 @@ export default async function PatientsPage() {
   const countByPatient = new Map<string, number>(
     counts.map((c: CountRow) => [c.patientId, c._count._all])
   );
+
+  // Round 3 PR-C — §164.312(b) PHI-read audit (A05-P0-004). Patients
+  // list reveals identity (name + DOB) for the practice's full roster.
+  void logAudit({
+    action: 'VIEWED_PATIENT_LIST',
+    targetType: 'TranscribeMdPatient',
+    metadata: {
+      source: 'rsc:/patients',
+      count: rows.length,
+    },
+  });
 
   const patients: DashboardPatient[] = rows.map(
     (r: PatientRow): DashboardPatient => {
