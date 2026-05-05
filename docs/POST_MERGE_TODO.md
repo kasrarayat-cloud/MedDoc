@@ -1497,8 +1497,8 @@ P2/P3 findings should land in subsequent batched-cleanup PRs (analogous to PRs #
 
 | # | Title | PR | Status |
 |---|---|---|---|
-| **PR-A** | Secrets sweep — `.dockerignore` + `.env` cleanup + image rebuild + CI guard | (this PR) | 🚧 OPEN — closes A01-P0-001..003 + A02-P0-002 + A07-P3-001 |
-| PR-B | Edge security — sshd + UFW + fail2ban + evict ai-deal-hunter | — | pending |
+| PR-A | Secrets sweep — `.dockerignore` + `.env` cleanup + image rebuild + CI guard | #112 | 🚧 OPEN — closes A01-P0-001..003 + A02-P0-002 + A07-P3-001 |
+| **PR-B** | Edge security — sshd + UFW + fail2ban + evict ai-deal-hunter | (this PR) | 🚧 OPEN — closes A07-P0-001..003 |
 | PR-C | HIPAA tech — PHI-read audit + audit_logs REVOKE + MinIO SSE + backup fingerprint | — | pending |
 | PR-D | AI safety — empty-transcript guard + ICD/CPT allowlist + pharmacology + weight | — | pending |
 | PR-E | Data integrity — Rx warning unique + SOAP optimistic concurrency | — | pending |
@@ -1537,3 +1537,49 @@ Closes Round 3 audit findings:
 - **Did not rebase / rewrite git history.** Rotated keys are dead values at the vendor; rebase doesn't help and creates merge headaches. The CI guard is diff-only so historical secrets don't block future PRs.
 - **Did not paste new secret values into `.env`.** That happens post-merge by the operator (Kasra) per the rewritten LAUNCH_CHECKLIST §6.
 - **Did not commit any `.env*` file.** Verify via `git diff --cached --stat | grep -E '\.env'` (must be empty).
+
+---
+
+## 24.B 🛠 PR-B — Edge security hardening — 2026-05-05 (runbook-only)
+
+Branch: `fix/round-3-pr-b-edge-security` (stacked on `fix/round-3-pr-a-secrets-sweep`; auto-rebases clean as PR-A → audit branch → main lands).
+
+Closes Round 3 audit findings:
+- **A07-P0-001** sshd `PermitRootLogin yes`, no `AllowUsers`, password auth not explicitly disabled
+- **A07-P0-002** UFW disabled / no nftables / fail2ban absent (3 P0s rolled into one bucket)
+- **A07-P0-003** Root `ai-deal-hunter` uvicorn cohabits the PHI VPS on `:8000`
+
+### Path A — runbook only
+
+PR-B is **structural only — no live VPS changes from this session.** The Lead automation user (`claude`) is in `docker` group but is NOT in `sudo`; live operations on `/etc/ssh/sshd_config`, `ufw`, `apt-get install fail2ban`, and `systemctl stop ai-deal-hunter` all require root. Operator (Kasra) executes the runbook live, post-merge.
+
+### Operator decisions (made before drafting)
+
+1. **`AllowUsers`:** `ubuntu claude` (Q1). NOT `cortex` — provenance unconfirmed, blast-radius limit. 1-line edit later if needed.
+2. **`ai-deal-hunter`:** STOP + DISABLE + ARCHIVE (Q2). Move `/root/ai-deal-hunter/` → `/root/archive-2026-05-04/ai-deal-hunter/`. Don't delete; Kasra may relocate.
+3. **SSH IP allowlist:** NO (Q3). Open `22/tcp` to all; rely on key-only auth + fail2ban + sshd `MaxAuthTries=3` + `LoginGraceTime=30`. Avoids the lockout-from-cafe risk an IP allowlist creates.
+
+### Files added
+
+- `infra/ssh/sshd_config.recommended` — full sshd_config drop-in. Hardening directives: `PermitRootLogin no`, `PasswordAuthentication no`, `AllowUsers ubuntu claude`, `MaxAuthTries 3`, `LoginGraceTime 30`, `ClientAliveInterval 300`, etc. Inline comments explain each non-default directive's rationale.
+- `infra/ufw/after.rules.fragment` — chaifeng/ufw-docker DOCKER-USER chain integration. Lets UFW rules apply to Docker-published ports without breaking container-to-container traffic. Explicit insert position (before final COMMIT in `*filter` block) documented in the fragment header.
+- `infra/fail2ban/jail.local` — sshd jail with `bantime=3600`, `findtime=600`, `maxretry=3`, `ignoreip=127.0.0.1/8 ::1`. Web-app jails deliberately not enabled (Caddy threat model is rate-limit + WAF, not blacklist-IP).
+- `docs/runbooks/edge-security.md` — full operator runbook (~600 lines): pre-flight checklist, §1 prerequisites (verify `ubuntu` SSH key auth from a separate terminal), §2 pre-stage, §3 sshd hardening (`sshd -t` validation; `reload` not `restart`), §4 UFW + Docker compatibility (with immediate rollback if Docker breaks), §5 fail2ban, §6 evict ai-deal-hunter, §7 final verification, §8 recovery procedures (lockout, Docker break, fail2ban self-ban, ai-deal-hunter restore).
+- `docs/LAUNCH_CHECKLIST.md §6.5` — edge security checklist with all checkboxes from the runbook, ready for operator sign-off.
+
+### Things explicitly NOT done in this PR
+
+- **No live VPS changes.** No sshd reload, no UFW enable, no fail2ban install, no `ai-deal-hunter` stop. Path A pattern: Lead drafts, Kasra executes.
+- **No SSH port change.** Keeping `22/tcp` — port-shifting is security theatre, breaks tooling, doesn't deter port-scans.
+- **No SSH IP allowlist.** Q3 decision; can add `ufw allow from <ip>` later if Kasra gets a static office IP.
+- **No git history rebase.** Not relevant to this PR; mentioned for symmetry with PR-A's note.
+- **No production code touched.** Host config only.
+
+### Operator step (Kasra, post-merge)
+
+1. Read `docs/runbooks/edge-security.md` end-to-end.
+2. Open Zap Hosting web console as fallback path.
+3. Execute §0 pre-flight → §7 final verification.
+4. Tick all boxes in `LAUNCH_CHECKLIST.md §6.5`.
+5. Update §24.B in this file: 🚧 OPEN → ✅ MERGED with merge link.
+6. `git tag round-3-pr-b-complete && git push origin round-3-pr-b-complete`.
