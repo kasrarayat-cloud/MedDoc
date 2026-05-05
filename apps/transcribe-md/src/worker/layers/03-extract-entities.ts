@@ -41,11 +41,16 @@ export type Evidence = z.infer<typeof Evidence>;
 
 // A "fact plus evidence" wrapper used everywhere there's a single textual
 // finding to capture.
+//
+// Q2 fix-pack §06.3 — every fact field is `.min(1)` so the model can't
+// satisfy the schema with an empty string for a required clinical
+// concept. The retry-on-schema-fail loop catches the empty-string case
+// and re-prompts.
 function factWithEvidence<K extends string>(
   key: K
 ): z.ZodObject<{ [P in K | 'evidence_quote' | 'speaker' | 'timestamp']: z.ZodTypeAny }> {
   return z.object({
-    [key]: z.string(),
+    [key]: z.string().min(1),
     evidence_quote: z.string().min(1),
     speaker: z.string().optional(),
     timestamp: z.number().nonnegative().optional(),
@@ -71,7 +76,8 @@ const HpiDimensions = z.object({
 export const ExtractedEntities = z.object({
   chief_complaint: z
     .object({
-      statement: z.string(),
+      // Q2 fix-pack §06.3 — empty statement is invalid; force re-extract.
+      statement: z.string().min(1),
       evidence_quote: z.string().min(1),
       speaker: z.string().optional(),
       timestamp: z.number().nonnegative().optional(),
@@ -82,7 +88,8 @@ export const ExtractedEntities = z.object({
   medications: z
     .array(
       z.object({
-        name: z.string(),
+        // Q2 fix-pack — drug name must be present.
+        name: z.string().min(1),
         dose: z.string().nullable().optional(),
         route: z.string().nullable().optional(),
         frequency: z.string().nullable().optional(),
@@ -95,7 +102,8 @@ export const ExtractedEntities = z.object({
   allergies: z
     .array(
       z.object({
-        substance: z.string(),
+        // Q2 fix-pack — substance must be present (clinical safety).
+        substance: z.string().min(1),
         reaction: z.string().nullable().optional(),
         evidence_quote: z.string().min(1),
         speaker: z.string().optional(),
@@ -106,8 +114,9 @@ export const ExtractedEntities = z.object({
   family_history: z
     .array(
       z.object({
-        relation: z.string(),
-        condition: z.string(),
+        // Q2 fix-pack — both relation and condition meaningful.
+        relation: z.string().min(1),
+        condition: z.string().min(1),
         evidence_quote: z.string().min(1),
         speaker: z.string().optional(),
         timestamp: z.number().nonnegative().optional(),
@@ -125,8 +134,9 @@ export const ExtractedEntities = z.object({
   ros: z
     .array(
       z.object({
-        system: z.string(),
-        finding: z.string(),
+        // Q2 fix-pack — both system and finding meaningful.
+        system: z.string().min(1),
+        finding: z.string().min(1),
         evidence_quote: z.string().min(1),
         speaker: z.string().optional(),
         timestamp: z.number().nonnegative().optional(),
@@ -136,8 +146,9 @@ export const ExtractedEntities = z.object({
   exam_findings: z
     .array(
       z.object({
-        system: z.string(),
-        finding: z.string(),
+        // Q2 fix-pack — both system and finding meaningful.
+        system: z.string().min(1),
+        finding: z.string().min(1),
         evidence_quote: z.string().min(1),
         speaker: z.string().optional(),
         timestamp: z.number().nonnegative().optional(),
@@ -147,7 +158,8 @@ export const ExtractedEntities = z.object({
   tests_mentioned: z
     .array(
       z.object({
-        test: z.string(),
+        // Q2 fix-pack — test name must be present.
+        test: z.string().min(1),
         result_if_given: z.string().nullable().optional(),
         evidence_quote: z.string().min(1),
         speaker: z.string().optional(),
@@ -418,7 +430,9 @@ export async function runLayer3ExtractEntities(
     user,
     schema: ExtractedEntities,
     maxTokens: 6144,
-    temperature: 0.2,
+    // Q2 fix-pack — entity extraction is structured-output; tightened
+    // from 0.2 to 0.1 for reproducible parses (audit §08).
+    temperature: 0.1,
   });
 
   await prisma.transcribeVisit.update({

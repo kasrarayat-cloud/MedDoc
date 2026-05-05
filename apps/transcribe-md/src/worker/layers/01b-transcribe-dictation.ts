@@ -15,6 +15,10 @@ import { Readable } from 'node:stream';
 import prisma from '@meddoc/db';
 import { deepgramBatchTranscribe } from '@meddoc/ai';
 import { statAudio, streamAudio } from '@/lib/minio';
+// Q2 fix-pack — dictation is the path where the doctor speaks
+// medication names, anatomy, labs, and diagnoses directly. Until now
+// L1b passed no keyterms — the densest-yield case for the boost.
+import { CLINICAL_KEYTERMS } from '@/lib/deepgram-vocabulary';
 import {
   computeAudioConfidenceStats,
   shouldFlagForReview,
@@ -63,6 +67,8 @@ export async function runLayer1bTranscribeDictation(
         diarize: false,
         utterances: false,
       },
+      // Q2 fix-pack — same clinical-vocabulary boost as L1.
+      keyterms: CLINICAL_KEYTERMS,
     });
   };
 

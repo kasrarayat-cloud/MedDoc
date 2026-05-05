@@ -41,6 +41,11 @@ export const ProcedureCpt = z.object({
   code: z.string().regex(/^[0-9]{5}$/, '5-digit CPT'),
   description: z.string(),
   evidence_quote: z.string().min(1),
+  /** Q2 fix-pack §06.6 — categorical confidence on the procedure
+   *  attribution. "low" → SOAP barely supports this procedure; the
+   *  doctor should review before billing. The post-processor uses
+   *  this to flip needsReview when any procedure lands "low". */
+  confidenceLevel: z.enum(['high', 'medium', 'low']).default('high'),
 });
 
 export const Modifier = z.object({
@@ -102,6 +107,13 @@ export async function runLayer7bCptCoding(
     'Evidence rule: every code carries a specific SOAP quote. If you',
     'cannot cite evidence, omit the code.',
     '',
+    'Procedure confidence: assign confidenceLevel to each procedure:',
+    '  "high"   — SOAP explicitly documents the procedure as performed',
+    '  "medium" — implied by findings + plan but not unambiguous',
+    '  "low"    — speculative based on context (worth doctor review)',
+    'When in doubt, prefer "low" + let the doctor confirm rather than',
+    '"medium" + risk a speculative bill.',
+    '',
     'Respond with VALID JSON ONLY, no markdown fences:',
     '{',
     '  "em": {',
@@ -144,7 +156,8 @@ export async function runLayer7bCptCoding(
     user,
     schema: CptResult,
     maxTokens: 3072,
-    temperature: 0.1,
+    // Q2 fix-pack — same rationale as L7a: billing codes deterministic.
+    temperature: 0,
   });
 
   // Round 3 PR-D — A06-P0-002 deterministic CPT allowlist floor.
@@ -182,6 +195,22 @@ export async function runLayer7bCptCoding(
     procedures: filteredProcedures,
     modifiers: result.modifiers,
   };
+
+  // Q2 fix-pack §06.6 — flag visits where any procedure landed at low
+  // confidence. Doctor sees the warning before signing rather than
+  // auto-attaching speculative billing codes.
+  const lowConfProcedures = filteredProcedures.filter(
+    (p) => p.confidenceLevel === 'low'
+  );
+  if (lowConfProcedures.length > 0) {
+    await prisma.transcribeVisit.update({
+      where: { id: input.visitId },
+      data: {
+        needsReview: true,
+        reviewReason: `${lowConfProcedures.length} CPT procedure code${lowConfProcedures.length === 1 ? '' : 's'} at low confidence — verify before billing: ${lowConfProcedures.map((p) => p.code).join(', ')}.`,
+      },
+    });
+  }
 
   await prisma.transcribeVisit.update({
     where: { id: input.visitId },

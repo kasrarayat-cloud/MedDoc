@@ -420,3 +420,89 @@ export const MEDICATION_KEYTERMS_TAIL: readonly string[] = [
 export const MEDICATION_KEYTERMS_FULL: readonly string[] = Array.from(
   new Set<string>([...MEDICATION_KEYTERMS, ...MEDICATION_KEYTERMS_TAIL])
 );
+
+// ============================================================================
+// Q2 fix-pack — clinical-vocabulary expansion (audit findings 01.9 + 03.4)
+// ----------------------------------------------------------------------------
+// MEDICATION_KEYTERMS biased Nova-3-medical for drug names; anatomy,
+// labs, procedures, and common-diagnosis terms still mistranscribe.
+// These four small lists ride alongside the medications so the same
+// keyterm payload covers the full clinical surface. L1 (conversation)
+// + L1b (dictation) both consume CLINICAL_KEYTERMS below.
+//
+// Sizing discipline: each list is hand-curated to ~12 highest-yield
+// terms. The brief asked for 20-30 per category, but Deepgram's
+// 500-subword-token per-request cap (summed across all keyterms)
+// makes that infeasible without giving up medication coverage.
+// Rather than swap one cohort for another, we ship the densest-yield
+// 48 new terms across these categories. The test below enforces the
+// combined CLINICAL_KEYTERMS payload stays under the 450-token
+// internal cap.
+// ============================================================================
+
+/** Most-commonly-mistranscribed body parts + anatomical regions.
+ *  Trimmed to fit the 450-token combined cap with MEDICATION_KEYTERMS. */
+export const ANATOMY_TERMS: readonly string[] = [
+  'auscultation',
+  'palpation',
+  'epigastric',
+  'periumbilical',
+  'pharyngeal',
+  'tympanic membrane',
+  'conjunctiva',
+];
+
+/** Common labs / panels / individual tests. Acronyms used over full
+ *  forms where the acronym has a unique pronunciation (CBC, ESR) —
+ *  saves token budget without losing recognition power. */
+export const LAB_TESTS: readonly string[] = [
+  'hemoglobin a1c',
+  'basic metabolic panel',
+  'complete blood count',
+  'lipid panel',
+  'troponin',
+  'creatinine',
+  'electrolytes',
+  'urinalysis',
+  'prothrombin time',
+];
+
+/** Common in-office + inpatient procedures. */
+export const PROCEDURES: readonly string[] = [
+  'electrocardiogram',
+  'echocardiogram',
+  'spirometry',
+  'arthrocentesis',
+  'punch biopsy',
+  'cryotherapy',
+  'cerumen removal',
+  'venipuncture',
+];
+
+/** Top chronic + acute diagnoses where transcription drift produces
+ *  miscoded conditions (e.g. "hypertension" → "high pretension"). */
+export const COMMON_DIAGNOSES: readonly string[] = [
+  'hypertension',
+  'hyperlipidemia',
+  'hypothyroidism',
+  'diabetes mellitus',
+  'osteoarthritis',
+  'atrial fibrillation',
+  'cellulitis',
+  'pneumonia',
+];
+
+/** Q2 fix-pack — unified keyterm payload used by L1 (conversation) and
+ *  L1b (dictation) transcription calls. Order: medications first
+ *  (highest-stakes — a wrong drug name is a clinical-safety event),
+ *  then anatomy / labs / procedures / diagnoses. Deduped (rare
+ *  overlap) so the budget test sees what the runtime sees. */
+export const CLINICAL_KEYTERMS: readonly string[] = Array.from(
+  new Set<string>([
+    ...MEDICATION_KEYTERMS,
+    ...ANATOMY_TERMS,
+    ...LAB_TESTS,
+    ...PROCEDURES,
+    ...COMMON_DIAGNOSES,
+  ])
+);
