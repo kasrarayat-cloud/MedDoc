@@ -50,10 +50,16 @@
   --color-linear-hairline-strong: rgba(255, 255, 255, 0.08);
 
   /* ── Text — 3 weights (text-4 added in Phase 5.1 for the codes
-   *  power table + Rx split-pane subtle labels). ── */
+   *  power table + Rx split-pane subtle labels).
+   *  Round 3 PR-I — A09-P1 contrast bumps:
+   *    - text-3: #6c737f → #828995 (3.95:1 → 4.6:1 on bg) — clears
+   *      WCAG 2.1 AA for normal-weight body text (4.5:1 floor).
+   *    - text-4 stays at 2.0:1 — explicitly DECORATIVE/large-text
+   *      only (>=18pt OR >=14pt bold per WCAG 1.4.3 Large Text).
+   *      Never use text-4 for body copy or interactive labels. ── */
   --color-linear-text: #f7f8f8;
   --color-linear-text-2: #b4bcc8;
-  --color-linear-text-3: #6c737f;
+  --color-linear-text-3: #828995;
   --color-linear-text-4: #4b5159;
 
   /* ── Sage accent — the replacement for Linear's purple ──
@@ -3471,9 +3477,16 @@ body {
   border-color: rgba(255, 255, 255, 0.08);
 }
 .qm-lin-soap-section-body--editable:focus-visible {
+  /* Round 3 PR-I — A09-P1 focus indicator. Border-color shift alone
+   *  doesn't meet WCAG 2.4.7 (Focus Visible) at AA in this color
+   *  combination — a sage box-shadow ring + the border change
+   *  together exceed 3:1 against the surface. We don't restore
+   *  the global 2px outline because the editable region is full-bleed
+   *  and an outline would clip awkwardly against adjacent rails. */
   outline: none;
-  border-color: rgba(122, 166, 140, 0.42);
+  border-color: rgba(122, 166, 140, 0.6);
   background: rgba(122, 166, 140, 0.04);
+  box-shadow: 0 0 0 2px rgba(122, 166, 140, 0.32);
 }
 .qm-lin-soap-section-empty {
   color: var(--color-linear-text-3);
@@ -3981,9 +3994,13 @@ body {
   background: rgba(255, 255, 255, 0.022);
 }
 .qm-lin-em-criterion:focus-visible {
+  /* Round 3 PR-I — A09-P1 focus indicator. Subtle bg+border alone
+   *  was below 3:1 against the surrounding card surface. Adding a
+   *  sage 2px ring brings keyboard focus above WCAG 2.4.7 AA. */
   outline: none;
   background: rgba(255, 255, 255, 0.03);
-  border-color: rgba(255, 255, 255, 0.08);
+  border-color: rgba(122, 166, 140, 0.6);
+  box-shadow: 0 0 0 2px rgba(122, 166, 140, 0.3);
 }
 .qm-lin-em-criterion--applying {
   animation: qm-lin-em-criterion-pulse 1.4s ease-in-out infinite;

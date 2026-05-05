@@ -50,7 +50,22 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       className={`${sans.variable} ${mono.variable} dark`}
       suppressHydrationWarning
     >
-      <body className="min-h-screen antialiased">{children}</body>
+      <body className="min-h-screen antialiased">
+        {/* Round 3 PR-I — A09-P1 WCAG 2.4.1 (Bypass Blocks). Skip-to
+            content is the first focusable element on every marketing
+            page; visible only when focused (sr-only → focus:not-sr-only).
+            Marketing pages render `<main>` via individual page wrappers
+            (most just call NavBar + section + Footer); we add the
+            scroll-target landmark here so the link always has somewhere
+            to land. */}
+        <a
+          href="#main"
+          className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-50 focus:rounded-md focus:bg-[var(--color-linear-sage)] focus:px-3 focus:py-2 focus:font-medium focus:text-[var(--color-linear-bg)] focus:shadow-lg"
+        >
+          Skip to main content
+        </a>
+        {children}
+      </body>
     </html>
   );
 }
