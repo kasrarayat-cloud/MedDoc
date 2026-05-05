@@ -40,6 +40,14 @@ vi.mock('@meddoc/db', () => ({
   },
 }));
 
+// Fix-Pack 1 Q0-1 — L7c now imports `logAudit` from @/lib/audit so the
+// validator integration can emit audit rows. That module pulls in
+// next-auth → next/server which jsdom can't resolve in this unit test.
+// Stub it out — the peds-framing tests don't assert on audit emits.
+vi.mock('@/lib/audit', () => ({
+  logAudit: vi.fn(async () => undefined),
+}));
+
 import { runLayer7cRxDrafting } from '../07c-rx-drafting';
 
 const baseInput = {
