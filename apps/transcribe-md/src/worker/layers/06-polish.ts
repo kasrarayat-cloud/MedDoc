@@ -81,7 +81,10 @@ export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output>
       system,
       user,
       maxTokens: 8192,
-      temperature: 0.2,
+      // Q2 fix-pack — polish is constrained edit ("apply these fixes").
+      // Tightened from 0.2 to 0.1 so the same draft + critique produce
+      // the same revised SOAP run-to-run.
+      temperature: 0.1,
     });
     soapFinal = text;
   }

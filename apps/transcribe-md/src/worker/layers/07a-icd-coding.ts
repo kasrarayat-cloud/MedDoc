@@ -22,6 +22,12 @@ export const IcdCode = z.object({
   evidence_quote: z.string().min(1),
   /** 0-1 confidence — the UI maps <0.5 red, 0.5-0.8 amber, >0.8 green. */
   confidence: z.number().min(0).max(1),
+  /** Q2 fix-pack §06.6 — categorical companion to the numeric
+   *  confidence. Derived from the number (>=0.8 = high, 0.5-0.8 =
+   *  medium, <0.5 = low). The dual representation lets the UI render
+   *  the gradient AND the post-processor flag low-confidence codes
+   *  for `needsReview` without re-deriving thresholds. */
+  confidenceLevel: z.enum(['high', 'medium', 'low']),
 });
 export type IcdCode = z.infer<typeof IcdCode>;
 
@@ -68,13 +74,19 @@ export async function runLayer7aIcdCoding(
     '    0.5-0.7 reasonable inference, worth doctor review',
     '    <0.5   speculative — include only if you would back it in',
     '            a billing audit',
+    '- confidenceLevel: categorical view of confidence (Q2 fix-pack):',
+    '    "high"   → confidence >= 0.8',
+    '    "medium" → 0.5 <= confidence < 0.8',
+    '    "low"    → confidence < 0.5',
+    '  Always set; downstream UI flags low-confidence codes for review.',
     '',
     'CRITICAL: If you cannot cite a specific evidence_quote for a code,',
     'OMIT the code. Hallucinating ICD codes can constitute billing fraud.',
     '',
     'Respond with VALID JSON ONLY, no markdown fences:',
     '{ "codes": [{ "code": "...", "description": "...",',
-    '              "evidence_quote": "...", "confidence": 0.0 }] }',
+    '              "evidence_quote": "...", "confidence": 0.0,',
+    '              "confidenceLevel": "high" }] }',
   ].join('\n');
 
   const user = [
@@ -98,7 +110,9 @@ export async function runLayer7aIcdCoding(
     user,
     schema: IcdResult,
     maxTokens: 3072,
-    temperature: 0.1,
+    // Q2 fix-pack — billing codes are deterministic; tightened from
+    // 0.1 to 0 so the same SOAP produces the same code list every time.
+    temperature: 0,
   });
 
   // Round 3 PR-D — A06-P0-002 deterministic ICD-10 allowlist floor.
@@ -110,7 +124,15 @@ export async function runLayer7aIcdCoding(
   const rejected: Array<{ code: string; description: string }> = [];
   for (const c of result.codes) {
     if (isValidIcd10(c.code)) {
-      accepted.push(c);
+      // Q2 fix-pack §06.6 — defensive re-derivation of confidenceLevel
+      // from the numeric confidence. The model is asked to emit both
+      // and they should agree; if the model drifted on the categorical
+      // rule, the numeric value is the source of truth. Prevents a
+      // "high" badge over a 0.4-confidence code.
+      const derivedLevel: 'high' | 'medium' | 'low' =
+        c.confidence >= 0.8 ? 'high' :
+        c.confidence >= 0.5 ? 'medium' : 'low';
+      accepted.push({ ...c, confidenceLevel: derivedLevel });
     } else {
       rejected.push({ code: c.code, description: c.description });
     }
@@ -133,6 +155,21 @@ export async function runLayer7aIcdCoding(
     });
   }
   const filtered: typeof result = { codes: accepted };
+
+  // Q2 fix-pack §06.6 — surface low-confidence codes via needsReview
+  // when one or more accepted codes land at confidenceLevel='low'.
+  // Doctor sees the warning before signing rather than auto-attaching
+  // a speculative code to billing.
+  const lowConfCodes = accepted.filter((c) => c.confidenceLevel === 'low');
+  if (lowConfCodes.length > 0) {
+    await prisma.transcribeVisit.update({
+      where: { id: input.visitId },
+      data: {
+        needsReview: true,
+        reviewReason: `${lowConfCodes.length} ICD code${lowConfCodes.length === 1 ? '' : 's'} at low confidence — verify before billing: ${lowConfCodes.map((c) => c.code).join(', ')}.`,
+      },
+    });
+  }
 
   await prisma.transcribeVisit.update({
     where: { id: input.visitId },

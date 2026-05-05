@@ -31,11 +31,21 @@ const MODEL = 'claude-opus-4-7';
  *  drift here would surface immediately in the SA1 validator integration. */
 const PEDS_AGE_THRESHOLD_YEARS = 18;
 
+// Q2 fix-pack §06.7 — RxAction enum expanded with clinically distinct
+// scenarios that previously had to be encoded as discontinue+new pairs
+// (switch) or were missing entirely (refill, hold, restart). Existing
+// 'increase' / 'decrease' kept for granular dose changes — 'switch' is
+// not a substitute for those. 'unclear' stays as the safety fallback
+// for ambiguous plan language.
 export const RxAction = z.enum([
   'new',
+  'refill',
   'continue',
   'increase',
   'decrease',
+  'switch',
+  'hold',
+  'restart',
   'discontinue',
   'unclear',
 ]);
@@ -167,9 +177,18 @@ export async function runLayer7cRxDrafting(
       '  (null if not stated)',
       '- quantity: e.g. "90" or "30 mL" (null if not stated)',
       '- refills: as a string, e.g. "3" or "0" (null if not stated)',
-      '- action: one of new | continue | increase | decrease | discontinue',
-      '  | unclear. Use "unclear" WHEN YOU ARE NOT SURE rather than',
-      '  guessing.',
+      '- action: one of:',
+      '    new          — first-time start; full sig required',
+      '    refill       — same drug, same dose; new fill cycle',
+      '    continue     — keep on current drug/dose with no change',
+      '    increase     — same drug, higher dose',
+      '    decrease     — same drug, lower dose',
+      '    switch       — replacing one drug with another (single decision)',
+      '    hold         — temporary pause (peri-op, illness, lab abnormality)',
+      '    restart      — resuming a previously held drug',
+      '    discontinue  — stopping the drug',
+      '    unclear      — plan is ambiguous; do NOT guess',
+      '  Use "unclear" WHEN YOU ARE NOT SURE rather than guessing.',
       '- evidence_quote: verbatim SOAP snippet supporting the Rx',
       '',
       'SAFETY WARNINGS — surface, don\'t silently fix. For each concern,',

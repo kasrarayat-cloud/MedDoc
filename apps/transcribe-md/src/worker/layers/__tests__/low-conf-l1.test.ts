@@ -66,7 +66,12 @@ vi.mock('@/lib/minio', () => ({
 }));
 
 // Avoid pulling the full vocabulary list into the test process.
+// Q2 fix-pack — L1 now consumes CLINICAL_KEYTERMS (medications +
+// anatomy + labs + procedures + diagnoses). Mock both names with
+// empty arrays since the test cares about confidence-stat plumbing,
+// not keyterm payload content.
 vi.mock('@/lib/deepgram-vocabulary', () => ({
+  CLINICAL_KEYTERMS: [],
   MEDICATION_KEYTERMS: [],
 }));
 
