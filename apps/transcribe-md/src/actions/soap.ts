@@ -11,21 +11,41 @@ import { captureEditPattern } from '@/lib/edit-tracking';
 const SaveSoapSchema = z.object({
   visitId: z.string().min(1),
   text: z.string().max(50_000),
+  expectedVersion: z.number().int().nonnegative().optional(),
 });
 
 export interface SaveSoapResult {
   ok: boolean;
   error?: string;
+  /**
+   * Round 3 PR-E (A09-P0-003) — populated when error === 'conflict'.
+   * Lets the client surface a "another edit happened — reload to see"
+   * UX without a second round trip.
+   */
+  conflict?: {
+    currentVersion: number;
+    currentText: string;
+  };
+  /** New version after a successful write. Client stores it for the
+   *  next save's expectedVersion. */
+  newVersion?: number;
 }
 
 /** Persists the user's edits to soapFinal. Signed visits are locked —
- *  the action rejects rather than silently dropping the write. */
+ *  the action rejects rather than silently dropping the write.
+ *
+ *  Round 3 PR-E (A09-P0-003) — optimistic concurrency. If
+ *  `expectedVersion` is provided (preferred), the write is gated by
+ *  `WHERE soapVersion = expectedVersion`; mismatch returns
+ *  `error: 'conflict'` with current state. If omitted (legacy
+ *  callers during deploy window), falls back to last-write-wins. */
 export async function saveSoapDraftAction(
   visitId: string,
-  text: string
+  text: string,
+  expectedVersion?: number
 ): Promise<SaveSoapResult> {
   const session = await requireSession();
-  const parsed = SaveSoapSchema.safeParse({ visitId, text });
+  const parsed = SaveSoapSchema.safeParse({ visitId, text, expectedVersion });
   if (!parsed.success) {
     return { ok: false, error: 'Invalid input.' };
   }
@@ -56,13 +76,52 @@ export async function saveSoapDraftAction(
     return { ok: false, error: 'Note is still processing.' };
   }
 
-  await prisma.transcribeVisit.update({
+  // Round 3 PR-E (A09-P0-003) — optimistic-concurrency path.
+  // updateMany with a WHERE clause on soapVersion is atomic in
+  // Postgres: only one of two concurrent saves with the same
+  // expectedVersion succeeds; the other returns count=0.
+  if (parsed.data.expectedVersion !== undefined) {
+    const result = await prisma.transcribeVisit.updateMany({
+      where: { id: visitId, soapVersion: parsed.data.expectedVersion },
+      data: {
+        soapFinal: parsed.data.text,
+        soapVersion: { increment: 1 },
+      },
+    });
+    if (result.count === 0) {
+      // Conflict: another save landed first. Surface current version
+      // + text so the client can show a "reload to see latest" prompt.
+      const current = await prisma.transcribeVisit.findUnique({
+        where: { id: visitId },
+        select: { soapVersion: true, soapFinal: true },
+      });
+      return {
+        ok: false,
+        error: 'conflict',
+        conflict: {
+          currentVersion: current?.soapVersion ?? -1,
+          currentText: current?.soapFinal ?? '',
+        },
+      };
+    }
+    revalidatePath(`/visits/${visitId}`);
+    return { ok: true, newVersion: parsed.data.expectedVersion + 1 };
+  }
+
+  // Legacy fallback (no expectedVersion supplied) — last-write-wins.
+  // Still bumps soapVersion so a subsequent expectedVersion-aware
+  // call sees the right value.
+  const updated = await prisma.transcribeVisit.update({
     where: { id: visitId },
-    data: { soapFinal: parsed.data.text },
+    data: {
+      soapFinal: parsed.data.text,
+      soapVersion: { increment: 1 },
+    },
+    select: { soapVersion: true },
   });
 
   revalidatePath(`/visits/${visitId}`);
-  return { ok: true };
+  return { ok: true, newVersion: updated.soapVersion };
 }
 
 /** Freezes the current soapFinal into signedSoap and flips status to

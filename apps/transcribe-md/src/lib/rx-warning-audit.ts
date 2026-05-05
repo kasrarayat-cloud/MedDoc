@@ -87,19 +87,54 @@ export async function recordOverride(
     }
 
     // ── 3. Write audit row ──
+    // Round 3 PR-E (A09-P0-001) — idempotent on (visitId, warningId).
+    // Same warning re-clicked or network-retried produces the SAME
+    // audit row (the original one), not a new dupe that would inflate
+    // the sign-gate's distinct-warning count and let an actual
+    // unanswered warning slip through. The compound unique key is
+    // enforced at the DB layer; we catch P2002 instead of using upsert
+    // so we PRESERVE the original `overriddenAt` + `reason` (audit-
+    // trail integrity) rather than overwrite with the second-click
+    // data.
     type CreatedRow = { id: string };
-    const created: CreatedRow = await prisma.rxWarningOverride.create({
-      data: {
-        visitId: input.visitId,
-        rxLineNumber: input.rxLineNumber,
-        warningId: input.warningId,
-        severity: input.severity,
-        headline: input.headline,
-        reason: trimmedReason,
-        overriddenBy: session.user.id,
-      },
-      select: { id: true },
-    });
+    let created: CreatedRow;
+    try {
+      created = await prisma.rxWarningOverride.create({
+        data: {
+          visitId: input.visitId,
+          rxLineNumber: input.rxLineNumber,
+          warningId: input.warningId,
+          severity: input.severity,
+          headline: input.headline,
+          reason: trimmedReason,
+          overriddenBy: session.user.id,
+        },
+        select: { id: true },
+      });
+    } catch (err: unknown) {
+      // P2002 = Prisma unique-constraint violation. Treat as
+      // idempotent: fetch the existing row and return its id. Any
+      // other error re-throws into the outer try/catch.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const code = (err as any)?.code;
+      if (code !== 'P2002') throw err;
+      const existing = await prisma.rxWarningOverride.findUnique({
+        where: {
+          rx_warning_overrides_visit_warning_unique: {
+            visitId: input.visitId,
+            warningId: input.warningId,
+          },
+        },
+        select: { id: true },
+      });
+      if (!existing) {
+        return {
+          ok: false,
+          error: 'Override write conflicted; please retry.',
+        };
+      }
+      created = existing;
+    }
 
     // HIPAA audit row. The domain-specific `rx_warning_overrides`
     // table is the clinical-safety record; `audit_logs` is the
