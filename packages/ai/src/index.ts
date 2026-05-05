@@ -52,6 +52,12 @@ export {
   type RxValidationResult,
   type RxValidationWarning,
 } from './data/dose-ranges-validator';
+// Round 3 PR-J — prompt-injection delimiter helpers (audit finding A07-P0).
+export {
+  wrapAsData,
+  delimiterSystemSuffix,
+  type WrapAsDataResult,
+} from './prompt-delimiters';
 // Phase 6 — per-call usage events (separate table from ai_calls; this
 // one carries the cost rollups for the admin usage dashboard).
 export {
