@@ -101,6 +101,21 @@ export function SoapEditor({
   const [text, setText] = useState(initialText);
   const [soapVersion, setSoapVersion] = useState(initialSoapVersion);
   const [, startSaving] = useTransition();
+  // Phase 5.2 stub completion — lifted SignAndSendModal open state.
+  // Both the bottom-action "Sign & Send" Dialog.Trigger and the
+  // CodingRail "Confirm <code> · sign" button drive this single
+  // controlled state; the modal honors `controlledOpen` when these
+  // are passed in. Pre-fix the rail dispatched a `qm:request-sign`
+  // window event that no listener consumed.
+  const [signModalOpen, setSignModalOpen] = useState(false);
+  // Local mirror of the rail's score so apply-additions responses can
+  // update the rail-rendered tier without a full page reload. The
+  // initial value is the server-rendered score; the rail's internal
+  // useEffect re-syncs from props when the parent re-renders.
+  const [emScore, setEmScore] = useState<EmScore | null>(initialScore);
+  useEffect(() => {
+    setEmScore(initialScore);
+  }, [initialScore]);
   // Phase 5.2 — boost hints are surfaced by the CodingRail via the
   // `qm:em-boost-hints` CustomEvent (loose coupling, no shared store).
   // The body listens and re-renders with sage/amber pulse dots in the
@@ -192,15 +207,61 @@ export function SoapEditor({
           readonly={isReadonly}
         />
 
-        {/* RIGHT — Coding Rail slot. Real implementation from Subagent
-            C; consumes the server-rendered initialScore. When score is
-            null (engine unavailable / fail-soft), render the skeleton. */}
+        {/* RIGHT — Coding Rail slot. Phase 5.2 stub completion: now
+            wires `onConfirmSign` (opens the lifted SignAndSendModal)
+            and `onApplyAdditions` (POSTs to the bump-additions
+            persistence endpoint). The rail's `emScore` prop is the
+            local state mirror so apply-additions responses update
+            the displayed tier without a page reload. */}
         <aside className="qm-lin-coding-rail-slot" aria-label="Billing support">
-          {initialScore ? (
+          {emScore ? (
             <CodingRail
-              emScore={initialScore}
+              emScore={emScore}
               visitId={visitId}
               readonly={isReadonly}
+              onConfirmSign={
+                isReadonly || isSigned
+                  ? undefined
+                  : () => setSignModalOpen(true)
+              }
+              onApplyAdditions={async (additions) => {
+                try {
+                  const res = await fetch(
+                    `/api/visits/${visitId}/em-score/apply-additions`,
+                    {
+                      method: 'POST',
+                      headers: { 'content-type': 'application/json' },
+                      body: JSON.stringify({ additions }),
+                    }
+                  );
+                  if (!res.ok) {
+                    const body = (await res.json().catch(() => ({}))) as {
+                      error?: string;
+                    };
+                    return {
+                      ok: false,
+                      error:
+                        body.error ?? `Apply failed (${res.status}).`,
+                    };
+                  }
+                  const data = (await res.json()) as {
+                    ok: boolean;
+                    newScore?: EmScore;
+                  };
+                  if (data.ok && data.newScore) {
+                    setEmScore(data.newScore);
+                  }
+                  return { ok: data.ok, newScore: data.newScore };
+                } catch (err) {
+                  return {
+                    ok: false,
+                    error:
+                      err instanceof Error
+                        ? err.message
+                        : 'Network error applying additions.',
+                  };
+                }
+              }}
             />
           ) : (
             <CodingRailSkeleton />
@@ -223,6 +284,8 @@ export function SoapEditor({
             signOnSubmit
             triggerLabel="Sign & Send"
             triggerIcon={<Lock className="h-3.5 w-3.5" aria-hidden />}
+            controlledOpen={signModalOpen}
+            onControlledOpenChange={setSignModalOpen}
           />
         )}
 
