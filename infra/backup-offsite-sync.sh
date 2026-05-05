@@ -201,6 +201,65 @@ ensure_keypair() {
 }
 
 # ---------------------------------------------------------------------------
+# Round 3 PR-C (audit A05-P1-004): verify the public key on disk matches
+# the operator-deployed expected fingerprint. The expected sha256 lives at
+# /etc/meddoc/expected-public-key-fingerprint.sha256 — written once by the
+# operator immediately after scp'ing the canonical public key onto the VPS.
+#
+# Failure mode taxonomy:
+#   - Mismatch: hard-fail (exit 1). Encrypting with a key whose private half
+#               is not in operator custody would produce unrecoverable blobs.
+#   - File missing: warn-and-continue (transition mode). PR-C bootstrap
+#               instructs the operator to deploy the fingerprint file
+#               alongside the public key; until that lands, runs continue
+#               with a loud reminder rather than blocking the backup chain.
+#
+# Override for tests: EXPECTED_FINGERPRINT_FILE env var.
+# ---------------------------------------------------------------------------
+verify_public_key_fingerprint() {
+  local expected_file="${EXPECTED_FINGERPRINT_FILE:-/etc/meddoc/expected-public-key-fingerprint.sha256}"
+  if [[ ! -f "$expected_file" ]]; then
+    log "WARN: ${expected_file} not present — fingerprint check SKIPPED."
+    log "WARN: Round 3 PR-C requires this file. Operator must run, ONCE,"
+    log "WARN: after deploying the canonical public key:"
+    log "WARN:   sha256sum ${PUBLIC_KEY} | awk '{print \$1}' > ${expected_file}"
+    log "WARN:   chmod 644 ${expected_file}"
+    log "WARN: Continuing without fingerprint check (transition mode)."
+    return 0
+  fi
+
+  local actual expected
+  actual="$(sha256sum "$PUBLIC_KEY" | awk '{print $1}')"
+  expected="$(tr -d '[:space:]' < "$expected_file")"
+
+  if [[ "$actual" != "$expected" ]]; then
+    log "ERROR: public key fingerprint MISMATCH — refusing to encrypt."
+    log "ERROR:   path:     ${PUBLIC_KEY}"
+    log "ERROR:   actual:   ${actual}"
+    log "ERROR:   expected: ${expected} (from ${expected_file})"
+    log "ERROR:"
+    log "ERROR: The public key on disk does not match the canonical key. Possible causes:"
+    log "ERROR:   1. The auto-generate fall-through in ensure_keypair() fired (look for"
+    log "ERROR:      a 'keypair generated' line in earlier log entries) — encrypt with"
+    log "ERROR:      this key and the blob is UNRECOVERABLE because the operator's"
+    log "ERROR:      offline private key cannot decrypt it."
+    log "ERROR:   2. An attacker swapped the public key to capture future backups."
+    log "ERROR:   3. The operator rotated the key and forgot to update ${expected_file}."
+    log "ERROR:"
+    log "ERROR: To recover (only after verifying which case applies):"
+    log "ERROR:   - Case 1: discard the auto-generated keypair, re-deploy the canonical"
+    log "ERROR:            public key from offline custody."
+    log "ERROR:   - Case 2: incident response — see docs/runbooks/edge-security.md §8.4"
+    log "ERROR:            then re-deploy canonical public key."
+    log "ERROR:   - Case 3: update the expected fingerprint:"
+    log "ERROR:            sha256sum ${PUBLIC_KEY} | awk '{print \$1}' > ${expected_file}"
+    exit 1
+  fi
+
+  log "INFO: public key fingerprint verified (${actual:0:16}...)"
+}
+
+# ---------------------------------------------------------------------------
 # B2 authentication. The B2 CLI caches auth in ~/.b2_account_info — we
 # re-authenticate on every run so credential rotations take effect on the
 # next backup cycle without a manual step.
@@ -338,6 +397,14 @@ main() {
   require_cli "python3"    "ships in default distro packages; required for retention pruning"
 
   ensure_keypair
+
+  # Round 3 PR-C — A05-P1-004 fingerprint check. After ensure_keypair
+  # confirms PUBLIC_KEY exists, verify it hashes to the operator-deployed
+  # expected fingerprint. Catches: clobbered key, swapped key, and the
+  # auto-regenerate fall-through above (which produces a public key the
+  # operator doesn't have the private half of). Fails closed on mismatch;
+  # warns-and-continues on missing-fingerprint-file (transition mode).
+  verify_public_key_fingerprint
 
   # Phase 6.2: optional positional arg lets a host-side cron pass the dump
   # path explicitly — the host backup dir doesn't match the in-container

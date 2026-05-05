@@ -107,6 +107,21 @@ export const GET = withApiHandler('api:patients:list', async (req) => {
         LIMIT ${LIST_LIMIT}
       `;
 
+  // Round 3 PR-C — §164.312(b) PHI-read audit (A05-P0-004). Patient
+  // list reveals identity (name + DOB + externalId) for every patient
+  // in the practice; audit at the list level, not per-row. metadata
+  // captures count + search-term presence (NOT the search-term value
+  // itself, which could embed identifying info).
+  void logAudit({
+    action: 'VIEWED_PATIENT_LIST',
+    targetType: 'TranscribeMdPatient',
+    metadata: {
+      source: 'api:GET /api/patients',
+      count: rows.length,
+      hasSearch: search !== null,
+    },
+  });
+
   return NextResponse.json({ patients: rows });
 });
 

@@ -28,6 +28,7 @@ import prisma from '@meddoc/db';
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { getSession } from '@/lib/auth';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
+import { logAudit } from '@/lib/audit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -126,6 +127,20 @@ export const POST = withApiHandler('api:patients:fuzzy-match', async (req) => {
       score: Number(r.score.toFixed(3)),
       dobMatches,
     };
+  });
+
+  // Round 3 PR-C — §164.312(b) PHI-read audit (A05-P0-004). Fuzzy-match
+  // returns identifying fields (name + DOB + externalId) for up to 5
+  // patients per call; audited as a list view. Search-term value is
+  // NOT logged (could itself embed identifying info).
+  void logAudit({
+    action: 'VIEWED_PATIENT_LIST',
+    targetType: 'TranscribeMdPatient',
+    metadata: {
+      source: 'api:POST /api/patients/fuzzy-match',
+      count: matches.length,
+      hasDob: dobInput !== null,
+    },
   });
 
   return NextResponse.json({ matches });
