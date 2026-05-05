@@ -1419,3 +1419,76 @@ Avg input/output tokens: 0/0  |  Avg latency: 0ms
 Avg cost per call: $0  |  Total 48h cost: $0
 
 Full report: `docs/cache-verify-reports/cache-verify-20260504T220001Z.md`.
+
+---
+
+## 24. 🔍 Round 3 — Pre-pilot deep audit (12-domain) — audit-only PR 2026-05-04
+
+Branch: `chore/round-3-deep-audit-2026-05-04` (off `main`, off tag `phase-6.2-pre-activation-fixes`).
+Method: 12 parallel sub-agent audits, no domain skipped, no sampling, read-only.
+Phase 0 verdict: 🟢 GO — full parallel mode (RAM 9.8 Gi available, load 0.60, 9/9 containers healthy, no recent OOM).
+Resource note: total RAM regressed mid-run (11 Gi → 5.5 Gi; same balloon pattern as 2026-05-04 morning) but `lsmod | grep balloon` confirmed driver still unloaded — likely host-side reallocation. Available stayed > 3 Gi throughout; no audit-quality impact.
+
+### Findings tally
+
+| Severity | Count | Definition |
+|---|---|---|
+| **P0** | **21** | Blocks pilot |
+| **P1** | **47** | Blocks public launch |
+| **P2** | **44** | Notable, non-blocking |
+| **P3** | **26** | Polish / backlog |
+| **Total** | **138** | |
+
+Per-agent breakdown: see `docs/round-3-deep-audit-2026-05-04/EXECUTIVE-SUMMARY.md`.
+
+### Top 5 highest-risk findings (pilot-blockers)
+
+1. **A05-P0-004** — Every PHI-READ endpoint emits zero audit rows. HIPAA §164.312(b) failure.
+2. **A09-P0-002** — `audit_logs` is application-mutable (no `REVOKE`). HIPAA §164.312(c) failure.
+3. **A06-P0-002** — No ICD-10/CPT allowlist. False Claims Act exposure.
+4. **A07-P0-001..003** — Host hardening absent: root SSH, UFW disabled, root uvicorn cohabits PHI VPS.
+5. **A01-P0-001..003 + A02-P0-002** — Live secrets in Docker images, world-writable `.env`, AUTH_SECRET world-readable, OpenAI key documented as rotated still on disk.
+
+### Cross-domain themes
+
+- **A.** Defense-in-depth at rest is patchy (LUKS for Postgres only; MinIO/backups/swap/.env not protected).
+- **B.** AI pipeline has zero deterministic backstops on clinical safety (27 model-trust touchpoints).
+- **C.** HIPAA technical-safeguard pattern enforcement is inconsistent (writes-side comprehensive, reads-side absent; integrity not DB-enforced).
+- **D.** Operational hardening lags compose hygiene (compose excellent, host config not).
+- **E.** Round-2 fix verification was procedural, not behavioural (axe-color-contrast was suppressed in tests, not fixed).
+- **F.** Documentation says "we did X" while code/infra says "we partially did X" (BAA claim, peds dosing, Whisper fallback, 8th-grade summaries).
+
+### Recommended follow-up PR sequence
+
+| # | Title | Severity | Estimate |
+|---|---|---|---|
+| PR-A | Secrets sweep (rotate OpenAI + .dockerignore + chmod + image rebuild) | P0 | 2-4h |
+| PR-B | Edge security (sshd config, UFW, fail2ban, evict ai-deal-hunter) | P0 | 4-8h |
+| PR-C | HIPAA tech (PHI-read audit, audit_logs REVOKE, MinIO SSE, backup fingerprint) | P0 | 1-2 days |
+| PR-D | AI safety (empty-transcript guard, ICD/CPT allowlist, pharmacology, weight) | P0 | 2-4 days |
+| PR-E | Data integrity (Rx warning unique, SOAP optimistic concurrency) | P0 | 1 day |
+| PR-F | Auth hardening (disable EMAIL_AUTO_CONFIRM in prod, signup anti-enum, NextAuth GA pin) | P0 | 4-8h |
+| PR-G | Compliance docs (BAA reality vs claim, IR runbook, DR runbook) | P0 | 2-4 days |
+| PR-H | Observability (Sentry source maps, Redis AOF, worker healthcheck, marketing observability) | P1 | 1 day |
+| PR-I | A11y (color-contrast token, skip-link target, transcript audio keyboard) | P1 | 4-8h |
+| PR-J | Input validation (prompt-injection delimiters, audio magic-byte sniff) | P1 | 4-8h |
+| PR-K | Supply chain (NextAuth pin, base-image SHA, Dependabot, audit-ci allowlist) | P1 | 2-4h |
+| PR-L | Clinical resilience (Whisper fallback, BullMQ DLQ, bull-board) | P1 | 1 day |
+
+P0 subset (must close before pilot): PR-A through PR-G — ~7-12 dev-days.
+P1 subset (must close before public launch): PR-H through PR-L — ~4-7 dev-days.
+
+P2/P3 findings should land in subsequent batched-cleanup PRs (analogous to PRs #97, #98 from Round 2).
+
+### Artifacts
+
+- `docs/round-3-deep-audit-2026-05-04/EXECUTIVE-SUMMARY.md` — synthesis + themes + recommended PR sequence
+- `docs/round-3-deep-audit-2026-05-04/INDEX.md` — flat severity-sorted list of all 138 findings
+- `docs/round-3-deep-audit-2026-05-04/findings/agent-NN/` (×12) — one file per finding + per-domain SUMMARY.md
+- `docs/preflight-reports/preflight-20260504T232956Z.md` — Phase 0 health check (🟢 GO)
+
+### Process notes
+
+- No fixes shipped in this PR. Audit-only.
+- Production code/config unmodified. Only writes are under `docs/round-3-deep-audit-2026-05-04/` and this section.
+- Verification of prior-audit fixes: Round-1 PDF/DOCX metadata fix (P1-001) confirmed held in both formats; Round-2 axe-color-contrast "clearance" debunked (rule globally suppressed in `a11y.spec.ts:113-119`, not fixed); Round-2 Zod-bounds (P2-001) partially held — password fields still unbounded.
