@@ -10,7 +10,7 @@ import { signIn as nextAuthSignIn } from '@/lib/nextauth';
 import { createAuthToken } from '@/lib/auth-tokens';
 import { isEmailDeliveryEnabled } from '@/lib/email-enabled';
 import { isAutoConfirmDomain } from '@/lib/email-auto-confirm';
-import { sendEmailVerification } from '@/lib/email';
+import { sendEmailVerification, sendAccountExistsEmail } from '@/lib/email';
 import { APP_URL } from '@/lib/constants';
 import {
   RATE_LIMITS,
@@ -318,24 +318,48 @@ export async function signupAction(
 
   const emailLower = parsed.data.email.trim().toLowerCase();
 
-  // Uniqueness check up front so we return a friendly error (rather than
-  // surfacing a Prisma P2002). The race between this check and the
-  // transaction is harmless — the `users.email` unique index catches it,
-  // and the catch below rewrites it to the same friendly message.
+  // Round 3 PR-F (A02-P1-001) — signup anti-enumeration.
+  //
+  // Pre-PR-F: existing-email path returned a UI-distinct error
+  // ("An account with this email exists. Sign in instead.") which let
+  // an attacker map every customer email by enumerating signups.
+  //
+  // Post-PR-F: existing-email path returns the SAME response shape as
+  // the new-signup happy path (`ok: true` + `redirect: /check-email`)
+  // and runs equivalent work (dummy bcrypt + send "account exists"
+  // email to the real user) so an attacker probing for existing
+  // accounts sees identical response body + similar wall-clock timing.
+  // The real user gets a "you already have an account" nudge in their
+  // inbox; the attacker gets nothing actionable.
   const existing = await prisma.user.findUnique({
     where: { email: emailLower },
-    select: { id: true },
+    select: { id: true, name: true },
   });
   if (existing) {
+    // Equalize wall-clock timing with the new-signup path. The
+    // new-signup path runs:
+    //   - bcrypt.hash(password, 12)             ~150ms
+    //   - prisma.$transaction (practice + user) ~30ms
+    //   - createAuthToken                       ~5ms
+    //   - sendEmailVerification (Resend POST)   ~variable, fire-and-forget OK
+    // Burning a bcrypt.hash of equivalent cost is the dominant
+    // equalizer; the rest is sub-tens-of-ms noise.
+    await bcrypt.hash(parsed.data.password, 12);
+
+    // Send "you already have an account" email to the real user.
+    // Fire-and-forget: same as new-signup verification email — a
+    // Resend hiccup mustn't reveal an error path.
+    void sendAccountExistsEmail({
+      toEmail: emailLower,
+      userName: existing.name ?? null,
+      signInUrl: `${APP_URL}/login`,
+    }).catch((err: unknown) => {
+      console.error('[signup] account-exists email failed:', err);
+    });
+
     return {
-      ok: false,
-      errors: {
-        email: 'An account with this email exists. Sign in instead.',
-      },
-      values: {
-        email: emailLower,
-        name: parsed.data.name,
-      },
+      ok: true,
+      redirect: `/check-email?email=${encodeURIComponent(emailLower)}`,
     };
   }
 
