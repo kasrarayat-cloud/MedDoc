@@ -213,6 +213,26 @@ enum AuditAction {
   RX_DOSE_EXCEEDS_VERIFIED_RANGE
   RX_CONTRAINDICATION_MATCH
   RX_DRUG_NOT_IN_VERIFIED_DATABASE
+
+  // Round 3 PR-J — input validation audit (audit findings A07-P0/P1):
+  //   - INJECTION_DELIMITER: a user-supplied transcript or text-mode
+  //     input contained the literal `<transcript_*>` prefix, signalling
+  //     a possible prompt-injection attempt. The random suffix on the
+  //     real delimiter prevents an actual escape, but we still log
+  //     the attempt for forensics.
+  //   - AUDIO_REJECTED_INVALID_MAGIC_BYTES: the upload's claimed
+  //     Content-Type doesn't match the binary header (e.g., a .txt
+  //     renamed to .mp3). We refuse the upload and audit-log the
+  //     attempt before bytes ever reach MinIO.
+  //   - AUDIO_REJECTED_FILE_TOO_LARGE: server-side enforcement of
+  //     the 100 MB upload ceiling, even when the client lies about
+  //     content-length.
+  //   - TEXT_INPUT_REJECTED_TOO_LARGE: text-mode visit input
+  //     exceeded the 5000-char Zod cap.
+  PIPELINE_REJECTED_INJECTION_DELIMITER
+  AUDIO_REJECTED_INVALID_MAGIC_BYTES
+  AUDIO_REJECTED_FILE_TOO_LARGE
+  TEXT_INPUT_REJECTED_TOO_LARGE
 }
 
 /// Document lifecycle status

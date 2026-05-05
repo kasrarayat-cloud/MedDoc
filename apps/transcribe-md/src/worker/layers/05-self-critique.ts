@@ -12,9 +12,10 @@
 // ============================================================================
 
 import { z } from 'zod';
-import { modelClient } from '@meddoc/ai';
+import { modelClient, wrapAsData, delimiterSystemSuffix } from '@meddoc/ai';
 import prisma from '@meddoc/db';
 import type { ExtractedEntities } from './03-extract-entities';
+import { logAudit } from '@/lib/audit';
 
 const MODEL = 'claude-sonnet-4-6';
 
@@ -46,6 +47,19 @@ export interface Layer5Input {
 export async function runLayer5SelfCritique(
   input: Layer5Input
 ): Promise<CritiqueReport> {
+  // Round 3 PR-J — A07-P0 prompt-injection delimiter (mirrors L4).
+  const wrap = wrapAsData(input.roleLabeledTranscript, 'transcript');
+  if (wrap.injectionAttemptDetected) {
+    void logAudit({
+      action: 'PIPELINE_REJECTED_INJECTION_DELIMITER',
+      targetType: 'transcribe_visit',
+      targetId: input.visitId,
+      success: false,
+      errorCode: 'INJECTION_DELIMITER_DETECTED',
+      metadata: { layer: 'L5', suffix: wrap.suffix },
+    });
+  }
+
   const system = [
     'You are an auditor reviewing a SOAP note for clinical quality. The',
     'note was generated from a transcript + extracted entities by a',
@@ -88,6 +102,8 @@ export async function runLayer5SelfCritique(
     '  "overall_quality": "high|medium|low",',
     '  "safe_to_sign_without_review": true|false',
     '}',
+    // Round 3 PR-J — instruction-as-data boundary.
+    delimiterSystemSuffix('transcript'),
   ].join('\n');
 
   const user = [
@@ -100,7 +116,7 @@ export async function runLayer5SelfCritique(
     JSON.stringify(input.entities, null, 2),
     '',
     'Role-labeled transcript (the ground truth):',
-    input.roleLabeledTranscript,
+    wrap.wrapped,
   ].join('\n');
 
   const report = await modelClient.complete({

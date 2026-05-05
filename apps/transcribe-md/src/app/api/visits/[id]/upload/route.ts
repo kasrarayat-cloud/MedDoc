@@ -29,14 +29,23 @@ import { apiError, withApiHandler } from '@/lib/api-error';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 import { redactPhi } from '@meddoc/ai';
 import { logAudit } from '@/lib/audit';
+import {
+  sniffAudioMagicBytes,
+  magicBytesMatchClaimedMime,
+  SNIFF_MIN_BYTES,
+} from '@/lib/audio-sniff';
 
 export const runtime = 'nodejs';
 // Next's default body-size limit on route handlers is 1 MB — we need
-// to opt out to accept up to 500 MB.
+// to opt out to accept up to 100 MB.
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
 
-const MAX_BYTES = 500 * 1024 * 1024; // 500 MB
+// Round 3 PR-J — A07-P0 server-side cap. Lowered from the historical
+// 500 MB to 100 MB: a 100 MB ceiling covers a 90-minute high-quality
+// recording with comfortable headroom and removes the high-end abuse
+// surface (bandwidth-flooding the worker, OOM via runaway streams).
+const MAX_BYTES = 100 * 1024 * 1024;
 
 const ALLOWED_MIME = new Set([
   'audio/mpeg',
@@ -117,6 +126,20 @@ export const POST = withApiHandler<{ id: string }>(
       );
     }
     if (contentLength > MAX_BYTES) {
+      // Round 3 PR-J — audit the rejection so a flood of oversize
+      // attempts shows up in the audit log even when the bytes never
+      // reach MinIO.
+      void logAudit({
+        action: 'AUDIO_REJECTED_FILE_TOO_LARGE',
+        targetType: 'transcribe_visit',
+        targetId: visitId,
+        success: false,
+        errorCode: 'FILE_TOO_LARGE',
+        metadata: {
+          claimedSizeBytes: contentLength,
+          maxBytes: MAX_BYTES,
+        },
+      });
       return apiError(
         `File too large: ${contentLength} bytes exceeds the ${Math.round(MAX_BYTES / 1024 / 1024)} MB limit.`,
         413,
@@ -140,12 +163,75 @@ export const POST = withApiHandler<{ id: string }>(
 
     if (!req.body) return apiError('empty body', 400);
 
-    // Adapt Web ReadableStream → Node Readable for the MinIO SDK.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const nodeReadable = Readable.fromWeb(req.body as any);
+    // ── Round 3 PR-J — A07-P0 magic-byte sniff ──
+    // The Content-Type header is client-supplied and trivially spoofable;
+    // the MIME allowlist above is courtesy, not a boundary. Buffer the
+    // entire request body, sniff the leading bytes, and reject if the
+    // claimed MIME doesn't match the binary header. We buffer in
+    // memory because a 100 MB cap fits in the worker's mem_limit; if
+    // that ceiling rises in the future this becomes a streaming PassThrough
+    // pattern (peek 16 bytes, then forward to MinIO).
+    const bodyBuffer = Buffer.from(await req.arrayBuffer());
+    if (bodyBuffer.byteLength === 0) return apiError('empty body', 400);
+    if (bodyBuffer.byteLength > MAX_BYTES) {
+      // Defensive — content-length lied about size. Audit + reject.
+      void logAudit({
+        action: 'AUDIO_REJECTED_FILE_TOO_LARGE',
+        targetType: 'transcribe_visit',
+        targetId: visitId,
+        success: false,
+        errorCode: 'FILE_TOO_LARGE_BODY',
+        metadata: {
+          claimedSizeBytes: contentLength,
+          actualSizeBytes: bodyBuffer.byteLength,
+          maxBytes: MAX_BYTES,
+        },
+      });
+      return apiError(
+        `File too large: actual body size exceeds the ${Math.round(MAX_BYTES / 1024 / 1024)} MB limit.`,
+        413,
+        { code: 'FILE_TOO_LARGE', retry: false }
+      );
+    }
+
+    const claimedMime = mimeType.split(';')[0]!.trim();
+    const sniff = sniffAudioMagicBytes(
+      bodyBuffer.subarray(0, Math.max(SNIFF_MIN_BYTES, 32))
+    );
+    if (!magicBytesMatchClaimedMime(sniff.detected, claimedMime)) {
+      void logAudit({
+        action: 'AUDIO_REJECTED_INVALID_MAGIC_BYTES',
+        targetType: 'transcribe_visit',
+        targetId: visitId,
+        success: false,
+        errorCode: 'INVALID_MAGIC_BYTES',
+        metadata: {
+          claimedMime,
+          detectedMime: sniff.detected,
+          detectedFormat: sniff.format,
+          sizeBytes: bodyBuffer.byteLength,
+        },
+      });
+      return apiError(
+        sniff.detected
+          ? `File contents (${sniff.format}) don't match the declared format (${claimedMime}). Re-upload with the correct file or extension.`
+          : `Unrecognised audio format. Try MP3, M4A, WAV, OGG, WebM, or FLAC.`,
+        415,
+        { code: 'INVALID_MAGIC_BYTES', retry: false }
+      );
+    }
+
+    // Adapt Buffer → Node Readable for the MinIO SDK. The buffer
+    // is in-memory (capped at 100 MB by the gate above).
+    const nodeReadable = Readable.from(bodyBuffer);
 
     try {
-      await putAudioStream(objectKey, nodeReadable, contentLength, mimeType);
+      await putAudioStream(
+        objectKey,
+        nodeReadable,
+        bodyBuffer.byteLength,
+        mimeType
+      );
     } catch (err) {
       // MinIO classification: 5xx → transient (retry worth it);
       // 4xx with an error message mentioning the bucket → permanent
@@ -179,7 +265,10 @@ export const POST = withApiHandler<{ id: string }>(
       data: {
         audioKey: objectKey,
         audioMimeType: mimeType.split(';')[0]!.trim(),
-        audioSizeBytes: contentLength,
+        // Round 3 PR-J — record the actual byte count, not the
+        // client's content-length header. They match for honest
+        // clients; for a lying client we already rejected above.
+        audioSizeBytes: bodyBuffer.byteLength,
         audioUploadedAt: new Date(),
         status: TranscribeVisitStatus.QUEUED,
         needsReview: false,
@@ -210,8 +299,12 @@ export const POST = withApiHandler<{ id: string }>(
       targetType: 'transcribe_visit',
       targetId: visitId,
       metadata: {
-        sizeBytes: contentLength,
+        sizeBytes: bodyBuffer.byteLength,
         mimeType: mimeType.split(';')[0]!.trim(),
+        // Round 3 PR-J — surface the sniffed format alongside the
+        // claimed MIME for forensics. They should match for accepted
+        // uploads (we reject mismatches above).
+        detectedFormat: sniff.format,
         inputMode: 'audio_upload',
         reupload: visit.audioKey !== null && visit.audioKey !== objectKey,
       },
