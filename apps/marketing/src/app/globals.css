@@ -33,10 +33,14 @@
   --color-linear-hairline: rgba(255, 255, 255, 0.05);
   --color-linear-hairline-strong: rgba(255, 255, 255, 0.08);
 
-  /* ── Text ── */
+  /* ── Text ──
+   *  Round 3 PR-I — A09-P1 contrast bump for text-3 to clear
+   *  WCAG 2.1 AA (4.5:1 on the dark canvas). text-3 is used for
+   *  secondary labels + meta lines that must remain legible to
+   *  visitors browsing the marketing site at small sizes. ── */
   --color-linear-text: #f7f8f8;
   --color-linear-text-2: #b4bcc8;
-  --color-linear-text-3: #6c737f;
+  --color-linear-text-3: #828995;
 
   /* ── Sage accent — replaces Linear's purple ── */
   --color-linear-sage: #7AA68C;

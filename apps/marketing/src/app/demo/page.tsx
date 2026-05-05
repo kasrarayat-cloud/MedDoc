@@ -17,7 +17,7 @@ export default function DemoPage() {
   return (
     <>
       <NavBar />
-      <main>
+      <main id="main" tabIndex={-1} style={{ outline: 'none' }}>
         <section
           className="relative overflow-hidden"
           style={{ paddingTop: 96, paddingBottom: 96 }}
