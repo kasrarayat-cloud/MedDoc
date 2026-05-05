@@ -110,6 +110,41 @@ function getProvider(err: unknown): Provider {
   return 'unknown';
 }
 
+/** Q2 follow-up — Anthropic SDK errors. The SDK throws BadRequestError
+ *  / AuthenticationError / PermissionDeniedError / NotFoundError for
+ *  structured 4xx responses. The body shape is:
+ *    { type: 'error', error: { type: <api-error-type>, message: <text> } }
+ *  with api-error-type ∈ {'invalid_request_error',
+ *  'authentication_error', 'permission_error', 'not_found_error',
+ *  'request_too_large', …}. All of these are permanent — the same
+ *  wire payload will fail identically every time; retry only burns
+ *  the BullMQ attempt budget without a chance of success.
+ *
+ *  Caught the temperature-deprecation 400 in production (Opus 4.7
+ *  rejected `temperature`); pre-fix the categorizer treated it as
+ *  transient and the worker burned 6 attempts on it. */
+const PERMANENT_API_ERROR_TYPES = new Set([
+  'invalid_request_error',
+  'authentication_error',
+  'permission_error',
+  'not_found_error',
+  'request_too_large',
+]);
+
+function isPermanent4xxApiError(err: unknown): boolean {
+  if (err === null || typeof err !== 'object') return false;
+  const obj = err as Record<string, unknown>;
+  const status = obj.status;
+  if (typeof status !== 'number' || status < 400 || status >= 500) return false;
+  // The SDK's parsed body lives at err.error; the API's nested error
+  // type is err.error.error.type.
+  const body = obj.error as Record<string, unknown> | undefined;
+  const inner = body?.error as Record<string, unknown> | undefined;
+  const apiErrorType = inner?.type;
+  if (typeof apiErrorType !== 'string') return false;
+  return PERMANENT_API_ERROR_TYPES.has(apiErrorType);
+}
+
 /** Match patterns that mean "this input will never process correctly,
  *  no matter how many times we retry". Conservative on purpose — when
  *  in doubt, treat as transient.
@@ -193,6 +228,10 @@ export function categorizeError(err: unknown): ErrorCategory {
   // Permanent first — a Zod / format error doesn't get to be
   // "transient" just because it happens to also include the word
   // "timeout" somewhere in the message.
+  // Q2 follow-up: Anthropic 4xx structured errors (invalid_request,
+  // auth, permission, not_found, request_too_large) are also
+  // permanent. Same wire payload will fail identically on retry.
+  if (isPermanent4xxApiError(err)) return 'permanent';
   if (isPermanentInputError(msg, err)) return 'permanent';
 
   const transient = isLikelyTransient(msg, status);
