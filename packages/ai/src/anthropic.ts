@@ -40,6 +40,84 @@ function capErrorDetails(raw: string): string {
   );
 }
 
+/** Q2 follow-up — Anthropic deprecated `temperature` on the Opus 4
+ *  family (4.7 returns 400 invalid_request_error("`temperature` is
+ *  deprecated for this model.")). The Sonnet + Haiku families still
+ *  accept it. Strip silently for Opus 4.x; pass through for everything
+ *  else. Layer source files keep their `temperature: 0.x` lines as
+ *  documentation of intent — the library honors the wire contract. */
+function shouldOmitTemperature(model: string): boolean {
+  return model.startsWith('claude-opus-4');
+}
+
+/** Q2 follow-up — when an Anthropic SDK call throws (network blip,
+ *  4xx, 5xx, refusal), extract the structured error fields into a
+ *  small JSON payload suitable for `ai_calls.errorDetails`.
+ *
+ *  Capped at 4 KB. Never includes request payloads (PHI / transcript
+ *  content). Only the API's response body + status + request id. */
+const ERROR_DETAILS_MAX_JSON_BYTES = 4096;
+
+interface AnthropicErrorShape {
+  httpStatus: number | null;
+  apiErrorType: string | null;
+  apiErrorMessage: string | null;
+  requestId: string | null;
+}
+
+function extractAnthropicError(err: unknown): AnthropicErrorShape {
+  const obj = err as Record<string, unknown> | null;
+  if (!obj || typeof obj !== 'object') {
+    return { httpStatus: null, apiErrorType: null, apiErrorMessage: null, requestId: null };
+  }
+  const httpStatus =
+    typeof obj.status === 'number' && Number.isFinite(obj.status as number)
+      ? (obj.status as number)
+      : null;
+  // SDK's BadRequestError exposes the parsed body at `.error`. The
+  // body shape is { type: 'error', error: { type: string, message: string } }.
+  const body = obj.error as Record<string, unknown> | undefined;
+  const inner = body?.error as Record<string, unknown> | undefined;
+  const apiErrorType =
+    typeof inner?.type === 'string' ? (inner.type as string) : null;
+  const apiErrorMessage =
+    typeof inner?.message === 'string' ? (inner.message as string) : null;
+  const requestId =
+    typeof obj.request_id === 'string'
+      ? (obj.request_id as string)
+      : typeof (obj.headers as Record<string, unknown> | undefined)?.[
+          'request-id'
+        ] === 'string'
+        ? ((obj.headers as Record<string, unknown>)['request-id'] as string)
+        : null;
+  return { httpStatus, apiErrorType, apiErrorMessage, requestId };
+}
+
+export function anthropicErrorDetailsJson(err: unknown): string {
+  const shape = extractAnthropicError(err);
+  // Truncate apiErrorMessage if needed to keep JSON under cap.
+  const trimmedMsg = shape.apiErrorMessage
+    ? shape.apiErrorMessage.length > 1024
+      ? shape.apiErrorMessage.slice(0, 1024) + '… [truncated]'
+      : shape.apiErrorMessage
+    : null;
+  const payload = {
+    httpStatus: shape.httpStatus,
+    apiErrorType: shape.apiErrorType,
+    apiErrorMessage: trimmedMsg,
+    requestId: shape.requestId,
+  };
+  const json = JSON.stringify(payload);
+  if (json.length <= ERROR_DETAILS_MAX_JSON_BYTES) return json;
+  // Pathological — fall back to the bare httpStatus + truncated marker.
+  return JSON.stringify({
+    httpStatus: shape.httpStatus,
+    apiErrorType: shape.apiErrorType,
+    apiErrorMessage: '[truncated — payload exceeded 4KB]',
+    requestId: shape.requestId,
+  });
+}
+
 export interface AnthropicCompleteArgs<T> extends AiLogContext {
   model: string;
   system: string;
@@ -66,7 +144,9 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
     const response = await client.messages.create({
       model: args.model,
       max_tokens: args.maxTokens ?? 4096,
-      ...(args.temperature !== undefined && { temperature: args.temperature }),
+      ...(args.temperature !== undefined && !shouldOmitTemperature(args.model)
+        ? { temperature: args.temperature }
+        : {}),
       system: args.system,
       messages: [{ role: 'user', content: userContent }],
     });
@@ -174,6 +254,10 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
   } catch (err) {
     // Re-throw after logging — schema fails and JSON parse fails already
     // logged themselves above, so this catches network / 429 / auth errors.
+    // Q2 follow-up: persist the structured Anthropic error body to
+    // ai_calls.errorDetails so the forensic chain doesn't have to scrape
+    // worker logs to find the actual failure mode (e.g., the Opus 4.7
+    // temperature-deprecation 400 was invisible at the DB level until now).
     const latencyMs = Date.now() - started;
     if (!(err instanceof Error) || (err.message !== 'SCHEMA_FAIL' && !err.message.startsWith('Anthropic response'))) {
       logAiCall({
@@ -183,6 +267,7 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
         latencyMs,
         success: false,
         errorCode: err instanceof Error ? err.name.toUpperCase() : 'UNKNOWN',
+        errorDetails: anthropicErrorDetailsJson(err),
       });
     }
     throw err;
@@ -224,7 +309,9 @@ export async function anthropicCompleteText(
     const response = await client.messages.create({
       model: args.model,
       max_tokens: args.maxTokens ?? 8192,
-      ...(args.temperature !== undefined && { temperature: args.temperature }),
+      ...(args.temperature !== undefined && !shouldOmitTemperature(args.model)
+        ? { temperature: args.temperature }
+        : {}),
       system: args.system,
       messages: [{ role: 'user', content: args.user }],
     });
@@ -273,6 +360,9 @@ export async function anthropicCompleteText(
       outputTokens: response.usage.output_tokens,
     };
   } catch (err) {
+    // Q2 follow-up — capture the structured Anthropic error body so
+    // post-mortems read directly from ai_calls.errorDetails (no worker
+    // log scrape required).
     const latencyMs = Date.now() - started;
     logAiCall({
       ...args,
@@ -281,6 +371,7 @@ export async function anthropicCompleteText(
       latencyMs,
       success: false,
       errorCode: err instanceof Error ? err.name.toUpperCase() : 'UNKNOWN',
+      errorDetails: anthropicErrorDetailsJson(err),
     });
     throw err;
   }
