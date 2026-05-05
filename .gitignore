@@ -54,6 +54,11 @@ test-results/
 /venv/
 .claude/settings.local.json
 
+# QA Interaction Auditor — seeded test-user/patient ids are written here
+# on each seed-qa-user.ts run. Per-environment, may contain dev DB ids;
+# never committed.
+.claude/agents/qa-interaction-auditor/fixtures/seeded-ids.json
+
 # On-VPS snapshot copies kept next to the live config for quick rollback
 # (Caddyfile.backup, docker-compose.yml.backup). Host-only — do not commit.
 *.backup

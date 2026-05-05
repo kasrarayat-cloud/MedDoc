@@ -44,6 +44,11 @@ export interface SoapSectionProps {
   status: SoapSectionStatus;
   /** Optional engine-fed micro-meta. Renders in the section header. */
   pulseHint?: SoapPulseHint | null;
+  /** When true, applies the bump-highlight CSS class so this section
+   *  shows a sage edge-glow that fades over ~2.5s. Drives the doctor's
+   *  eye to the S/O/A/P block containing the gap criteria when the
+   *  bump CTA is clicked. Parent (SoapEditor) toggles + auto-clears. */
+  highlight?: boolean;
   /** Persists `next` (full SOAP blob) via saveSoapDraftAction. The
    *  parent SoapEditor owns the action call so error toasts remain
    *  centralised. */
@@ -70,11 +75,18 @@ export function SoapSection({
   fullText,
   status,
   pulseHint,
+  highlight,
   onEdit,
   readonly,
 }: SoapSectionProps) {
   return (
-    <article className="qm-lin-soap-section-v6" data-section={letter}>
+    <article
+      className={cn(
+        'qm-lin-soap-section-v6',
+        highlight && 'qm-lin-soap-section-v6--highlight'
+      )}
+      data-section={letter}
+    >
       <header className="qm-lin-soap-section-head">
         <div className="qm-lin-soap-section-head-left">
           <span className="qm-lin-soap-section-eyebrow">

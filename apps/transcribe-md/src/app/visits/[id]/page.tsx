@@ -47,6 +47,27 @@ function extractRxForEngine(raw: unknown): RxDraftRow[] {
   }));
 }
 
+/** Phase 5.2 orphan-completion — hydrate the doctor's previously-set
+ *  E&M override from cptCodes.em.override so the rail renders the
+ *  doctor-set code on initial load instead of the AI suggestion.
+ *  Returns undefined when the doctor has not set an override. */
+function extractEmOverride(
+  raw: unknown
+): import('@/lib/em-coding-ui/types').EmOverride | undefined {
+  if (typeof raw !== 'object' || raw === null) return undefined;
+  const blob = raw as { em?: { override?: unknown } };
+  const override = blob.em?.override;
+  if (typeof override !== 'object' || override === null) return undefined;
+  const o = override as Record<string, unknown>;
+  if (typeof o.code !== 'string') return undefined;
+  return {
+    code: o.code as import('@/lib/em-coding-ui/types').EmCode,
+    reason: typeof o.reason === 'string' ? o.reason : undefined,
+    overriddenAt:
+      typeof o.overriddenAt === 'string' ? o.overriddenAt : '',
+  };
+}
+
 const PROGRESS_HINT: Record<TranscribeVisitStatus, string> = {
   QUEUED: 'Queued — waiting for a worker',
   TRANSCRIBING: 'Transcribing audio',
@@ -618,7 +639,16 @@ async function VisitBody(props: VisitBodyProps) {
       icdCodes: extractIcdCodesForEngine(props.icdCodes),
       rxDrafts: extractRxForEngine(props.rxDrafts),
     });
-    initialEmScore = engineToUiScore(engineScore, durationSec ?? 0);
+    // Hydrate the doctor's previously-set override (if any) from
+    // cptCodes.em.override so the rail renders the doctor-set code on
+    // page load. The server route at POST /em-score/override writes
+    // here; this read is the round-trip back to the rail.
+    const existingOverride = extractEmOverride(props.cptCodes);
+    initialEmScore = engineToUiScore(
+      engineScore,
+      durationSec ?? 0,
+      existingOverride
+    );
   } catch (e) {
     console.error('[em-score] initial render failed:', e);
   }
