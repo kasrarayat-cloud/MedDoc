@@ -29,6 +29,10 @@ export interface SoapBodyProps {
   /** Per-section engine pulse hints (sage = ok, amber = boost-needed).
    *  Optional — sections render without a hint when missing. */
   pulseHints?: Partial<Record<SoapSectionKey, SoapPulseHint>>;
+  /** Sections currently flashing the bump-CTA highlight. The parent
+   *  flips this on bump-click and clears after the fade. Optional —
+   *  no highlights when omitted. */
+  highlightedSections?: SoapSectionKey[];
   /** Persists the full new SOAP blob; parent owns the saveSoapDraftAction
    *  call so error toasts stay centralised. */
   onEdit: (next: string) => Promise<{ ok: boolean; error?: string }>;
@@ -42,11 +46,16 @@ export function SoapBody({
   text,
   statusFor,
   pulseHints,
+  highlightedSections,
   onEdit,
   readonly,
   lastEditLabel,
 }: SoapBodyProps) {
   const sections = useMemo(() => parseSoapSections(text), [text]);
+  const highlightSet = useMemo(
+    () => new Set(highlightedSections ?? []),
+    [highlightedSections]
+  );
 
   const onCopy = async () => {
     try {
@@ -68,6 +77,7 @@ export function SoapBody({
           fullText={text}
           status={statusFor(section.key)}
           pulseHint={pulseHints?.[section.key] ?? null}
+          highlight={highlightSet.has(section.key)}
           onEdit={onEdit}
           readonly={readonly}
         />

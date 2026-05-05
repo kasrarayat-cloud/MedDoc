@@ -31,7 +31,7 @@
 // the Phase 5.2 stage rollout.
 // ============================================================================
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { Lock, Send } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -39,10 +39,43 @@ import { saveSoapDraftAction } from '@/actions/soap';
 import { parseSoapSections, type SoapSectionKey } from '@/lib/parse-soap-sections';
 import { CodingRail } from '@/components/visits/CodingRail';
 import { CodingRailSkeleton } from '@/components/visits/CodingRailSkeleton';
-import type { EmScore } from '@/lib/em-coding-ui/types';
+import type {
+  EmCode,
+  EmScore,
+  SoapSectionKey as EmSoapSectionKey,
+} from '@/lib/em-coding-ui/types';
 import { SoapBody } from './soap/SoapBody';
 import type { SoapPulseHint, SoapSectionStatus } from './soap/SoapSection';
 import { SignAndSendModal } from './sign-and-send-modal';
+
+/** Engine `SoapSectionKey` (long form: 'subjective' | …) → the SOAP
+ *  body's letter-form key ('S' | 'O' | 'A' | 'P'). The two key sets
+ *  exist for historical reasons (parser uses letters; em-coding-ui
+ *  predates that). */
+const EM_KEY_TO_LETTER: Record<EmSoapSectionKey, SoapSectionKey> = {
+  subjective: 'S',
+  objective: 'O',
+  assessment: 'A',
+  plan: 'P',
+};
+
+/** EmCriterion id prefix → SOAP section letter. Mirrors
+ *  `lib/em-coding/criterion-to-section.ts`'s table; inline here so the
+ *  bump-CTA highlight handler stays self-contained. */
+const CRITERION_TO_SECTION: Record<string, SoapSectionKey> = {
+  'hpi.elements': 'S',
+  'ros.systems': 'S',
+  'pfsh.categories': 'S',
+  'exam.systems': 'O',
+  'mdm.problems': 'A',
+  'mdm.data': 'P',
+  'mdm.risk': 'A',
+};
+
+/** Length of the highlight pulse on bump-CTA click — long enough for
+ *  the doctor's eye to land on the section, short enough that it
+ *  doesn't linger as background visual noise. */
+const HIGHLIGHT_DURATION_MS = 2500;
 
 type SoapEditorTheme = 'legacy' | 'clinician';
 
@@ -108,30 +141,123 @@ export function SoapEditor({
   // are passed in. Pre-fix the rail dispatched a `qm:request-sign`
   // window event that no listener consumed.
   const [signModalOpen, setSignModalOpen] = useState(false);
-  // Local mirror of the rail's score so apply-additions responses can
-  // update the rail-rendered tier without a full page reload. The
-  // initial value is the server-rendered score; the rail's internal
-  // useEffect re-syncs from props when the parent re-renders.
+  // Local mirror of the rail's score so apply-additions / override
+  // responses can update the rail-rendered tier without a full page
+  // reload. The initial value is the server-rendered score; the rail's
+  // internal useEffect re-syncs from props when the parent re-renders.
   const [emScore, setEmScore] = useState<EmScore | null>(initialScore);
   useEffect(() => {
     setEmScore(initialScore);
   }, [initialScore]);
-  // Phase 5.2 — boost hints are surfaced by the CodingRail via the
-  // `qm:em-boost-hints` CustomEvent (loose coupling, no shared store).
-  // The body listens and re-renders with sage/amber pulse dots in the
-  // section heads when the rail flags a section as gating a higher tier.
-  const [boostHints, setBoostHints] = useState<
-    Partial<Record<SoapSectionKey, SoapPulseHint>>
-  >({});
 
+  // Boost hints — pure derived value from emScore.sectionPulseHints.
+  // Phase 5.2 originally used a `qm:em-boost-hints` window CustomEvent
+  // for this; the listener was orphan because no dispatcher existed.
+  // The score's sectionPulseHints field carries the same data and
+  // already round-trips through engineToUiScore (server-rendered + on
+  // every rescore), so the UI just reads it directly. Translate from
+  // the engine's long-form keys to the SOAP body's letter-form keys.
+  const boostHints = useMemo<
+    Partial<Record<SoapSectionKey, SoapPulseHint>>
+  >(() => {
+    const lean = emScore?.sectionPulseHints;
+    if (!lean) return {};
+    const out: Partial<Record<SoapSectionKey, SoapPulseHint>> = {};
+    for (const [emKey, tone] of Object.entries(lean) as Array<
+      [EmSoapSectionKey, 'ok' | 'boost']
+    >) {
+      const letter = EM_KEY_TO_LETTER[emKey];
+      if (!letter) continue;
+      out[letter] = {
+        tone,
+        text: tone === 'boost' ? 'gap to next tier' : 'criteria satisfied',
+      };
+    }
+    return out;
+  }, [emScore?.sectionPulseHints]);
+
+  // Highlighted sections — flashed when the doctor clicks the bump CTA
+  // so they can see at a glance which S/O/A/P block contains the
+  // missing criteria. Auto-clears after HIGHLIGHT_DURATION_MS.
+  const [highlightedSections, setHighlightedSections] = useState<
+    SoapSectionKey[]
+  >([]);
+  const highlightTimerRef = useRef<number | null>(null);
+  const handleHighlightCriteria = useCallback(
+    (criterionIds: string[]) => {
+      if (typeof window === 'undefined') return;
+      const targets = new Set<SoapSectionKey>();
+      for (const id of criterionIds) {
+        const section = CRITERION_TO_SECTION[id];
+        if (section) targets.add(section);
+      }
+      if (targets.size === 0) return;
+      setHighlightedSections(Array.from(targets));
+      if (highlightTimerRef.current !== null) {
+        window.clearTimeout(highlightTimerRef.current);
+      }
+      highlightTimerRef.current = window.setTimeout(() => {
+        highlightTimerRef.current = null;
+        setHighlightedSections([]);
+      }, HIGHLIGHT_DURATION_MS);
+    },
+    []
+  );
   useEffect(() => {
-    const onHints = (ev: Event) => {
-      const detail = (ev as CustomEvent<Partial<Record<SoapSectionKey, SoapPulseHint>>>).detail;
-      if (detail) setBoostHints(detail);
+    return () => {
+      if (typeof window !== 'undefined' && highlightTimerRef.current !== null) {
+        window.clearTimeout(highlightTimerRef.current);
+        highlightTimerRef.current = null;
+      }
     };
-    window.addEventListener('qm:em-boost-hints', onHints as EventListener);
-    return () => window.removeEventListener('qm:em-boost-hints', onHints as EventListener);
   }, []);
+
+  // Override persistence — calls the new POST /em-score/override route
+  // and threads the refreshed score back into local state. The rail's
+  // success/failure toast handling lives inside CodingRail itself.
+  const handleApplyOverride = useCallback(
+    async (
+      code: EmCode,
+      reason?: string
+    ): Promise<{ ok: boolean; error?: string; newScore?: EmScore }> => {
+      try {
+        const res = await fetch(
+          `/api/visits/${visitId}/em-score/override`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ overrideToCode: code, reason }),
+          }
+        );
+        if (!res.ok) {
+          const body = (await res.json().catch(() => ({}))) as {
+            error?: string;
+          };
+          return {
+            ok: false,
+            error: body.error ?? `Override failed (${res.status}).`,
+          };
+        }
+        const data = (await res.json()) as {
+          ok: boolean;
+          newScore?: EmScore;
+        };
+        if (data.ok && data.newScore) {
+          setEmScore(data.newScore);
+        }
+        return { ok: data.ok, newScore: data.newScore };
+      } catch (err) {
+        return {
+          ok: false,
+          error:
+            err instanceof Error
+              ? err.message
+              : 'Network error applying override.',
+        };
+      }
+    },
+    [visitId]
+  );
 
   // Batch H — signedAt is the canonical signal that the note is locked,
   // independent of how the lifecycle status enum was set. A signed
@@ -203,6 +329,7 @@ export function SoapEditor({
           text={text}
           statusFor={statusFor}
           pulseHints={boostHints}
+          highlightedSections={highlightedSections}
           onEdit={onEdit}
           readonly={isReadonly}
         />
@@ -219,11 +346,16 @@ export function SoapEditor({
               emScore={emScore}
               visitId={visitId}
               readonly={isReadonly}
+              currentSoapText={text}
               onConfirmSign={
                 isReadonly || isSigned
                   ? undefined
                   : () => setSignModalOpen(true)
               }
+              onApplyOverride={
+                isReadonly || isSigned ? undefined : handleApplyOverride
+              }
+              onHighlightCriteria={handleHighlightCriteria}
               onApplyAdditions={async (additions) => {
                 try {
                   const res = await fetch(

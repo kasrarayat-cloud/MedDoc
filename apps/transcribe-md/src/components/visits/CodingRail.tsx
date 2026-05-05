@@ -25,11 +25,17 @@
 //     never red, never blocking — keeps last known good score
 //   - readonly visits → no override, no Bump CTA, no Modal mount
 //
-// CustomEvent contracts (loose coupling):
-//   - LISTENS:  qm:soap-edited        (Subagent A's body fires on edit)
-//   - EMITS:    qm:soap-highlight-criteria (BumpCtaButton click)
-//   - EMITS:    qm:em-override        (override dropdown selection)
-//   - EMITS:    qm:soap-jump          (EmCriterion row click)
+// Direct prop coupling (replaces the orphan window-event contract from
+// the original Phase 5.2 standalone build — see em-coding-ui/types.ts
+// header for the removal context):
+//   - SOAP edits → parent passes `currentSoapText`; the rail's
+//     useEffect debounces and calls POST /em-score itself.
+//   - Highlight gap criteria → `onHighlightCriteria(criterionIds)`
+//     bubbles up to the parent, which sets `highlightedSections`
+//     state on <SoapBody>.
+//   - Override → `onApplyOverride(code, reason?)` resolves to
+//     `{ ok, error?, newScore? }`; the rail updates `score` on
+//     success + surfaces a real toast on failure.
 // ============================================================================
 
 import {
@@ -47,10 +53,6 @@ import {
   type EmCode,
   type EmScore,
   type EmVisitType,
-  SOAP_EDITED_EVENT,
-  type SoapEditedDetail,
-  EM_OVERRIDE_EVENT,
-  type EmOverrideDetail,
 } from '@/lib/em-coding-ui/types';
 import { ANNUAL_SAVINGS_FOOTER, formatDelta } from '@/lib/em-coding-ui/revenueDelta';
 
@@ -72,6 +74,16 @@ interface CodingRailProps {
   visitId: string;
   /** Signed visits are coaching-only — readonly disables override + bump CTA. */
   readonly: boolean;
+  /**
+   * Latest SOAP markdown body, supplied by the parent SoapEditor each
+   * render. The rail watches this prop, debounces, and POSTs to
+   * /em-score for a fresh score on every meaningful edit. Replaces
+   * the orphan SOAP_EDITED_EVENT window-event contract.
+   *
+   * Optional — when undefined the rail simply skips the auto-rescore
+   * loop and stays on the server-supplied initial score.
+   */
+  currentSoapText?: string;
   /** Fired when the doctor accepts a bump suggestion via the modal. */
   onBumpAccepted?: (toCode: EmCode) => void;
   /**
@@ -83,6 +95,26 @@ interface CodingRailProps {
   onApplyAdditions?: (
     additions: Array<{ criterionId: string; text: string }>
   ) => Promise<{ ok: boolean; error?: string; newScore?: EmScore }>;
+  /**
+   * Persists a doctor-set CPT override. Wired to
+   * POST /api/visits/[id]/em-score/override by the parent. Returning
+   * `{ ok: true, newScore }` causes the rail to re-render with the
+   * doctor-set code. Returning `{ ok: false, error }` surfaces a real
+   * error toast and the rail keeps its prior score (no silent drop —
+   * this is the post-fix behaviour for QA-report finding F-01).
+   */
+  onApplyOverride?: (
+    code: EmCode,
+    reason?: string
+  ) => Promise<{ ok: boolean; error?: string; newScore?: EmScore }>;
+  /**
+   * Asks the parent to highlight the SOAP sections that contain the
+   * given gap criterion ids — typically called when the doctor clicks
+   * the bump CTA so the eye is drawn to the right S/O/A/P block.
+   * Optional — sections silently don't pulse when the parent doesn't
+   * supply a handler.
+   */
+  onHighlightCriteria?: (criterionIds: string[]) => void;
   /**
    * Fired when the doctor clicks "Confirm <code> · sign". Parent
    * opens its lifted SignAndSendModal (controlled-open mode). When
@@ -102,8 +134,11 @@ export function CodingRail({
   emScore: initialScore,
   visitId,
   readonly,
+  currentSoapText,
   onBumpAccepted,
   onApplyAdditions,
+  onApplyOverride,
+  onHighlightCriteria,
   onConfirmSign,
 }: CodingRailProps) {
   // Last known-good server score; fall back here on rescoring failures.
@@ -119,9 +154,10 @@ export function CodingRail({
 
   const debounceRef = useRef<number | null>(null);
   const inflightRef = useRef<AbortController | null>(null);
-
-  // Track the latest SOAP body text so the rescore POST sends the correct payload.
-  const latestSoapRef = useRef<string | null>(null);
+  // Skip the rescore loop on the very first render — the score from
+  // the server already reflects the initial SOAP body. This prevents
+  // a redundant POST on every page load.
+  const lastRescoredTextRef = useRef<string | null>(null);
 
   // Reflect prop changes when the parent server-rerenders with a new score
   // (e.g. after page-level revalidatePath). Keeps the rail in sync without
@@ -176,39 +212,50 @@ export function CodingRail({
     [visitId]
   );
 
+  // Watch the parent-supplied SOAP text and debounce-rescore on change.
+  // The first render seeds the ref so we don't re-fetch a score the
+  // server has already produced. Subsequent prop changes (the doctor
+  // typed in <SoapInlineEdit>, parent persisted via saveSoapDraftAction
+  // and re-rendered with the new text) trigger the debounced POST.
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    if (currentSoapText === undefined) return;
 
-    const handler = (event: Event) => {
-      const detail = (event as CustomEvent<SoapEditedDetail>).detail;
-      if (!detail || detail.visitId !== visitId) return;
-      latestSoapRef.current = detail.soapText;
+    if (lastRescoredTextRef.current === null) {
+      // Initial seed — the server-rendered score already reflects this
+      // text, so suppress the first-render rescore.
+      lastRescoredTextRef.current = currentSoapText;
+      return;
+    }
+    if (currentSoapText === lastRescoredTextRef.current) return;
+    lastRescoredTextRef.current = currentSoapText;
 
-      if (debounceRef.current !== null) {
-        window.clearTimeout(debounceRef.current);
-      }
-      debounceRef.current = window.setTimeout(() => {
-        debounceRef.current = null;
-        const text = latestSoapRef.current;
-        if (text !== null) {
-          void rescore(text);
-        }
-      }, RESCORE_DEBOUNCE_MS);
-    };
+    if (debounceRef.current !== null) {
+      window.clearTimeout(debounceRef.current);
+    }
+    const textForRescore = currentSoapText;
+    debounceRef.current = window.setTimeout(() => {
+      debounceRef.current = null;
+      void rescore(textForRescore);
+    }, RESCORE_DEBOUNCE_MS);
 
-    window.addEventListener(SOAP_EDITED_EVENT, handler);
     return () => {
-      window.removeEventListener(SOAP_EDITED_EVENT, handler);
       if (debounceRef.current !== null) {
         window.clearTimeout(debounceRef.current);
         debounceRef.current = null;
       }
+    };
+  }, [currentSoapText, rescore]);
+
+  // Cancel any inflight request on unmount.
+  useEffect(() => {
+    return () => {
       if (inflightRef.current) {
         inflightRef.current.abort();
         inflightRef.current = null;
       }
     };
-  }, [visitId, rescore]);
+  }, []);
 
   // ---------------------------------------------------------------------------
   // Override dropdown
@@ -219,17 +266,32 @@ export function CodingRail({
   );
 
   const handleOverrideSelect = useCallback(
-    (code: EmCode) => {
+    async (code: EmCode) => {
       setOverrideOpen(false);
-      if (typeof window === 'undefined') return;
-      const detail: EmOverrideDetail = { visitId, code };
-      window.dispatchEvent(new CustomEvent(EM_OVERRIDE_EVENT, { detail }));
-      // Optimistic local toast — Subagent B wires the actual PATCH endpoint.
-      toast.success(`Override set to ${code}`, {
-        description: 'Doctor-set code recorded in audit trail.',
+      if (!onApplyOverride) {
+        // No persistence handler wired — refuse silently rather than
+        // surface a "success" toast for a dropped click. The rail
+        // dropdown is hidden in readonly mode, so reaching this branch
+        // in production indicates a parent-wiring bug, not a doctor-
+        // facing flow.
+        toast.error('Override is not wired — reload or contact support.');
+        return;
+      }
+      const result = await onApplyOverride(code);
+      if (!result.ok) {
+        toast.error(result.error ?? 'Override failed — try again.');
+        return;
+      }
+      if (result.newScore) {
+        setScore(result.newScore);
+        setStale(false);
+        setUnavailable(false);
+      }
+      toast.success(`Override applied — ${code}`, {
+        description: 'Doctor-set code persisted to the audit trail.',
       });
     },
-    [visitId]
+    [onApplyOverride]
   );
 
   // ---------------------------------------------------------------------------
@@ -402,6 +464,7 @@ export function CodingRail({
               gaps={score.bump.gaps.map((g) => g.label)}
               gapCriterionIds={score.bump.gaps.map((g) => g.criterionId)}
               onClick={handleBumpClick}
+              onHighlight={onHighlightCriteria}
               disabled={readonly}
             />
           ) : null}
