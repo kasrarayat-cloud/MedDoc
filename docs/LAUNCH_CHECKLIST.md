@@ -191,27 +191,50 @@ with a valid DKIM signature.
 
 ---
 
-## 6. `OPENAI_API_KEY` rotation (leaked during development)
+## 6. Credential rotation sweep — Round 3 PR-A (2026-05-04)
 
-**Status:** open security debt. Key was exposed in a dev log / commit / screen-share
-(root cause TBD below). Must rotate before production use.
+**Status:** ✅ Vendor-side rotation complete; ⏳ .env paste pending PR-A merge.
 
-### Rotate
-- [ ] Log into OpenAI dashboard → API Keys → Delete the leaked key (don't just name-rename — fully revoke)
-- [ ] Generate a new key, name-tag it `prod-transcribe-md-<date>`
-- [ ] Update `.env` on the VPS: `OPENAI_API_KEY=sk-proj-<new>`
-- [ ] `docker compose up -d --force-recreate transcribe-md transcribe-md-worker`
-- [ ] Verify: kick off a test visit that hits OpenAI embedding (the edit-tracking hook) and confirm the call succeeds in worker logs
+The Round 3 audit (PR #111) findings A01-P0-001..003 + A02-P0-002 + A07-P3-001 documented that eight secrets had been baked into shipped Docker images and/or sat in world-readable `.env.backup`/`.env.local` on the VPS. The structural fix landed in Round 3 PR-A (`fix(round-3-pr-a): secrets sweep …`):
 
-### Audit exposure
-- [ ] Pull billing data for the leaked-key window (OpenAI dashboard → Usage → filter by API key if possible). Any spend not attributable to our own dev activity = possible unauthorized use
-- [ ] Check for any suspicious IPs in the usage analytics
-- [ ] If unauthorized use observed, file with OpenAI support for credit + report the incident
+- `.dockerignore` rewritten so `COPY . .` no longer pulls `.env*` into image layers (root cause of A01-P0-001).
+- `.env.backup`, `.env.local` (root), and `apps/meddoc-pro/.env.local` deleted from the VPS.
+- `.env` mode tightened to `0600` (was 0640).
+- All five affected images rebuilt `--no-cache` against the new ignore list and verified via `docker save … | tar tv | grep .env` (clean).
+- CI `secrets-scan.yml` workflow added (trufflehog `--only-verified` on every PR) to prevent regression.
 
-### Prevent next time
-- [ ] Add the key pattern (`sk-proj-[A-Za-z0-9]{40,}`) to a pre-commit secret-scanner (git-secrets, detect-secrets, gitleaks) — pick one and install on the repo
-- [ ] Document the incident + rotation in `docs/ROTATION_RUNBOOK.md` with the date so future rotations have a reference
-- [ ] Verify `.env` is still gitignored (it is — just re-confirm before the next commit)
+### Rotation status (vendor-side — done by Kasra 2026-05-04)
+
+All eight secrets were considered compromised and rotated through the vendor consoles. Old values are dead at the vendor; new values live in Kasra's password manager pending the `.env` paste.
+
+- [x] `OPENAI_API_KEY` (was `sk-proj-K8_…` per audit A01-P0-002) — revoked + new key issued
+- [x] `ANTHROPIC_API_KEY` — revoked + new key issued
+- [x] `DEEPGRAM_API_KEY` — revoked + new key issued
+- [x] `RESEND_API_KEY` — revoked + new key issued
+- [x] `AUTH_SECRET` — regenerated via `openssl rand -base64 33`
+- [x] `DB_PASSWORD` — Postgres `meddoc` role password rotated
+- [x] `MINIO_ROOT_PASSWORD` — MinIO root credential rotated
+- [x] `SCRIBE_SERVICE_TOKEN` — regenerated
+
+### Operator step (Kasra, post-PR-A merge)
+
+- [ ] Paste the eight new values into `/opt/meddoc-pro/.env`
+- [ ] `docker compose up -d --force-recreate postgres minio redis transcribe-md transcribe-md-worker meddoc-pro marketing` (postgres + minio first to pick up the new root credentials, then app tier)
+- [ ] Smoke-verify: `curl -sI https://app.quillmd.com` returns 307; `curl -sI https://pro.quillmd.com` returns 200; kick off a test visit and confirm the AI pipeline reaches Claude / Deepgram / OpenAI from worker logs
+- [ ] Confirm `.env` mode is still `0600` after the paste (`stat -c '%a %n' /opt/meddoc-pro/.env`)
+
+### Audit exposure (post-rotation)
+
+- [ ] Pull billing data for the leaked-key window from OpenAI / Anthropic / Deepgram / Resend dashboards. Any spend not attributable to our own dev activity = possible unauthorized use; file with vendor support for credit
+- [ ] Check usage analytics for suspicious IPs / regions
+- [ ] If unauthorized use observed, document in `docs/incidents/2026-05-04-credential-leak.md` (incident-response runbook is itself a Round 3 finding A12-P0-002 — to be authored under PR-G)
+
+### Prevent next time (closed by this PR)
+
+- [x] CI guard: `.github/workflows/secrets-scan.yml` runs trufflehog `--only-verified` on every PR; fails on any verified-live secret in the diff or working tree
+- [x] `.dockerignore` rewritten so `COPY . .` cannot bake `.env*` into images (closes A01-P0-001 root cause)
+- [x] On-disk leftovers (`.env.backup`, `.env.local`) deleted; mode tightened to 0600
+- [ ] Document this rotation event in `docs/ROTATION_RUNBOOK.md` (deferred to follow-up PR — `ROTATION_RUNBOOK.md` already exists per audit A12 positives but should record the 2026-05-04 sweep date)
 
 ---
 
