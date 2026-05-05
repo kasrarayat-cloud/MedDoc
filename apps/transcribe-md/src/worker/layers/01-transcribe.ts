@@ -16,6 +16,11 @@ import prisma from '@meddoc/db';
 import { deepgramBatchTranscribe } from '@meddoc/ai';
 import { statAudio, streamAudio } from '@/lib/minio';
 import { MEDICATION_KEYTERMS } from '@/lib/deepgram-vocabulary';
+import {
+  computeAudioConfidenceStats,
+  shouldFlagForReview,
+  LOW_CONFIDENCE_THRESHOLD,
+} from './audio-confidence';
 
 export interface Layer1Input {
   visitId: string;
@@ -87,12 +92,30 @@ export async function runLayer1Transcribe(
     if (typeof u.speaker === 'number') speakerIds.add(u.speaker);
   }
 
+  // Round 3 quality fix-pack Q0-5 (audit Findings 02.5 + 07.3) —
+  // aggregate Deepgram per-utterance confidence into a single visit-
+  // level signal. When the audio is mostly low-confidence (median
+  // below 0.55 OR more than 30% of utterances under 0.6), flip
+  // needsReview so the doctor sees the warning before signing AND
+  // surface the structured stats column so L4 + L5 can hedge their
+  // language. Don't HALT — produce the SOAP, but make sure the
+  // doctor knows the audio fidelity wasn't great.
+  const audioStats = computeAudioConfidenceStats(result.utterances);
+  const lowConfFlag = audioStats ? shouldFlagForReview(audioStats) : false;
+
   await prisma.transcribeVisit.update({
     where: { id: input.visitId },
     data: {
       transcriptRaw: result.raw as unknown as object,
       transcriptText: result.transcript,
       audioDurationSec: result.durationSec,
+      audioConfidenceStats: (audioStats ?? null) as unknown as object,
+      ...(lowConfFlag
+        ? {
+            needsReview: true,
+            reviewReason: `Audio confidence is below threshold (median ${audioStats!.median.toFixed(2)}, ${audioStats!.lowConfPct.toFixed(0)}% of utterances < ${LOW_CONFIDENCE_THRESHOLD}). Recommend manual review or re-record.`,
+          }
+        : {}),
     },
   });
 
