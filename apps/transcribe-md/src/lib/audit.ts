@@ -109,7 +109,9 @@ export type AuditAction =
   | 'PIPELINE_REJECTED_INJECTION_DELIMITER'
   | 'AUDIO_REJECTED_INVALID_MAGIC_BYTES'
   | 'AUDIO_REJECTED_FILE_TOO_LARGE'
-  | 'TEXT_INPUT_REJECTED_TOO_LARGE';
+  | 'TEXT_INPUT_REJECTED_TOO_LARGE'
+  // Coding-coach bump persistence (Phase 5.2 stub completion)
+  | 'EM_BUMP_APPLIED';
 
 export interface AuditLogInput {
   action: AuditAction;

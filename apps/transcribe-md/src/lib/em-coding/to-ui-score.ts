@@ -27,6 +27,10 @@ import type {
   BumpSuggestion as UiBumpSuggestion,
 } from '../em-coding-ui/types';
 import { revenueDelta } from '../em-coding-ui/revenueDelta';
+import {
+  criterionIdForGapLabel,
+  suggestionForCriterionId,
+} from './criterion-to-section';
 
 /** AMA 2021 time bands (rubric §1.1/§1.2). Returned in seconds for UI consistency. */
 const TIME_BANDS: Record<string, { min: number; max: number }> = {
@@ -219,14 +223,23 @@ function deriveGroups(score: EngineEmScore): EmCriterionGroup[] {
   ];
 }
 
-/** Project engine bump → UI bump. */
+/** Project engine bump → UI bump.
+ *  Phase 5.2 stub completion — gap.criterionId now derives from the
+ *  gap label's prefix so the BumpModal's apply-additions payload
+ *  carries a meaningful id (`hpi.elements` / `ros.systems` / etc.)
+ *  that the server route can map to a SOAP section. The pre-fix
+ *  positional `gap.0` ids were placeholders for the never-landed
+ *  Subagent B integration. */
 function deriveBump(score: EngineEmScore): UiBumpSuggestion | null {
   if (!score.bumpableTo) return null;
-  const gaps = (score.bumpGaps ?? []).map((label, i) => ({
-    criterionId: `gap.${i}`,
-    label,
-    suggestion: label,
-  }));
+  const gaps = (score.bumpGaps ?? []).map((label) => {
+    const criterionId = criterionIdForGapLabel(label);
+    return {
+      criterionId,
+      label,
+      suggestion: suggestionForCriterionId(criterionId),
+    };
+  });
   return {
     mode: gaps.length === 0 ? 'confirm-bump' : 'almost-there',
     toCode: score.bumpableTo as UiBumpSuggestion['toCode'],
