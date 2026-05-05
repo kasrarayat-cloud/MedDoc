@@ -233,6 +233,12 @@ enum AuditAction {
   AUDIO_REJECTED_INVALID_MAGIC_BYTES
   AUDIO_REJECTED_FILE_TOO_LARGE
   TEXT_INPUT_REJECTED_TOO_LARGE
+
+  // Coding-coach bump persistence (Phase 5.2 stub completion). Emitted
+  // when the doctor accepts a "Bump 99213 → 99214"-style suggestion and
+  // the server merges the additions into the SOAP draft + re-runs the
+  // L7b CPT scorer.
+  EM_BUMP_APPLIED
 }
 
 /// Document lifecycle status
