@@ -88,6 +88,22 @@ export function isAutoConfirmDomain(email: string): boolean {
   const raw = process.env.EMAIL_AUTO_CONFIRM_DOMAINS ?? '';
   if (!raw.trim()) return false;
 
+  // Round 3 PR-F (A02-P0-001) — production safety gate.
+  // Pre-PR-F, EMAIL_AUTO_CONFIRM_DOMAINS=quillmd-test.local was active
+  // in production (set on the live container's compose env), giving
+  // anyone who can present `*@quillmd-test.local` a fully-provisioned
+  // account with no real email ownership. Defence in depth: in
+  // production we now require an EXPLICIT second flag
+  // (EMAIL_AUTO_CONFIRM_ALLOW_IN_PROD=true) so the QA harness can
+  // still opt in deliberately, but a stale `EMAIL_AUTO_CONFIRM_DOMAINS`
+  // env entry left over from staging cannot fire by accident. Outside
+  // production (test, development), behaviour is unchanged so dev/QA
+  // workflows keep working.
+  if (process.env.NODE_ENV === 'production') {
+    const allowInProd = process.env.EMAIL_AUTO_CONFIRM_ALLOW_IN_PROD;
+    if (allowInProd !== 'true') return false;
+  }
+
   const allowlist = new Set(
     raw
       .split(',')
