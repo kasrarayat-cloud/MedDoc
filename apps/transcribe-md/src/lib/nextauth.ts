@@ -18,6 +18,7 @@
 import NextAuth from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import bcrypt from 'bcryptjs';
+import * as Sentry from '@sentry/nextjs';
 
 import authConfig from '@/lib/auth.config';
 import prisma from '@meddoc/db';
@@ -239,6 +240,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         userEmail: user.email ?? null,
         practiceId: practiceId ?? null,
       });
+      // Round 3 PR-H — A11-P1 Sentry user context.
+      // PHI guard: pass IDs only — never email, name, MRN, DOB. Sentry
+      // is BAA-pending (compliance register) and the redactPhi
+      // beforeSend hook will scrub strings, but the right defense is
+      // never sending PHI in the first place. user.id is a UUID; it
+      // can be cross-referenced server-side via /api/admin if ops
+      // needs to map an event back to a user.
+      Sentry.setUser({ id: user.id });
+      if (practiceId) Sentry.setTag('practiceId', practiceId);
     },
     async signOut(message) {
       // next-auth v5's signOut event fires with a discriminated union.
@@ -252,6 +262,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (userId) {
         void logAudit({ action: 'LOGOUT', userId });
       }
+      // Round 3 PR-H — clear Sentry user scope on signout so a
+      // subsequent error from this process doesn't carry the
+      // departed user's id.
+      Sentry.setUser(null);
     },
   },
 });

@@ -782,7 +782,14 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
     // T-M16.3: capture to Sentry BEFORE the re-throw so BullMQ's retry
     // still sees the original error. The {visitId, layer} tags let ops
     // filter errors by failure point without reading the stack trace.
-    captureWorkerException(err, { visitId, layer: currentLayer });
+    // Round 3 PR-H: pass userId + practiceId as tags too — IDs only,
+    // never email/name/MRN.
+    captureWorkerException(err, {
+      visitId,
+      layer: currentLayer,
+      userId: visit.userId,
+      practiceId: visit.user?.practiceId ?? null,
+    });
 
     // T-M23.A: only persist FAILED on the final BullMQ attempt …
     // *unless* this fix-pass classifies the error as `permanent`. A
@@ -1083,10 +1090,37 @@ async function startCleanupWorker(): Promise<void> {
   }
 }
 
+/** Round 3 PR-H — A11-P1 worker liveness heartbeat.
+ *  Writes a Unix-timestamp file every 15s. The compose healthcheck
+ *  reads this file and treats the worker as unhealthy when the
+ *  timestamp is more than 60s stale, so a deadlocked event loop
+ *  (Prisma deadlock, infinite-loop guard, hung Anthropic stream)
+ *  surfaces as an unhealthy container instead of a silently-stuck
+ *  worker. The heartbeat is decoupled from BullMQ — it fires even
+ *  when the queue is empty, so an idle worker still reports healthy. */
+async function startHeartbeat(): Promise<void> {
+  const fs = await import('node:fs/promises');
+  const HEARTBEAT_PATH = '/tmp/worker-heartbeat';
+  const HEARTBEAT_INTERVAL_MS = 15_000;
+  const tick = async () => {
+    try {
+      await fs.writeFile(HEARTBEAT_PATH, String(Date.now()));
+    } catch (err) {
+      console.error(
+        '[transcribe-md-worker] heartbeat write failed:',
+        err instanceof Error ? err.message : err
+      );
+    }
+  };
+  await tick();
+  setInterval(() => void tick(), HEARTBEAT_INTERVAL_MS).unref();
+}
+
 async function main() {
   log.info('transcribe-md-worker', 'booting');
   await ensureBucket();
   log.info('transcribe-md-worker', 'bucket ready');
+  await startHeartbeat();
 
   const worker = new Worker<ProcessVisitPayload>(
     QUEUE_NAME,
