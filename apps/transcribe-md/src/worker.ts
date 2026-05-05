@@ -73,6 +73,7 @@ import {
 } from '@/worker/layers/03-extract-entities';
 import { runLayer4GenerateSoap } from '@/worker/layers/04-generate-soap';
 import { runLayer5SelfCritique } from '@/worker/layers/05-self-critique';
+import type { AudioConfidenceStats } from '@/worker/layers/audio-confidence';
 import { runLayer6Polish } from '@/worker/layers/06-polish';
 import { runLayer7aIcdCoding } from '@/worker/layers/07a-icd-coding';
 import { runLayer7bCptCoding } from '@/worker/layers/07b-cpt-coding';
@@ -325,6 +326,11 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
     // -------------------------------------------------------------------
     let entities: ExtractedEntities;
     let contextText: string;
+    // Round 3 quality fix-pack Q0-5 (audit Findings 02.5 + 07.3) —
+    // visit-level Deepgram confidence aggregate. Populated by L1 /
+    // L1b; null for text_notes (no audio) and for dictation runs
+    // that disable utterance segmentation.
+    let audioConfidenceStats: AudioConfidenceStats | null = null;
 
     if (visit.inputMode === 'audio_upload') {
       // ── L1 — Deepgram with diarize on ───────────────────────────
@@ -354,6 +360,10 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
           // guard fails the visit before L2 burns Anthropic budget.
           audioDurationSec: true,
           transcriptText: true,
+          // Round 3 quality fix-pack Q0-5 — L1 wrote this column
+          // with the Deepgram per-utterance confidence aggregate.
+          // L4 + L5 read it through the worker plumbing below.
+          audioConfidenceStats: true,
         },
       });
       const raw = withTranscript?.transcriptRaw as
@@ -361,6 +371,11 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         | null
         | undefined;
       const utterances: DeepgramUtterance[] = raw?.results?.utterances ?? [];
+      audioConfidenceStats =
+        (withTranscript?.audioConfidenceStats as
+          | AudioConfidenceStats
+          | null
+          | undefined) ?? null;
 
       // Round 3 PR-D — A06-P0-001 empty-transcript guard. Throws
       // PipelineRejectError on insufficient audio/transcript; the
@@ -441,9 +456,16 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       // Round 3 PR-D — A06-P0-001 empty-transcript guard (dictation
       // path). Read the duration L1b just wrote and run the same
       // assertion the audio_upload path uses.
+      // Round 3 quality fix-pack Q0-5 — also read audioConfidenceStats
+      // here so L4/L5 can see it on the dictation branch (will be
+      // null today since L1b runs Deepgram with utterances disabled,
+      // but the wiring is parallel to the audio_upload branch).
       const withDictationDuration = await prisma.transcribeVisit.findUnique({
         where: { id: visitId },
-        select: { dictationDurationSec: true },
+        select: {
+          dictationDurationSec: true,
+          audioConfidenceStats: true,
+        },
       });
       await assertSufficientTranscript({
         visitId,
@@ -452,6 +474,11 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         durationSec: withDictationDuration?.dictationDurationSec ?? 0,
         transcriptText: dictationText,
       });
+      audioConfidenceStats =
+        (withDictationDuration?.audioConfidenceStats as
+          | AudioConfidenceStats
+          | null
+          | undefined) ?? null;
 
       // ── L3 — dictation entities ─────────────────────────────────
       await prisma.transcribeVisit.update({
@@ -517,6 +544,10 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         specialty: visit.specialty,
         roleLabeledTranscript: contextText,
         entities,
+        // Round 3 quality fix-pack Q0-5 — visit-level Deepgram
+        // confidence aggregate. Drives the L4 hedge prompt when
+        // the audio fidelity was poor.
+        audioConfidenceStats,
       });
     }
 
@@ -539,6 +570,10 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         soapDraft,
         roleLabeledTranscript: contextText,
         entities,
+        // Round 3 quality fix-pack Q0-5 — same hedge signal L4 sees,
+        // so the auditor can flag SOAP content the audio doesn't
+        // clearly support as critical hallucinations.
+        audioConfidenceStats,
       });
     }
 

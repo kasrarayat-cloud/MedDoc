@@ -15,6 +15,11 @@ import { Readable } from 'node:stream';
 import prisma from '@meddoc/db';
 import { deepgramBatchTranscribe } from '@meddoc/ai';
 import { statAudio, streamAudio } from '@/lib/minio';
+import {
+  computeAudioConfidenceStats,
+  shouldFlagForReview,
+  LOW_CONFIDENCE_THRESHOLD,
+} from './audio-confidence';
 
 export interface Layer1bInput {
   visitId: string;
@@ -71,12 +76,29 @@ export async function runLayer1bTranscribeDictation(
     result = await attempt();
   }
 
+  // Round 3 quality fix-pack Q0-5 (audit Findings 02.5 + 07.3) —
+  // dictation also runs through Deepgram's batch endpoint, so the
+  // same low-confidence detection applies. Note that L1b currently
+  // requests `utterances: false`, so result.utterances is empty and
+  // the helper returns null (we deliberately keep dictation parity
+  // with the helper contract). When a future PR enables utterances
+  // for dictation, the same wiring fires automatically.
+  const audioStats = computeAudioConfidenceStats(result.utterances);
+  const lowConfFlag = audioStats ? shouldFlagForReview(audioStats) : false;
+
   await prisma.transcribeVisit.update({
     where: { id: input.visitId },
     data: {
       transcriptRaw: result.raw as unknown as object,
       transcriptText: result.transcript,
       dictationDurationSec: result.durationSec,
+      audioConfidenceStats: (audioStats ?? null) as unknown as object,
+      ...(lowConfFlag
+        ? {
+            needsReview: true,
+            reviewReason: `Audio confidence is below threshold (median ${audioStats!.median.toFixed(2)}, ${audioStats!.lowConfPct.toFixed(0)}% of utterances < ${LOW_CONFIDENCE_THRESHOLD}). Recommend manual review or re-record.`,
+          }
+        : {}),
     },
   });
 
