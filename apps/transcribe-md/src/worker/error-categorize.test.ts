@@ -88,6 +88,70 @@ describe('categorizeError — permanent', () => {
       )
     ).toBe('permanent');
   });
+
+  // Q2 follow-up — Anthropic SDK structured 4xx errors. The
+  // BadRequestError shape is { status, error: { type: 'error',
+  // error: { type: <api-error-type>, message: <text> } } }. Pre-fix
+  // these were classified as transient and the worker burned 6
+  // BullMQ attempts on the same wire payload. The kasra Opus-4.7
+  // temperature-deprecation 400 is the canonical regression.
+  it('flags Anthropic 400 invalid_request_error as permanent (Opus 4.7 temp deprecation)', () => {
+    const err = Object.assign(new Error('400 Bad Request'), {
+      status: 400,
+      error: {
+        type: 'error',
+        error: {
+          type: 'invalid_request_error',
+          message: '`temperature` is deprecated for this model.',
+        },
+      },
+    });
+    expect(categorizeError(err)).toBe('permanent');
+  });
+
+  it('flags Anthropic 401 authentication_error as permanent', () => {
+    const err = Object.assign(new Error('401 Unauthorized'), {
+      status: 401,
+      error: {
+        type: 'error',
+        error: { type: 'authentication_error', message: 'invalid x-api-key' },
+      },
+    });
+    expect(categorizeError(err)).toBe('permanent');
+  });
+
+  it('flags Anthropic 403 permission_error as permanent', () => {
+    const err = Object.assign(new Error('403 Forbidden'), {
+      status: 403,
+      error: {
+        type: 'error',
+        error: { type: 'permission_error', message: 'no access to this model' },
+      },
+    });
+    expect(categorizeError(err)).toBe('permanent');
+  });
+
+  it('flags Anthropic 404 not_found_error as permanent', () => {
+    const err = Object.assign(new Error('404 Not Found'), {
+      status: 404,
+      error: {
+        type: 'error',
+        error: { type: 'not_found_error', message: 'unknown model' },
+      },
+    });
+    expect(categorizeError(err)).toBe('permanent');
+  });
+
+  it('flags Anthropic 413 request_too_large as permanent', () => {
+    const err = Object.assign(new Error('413 Payload Too Large'), {
+      status: 413,
+      error: {
+        type: 'error',
+        error: { type: 'request_too_large', message: 'context too long' },
+      },
+    });
+    expect(categorizeError(err)).toBe('permanent');
+  });
 });
 
 describe('categorizeError — transient', () => {
