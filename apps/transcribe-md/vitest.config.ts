@@ -38,6 +38,17 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./vitest.setup.ts'],
+    // Default `include` is `**/*.{test,spec}.?(c|m)[jt]s?(x)` relative
+    // to root — i.e. only files inside apps/transcribe-md. The
+    // @meddoc/ai package has no vitest of its own (no build step,
+    // either), so its tests live under packages/ai/src/__tests__/ and
+    // are folded into this config so they run alongside the worker
+    // tests they guard. Path is absolute so the resolution doesn't
+    // depend on cwd when CI invokes vitest.
+    include: [
+      '**/*.{test,spec}.?(c|m)[jt]s?(x)',
+      path.resolve(__dirname, '../../packages/ai/src/**/*.test.ts'),
+    ],
     exclude: [
       '**/node_modules/**',
       '**/.next/**',

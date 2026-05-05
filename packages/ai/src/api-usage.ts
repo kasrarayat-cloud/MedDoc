@@ -24,6 +24,8 @@ import { randomUUID } from 'node:crypto';
 
 import prisma from '@meddoc/db';
 
+import { claudeCostCents } from './pricing';
+
 export const PRICING = {
   // Deepgram Nova-3 Medical — per minute
   deepgram_nova3_medical: 0.0043,
@@ -32,6 +34,9 @@ export const PRICING = {
   // Anthropic Sonnet — per 1M tokens
   anthropic_sonnet_input: 3.0,
   anthropic_sonnet_output: 15.0,
+  // Anthropic Opus — per 1M tokens
+  anthropic_opus_input: 15.0,
+  anthropic_opus_output: 75.0,
   // Anthropic Haiku — per 1M tokens
   anthropic_haiku_input: 0.25,
   anthropic_haiku_output: 1.25,
@@ -167,16 +172,36 @@ export function buildAnthropicUsage(
   modelName: string,
   operation = 'soap_generate'
 ): UsageEvent {
-  const isHaiku = modelName.toLowerCase().includes('haiku');
-  const inputRate = isHaiku
-    ? PRICING.anthropic_haiku_input
-    : PRICING.anthropic_sonnet_input;
-  const outputRate = isHaiku
-    ? PRICING.anthropic_haiku_output
-    : PRICING.anthropic_sonnet_output;
+  // Per-model pricing. Opus 4.7 lands in the L4/L5/L7c layers (audit
+  // Finding 04.1) so the dispatch must recognise it explicitly — the
+  // legacy isHaiku-vs-Sonnet branch would have priced Opus calls at
+  // Sonnet's rate. The shared `claudeCostCents` helper in pricing.ts
+  // owns the source-of-truth per-million rates; we mirror them here as
+  // input/output rates only because UsageEvent records `unitCostUsd`
+  // (the input-rate-per-token, used by the admin dashboard's coarse
+  // "cents per token" lens) separately from `totalCostUsd`.
+  const lower = modelName.toLowerCase();
+  let inputRate: number;
+  let outputRate: number;
+  if (lower.includes('haiku')) {
+    inputRate = PRICING.anthropic_haiku_input;
+    outputRate = PRICING.anthropic_haiku_output;
+  } else if (lower.includes('opus')) {
+    inputRate = PRICING.anthropic_opus_input;
+    outputRate = PRICING.anthropic_opus_output;
+  } else {
+    inputRate = PRICING.anthropic_sonnet_input;
+    outputRate = PRICING.anthropic_sonnet_output;
+  }
+  // Authoritative per-call total comes from the pricing.ts dispatcher
+  // (which is env-overridable). Falls back to the per-rate computation
+  // for non-dispatchable models so the row still has a sensible figure.
+  const dispatchedCents = claudeCostCents(modelName, inputTokens, outputTokens);
   const totalCostUsd =
-    (inputTokens / 1_000_000) * inputRate +
-    (outputTokens / 1_000_000) * outputRate;
+    dispatchedCents > 0
+      ? dispatchedCents / 100
+      : (inputTokens / 1_000_000) * inputRate +
+        (outputTokens / 1_000_000) * outputRate;
   return {
     ...ctx,
     requestId: ctx.requestId ?? randomUUID(),
