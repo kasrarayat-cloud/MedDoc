@@ -67,6 +67,11 @@ export interface VisitReadyViewProps {
   /** The note shown in the SOAP tab — soapFinal when READY, signedSoap
    *  when SIGNED. The caller picks. */
   soapText: string;
+  /** Round 3 PR-E (A09-P0-003) — optimistic-concurrency token. The
+   *  RSC loads `transcribe_visits.soapVersion` and forwards it to the
+   *  client editor; saves include this version so two-tab edits
+   *  conflict-detect instead of last-write-wins. */
+  soapVersion: number;
   readonly: boolean;
   /** audio_upload only — full diarized utterance list from Deepgram. */
   utterances: Utterance[];
@@ -230,6 +235,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
               doctorEmail={props.doctorEmail}
               emailEnabled={props.emailEnabled}
               initialText={props.soapText}
+              initialSoapVersion={props.soapVersion}
               readonly={props.readonly}
               signedAt={props.signedAt}
               sources={soapSources}
