@@ -24,6 +24,11 @@ import {
   MEDICATION_KEYTERMS,
   MEDICATION_KEYTERMS_TAIL,
   MEDICATION_KEYTERMS_FULL,
+  ANATOMY_TERMS,
+  LAB_TESTS,
+  PROCEDURES,
+  COMMON_DIAGNOSES,
+  CLINICAL_KEYTERMS,
 } from './deepgram-vocabulary';
 
 /** Conservative upper-bound estimate of Deepgram's subword tokenizer.
@@ -82,6 +87,45 @@ describe('MEDICATION_KEYTERMS — Deepgram 500-token cap', () => {
       ...MEDICATION_KEYTERMS_TAIL,
     ]);
     expect(MEDICATION_KEYTERMS_FULL.length).toBe(merged.size);
+  });
+});
+
+describe('Q2 fix-pack — clinical-vocabulary expansion', () => {
+  it('every new section is non-empty (audit Findings 01.9 + 03.4)', () => {
+    expect(ANATOMY_TERMS.length).toBeGreaterThan(0);
+    expect(LAB_TESTS.length).toBeGreaterThan(0);
+    expect(PROCEDURES.length).toBeGreaterThan(0);
+    expect(COMMON_DIAGNOSES.length).toBeGreaterThan(0);
+  });
+
+  it('all new entries are lowercase + non-empty (Deepgram lookup)', () => {
+    for (const set of [ANATOMY_TERMS, LAB_TESTS, PROCEDURES, COMMON_DIAGNOSES]) {
+      for (const t of set) {
+        expect(t).toBe(t.toLowerCase());
+        expect(t.trim()).not.toBe('');
+      }
+    }
+  });
+
+  it('CLINICAL_KEYTERMS = MEDICATION_KEYTERMS ∪ 4 new sections, deduped', () => {
+    // Every new section flows through CLINICAL_KEYTERMS.
+    for (const t of [...ANATOMY_TERMS, ...LAB_TESTS, ...PROCEDURES, ...COMMON_DIAGNOSES]) {
+      expect(CLINICAL_KEYTERMS).toContain(t);
+    }
+    // Every medication flows through.
+    for (const t of MEDICATION_KEYTERMS) {
+      expect(CLINICAL_KEYTERMS).toContain(t);
+    }
+    // No duplicates.
+    expect(new Set(CLINICAL_KEYTERMS).size).toBe(CLINICAL_KEYTERMS.length);
+  });
+
+  it('CLINICAL_KEYTERMS estimated tokens stay under the internal cap', () => {
+    // Same 450-token internal cap (10% headroom under Deepgram's 500).
+    // L1 + L1b ship CLINICAL_KEYTERMS as the keyterm payload, so this
+    // is the budget that actually matters at runtime.
+    const total = totalEstimatedTokens(CLINICAL_KEYTERMS);
+    expect(total).toBeLessThanOrEqual(INTERNAL_TOKEN_CAP);
   });
 });
 

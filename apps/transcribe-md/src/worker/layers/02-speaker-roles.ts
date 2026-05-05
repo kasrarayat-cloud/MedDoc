@@ -146,6 +146,11 @@ export async function runLayer2SpeakerRoles(
     user,
     schema: SpeakerMap,
     maxTokens: 2048,
+    // Q2 fix-pack §08.1 — speaker classification is a deterministic
+    // task. Without temperature, SDK default (~1.0) made the same audio
+    // oscillate between confidence 0.65 (needsReview) and 0.75 (clean)
+    // run-to-run. Pin to 0 so the lowestConfidence gate is consistent.
+    temperature: 0,
   });
 
   const confidences = Object.values(speakerMap).map((s) => s.confidence);

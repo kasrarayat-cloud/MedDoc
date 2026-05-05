@@ -15,7 +15,9 @@ import { Readable } from 'node:stream';
 import prisma from '@meddoc/db';
 import { deepgramBatchTranscribe } from '@meddoc/ai';
 import { statAudio, streamAudio } from '@/lib/minio';
-import { MEDICATION_KEYTERMS } from '@/lib/deepgram-vocabulary';
+// Q2 fix-pack — keyterm coverage now spans medications + anatomy + labs
+// + procedures + common diagnoses. See `CLINICAL_KEYTERMS`.
+import { CLINICAL_KEYTERMS } from '@/lib/deepgram-vocabulary';
 import {
   computeAudioConfidenceStats,
   shouldFlagForReview,
@@ -67,10 +69,10 @@ export async function runLayer1Transcribe(
       purpose: 'tm_transcribe',
       audio: { stream: webStream, sizeBytes: stat.size },
       mimeType: input.audioMimeType!,
-      // Phase-2 voice batch 1: boost the medication lexicon so
-      // near-homophones decode as the drug name rather than an
-      // invented word. See src/lib/deepgram-vocabulary.ts.
-      keyterms: MEDICATION_KEYTERMS,
+      // Q2 fix-pack — biases nova-3-medical across the full clinical
+      // surface: medications (drug-name homophones) + anatomy + labs
+      // + procedures + common diagnoses. See `CLINICAL_KEYTERMS`.
+      keyterms: CLINICAL_KEYTERMS,
     });
   };
 
