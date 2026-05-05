@@ -17,9 +17,11 @@
 // ============================================================================
 
 import { z } from 'zod';
-import { modelClient } from '@meddoc/ai';
+import { modelClient, validateRxDose } from '@meddoc/ai';
 import prisma from '@meddoc/db';
 import { RX_PEDIATRIC_FEWSHOT_EXAMPLES } from '@/worker/prompts/rx-pediatric-examples';
+import { logAudit, type AuditAction } from '@/lib/audit';
+import { parseRxToMgPerDay } from './rx-sig-parser';
 
 const MODEL = 'claude-sonnet-4-6';
 
@@ -292,6 +294,84 @@ export async function runLayer7cRxDrafting(
     maxTokens: 3072,
     temperature: 0.1,
   });
+
+  // Fix-Pack 1 Q0-1 (audit Finding 06.1) — deterministic safety floor.
+  // Round 3 PR-D shipped `validateRxDose` but never wired it into L7c;
+  // the model output flowed straight to the DB with only the model's
+  // training-time pharmacology backstopping it. Now every prescription
+  // is run through the verified dose-ranges table and any warnings the
+  // validator emits are appended to result.warnings + audit-logged.
+  //
+  // The validator is fail-closed for unknown drugs (emits
+  // RX_DRUG_NOT_IN_VERIFIED_DATABASE) and always-on for the
+  // contraindication check (allergy substring match) — those run even
+  // when the (strength, sig) → mg/day parse fails.
+  for (const rx of result.prescriptions) {
+    const doseMgPerDay = parseRxToMgPerDay(
+      rx.strength ?? null,
+      rx.sig ?? null
+    );
+    const validation = validateRxDose({
+      drug: rx.drug,
+      doseMgPerDay,
+      patient: {
+        dateOfBirth: input.patient.dateOfBirth ?? null,
+        weightKg: input.patient.weightKg ?? null,
+        allergies: input.patient.allergies ?? [],
+      },
+    });
+
+    for (const w of validation.warnings) {
+      // Severity mapping mirrors the prompt's severity ladder. Dose-
+      // exceeds-range and explicit allergy/contraindication matches are
+      // patient-harm risks — critical. "Drug not in verified DB" is a
+      // major (verify-against-reference) signal, not critical, because
+      // the model's pharmacology may still be correct; we just lack a
+      // deterministic check. Complex-dosing is minor — it's a "verify
+      // individually" nudge, not a hard block.
+      const severity: 'critical' | 'major' | 'minor' =
+        w.code === 'RX_DOSE_EXCEEDS_VERIFIED_RANGE' ||
+        w.code === 'RX_CONTRAINDICATION_MATCH'
+          ? 'critical'
+          : w.code === 'RX_DRUG_NOT_IN_VERIFIED_DATABASE'
+            ? 'major'
+            : 'minor';
+
+      result.warnings.push({
+        severity,
+        rx_drug: rx.drug,
+        // [deterministic] prefix lets the Rx panel + audit reviewer
+        // distinguish validator-emitted warnings from model-emitted
+        // ones, in case both fire on the same drug.
+        message: `[deterministic] ${w.message}`,
+        evidence_quote: rx.evidence_quote ?? null,
+      });
+
+      // PR-D shipped three of the four warning codes as audit-action
+      // enum values. RX_COMPLEX_DOSING_VERIFY_INDIVIDUALLY is NOT in
+      // the AuditAction enum (Prisma) nor in the TS union — adding it
+      // would require a Prisma migration that's out of scope for this
+      // PR. We still surface the warning to the doctor (above), but
+      // skip the audit row. Follow-up: extend the enum + write a
+      // migration so the complex-dosing nudge is auditable.
+      const isAuditable =
+        w.code === 'RX_DOSE_EXCEEDS_VERIFIED_RANGE' ||
+        w.code === 'RX_CONTRAINDICATION_MATCH' ||
+        w.code === 'RX_DRUG_NOT_IN_VERIFIED_DATABASE';
+
+      if (isAuditable) {
+        void logAudit({
+          action: w.code as AuditAction,
+          targetId: input.visitId,
+          targetType: 'TranscribeVisit',
+          userId: input.userId,
+          practiceId: input.practiceId,
+          success: false,
+          metadata: w.metadata as Record<string, unknown>,
+        });
+      }
+    }
+  }
 
   await prisma.transcribeVisit.update({
     where: { id: input.visitId },
