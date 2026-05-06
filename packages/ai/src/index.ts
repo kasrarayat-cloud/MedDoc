@@ -24,6 +24,8 @@ export {
   transcribe,
   type TranscribeArgs,
   type TranscribeResult,
+  type TranscribeAudioSource,
+  type TranscribeStreamSource,
   type TranscriptionProvider,
 } from './transcribe';
 export {

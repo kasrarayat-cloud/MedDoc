@@ -257,6 +257,14 @@ enum AuditAction {
   VIEWED_DASHBOARD
   VISIT_CREATED
   VIEWED_SETTINGS
+
+  // PR-L follow-up — Whisper-fallback canary. Emitted by Layer-1 (and
+  // Layer-1b dictation) when the transcribe() orchestrator's primary
+  // Deepgram call failed and Whisper saved the visit. Metadata
+  // carries: { primaryProvider, fallbackProvider, primaryError?,
+  // durationSec }. Operators see the rate over time in /admin/queues
+  // + audit_logs.
+  TRANSCRIPTION_PROVIDER_FALLBACK
 }
 
 /// Document lifecycle status
@@ -1516,6 +1524,19 @@ model TranscribeVisit {
   status    TranscribeVisitStatus @default(QUEUED)
 
   audioKey         String?
+  /// PR-L follow-up: which provider produced the transcript on the
+  /// most-recent (re-)processing pass. Set by the transcribe()
+  /// orchestrator in `worker/layers/01-transcribe.ts` (and 01b for
+  /// dictation). Values:
+  ///   - 'deepgram-batch'    — primary path (best clinical-domain
+  ///                          quality + speaker diarization).
+  ///   - 'whisper-fallback'  — Deepgram primary failed; Whisper
+  ///                          saved the visit. Triggers a
+  ///                          TRANSCRIPTION_PROVIDER_FALLBACK audit
+  ///                          row + the visit is auto-flagged for
+  ///                          review (no diarization on Whisper).
+  ///   - null                — pre-orchestrator visits (legacy).
+  transcriptionProvider String?
   transcriptText   String? @db.Text
   /// Line-level SOAP content (app-redesign-v1+). Each section's value
   /// is either a legacy string OR an array of line objects with the

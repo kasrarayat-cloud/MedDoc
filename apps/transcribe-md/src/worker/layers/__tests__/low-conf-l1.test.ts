@@ -1,5 +1,5 @@
 // ============================================================================
-// Layer 1 low-confidence integration test (Round 3 quality fix-pack Q0-5)
+// Layer 1 low-confidence + fallback integration test
 // ----------------------------------------------------------------------------
 // Asserts that runLayer1Transcribe:
 //   - Aggregates Deepgram per-utterance confidence into audioConfidenceStats
@@ -7,15 +7,22 @@
 //   - Flips needsReview + sets reviewReason when the aggregate triggers
 //     shouldFlagForReview (median below 0.55 OR low-confidence pct > 30%).
 //   - Leaves needsReview unchanged when the audio is clean.
+//   - PR-L follow-up: persists `transcriptionProvider` on every visit and
+//     emits a TRANSCRIPTION_PROVIDER_FALLBACK audit row when the
+//     orchestrator fell back to Whisper.
 //
 // Closes audit Findings 02.5 (heavy accent / mumbling produces overconfident
 // SOAPs) + 07.3 (Deepgram per-utterance confidence captured but not
-// propagated). The deepgramBatchTranscribe call is stubbed to return a
-// shaped fixture; the helper + the L1 plumbing are exercised end-to-end.
+// propagated). The transcribe() orchestrator is stubbed to return a shaped
+// fixture; the helper + the L1 plumbing are exercised end-to-end.
 // ============================================================================
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { DeepgramBatchResult } from '@meddoc/ai';
+import type {
+  DeepgramBatchResult,
+  TranscribeResult,
+  WhisperBatchResult,
+} from '@meddoc/ai';
 
 // Captured Prisma update calls — the test inspects the data argument to
 // verify the new column + reviewReason.
@@ -33,11 +40,31 @@ vi.mock('@meddoc/db', () => ({
   },
 }));
 
-// Per-test fixture for what the Deepgram client returns. Each test sets
-// it via `setNextDeepgramResult(...)` before invoking the layer.
-let nextDeepgramResult: DeepgramBatchResult | null = null;
-function setNextDeepgramResult(r: DeepgramBatchResult): void {
-  nextDeepgramResult = r;
+// PR-L follow-up: capture every logAudit call so the fallback audit-row
+// test can assert action + metadata. The real audit module pulls in
+// next/headers + nextauth + redis — we stub it down to a spy that
+// only records inputs.
+type AuditCall = {
+  action: string;
+  targetId?: string | null;
+  targetType?: string | null;
+  userId?: string | null;
+  practiceId?: string | null;
+  metadata?: Record<string, unknown>;
+};
+const auditCalls: AuditCall[] = [];
+
+vi.mock('@/lib/audit', () => ({
+  logAudit: vi.fn(async (input: AuditCall) => {
+    auditCalls.push(input);
+  }),
+}));
+
+// Per-test fixture for what the orchestrator returns. Each test sets
+// it via `setNextTranscribeResult(...)` before invoking the layer.
+let nextTranscribeResult: TranscribeResult | null = null;
+function setNextTranscribeResult(r: TranscribeResult): void {
+  nextTranscribeResult = r;
 }
 
 vi.mock('@meddoc/ai', async () => {
@@ -45,11 +72,11 @@ vi.mock('@meddoc/ai', async () => {
     await vi.importActual<typeof import('@meddoc/ai')>('@meddoc/ai');
   return {
     ...actual,
-    deepgramBatchTranscribe: vi.fn(async () => {
-      if (!nextDeepgramResult) {
-        throw new Error('test forgot to setNextDeepgramResult');
+    transcribe: vi.fn(async () => {
+      if (!nextTranscribeResult) {
+        throw new Error('test forgot to setNextTranscribeResult');
       }
-      return nextDeepgramResult;
+      return nextTranscribeResult;
     }),
   };
 });
@@ -97,7 +124,7 @@ function makeUtterance(confidence: number, idx: number) {
   };
 }
 
-function makeResult(confidences: number[]): DeepgramBatchResult {
+function makeDeepgramResult(confidences: number[]): DeepgramBatchResult {
   const utterances = confidences.map((c, i) => makeUtterance(c, i));
   return {
     raw: { results: { utterances } } as unknown as DeepgramBatchResult['raw'],
@@ -107,9 +134,58 @@ function makeResult(confidences: number[]): DeepgramBatchResult {
   };
 }
 
+/** Wrap a DeepgramBatchResult into the orchestrator's TranscribeResult
+ *  with provider='deepgram-batch' (no fallback). */
+function makeResult(confidences: number[]): TranscribeResult {
+  const dg = makeDeepgramResult(confidences);
+  return {
+    provider: 'deepgram-batch',
+    transcript: dg.transcript,
+    durationSec: dg.durationSec,
+    language: 'en',
+    costCents: 0,
+    fallbackUsed: false,
+    raw: { kind: 'deepgram', data: dg },
+  };
+}
+
+/** Wrap a Whisper-shaped fixture as a fallback TranscribeResult. */
+function makeWhisperFallbackResult(transcript: string): TranscribeResult {
+  const whisper: WhisperBatchResult = {
+    provider: 'whisper',
+    transcript,
+    durationSec: 30,
+    segments: [
+      {
+        id: 0,
+        start: 0,
+        end: 30,
+        text: transcript,
+        avg_logprob: -0.3,
+        no_speech_prob: 0.05,
+        compression_ratio: 1.4,
+        temperature: 0,
+      },
+    ],
+    language: 'en',
+    costCents: 18,
+  };
+  return {
+    provider: 'whisper-fallback',
+    transcript,
+    durationSec: whisper.durationSec,
+    language: whisper.language,
+    costCents: whisper.costCents,
+    fallbackUsed: true,
+    primaryError: { message: 'Deepgram 503 Service Unavailable', status: 503 },
+    raw: { kind: 'whisper', data: whisper },
+  };
+}
+
 beforeEach(() => {
   updateCalls.length = 0;
-  nextDeepgramResult = null;
+  auditCalls.length = 0;
+  nextTranscribeResult = null;
 });
 
 afterEach(() => {
@@ -118,7 +194,7 @@ afterEach(() => {
 
 describe('runLayer1Transcribe — audio confidence wiring', () => {
   it('persists audioConfidenceStats and flips needsReview on low-confidence audio', async () => {
-    setNextDeepgramResult(
+    setNextTranscribeResult(
       makeResult([0.42, 0.38, 0.5, 0.3, 0.45, 0.48, 0.4, 0.35, 0.55, 0.4])
     );
 
@@ -146,7 +222,7 @@ describe('runLayer1Transcribe — audio confidence wiring', () => {
   });
 
   it('persists audioConfidenceStats but does NOT flip needsReview on clean audio', async () => {
-    setNextDeepgramResult(makeResult(Array(10).fill(0.95)));
+    setNextTranscribeResult(makeResult(Array(10).fill(0.95)));
 
     await runLayer1Transcribe(baseInput);
 
@@ -166,11 +242,22 @@ describe('runLayer1Transcribe — audio confidence wiring', () => {
   });
 
   it('persists audioConfidenceStats=null when Deepgram returned no utterances', async () => {
-    setNextDeepgramResult({
-      raw: {} as unknown as DeepgramBatchResult['raw'],
+    setNextTranscribeResult({
+      provider: 'deepgram-batch',
       transcript: '',
-      utterances: [],
       durationSec: 0,
+      language: 'en',
+      costCents: 0,
+      fallbackUsed: false,
+      raw: {
+        kind: 'deepgram',
+        data: {
+          raw: {} as unknown as DeepgramBatchResult['raw'],
+          transcript: '',
+          utterances: [],
+          durationSec: 0,
+        },
+      },
     });
 
     await runLayer1Transcribe(baseInput);
@@ -184,7 +271,7 @@ describe('runLayer1Transcribe — audio confidence wiring', () => {
 
   it('flips needsReview via the lowConfPct branch (clean median, rough patches)', async () => {
     // 10 utterances: 6 clean, 4 rough — 40% > 30% threshold; median high.
-    setNextDeepgramResult(
+    setNextTranscribeResult(
       makeResult([0.95, 0.95, 0.92, 0.9, 0.88, 0.86, 0.45, 0.42, 0.38, 0.35])
     );
 
@@ -198,5 +285,59 @@ describe('runLayer1Transcribe — audio confidence wiring', () => {
     expect(stats.lowConfPct).toBeGreaterThan(30);
     expect(data.needsReview).toBe(true);
     expect(data.reviewReason as string).toContain('40%');
+  });
+
+  it('persists transcriptionProvider=deepgram-batch on the happy path', async () => {
+    setNextTranscribeResult(makeResult(Array(5).fill(0.9)));
+
+    await runLayer1Transcribe(baseInput);
+
+    const data = updateCalls[0].data;
+    expect(data.transcriptionProvider).toBe('deepgram-batch');
+    // No audit row on the happy path.
+    expect(auditCalls).toHaveLength(0);
+  });
+});
+
+describe('runLayer1Transcribe — Whisper fallback (PR-L follow-up)', () => {
+  it('persists transcriptionProvider=whisper-fallback, flags review, emits audit row', async () => {
+    setNextTranscribeResult(makeWhisperFallbackResult('patient reports headache'));
+
+    const out = await runLayer1Transcribe(baseInput);
+
+    // Visit row tagged with the canary provider.
+    expect(updateCalls).toHaveLength(1);
+    const data = updateCalls[0].data;
+    expect(data.transcriptionProvider).toBe('whisper-fallback');
+    expect(data.transcriptText).toBe('patient reports headache');
+
+    // No diarization on Whisper → speakerCount falls back to 1, audioStats null.
+    expect(out.speakerCount).toBe(1);
+    expect(out.utteranceCount).toBe(0);
+    expect(data.audioConfidenceStats).toBeNull();
+
+    // Fallback flips review with a Whisper-specific reason.
+    expect(data.needsReview).toBe(true);
+    expect(data.reviewReason as string).toMatch(/whisper-fallback/i);
+    expect(data.reviewReason as string).toMatch(/Deepgram failed/i);
+
+    // Whisper raw shape persisted under the discriminator.
+    const raw = data.transcriptRaw as { kind: string; segments: unknown[] };
+    expect(raw.kind).toBe('whisper');
+    expect(Array.isArray(raw.segments)).toBe(true);
+
+    // Audit row emitted with metadata that ops can grep for.
+    expect(auditCalls).toHaveLength(1);
+    const audit = auditCalls[0];
+    expect(audit.action).toBe('TRANSCRIPTION_PROVIDER_FALLBACK');
+    expect(audit.targetType).toBe('TranscribeVisit');
+    expect(audit.targetId).toBe(baseInput.visitId);
+    expect(audit.userId).toBe(baseInput.userId);
+    expect(audit.practiceId).toBe(baseInput.practiceId);
+    expect(audit.metadata?.layer).toBe('L1');
+    expect(audit.metadata?.primaryProvider).toBe('deepgram-batch');
+    expect(audit.metadata?.fallbackProvider).toBe('whisper-fallback');
+    expect(audit.metadata?.primaryStatus).toBe(503);
+    expect(audit.metadata?.primaryError).toMatch(/503/);
   });
 });
