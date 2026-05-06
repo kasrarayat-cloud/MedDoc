@@ -255,51 +255,96 @@ expect to see.
 ### Dashboard — `/dashboard`
 
 File: `apps/transcribe-md/src/app/dashboard/page.tsx`. Linear V1
-landing surface; two tabs (Patients + All Visits) inside a
-`<Tabs>` shell. Sidebar nav comes from `AppFrame` layout.
+landing surface; `?tab=patients` (default) ↔ `?tab=all`.
 
 - **Doctor's intent:** triage — see what's pending review; jump
   into a visit; create a new one.
-- **Top-level interactive elements (v2 walker stubs the click set;
-  future depth):**
-  - `<Tabs>` switcher between Patients + All Visits
-  - "+ New visit" button → `/visits/new`
-  - Each row in either tab → patient detail or visit detail
-  - Search palette trigger (Cmd-K) — opens the global palette
-- **DB tables read:** `transcribe_visits`, `transcribe_md_patients`
-  (both scoped to the user's practice).
-- **Audit rows expected on load:** `VIEWED_PATIENT_LIST`
-  + `VIEWED_VISIT_LIST` (Round 3 PR-C compliance).
+- **In-page clickables (deep-walked):**
+  - TabBar Patients ↔ All visits — `Link` with `scroll={false}`,
+    URL changes via `?tab=`. Pure server re-render; no DB write.
+  - Top-bar brand "QuillMD" — Link to `/dashboard` (same-page).
+  - Cmd-K palette `<button>` — synthesises `Meta+K` keydown to
+    toggle the global `<CommandPalette>`. In-page DOM mutation
+    only.
+  - Avatar dropdown `<button>` — Radix dropdown trigger; opens a
+    portal with Settings + Sign-out items.
+- **Enumerated, not clicked (outbound):**
+  - PatientList rows → `/patients/[id]`
+  - VisitList / DraftsReady rows → `/visits/[id]`
+  - Sidebar nav (Visits / Patients / Settings) and "+ New visit"
+  - Avatar-dropdown Settings + Sign-out items
+- **DB tables snapshotted (read-scoping check):**
+  `transcribe_visits`, `transcribe_md_patients`. Either changing
+  on a view-only click is a finding.
+- **Audit rows expected on load:** `VIEWED_PATIENT_LIST` +
+  `VIEWED_VISIT_LIST` (Round 3 PR-C compliance).
+- **Audit rows expected per click:** none. Tab toggle, palette
+  open, dropdown open are pure UI — `auditDelta` should be 0.
+- **Walker tier:** ✅ v3.2 deep walker (`sweep-dashboard.mjs`).
+  Auth via shared `getOrCreateAuthState`; mid-walk /login retry;
+  per-click classification via `clickAndClassify()`.
 
 ### Visits list — `/visits`
 
-File: `apps/transcribe-md/src/app/visits/page.tsx`. All-visits
-table with filter pills.
+File: `apps/transcribe-md/src/app/visits/page.tsx`. All-visits list
+with URL-driven filter pills and a grouped `<VisitList>` table.
 
-- **Filter pills:** all / ready / review / signed / processing
-  — each is a `Link` that adds a `?filter=` query param. v2
-  walker confirms each pill renders; future deepens with row
-  counts per filter.
+- **Filter pills:** all / ready / review / signed / processing — each
+  is a `<Link href="/visits[?filter=...]">` with `scroll={false}`. The
+  page is a Server Component, so each click triggers a Next.js RSC
+  re-fetch (a GET) that swaps the rendered table for the new
+  `?filter=` slice. **No DB write**: the filter is a `WHERE` clause
+  in `prisma.transcribeVisit.findMany`, plus a `userId +
+  deletedAt:null + archivedAt:null` base scope. Walker emits a
+  per-pill `filter-pill` event with `{ urlBefore, urlAfter,
+  urlChanged, dbChanged }` — any `dbChanged: true` is a hard finding.
+- **Click classification:** because RSC re-fetches are GETs,
+  `clickAndClassify` reports each pill as `VISUAL_ONLY` (DOM swap
+  observed) or `NO_NETWORK_FIRED` (swap completes inside the settle
+  window). Both are expected; only `PRETEND_SUCCESS_FALLBACK`,
+  `CLICK_THREW`, `HTTP_5xx`, or any `dbChanged` count as findings.
 - **Each row:** `<Link href="/visits/{id}">` — drives the visit
-  detail walker.
-- **Audit rows expected on load:** `VIEWED_VISIT_LIST`.
+  detail walker. Walker enumerates rows (with `click-skipped`,
+  reason='leaves-page') but never clicks them.
+- **Audit rows expected:** one `VIEWED_VISIT_LIST` per RSC render
+  (Round 3 PR-C, A05-P0-004). Walker captures the unscoped baseline
+  count via `audit-baseline` and tracks per-click `auditDelta`.
+- **Walker tier:** ✅ v3.2 deep walker (`sweep-visits-list.mjs`).
 
 ### New visit — `/visits/new`
 
 File: `apps/transcribe-md/src/app/visits/new/page.tsx` (+
-`new-visit-client.tsx`, `visit-form-step2.tsx`).
+`new-visit-client.tsx`, `patient-picker.tsx`, `visit-form-step2.tsx`,
+`mode-tile-with-form.tsx`, `duplicate-modal.tsx`).
 
-- **Doctor's intent:** start a new visit by picking a patient +
-  capture mode (audio_upload / voice_dictation / text_notes).
-- **Two stages internally** (single page):
-  1. PatientPicker (no patient yet) — search + select, or "+ New
-     patient" link.
-  2. VisitFormStep2 — specialty dropdown + 3 capture-mode tiles.
-     Submitting any tile creates the `transcribe_visits` row.
-- **DB writes on submit:** new `transcribe_visits` row (status
-  QUEUED) + optionally a new `transcribe_md_patients` row.
-- **Audit rows expected:** `CREATED_PATIENT` (only when a new
-  patient is created inline), then visit-creation flow.
+- **Doctor's intent:** start a new visit by picking a patient + capture
+  mode (audio_upload / voice_dictation / text_notes).
+- **Two stages on a single URL** (driven by `selectedPatient` state in
+  `new-visit-client.tsx`):
+  1. **Stage 1 — PatientPicker.** Debounced search input → GET
+     `/api/patients?search=`. "Create new patient" toggle expands an
+     inline form (name + DOB + externalId). Submit → POST
+     `/api/patients/fuzzy-match`; matches with score > 0.6 open the
+     `DuplicateModal`, otherwise POST `/api/patients` directly.
+  2. **Stage 2 — VisitFormStep2.** Patient pill (`Change patient`
+     button resets to Stage 1 client-side, OR Link → `/visits/new` when
+     opened with `?patientId=`). `<SpecialtyDropdown>` (Radix Select).
+     Chief-complaint `<input>` (optional). Three `<ModeTileWithForm>`
+     buttons — each is `<button type="submit" form="new-visit-form"
+     name="inputMode" value="audio_upload|voice_dictation|text_notes">`
+     and triggers `createVisitAction` directly.
+- **DB writes on submit:** new `transcribe_visits` row (status QUEUED)
+  + optionally a new `transcribe_md_patients` row.
+- **Audit rows expected on submit:** `TM_PATIENT_CREATED` (only when
+  patient created inline). No `VISIT_CREATED` action exists in the
+  enum today — Pattern-A risk if added later without instrumentation.
+- **Walker (`sweep-new-visit.mjs` ✅):** lands on Stage 2 via
+  `?patientId=<seeded.patientId>` (`--stage 1` walks picker).
+  Classifies submit-named buttons + outbound nav before clicking.
+  Tile-submit / "Create & continue" / "+ New patient"-equivalents are
+  enumerated but never clicked. dbSnapshotSpec watches
+  `transcribe_visits ORDER BY "createdAt" DESC LIMIT 5` — any
+  `dbChanged` mid-walk = finding.
 
 ### Visit record — `/visits/[id]/record`
 
@@ -324,24 +369,75 @@ patient list, searchable via the command palette.
 ### Patient detail — `/patients/[id]`
 
 File: `apps/transcribe-md/src/app/patients/[id]/page.tsx`. Tabs:
-Visits (default) / Notes (stub) / Files (stub) / Trash (only when
-items exist).
+Visits (default) / Notes (stub) / Files (stub) / Trash (only
+rendered when the patient has trashed visits — `trashCount === 0`
+hides the tab; page.tsx :478).
 
-- **Audit rows expected on load:** `VIEWED_PATIENT_FILE`.
-- **Stub-tab copy** (intentional empty-state, NOT a Pattern C
-  bug): "Notes coming soon" / "Files coming soon".
+- **Doctor's intent:** review one patient's visit history; trigger
+  Edit / Delete / Problem-list management; jump into a visit; restore
+  a trashed visit.
+- **Top-level interactive elements** (deep-walked by
+  `sweep-patient-detail.mjs` v3.2):
+  - Breadcrumb back to `/patients` (outbound)
+  - PatientHeaderCard:
+    - `[Manage]` → ProblemListDialog (Radix; in-page DOM mutation)
+    - `+ New visit` → `/visits/new?patientId=...` (outbound)
+    - `Export` → `/api/patients/{id}/export` (outbound; downloads ZIP)
+    - `[Edit]` → EditPatientDialog (Radix; in-page)
+    - `[Delete patient]` → DeletePatientDialog (Radix; in-page)
+  - TabBar — 4 `<Link>`s, `scroll={false}`. Each is server-rendered
+    via `?tab=` query param.
+  - Visits tab → `<VisitList>` row links (outbound to `/visits/{id}`)
+  - Notes tab → `<StubTab title="Notes" body="A freeform clinical
+    notepad … Coming soon">`. **Intentional empty-state copy — NOT
+    a Pattern C bug.**
+  - Files tab → `<StubTab title="Files" body="Patient-attached files
+    … Not ported yet">`. Same intentional-stub status.
+  - Trash tab → grid of `<TrashedVisitCard>` (Restore / Delete
+    permanently buttons mutate `transcribe_visits`; **walker
+    enumerates but never clicks** them).
+- **DB tables read:** `transcribe_md_patients`, `transcribe_visits`
+  (both practice + user scoped).
+- **Audit rows expected on load:** `VIEWED_PATIENT_FILE` (Round 3
+  PR-C, page.tsx :170). One row per RSC render — i.e. one on initial
+  load + one per tab click.
+- **DB writes expected from view-only clicks:** none. Walker fails
+  if `transcribe_md_patients` row diffs across any tab/dialog-trigger
+  click (read-scoping regression).
 
 ### Settings — `/settings`
 
 File: `apps/transcribe-md/src/app/settings/page.tsx`. Single-page
-form with 6 sticky-anchor sections: profile / security / sessions
-/ data / billing / danger-zone.
+form with 6 sticky-anchor sections: profile / security / sessions /
+data / billing / danger-zone.
 
-- **Walker constraint (read-only assertions for v2):** never click
-  "Delete account" or "Revoke all sessions" against the test
-  user. Click count is enumerated; submission is suppressed.
-- **Per-section save actions** each fire their own server action
-  + audit row on success.
+- **Walker tier:** v3.2 deep walker (`sweep-settings.mjs`). MOST
+  DELICATE walker in the fleet — every section hosts at least one
+  irreversible action against the QA test user.
+- **Safe click surface:** 6 sticky-aside anchor links
+  (`#profile` … `#danger`) + ProfileForm "Save profile" submit
+  with the prefilled-unchanged FormData (no-op equality write).
+- **Forbidden buttons** (enumerated but never clicked; each fires a
+  `click-skipped reason='destructive-not-clicked'` event with a
+  per-button `risk` tag):
+  - "Delete my account" — `would-delete-qa-user`
+  - "Sign out all devices" / "Revoke all" — `kills-agent-session`
+  - "Sign out" (bare) — `kills-agent-session`
+  - "Update password" — `rotates-qa-password`
+  - "Enable/Disable 2FA / MFA" — `mfa-lockout`
+  - "Manage billing" — `outbound-stripe` (currently disabled in
+    the build, kept in the safety net for when it ships)
+  - "Export my data" — `outbound-download`
+  - "Send confirmation" (ChangeEmailDialog submit) — `fires-real-email`
+- **DB snapshot scope:** `users` + `user_sessions` rows for the QA
+  user. Anchor-link clicks must produce `dbChanged=false` AND
+  `auditDelta=0`; either is upgraded to a `finding` event.
+- **Audit rows expected on load:** none. There is no
+  `VIEWED_SETTINGS` action in the AuditAction enum at the time of
+  writing (see v3.2 finding); a clean read-only load is expected.
+- **Pattern matching is case-insensitive** and runs against the
+  combined text + aria-label so renames do not silently disarm the
+  safety net.
 
 ### Admin routes — `/admin*` (5 routes)
 
