@@ -15,7 +15,7 @@ import { AudioUploader } from '@/components/audio-uploader';
 import { VoiceDictator } from '@/components/voice-dictator';
 import { TextComposer } from '@/components/text-composer';
 
-import { ProcessingState } from './processing-state';
+import { ProcessingTypewriter } from './processing-typewriter';
 import { VisitReadyView, type Utterance, type SpeakerInfo } from './visit-ready-view';
 import { VisitFailedView } from './visit-failed-view';
 import { VisitLifecycleActions } from './visit-lifecycle-actions';
@@ -67,19 +67,6 @@ function extractEmOverride(
       typeof o.overriddenAt === 'string' ? o.overriddenAt : '',
   };
 }
-
-const PROGRESS_HINT: Record<TranscribeVisitStatus, string> = {
-  QUEUED: 'Queued — waiting for a worker',
-  TRANSCRIBING: 'Transcribing audio',
-  EXTRACTING: 'Identifying speakers and extracting medical entities',
-  DRAFTING: 'Drafting the SOAP note',
-  CRITIQUING: 'Auditing the draft for clinical accuracy',
-  POLISHING: 'Applying polish fixes',
-  AUTOMATING: 'Generating codes, prescriptions, and summary',
-  READY: 'Ready to review',
-  FAILED: 'Processing failed',
-  SIGNED: 'Signed and locked',
-};
 
 const PROCESSING_STATES: ReadonlyArray<TranscribeVisitStatus> = [
   TranscribeVisitStatus.TRANSCRIBING,
@@ -572,11 +559,26 @@ async function VisitBody(props: VisitBodyProps) {
         props.dictationAudioKey ||
         props.rawTextInput))
   ) {
+    // Pre-count chips so the typewriter can render the chip row without
+    // a flash of "0" when AUTOMATING completes between page-load and
+    // first poll. Tolerant of legacy rows whose JSONB shape may be
+    // null or unexpected — same defensive pattern as the status route.
+    const icdBlob = props.icdCodes as { codes?: unknown[] } | null;
+    const cptBlob = props.cptCodes as { codes?: unknown[] } | null;
+    const initialIcdCount = Array.isArray(icdBlob?.codes) ? icdBlob.codes.length : 0;
+    const initialCptCount = Array.isArray(cptBlob?.codes) ? cptBlob.codes.length : 0;
     return (
-      <ProcessingState
+      <ProcessingTypewriter
         visitId={props.visitId}
         initialStatus={props.status}
-        initialHint={PROGRESS_HINT[props.status]}
+        initialIcdCount={initialIcdCount}
+        initialCptCount={initialCptCount}
+        initialProcessingStartedAt={
+          props.processingStartedAt
+            ? props.processingStartedAt.toISOString()
+            : null
+        }
+        specialtyLabel={props.specialty}
       />
     );
   }
