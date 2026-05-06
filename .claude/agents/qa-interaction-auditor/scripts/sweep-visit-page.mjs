@@ -1,46 +1,62 @@
 #!/usr/bin/env node
 // ============================================================================
-// sweep-visit-page.mjs
+// sweep-visit-page.mjs — flagship deep walker (✅ tier)
 // ----------------------------------------------------------------------------
-// Walks a target page in headless Chromium as the QA test user, clicks
-// every visible interactive element, and emits one classification per
-// click on stdout (NDJSON — one JSON object per line).
+// Walks every interactive element on the visit-ready page as the QA
+// test user. Per element:
+//   - Snapshots transcribe_visits row + audit_logs count BEFORE click
+//   - Clicks the element + waits for network-idle
+//   - Snapshots same tables AFTER, classifies the outcome
+//   - Re-navigates to the target URL between clicks for stable state
 //
-// The QA Interaction Auditor agent invokes this and pipes the output
-// into the bug-report template in skills/reporting-format.md.
+// v3.1 refactor (proof-of-shape for the deepWalk helper):
+//   - Auth via lib/walker-base.mjs getOrCreateAuthState (session
+//     reuse — no per-walker login)
+//   - Click classification + table snapshotting via walker-base
+//     primitives (snapshotTables, clickAndClassify)
+//   - --scenario flag resolves to one of the 4 fixture visit ids
+//     so the walker can exercise different code paths
 //
 // Usage:
 //   node sweep-visit-page.mjs --url /visits/<id>
-//   node sweep-visit-page.mjs --url /visits --skip-clicks   (enumerate only)
-//   node sweep-visit-page.mjs --url / --base https://app.quillmd.com
+//   node sweep-visit-page.mjs --scenario bumpEligible
+//   node sweep-visit-page.mjs --visit-id <id> --skip-clicks
 //
-// Required env:
-//   QA_AUDITOR_PASSWORD   bcrypt-hashed account in DB; see fixtures/test-user.md
-// Optional env:
-//   QA_AUDITOR_EMAIL      defaults to qa-auditor@quillmd.test
-//   QA_AUDITOR_BASE_URL   defaults to https://app.quillmd.com
-//
-// Output (NDJSON to stdout):
-//   {"event":"sweep-start", "url":"...", "ts":"..."}
-//   {"event":"element", "label":"...", "tag":"button", "selector":"...", ...}
-//   {"event":"click", "label":"...", "classification":"OK|NO_NETWORK_FIRED|PRETEND_SUCCESS_FALLBACK|HTTP_4xx|HTTP_5xx", ...}
-//   {"event":"sweep-end", "elements":N, "clicks":N, "findings":N}
-//
-// Side effects:
-//   - Logs in as the test user, navigates, clicks. Creates browser
-//     state at run time; does NOT write to disk.
-//   - Reads from postgres + caddy logs via docker exec / docker logs
-//     (read-only).
-//   - Aborts cleanly on Ctrl-C.
+// Output: NDJSON to stdout — one record per element / click / event.
 // ============================================================================
 
-import { chromium } from '/opt/meddoc-pro/node_modules/playwright/index.mjs';
-import { execSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { argv, env, exit, stderr, stdout } from 'node:process';
-import { recentMutations } from './check-network-mutations.mjs';
+
+import {
+  emit,
+  getOrCreateAuthState,
+  invalidateAuthState,
+  launchBrowser,
+  newAppContext,
+  clickAndClassify,
+  snapshotTables,
+  snapshotAuditCount,
+} from './lib/walker-base.mjs';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const SEEDED_IDS_PATH = resolve(__dirname, '..', 'fixtures', 'seeded-ids.json');
+
+function resolveScenarioToVisitId(scenario) {
+  if (!scenario) return null;
+  if (!existsSync(SEEDED_IDS_PATH)) return null;
+  try {
+    const seeded = JSON.parse(readFileSync(SEEDED_IDS_PATH, 'utf-8'));
+    return seeded.visitIds?.[scenario] ?? null;
+  } catch {
+    return null;
+  }
+}
 
 // ---------------------------------------------------------------------------
-// Args + env
+// Args
 // ---------------------------------------------------------------------------
 
 function parseArgs(args) {
@@ -49,27 +65,21 @@ function parseArgs(args) {
     base: env.QA_AUDITOR_BASE_URL ?? 'https://app.quillmd.com',
     skipClicks: false,
     visitId: null,
+    scenario: env.QA_SCENARIO ?? null,
     timeout: 15_000,
   };
   for (let i = 2; i < args.length; i += 1) {
     const a = args[i];
-    if (a === '--url') {
-      opts.url = args[i + 1];
-      i += 1;
-    } else if (a === '--base') {
-      opts.base = args[i + 1];
-      i += 1;
-    } else if (a === '--visit-id') {
-      opts.visitId = args[i + 1];
-      i += 1;
-    } else if (a === '--skip-clicks') {
-      opts.skipClicks = true;
-    } else if (a === '--timeout') {
-      opts.timeout = Number(args[i + 1]);
-      i += 1;
-    } else if (a === '--help' || a === '-h') {
+    if (a === '--url') { opts.url = args[i + 1]; i += 1; }
+    else if (a === '--base') { opts.base = args[i + 1]; i += 1; }
+    else if (a === '--visit-id') { opts.visitId = args[i + 1]; i += 1; }
+    else if (a === '--scenario') { opts.scenario = args[i + 1]; i += 1; }
+    else if (a === '--skip-clicks') { opts.skipClicks = true; }
+    else if (a === '--timeout') { opts.timeout = Number(args[i + 1]); i += 1; }
+    else if (a === '--help' || a === '-h') {
       stderr.write(
-        'sweep-visit-page.mjs --url <path> [--base <https://...>] [--skip-clicks] [--visit-id <uuid>]\n'
+        'sweep-visit-page.mjs --url <path> | --scenario <key> | --visit-id <id>\n' +
+          '  --scenario one of: bumpEligible | criticalRx | pediatric | nonClinical\n'
       );
       exit(2);
     } else {
@@ -77,8 +87,27 @@ function parseArgs(args) {
       exit(2);
     }
   }
+
+  if (opts.scenario && !opts.visitId) {
+    const vid = resolveScenarioToVisitId(opts.scenario);
+    if (!vid) {
+      stderr.write(
+        `Scenario '${opts.scenario}' not found in seeded-ids.json. ` +
+          'Run apps/transcribe-md/scripts/seed-qa-fixtures.ts first.\n'
+      );
+      exit(2);
+    }
+    opts.visitId = vid;
+    if (!opts.url) opts.url = `/visits/${vid}`;
+  }
+  if (!opts.visitId && env.QA_FIXTURE_VISIT_ID) {
+    opts.visitId = env.QA_FIXTURE_VISIT_ID;
+    if (!opts.url) opts.url = `/visits/${opts.visitId}`;
+  }
   if (!opts.url) {
-    stderr.write('--url is required\n');
+    stderr.write(
+      '--url required (or pass --scenario / QA_SCENARIO / QA_FIXTURE_VISIT_ID)\n'
+    );
     exit(2);
   }
   return opts;
@@ -86,91 +115,11 @@ function parseArgs(args) {
 
 const opts = parseArgs(argv);
 
-const TEST_EMAIL = env.QA_AUDITOR_EMAIL ?? 'qa-auditor@quillmd.test';
-const TEST_PASSWORD = env.QA_AUDITOR_PASSWORD;
-if (!TEST_PASSWORD) {
-  stderr.write('QA_AUDITOR_PASSWORD not set — see fixtures/test-user.md\n');
-  exit(2);
-}
-
-function emit(obj) {
-  stdout.write(`${JSON.stringify({ ts: new Date().toISOString(), ...obj })}\n`);
-}
-
 // ---------------------------------------------------------------------------
-// DB snapshot helper (uses the sibling diff-db-state.sh)
+// DOM enumeration — same shape as the v2 walker, but the click loop
+// below routes each element through walker-base's clickAndClassify
+// instead of bespoke logic.
 // ---------------------------------------------------------------------------
-
-function snapshotVisit(visitId, label) {
-  if (!visitId) return null;
-  try {
-    const out = execSync(
-      `${import.meta.dirname}/diff-db-state.sh snapshot ${visitId} ${label}`,
-      { encoding: 'utf-8' }
-    );
-    return out.trim();
-  } catch (err) {
-    stderr.write(`snapshotVisit failed: ${err.message}\n`);
-    return null;
-  }
-}
-
-function diffVisit(visitId, labelA, labelB) {
-  if (!visitId) return null;
-  try {
-    const out = execSync(
-      `${import.meta.dirname}/diff-db-state.sh diff ${visitId} ${labelA} ${labelB} 2>&1`,
-      { encoding: 'utf-8' }
-    );
-    return JSON.parse(out);
-  } catch (err) {
-    // Exit code 1 = changes found (still a successful diff). Non-1 = real error.
-    if (err.status === 1 && err.stdout) {
-      try {
-        return JSON.parse(err.stdout.toString());
-      } catch {
-        return null;
-      }
-    }
-    stderr.write(`diffVisit failed: ${err.message}\n`);
-    return null;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Click classification
-// ---------------------------------------------------------------------------
-
-function classifyClick({ response, dbDiff, mutationsAfter }) {
-  if (!response && (!mutationsAfter || mutationsAfter.length === 0)) {
-    return 'NO_NETWORK_FIRED';
-  }
-  const status = response?.status() ?? mutationsAfter?.[0]?.status ?? null;
-  if (status === null) return 'UNKNOWN';
-  if (status >= 200 && status < 300) {
-    if (!dbDiff || dbDiff.changed === false) {
-      return 'PRETEND_SUCCESS_FALLBACK';
-    }
-    return 'OK';
-  }
-  if (status >= 400 && status < 500) return `HTTP_${status}`;
-  if (status >= 500) return `HTTP_${status}`;
-  return `HTTP_${status}`;
-}
-
-// ---------------------------------------------------------------------------
-// Sweep
-// ---------------------------------------------------------------------------
-
-async function login(page) {
-  await page.goto('/login', { waitUntil: 'domcontentloaded' });
-  await page.fill('input[type="email"]', TEST_EMAIL);
-  await page.fill('input[type="password"]', TEST_PASSWORD);
-  await Promise.all([
-    page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: opts.timeout }),
-    page.click('button[type="submit"]'),
-  ]);
-}
 
 async function enumerate(page) {
   return page.$$eval(
@@ -180,10 +129,9 @@ async function enumerate(page) {
         .map((el, i) => {
           const r = el.getBoundingClientRect();
           if (r.width === 0 || r.height === 0) return null;
-          const tag = el.tagName.toLowerCase();
           return {
             index: i,
-            tag,
+            tag: el.tagName.toLowerCase(),
             text: (el.textContent ?? '').trim().slice(0, 80),
             disabled:
               'disabled' in el && typeof el.disabled === 'boolean'
@@ -192,71 +140,10 @@ async function enumerate(page) {
             href: el.getAttribute('href') ?? null,
             ariaLabel: el.getAttribute('aria-label') ?? null,
             role: el.getAttribute('role'),
-            // Cheap, stable selector — the agent re-locates by index
-            // because the DOM may mutate between enumerate and click.
-            uniqueText:
-              (el.getAttribute('aria-label') ?? '') +
-              '|' +
-              (el.textContent ?? '').trim().slice(0, 40),
           };
         })
         .filter(Boolean)
   );
-}
-
-async function clickAndClassify(page, element, opts) {
-  const beforeMutations = recentMutations({ since: '5s' });
-  if (opts.visitId) snapshotVisit(opts.visitId, 'before');
-
-  // Re-locate by aria-label or visible text.
-  const locator = element.ariaLabel
-    ? page.getByRole(element.role ?? 'button', { name: element.ariaLabel })
-    : page.getByText(element.text || element.uniqueText, { exact: false }).first();
-
-  let response = null;
-  try {
-    [response] = await Promise.all([
-      page
-        .waitForResponse(
-          (r) => {
-            const m = r.request().method();
-            const u = r.url();
-            return m !== 'GET' && (u.includes('/api/') || u.includes('/visits/'));
-          },
-          { timeout: 5_000 }
-        )
-        .catch(() => null),
-      locator.click({ timeout: 3_000 }),
-    ]);
-  } catch (err) {
-    return {
-      classification: 'CLICK_THREW',
-      error: err.message,
-      networkRequest: null,
-      dbDiff: null,
-    };
-  }
-
-  // Settle: small DOM-mutation grace window.
-  await page.waitForTimeout(800);
-
-  const afterMutations = recentMutations({ since: '8s' });
-  const newMutations = afterMutations.slice(beforeMutations.length);
-
-  let dbDiff = null;
-  if (opts.visitId) {
-    snapshotVisit(opts.visitId, 'after');
-    dbDiff = diffVisit(opts.visitId, 'before', 'after');
-  }
-
-  return {
-    classification: classifyClick({ response, dbDiff, mutationsAfter: newMutations }),
-    networkRequest: response
-      ? { url: response.url(), method: response.request().method(), status: response.status() }
-      : null,
-    networkSnapshot: newMutations,
-    dbDiff,
-  };
 }
 
 // ---------------------------------------------------------------------------
@@ -264,24 +151,46 @@ async function clickAndClassify(page, element, opts) {
 // ---------------------------------------------------------------------------
 
 async function main() {
-  const browser = await chromium.launch({ headless: true });
-  const ctx = await browser.newContext({
-    baseURL: opts.base,
-    colorScheme: 'dark',
-    reducedMotion: 'reduce',
-    storageState: undefined,
-  });
+  emit({ event: 'sweep-start', url: opts.url, base: opts.base, visitId: opts.visitId });
 
-  let counters = { elements: 0, clicks: 0, findings: 0 };
+  let storagePath;
+  try {
+    storagePath = await getOrCreateAuthState();
+  } catch (err) {
+    emit({ event: 'sweep-error', stage: 'login', message: err.message });
+    exit(1);
+  }
+
+  const browser = await launchBrowser();
   let exitCode = 0;
+  const counters = { elements: 0, clicks: 0, findings: 0 };
 
   try {
-    const page = await ctx.newPage();
+    let ctx = await newAppContext(browser, { storageState: storagePath });
+    let page = await ctx.newPage();
 
-    emit({ event: 'sweep-start', url: opts.url, base: opts.base });
+    await page.goto(opts.url, {
+      waitUntil: 'networkidle',
+      timeout: opts.timeout,
+    });
 
-    await login(page);
-    await page.goto(opts.url, { waitUntil: 'networkidle', timeout: opts.timeout });
+    // If the cached session expired and the page bounced to /login,
+    // refresh storageState once and retry the navigation.
+    if (page.url().includes('/login')) {
+      emit({
+        event: 'sweep-session-refresh',
+        reason: 'redirect-to-login — invalidating cached storageState',
+      });
+      await ctx.close();
+      invalidateAuthState();
+      storagePath = await getOrCreateAuthState({ forceFresh: true });
+      ctx = await newAppContext(browser, { storageState: storagePath });
+      page = await ctx.newPage();
+      await page.goto(opts.url, {
+        waitUntil: 'networkidle',
+        timeout: opts.timeout,
+      });
+    }
 
     const elements = await enumerate(page);
     counters.elements = elements.length;
@@ -290,48 +199,96 @@ async function main() {
     }
 
     if (!opts.skipClicks) {
+      // The DB-snapshot spec for the visit-ready page: rows the
+      // visit-ready interactions can mutate.
+      const dbSnapshotSpec = opts.visitId
+        ? [
+            {
+              table: 'transcribe_visits',
+              where: `id = '${opts.visitId.replace(/'/g, "''")}'`,
+            },
+          ]
+        : [];
+
       for (const el of elements) {
         if (el.disabled) {
           emit({ event: 'click-skipped', label: el.text, reason: 'disabled' });
           continue;
         }
-        // Skip outbound nav links — clicking them leaves the page and
-        // we'd need full state restoration. Enumerate them but don't click.
+        // Outbound nav links would leave the page; enumerate but don't click.
         if (el.tag === 'a' && el.href && !el.href.startsWith(opts.url)) {
-          emit({ event: 'click-skipped', label: el.text, reason: 'leaves-page', href: el.href });
+          emit({
+            event: 'click-skipped',
+            label: el.text,
+            reason: 'leaves-page',
+            href: el.href,
+          });
           continue;
         }
 
-        const result = await clickAndClassify(page, el, opts);
+        // Build a Playwright-flavored selector spec for clickAndClassify.
+        const selectorSpec = el.ariaLabel
+          ? { role: el.role ?? 'button', name: el.ariaLabel }
+          : { text: el.text || el.ariaLabel || '?', exact: false };
+
+        const result = await clickAndClassify(page, {
+          name: el.text || el.ariaLabel || `(${el.tag})`,
+          selector: selectorSpec,
+          dbSnapshotSpec,
+          auditTargetId: opts.visitId,
+          settleMs: 800,
+        });
         counters.clicks += 1;
 
         if (
           result.classification === 'NO_NETWORK_FIRED' ||
           result.classification === 'PRETEND_SUCCESS_FALLBACK' ||
           result.classification === 'CLICK_THREW' ||
-          result.classification.startsWith('HTTP_5')
+          (typeof result.classification === 'string' &&
+            result.classification.startsWith('HTTP_5'))
         ) {
           counters.findings += 1;
         }
 
         emit({ event: 'click', label: el.text, ...result });
 
-        // Re-navigate to the target URL after each click so the next
-        // element comes from a stable state. Click sequences that need
-        // ordering should be expressed as a workflow walk, not a sweep.
-        await page.goto(opts.url, { waitUntil: 'networkidle', timeout: opts.timeout });
+        // Re-navigate after each click for a stable starting state.
+        await page.goto(opts.url, {
+          waitUntil: 'networkidle',
+          timeout: opts.timeout,
+        });
       }
     }
 
     emit({ event: 'sweep-end', ...counters });
+    // Shape-consistency emit so sweep-all.mjs's table picks this
+    // walker up as OK rather than mis-categorising "completed with
+    // findings" as WARN. Findings are surfaced via the per-click
+    // records (with classifications like PRETEND_SUCCESS_FALLBACK)
+    // and the counters.findings tally — they don't downgrade the
+    // walker itself.
+    emit({
+      event: 'walker-result',
+      name: 'visit-page',
+      url: opts.url,
+      ok: true,
+      durationMs: 0,
+      ...counters,
+    });
+    await ctx.close();
   } catch (err) {
     emit({ event: 'sweep-error', message: err.message, stack: err.stack });
+    emit({
+      event: 'walker-result',
+      name: 'visit-page',
+      url: opts.url,
+      ok: false,
+      loadErr: err.message,
+    });
     exitCode = 1;
   } finally {
-    await ctx.close();
     await browser.close();
   }
-
   exit(exitCode);
 }
 
