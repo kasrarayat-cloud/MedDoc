@@ -25,14 +25,14 @@ Status legend:
 
 | URL | File | Required role | Walker | Status | Description |
 |---|---|---|---|---|---|
-| `/dashboard` | `src/app/dashboard/page.tsx` | DOCTOR / STAFF / ADMIN | `sweep-dashboard.mjs` | 🚧 v3.2 | Main clinician landing — Patients + All Visits tabs. Sidebar nav. **Top-of-funnel; daily-traffic** — deep next. |
-| `/visits` | `src/app/visits/page.tsx` | DOCTOR / STAFF / ADMIN | `sweep-visits-list.mjs` | 🚧 v3.2 | All visits list + filter pills. **Filter pills are click-stateful — high-value deep walk.** |
-| `/visits/new` | `src/app/visits/new/page.tsx` | DOCTOR / STAFF / ADMIN | `sweep-new-visit.mjs` | 🚧 v3.2 | Two-step wizard. **Visit-creation flow — most error-prone path; deep walk surfaces input-validation regressions.** |
+| `/dashboard` | `src/app/dashboard/page.tsx` | DOCTOR / STAFF / ADMIN | `sweep-dashboard.mjs` | ✅ | Main clinician landing — Patients + All Visits tabs. v3.2 deep walker: tab toggle, brand link, Cmd-K palette, avatar dropdown. Patient/visit rows + sidebar nav + "+ New visit" enumerated as outbound. |
+| `/visits` | `src/app/visits/page.tsx` | DOCTOR / STAFF / ADMIN | `sweep-visits-list.mjs` | ✅ | All-visits list with 5 filter pills (URL-driven). v3.2 deep walker clicks each pill, asserts URL changes + zero `transcribe_visits` writes (filter is RSC-read-only). Visit-row links enumerated but not clicked (outbound). |
+| `/visits/new` | `src/app/visits/new/page.tsx` | DOCTOR / STAFF / ADMIN | `sweep-new-visit.mjs` | ✅ | Two-stage wizard (PatientPicker → VisitFormStep2). Deep walker lands on Stage 2 via `?patientId=<seeded>`; `--stage 1` walks the picker. **Submit/Continue tiles enumerated but NOT clicked** — would create a real visit + fire AI pipeline. |
 | `/visits/[id]` | `src/app/visits/[id]/page.tsx` | DOCTOR / STAFF / ADMIN | `sweep-visit-page.mjs` | ✅ | **The flagship walker.** Refactored in v3.1 to use `deepWalk()` + storageState reuse + `--scenario` flag (4 fixture variants). |
 | `/visits/[id]/record` | `src/app/visits/[id]/record/page.tsx` | DOCTOR / STAFF / ADMIN | `sweep-visit-record.mjs` | 🟡 | Live MediaRecorder dictation interface. Skipped today (needs draft-mode visit + getUserMedia mock). |
 | `/patients` | `src/app/patients/page.tsx` | DOCTOR / STAFF / ADMIN | `sweep-patients-list.mjs` | 🟡 | Practice patient list, searchable. |
-| `/patients/[id]` | `src/app/patients/[id]/page.tsx` | DOCTOR / STAFF / ADMIN | `sweep-patient-detail.mjs` | 🚧 v3.2 | Patient detail with Visits / Notes / Files / Trash tabs. **Tabs are click-stateful — deep walk verifies each tab loads.** |
-| `/settings` | `src/app/settings/page.tsx` | DOCTOR / STAFF / ADMIN | `sweep-settings.mjs` | 🚧 v3.2 | Profile / security / sessions / data / billing / danger zone. **Six sections × multiple save actions — high finding-density per click.** |
+| `/patients/[id]` | `src/app/patients/[id]/page.tsx` | DOCTOR / STAFF / ADMIN | `sweep-patient-detail.mjs` | ✅ | Patient detail with Visits / Notes / Files / Trash tabs. Deep walker (v3.2) — tab-stateful clicks + dialog triggers + read-scoping check on `transcribe_md_patients`. Trash tab walked only when DOM-present. |
+| `/settings` | `src/app/settings/page.tsx` | DOCTOR / STAFF / ADMIN | `sweep-settings.mjs` | ✅ | Profile / security / sessions / data / billing / danger zone. **Most delicate walker:** 8 destructive buttons (delete account, sign-out-all, password change, MFA toggle, Stripe portal, data export, send-confirmation, sign-out) explicitly enumerated-but-not-clicked via the `FORBIDDEN_BUTTONS` safety net. |
 | `/dev/rx-warnings` | `src/app/dev/rx-warnings/page.tsx` | DOCTOR (dev-build only) | `sweep-dev-rx-warnings.mjs` | 🟡 | Rx-warning card variant preview. 404s in production. |
 
 ### Authenticated routes (require SUPER_ADMIN + ≤12h session)
@@ -102,7 +102,7 @@ For the **v2** build, every route had a 🟡 walker that confirms the
 page loads as the test user (or as anonymous for public routes). The
 flagship `sweep-visit-page.mjs` was the only ✅.
 
-The **v3.1** build (this PR) added:
+The **v3.1** build added:
   - `lib/walker-base.mjs deepWalk()` — the shared element-walk +
     DB-diff helper that v3.2 walkers use
   - storageState session reuse (28 logins → 1 login + 28 cookie
@@ -111,15 +111,30 @@ The **v3.1** build (this PR) added:
     (bumpEligible / criticalRx / pediatric / nonClinical) so the
     flagship walker can exercise different code paths via
     `--scenario`
-  - 5 routes marked **🚧 v3.2** to set the v3.2 deep-walk priority
-    list (dashboard, visits-list, new-visit, patient-detail,
-    settings — all daily doctor-facing surfaces)
+  - 5 routes marked 🚧 v3.2 as the v3.2 deep-walk priority list
+
+The **v3.2** build (this PR) promoted all 5 of those routes from
+🚧 to ✅:
+  - `/dashboard` — tab toggle, brand link, Cmd-K palette, avatar
+    dropdown; outbound nav enumerated
+  - `/visits` — 5 filter pills walked + URL-change assertion +
+    zero-DB-write check
+  - `/visits/new` — Stage 2 specialty + capture-mode-tile
+    enumeration; submits explicitly skipped (would create real
+    visit + fire pipeline)
+  - `/patients/[id]` — 4 tabs (Trash conditional) + dialog
+    triggers + intentional-stub-copy capture
+  - `/settings` — 6-section anchor walk + ProfileForm no-op save;
+    8 destructive buttons explicitly enumerated-but-skipped
+    (delete-account / sign-out-all / password / MFA / Stripe /
+    export / send-confirmation / bare-sign-out)
 
 The remaining 🟡 routes (admin / public / marketing) stay 🟡
 indefinitely. Marketing has no DB writes; admin pages 404 for
 DOCTOR-role test user (the gate check IS the deep walk); public
 pages can't safely submit forms in QA (would create stale users /
-fire real emails).
+fire real emails). `/visits/[id]/record` stays 🟡 pending a
+getUserMedia mock and a draft-mode fixture.
 
 ## When a new route is added to the app
 
