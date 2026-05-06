@@ -11,8 +11,15 @@
 # 1efd1b2); don't repeat that here.
 # ============================================================================
 
+# PR-K supply-chain hardening: every external base image pinned to a
+# specific manifest digest so an upstream `node:22-alpine` rebuild
+# can't change the bytes we ship without us reviewing it first.
+# Bumps land via Dependabot's docker ecosystem.
+#   node:22-alpine — pinned 2026-05-06 (linux/amd64)
+ARG NODE_BASE=node@sha256:8ea2348b068a9544dae7317b4f3aafcdc032df1647bb7d768a05a5cad1a7683f
+
 # ── Stage 1: Dependencies (prod only, for runtime copy) ──
-FROM node:22-alpine AS deps
+FROM ${NODE_BASE} AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/meddoc-pro/package.json ./apps/meddoc-pro/package.json
@@ -24,7 +31,7 @@ COPY packages/ai/package.json ./packages/ai/package.json
 RUN npm ci --omit=dev
 
 # ── Stage 2: Build (full deps, runs next build) ──
-FROM node:22-alpine AS builder
+FROM ${NODE_BASE} AS builder
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/meddoc-pro/package.json ./apps/meddoc-pro/package.json
@@ -52,7 +59,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build -w marketing
 
 # ── Stage 3: Production Runner ──
-FROM node:22-alpine AS runner
+FROM ${NODE_BASE} AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
