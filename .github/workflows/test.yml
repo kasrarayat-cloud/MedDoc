@@ -113,3 +113,33 @@ jobs:
           name: playwright-test-results
           path: apps/meddoc-pro/test-results/
           retention-days: 7
+
+  # ──────────────────────────────────────────────────────────────────
+  # PR-K supply-chain hardening: dependency-vulnerability gate.
+  # Fails the PR when a new high or critical vulnerability lands.
+  # Baseline at PR-K time: 0 high + 0 critical (8 moderate); see
+  # docs/security-audits/npm-audit-baseline-20260506T064154Z.md.
+  # The gate is `--audit-level=high` so the existing moderate
+  # vulnerabilities don't trip CI; only NEW high/critical findings
+  # do. Daily Dependabot rotation keeps the moderate count moving
+  # toward zero.
+  # ──────────────────────────────────────────────────────────────────
+  audit:
+    name: npm audit (high+critical gate)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Audit (fail on high/critical only)
+        # `--workspaces` walks every workspace; `--audit-level=high`
+        # gates exit code on high/critical (moderate + low are
+        # printed but don't fail). `|| true` is intentionally NOT
+        # added — we want the gate to fail the job on a vulnerability
+        # above threshold.
+        run: npm audit --audit-level=high --workspaces --include-workspace-root

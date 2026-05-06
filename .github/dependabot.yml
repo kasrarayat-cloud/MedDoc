@@ -1,0 +1,240 @@
+# ============================================================================
+# Dependabot — supply-chain hardening (PR-K).
+# ----------------------------------------------------------------------------
+# Auto-PRs for:
+#   - npm (root + each apps/* + each packages/* workspace; meddoc-pro
+#     excluded per the QA-agent / project scope rule — that workspace
+#     is treated as out-of-project)
+#   - github-actions (workflow files under .github/workflows/)
+#   - docker (every Dockerfile location, including the SHA-pinned
+#     ARG NODE_BASE — Dependabot rewrites the digest on a base-image
+#     bump)
+#
+# Posture:
+#   - Schedule: daily for npm, weekly for actions + docker.
+#   - Group minor + patch into one PR per ecosystem/workspace; each
+#     major upgrade gets its own PR so the blast-radius review is
+#     focused.
+#   - No auto-merge — Kasra reviews every PR.
+#   - Allow list: empty (Dependabot tracks every dep). The agent can
+#     add ignores here later if a noisy dep needs throttling.
+#   - Labels: 'dependencies' on all PRs; 'security' added by Dependabot
+#     automatically when the upgrade closes a published advisory.
+#   - Commit prefix: 'chore(deps):' so the changes thread cleanly into
+#     the rest of the repo's conventional-commit history.
+# ============================================================================
+
+version: 2
+
+updates:
+  # ──────────────────────────────────────────────────────────────────
+  # npm — monorepo root
+  # ──────────────────────────────────────────────────────────────────
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+    commit-message:
+      prefix: chore(deps)
+      include: scope
+    groups:
+      monorepo-root-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+
+  # ──────────────────────────────────────────────────────────────────
+  # npm — apps/transcribe-md (clinician web app)
+  # ──────────────────────────────────────────────────────────────────
+  - package-ecosystem: npm
+    directory: /apps/transcribe-md
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - app:transcribe-md
+    commit-message:
+      prefix: chore(deps)
+      include: scope
+    groups:
+      transcribe-md-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+
+  # ──────────────────────────────────────────────────────────────────
+  # npm — apps/marketing (public landing site)
+  # ──────────────────────────────────────────────────────────────────
+  - package-ecosystem: npm
+    directory: /apps/marketing
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - app:marketing
+    commit-message:
+      prefix: chore(deps)
+      include: scope
+    groups:
+      marketing-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+
+  # NB: apps/meddoc-pro is intentionally NOT covered by Dependabot —
+  # it's out of project scope (memory #9 / agent-baseline rule).
+  # If/when that workspace re-enters scope, add the matching entry
+  # alongside the other apps/* entries above.
+
+  # ──────────────────────────────────────────────────────────────────
+  # npm — packages/* (workspace libraries)
+  # ──────────────────────────────────────────────────────────────────
+  - package-ecosystem: npm
+    directory: /packages/db
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - pkg:db
+    commit-message:
+      prefix: chore(deps)
+      include: scope
+    groups:
+      db-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: npm
+    directory: /packages/auth
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - pkg:auth
+    commit-message:
+      prefix: chore(deps)
+      include: scope
+    groups:
+      auth-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: npm
+    directory: /packages/types
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - pkg:types
+    commit-message:
+      prefix: chore(deps)
+      include: scope
+    groups:
+      types-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: npm
+    directory: /packages/ai
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - pkg:ai
+    commit-message:
+      prefix: chore(deps)
+      include: scope
+    groups:
+      ai-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: npm
+    directory: /packages/shared
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - pkg:shared
+    commit-message:
+      prefix: chore(deps)
+      include: scope
+    groups:
+      shared-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+
+  # ──────────────────────────────────────────────────────────────────
+  # GitHub Actions (workflow files)
+  # ──────────────────────────────────────────────────────────────────
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - ci
+    commit-message:
+      prefix: chore(deps)
+      include: scope
+
+  # ──────────────────────────────────────────────────────────────────
+  # Docker — every Dockerfile location
+  # ──────────────────────────────────────────────────────────────────
+  # Dependabot rewrites the SHA digest in `ARG NODE_BASE=node@sha256:…`
+  # when a new image manifest lands. Bumps land as separate PRs per
+  # Dockerfile so a base-image regression is bisectable.
+  - package-ecosystem: docker
+    directory: /apps/transcribe-md
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - docker
+    commit-message:
+      prefix: chore(deps)
+      include: scope
+
+  - package-ecosystem: docker
+    directory: /apps/marketing
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - docker
+    commit-message:
+      prefix: chore(deps)
+      include: scope
+
+  # NB: docker-compose.yml's third-party `image:` references (postgres,
+  # redis, minio, caddy, prodrigestivill/postgres-backup-local) are
+  # NOT covered by the docker ecosystem — Dependabot's docker support
+  # only rewrites Dockerfile FROM lines. Those image bumps need a
+  # separate ecosystem entry once we move them off floating tags.
+  # Tracked separately; out of scope for PR-K.
