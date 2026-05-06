@@ -14,6 +14,27 @@ import prisma from '@meddoc/db';
 import { TranscribeVisitStatus } from '@prisma/client';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
+import { parseSoapSections } from '@/lib/parse-soap-sections';
+
+// Truncation budgets for the typewriter preview. At ~150 chars/sec
+// typing speed: transcript runs ~4s, each SOAP section runs ~2.7s.
+// Doctors who need full content open the ready view; the loading
+// screen is preview-only.
+const PREVIEW_TRANSCRIPT_MAX = 600;
+const PREVIEW_SOAP_SECTION_MAX = 400;
+
+function clipForPreview(text: string | null | undefined, max: number): string | null {
+  if (!text) return null;
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  if (trimmed.length <= max) return trimmed;
+  // Soft-break on a word boundary near max so the typewriter doesn't
+  // freeze mid-word with the truncation ellipsis.
+  const slice = trimmed.slice(0, max);
+  const lastSpace = slice.lastIndexOf(' ');
+  const boundary = lastSpace > max * 0.7 ? lastSpace : max;
+  return trimmed.slice(0, boundary).trimEnd() + '…';
+}
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -63,6 +84,14 @@ export const GET = withApiHandler<{ id: string }>(
         processingStartedAt: true,
         icdCodes: true,
         cptCodes: true,
+        // Preview content for typewriter rendering (PATH B-lite).
+        // transcriptText lands after TRANSCRIBING; soapDraft lands
+        // after DRAFTING (overwritten by POLISHING). Server-side
+        // truncation keeps polling payload bounded and avoids
+        // sending full PHI bodies through the public-facing
+        // status endpoint when only a preview is needed.
+        transcriptText: true,
+        soapDraft: true,
       },
     });
     // 404 on both "not found" AND "not yours" prevents ID enumeration.
@@ -79,6 +108,31 @@ export const GET = withApiHandler<{ id: string }>(
     const icdCount = Array.isArray(icdBlob?.codes) ? icdBlob.codes.length : 0;
     const cptCount = Array.isArray(cptBlob?.codes) ? cptBlob.codes.length : 0;
 
+    // Build typewriter preview content. SOAP markdown is split via the
+    // existing parseSoapSections parser used by SoapBody / soap-editor /
+    // em-coding to keep the section-split logic single-source.
+    const previewTranscript = clipForPreview(
+      visit.transcriptText,
+      PREVIEW_TRANSCRIPT_MAX
+    );
+    let previewSoap: {
+      subjective: string | null;
+      objective: string | null;
+      assessment: string | null;
+      plan: string | null;
+    } | null = null;
+    if (visit.soapDraft && visit.soapDraft.trim() !== '') {
+      const sections = parseSoapSections(visit.soapDraft);
+      const byKey = Object.fromEntries(sections.map((s) => [s.key, s.body])) as
+        Record<'S' | 'O' | 'A' | 'P', string>;
+      previewSoap = {
+        subjective: clipForPreview(byKey.S, PREVIEW_SOAP_SECTION_MAX),
+        objective:  clipForPreview(byKey.O, PREVIEW_SOAP_SECTION_MAX),
+        assessment: clipForPreview(byKey.A, PREVIEW_SOAP_SECTION_MAX),
+        plan:       clipForPreview(byKey.P, PREVIEW_SOAP_SECTION_MAX),
+      };
+    }
+
     return NextResponse.json(
       {
         visitId: visit.id,
@@ -93,6 +147,10 @@ export const GET = withApiHandler<{ id: string }>(
         processingStartedAt: visit.processingStartedAt?.toISOString() ?? null,
         icdCount,
         cptCount,
+        preview: {
+          transcript: previewTranscript,
+          soap: previewSoap,
+        },
       },
       { status: 200 }
     );
