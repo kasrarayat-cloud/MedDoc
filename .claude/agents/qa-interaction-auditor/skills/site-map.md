@@ -44,6 +44,7 @@ Status legend:
 | `/admin/usage` | `src/app/admin/usage/page.tsx` | `sweep-admin-usage.mjs` | 🟡 | API usage analytics — billing-adjacent. |
 | `/admin/hipaa` | `src/app/admin/hipaa/page.tsx` | `sweep-admin-hipaa.mjs` | 🟡 | HIPAA compliance dashboard. |
 | `/admin/threats` | `src/app/admin/threats/page.tsx` | `sweep-admin-threats.mjs` | 🟡 | Security threats / anomalies log. |
+| `/admin/queues` | `src/app/admin/queues/page.tsx` | `sweep-admin-queues.mjs` | 🟡 | **NEW PR-L** — BullMQ queue health dashboard (depth across transcribe-md / cleanup / dlq:permanent-failures + recent DLQ jobs). Same SUPER_ADMIN gate as the other `/admin/*` routes; DOCTOR test user expects 404. |
 
 ### Public routes (no auth)
 

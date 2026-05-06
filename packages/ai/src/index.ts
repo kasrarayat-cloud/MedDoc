@@ -11,6 +11,22 @@ export * from './types';
 export * from './model-client';
 export * from './deepgram-batch';
 export {
+  whisperBatchTranscribe,
+  isPermanent4xxError,
+  WHISPER_MAX_BYTES,
+  DEFAULT_WHISPER_MODEL,
+  __setOpenAIClientForTests,
+  type WhisperBatchArgs,
+  type WhisperBatchResult,
+  type WhisperSegment,
+} from './whisper-batch';
+export {
+  transcribe,
+  type TranscribeArgs,
+  type TranscribeResult,
+  type TranscriptionProvider,
+} from './transcribe';
+export {
   EMBED_DIMENSION,
   embedText,
   type EmbedTextArgs,
