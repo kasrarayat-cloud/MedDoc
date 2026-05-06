@@ -243,6 +243,138 @@ but doesn't need DB diffs (no DB writes on marketing pages).
 
 ---
 
+## Per-page workflow stubs (v2 baseline)
+
+These are short workflow entries for every page beyond the flagship
+sign-and-send sequence. Each page has a 🟡 walker today
+(`scripts/sweep-<name>.mjs`) and a deeper element-by-element walk in
+its future. The minimum each entry captures: doctor's intent on the
+page, the load-state DB tables, and the audit-action values we
+expect to see.
+
+### Dashboard — `/dashboard`
+
+File: `apps/transcribe-md/src/app/dashboard/page.tsx`. Linear V1
+landing surface; two tabs (Patients + All Visits) inside a
+`<Tabs>` shell. Sidebar nav comes from `AppFrame` layout.
+
+- **Doctor's intent:** triage — see what's pending review; jump
+  into a visit; create a new one.
+- **Top-level interactive elements (v2 walker stubs the click set;
+  future depth):**
+  - `<Tabs>` switcher between Patients + All Visits
+  - "+ New visit" button → `/visits/new`
+  - Each row in either tab → patient detail or visit detail
+  - Search palette trigger (Cmd-K) — opens the global palette
+- **DB tables read:** `transcribe_visits`, `transcribe_md_patients`
+  (both scoped to the user's practice).
+- **Audit rows expected on load:** `VIEWED_PATIENT_LIST`
+  + `VIEWED_VISIT_LIST` (Round 3 PR-C compliance).
+
+### Visits list — `/visits`
+
+File: `apps/transcribe-md/src/app/visits/page.tsx`. All-visits
+table with filter pills.
+
+- **Filter pills:** all / ready / review / signed / processing
+  — each is a `Link` that adds a `?filter=` query param. v2
+  walker confirms each pill renders; future deepens with row
+  counts per filter.
+- **Each row:** `<Link href="/visits/{id}">` — drives the visit
+  detail walker.
+- **Audit rows expected on load:** `VIEWED_VISIT_LIST`.
+
+### New visit — `/visits/new`
+
+File: `apps/transcribe-md/src/app/visits/new/page.tsx` (+
+`new-visit-client.tsx`, `visit-form-step2.tsx`).
+
+- **Doctor's intent:** start a new visit by picking a patient +
+  capture mode (audio_upload / voice_dictation / text_notes).
+- **Two stages internally** (single page):
+  1. PatientPicker (no patient yet) — search + select, or "+ New
+     patient" link.
+  2. VisitFormStep2 — specialty dropdown + 3 capture-mode tiles.
+     Submitting any tile creates the `transcribe_visits` row.
+- **DB writes on submit:** new `transcribe_visits` row (status
+  QUEUED) + optionally a new `transcribe_md_patients` row.
+- **Audit rows expected:** `CREATED_PATIENT` (only when a new
+  patient is created inline), then visit-creation flow.
+
+### Visit record — `/visits/[id]/record`
+
+File: `apps/transcribe-md/src/app/visits/[id]/record/page.tsx`.
+Live MediaRecorder dictation interface for `voice_dictation` mode.
+
+- **Interactive elements:** record / pause / stop buttons; live
+  waveform (visual only); transcript-placeholder pane.
+- **POST endpoint:** `/api/visits/[id]/dictation/upload`
+  (multi-chunk).
+- **Audit rows expected:** `AUDIO_UPLOADED` once final chunk
+  lands.
+
+### Patients list — `/patients`
+
+File: `apps/transcribe-md/src/app/patients/page.tsx`. Practice
+patient list, searchable via the command palette.
+
+- **Each row:** `<Link href="/patients/{id}">`.
+- **Audit rows expected on load:** `VIEWED_PATIENT_LIST`.
+
+### Patient detail — `/patients/[id]`
+
+File: `apps/transcribe-md/src/app/patients/[id]/page.tsx`. Tabs:
+Visits (default) / Notes (stub) / Files (stub) / Trash (only when
+items exist).
+
+- **Audit rows expected on load:** `VIEWED_PATIENT_FILE`.
+- **Stub-tab copy** (intentional empty-state, NOT a Pattern C
+  bug): "Notes coming soon" / "Files coming soon".
+
+### Settings — `/settings`
+
+File: `apps/transcribe-md/src/app/settings/page.tsx`. Single-page
+form with 6 sticky-anchor sections: profile / security / sessions
+/ data / billing / danger-zone.
+
+- **Walker constraint (read-only assertions for v2):** never click
+  "Delete account" or "Revoke all sessions" against the test
+  user. Click count is enumerated; submission is suppressed.
+- **Per-section save actions** each fire their own server action
+  + audit row on success.
+
+### Admin routes — `/admin*` (5 routes)
+
+Files: `apps/transcribe-md/src/app/admin/{page,users/page,usage/page,hipaa/page,threats/page}.tsx`.
+
+- **Gate:** `admin/layout.tsx` requires SUPER_ADMIN role + ≤12-
+  hour session freshness.
+- **QA test user is DOCTOR** — every admin-route walker expects a
+  404 / not-authorized response. A 200 here is a finding (the gate
+  is broken).
+- **Audit rows expected on access:** Round 3 PR-C admin-access
+  audit row (`ADMIN_DASHBOARD_ACCESS` etc) ONLY fires when the
+  gate passes — i.e. never for the QA test user.
+
+### Public app routes — `/login`, `/signup`, `/forgot-password`, `/reset-password`, `/check-email`
+
+Files under `apps/transcribe-md/src/app/<route>/page.tsx`.
+
+- **Walker constraint:** never SUBMITS the signup or
+  forgot-password forms — would create stale users / fire real
+  emails.
+- **Login** is the agent's own happy path; every authenticated
+  walker exercises it via `lib/walker-base.mjs login()`.
+
+### Marketing site — 10 routes under `apps/marketing/src/app`
+
+All public, all share `NavBar` + `Footer` chrome. No DB writes on
+any of them; the walker just confirms page-load + element-count.
+The contact form is exempt from any submit attempt — would page
+support / sales.
+
+---
+
 ## Adding a new workflow
 
 When a new feature ships, append a workflow section here with:
@@ -255,3 +387,11 @@ The agent's first run on the new feature reads this file and
 auto-generates the walk plan. If the section is missing, the agent
 falls back to enumerating elements from the page DOM at runtime
 (less precise; verbatim cites from this file are better).
+
+When you add a new route, also:
+1. Add a row to `skills/site-map.md` so the inventory stays
+   current (orphan routes are surfaces no one is auditing).
+2. Add a stub walker `scripts/sweep-<name>.mjs` (mirror an
+   existing one).
+3. Add the walker name to `scripts/sweep-all.mjs`'s WALKERS
+   registry.
