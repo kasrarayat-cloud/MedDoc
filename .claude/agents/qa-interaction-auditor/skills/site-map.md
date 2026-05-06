@@ -11,10 +11,13 @@ Source of truth: `apps/transcribe-md/src/app/**/page.tsx` and
 **out of scope** (memory #9).
 
 Status legend:
-- ✅ **covered** — walker exists + smoke test passes
-- 🟡 **stub** — walker exists but only verifies page-load (the v2 build
-  baseline; future sweeps deepen the per-page coverage)
-- ⚪ **uncovered** — walker pending (none should remain after agent v2)
+- ✅ **deep** — full element walk via `lib/walker-base.mjs deepWalk()`,
+  DB diff per click, audit-row diff. Today: `sweep-visit-page.mjs`.
+- 🚧 **v3.2** — stub today, slated for promotion to ✅ in v3.2.
+  High-traffic pages that warrant deep walks first.
+- 🟡 **stub** — page-load smoke + interactive-element count. The v2
+  baseline; the long tail of pages that don't yet need deep walks.
+- ⚪ **uncovered** — walker pending (none should remain after agent v2).
 
 ## QuillMD app — `apps/transcribe-md` (`app.quillmd.com`)
 
@@ -22,14 +25,14 @@ Status legend:
 
 | URL | File | Required role | Walker | Status | Description |
 |---|---|---|---|---|---|
-| `/dashboard` | `src/app/dashboard/page.tsx` | DOCTOR / STAFF / ADMIN | `sweep-dashboard.mjs` | 🟡 | Main clinician landing — Patients + All Visits tabs. Sidebar nav. |
-| `/visits` | `src/app/visits/page.tsx` | DOCTOR / STAFF / ADMIN | `sweep-visits-list.mjs` | 🟡 | All visits list + filter pills (all / ready / review / signed / processing). |
-| `/visits/new` | `src/app/visits/new/page.tsx` | DOCTOR / STAFF / ADMIN | `sweep-new-visit.mjs` | 🟡 | Two-step new-visit wizard: pick patient + capture mode. |
-| `/visits/[id]` | `src/app/visits/[id]/page.tsx` | DOCTOR / STAFF / ADMIN | `sweep-visit-page.mjs` | ✅ | **The flagship walker.** SOAP body + Coding Rail + tabs + Sign & Send. |
-| `/visits/[id]/record` | `src/app/visits/[id]/record/page.tsx` | DOCTOR / STAFF / ADMIN | `sweep-visit-record.mjs` | 🟡 | Live MediaRecorder dictation interface. |
+| `/dashboard` | `src/app/dashboard/page.tsx` | DOCTOR / STAFF / ADMIN | `sweep-dashboard.mjs` | 🚧 v3.2 | Main clinician landing — Patients + All Visits tabs. Sidebar nav. **Top-of-funnel; daily-traffic** — deep next. |
+| `/visits` | `src/app/visits/page.tsx` | DOCTOR / STAFF / ADMIN | `sweep-visits-list.mjs` | 🚧 v3.2 | All visits list + filter pills. **Filter pills are click-stateful — high-value deep walk.** |
+| `/visits/new` | `src/app/visits/new/page.tsx` | DOCTOR / STAFF / ADMIN | `sweep-new-visit.mjs` | 🚧 v3.2 | Two-step wizard. **Visit-creation flow — most error-prone path; deep walk surfaces input-validation regressions.** |
+| `/visits/[id]` | `src/app/visits/[id]/page.tsx` | DOCTOR / STAFF / ADMIN | `sweep-visit-page.mjs` | ✅ | **The flagship walker.** Refactored in v3.1 to use `deepWalk()` + storageState reuse + `--scenario` flag (4 fixture variants). |
+| `/visits/[id]/record` | `src/app/visits/[id]/record/page.tsx` | DOCTOR / STAFF / ADMIN | `sweep-visit-record.mjs` | 🟡 | Live MediaRecorder dictation interface. Skipped today (needs draft-mode visit + getUserMedia mock). |
 | `/patients` | `src/app/patients/page.tsx` | DOCTOR / STAFF / ADMIN | `sweep-patients-list.mjs` | 🟡 | Practice patient list, searchable. |
-| `/patients/[id]` | `src/app/patients/[id]/page.tsx` | DOCTOR / STAFF / ADMIN | `sweep-patient-detail.mjs` | 🟡 | Patient detail with Visits / Notes / Files / Trash tabs. |
-| `/settings` | `src/app/settings/page.tsx` | DOCTOR / STAFF / ADMIN | `sweep-settings.mjs` | 🟡 | Profile / security / sessions / data / billing / danger zone. |
+| `/patients/[id]` | `src/app/patients/[id]/page.tsx` | DOCTOR / STAFF / ADMIN | `sweep-patient-detail.mjs` | 🚧 v3.2 | Patient detail with Visits / Notes / Files / Trash tabs. **Tabs are click-stateful — deep walk verifies each tab loads.** |
+| `/settings` | `src/app/settings/page.tsx` | DOCTOR / STAFF / ADMIN | `sweep-settings.mjs` | 🚧 v3.2 | Profile / security / sessions / data / billing / danger zone. **Six sections × multiple save actions — high finding-density per click.** |
 | `/dev/rx-warnings` | `src/app/dev/rx-warnings/page.tsx` | DOCTOR (dev-build only) | `sweep-dev-rx-warnings.mjs` | 🟡 | Rx-warning card variant preview. 404s in production. |
 
 ### Authenticated routes (require SUPER_ADMIN + ≤12h session)
@@ -95,16 +98,28 @@ Element coverage for the chrome lives in `quillmd-workflows.md`.
 
 ## Coverage budget
 
-For the v2 build, every route has a 🟡 walker that confirms the page
-loads as the test user (or as anonymous for public routes). The
-flagship `sweep-visit-page.mjs` is the only ✅ — full element walk +
-DB diff per click.
+For the **v2** build, every route had a 🟡 walker that confirms the
+page loads as the test user (or as anonymous for public routes). The
+flagship `sweep-visit-page.mjs` was the only ✅.
 
-The next priority for v3 is to deepen Visit-creation
-(`sweep-new-visit.mjs`) and the Settings page (`sweep-settings.mjs`),
-since both are doctor-facing daily flows. Marketing pages can stay 🟡
-indefinitely — they have no DB writes, so the page-load smoke is the
-whole audit surface they need.
+The **v3.1** build (this PR) added:
+  - `lib/walker-base.mjs deepWalk()` — the shared element-walk +
+    DB-diff helper that v3.2 walkers use
+  - storageState session reuse (28 logins → 1 login + 28 cookie
+    loads); fixes the v2 rate-limit cascade
+  - `seed-qa-fixtures.ts` — four scripted fixture visits
+    (bumpEligible / criticalRx / pediatric / nonClinical) so the
+    flagship walker can exercise different code paths via
+    `--scenario`
+  - 5 routes marked **🚧 v3.2** to set the v3.2 deep-walk priority
+    list (dashboard, visits-list, new-visit, patient-detail,
+    settings — all daily doctor-facing surfaces)
+
+The remaining 🟡 routes (admin / public / marketing) stay 🟡
+indefinitely. Marketing has no DB writes; admin pages 404 for
+DOCTOR-role test user (the gate check IS the deep walk); public
+pages can't safely submit forms in QA (would create stale users /
+fire real emails).
 
 ## When a new route is added to the app
 

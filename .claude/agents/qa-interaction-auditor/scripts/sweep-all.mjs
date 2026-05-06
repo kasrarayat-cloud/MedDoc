@@ -16,13 +16,22 @@
 // ============================================================================
 
 import { spawn, execSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, existsSync, unlinkSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { randomBytes } from 'node:crypto';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SCRIPT_DIR = __dirname;
 const REPO_ROOT = resolve(__dirname, '..', '..', '..', '..');
+
+// One sweep-run id per orchestrator invocation. All child walkers
+// inherit it via QA_SWEEP_RUN_ID env so they share a single cached
+// auth-session file in /tmp (v3.1 fix for the v2 rate-limit cascade
+// where 28 separate logins tripped /login's rate limiter).
+const SWEEP_RUN_ID = randomBytes(6).toString('hex');
+const SESSION_FILE = resolve(tmpdir(), `qa-auditor-session-${SWEEP_RUN_ID}.json`);
 
 // ──────────────────────────────────────────────────────────────────────
 // Walker registry — keep in sync with skills/site-map.md
@@ -89,20 +98,49 @@ function preflight() {
 // ──────────────────────────────────────────────────────────────────────
 // Walker invocation
 // ──────────────────────────────────────────────────────────────────────
+// Auto-resolve the deep-walker fixture from seeded-ids.json so the
+// orchestrator no longer skips visit-page. Defaults to the
+// bump-eligible scenario; operators can override via env.
+function deepWalkerFixtureId() {
+  if (process.env.QA_FIXTURE_VISIT_ID) return process.env.QA_FIXTURE_VISIT_ID;
+  const seededPath = resolve(
+    __dirname,
+    '..',
+    'fixtures',
+    'seeded-ids.json'
+  );
+  if (!existsSync(seededPath)) return null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const seeded = JSON.parse(execSync(`cat ${seededPath}`, { encoding: 'utf-8' }));
+    const scenario = process.env.QA_SCENARIO ?? 'bumpEligible';
+    return seeded.visitIds?.[scenario] ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function runWalker(walker) {
   return new Promise((resolveFn) => {
     const file = resolve(SCRIPT_DIR, walker.file);
-    const env = { ...process.env };
-    if (walker.deep && !env.QA_FIXTURE_VISIT_ID) {
-      // sweep-visit-page.mjs needs a fixture visit id; the operator
-      // can pre-set this. Without it, skip the deep walker rather
-      // than crash.
-      return resolveFn({
-        name: walker.name,
-        skipped: true,
-        reason: 'QA_FIXTURE_VISIT_ID not set — sweep-visit-page.mjs needs a fixture visit',
-      });
+    // Propagate the sweep-run id so all walkers share one
+    // /tmp/qa-auditor-session-<id>.json — first auth walker logs in
+    // once, the rest reuse the cached storageState.
+    const env = { ...process.env, QA_SWEEP_RUN_ID: SWEEP_RUN_ID };
+
+    if (walker.deep) {
+      const fixtureId = deepWalkerFixtureId();
+      if (!fixtureId) {
+        return resolveFn({
+          name: walker.name,
+          skipped: true,
+          reason:
+            'No fixture visit id resolvable. Run seed-qa-fixtures.ts or set QA_FIXTURE_VISIT_ID.',
+        });
+      }
+      env.QA_FIXTURE_VISIT_ID = fixtureId;
     }
+
     const child = spawn('node', [file], {
       env,
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -143,14 +181,18 @@ function reportPath() {
 
 function buildReport({ runs, preflightInfo, startedAt, finishedAt }) {
   const totalWalkers = runs.length;
-  const skipped = runs.filter((r) => r.skipped).length;
+  const orchSkipped = runs.filter((r) => r.skipped).length;
+  const selfSkipped = runs.filter((r) =>
+    !r.skipped && r.events?.some((e) => e.event === 'walker-skip')
+  ).length;
+  const skipped = orchSkipped + selfSkipped;
   const failed = runs.filter((r) => !r.skipped && r.exitCode !== 0).length;
   const ok = totalWalkers - skipped - failed;
 
   const lines = [];
   lines.push(`# QA Interaction Audit — full-site sweep — ${startedAt}`);
   lines.push('');
-  lines.push(`- Agent: qa-interaction-auditor v2 (full-site coverage)`);
+  lines.push(`- Agent: qa-interaction-auditor v3.1 (storageState + rich fixtures + deepWalk)`);
   lines.push(`- Run mode: sweep-all.mjs orchestrator`);
   lines.push(`- Walkers: ${totalWalkers} total — ${ok} ok, ${failed} failed, ${skipped} skipped`);
   lines.push(`- Pre-flight: ${preflightInfo.availableMb} Mi available / ${preflightInfo.totalMb} Mi total`);
@@ -166,6 +208,14 @@ function buildReport({ runs, preflightInfo, startedAt, finishedAt }) {
   for (const r of runs) {
     if (r.skipped) {
       lines.push(`| ${r.name} | ⏭️  skipped | — | ${r.reason} |`);
+      continue;
+    }
+    // walker-skip is a self-declared skip emitted by the walker
+    // itself (e.g. visit-record skipping when no draft visit exists).
+    // Treat it identically to the orchestrator-side skip.
+    const selfSkip = r.events.find((e) => e.event === 'walker-skip');
+    if (selfSkip) {
+      lines.push(`| ${r.name} | ⏭️  skipped | — | ${(selfSkip.reason ?? '').slice(0, 120)} |`);
       continue;
     }
     const result = r.events.find((e) => e.event === 'walker-result');
@@ -206,6 +256,7 @@ function buildReport({ runs, preflightInfo, startedAt, finishedAt }) {
 async function main() {
   const startedAt = new Date().toISOString();
   console.log(`sweep-all started at ${startedAt}`);
+  console.log(`sweep-run-id: ${SWEEP_RUN_ID} (session at ${SESSION_FILE})`);
 
   const preflightInfo = preflight();
   console.log(
@@ -227,8 +278,13 @@ async function main() {
     if (r.skipped) {
       process.stdout.write(`skip (${r.reason})\n`);
     } else {
-      const result = r.events.find((e) => e.event === 'walker-result');
-      const okStr = r.exitCode === 0 ? (result?.ok ? 'OK' : 'WARN') : 'FAIL';
+      const selfSkip = r.events?.find((e) => e.event === 'walker-skip');
+      const result = r.events?.find((e) => e.event === 'walker-result');
+      let okStr;
+      if (r.exitCode !== 0) okStr = 'FAIL';
+      else if (selfSkip) okStr = 'skip';
+      else if (result?.ok) okStr = 'OK';
+      else okStr = 'WARN';
       process.stdout.write(`${okStr} ${dur}ms\n`);
     }
     runs.push(r);
@@ -240,6 +296,14 @@ async function main() {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, report);
   console.log(`\nreport: ${path}`);
+
+  // Sweep done — best-effort cleanup of the cached session file.
+  // Leaving it would leak a logged-in cookie until /tmp is cleared;
+  // the file's TTL would also auto-invalidate it, but explicit beats
+  // implicit.
+  if (existsSync(SESSION_FILE)) {
+    try { unlinkSync(SESSION_FILE); } catch { /* ignore */ }
+  }
 
   // Exit non-zero if any walker failed (but skipped is fine).
   const anyFail = runs.some((r) => !r.skipped && r.exitCode !== 0);
