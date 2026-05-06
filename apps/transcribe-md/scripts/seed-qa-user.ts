@@ -30,17 +30,56 @@
 // without re-querying.
 // ============================================================================
 
-import 'dotenv/config';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
 import bcrypt from 'bcryptjs';
 
-const QA_EMAIL = process.env.QA_AUDITOR_EMAIL ?? 'qa-auditor@quillmd.test';
-const QA_PASSWORD = process.env.QA_AUDITOR_PASSWORD;
-const PRACTICE_ID = 'clinic_main';
-const PATIENT_NAME = 'QA Test Patient';
-const PATIENT_DOB = new Date('2000-01-01T00:00:00.000Z');
+export const QA_EMAIL_DEFAULT = 'qa-auditor@quillmd.test';
+export const PRACTICE_ID = 'clinic_main';
+export const PATIENT_NAME = 'QA Test Patient';
+export const PATIENT_DOB = new Date('2000-01-01T00:00:00.000Z');
+
+/** Pure builder for the user.upsert() payload — extracted so unit
+ *  tests can verify the F-07 / F-08 fixes without spinning up a real
+ *  Prisma client. The seed-qa-user.test.ts guard imports this directly.
+ *
+ *  Both branches set `emailVerified` + `products` so an idempotent
+ *  re-seed restores them on a partially-broken row (e.g. emailVerified
+ *  cleared by some other migration / fixture reset).
+ */
+export function buildUserUpsertPayload(args: {
+  email: string;
+  passwordHash: string;
+}) {
+  return {
+    where: { email: args.email },
+    update: {
+      passwordHash: args.passwordHash,
+      role: 'DOCTOR' as const,
+      isActive: true,
+      lockedUntil: null,
+      failedLoginCount: 0,
+      emailVerified: new Date(),
+      products: ['TRANSCRIBE_MD'] as const,
+      practiceId: PRACTICE_ID,
+      specialty: 'family-medicine',
+      timeZone: 'America/Los_Angeles',
+    },
+    create: {
+      email: args.email,
+      name: 'QA Interaction Auditor',
+      passwordHash: args.passwordHash,
+      role: 'DOCTOR' as const,
+      isActive: true,
+      emailVerified: new Date(),
+      products: ['TRANSCRIBE_MD'] as const,
+      practiceId: PRACTICE_ID,
+      specialty: 'family-medicine',
+      timeZone: 'America/Los_Angeles',
+    },
+  };
+}
 
 // Path is relative to the repo root; the script may run from any cwd
 // (CI, local, docker exec) so we resolve from this file's location.
@@ -57,6 +96,13 @@ const SEEDED_IDS_PATH = resolve(
 );
 
 async function main() {
+  // dotenv/config is dynamically required so the unit test (which sets
+  // env vars directly) doesn't trip on a missing .env file.
+  await import('dotenv/config').catch(() => null);
+
+  const QA_EMAIL = process.env.QA_AUDITOR_EMAIL ?? QA_EMAIL_DEFAULT;
+  const QA_PASSWORD = process.env.QA_AUDITOR_PASSWORD;
+
   if (!QA_PASSWORD || QA_PASSWORD.length === 0) {
     console.error(
       'QA_AUDITOR_PASSWORD env var is missing or empty.\n' +
@@ -97,31 +143,20 @@ async function main() {
 
     const passwordHash = await bcrypt.hash(QA_PASSWORD, 12);
 
-    const user = await prisma.user.upsert({
-      where: { email: QA_EMAIL },
-      update: {
-        // Re-run resets to known-good shape so a stale lockout doesn't
-        // block the agent.
-        passwordHash,
-        role: 'DOCTOR',
-        isActive: true,
-        lockedUntil: null,
-        failedLoginCount: 0,
-        practiceId: PRACTICE_ID,
-        specialty: 'family-medicine',
-        timeZone: 'America/Los_Angeles',
-      },
-      create: {
-        email: QA_EMAIL,
-        name: 'QA Interaction Auditor',
-        passwordHash,
-        role: 'DOCTOR',
-        isActive: true,
-        practiceId: PRACTICE_ID,
-        specialty: 'family-medicine',
-        timeZone: 'America/Los_Angeles',
-      },
-    });
+    // F-07 + F-08 (caught by the agent's own first PASS B browser walk
+    // on 2026-05-06 — see docs/qa-reports/20260506T005713Z.md):
+    //   - emailVerified must be set, or the login flow rejects with
+    //     "Please verify your email before signing in."
+    //   - products must include TRANSCRIBE_MD, or the cross-app gate
+    //     (apps/transcribe-md/src/actions/auth.ts:213) bounces login
+    //     to the MedDoc Pro app with "This account is for MedDoc Pro,
+    //     not TranscribeMD."
+    // The payload (with both branches setting these) is built by the
+    // exported buildUserUpsertPayload so the unit test can assert the
+    // shape without reaching for Prisma.
+    const user = await prisma.user.upsert(
+      buildUserUpsertPayload({ email: QA_EMAIL, passwordHash })
+    );
 
     // Test patient — TranscribeMdPatient (the patient the doctor
     // attaches a visit to). NO PHI: synthetic name + DOB matching
@@ -171,7 +206,13 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error('Seed failed:', err);
-  process.exit(1);
-});
+// CLI entry — only runs main() when this file is the entrypoint, so a
+// dynamic import from the unit test doesn't kick off a real DB run.
+const isCli =
+  typeof require !== 'undefined' && require.main === module;
+if (isCli) {
+  main().catch((err) => {
+    console.error('Seed failed:', err);
+    process.exit(1);
+  });
+}
