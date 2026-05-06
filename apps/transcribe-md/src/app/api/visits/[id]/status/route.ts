@@ -16,14 +16,11 @@ import { TranscribeVisitStatus } from '@prisma/client';
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { parseSoapSections } from '@/lib/parse-soap-sections';
 
-// Truncation budgets for the typewriter preview. Sized from the live
-// READY-visit distribution (39 rows analysed): P95 transcript = 7,419
-// chars; P95 per-section = 2,661 (Subjective P95 = 3,169). The 8000 /
-// 3200 caps capture P95 with headroom; payload is ~22 KB per poll
-// which is acceptable for the 1.5s cadence. The earlier 600/400 caps
-// truncated 78% of sections mid-sentence — the visible bug this fix
-// closes. Full content still lives on the ready view.
-const PREVIEW_TRANSCRIPT_MAX = 8000;
+// Truncation budget for SOAP-section preview. Sized from the live
+// READY-visit distribution (P95 per-section = 2,661 chars). The 3200
+// cap captures P95 with headroom; per-poll payload is ~14 KB which is
+// fine for the 1.5s cadence. Transcript preview was dropped — see the
+// matching note in processing-typewriter.tsx.
 const PREVIEW_SOAP_SECTION_MAX = 3200;
 
 function clipForPreview(text: string | null | undefined, max: number): string | null {
@@ -87,13 +84,9 @@ export const GET = withApiHandler<{ id: string }>(
         processingStartedAt: true,
         icdCodes: true,
         cptCodes: true,
-        // Preview content for typewriter rendering (PATH B-lite).
-        // transcriptText lands after TRANSCRIBING; soapDraft lands
+        // Preview content for typewriter rendering. soapDraft lands
         // after DRAFTING (overwritten by POLISHING). Server-side
-        // truncation keeps polling payload bounded and avoids
-        // sending full PHI bodies through the public-facing
-        // status endpoint when only a preview is needed.
-        transcriptText: true,
+        // truncation keeps polling payload bounded.
         soapDraft: true,
       },
     });
@@ -114,10 +107,6 @@ export const GET = withApiHandler<{ id: string }>(
     // Build typewriter preview content. SOAP markdown is split via the
     // existing parseSoapSections parser used by SoapBody / soap-editor /
     // em-coding to keep the section-split logic single-source.
-    const previewTranscript = clipForPreview(
-      visit.transcriptText,
-      PREVIEW_TRANSCRIPT_MAX
-    );
     let previewSoap: {
       subjective: string | null;
       objective: string | null;
@@ -151,7 +140,6 @@ export const GET = withApiHandler<{ id: string }>(
         icdCount,
         cptCount,
         preview: {
-          transcript: previewTranscript,
           soap: previewSoap,
         },
       },
