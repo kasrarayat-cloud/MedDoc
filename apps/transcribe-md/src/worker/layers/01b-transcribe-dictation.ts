@@ -13,12 +13,18 @@
 import { Readable } from 'node:stream';
 
 import prisma from '@meddoc/db';
-import { deepgramBatchTranscribe } from '@meddoc/ai';
+// PR-L follow-up — same orchestrator swap as L1; dictation now also
+// gets Whisper fallback when Deepgram has a transient outage. The
+// dictation path is single-speaker so there are no diarization
+// concerns on the fallback branch — Whisper produces the same flat
+// text Deepgram does (with `diarize: false`).
+import { transcribe, type TranscribeResult } from '@meddoc/ai';
 import { statAudio, streamAudio } from '@/lib/minio';
 // Q2 fix-pack — dictation is the path where the doctor speaks
 // medication names, anatomy, labs, and diagnoses directly. Until now
 // L1b passed no keyterms — the densest-yield case for the boost.
 import { CLINICAL_KEYTERMS } from '@/lib/deepgram-vocabulary';
+import { logAudit } from '@/lib/audit';
 import {
   computeAudioConfidenceStats,
   shouldFlagForReview,
@@ -43,36 +49,48 @@ const BACKOFF_MS = 2_000;
 export async function runLayer1bTranscribeDictation(
   input: Layer1bInput
 ): Promise<Layer1bOutput> {
-  // T-M18.2 A7: stream MinIO → fetch instead of buffering.
+  // T-M18.2 A7 + PR-L: stream MinIO → orchestrator. The fresh
+  // toBuffer() callback re-opens the MinIO object on the rare
+  // fallback path so Whisper's multipart upload has a Buffer.
+  const stat = await statAudio(input.dictationAudioKey);
+  if (!stat || typeof stat.size !== 'number') {
+    throw new Error(
+      `[L1b] dictation audio missing or has no size: ${input.dictationAudioKey}`
+    );
+  }
+  const nodeStream = await streamAudio(input.dictationAudioKey);
+  const webStream = Readable.toWeb(nodeStream) as ReadableStream<Uint8Array>;
+
   const attempt = async () => {
-    const stat = await statAudio(input.dictationAudioKey);
-    if (!stat || typeof stat.size !== 'number') {
-      throw new Error(
-        `[L1b] dictation audio missing or has no size: ${input.dictationAudioKey}`
-      );
-    }
-    const nodeStream = await streamAudio(input.dictationAudioKey);
-    const webStream = Readable.toWeb(nodeStream) as ReadableStream<Uint8Array>;
-    return deepgramBatchTranscribe({
+    return transcribe({
       practiceId: input.practiceId,
       visitId: input.visitId,
       userId: input.userId,
       purpose: 'tm_transcribe',
-      audio: { stream: webStream, sizeBytes: stat.size },
-      mimeType: input.dictationMimeType,
-      // Options below intentionally differ from Layer 1: single speaker
-      // → no diarize, and we don't need utterance boundaries since the
-      // downstream layers treat the transcript as one block.
-      options: {
-        diarize: false,
-        utterances: false,
+      audio: {
+        stream: webStream,
+        sizeBytes: stat.size,
+        toBuffer: async () => {
+          const fresh = await streamAudio(input.dictationAudioKey);
+          const chunks: Buffer[] = [];
+          for await (const chunk of fresh) {
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+          }
+          return Buffer.concat(chunks);
+        },
       },
-      // Q2 fix-pack — same clinical-vocabulary boost as L1.
-      keyterms: CLINICAL_KEYTERMS,
+      mimeType: input.dictationMimeType,
+      deepgram: {
+        // Single-speaker dictation — disable diarize + utterances.
+        // Whisper has no equivalent toggles (it just transcribes), so
+        // the fallback path produces functionally the same flat text.
+        options: { diarize: false, utterances: false },
+        keyterms: CLINICAL_KEYTERMS,
+      },
     });
   };
 
-  let result;
+  let result: TranscribeResult;
   try {
     result = await attempt();
   } catch (err) {
@@ -89,24 +107,63 @@ export async function runLayer1bTranscribeDictation(
   // the helper returns null (we deliberately keep dictation parity
   // with the helper contract). When a future PR enables utterances
   // for dictation, the same wiring fires automatically.
-  const audioStats = computeAudioConfidenceStats(result.utterances);
+  // PR-L: same discriminated-union handling as L1.
+  const utterances =
+    result.raw.kind === 'deepgram' ? result.raw.data.utterances : [];
+  const audioStats = computeAudioConfidenceStats(utterances);
   const lowConfFlag = audioStats ? shouldFlagForReview(audioStats) : false;
+
+  const transcriptRaw =
+    result.raw.kind === 'deepgram'
+      ? result.raw.data.raw
+      : { kind: 'whisper', segments: result.raw.data.segments };
+
+  // PR-L: dictation is single-speaker so there's no diarization gap
+  // on the fallback path; the transcript is still usable. We still
+  // surface a softer review note so the doctor knows the route the
+  // recording took (helps explain stylistic differences after the
+  // fact).
+  const fallbackReviewReason = result.fallbackUsed
+    ? `Dictation transcribed by ${result.provider} (Whisper fallback) — primary Deepgram failed${result.primaryError?.message ? ` with: ${result.primaryError.message.slice(0, 120)}` : ''}. Verify the transcript before signing.`
+    : null;
 
   await prisma.transcribeVisit.update({
     where: { id: input.visitId },
     data: {
-      transcriptRaw: result.raw as unknown as object,
+      transcriptRaw: transcriptRaw as unknown as object,
       transcriptText: result.transcript,
       dictationDurationSec: result.durationSec,
       audioConfidenceStats: (audioStats ?? null) as unknown as object,
-      ...(lowConfFlag
-        ? {
-            needsReview: true,
-            reviewReason: `Audio confidence is below threshold (median ${audioStats!.median.toFixed(2)}, ${audioStats!.lowConfPct.toFixed(0)}% of utterances < ${LOW_CONFIDENCE_THRESHOLD}). Recommend manual review or re-record.`,
-          }
-        : {}),
+      transcriptionProvider: result.provider,
+      ...(fallbackReviewReason
+        ? { needsReview: true, reviewReason: fallbackReviewReason }
+        : lowConfFlag
+          ? {
+              needsReview: true,
+              reviewReason: `Audio confidence is below threshold (median ${audioStats!.median.toFixed(2)}, ${audioStats!.lowConfPct.toFixed(0)}% of utterances < ${LOW_CONFIDENCE_THRESHOLD}). Recommend manual review or re-record.`,
+            }
+          : {}),
     },
   });
+
+  // PR-L canary — same audit row L1 emits, scoped to L1b.
+  if (result.fallbackUsed) {
+    void logAudit({
+      action: 'TRANSCRIPTION_PROVIDER_FALLBACK',
+      targetType: 'TranscribeVisit',
+      targetId: input.visitId,
+      userId: input.userId,
+      practiceId: input.practiceId,
+      metadata: {
+        layer: 'L1b',
+        primaryProvider: 'deepgram-batch',
+        fallbackProvider: result.provider,
+        primaryError: result.primaryError?.message ?? null,
+        primaryStatus: result.primaryError?.status ?? null,
+        durationSec: result.durationSec,
+      },
+    });
+  }
 
   return { durationSec: result.durationSec, transcript: result.transcript };
 }
