@@ -9,31 +9,30 @@
 // At AUTOMATING (display: "Coding"), ICD/CPT chips appear at the bottom
 // with real counts pulled from the visit row.
 //
-// PATH A discipline (this PR):
-//   - No fake patient text. Every section content area is rendered as
-//     underscore blanks; the active section gets a blinking caret +
-//     a "writing…" muted indicator under the label. The typewriter
-//     "feel" comes from caret motion + label-pulse + per-section state
-//     transitions, NOT from streamed real text.
-//   - V2 (streaming partial draft) is deferred until a pilot doctor
-//     asks for it. Worker would emit Redis pubsub of incremental
-//     output; client would subscribe via scribe-ws sidecar.
+// PATH B-LITE (this PR):
+// Real content types in. After TRANSCRIBING completes, the transcript
+// text shows up on the Subjective preview slot (typed character by
+// character at ~150 chars/sec). After DRAFTING completes, the four SOAP
+// sections type in their real bodies — and the Subjective slot
+// cross-fades from transcript → soap.subjective so the doctor isn't
+// surprised by stale text. Server-side truncation keeps payload
+// bounded; full content lives on the ready view.
 //
-// Phase-event source: existing /api/visits/[id]/status polling at 1.5s
-// interval. No new schema columns; no new pubsub. Polling cadence is
-// 1.5s (down from v1's 2s) so phase transitions feel less jumpy.
+// Phase-event mechanism: existing /api/visits/[id]/status polling at
+// 1.5s. The endpoint surfaces { transcript, soap{S,O,A,P} } as
+// preview-clipped strings (600 chars / 400 per section). No worker
+// streaming changes; content is already in transcribe_visits when
+// each phase completes.
 //
 // Min-display-time: 2.4s per phase. Some phases (e.g. AUTOMATING when
-// no Rx is involved) complete faster than they're visible. Holding
-// each phase for ≥2.4s before advancing the displayed phase keeps the
-// animation smooth — the underlying data still updates immediately;
-// only the displayed phase lags. When the actual visit hits READY, we
-// transition through any unseen phases at 1.2s each before redirecting
-// (so the doctor sees Coding chips appear if they were skipped).
+// no Rx) complete fast; the displayed phase lags so transitions stay
+// visible. Typing is independent of the display-phase advance — once
+// content lands, it types until done even if the next phase has
+// already arrived.
 //
-// prefers-reduced-motion: disables the caret blink + label pulse;
-// keeps the cross-fade transitions but caps them at 90ms so the screen
-// still functions but stays visually quiet for users who opted out.
+// prefers-reduced-motion: caret blink + label pulse OFF; typing speed
+// goes 150 → 400 chars/sec so content appears nearly-instantly. The
+// typing itself stays on (it's information, not decoration).
 // ============================================================================
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -46,7 +45,6 @@ import {
   VISIT_PHASES,
   formatElapsed,
   phaseIndex,
-  sectionStates,
   statusToPhase,
   type SoapSection,
   type VisitPhase,
@@ -64,6 +62,15 @@ interface StatusResponse {
   processingStartedAt: string | null;
   icdCount: number;
   cptCount: number;
+  preview: {
+    transcript: string | null;
+    soap: {
+      subjective: string | null;
+      objective: string | null;
+      assessment: string | null;
+      plan: string | null;
+    } | null;
+  };
 }
 
 interface ProcessingTypewriterProps {
@@ -81,17 +88,54 @@ const MIN_PHASE_MS = 2400;
 const WARN_AT_MIN = 10;
 const STUCK_AT_MIN = 30;
 
+// Typing speed (characters per second). Reduced-motion mode kicks in
+// near-instant typing so the page stays calm but information doesn't
+// hide behind animation.
+const TYPE_CHARS_PER_SEC = 150;
+const TYPE_CHARS_PER_SEC_REDUCED = 400;
+
 const SOAP_SECTIONS: { key: SoapSection; label: string; rows: number }[] = [
   { key: 'subjective', label: 'Subjective', rows: 3 },
   { key: 'objective',  label: 'Objective',  rows: 2 },
   { key: 'assessment', label: 'Assessment', rows: 2 },
   { key: 'plan',       label: 'Plan',       rows: 3 },
 ];
+const SOAP_KEYS: SoapSection[] = ['subjective', 'objective', 'assessment', 'plan'];
 
-// Underscore-blank pattern. Wide enough to look like a paragraph but
-// short of a full mock paragraph (which would feel like a placeholder
-// the doctor expects to see filled in).
+// Underscore-blank pattern used for idle sections.
 const ROW_BLANK = '________ _____ ___ ______ ________ _____ ___';
+
+// Per-section content state. A section travels:
+//   idle       → typing (first time text arrives)
+//   typing     → done   (animation completes)
+//   any        → swap-out (200ms fade) → typing (new content)
+type SectionMode = 'idle' | 'typing' | 'done' | 'swap-out';
+interface SectionTarget {
+  /** Full content the typewriter is animating toward. null = nothing yet. */
+  text: string | null;
+  /** Where the text came from. Subjective swaps from 'transcript' (post-
+   *  TRANSCRIBING) to 'soap' (post-DRAFTING); the other sections only
+   *  ever land in 'soap'. */
+  source: 'transcript' | 'soap' | null;
+  /** Float so the RAF loop can advance fractional chars; we Math.floor
+   *  before rendering so a 60Hz tick at 150 cps still gives 2.5 chars
+   *  per frame and the perceived motion stays smooth. */
+  revealed: number;
+  mode: SectionMode;
+  /** Text being faded out during a swap. Rendered alongside the
+   *  current text with opacity transitioning 1→0 over 200ms. */
+  fadingText: string | null;
+}
+
+const INITIAL_SECTION_TARGET: SectionTarget = {
+  text: null,
+  source: null,
+  revealed: 0,
+  mode: 'idle',
+  fadingText: null,
+};
+
+const SWAP_FADE_MS = 200;
 
 export function ProcessingTypewriter({
   visitId,
@@ -112,14 +156,32 @@ export function ProcessingTypewriter({
   );
 
   // ── displayed phase (lagged by min-display-time) ────────────────────
-  // The "real" phase from the server can advance faster than the UI
-  // wants to show. We track displayPhase separately and advance it on
-  // a min-display schedule. This keeps the typewriter motion legible
-  // even when the worker tears through a phase in <1s.
   const [displayPhase, setDisplayPhase] = useState<VisitPhase | null>(() =>
     statusToPhase(initialStatus)
   );
   const lastDisplayChangeRef = useRef<number>(Date.now());
+
+  // ── per-section typewriter state ────────────────────────────────────
+  const [sectionTargets, setSectionTargets] = useState<
+    Record<SoapSection, SectionTarget>
+  >(() => ({
+    subjective: { ...INITIAL_SECTION_TARGET },
+    objective:  { ...INITIAL_SECTION_TARGET },
+    assessment: { ...INITIAL_SECTION_TARGET },
+    plan:       { ...INITIAL_SECTION_TARGET },
+  }));
+
+  // Detect prefers-reduced-motion (live, not just on mount, so a user
+  // toggling the OS setting mid-session takes effect).
+  const [reducedMotion, setReducedMotion] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    setReducedMotion(mq.matches);
+    const onChange = (e: MediaQueryListEvent) => setReducedMotion(e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
 
   // ── elapsed clock ───────────────────────────────────────────────────
   const [now, setNow] = useState<number>(() => Date.now());
@@ -144,8 +206,6 @@ export function ProcessingTypewriter({
         if (res.ok) {
           const body = (await res.json()) as StatusResponse;
           if (abandoned) return;
-          // Lifecycle interrupts (T-M18.3 A21 parity): visit deleted
-          // or archived in another tab → bounce to dashboard.
           if (body.deletedAt) {
             toast.info('This visit was deleted from another tab.');
             router.push('/dashboard');
@@ -162,13 +222,11 @@ export function ProcessingTypewriter({
           if (body.processingStartedAt) {
             setProcessingStartedAt(body.processingStartedAt);
           }
-          // FAILED → reload page; the FAILED-view branch in
-          // visits/[id]/page.tsx renders the failure UI.
+          ingestPreview(body.preview);
           if (body.status === 'FAILED') {
             router.refresh();
             return;
           }
-          // READY → reload to switch into the ready view.
           if (body.status === 'READY' || body.status === 'SIGNED') {
             router.refresh();
             return;
@@ -180,6 +238,101 @@ export function ProcessingTypewriter({
         if (!abandoned) timer = setTimeout(tick, POLL_MS);
       }
     };
+
+    /** Fold a poll's preview block into per-section state. The rules:
+     *
+     *   - First time `transcript` arrives: set Subjective target with
+     *     source='transcript' (start typing).
+     *   - First time `soap.subjective` arrives AND Subjective is on
+     *     transcript: trigger swap. Cross-fade old text out (200ms),
+     *     then start typing soap.subjective.
+     *   - First time `soap.{objective,assessment,plan}` arrives: set
+     *     target with source='soap' (start typing).
+     *   - Server may keep returning the same content on subsequent
+     *     polls — only act on changes (text differs from current
+     *     target).
+     *
+     *   Done-state is a function of revealed === text.length and is
+     *   computed in the RAF loop, not here.
+     */
+    function ingestPreview(preview: StatusResponse['preview']) {
+      setSectionTargets((prev) => {
+        const next = { ...prev };
+        let changed = false;
+
+        // SUBJECTIVE
+        const incomingSubj = preview.soap?.subjective ?? null;
+        const incomingTrans = preview.transcript ?? null;
+        const cur = prev.subjective;
+        if (incomingSubj) {
+          // SOAP arrived. Either swap from transcript or initial-set.
+          if (cur.text !== incomingSubj || cur.source !== 'soap') {
+            if (cur.source === 'transcript' && cur.text) {
+              // Trigger cross-fade swap.
+              next.subjective = {
+                text: incomingSubj,
+                source: 'soap',
+                revealed: 0,
+                mode: 'swap-out',
+                fadingText: cur.text.slice(0, Math.floor(cur.revealed)),
+              };
+              changed = true;
+              // Schedule the swap-out → typing transition.
+              setTimeout(() => {
+                setSectionTargets((p) => {
+                  const c = p.subjective;
+                  if (c.source !== 'soap' || c.mode !== 'swap-out') return p;
+                  return {
+                    ...p,
+                    subjective: { ...c, mode: 'typing', fadingText: null },
+                  };
+                });
+              }, SWAP_FADE_MS);
+            } else {
+              // First-time arrival for Subjective with SOAP content.
+              next.subjective = {
+                text: incomingSubj,
+                source: 'soap',
+                revealed: 0,
+                mode: 'typing',
+                fadingText: null,
+              };
+              changed = true;
+            }
+          }
+        } else if (incomingTrans && cur.source === null) {
+          // Transcript arrived first; SOAP not yet. Type the transcript
+          // as Subjective preview until SOAP lands.
+          next.subjective = {
+            text: incomingTrans,
+            source: 'transcript',
+            revealed: 0,
+            mode: 'typing',
+            fadingText: null,
+          };
+          changed = true;
+        }
+
+        // O / A / P — set on first arrival; don't restart if server
+        // sends the same content again.
+        for (const k of ['objective', 'assessment', 'plan'] as const) {
+          const incoming = preview.soap?.[k] ?? null;
+          if (incoming && (prev[k].text !== incoming || prev[k].source !== 'soap')) {
+            next[k] = {
+              text: incoming,
+              source: 'soap',
+              revealed: 0,
+              mode: 'typing',
+              fadingText: null,
+            };
+            changed = true;
+          }
+        }
+
+        return changed ? next : prev;
+      });
+    }
+
     tick();
     return () => {
       abandoned = true;
@@ -199,9 +352,6 @@ export function ProcessingTypewriter({
     const remaining = Math.max(0, MIN_PHASE_MS - elapsedSinceChange);
 
     const id = setTimeout(() => {
-      // Step exactly one phase forward — never skip multiple visible
-      // states even if real has jumped two phases. The next effect
-      // re-fires after this tick when displayPhase updates.
       const nextIdx = Math.min(VISIT_PHASES.length - 1, dispIdx + 1);
       setDisplayPhase(VISIT_PHASES[nextIdx]);
       lastDisplayChangeRef.current = Date.now();
@@ -209,8 +359,56 @@ export function ProcessingTypewriter({
     return () => clearTimeout(id);
   }, [status, displayPhase]);
 
+  // ── RAF typing loop ─────────────────────────────────────────────────
+  // Animates `revealed` toward `text.length` for any section in
+  // 'typing' mode. Frame-rate-independent (uses dt from rAF). Settles
+  // into 'done' when fully revealed; respects swap-out (no advance
+  // during fade-out).
+  useEffect(() => {
+    let raf = 0;
+    let last = performance.now();
+    const speed = reducedMotion ? TYPE_CHARS_PER_SEC_REDUCED : TYPE_CHARS_PER_SEC;
+    const loop = (t: number) => {
+      const dt = Math.min(0.1, (t - last) / 1000); // clamp for tab-switch
+      last = t;
+      setSectionTargets((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        for (const k of SOAP_KEYS) {
+          const cur = prev[k];
+          if (cur.mode !== 'typing' || !cur.text) continue;
+          const target = cur.text.length;
+          if (cur.revealed >= target) {
+            next[k] = { ...cur, mode: 'done' };
+            changed = true;
+            continue;
+          }
+          const incremented = Math.min(target, cur.revealed + speed * dt);
+          // Only re-render when the *integer* char count changed —
+          // otherwise we'd setState on every frame, scheduling
+          // 60 reconciles/sec for the same visible string.
+          if (Math.floor(incremented) !== Math.floor(cur.revealed)) {
+            next[k] = { ...cur, revealed: incremented };
+            changed = true;
+          } else {
+            // Still update the float so we accumulate toward the next
+            // integer; this doesn't trigger a render because shallow
+            // compare on objects above wraps the same value when the
+            // floor hasn't moved. Use a setTimeout-style reservation
+            // by storing the incremented float without flagging
+            // changed — the next frame picks it up.
+            next[k] = { ...cur, revealed: incremented };
+          }
+        }
+        return changed ? next : prev;
+      });
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [reducedMotion]);
+
   // ── derived ─────────────────────────────────────────────────────────
-  const sections = useMemo(() => sectionStates(displayPhase), [displayPhase]);
   const eyebrow = useMemo(
     () => (displayPhase ? PHASE_EYEBROW[displayPhase] : null),
     [displayPhase]
@@ -224,16 +422,26 @@ export function ProcessingTypewriter({
   }, [processingStartedAt, now]);
   const elapsedFmt = formatElapsed(elapsedSec);
 
-  // ── stuck-state warnings (T-M16.4 H13 parity) ───────────────────────
   const elapsedMin = elapsedSec / 60;
   const stuckLevel: 'ok' | 'warn' | 'stuck' =
     elapsedMin >= STUCK_AT_MIN ? 'stuck' : elapsedMin >= WARN_AT_MIN ? 'warn' : 'ok';
 
   const showCodingChips = displayPhase === 'Coding';
 
+  // Caret-section selection: prefer the section currently being typed
+  // (so the cursor sits at the end of the active text). If no section
+  // is typing, fall back to the phase-mapping caret position.
+  const activeTypingSection = useMemo<SoapSection | null>(() => {
+    for (const k of SOAP_KEYS) {
+      const t = sectionTargets[k];
+      if (t.mode === 'typing' || t.mode === 'swap-out') return k;
+    }
+    return null;
+  }, [sectionTargets]);
+
   return (
     <div className="qm-typewriter">
-      {/* ── Top bar: specialty badge + meta ───────────────────────── */}
+      {/* ── Top bar: specialty badge + elapsed ───────────────────── */}
       <div className="qm-tw-top">
         <div className="qm-tw-top-left">
           {specialtyLabel ? (
@@ -260,8 +468,6 @@ export function ProcessingTypewriter({
             {eyebrow?.sub ?? 'Waiting for a worker'}
           </div>
         </div>
-        {/* 5-segment phase indicator. Done segments are filled teal,
-            active segment shimmers, queued segments are dim. */}
         <div
           className="qm-tw-segments"
           role="progressbar"
@@ -272,52 +478,88 @@ export function ProcessingTypewriter({
         >
           {VISIT_PHASES.map((p, i) => {
             const di = phaseIndex(displayPhase);
-            const cls =
-              i < di ? 'done' : i === di ? 'active' : 'queued';
+            const cls = i < di ? 'done' : i === di ? 'active' : 'queued';
             return <div key={p} className={`qm-tw-seg qm-tw-seg-${cls}`} />;
           })}
         </div>
       </div>
 
-      {/* ── SOAP skeleton ─────────────────────────────────────────── */}
-      <div className="qm-tw-soap" role="region" aria-label="SOAP draft skeleton">
+      {/* ── SOAP skeleton + typewriter ────────────────────────────── */}
+      <div className="qm-tw-soap" role="region" aria-label="SOAP draft preview">
         {SOAP_SECTIONS.map((sec) => {
-          const state = sections[sec.key];
+          const target = sectionTargets[sec.key];
+          const isActiveTyping = activeTypingSection === sec.key;
+          const sectionDone = target.mode === 'done';
+          const hasContent = target.text !== null;
+          const revealedCount = Math.floor(target.revealed);
+          const revealed = target.text ? target.text.slice(0, revealedCount) : '';
+          // Section-label badge state. Subjective during transcript-phase
+          // shouldn't show ✓ (the doctor will see soap.subjective swap in
+          // shortly); use 'writing' until SOAP lands.
+          const labelState: 'idle' | 'writing' | 'done' =
+            sectionDone && target.source === 'soap'
+              ? 'done'
+              : isActiveTyping
+              ? 'writing'
+              : hasContent
+              ? 'writing' // text typed in but not yet 'done' (mostly during swap)
+              : 'idle';
           return (
             <div
               key={sec.key}
-              className={`qm-tw-section qm-tw-state-${state}`}
+              className={`qm-tw-section qm-tw-state-${labelState}`}
               data-testid={`qm-tw-section-${sec.key}`}
             >
               <div className="qm-tw-section-label-row">
                 <div className="qm-tw-section-label">{sec.label}</div>
                 <div className="qm-tw-section-badge">
-                  {state === 'done' && (
+                  {labelState === 'done' && (
                     <span className="qm-tw-check" role="img" aria-label="drafted">
                       ✓
                     </span>
                   )}
-                  {state === 'writing' && (
-                    <span className="qm-tw-writing">writing…</span>
+                  {labelState === 'writing' && (
+                    <span className="qm-tw-writing">
+                      {target.source === 'transcript'
+                        ? 'transcribing…'
+                        : 'writing…'}
+                    </span>
                   )}
                 </div>
               </div>
-              <div className="qm-tw-section-body">
-                {Array.from({ length: sec.rows }).map((_, ri) => (
-                  <div key={ri} className="qm-tw-row">
-                    <span className="qm-tw-blank">
-                      {ROW_BLANK.slice(
-                        0,
-                        ri === sec.rows - 1
-                          ? Math.floor(ROW_BLANK.length * 0.62)
-                          : ROW_BLANK.length
-                      )}
-                    </span>
-                    {state === 'writing' && ri === 0 ? (
-                      <span className="qm-tw-cursor" aria-hidden="true" />
+              <div
+                className="qm-tw-section-body"
+                aria-live={hasContent ? 'polite' : 'off'}
+                aria-atomic="false"
+              >
+                {!hasContent ? (
+                  // idle: blank rows + caret on the phase-mapping section
+                  Array.from({ length: sec.rows }).map((_, ri) => (
+                    <div key={ri} className="qm-tw-row">
+                      <span className="qm-tw-blank">
+                        {ROW_BLANK.slice(
+                          0,
+                          ri === sec.rows - 1
+                            ? Math.floor(ROW_BLANK.length * 0.62)
+                            : ROW_BLANK.length
+                        )}
+                      </span>
+                      {isActiveTyping && ri === 0 ? (
+                        <span className="qm-tw-cursor" aria-hidden="true" />
+                      ) : null}
+                    </div>
+                  ))
+                ) : (
+                  <div className="qm-tw-typed-wrap">
+                    {target.fadingText ? (
+                      <span className="qm-tw-fading">{target.fadingText}</span>
+                    ) : null}
+                    <span className="qm-tw-typed">{revealed}</span>
+                    {isActiveTyping && !sectionDone ? (
+                      <span className="qm-tw-cursor qm-tw-cursor-inline" aria-hidden="true" />
                     ) : null}
                   </div>
-                ))}
+                )}
               </div>
             </div>
           );
@@ -377,9 +619,6 @@ export function ProcessingTypewriter({
         )}
       </div>
 
-      {/* Component-scoped styles. Tailwind isn't used in this app's
-          server pages; sticking to the existing `qm-*` global class
-          conventions a la processing-state.tsx. */}
       <style jsx>{`
         .qm-typewriter {
           position: relative;
@@ -546,6 +785,8 @@ export function ProcessingTypewriter({
           font-family: "Lora", "Source Serif 4", "Iowan Old Style", Georgia, serif;
           font-size: 17px;
           line-height: 1.65;
+          word-break: break-word;
+          overflow-wrap: anywhere;
         }
         .qm-tw-row {
           display: flex;
@@ -561,6 +802,28 @@ export function ProcessingTypewriter({
         .qm-tw-state-writing .qm-tw-blank {
           color: #4a4e4b;
         }
+        .qm-tw-typed-wrap {
+          position: relative;
+          color: #c4c8c5;
+        }
+        .qm-tw-typed {
+          color: #c4c8c5;
+        }
+        .qm-tw-state-done .qm-tw-typed {
+          color: #fff;
+        }
+        .qm-tw-fading {
+          color: #c4c8c5;
+          opacity: 0.0;
+          position: absolute;
+          inset: 0;
+          animation: qm-tw-fade-out ${SWAP_FADE_MS}ms ease-out forwards;
+          pointer-events: none;
+        }
+        @keyframes qm-tw-fade-out {
+          from { opacity: 0.55; }
+          to   { opacity: 0; }
+        }
         .qm-tw-cursor {
           display: inline-block;
           width: 7px;
@@ -570,24 +833,17 @@ export function ProcessingTypewriter({
           vertical-align: -0.1em;
           animation: qm-tw-blink 1.05s ease-in-out infinite;
         }
+        .qm-tw-cursor-inline {
+          width: 8px;
+          margin-left: 2px;
+        }
         @keyframes qm-tw-blink {
-          0%,
-          49% {
-            opacity: 1;
-          }
-          50%,
-          100% {
-            opacity: 0;
-          }
+          0%, 49% { opacity: 1; }
+          50%, 100% { opacity: 0; }
         }
         @keyframes qm-tw-label-pulse {
-          0%,
-          100% {
-            opacity: 0.7;
-          }
-          50% {
-            opacity: 1;
-          }
+          0%, 100% { opacity: 0.7; }
+          50% { opacity: 1; }
         }
         .qm-tw-codes {
           grid-column: 1 / -1;
@@ -598,9 +854,7 @@ export function ProcessingTypewriter({
           opacity: 0;
           transition: opacity 0.6s;
         }
-        .qm-tw-codes-visible {
-          opacity: 1;
-        }
+        .qm-tw-codes-visible { opacity: 1; }
         .qm-tw-chip-row {
           display: flex;
           flex-wrap: wrap;
@@ -642,9 +896,7 @@ export function ProcessingTypewriter({
           line-height: 1.55;
           max-width: 420px;
         }
-        .qm-tw-reassurance-strong {
-          color: #c4c8c5;
-        }
+        .qm-tw-reassurance-strong { color: #c4c8c5; }
         .qm-tw-stuck {
           display: flex;
           flex-direction: column;
@@ -655,9 +907,7 @@ export function ProcessingTypewriter({
           border-radius: 4px;
           background: rgba(255, 200, 100, 0.04);
         }
-        .qm-tw-stuck-warn {
-          border-color: rgba(255, 200, 100, 0.16);
-        }
+        .qm-tw-stuck-warn { border-color: rgba(255, 200, 100, 0.16); }
         .qm-tw-stuck-stuck {
           border-color: rgba(255, 130, 130, 0.24);
           background: rgba(255, 130, 130, 0.04);
@@ -674,15 +924,40 @@ export function ProcessingTypewriter({
           color: #7a7e7b;
           letter-spacing: 0.16em;
         }
+        @media (max-width: 720px) {
+          .qm-typewriter {
+            padding: 24px 20px 24px 20px;
+          }
+          .qm-tw-soap {
+            grid-template-columns: 96px 1fr;
+            gap: 20px 16px;
+          }
+          .qm-tw-section-body {
+            font-size: 15px;
+          }
+          .qm-tw-codes {
+            grid-template-columns: 96px 1fr;
+            gap: 16px;
+          }
+          .qm-tw-eyebrow-row {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 14px;
+          }
+          .qm-tw-bottom {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 14px;
+          }
+        }
         @media (prefers-reduced-motion: reduce) {
           .qm-tw-cursor,
           .qm-tw-state-writing .qm-tw-section-label,
           .qm-tw-seg-active::after {
             animation: none;
           }
-          .qm-tw-cursor {
-            opacity: 0.65;
-          }
+          .qm-tw-cursor { opacity: 0.65; }
+          .qm-tw-fading { animation-duration: 60ms; }
           .qm-tw-codes,
           .qm-tw-section-label,
           .qm-tw-blank,
@@ -696,9 +971,6 @@ export function ProcessingTypewriter({
 }
 
 // ── stuck-state retry button ─────────────────────────────────────
-// Same retry shape as the v1 processing-state. POSTs to the existing
-// /api/visits/[id]/retry endpoint; redirects to /dashboard when
-// the visit's retry budget is exhausted.
 function RetryButton({ visitId }: { visitId: string }) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
