@@ -172,8 +172,13 @@ services:
 
   # ── MinIO (S3-compatible object storage for audio) ──
   # Browsers upload audio directly here via presigned PUT URLs (spec §10).
-  # The worker downloads by object key. Data lives in a docker volume —
-  # production must enable SSE-S3 + verify disk-level encryption (M7).
+  # The worker downloads by object key. Data lives in a docker volume.
+  # PR-M Path B: SSE-S3 server-side encryption is enabled via
+  # MINIO_KMS_SECRET_KEY (see env section below). Bucket-level default
+  # encryption is set by scripts/minio-enable-sse.sh, which is run
+  # post-deploy. KES sidecar deferred to multi-tenant scope —
+  # rationale + rotation runbook in docs/security-audits/
+  # minio-sse-bootstrap.md.
   minio:
     image: minio/minio:latest
     restart: unless-stopped
@@ -199,6 +204,15 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-meddoc}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-changeme_in_production}
+      # PR-M Path B: built-in single-key KMS for SSE-S3. Format is
+      # `<key-name>:<base64-32-bytes>`. The key NAME (quillmd-master-key-1)
+      # is referenced by every bucket's encryption config, so it must
+      # not change without a re-encryption sweep. Value lives only in
+      # /opt/meddoc-pro/.env (gitignored). Rotation: add
+      # quillmd-master-key-2 alongside -1, `mc encrypt rotate`, then
+      # deprecate -1 once existing objects are re-encrypted. See
+      # docs/security-audits/minio-sse-bootstrap.md.
+      MINIO_KMS_SECRET_KEY: ${MINIO_KMS_SECRET_KEY}
     volumes:
       - minio_data:/data
     ports:
