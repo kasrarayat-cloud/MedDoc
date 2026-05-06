@@ -1,5 +1,35 @@
 # Edge security — operator runbook (Round 3 PR-B)
 
+> **Updated 2026-05-06 (PR-N):** The recommended way to apply this
+> runbook is now `scripts/edge-security-apply.sh` — an idempotent
+> wrapper that turns the 30+ sudo commands below into a small set
+> of explicit `--phase=NAME go` invocations, with kill-switch
+> arming via `at(1)`, dry-run previews of every destructive step,
+> and per-phase rollback on failure.
+>
+> **This runbook remains authoritative reference.** Read it first
+> to understand WHAT each phase does. Then use the script to
+> actually apply, e.g.:
+>
+> ```
+> sudo bash scripts/edge-security-apply.sh --help
+> sudo bash scripts/edge-security-apply.sh --status
+> sudo bash scripts/edge-security-apply.sh --phase=pre
+> sudo bash scripts/edge-security-apply.sh --kill-switch arm go
+> sudo bash scripts/edge-security-apply.sh --phase=ssh go
+> sudo bash scripts/edge-security-apply.sh --phase=ufw go
+> sudo bash scripts/edge-security-apply.sh --phase=fail2ban go
+> sudo bash scripts/edge-security-apply.sh --phase=evict-deal-hunter go
+> sudo bash scripts/edge-security-apply.sh --phase=verify
+> sudo bash scripts/edge-security-apply.sh --kill-switch cancel go
+> ```
+>
+> The script wraps the runbook's commands verbatim — zero deviations
+> from the parameters below (allowed ports, fail2ban thresholds,
+> AllowUsers list, DOCKER-USER fragment, ai-deal-hunter handling).
+> If the script ever surprises you, fall back to the manual steps;
+> they are still correct.
+
 **Closes audit findings:** A07-P0-001 (sshd `PermitRootLogin yes`), A07-P0-002 (UFW disabled / no nftables), A07-P0-003 (root `ai-deal-hunter` uvicorn cohabits PHI VPS).
 
 **Risk profile:** **HIGH.** SSH lockout and Docker-network break are both real possibilities. Read the whole runbook before starting. Have the Zap Hosting web console open in a separate browser tab. Have a SECOND SSH session open as fallback. Never reload sshd without first validating with `sshd -t`.
