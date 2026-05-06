@@ -233,3 +233,43 @@ After completing this runbook, reconcile:
 - [ ] `.env` — chmod 600 verified post-edit
 - [ ] Smoke test §4 ran cleanly with redacted output
 - [ ] Quota alert configured at 80% in sentry.io
+
+---
+
+## PR-O closure (2026-05-06)
+
+A separate operator (Claude in chat) drafted a "Sentry foundation"
+PR brief on 2026-05-06 unaware that T-M16.3 + Round 3 PR-H had
+already shipped the foundation. Lead investigated per memory #16
+and closed PR-O as NAB. Three polish items were noted at
+`docs/backlog/sentry-polish.md` for future consideration; none
+are BAA-blocking.
+
+**Foundation status:** COMPLETE.
+**Activation status:** PENDING — gated on Sentry BAA per the
+activation flow in §3 + §5 above.
+
+Settled questions captured here so future investigations don't
+re-walk them:
+
+- **Why `redactPhi` (from `@meddoc/ai/log.ts`) over a per-PR scrubber?**
+  `redactPhi` collapses any string longer than 20 words to a
+  length marker (`[REDACTED:NNNw]`). Clinical free-text and
+  transcripts routinely exceed 20 words. Replacing it with a
+  500-char-threshold variant proposed in the PR-O brief would be
+  strictly less safe — most transcripts pass through 500 chars
+  before reaching 20 words.
+- **Why per-app DSN env vars instead of a single `SENTRY_DSN`?**
+  `SENTRY_DSN_TRANSCRIBE_MD` + `SENTRY_DSN_MARKETING` (with
+  `SENTRY_DSN` fallback) lets each app land in its own Sentry
+  project with its own alert routing. A single DSN would funnel
+  marketing typos into the same triage queue as worker pipeline
+  errors.
+- **Why `tracesSampleRate: 0` permanently in foundation?**
+  Performance traces include URL paths and span attributes that
+  can carry visit UUIDs / patient IDs. Until the post-activation
+  PHI sweep confirms `beforeSend` catches everything, traces
+  stay off. Future: `0.1` once the sweep is clean.
+- **Why no Sentry session replay?** Replay captures DOM, which
+  on the visit-detail page includes transcript text. Permanently
+  off-limits regardless of BAA.
