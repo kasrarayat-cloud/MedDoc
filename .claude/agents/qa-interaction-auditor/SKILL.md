@@ -20,6 +20,7 @@ later PR that never landed.
 Lead recognizes any of these phrases as a request to invoke this
 agent:
 
+**Per-page invocations:**
 - "Run the QA agent / QA sweep / interaction sweep"
 - "Audit the [page name] for UX bugs"
 - "Find no-op buttons / silent failures / stub features on [page]"
@@ -27,20 +28,36 @@ agent:
 - "Walk through the [workflow name] looking for bugs"
 - "Run the interaction auditor"
 
+**Full-site invocations (v2+):**
+- "Run the full site QA sweep"
+- "Audit the entire site for UX bugs"
+- "Walk every page looking for bugs"
+
+For per-page calls, Lead picks the matching walker from
+`scripts/sweep-<page>.mjs`. For full-site calls, Lead invokes
+`scripts/sweep-all.mjs` which orchestrates every walker
+sequentially + writes a single aggregated report.
+
 ## Scope
 
-**In scope:**
-- `apps/transcribe-md/src/**` — every UI surface in the doctor app
-- `apps/marketing/src/**` — every public-facing page
-- Any new app added to the QuillMD monorepo (auto-discover via
-  `apps/*/package.json`)
+**In scope** — every UI surface in QuillMD, enumerated in
+[`skills/site-map.md`](skills/site-map.md):
+
+- `apps/transcribe-md/src/**` — 19 routes (6 public, 13
+  authenticated; 5 of the authenticated are SUPER_ADMIN-gated).
+- `apps/marketing/src/**` — 10 public landing-site routes.
+- Any new app added to the QuillMD monorepo. The site-map
+  entry + the matching walker script must land in the same
+  PR as the new route — orphan routes (in code but missing
+  from the site-map) are surfaces no one is auditing.
 
 **Out of scope:**
-- `apps/meddoc-pro` (per memory #9 — out of project scope)
+- `apps/meddoc-pro` (per memory #9 — out of project scope; CRM
+  is a separate project).
 - Backend-only logic (use a different audit pattern; flag for the
-  AI pipeline auditor or the Round 3 audit suite if relevant)
-- Visual regression / pixel diffs (separate agent if needed later)
-- E2E flows that require real PHI uploads (test fixtures only)
+  AI pipeline auditor or the Round 3 audit suite if relevant).
+- Visual regression / pixel diffs (separate agent if needed later).
+- E2E flows that require real PHI uploads (test fixtures only).
 
 ## Methodology
 
@@ -66,8 +83,10 @@ I walk the application in five passes, in this order:
    block per finding, no prose.
 
 Read these files before starting:
+- [`skills/site-map.md`](skills/site-map.md) — every QuillMD
+  route + matching walker script + coverage status
 - [`skills/bug-patterns.md`](skills/bug-patterns.md) — taxonomy +
-  real verbatim examples from production bugs this week
+  real verbatim examples from production bugs the agent has caught
 - [`skills/quillmd-workflows.md`](skills/quillmd-workflows.md) —
   the sign-and-send doctor workflow + every interactive element in
   it, with `file:line` cites
@@ -99,17 +118,35 @@ Read these files before starting:
 
 When Kasra speaks one of the trigger phrases above, Lead:
 
-1. Opens this `SKILL.md` and reads the four `skills/*.md` files
-   into context.
-2. Reads `fixtures/test-user.md` to confirm the test user exists.
-   If not, surfaces the seed command for Kasra to run once.
-3. Runs `scripts/sweep-visit-page.mjs` (or the equivalent for
-   the page Kasra named) against the target page.
+1. Opens this `SKILL.md` and reads the five `skills/*.md` files
+   (including `site-map.md`) into context.
+2. Reads `fixtures/test-user.md` + `fixtures/seeded-ids.json` to
+   confirm the test user exists. If `seeded-ids.json` is missing
+   or stale, surfaces the seed command for Kasra to run once.
+3. Determines target:
+   - **Per-page** trigger → runs the matching walker per
+     `skills/site-map.md` (e.g. `scripts/sweep-dashboard.mjs`).
+   - **Full-site** trigger → runs `scripts/sweep-all.mjs`. That
+     orchestrator runs every walker sequentially (memory #17 —
+     no parallel browser launches on this VPS), aggregates the
+     NDJSON output, and writes one unified report.
 4. Pipes the script's structured JSON output into the report
    template from `skills/reporting-format.md`.
-5. Surfaces the report to Kasra. NEVER auto-fixes anything.
+5. Surfaces the report to Kasra. **Never auto-fixes anything.**
 
 Lead does the agent work in the main conversation; this skill is
 the contract Lead follows. Sub-agent isolation isn't required for
 this work because the methodology is well-defined and the output is
 read-only.
+
+### Walker tiers
+
+Walkers fall into two tiers, marked in `skills/site-map.md`:
+
+- **🟡 stub** (default) — confirms the page loads as the right
+  user, captures interactive-element counts, exits cleanly. The
+  v2 baseline; future iterations deepen them.
+- **✅ full** — full element walk + DB diff per click + Caddy log
+  inspection per click + audit-row diff. Today only
+  `sweep-visit-page.mjs` is at this tier. New `✅` walkers come
+  online when someone wires real assertions into a 🟡 walker.

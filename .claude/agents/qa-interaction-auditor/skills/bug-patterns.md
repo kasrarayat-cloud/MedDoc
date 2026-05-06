@@ -310,3 +310,101 @@ Skip the following — they look bug-shaped but aren't:
   event name or payload.
 - E2E test code (`tests/automated/e2e/**`, `*.spec.ts`,
   `*.test.tsx`) — fixtures and mocks legitimately stub things out.
+
+## Pattern D — Fixture / seed-script bugs that gate the agent itself
+
+**What it looks like:** the seed script for the QA test user creates
+a row that *technically* exists but is missing fields the auth flow
+checks. The agent reports "login failed" on its first PASS B run, the
+operator reads the form-level error message, fixes the seed script
+in a follow-up PR. This is the most "agent-eats-its-own-dogfood"
+class of bug — the agent's job is to find UX bugs, but if its own
+fixture is broken, it can't get past the front door.
+
+### Real example (PR #135 / 2026-05-06 — F-07 + F-08)
+
+Pre-fix verbatim from `apps/transcribe-md/scripts/seed-qa-user.ts`
+(the user.upsert payload — both branches missed two fields):
+
+```ts
+const user = await prisma.user.upsert({
+  where: { email: QA_EMAIL },
+  update: {
+    passwordHash,
+    role: 'DOCTOR',
+    isActive: true,
+    lockedUntil: null,
+    failedLoginCount: 0,
+    practiceId: PRACTICE_ID,
+    specialty: 'family-medicine',
+    timeZone: 'America/Los_Angeles',
+    // F-07: emailVerified missing; login refuses with
+    //       "Please verify your email before signing in."
+    // F-08: products missing; login refuses with
+    //       "This account is for MedDoc Pro, not TranscribeMD."
+  },
+  create: { /* same omissions */ },
+});
+```
+
+The transcribe-md auth flow gates on:
+1. `users.emailVerified !== null` (`apps/transcribe-md/src/actions/
+   auth.ts` — verify-before-sign-in block)
+2. `users.products` includes `Product.TRANSCRIBE_MD` (same file,
+   line 213 — cross-app-redirect block)
+
+A user row that satisfies neither was the equivalent of a seed
+script that creates an account but locks it. The agent's first
+PASS B run produced two findings + the operator fixed both in a
+single seed-script patch.
+
+### Detection — what to grep for
+
+Seed scripts that create User rows and miss required-for-login
+fields. Two greps:
+
+```bash
+# 1. Find every User upsert / create in scripts/
+grep -rEn "prisma\.user\.(upsert|create)" \
+  apps/*/scripts/ apps/meddoc-pro/scripts/ 2>/dev/null
+
+# 2. For each match, check the payload for ALL of:
+#    emailVerified, products, role, isActive, lockedUntil
+# A missing emailVerified or products entry is a candidate;
+# verify by checking the auth route's gates.
+```
+
+The agent's preventive grep on a new seed script:
+
+```bash
+# All required-for-login fields (transcribe-md)
+for FIELD in emailVerified products role isActive; do
+  if ! grep -qF "$FIELD" path/to/seed-script.ts; then
+    echo "FINDING: seed missing '$FIELD'"
+  fi
+done
+```
+
+### Why this matters past the immediate bug
+
+Every seed script that creates a User row is a candidate for the
+same gap. A new `seed-staff-user.ts`, `seed-admin.ts`, etc. should
+be auto-checked against this pattern. The QA agent's role is to
+catch this once + write the regression test
+(`tests/scripts/seed-qa-user.test.ts` for the QA fixture; future
+seed scripts should mirror its `buildUserUpsertPayload` shape +
+guard tests).
+
+### Severity rubric for fixture-gap findings
+
+- **P1** — fixture gap that gates an agent capability (login,
+  visit creation, etc.). One-line fix in the seed script
+  unblocks the agent permanently.
+- **P3** — fixture gap that only affects niche test paths
+  (specific role permutations, edge-case roles). Same shape but
+  smaller blast radius.
+
+Never **P0** unless the fixture gap exposes a product bug
+(e.g. seed creates a user with `isActive: false` and the agent
+discovers the inactive-user gate is broken — the seed-side bug
+is then secondary to the product-side finding).
