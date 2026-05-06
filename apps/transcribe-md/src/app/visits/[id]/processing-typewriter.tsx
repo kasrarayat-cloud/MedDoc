@@ -264,7 +264,11 @@ export function ProcessingTypewriter({
             active segment shimmers, queued segments are dim. */}
         <div
           className="qm-tw-segments"
-          aria-label={`Phase ${(phaseIndex(displayPhase) + 1)} of ${VISIT_PHASES.length}`}
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={VISIT_PHASES.length}
+          aria-valuenow={Math.max(0, phaseIndex(displayPhase) + 1)}
+          aria-valuetext={`Phase ${Math.max(0, phaseIndex(displayPhase) + 1)} of ${VISIT_PHASES.length}: ${eyebrow?.primary ?? 'Queued'}`}
         >
           {VISIT_PHASES.map((p, i) => {
             const di = phaseIndex(displayPhase);
@@ -289,7 +293,7 @@ export function ProcessingTypewriter({
                 <div className="qm-tw-section-label">{sec.label}</div>
                 <div className="qm-tw-section-badge">
                   {state === 'done' && (
-                    <span className="qm-tw-check" aria-label="drafted">
+                    <span className="qm-tw-check" role="img" aria-label="drafted">
                       ✓
                     </span>
                   )}
