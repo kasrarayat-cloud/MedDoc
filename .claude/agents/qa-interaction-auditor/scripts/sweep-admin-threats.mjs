@@ -1,5 +1,11 @@
 #!/usr/bin/env node
-// sweep-admin-threats.mjs — /admin/threats (SUPER_ADMIN-gated; DOCTOR → 404).
+// sweep-admin-threats.mjs — /admin/threats (gate-check tier, v3.3).
+// SUPER_ADMIN-gated; QA test user is DOCTOR → admin/layout.tsx
+// notFound() should fire. A 200 here = gate broken = finding.
+// Read-only walker — page-load smoke + `looksGated` assertion.
+// No clicks; uses fresh `login(page)` to keep the ≤12h session-
+// freshness check satisfied (so a 404 here means the role gate
+// fired, not the freshness gate).
 
 import { emit, login, launchBrowser, newAppContext, smokeLoad } from './lib/walker-base.mjs';
 
