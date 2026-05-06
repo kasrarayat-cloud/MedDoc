@@ -270,9 +270,25 @@ async function main() {
         // the same shape as sweep-dashboard.mjs.
         const urlBefore = page.url();
 
-        const selectorSpec = el.ariaLabel
-          ? { role: el.role ?? (el.tag === 'a' ? 'link' : 'button'), name: el.ariaLabel }
-          : { text: el.text || '?', exact: false };
+        // F-16 closure: prefer href-based locators for filter pills
+        // (and any other anchor with a stable href). Visible text is
+        // a fragile selector — renaming "All" → "Show all" would
+        // silently break the walker. The href is the contract; the
+        // label is decoration.
+        let selectorSpec;
+        if (isFilterPill) {
+          // Pin by exact href — `/visits` for the all pill, otherwise
+          // `/visits?filter=<id>`. CSS attribute selector is what
+          // Playwright resolves cheapest.
+          selectorSpec = `a[href="${el.href}"]`;
+        } else if (el.ariaLabel) {
+          selectorSpec = {
+            role: el.role ?? (el.tag === 'a' ? 'link' : 'button'),
+            name: el.ariaLabel,
+          };
+        } else {
+          selectorSpec = { text: el.text || '?', exact: false };
+        }
 
         const result = await clickAndClassify(page, {
           name: el.text || el.ariaLabel || `(${el.tag})`,
