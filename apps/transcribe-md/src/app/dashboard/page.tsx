@@ -24,6 +24,7 @@ import { Suspense } from 'react';
 import prisma from '@meddoc/db';
 import { TranscribeVisitStatus } from '@prisma/client';
 import { auth } from '@/lib/nextauth';
+import { logAudit } from '@/lib/audit';
 import { AppFrame } from '@/components/ui/app-frame';
 import { StatCard } from '@/components/dashboard/stat-card';
 import { Greeting } from '@/components/dashboard/greeting';
@@ -152,6 +153,23 @@ async function DashboardBody({
 
   const avgDraftedSec = avgDraftedAgg._avg.draftedInSeconds;
   const avgDraftedMin = avgDraftedSec != null ? Math.round(avgDraftedSec / 60) : null;
+
+  // §164.312(b) audit row — F-09 from QA agent v3.2 discovery report.
+  // The dashboard reads the patient + visit lists for this user; that's
+  // a PHI-adjacent surface and Round 3 PR-C's coverage missed it.
+  // Fire-and-forget per the patient/visit-list precedent — `logAudit`
+  // is internally try/wrapped so failures never break the render.
+  void logAudit({
+    action: 'VIEWED_DASHBOARD',
+    targetType: 'User',
+    targetId: userId,
+    metadata: {
+      source: 'rsc:/dashboard',
+      activeTab,
+      patientCount,
+      activeVisitCount,
+    },
+  });
 
   const firstName = userName ? userName.trim().split(/\s+/)[0] ?? null : null;
 
