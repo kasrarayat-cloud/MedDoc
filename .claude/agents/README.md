@@ -9,6 +9,7 @@ domain-knowledge documents.
 |---|---|---|---|
 | [`qa-interaction-auditor`](./qa-interaction-auditor/) | **active** (v3.3) | Walks the QuillMD UI clicking every interactive element + verifies each click produces the state change it appears to. Catches feature stubs, orphan event dispatchers, "pretend success" fallbacks, and parser/renderer mismatches. | "Run the QA agent / QA sweep / interaction sweep" |
 | [`ai-pipeline-auditor`](./ai-pipeline-auditor/) | **DORMANT (designed, not activated)** | Audits the AI pipeline (transcribe → SOAP → coding → Rx → referral) for cost / quality / coverage / model-assignment drift. Read-only against `transcribe_visits` + `ai_calls` + `audit_logs` + eval results. | "Run the AI pipeline audit" (post-activation) |
+| [`hipaa-compliance-auditor`](./hipaa-compliance-auditor/) | **DORMANT (designed, staged activation)** | Audits HIPAA compliance posture: §164.308 (admin) + §164.310 (physical attestation) + §164.312 (technical — access control, audit controls, integrity, auth, transmission). Read-only against `audit_logs` + users + sessions + filesystem + container env. **Does NOT read PHI content; counts bucketed; visit IDs short-hashed in reports.** Per-phase activation gating — most phases run today; phases 2+3 wait for pilot data. | "Run the HIPAA compliance audit" (post-activation) |
 
 ## Activation gates
 
@@ -21,6 +22,15 @@ until the underlying signal exists:
   be stylistic rather than behavioral. See
   [`ai-pipeline-auditor/skills/activation-criteria.md`](./ai-pipeline-auditor/skills/activation-criteria.md)
   for the full activation runbook + pre-pilot polish backlog.
+- **`hipaa-compliance-auditor`** — staged activation. Most
+  phases (0/1/4/5/6/7/8/9) can run today; phases 2 + 3 (audit
+  controls + integrity) wait for the same pilot-data threshold
+  as `ai-pipeline-auditor`. Initial activation enables the
+  today-runnable phases; mid-pilot activation enables phases 2
+  + 3. See
+  [`hipaa-compliance-auditor/skills/activation-criteria.md`](./hipaa-compliance-auditor/skills/activation-criteria.md)
+  for the staged runbook + 12-item pre-activation polish
+  backlog.
 
 A DORMANT agent ships as a design artifact (directory + skills
 docs) but **does NOT have a `SKILL.md`** — its absence keeps
