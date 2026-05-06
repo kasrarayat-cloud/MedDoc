@@ -29,7 +29,7 @@ Status legend:
 | `/visits` | `src/app/visits/page.tsx` | DOCTOR / STAFF / ADMIN | `sweep-visits-list.mjs` | ✅ | All-visits list with 5 filter pills (URL-driven). v3.2 deep walker clicks each pill, asserts URL changes + zero `transcribe_visits` writes (filter is RSC-read-only). Filter-pill locator pins to `a[href="/visits[?filter=...]"]` (F-16 hardening — text-locator collision-prone). Visit-row links enumerated but not clicked (outbound). |
 | `/visits/new` | `src/app/visits/new/page.tsx` | DOCTOR / STAFF / ADMIN | `sweep-new-visit.mjs` | ✅ | Two-stage wizard (PatientPicker → VisitFormStep2). Deep walker lands on Stage 2 via `?patientId=<seeded>`; `--stage 1` walks the picker. **Submit/Continue tiles enumerated but NOT clicked** — would create a real visit + fire AI pipeline. |
 | `/visits/[id]` | `src/app/visits/[id]/page.tsx` | DOCTOR / STAFF / ADMIN | `sweep-visit-page.mjs` | ✅ | **The flagship walker.** Refactored in v3.1 to use `deepWalk()` + storageState reuse + `--scenario` flag (4 fixture variants). |
-| `/visits/[id]/record` | `src/app/visits/[id]/record/page.tsx` | DOCTOR / STAFF / ADMIN | `sweep-visit-record.mjs` | 🟡 | Live MediaRecorder dictation interface. Skipped today (needs draft-mode visit + getUserMedia mock). |
+| `/visits/[id]/record` | `src/app/visits/[id]/record/page.tsx` | DOCTOR / STAFF / ADMIN | `sweep-visit-record.mjs` | ✅ | Live MediaRecorder dictation interface. v3.3 deep walker — uses `lib/media-mocks.mjs` (`addInitScript` of getUserMedia + MediaRecorder stubs) so headless Chromium never asks for the mic. Lands on the seeded `recordDraft` fixture (status=QUEUED). Clicks "Start recording", asserts NO_NETWORK_FIRED + DOM transition to RECORDING phase. **"Stop & process" enumerated but NOT clicked** — that triggers `/dictation/upload` (out of read-only scope). |
 | `/patients` | `src/app/patients/page.tsx` | DOCTOR / STAFF / ADMIN | `sweep-patients-list.mjs` | 🟡 | Practice patient list, searchable. |
 | `/patients/[id]` | `src/app/patients/[id]/page.tsx` | DOCTOR / STAFF / ADMIN | `sweep-patient-detail.mjs` | ✅ | Patient detail with Visits / Notes / Files / Trash tabs. Deep walker (v3.2) — tab-stateful clicks + dialog triggers + read-scoping check on `transcribe_md_patients`. Trash tab walked only when DOM-present. |
 | `/settings` | `src/app/settings/page.tsx` | DOCTOR / STAFF / ADMIN | `sweep-settings.mjs` | ✅ | Profile / security / sessions / data / billing / danger zone. **Most delicate walker:** 8 destructive buttons (delete account, sign-out-all, password change, MFA toggle, Stripe portal, data export, send-confirmation, sign-out) explicitly enumerated-but-not-clicked via the `FORBIDDEN_BUTTONS` safety net. |
@@ -134,8 +134,11 @@ The remaining 🟡 routes (admin / public / marketing) stay 🟡
 indefinitely. Marketing has no DB writes; admin pages 404 for
 DOCTOR-role test user (the gate check IS the deep walk); public
 pages can't safely submit forms in QA (would create stale users /
-fire real emails). `/visits/[id]/record` stays 🟡 pending a
-getUserMedia mock and a draft-mode fixture.
+fire real emails). `/visits/[id]/record` was promoted to ✅ in
+v3.3 via the `lib/media-mocks.mjs` `addInitScript` payload (stubs
+`getUserMedia` + `MediaRecorder` so headless Chromium never opens
+the mic) plus the seeded `recordDraft` fixture
+(`qa_fix_visit_record_draft`, status=QUEUED).
 
 ## When a new route is added to the app
 
