@@ -88,11 +88,16 @@ const MIN_PHASE_MS = 2400;
 const WARN_AT_MIN = 10;
 const STUCK_AT_MIN = 30;
 
-// Typing speed (characters per second). Reduced-motion mode kicks in
-// near-instant typing so the page stays calm but information doesn't
-// hide behind animation.
-const TYPE_CHARS_PER_SEC = 150;
-const TYPE_CHARS_PER_SEC_REDUCED = 400;
+// Typing speed (characters per second), per source. Transcript stays
+// at the calmer 150 cps because it's a single section and reads well
+// at that pace. SOAP is 300 cps because real sections run 1500-3200
+// chars (per the live distribution analysis); 150 cps would drag a
+// 3200-char Subjective out for >20s, longer than the AUDITING phase
+// itself. Reduced-motion floods content nearly-instantly so the page
+// stays quiet for users who opted out of animation.
+const TYPE_CHARS_PER_SEC_TRANSCRIPT = 150;
+const TYPE_CHARS_PER_SEC_SOAP = 300;
+const TYPE_CHARS_PER_SEC_REDUCED = 800;
 
 const SOAP_SECTIONS: { key: SoapSection; label: string; rows: number }[] = [
   { key: 'subjective', label: 'Subjective', rows: 3 },
@@ -364,10 +369,28 @@ export function ProcessingTypewriter({
   // 'typing' mode. Frame-rate-independent (uses dt from rAF). Settles
   // into 'done' when fully revealed; respects swap-out (no advance
   // during fade-out).
+  //
+  // Earlier version had a "render throttle" else-branch that wrote the
+  // float to `next[k]` but DIDN'T set `changed = true` — the reducer
+  // returned `prev`, the partial increment was discarded, and on
+  // high-refresh displays (120–240 Hz, common on clinical iPads /
+  // modern MacBooks) where `speed * dt < 1 char/frame`, the float
+  // never accumulated. `revealed` froze one integer below
+  // `text.length`, mode never flipped to 'done', and all sections
+  // stayed in "writing…" forever. Fix: always commit + flag changed.
+  // The render-throttle is unnecessary anyway because the rendered
+  // string slice uses Math.floor(target.revealed), so identical
+  // integer slices produce identical text-node strings — React's DOM
+  // diff bails out at the cheap level.
   useEffect(() => {
     let raf = 0;
     let last = performance.now();
-    const speed = reducedMotion ? TYPE_CHARS_PER_SEC_REDUCED : TYPE_CHARS_PER_SEC;
+    const speedSoap = reducedMotion
+      ? TYPE_CHARS_PER_SEC_REDUCED
+      : TYPE_CHARS_PER_SEC_SOAP;
+    const speedTranscript = reducedMotion
+      ? TYPE_CHARS_PER_SEC_REDUCED
+      : TYPE_CHARS_PER_SEC_TRANSCRIPT;
     const loop = (t: number) => {
       const dt = Math.min(0.1, (t - last) / 1000); // clamp for tab-switch
       last = t;
@@ -383,22 +406,11 @@ export function ProcessingTypewriter({
             changed = true;
             continue;
           }
+          const speed =
+            cur.source === 'transcript' ? speedTranscript : speedSoap;
           const incremented = Math.min(target, cur.revealed + speed * dt);
-          // Only re-render when the *integer* char count changed —
-          // otherwise we'd setState on every frame, scheduling
-          // 60 reconciles/sec for the same visible string.
-          if (Math.floor(incremented) !== Math.floor(cur.revealed)) {
-            next[k] = { ...cur, revealed: incremented };
-            changed = true;
-          } else {
-            // Still update the float so we accumulate toward the next
-            // integer; this doesn't trigger a render because shallow
-            // compare on objects above wraps the same value when the
-            // floor hasn't moved. Use a setTimeout-style reservation
-            // by storing the incremented float without flagging
-            // changed — the next frame picks it up.
-            next[k] = { ...cur, revealed: incremented };
-          }
+          next[k] = { ...cur, revealed: incremented };
+          changed = true;
         }
         return changed ? next : prev;
       });
@@ -804,12 +816,9 @@ export function ProcessingTypewriter({
         }
         .qm-tw-typed-wrap {
           position: relative;
-          color: #c4c8c5;
+          color: #fff;
         }
         .qm-tw-typed {
-          color: #c4c8c5;
-        }
-        .qm-tw-state-done .qm-tw-typed {
           color: #fff;
         }
         .qm-tw-fading {
