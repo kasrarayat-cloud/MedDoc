@@ -117,7 +117,11 @@ export type AuditAction =
   // §164.312(b) audit-row coverage extension (QA agent v3.2 F-09/F-10/F-11)
   | 'VIEWED_DASHBOARD'
   | 'VISIT_CREATED'
-  | 'VIEWED_SETTINGS';
+  | 'VIEWED_SETTINGS'
+  // PR-L follow-up: Whisper-fallback canary. Layer-1 (and 1b dictation)
+  // emit this when the transcribe() orchestrator's primary Deepgram
+  // call failed and Whisper saved the visit.
+  | 'TRANSCRIPTION_PROVIDER_FALLBACK';
 
 export interface AuditLogInput {
   action: AuditAction;

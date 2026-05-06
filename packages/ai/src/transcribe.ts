@@ -48,6 +48,24 @@ import type { AiLogContext } from './types';
  *  unit cost; the orchestrator just calls it. */
 const deepgramBatchCostCentsHelper = deepgramBatchCostCents;
 
+/** PR-L follow-up: stream-with-fallback-buffer source. The Deepgram
+ *  primary path uses the stream (preserves T-M18.2's streaming
+ *  optimization — never buffers the full audio in worker RAM). When
+ *  fallback fires, the orchestrator calls toBuffer() to materialize
+ *  the audio for Whisper (which only accepts multipart Buffer).
+ *
+ *  Callers (Layer-1) implement toBuffer() by re-opening the MinIO
+ *  source + draining — the original stream above has been consumed
+ *  by the failed Deepgram attempt, so a fresh open is required.
+ */
+export interface TranscribeStreamSource {
+  stream: ReadableStream<Uint8Array>;
+  sizeBytes: number;
+  toBuffer: () => Promise<Buffer>;
+}
+
+export type TranscribeAudioSource = Buffer | TranscribeStreamSource;
+
 /** Tag the orchestrator stamps on every result so downstream Layer
  *  2/3 + the audit trail know which provider produced this transcript.
  *  `whisper-fallback` is the canary value: any visit carrying this
@@ -58,10 +76,14 @@ export type TranscriptionProvider =
   | 'whisper-fallback';
 
 export interface TranscribeArgs extends AiLogContext {
-  /** Raw audio bytes. The orchestrator passes through to the
-   *  underlying provider. Files > 25 MB skip Whisper fallback (per
-   *  WHISPER_MAX_BYTES); a Deepgram failure on those surfaces. */
-  audio: Buffer;
+  /** Audio source. Buffer = always-buffered shape (small files,
+   *  legacy callers, tests). TranscribeStreamSource = stream-first
+   *  shape that preserves T-M18.2's RAM optimization on the
+   *  Deepgram primary path; the orchestrator calls toBuffer() only
+   *  when fallback fires.
+   *  Files > 25 MB skip Whisper fallback (per WHISPER_MAX_BYTES);
+   *  a Deepgram failure on those surfaces. */
+  audio: TranscribeAudioSource;
   /** MIME type — both providers auto-detect from this. */
   mimeType: string;
   /** IETF language tag. Defaults to 'en'. */
@@ -101,6 +123,11 @@ export interface TranscribeResult {
     | { kind: 'whisper'; data: WhisperBatchResult };
 }
 
+/** Audio byte size — works for both Buffer + TranscribeStreamSource. */
+function audioByteLength(source: TranscribeAudioSource): number {
+  return Buffer.isBuffer(source) ? source.byteLength : source.sizeBytes;
+}
+
 /** Decide whether to attempt fallback after a primary failure.
  *
  *  Skip fallback when:
@@ -112,7 +139,7 @@ export interface TranscribeResult {
  *  Otherwise (5xx, 408, 429, network failure, timeout) → fallback.
  */
 function shouldFallback(args: TranscribeArgs, err: unknown): boolean {
-  if (args.audio.byteLength > WHISPER_MAX_BYTES) return false;
+  if (audioByteLength(args.audio) > WHISPER_MAX_BYTES) return false;
   if (isPermanent4xxError(err)) return false;
   return true;
 }
@@ -127,12 +154,21 @@ export async function transcribe(
 
   // ── Primary: Deepgram nova-3-medical ──
   try {
+    // deepgramBatchTranscribe natively accepts Buffer | { stream,
+    // sizeBytes }; our TranscribeStreamSource adds the toBuffer()
+    // materializer used only on the fallback path. Strip toBuffer
+    // before forwarding so the deepgram call doesn't see an
+    // unrecognized field.
+    const dgAudio: Buffer | { stream: ReadableStream<Uint8Array>; sizeBytes: number } =
+      Buffer.isBuffer(args.audio)
+        ? args.audio
+        : { stream: args.audio.stream, sizeBytes: args.audio.sizeBytes };
     const deepgram = await deepgramBatchTranscribe({
       practiceId: args.practiceId,
       visitId: args.visitId,
       userId: args.userId,
       purpose: args.purpose,
-      audio: args.audio,
+      audio: dgAudio,
       mimeType: args.mimeType,
       language: args.language,
       ...(args.deepgram ?? {}),
@@ -169,12 +205,19 @@ export async function transcribe(
 
   // ── Fallback: OpenAI Whisper ──
   // Reaching here means: primary failed, fallback allowed, audio fits.
+  // Whisper's multipart upload requires a Buffer — materialize the
+  // stream source via toBuffer() if needed. Layer-1 implements
+  // toBuffer() by re-opening the MinIO source (the original stream
+  // was consumed by the Deepgram primary attempt).
+  const whisperAudio: Buffer = Buffer.isBuffer(args.audio)
+    ? args.audio
+    : await args.audio.toBuffer();
   const whisper = await whisperBatchTranscribe({
     practiceId: args.practiceId,
     visitId: args.visitId,
     userId: args.userId,
     purpose: args.purpose,
-    audio: args.audio,
+    audio: whisperAudio,
     mimeType: args.mimeType,
     language: args.language,
     ...(args.whisper ?? {}),
