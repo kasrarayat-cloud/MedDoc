@@ -9,8 +9,15 @@
 # Build context: monorepo root (context: . in docker-compose.yml).
 # ============================================================================
 
+# PR-K supply-chain hardening: every external base image pinned to a
+# specific manifest digest so an upstream `node:22-alpine` rebuild
+# can't change the bytes we ship without us reviewing it first.
+# Bumps land via Dependabot's docker ecosystem.
+#   node:22-alpine — pinned 2026-05-06 (linux/amd64)
+ARG NODE_BASE=node@sha256:8ea2348b068a9544dae7317b4f3aafcdc032df1647bb7d768a05a5cad1a7683f
+
 # ── Stage 1: full-deps (needed for prisma generate) ──
-FROM node:22-alpine AS full-deps
+FROM ${NODE_BASE} AS full-deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/meddoc-pro/package.json ./apps/meddoc-pro/package.json
@@ -23,7 +30,7 @@ COPY packages/ai/package.json ./packages/ai/package.json
 RUN npm ci
 
 # ── Stage 2: prod-deps (prune dev deps for the runtime layer) ──
-FROM node:22-alpine AS prod-deps
+FROM ${NODE_BASE} AS prod-deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/meddoc-pro/package.json ./apps/meddoc-pro/package.json
@@ -44,7 +51,7 @@ COPY packages/db/prisma.config.ts ./packages/db/prisma.config.ts
 RUN npm run generate -w @meddoc/db
 
 # ── Stage 4: runtime ──
-FROM node:22-alpine AS runner
+FROM ${NODE_BASE} AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
