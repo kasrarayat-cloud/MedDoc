@@ -40,6 +40,7 @@ import {
   JOB_MINIO_ORPHAN_CLEANUP,
   JOB_STALE_VISIT_CLEANUP,
   JOB_RETENTION_SWEEP,
+  enqueueDlq,
   getSharedRedisConnection,
   getCleanupQueue,
   type ProcessVisitPayload,
@@ -1207,6 +1208,37 @@ async function main() {
       `[transcribe-md-worker] job ${job?.id} visit ${job?.data.visitId} FAILED:`,
       err
     );
+    // PR-L: when the retry budget is exhausted, ship the job to the
+    // DLQ so an operator can see + decide via /admin/queues. The
+    // `failed` event fires AFTER each failed attempt — only enqueue
+    // when the FINAL attempt failed (attemptsMade equals the
+    // configured ceiling). Best-effort: if Redis is unhappy we log +
+    // drop rather than crash the worker (the next failure will retry
+    // the DLQ enqueue too).
+    if (
+      job &&
+      typeof job.attemptsMade === 'number' &&
+      typeof job.opts?.attempts === 'number' &&
+      job.attemptsMade >= job.opts.attempts
+    ) {
+      void enqueueDlq({
+        originalQueue: QUEUE_NAME,
+        originalJobId: job.id ?? null,
+        originalJobName: job.name,
+        originalPayload: job.data,
+        lastError:
+          err instanceof Error
+            ? err.message
+            : String(err ?? '(no error message)'),
+        exhaustedAt: new Date().toISOString(),
+        totalAttempts: job.opts.attempts,
+      }).catch((dlqErr) => {
+        console.error(
+          `[transcribe-md-worker] DLQ enqueue failed for job ${job.id}:`,
+          dlqErr
+        );
+      });
+    }
   });
 
   log.info('transcribe-md-worker', 'listening on queue', {
