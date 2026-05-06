@@ -56,12 +56,29 @@ export const GET = withApiHandler<{ id: string }>(
         // redirect to /dashboard instead of spinning indefinitely.
         deletedAt: true,
         archivedAt: true,
+        // Typewriter processing screen: needs the start anchor for the
+        // elapsed clock + the JSONB columns to compute chip counts at
+        // the AUTOMATING phase. processingStartedAt is set when L1
+        // begins; null on QUEUED rows.
+        processingStartedAt: true,
+        icdCodes: true,
+        cptCodes: true,
       },
     });
     // 404 on both "not found" AND "not yours" prevents ID enumeration.
     if (!visit || visit.userId !== userId) return apiError('not found', 404);
 
     const status = visit.status as TranscribeVisitStatus;
+
+    // Count chips without leaking the underlying jsonb shape to the
+    // client. {codes: [...]} on both ICD + CPT (Phase 5.2 contract);
+    // tolerate older rows whose blob may be null or a different shape
+    // by defaulting to 0.
+    const icdBlob = visit.icdCodes as { codes?: unknown[] } | null;
+    const cptBlob = visit.cptCodes as { codes?: unknown[] } | null;
+    const icdCount = Array.isArray(icdBlob?.codes) ? icdBlob.codes.length : 0;
+    const cptCount = Array.isArray(cptBlob?.codes) ? cptBlob.codes.length : 0;
+
     return NextResponse.json(
       {
         visitId: visit.id,
@@ -72,6 +89,10 @@ export const GET = withApiHandler<{ id: string }>(
         audioDurationSec: visit.audioDurationSec,
         deletedAt: visit.deletedAt?.toISOString() ?? null,
         archivedAt: visit.archivedAt?.toISOString() ?? null,
+        // Typewriter processing screen consumers
+        processingStartedAt: visit.processingStartedAt?.toISOString() ?? null,
+        icdCount,
+        cptCount,
       },
       { status: 200 }
     );
