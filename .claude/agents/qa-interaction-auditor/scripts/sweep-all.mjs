@@ -69,6 +69,7 @@ const WALKERS = [
   { name: 'admin-usage', file: 'sweep-admin-usage.mjs', auth: true },
   { name: 'admin-hipaa', file: 'sweep-admin-hipaa.mjs', auth: true },
   { name: 'admin-threats', file: 'sweep-admin-threats.mjs', auth: true },
+  { name: 'admin-queues', file: 'sweep-admin-queues.mjs', auth: true },
   // Flagship walker last — longest run + most expensive (SQL fixture +
   // full element walk). When this fails the rest of the report is
   // already in-hand.
