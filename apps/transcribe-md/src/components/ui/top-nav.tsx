@@ -50,10 +50,35 @@ function deriveCrumbs(
 }
 
 function openCmdK() {
-  // The existing <CommandPalette> binds Meta+K via its keyboard hook.
-  // Synthesising the keydown triggers the same toggle without needing
-  // a separate imperative API. TODO(phase5-stage3): replace with a
-  // direct store opener once the palette is re-wired.
+  // ──────────────────────────────────────────────────────────────────
+  // Synthetic-keydown chain — DOCUMENTED CONTRACT
+  // ──────────────────────────────────────────────────────────────────
+  // Listener path (verified end-to-end 2026-05-06):
+  //   apps/transcribe-md/src/components/command-palette.tsx
+  //     → useShortcut({ key: 'k', meta: true,
+  //                     onFire: () => setOpen((v) => !v) })
+  //   apps/transcribe-md/src/lib/shortcuts.ts:67
+  //     → window.addEventListener('keydown', onKeyDown)
+  //
+  // Why this works: the event is dispatched on `document` with
+  // `bubbles: true`, so it propagates up to the window-level listener
+  // installed by <CommandPalette>'s `useShortcut` hook.
+  //
+  // **If you change ANY of these, also update this helper:**
+  //   - moving the palette's listener off window (e.g. to a portal-
+  //     scoped container, or replacing useShortcut with a context-
+  //     scoped handler)
+  //   - flipping the key binding away from Meta+K
+  //   - removing the palette entirely
+  //
+  // Regression-pinned by:
+  //   apps/transcribe-md/tests/keyboard/topnav-cmdk.test.tsx
+  //
+  // QA Auditor F-13 closure note: the original concern was this
+  // dispatcher going orphan if the palette is re-wired without
+  // updating this helper. The regression test trips CI if the chain
+  // breaks.
+  // ──────────────────────────────────────────────────────────────────
   const ev = new KeyboardEvent('keydown', {
     key: 'k',
     metaKey: true,

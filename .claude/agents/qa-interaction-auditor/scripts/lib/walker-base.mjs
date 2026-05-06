@@ -92,6 +92,53 @@ export function snapshotAuditCount(visitId) {
   }
 }
 
+/** Settled-count variant of `snapshotAuditCount` — closes F-15 from the
+ *  v3.2 discovery report. Product code emits audit rows fire-and-forget
+ *  (`void logAudit({ ... })`), so on slow VPSes the row write can lag
+ *  behind the walker's post-click read by a few hundred ms. The naive
+ *  "snapshot before / snapshot after" comparison would then return
+ *  delta=0 and surface a false-negative finding.
+ *
+ *  This helper polls until two consecutive reads agree:
+ *
+ *    1. Read count
+ *    2. Wait 250 ms
+ *    3. Read again
+ *    4. If different (write in flight), loop up to `maxAttempts`
+ *    5. Once two consecutive reads match, return that count
+ *    6. Hard cap at ~1.25s to avoid stalling the walker
+ *
+ *  Returns the settled count. Falls back to the last-read count when
+ *  the cap is hit (better than throwing — the walker can still report
+ *  a result).
+ *
+ *  Test: see qa-interaction-auditor/tests/audit-settle.test.mjs.
+ */
+export function snapshotAuditCountWithSettle(
+  visitId,
+  { maxAttempts = 5, settleMs = 250 } = {}
+) {
+  if (!visitId) return 0;
+  let prev = snapshotAuditCount(visitId);
+  for (let i = 0; i < maxAttempts; i += 1) {
+    // Synchronous spin — execSync gives us a sync API, and the walker
+    // is already serial per click, so a 250 ms sleep is acceptable.
+    // We use `sh -c "sleep 0.25"` because Node has no built-in sync
+    // sleep and busy-loops would be wasteful + lock the event loop
+    // longer than a real sleep.
+    try {
+      execSync(`sleep ${settleMs / 1000}`);
+    } catch {
+      // sleep failed — treat as already-settled
+      return prev;
+    }
+    const next = snapshotAuditCount(visitId);
+    if (next === prev) return next;
+    prev = next;
+  }
+  return prev;
+}
+
 /** Recent Caddy mutations within the last `sinceSeconds`. Used for
  *  classifying whether a click fired a server-side write. Filters out
  *  static-asset and Next.js internal POSTs. */
@@ -537,7 +584,10 @@ export async function clickAndClassify(page, opts) {
   await page.waitForTimeout(settleMs);
 
   const dbAfter = snapshotTables(dbSnapshotSpec);
-  const auditAfter = snapshotAuditCount(auditTargetId);
+  // F-15: void logAudit() in product code is fire-and-forget; the row
+  // write can lag the post-click read by a few hundred ms. Use the
+  // settled variant so the walker doesn't false-negative on slow VPS.
+  const auditAfter = snapshotAuditCountWithSettle(auditTargetId);
   const muts = recentMutations(12);
   const newMuts = muts; // recentMutations already filters to short window
   const responseSummary = response
