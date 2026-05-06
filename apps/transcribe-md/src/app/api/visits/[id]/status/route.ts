@@ -16,12 +16,15 @@ import { TranscribeVisitStatus } from '@prisma/client';
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { parseSoapSections } from '@/lib/parse-soap-sections';
 
-// Truncation budgets for the typewriter preview. At ~150 chars/sec
-// typing speed: transcript runs ~4s, each SOAP section runs ~2.7s.
-// Doctors who need full content open the ready view; the loading
-// screen is preview-only.
-const PREVIEW_TRANSCRIPT_MAX = 600;
-const PREVIEW_SOAP_SECTION_MAX = 400;
+// Truncation budgets for the typewriter preview. Sized from the live
+// READY-visit distribution (39 rows analysed): P95 transcript = 7,419
+// chars; P95 per-section = 2,661 (Subjective P95 = 3,169). The 8000 /
+// 3200 caps capture P95 with headroom; payload is ~22 KB per poll
+// which is acceptable for the 1.5s cadence. The earlier 600/400 caps
+// truncated 78% of sections mid-sentence — the visible bug this fix
+// closes. Full content still lives on the ready view.
+const PREVIEW_TRANSCRIPT_MAX = 8000;
+const PREVIEW_SOAP_SECTION_MAX = 3200;
 
 function clipForPreview(text: string | null | undefined, max: number): string | null {
   if (!text) return null;
