@@ -3,36 +3,40 @@
 // ============================================================================
 // Typewriter SOAP — production post-upload processing screen.
 // ----------------------------------------------------------------------------
-// Replaces the v1 minimal-dot processing-state UI. Renders a 4-section
-// SOAP skeleton (Subjective / Objective / Assessment / Plan) that fills
-// section-by-section as the visit advances through the pipeline phases.
-// At AUTOMATING (display: "Coding"), ICD/CPT chips appear at the bottom
-// with real counts pulled from the visit row.
+// Renders a 4-section SOAP skeleton (Subjective / Objective / Assessment
+// / Plan) that fills section-by-section as the AI pipeline runs. At
+// AUTOMATING (display: "Coding"), ICD/CPT chips appear with real counts.
 //
-// PATH B-LITE (this PR):
-// Real content types in. After TRANSCRIBING completes, the transcript
-// text shows up on the Subjective preview slot (typed character by
-// character at ~150 chars/sec). After DRAFTING completes, the four SOAP
-// sections type in their real bodies — and the Subjective slot
-// cross-fades from transcript → soap.subjective so the doctor isn't
-// surprised by stale text. Server-side truncation keeps payload
-// bounded; full content lives on the ready view.
+// SCOPE (this PR — fix-typewriter-typography-and-scope):
+// Sections stay empty (underscored blanks + caret on the active label
+// per phase mapping) through TRANSCRIBING / EXTRACTING / DRAFTING. When
+// soapDraft lands (post-DRAFTING / re-written by POLISHING), the four
+// sections type in their real bodies. Markdown bold (`**text**`) is
+// rendered as `<strong>` inline; partial mid-typing markers display
+// the asterisks until the closing pair arrives.
 //
-// Phase-event mechanism: existing /api/visits/[id]/status polling at
-// 1.5s. The endpoint surfaces { transcript, soap{S,O,A,P} } as
-// preview-clipped strings (600 chars / 400 per section). No worker
-// streaming changes; content is already in transcribe_visits when
-// each phase completes.
+// Earlier iteration typed the raw Deepgram transcript on the Subjective
+// slot during TRANSCRIBING, then cross-faded to soap.subjective when
+// DRAFTING completed. Doctors saw their own dictation artifacts
+// ("comma", "period", "Sorry for number two") play back at 150 cps for
+// ~50 seconds — anti-trust experience. Dropped the transcript phase
+// entirely; sections sit idle until SOAP is ready.
 //
-// Min-display-time: 2.4s per phase. Some phases (e.g. AUTOMATING when
-// no Rx) complete fast; the displayed phase lags so transitions stay
-// visible. Typing is independent of the display-phase advance — once
-// content lands, it types until done even if the next phase has
-// already arrived.
+// Phase-event mechanism: /api/visits/[id]/status polling at 1.5s. The
+// endpoint surfaces { soap: {S,O,A,P} } as preview-clipped strings
+// (3200 chars per section). No worker streaming changes.
+//
+// Min-display-time: 2.4s per phase so fast phases stay legible. Typing
+// is independent of the display-phase advance — once SOAP content
+// lands it types at 300 cps until done.
 //
 // prefers-reduced-motion: caret blink + label pulse OFF; typing speed
-// goes 150 → 400 chars/sec so content appears nearly-instantly. The
-// typing itself stays on (it's information, not decoration).
+// 300 → 800 chars/sec so content appears nearly-instantly. The typing
+// itself stays on (it's information, not decoration).
+//
+// Reading width: section body is capped at 70ch (~63ch usable after
+// font metrics) to keep eye-travel inside the typography sweet spot;
+// outer container is centered at 1100px max-width.
 // ============================================================================
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -63,7 +67,6 @@ interface StatusResponse {
   icdCount: number;
   cptCount: number;
   preview: {
-    transcript: string | null;
     soap: {
       subjective: string | null;
       objective: string | null;
@@ -88,14 +91,11 @@ const MIN_PHASE_MS = 2400;
 const WARN_AT_MIN = 10;
 const STUCK_AT_MIN = 30;
 
-// Typing speed (characters per second), per source. Transcript stays
-// at the calmer 150 cps because it's a single section and reads well
-// at that pace. SOAP is 300 cps because real sections run 1500-3200
-// chars (per the live distribution analysis); 150 cps would drag a
-// 3200-char Subjective out for >20s, longer than the AUDITING phase
-// itself. Reduced-motion floods content nearly-instantly so the page
-// stays quiet for users who opted out of animation.
-const TYPE_CHARS_PER_SEC_TRANSCRIPT = 150;
+// Typing speed (characters per second). 300 cps suits real SOAP
+// sections (1500-3200 chars per the live distribution analysis); 150
+// cps would drag a 3200-char Subjective out for >20s, longer than the
+// AUDITING phase itself. Reduced-motion floods content nearly-instantly
+// so the page stays quiet for users who opted out of animation.
 const TYPE_CHARS_PER_SEC_SOAP = 300;
 const TYPE_CHARS_PER_SEC_REDUCED = 800;
 
@@ -110,37 +110,52 @@ const SOAP_KEYS: SoapSection[] = ['subjective', 'objective', 'assessment', 'plan
 // Underscore-blank pattern used for idle sections.
 const ROW_BLANK = '________ _____ ___ ______ ________ _____ ___';
 
-// Per-section content state. A section travels:
-//   idle       → typing (first time text arrives)
-//   typing     → done   (animation completes)
-//   any        → swap-out (200ms fade) → typing (new content)
-type SectionMode = 'idle' | 'typing' | 'done' | 'swap-out';
+// Per-section content state. A section travels: idle → typing → done.
+// Earlier iteration had a transcript-source + swap-out cross-fade; both
+// dropped because typing the raw transcript was an anti-trust user
+// experience for doctors (Deepgram artifacts visible mid-typing).
+type SectionMode = 'idle' | 'typing' | 'done';
 interface SectionTarget {
   /** Full content the typewriter is animating toward. null = nothing yet. */
   text: string | null;
-  /** Where the text came from. Subjective swaps from 'transcript' (post-
-   *  TRANSCRIBING) to 'soap' (post-DRAFTING); the other sections only
-   *  ever land in 'soap'. */
-  source: 'transcript' | 'soap' | null;
-  /** Float so the RAF loop can advance fractional chars; we Math.floor
-   *  before rendering so a 60Hz tick at 150 cps still gives 2.5 chars
-   *  per frame and the perceived motion stays smooth. */
+  /** Float so the RAF loop can advance fractional chars; rendered via
+   *  Math.floor so identical integer slices skip the React DOM diff. */
   revealed: number;
   mode: SectionMode;
-  /** Text being faded out during a swap. Rendered alongside the
-   *  current text with opacity transitioning 1→0 over 200ms. */
-  fadingText: string | null;
 }
 
 const INITIAL_SECTION_TARGET: SectionTarget = {
   text: null,
-  source: null,
   revealed: 0,
   mode: 'idle',
-  fadingText: null,
 };
 
-const SWAP_FADE_MS = 200;
+// ── Inline markdown renderer (bold + line-breaks only) ──────────────
+// SOAP drafts use `**Header:**` style for clinical sub-headings. The
+// existing project pattern (apps/transcribe-md/src/app/visits/[id]/
+// soap/SoapSection.tsx) has a 30-line minimal renderer; we reuse the
+// inline-bold pattern here so the typewriter doesn't pull in a heavy
+// markdown lib. Partial mid-typing markers display asterisks until the
+// closing pair arrives — the regex requires a complete `**...**` pair
+// to substitute, so unfinished bold renders verbatim for ≤300ms (one
+// frame at 300 cps × ~3-4 char marker length).
+const BOLD_SPLIT_RE = /(\*\*[^*]+\*\*)/g;
+function renderInlineMd(text: string): React.ReactNode[] {
+  const out: React.ReactNode[] = [];
+  const lines = text.split('\n');
+  lines.forEach((line, li) => {
+    if (li > 0) out.push(<br key={`br-${li}`} />);
+    const parts = line.split(BOLD_SPLIT_RE);
+    parts.forEach((p, pi) => {
+      if (p.startsWith('**') && p.endsWith('**') && p.length >= 5) {
+        out.push(<strong key={`b-${li}-${pi}`}>{p.slice(2, -2)}</strong>);
+      } else if (p) {
+        out.push(<span key={`t-${li}-${pi}`}>{p}</span>);
+      }
+    });
+  });
+  return out;
+}
 
 export function ProcessingTypewriter({
   visitId,
@@ -244,18 +259,14 @@ export function ProcessingTypewriter({
       }
     };
 
-    /** Fold a poll's preview block into per-section state. The rules:
+    /** Fold a poll's preview block into per-section state.
      *
-     *   - First time `transcript` arrives: set Subjective target with
-     *     source='transcript' (start typing).
-     *   - First time `soap.subjective` arrives AND Subjective is on
-     *     transcript: trigger swap. Cross-fade old text out (200ms),
-     *     then start typing soap.subjective.
-     *   - First time `soap.{objective,assessment,plan}` arrives: set
-     *     target with source='soap' (start typing).
+     *   - First time `soap.{S,O,A,P}` arrives for a section: set
+     *     target + start typing. Server returns the full clipped
+     *     content; the RAF loop animates `revealed` up to it.
      *   - Server may keep returning the same content on subsequent
      *     polls — only act on changes (text differs from current
-     *     target).
+     *     target). Done sections never re-arm.
      *
      *   Done-state is a function of revealed === text.length and is
      *   computed in the RAF loop, not here.
@@ -264,76 +275,13 @@ export function ProcessingTypewriter({
       setSectionTargets((prev) => {
         const next = { ...prev };
         let changed = false;
-
-        // SUBJECTIVE
-        const incomingSubj = preview.soap?.subjective ?? null;
-        const incomingTrans = preview.transcript ?? null;
-        const cur = prev.subjective;
-        if (incomingSubj) {
-          // SOAP arrived. Either swap from transcript or initial-set.
-          if (cur.text !== incomingSubj || cur.source !== 'soap') {
-            if (cur.source === 'transcript' && cur.text) {
-              // Trigger cross-fade swap.
-              next.subjective = {
-                text: incomingSubj,
-                source: 'soap',
-                revealed: 0,
-                mode: 'swap-out',
-                fadingText: cur.text.slice(0, Math.floor(cur.revealed)),
-              };
-              changed = true;
-              // Schedule the swap-out → typing transition.
-              setTimeout(() => {
-                setSectionTargets((p) => {
-                  const c = p.subjective;
-                  if (c.source !== 'soap' || c.mode !== 'swap-out') return p;
-                  return {
-                    ...p,
-                    subjective: { ...c, mode: 'typing', fadingText: null },
-                  };
-                });
-              }, SWAP_FADE_MS);
-            } else {
-              // First-time arrival for Subjective with SOAP content.
-              next.subjective = {
-                text: incomingSubj,
-                source: 'soap',
-                revealed: 0,
-                mode: 'typing',
-                fadingText: null,
-              };
-              changed = true;
-            }
-          }
-        } else if (incomingTrans && cur.source === null) {
-          // Transcript arrived first; SOAP not yet. Type the transcript
-          // as Subjective preview until SOAP lands.
-          next.subjective = {
-            text: incomingTrans,
-            source: 'transcript',
-            revealed: 0,
-            mode: 'typing',
-            fadingText: null,
-          };
-          changed = true;
-        }
-
-        // O / A / P — set on first arrival; don't restart if server
-        // sends the same content again.
-        for (const k of ['objective', 'assessment', 'plan'] as const) {
+        for (const k of SOAP_KEYS) {
           const incoming = preview.soap?.[k] ?? null;
-          if (incoming && (prev[k].text !== incoming || prev[k].source !== 'soap')) {
-            next[k] = {
-              text: incoming,
-              source: 'soap',
-              revealed: 0,
-              mode: 'typing',
-              fadingText: null,
-            };
+          if (incoming && prev[k].text !== incoming) {
+            next[k] = { text: incoming, revealed: 0, mode: 'typing' };
             changed = true;
           }
         }
-
         return changed ? next : prev;
       });
     }
@@ -385,12 +333,9 @@ export function ProcessingTypewriter({
   useEffect(() => {
     let raf = 0;
     let last = performance.now();
-    const speedSoap = reducedMotion
+    const speed = reducedMotion
       ? TYPE_CHARS_PER_SEC_REDUCED
       : TYPE_CHARS_PER_SEC_SOAP;
-    const speedTranscript = reducedMotion
-      ? TYPE_CHARS_PER_SEC_REDUCED
-      : TYPE_CHARS_PER_SEC_TRANSCRIPT;
     const loop = (t: number) => {
       const dt = Math.min(0.1, (t - last) / 1000); // clamp for tab-switch
       last = t;
@@ -406,8 +351,6 @@ export function ProcessingTypewriter({
             changed = true;
             continue;
           }
-          const speed =
-            cur.source === 'transcript' ? speedTranscript : speedSoap;
           const incremented = Math.min(target, cur.revealed + speed * dt);
           next[k] = { ...cur, revealed: incremented };
           changed = true;
@@ -445,8 +388,7 @@ export function ProcessingTypewriter({
   // is typing, fall back to the phase-mapping caret position.
   const activeTypingSection = useMemo<SoapSection | null>(() => {
     for (const k of SOAP_KEYS) {
-      const t = sectionTargets[k];
-      if (t.mode === 'typing' || t.mode === 'swap-out') return k;
+      if (sectionTargets[k].mode === 'typing') return k;
     }
     return null;
   }, [sectionTargets]);
@@ -505,16 +447,11 @@ export function ProcessingTypewriter({
           const hasContent = target.text !== null;
           const revealedCount = Math.floor(target.revealed);
           const revealed = target.text ? target.text.slice(0, revealedCount) : '';
-          // Section-label badge state. Subjective during transcript-phase
-          // shouldn't show ✓ (the doctor will see soap.subjective swap in
-          // shortly); use 'writing' until SOAP lands.
           const labelState: 'idle' | 'writing' | 'done' =
-            sectionDone && target.source === 'soap'
+            sectionDone
               ? 'done'
-              : isActiveTyping
-              ? 'writing'
               : hasContent
-              ? 'writing' // text typed in but not yet 'done' (mostly during swap)
+              ? 'writing'
               : 'idle';
           return (
             <div
@@ -531,11 +468,7 @@ export function ProcessingTypewriter({
                     </span>
                   )}
                   {labelState === 'writing' && (
-                    <span className="qm-tw-writing">
-                      {target.source === 'transcript'
-                        ? 'transcribing…'
-                        : 'writing…'}
-                    </span>
+                    <span className="qm-tw-writing">writing…</span>
                   )}
                 </div>
               </div>
@@ -545,7 +478,6 @@ export function ProcessingTypewriter({
                 aria-atomic="false"
               >
                 {!hasContent ? (
-                  // idle: blank rows + caret on the phase-mapping section
                   Array.from({ length: sec.rows }).map((_, ri) => (
                     <div key={ri} className="qm-tw-row">
                       <span className="qm-tw-blank">
@@ -563,10 +495,7 @@ export function ProcessingTypewriter({
                   ))
                 ) : (
                   <div className="qm-tw-typed-wrap">
-                    {target.fadingText ? (
-                      <span className="qm-tw-fading">{target.fadingText}</span>
-                    ) : null}
-                    <span className="qm-tw-typed">{revealed}</span>
+                    <span className="qm-tw-typed">{renderInlineMd(revealed)}</span>
                     {isActiveTyping && !sectionDone ? (
                       <span className="qm-tw-cursor qm-tw-cursor-inline" aria-hidden="true" />
                     ) : null}
@@ -635,6 +564,8 @@ export function ProcessingTypewriter({
         .qm-typewriter {
           position: relative;
           width: 100%;
+          max-width: 1100px;
+          margin: 0 auto;
           min-height: calc(100vh - 48px);
           background: #050607;
           color: #fff;
@@ -799,6 +730,15 @@ export function ProcessingTypewriter({
           line-height: 1.65;
           word-break: break-word;
           overflow-wrap: anywhere;
+          /* 70ch keeps line-length inside the typography sweet spot
+             (60-80ch) where eye-travel + saccade re-acquisition stay
+             comfortable. Without this, real SOAP content stretches
+             1500+ px on wide screens and reads like a wall. */
+          max-width: 70ch;
+        }
+        .qm-tw-typed strong {
+          font-weight: 600;
+          color: #fff;
         }
         .qm-tw-row {
           display: flex;
@@ -820,18 +760,6 @@ export function ProcessingTypewriter({
         }
         .qm-tw-typed {
           color: #fff;
-        }
-        .qm-tw-fading {
-          color: #c4c8c5;
-          opacity: 0.0;
-          position: absolute;
-          inset: 0;
-          animation: qm-tw-fade-out ${SWAP_FADE_MS}ms ease-out forwards;
-          pointer-events: none;
-        }
-        @keyframes qm-tw-fade-out {
-          from { opacity: 0.55; }
-          to   { opacity: 0; }
         }
         .qm-tw-cursor {
           display: inline-block;
@@ -966,7 +894,6 @@ export function ProcessingTypewriter({
             animation: none;
           }
           .qm-tw-cursor { opacity: 0.65; }
-          .qm-tw-fading { animation-duration: 60ms; }
           .qm-tw-codes,
           .qm-tw-section-label,
           .qm-tw-blank,
