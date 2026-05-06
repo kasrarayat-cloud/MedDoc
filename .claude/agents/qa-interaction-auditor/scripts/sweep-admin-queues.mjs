@@ -1,11 +1,14 @@
 #!/usr/bin/env node
-// sweep-admin-queues.mjs — /admin/queues (PR-L; SUPER_ADMIN-gated; DOCTOR → 404).
-//
-// New in PR-L. Same gate-test as the other /admin/* walkers: the QA
-// test user is DOCTOR, so the route should bounce off the SUPER_ADMIN
-// gate via admin/layout.tsx's `notFound()` posture. A 200 here is a
-// finding (gate broken). Read-only view; no clicks beyond the page
-// load.
+// sweep-admin-queues.mjs — /admin/queues (gate-check tier, v3.3).
+// New in PR-L (BullMQ queue health dashboard). SUPER_ADMIN-gated;
+// QA test user is DOCTOR → admin/layout.tsx notFound() should fire.
+// A 200 here = gate broken = finding.
+// Reference walker for the gate-check tier (see site-map.md
+// "Walker tiers"). Read-only — page-load smoke + `looksGated`
+// assertion (title contains "404" OR body text < 200 chars).
+// No clicks; uses fresh `login(page)` to keep the ≤12h session-
+// freshness check satisfied (so a 404 here means the role gate
+// fired, not the freshness gate).
 
 import { emit, login, launchBrowser, newAppContext, smokeLoad } from './lib/walker-base.mjs';
 
