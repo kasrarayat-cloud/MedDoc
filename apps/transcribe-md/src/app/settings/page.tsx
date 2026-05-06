@@ -19,6 +19,7 @@ import { redirect } from 'next/navigation';
 import prisma from '@meddoc/db';
 import { auth } from '@/lib/nextauth';
 import { getCurrentSessionId } from '@/lib/auth';
+import { logAudit } from '@/lib/audit';
 import {
   describeIpLocation,
   parseUserAgent,
@@ -85,6 +86,23 @@ export default async function SettingsPage() {
     : null;
 
   const { browser, os } = parseUserAgent(activeSession?.userAgent ?? null);
+
+  // §164.312(b) audit row — F-11 from QA agent v3.2 discovery report.
+  // /settings reads the user's profile + active sessions; the latter
+  // exposes ipAddress + userAgent (device fingerprints), so the page
+  // is PHI-adjacent under a strict §164.312(b) reading. Round 3 PR-C
+  // covered other read surfaces but missed this one. Fire-and-forget
+  // per the file's audit precedents — `logAudit` is internally try/
+  // wrapped so failures never break the render.
+  void logAudit({
+    action: 'VIEWED_SETTINGS',
+    targetType: 'User',
+    targetId: session.user.id,
+    metadata: {
+      source: 'rsc:/settings',
+      hasActiveSession: activeSession !== null,
+    },
+  });
 
   return (
     <AppFrame>
