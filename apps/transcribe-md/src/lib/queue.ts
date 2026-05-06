@@ -15,6 +15,7 @@ const redisUrl = process.env.REDIS_URL?.trim() || 'redis://redis:6379';
 let connection: IORedis | null = null;
 let transcribeMdQueue: Queue | null = null;
 let cleanupQueue: Queue | null = null;
+let dlqQueue: Queue | null = null;
 
 function getConnection(): IORedis {
   if (connection) return connection;
@@ -143,4 +144,76 @@ export function getCleanupQueue(): Queue {
     },
   });
   return cleanupQueue;
+}
+
+// ---------------------------------------------------------------------------
+// PR-L: Dead Letter Queue — `dlq:permanent-failures`.
+// ---------------------------------------------------------------------------
+// Jobs that exhaust their retry budget on the main queues land here
+// with their original payload + last-error metadata. The DLQ has NO
+// automatic consumer — it accumulates until a human (admin) decides
+// what to do (re-enqueue / fix / drop). This sits behind the
+// SUPER_ADMIN-gated /admin/queues bull-board dashboard so an operator
+// can see depth + retry / discard from the UI.
+//
+// Worker-side wiring (apps/transcribe-md/src/worker.ts): the worker's
+// `failed` event handler checks `job.attemptsMade === job.opts.attempts`
+// and calls enqueueDlq() with the job's original payload + the last
+// error message. This handler doesn't itself retry — by the time the
+// failed event fires, BullMQ has already exhausted the retry budget.
+// ---------------------------------------------------------------------------
+
+export const DLQ_QUEUE_NAME = 'dlq:permanent-failures';
+
+export interface DlqJobPayload {
+  /** Source queue the failed job came from (e.g. 'transcribe-md'). */
+  originalQueue: string;
+  /** BullMQ job id of the failed job. */
+  originalJobId: string | null;
+  /** Job name (e.g. 'process_visit'). */
+  originalJobName: string;
+  /** The job's `data` payload at the time it failed. May contain
+   *  `visitId` etc. PHI guard: callers strip raw text fields before
+   *  enqueueing — admin-side viewing is intentional but limited to
+   *  identifiers + status. */
+  originalPayload: unknown;
+  /** Last `failedReason` BullMQ recorded (string-coerced error). */
+  lastError: string;
+  /** ISO-8601 timestamp of when the retry budget was exhausted. */
+  exhaustedAt: string;
+  /** Total attempts the original job was allowed (e.g. 3 for
+   *  transcribe-md, 1 for cleanup). Operator reads this in the UI to
+   *  understand whether the retry budget was generous or stingy. */
+  totalAttempts: number;
+}
+
+export function getDlqQueue(): Queue<DlqJobPayload> {
+  if (dlqQueue) return dlqQueue as Queue<DlqJobPayload>;
+  dlqQueue = new Queue<DlqJobPayload>(DLQ_QUEUE_NAME, {
+    connection: getConnection(),
+    defaultJobOptions: {
+      // DLQ jobs are themselves never retried — they're already
+      // failed-permanently records. removeOnComplete:false so the
+      // operator sees the full history; cap on count so an
+      // unbounded DLQ doesn't fill Redis.
+      attempts: 1,
+      removeOnComplete: false,
+      removeOnFail: false,
+    },
+  });
+  return dlqQueue as Queue<DlqJobPayload>;
+}
+
+/** Enqueue a permanently-failed job into the DLQ. The worker's
+ *  `failed` event handler calls this when `attemptsMade ===
+ *  job.opts.attempts` (final retry exhausted). The DLQ job's id is
+ *  derived from the original job id so re-attempts on the same
+ *  payload don't pile up duplicate DLQ entries. */
+export async function enqueueDlq(payload: DlqJobPayload): Promise<void> {
+  await getDlqQueue().add('permanent-failure', payload, {
+    // Stable id keyed on origin queue + job id avoids duplicates if
+    // the same exhausted job's failed-event fires twice (rare but
+    // possible during worker restarts mid-event).
+    jobId: `${payload.originalQueue}:${payload.originalJobId ?? 'null'}`,
+  });
 }
