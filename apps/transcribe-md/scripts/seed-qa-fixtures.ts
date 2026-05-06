@@ -35,6 +35,10 @@ export const FIXTURE_VISIT_IDS = {
   criticalRx: 'qa_fix_visit_critical_rx',
   pediatric: 'qa_fix_visit_pediatric',
   nonClinical: 'qa_fix_visit_nonclinical',
+  // v3.3: a QUEUED, audio-less visit so the walker can land on
+  // /visits/[id]/record without triggering the page's redirect-when-
+  // not-QUEUED guard. See sweep-visit-record.mjs.
+  recordDraft: 'qa_fix_visit_record_draft',
 } as const;
 
 const SEEDED_IDS_PATH = resolve(
@@ -452,6 +456,54 @@ async function main() {
         'recording of meeting between solicitor and witness regarding property line dispute',
       icd: { codes: [] },
       rx: null,
+    });
+
+    // v3.3 — record-draft fixture. The /visits/[id]/record page only
+    // renders when status === 'QUEUED' (else redirects to /visits/[id]).
+    // No SOAP, no transcript, no audio — same shape a freshly-created
+    // voice_dictation visit has the moment a doctor lands on it.
+    await prisma.transcribeVisit.upsert({
+      where: { id: FIXTURE_VISIT_IDS.recordDraft },
+      update: {
+        userId: user.id,
+        status: 'QUEUED' as const,
+        inputMode: 'voice_dictation' as const,
+        patientId: adultPatient.id,
+        patientName: 'QA Test Patient',
+        specialty: 'primary-care',
+        audioKey: null,
+        audioMimeType: null,
+        audioDurationSec: null,
+        dictationDurationSec: null,
+        transcriptText: null,
+        transcriptRaw: undefined,
+        soapDraft: null,
+        soapFinal: null,
+        rawTextInput: null,
+        icdCodes: undefined,
+        cptCodes: undefined,
+        rxDrafts: undefined,
+        confidenceScores: undefined,
+        referrals: undefined,
+        needsReview: false,
+        reviewReason: null,
+        processingCostCents: 0,
+        processingStartedAt: null,
+        processingFinishedAt: null,
+        soapVersion: 1,
+      },
+      create: {
+        id: FIXTURE_VISIT_IDS.recordDraft,
+        userId: user.id,
+        status: 'QUEUED' as const,
+        inputMode: 'voice_dictation' as const,
+        patientId: adultPatient.id,
+        patientName: 'QA Test Patient',
+        specialty: 'primary-care',
+        soapVersion: 1,
+        needsReview: false,
+        processingCostCents: 0,
+      },
     });
 
     // Update seeded-ids.json with the new visit ids.
