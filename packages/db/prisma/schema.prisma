@@ -247,6 +247,16 @@ enum AuditAction {
   // override is also persisted at `cptCodes.em.override` for the next
   // page load.
   EM_OVERRIDE_APPLIED
+
+  // §164.312(b) audit-row coverage extension surfaced by QA agent v3.2
+  // deep walks (docs/qa-reports/v3.2-discovery-20260506T024044Z.md):
+  //   - VIEWED_DASHBOARD: PHI read on the authenticated landing page
+  //   - VISIT_CREATED:    write-side audit when createVisitAction
+  //     inserts a new transcribe_visits row
+  //   - VIEWED_SETTINGS:  PHI-adjacent read of users + user_sessions
+  VIEWED_DASHBOARD
+  VISIT_CREATED
+  VIEWED_SETTINGS
 }
 
 /// Document lifecycle status

@@ -113,7 +113,11 @@ export type AuditAction =
   // Coding-coach bump persistence (Phase 5.2 stub completion)
   | 'EM_BUMP_APPLIED'
   // Coding-coach override persistence (Phase 5.2 orphan-completion)
-  | 'EM_OVERRIDE_APPLIED';
+  | 'EM_OVERRIDE_APPLIED'
+  // §164.312(b) audit-row coverage extension (QA agent v3.2 F-09/F-10/F-11)
+  | 'VIEWED_DASHBOARD'
+  | 'VISIT_CREATED'
+  | 'VIEWED_SETTINGS';
 
 export interface AuditLogInput {
   action: AuditAction;

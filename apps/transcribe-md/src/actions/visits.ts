@@ -7,6 +7,7 @@ import { z } from 'zod';
 import prisma from '@meddoc/db';
 import { SPECIALTY_IDS } from '@meddoc/shared/specialties';
 import { requireSession } from '@/lib/auth';
+import { logAudit } from '@/lib/audit';
 import {
   DASHBOARD_PAGE_SIZE,
   type DashboardCursor,
@@ -153,6 +154,26 @@ export async function createVisitAction(formData: FormData): Promise<void> {
       inputMode: parsed.data.inputMode,
     },
     select: { id: true },
+  });
+
+  // §164.312(b) — F-10 from QA agent v3.2 discovery report. Visit
+  // creation was previously silent at write-time; only VIEWED_VISIT
+  // fired later when the doctor navigated into the row, so the
+  // create-event itself was invisible in the audit trail. Fire-and-
+  // forget per the file's other audit precedents — `logAudit` is
+  // internally try/wrapped so failures never break the create path.
+  // PHI: only the patient FK + non-clinical metadata go into the row;
+  // the patient's name + chiefComplaint stay out.
+  void logAudit({
+    action: 'VISIT_CREATED',
+    targetType: 'TranscribeVisit',
+    targetId: visit.id,
+    metadata: {
+      source: 'action:createVisitAction',
+      inputMode: parsed.data.inputMode,
+      specialty: parsed.data.specialty,
+      patientId: patient.id,
+    },
   });
 
   revalidatePath('/dashboard');
