@@ -1,9 +1,14 @@
 #!/usr/bin/env node
-// sweep-admin-dashboard.mjs — /admin (SUPER_ADMIN-gated).
-// v2 stub: walks the page as the DOCTOR-role QA user. Expected:
-// admin/layout.tsx returns 404 to non-SUPER_ADMINs — confirming the
-// route-gate + write to access-audit log fires. A 200 here is a
-// finding (gate broken).
+// sweep-admin-dashboard.mjs — /admin (gate-check tier, v3.3).
+// SUPER_ADMIN-gated; QA test user is DOCTOR → admin/layout.tsx
+// notFound() should fire. A 200 here = gate broken = finding.
+// Read-only walker — page-load smoke + `looksGated` assertion
+// (title contains "404"/"Not Found" OR body text < 200 chars).
+// No clicks; no DB writes expected (the layout's access-audit log
+// row is fired by the gate itself, not by the walker).
+// Uses fresh `login(page)` not `getOrCreateAuthState` — the gate
+// also enforces ≤12h session-freshness, so cached storageState
+// risks tripping the freshness check rather than the role check.
 
 import { emit, login, launchBrowser, newAppContext, smokeLoad } from './lib/walker-base.mjs';
 
