@@ -297,7 +297,7 @@ export function RxWarningsRail({
           border-color: rgba(212, 87, 74, 0.52);
         }
         .qm-warn-override-btn:focus-visible {
-          outline: 2px solid var(--color-linear-sage, #9eb5a0);
+          outline: 2px solid var(--color-linear-sage, #7AA68C);
           outline-offset: 2px;
         }
         .qm-warn-overridden {
@@ -308,9 +308,9 @@ export function RxWarningsRail({
           font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, monospace);
           font-size: 11px;
           letter-spacing: 0.06em;
-          color: var(--color-linear-sage, #9eb5a0);
-          background: rgba(158, 181, 160, 0.08);
-          border: 1px solid rgba(158, 181, 160, 0.32);
+          color: var(--color-linear-sage, #7AA68C);
+          background: rgba(122, 166, 140, 0.08);
+          border: 1px solid rgba(122, 166, 140, 0.32);
           border-radius: 4px;
         }
       `}</style>
