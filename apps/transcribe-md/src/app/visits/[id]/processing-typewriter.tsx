@@ -425,6 +425,7 @@ export function ProcessingTypewriter({
         <div
           className="qm-tw-segments"
           role="progressbar"
+          aria-label="SOAP processing progress"
           aria-valuemin={0}
           aria-valuemax={VISIT_PHASES.length}
           aria-valuenow={Math.max(0, phaseIndex(displayPhase) + 1)}
