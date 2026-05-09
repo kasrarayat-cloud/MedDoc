@@ -1,0 +1,1768 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>QuillMD · SOAP tab redesign · v3 · 10 simple concepts</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   PRODUCTION TOKENS (apps/transcribe-md/src/app/globals.css:36–97)
+   No #9eb5a0 (TOKEN-002 banned). Sage = #7AA68C.
+   ============================================================ */
+:root {
+  --bg: #08090a;
+  --surface-1: #0d0e10;
+  --surface-2: #131416;
+  --surface-3: #1a1c1e;
+  --border: #21232a;
+  --border-strong: #2c2f38;
+  --hairline: rgba(255,255,255,0.05);
+  --hairline-2: rgba(255,255,255,0.08);
+  --text: #f7f8f8;
+  --text-2: #b4bcc8;
+  --text-3: #828995;
+  --text-4: #4b5159;
+  --sage: #7aa68c;
+  --sage-bright: #9bc4a8;
+  --sage-soft: #5d8a73;
+  --sage-deep: #2f5040;
+  --sage-tint: rgba(122,166,140,0.13);
+  --sage-glow: rgba(122,166,140,0.18);
+  --warning: #d4a437;
+  --danger: #d4574a;
+  --info: #5b8db8;
+  --row-hover: rgba(255,255,255,0.03);
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+  letter-spacing: -0.005em;
+  font-feature-settings: 'cv11','ss01';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+a { color: inherit; text-decoration: none; }
+button { font: inherit; color: inherit; cursor: pointer; background: 0; border: 0; padding: 0; }
+::selection { background: rgba(122,166,140,0.25); }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 5px; border: 2px solid var(--bg); }
+
+/* ============================================================
+   PAGE SHELL (matches v2 structure for continuity)
+   ============================================================ */
+.page { max-width: 1440px; margin: 0 auto; padding: 56px 32px 96px; }
+.page-h { display: flex; align-items: baseline; gap: 16px; margin-bottom: 6px; }
+.page-h .mark {
+  width: 26px; height: 26px;
+  background: linear-gradient(135deg, var(--sage-deep), var(--sage));
+  border-radius: 6px;
+  display: inline-grid; place-items: center;
+  color: #0d1611; font-family: var(--font-mono); font-weight: 600; font-size: 14px;
+}
+.page-h h1 { font-size: 22px; font-weight: 600; letter-spacing: -0.018em; margin: 0; }
+.page-h .ver {
+  font-family: var(--font-mono); font-size: 11px; color: var(--text-3);
+  letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 3px 8px; border: 1px solid var(--border); border-radius: 4px;
+  margin-left: auto;
+}
+.page-sub {
+  font-size: 13px; color: var(--text-3); margin: 0 0 32px;
+  max-width: 880px; line-height: 1.7;
+}
+.page-sub a { color: var(--sage-bright); border-bottom: 1px dotted var(--sage-soft); }
+.page-sub strong { color: var(--text-2); font-weight: 500; }
+
+.toc {
+  border: 1px solid var(--hairline); border-radius: 8px;
+  background: var(--surface-1);
+  padding: 18px 22px 22px; margin: 0 0 64px;
+}
+.toc-h {
+  font-family: var(--font-mono); font-size: 9.5px;
+  letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--text-3); font-weight: 600; margin-bottom: 14px;
+}
+.toc ol {
+  list-style: none; padding: 0; margin: 0;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 4px 24px;
+}
+.toc li { display: flex; align-items: baseline; gap: 12px; padding: 4px 6px; border-radius: 4px; }
+.toc li:hover { background: var(--row-hover); }
+.toc li .num { font-family: var(--font-mono); font-size: 11px; color: var(--text-4); width: 22px; flex-shrink: 0; }
+.toc li a { flex: 1; color: var(--text); font-size: 13.5px; }
+.toc li a:hover { color: var(--sage-bright); }
+.toc li .meta { font-family: var(--font-mono); font-size: 10px; color: var(--text-4); letter-spacing: 0.06em; text-transform: uppercase; }
+
+.concept { margin: 0 0 80px; scroll-margin-top: 24px; }
+.concept-h { display: flex; align-items: baseline; gap: 14px; margin-bottom: 6px; }
+.concept-h .num {
+  font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--sage-bright); font-weight: 600;
+  padding: 3px 7px;
+  background: var(--sage-tint);
+  border: 1px solid rgba(122,166,140,0.30);
+  border-radius: 4px;
+}
+.concept-h h2 { font-size: 19px; font-weight: 600; letter-spacing: -0.012em; margin: 0; }
+.concept-h .vp-tag {
+  margin-left: auto;
+  font-family: var(--font-mono); font-size: 10px; color: var(--text-4);
+  letter-spacing: 0.06em; text-transform: uppercase;
+}
+.rationale {
+  font-size: 13px; color: var(--text-3); margin: 0 0 18px;
+  font-style: italic; max-width: 720px;
+}
+.tradeoff {
+  margin: 14px 0 0;
+  padding: 10px 14px;
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-left: 2px solid var(--sage-soft);
+  border-radius: 0 4px 4px 0;
+  font-size: 12.5px; color: var(--text-2); line-height: 1.6;
+}
+.tradeoff strong {
+  display: inline-block;
+  font-family: var(--font-mono); font-size: 9.5px; font-weight: 600;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--text-3); margin-right: 6px;
+}
+.tradeoff .strength strong { color: var(--sage-bright); }
+.tradeoff .weakness strong { color: var(--warning); }
+
+.viewport {
+  border: 1px solid var(--border); border-radius: 12px;
+  overflow: hidden; background: var(--bg);
+  box-shadow: 0 16px 48px rgba(0,0,0,0.4);
+  width: 1280px; max-width: 100%; aspect-ratio: 1280/800;
+}
+.vp-frame { width: 100%; height: 100%; overflow: hidden; display: block; }
+
+/* ============================================================
+   SHARED PRIMITIVES — match production
+   ============================================================ */
+
+.tabs {
+  display: flex; align-items: center;
+  border-bottom: 1px solid var(--hairline);
+  padding: 0 18px; height: 38px;
+}
+.tab {
+  padding: 8px 12px 10px;
+  font-family: var(--font-mono); font-size: 10.5px;
+  letter-spacing: 0.07em; text-transform: uppercase;
+  font-weight: 500; color: var(--text-3);
+  position: relative;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.tab.active { color: var(--text); }
+.tab.active::after {
+  content: ""; position: absolute; left: 12px; right: 12px; bottom: -1px;
+  height: 1.5px; background: var(--sage); border-radius: 1px 1px 0 0;
+}
+.tab .badge-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--warning); }
+.tab .badge-dot.crit { background: var(--danger); }
+
+.pt {
+  display: flex; align-items: baseline; gap: 12px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--hairline);
+  font-size: 11.5px; color: var(--text-3);
+}
+.pt .nm { color: var(--text); font-size: 13px; font-weight: 500; }
+.pt .sep { color: var(--text-4); }
+.pt .meta { font-family: var(--font-mono); font-size: 10.5px; }
+.pt .grow { flex: 1; }
+.pt .mrn { font-family: var(--font-mono); font-size: 10px; color: var(--text-4); letter-spacing: 0.06em; text-transform: uppercase; }
+
+/* SOAP letter chip */
+.soap-letter {
+  display: inline-grid; place-items: center;
+  width: 18px; height: 18px;
+  background: var(--sage-tint);
+  border: 1px solid rgba(122,166,140,0.28);
+  color: var(--sage-bright);
+  font-family: var(--font-mono);
+  font-size: 10px; font-weight: 600;
+  border-radius: 4px;
+}
+.soap-letter.sm { width: 16px; height: 16px; font-size: 9px; }
+.soap-letter.lg { width: 22px; height: 22px; font-size: 11px; border-radius: 5px; }
+
+/* status pill */
+.pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 1px 7px; border-radius: 3px;
+  font-size: 10.5px;
+  background: var(--surface-2); color: var(--text-2);
+  border: 1px solid var(--border);
+  letter-spacing: 0.02em; font-weight: 500;
+}
+.pill--sage { background: var(--sage-tint); color: var(--sage-bright); border-color: rgba(122,166,140,0.30); }
+.pill--review { background: rgba(212,165,116,0.06); color: #e3b984; border-color: rgba(212,165,116,0.25); }
+.pill--mono { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.10em; text-transform: uppercase; }
+
+/* sage CTA — sacred #0d1611 text on var(--sage) */
+.sign {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 14px;
+  background: var(--sage); color: #0d1611;
+  border-radius: 5px;
+  font-size: 12px; font-weight: 600;
+  letter-spacing: -0.005em;
+  box-shadow: 0 0 0 1px rgba(122,166,140,0.3);
+}
+.sign.blocked { background: var(--surface-3); color: var(--text-4); box-shadow: none; }
+.sign .kbd {
+  font-family: var(--font-mono); font-size: 9.5px;
+  background: rgba(13,22,17,0.18);
+  padding: 1px 5px; border-radius: 2px; letter-spacing: 0.04em;
+}
+.sign.blocked .kbd { background: rgba(255,255,255,0.04); }
+
+.btn-ghost {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--border); border-radius: 5px;
+  font-size: 11.5px; color: var(--text-2);
+  background: transparent;
+}
+.btn-ghost:hover { border-color: var(--border-strong); color: var(--text); }
+
+/* CALM Rx alert — single line, sidebar tile, or compact card.
+   Deliberately NOT the qm-warn 8-region card from production —
+   v3 keeps the alert quiet. */
+.alert {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 12px;
+  background: rgba(212,87,74,0.06);
+  border: 1px solid rgba(212,87,74,0.30);
+  border-radius: 5px;
+  font-size: 12.5px; color: var(--text-2); line-height: 1.5;
+}
+.alert .ic {
+  color: var(--danger);
+  font-family: var(--font-mono); font-size: 13px;
+  flex-shrink: 0;
+}
+.alert .body { flex: 1; }
+.alert .h { font-weight: 600; color: var(--danger); margin-bottom: 1px; }
+.alert .ax {
+  font-family: var(--font-mono); font-size: 9.5px;
+  color: var(--danger);
+  letter-spacing: 0.10em; text-transform: uppercase;
+  margin-left: 12px; flex-shrink: 0;
+  display: inline-flex; gap: 8px;
+}
+.alert .ax button { color: var(--danger); }
+.alert .ax button:hover { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; }
+.alert.warn { background: rgba(212,164,55,0.06); border-color: rgba(212,164,55,0.30); }
+.alert.warn .ic, .alert.warn .h, .alert.warn .ax, .alert.warn .ax button { color: var(--warning); }
+.alert.inline {
+  border-left-width: 2px; border-radius: 0 4px 4px 0;
+  border-top: 0; border-right: 0; border-bottom: 0;
+  background: rgba(212,87,74,0.04);
+  padding-left: 10px;
+}
+
+/* ============================================================
+   COMPARISON MATRIX (footer)
+   ============================================================ */
+.matrix {
+  margin-top: 80px; padding: 24px 28px;
+  border: 1px solid var(--hairline); border-radius: 12px;
+  background: var(--surface-1);
+}
+.matrix h3 { margin: 0 0 6px; font-size: 15px; font-weight: 600; letter-spacing: -0.012em; }
+.matrix p { margin: 0 0 18px; font-size: 12.5px; color: var(--text-3); }
+.matrix table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.matrix th {
+  text-align: left;
+  font-family: var(--font-mono); font-size: 9.5px;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--text-3); font-weight: 600;
+  padding: 10px 8px 8px;
+  border-bottom: 1px solid var(--hairline);
+}
+.matrix td { padding: 8px; border-bottom: 1px solid var(--hairline); color: var(--text-2); vertical-align: top; }
+.matrix tr:hover td { background: var(--row-hover); }
+.matrix .col-num { color: var(--sage-bright); font-family: var(--font-mono); width: 28px; }
+.matrix .col-name { color: var(--text); font-weight: 500; min-width: 180px; }
+.matrix .pip { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--text-4); margin-right: 2px; }
+.matrix .pip.on { background: var(--sage); }
+.matrix .score { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-3); display: inline-flex; gap: 1px; }
+
+/* ============================================================
+   PER-CONCEPT STYLES — small, scoped, unornamented
+   ============================================================ */
+
+/* Concept 1 — Single column document */
+.c1-body { padding: 32px 0 36px; height: 100%; overflow: auto; }
+.c1-doc { max-width: 720px; margin: 0 auto; padding: 0 16px; }
+.c1-doc .meta {
+  font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: 0.10em; text-transform: uppercase;
+  color: var(--text-3); margin-bottom: 6px;
+}
+.c1-doc h1 {
+  font-size: 22px; font-weight: 600; letter-spacing: -0.018em;
+  margin: 0 0 4px;
+}
+.c1-doc .sub { color: var(--text-3); font-size: 13px; margin-bottom: 32px; }
+.c1-doc h3 {
+  font-family: var(--font-mono); font-size: 10.5px;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--sage-bright); font-weight: 600;
+  margin: 32px 0 8px;
+  display: flex; align-items: center; gap: 8px;
+}
+.c1-doc p { margin: 0 0 8px; font-size: 14px; line-height: 1.7; color: var(--text); }
+.c1-doc ul { margin: 6px 0 0; padding-left: 22px; }
+.c1-doc ul li { font-size: 14px; line-height: 1.65; color: var(--text-2); padding: 2px 0; }
+.c1-doc ul li strong { color: var(--text); font-weight: 600; }
+.c1-doc .foot {
+  margin-top: 36px; padding-top: 16px;
+  border-top: 1px solid var(--hairline);
+  display: flex; align-items: center; gap: 10px;
+}
+.c1-doc .foot .meta { margin: 0; flex: 1; }
+
+/* Concept 2 — Two column with meta sidebar */
+.c2-body { height: 100%; display: grid; grid-template-columns: minmax(0,1fr) 280px; }
+.c2-main { padding: 28px 36px; overflow: auto; }
+.c2-rail {
+  background: var(--surface-1);
+  border-left: 1px solid var(--hairline);
+  padding: 18px 18px;
+  overflow: auto;
+  display: flex; flex-direction: column; gap: 16px;
+}
+.c2-main h3 {
+  font-family: var(--font-mono); font-size: 10.5px;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--sage-bright); font-weight: 600;
+  margin: 26px 0 8px;
+  display: flex; align-items: center; gap: 8px;
+}
+.c2-main h3:first-child { margin-top: 0; }
+.c2-main h2 {
+  font-size: 19px; font-weight: 600; letter-spacing: -0.018em;
+  margin: 0 0 8px;
+}
+.c2-main p { margin: 0 0 8px; font-size: 14px; line-height: 1.65; color: var(--text); }
+.c2-main ul { margin: 6px 0 0; padding-left: 20px; }
+.c2-main ul li { font-size: 13.5px; line-height: 1.55; color: var(--text-2); padding: 1px 0; }
+.c2-main ul li strong { color: var(--text); font-weight: 600; }
+
+.c2-rail-h {
+  font-family: var(--font-mono); font-size: 9.5px;
+  letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--text-3); font-weight: 600; margin: 0;
+}
+.c2-rail .vit-row {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px;
+}
+.c2-rail .v { display: flex; flex-direction: column; gap: 1px; }
+.c2-rail .v .l {
+  font-family: var(--font-mono); font-size: 9px;
+  letter-spacing: 0.10em; text-transform: uppercase;
+  color: var(--text-3);
+}
+.c2-rail .v .n {
+  font-family: var(--font-mono); font-size: 14px;
+  color: var(--text); font-variant-numeric: tabular-nums;
+}
+.c2-rail .v .delta {
+  font-family: var(--font-mono); font-size: 9px;
+  color: var(--sage-bright); letter-spacing: 0.04em;
+}
+.c2-rail .actions { display: flex; flex-direction: column; gap: 6px; }
+.c2-rail .actions .btn-ghost { width: 100%; justify-content: flex-start; padding: 7px 10px; }
+.c2-rail .actions .sign { width: 100%; justify-content: center; padding: 9px 12px; }
+
+/* Concept 3 — Cards (one per S/O/A/P) */
+.c3-body { height: 100%; overflow: auto; padding: 24px 36px 32px; }
+.c3-grid { max-width: 880px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+.c3-card {
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  padding: 18px 22px;
+}
+.c3-card-h {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--hairline);
+}
+.c3-card-h .lbl { font-size: 14px; font-weight: 600; letter-spacing: -0.012em; }
+.c3-card-h .grow { flex: 1; }
+.c3-card p { margin: 0 0 6px; font-size: 13.5px; line-height: 1.65; color: var(--text); }
+.c3-card ul { margin: 4px 0 0; padding-left: 20px; }
+.c3-card ul li { font-size: 13px; line-height: 1.55; color: var(--text-2); padding: 1px 0; }
+.c3-card ul li strong { color: var(--text); font-weight: 600; }
+.c3-card .field-h {
+  font-family: var(--font-mono); font-size: 9.5px;
+  letter-spacing: 0.10em; text-transform: uppercase;
+  color: var(--text-3); font-weight: 600;
+  margin: 10px 0 4px;
+}
+.c3-card .field-h:first-child { margin-top: 0; }
+.c3-foot {
+  max-width: 880px; margin: 18px auto 0;
+  display: flex; align-items: center; gap: 10px;
+}
+
+/* Concept 4 — Accordion */
+.c4-body { height: 100%; overflow: auto; padding: 24px 36px 32px; }
+.c4-stack { max-width: 720px; margin: 0 auto; }
+.c4-row {
+  border-bottom: 1px solid var(--hairline);
+  padding: 14px 4px;
+}
+.c4-row.open { padding-bottom: 22px; }
+.c4-row-h {
+  display: flex; align-items: center; gap: 12px;
+  cursor: pointer; user-select: none;
+}
+.c4-row-h .ch {
+  font-family: var(--font-mono); font-size: 12px;
+  color: var(--text-3); width: 14px;
+}
+.c4-row.open .c4-row-h .ch { transform: rotate(90deg); color: var(--sage-bright); }
+.c4-row-h .lbl { font-size: 14px; font-weight: 600; letter-spacing: -0.012em; }
+.c4-row-h .summary { font-size: 12.5px; color: var(--text-3); margin-left: auto; }
+.c4-row-h .pill { margin-left: 6px; }
+.c4-row-body { display: none; padding: 12px 26px 0; }
+.c4-row.open .c4-row-body { display: block; }
+.c4-row-body p { margin: 0 0 6px; font-size: 13.5px; line-height: 1.65; color: var(--text); }
+.c4-row-body ul { margin: 4px 0 0; padding-left: 18px; }
+.c4-row-body ul li { font-size: 13px; line-height: 1.55; color: var(--text-2); padding: 1px 0; }
+.c4-row-body ul li strong { color: var(--text); font-weight: 600; }
+.c4-foot { max-width: 720px; margin: 22px auto 0; display: flex; gap: 10px; align-items: center; }
+
+/* Concept 5 — Stepper */
+.c5-body { height: 100%; display: flex; flex-direction: column; }
+.c5-stepper {
+  display: flex; align-items: center;
+  padding: 22px 56px 22px;
+  border-bottom: 1px solid var(--hairline);
+  max-width: 880px; margin: 0 auto; width: 100%;
+}
+.c5-step { display: flex; align-items: center; gap: 10px; }
+.c5-step .dot {
+  width: 22px; height: 22px;
+  border: 1px solid var(--hairline-2);
+  background: var(--surface-2);
+  color: var(--text-3);
+  border-radius: 50%;
+  display: inline-grid; place-items: center;
+  font-family: var(--font-mono); font-size: 10.5px; font-weight: 600;
+}
+.c5-step.done .dot {
+  background: var(--sage-tint);
+  border-color: rgba(122,166,140,0.32);
+  color: var(--sage-bright);
+}
+.c5-step.on .dot {
+  background: var(--sage); color: #0d1611; border-color: var(--sage);
+  box-shadow: 0 0 0 4px rgba(122,166,140,0.18);
+}
+.c5-step .lbl {
+  font-size: 12.5px; color: var(--text-3); letter-spacing: -0.005em;
+}
+.c5-step.done .lbl, .c5-step.on .lbl { color: var(--text); font-weight: 500; }
+.c5-line {
+  flex: 1; height: 1px; background: var(--hairline-2); margin: 0 14px;
+}
+.c5-line.done { background: var(--sage-soft); }
+.c5-stage {
+  flex: 1; overflow: auto;
+  padding: 28px 56px 16px;
+  max-width: 880px; margin: 0 auto; width: 100%;
+}
+.c5-stage h2 {
+  font-size: 20px; font-weight: 600; letter-spacing: -0.018em;
+  margin: 0 0 6px;
+}
+.c5-stage .crumbs {
+  font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: 0.10em; text-transform: uppercase;
+  color: var(--text-3); margin-bottom: 18px;
+}
+.c5-stage p { margin: 0 0 8px; font-size: 14px; line-height: 1.7; color: var(--text); }
+.c5-stage ul { margin: 6px 0 0; padding-left: 22px; }
+.c5-stage ul li { font-size: 14px; line-height: 1.65; color: var(--text-2); padding: 2px 0; }
+.c5-stage ul li strong { color: var(--text); font-weight: 600; }
+.c5-foot {
+  border-top: 1px solid var(--hairline);
+  padding: 14px 56px;
+  display: flex; align-items: center; gap: 10px;
+  max-width: 880px; margin: 0 auto; width: 100%;
+}
+.c5-foot .pos {
+  font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: 0.10em; text-transform: uppercase;
+  color: var(--text-3); margin-right: auto;
+}
+
+/* Concept 6 — Top summary card + scrollable body */
+.c6-body { height: 100%; overflow: auto; padding: 24px 36px 32px; }
+.c6-wrap { max-width: 880px; margin: 0 auto; }
+.c6-summary {
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  padding: 22px 24px;
+  margin-bottom: 22px;
+}
+.c6-summary .meta {
+  font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--text-3); margin-bottom: 8px;
+}
+.c6-summary h2 {
+  font-size: 21px; font-weight: 600; letter-spacing: -0.018em;
+  margin: 0 0 12px; line-height: 1.35;
+}
+.c6-summary .row {
+  display: flex; gap: 20px;
+  padding-top: 14px; margin-top: 14px;
+  border-top: 1px solid var(--hairline);
+  flex-wrap: wrap;
+}
+.c6-summary .v {
+  display: flex; flex-direction: column; gap: 2px;
+}
+.c6-summary .v .l {
+  font-family: var(--font-mono); font-size: 9px;
+  letter-spacing: 0.10em; text-transform: uppercase; color: var(--text-3);
+}
+.c6-summary .v .n {
+  font-family: var(--font-mono); font-size: 14px;
+  color: var(--text); font-variant-numeric: tabular-nums;
+}
+.c6-summary .v.warn .n { color: var(--warning); }
+.c6-summary .v .delta {
+  font-family: var(--font-mono); font-size: 9px;
+  color: var(--sage-bright);
+}
+
+.c6-body h3 {
+  font-family: var(--font-mono); font-size: 10.5px;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--sage-bright); font-weight: 600;
+  margin: 28px 0 8px;
+  display: flex; align-items: center; gap: 8px;
+}
+.c6-body p { margin: 0 0 8px; font-size: 14px; line-height: 1.65; color: var(--text); }
+.c6-body ul { margin: 4px 0 0; padding-left: 20px; }
+.c6-body ul li { font-size: 13.5px; line-height: 1.55; color: var(--text-2); padding: 1px 0; }
+.c6-body ul li strong { color: var(--text); font-weight: 600; }
+
+/* Concept 7 — Form-style */
+.c7-body { height: 100%; overflow: auto; padding: 24px 36px 32px; }
+.c7-form { max-width: 720px; margin: 0 auto; }
+.c7-fieldset {
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  padding: 16px 18px 18px;
+  margin-bottom: 12px;
+  background: var(--surface-1);
+}
+.c7-legend {
+  font-family: var(--font-mono); font-size: 9.5px;
+  letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--sage-bright); font-weight: 600;
+  margin-bottom: 10px; padding-bottom: 8px;
+  border-bottom: 1px solid var(--hairline);
+  display: flex; align-items: center; gap: 8px;
+}
+.c7-field { display: grid; grid-template-columns: 110px 1fr; gap: 4px 16px; padding: 6px 0; }
+.c7-field + .c7-field { border-top: 1px solid var(--hairline); }
+.c7-field dt {
+  font-size: 11px; color: var(--text-3);
+  padding-top: 6px;
+  letter-spacing: -0.005em;
+}
+.c7-field dd {
+  margin: 0; font-size: 13.5px; color: var(--text);
+  padding: 5px 8px; min-height: 32px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  line-height: 1.55;
+}
+.c7-field dd:hover { border-color: var(--hairline-2); background: rgba(255,255,255,0.022); cursor: text; }
+.c7-field dd ul { margin: 4px 0 0; padding-left: 18px; }
+.c7-field dd ul li { font-size: 13px; padding: 1px 0; }
+.c7-field dd strong { font-weight: 600; }
+
+/* Concept 8 — Notebook (pure typography) */
+.c8-body {
+  height: 100%; overflow: auto;
+  padding: 56px 96px 56px;
+  font-family: var(--font-sans);
+}
+.c8-doc { max-width: 600px; margin: 0 auto; }
+.c8-doc .meta {
+  font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: 0.20em; text-transform: uppercase;
+  color: var(--text-3); margin-bottom: 6px;
+}
+.c8-doc h1 {
+  font-size: 17px; font-weight: 600;
+  letter-spacing: 0.30em; text-transform: uppercase;
+  margin: 0 0 36px; color: var(--text);
+}
+.c8-doc h3 {
+  font-size: 11px; font-weight: 600;
+  letter-spacing: 0.30em; text-transform: uppercase;
+  color: var(--sage-bright);
+  margin: 36px 0 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--hairline);
+}
+.c8-doc p {
+  margin: 0 0 12px;
+  font-size: 14px; line-height: 1.85;
+  color: var(--text);
+  letter-spacing: -0.005em;
+}
+.c8-doc p strong { font-weight: 600; }
+.c8-doc .num {
+  font-family: var(--font-mono);
+  color: var(--text-3);
+  margin-right: 4px;
+}
+.c8-doc .sig {
+  margin-top: 56px; padding-top: 16px;
+  border-top: 1px solid var(--hairline);
+  display: flex; align-items: baseline; gap: 18px;
+  font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--text-3);
+}
+
+/* Concept 9 — Side tabs */
+.c9-body { height: 100%; display: grid; grid-template-columns: 200px minmax(0,1fr); }
+.c9-rail {
+  background: var(--surface-1);
+  border-right: 1px solid var(--hairline);
+  padding: 22px 12px;
+  overflow: auto;
+  display: flex; flex-direction: column;
+}
+.c9-rail-h {
+  font-family: var(--font-mono); font-size: 9.5px;
+  letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--text-3); font-weight: 600;
+  padding: 0 10px 12px;
+}
+.c9-rail .item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px;
+  font-size: 13px; color: var(--text-3);
+  border-radius: 5px;
+  letter-spacing: -0.005em;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+}
+.c9-rail .item:hover { color: var(--text); background: var(--row-hover); }
+.c9-rail .item.on {
+  color: var(--text);
+  background: var(--sage-tint);
+  border-left-color: var(--sage);
+}
+.c9-rail .item .meta {
+  margin-left: auto;
+  font-family: var(--font-mono); font-size: 9.5px;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--text-4);
+}
+.c9-rail .item.on .meta { color: var(--sage-bright); }
+.c9-rail .foot { margin-top: auto; padding-top: 16px; }
+.c9-content {
+  padding: 28px 36px;
+  overflow: auto;
+}
+.c9-content h2 {
+  font-size: 20px; font-weight: 600; letter-spacing: -0.018em;
+  margin: 0 0 6px;
+}
+.c9-content .crumbs {
+  font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: 0.10em; text-transform: uppercase;
+  color: var(--text-3); margin-bottom: 18px;
+}
+.c9-content p { margin: 0 0 8px; font-size: 14px; line-height: 1.65; color: var(--text); }
+.c9-content ul { margin: 6px 0 0; padding-left: 20px; }
+.c9-content ul li { font-size: 14px; line-height: 1.55; color: var(--text-2); padding: 1px 0; }
+.c9-content ul li strong { color: var(--text); font-weight: 600; }
+
+/* Concept 10 — 2×2 grid */
+.c10-body { height: 100%; display: flex; flex-direction: column; padding: 18px 24px; gap: 12px; }
+.c10-vit-strip {
+  display: grid; grid-template-columns: repeat(6,1fr);
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.c10-vit-strip .v { padding: 12px 14px; border-right: 1px solid var(--hairline); }
+.c10-vit-strip .v:last-child { border-right: 0; }
+.c10-vit-strip .l {
+  font-family: var(--font-mono); font-size: 9px;
+  letter-spacing: 0.10em; text-transform: uppercase; color: var(--text-3);
+  margin-bottom: 4px;
+}
+.c10-vit-strip .n {
+  font-family: var(--font-mono); font-size: 16px;
+  color: var(--text); font-variant-numeric: tabular-nums;
+}
+.c10-vit-strip .v.warn .n { color: var(--warning); }
+.c10-vit-strip .delta {
+  font-family: var(--font-mono); font-size: 9px;
+  color: var(--sage-bright); letter-spacing: 0.04em;
+}
+.c10-grid {
+  flex: 1;
+  display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;
+  gap: 12px;
+}
+.c10-card {
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  padding: 14px 16px;
+  overflow: auto;
+}
+.c10-card-h {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--hairline);
+}
+.c10-card-h .lbl { font-size: 13px; font-weight: 600; letter-spacing: -0.012em; }
+.c10-card-h .grow { flex: 1; }
+.c10-card p { margin: 0 0 6px; font-size: 13px; line-height: 1.55; color: var(--text); }
+.c10-card ul { margin: 4px 0 0; padding-left: 16px; }
+.c10-card ul li { font-size: 12.5px; line-height: 1.5; color: var(--text-2); padding: 1px 0; }
+.c10-card ul li strong { color: var(--text); font-weight: 600; }
+.c10-foot { display: flex; align-items: center; gap: 10px; }
+
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <div class="page-h">
+    <span class="mark">Q</span>
+    <h1>QuillMD · SOAP tab redesign · v3 · simple concepts</h1>
+    <span class="ver">V3 · 10 SIMPLE · 2026-05-09</span>
+  </div>
+  <p class="page-sub">
+    Round 3 inverts <a href="quillmd-soap-mockups-v2.html">v2</a>'s direction. v2 reached for novel paradigms (diff mode, audit-trail marginalia, opacity-as-confidence, voice-first, AI co-pilot, transcript-link). All clever, none resonated. v3 reaches for <strong>clean execution of standard patterns</strong> — single column, two-column, cards, accordion, stepper, form, document, side-tabs, grid. A doctor opens the SOAP tab, understands what they're looking at within 2 seconds, knows what to do next without instruction. Reference points: Things 3, Linear's basic issue view, Notion's plain document mode. Same fixture as v2 (Maria Castillo, 52F, T2DM/HTN follow-up, new orthostatic dizziness, dapagliflozin + Lisinopril Rx warning) so layout differences are visible without content noise. Same production token discipline: dark canvas <code>#08090a</code>, sage <code>#7AA68C</code>, Inter + JetBrains Mono. The Rx warning is present in every concept but treated calmly — single-line inline alert or sidebar tile, not a takeover.
+  </p>
+  <p class="page-sub" style="font-size: 12px; color: var(--text-4);">
+    Earlier rounds: <a href="quillmd-soap-mockups.html">v1</a> (5 concepts: Index+Body, Problem-Forward, Hero+Detail, Smart Highlights, Active vs Reference) · <a href="quillmd-soap-mockups-v2.html">v2</a> (10 concepts: Tabbed, Split-pane, Diff, Confidence-graded, Audit-trail, Compact dashboard, AI co-pilot, Voice-first, Mobile, Print-preview).
+  </p>
+
+  <nav class="toc">
+    <div class="toc-h">10 simple concepts · click to jump</div>
+    <ol>
+      <li><span class="num">01</span><a href="#c1">Single-column document</a><span class="meta">read · prose</span></li>
+      <li><span class="num">02</span><a href="#c2">Two-column with meta sidebar</a><span class="meta">read · sidebar</span></li>
+      <li><span class="num">03</span><a href="#c3">Section cards</a><span class="meta">read · cards</span></li>
+      <li><span class="num">04</span><a href="#c4">Accordion</a><span class="meta">read · collapse</span></li>
+      <li><span class="num">05</span><a href="#c5">Stepper</a><span class="meta">read · linear</span></li>
+      <li><span class="num">06</span><a href="#c6">Top summary + body</a><span class="meta">read · skim</span></li>
+      <li><span class="num">07</span><a href="#c7">Form-style fields</a><span class="meta">edit · EHR</span></li>
+      <li><span class="num">08</span><a href="#c8">Notebook</a><span class="meta">read · type-only</span></li>
+      <li><span class="num">09</span><a href="#c9">Side tabs</a><span class="meta">read · settings</span></li>
+      <li><span class="num">10</span><a href="#c10">2×2 grid</a><span class="meta">read · symmetric</span></li>
+    </ol>
+  </nav>
+
+  <!-- ============================================================
+       CONCEPT 1 — SINGLE-COLUMN DOCUMENT
+       ============================================================ -->
+  <section id="c1" class="concept">
+    <div class="concept-h">
+      <span class="num">01</span>
+      <h2>Single-column document</h2>
+      <span class="vp-tag">desktop · 1280×800</span>
+    </div>
+    <p class="rationale">A doctor opens it and sees prose. One centered column, generous whitespace, S/O/A/P as restrained section headings. No chrome, no rails. Like reading a page.</p>
+    <div class="viewport"><div class="vp-frame">
+      <div class="c1-body">
+        <div class="tabs">
+          <button class="tab active">SOAP Note</button>
+          <button class="tab">Transcript</button>
+          <button class="tab">Codes</button>
+          <button class="tab">Rx<span class="badge-dot crit"></span></button>
+          <button class="tab">Extras</button>
+        </div>
+        <div class="pt">
+          <span class="nm">Maria Castillo</span>
+          <span class="sep">·</span><span>52F</span>
+          <span class="sep">·</span><span>T2DM/HTN follow-up</span>
+          <span class="sep">·</span><span class="meta">2026-05-09</span>
+          <span class="grow"></span>
+          <span class="mrn">MRN 8214-31</span>
+        </div>
+        <div class="c1-doc" style="padding-top:32px;padding-bottom:36px">
+          <div class="meta">SOAP note · Dr. P. Chen · 18 min</div>
+          <h1>T2DM / HTN quarterly follow-up</h1>
+          <div class="sub">Routine review with new orthostatic dizziness × 2 weeks.</div>
+
+          <h3><span class="soap-letter">S</span>Subjective</h3>
+          <p>52-year-old woman with established Type 2 Diabetes Mellitus (2018) and Hypertension (2019), here for routine quarterly follow-up. Reports good adherence to metformin, dapagliflozin, and lisinopril. Diet improved; lost 3 lb. Walking 20 min × 4 days/week.</p>
+          <p>New: occasional morning dizziness on standing × 2 weeks. Denies vision changes, palpitations, chest pain.</p>
+
+          <h3><span class="soap-letter">O</span>Objective</h3>
+          <p>BP <strong>124/78</strong> (improved from 142/88) · HR 72 · T 98.6°F · RR 14 · SpO₂ 98% · Wt 168 lb (-3) · BMI 28.0.</p>
+          <p>Gen NAD · CV RRR no m/r/g · Pulm CTAB · Ext no edema · Diabetic foot exam normal · Neuro A&Ox3, motor 5/5, DTRs 2+ symmetric.</p>
+
+          <h3><span class="soap-letter">A</span>Assessment</h3>
+          <ul>
+            <li><strong>1 · T2DM, well controlled</strong> — A1C 6.8% (improved from 7.2%) — E11.9</li>
+            <li><strong>2 · HTN, improved</strong> — 124/78 today — I10</li>
+            <li><strong>3 · Orthostatic dizziness, new</strong> — likely volume-related — R42</li>
+            <li><strong>4 · HLD, stable</strong> — E78.5</li>
+          </ul>
+
+          <h3><span class="soap-letter">P</span>Plan</h3>
+          <ul>
+            <li>T2DM: continue regimen; A1C in 3 months.</li>
+            <li>HTN: continue Lisinopril 20 mg qD; consider dose reduction if remains &lt;120/80.</li>
+            <li>Dizziness: hydration counseling; reassess in 2 weeks.</li>
+            <li>HLD: continue atorvastatin. Annual labs ordered.</li>
+          </ul>
+
+          <div class="alert" style="margin-top: 18px">
+            <span class="ic">⚠</span>
+            <span class="body"><span class="h">Rx safety</span> Dapagliflozin + Lisinopril → orthostatic hypotension risk. Sign blocked.</span>
+            <span class="ax"><button>Review</button></span>
+          </div>
+
+          <div class="foot">
+            <div class="meta">Last edit 4 m ago · 4 of 4 sections drafted</div>
+            <button class="btn-ghost">Edit</button>
+            <span class="sign blocked">Sign — review Rx <span class="kbd">⌘ ↵</span></span>
+          </div>
+        </div>
+      </div>
+    </div></div>
+    <p class="tradeoff"><span class="strength"><strong>Strength</strong>Calmest possible read. Nothing competing with the prose. Doctor reads top-to-bottom in one pass; the Rx alert appears once, in line, where the Plan ends.</span> · <span class="weakness"><strong>Weakness</strong>No at-a-glance vitals/billing context — those that exist in production rails are absent here, traded for calm.</span></p>
+  </section>
+
+  <!-- ============================================================
+       CONCEPT 2 — TWO-COLUMN WITH META SIDEBAR
+       ============================================================ -->
+  <section id="c2" class="concept">
+    <div class="concept-h">
+      <span class="num">02</span>
+      <h2>Two-column with meta sidebar</h2>
+      <span class="vp-tag">desktop · 1280×800</span>
+    </div>
+    <p class="rationale">SOAP body in a comfortable reading column; a thin sidebar on the right holds today's vitals, action buttons, and the Rx alert tile. No surprises.</p>
+    <div class="viewport"><div class="vp-frame">
+      <div class="c2-body">
+        <div style="grid-column: 1 / -1">
+          <div class="tabs">
+            <button class="tab active">SOAP Note</button>
+            <button class="tab">Transcript</button>
+            <button class="tab">Codes</button>
+            <button class="tab">Rx<span class="badge-dot crit"></span></button>
+            <button class="tab">Extras</button>
+          </div>
+          <div class="pt">
+            <span class="nm">Maria Castillo</span>
+            <span class="sep">·</span><span>52F</span>
+            <span class="sep">·</span><span>T2DM/HTN follow-up</span>
+            <span class="sep">·</span><span class="meta">2026-05-09</span>
+            <span class="grow"></span>
+            <span class="mrn">MRN 8214-31</span>
+          </div>
+        </div>
+
+        <div class="c2-main">
+          <h2>T2DM / HTN quarterly follow-up</h2>
+
+          <h3><span class="soap-letter">S</span>Subjective</h3>
+          <p>52F with established T2DM (2018) and HTN (2019), routine quarterly f/u. Good adherence to met + dapagliflozin + lisinopril. Diet improved; lost 3 lb. Walking 20 min × 4 days/week. New: occasional morning dizziness on standing × 2 weeks. Denies vision changes, palpitations, chest pain.</p>
+          <p>PMH: T2DM · HTN · HLD · GAD. Allergies: <strong>sulfa (rash)</strong>. FH: Mother T2DM, Father MI 58.</p>
+
+          <h3><span class="soap-letter">O</span>Objective</h3>
+          <p>BP 124/78 (↓ 142/88) · HR 72 · T 98.6° · BMI 28.0. Gen NAD · CV RRR · Pulm CTAB · Ext no edema · Diabetic foot exam normal · Neuro intact.</p>
+
+          <h3><span class="soap-letter">A</span>Assessment</h3>
+          <ul>
+            <li><strong>1 · T2DM, well controlled</strong> — A1C 6.8% (↓ 7.2%) — E11.9</li>
+            <li><strong>2 · HTN, improved</strong> — I10</li>
+            <li><strong>3 · Orthostatic dizziness, new</strong> — likely volume-related — R42</li>
+            <li><strong>4 · HLD, stable</strong> — E78.5</li>
+          </ul>
+
+          <h3><span class="soap-letter">P</span>Plan</h3>
+          <ul>
+            <li>T2DM: continue regimen; A1C in 3 months.</li>
+            <li>HTN: continue Lisinopril 20 mg qD; consider dose reduction at next visit if stable.</li>
+            <li>Dizziness: hydration counseling, reassess in 2 weeks.</li>
+            <li>HLD: continue atorvastatin. Annual labs ordered.</li>
+          </ul>
+        </div>
+
+        <aside class="c2-rail">
+          <div>
+            <div class="c2-rail-h">Today</div>
+            <div class="vit-row" style="margin-top:10px">
+              <div class="v"><div class="l">BP</div><div class="n">124/78</div><div class="delta">↓ 142/88</div></div>
+              <div class="v"><div class="l">A1C</div><div class="n">6.8%</div><div class="delta">↓ 7.2%</div></div>
+              <div class="v"><div class="l">HR</div><div class="n">72</div></div>
+              <div class="v"><div class="l">BMI</div><div class="n">28.0</div><div class="delta">↓ 0.5</div></div>
+            </div>
+          </div>
+          <div>
+            <div class="c2-rail-h">Rx safety</div>
+            <div class="alert" style="margin-top:8px;flex-direction:column;gap:6px">
+              <div style="display:flex;gap:10px;align-items:flex-start">
+                <span class="ic">⚠</span>
+                <div>
+                  <div class="h">1 critical</div>
+                  <div style="font-size:12px">Dapagliflozin + Lisinopril → orthostatic hypotension.</div>
+                </div>
+              </div>
+              <div class="ax" style="margin-left:0;margin-top:4px"><button>Review →</button></div>
+            </div>
+          </div>
+          <div>
+            <div class="c2-rail-h">Actions</div>
+            <div class="actions" style="margin-top:8px">
+              <button class="btn-ghost">Edit</button>
+              <button class="btn-ghost">Copy SOAP</button>
+              <span class="sign blocked">Sign · review Rx</span>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div></div>
+    <p class="tradeoff"><span class="strength"><strong>Strength</strong>Body reads like prose; sidebar gives at-a-glance status. Most familiar two-column layout doctors already know from EHRs and email clients. No motion required.</span> · <span class="weakness"><strong>Weakness</strong>Sidebar always present, even when ignored — costs ~280 px of horizontal space the body could use. Reading column narrower than concept 1.</span></p>
+  </section>
+
+  <!-- ============================================================
+       CONCEPT 3 — CARDS
+       ============================================================ -->
+  <section id="c3" class="concept">
+    <div class="concept-h">
+      <span class="num">03</span>
+      <h2>Section cards</h2>
+      <span class="vp-tag">desktop · 1280×800</span>
+    </div>
+    <p class="rationale">One card per S/O/A/P section, stacked. Each card is its own contained unit — easy to scan, easy to skip, edges separate concerns visually.</p>
+    <div class="viewport"><div class="vp-frame">
+      <div style="height: 100%; display:flex; flex-direction:column">
+        <div class="tabs">
+          <button class="tab active">SOAP Note</button>
+          <button class="tab">Transcript</button>
+          <button class="tab">Codes</button>
+          <button class="tab">Rx<span class="badge-dot crit"></span></button>
+          <button class="tab">Extras</button>
+        </div>
+        <div class="pt">
+          <span class="nm">Maria Castillo</span>
+          <span class="sep">·</span><span>52F</span>
+          <span class="sep">·</span><span>T2DM/HTN follow-up</span>
+          <span class="sep">·</span><span class="meta">2026-05-09</span>
+          <span class="grow"></span>
+          <span class="mrn">MRN 8214-31</span>
+        </div>
+        <div class="c3-body">
+          <div class="c3-grid">
+
+            <div class="c3-card">
+              <div class="c3-card-h">
+                <span class="soap-letter lg">S</span>
+                <span class="lbl">Subjective</span>
+                <span class="grow"></span>
+                <span class="pill pill--sage pill--mono">Reviewed</span>
+              </div>
+              <p>52F with established T2DM (2018) and HTN (2019), routine quarterly f/u. Good adherence to metformin + dapagliflozin + lisinopril. Diet improved; lost 3 lb. Walking 20 min × 4 days/week.</p>
+              <p><strong>New: occasional morning dizziness on standing × 2 weeks.</strong> Denies vision changes, palpitations, chest pain.</p>
+              <div class="field-h">PMH · Meds · FH · Allergies</div>
+              <ul>
+                <li>T2DM (2018) · HTN (2019) · HLD · GAD</li>
+                <li>Met 1 g BID · Dapaglif 10 qD · Lisin 20 qD · Atorv 20 qHS · Sert 50 qD</li>
+                <li>Mother T2DM · Father MI 58 · <strong>Sulfa (rash)</strong></li>
+              </ul>
+            </div>
+
+            <div class="c3-card">
+              <div class="c3-card-h">
+                <span class="soap-letter lg">O</span>
+                <span class="lbl">Objective</span>
+                <span class="grow"></span>
+                <span class="pill pill--sage pill--mono">Reviewed</span>
+              </div>
+              <div class="field-h">Vitals</div>
+              <p>BP <strong>124/78</strong> (↓ from 142/88) · HR 72 · T 98.6° · RR 14 · SpO₂ 98% · Wt 168 lb (-3) · BMI 28.0.</p>
+              <div class="field-h">Exam</div>
+              <p>Gen NAD · CV RRR no m/r/g · Pulm CTAB · Ext no edema · Diabetic foot exam normal — monofilament intact bilaterally · Neuro A&Ox3, motor 5/5.</p>
+            </div>
+
+            <div class="c3-card">
+              <div class="c3-card-h">
+                <span class="soap-letter lg">A</span>
+                <span class="lbl">Assessment</span>
+                <span class="grow"></span>
+                <span class="pill pill--review pill--mono">Drafted</span>
+              </div>
+              <ul>
+                <li><strong>1 · T2DM, well controlled</strong> — A1C 6.8% (improved from 7.2%) — E11.9</li>
+                <li><strong>2 · HTN, improved</strong> — 124/78 today — I10</li>
+                <li><strong>3 · Orthostatic dizziness, new</strong> — likely volume-related (SGLT2 + recent weight loss) — R42</li>
+                <li><strong>4 · HLD, stable</strong> — E78.5</li>
+              </ul>
+            </div>
+
+            <div class="c3-card">
+              <div class="c3-card-h">
+                <span class="soap-letter lg">P</span>
+                <span class="lbl">Plan</span>
+                <span class="grow"></span>
+                <span class="pill pill--review pill--mono">Drafted</span>
+              </div>
+              <ul>
+                <li>T2DM: continue metformin + dapagliflozin; A1C in 3 months.</li>
+                <li>HTN: continue Lisinopril 20 mg qD; consider dose reduction if stable.</li>
+                <li>Dizziness: hydration counseling, reassess in 2 weeks; if persistent, hold dapagliflozin.</li>
+                <li>HLD: continue atorvastatin. Annual labs ordered.</li>
+              </ul>
+            </div>
+
+            <div class="alert">
+              <span class="ic">⚠</span>
+              <span class="body"><span class="h">Rx safety · 1 critical</span> Dapagliflozin + Lisinopril → orthostatic hypotension. Patient already symptomatic. Sign blocked until acknowledged.</span>
+              <span class="ax"><button>Review →</button></span>
+            </div>
+
+          </div>
+          <div class="c3-foot">
+            <div style="flex:1;font-family:var(--font-mono);font-size:10px;letter-spacing:0.06em;color:var(--text-3);text-transform:uppercase">4 sections · last edit 4 m ago</div>
+            <button class="btn-ghost">Edit</button>
+            <button class="btn-ghost">Copy SOAP</button>
+            <span class="sign blocked">Sign — review Rx <span class="kbd">⌘ ↵</span></span>
+          </div>
+        </div>
+      </div>
+    </div></div>
+    <p class="tradeoff"><span class="strength"><strong>Strength</strong>Each section is a discrete unit — eye doesn't blur across boundaries. Standard card pattern; any clinician used to a phone or web app will read it natively. Status pill per card surfaces "this section is drafted but not reviewed" without rails or rails-of-rails.</span> · <span class="weakness"><strong>Weakness</strong>Card chrome (border + padding) costs vertical space. Doctors with long HPIs will scroll more than concept 1. Flat card list — no hierarchy between, say, A (clinically critical) and S (history).</span></p>
+  </section>
+
+  <!-- ============================================================
+       CONCEPT 4 — ACCORDION
+       ============================================================ -->
+  <section id="c4" class="concept">
+    <div class="concept-h">
+      <span class="num">04</span>
+      <h2>Accordion</h2>
+      <span class="vp-tag">desktop · 1280×800</span>
+    </div>
+    <p class="rationale">All four sections collapsed by default with a one-line summary. Click to expand inline. Reading mode: doctor opens just the sections they want to verify; the rest stays out of the way.</p>
+    <div class="viewport"><div class="vp-frame">
+      <div style="height: 100%; display:flex; flex-direction:column">
+        <div class="tabs">
+          <button class="tab active">SOAP Note</button>
+          <button class="tab">Transcript</button>
+          <button class="tab">Codes</button>
+          <button class="tab">Rx<span class="badge-dot crit"></span></button>
+          <button class="tab">Extras</button>
+        </div>
+        <div class="pt">
+          <span class="nm">Maria Castillo</span>
+          <span class="sep">·</span><span>52F</span>
+          <span class="sep">·</span><span>T2DM/HTN follow-up</span>
+          <span class="sep">·</span><span class="meta">2026-05-09</span>
+          <span class="grow"></span>
+          <span class="mrn">MRN 8214-31</span>
+        </div>
+        <div class="c4-body">
+          <div class="c4-stack">
+
+            <div class="c4-row">
+              <div class="c4-row-h">
+                <span class="ch">›</span>
+                <span class="soap-letter">S</span>
+                <span class="lbl">Subjective</span>
+                <span class="summary">CC + HPI · PMH · meds · allergies · FH · SH</span>
+                <span class="pill pill--sage pill--mono">Reviewed</span>
+              </div>
+            </div>
+
+            <div class="c4-row">
+              <div class="c4-row-h">
+                <span class="ch">›</span>
+                <span class="soap-letter">O</span>
+                <span class="lbl">Objective</span>
+                <span class="summary">BP 124/78 ↓ · HR 72 · 168 lb · exam unremarkable</span>
+                <span class="pill pill--sage pill--mono">Reviewed</span>
+              </div>
+            </div>
+
+            <div class="c4-row open">
+              <div class="c4-row-h">
+                <span class="ch">›</span>
+                <span class="soap-letter">A</span>
+                <span class="lbl">Assessment</span>
+                <span class="summary">4 problems · 1 new (orthostatic dizziness)</span>
+                <span class="pill pill--review pill--mono">Drafted</span>
+              </div>
+              <div class="c4-row-body">
+                <ul>
+                  <li><strong>1 · T2DM, well controlled</strong> — A1C 6.8% (improved from 7.2%) — E11.9</li>
+                  <li><strong>2 · HTN, improved</strong> — 124/78 today (down from 142/88) — I10</li>
+                  <li><strong>3 · Orthostatic dizziness, new</strong> — likely volume-related, attributable to dapagliflozin (SGLT2 osmotic effect) + recent weight loss + Lisinopril — R42</li>
+                  <li><strong>4 · HLD, stable</strong> — E78.5</li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="c4-row open">
+              <div class="c4-row-h">
+                <span class="ch">›</span>
+                <span class="soap-letter">P</span>
+                <span class="lbl">Plan</span>
+                <span class="summary">5 actions · 1 conditional Rx hold</span>
+                <span class="pill pill--review pill--mono">Drafted</span>
+              </div>
+              <div class="c4-row-body">
+                <ul>
+                  <li>T2DM: continue metformin + dapagliflozin; A1C in 3 months.</li>
+                  <li>HTN: continue Lisinopril 20 mg qD; consider dose reduction at next visit if remains &lt;120/80.</li>
+                  <li>Dizziness: hydration counseling, reassess in 2 weeks; <strong>if persistent, hold dapagliflozin temporarily.</strong></li>
+                  <li>HLD: continue atorvastatin. Annual labs ordered (A1C, lipid, BMP).</li>
+                </ul>
+                <div class="alert" style="margin-top:14px">
+                  <span class="ic">⚠</span>
+                  <span class="body"><span class="h">Rx safety</span> Dapagliflozin + Lisinopril → orthostatic hypotension. Sign blocked until acknowledged.</span>
+                  <span class="ax"><button>Review →</button></span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+          <div class="c4-foot">
+            <div style="flex:1;font-family:var(--font-mono);font-size:10px;letter-spacing:0.06em;color:var(--text-3);text-transform:uppercase">2 of 4 expanded · last edit 4 m ago</div>
+            <button class="btn-ghost">Expand all</button>
+            <button class="btn-ghost">Edit</button>
+            <span class="sign blocked">Sign — review Rx <span class="kbd">⌘ ↵</span></span>
+          </div>
+        </div>
+      </div>
+    </div></div>
+    <p class="tradeoff"><span class="strength"><strong>Strength</strong>Doctor controls the depth of review — open just A and P, leave S and O closed since they're already reviewed. Summary line per row gives a real preview without opening. Tightest visual budget on the page.</span> · <span class="weakness"><strong>Weakness</strong>One-click cost to read every section discourages thoroughness. Cross-section reasoning ("how does the BP improvement relate to the dizziness?") requires opening multiple rows at once.</span></p>
+  </section>
+
+  <!-- ============================================================
+       CONCEPT 5 — STEPPER
+       ============================================================ -->
+  <section id="c5" class="concept">
+    <div class="concept-h">
+      <span class="num">05</span>
+      <h2>Stepper</h2>
+      <span class="vp-tag">desktop · 1280×800</span>
+    </div>
+    <p class="rationale">S → O → A → P presented as an explicit four-step flow. Doctor advances one step at a time. Familiar from onboarding wizards and review checklists.</p>
+    <div class="viewport"><div class="vp-frame">
+      <div class="c5-body">
+        <div class="tabs">
+          <button class="tab active">SOAP Note</button>
+          <button class="tab">Transcript</button>
+          <button class="tab">Codes</button>
+          <button class="tab">Rx<span class="badge-dot crit"></span></button>
+          <button class="tab">Extras</button>
+        </div>
+        <div class="pt">
+          <span class="nm">Maria Castillo</span>
+          <span class="sep">·</span><span>52F</span>
+          <span class="sep">·</span><span>T2DM/HTN follow-up</span>
+          <span class="sep">·</span><span class="meta">2026-05-09</span>
+          <span class="grow"></span>
+          <span class="mrn">MRN 8214-31</span>
+        </div>
+
+        <div class="c5-stepper">
+          <div class="c5-step done"><div class="dot">S</div><div class="lbl">Subjective</div></div>
+          <div class="c5-line done"></div>
+          <div class="c5-step done"><div class="dot">O</div><div class="lbl">Objective</div></div>
+          <div class="c5-line done"></div>
+          <div class="c5-step on"><div class="dot">A</div><div class="lbl">Assessment</div></div>
+          <div class="c5-line"></div>
+          <div class="c5-step"><div class="dot">P</div><div class="lbl">Plan</div></div>
+        </div>
+
+        <div class="c5-stage">
+          <div class="crumbs">Step 3 of 4 · Assessment</div>
+          <h2>Four problems, one new this visit.</h2>
+          <ul>
+            <li><strong>1 · Type 2 DM, well controlled</strong> — A1C 6.8% (improved from 7.2%) · continue metformin + dapagliflozin · E11.9</li>
+            <li><strong>2 · Hypertension, improved</strong> — 124/78 today · trending down from 142/88 last visit · I10</li>
+            <li><strong>3 · Orthostatic dizziness, new</strong> — 2-week history of morning dizziness on standing. Likely volume-related, attributable to dapagliflozin (SGLT2 osmotic diuresis) combined with recent weight loss and concurrent Lisinopril. R42</li>
+            <li><strong>4 · Hyperlipidemia, stable</strong> — continue atorvastatin · E78.5</li>
+          </ul>
+          <div class="alert" style="margin-top: 18px">
+            <span class="ic">⚠</span>
+            <span class="body"><span class="h">Rx safety surfaced this step</span> Dapagliflozin + Lisinopril cluster → orthostatic hypotension risk. Reviewed and acknowledged before sign.</span>
+            <span class="ax"><button>Review →</button></span>
+          </div>
+        </div>
+
+        <div class="c5-foot">
+          <div class="pos">3 of 4 · A — assessment</div>
+          <button class="btn-ghost">← Objective</button>
+          <button class="btn-ghost">Edit this section</button>
+          <span class="sign">Plan → <span class="kbd">↵</span></span>
+        </div>
+      </div>
+    </div></div>
+    <p class="tradeoff"><span class="strength"><strong>Strength</strong>Linear advance with explicit progress. New users get an obvious mental model: review S, then O, then A, then P, then sign. The dizziness/Rx surfacing on the A step makes the safety check land at the right moment in the flow.</span> · <span class="weakness"><strong>Weakness</strong>Forces sequence on doctors who often jump section to section. Adds an extra "Next" click between every section read.</span></p>
+  </section>
+
+  <!-- ============================================================
+       CONCEPT 6 — TOP SUMMARY + BODY
+       ============================================================ -->
+  <section id="c6" class="concept">
+    <div class="concept-h">
+      <span class="num">06</span>
+      <h2>Top summary + body</h2>
+      <span class="vp-tag">desktop · 1280×800</span>
+    </div>
+    <p class="rationale">A calm summary card up top: chief complaint, key vitals, problem count, Rx flag. Below: the full SOAP. Skim or scroll. Different from v1 Hero+Detail — no CTAs, no ask-list, no controls in the summary.</p>
+    <div class="viewport"><div class="vp-frame">
+      <div style="height: 100%; display:flex; flex-direction:column">
+        <div class="tabs">
+          <button class="tab active">SOAP Note</button>
+          <button class="tab">Transcript</button>
+          <button class="tab">Codes</button>
+          <button class="tab">Rx<span class="badge-dot crit"></span></button>
+          <button class="tab">Extras</button>
+        </div>
+        <div class="pt">
+          <span class="nm">Maria Castillo</span>
+          <span class="sep">·</span><span>52F</span>
+          <span class="sep">·</span><span>T2DM/HTN follow-up</span>
+          <span class="sep">·</span><span class="meta">2026-05-09</span>
+          <span class="grow"></span>
+          <span class="mrn">MRN 8214-31</span>
+        </div>
+
+        <div class="c6-body">
+          <div class="c6-wrap">
+
+            <div class="c6-summary">
+              <div class="meta">Visit summary · 18 min · Dr. P. Chen</div>
+              <h2>T2DM &amp; HTN both improved · new orthostatic dizziness × 2 weeks · 1 Rx safety check pending.</h2>
+              <div class="row">
+                <div class="v"><div class="l">BP</div><div class="n">124/78</div><div class="delta">↓ 142/88</div></div>
+                <div class="v"><div class="l">A1C</div><div class="n">6.8%</div><div class="delta">↓ 7.2%</div></div>
+                <div class="v warn"><div class="l">New problem</div><div class="n">orthostatic</div><div class="delta" style="color:var(--warning)">× 2 wk</div></div>
+                <div class="v"><div class="l">Wt</div><div class="n">168 lb</div><div class="delta">↓ 3 lb</div></div>
+                <div class="v"><div class="l">Sections</div><div class="n">4 of 4</div><div class="delta">drafted</div></div>
+                <div class="v"><div class="l">Rx</div><div class="n" style="color:var(--danger)">1 critical</div></div>
+              </div>
+            </div>
+
+            <h3><span class="soap-letter">S</span>Subjective</h3>
+            <p>52F with established T2DM (2018) and HTN (2019) here for routine quarterly follow-up. Reports good adherence to all medications. Diet improved; lost 3 lb. New: occasional morning dizziness on standing × 2 weeks. Denies vision changes, palpitations, chest pain.</p>
+
+            <h3><span class="soap-letter">O</span>Objective</h3>
+            <p>BP <strong>124/78</strong> · HR 72 · T 98.6° · BMI 28.0. Gen NAD · CV RRR · Pulm CTAB · Ext no edema · Diabetic foot exam normal · Neuro intact.</p>
+
+            <h3><span class="soap-letter">A</span>Assessment</h3>
+            <ul>
+              <li><strong>1 · T2DM, well controlled</strong> — E11.9</li>
+              <li><strong>2 · HTN, improved</strong> — I10</li>
+              <li><strong>3 · Orthostatic dizziness, new</strong> — likely volume-related — R42</li>
+              <li><strong>4 · HLD, stable</strong> — E78.5</li>
+            </ul>
+
+            <h3><span class="soap-letter">P</span>Plan</h3>
+            <ul>
+              <li>T2DM: continue regimen; A1C in 3 months.</li>
+              <li>HTN: continue Lisinopril 20 mg qD; consider dose reduction.</li>
+              <li>Dizziness: hydration counseling, reassess in 2 weeks.</li>
+              <li>HLD: continue atorvastatin. Annual labs ordered.</li>
+            </ul>
+
+            <div class="alert" style="margin-top: 18px">
+              <span class="ic">⚠</span>
+              <span class="body"><span class="h">Rx safety</span> Dapagliflozin + Lisinopril → orthostatic hypotension. Sign blocked until acknowledged.</span>
+              <span class="ax"><button>Review →</button></span>
+            </div>
+          </div>
+        </div>
+
+        <div style="border-top:1px solid var(--hairline);padding:10px 36px;display:flex;align-items:center;gap:10px;background:rgba(13,14,16,0.6)">
+          <div style="flex:1;font-family:var(--font-mono);font-size:10px;letter-spacing:0.06em;color:var(--text-3);text-transform:uppercase">Last edit 4 m ago · 1 critical Rx</div>
+          <button class="btn-ghost">Edit</button>
+          <span class="sign blocked">Sign — review Rx <span class="kbd">⌘ ↵</span></span>
+        </div>
+      </div>
+    </div></div>
+    <p class="tradeoff"><span class="strength"><strong>Strength</strong>The summary card answers the doctor's first three questions without scrolling: "what's the headline?", "are vitals OK?", "anything I need to act on?" Body is plain SOAP below for those who want detail.</span> · <span class="weakness"><strong>Weakness</strong>The summary is generated metadata — if it's wrong (or stale), it misleads. Production would need to anchor every summary number to the source field. The summary also adds vertical space — body starts ~200 px lower than other concepts.</span></p>
+  </section>
+
+  <!-- ============================================================
+       CONCEPT 7 — FORM-STYLE
+       ============================================================ -->
+  <section id="c7" class="concept">
+    <div class="concept-h">
+      <span class="num">07</span>
+      <h2>Form-style fields</h2>
+      <span class="vp-tag">desktop · 1280×800</span>
+    </div>
+    <p class="rationale">Looks like the labeled-field forms doctors already use in EHRs. Each section is a fieldset; each field is a labeled value. Hover any value to edit in place. Familiar to anyone who's used Epic, Athena, or Cerner.</p>
+    <div class="viewport"><div class="vp-frame">
+      <div style="height: 100%; display:flex; flex-direction:column">
+        <div class="tabs">
+          <button class="tab active">SOAP Note</button>
+          <button class="tab">Transcript</button>
+          <button class="tab">Codes</button>
+          <button class="tab">Rx<span class="badge-dot crit"></span></button>
+          <button class="tab">Extras</button>
+        </div>
+        <div class="pt">
+          <span class="nm">Maria Castillo</span>
+          <span class="sep">·</span><span>52F</span>
+          <span class="sep">·</span><span>T2DM/HTN follow-up</span>
+          <span class="sep">·</span><span class="meta">2026-05-09</span>
+          <span class="grow"></span>
+          <span class="mrn">MRN 8214-31</span>
+        </div>
+
+        <div class="c7-body">
+          <div class="c7-form">
+
+            <div class="c7-fieldset">
+              <div class="c7-legend"><span class="soap-letter">S</span>Subjective</div>
+              <dl class="c7-field"><dt>CC</dt><dd>T2DM/HTN follow-up + new dizziness × 2 weeks</dd></dl>
+              <dl class="c7-field"><dt>HPI</dt><dd>52F, established T2DM (2018) + HTN (2019). Routine f/u. Good adherence to met + dapagliflozin + lisinopril. Diet improved; lost 3 lb. <strong>New: morning orthostatic dizziness × 2 weeks.</strong> Denies vision changes, palpitations, chest pain.</dd></dl>
+              <dl class="c7-field"><dt>PMH</dt><dd>T2DM (2018) · HTN (2019) · HLD · GAD</dd></dl>
+              <dl class="c7-field"><dt>Meds</dt><dd>Met 1 g BID · Dapaglif 10 qD · Lisin 20 qD · Atorv 20 qHS · Sert 50 qD</dd></dl>
+              <dl class="c7-field"><dt>Allergies</dt><dd><strong>Sulfa</strong> (rash)</dd></dl>
+              <dl class="c7-field"><dt>FH / SH</dt><dd>Mother T2DM · Father MI 58 · Non-smoker · 1 wine/wk · Accountant</dd></dl>
+            </div>
+
+            <div class="c7-fieldset">
+              <div class="c7-legend"><span class="soap-letter">O</span>Objective</div>
+              <dl class="c7-field"><dt>Vitals</dt><dd>BP <strong>124/78</strong> · HR 72 · T 98.6° · RR 14 · SpO₂ 98% · Wt 168 lb (-3) · BMI 28.0</dd></dl>
+              <dl class="c7-field"><dt>Exam</dt><dd>Gen NAD · CV RRR no m/r/g · Pulm CTAB · Ext no edema · Diabetic foot exam normal · Neuro A&Ox3 motor 5/5</dd></dl>
+            </div>
+
+            <div class="c7-fieldset">
+              <div class="c7-legend"><span class="soap-letter">A</span>Assessment</div>
+              <dl class="c7-field"><dt>Problem 1</dt><dd><strong>T2DM, well controlled</strong> — A1C 6.8% (↓ 7.2%) — E11.9</dd></dl>
+              <dl class="c7-field"><dt>Problem 2</dt><dd><strong>HTN, improved</strong> — 124/78 today — I10</dd></dl>
+              <dl class="c7-field"><dt>Problem 3</dt><dd><strong>Orthostatic dizziness, new</strong> — likely volume-related — R42</dd></dl>
+              <dl class="c7-field"><dt>Problem 4</dt><dd><strong>HLD, stable</strong> — E78.5</dd></dl>
+            </div>
+
+            <div class="c7-fieldset">
+              <div class="c7-legend"><span class="soap-letter">P</span>Plan</div>
+              <dl class="c7-field"><dt>Actions</dt><dd>
+                <ul>
+                  <li>T2DM: continue regimen; A1C in 3 mo</li>
+                  <li>HTN: continue Lisinopril; consider dose reduction</li>
+                  <li>Dizziness: hydration counsel; reassess 2 wk; if persistent, hold dapagliflozin</li>
+                  <li>HLD: continue atorvastatin · annual labs ordered</li>
+                </ul>
+              </dd></dl>
+            </div>
+
+            <div class="alert">
+              <span class="ic">⚠</span>
+              <span class="body"><span class="h">Rx safety · 1 critical</span> Dapagliflozin + Lisinopril → orthostatic hypotension. Sign blocked.</span>
+              <span class="ax"><button>Review →</button></span>
+            </div>
+
+          </div>
+        </div>
+
+        <div style="border-top:1px solid var(--hairline);padding:10px 36px;display:flex;align-items:center;gap:10px;background:rgba(13,14,16,0.6)">
+          <div style="flex:1;font-family:var(--font-mono);font-size:10px;letter-spacing:0.06em;color:var(--text-3);text-transform:uppercase">14 fields · 11 reviewed · 3 drafted</div>
+          <button class="btn-ghost">Copy SOAP</button>
+          <span class="sign blocked">Sign — review Rx <span class="kbd">⌘ ↵</span></span>
+        </div>
+      </div>
+    </div></div>
+    <p class="tradeoff"><span class="strength"><strong>Strength</strong>EHR-native vocabulary. Doctors who came from Epic/Cerner read this without translation. Hover-to-edit on each field reduces context switch. Field labels make missing/incomplete content obvious.</span> · <span class="weakness"><strong>Weakness</strong>Field grid is more visually busy than a free-text SOAP. Long HPIs feel cramped in a "value cell." Risks importing the worst part of EHRs (form fatigue) along with the familiar part.</span></p>
+  </section>
+
+  <!-- ============================================================
+       CONCEPT 8 — NOTEBOOK
+       ============================================================ -->
+  <section id="c8" class="concept">
+    <div class="concept-h">
+      <span class="num">08</span>
+      <h2>Notebook</h2>
+      <span class="vp-tag">desktop · 1280×800</span>
+    </div>
+    <p class="rationale">Pure typography. No boxes, no rails, no chrome — just text on canvas, generously leaded. Clinical letter feel, on dark.</p>
+    <div class="viewport"><div class="vp-frame">
+      <div style="height: 100%; display:flex; flex-direction:column">
+        <div class="tabs">
+          <button class="tab active">SOAP Note</button>
+          <button class="tab">Transcript</button>
+          <button class="tab">Codes</button>
+          <button class="tab">Rx<span class="badge-dot crit"></span></button>
+          <button class="tab">Extras</button>
+        </div>
+        <div class="pt">
+          <span class="nm">Maria Castillo</span>
+          <span class="sep">·</span><span>52F</span>
+          <span class="sep">·</span><span>T2DM/HTN follow-up</span>
+          <span class="sep">·</span><span class="meta">2026-05-09</span>
+          <span class="grow"></span>
+          <span class="mrn">MRN 8214-31</span>
+        </div>
+
+        <div class="c8-body">
+          <div class="c8-doc">
+            <div class="meta">Eastside Internal Medicine · Dr. P. Chen, MD</div>
+            <h1>Castillo · 52F · 2026-05-09</h1>
+
+            <h3>Subjective</h3>
+            <p>Established Type 2 DM and Hypertension. Quarterly follow-up. Adherence good across regimen. Diet improved; lost three pounds. Walking twenty minutes, four days a week.</p>
+            <p>New: occasional morning dizziness on standing, present approximately two weeks. Denies vision changes, palpitations, chest pain.</p>
+
+            <h3>Objective</h3>
+            <p>BP <strong>124/78</strong>, down from 142/88. HR 72, BMI 28.0. Gen NAD. CV regular, lungs clear, no edema. Foot exam normal. Neuro intact.</p>
+
+            <h3>Assessment</h3>
+            <p><span class="num">1.</span> Type 2 DM, well controlled. A1C 6.8%, improved from 7.2%.</p>
+            <p><span class="num">2.</span> Hypertension, improved.</p>
+            <p><span class="num">3.</span> <strong>Orthostatic dizziness, new</strong> — likely volume-related (SGLT2 + recent weight loss + concurrent ACE-I).</p>
+            <p><span class="num">4.</span> Hyperlipidemia, stable.</p>
+
+            <h3>Plan</h3>
+            <p>Continue metformin and dapagliflozin; A1C in three months. Continue Lisinopril; consider dose reduction at next visit if stable. Hydration counseling for dizziness; reassess in two weeks. If symptoms persist, hold dapagliflozin temporarily.</p>
+            <p>Continue atorvastatin. Annual labs ordered.</p>
+
+            <div class="alert" style="margin-top:18px">
+              <span class="ic">⚠</span>
+              <span class="body"><span class="h">Rx safety</span> Dapagliflozin + Lisinopril → orthostatic hypotension. Sign blocked.</span>
+              <span class="ax"><button>Review →</button></span>
+            </div>
+
+            <div class="sig">
+              <div style="flex:1">P. Chen, MD · NPI 1234567890</div>
+              <span class="sign blocked">Sign — review Rx</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+    <p class="tradeoff"><span class="strength"><strong>Strength</strong>Most calming of the ten. Reads like a clinical letter. The same text that ends up at the referring physician or in the patient chart. Strips every chrome element that isn't earning its space.</span> · <span class="weakness"><strong>Weakness</strong>Reading mode only — editing in this paradigm needs a separate mode (or a hover-to-reveal affordance, which the brief warns against). Without status pills the doctor has no inline cue for "this section is drafted, not reviewed."</span></p>
+  </section>
+
+  <!-- ============================================================
+       CONCEPT 9 — SIDE TABS
+       ============================================================ -->
+  <section id="c9" class="concept">
+    <div class="concept-h">
+      <span class="num">09</span>
+      <h2>Side tabs</h2>
+      <span class="vp-tag">desktop · 1280×800</span>
+    </div>
+    <p class="rationale">Vertical left rail with S/O/A/P; right pane shows the selected section. The macOS Settings / Linear settings layout. Clean, expected, requires zero introduction.</p>
+    <div class="viewport"><div class="vp-frame">
+      <div style="height: 100%; display:flex; flex-direction:column">
+        <div class="tabs">
+          <button class="tab active">SOAP Note</button>
+          <button class="tab">Transcript</button>
+          <button class="tab">Codes</button>
+          <button class="tab">Rx<span class="badge-dot crit"></span></button>
+          <button class="tab">Extras</button>
+        </div>
+        <div class="pt">
+          <span class="nm">Maria Castillo</span>
+          <span class="sep">·</span><span>52F</span>
+          <span class="sep">·</span><span>T2DM/HTN follow-up</span>
+          <span class="sep">·</span><span class="meta">2026-05-09</span>
+          <span class="grow"></span>
+          <span class="mrn">MRN 8214-31</span>
+        </div>
+        <div class="c9-body">
+
+          <aside class="c9-rail">
+            <div class="c9-rail-h">SOAP sections</div>
+            <div class="item">
+              <span class="soap-letter">S</span>
+              <span>Subjective</span>
+              <span class="meta">reviewed</span>
+            </div>
+            <div class="item">
+              <span class="soap-letter">O</span>
+              <span>Objective</span>
+              <span class="meta">reviewed</span>
+            </div>
+            <div class="item on">
+              <span class="soap-letter">A</span>
+              <span>Assessment</span>
+              <span class="meta">drafted</span>
+            </div>
+            <div class="item">
+              <span class="soap-letter">P</span>
+              <span>Plan</span>
+              <span class="meta">drafted</span>
+            </div>
+            <div class="foot">
+              <span class="sign blocked" style="width:100%;justify-content:center">Sign — review Rx</span>
+            </div>
+          </aside>
+
+          <div class="c9-content">
+            <div class="crumbs">SOAP / A · Assessment</div>
+            <h2>Four problems, one new this visit.</h2>
+            <ul>
+              <li><strong>1 · T2DM, well controlled</strong> — A1C 6.8% (improved from 7.2%) · continue metformin + dapagliflozin · E11.9</li>
+              <li><strong>2 · HTN, improved</strong> — 124/78 today (down from 142/88) — I10</li>
+              <li><strong>3 · Orthostatic dizziness, new</strong> — 2-week history of morning dizziness on standing. Likely volume-related, attributable to dapagliflozin (SGLT2 osmotic effect) + recent weight loss + Lisinopril — R42</li>
+              <li><strong>4 · HLD, stable</strong> — continue atorvastatin — E78.5</li>
+            </ul>
+            <div class="alert" style="margin-top:18px">
+              <span class="ic">⚠</span>
+              <span class="body"><span class="h">Rx safety surfaced for problem 3</span> Dapagliflozin + Lisinopril → orthostatic hypotension. Acknowledge before sign.</span>
+              <span class="ax"><button>Review →</button></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+    <p class="tradeoff"><span class="strength"><strong>Strength</strong>Doctor jumps to any section in one click. Status meta on each rail item gives at-a-glance progress without separate rails. Standard left-nav pattern — needs zero explanation.</span> · <span class="weakness"><strong>Weakness</strong>Cross-section reading still requires switching panes. Less natural for "scan the whole note top-to-bottom" use case than concept 1 or 6.</span></p>
+  </section>
+
+  <!-- ============================================================
+       CONCEPT 10 — 2×2 GRID
+       ============================================================ -->
+  <section id="c10" class="concept">
+    <div class="concept-h">
+      <span class="num">10</span>
+      <h2>2×2 grid</h2>
+      <span class="vp-tag">desktop · 1280×800</span>
+    </div>
+    <p class="rationale">Vitals strip across the top. Below: four equal-weight cards in 2×2 — S, O, A, P. Symmetric, balanced, calm. Every section has the same affordance.</p>
+    <div class="viewport"><div class="vp-frame">
+      <div style="height: 100%; display:flex; flex-direction:column">
+        <div class="tabs">
+          <button class="tab active">SOAP Note</button>
+          <button class="tab">Transcript</button>
+          <button class="tab">Codes</button>
+          <button class="tab">Rx<span class="badge-dot crit"></span></button>
+          <button class="tab">Extras</button>
+        </div>
+        <div class="pt">
+          <span class="nm">Maria Castillo</span>
+          <span class="sep">·</span><span>52F</span>
+          <span class="sep">·</span><span>T2DM/HTN follow-up</span>
+          <span class="sep">·</span><span class="meta">2026-05-09</span>
+          <span class="grow"></span>
+          <span class="mrn">MRN 8214-31</span>
+        </div>
+
+        <div class="c10-body">
+          <div class="c10-vit-strip">
+            <div class="v warn"><div class="l">BP</div><div class="n">124/78</div><div class="delta">↓ 142/88</div></div>
+            <div class="v"><div class="l">A1C</div><div class="n">6.8%</div><div class="delta">↓ 7.2%</div></div>
+            <div class="v"><div class="l">HR</div><div class="n">72</div></div>
+            <div class="v"><div class="l">Wt</div><div class="n">168</div><div class="delta">↓ 3 lb</div></div>
+            <div class="v"><div class="l">BMI</div><div class="n">28.0</div></div>
+            <div class="v"><div class="l">SpO₂</div><div class="n">98%</div></div>
+          </div>
+
+          <div class="c10-grid">
+
+            <div class="c10-card">
+              <div class="c10-card-h">
+                <span class="soap-letter">S</span>
+                <span class="lbl">Subjective</span>
+                <span class="grow"></span>
+                <span class="pill pill--sage pill--mono">Reviewed</span>
+              </div>
+              <p>52F, T2DM (2018) + HTN (2019). Routine f/u. Adherence good. Diet ↑, lost 3 lb. <strong>New: orthostatic dizziness × 2 wk.</strong> Denies vision/palp/CP.</p>
+              <p><strong>PMH:</strong> T2DM · HTN · HLD · GAD · <strong>Allergies:</strong> sulfa.</p>
+            </div>
+
+            <div class="c10-card">
+              <div class="c10-card-h">
+                <span class="soap-letter">O</span>
+                <span class="lbl">Objective</span>
+                <span class="grow"></span>
+                <span class="pill pill--sage pill--mono">Reviewed</span>
+              </div>
+              <p>Gen NAD · CV RRR · Pulm CTAB · Ext no edema · DM foot exam normal · Neuro A&Ox3 5/5. Vitals above ↑.</p>
+            </div>
+
+            <div class="c10-card">
+              <div class="c10-card-h">
+                <span class="soap-letter">A</span>
+                <span class="lbl">Assessment</span>
+                <span class="grow"></span>
+                <span class="pill pill--review pill--mono">Drafted</span>
+              </div>
+              <ul>
+                <li><strong>1 · T2DM, well controlled</strong> — E11.9</li>
+                <li><strong>2 · HTN, improved</strong> — I10</li>
+                <li><strong>3 · Orthostatic dizziness, new</strong> — R42</li>
+                <li><strong>4 · HLD, stable</strong> — E78.5</li>
+              </ul>
+            </div>
+
+            <div class="c10-card">
+              <div class="c10-card-h">
+                <span class="soap-letter">P</span>
+                <span class="lbl">Plan</span>
+                <span class="grow"></span>
+                <span class="pill pill--review pill--mono">Drafted</span>
+              </div>
+              <ul>
+                <li>T2DM continue, A1C 3 mo</li>
+                <li>HTN continue Lisin; consider dose ↓</li>
+                <li><strong>Dizziness:</strong> hydration · 2-wk f/u · hold dapaglif if persists</li>
+                <li>HLD continue atorvastatin · annual labs</li>
+              </ul>
+            </div>
+
+          </div>
+
+          <div class="alert">
+            <span class="ic">⚠</span>
+            <span class="body"><span class="h">Rx safety · 1 critical</span> Dapagliflozin + Lisinopril → orthostatic hypotension. Sign blocked until acknowledged.</span>
+            <span class="ax"><button>Review →</button></span>
+          </div>
+
+          <div class="c10-foot">
+            <div style="flex:1;font-family:var(--font-mono);font-size:10px;letter-spacing:0.06em;color:var(--text-3);text-transform:uppercase">4 sections · 1 critical Rx · last edit 4 m ago</div>
+            <button class="btn-ghost">Edit</button>
+            <button class="btn-ghost">Copy SOAP</button>
+            <span class="sign blocked">Sign — review Rx <span class="kbd">⌘ ↵</span></span>
+          </div>
+        </div>
+      </div>
+    </div></div>
+    <p class="tradeoff"><span class="strength"><strong>Strength</strong>Each section gets equal real estate — visual democracy across S/O/A/P. Vitals strip up top is a fixed scan target. Single-screen layout fits without scrolling on a 1280-wide desktop, which is the sweet spot for "review and sign."</span> · <span class="weakness"><strong>Weakness</strong>Equal-weight cards force long Plans into the same box as short Subjectives — long content gets clipped or pushes the grid out of frame. Best for short-to-medium notes; chronic-care patients with verbose HPIs would benefit from concept 1 or 3 instead.</span></p>
+  </section>
+
+  <!-- ============================================================
+       MATRIX FOOTER
+       ============================================================ -->
+  <div class="matrix">
+    <h3>Comparison matrix</h3>
+    <p>Density = how much fits on one screen. Edit-friction = how much friction to make an inline edit. Familiarity = how immediately recognizable the pattern is to a clinician. Polish = how restrained-and-finished the execution feels. Novelty vs v1+v2 = how distinct from prior rounds.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Concept</th>
+          <th>Density</th>
+          <th>Edit friction</th>
+          <th>Familiarity</th>
+          <th>Polish</th>
+          <th>Novelty vs v1+v2</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="col-num">01</td><td class="col-name">Single-column document</td>
+          <td><span class="score"><span class="pip on"></span><span class="pip on"></span><span class="pip"></span><span class="pip"></span></span></td>
+          <td><span class="score"><span class="pip on"></span><span class="pip on"></span><span class="pip"></span><span class="pip"></span></span></td>
+          <td><span class="score"><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span></span></td>
+          <td><span class="score"><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span></span></td>
+          <td><span class="score"><span class="pip on"></span><span class="pip on"></span><span class="pip"></span><span class="pip"></span></span></td>
+        </tr>
+        <tr><td class="col-num">02</td><td class="col-name">Two-column with meta sidebar</td>
+          <td><span class="score"><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip"></span></span></td>
+          <td><span class="score"><span class="pip on"></span><span class="pip on"></span><span class="pip"></span><span class="pip"></span></span></td>
+          <td><span class="score"><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span></span></td>
+          <td><span class="score"><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip"></span></span></td>
+          <td><span class="score"><span class="pip on"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></span></td>
+        </tr>
+        <tr><td class="col-num">03</td><td class="col-name">Section cards</td>
+          <td><span class="score"><span class="pip on"></span><span class="pip on"></span><span class="pip"></span><span class="pip"></span></span></td>
+          <td><span class="score"><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip"></span></span></td>
+          <td><span class="score"><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span></span></td>
+          <td><span class="score"><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span></span></td>
+          <td><span class="score"><span class="pip on"></span><span class="pip on"></span><span class="pip"></span><span class="pip"></span></span></td>
+        </tr>
+        <tr><td class="col-num">04</td><td class="col-name">Accordion</td>
+          <td><span class="score"><span class="pip on"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></span></td>
+          <td><span class="score"><span class="pip on"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></span></td>
+          <td><span class="score"><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip"></span></span></td>
+          <td><span class="score"><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip"></span></span></td>
+          <td><span class="score"><span class="pip on"></span><span class="pip on"></span><span class="pip"></span><span class="pip"></span></span></td>
+        </tr>
+        <tr><td class="col-num">05</td><td class="col-name">Stepper</td>
+          <td><span class="score"><span class="pip on"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></span></td>
+          <td><span class="score"><span class="pip on"></span><span class="pip on"></span><span class="pip"></span><span class="pip"></span></span></td>
+          <td><span class="score"><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip"></span></span></td>
+          <td><span class="score"><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip"></span></span></td>
+          <td><span class="score"><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip"></span></span></td>
+        </tr>
+        <tr><td class="col-num">06</td><td class="col-name">Top summary + body</td>
+          <td><span class="score"><span class="pip on"></span><span class="pip on"></span><span class="pip"></span><span class="pip"></span></span></td>
+          <td><span class="score"><span class="pip on"></span><span class="pip on"></span><span class="pip"></span><span class="pip"></span></span></td>
+          <td><span class="score"><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span></span></td>
+          <td><span class="score"><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip"></span></span></td>
+          <td><span class="score"><span class="pip on"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></span></td>
+        </tr>
+        <tr><td class="col-num">07</td><td class="col-name">Form-style fields</td>
+          <td><span class="score"><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip"></span></span></td>
+          <td><span class="score"><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span></span></td>
+          <td><span class="score"><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span></span></td>
+          <td><span class="score"><span class="pip on"></span><span class="pip on"></span><span class="pip"></span><span class="pip"></span></span></td>
+          <td><span class="score"><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip"></span></span></td>
+        </tr>
+        <tr><td class="col-num">08</td><td class="col-name">Notebook</td>
+          <td><span class="score"><span class="pip on"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></span></td>
+          <td><span class="score"><span class="pip on"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></span></td>
+          <td><span class="score"><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip"></span></span></td>
+          <td><span class="score"><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span></span></td>
+          <td><span class="score"><span class="pip on"></span><span class="pip on"></span><span class="pip"></span><span class="pip"></span></span></td>
+        </tr>
+        <tr><td class="col-num">09</td><td class="col-name">Side tabs</td>
+          <td><span class="score"><span class="pip on"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></span></td>
+          <td><span class="score"><span class="pip on"></span><span class="pip on"></span><span class="pip"></span><span class="pip"></span></span></td>
+          <td><span class="score"><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span></span></td>
+          <td><span class="score"><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip"></span></span></td>
+          <td><span class="score"><span class="pip on"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></span></td>
+        </tr>
+        <tr><td class="col-num">10</td><td class="col-name">2×2 grid</td>
+          <td><span class="score"><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span></span></td>
+          <td><span class="score"><span class="pip on"></span><span class="pip on"></span><span class="pip"></span><span class="pip"></span></span></td>
+          <td><span class="score"><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip"></span></span></td>
+          <td><span class="score"><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span></span></td>
+          <td><span class="score"><span class="pip on"></span><span class="pip on"></span><span class="pip"></span><span class="pip"></span></span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+</body>
+</html>
