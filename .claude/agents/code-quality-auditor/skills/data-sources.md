@@ -67,7 +67,7 @@ total disk read is bounded by:
 
 - the unified-diff (one round-trip to `gh`)
 - `rules.md` (one read)
-- the canonical-reference files (≤30 files, capped on the 26 rules)
+- the canonical-reference files (≤30 files, capped on the 27 rules)
 - the post-fix content of changed files (the diff plus surrounding
   context for symbol cross-checks)
 

@@ -119,7 +119,7 @@ their methodology genuinely needs them.
 | **Name** | Code Quality / Pattern Auditor |
 | **Version** | v1 (rule library at `agent/code-quality-auditor-v1` head) |
 | **Purpose** | Audits PR diffs (and arbitrary file paths) for compliance with QuillMD's actual production conventions — design tokens, component patterns, Prisma schema rules, BullMQ pipeline rules, server/client boundary, folder layout, scope guards. Catches pattern drift that pure typecheck + tests miss. |
-| **Scope** | `apps/transcribe-md/**`, `apps/marketing/**`, `packages/**` (only when an in-scope app diff touches a packaged symbol). 26 rules across 8 categories. |
+| **Scope** | `apps/transcribe-md/**`, `apps/marketing/**`, `packages/**` (only when an in-scope app diff touches a packaged symbol). 27 rules across 8 categories. |
 | **Out of scope** | `apps/meddoc-pro/**` (legacy decommissioned). `_design-references/`, `docs/`, `infra/`, top-level `scripts/`, `.claude/` (auditor's own files exempt). Visual / aesthetic correctness (eyes-on review job). AI prompt quality / model choice / cost (AI Pipeline Auditor). Compliance correctness at runtime (HIPAA Auditor). |
 | **Runtime** | PR-time (called by Lead during PR review) + on-demand. Read-only against the diff and the rule library's canonical references. Future v1.1 may wire CI hook. |
 | **Trigger phrase** | "Run code quality audit on PR #N" / "Audit diff for pattern compliance" / "Code quality audit on `<path>`" |

@@ -17,9 +17,9 @@
 
 ## BLOCK · 2 findings
 
-### design-tokens · `TOKEN-001` · 2 findings
+### design-tokens · `TOKEN-002` · 2 findings
 
-- **`apps/transcribe-md/src/app/visits/[id]/rx-warnings-rail.tsx:518`** — Banned `#9eb5a0` color in CSS fallback chain.
+- **`apps/transcribe-md/src/app/visits/[id]/rx-warnings-rail.tsx:300`** — Banned `#9eb5a0` color in CSS fallback chain.
   - Snippet: `outline: 2px solid var(--color-linear-sage, #9eb5a0);`
   - Canonical: `apps/transcribe-md/src/app/globals.css:70` declares `--color-linear-sage: #7AA68C;`
   - Why BLOCK: `#9eb5a0` is the **Round-1 mockup mistake** explicitly retired in
@@ -30,7 +30,7 @@
   - Fix: replace fallback with `#7AA68C`:
     `outline: 2px solid var(--color-linear-sage, #7AA68C);`
 
-- **`apps/transcribe-md/src/app/visits/[id]/rx-warnings-rail.tsx:529–532`** — Banned `#9eb5a0` color + matching rgba derivatives in `.qm-warn-overridden` chip.
+- **`apps/transcribe-md/src/app/visits/[id]/rx-warnings-rail.tsx:311–313`** — Banned `#9eb5a0` color + matching rgba derivatives in `.qm-warn-overridden` chip.
   - Snippet:
     ```css
     color: var(--color-linear-sage, #9eb5a0);
@@ -59,7 +59,7 @@
 
 ### React component patterns · `COMP-004` · 1 finding (sub-threshold; advisory)
 
-- **`apps/transcribe-md/src/app/visits/[id]/rx-warnings-rail.tsx:491–533`** — `<style jsx>` block introduces three new utility-shaped classes.
+- **`apps/transcribe-md/src/app/visits/[id]/rx-warnings-rail.tsx:273–316`** — `<style jsx>` block introduces three new utility-shaped classes.
   - Snippet:
     ```tsx
     <style jsx>{`
@@ -87,7 +87,7 @@
 
 ### Documentation hygiene · `DOC-001` · 1 finding
 
-- **`apps/transcribe-md/src/app/visits/[id]/page.tsx:160–164`** — Comment mentions "Round 4" without a ticket / PR pointer.
+- **`apps/transcribe-md/src/app/visits/[id]/page.tsx:196–199`** — Comment mentions "Round 4" without a ticket / PR pointer.
   - Snippet:
     ```ts
     // Round 4 critical-Rx-override fix: pull existing override rows so
@@ -104,13 +104,13 @@
 
 ## Findings against the diff but no rule fired
 
-- `apps/transcribe-md/src/app/visits/[id]/page.tsx:174–177` adds
+- `apps/transcribe-md/src/app/visits/[id]/page.tsx:259–262` adds
   `prisma.rxWarningOverride.findMany` to the `Promise.all` batch. **Read,
   not mutation** → `SCHEMA-001` (audit-row presence) does NOT apply. PASS.
-- `apps/transcribe-md/src/app/visits/[id]/rx-tab.tsx:235–260` lifts a
+- `apps/transcribe-md/src/app/visits/[id]/rx-tab.tsx:111–127` lifts a
   `Set<string>` state via `useState` + `useCallback` for the merge
   handler. Mirrors the production state-management style. PASS.
-- `apps/transcribe-md/src/app/visits/[id]/rx-warnings-rail.tsx:212–215`
+- `apps/transcribe-md/src/app/visits/[id]/rx-warnings-rail.tsx:211–215`
   adds the `e.stopPropagation()` click-bubble guard on the override-button
   container — `COMP-005` recognises this as the right pattern. PASS.
 - The PR adds `rxLineNumber: number` as a proper field on `RailWarning`
@@ -119,7 +119,7 @@
 - `apps/transcribe-md/src/app/visits/[id]/rx-warnings-rail.tsx:1–30`
   comment header expanded to document the new override flow. `COMP-006`
   satisfied. PASS.
-- The new modal mount block at `rx-warnings-rail.tsx:467–489` filters by
+- The new modal mount block at `rx-warnings-rail.tsx:249–271` filters by
   `!readonly && !overriddenIds.has(w.id)` — defensive; doesn't render
   modals for warnings that don't need them. PASS.
 
@@ -129,10 +129,10 @@
 
 ```
 2 BLOCK · 1 WARN · 1 NIT against 4 in-scope files.
-Rule library: 26 rules (10 BLOCK / 9 WARN / 7 NIT). Stale: 0.
+Rule library: 27 rules (11 BLOCK / 9 WARN / 7 NIT). Stale: 0.
 ```
 
-**Merge gate.** Two BLOCK findings — both are the same `TOKEN-001`
+**Merge gate.** Two BLOCK findings — both are the same `TOKEN-002`
 violation (banned `#9eb5a0` Round-1 sage) in two locations of the same
 file. **Fixing the two locations unblocks merge.** The WARN and NIT are
 advisory.

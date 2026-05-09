@@ -64,11 +64,11 @@ PR #N", "convention check on this diff".
 
 ## What it audits (high level)
 
-26 rules across 8 categories. Severity-tiered:
+27 rules across 8 categories. Severity-tiered:
 
 | Category | BLOCK | WARN | NIT |
 |---|---|---|---|
-| Design tokens | 0 | 2 | 1 |
+| Design tokens | 1 | 2 | 1 |
 | React component patterns | 2 | 3 | 1 |
 | Prisma / schema | 2 | 1 | 1 |
 | BullMQ / pipeline | 2 | 1 | 0 |
@@ -76,7 +76,7 @@ PR #N", "convention check on this diff".
 | Folder layout | 1 | 1 | 1 |
 | Scope guards | 2 | 0 | 0 |
 | Documentation hygiene | 0 | 0 | 2 |
-| **Total** | **10** | **9** | **7** |
+| **Total** | **11** | **9** | **7** |
 
 Full rule definitions in [`rules.md`](rules.md). Methodology in
 [`skills/methodology.md`](skills/methodology.md).

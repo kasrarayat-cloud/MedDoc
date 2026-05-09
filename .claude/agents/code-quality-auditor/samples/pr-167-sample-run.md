@@ -89,7 +89,7 @@
 
 ```
 1 BLOCK · 0 WARN · 1 NIT against 1 in-scope file.
-Rule library: 26 rules (10 BLOCK / 9 WARN / 7 NIT). Stale: 0.
+Rule library: 27 rules (11 BLOCK / 9 WARN / 7 NIT). Stale: 0.
 ```
 
 **Merge gate.** One BLOCK — the `SCHEMA-001` finding on the seed-script

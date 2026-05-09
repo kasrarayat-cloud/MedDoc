@@ -67,10 +67,17 @@ should reach for the token, not the underlying value.
 or `apps/marketing/**` contains a hex (`#0d0e10`, `#7AA68C`, `#21232a`,
 …), `rgb(…)`, `rgba(…)`, `hsl(…)` literal that maps to a declared token.
 The auditor's lookup table is built once per run from `globals.css:36–97`
-plus the seven derived values intentionally hard-coded in production
-(see `TOKEN-001-allowlist` below).
+plus the five derived values intentionally hard-coded in production (the
+allowlist below).
 
-**Allowlist (don't flag — these are intentional):**
+**Scope split.** This rule covers *drift* — a hex literal where a token
+exists but no regression-class signal applies. **Banned values
+(`#9eb5a0`, `#050607`) are split out into `TOKEN-002` BLOCK** rather
+than being a footnote on this rule. That keeps each rule single-tier
+(WARN here; BLOCK there) and mirrors the LAYOUT-001 / SCOPE-001 family
+pattern where regression-class concerns get their own rule ID.
+
+**Allowlist (don't flag — these are intentional production values):**
 
 | Hex | Where | Why allowed |
 |---|---|---|
@@ -79,7 +86,6 @@ plus the seven derived values intentionally hard-coded in production
 | `#e3b984` | `globals.css:310` | `pill--review` text; production decision (richer than `var(--color-linear-warning)` which is too saturated for a pill foreground). |
 | `#e3b950` | `globals.css:3483` | `pulse-meta--boost` text; production tuned. |
 | `#9bc4d9` | `globals.css:324` | `pill--processing` text; tuned vs `--color-linear-sky`. |
-| `#9eb5a0`, `#050607` | **NEVER** — these were Round-1 mockup values. Treat as BLOCK if seen. |
 
 **Violation example** (from a hypothetical bad diff):
 ```tsx
@@ -99,7 +105,59 @@ plus the seven derived values intentionally hard-coded in production
 the body baseline references `var(--color-linear-bg)` + `var(--color-linear-text)`,
 never the underlying hex.
 
-### `TOKEN-002` — WARN — Hardcoded font-family
+### `TOKEN-002` — BLOCK — Banned color values (Round-1 mockup regression class)
+
+**Trigger.** Any in-scope file references one of the explicitly-retired
+mockup values:
+
+| Banned value | Why banned | Production replacement |
+|---|---|---|
+| `#9eb5a0` (or `rgb(158, 181, 160)` / matching rgba triplets) | Round-1 mockup sage; off by 36/15/-20 in RGB from production sage | `var(--color-linear-sage)` = `#7AA68C` = `rgb(122, 166, 140)` |
+| `#050607` (or matching rgb) | Round-1 mockup background; differs from production canvas | `var(--color-linear-bg)` = `#08090a` |
+
+The match is hex-exact (case-insensitive) on the value, AND on the
+matching rgb/rgba triplets — `(158, 181, 160, X)` is the alpha-variant
+of `#9eb5a0`; `(5, 6, 7, X)` is the alpha-variant of `#050607`. Both
+forms emit BLOCK.
+
+**Why a separate rule (not a TOKEN-001 footnote).** TOKEN-001 catches
+*drift* — hardcoded production values where a token would be cleaner.
+TOKEN-002 catches *regression* — values that were explicitly retired
+in Phase 5 Linear V1 because they paint visibly-wrong sage/canvas. The
+operator action is different: TOKEN-001 invites a refactor; TOKEN-002
+blocks merge until reverted. Keeping them as one dual-tier rule
+obscures that.
+
+**Provenance of the banned list.** See
+`_design-references/quillmd-design-tokens.md` "BANNED-VALUE LEAK CHECK"
+section. Both values originated in Round-1 mockup attempts that used
+different palettes than production; the post-merge audit caught and
+documented them. Future banned values (if any are retired in a Phase
+6+ palette migration) get appended here in the same shape.
+
+**Violation:**
+```css
+/* anywhere under apps/transcribe-md/** or apps/marketing/** */
+.foo { color: var(--color-linear-sage, #9eb5a0); }       /* fallback wrong sage */
+.bar { background: rgba(158, 181, 160, 0.08); }          /* alpha-variant of #9eb5a0 */
+```
+
+**Correct:**
+```css
+.foo { color: var(--color-linear-sage, #7AA68C); }       /* fallback matches the var */
+.bar { background: rgba(122, 166, 140, 0.08); }          /* production sage rgba */
+/* or, preferred — drop the alpha-form for the named token */
+.bar { background: var(--color-linear-sage-tint); }       /* declared at globals.css:74 */
+```
+
+**Real regression caught by this rule.** PR #176's first version landed
+four `#9eb5a0` / `rgb(158, 181, 160)` hits in the new
+`<style jsx>` block of `rx-warnings-rail.tsx` (lines 300, 311, 312, 313).
+The auditor's first review pass surfaced them as BLOCK; the
+amendment commit corrected them before merge. See
+`samples/pr-176-sample-run.md`.
+
+### `TOKEN-003` — WARN — Hardcoded font-family
 
 **Trigger.** A literal `'Inter'`, `'JetBrains Mono'`, `'Source Serif'`,
 `'Lora'`, etc. appears inside an in-scope file. `var(--font-sans)` and
@@ -125,7 +183,7 @@ only* since Phase 5 Linear V1; serif fonts are explicitly retired
 font wiring via `next/font/google`, exported as the `--font-sans` / `--font-mono`
 CSS vars.
 
-### `TOKEN-003` — NIT — Hardcoded spacing where Tailwind utility exists
+### `TOKEN-004` — NIT — Hardcoded spacing where Tailwind utility exists
 
 **Trigger.** `padding: 14px 16px` or similar hardcoded spacing inside JSX
 inline styles when a Tailwind utility (`px-4 py-3.5` etc.) covers the same
@@ -590,7 +648,7 @@ back-compat", or similar without a delete-by date or ticket. These rot.
 
 | Category | BLOCK | WARN | NIT | Total |
 |---|---|---|---|---|
-| Design tokens | 0 | 2 | 1 | 3 |
+| Design tokens | 1 | 2 | 1 | 4 |
 | React component patterns | 2 | 3 | 1 | 6 |
 | Prisma / schema | 2 | 1 | 1 | 4 |
 | BullMQ / pipeline | 2 | 1 | 0 | 3 |
@@ -598,7 +656,7 @@ back-compat", or similar without a delete-by date or ticket. These rot.
 | Folder layout | 1 | 1 | 1 | 3 |
 | Scope guards | 2 | 0 | 0 | 2 |
 | Documentation hygiene | 0 | 0 | 2 | 2 |
-| **Totals** | **10** | **9** | **7** | **26 rules** |
+| **Totals** | **11** | **9** | **7** | **27 rules** |
 
 ## Stale-rule guard
 

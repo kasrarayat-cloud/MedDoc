@@ -125,7 +125,7 @@ Report structure:
 ---
 
 **Summary:** X BLOCK · Y WARN · Z NIT against N files. Rule library has
-26 rules (10 BLOCK / 9 WARN / 7 NIT). Stale: K.
+27 rules (11 BLOCK / 9 WARN / 7 NIT). Stale: K.
 ```
 
 ### Phase 5 — Persistence (optional)
@@ -181,15 +181,24 @@ without re-anchoring this rule, `RULE_STALE` fires first and the
 operator updates `rules.md` to point at the new module. Then this
 rule's check passes correctly.
 
-### `TOKEN-001` (hardcoded colors)
+### `TOKEN-001` (hardcoded colors — drift)
 
 The auditor's color lookup is built once per run from
 `globals.css:36–97`. Hex literals matching exactly (case-insensitive)
-fire WARN; the seven allowlist hexes (see rules.md) are silently
-skipped. Two values that previously appeared in mockups (`#9eb5a0`
-and `#050607`) fire **BLOCK** rather than WARN — they were the
-Round-1 mockup mistake we explicitly retired, and any reappearance
-is regression.
+fire WARN; the five allowlist hexes (see rules.md) are silently
+skipped.
+
+### `TOKEN-002` (banned color values — regression)
+
+A separate rule from TOKEN-001 (split in v1.0.1 after PR #178's first
+review pass — see `samples/pr-176-sample-run.md`). Two values that
+previously appeared in mockups (`#9eb5a0` and `#050607`, plus their
+matching `rgb()` / `rgba()` triplets) fire **BLOCK** — they were the
+Round-1 mockup mistake explicitly retired in Phase 5 Linear V1, and
+any reappearance is regression. The rule scans both the hex form and
+the alpha-variant rgba triplets so a lurking `rgba(158, 181, 160, X)`
+is caught the same as `#9eb5a0`. The split keeps each rule
+single-tier and mirrors the LAYOUT-001 / SCOPE-001 family pattern.
 
 ### `BOUND-001` (env reads in client bundles)
 

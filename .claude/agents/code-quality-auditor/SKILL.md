@@ -105,7 +105,7 @@ The report ends with a one-line summary:
 
 ```
 Summary: 2 BLOCK · 5 WARN · 1 NIT against 7 files in PR #176.
-Rule library: rules.md @ cefb2be (26 rules; 10 BLOCK / 9 WARN / 7 NIT).
+Rule library: rules.md @ cefb2be (27 rules; 11 BLOCK / 9 WARN / 7 NIT).
 ```
 
 ## Skills index
