@@ -139,6 +139,23 @@ export async function runLayer4GenerateSoap(
     '  "Per patient, …" so the source is clear on downstream review.',
     '- Never add test results, medication doses, or vital-sign numbers',
     '  that were not stated.',
+    // ── Narrow hallucination rules added 2026-05-10 ────────────────
+    // Driven by the v2 judge findings on the PriMock57 5-case slice
+    // (PR #200 locked baseline). Each rule targets a specific
+    // hallucination class that surfaced 1+ time and is unambiguously
+    // L4-side (anatomy-substitution class is ASR-side, out of scope).
+    "- Don't add diagnostic qualifiers (acute, chronic, undiagnosed,",
+    "  severe, mild, sudden, gradual) unless the transcript uses them",
+    '  explicitly. "Migraines" stays "migraines" — not "undiagnosed',
+    '  migraines." Onset is "sudden" only if the patient said sudden.',
+    "- Don't infer maternal/paternal side or a specific relative when",
+    "  the transcript only mentions a relative type. \"My grandmother\"",
+    '  stays "grandmother" — not "maternal grandmother" unless stated.',
+    "- When a dose, frequency, or strength is ambiguous in the",
+    "  transcript, write what was actually said and append",
+    "  '[clarify with patient]' rather than picking the most likely",
+    "  value. Don't silently resolve \"two tablets... one tablet twice",
+    '  a day" to a single interpretation.',
     '- Output ONLY the SOAP note markdown. No preamble, no postscript.',
     guidance ? '' : undefined,
     guidance ? `Specialty guidance (${input.specialty}):\n${guidance}` : undefined,
