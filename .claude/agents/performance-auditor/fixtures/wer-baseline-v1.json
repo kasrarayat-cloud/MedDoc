@@ -1,0 +1,28 @@
+{
+  "$schema_version": "v1",
+  "baseline_source": "docs/eval-runs/primock57-20260510T223531Z.md",
+  "baseline_run_at_utc": "2026-05-10T22:35:31Z",
+  "dataset": "github.com/babylonhealth/primock57",
+  "asr_provider": "Deepgram nova-3-medical",
+  "wer_methodology_notes": "Two normalizations emitted in parallel (see docs/eval-runs/wer-methodology.md). The internal column keeps digits + hyphens (slightly stricter; surfaces cosmetic ASR drift). The PriMock57-aligned column matches preprocess_text() in the dataset's scripts/utils.py exactly (alphabetic-only + hyphen→space) so the WER is byte-comparable against published baselines.",
+  "sample_size": 56,
+  "audio_minutes_total": 508.3,
+  "wer_internal": {
+    "mean": 0.171,
+    "p50": 0.173,
+    "p95": 0.209,
+    "p99": 0.245,
+    "min": 0.107,
+    "max": 0.253
+  },
+  "wer_primock57_aligned": {
+    "mean": 0.238,
+    "notes": "Lands at the low end of Moramarco et al. (ACL 2022) published baselines (23–30% across ASR systems). nova-3-medical behaves credibly on this corpus."
+  },
+  "alert_thresholds": {
+    "primary_metric": "wer_primock57_aligned",
+    "warn_drift": "mean_above 0.30 (30%)",
+    "blocking_regression": "mean_above 0.40 (40%)",
+    "rationale": "Anchored against the paper-comparable column so cross-system comparisons stay honest. Internal column tracks the same direction; either trigger fires when ASR meaningfully regresses."
+  }
+}
