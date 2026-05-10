@@ -279,6 +279,24 @@ button { font: inherit; color: inherit; cursor: pointer; background: 0; border: 
   background: rgba(212,87,74,0.04);
   padding-left: 10px;
 }
+/* "Reviewed" follow-through — clicking Review → on the Rx alert
+   transitions the alert AND the corresponding Sign CTA.
+   Single satisfying state change; no second click. */
+.alert.cleared {
+  background: rgba(122,166,140,0.06);
+  border-color: rgba(122,166,140,0.30);
+  transition: background 200ms ease, border-color 200ms ease;
+}
+.alert.cleared .ic { color: var(--sage-bright); }
+.alert.cleared .h { color: var(--sage-bright); }
+.alert .ack-pill {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--sage-bright);
+  display: inline-flex; align-items: center; gap: 4px;
+}
 
 /* ============================================================
    COMPARISON MATRIX (footer)
@@ -1763,6 +1781,66 @@ button { font: inherit; color: inherit; cursor: pointer; background: 0; border: 
   </div>
 
 </div>
+
+<script>
+/* ============================================================
+   Two interactions wired with single satisfying transitions:
+   1. Rx alert "Review →" → alert + Sign CTA both transition once
+   2. Concept 4 accordion → click row to expand/collapse
+   Everything else stays static (mockup, not prototype).
+   ============================================================ */
+(function() {
+  function clearRxAlert(alert) {
+    if (alert.classList.contains('cleared')) return;
+    alert.classList.add('cleared');
+
+    var ic = alert.querySelector('.ic');
+    if (ic) ic.textContent = '✓';                /* ✓ */
+
+    var h = alert.querySelector('.h');
+    if (h) h.textContent = 'Rx safety reviewed';
+
+    var ax = alert.querySelector('.ax');
+    if (ax) ax.innerHTML = '<span class="ack-pill">acknowledged</span>';
+
+    /* In the same concept block, unblock the Sign CTA. */
+    var concept = alert.closest('.concept');
+    if (!concept) return;
+    var signs = concept.querySelectorAll('.sign.blocked');
+    signs.forEach(function(s) {
+      s.classList.remove('blocked');
+      /* Replace any "review Rx" / "awaiting Rx ack" / "Sign blocked" phrasing
+         with a quiet confirm — keeps any trailing <span class="kbd">. */
+      var kbd = s.querySelector('.kbd');
+      var newLabel = 'Sign — confirm 99214';
+      if (kbd) {
+        s.innerHTML = newLabel + ' ' + kbd.outerHTML;
+      } else {
+        s.textContent = newLabel;
+      }
+    });
+  }
+
+  document.addEventListener('click', function(e) {
+    /* Rx review action — only inside a not-yet-cleared alert */
+    var btn = e.target.closest('.alert .ax button');
+    if (btn) {
+      var alert = btn.closest('.alert');
+      if (alert && !alert.classList.contains('cleared')) {
+        e.preventDefault();
+        clearRxAlert(alert);
+        return;
+      }
+    }
+    /* Concept 4 accordion — toggle on row header click */
+    var rowH = e.target.closest('.c4-row-h');
+    if (rowH) {
+      var row = rowH.closest('.c4-row');
+      if (row) row.classList.toggle('open');
+    }
+  });
+})();
+</script>
 
 </body>
 </html>
