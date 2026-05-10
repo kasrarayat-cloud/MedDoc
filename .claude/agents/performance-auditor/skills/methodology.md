@@ -9,8 +9,10 @@
 Pre-condition check. Reads `data-sources.md` §1's columns from
 `information_schema.columns`; confirms each is present + typed
 correctly. Reads §2's Redis keys; confirms each is reachable.
-Reads §3's filesystem paths; confirms `app-build-manifest.json`
-exists if Phase 5 will run.
+Reads §3's filesystem paths; confirms `app-path-routes-manifest.json`
++ the `static/chunks/app/` tree exist if Phase 5 will run. (The
+old spec referenced `app-build-manifest.json`; that file isn't
+emitted by Next 15 App Router. Corrected 2026-05-10.)
 
 **Output.** Either "phase 0 OK" or one or more `SCHEMA_GAP`
 findings. Schema gaps fail the run — fix before continuing.
@@ -102,15 +104,38 @@ graduation.)
 
 ## Phase 5 — Bundle size
 
-Reads `apps/transcribe-md/.next/app-build-manifest.json` (after a
-fresh `next build`). Computes per-route gzipped JS bundle size for
-the three high-traffic routes.
+> **2026-05-10 correction:** the original spec said
+> `app-build-manifest.json`; that artifact isn't emitted by Next 15
+> App Router. The actual artifact set the auditor reads is below.
+> See `docs/agent-shadow-runs/performance/20260510T200534Z.md`
+> PERFORMANCE_FINDING_003 for the discovery context.
 
-Compares against `fixtures/bundle-baseline-v1.json` (when
-present). Emits per-tier findings. The per-PR mode of this phase
-runs against a fresh build of the PR's branch + the baseline of
-main; the absolute-budget mode of this phase runs against a
-single build's manifest.
+Reads (after a fresh `next build` in `apps/transcribe-md`):
+
+| Path | Why |
+|---|---|
+| `.next/app-path-routes-manifest.json` | Per-route catalogue (29 routes including `/visits`, `/visits/[id]`, `/visits/[id]/record`). |
+| `.next/build-manifest.json` | Top-level pages-router entries (mostly empty for App Router). |
+| `.next/static/chunks/app/<route>/page-*.js` | Per-route client chunk for App Router pages. The auditor sums sizes of all chunks under the route's directory. |
+| `.next/server/app/<route>/page.js` | Per-route server-rendered output (size signal for SSR weight). |
+
+Computation:
+
+1. Read `app-path-routes-manifest.json` → list of route IDs.
+2. For each route in the high-traffic set (`/visits`,
+   `/visits/[id]`, `/visits/[id]/record`):
+   - Walk `.next/static/chunks/app/<route-path>/` and sum
+     `page-*.js` + dependencies. Apply gzip (Node's `zlib.gzip`)
+     to compute the over-the-wire size.
+   - Walk `.next/server/app/<route-path>/page.js` for the SSR
+     output size.
+3. Compare against `fixtures/bundle-baseline-v1.json`
+   (`{routeId: {gzipBytes: N, ssrBytes: M}}`) when present.
+
+Emits per-tier findings. The per-PR mode of this phase runs against
+a fresh build of the PR's branch + the baseline of main; the
+absolute-budget mode runs against a single build (compares against
+the baseline-v1 thresholds in `finding-classes.md`).
 
 ## Output assembly
 
