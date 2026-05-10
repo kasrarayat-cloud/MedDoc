@@ -74,6 +74,11 @@ interface RxTabProps {
   visitId: string;
   /** Visit is SIGNED → suppress mutation affordances. */
   readonly?: boolean;
+  /** warningIds (rx-warning-${i}) that already have RxWarningOverride
+   *  rows in the database. Threaded from page.tsx's prisma query so the
+   *  ✓ Overridden chip persists across reloads + tabs. New overrides
+   *  recorded in this session are merged into local state. */
+  initialOverriddenIds?: string[];
   /** @deprecated kept for back-compat; Linear V1 is single-theme. */
   theme?: RxTabTheme;
 }
@@ -89,12 +94,31 @@ function mapWorkerSeverity(s: WorkerWarning['severity']): RailSeverity {
 // Public component
 // ---------------------------------------------------------------------------
 
-export function RxTab({ rx, visitId, readonly = false }: RxTabProps) {
-  void visitId; // reserved for future server-action wiring
-
+export function RxTab({
+  rx,
+  visitId,
+  readonly = false,
+  initialOverriddenIds = [],
+}: RxTabProps) {
   const blob = (rx as RxBlob | null) ?? null;
   const prescriptions = blob?.prescriptions ?? [];
   const warnings = blob?.warnings ?? [];
+
+  // Track which warnings have RxWarningOverride rows. Initial value
+  // comes from the page-level prisma query; new overrides recorded
+  // via the rail's modal flow merge in via the onOverrideRecorded
+  // callback. Set rather than array for O(1) membership in the rail.
+  const [overriddenIds, setOverriddenIds] = useState<Set<string>>(
+    () => new Set(initialOverriddenIds)
+  );
+  const handleOverrideRecorded = useCallback((warningId: string) => {
+    setOverriddenIds((prev) => {
+      if (prev.has(warningId)) return prev;
+      const next = new Set(prev);
+      next.add(warningId);
+      return next;
+    });
+  }, []);
 
   // Build stable Rx IDs (R-001, R-002, …). The order in the wire
   // determines the ID — preserved across renders so the rail's
@@ -109,19 +133,24 @@ export function RxTab({ rx, visitId, readonly = false }: RxTabProps) {
 
   // Materialise the rail warnings. Worker doesn't emit explicit Rx IDs
   // yet, so match by `rx_drug` against the drug field; fall back to
-  // the first Rx ID when no match (defensive).
+  // the first Rx ID when no match (defensive). The 1-based
+  // rxLineNumber is parsed from the matched Rx's index — when no
+  // match, the warning attaches to the first Rx at line 1 so the
+  // override's payload still passes the recordOverride number guard.
   const railWarnings = useMemo<RailWarning[]>(() => {
     return warnings.map((w, i) => {
       const matched = decoratedRx.find(
         (p) => p.drug?.toLowerCase() === w.rx_drug?.toLowerCase()
       );
       const rxId = matched?.rxId ?? decoratedRx[0]?.rxId ?? '—';
+      const matchedIx = matched?._ix ?? decoratedRx[0]?._ix ?? 0;
       return {
         id: `rx-warning-${i}`,
         severity: mapWorkerSeverity(w.severity),
         headline: w.rx_drug,
         body: w.message + (w.evidence_quote ? ` "${w.evidence_quote}"` : ''),
         rxId,
+        rxLineNumber: matchedIx + 1,
       };
     });
   }, [warnings, decoratedRx]);
@@ -211,6 +240,10 @@ export function RxTab({ rx, visitId, readonly = false }: RxTabProps) {
         warnings={railWarnings}
         activeRxId={activeRxId}
         onWarningFocus={handleWarningFocus}
+        visitId={visitId}
+        overriddenIds={overriddenIds}
+        onOverrideRecorded={handleOverrideRecorded}
+        readonly={readonly}
       />
     </div>
   );
