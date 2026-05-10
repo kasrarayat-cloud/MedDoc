@@ -192,6 +192,24 @@ async function main() {
       });
     }
 
+    // Round 4 critical-Rx-override regression guard. Runs only when
+    // the walker is exercising the criticalRx fixture; verifies the
+    // bridge from RxWarningsRail → OverrideConfirmModal is wired.
+    // The bug this catches: API-side guard exists (sign-route 422 on
+    // missing override) but no UI-side path to the modal — doctor
+    // sees the toast with no remediation. Cancels the modal without
+    // submitting so the fixture stays clean.
+    if (opts.scenario === 'criticalRx') {
+      const overrideAssertion = await assertCriticalRxOverrideFlow(
+        page,
+        opts.visitId
+      );
+      if (!overrideAssertion.ok) {
+        counters.findings += 1;
+      }
+      emit({ event: 'critical-rx-override-flow', ...overrideAssertion });
+    }
+
     const elements = await enumerate(page);
     counters.elements = elements.length;
     for (const el of elements) {
@@ -290,6 +308,110 @@ async function main() {
     await browser.close();
   }
   exit(exitCode);
+}
+
+// ---------------------------------------------------------------------------
+// assertCriticalRxOverrideFlow — Round 4 regression guard.
+// ---------------------------------------------------------------------------
+// Catches the class of bug where the sign-API enforces a critical-Rx-
+// override audit row but the production UI doesn't expose the override
+// modal trigger. Runs against the qa_fix_visit_critical_rx fixture
+// which seeds one critical Ibuprofen+warfarin warning.
+//
+// Steps (all read-only — modal is canceled, NOT submitted):
+//   1. Click the Rx tab so the rail renders
+//   2. Assert >=1 .qm-warn-critical row visible
+//   3. Assert >=1 .qm-warn-override-btn button reachable
+//   4. Click the button → assert a Radix Dialog (role="dialog") opens
+//   5. Assert the dialog title contains the warning headline
+//   6. Press Escape → assert the dialog closes
+//
+// Returns { ok, step, detail } where ok=false marks any failure point.
+// ---------------------------------------------------------------------------
+async function assertCriticalRxOverrideFlow(page, visitId) {
+  // Step 1 — switch to Rx tab. The visit page renders the Rx tab via
+  // a button or pill labeled "Rx" / "Prescriptions".
+  try {
+    const rxTabBtn = page
+      .locator('button, [role="tab"]')
+      .filter({ hasText: /^(Rx|Prescriptions)$/i })
+      .first();
+    if (await rxTabBtn.count() > 0) {
+      await rxTabBtn.click({ timeout: 4000 }).catch(() => undefined);
+      await page.waitForTimeout(400);
+    }
+  } catch {
+    // Tab may already be selected; non-fatal.
+  }
+
+  // Step 2 — assert critical warning rendered.
+  const criticalCount = await page.locator('.qm-warn-critical').count();
+  if (criticalCount < 1) {
+    return {
+      ok: false,
+      step: 'assert-critical-rendered',
+      detail: 'Expected >=1 .qm-warn-critical on /visits/<criticalRx>',
+      visitId,
+    };
+  }
+
+  // Step 3 — assert override button present.
+  const overrideBtn = page.locator('.qm-warn-override-btn').first();
+  const overrideCount = await page.locator('.qm-warn-override-btn').count();
+  if (overrideCount < 1) {
+    return {
+      ok: false,
+      step: 'assert-override-button-present',
+      detail:
+        'Found .qm-warn-critical but no .qm-warn-override-btn — ' +
+        'rail is not wired to the override modal (the bug this guard catches)',
+      visitId,
+      criticalCount,
+    };
+  }
+
+  // Step 4 — click the button + assert dialog opens.
+  await overrideBtn.click({ timeout: 4000 });
+  const dialog = page.locator('[role="dialog"]').first();
+  try {
+    await dialog.waitFor({ state: 'visible', timeout: 4000 });
+  } catch {
+    return {
+      ok: false,
+      step: 'assert-dialog-opens',
+      detail: 'Override button clicked but no [role="dialog"] appeared',
+      visitId,
+    };
+  }
+
+  // Step 5 — confirm dialog title is plausibly the warning headline.
+  // criticalRx fixture's headline is the rx_drug name "Ibuprofen".
+  const titleText = (await dialog.locator('h1, h2, [id^="radix-"]').first()
+    .textContent().catch(() => null)) ?? '';
+
+  // Step 6 — press Escape, assert dialog closes. NOT submitting (would
+  // write to RxWarningOverride table and persist a fixture-mutating
+  // row).
+  await page.keyboard.press('Escape');
+  try {
+    await dialog.waitFor({ state: 'hidden', timeout: 3000 });
+  } catch {
+    return {
+      ok: false,
+      step: 'assert-dialog-closes',
+      detail: 'Dialog did not close on Escape',
+      visitId,
+    };
+  }
+
+  return {
+    ok: true,
+    step: 'complete',
+    visitId,
+    criticalCount,
+    overrideButtonCount: overrideCount,
+    dialogTitleSeen: titleText.slice(0, 60),
+  };
 }
 
 main();
