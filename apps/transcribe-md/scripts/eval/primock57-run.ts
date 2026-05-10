@@ -400,6 +400,19 @@ async function callAnthropicSoap(roleLabeledTranscript: string): Promise<SoapRes
     '  "Per patient, …" so the source is clear on downstream review.',
     '- Never add test results, medication doses, or vital-sign numbers',
     '  that were not stated.',
+    // Narrow rules added 2026-05-10; mirror of 04-generate-soap.ts.
+    "- Don't add diagnostic qualifiers (acute, chronic, undiagnosed,",
+    "  severe, mild, sudden, gradual) unless the transcript uses them",
+    '  explicitly. "Migraines" stays "migraines" — not "undiagnosed',
+    '  migraines." Onset is "sudden" only if the patient said sudden.',
+    "- Don't infer maternal/paternal side or a specific relative when",
+    "  the transcript only mentions a relative type. \"My grandmother\"",
+    '  stays "grandmother" — not "maternal grandmother" unless stated.',
+    "- When a dose, frequency, or strength is ambiguous in the",
+    "  transcript, write what was actually said and append",
+    "  '[clarify with patient]' rather than picking the most likely",
+    "  value. Don't silently resolve \"two tablets... one tablet twice",
+    '  a day" to a single interpretation.',
     '- Output ONLY the SOAP note markdown. No preamble, no postscript.',
   ].join('\n');
 
