@@ -58,6 +58,26 @@ function factWithEvidence<K extends string>(
   }) as any;
 }
 
+/** Q1 #19 follow-up: lift a bare string into a factWithEvidence-shaped
+ *  object. Prompt guidance asks the model to emit the full shape, but
+ *  the model occasionally shortcuts to `"occupation": "factory worker"`
+ *  in social_history fields. This preserves the data instead of
+ *  rejecting the whole entity-extraction call (15/68 SCHEMA_FAIL hits
+ *  on this in the 2026-05-10 baseline). The string itself becomes
+ *  both the value AND evidence_quote — lossy but monotone. */
+function liftStringToFact<K extends string>(key: K) {
+  const objectShape = factWithEvidence(key);
+  return z
+    .preprocess((value) => {
+      if (typeof value === 'string' && value.length > 0) {
+        return { [key]: value, evidence_quote: value };
+      }
+      return value;
+    }, objectShape)
+    .nullable()
+    .optional();
+}
+
 const HpiDimensions = z.object({
   onset: z.string().optional(),
   duration: z.string().optional(),
@@ -125,10 +145,14 @@ export const ExtractedEntities = z.object({
     .default([]),
   social_history: z
     .object({
-      smoking: factWithEvidence('status').nullable().optional(),
-      alcohol: factWithEvidence('status').nullable().optional(),
-      drugs: factWithEvidence('status').nullable().optional(),
-      occupation: factWithEvidence('value').nullable().optional(),
+      // Q1 #19 follow-up: each subfield is a factWithEvidence object,
+      // but the model occasionally shortcuts to a bare string. Wrap
+      // each via liftStringToFact() so the SCHEMA_FAIL cases convert
+      // to monotone-lossy objects instead of failing the whole call.
+      smoking: liftStringToFact('status'),
+      alcohol: liftStringToFact('status'),
+      drugs: liftStringToFact('status'),
+      occupation: liftStringToFact('value'),
     })
     .default({}),
   ros: z
