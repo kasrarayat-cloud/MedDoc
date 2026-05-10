@@ -1,7 +1,62 @@
 # Activation criteria — AI Pipeline Auditor
 
-> **Status: design only.** This document describes when the
-> agent is allowed to run + what activation involves.
+> **Status: SHADOW MODE** as of merge of
+> `agent/auditors-shadow-mode`. This document describes when
+> the agent is allowed to run + what graduation from shadow to
+> production looks like.
+
+## Shadow mode (current)
+
+Shadow mode means the agent runs against the live database but
+findings route to a **shadow report path**, not the
+post-graduation production report path. See `SKILL.md` for the
+operator-facing description.
+
+### Shadow output contract
+
+| Field | Value |
+|---|---|
+| **Output path** | `docs/agent-shadow-runs/ai-pipeline/<UTC-timestamp>.md` |
+| **Format** | Markdown, structured per `methodology.md` phase order |
+| **Severity behaviour** | Severity is preserved (a `BLOCKING_*` finding stays `BLOCKING_*`); shadow does NOT downgrade. It only relocates the report. |
+| **Action coupling** | None. Shadow reports never trigger automated action (no merge block, no deploy gate, no Slack ping). The operator reads + decides. |
+| **Retention** | One file per run; no rotation needed yet. Move to per-month subdirs if the directory grows past ~30 reports. |
+
+### Why a separate path
+
+The post-graduation path (`docs/ai-pipeline-audit-reports/…`) is
+reserved for runs that meet the hard gate AND have baked
+baselines. Mixing pre-baseline shadow output with post-baseline
+production runs would muddle whichever audience reads them
+later (operator? compliance? new pilot?). Two paths, two
+audiences, zero ambiguity.
+
+### Phase availability in shadow
+
+Phases that don't depend on pilot-data thresholds run today and
+produce real findings against shadow output. Phases gated on
+the hard gate emit `NO_DATA` markers in the shadow report
+instead of empty rollups, so the operator can see at a glance
+which phases are "wait for data."
+
+## Graduation criteria (shadow → production)
+
+Graduation requires ALL of:
+
+1. **Hard gate met** — see "Hard gate" section below.
+2. **Baselines baked** — `fixtures/cost-baseline-v1.json`,
+   `latency-baseline-v1.json`, `accepted-rate-baseline-v1.json`,
+   `specialty-spread-baseline-v1.json` all populated from the
+   first 100 READY visits.
+3. **Postgres role provisioned** — `ai_pipeline_auditor`
+   read-only role with SELECT-only on the `data-sources.md` §1
+   tables; agent connection string updated.
+4. **Operator approval** — explicit "graduate the AI pipeline
+   auditor" instruction, not implicit. Edit
+   `.claude/agents/ai-pipeline-auditor/README.md` + this file's
+   status block in the same PR.
+
+Until all four are done, the agent stays in shadow.
 
 ## Hard gate
 

@@ -1,14 +1,16 @@
 # AI Pipeline Auditor
 
-> **Status: DORMANT (designed, not activated).** This agent ships
-> as a design artifact only — directory structure, methodology,
-> finding-class taxonomy, and activation criteria. **No
-> `SKILL.md` is present**, which means Lead cannot accidentally
-> invoke this agent via the skill system. Activation is an
-> explicit operator action after the pilot-data threshold below
-> is met. See `skills/activation-criteria.md`.
+> **Status: SHADOW MODE** (active, advisory-only) as of merge of
+> `agent/auditors-shadow-mode`. The agent runs on demand against
+> the live database read-only; findings route to
+> `docs/agent-shadow-runs/ai-pipeline/<UTC>.md` (advisory) instead
+> of the production report path. Findings do NOT block any merge,
+> deploy, or operator action — they are advisory until graduation.
+> Trigger phrase: **"Run the AI pipeline shadow audit"**. See
+> `SKILL.md` and `skills/activation-criteria.md` for the shadow
+> output contract + the four graduation criteria.
 
-A planned agent that audits the QuillMD AI pipeline (transcribe →
+An agent that audits the QuillMD AI pipeline (transcribe →
 SOAP → coding → Rx → referral → patient-summary) for
 correctness, cost efficiency, eval coverage, and model-assignment
 appropriateness. Designed to run **read-only against the live
