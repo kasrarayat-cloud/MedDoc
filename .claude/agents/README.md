@@ -5,11 +5,18 @@ directory with a `SKILL.md` (skill registration), a `README.md`
 (operator-facing overview), and a `skills/` dir of methodology +
 domain-knowledge documents.
 
+> **Boundary table.** When two agents *could* fire on the same gap, see
+> [`docs/agents/CHARTERS.md`](../../docs/agents/CHARTERS.md) for the
+> ownership split. The closest-neighbour boundary
+> (Code Quality ↔ HIPAA on audit-row enforcement) is called out there
+> in detail.
+
 | Agent | Status | Purpose | Trigger phrase |
 |---|---|---|---|
 | [`qa-interaction-auditor`](./qa-interaction-auditor/) | **active** (v3.3) | Walks the QuillMD UI clicking every interactive element + verifies each click produces the state change it appears to. Catches feature stubs, orphan event dispatchers, "pretend success" fallbacks, and parser/renderer mismatches. | "Run the QA agent / QA sweep / interaction sweep" |
 | [`ai-pipeline-auditor`](./ai-pipeline-auditor/) | **DORMANT (designed, not activated)** | Audits the AI pipeline (transcribe → SOAP → coding → Rx → referral) for cost / quality / coverage / model-assignment drift. Read-only against `transcribe_visits` + `ai_calls` + `audit_logs` + eval results. | "Run the AI pipeline audit" (post-activation) |
 | [`hipaa-compliance-auditor`](./hipaa-compliance-auditor/) | **DORMANT (designed, staged activation)** | Audits HIPAA compliance posture: §164.308 (admin) + §164.310 (physical attestation) + §164.312 (technical — access control, audit controls, integrity, auth, transmission). Read-only against `audit_logs` + users + sessions + filesystem + container env. **Does NOT read PHI content; counts bucketed; visit IDs short-hashed in reports.** Per-phase activation gating — most phases run today; phases 2+3 wait for pilot data. | "Run the HIPAA compliance audit" (post-activation) |
+| [`code-quality-auditor`](./code-quality-auditor/) | **active** (v1) | Audits PR diffs (and arbitrary file paths) for compliance with QuillMD's actual production conventions — design tokens, component patterns, Prisma schema rules, BullMQ patterns, server/client boundary, folder layout, scope guards. Catches pattern drift that pure typecheck + tests miss. | "Run code quality audit on PR #N" / "Audit diff for pattern compliance" / "Code quality audit on `<path>`" |
 
 ## Activation gates
 
