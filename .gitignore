@@ -91,3 +91,15 @@ qa-sweep-*/test-account.txt
 
 # E2E smoke test session cookies (regenerable; sensitive — Auth.js JWT).
 docs/smoke-test-*/test-data/session-storage.json
+
+# Design-review preview assets — bulky binary snapshots stay host-side.
+# The HTML mockups + tokens reference under _design-references/ ARE
+# tracked (text, ~470KB total, cited by .claude/agents/code-quality-
+# auditor/rules.md TOKEN-002 as the banned-value provenance source).
+# The marketing snapshot zip is a one-shot capture; regenerate from
+# Phase 5 source on demand instead of carrying the binary in git.
+# processing-mockups.html is a Round-1 artifact still using the banned
+# palette (#050607 + #9eb5a0 + Lora) — kept on disk for historical
+# context, never committed.
+_design-references/*.zip
+_design-references/quillmd-processing-mockups.html
