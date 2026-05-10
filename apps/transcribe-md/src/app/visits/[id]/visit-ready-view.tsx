@@ -91,6 +91,10 @@ export interface VisitReadyViewProps {
   icdCodes: unknown;
   cptCodes: unknown;
   rxDrafts: unknown;
+  /** Round 4 critical-Rx-override fix: warningIds with existing
+   *  RxWarningOverride rows. Threaded into RxTab → RxWarningsRail so
+   *  ✓ Overridden chips persist across reload. */
+  rxOverriddenWarningIds: string[];
   referrals: unknown;
   patientSummary: string | null;
   confidenceScores: unknown;
@@ -293,6 +297,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
               rx={props.rxDrafts}
               visitId={props.visitId}
               readonly={props.readonly}
+              initialOverriddenIds={props.rxOverriddenWarningIds}
             />
           </div>
         )}

@@ -193,7 +193,11 @@ export default async function VisitPage({
     confidenceScores: unknown;
   };
 
-  const [user, visit] = (await Promise.all([
+  // Round 4 critical-Rx-override fix: pull existing override rows so
+  // the rail can hydrate with ✓ Overridden chips on already-acknowledged
+  // warnings. Visit-scoped + persisted, so reload + cross-tab don't
+  // lose the doctor's progress through multiple critical warnings.
+  const [user, visit, rxOverrides] = (await Promise.all([
     prisma.user.findUnique({
       where: { id: session.user.id },
       select: { name: true, email: true },
@@ -252,7 +256,15 @@ export default async function VisitPage({
         confidenceScores: true,
       },
     }),
-  ])) as [UserRow | null, VisitRow | null];
+    prisma.rxWarningOverride.findMany({
+      where: { visitId: id },
+      select: { warningId: true },
+    }),
+  ])) as [
+    UserRow | null,
+    VisitRow | null,
+    Array<{ warningId: string }>,
+  ];
 
   if (!user) redirect('/login');
   if (!visit || visit.userId !== session.user.id) notFound();
@@ -467,6 +479,7 @@ export default async function VisitPage({
           icdCodes={visit.icdCodes}
           cptCodes={visit.cptCodes}
           rxDrafts={visit.rxDrafts}
+          rxOverriddenWarningIds={rxOverrides.map((o) => o.warningId)}
           referrals={visit.referrals}
           patientSummary={visit.patientSummary}
           confidenceScores={visit.confidenceScores}
@@ -518,6 +531,10 @@ interface VisitBodyProps {
   icdCodes: unknown;
   cptCodes: unknown;
   rxDrafts: unknown;
+  /** Round 4 critical-Rx-override fix: warningIds with existing
+   *  RxWarningOverride rows. Hydrates the rail's ✓ Overridden chips
+   *  on initial paint so reload + cross-tab persistence works. */
+  rxOverriddenWarningIds: string[];
   referrals: unknown;
   patientSummary: string | null;
   confidenceScores: unknown;
@@ -671,6 +688,7 @@ async function VisitBody(props: VisitBodyProps) {
       icdCodes={props.icdCodes}
       cptCodes={props.cptCodes}
       rxDrafts={props.rxDrafts}
+      rxOverriddenWarningIds={props.rxOverriddenWarningIds}
       referrals={props.referrals}
       patientSummary={props.patientSummary}
       confidenceScores={props.confidenceScores}
