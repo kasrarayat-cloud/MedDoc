@@ -1,0 +1,3967 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>QuillMD — SOAP redesign concepts</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   PRODUCTION TOKENS — exact values from
+   apps/transcribe-md/src/app/globals.css:36–97
+   ============================================================ */
+:root {
+  --bg: #08090a;
+  --surface-1: #0d0e10;
+  --surface-2: #131416;
+  --surface-3: #1a1c1e;
+  --border: #21232a;
+  --border-strong: #2c2f38;
+  --hairline: rgba(255,255,255,0.05);
+  --hairline-2: rgba(255,255,255,0.08);
+  --text: #f7f8f8;
+  --text-2: #b4bcc8;
+  --text-3: #828995;
+  --text-4: #4b5159;
+  --sage: #7aa68c;
+  --sage-bright: #9bc4a8;
+  --sage-soft: #5d8a73;
+  --sage-deep: #2f5040;
+  --sage-tint: rgba(122,166,140,0.13);
+  --sage-glow: rgba(122,166,140,0.18);
+  --warning: #d4a437;
+  --danger: #d4574a;
+  --info: #5b8db8;
+  --row-hover: rgba(255,255,255,0.03);
+  --row-active: rgba(255,255,255,0.05);
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.45;
+  letter-spacing: -0.005em;
+  font-feature-settings: 'cv11', 'ss01';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+}
+button { font-family: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+a { color: inherit; text-decoration: none; }
+::selection { background: rgba(122,166,140,0.25); color: var(--text); }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 5px; border: 2px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
+*:focus-visible { outline: 2px solid rgba(122,166,140,0.55); outline-offset: 2px; border-radius: 4px; }
+
+/* ============================================================
+   APP SHELL — sidebar + canvas + viewport toggle
+   ============================================================ */
+.app { display: grid; grid-template-columns: 260px 1fr; height: 100vh; }
+
+.lab-nav {
+  background: var(--surface-1);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  padding: 16px 0 24px;
+  display: flex; flex-direction: column;
+}
+.lab-brand {
+  padding: 4px 18px 18px;
+  border-bottom: 1px solid var(--hairline);
+  margin-bottom: 12px;
+}
+.lab-logo {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; font-weight: 600; color: var(--text);
+  letter-spacing: -0.005em;
+}
+.lab-logo .mark {
+  width: 18px; height: 18px;
+  background: linear-gradient(135deg, var(--sage-deep), var(--sage));
+  border-radius: 4px;
+  display: inline-grid; place-items: center;
+  color: #0d1611;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+}
+.lab-sub {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-3);
+  margin-top: 8px;
+}
+.lab-group {
+  padding: 10px 18px 4px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-4);
+  font-weight: 500;
+}
+.lab-item {
+  display: block;
+  padding: 9px 18px;
+  font-size: 13px;
+  color: var(--text-2);
+  position: relative;
+  transition: all 100ms ease-out;
+  border-left: 2px solid transparent;
+  cursor: pointer;
+  user-select: none;
+}
+.lab-item:hover { color: var(--text); background: var(--row-hover); }
+.lab-item.active {
+  color: var(--text);
+  background: var(--sage-tint);
+  border-left-color: var(--sage);
+}
+.lab-item .num {
+  font-family: var(--font-mono);
+  color: var(--text-4);
+  font-size: 10px;
+  margin-right: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.lab-item.active .num { color: var(--sage-bright); }
+.lab-meta {
+  padding: 0 18px 4px 50px;
+  font-size: 11px;
+  color: var(--text-4);
+  letter-spacing: -0.005em;
+}
+.lab-foot {
+  margin-top: auto;
+  padding: 16px 18px 4px;
+  border-top: 1px solid var(--hairline);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  color: var(--text-4);
+  text-transform: uppercase;
+  line-height: 1.6;
+}
+.lab-foot .gd { color: var(--sage-bright); }
+
+/* canvas */
+.canvas {
+  background: var(--bg);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+.canvas-bar {
+  height: 48px;
+  border-bottom: 1px solid var(--hairline);
+  background: rgba(13,14,16,0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  display: flex; align-items: center;
+  padding: 0 16px;
+  gap: 14px;
+  flex-shrink: 0;
+}
+.cb-title {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 500;
+  letter-spacing: -0.005em;
+}
+.cb-num {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-3);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.cb-spacer { flex: 1; }
+.vp-toggle {
+  display: inline-flex;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px;
+}
+.vp-btn {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 5px 11px;
+  color: var(--text-3);
+  border-radius: 4px;
+  font-weight: 500;
+  transition: all 100ms ease-out;
+}
+.vp-btn:hover { color: var(--text-2); }
+.vp-btn.active { background: var(--surface-3); color: var(--text); }
+.cb-meta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-3);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.cb-meta .pulse {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--sage);
+  box-shadow: 0 0 0 3px rgba(122,166,140,0.15);
+  animation: q-pulse 2s ease-in-out infinite;
+}
+@keyframes q-pulse {
+  0%,100% { box-shadow: 0 0 0 3px rgba(122,166,140,0.10); opacity: 0.7; }
+  50% { box-shadow: 0 0 0 5px rgba(122,166,140,0.18); opacity: 1; }
+}
+
+.viewport {
+  flex: 1;
+  overflow: auto;
+  background:
+    radial-gradient(ellipse 60% 40% at 50% 0%, rgba(122,166,140,0.025) 0%, transparent 60%),
+    var(--bg);
+}
+.vp-frame {
+  margin: 0 auto;
+  background: var(--bg);
+  border-left: 1px solid transparent;
+  border-right: 1px solid transparent;
+  min-height: calc(100vh - 48px);
+  transition: max-width 280ms var(--ease), border-color 180ms var(--ease);
+  position: relative;
+}
+[data-vp="desktop"] .vp-frame { max-width: 100%; }
+[data-vp="ipad"] .vp-frame {
+  max-width: 1024px;
+  border-left-color: var(--hairline);
+  border-right-color: var(--hairline);
+  margin-top: 16px;
+  margin-bottom: 16px;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  min-height: calc(100vh - 80px);
+  overflow: hidden;
+}
+[data-vp="phone"] .vp-frame {
+  max-width: 390px;
+  border: 1px solid var(--hairline);
+  border-radius: 18px;
+  margin-top: 16px;
+  margin-bottom: 16px;
+  min-height: calc(100vh - 80px);
+  overflow: hidden;
+}
+
+/* ============================================================
+   SHARED PRIMITIVES — production patterns reproduced exactly
+   ============================================================ */
+.concept { display: none; }
+.concept.active { display: block; }
+
+/* ---- Top tab bar (visit-ready-view.tsx:545-657 inline pattern) ---- */
+.tabs {
+  display: flex; align-items: center;
+  border-bottom: 1px solid var(--hairline);
+  padding: 0 24px;
+  gap: 0;
+  height: 42px;
+  position: relative;
+}
+.tab {
+  position: relative;
+  padding: 8px 14px 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  font-weight: 500;
+  color: var(--text-3);
+  background: transparent;
+  border: 0;
+  transition: color 100ms ease-out;
+  display: inline-flex; align-items: center; gap: 6px;
+  cursor: pointer;
+}
+.tab:hover { color: var(--text); }
+.tab:first-child { padding-left: 0; }
+.tab.active { color: var(--text); }
+.tab.active::after {
+  content: "";
+  position: absolute;
+  left: 14px; right: 14px; bottom: -1px;
+  height: 1.5px;
+  border-radius: 1px 1px 0 0;
+  background: var(--sage);
+}
+.tab:first-child.active::after { left: 0; }
+.tab .ic { width: 14px; height: 14px; opacity: 0.85; flex-shrink: 0; }
+.tab.active .ic { opacity: 1; }
+.tab .warn-dot {
+  display: inline-block;
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--warning);
+}
+.tab .warn-dot.crit { background: var(--danger); }
+.tabs-spacer { flex: 1; }
+.tabs-actions { display: inline-flex; gap: 8px; align-items: center; }
+
+/* Patient strip */
+.pt-strip {
+  display: flex; align-items: baseline; gap: 12px;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--hairline);
+  font-size: 12px;
+  color: var(--text-3);
+}
+.pt-name {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+}
+.pt-strip .sep { color: var(--text-4); }
+.pt-strip .meta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+.pt-strip .grow { flex: 1; }
+.pt-strip .mrn {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-4);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* Pill — qm-lin-pill family */
+.pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+  font-weight: 500;
+}
+.pill--sage {
+  background: var(--sage-tint);
+  color: var(--sage-bright);
+  border-color: rgba(122,166,140,0.30);
+}
+.pill--review {
+  background: rgba(212,165,116,0.06);
+  color: #e3b984;
+  border-color: rgba(212,165,116,0.25);
+}
+.pill--draft { background: var(--surface-2); color: var(--text-2); }
+.pill--signed { background: transparent; color: var(--text-3); border-color: var(--hairline); }
+.pill--crit {
+  background: rgba(212,87,74,0.08);
+  color: #e4867a;
+  border-color: rgba(212,87,74,0.32);
+}
+
+/* Section status pill — mono variant */
+.sec-status {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 22px; padding: 0 9px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+.sec-status--reviewed {
+  border: 1px solid rgba(122,166,140,0.28);
+  color: var(--sage-bright);
+  background: rgba(122,166,140,0.08);
+}
+.sec-status--drafted {
+  border: 1px solid rgba(212,164,55,0.25);
+  color: var(--warning);
+  background: rgba(212,164,55,0.06);
+}
+.sec-status--signed {
+  border: 1px solid var(--hairline);
+  color: var(--text-3);
+  background: transparent;
+}
+
+/* SOAP eyebrow — letter chip + uppercase mono label */
+.soap-eyebrow {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  font-weight: 500;
+}
+.soap-letter {
+  display: inline-grid; place-items: center;
+  width: 18px; height: 18px;
+  background: rgba(122,166,140,0.10);
+  border: 1px solid rgba(122,166,140,0.28);
+  color: var(--sage-bright);
+  font-size: 10px;
+  border-radius: 4px;
+  font-weight: 600;
+  letter-spacing: 0;
+  font-family: var(--font-mono);
+}
+
+/* Pulse meta — small sage dot + mono micro-meta */
+.pulse-meta {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.pulse-meta .dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--sage);
+}
+.pulse-meta--boost { color: #e3b950; }
+.pulse-meta--boost .dot { background: var(--warning); }
+
+/* SOAP section card — qm-lin-soap-section-v6 */
+.soap-section {
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: var(--surface-1);
+  padding: 14px 16px 16px;
+  margin-bottom: 22px;
+  position: relative;
+  transition: border-color 130ms var(--ease);
+}
+.soap-section:hover { border-color: var(--hairline-2); }
+.soap-section-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--hairline);
+}
+.soap-section-head .lhs {
+  display: flex; align-items: center; gap: 10px;
+  min-width: 0;
+}
+.soap-section-body {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text);
+  letter-spacing: -0.005em;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  padding: 6px 8px;
+  margin: 0 -8px;
+  transition: all 130ms var(--ease);
+}
+.soap-section-body:hover {
+  background: rgba(255,255,255,0.022);
+  border-color: var(--hairline-2);
+  cursor: text;
+}
+
+/* Markdown shim — qm-lin-soap-md-* */
+.md-h2 {
+  margin: 14px 0 4px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--sage-bright);
+}
+.md-h2:first-child { margin-top: 0; }
+.md-p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text);
+}
+.md-p strong { font-weight: 600; color: var(--text); }
+.md-p + .md-p { margin-top: 4px; }
+.md-ul {
+  margin: 6px 0;
+  padding-left: 22px;
+  list-style: disc;
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.md-ul li + li { margin-top: 4px; }
+.md-ul li strong { color: var(--text); font-weight: 600; }
+.md-spacer { height: 6px; }
+
+/* Vital token (inline mono numerals) */
+.vital-tok {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  color: var(--text);
+}
+.vital-tok .v-lbl {
+  color: var(--text-3);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-right: 3px;
+}
+
+/* Buttons — qm-lin-btn / btn-primary */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  background: transparent;
+  color: var(--text-2);
+  border: 1px solid var(--border);
+  transition: all 120ms ease-out;
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+}
+.btn:hover { border-color: var(--border-strong); color: var(--text); }
+.btn:active { background: var(--row-hover); }
+.btn-primary {
+  background: var(--sage);
+  color: #0d1611;
+  border: 0;
+  box-shadow: 0 0 0 1px rgba(122,166,140,0.3);
+  font-weight: 500;
+}
+.btn-primary:hover { background: var(--sage-bright); }
+.btn-primary:active { transform: translateY(0.5px); }
+
+/* Coding rail — qm-lin-coding-rail */
+.coding-rail {
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex; flex-direction: column;
+  font-family: var(--font-sans);
+  color: var(--text);
+}
+.coding-rail-head {
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--hairline);
+}
+.coding-rail-head-top {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 6px;
+}
+.coding-rail-label {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  font-weight: 500;
+}
+.coding-rail-label--coach { color: var(--sage-bright); }
+.coding-rail-pulse {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--sage);
+  box-shadow: 0 0 0 3px rgba(122,166,140,0.15);
+  animation: q-pulse 2s ease-in-out infinite;
+}
+.coding-rail-code-row {
+  display: flex; align-items: center; gap: 8px;
+  margin-top: 2px;
+}
+.coding-code {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  color: var(--text);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.coding-level {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sage-bright);
+  font-weight: 500;
+  padding: 2px 6px;
+  border: 1px solid rgba(122,166,140,0.28);
+  border-radius: 3px;
+  background: rgba(122,166,140,0.07);
+}
+.coding-override {
+  margin-left: auto;
+  display: inline-flex; align-items: center; gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  padding: 3px 6px;
+  border: 1px solid var(--hairline-2);
+  border-radius: 3px;
+  background: transparent;
+  cursor: pointer;
+  transition: all 100ms ease;
+}
+.coding-override:hover { color: var(--text); border-color: rgba(255,255,255,0.16); background: rgba(255,255,255,0.025); }
+
+/* time tracker */
+.coding-time {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--hairline);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: var(--text-2);
+  background: rgba(122,166,140,0.025);
+}
+.coding-time-num {
+  color: var(--text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.coding-time-meter {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--hairline-2);
+  overflow: hidden;
+  margin-left: 6px;
+  position: relative;
+}
+.coding-time-meter-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--sage-deep), var(--sage));
+  border-radius: 2px;
+}
+.coding-time-rule {
+  color: var(--text-4);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* checklist */
+.em-checklist {
+  flex: 1;
+  padding: 12px 14px 4px;
+  display: flex; flex-direction: column;
+  gap: 14px;
+}
+.em-criterion-group {
+  display: flex; flex-direction: column;
+}
+.em-criterion-group-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 6px;
+  padding-bottom: 5px;
+  border-bottom: 1px dashed var(--hairline);
+}
+.em-criterion-group-title {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--text);
+  font-weight: 600;
+}
+.em-criterion-group-summary {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  color: var(--text-4);
+}
+.em-criterion {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 5px 4px;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-2);
+  letter-spacing: -0.005em;
+  cursor: pointer;
+  transition: background 100ms ease;
+}
+.em-criterion:hover { background: rgba(255,255,255,0.022); }
+.em-criterion-icon {
+  flex: 0 0 14px;
+  width: 14px; height: 14px;
+  display: inline-grid; place-items: center;
+  border-radius: 50%;
+  margin-top: 2px;
+  font-size: 8px;
+}
+.em-criterion-icon--ok {
+  background: rgba(122,166,140,0.14);
+  color: var(--sage-bright);
+  border: 1px solid rgba(122,166,140,0.32);
+}
+.em-criterion-icon--warn {
+  background: rgba(212,164,55,0.10);
+  color: var(--warning);
+  border: 1px solid rgba(212,164,55,0.36);
+}
+.em-criterion-text {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column;
+}
+.em-criterion-head {
+  color: var(--text);
+  font-weight: 500;
+  font-size: 12.5px;
+}
+.em-criterion-sub {
+  color: var(--text-3);
+  font-size: 11.5px;
+  margin-top: 1px;
+}
+.em-criterion--warn .em-criterion-head { color: var(--warning); }
+.em-criterion--warn .em-criterion-sub { color: var(--warning); opacity: 0.85; }
+
+/* CTA block */
+.coding-cta {
+  border-top: 1px solid var(--hairline);
+  padding: 12px 14px 14px;
+  background: linear-gradient(180deg, rgba(122,166,140,0.018), rgba(122,166,140,0.05));
+  display: flex; flex-direction: column; gap: 8px;
+}
+
+/* Bump CTA — sacred #0d1611 text on var(--sage) bg */
+.bump {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+  padding: 11px 14px;
+  background: var(--sage);
+  color: #0d1611;
+  border: 0;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  cursor: pointer;
+  transition: background 100ms ease, transform 80ms ease, box-shadow 200ms ease;
+}
+.bump:hover {
+  background: #88b599;
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 4px rgba(122,166,140,0.18);
+}
+.bump-lhs { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; }
+.bump-top { display: flex; align-items: center; gap: 6px; }
+.bump-sub {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(13,22,17,0.62);
+  font-weight: 500;
+}
+.bump-arrow {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 13px;
+}
+.bump-delta {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.coding-confirm {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px;
+  border: 1px solid var(--hairline-2);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12px;
+  letter-spacing: -0.005em;
+  cursor: pointer;
+  transition: all 100ms ease;
+}
+.coding-confirm:hover {
+  color: var(--text);
+  background: rgba(255,255,255,0.025);
+  border-color: rgba(255,255,255,0.16);
+}
+.coding-confirm-check { color: var(--sage-bright); font-weight: 600; }
+.coding-confirm-shortcut { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-3); }
+.coding-cta-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-4);
+  padding-top: 4px;
+}
+.coding-cta-foot--gap { color: var(--warning); opacity: 0.85; }
+.coding-cta-foot-ama {
+  color: var(--text-3);
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.coding-cta-foot-ama::before {
+  content: '';
+  width: 3.5px; height: 3.5px;
+  border-radius: 50%;
+  background: var(--sage);
+  opacity: 0.6;
+}
+
+/* Rx warning card primitive — .qm-warn family condensed */
+.qm-warn {
+  position: relative;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  overflow: hidden;
+  color: var(--text-2);
+  font-family: var(--font-sans);
+}
+.qm-warn::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: var(--danger);
+}
+.qm-warn--warn::before { background: var(--warning); }
+.qm-warn-h {
+  display: grid;
+  grid-template-columns: 36px auto 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 14px 16px 8px;
+}
+.qm-warn-icon {
+  width: 36px; height: 36px;
+  border-radius: 8px;
+  border: 1px solid rgba(212,87,74,0.28);
+  background: rgba(212,87,74,0.10);
+  display: grid; place-items: center;
+  color: var(--danger);
+  font-family: var(--font-mono);
+  font-size: 16px;
+}
+.qm-warn--warn .qm-warn-icon {
+  border-color: rgba(212,164,55,0.32);
+  background: rgba(212,164,55,0.10);
+  color: var(--warning);
+}
+.qm-warn-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--bg);
+  background: var(--danger);
+  padding: 0 8px 0 7px;
+  height: 20px;
+  display: inline-flex; align-items: center;
+  border-radius: 4px;
+  border: 1px solid rgba(212,87,74,0.55);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.18);
+}
+.qm-warn--warn .qm-warn-badge { background: var(--warning); border-color: rgba(212,164,55,0.55); }
+.qm-warn-headline {
+  grid-column: 1 / -2;
+  margin-top: 4px;
+  font-size: 17px;
+  font-weight: 500;
+  letter-spacing: -0.012em;
+  color: var(--text);
+  line-height: 1.3;
+}
+.qm-warn-body {
+  padding: 0 16px 14px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.qm-warn-action {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: rgba(212,87,74,0.10);
+  border: 1px solid rgba(212,87,74,0.28);
+  color: rgb(228, 134, 122);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+.qm-warn--warn .qm-warn-action {
+  background: rgba(212,164,55,0.10);
+  border-color: rgba(212,164,55,0.28);
+  color: rgb(228, 185, 132);
+}
+.qm-warn-transcribed {
+  display: grid; grid-template-columns: 1fr auto 1fr;
+  gap: 14px; align-items: center;
+}
+.qm-warn-field-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.qm-warn-field-value {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+.qm-warn-arrow {
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+.qm-warn-confidence {
+  margin-left: 8px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--warning);
+  border: 1px solid rgba(212,164,55,0.30);
+  background: rgba(212,164,55,0.08);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.qm-warn-action-row {
+  display: flex; gap: 8px; align-items: center;
+}
+.qm-warn-override-btn {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--danger);
+  background: rgba(212,87,74,0.08);
+  border: 1px solid rgba(212,87,74,0.32);
+  border-radius: 4px;
+  padding: 5px 11px;
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+.qm-warn-override-btn:hover { background: rgba(212,87,74,0.14); border-color: rgba(212,87,74,0.52); }
+
+/* Vitals strip primitive */
+.vitals-strip {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 0;
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.vitals-strip .v {
+  padding: 12px 14px;
+  border-right: 1px solid var(--hairline);
+}
+.vitals-strip .v:last-child { border-right: 0; }
+.vitals-strip .l {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 4px;
+}
+.vitals-strip .n {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  font-weight: 500;
+}
+.vitals-strip .v.warn .n { color: var(--warning); }
+.vitals-strip .v.warn .l::after { content: " ↑"; color: var(--warning); }
+.vitals-strip .delta {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--text-4);
+  margin-top: 2px;
+  letter-spacing: 0.04em;
+}
+.vitals-strip .v.warn .delta { color: var(--warning); opacity: 0.8; }
+
+/* notebody-foot — last edit + Copy SOAP */
+.notebody-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--hairline);
+}
+.notebody-foot-meta {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.notebody-foot-meta .dot {
+  width: 4px; height: 4px;
+  border-radius: 50%;
+  background: var(--sage);
+  opacity: 0.7;
+}
+
+/* ============================================================
+   CONCEPT 1 — INDEX + BODY
+   ============================================================ */
+.c1 .body {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr) 280px;
+  gap: 0;
+  align-items: start;
+}
+.c1 .toc {
+  position: sticky; top: 0;
+  align-self: start;
+  max-height: 100vh; overflow-y: auto;
+  padding: 24px 16px 32px 24px;
+  border-right: 1px solid var(--hairline);
+}
+.c1 .toc-h {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-4);
+  margin-bottom: 14px;
+  font-weight: 600;
+}
+.c1 .toc-section {
+  margin-bottom: 18px;
+}
+.c1 .toc-section-h {
+  display: flex; align-items: center; gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--sage-bright);
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+.c1 .toc-section-h .letter {
+  display: inline-grid; place-items: center;
+  width: 14px; height: 14px;
+  background: rgba(122,166,140,0.10);
+  border: 1px solid rgba(122,166,140,0.28);
+  color: var(--sage-bright);
+  font-size: 9px;
+  border-radius: 3px;
+  font-weight: 600;
+}
+.c1 .toc-link {
+  display: flex; align-items: center;
+  padding: 5px 10px 5px 24px;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  color: var(--text-3);
+  border-left: 1px solid transparent;
+  transition: all 100ms ease;
+  position: relative;
+  cursor: pointer;
+  letter-spacing: -0.005em;
+}
+.c1 .toc-link:hover { color: var(--text); }
+.c1 .toc-link.on {
+  color: var(--text);
+  border-left-color: var(--sage);
+  background: rgba(122,166,140,0.04);
+}
+.c1 .toc-link .ct {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0;
+  padding: 0 5px;
+  border-radius: 3px;
+}
+.c1 .toc-link .ct.flag-amber { background: rgba(212,164,55,0.12); color: var(--warning); }
+.c1 .toc-link .ct.flag-crit { background: rgba(212,87,74,0.12); color: var(--danger); }
+
+.c1 .reading {
+  padding: 32px 40px 64px;
+  max-width: 760px;
+  margin: 0 auto;
+  width: 100%;
+}
+.c1 .reading h1 {
+  font-family: var(--font-sans);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.018em;
+  color: var(--text);
+  margin: 0 0 4px;
+}
+.c1 .reading .h-meta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+  text-transform: uppercase;
+  margin-bottom: 28px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.c1 .right-rail {
+  position: sticky; top: 0;
+  align-self: start;
+  max-height: 100vh; overflow-y: auto;
+  padding: 24px 24px 32px 16px;
+  border-left: 1px solid var(--hairline);
+}
+.c1 .badge-card {
+  border: 1px solid var(--hairline);
+  background: var(--surface-1);
+  border-radius: 8px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: all 130ms var(--ease);
+}
+.c1 .badge-card:hover { border-color: var(--hairline-2); }
+.c1 .badge-card .row {
+  display: flex; align-items: baseline; justify-content: space-between;
+  margin-bottom: 8px;
+}
+.c1 .badge-card .lbl {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--sage-bright);
+  font-weight: 500;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.c1 .badge-card .lbl::before {
+  content: ''; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--sage);
+  box-shadow: 0 0 0 3px rgba(122,166,140,0.15);
+}
+.c1 .badge-card .ama {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-4);
+}
+.c1 .badge-card .code {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  color: var(--text);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.c1 .badge-card .level {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sage-bright);
+  font-weight: 500;
+  padding: 2px 6px;
+  border: 1px solid rgba(122,166,140,0.28);
+  border-radius: 3px;
+  background: rgba(122,166,140,0.07);
+  margin-left: 8px;
+}
+.c1 .badge-card .delta {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--sage-bright);
+  margin-top: 6px;
+  letter-spacing: 0.02em;
+}
+.c1 .badge-card .gaps {
+  margin-top: 8px; padding-top: 8px;
+  border-top: 1px dashed var(--hairline);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--warning);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.c1 .badge-card .expand-hint {
+  margin-top: 8px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--text-4);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.c1 .review-pill {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 11px;
+  margin-top: 14px;
+  border-radius: 14px;
+  background: rgba(212,87,74,0.06);
+  border: 1px solid rgba(212,87,74,0.32);
+  color: var(--danger);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 500;
+  width: 100%;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: all 130ms ease;
+}
+.c1 .review-pill:hover { background: rgba(212,87,74,0.12); }
+.c1 .review-pill .ct {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.c1 .c1-bill-expand { display: none; margin-top: 14px; }
+.c1 .c1-bill-expand.open { display: flex; flex-direction: column; }
+.c1 .badge-card .expand-hint { transition: opacity 130ms ease; }
+.c1 .c1-bill-expand.open ~ .badge-card .expand-hint { opacity: 0.4; }
+
+[data-vp="ipad"] .c1 .body { grid-template-columns: 200px minmax(0, 1fr) 240px; }
+[data-vp="ipad"] .c1 .reading { padding: 24px 24px 48px; }
+[data-vp="phone"] .c1 .body { grid-template-columns: 1fr; }
+[data-vp="phone"] .c1 .toc, [data-vp="phone"] .c1 .right-rail { display: none; }
+[data-vp="phone"] .c1 .reading { padding: 20px 16px 48px; }
+
+/* ============================================================
+   CONCEPT 2 — PROBLEM-FORWARD
+   ============================================================ */
+.c2 .body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 24px;
+  padding: 28px 24px 64px;
+  max-width: 1480px;
+  margin: 0 auto;
+  align-items: start;
+}
+.c2 .stage { min-width: 0; }
+.c2 .stage h1 {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.018em;
+  color: var(--text);
+  margin: 0 0 4px;
+}
+.c2 .stage .h-meta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.c2 .stage .summary-row {
+  display: flex; gap: 8px; margin: 14px 0 24px;
+  flex-wrap: wrap;
+}
+.c2 .summary-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  color: var(--text-2);
+}
+.c2 .summary-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--sage); }
+.c2 .summary-pill.crit { color: var(--danger); border-color: rgba(212,87,74,0.32); background: rgba(212,87,74,0.06); }
+.c2 .summary-pill.crit .dot { background: var(--danger); }
+.c2 .summary-pill.warn { color: var(--warning); border-color: rgba(212,164,55,0.30); background: rgba(212,164,55,0.06); }
+.c2 .summary-pill.warn .dot { background: var(--warning); }
+
+.c2 .section-eyebrow {
+  display: flex; align-items: baseline; gap: 12px;
+  margin: 32px 0 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--hairline);
+}
+.c2 .section-eyebrow .lbl {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  font-weight: 600;
+}
+.c2 .section-eyebrow .meta {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-4);
+  margin-left: auto;
+}
+
+.c2 .pcards { display: flex; flex-direction: column; gap: 14px; }
+.c2 .pcard {
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  overflow: hidden;
+  transition: border-color 130ms var(--ease);
+}
+.c2 .pcard:hover { border-color: var(--hairline-2); }
+.c2 .pcard.crit { border-color: rgba(212,87,74,0.32); }
+.c2 .pcard.flag { border-color: rgba(212,164,55,0.30); }
+.c2 .pcard-h {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--hairline);
+}
+.c2 .pcard-num {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--text-3);
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  padding: 3px 8px;
+  border-radius: 4px;
+  min-width: 28px;
+  text-align: center;
+}
+.c2 .pcard-name {
+  flex: 1;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.012em;
+}
+.c2 .pcard-icd {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--sage-bright);
+  padding: 3px 8px;
+  border: 1px solid rgba(122,166,140,0.28);
+  border-radius: 4px;
+  background: rgba(122,166,140,0.07);
+  letter-spacing: 0.02em;
+  font-weight: 500;
+}
+.c2 .pcard-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+}
+.c2 .pcard-col {
+  padding: 14px 16px;
+}
+.c2 .pcard-col + .pcard-col { border-left: 1px solid var(--hairline); }
+.c2 .pcard-col-h {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 10px;
+  font-weight: 600;
+  display: flex; align-items: center; gap: 8px;
+}
+.c2 .pcard-col-h::after {
+  content: ''; flex: 1; height: 1px; background: var(--hairline);
+}
+.c2 .pcard-col ul { padding: 0; margin: 0; list-style: none; }
+.c2 .pcard-col li {
+  font-size: 13.5px;
+  color: var(--text-2);
+  padding: 3px 0 3px 14px;
+  position: relative;
+  line-height: 1.5;
+}
+.c2 .pcard-col li::before {
+  content: '·';
+  position: absolute; left: 4px;
+  color: var(--text-4);
+}
+.c2 .pcard-col li strong { color: var(--text); font-weight: 600; }
+.c2 .pcard-reasoning {
+  font-size: 13.5px;
+  color: var(--text-3);
+  line-height: 1.6;
+  font-style: italic;
+  margin-bottom: 8px;
+}
+.c2 .pcard-flag-bar {
+  border-top: 1px solid rgba(212,87,74,0.32);
+  background: rgba(212,87,74,0.05);
+  padding: 10px 16px;
+  display: flex; align-items: center; gap: 12px;
+}
+.c2 .pcard-flag-bar.warn {
+  border-top-color: rgba(212,164,55,0.30);
+  background: rgba(212,164,55,0.04);
+}
+.c2 .pcard-flag-bar .ic { color: var(--danger); font-family: var(--font-mono); font-size: 14px; }
+.c2 .pcard-flag-bar.warn .ic { color: var(--warning); }
+.c2 .pcard-flag-bar .txt {
+  flex: 1;
+  font-size: 12.5px;
+  color: var(--text-2);
+  letter-spacing: -0.005em;
+}
+.c2 .pcard-flag-bar .txt strong { color: var(--danger); font-weight: 600; }
+.c2 .pcard-flag-bar.warn .txt strong { color: var(--warning); }
+.c2 .pcard-flag-bar .ax {
+  display: inline-flex; gap: 6px;
+}
+.c2 .pcard-flag-bar .ax-btn {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 4px 9px;
+  border: 1px solid var(--hairline-2);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.c2 .pcard-flag-bar .ax-btn--p {
+  background: rgba(212,87,74,0.10);
+  color: var(--danger);
+  border-color: rgba(212,87,74,0.32);
+}
+.c2 .pcard-flag-bar.warn .ax-btn--p {
+  background: rgba(212,164,55,0.10);
+  color: var(--warning);
+  border-color: rgba(212,164,55,0.32);
+}
+
+/* Source panels — collapsed below problem cards */
+.c2 .source-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.c2 .source-card {
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.c2 .source-card.open { background: var(--surface-2); }
+.c2 .source-card-h {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px;
+  cursor: pointer;
+  user-select: none;
+  border-bottom: 1px solid transparent;
+  transition: all 100ms ease;
+}
+.c2 .source-card.open .source-card-h { border-bottom-color: var(--hairline); }
+.c2 .source-card-h .letter {
+  display: inline-grid; place-items: center;
+  width: 18px; height: 18px;
+  background: rgba(122,166,140,0.10);
+  border: 1px solid rgba(122,166,140,0.28);
+  color: var(--sage-bright);
+  font-size: 10px;
+  border-radius: 4px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+}
+.c2 .source-card-h .lbl {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  font-weight: 500;
+  flex: 1;
+}
+.c2 .source-card-h .ct {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--text-4);
+  letter-spacing: 0.04em;
+}
+.c2 .source-card-h .ch {
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  transition: transform 200ms var(--ease);
+}
+.c2 .source-card.open .source-card-h .ch { transform: rotate(90deg); }
+.c2 .source-card-body {
+  display: none;
+  padding: 12px 14px 14px;
+  font-size: 13.5px;
+  color: var(--text-2);
+  line-height: 1.55;
+  letter-spacing: -0.005em;
+}
+.c2 .source-card.open .source-card-body { display: block; }
+.c2 .source-card-body .label-row {
+  display: grid; grid-template-columns: 90px 1fr;
+  gap: 8px 12px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+.c2 .source-card-body .label-row:last-child { border: 0; }
+.c2 .source-card-body dt {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  color: var(--text-3);
+  padding-top: 3px;
+  font-weight: 500;
+}
+.c2 .source-card-body dd { margin: 0; color: var(--text); }
+.c2 .source-card-body .crit-mark {
+  color: var(--danger);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+[data-vp="ipad"] .c2 .body { grid-template-columns: 1fr 280px; padding: 20px 20px 48px; }
+[data-vp="ipad"] .c2 .source-grid { grid-template-columns: 1fr 1fr; }
+[data-vp="phone"] .c2 .body { grid-template-columns: 1fr; padding: 16px; gap: 16px; }
+[data-vp="phone"] .c2 .pcard-body { grid-template-columns: 1fr; }
+[data-vp="phone"] .c2 .pcard-col + .pcard-col { border-left: 0; border-top: 1px solid var(--hairline); }
+[data-vp="phone"] .c2 .source-grid { grid-template-columns: 1fr; }
+
+/* ============================================================
+   CONCEPT 3 — HERO + DETAIL
+   ============================================================ */
+.c3 .body { padding: 0; }
+.c3 .hero {
+  padding: 28px 32px 24px;
+  border-bottom: 1px solid var(--hairline);
+  background:
+    radial-gradient(ellipse 50% 60% at 18% 0%, rgba(122,166,140,0.05) 0%, transparent 60%),
+    var(--bg);
+  position: relative;
+}
+.c3 .hero-eyebrow {
+  display: flex; align-items: baseline; gap: 14px;
+  margin-bottom: 14px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--sage-bright);
+  font-weight: 600;
+}
+.c3 .hero-eyebrow .pulse-wrap {
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.c3 .hero-eyebrow .pulse-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--sage);
+  box-shadow: 0 0 0 3px rgba(122,166,140,0.15);
+  animation: q-pulse 2s ease-in-out infinite;
+}
+.c3 .hero-eyebrow .grow { flex: 1; }
+.c3 .hero-eyebrow .meta-mono { color: var(--text-3); font-weight: 500; }
+.c3 .hero-cc {
+  font-family: var(--font-sans);
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.018em;
+  color: var(--text);
+  line-height: 1.25;
+  margin: 0 0 4px;
+  max-width: 880px;
+}
+.c3 .hero-cc .smaller {
+  font-size: 18px;
+  color: var(--text-2);
+  font-weight: 400;
+  display: block;
+  margin-top: 4px;
+}
+.c3 .hero-meta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+  margin-bottom: 22px;
+}
+
+.c3 .hero-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr 1fr;
+  gap: 0;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface-1);
+}
+.c3 .hero-cell {
+  padding: 14px 16px;
+  border-right: 1px solid var(--hairline);
+  display: flex; flex-direction: column;
+}
+.c3 .hero-cell:last-child { border-right: 0; }
+.c3 .hero-cell-h {
+  display: flex; align-items: baseline; justify-content: space-between;
+  margin-bottom: 10px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  font-weight: 600;
+}
+.c3 .hero-cell-h .ct {
+  color: var(--text-4);
+  font-size: 9.5px;
+}
+
+/* vitals cell */
+.c3 .hero-vitals {
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px 12px;
+}
+.c3 .hero-vitals .v .l {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.c3 .hero-vitals .v .n {
+  font-family: var(--font-mono);
+  font-size: 17px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+.c3 .hero-vitals .v.warn .n { color: var(--warning); }
+
+/* problems cell */
+.c3 .hero-probs { display: flex; flex-direction: column; gap: 4px; font-family: var(--font-sans); }
+.c3 .hero-probs .row {
+  display: flex; gap: 6px; align-items: baseline;
+  padding: 3px 0;
+  font-size: 12.5px;
+  color: var(--text);
+}
+.c3 .hero-probs .row .num {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-3);
+  width: 14px;
+}
+.c3 .hero-probs .row .nm { flex: 1; letter-spacing: -0.005em; }
+.c3 .hero-probs .row .icd {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--sage-bright);
+  letter-spacing: 0.02em;
+}
+
+/* asks cell */
+.c3 .hero-asks { display: flex; flex-direction: column; gap: 5px; }
+.c3 .hero-asks .ask-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  border-left: 2px solid var(--warning);
+  font-size: 12px;
+  color: var(--text);
+  letter-spacing: -0.005em;
+  cursor: pointer;
+  transition: all 100ms ease;
+}
+.c3 .hero-asks .ask-row.crit { border-left-color: var(--danger); }
+.c3 .hero-asks .ask-row.done {
+  opacity: 0.5;
+  text-decoration: line-through;
+  border-left-color: var(--sage);
+}
+.c3 .hero-asks .ask-row:hover { background: var(--surface-3); }
+.c3 .hero-asks .ask-row .ic {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--warning);
+  width: 12px;
+  flex-shrink: 0;
+}
+.c3 .hero-asks .ask-row.crit .ic { color: var(--danger); }
+.c3 .hero-asks .ask-row.done .ic { color: var(--sage); }
+
+/* billing cell */
+.c3 .hero-bill .tier {
+  display: flex; align-items: baseline; gap: 8px;
+  margin-bottom: 6px;
+}
+.c3 .hero-bill .from {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-4);
+  text-decoration: line-through;
+}
+.c3 .hero-bill .to {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  color: var(--sage-bright);
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+.c3 .hero-bill .delta {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--sage-bright);
+  font-weight: 600;
+  margin-left: auto;
+}
+.c3 .hero-bill .meter {
+  height: 4px;
+  background: var(--hairline-2);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+.c3 .hero-bill .meter-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--sage-deep), var(--sage));
+  width: 33%;
+}
+.c3 .hero-bill .step {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--warning);
+}
+
+.c3 .hero-cta {
+  display: flex; gap: 8px; margin-top: 22px;
+  align-items: center;
+}
+.c3 .hero-cta .grow { flex: 1; }
+.c3 .hero-cta .meta {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+  text-transform: uppercase;
+  display: inline-flex; gap: 4px; align-items: center;
+}
+
+/* fold */
+.c3 .fold {
+  text-align: center;
+  padding: 14px 0;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.22em;
+  color: var(--text-4);
+  text-transform: uppercase;
+  font-weight: 600;
+  border-bottom: 1px solid var(--hairline);
+  position: relative;
+}
+.c3 .fold::before, .c3 .fold::after {
+  content: ""; position: absolute; top: 50%; height: 1px;
+  width: 36%;
+  background: linear-gradient(90deg, transparent, var(--hairline-2));
+}
+.c3 .fold::before { left: 0; }
+.c3 .fold::after { right: 0; transform: scaleX(-1); }
+
+.c3 .detail {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 24px;
+  padding: 28px 32px 64px;
+  max-width: 1480px;
+  margin: 0 auto;
+  align-items: start;
+}
+.c3 .detail-main { min-width: 0; }
+.c3 .detail-rail {
+  position: sticky; top: 14px;
+  align-self: start;
+  max-height: calc(100vh - 28px);
+  overflow-y: auto;
+}
+
+[data-vp="ipad"] .c3 .hero-grid { grid-template-columns: 1fr 1fr; }
+[data-vp="ipad"] .c3 .hero-cell:nth-child(2n) { border-right: 0; }
+[data-vp="ipad"] .c3 .hero-cell:nth-child(-n+2) { border-bottom: 1px solid var(--hairline); }
+[data-vp="ipad"] .c3 .detail { grid-template-columns: 1fr; padding: 24px 24px 48px; }
+[data-vp="ipad"] .c3 .detail-rail { position: static; }
+[data-vp="phone"] .c3 .hero { padding: 20px 16px 18px; }
+[data-vp="phone"] .c3 .hero-cc { font-size: 19px; }
+[data-vp="phone"] .c3 .hero-cc .smaller { font-size: 15px; }
+[data-vp="phone"] .c3 .hero-grid { grid-template-columns: 1fr; }
+[data-vp="phone"] .c3 .hero-cell { border-right: 0; border-bottom: 1px solid var(--hairline); }
+[data-vp="phone"] .c3 .hero-cell:last-child { border-bottom: 0; }
+[data-vp="phone"] .c3 .hero-cta { flex-wrap: wrap; }
+[data-vp="phone"] .c3 .detail { grid-template-columns: 1fr; padding: 20px 16px 48px; gap: 16px; }
+[data-vp="phone"] .c3 .detail-rail { position: static; }
+
+/* ============================================================
+   CONCEPT 4 — SMART HIGHLIGHTS
+   ============================================================ */
+.c4 .body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 0;
+  align-items: start;
+}
+.c4 .stage {
+  padding: 24px 32px 64px;
+  max-width: 880px;
+  width: 100%;
+  margin: 0 auto;
+  min-width: 0;
+}
+.c4 .filter-bar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px;
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  margin-bottom: 22px;
+  flex-wrap: wrap;
+}
+.c4 .filter-bar .lbl {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  font-weight: 500;
+  margin-right: 4px;
+}
+.c4 .ent-filter {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  font-weight: 500;
+  border: 1px solid;
+  cursor: pointer;
+  letter-spacing: 0.01em;
+  transition: all 100ms ease;
+}
+.c4 .ent-filter .swatch {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+}
+.c4 .ent-filter .ct {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0;
+  margin-left: 4px;
+  opacity: 0.7;
+}
+.c4 .ent-filter.sage {
+  border-color: rgba(122,166,140,0.32);
+  background: rgba(122,166,140,0.06);
+  color: var(--sage-bright);
+}
+.c4 .ent-filter.sage .swatch { background: var(--sage); }
+.c4 .ent-filter.amber {
+  border-color: rgba(212,164,55,0.32);
+  background: rgba(212,164,55,0.06);
+  color: var(--warning);
+}
+.c4 .ent-filter.amber .swatch { background: var(--warning); }
+.c4 .ent-filter.danger {
+  border-color: rgba(212,87,74,0.32);
+  background: rgba(212,87,74,0.06);
+  color: var(--danger);
+}
+.c4 .ent-filter.danger .swatch { background: var(--danger); }
+.c4 .filter-bar .grow { flex: 1; }
+.c4 .filter-bar .meta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-4);
+  letter-spacing: 0.04em;
+}
+
+/* Entity highlights — INSIDE prose */
+.ent {
+  position: relative;
+  padding: 0 3px;
+  border-radius: 2px;
+  cursor: help;
+  transition: background 100ms ease;
+  font-weight: 500;
+}
+.ent.sage {
+  background: rgba(122,166,140,0.10);
+  color: var(--text);
+}
+.ent.sage:hover { background: rgba(122,166,140,0.20); }
+.ent.med {
+  background: rgba(122,166,140,0.08);
+  color: var(--text);
+  border-bottom: 1px solid rgba(122,166,140,0.32);
+}
+.ent.amber {
+  background: rgba(212,164,55,0.12);
+  color: var(--warning);
+}
+.ent.amber:hover { background: rgba(212,164,55,0.22); }
+.ent.danger {
+  background: rgba(212,87,74,0.12);
+  color: var(--danger);
+  text-decoration: line-through;
+  text-decoration-color: rgba(212,87,74,0.42);
+}
+.ent.fix {
+  background: rgba(122,166,140,0.18);
+  color: var(--sage-bright);
+  font-weight: 600;
+}
+.ent.vit {
+  background: rgba(122,166,140,0.08);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* tooltip */
+.ent::before {
+  content: attr(data-meta);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  background: var(--surface-3);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text);
+  white-space: nowrap;
+  letter-spacing: 0;
+  font-weight: 400;
+  text-decoration: none;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 140ms ease;
+  box-shadow: 0 6px 14px rgba(0,0,0,0.5);
+  z-index: 30;
+}
+.ent:hover::before {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* Entity index rail */
+.c4 .entity-rail {
+  position: sticky; top: 0;
+  align-self: start;
+  max-height: 100vh; overflow-y: auto;
+  padding: 24px 20px 32px 16px;
+  border-left: 1px solid var(--hairline);
+  background: linear-gradient(180deg, rgba(255,255,255,0.005), transparent);
+}
+.c4 .entity-rail-h {
+  display: flex; align-items: baseline; justify-content: space-between;
+  margin-bottom: 14px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  font-weight: 600;
+}
+.c4 .entity-rail-h .ct {
+  color: var(--text-4);
+  font-size: 9.5px;
+}
+.c4 .entity-group { margin-bottom: 18px; }
+.c4 .entity-group-h {
+  display: flex; align-items: center; gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+.c4 .entity-group-h .swatch {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+}
+.c4 .entity-group-h.sage .swatch { background: var(--sage); }
+.c4 .entity-group-h.amber .swatch { background: var(--warning); }
+.c4 .entity-group-h.danger .swatch { background: var(--danger); }
+.c4 .entity-group-h .ct {
+  margin-left: auto;
+  color: var(--text-4);
+  letter-spacing: 0;
+}
+.c4 .ent-row {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 5px 8px;
+  font-size: 12.5px;
+  color: var(--text-2);
+  border-radius: 4px;
+  transition: background 100ms ease;
+  letter-spacing: -0.005em;
+  cursor: pointer;
+}
+.c4 .ent-row:hover { background: var(--row-hover); color: var(--text); }
+.c4 .ent-row .nm { flex: 1; min-width: 0; }
+.c4 .ent-row .meta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-4);
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+.c4 .ent-row.crit { color: var(--danger); }
+.c4 .ent-row.warn { color: var(--warning); }
+
+[data-vp="ipad"] .c4 .stage { padding: 20px 24px 48px; }
+[data-vp="ipad"] .c4 .body { grid-template-columns: 1fr 240px; }
+[data-vp="phone"] .c4 .body { grid-template-columns: 1fr; }
+[data-vp="phone"] .c4 .stage { padding: 16px; }
+[data-vp="phone"] .c4 .entity-rail { display: none; }
+[data-vp="phone"] .c4 .filter-bar { padding: 6px 10px; gap: 6px; }
+[data-vp="phone"] .ent::before { display: none; }
+
+/* ============================================================
+   CONCEPT 5 — ACTIVE vs REFERENCE
+   ============================================================ */
+.c5 .body { padding: 0; }
+
+/* Today zone */
+.c5 .today {
+  padding: 28px 32px 36px;
+  border-bottom: 1px solid var(--border);
+  background:
+    radial-gradient(ellipse 60% 50% at 50% 0%, rgba(122,166,140,0.025), transparent 60%),
+    var(--bg);
+  position: relative;
+}
+.c5 .zone-h {
+  display: flex; align-items: baseline; gap: 16px;
+  margin-bottom: 18px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--hairline);
+}
+.c5 .zone-h .ti {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.018em;
+}
+.c5 .zone-h .ti .accent {
+  font-family: var(--font-mono);
+  color: var(--sage-bright);
+  font-weight: 500;
+  font-size: 14px;
+  margin-right: 6px;
+  letter-spacing: 0.02em;
+}
+.c5 .zone-h .sub {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--sage-bright);
+  font-weight: 600;
+}
+.c5 .zone-h .grow { flex: 1; }
+.c5 .zone-h .meta {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-3);
+  letter-spacing: 0.06em;
+}
+
+.c5 .today-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 24px;
+  align-items: start;
+}
+.c5 .now-list { display: flex; flex-direction: column; gap: 12px; }
+.c5 .now-card {
+  border: 1px solid var(--hairline);
+  background: var(--surface-1);
+  border-radius: 6px;
+  padding: 14px 16px 14px 18px;
+  position: relative;
+  transition: border-color 130ms var(--ease);
+}
+.c5 .now-card::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 14px; bottom: 14px;
+  width: 2px;
+  background: var(--sage);
+  border-radius: 0 2px 2px 0;
+}
+.c5 .now-card:hover { border-color: var(--hairline-2); }
+.c5 .now-card.crit::before { background: var(--danger); }
+.c5 .now-card.flag::before { background: var(--warning); }
+.c5 .now-card-h {
+  display: flex; align-items: baseline; gap: 10px;
+  margin-bottom: 6px;
+}
+.c5 .now-card-num {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+.c5 .now-card-name {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.012em;
+  line-height: 1.35;
+}
+.c5 .now-card-icd {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--sage-bright);
+  letter-spacing: 0.02em;
+  font-weight: 500;
+}
+.c5 .now-card-reasoning {
+  font-size: 13px;
+  color: var(--text-3);
+  font-style: italic;
+  line-height: 1.6;
+  margin-bottom: 8px;
+}
+.c5 .now-card ul {
+  margin: 0; padding-left: 20px;
+  list-style: disc;
+  color: var(--text-2);
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+.c5 .now-card ul li + li { margin-top: 3px; }
+.c5 .now-card ul li strong { color: var(--text); font-weight: 600; }
+.c5 .now-card .crit-line {
+  margin-top: 8px;
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px;
+  background: rgba(212,87,74,0.06);
+  border: 1px solid rgba(212,87,74,0.32);
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.c5 .now-card .crit-line strong { color: var(--danger); font-weight: 600; }
+
+.c5 .visit-snap {
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  padding: 16px;
+}
+.c5 .visit-snap h3 {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin: 0 0 12px;
+  font-weight: 600;
+}
+.c5 .visit-snap .cc {
+  font-size: 14px;
+  color: var(--text);
+  line-height: 1.45;
+  letter-spacing: -0.005em;
+  padding-bottom: 12px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--hairline);
+}
+.c5 .visit-snap .vit-stack {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--hairline);
+}
+.c5 .visit-snap .vit-stack .v .l {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.c5 .visit-snap .vit-stack .v .n {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+.c5 .visit-snap .vit-stack .v.warn .n { color: var(--warning); }
+.c5 .visit-snap .exam-key {
+  font-size: 12.5px;
+  color: var(--text-2);
+  line-height: 1.55;
+}
+.c5 .visit-snap .exam-key strong { color: var(--text); font-weight: 600; }
+
+.c5 .billing-mini {
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--hairline);
+}
+.c5 .billing-mini .b {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--sage-bright);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.c5 .billing-mini .gap {
+  font-size: 11px;
+  color: var(--text-3);
+  letter-spacing: -0.005em;
+  flex: 1;
+}
+.c5 .billing-mini .delta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--sage-bright);
+  font-weight: 600;
+}
+
+/* Reference zone */
+.c5 .reference {
+  padding: 24px 32px 64px;
+  background: linear-gradient(180deg, var(--surface-1), var(--bg));
+  position: relative;
+}
+.c5 .reference .zone-h .ti { color: var(--text-2); font-style: italic; }
+.c5 .reference .zone-h .sub { color: var(--text-4); }
+.c5 .ref-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+.c5 .ref-card {
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  overflow: hidden;
+  transition: border-color 130ms var(--ease);
+}
+.c5 .ref-card:hover { border-color: var(--hairline-2); }
+.c5 .ref-card.flag { border-color: rgba(212,164,55,0.30); }
+.c5 .ref-card.crit { border-color: rgba(212,87,74,0.30); }
+.c5 .ref-card-h {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  user-select: none;
+}
+.c5 .ref-card .lbl {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.c5 .ref-card.flag .lbl { color: var(--warning); }
+.c5 .ref-card.crit .lbl { color: var(--danger); }
+.c5 .ref-card .preview {
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  color: var(--text-3);
+  margin-left: auto;
+  max-width: 60%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: -0.005em;
+}
+.c5 .ref-card.open .preview { display: none; }
+.c5 .ref-card .ch {
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  transition: transform 200ms var(--ease);
+}
+.c5 .ref-card.open .ch { transform: rotate(90deg); }
+.c5 .ref-card-body {
+  display: none;
+  padding: 0 12px 12px;
+  font-size: 12.5px;
+  color: var(--text-2);
+  line-height: 1.55;
+  border-top: 1px solid var(--hairline);
+}
+.c5 .ref-card.open .ref-card-body { display: block; padding-top: 10px; }
+.c5 .ref-card-body ul {
+  margin: 0; padding-left: 0; list-style: none;
+}
+.c5 .ref-card-body li {
+  padding: 3px 0 3px 12px;
+  position: relative;
+}
+.c5 .ref-card-body li::before {
+  content: '·';
+  position: absolute; left: 4px;
+  color: var(--text-4);
+}
+.c5 .ref-card-body li strong { color: var(--text); font-weight: 600; }
+.c5 .ref-card-body p { margin: 0 0 6px; }
+
+[data-vp="ipad"] .c5 .today-grid { grid-template-columns: 1fr; }
+[data-vp="ipad"] .c5 .ref-grid { grid-template-columns: 1fr 1fr; }
+[data-vp="ipad"] .c5 .today, [data-vp="ipad"] .c5 .reference { padding: 20px 24px; }
+[data-vp="phone"] .c5 .today, [data-vp="phone"] .c5 .reference { padding: 16px; }
+[data-vp="phone"] .c5 .today-grid { grid-template-columns: 1fr; gap: 16px; }
+[data-vp="phone"] .c5 .ref-grid { grid-template-columns: 1fr; }
+[data-vp="phone"] .c5 .visit-snap .vit-stack { grid-template-columns: 1fr 1fr; }
+
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ============================================================
+       SIDEBAR — concept switcher
+       ============================================================ -->
+  <aside class="lab-nav">
+    <div class="lab-brand">
+      <div class="lab-logo">
+        <span class="mark">Q</span>
+        <span>QuillMD · SOAP redesign</span>
+      </div>
+      <div class="lab-sub">5 directions · production tokens</div>
+    </div>
+
+    <div class="lab-group">Concepts</div>
+    <a class="lab-item active" data-c="1"><span class="num">01</span>Index + Body</a>
+    <div class="lab-meta">ToC · scroll-spy · billing badge</div>
+    <a class="lab-item" data-c="2"><span class="num">02</span>Problem-Forward</a>
+    <div class="lab-meta">A+P primary · sources collapsed</div>
+    <a class="lab-item" data-c="3"><span class="num">03</span>Hero + Detail</a>
+    <div class="lab-meta">30-second snapshot · then SOAP</div>
+    <a class="lab-item" data-c="4"><span class="num">04</span>Smart Highlights</a>
+    <div class="lab-meta">Tinted entities · entity index</div>
+    <a class="lab-item" data-c="5"><span class="num">05</span>Active vs Reference</a>
+    <div class="lab-meta">Today first · history collapsed</div>
+
+    <div class="lab-foot">
+      <span class="gd">Linear V1 Faithful</span><br>
+      Inter · JetBrains Mono<br>
+      Sage <span style="font-family:var(--font-mono);color:var(--sage-bright)">#7AA68C</span>
+    </div>
+  </aside>
+
+  <!-- ============================================================
+       CANVAS
+       ============================================================ -->
+  <main class="canvas" data-vp="desktop">
+    <div class="canvas-bar">
+      <span class="cb-title" id="cb-title">Index + Body</span>
+      <span class="cb-num" id="cb-num">01 / 05</span>
+      <span class="cb-spacer"></span>
+      <div class="vp-toggle">
+        <button class="vp-btn active" data-vp="desktop">Desktop</button>
+        <button class="vp-btn" data-vp="ipad">iPad</button>
+        <button class="vp-btn" data-vp="phone">Phone</button>
+      </div>
+      <span class="cb-meta"><span class="pulse"></span>Production design system</span>
+    </div>
+    <div class="viewport">
+      <div class="vp-frame" id="frame">
+        <div id="concept-1" class="concept active c1">
+          <div class="tabs">
+            <button class="tab active">
+              <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 2.5h7.5L13 5v8.5a.5.5 0 0 1-.5.5h-9a.5.5 0 0 1-.5-.5v-11a.5.5 0 0 1 .5-.5z"/><path d="M10 2.5V5h3"/></svg>
+              SOAP Note
+            </button>
+            <button class="tab">
+              <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 4h11M2.5 8h11M2.5 12h7"/></svg>
+              Transcript
+            </button>
+            <button class="tab">
+              <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 6.5V4a3 3 0 0 1 6 0v2.5M3.5 6.5h9v6.5a.5.5 0 0 1-.5.5h-8a.5.5 0 0 1-.5-.5v-6.5z"/></svg>
+              Codes
+              <span class="warn-dot"></span>
+            </button>
+            <button class="tab">
+              <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="10" r="3.5"/><circle cx="10" cy="6" r="3.5"/></svg>
+              Rx
+              <span class="warn-dot crit"></span>
+            </button>
+            <button class="tab">
+              <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2.5l1.6 3.4 3.4.5-2.5 2.4.6 3.5L8 10.6l-3.1 1.7.6-3.5L3 6.4l3.4-.5z"/></svg>
+              Extras
+            </button>
+          </div>
+          <div class="pt-strip">
+            <span class="pt-name">Jeffrey Whitaker</span>
+            <span class="sep">·</span><span>59M</span>
+            <span class="sep">·</span><span>Primary Care</span>
+            <span class="sep">·</span><span class="meta">2026-05-09 · 22 min</span>
+            <span class="grow"></span>
+            <span class="mrn">MRN 4128-09</span>
+          </div>
+          <div class="body">
+            <!-- LEFT TOC -->
+            <nav class="toc" aria-label="Note sections">
+              <div class="toc-h">In this note</div>
+
+              <div class="toc-section">
+                <div class="toc-section-h"><span class="letter">S</span>Subjective</div>
+                <a class="toc-link on" data-anchor="cc">Chief Complaint</a>
+                <a class="toc-link" data-anchor="hpi">HPI</a>
+                <a class="toc-link" data-anchor="neg">Pertinent Negatives</a>
+                <a class="toc-link" data-anchor="pmh">PMH</a>
+                <a class="toc-link" data-anchor="meds">Medications<span class="ct flag-crit">!</span></a>
+                <a class="toc-link" data-anchor="all">Allergies<span class="ct flag-amber">?</span></a>
+                <a class="toc-link" data-anchor="fh">Family Hx</a>
+                <a class="toc-link" data-anchor="sh">Social Hx</a>
+                <a class="toc-link" data-anchor="ros">ROS</a>
+              </div>
+
+              <div class="toc-section">
+                <div class="toc-section-h"><span class="letter">O</span>Objective</div>
+                <a class="toc-link" data-anchor="vitals">Vitals</a>
+                <a class="toc-link" data-anchor="exam">Physical Exam</a>
+              </div>
+
+              <div class="toc-section">
+                <div class="toc-section-h"><span class="letter">A</span>Assessment</div>
+                <a class="toc-link" data-anchor="ax-1">Cervical strain</a>
+                <a class="toc-link" data-anchor="ax-2">Lumbar strain</a>
+                <a class="toc-link" data-anchor="ax-3">HTN sub-optimal</a>
+              </div>
+
+              <div class="toc-section">
+                <div class="toc-section-h"><span class="letter">P</span>Plan</div>
+                <a class="toc-link" data-anchor="plan-1">Cervical · Rx + PT</a>
+                <a class="toc-link" data-anchor="plan-2">Lumbar · PT</a>
+                <a class="toc-link" data-anchor="plan-3">HTN · BP recheck</a>
+                <a class="toc-link" data-anchor="plan-4">Health maintenance</a>
+              </div>
+            </nav>
+
+            <!-- READING COLUMN -->
+            <div class="reading">
+              <h1>Persistent post-MVA musculoskeletal pain</h1>
+              <div class="h-meta">2026-05-09 · 22 min · Dr. M. Reyes · Primary care follow-up</div>
+
+              <article class="soap-section" data-anchor="cc">
+                <header class="soap-section-head">
+                  <div class="lhs">
+                    <span class="soap-eyebrow"><span class="soap-letter">S</span>Subjective</span>
+                    <span class="sec-status sec-status--reviewed">Reviewed</span>
+                  </div>
+                  <span class="pulse-meta"><span class="dot"></span>HPI · 4 elements</span>
+                </header>
+                <div class="soap-section-body">
+                  <div class="md-h2">Chief Complaint</div>
+                  <p class="md-p">Neck and shoulder pain with radiation, plus low back pain following an MVA on 12/30/2025.</p>
+
+                  <div class="md-h2" data-anchor-trigger="hpi">History of Present Illness</div>
+                  <p class="md-p">59-year-old male presents for evaluation of persistent neck and shoulder pain with radiation, accompanied by low back pain, following a motor vehicle accident on 12/30/2025. Pain is constant and dull with intermittent sharp episodes. Discomfort radiates from the cervical region into the right shoulder and down the right arm.</p>
+                  <p class="md-p">Patient reports difficulty with cervical rotation and lifting. Has tried OTC ibuprofen 400 mg PRN with minimal relief. Sleep is disrupted by discomfort. No prior episodes of similar pain.</p>
+
+                  <div class="md-h2">Pertinent Negatives</div>
+                  <p class="md-p">Denies head trauma, LOC, numbness/tingling, saddle anesthesia, bowel/bladder changes, fever, weight loss, night sweats. No history of malignancy.</p>
+
+                  <div class="md-h2">Past Medical History</div>
+                  <ul class="md-ul">
+                    <li><strong>HTN</strong> · diagnosed 2018</li>
+                    <li><strong>Type 2 DM</strong> · diagnosed 2020 · last A1C 7.2% (Feb 2026)</li>
+                    <li><strong>Hyperlipidemia</strong></li>
+                    <li><strong>GERD</strong></li>
+                  </ul>
+
+                  <div class="md-h2">Medications</div>
+                  <ul class="md-ul">
+                    <li><strong>Lisinopril</strong> 20 mg PO daily</li>
+                    <li><strong>Metformin</strong> 1000 mg PO BID</li>
+                    <li><strong>Atorvastatin</strong> 40 mg PO qHS</li>
+                    <li><strong>Omeprazole</strong> 20 mg PO daily</li>
+                  </ul>
+
+                  <!-- Critical Rx surfaces inline as a production qm-warn card.
+                       This is the production pattern (not invented inline brackets). -->
+                  <div class="qm-warn" style="margin-top:12px" role="alert">
+                    <div class="qm-warn-h">
+                      <div class="qm-warn-icon">⚠</div>
+                      <span class="qm-warn-badge">Critical · Rx</span>
+                      <div></div>
+                      <div></div>
+                      <div class="qm-warn-headline">"Nitropyloprolol 50 mg PO daily" — likely transcription error</div>
+                    </div>
+                    <div class="qm-warn-body">
+                      <div class="qm-warn-action">
+                        <span style="font-family:var(--font-mono);font-size:14px">→</span>
+                        <span>Most plausible intent: <strong style="color:var(--text)">Metoprolol 50 mg PO daily</strong> (β-blocker; fits HTN + paternal MI hx). Resolve before signing.</span>
+                      </div>
+                      <div class="qm-warn-transcribed">
+                        <div>
+                          <div class="qm-warn-field-label">Heard</div>
+                          <div class="qm-warn-field-value">"Nitropyloprolol"</div>
+                        </div>
+                        <div class="qm-warn-arrow">→</div>
+                        <div>
+                          <div class="qm-warn-field-label">Suggested</div>
+                          <div class="qm-warn-field-value">Metoprolol <span class="qm-warn-confidence">0.81</span></div>
+                        </div>
+                      </div>
+                      <div class="qm-warn-action-row">
+                        <button class="qm-warn-override-btn">Override…</button>
+                        <button class="btn">Replace with Metoprolol</button>
+                        <button class="btn">Source ↗</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="md-h2">Allergies</div>
+                  <p class="md-p"><span style="display:inline-flex;align-items:center;gap:6px;color:var(--warning);background:rgba(212,164,55,0.06);border:1px solid rgba(212,164,55,0.30);padding:1px 8px;border-radius:4px;font-family:var(--font-mono);font-size:11.5px;letter-spacing:0;">⌖ Not documented — verify with patient</span></p>
+
+                  <div class="md-h2">Family History</div>
+                  <ul class="md-ul">
+                    <li>Father — MI age 67</li>
+                    <li>Mother — Type 2 DM, HTN</li>
+                    <li>Brother — HTN</li>
+                  </ul>
+
+                  <div class="md-h2">Social History</div>
+                  <ul class="md-ul">
+                    <li>Former smoker, 30 pack-years prior, quit 2015</li>
+                    <li>Alcohol 2-3 drinks / week</li>
+                    <li>Lives with spouse · accountant · walks 30 min 3×/wk pre-MVA</li>
+                  </ul>
+
+                  <div class="md-h2">Review of Systems</div>
+                  <p class="md-p">Negative across constitutional, HEENT, cardiovascular, respiratory, and neurological systems. Musculoskeletal as in HPI.</p>
+                </div>
+              </article>
+
+              <article class="soap-section" data-anchor="vitals">
+                <header class="soap-section-head">
+                  <div class="lhs">
+                    <span class="soap-eyebrow"><span class="soap-letter">O</span>Objective</span>
+                    <span class="sec-status sec-status--reviewed">Reviewed</span>
+                  </div>
+                  <span class="pulse-meta"><span class="dot"></span>Exam · multi-system</span>
+                </header>
+                <div class="soap-section-body">
+                  <div class="md-h2">Vitals</div>
+                  <div class="vitals-strip" style="margin-top:6px">
+                    <div class="v warn"><div class="l">BP</div><div class="n">138/86</div><div class="delta">↑ from 132/82</div></div>
+                    <div class="v"><div class="l">HR</div><div class="n">76</div><div class="delta">RRR</div></div>
+                    <div class="v"><div class="l">Temp</div><div class="n">98.4°</div></div>
+                    <div class="v"><div class="l">RR</div><div class="n">16</div></div>
+                    <div class="v"><div class="l">SpO₂</div><div class="n">98%</div></div>
+                    <div class="v"><div class="l">BMI</div><div class="n">28.4</div><div class="delta">198 lb · 5'10"</div></div>
+                  </div>
+
+                  <div class="md-h2" data-anchor-trigger="exam">Physical Exam</div>
+                  <p class="md-p"><strong>Gen:</strong> Well-appearing, NAD, mild discomfort with cervical motion.</p>
+                  <p class="md-p"><strong>HEENT:</strong> PERRL · oropharynx clear.</p>
+                  <p class="md-p"><strong>Neck:</strong> Tender to palpation R paraspinal cervical musculature; ↓ROM rotation/lateral flexion. No lymphadenopathy.</p>
+                  <p class="md-p"><strong>CV:</strong> RRR, no m/r/g.</p>
+                  <p class="md-p"><strong>Pulm:</strong> CTAB.</p>
+                  <p class="md-p"><strong>MSK:</strong> R shoulder TTP trapezius, ROM mildly reduced, neg impingement; lumbar paraspinal TTP L4-L5; SLR neg b/l.</p>
+                  <p class="md-p"><strong>Neuro:</strong> A&Ox3 · CN II-XII intact · motor 5/5 · DTRs 2+ symmetric · sensation grossly intact.</p>
+                </div>
+              </article>
+
+              <article class="soap-section" data-anchor="ax-1">
+                <header class="soap-section-head">
+                  <div class="lhs">
+                    <span class="soap-eyebrow"><span class="soap-letter">A</span>Assessment</span>
+                    <span class="sec-status sec-status--drafted">Drafted</span>
+                  </div>
+                  <span class="pulse-meta pulse-meta--boost"><span class="dot"></span>MDM · moderate w/ gap</span>
+                </header>
+                <div class="soap-section-body">
+                  <div class="md-h2">1 · Cervical strain w/ radicular sx, post-MVA <span style="color:var(--sage-bright);font-family:var(--font-mono);font-size:11px;letter-spacing:0.02em;text-transform:none;">M54.12</span></div>
+                  <p class="md-p">Mechanism, exam findings, and timing all consistent with cervical radiculopathy without red-flag features.</p>
+
+                  <div class="md-h2">2 · Lumbar strain, post-MVA <span style="color:var(--sage-bright);font-family:var(--font-mono);font-size:11px;letter-spacing:0.02em;text-transform:none;">S39.012A</span></div>
+                  <p class="md-p">Paraspinal tenderness without neurological deficits or red-flag features.</p>
+
+                  <div class="md-h2">3 · Hypertension, sub-optimally controlled <span style="color:var(--sage-bright);font-family:var(--font-mono);font-size:11px;letter-spacing:0.02em;text-transform:none;">I10</span></div>
+                  <p class="md-p">Today's BP 138/86; trending upward over last three visits despite stable regimen.</p>
+                </div>
+              </article>
+
+              <article class="soap-section" data-anchor="plan-1">
+                <header class="soap-section-head">
+                  <div class="lhs">
+                    <span class="soap-eyebrow"><span class="soap-letter">P</span>Plan</span>
+                    <span class="sec-status sec-status--drafted">Drafted</span>
+                  </div>
+                  <span class="pulse-meta"><span class="dot"></span>4 actions</span>
+                </header>
+                <div class="soap-section-body">
+                  <div class="md-h2">1 · Cervical strain</div>
+                  <ul class="md-ul">
+                    <li><strong>Cyclobenzaprine</strong> 5 mg PO TID PRN × 7 days</li>
+                    <li>PT cervical/thoracic, 2×/wk × 4 wk</li>
+                    <li>Continue ibuprofen 600 mg TID with food</li>
+                    <li>Return precautions: numbness, weakness, bowel/bladder changes</li>
+                  </ul>
+
+                  <div class="md-h2">2 · Lumbar strain</div>
+                  <ul class="md-ul">
+                    <li>Same PT visit · home exercise program · heat/ice as tolerated</li>
+                  </ul>
+
+                  <div class="md-h2">3 · Hypertension</div>
+                  <ul class="md-ul">
+                    <li>Recheck BP in 2 weeks</li>
+                    <li>If persistent: <strong>Lisinopril 20 → 40 mg</strong></li>
+                    <li>DASH diet · resume walking when comfortable</li>
+                  </ul>
+
+                  <div class="md-h2">4 · Health maintenance</div>
+                  <ul class="md-ul">
+                    <li>Colonoscopy due (last 2014) — order today</li>
+                    <li>Pneumococcal vaccine due</li>
+                    <li>A1C drawn today (last 7.2%, Feb 2026)</li>
+                  </ul>
+                </div>
+              </article>
+
+              <div class="notebody-foot">
+                <div class="notebody-foot-meta"><span class="dot"></span>4 sections · last edit 4 m ago</div>
+                <button class="btn">
+                  <svg class="ic" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" style="width:14px;height:14px"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><path d="M2 10V2.5a.5.5 0 0 1 .5-.5H10"/></svg>
+                  Copy SOAP
+                </button>
+              </div>
+            </div>
+
+            <!-- RIGHT RAIL — collapsed billing badge -->
+            <aside class="right-rail">
+              <div class="badge-card" data-expand-target="c1-bill-expand">
+                <div class="row">
+                  <span class="lbl">Billing support</span>
+                  <span class="ama">AMA 2021</span>
+                </div>
+                <div>
+                  <span class="code">99213</span>
+                  <span class="level">Level 3</span>
+                </div>
+                <div class="delta">↗ Bump to 99214 · +$32</div>
+                <div class="gaps">2 gaps to close</div>
+                <div class="expand-hint">Click to expand →</div>
+              </div>
+
+              <button class="review-pill" data-ack>
+                <span><span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--danger);margin-right:8px;vertical-align:middle"></span>3 need review</span>
+                <span class="ct">3</span>
+              </button>
+
+              <div id="c1-bill-expand" class="coding-rail c1-bill-expand">
+                <div class="coding-rail-head">
+                  <div class="coding-rail-head-top">
+                    <span class="coding-rail-label coding-rail-label--coach"><span class="coding-rail-pulse"></span>Billing support</span>
+                    <span class="coding-rail-label">AMA 2021</span>
+                  </div>
+                  <div class="coding-rail-code-row">
+                    <span class="coding-code">99213</span>
+                    <span class="coding-level">Level 3</span>
+                    <button class="coding-override">override <span style="font-size:9px">▾</span></button>
+                  </div>
+                </div>
+                <div class="coding-time">
+                  <span style="color:var(--sage-bright);font-family:var(--font-mono)">⏱</span>
+                  <span>Visit time</span>
+                  <span class="coding-time-num">22 m</span>
+                  <span class="coding-time-meter"><span class="coding-time-meter-fill" style="width:73%"></span></span>
+                  <span class="coding-time-rule">30+ min</span>
+                </div>
+                <div class="em-checklist">
+                  <div class="em-criterion-group">
+                    <div class="em-criterion-group-head">
+                      <span class="em-criterion-group-title">History · 2 of 2</span>
+                      <span class="em-criterion-group-summary">Comprehensive</span>
+                    </div>
+                    <div class="em-criterion">
+                      <span class="em-criterion-icon em-criterion-icon--ok">✓</span>
+                      <span class="em-criterion-text"><span class="em-criterion-head">HPI 4+ elements</span><span class="em-criterion-sub">Location · quality · timing · context</span></span>
+                    </div>
+                    <div class="em-criterion">
+                      <span class="em-criterion-icon em-criterion-icon--ok">✓</span>
+                      <span class="em-criterion-text"><span class="em-criterion-head">PFSH covered</span><span class="em-criterion-sub">PMH · FH · SH all present</span></span>
+                    </div>
+                  </div>
+                  <div class="em-criterion-group">
+                    <div class="em-criterion-group-head">
+                      <span class="em-criterion-group-title">Exam · 1 of 1</span>
+                      <span class="em-criterion-group-summary">Multi-system</span>
+                    </div>
+                    <div class="em-criterion">
+                      <span class="em-criterion-icon em-criterion-icon--ok">✓</span>
+                      <span class="em-criterion-text"><span class="em-criterion-head">Multi-system exam</span><span class="em-criterion-sub">7 systems documented</span></span>
+                    </div>
+                  </div>
+                  <div class="em-criterion-group">
+                    <div class="em-criterion-group-head">
+                      <span class="em-criterion-group-title">MDM · 1 of 2</span>
+                      <span class="em-criterion-group-summary" style="color:var(--warning)">Moderate w/ gap</span>
+                    </div>
+                    <div class="em-criterion">
+                      <span class="em-criterion-icon em-criterion-icon--ok">✓</span>
+                      <span class="em-criterion-text"><span class="em-criterion-head">3 problems addressed</span><span class="em-criterion-sub">Cervical · Lumbar · HTN</span></span>
+                    </div>
+                    <div class="em-criterion em-criterion--warn">
+                      <span class="em-criterion-icon em-criterion-icon--warn">!</span>
+                      <span class="em-criterion-text"><span class="em-criterion-head">Risk discussion</span><span class="em-criterion-sub">Document Lisinopril titration plan</span></span>
+                    </div>
+                  </div>
+                </div>
+                <div class="coding-cta">
+                  <button class="bump">
+                    <span class="bump-lhs">
+                      <span class="bump-sub">Bump to</span>
+                      <span class="bump-top"><span class="bump-arrow">99214</span><span style="font-size:10px;font-family:var(--font-mono);opacity:0.62">· Level 4</span></span>
+                    </span>
+                    <span class="bump-delta">+$32</span>
+                  </button>
+                  <button class="coding-confirm">
+                    <span><span class="coding-confirm-check">✓</span> Confirm 99213 · sign</span>
+                    <span class="coding-confirm-shortcut">⌘ ↵</span>
+                  </button>
+                  <div class="coding-cta-foot">
+                    <span class="coding-cta-foot-ama">AMA 2021 · time-based</span>
+                    <span>+$8.4k / yr est.</span>
+                  </div>
+                  <div class="coding-cta-foot coding-cta-foot--gap">
+                    <span>99213 supports · 1 gap to 99214</span>
+                    <span>+$32</span>
+                  </div>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </div>
+        <div id="concept-2" class="concept c2">
+          <div class="tabs">
+            <button class="tab active">
+              <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 2.5h7.5L13 5v8.5a.5.5 0 0 1-.5.5h-9a.5.5 0 0 1-.5-.5v-11a.5.5 0 0 1 .5-.5z"/><path d="M10 2.5V5h3"/></svg>
+              SOAP Note
+            </button>
+            <button class="tab">
+              <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 4h11M2.5 8h11M2.5 12h7"/></svg>
+              Transcript
+            </button>
+            <button class="tab">
+              <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 6.5V4a3 3 0 0 1 6 0v2.5M3.5 6.5h9v6.5a.5.5 0 0 1-.5.5h-8a.5.5 0 0 1-.5-.5v-6.5z"/></svg>
+              Codes <span class="warn-dot"></span>
+            </button>
+            <button class="tab">
+              <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="10" r="3.5"/><circle cx="10" cy="6" r="3.5"/></svg>
+              Rx <span class="warn-dot crit"></span>
+            </button>
+            <button class="tab">
+              <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2.5l1.6 3.4 3.4.5-2.5 2.4.6 3.5L8 10.6l-3.1 1.7.6-3.5L3 6.4l3.4-.5z"/></svg>
+              Extras
+            </button>
+          </div>
+          <div class="pt-strip">
+            <span class="pt-name">Jeffrey Whitaker</span>
+            <span class="sep">·</span><span>59M</span>
+            <span class="sep">·</span><span>Primary Care</span>
+            <span class="sep">·</span><span class="meta">2026-05-09 · 22 min</span>
+            <span class="grow"></span>
+            <span class="mrn">MRN 4128-09</span>
+          </div>
+          <div class="body">
+            <div class="stage">
+              <h1>Persistent post-MVA musculoskeletal pain</h1>
+              <div class="h-meta">3 active problems · 1 reference · post-MVA presentation</div>
+              <div class="summary-row">
+                <span class="summary-pill"><span class="dot"></span>3 problems</span>
+                <span class="summary-pill crit"><span class="dot"></span>1 critical Rx</span>
+                <span class="summary-pill warn"><span class="dot"></span>1 ask</span>
+                <span class="summary-pill"><span class="dot"></span>+$32 bump available</span>
+              </div>
+
+              <div class="section-eyebrow">
+                <span class="lbl">Active Problems</span>
+                <span class="meta">Assessment + Plan · 3 problems</span>
+              </div>
+
+              <div class="pcards">
+                <article class="pcard crit">
+                  <header class="pcard-h">
+                    <span class="pcard-num">01</span>
+                    <span class="pcard-name">Cervical strain w/ radicular sx, post-MVA</span>
+                    <span class="pcard-icd">M54.12</span>
+                  </header>
+                  <div class="pcard-body">
+                    <div class="pcard-col">
+                      <div class="pcard-col-h">Evidence · S+O</div>
+                      <ul>
+                        <li>Constant dull pain w/ sharp episodes since <strong>12/30/25 MVA</strong></li>
+                        <li>Radiates: cervical → R shoulder → R arm</li>
+                        <li>Difficulty with cervical rotation, lifting</li>
+                        <li>OTC ibuprofen 400 mg PRN — minimal relief</li>
+                        <li>Exam: <strong>TTP R paraspinal cervical</strong>, ↓ROM rotation/lateral flexion</li>
+                        <li>Neuro intact — motor 5/5, DTRs 2+ symmetric</li>
+                      </ul>
+                    </div>
+                    <div class="pcard-col">
+                      <div class="pcard-col-h">Reasoning + Plan</div>
+                      <p class="pcard-reasoning">Mechanism, exam, and timing all consistent with cervical radiculopathy without red-flag features. Conservative management.</p>
+                      <ul>
+                        <li><strong>Cyclobenzaprine</strong> 5 mg PO TID PRN × 7 days</li>
+                        <li>PT cervical/thoracic, 2×/wk × 4 wk</li>
+                        <li>Continue ibuprofen 600 mg TID with food</li>
+                        <li>Return precautions reviewed</li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div class="pcard-flag-bar">
+                    <span class="ic">⚠</span>
+                    <span class="txt"><strong>Critical · Rx safety:</strong> "Nitropyloprolol 50 mg" in active meds is likely transcription error → <strong style="color:var(--text)">Metoprolol</strong>. Resolve before signing the new Cyclobenzaprine Rx.</span>
+                    <span class="ax">
+                      <button class="ax-btn ax-btn--p">Override…</button>
+                      <button class="ax-btn">Source ↗</button>
+                    </span>
+                  </div>
+                </article>
+
+                <article class="pcard">
+                  <header class="pcard-h">
+                    <span class="pcard-num">02</span>
+                    <span class="pcard-name">Lumbar strain, post-MVA</span>
+                    <span class="pcard-icd">S39.012A</span>
+                  </header>
+                  <div class="pcard-body">
+                    <div class="pcard-col">
+                      <div class="pcard-col-h">Evidence · S+O</div>
+                      <ul>
+                        <li>Low back pain since <strong>12/30/25 MVA</strong></li>
+                        <li>Exam: <strong>lumbar paraspinal TTP L4-L5</strong></li>
+                        <li><strong>SLR negative</strong> bilaterally</li>
+                        <li>No saddle anesthesia, bowel/bladder changes</li>
+                      </ul>
+                    </div>
+                    <div class="pcard-col">
+                      <div class="pcard-col-h">Reasoning + Plan</div>
+                      <p class="pcard-reasoning">Paraspinal tenderness without neurological deficits or red-flag features. Co-managed with cervical PT.</p>
+                      <ul>
+                        <li>Same PT visit (cervical/thoracic/lumbar)</li>
+                        <li>Home exercise program</li>
+                        <li>Heat/ice as tolerated</li>
+                      </ul>
+                    </div>
+                  </div>
+                </article>
+
+                <article class="pcard flag">
+                  <header class="pcard-h">
+                    <span class="pcard-num">03</span>
+                    <span class="pcard-name">Hypertension, sub-optimally controlled</span>
+                    <span class="pcard-icd">I10</span>
+                  </header>
+                  <div class="pcard-body">
+                    <div class="pcard-col">
+                      <div class="pcard-col-h">Evidence · S+O</div>
+                      <ul>
+                        <li><strong>Today: 138/86</strong> (target &lt;130/80)</li>
+                        <li>Feb 2026: <span class="vital-tok">132/82</span></li>
+                        <li>Aug 2025: <span class="vital-tok">128/78</span></li>
+                        <li>Currently on <strong>Lisinopril 20 mg daily</strong></li>
+                      </ul>
+                    </div>
+                    <div class="pcard-col">
+                      <div class="pcard-col-h">Reasoning + Plan</div>
+                      <p class="pcard-reasoning">Trending upward over last three visits despite stable regimen. Pain stress may contribute.</p>
+                      <ul>
+                        <li>Recheck BP in 2 weeks</li>
+                        <li>If persistent: <strong>Lisinopril 20 → 40 mg</strong></li>
+                        <li>DASH diet · resume walking when comfortable</li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div class="pcard-flag-bar warn">
+                    <span class="ic">↗</span>
+                    <span class="txt">Document the <strong>Lisinopril titration plan</strong> here to satisfy MDM moderate · qualifies for 99214 (+$32).</span>
+                    <span class="ax">
+                      <button class="ax-btn ax-btn--p">Add to MDM</button>
+                    </span>
+                  </div>
+                </article>
+
+                <article class="pcard" style="border-style:dashed">
+                  <header class="pcard-h">
+                    <span class="pcard-num">04</span>
+                    <span class="pcard-name">Health maintenance · 3 due</span>
+                    <span class="pcard-icd" style="border-color:var(--hairline);color:var(--text-3);background:transparent">Z00.00</span>
+                  </header>
+                  <div class="pcard-body">
+                    <div class="pcard-col">
+                      <div class="pcard-col-h">Due</div>
+                      <ul>
+                        <li>Colonoscopy — last 2014, order today</li>
+                        <li>Pneumococcal vaccine — eligible</li>
+                        <li>A1C drawn today (last 7.2%, Feb 2026)</li>
+                      </ul>
+                    </div>
+                    <div class="pcard-col">
+                      <div class="pcard-col-h">Reasoning</div>
+                      <p class="pcard-reasoning">Visit was acute-focused. Surface preventive items but defer to dedicated follow-up unless patient willing today.</p>
+                    </div>
+                  </div>
+                </article>
+              </div>
+
+              <div class="section-eyebrow" style="margin-top:36px">
+                <span class="lbl">Source Material</span>
+                <span class="meta">Subjective + Objective · click to expand</span>
+              </div>
+
+              <div class="source-grid">
+                <div class="source-card open" data-coll>
+                  <div class="source-card-h" data-toggle>
+                    <span class="letter">S</span>
+                    <span class="lbl">Subjective</span>
+                    <span class="ct">9 fields</span>
+                    <span class="ch">›</span>
+                  </div>
+                  <div class="source-card-body">
+                    <dl>
+                      <div class="label-row"><dt>CC</dt><dd>Neck/shoulder + LBP s/p MVA 12/30/25</dd></div>
+                      <div class="label-row"><dt>HPI</dt><dd>Persistent post-MVA pain · ibuprofen min relief · sleep disrupted</dd></div>
+                      <div class="label-row"><dt>PMH</dt><dd>HTN · T2DM · HLD · GERD</dd></div>
+                      <div class="label-row"><dt>Meds</dt><dd>Lisinopril 20 · Metformin 1g BID · Atorvastatin 40 qHS · <span class="crit-mark">Nitropyloprolol → Metoprolol?</span> · Omeprazole 20</dd></div>
+                      <div class="label-row"><dt>Allergies</dt><dd style="color:var(--warning)">⌖ Not documented</dd></div>
+                      <div class="label-row"><dt>FH</dt><dd>Father MI 67 · Mother T2DM/HTN</dd></div>
+                      <div class="label-row"><dt>SH</dt><dd>30 PY (quit '15) · 2-3 drinks/wk · accountant</dd></div>
+                      <div class="label-row"><dt>ROS</dt><dd>Negative except MSK</dd></div>
+                    </dl>
+                  </div>
+                </div>
+
+                <div class="source-card open" data-coll>
+                  <div class="source-card-h" data-toggle>
+                    <span class="letter">O</span>
+                    <span class="lbl">Objective</span>
+                    <span class="ct">vitals + exam</span>
+                    <span class="ch">›</span>
+                  </div>
+                  <div class="source-card-body">
+                    <div class="vitals-strip" style="margin-bottom:10px;grid-template-columns:repeat(3,1fr)">
+                      <div class="v warn"><div class="l">BP</div><div class="n">138/86</div></div>
+                      <div class="v"><div class="l">HR</div><div class="n">76</div></div>
+                      <div class="v"><div class="l">SpO₂</div><div class="n">98%</div></div>
+                      <div class="v"><div class="l">Temp</div><div class="n">98.4°</div></div>
+                      <div class="v"><div class="l">RR</div><div class="n">16</div></div>
+                      <div class="v"><div class="l">BMI</div><div class="n">28.4</div></div>
+                    </div>
+                    <p style="margin:6px 0 0;font-size:13px;line-height:1.55"><strong>Gen:</strong> NAD · <strong>Neck:</strong> TTP R paraspinal · <strong>CV:</strong> RRR · <strong>Pulm:</strong> CTAB · <strong>MSK:</strong> R shoulder TTP, neg impingement · <strong>Neuro:</strong> A&Ox3, motor 5/5</p>
+                  </div>
+                </div>
+
+                <div class="source-card" data-coll>
+                  <div class="source-card-h" data-toggle>
+                    <span class="letter" style="background:transparent;border-color:var(--hairline);color:var(--text-3)">T</span>
+                    <span class="lbl">Transcript</span>
+                    <span class="ct">22 m · 14 turns</span>
+                    <span class="ch">›</span>
+                  </div>
+                  <div class="source-card-body">
+                    <p style="font-size:13px;font-style:italic;color:var(--text-3);line-height:1.55;margin:0">"…so this all started after the wreck on the 30th of December…the pain runs from my neck down into my shoulder and arm…ibuprofen barely takes the edge off…I'm on something for blood pressure that starts with M…I think Nitro something pro something…"</p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="notebody-foot" style="margin-top:36px">
+                <div class="notebody-foot-meta"><span class="dot"></span>Last edit 4 m ago · 22 min visit</div>
+                <button class="btn">
+                  <svg class="ic" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" style="width:14px;height:14px"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><path d="M2 10V2.5a.5.5 0 0 1 .5-.5H10"/></svg>
+                  Copy SOAP
+                </button>
+              </div>
+            </div>
+
+            <!-- RIGHT RAIL — full Coding rail (production) -->
+            <aside class="coding-rail" style="position:sticky;top:14px;align-self:start;max-height:calc(100vh - 28px);overflow-y:auto">
+              <div class="coding-rail-head">
+                <div class="coding-rail-head-top">
+                  <span class="coding-rail-label coding-rail-label--coach"><span class="coding-rail-pulse"></span>Billing support</span>
+                  <span class="coding-rail-label">AMA 2021</span>
+                </div>
+                <div class="coding-rail-code-row">
+                  <span class="coding-code">99213</span>
+                  <span class="coding-level">Level 3</span>
+                  <button class="coding-override">override <span style="font-size:9px">▾</span></button>
+                </div>
+              </div>
+              <div class="coding-time">
+                <span style="color:var(--sage-bright);font-family:var(--font-mono)">⏱</span>
+                <span>Visit time</span>
+                <span class="coding-time-num">22 m</span>
+                <span class="coding-time-meter"><span class="coding-time-meter-fill" style="width:73%"></span></span>
+                <span class="coding-time-rule">30+ min</span>
+              </div>
+              <div class="em-checklist">
+                <div class="em-criterion-group">
+                  <div class="em-criterion-group-head">
+                    <span class="em-criterion-group-title">History · 2 of 2</span>
+                    <span class="em-criterion-group-summary">Comprehensive</span>
+                  </div>
+                  <div class="em-criterion">
+                    <span class="em-criterion-icon em-criterion-icon--ok">✓</span>
+                    <span class="em-criterion-text"><span class="em-criterion-head">HPI 4+ elements</span><span class="em-criterion-sub">Location · quality · timing · context</span></span>
+                  </div>
+                  <div class="em-criterion">
+                    <span class="em-criterion-icon em-criterion-icon--ok">✓</span>
+                    <span class="em-criterion-text"><span class="em-criterion-head">PFSH covered</span><span class="em-criterion-sub">PMH · FH · SH all present</span></span>
+                  </div>
+                </div>
+                <div class="em-criterion-group">
+                  <div class="em-criterion-group-head">
+                    <span class="em-criterion-group-title">Exam · 1 of 1</span>
+                    <span class="em-criterion-group-summary">Multi-system</span>
+                  </div>
+                  <div class="em-criterion">
+                    <span class="em-criterion-icon em-criterion-icon--ok">✓</span>
+                    <span class="em-criterion-text"><span class="em-criterion-head">Multi-system exam</span><span class="em-criterion-sub">7 systems documented</span></span>
+                  </div>
+                </div>
+                <div class="em-criterion-group">
+                  <div class="em-criterion-group-head">
+                    <span class="em-criterion-group-title">MDM · 1 of 2</span>
+                    <span class="em-criterion-group-summary" style="color:var(--warning)">Moderate w/ gap</span>
+                  </div>
+                  <div class="em-criterion">
+                    <span class="em-criterion-icon em-criterion-icon--ok">✓</span>
+                    <span class="em-criterion-text"><span class="em-criterion-head">3 problems addressed</span><span class="em-criterion-sub">Cervical · Lumbar · HTN</span></span>
+                  </div>
+                  <div class="em-criterion em-criterion--warn">
+                    <span class="em-criterion-icon em-criterion-icon--warn">!</span>
+                    <span class="em-criterion-text"><span class="em-criterion-head">Risk discussion</span><span class="em-criterion-sub">Document Lisinopril titration plan</span></span>
+                  </div>
+                </div>
+              </div>
+              <div class="coding-cta">
+                <button class="bump">
+                  <span class="bump-lhs">
+                    <span class="bump-sub">Bump to</span>
+                    <span class="bump-top"><span class="bump-arrow">99214</span><span style="font-size:10px;font-family:var(--font-mono);opacity:0.62">· Level 4</span></span>
+                  </span>
+                  <span class="bump-delta">+$32</span>
+                </button>
+                <button class="coding-confirm">
+                  <span><span class="coding-confirm-check">✓</span> Confirm 99213 · sign</span>
+                  <span class="coding-confirm-shortcut">⌘ ↵</span>
+                </button>
+                <div class="coding-cta-foot">
+                  <span class="coding-cta-foot-ama">AMA 2021 · time-based</span>
+                  <span>+$8.4k / yr est.</span>
+                </div>
+                <div class="coding-cta-foot coding-cta-foot--gap">
+                  <span>99213 supports · 1 gap to 99214</span>
+                  <span>+$32</span>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </div>
+        <div id="concept-3" class="concept c3">
+          <div class="tabs">
+            <button class="tab active">
+              <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 2.5h7.5L13 5v8.5a.5.5 0 0 1-.5.5h-9a.5.5 0 0 1-.5-.5v-11a.5.5 0 0 1 .5-.5z"/><path d="M10 2.5V5h3"/></svg>
+              SOAP Note
+            </button>
+            <button class="tab">
+              <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 4h11M2.5 8h11M2.5 12h7"/></svg>
+              Transcript
+            </button>
+            <button class="tab">
+              <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 6.5V4a3 3 0 0 1 6 0v2.5M3.5 6.5h9v6.5a.5.5 0 0 1-.5.5h-8a.5.5 0 0 1-.5-.5v-6.5z"/></svg>
+              Codes <span class="warn-dot"></span>
+            </button>
+            <button class="tab">
+              <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="10" r="3.5"/><circle cx="10" cy="6" r="3.5"/></svg>
+              Rx <span class="warn-dot crit"></span>
+            </button>
+            <button class="tab">
+              <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2.5l1.6 3.4 3.4.5-2.5 2.4.6 3.5L8 10.6l-3.1 1.7.6-3.5L3 6.4l3.4-.5z"/></svg>
+              Extras
+            </button>
+          </div>
+          <div class="pt-strip">
+            <span class="pt-name">Jeffrey Whitaker</span>
+            <span class="sep">·</span><span>59M</span>
+            <span class="sep">·</span><span>Primary Care</span>
+            <span class="sep">·</span><span class="meta">2026-05-09 · 22 min</span>
+            <span class="grow"></span>
+            <span class="mrn">MRN 4128-09</span>
+          </div>
+          <div class="body">
+            <!-- ABOVE THE FOLD — encounter snapshot -->
+            <section class="hero">
+              <div class="hero-eyebrow">
+                <span class="pulse-wrap"><span class="pulse-dot"></span>Encounter Snapshot</span>
+                <span class="grow"></span>
+                <span class="meta-mono">Reviewed in 30 seconds · 4 sections drafted · 1 critical · 1 ask</span>
+              </div>
+
+              <h1 class="hero-cc">Persistent post-MVA musculoskeletal pain<span class="smaller">in a 59M with HTN and T2DM, following an MVA on 12/30/2025.</span></h1>
+              <div class="hero-meta">Dr. M. Reyes · 22 min · Primary care follow-up · MRN 4128-09</div>
+
+              <div class="hero-grid">
+                <div class="hero-cell">
+                  <div class="hero-cell-h"><span>Vitals · Today</span><span class="ct">↑ BP</span></div>
+                  <div class="hero-vitals">
+                    <div class="v warn"><div class="l">BP</div><div class="n">138/86</div></div>
+                    <div class="v"><div class="l">HR</div><div class="n">76</div></div>
+                    <div class="v"><div class="l">Temp</div><div class="n">98.4°</div></div>
+                    <div class="v"><div class="l">RR</div><div class="n">16</div></div>
+                    <div class="v"><div class="l">SpO₂</div><div class="n">98%</div></div>
+                    <div class="v"><div class="l">BMI</div><div class="n">28.4</div></div>
+                  </div>
+                </div>
+
+                <div class="hero-cell">
+                  <div class="hero-cell-h"><span>Active Problems</span><span class="ct">3 + HM</span></div>
+                  <div class="hero-probs">
+                    <div class="row"><span class="num">1</span><span class="nm">Cervical strain w/ radicular sx</span><span class="icd">M54.12</span></div>
+                    <div class="row"><span class="num">2</span><span class="nm">Lumbar strain</span><span class="icd">S39.012A</span></div>
+                    <div class="row"><span class="num">3</span><span class="nm">HTN, sub-optimal</span><span class="icd">I10</span></div>
+                    <div class="row"><span class="num">4</span><span class="nm">Health maintenance</span><span class="icd">Z00.00</span></div>
+                  </div>
+                </div>
+
+                <div class="hero-cell">
+                  <div class="hero-cell-h"><span>Needs Review</span><span class="ct">3</span></div>
+                  <div class="hero-asks">
+                    <div class="ask-row crit" data-ack><span class="ic">⊗</span><span>Rx: Nitropyloprolol → Metoprolol?</span></div>
+                    <div class="ask-row" data-ack><span class="ic">?</span><span>Allergies undocumented</span></div>
+                    <div class="ask-row" data-ack><span class="ic">⌖</span><span>Confirm MVA date capture</span></div>
+                  </div>
+                </div>
+
+                <div class="hero-cell hero-bill">
+                  <div class="hero-cell-h"><span>Billing</span><span class="ct">2 gaps</span></div>
+                  <div class="tier">
+                    <span class="from">99213</span>
+                    <span class="to">99214</span>
+                    <span class="delta">+ $32</span>
+                  </div>
+                  <div class="meter"><div class="meter-fill"></div></div>
+                  <div class="step">1 of 3 met · MDM moderate + time pending</div>
+                </div>
+              </div>
+
+              <div class="hero-cta">
+                <button class="btn-primary btn">
+                  <span>Sign + send to EHR</span>
+                </button>
+                <button class="btn">Resolve 3 reviews</button>
+                <button class="btn">Edit note</button>
+                <span class="grow"></span>
+                <span class="meta">⌘ ↵ to sign · auto-saved 14:32</span>
+              </div>
+            </section>
+
+            <div class="fold">Detail · scroll for full SOAP</div>
+
+            <!-- BELOW THE FOLD — full SOAP -->
+            <div class="detail">
+              <div class="detail-main">
+                <article class="soap-section">
+                  <header class="soap-section-head">
+                    <div class="lhs">
+                      <span class="soap-eyebrow"><span class="soap-letter">S</span>Subjective</span>
+                      <span class="sec-status sec-status--reviewed">Reviewed</span>
+                    </div>
+                    <span class="pulse-meta"><span class="dot"></span>HPI · 4 elements</span>
+                  </header>
+                  <div class="soap-section-body">
+                    <div class="md-h2">Chief Complaint</div>
+                    <p class="md-p">Neck and shoulder pain with radiation, plus low back pain following an MVA on 12/30/2025.</p>
+                    <div class="md-h2">HPI</div>
+                    <p class="md-p">59-year-old male presents for evaluation of persistent neck and shoulder pain with radiation, accompanied by low back pain. Pain is constant and dull with intermittent sharp episodes, radiating from the cervical region into the right shoulder and down the right arm. Difficulty with cervical rotation and lifting. OTC ibuprofen 400 mg PRN with minimal relief. Sleep disrupted.</p>
+                    <p class="md-p"><strong>Pertinent negatives:</strong> Denies head trauma, LOC, numbness/tingling, saddle anesthesia, bowel/bladder changes, fever, weight loss.</p>
+                    <div class="md-h2">PMH · Allergies · Hx</div>
+                    <ul class="md-ul">
+                      <li><strong>PMH:</strong> HTN (2018) · T2DM (2020) · HLD · GERD</li>
+                      <li><strong>Allergies:</strong> <span style="color:var(--warning);font-family:var(--font-mono);font-size:12px">⌖ Not documented — verify with patient</span></li>
+                      <li><strong>FH:</strong> Father MI age 67 · Mother T2DM/HTN · Brother HTN</li>
+                      <li><strong>SH:</strong> Former smoker (30 PY, quit 2015) · 2-3 drinks/wk · Accountant</li>
+                    </ul>
+                    <div class="md-h2">Medications</div>
+                    <ul class="md-ul">
+                      <li>Lisinopril 20 mg PO daily</li>
+                      <li>Metformin 1000 mg PO BID</li>
+                      <li>Atorvastatin 40 mg PO qHS</li>
+                      <li>Omeprazole 20 mg PO daily</li>
+                    </ul>
+                    <div class="qm-warn" style="margin-top:14px" role="alert">
+                      <div class="qm-warn-h">
+                        <div class="qm-warn-icon">⚠</div>
+                        <span class="qm-warn-badge">Critical · Rx</span>
+                        <div></div>
+                        <div></div>
+                        <div class="qm-warn-headline">"Nitropyloprolol 50 mg PO daily" — likely transcription error</div>
+                      </div>
+                      <div class="qm-warn-body">
+                        <div class="qm-warn-action">
+                          <span style="font-family:var(--font-mono);font-size:14px">→</span>
+                          <span>Most plausible intent: <strong style="color:var(--text)">Metoprolol 50 mg PO daily</strong>. Resolve before signing.</span>
+                        </div>
+                        <div class="qm-warn-action-row">
+                          <button class="qm-warn-override-btn">Override…</button>
+                          <button class="btn">Replace with Metoprolol</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </article>
+
+                <article class="soap-section">
+                  <header class="soap-section-head">
+                    <div class="lhs">
+                      <span class="soap-eyebrow"><span class="soap-letter">O</span>Objective</span>
+                      <span class="sec-status sec-status--reviewed">Reviewed</span>
+                    </div>
+                    <span class="pulse-meta"><span class="dot"></span>Multi-system exam</span>
+                  </header>
+                  <div class="soap-section-body">
+                    <div class="vitals-strip" style="margin-bottom:10px">
+                      <div class="v warn"><div class="l">BP</div><div class="n">138/86</div></div>
+                      <div class="v"><div class="l">HR</div><div class="n">76</div></div>
+                      <div class="v"><div class="l">Temp</div><div class="n">98.4°</div></div>
+                      <div class="v"><div class="l">RR</div><div class="n">16</div></div>
+                      <div class="v"><div class="l">SpO₂</div><div class="n">98%</div></div>
+                      <div class="v"><div class="l">BMI</div><div class="n">28.4</div></div>
+                    </div>
+                    <p class="md-p" style="margin-top:10px"><strong>Gen:</strong> NAD, mild discomfort with cervical motion. <strong>Neck:</strong> TTP R paraspinal cervical, ↓ROM rotation/lateral flexion. <strong>CV:</strong> RRR, no m/r/g. <strong>Pulm:</strong> CTAB. <strong>MSK:</strong> R shoulder TTP trapezius, neg impingement; lumbar paraspinal TTP L4-L5; SLR neg b/l. <strong>Neuro:</strong> A&Ox3, motor 5/5, DTRs 2+ symmetric.</p>
+                  </div>
+                </article>
+
+                <article class="soap-section">
+                  <header class="soap-section-head">
+                    <div class="lhs">
+                      <span class="soap-eyebrow"><span class="soap-letter">A</span>Assessment</span>
+                      <span class="sec-status sec-status--drafted">Drafted</span>
+                    </div>
+                    <span class="pulse-meta pulse-meta--boost"><span class="dot"></span>MDM · moderate w/ gap</span>
+                  </header>
+                  <div class="soap-section-body">
+                    <div class="md-h2">1 · Cervical strain w/ radicular sx <span style="color:var(--sage-bright);font-family:var(--font-mono);font-size:11px;text-transform:none;letter-spacing:0.02em">M54.12</span></div>
+                    <p class="md-p">Mechanism, exam, and timing all consistent. Conservative management.</p>
+                    <div class="md-h2">2 · Lumbar strain <span style="color:var(--sage-bright);font-family:var(--font-mono);font-size:11px;text-transform:none;letter-spacing:0.02em">S39.012A</span></div>
+                    <p class="md-p">Paraspinal tenderness without neurological deficits.</p>
+                    <div class="md-h2">3 · HTN, sub-optimal <span style="color:var(--sage-bright);font-family:var(--font-mono);font-size:11px;text-transform:none;letter-spacing:0.02em">I10</span></div>
+                    <p class="md-p">138/86 today; trending up over last three visits.</p>
+                  </div>
+                </article>
+
+                <article class="soap-section">
+                  <header class="soap-section-head">
+                    <div class="lhs">
+                      <span class="soap-eyebrow"><span class="soap-letter">P</span>Plan</span>
+                      <span class="sec-status sec-status--drafted">Drafted</span>
+                    </div>
+                    <span class="pulse-meta"><span class="dot"></span>4 actions</span>
+                  </header>
+                  <div class="soap-section-body">
+                    <div class="md-h2">1 · Cervical strain</div>
+                    <ul class="md-ul">
+                      <li><strong>Cyclobenzaprine</strong> 5 mg PO TID PRN × 7 days</li>
+                      <li>PT cervical/thoracic, 2×/wk × 4 wk</li>
+                      <li>Continue ibuprofen 600 mg TID with food</li>
+                      <li>Return precautions reviewed</li>
+                    </ul>
+                    <div class="md-h2">2 · Lumbar strain</div>
+                    <ul class="md-ul"><li>Same PT visit · home exercise program · heat/ice as tolerated</li></ul>
+                    <div class="md-h2">3 · HTN</div>
+                    <ul class="md-ul">
+                      <li>Recheck BP in 2 weeks · consider <strong>Lisinopril 20 → 40 mg</strong> if persistent</li>
+                      <li>DASH diet · resume walking when comfortable</li>
+                    </ul>
+                    <div class="md-h2">4 · Health maintenance</div>
+                    <ul class="md-ul"><li>Colonoscopy due (last 2014) · Pneumococcal vaccine · A1C drawn today</li></ul>
+                  </div>
+                </article>
+
+                <div class="notebody-foot">
+                  <div class="notebody-foot-meta"><span class="dot"></span>4 sections · last edit 4 m ago</div>
+                  <button class="btn">
+                    <svg class="ic" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" style="width:14px;height:14px"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><path d="M2 10V2.5a.5.5 0 0 1 .5-.5H10"/></svg>
+                    Copy SOAP
+                  </button>
+                </div>
+              </div>
+
+              <aside class="coding-rail detail-rail">
+                <div class="coding-rail-head">
+                  <div class="coding-rail-head-top">
+                    <span class="coding-rail-label coding-rail-label--coach"><span class="coding-rail-pulse"></span>Billing support</span>
+                    <span class="coding-rail-label">AMA 2021</span>
+                  </div>
+                  <div class="coding-rail-code-row">
+                    <span class="coding-code">99213</span>
+                    <span class="coding-level">Level 3</span>
+                    <button class="coding-override">override <span style="font-size:9px">▾</span></button>
+                  </div>
+                </div>
+                <div class="coding-time">
+                  <span style="color:var(--sage-bright);font-family:var(--font-mono)">⏱</span>
+                  <span>Visit time</span>
+                  <span class="coding-time-num">22 m</span>
+                  <span class="coding-time-meter"><span class="coding-time-meter-fill" style="width:73%"></span></span>
+                  <span class="coding-time-rule">30+ min</span>
+                </div>
+                <div class="em-checklist">
+                  <div class="em-criterion-group">
+                    <div class="em-criterion-group-head">
+                      <span class="em-criterion-group-title">History · 2 of 2</span>
+                      <span class="em-criterion-group-summary">Comprehensive</span>
+                    </div>
+                    <div class="em-criterion">
+                      <span class="em-criterion-icon em-criterion-icon--ok">✓</span>
+                      <span class="em-criterion-text"><span class="em-criterion-head">HPI 4+ elements</span><span class="em-criterion-sub">Location · quality · timing · context</span></span>
+                    </div>
+                  </div>
+                  <div class="em-criterion-group">
+                    <div class="em-criterion-group-head">
+                      <span class="em-criterion-group-title">MDM · 1 of 2</span>
+                      <span class="em-criterion-group-summary" style="color:var(--warning)">Moderate w/ gap</span>
+                    </div>
+                    <div class="em-criterion">
+                      <span class="em-criterion-icon em-criterion-icon--ok">✓</span>
+                      <span class="em-criterion-text"><span class="em-criterion-head">3 problems addressed</span><span class="em-criterion-sub">Cervical · Lumbar · HTN</span></span>
+                    </div>
+                    <div class="em-criterion em-criterion--warn">
+                      <span class="em-criterion-icon em-criterion-icon--warn">!</span>
+                      <span class="em-criterion-text"><span class="em-criterion-head">Risk discussion</span><span class="em-criterion-sub">Document Lisinopril titration</span></span>
+                    </div>
+                  </div>
+                </div>
+                <div class="coding-cta">
+                  <button class="bump">
+                    <span class="bump-lhs">
+                      <span class="bump-sub">Bump to</span>
+                      <span class="bump-top"><span class="bump-arrow">99214</span><span style="font-size:10px;font-family:var(--font-mono);opacity:0.62">· Level 4</span></span>
+                    </span>
+                    <span class="bump-delta">+$32</span>
+                  </button>
+                  <button class="coding-confirm">
+                    <span><span class="coding-confirm-check">✓</span> Confirm 99213 · sign</span>
+                    <span class="coding-confirm-shortcut">⌘ ↵</span>
+                  </button>
+                  <div class="coding-cta-foot">
+                    <span class="coding-cta-foot-ama">AMA 2021 · time-based</span>
+                    <span>+$8.4k / yr est.</span>
+                  </div>
+                </div>
+              </aside>
+            </div>
+          </div>
+        </div>
+        <div id="concept-4" class="concept c4">
+          <div class="tabs">
+            <button class="tab active">
+              <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 2.5h7.5L13 5v8.5a.5.5 0 0 1-.5.5h-9a.5.5 0 0 1-.5-.5v-11a.5.5 0 0 1 .5-.5z"/><path d="M10 2.5V5h3"/></svg>
+              SOAP Note
+            </button>
+            <button class="tab">
+              <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 4h11M2.5 8h11M2.5 12h7"/></svg>
+              Transcript
+            </button>
+            <button class="tab">
+              <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 6.5V4a3 3 0 0 1 6 0v2.5M3.5 6.5h9v6.5a.5.5 0 0 1-.5.5h-8a.5.5 0 0 1-.5-.5v-6.5z"/></svg>
+              Codes <span class="warn-dot"></span>
+            </button>
+            <button class="tab">
+              <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="10" r="3.5"/><circle cx="10" cy="6" r="3.5"/></svg>
+              Rx <span class="warn-dot crit"></span>
+            </button>
+            <button class="tab">
+              <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2.5l1.6 3.4 3.4.5-2.5 2.4.6 3.5L8 10.6l-3.1 1.7.6-3.5L3 6.4l3.4-.5z"/></svg>
+              Extras
+            </button>
+          </div>
+          <div class="pt-strip">
+            <span class="pt-name">Jeffrey Whitaker</span>
+            <span class="sep">·</span><span>59M</span>
+            <span class="sep">·</span><span>Primary Care</span>
+            <span class="sep">·</span><span class="meta">2026-05-09 · 22 min</span>
+            <span class="grow"></span>
+            <span class="mrn">MRN 4128-09</span>
+          </div>
+          <div class="body">
+            <div class="stage">
+              <div class="filter-bar">
+                <span class="lbl">Highlights</span>
+                <span class="ent-filter sage"><span class="swatch"></span>Diagnoses<span class="ct">7</span></span>
+                <span class="ent-filter sage"><span class="swatch"></span>Medications<span class="ct">5</span></span>
+                <span class="ent-filter sage"><span class="swatch"></span>Vitals<span class="ct">6</span></span>
+                <span class="ent-filter amber"><span class="swatch"></span>Asks<span class="ct">2</span></span>
+                <span class="ent-filter danger"><span class="swatch"></span>Critical<span class="ct">1</span></span>
+                <span class="grow"></span>
+                <span class="meta">21 entities · hover for source</span>
+              </div>
+
+              <article class="soap-section">
+                <header class="soap-section-head">
+                  <div class="lhs">
+                    <span class="soap-eyebrow"><span class="soap-letter">S</span>Subjective</span>
+                    <span class="sec-status sec-status--reviewed">Reviewed</span>
+                  </div>
+                  <span class="pulse-meta"><span class="dot"></span>HPI · 4 elements</span>
+                </header>
+                <div class="soap-section-body">
+                  <div class="md-h2">Chief Complaint</div>
+                  <p class="md-p"><span class="ent sage" data-meta="condition · M54.12">Neck and shoulder pain with radiation</span>, plus <span class="ent sage" data-meta="condition · S39.012A">low back pain</span> following a <span class="ent amber" data-meta="ask · MVA date · confirm">motor vehicle accident on 12/30/2025</span>.</p>
+
+                  <div class="md-h2">HPI</div>
+                  <p class="md-p">59-year-old male presents for evaluation of persistent post-MVA pain. Pain is constant and dull with intermittent sharp episodes, radiating from cervical region into right shoulder and arm. Difficulty with cervical rotation and lifting. OTC <span class="ent med" data-meta="med · ibuprofen 400 mg PRN">ibuprofen</span> with minimal relief. Sleep disrupted.</p>
+                  <p class="md-p">Denies head trauma, LOC, numbness/tingling, saddle anesthesia, bowel/bladder changes, fever, weight loss.</p>
+
+                  <div class="md-h2">PMH</div>
+                  <p class="md-p"><span class="ent sage" data-meta="condition · I10 · since 2018">HTN (2018)</span> · <span class="ent sage" data-meta="condition · E11.9 · A1C 7.2%">T2DM (2020)</span> · <span class="ent sage" data-meta="condition · E78.5">Hyperlipidemia</span> · <span class="ent sage" data-meta="condition · K21.9">GERD</span></p>
+
+                  <div class="md-h2">Medications</div>
+                  <ul class="md-ul">
+                    <li><span class="ent med" data-meta="ACE inhibitor · since 2020-09">Lisinopril 20 mg PO daily</span></li>
+                    <li><span class="ent med" data-meta="biguanide · last A1C 7.2%">Metformin 1000 mg PO BID</span></li>
+                    <li><span class="ent med" data-meta="statin · LDL goal &lt;100">Atorvastatin 40 mg PO qHS</span></li>
+                    <li><span class="ent danger" data-meta="not a real medication · phonetic match">Nitropyloprolol 50 mg PO daily</span> <span class="ent fix" data-meta="suggested replacement · 0.81 conf">→ Metoprolol?</span></li>
+                    <li><span class="ent med" data-meta="PPI · for GERD">Omeprazole 20 mg PO daily</span></li>
+                  </ul>
+
+                  <div class="md-h2">Allergies</div>
+                  <p class="md-p"><span class="ent amber" data-meta="ask · not in EHR · verify">Not documented — verify with patient</span></p>
+
+                  <div class="md-h2">Family History</div>
+                  <p class="md-p">Father <span class="ent sage" data-meta="event · age 67">MI age 67</span> · Mother <span class="ent sage" data-meta="condition">T2DM/HTN</span> · Brother <span class="ent sage" data-meta="condition">HTN</span></p>
+
+                  <div class="md-h2">Social History</div>
+                  <p class="md-p">Former <span class="ent sage" data-meta="risk factor · 30 PY · quit 2015">smoker</span> · 2-3 drinks/wk · Accountant</p>
+                </div>
+              </article>
+
+              <article class="soap-section">
+                <header class="soap-section-head">
+                  <div class="lhs">
+                    <span class="soap-eyebrow"><span class="soap-letter">O</span>Objective</span>
+                    <span class="sec-status sec-status--reviewed">Reviewed</span>
+                  </div>
+                  <span class="pulse-meta"><span class="dot"></span>Multi-system exam</span>
+                </header>
+                <div class="soap-section-body">
+                  <div class="md-h2">Vitals</div>
+                  <p class="md-p" style="line-height:2;margin:8px 0">
+                    <span class="vital-tok"><span class="v-lbl">BP</span><span class="ent amber" data-meta="↗ trending up · feb 132/82">138/86</span></span>
+                    &nbsp;<span class="vital-tok"><span class="v-lbl">HR</span><span class="ent vit" data-meta="vital · normal">76</span></span>
+                    &nbsp;<span class="vital-tok"><span class="v-lbl">Temp</span><span class="ent vit" data-meta="vital · normal">98.4°</span></span>
+                    &nbsp;<span class="vital-tok"><span class="v-lbl">RR</span><span class="ent vit" data-meta="vital · normal">16</span></span>
+                    &nbsp;<span class="vital-tok"><span class="v-lbl">SpO₂</span><span class="ent vit" data-meta="vital · normal">98%</span></span>
+                    &nbsp;<span class="vital-tok"><span class="v-lbl">BMI</span><span class="ent vit" data-meta="overweight · 25-29.9">28.4</span></span>
+                  </p>
+
+                  <div class="md-h2">Physical Exam</div>
+                  <p class="md-p"><strong>Gen:</strong> NAD, mild discomfort with cervical motion. <strong>Neck:</strong> <span class="ent sage" data-meta="exam · cervical paraspinal">TTP R paraspinal cervical</span>; ↓ROM rotation/lateral flexion. <strong>CV:</strong> RRR. <strong>Pulm:</strong> CTAB. <strong>MSK:</strong> <span class="ent sage" data-meta="exam · trapezius">R shoulder TTP trapezius</span>, neg impingement; <span class="ent sage" data-meta="exam · L4-L5">lumbar paraspinal TTP L4-L5</span>; SLR neg b/l. <strong>Neuro:</strong> A&Ox3, motor 5/5, DTRs 2+ symmetric.</p>
+                </div>
+              </article>
+
+              <article class="soap-section">
+                <header class="soap-section-head">
+                  <div class="lhs">
+                    <span class="soap-eyebrow"><span class="soap-letter">A</span>Assessment</span>
+                    <span class="sec-status sec-status--drafted">Drafted</span>
+                  </div>
+                  <span class="pulse-meta pulse-meta--boost"><span class="dot"></span>MDM · moderate w/ gap</span>
+                </header>
+                <div class="soap-section-body">
+                  <div class="md-h2">1 · Cervical strain w/ radicular sx, post-MVA <span class="ent sage" data-meta="ICD-10 · 0.93 conf · selected over M54.2 due to radicular features" style="font-family:var(--font-mono);font-size:11px;text-transform:none;letter-spacing:0.02em">M54.12</span></div>
+                  <p class="md-p">Mechanism, exam findings, and timing all consistent with cervical radiculopathy.</p>
+
+                  <div class="md-h2">2 · Lumbar strain, post-MVA <span class="ent sage" data-meta="ICD-10 · acute strain" style="font-family:var(--font-mono);font-size:11px;text-transform:none;letter-spacing:0.02em">S39.012A</span></div>
+                  <p class="md-p">Paraspinal tenderness without neurological deficits.</p>
+
+                  <div class="md-h2">3 · HTN, sub-optimally controlled <span class="ent sage" data-meta="ICD-10 · essential HTN" style="font-family:var(--font-mono);font-size:11px;text-transform:none;letter-spacing:0.02em">I10</span></div>
+                  <p class="md-p">Today's BP <span class="ent amber" data-meta="trend ↑ · 132/82 → 138/86">138/86</span>; trending up over last three visits.</p>
+                </div>
+              </article>
+
+              <article class="soap-section">
+                <header class="soap-section-head">
+                  <div class="lhs">
+                    <span class="soap-eyebrow"><span class="soap-letter">P</span>Plan</span>
+                    <span class="sec-status sec-status--drafted">Drafted</span>
+                  </div>
+                  <span class="pulse-meta"><span class="dot"></span>4 actions</span>
+                </header>
+                <div class="soap-section-body">
+                  <div class="md-h2">1 · Cervical strain</div>
+                  <ul class="md-ul">
+                    <li><span class="ent med" data-meta="muscle relaxant · NEW Rx">Cyclobenzaprine 5 mg PO TID PRN × 7 days</span></li>
+                    <li>PT cervical/thoracic, 2×/wk × 4 wk</li>
+                    <li>Continue ibuprofen 600 mg TID with food</li>
+                    <li>Return precautions reviewed</li>
+                  </ul>
+                  <div class="md-h2">2 · Lumbar strain</div>
+                  <ul class="md-ul"><li>Same PT visit · home exercise program · heat/ice</li></ul>
+                  <div class="md-h2">3 · HTN</div>
+                  <ul class="md-ul">
+                    <li>Recheck BP 2 wks · consider <span class="ent med" data-meta="dose adjustment">Lisinopril 20 → 40 mg</span> if persistent</li>
+                    <li>DASH diet · resume walking</li>
+                  </ul>
+                  <div class="md-h2">4 · Health maintenance</div>
+                  <ul class="md-ul"><li>Colonoscopy due (last 2014) · Pneumococcal vaccine · A1C drawn today</li></ul>
+                </div>
+              </article>
+
+              <div class="notebody-foot">
+                <div class="notebody-foot-meta"><span class="dot"></span>4 sections · last edit 4 m ago</div>
+                <button class="btn">
+                  <svg class="ic" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" style="width:14px;height:14px"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><path d="M2 10V2.5a.5.5 0 0 1 .5-.5H10"/></svg>
+                  Copy SOAP
+                </button>
+              </div>
+            </div>
+
+            <aside class="entity-rail">
+              <div class="entity-rail-h"><span>Entity index</span><span class="ct">21 / 21</span></div>
+
+              <div class="entity-group">
+                <div class="entity-group-h sage"><span class="swatch"></span>Diagnoses<span class="ct">7</span></div>
+                <div class="ent-row"><span class="nm">Cervical strain w/ rad sx</span><span class="meta">M54.12</span></div>
+                <div class="ent-row"><span class="nm">Lumbar strain</span><span class="meta">S39.012A</span></div>
+                <div class="ent-row"><span class="nm">Hypertension</span><span class="meta">I10</span></div>
+                <div class="ent-row"><span class="nm">T2DM</span><span class="meta">E11.9</span></div>
+                <div class="ent-row"><span class="nm">Hyperlipidemia</span><span class="meta">E78.5</span></div>
+                <div class="ent-row"><span class="nm">GERD</span><span class="meta">K21.9</span></div>
+                <div class="ent-row"><span class="nm">Health maintenance</span><span class="meta">Z00.00</span></div>
+              </div>
+
+              <div class="entity-group">
+                <div class="entity-group-h sage"><span class="swatch"></span>Medications<span class="ct">5</span></div>
+                <div class="ent-row"><span class="nm">Lisinopril 20 mg</span><span class="meta">qD</span></div>
+                <div class="ent-row"><span class="nm">Metformin 1 g</span><span class="meta">BID</span></div>
+                <div class="ent-row"><span class="nm">Atorvastatin 40 mg</span><span class="meta">qHS</span></div>
+                <div class="ent-row crit"><span class="nm">Nitropyloprolol</span><span class="meta">flag</span></div>
+                <div class="ent-row"><span class="nm">Omeprazole 20 mg</span><span class="meta">qD</span></div>
+              </div>
+
+              <div class="entity-group">
+                <div class="entity-group-h sage"><span class="swatch"></span>Vitals<span class="ct">6</span></div>
+                <div class="ent-row warn"><span class="nm">BP 138/86</span><span class="meta">↑</span></div>
+                <div class="ent-row"><span class="nm">HR 76 · BMI 28.4</span><span class="meta">+4</span></div>
+              </div>
+
+              <div class="entity-group">
+                <div class="entity-group-h amber"><span class="swatch"></span>Asks<span class="ct">2</span></div>
+                <div class="ent-row warn"><span class="nm">Allergies undocumented</span></div>
+                <div class="ent-row warn"><span class="nm">MVA date confirm</span></div>
+              </div>
+
+              <div class="entity-group">
+                <div class="entity-group-h danger"><span class="swatch"></span>Critical<span class="ct">1</span></div>
+                <div class="ent-row crit"><span class="nm">Rx safety: Nitropyloprolol</span><span class="meta">→ Metoprolol</span></div>
+              </div>
+            </aside>
+          </div>
+        </div>
+        <div id="concept-5" class="concept c5">
+          <div class="tabs">
+            <button class="tab active">
+              <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 2.5h7.5L13 5v8.5a.5.5 0 0 1-.5.5h-9a.5.5 0 0 1-.5-.5v-11a.5.5 0 0 1 .5-.5z"/><path d="M10 2.5V5h3"/></svg>
+              SOAP Note
+            </button>
+            <button class="tab">
+              <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 4h11M2.5 8h11M2.5 12h7"/></svg>
+              Transcript
+            </button>
+            <button class="tab">
+              <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 6.5V4a3 3 0 0 1 6 0v2.5M3.5 6.5h9v6.5a.5.5 0 0 1-.5.5h-8a.5.5 0 0 1-.5-.5v-6.5z"/></svg>
+              Codes <span class="warn-dot"></span>
+            </button>
+            <button class="tab">
+              <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="10" r="3.5"/><circle cx="10" cy="6" r="3.5"/></svg>
+              Rx <span class="warn-dot crit"></span>
+            </button>
+            <button class="tab">
+              <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2.5l1.6 3.4 3.4.5-2.5 2.4.6 3.5L8 10.6l-3.1 1.7.6-3.5L3 6.4l3.4-.5z"/></svg>
+              Extras
+            </button>
+          </div>
+          <div class="pt-strip">
+            <span class="pt-name">Jeffrey Whitaker</span>
+            <span class="sep">·</span><span>59M</span>
+            <span class="sep">·</span><span>Primary Care</span>
+            <span class="sep">·</span><span class="meta">2026-05-09 · 22 min</span>
+            <span class="grow"></span>
+            <span class="mrn">MRN 4128-09</span>
+          </div>
+          <div class="body">
+            <!-- TOP — Today, full fidelity -->
+            <section class="today">
+              <div class="zone-h">
+                <span class="sub">▸ Today</span>
+                <span class="ti"><span class="accent">2026-05-09</span>Active findings, problems, plan</span>
+                <span class="grow"></span>
+                <span class="meta">Dr. M. Reyes · 22 min · 3 active · 1 critical</span>
+              </div>
+
+              <div class="today-grid">
+                <div class="now-list">
+                  <div class="now-card crit">
+                    <div class="now-card-h">
+                      <span class="now-card-num">01</span>
+                      <span class="now-card-name">Cervical strain w/ radicular sx, post-MVA</span>
+                      <span class="now-card-icd">M54.12</span>
+                    </div>
+                    <p class="now-card-reasoning">Mechanism, exam findings, and timing all consistent with cervical radiculopathy without red-flag features.</p>
+                    <ul>
+                      <li><strong>Cyclobenzaprine</strong> 5 mg PO TID PRN × 7 days</li>
+                      <li>PT cervical/thoracic, 2×/wk × 4 wk</li>
+                      <li>Continue ibuprofen 600 mg TID with food</li>
+                      <li>Return precautions reviewed</li>
+                    </ul>
+                    <div class="crit-line">
+                      <span style="font-family:var(--font-mono);font-size:14px;color:var(--danger)">⚠</span>
+                      <span><strong>Critical · Rx safety:</strong> "Nitropyloprolol" in active meds → likely <strong style="color:var(--text)">Metoprolol</strong>. Resolve before signing.</span>
+                    </div>
+                  </div>
+
+                  <div class="now-card">
+                    <div class="now-card-h">
+                      <span class="now-card-num">02</span>
+                      <span class="now-card-name">Lumbar strain, post-MVA</span>
+                      <span class="now-card-icd">S39.012A</span>
+                    </div>
+                    <p class="now-card-reasoning">Paraspinal tenderness without neurological deficits.</p>
+                    <ul>
+                      <li>Same PT visit · home exercise program · heat/ice as tolerated</li>
+                    </ul>
+                  </div>
+
+                  <div class="now-card flag">
+                    <div class="now-card-h">
+                      <span class="now-card-num">03</span>
+                      <span class="now-card-name">Hypertension, sub-optimally controlled</span>
+                      <span class="now-card-icd">I10</span>
+                    </div>
+                    <p class="now-card-reasoning">Today's BP 138/86; trending upward despite stable regimen.</p>
+                    <ul>
+                      <li>Recheck BP in 2 weeks</li>
+                      <li>If persistent: <strong>Lisinopril 20 → 40 mg</strong></li>
+                      <li>DASH diet · resume walking when comfortable</li>
+                    </ul>
+                  </div>
+
+                  <div class="now-card" style="border-style:dashed">
+                    <div class="now-card-h">
+                      <span class="now-card-num">04</span>
+                      <span class="now-card-name">Health maintenance · 3 due</span>
+                      <span class="now-card-icd" style="color:var(--text-3)">Z00.00</span>
+                    </div>
+                    <ul>
+                      <li>Colonoscopy due (last 2014) · Pneumococcal vaccine · A1C drawn today</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <aside class="visit-snap">
+                  <h3>Today's Encounter</h3>
+                  <div class="cc">Neck and shoulder pain with radiation, plus low back pain following an MVA on 12/30/2025.</div>
+                  <div class="vit-stack">
+                    <div class="v warn"><div class="l">BP</div><div class="n">138/86</div></div>
+                    <div class="v"><div class="l">HR</div><div class="n">76</div></div>
+                    <div class="v"><div class="l">SpO₂</div><div class="n">98%</div></div>
+                    <div class="v"><div class="l">Temp</div><div class="n">98.4°</div></div>
+                    <div class="v"><div class="l">RR</div><div class="n">16</div></div>
+                    <div class="v"><div class="l">BMI</div><div class="n">28.4</div></div>
+                  </div>
+                  <div class="exam-key">
+                    <strong>Key exam:</strong> R cervical paraspinal TTP · ↓ROM rotation · R shoulder trapezius TTP · neg impingement · lumbar paraspinal TTP L4-L5 · SLR neg b/l · neuro intact (motor 5/5, DTRs 2+).
+                  </div>
+                  <div class="billing-mini">
+                    <span class="b">99213 → 99214</span>
+                    <span class="gap">Close MDM moderate + time gap</span>
+                    <span class="delta">+$32</span>
+                  </div>
+                </aside>
+              </div>
+            </section>
+
+            <!-- BOTTOM — Reference, collapsed -->
+            <section class="reference">
+              <div class="zone-h">
+                <span class="sub">▸ Reference</span>
+                <span class="ti">Background · stable since last visit</span>
+                <span class="grow"></span>
+                <span class="meta">8 areas · click to expand · 1 ask · 1 critical</span>
+              </div>
+
+              <div class="ref-grid">
+                <div class="ref-card" data-coll>
+                  <div class="ref-card-h" data-toggle>
+                    <span class="lbl">PMH</span>
+                    <span class="preview">HTN · T2DM · HLD · GERD</span>
+                    <span class="ch">›</span>
+                  </div>
+                  <div class="ref-card-body">
+                    <ul>
+                      <li><strong>Hypertension</strong> — diagnosed 2018</li>
+                      <li><strong>Type 2 DM</strong> — diagnosed 2020 · last A1C 7.2% (Feb 2026)</li>
+                      <li><strong>Hyperlipidemia</strong></li>
+                      <li><strong>GERD</strong></li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div class="ref-card crit" data-coll>
+                  <div class="ref-card-h" data-toggle>
+                    <span class="lbl">Medications · 1 critical</span>
+                    <span class="preview">5 active</span>
+                    <span class="ch">›</span>
+                  </div>
+                  <div class="ref-card-body">
+                    <ul>
+                      <li>Lisinopril 20 mg PO daily</li>
+                      <li>Metformin 1000 mg PO BID</li>
+                      <li>Atorvastatin 40 mg PO qHS</li>
+                      <li><span style="color:var(--danger);text-decoration:line-through;text-decoration-color:rgba(212,87,74,0.4)">Nitropyloprolol 50 mg PO daily</span> <span style="color:var(--sage-bright);font-weight:600">→ Metoprolol?</span></li>
+                      <li>Omeprazole 20 mg PO daily</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div class="ref-card flag" data-coll>
+                  <div class="ref-card-h" data-toggle>
+                    <span class="lbl">Allergies · ask</span>
+                    <span class="preview">Not documented</span>
+                    <span class="ch">›</span>
+                  </div>
+                  <div class="ref-card-body">
+                    <p style="color:var(--warning)">⌖ Not documented in chart — verify with patient before signing.</p>
+                    <div style="display:flex;gap:6px;margin-top:8px">
+                      <button class="btn" style="font-size:11px;padding:4px 10px;color:var(--warning);border-color:rgba(212,164,55,0.32);background:rgba(212,164,55,0.06)">Mark NKDA</button>
+                      <button class="btn" style="font-size:11px;padding:4px 10px">Has allergies</button>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="ref-card" data-coll>
+                  <div class="ref-card-h" data-toggle>
+                    <span class="lbl">Family Hx</span>
+                    <span class="preview">Father MI 67 · Mother T2DM</span>
+                    <span class="ch">›</span>
+                  </div>
+                  <div class="ref-card-body">
+                    <ul>
+                      <li>Father — MI age 67</li>
+                      <li>Mother — Type 2 DM, HTN</li>
+                      <li>Brother — HTN</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div class="ref-card" data-coll>
+                  <div class="ref-card-h" data-toggle>
+                    <span class="lbl">Social Hx</span>
+                    <span class="preview">Former smoker · accountant</span>
+                    <span class="ch">›</span>
+                  </div>
+                  <div class="ref-card-body">
+                    <ul>
+                      <li>Former smoker, 30 PY prior, quit 2015</li>
+                      <li>Alcohol 2-3 drinks/wk</li>
+                      <li>Lives with spouse · accountant</li>
+                      <li>Walks 30 min 3×/wk pre-MVA · currently limited</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div class="ref-card" data-coll>
+                  <div class="ref-card-h" data-toggle>
+                    <span class="lbl">ROS</span>
+                    <span class="preview">Negative except MSK</span>
+                    <span class="ch">›</span>
+                  </div>
+                  <div class="ref-card-body">
+                    <ul>
+                      <li><strong>Constitutional:</strong> no fever, fatigue WNL</li>
+                      <li><strong>HEENT:</strong> no headaches, vision changes</li>
+                      <li><strong>CV:</strong> no chest pain, palpitations</li>
+                      <li><strong>Resp:</strong> no SOB, cough</li>
+                      <li><strong>MSK:</strong> as in HPI</li>
+                      <li><strong>Neuro:</strong> no numbness, tingling, weakness</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div class="ref-card" data-coll>
+                  <div class="ref-card-h" data-toggle>
+                    <span class="lbl">Pertinent Negs</span>
+                    <span class="preview">No red flags</span>
+                    <span class="ch">›</span>
+                  </div>
+                  <div class="ref-card-body">
+                    <p>Denies head trauma, LOC, numbness/tingling, saddle anesthesia, bowel/bladder changes, fever, weight loss, night sweats. No malignancy hx.</p>
+                  </div>
+                </div>
+
+                <div class="ref-card" data-coll>
+                  <div class="ref-card-h" data-toggle>
+                    <span class="lbl">Prior Visits</span>
+                    <span class="preview">Last 2026-02-14</span>
+                    <span class="ch">›</span>
+                  </div>
+                  <div class="ref-card-body">
+                    <ul>
+                      <li>2026-02-14 — routine f/u · A1C 7.2%, BP 132/82</li>
+                      <li>2025-08-22 — routine f/u · BP 128/78</li>
+                      <li>2025-04-10 — annual physical</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+(function() {
+  const titles = ['Index + Body','Problem-Forward','Hero + Detail','Smart Highlights','Active vs Reference'];
+  const items = document.querySelectorAll('.lab-item');
+  const concepts = document.querySelectorAll('.concept');
+  const canvas = document.querySelector('.canvas');
+  const cbTitle = document.getElementById('cb-title');
+  const cbNum = document.getElementById('cb-num');
+
+  items.forEach(item => {
+    item.addEventListener('click', () => {
+      const c = item.dataset.c;
+      items.forEach(i => i.classList.remove('active'));
+      item.classList.add('active');
+      concepts.forEach(s => s.classList.remove('active'));
+      const target = document.getElementById('concept-' + c);
+      if (target) target.classList.add('active');
+      cbTitle.textContent = titles[parseInt(c) - 1];
+      cbNum.textContent = String(c).padStart(2, '0') + ' / 05';
+      const vp = document.querySelector('.viewport');
+      if (vp) vp.scrollTop = 0;
+    });
+  });
+
+  document.querySelectorAll('.vp-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.vp-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      canvas.dataset.vp = btn.dataset.vp;
+    });
+  });
+
+  document.addEventListener('click', (e) => {
+    const tab = e.target.closest('.tab');
+    if (tab && !tab.classList.contains('active')) {
+      const tabs = tab.parentElement.querySelectorAll('.tab');
+      tabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+    }
+    const tog = e.target.closest('[data-toggle]');
+    if (tog) {
+      const parent = tog.closest('[data-coll]');
+      if (parent) parent.classList.toggle('open');
+    }
+    const ack = e.target.closest('[data-ack]');
+    if (ack) ack.classList.toggle('done');
+    const exp = e.target.closest('[data-expand-target]');
+    if (exp) {
+      const id = exp.dataset.expandTarget;
+      const target = document.getElementById(id);
+      if (target) target.classList.toggle('open');
+    }
+  });
+
+  // Concept 1 scroll-spy — sets `.on` on the ToC link nearest the visible heading
+  const vp = document.querySelector('.viewport');
+  if (vp) {
+    vp.addEventListener('scroll', () => {
+      const c1 = document.querySelector('.c1.active');
+      if (!c1) return;
+      const sections = c1.querySelectorAll('[data-anchor]');
+      let active = null;
+      sections.forEach(s => {
+        const r = s.getBoundingClientRect();
+        if (r.top < 140) active = s.dataset.anchor;
+      });
+      if (!active) return;
+      c1.querySelectorAll('.toc-link').forEach(l => {
+        l.classList.toggle('on', l.dataset.anchor === active);
+      });
+    }, { passive: true });
+  }
+})();
+</script>
+
+</body>
+</html>
