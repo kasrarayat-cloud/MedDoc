@@ -449,27 +449,67 @@ interface JudgeResult {
   relevance: number;    // 1-10
   mean: number;
   rationale: string;
+  hallucinations: string[];
   inputTokens: number;
   outputTokens: number;
   latencyMs: number;
 }
 
-async function callJudgeSoap(referenceNote: string, generatedSoap: string): Promise<JudgeResult> {
+async function callJudgeSoap(
+  referenceTranscript: string,
+  referenceNote: string,
+  generatedSoap: string,
+): Promise<JudgeResult> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set');
 
+  // ── Methodology note (post-2026-05-10 correction) ──────────────────
+  // The first iteration of this judge scored against the reference
+  // note only. Inspection of PR #197's flagged "hallucinations"
+  // (e.g. case-01 "paracetamol 2 tablets QID", "did not measure
+  // temperature", "continued to attend work") revealed they were ALL
+  // present verbatim in the source transcript — they were absent only
+  // from the clinician's *summarized* reference note. The judge was
+  // penalizing the model for being MORE FAITHFUL to the transcript
+  // than the clinician's own abbreviated summary.
+  //
+  // Corrected methodology: the **TRANSCRIPT is the source of truth**.
+  // The reference note is auxiliary signal showing what the
+  // clinician thought was clinically important to capture. A
+  // generated SOAP detail is a hallucination IF AND ONLY IF the
+  // transcript does not support it. Generated details that appear in
+  // transcript but not in reference are NOT hallucinations — they
+  // are completeness wins.
   const system = [
     'You are a clinical-documentation reviewer evaluating an AI-generated',
-    'SOAP note against a reference note written by the consulting clinician.',
-    'Both describe the same patient encounter. Score the generated note on',
-    'three dimensions, 1–10 each:',
+    'SOAP note against a clinical consultation. You have two reference',
+    'artifacts:',
     '',
-    '  - completeness: Does the generated note cover the same clinical',
-    '    facts as the reference (CC, key HPI elements, relevant PMH/FHx,',
-    '    impression, plan)? Missing facts → lower score.',
-    '  - accuracy: Are the facts that ARE in the generated note actually',
-    '    supported by the reference (no hallucinated diagnoses, doses,',
-    '    or findings)? Hallucinations → lower score.',
+    '  1. The full role-labeled TRANSCRIPT of the consultation. This is',
+    '     your SOURCE OF TRUTH. Every fact in the generated SOAP must be',
+    '     traceable to the transcript.',
+    '  2. The REFERENCE NOTE written by the consulting clinician. This',
+    '     is the clinician\'s own abbreviated summary; it may itself be',
+    '     incomplete or imperfect relative to the transcript. Use it as',
+    '     a hint to what the clinician thought was important, NOT as',
+    '     ground truth.',
+    '',
+    'Score the generated note on three dimensions, 1–10 each:',
+    '',
+    '  - completeness (vs reference): Does the generated note cover the',
+    '    same clinical facts the reference captures (CC, key HPI, PMH,',
+    '    Plan)? Missing facts that the reference captured → lower score.',
+    '    Generated note containing MORE faithful detail than the',
+    '    reference is NOT a penalty — that\'s a completeness win.',
+    '',
+    '  - accuracy (vs transcript): Are the facts in the generated note',
+    '    supported by the TRANSCRIPT? **A fact is a hallucination IF',
+    '    AND ONLY IF the transcript does not support it.** A fact that',
+    '    appears in the transcript but NOT in the reference note is NOT',
+    '    a hallucination — it is the model being more faithful than the',
+    '    clinician\'s summary. Drug doses, frequencies, denials, ADLs,',
+    '    counts: trace each to the transcript before calling it wrong.',
+    '',
     '  - relevance: Does the generated note prioritize the clinically',
     '    important content (chief complaint, red flags, plan) over',
     '    boilerplate? Filler-heavy → lower score.',
@@ -480,15 +520,23 @@ async function callJudgeSoap(referenceNote: string, generatedSoap: string): Prom
     '  "completeness": 8,',
     '  "accuracy": 9,',
     '  "relevance": 7,',
-    '  "rationale": "short 2-3 sentence summary citing 1-2 specific gaps or strengths"',
+    '  "hallucinations": ["specific fact 1 not supported by transcript", "specific fact 2"],',
+    '  "rationale": "short 2-3 sentence summary citing 1-2 specific gaps or strengths, with transcript-line citations where possible"',
     '}',
+    '',
+    'The "hallucinations" array MUST be empty when accuracy is 10.',
+    'Only list a hallucination if you can confirm the fact is absent',
+    'from the transcript (not just absent from the reference note).',
   ].join('\n');
 
   const user = [
-    '## Reference note (ground truth)',
+    '## TRANSCRIPT (source of truth)',
+    referenceTranscript,
+    '',
+    '## REFERENCE NOTE (clinician summary — auxiliary signal only)',
     referenceNote,
     '',
-    '## Generated SOAP note (to evaluate)',
+    '## GENERATED SOAP NOTE (to evaluate)',
     generatedSoap,
   ].join('\n');
 
@@ -517,7 +565,13 @@ async function callJudgeSoap(referenceNote: string, generatedSoap: string): Prom
   const text = (json.content ?? []).find((b) => b.type === 'text')?.text ?? '';
   // Strip possible fences just in case
   const stripped = text.replace(/```(?:json)?\s*|\s*```/g, '').trim();
-  let parsed: { completeness: number; accuracy: number; relevance: number; rationale: string };
+  let parsed: {
+    completeness: number;
+    accuracy: number;
+    relevance: number;
+    rationale: string;
+    hallucinations?: string[];
+  };
   try {
     parsed = JSON.parse(stripped);
   } catch (e) {
@@ -530,6 +584,7 @@ async function callJudgeSoap(referenceNote: string, generatedSoap: string): Prom
     relevance: parsed.relevance,
     mean,
     rationale: parsed.rationale,
+    hallucinations: Array.isArray(parsed.hallucinations) ? parsed.hallucinations : [],
     inputTokens: json.usage?.input_tokens ?? 0,
     outputTokens: json.usage?.output_tokens ?? 0,
     latencyMs,
@@ -603,6 +658,7 @@ interface CaseResult {
   judgeAccuracy?: number;
   judgeRelevance?: number;
   judgeRationale?: string;
+  judgeHallucinations?: string[];
   judgeLatencyMs?: number;
   judgeInputTokens?: number;
   judgeOutputTokens?: number;
@@ -652,13 +708,15 @@ async function evalCase(c: Case): Promise<CaseResult> {
     result.l4OutputTokens = soapRes.outputTokens;
     result.generatedSoap = soapRes.soap;
 
-    // 7. Judge
-    const judge = await callJudgeSoap(noteJson.note, soapRes.soap);
+    // 7. Judge — now scores against the transcript (source of truth)
+    //    with the reference note as auxiliary signal. See callJudgeSoap.
+    const judge = await callJudgeSoap(refTranscript, noteJson.note, soapRes.soap);
     result.judgeMean = judge.mean;
     result.judgeCompleteness = judge.completeness;
     result.judgeAccuracy = judge.accuracy;
     result.judgeRelevance = judge.relevance;
     result.judgeRationale = judge.rationale;
+    result.judgeHallucinations = judge.hallucinations;
     result.judgeLatencyMs = judge.latencyMs;
     result.judgeInputTokens = judge.inputTokens;
     result.judgeOutputTokens = judge.outputTokens;
@@ -726,8 +784,17 @@ async function writeReport(
   lines.push(`**Dataset:** github.com/babylonhealth/primock57 — 57 mock consultations.`);
   lines.push(`**Cases run:** ${args.count} (seed: ${args.seed})`);
   lines.push(`**Pipeline path:** direct Deepgram (nova-3-medical) + Anthropic Opus 4.7 (SOAP). L4 prompt mirrors \`apps/transcribe-md/src/worker/layers/04-generate-soap.ts:96-150\`.`);
-  lines.push(`**Judge:** Anthropic Sonnet 4.6, 1–10 scoring on completeness + accuracy + relevance.`);
+  lines.push(`**Judge:** Anthropic Sonnet 4.6, 1–10 scoring on completeness + accuracy + relevance. **Methodology v2 (post-2026-05-10 correction):** scores accuracy against the TRANSCRIPT (source of truth), not the reference note. Reference is auxiliary signal only.`);
   lines.push('');
+
+  const totalHallucinations = successes.reduce(
+    (sum, r) => sum + (r.judgeHallucinations?.length ?? 0),
+    0,
+  );
+  const casesWithHallucinations = successes.filter(
+    (r) => (r.judgeHallucinations?.length ?? 0) > 0,
+  ).length;
+
   lines.push('## Summary');
   lines.push('');
   lines.push('| Metric | Value |');
@@ -738,6 +805,8 @@ async function writeReport(
   lines.push(`| Total audio | ${(totalAudioSec / 60).toFixed(1)} min |`);
   lines.push(`| Mean WER | ${pct(meanWer)} (n=${wers.length}) |`);
   lines.push(`| Mean SOAP score | ${meanJudge.toFixed(2)} / 10 (n=${judges.length}) |`);
+  lines.push(`| Cases with hallucinations | ${casesWithHallucinations} / ${successes.length} |`);
+  lines.push(`| Total hallucinations flagged | ${totalHallucinations} |`);
   lines.push(`| p50 end-to-end latency | ${Math.round(percentile(latencies, 50) / 1000)}s |`);
   lines.push(`| p95 end-to-end latency | ${Math.round(percentile(latencies, 95) / 1000)}s |`);
   lines.push(`| Total cost | ${dollars(totalCents)} |`);
@@ -780,6 +849,11 @@ async function writeReport(
     lines.push(`**WER:** ${pct(r.wer!)} · **Judge:** ${r.judgeMean!.toFixed(1)}/10 (completeness ${r.judgeCompleteness}, accuracy ${r.judgeAccuracy}, relevance ${r.judgeRelevance})`);
     lines.push('');
     lines.push(`**Judge rationale:** ${r.judgeRationale}`);
+    if ((r.judgeHallucinations?.length ?? 0) > 0) {
+      lines.push('');
+      lines.push(`**Hallucinations flagged (${r.judgeHallucinations!.length}):**`);
+      for (const h of r.judgeHallucinations!) lines.push(`- ${h}`);
+    }
     lines.push('');
     lines.push('<details><summary>Reference note</summary>');
     lines.push('');
