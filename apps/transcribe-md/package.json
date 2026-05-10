@@ -15,7 +15,8 @@
     "worker": "tsx src/worker.ts",
     "minio:cleanup": "tsx scripts/minio-cleanup.ts",
     "patients:backfill": "tsx scripts/backfill-patients.ts",
-    "patients:fix-drift": "tsx scripts/fix-patientname-drift.ts"
+    "patients:fix-drift": "tsx scripts/fix-patientname-drift.ts",
+    "eval:primock57": "tsx scripts/eval/primock57-run.ts"
   },
   "dependencies": {
     "@meddoc/ai": "*",

@@ -103,3 +103,11 @@ docs/smoke-test-*/test-data/session-storage.json
 # context, never committed.
 _design-references/*.zip
 _design-references/quillmd-processing-mockups.html
+
+# Host-only third-party eval datasets — never committed even when not
+# bound by a DUA. The PriMock57 corpus
+# (github.com/babylonhealth/primock57) lives under
+# `.local/datasets/primock57/` after the clone documented in
+# `apps/transcribe-md/scripts/eval/primock57-run.ts`. Local-only; eval
+# scripts read from this path but never write to it.
+.local/
