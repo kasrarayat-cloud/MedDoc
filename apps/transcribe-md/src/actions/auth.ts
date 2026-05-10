@@ -75,6 +75,12 @@ export interface FormErrorState {
     url: string;
     buttonLabel: string;
   };
+  /** Set when the account has mfaEnabled=true and the form has not
+   *  yet supplied a totpToken / recoveryCode. The form switches to
+   *  MFA mode (renders the 6-digit field + recovery-code link) and
+   *  re-submits with the second factor included. The email + password
+   *  are kept in `values` so the user doesn't retype. */
+  mfaRequired?: boolean;
 }
 export interface FormOkState {
   ok: true;
@@ -249,13 +255,65 @@ export async function loginAction(
       .catch(() => false);
   }
 
+  // MFA preflight (closes shadow-audit HIPAA_FINDING_001). When the
+  // user has mfaEnabled=true and the form has not supplied a second
+  // factor, return mfaRequired so the client switches to the MFA
+  // input and re-submits with the token. Re-runs the bcrypt check to
+  // avoid letting an attacker enumerate "account exists with MFA" by
+  // timing — every email path through here pays the bcrypt cost.
+  const mfaUser = await prisma.user.findUnique({
+    where: { email: parsed.data.email.trim().toLowerCase() },
+    select: {
+      passwordHash: true,
+      mfaEnabled: true,
+      isActive: true,
+      lockedUntil: true,
+    },
+  });
+  const credentialsValidForMfaCheck =
+    !!mfaUser?.isActive &&
+    (!mfaUser.lockedUntil || mfaUser.lockedUntil < new Date()) &&
+    (await bcrypt.compare(parsed.data.password, mfaUser.passwordHash));
+  if (credentialsValidForMfaCheck && mfaUser?.mfaEnabled) {
+    if (!parsed.data.totpToken && !parsed.data.recoveryCode) {
+      return {
+        ok: false,
+        errors: {},
+        values: { email: parsed.data.email },
+        mfaRequired: true,
+      };
+    }
+  } else {
+    // Equalize wall-clock for non-MFA paths — every login pays the
+    // same bcrypt cost regardless of whether MFA is on.
+    await bcrypt
+      .compare(parsed.data.password, DUMMY_PASSWORD_HASH)
+      .catch(() => false);
+  }
+
   try {
     await nextAuthSignIn('credentials', {
       redirect: false,
       email: parsed.data.email,
       password: parsed.data.password,
+      totpToken: parsed.data.totpToken ?? '',
+      recoveryCode: parsed.data.recoveryCode ?? '',
     });
   } catch {
+    // If MFA was required and we got here, the second factor is
+    // wrong. Surface a specific message + keep the form in MFA mode.
+    if (credentialsValidForMfaCheck && mfaUser?.mfaEnabled) {
+      return {
+        ok: false,
+        errors: {
+          _form: parsed.data.recoveryCode
+            ? 'Invalid recovery code.'
+            : 'Invalid 6-digit code. Try again.',
+        },
+        values: { email: parsed.data.email },
+        mfaRequired: true,
+      };
+    }
     return {
       ok: false,
       errors: { _form: 'Invalid email or password.' },
