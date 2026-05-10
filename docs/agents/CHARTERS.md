@@ -16,9 +16,9 @@
 | Agent | Status | Trigger | Catches |
 |---|---|---|---|
 | [QA Interaction Auditor](#1--qa-interaction-auditor) | **ACTIVE v3.3** | "Run the QA agent" / per-page invocations | UI behavior bugs (orphan dispatchers, "pretend success", parser/renderer mismatches) |
-| [AI Pipeline Auditor](#2--ai-pipeline-auditor) | **DORMANT (designed)** | "Run the AI pipeline audit" (post-activation) | AI pipeline drift (cost, quality, coverage, model assignment) |
-| [HIPAA Compliance Auditor](#3--hipaa-compliance-auditor) | **DORMANT (staged)** | "Run the HIPAA compliance audit" (post-activation) | Compliance posture drift (§164.308 / §164.310 / §164.312) |
-| [Code Quality / Pattern Auditor](#4--code-quality--pattern-auditor) | **ACTIVE on merge of `agent/code-quality-auditor-v1`** | "Run code quality audit on PR #N" / "Audit diff for pattern compliance" / "Code quality audit on `<path>`" | Pattern drift at PR time (design tokens, component patterns, schema rules, BullMQ patterns, server/client boundary, folder layout) |
+| [AI Pipeline Auditor](#2--ai-pipeline-auditor) | **SHADOW MODE** (advisory) | "Run the AI pipeline shadow audit" | AI pipeline drift (cost, quality, coverage, model assignment) |
+| [HIPAA Compliance Auditor](#3--hipaa-compliance-auditor) | **SHADOW MODE** (advisory) | "Run the HIPAA compliance shadow audit" | Compliance posture drift (§164.308 / §164.310 / §164.312) |
+| [Code Quality / Pattern Auditor](#4--code-quality--pattern-auditor) | **ACTIVE v1** | "Run code quality audit on PR #N" / "Audit diff for pattern compliance" / "Code quality audit on `<path>`" | Pattern drift at PR time (design tokens, component patterns, schema rules, BullMQ patterns, server/client boundary, folder layout) |
 
 ## Convergence on file structure
 
@@ -28,26 +28,36 @@ choices:
 - QA Interaction Auditor: full-fat — `SKILL.md` + `README.md` + `skills/`
   with five docs + `scripts/` populated with real walkers + `tests/`
   + `fixtures/` with seed JSON.
-- AI Pipeline Auditor: design-only — no `SKILL.md` (intentional — the
-  agent is dormant; absence of `SKILL.md` means Lead's skill system
-  doesn't list it as invocable yet) + `README.md` + `skills/` with
-  four design docs + `fixtures/` + `scripts/` as `.gitkeep` placeholders.
-- HIPAA Compliance Auditor: design-only — same shape as AI Pipeline
-  Auditor. **The most recent of the three; canonicalised here as the
-  reference for new agents.**
+- AI Pipeline Auditor: **shadow** — `SKILL.md` (shadow-mode trigger
+  phrase, advisory output path) + `README.md` + `skills/` with four
+  design docs + `fixtures/` + `scripts/` as `.gitkeep` placeholders
+  until graduation. The `SKILL.md` was added on transition from DORMANT
+  → SHADOW (`agent/auditors-shadow-mode`).
+- HIPAA Compliance Auditor: **shadow** — same shape as AI Pipeline
+  Auditor. **The most recent design-only template before shadow flip
+  (now both auditors are shadow-mode-equivalent in structure);
+  canonicalised here as the reference for new agents that ship
+  shadow-first.**
 
-**Convergence rule going forward.** New agents follow the HIPAA pattern
-when designed-but-dormant; promote to the QA pattern (real
-`SKILL.md` + populated `scripts/` + `fixtures/`) at activation:
+**Convergence rule going forward.** New agents ship in **shadow mode**
+when their findings need pilot data or operator-trust ramp-up before
+graduating to the production-blocking path. Shadow mode is the canonical
+intermediate state:
+
+| State | `SKILL.md`? | Output path | Action coupling |
+|---|---|---|---|
+| DORMANT (designed) | absent | n/a | none — not invocable |
+| SHADOW (current shape for AI + HIPAA) | present, advisory trigger | `docs/agent-shadow-runs/<name>/<UTC>.md` | none — advisory only |
+| ACTIVE (graduated) | present, production trigger | per-agent production path | per-agent contract |
 
 ```
 .claude/agents/<name>/
-├── README.md            (operator-facing)
-├── SKILL.md             (skill registration; present iff agent is ACTIVE)
+├── README.md            (operator-facing; status block at top)
+├── SKILL.md             (present in SHADOW or ACTIVE; absent in DORMANT)
 ├── fixtures/.gitkeep    (or real fixtures when ACTIVE)
 ├── scripts/.gitkeep     (or real scripts when ACTIVE)
 └── skills/
-    ├── activation-criteria.md
+    ├── activation-criteria.md   (defines graduation criteria)
     ├── data-sources.md
     ├── finding-classes.md
     └── methodology.md
@@ -89,7 +99,7 @@ their methodology genuinely needs them.
 | **Out of scope** | UI behavior. Schema correctness. Compliance posture. Pattern conformance of pipeline source code (that's the Code Quality Auditor). |
 | **Runtime** | Nightly (post-activation) + on-demand. Read-only against the database; never reads PHI content; row counts bucketed before reporting. |
 | **Trigger phrase** | "Run the AI pipeline audit" |
-| **Activation status** | **DORMANT (designed, gated).** Activates when ≥20 visits across ≥3 distinct doctors with `status=READY` exist in `transcribe_visits`. Below threshold the findings would be stylistic rather than behavioral. See `.claude/agents/ai-pipeline-auditor/skills/activation-criteria.md`. |
+| **Activation status** | **SHADOW MODE** as of merge of `agent/auditors-shadow-mode`. Runs on demand against the live database; findings route to `docs/agent-shadow-runs/ai-pipeline/<UTC>.md` (advisory) instead of the production report path. Phases that don't depend on the hard gate (≥20 visits across ≥3 doctors with `status=READY`) produce real signal today; gate-blocked phases emit `NO_DATA`. Graduation to the production path requires hard gate met + baselines baked + Postgres role provisioned + operator approval. See `.claude/agents/ai-pipeline-auditor/skills/activation-criteria.md`. |
 | **File location** | `.claude/agents/ai-pipeline-auditor/` |
 | **Owner of overlapping concerns** | **OWNS:** AI cost/quality/coverage drift, model assignment drift, prompt-cache hit rate analysis, layer-skip correctness across pipeline runs, eval-corpus regression detection. |
 
@@ -106,7 +116,7 @@ their methodology genuinely needs them.
 | **Out of scope** | Pattern conformance of source code (Code Quality Auditor). UI walking (QA Auditor). AI pipeline drift (AI Pipeline Auditor). Counsel-grade reportability decisions — agent NEVER decides reportability; only flags `ocr_reportable_candidate: true` for findings counsel should review. |
 | **Runtime** | Nightly (post-activation) + on-demand. Per-phase activation gating — most phases run today; phases 2 + 3 wait for pilot data. |
 | **Trigger phrase** | "Run the HIPAA compliance audit" |
-| **Activation status** | **DORMANT (staged).** Phases 0 / 5 / 6 / 7 / 8 / 9 can run today (schema sanity, transmission, encryption, BAAs, encryption posture, reporting). Phases 1 + 4 need ≥3 active accounts (currently met). Phases 2 + 3 (audit controls + integrity) share the same pilot-data threshold as `ai-pipeline-auditor`. See `.claude/agents/hipaa-compliance-auditor/skills/activation-criteria.md`. |
+| **Activation status** | **SHADOW MODE** as of merge of `agent/auditors-shadow-mode`. Runs on demand against the live system; findings route to `docs/agent-shadow-runs/hipaa-compliance/<UTC>.md` (advisory) instead of the production report path. Phases 0/1/4/5/6/7/8/9 produce real signal today; phases 2 + 3 emit `NO_DATA` markers until the pilot threshold (≥20 visits across ≥3 doctors with `status=READY`) is met. **Severity is preserved in shadow** — `BLOCKING_*` findings should still be escalated to compliance counsel. Graduation to the production path requires pilot threshold met + phases 2+3 producing real signal + counsel review of one shadow report + operator approval. See `.claude/agents/hipaa-compliance-auditor/skills/activation-criteria.md`. |
 | **File location** | `.claude/agents/hipaa-compliance-auditor/` |
 | **Owner of overlapping concerns** | **OWNS:** runtime audit-row correctness (does `LOGIN_FAILED` actually emit a row when a failed login occurs?), audit-log retention windows, BAA expiration, MFA coverage, encryption-at-rest verification, transmission-security verification. |
 

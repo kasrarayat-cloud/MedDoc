@@ -1,8 +1,54 @@
 # Activation criteria — HIPAA Compliance Auditor
 
-> **Status: design only.** Per-phase activation gating
-> distinguishes this agent from the other two — most
-> phases can run today; a few wait for pilot data.
+> **Status: SHADOW MODE** as of merge of
+> `agent/auditors-shadow-mode`. Per-phase activation gating
+> distinguishes this agent from the other two — most phases
+> run today; phases 2 + 3 wait for pilot data and emit
+> `NO_DATA` markers in the shadow report until the threshold
+> is met.
+
+## Shadow mode (current)
+
+Shadow mode means the agent runs against the live system but
+findings route to a **shadow report path**, not the
+post-graduation production report path. See `SKILL.md` for the
+operator-facing description.
+
+### Shadow output contract
+
+| Field | Value |
+|---|---|
+| **Output path** | `docs/agent-shadow-runs/hipaa-compliance/<UTC-timestamp>.md` |
+| **Format** | Markdown, structured per `methodology.md` phase order; phase-coverage table at the top. |
+| **Severity behaviour** | Severity preserved. `BLOCKING_*` findings stay `BLOCKING_*` — per `SKILL.md` they should be escalated to compliance counsel even in shadow mode. Shadow only relocates the report; it does not downgrade. |
+| **Action coupling** | None. Shadow reports never trigger automated action (no merge block, no deploy gate, no email). Operator reads + decides + escalates. |
+| **Retention** | One file per run; move to per-month subdirs once the directory grows past ~30 reports. |
+
+### Why a separate path
+
+The post-graduation path (`docs/hipaa-compliance-reports/…`) is
+reserved for runs that have been ratified by compliance counsel
+as the official signal. Shadow runs should not be mistaken for
+the official record — they are operator-facing
+intuition-builders, not external-audience artifacts.
+
+## Graduation criteria (shadow → production)
+
+Graduation requires ALL of:
+
+1. **Pilot threshold met** — ≥20 visits across ≥3 doctors with
+   `status=READY` (mirrors the AI Pipeline Auditor's gate).
+2. **Phase 2 + Phase 3 produce real signal** — at least one
+   shadow report shows non-NO_DATA rollups for those phases.
+3. **Compliance counsel review of one shadow report** —
+   counsel confirms the report shape is acceptable for the
+   audience that will consume the production report.
+4. **Operator approval** — explicit "graduate the HIPAA
+   compliance auditor" instruction. Edit
+   `.claude/agents/hipaa-compliance-auditor/README.md` + this
+   file's status block in the same PR.
+
+Until all four are done, the agent stays in shadow.
 
 ## Per-phase gating (the novel piece)
 
