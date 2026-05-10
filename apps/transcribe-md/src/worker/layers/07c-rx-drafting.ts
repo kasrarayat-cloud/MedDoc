@@ -65,7 +65,16 @@ export type Prescription = z.infer<typeof Prescription>;
 
 export const RxWarning = z.object({
   severity: z.enum(['critical', 'major', 'minor']),
-  rx_drug: z.string().min(1),
+  // Q1 #19 follow-up: model returns null for general warnings (no
+  // specific drug attribution; e.g. "no medications prescribed"
+  // observations). 15 of 69 tm_rx_drafting calls SCHEMA_FAILed on
+  // this in the 2026-05-10 baseline. Coerce null → "General" so the
+  // wire-shape stays string (downstream pdf-generator, docx-generator,
+  // ehr-formatters, rx-tab.tsx all treat this as a non-null string).
+  rx_drug: z.preprocess(
+    (value) => (value == null ? 'General' : value),
+    z.string().min(1),
+  ),
   message: z.string().min(1),
   evidence_quote: z.string().optional().nullable(),
 });

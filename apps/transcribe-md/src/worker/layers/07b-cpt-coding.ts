@@ -26,7 +26,20 @@ const EmReasoning = z.object({
     .default([]),
   /** Free-text summary of labs/imaging/records reviewed. */
   data: z.string(),
-  risk: z.enum(['minimal', 'low', 'moderate', 'high']),
+  // Q1 #19 follow-up: model occasionally writes prose into this enum
+  // field (e.g. "Low — prescription NSAID initiated; however..."
+  // instead of just "low"). 47 of 103 tm_cpt_coding calls SCHEMA_FAILed
+  // on this exact pattern in the 2026-05-10 baseline shadow audit.
+  // Preprocess extracts the first enum value present in the string;
+  // strict enum still applies if extraction returns no match.
+  risk: z.preprocess(
+    (value) => {
+      if (typeof value !== 'string') return value;
+      const match = value.toLowerCase().match(/\b(minimal|low|moderate|high)\b/);
+      return match ? match[1] : value;
+    },
+    z.enum(['minimal', 'low', 'moderate', 'high']),
+  ),
 });
 
 export const EmCode = z.object({
