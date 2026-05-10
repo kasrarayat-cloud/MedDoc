@@ -19,6 +19,7 @@
 | [AI Pipeline Auditor](#2--ai-pipeline-auditor) | **SHADOW MODE** (advisory) | "Run the AI pipeline shadow audit" | AI pipeline drift (cost, quality, coverage, model assignment) |
 | [HIPAA Compliance Auditor](#3--hipaa-compliance-auditor) | **SHADOW MODE** (advisory) | "Run the HIPAA compliance shadow audit" | Compliance posture drift (§164.308 / §164.310 / §164.312) |
 | [Code Quality / Pattern Auditor](#4--code-quality--pattern-auditor) | **ACTIVE v1** | "Run code quality audit on PR #N" / "Audit diff for pattern compliance" / "Code quality audit on `<path>`" | Pattern drift at PR time (design tokens, component patterns, schema rules, BullMQ patterns, server/client boundary, folder layout) |
+| [Performance Auditor](#5--performance-auditor) | **SHADOW MODE** (advisory) | "Run the performance shadow audit" / "Run the performance bundle check on PR #N" | Runtime performance drift (pipeline RTT, BullMQ queue + DLQ, Prisma N+1 on diff, route TTFB, bundle size delta) |
 
 ## Convergence on file structure
 
@@ -136,6 +137,23 @@ their methodology genuinely needs them.
 | **Activation status** | **ACTIVE on merge** of branch `agent/code-quality-auditor-v1`. No gate — pattern auditing's signal is the codebase itself, not runtime data. Read-only; never touches DB / MinIO / production. |
 | **File location** | `.claude/agents/code-quality-auditor/` |
 | **Owner of overlapping concerns** | **OWNS:** PR-time pattern presence checking (was a `logAudit` call written?), design-token vs hardcoded value detection, server/client boundary directive checking, scope-guard enforcement (no cross-app imports, no `apps/meddoc-pro/**` modifications). |
+
+---
+
+## 5 · Performance Auditor
+
+| Field | Value |
+|---|---|
+| **Name** | Performance Auditor |
+| **Version** | v1 (shadow-mode at file creation) |
+| **Purpose** | Audits QuillMD's runtime performance posture — pipeline RTT, BullMQ queue depth + DLQ, Prisma N+1 on PR diff, route TTFB on `/visits` + `/visits/[id]` + `/visits/[id]/record`, client bundle-size delta. Read-only against `transcribe_visits` + Redis + Next.js build manifest. |
+| **Scope** | `transcribe_visits` timestamps; Redis `bull:transcribe-md:*` SET cardinalities; `apps/transcribe-md/.next/app-build-manifest.json`; PR diffs (Prisma N+1 static analysis). 5 phases. |
+| **Out of scope** | UI behaviour (qa-interaction-auditor). AI pipeline cost (ai-pipeline-auditor). Compliance posture (hipaa-compliance-auditor). Source-code patterns (code-quality-auditor; though Prisma N+1 on diff overlaps mildly — see boundary section). VPS-level CPU/RAM/disk (operator-owned). |
+| **Runtime** | On-demand. Read-only against the live database + Redis + filesystem. Never reads PHI columns (transcript / SOAP / patient identifiers). Never deserializes job payloads (cardinalities only). |
+| **Trigger phrase** | "Run the performance shadow audit" (full pass) / "Run the performance bundle check on PR #N" (PR-diff bundle-only mode) |
+| **Activation status** | **SHADOW MODE** at file creation in `agent/performance-auditor-v1`. Findings route to `docs/agent-shadow-runs/performance/<UTC>.md` (advisory). Phases 2 (queue + DLQ), 3 (Prisma N+1 on diff), 5 (bundle size delta) produce real signal today; phases 1 (pipeline RTT) and 4 (route TTFB) emit `NO_BASELINE` until baseline tables are baked. **Severity is preserved in shadow** — `BLOCKING_OUTAGE` findings (e.g. DLQ depth > 100) should still trigger immediate operator action. Graduation to the production path requires hard gate met (≥200 visits over 14 days) + baselines baked + one shadow report reviewed + operator approval. See `.claude/agents/performance-auditor/skills/activation-criteria.md`. |
+| **File location** | `.claude/agents/performance-auditor/` |
+| **Owner of overlapping concerns** | **OWNS:** runtime performance drift across pipeline / queue / route / bundle dimensions. **Shares with code-quality-auditor:** Prisma N+1 catches in PR diffs — code-quality flags syntactic shape (in-loop await of Prisma call); performance flags it as a regression-class via baseline comparison + bundle/throughput context. |
 
 ---
 
