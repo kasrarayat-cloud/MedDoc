@@ -85,8 +85,18 @@ export function withApiHandler<P extends Record<string, string>>(
   ) => Promise<NextResponse>
 ): (req: NextRequest, ctx: ApiRouteContext<P>) => Promise<NextResponse> {
   return async (req, ctx) => {
+    // Performance Auditor Phase 4 (PERFORMANCE_FINDING_002 closure):
+    // capture wall-clock for every API route + emit as the
+    // `X-Response-Time` header. Phase 4 of the Performance Auditor
+    // reads route TTFB from this signal; without it, Phase 4 emits
+    // NO_DATA. Server-Timing header makes it visible to dev tools too.
+    const t0 = Date.now();
     try {
-      return await handler(req, ctx);
+      const response = await handler(req, ctx);
+      const ms = Date.now() - t0;
+      response.headers.set('X-Response-Time', `${ms}ms`);
+      response.headers.set('Server-Timing', `app;dur=${ms}`);
+      return response;
     } catch (err) {
       // T-M18.1 A1: scrub before stdout. `err` here is whatever slipped
       // past the handler's own try/catch — Prisma errors in particular
@@ -97,11 +107,15 @@ export function withApiHandler<P extends Record<string, string>>(
       // free-text blocks. Every route-level try/catch in this codebase
       // already pipes err through redactPhi; without this line, the
       // catchall defeated the pattern.
+      const ms = Date.now() - t0;
       console.error(
-        `[${prefix}] unexpected error:`,
+        `[${prefix}] unexpected error after ${ms}ms:`,
         redactPhi(err instanceof Error ? err.message : err)
       );
-      return apiError('internal server error', 500);
+      const response = apiError('internal server error', 500);
+      response.headers.set('X-Response-Time', `${ms}ms`);
+      response.headers.set('Server-Timing', `app;dur=${ms}`);
+      return response;
     }
   };
 }
