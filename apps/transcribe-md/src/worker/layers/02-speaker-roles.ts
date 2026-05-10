@@ -12,9 +12,14 @@
 // ============================================================================
 
 import { z } from 'zod';
-import { modelClient } from '@meddoc/ai';
+import {
+  modelClient,
+  type DeepgramUtterance,
+  wrapAsData,
+  delimiterSystemSuffix,
+} from '@meddoc/ai';
 import prisma from '@meddoc/db';
-import type { DeepgramUtterance } from '@meddoc/ai';
+import { logAudit } from '@/lib/audit';
 
 const MODEL = 'claude-sonnet-4-6';
 
@@ -133,7 +138,27 @@ export async function runLayer2SpeakerRoles(
     'Confidence is 0.0-1.0. Keep reasoning under 200 characters.',
   ].join('\n');
 
-  const user = blocks.join('\n\n');
+  // Q1 #18 — L2 was previously feeding raw user-supplied content (the
+  // diarized utterances) directly into the user prompt with no
+  // delimiter wrap. Pattern-copied from L3 (extract-entities).
+  // Even though L2 is upstream of L3 in the pipeline, the speaker
+  // utterances themselves are user-content and a crafted utterance
+  // could in principle attempt prompt injection at this stage.
+  const userContent = blocks.join('\n\n');
+  const wrap = wrapAsData(userContent, 'transcript');
+  if (wrap.injectionAttemptDetected) {
+    void logAudit({
+      action: 'PIPELINE_REJECTED_INJECTION_DELIMITER',
+      targetType: 'transcribe_visit',
+      targetId: input.visitId,
+      success: false,
+      errorCode: 'INJECTION_DELIMITER_DETECTED',
+      metadata: { layer: 'L2', suffix: wrap.suffix },
+    });
+  }
+  const user = [wrap.wrapped, '', delimiterSystemSuffix('transcript')].join(
+    '\n',
+  );
 
   const speakerMap = await modelClient.complete({
     practiceId: input.practiceId,
