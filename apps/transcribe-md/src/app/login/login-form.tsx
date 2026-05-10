@@ -67,6 +67,12 @@ export function LoginForm() {
     state && !state.ok ? state.needsVerificationFor : undefined;
   const crossAppRedirect =
     state && !state.ok ? state.crossAppRedirect : undefined;
+  // MFA challenge state — set when loginAction returns mfaRequired:true.
+  // The form switches to a single 6-digit input (or recovery code) and
+  // re-submits with the second factor included alongside email + pw.
+  const mfaRequired =
+    state && !state.ok && state.mfaRequired === true ? true : false;
+  const [useRecovery, setUseRecovery] = useState(false);
 
   async function resendVerification() {
     if (!needsVerificationFor) return;
@@ -136,6 +142,85 @@ export function LoginForm() {
         />
         <AuthFieldError message={errors.password} />
       </div>
+
+      {mfaRequired && !useRecovery && (
+        <div style={{ marginTop: 14 }}>
+          <AuthFieldLabel htmlFor="totpToken">6-digit code</AuthFieldLabel>
+          <input
+            id="totpToken"
+            name="totpToken"
+            type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            maxLength={7}
+            placeholder="123456"
+            required
+            autoFocus
+            style={{
+              ...inputStyle,
+              marginTop: 6,
+              fontFamily: 'var(--font-mono)',
+              letterSpacing: '2px',
+              fontSize: 16,
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => setUseRecovery(true)}
+            style={{
+              marginTop: 6,
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              fontSize: 11.5,
+              color: 'var(--color-linear-sage-bright)',
+              cursor: 'pointer',
+              fontFamily: 'var(--font-sans)',
+              fontWeight: 500,
+            }}
+          >
+            Use a recovery code instead
+          </button>
+        </div>
+      )}
+
+      {mfaRequired && useRecovery && (
+        <div style={{ marginTop: 14 }}>
+          <AuthFieldLabel htmlFor="recoveryCode">Recovery code</AuthFieldLabel>
+          <input
+            id="recoveryCode"
+            name="recoveryCode"
+            type="text"
+            maxLength={20}
+            autoComplete="off"
+            placeholder="ABCD-1234"
+            required
+            autoFocus
+            style={{
+              ...inputStyle,
+              marginTop: 6,
+              fontFamily: 'var(--font-mono)',
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => setUseRecovery(false)}
+            style={{
+              marginTop: 6,
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              fontSize: 11.5,
+              color: 'var(--color-linear-sage-bright)',
+              cursor: 'pointer',
+              fontFamily: 'var(--font-sans)',
+              fontWeight: 500,
+            }}
+          >
+            Use 6-digit code instead
+          </button>
+        </div>
+      )}
 
       {!crossAppRedirect && <AuthFieldError message={errors._form} />}
 

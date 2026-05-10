@@ -13,6 +13,11 @@ import { z } from 'zod';
 export const LoginSchema = z.object({
   email: z.string().email().max(254),
   password: z.string().min(1, 'Password is required'),
+  // MFA — both optional. When the user has mfaEnabled=true,
+  // loginAction requires one of these on the second submission.
+  // Validated server-side; the client form decides when to send.
+  totpToken: z.string().max(40).optional(),
+  recoveryCode: z.string().max(40).optional(),
 });
 
 export const SignupSchema = z.object({

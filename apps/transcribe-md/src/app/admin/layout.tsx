@@ -19,7 +19,7 @@
 // ============================================================================
 
 import { headers } from 'next/headers';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 
 import { Product } from '@prisma/client';
 import { auth } from '@/lib/nextauth';
@@ -64,6 +64,25 @@ export default async function AdminLayout({
 
   if (!hasSuperAdmin) {
     notFound();
+  }
+
+  // SUPER_ADMIN MFA gate (closes shadow-audit HIPAA_FINDING_001).
+  // SUPER_ADMINs MUST have MFA enrolled before reaching any /admin/*
+  // page. We redirect to the enrollment surface rather than 404 so
+  // the operator can self-recover; the redirect URL itself doesn't
+  // leak the admin gate (the user is already authenticated at this
+  // point + already known to be SUPER_ADMIN). DB read is fresh — we
+  // don't trust a JWT-cached mfaEnabled flag because enrollment
+  // happens in-session.
+  if (session?.user?.id) {
+    const prismaForMfa = (await import('@meddoc/db')).default;
+    const mfaUser = await prismaForMfa.user.findUnique({
+      where: { id: session.user.id },
+      select: { mfaEnabled: true },
+    });
+    if (!mfaUser?.mfaEnabled) {
+      redirect('/settings/security/mfa?reason=super_admin_required');
+    }
   }
 
   // Phase 19 — h16-admin-session-7day. Cookie itself stays 7 days
