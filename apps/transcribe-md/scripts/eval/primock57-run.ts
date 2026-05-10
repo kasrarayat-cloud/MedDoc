@@ -592,7 +592,29 @@ async function callJudgeSoap(
 }
 
 // ─── WER ────────────────────────────────────────────────────────────────
+//
+// Two normalizations are emitted side-by-side so future readers can
+// compare against either internal trends or the published PriMock57
+// paper's baselines (Moramarco et al., ACL 2022).
+//
+//   - normalizeForWer (our internal): light normalization — lowercase,
+//     strip ASCII punctuation, collapse whitespace. KEEPS numbers,
+//     hyphenated words, and apostrophes. Stricter than PriMock57's
+//     alphabetic-only filter; reports a slightly HIGHER WER on
+//     average because token mismatches like "3" vs "three" and
+//     "follow-up" vs "follow up" count as errors.
+//
+//   - normalizeForWerPrimock57Aligned: matches the published
+//     paper's preprocessing exactly — alphabetic-only with apostrophe
+//     preserved, hyphen → space. Lower WER on average; the metric to
+//     cite when comparing against the paper's tables.
+//
+// PriMock57's reference: `.local/datasets/primock57/scripts/utils.py`
+// `preprocess_text()` (committed by the dataset authors).
 
+/** Our internal normalization — preserves more tokens to surface
+ *  cosmetic ASR drift (digits, hyphens). Stricter than PriMock57-
+ *  aligned and produces a slightly higher WER on the same audio. */
 function normalizeForWer(s: string): string[] {
   return s
     .toLowerCase()
@@ -603,15 +625,28 @@ function normalizeForWer(s: string): string[] {
     .filter((w) => w.length > 0);
 }
 
-function computeWer(reference: string, hypothesis: string): { wer: number; refWords: number } {
-  const ref = normalizeForWer(reference);
-  const hyp = normalizeForWer(hypothesis);
-  if (ref.length === 0) return { wer: 0, refWords: 0 };
+/** Matches `preprocess_text` in PriMock57's `scripts/utils.py`:
+ *  lowercase → hyphen-to-space → strip non-`[a-z \']` → collapse
+ *  whitespace. Use this when comparing WER against the paper's
+ *  published baselines (Moramarco et al., 2022). */
+function normalizeForWerPrimock57Aligned(s: string): string[] {
+  return s
+    .toLowerCase()
+    .replace(/-/g, ' ')
+    .replace(/[^a-z \']+/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .split(' ')
+    .filter((w) => w.length > 0);
+}
 
-  // Word-level Levenshtein, O(ref × hyp).
+/** Word-level Levenshtein over already-tokenised arrays. Identical
+ *  algorithm to NIST's sclite (insertion/deletion/substitution all
+ *  cost 1; final WER = edits / reference word count). */
+function werFromTokens(ref: string[], hyp: string[]): { wer: number; refWords: number } {
+  if (ref.length === 0) return { wer: 0, refWords: 0 };
   const m = ref.length;
   const n = hyp.length;
-  // Use Uint32Array — refs are <50K words typically; insertion/deletion/sub all = 1.
   let prev = new Uint32Array(n + 1);
   let curr = new Uint32Array(n + 1);
   for (let j = 0; j <= n; j++) prev[j] = j;
@@ -620,15 +655,36 @@ function computeWer(reference: string, hypothesis: string): { wer: number; refWo
     for (let j = 1; j <= n; j++) {
       const cost = ref[i - 1] === hyp[j - 1] ? 0 : 1;
       curr[j] = Math.min(
-        prev[j] + 1,         // deletion
-        curr[j - 1] + 1,     // insertion
-        prev[j - 1] + cost,  // substitution
+        prev[j] + 1,
+        curr[j - 1] + 1,
+        prev[j - 1] + cost,
       );
     }
     [prev, curr] = [curr, prev];
   }
-  const edits = prev[n];
-  return { wer: edits / ref.length, refWords: ref.length };
+  return { wer: prev[n] / ref.length, refWords: ref.length };
+}
+
+function computeWer(reference: string, hypothesis: string): {
+  wer: number;
+  werPaper: number;
+  refWords: number;
+  refWordsPaper: number;
+} {
+  const internal = werFromTokens(
+    normalizeForWer(reference),
+    normalizeForWer(hypothesis),
+  );
+  const paper = werFromTokens(
+    normalizeForWerPrimock57Aligned(reference),
+    normalizeForWerPrimock57Aligned(hypothesis),
+  );
+  return {
+    wer: internal.wer,
+    werPaper: paper.wer,
+    refWords: internal.refWords,
+    refWordsPaper: paper.refWords,
+  };
 }
 
 // ─── Per-case eval ──────────────────────────────────────────────────────
@@ -644,9 +700,12 @@ interface CaseResult {
   // Reference
   referenceTranscript?: string;
   referenceNote?: string;
-  // WER
+  // WER — internal (preserves digits/hyphens, slightly stricter)
   wer?: number;
   refWords?: number;
+  // WER — aligned with PriMock57 paper's preprocess_text (alpha-only)
+  werPaper?: number;
+  refWordsPaper?: number;
   // L4
   l4LatencyMs?: number;
   l4InputTokens?: number;
@@ -692,9 +751,11 @@ async function evalCase(c: Case): Promise<CaseResult> {
 
     // 4. WER (compare plain transcript text, role labels stripped)
     const refTextOnly = refTranscript.replace(/^(Doctor|Patient): /gm, '');
-    const { wer, refWords } = computeWer(refTextOnly, dg.transcript);
-    result.wer = wer;
-    result.refWords = refWords;
+    const werResult = computeWer(refTextOnly, dg.transcript);
+    result.wer = werResult.wer;
+    result.refWords = werResult.refWords;
+    result.werPaper = werResult.werPaper;
+    result.refWordsPaper = werResult.refWordsPaper;
 
     // 5. Reference note
     const noteRaw = await readFile(c.noteJsonPath, 'utf-8');
@@ -803,7 +864,12 @@ async function writeReport(
   lines.push(`| Cases succeeded | ${successes.length} |`);
   lines.push(`| Cases failed | ${failures.length} |`);
   lines.push(`| Total audio | ${(totalAudioSec / 60).toFixed(1)} min |`);
-  lines.push(`| Mean WER | ${pct(meanWer)} (n=${wers.length}) |`);
+  lines.push(`| Mean WER (internal — preserves digits/hyphens) | ${pct(meanWer)} (n=${wers.length}) |`);
+
+  const persPaper = successes.map((r) => r.werPaper!).filter((v) => v != null).sort((a, b) => a - b);
+  const meanWerPaper =
+    persPaper.length === 0 ? 0 : persPaper.reduce((s, w) => s + w, 0) / persPaper.length;
+  lines.push(`| Mean WER (PriMock57-aligned — alpha-only + hyphen→space) | ${pct(meanWerPaper)} (n=${persPaper.length}) |`);
   lines.push(`| Mean SOAP score | ${meanJudge.toFixed(2)} / 10 (n=${judges.length}) |`);
   lines.push(`| Cases with hallucinations | ${casesWithHallucinations} / ${successes.length} |`);
   lines.push(`| Total hallucinations flagged | ${totalHallucinations} |`);
