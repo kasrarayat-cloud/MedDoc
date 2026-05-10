@@ -108,15 +108,20 @@ function parseArgs(argv: string[]): CliArgs {
     const k = argv[i];
     if (k === '--count') args.count = parseInt(argv[++i] ?? '0', 10);
     else if (k === '--seed') args.seed = parseInt(argv[++i] ?? '42', 10);
+    else if (k === '--confirm-budget') args.override = true;
+    // Legacy alias from the v1 script — kept for prior callers.
     else if (k === '--i-know-what-i-am-doing') args.override = true;
   }
   if (!Number.isFinite(args.count) || args.count < 1) {
     throw new Error('--count must be a positive integer');
   }
   if (args.count > HARD_CEILING_DEFAULT && !args.override) {
+    const low = (args.count * 0.3).toFixed(0);
+    const high = (args.count * 0.5).toFixed(0);
     throw new Error(
-      `Refusing to run > ${HARD_CEILING_DEFAULT} cases without --i-know-what-i-am-doing. ` +
-        `(Estimated cost: ~$${(args.count * 0.75).toFixed(0)}–$${(args.count * 1.5).toFixed(0)} for ${args.count} cases.)`,
+      `Refusing to run > ${HARD_CEILING_DEFAULT} cases without --confirm-budget. ` +
+        `(Estimated cost: ~$${low}–$${high} for ${args.count} cases. ` +
+        `Pass --confirm-budget to acknowledge + proceed.)`,
     );
   }
   return args;
@@ -455,6 +460,31 @@ interface JudgeResult {
   latencyMs: number;
 }
 
+/** Extract the first balanced `{...}` JSON object from a string that
+ *  may contain chain-of-thought prose before/after. Returns the JSON
+ *  substring; the caller still has to `JSON.parse` it (and may fail
+ *  if the bracketed region isn't valid JSON). */
+function extractFirstJsonObject(s: string): string {
+  const start = s.indexOf('{');
+  if (start === -1) return s;
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  for (let i = start; i < s.length; i++) {
+    const ch = s[i];
+    if (escape) { escape = false; continue; }
+    if (ch === '\\') { escape = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === '{') depth++;
+    else if (ch === '}') {
+      depth--;
+      if (depth === 0) return s.slice(start, i + 1);
+    }
+  }
+  return s.slice(start);
+}
+
 async function callJudgeSoap(
   referenceTranscript: string,
   referenceNote: string,
@@ -563,8 +593,13 @@ async function callJudgeSoap(
   }
   const json = (await res.json()) as AnthropicResponse;
   const text = (json.content ?? []).find((b) => b.type === 'text')?.text ?? '';
-  // Strip possible fences just in case
-  const stripped = text.replace(/```(?:json)?\s*|\s*```/g, '').trim();
+  // Strip possible fences just in case, then extract the first balanced
+  // JSON object — Sonnet sometimes prepends chain-of-thought prose
+  // before emitting the structured JSON even with strict instructions.
+  // Fence-strip handles ```json``` wrapping; the object-extract handles
+  // "I need to check... { ... }" prefixes.
+  const fenceStripped = text.replace(/```(?:json)?\s*|\s*```/g, '').trim();
+  const jsonObject = extractFirstJsonObject(fenceStripped);
   let parsed: {
     completeness: number;
     accuracy: number;
@@ -573,7 +608,7 @@ async function callJudgeSoap(
     hallucinations?: string[];
   };
   try {
-    parsed = JSON.parse(stripped);
+    parsed = JSON.parse(jsonObject);
   } catch (e) {
     throw new Error(`Judge JSON parse fail: ${(e as Error).message}; raw: ${text.slice(0, 300)}`);
   }
@@ -825,8 +860,17 @@ async function writeReport(
 ): Promise<string> {
   const successes = results.filter((r) => r.status === 'success');
   const failures = results.filter((r) => r.status === 'error');
-  const wers = successes.map((r) => r.wer!).sort((a, b) => a - b);
-  const judges = successes.map((r) => r.judgeMean!).sort((a, b) => a - b);
+  const wers = successes
+    .map((r) => r.wer!)
+    .filter((v) => Number.isFinite(v))
+    .sort((a, b) => a - b);
+  // Filter NaN — Sonnet occasionally emits malformed JSON that gets
+  // partially salvaged (e.g. a hallucinations array but no numeric
+  // scores). NaN scores would corrupt the mean if included.
+  const judges = successes
+    .map((r) => r.judgeMean!)
+    .filter((v) => Number.isFinite(v))
+    .sort((a, b) => a - b);
   const latencies = successes.map((r) => r.totalLatencyMs!).sort((a, b) => a - b);
   const totalCents = successes.reduce((sum, r) => sum + (r.totalCostCents ?? 0), 0);
 
@@ -834,6 +878,9 @@ async function writeReport(
     wers.length === 0 ? 0 : wers.reduce((s, w) => s + w, 0) / wers.length;
   const meanJudge =
     judges.length === 0 ? 0 : judges.reduce((s, w) => s + w, 0) / judges.length;
+  const judgeNaNCount = successes.filter(
+    (r) => r.status === 'success' && !Number.isFinite(r.judgeMean ?? NaN),
+  ).length;
   const totalAudioSec = successes.reduce(
     (s, r) => s + (r.audioDurationSec ?? 0),
     0,
@@ -870,7 +917,7 @@ async function writeReport(
   const meanWerPaper =
     persPaper.length === 0 ? 0 : persPaper.reduce((s, w) => s + w, 0) / persPaper.length;
   lines.push(`| Mean WER (PriMock57-aligned — alpha-only + hyphen→space) | ${pct(meanWerPaper)} (n=${persPaper.length}) |`);
-  lines.push(`| Mean SOAP score | ${meanJudge.toFixed(2)} / 10 (n=${judges.length}) |`);
+  lines.push(`| Mean SOAP score | ${meanJudge.toFixed(2)} / 10 (n=${judges.length}${judgeNaNCount > 0 ? `; ${judgeNaNCount} judge-parse failures excluded` : ''}) |`);
   lines.push(`| Cases with hallucinations | ${casesWithHallucinations} / ${successes.length} |`);
   lines.push(`| Total hallucinations flagged | ${totalHallucinations} |`);
   lines.push(`| p50 end-to-end latency | ${Math.round(percentile(latencies, 50) / 1000)}s |`);
