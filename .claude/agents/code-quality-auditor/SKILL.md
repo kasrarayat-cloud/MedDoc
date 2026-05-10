@@ -1,6 +1,7 @@
 ---
 name: code-quality-auditor
-description: Audits PR diffs (and arbitrary file paths) for compliance with QuillMD's actual production conventions — design tokens, component patterns, Prisma schema rules, BullMQ pipeline rules, server/client boundary, folder layout, scope guards. Catches pattern drift that pure typecheck + tests miss. Active immediately on merge — no staged rollout.
+version: v1.1
+description: Audits PR diffs (and arbitrary file paths) for compliance with QuillMD's actual production conventions — design tokens, component patterns, Prisma schema rules, BullMQ pipeline rules, server/client boundary, folder layout, scope guards, accessibility (v1.1+). Catches pattern drift that pure typecheck + tests miss, plus axe-core a11y regressions before they hit the 3-minute CI sweep. Active immediately on merge — no staged rollout.
 ---
 
 # QuillMD Code Quality / Pattern Auditor
@@ -105,7 +106,7 @@ The report ends with a one-line summary:
 
 ```
 Summary: 2 BLOCK · 5 WARN · 1 NIT against 7 files in PR #176.
-Rule library: rules.md @ cefb2be (27 rules; 11 BLOCK / 9 WARN / 7 NIT).
+Rule library: rules.md @ <commit-sha> (31 rules; 13 BLOCK / 11 WARN / 7 NIT).
 ```
 
 ## Skills index
