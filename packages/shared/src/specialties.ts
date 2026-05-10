@@ -25,6 +25,7 @@ export const SPECIALTIES = [
   { id: 'cardiology',      label: 'Cardiology',      templateId: 'cardiology' },
   { id: 'psychiatry',      label: 'Psychiatry',      templateId: 'psychiatry' },
   { id: 'pediatrics',      label: 'Pediatrics',      templateId: 'pediatrics' },
+  { id: 'ob-gyn',          label: 'OB-GYN',          templateId: 'ob-gyn' },
   { id: 'dermatology',     label: 'Dermatology',     templateId: 'dermatology' },
   { id: 'orthopedics',     label: 'Orthopedics',     templateId: 'orthopedics' },
   { id: 'urgent-care',     label: 'Urgent Care',     templateId: 'urgent-care' },
@@ -66,8 +67,10 @@ const LEGACY_TO_ID: Record<string, SpecialtyId> = {
   'Internal Medicine': 'primary-care',
   'Urgent Care': 'urgent-care',
   'Pain Management': 'pain-management',
-  'OB-Gyn': 'unspecified',
-  'Obstetrics & Gynecology': 'unspecified',
+  'OB-Gyn': 'ob-gyn',
+  'OB/Gyn': 'ob-gyn',
+  'Obstetrics & Gynecology': 'ob-gyn',
+  'Obstetrics-Gynecology': 'ob-gyn',
   // users.specialty old short ids
   pain: 'pain-management',
   ortho: 'orthopedics',
@@ -75,7 +78,10 @@ const LEGACY_TO_ID: Record<string, SpecialtyId> = {
   pulmonology: 'unspecified',
   ophthalmology: 'unspecified',
   'internal-medicine': 'primary-care',
-  'ob-gyn': 'unspecified',
+  // 'ob-gyn' is the canonical id post Q1 #9; no legacy mapping needed.
+  obstetrics: 'ob-gyn',
+  gynecology: 'ob-gyn',
+  'obstetrics-gynecology': 'ob-gyn',
 };
 
 /** Look up the catalog entry by id, with legacy-value fallback.
