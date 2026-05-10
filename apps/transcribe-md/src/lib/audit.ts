@@ -38,6 +38,12 @@ export type AuditAction =
   | 'LOGOUT'
   | 'PASSWORD_CHANGED'
   | 'SESSION_EXPIRED'
+  // MFA — added closing shadow-audit HIPAA_FINDING_001. Already in
+  // the Prisma AuditAction enum; surfaced here so call sites typecheck.
+  | 'MFA_ENABLED'
+  | 'MFA_DISABLED'
+  | 'MFA_CHALLENGE_PASSED'
+  | 'MFA_CHALLENGE_FAILED'
   // Admin
   | 'ADMIN_DASHBOARD_ACCESS'
   | 'ADMIN_API_ACCESS'
