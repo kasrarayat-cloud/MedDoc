@@ -644,6 +644,171 @@ back-compat", or similar without a delete-by date or ticket. These rot.
 
 ---
 
+## 9 · Accessibility (axe-core-aligned)
+
+> **Added v1.1 (2026-05-10).** Each rule is keyed to a specific
+> `axe-core` rule ID so failures translate 1:1 to the CI a11y job's
+> `aria-*-name` / `*-attr` checks that QuillMD already runs on every
+> PR. Pre-commit catch lets the auditor block the diff at PR-open
+> time instead of waiting for the 3-minute Playwright a11y sweep.
+
+Canonical references:
+- **`apps/transcribe-md/src/app/visits/[id]/processing-typewriter.tsx:425–432`** —
+  `role="progressbar"` with proper `aria-label` / valuemin / valuemax /
+  valuenow / valuetext (the post-PR-#180 baseline).
+- **`apps/transcribe-md/src/app/visits/[id]/rx-warnings-rail.tsx:142–152`** —
+  warning rows carry `role="alert"` + a `data-rxid` chip + an
+  inner heading; the click-to-focus handler propagates Rx ID to
+  parent state.
+- **`apps/transcribe-md/src/components/visits/CodingRail.tsx`** — bump
+  CTA + override controls; reference for accessible-name patterns
+  on action buttons.
+
+### `A11Y-001` — BLOCK — `aria-progressbar-name` (axe-core 4.10)
+
+**Trigger.** A `*.tsx` file under `apps/transcribe-md/**` or
+`apps/marketing/**` adds OR modifies an element with
+`role="progressbar"` (or the native `<progress>` element) **without
+any of:**
+- `aria-label="..."` (non-empty literal)
+- `aria-labelledby="<id>"` pointing to a non-empty element in the same render
+- `title="..."` (non-empty literal)
+
+**Why BLOCK.** This is the exact regression that PR #180 closed —
+the SOAP processing screen shipped (PRs #172–#175) with a fully-named
+*value* (`aria-valuemin`/`aria-valuemax`/`aria-valuenow`/`aria-valuetext`)
+but no *name*. Axe flagged it serious; CI a11y job blocked every
+downstream PR for ~4 days until #180 added the missing aria-label.
+At PR-open time the auditor would have caught this in <1 second
+instead of waiting for the 3-minute Playwright sweep.
+
+**Violation:**
+```tsx
+<div
+  className="qm-tw-segments"
+  role="progressbar"
+  aria-valuemin={0}
+  aria-valuemax={6}
+  aria-valuenow={4}
+  aria-valuetext="Phase 4 of 6: Drafting"
+>
+```
+
+**Correct.** Per `processing-typewriter.tsx:425–432`:
+```tsx
+<div
+  className="qm-tw-segments"
+  role="progressbar"
+  aria-label="SOAP processing progress"   // ← required name source
+  aria-valuemin={0}
+  aria-valuemax={6}
+  aria-valuenow={4}
+  aria-valuetext="Phase 4 of 6: Drafting"
+>
+```
+
+Allowed name sources are exactly the three documented at
+https://dequeuniversity.com/rules/axe/4.10/aria-progressbar-name —
+`aria-label`, `aria-labelledby` (non-empty target), or `title`.
+
+### `A11Y-002` — BLOCK — `button-name` (axe-core 4.10)
+
+**Trigger.** A `*.tsx` file adds OR modifies a `<button>` element (or
+an element with `role="button"`) that has **no accessible name**.
+The auditor checks for any of:
+- Non-empty text-node child (e.g. `<button>Save</button>`)
+- Non-empty `aria-label`
+- `aria-labelledby` pointing to a non-empty element
+- `title="..."` (non-empty literal)
+- Single child `<img>` with non-empty `alt`
+- Single child SVG with `<title>` element
+
+**Why BLOCK.** A button with no accessible name is unannouncable —
+screen readers read "button" with no further context. Common
+regression in icon-only buttons where the developer dropped the
+text but forgot the `aria-label`.
+
+**Violation:**
+```tsx
+<button onClick={handleClose}>
+  <Ic.x width={14} height={14} />
+</button>
+```
+
+**Correct (any of):**
+```tsx
+<button onClick={handleClose} aria-label="Close">
+  <Ic.x width={14} height={14} aria-hidden />
+</button>
+
+// or if the icon library supports semantic titles:
+<button onClick={handleClose}>
+  <Ic.x width={14} height={14} title="Close" />
+</button>
+```
+
+**Canonical example.** `apps/transcribe-md/src/app/visits/[id]/rx-tab.tsx:349`
+— icon-only override button uses `aria-label`. Same pattern in
+`CodingRail.tsx`'s bump CTA.
+
+### `A11Y-003` — WARN — `aria-label-on-interactive` (best-practice)
+
+**Trigger.** A `*.tsx` file adds OR modifies an element that's NOT a
+`<button>` / `<a>` / `<input>` but carries an interactive role
+(`role="button"`, `role="link"`, `role="tab"`, `role="menuitem"`,
+`role="checkbox"`, `role="switch"`, `role="option"`) AND has neither
+`aria-label` nor a non-empty visible text child.
+
+**Why WARN.** The element is technically findable by axe-core's
+button-name rule when role="button" is the case, but A11Y-002 covers
+the BLOCK-tier subset; this WARN catches the wider best-practice
+cases (tabs, menu items, switches) where missing names are usually
+silent — axe permits them in some configurations. WARN tier because
+production code has occasional well-justified omissions (when the
+parent label is announced via aria-labelledby or aria-describedby).
+
+**Allowlist.** Element with `aria-labelledby` set to an element id
+that is non-empty in the same render — already named through the
+labelledby chain.
+
+### `A11Y-004` — WARN — `aria-required-attr` (axe-core 4.10)
+
+**Trigger.** A `*.tsx` file adds OR modifies an element with a
+`role="..."` attribute and the role's WAI-ARIA spec **requires**
+attributes that are missing. The auditor's required-attr table is
+keyed off the axe-core rule of the same name; the table currently
+covers the roles QuillMD actively uses:
+
+| Role | Required attributes (per ARIA 1.2) |
+|---|---|
+| `progressbar` | `aria-valuenow` (or implicit-now via `aria-valuetext`) |
+| `slider` | `aria-valuenow` |
+| `combobox` | `aria-expanded` |
+| `scrollbar` | `aria-controls`, `aria-valuenow` |
+| `option` | (no required attrs at the role level — listbox parent enforces) |
+| `radio` | `aria-checked` |
+| `checkbox` | `aria-checked` |
+| `switch` | `aria-checked` |
+
+**Why WARN.** A missing required attribute usually still renders;
+axe flags it serious-tier in some cases and moderate in others
+depending on context. Treating as WARN keeps the auditor's BLOCK
+list focused on regressions that *break* a11y at runtime
+(A11Y-001/002), while still calling out the spec compliance gap
+for the author to address.
+
+**Violation:**
+```tsx
+<div role="progressbar" aria-label="Loading">  {/* no aria-valuenow */}
+```
+
+**Correct:**
+```tsx
+<div role="progressbar" aria-label="Loading" aria-valuenow={value} aria-valuemin={0} aria-valuemax={100}>
+```
+
+---
+
 ## Rule taxonomy summary
 
 | Category | BLOCK | WARN | NIT | Total |
@@ -656,7 +821,8 @@ back-compat", or similar without a delete-by date or ticket. These rot.
 | Folder layout | 1 | 1 | 1 | 3 |
 | Scope guards | 2 | 0 | 0 | 2 |
 | Documentation hygiene | 0 | 0 | 2 | 2 |
-| **Totals** | **11** | **9** | **7** | **27 rules** |
+| Accessibility (v1.1) | 2 | 2 | 0 | 4 |
+| **Totals** | **13** | **11** | **7** | **31 rules** |
 
 ## Stale-rule guard
 
