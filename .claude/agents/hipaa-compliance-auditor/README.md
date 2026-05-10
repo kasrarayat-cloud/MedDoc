@@ -1,15 +1,19 @@
 # HIPAA Compliance Auditor
 
-> **Status: DORMANT (designed, not activated).** This agent
-> ships as a design artifact only — directory structure,
-> 10-phase methodology, finding-class taxonomy keyed to 45
-> CFR Part 164 (§164.308 / §164.310 / §164.312), data-source
-> contract, per-phase activation criteria. **No `SKILL.md`** ⇒
-> Lead's skill system does not list the agent as invocable.
-> Activation is staged (per-phase gating) — see
+> **Status: SHADOW MODE** (active, advisory-only) as of merge of
+> `agent/auditors-shadow-mode`. The agent runs on demand against
+> the live system read-only; findings route to
+> `docs/agent-shadow-runs/hipaa-compliance/<UTC>.md` (advisory)
+> instead of the production report path. Phases 0/1/4/5/6/7/8/9
+> produce real signal today; phases 2 + 3 emit `NO_DATA` markers
+> until the pilot threshold (≥20 visits across ≥3 doctors) is
+> met. Findings do NOT block any merge, deploy, or operator
+> action — but `BLOCKING_*`-class findings should still be
+> escalated to compliance counsel. Trigger phrase: **"Run the
+> HIPAA compliance shadow audit"**. See `SKILL.md` and
 > `skills/activation-criteria.md`.
 
-A planned agent that audits QuillMD's **HIPAA compliance
+An agent that audits QuillMD's **HIPAA compliance
 posture** continuously: §164.308 (administrative safeguards —
 workforce training, contingency plan, vendor BAAs), §164.310
 (physical — facility, workstation, encryption-at-rest config
