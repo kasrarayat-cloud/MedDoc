@@ -36,9 +36,17 @@ PHI; reading the cardinality stays in safe territory.
 
 | File | Why |
 |---|---|
-| `apps/transcribe-md/.next/app-build-manifest.json` | Per-route bundle composition for size delta. |
-| `apps/transcribe-md/.next/build-manifest.json` | Top-level bundle entries. |
+| `apps/transcribe-md/.next/app-path-routes-manifest.json` | Per-route catalogue (29 routes incl. `/visits`, `/visits/[id]`, `/visits/[id]/record`). |
+| `apps/transcribe-md/.next/build-manifest.json` | Top-level pages-router entries (mostly empty under App Router but read for completeness). |
+| `apps/transcribe-md/.next/static/chunks/app/<route>/page-*.js` | Per-route client bundle for size + gzip-size compute. |
+| `apps/transcribe-md/.next/server/app/<route>/page.js` | Per-route server bundle for SSR weight. |
 | `.claude/agents/performance-auditor/fixtures/*.json` | Baseline tables for percentage-drift comparison. |
+
+> **2026-05-10 correction:** earlier spec said
+> `.next/app-build-manifest.json`. That artifact isn't emitted by
+> Next 15 App Router; the actual artifact set is above. See
+> `docs/agent-shadow-runs/performance/20260510T200534Z.md`
+> PERFORMANCE_FINDING_003 for context.
 
 ## §4 · Diffs (PR-time mode only)
 
