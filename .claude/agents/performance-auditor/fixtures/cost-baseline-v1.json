@@ -1,0 +1,21 @@
+{
+  "$schema_version": "v1",
+  "baseline_source": "docs/eval-runs/primock57-20260510T223531Z.md",
+  "baseline_run_at_utc": "2026-05-10T22:35:31Z",
+  "dataset": "github.com/babylonhealth/primock57",
+  "sample_size": 56,
+  "audio_minutes_total": 508.3,
+  "scope_notes": "Per-case cost = Deepgram (nova-3-medical) + Anthropic Opus 4.7 (L4 SOAP) + Anthropic Sonnet 4.6 (LLM-as-judge). Production cost per visit is HIGHER than these numbers because the production pipeline runs L1-L7 (entities, critique, polish, ICD coding, CPT coding, Rx drafts, referrals, patient summary) — this baseline measures L1 + L4 + judge only. Use this as the LOWER BOUND of per-visit cost; expand the methodology in v2 to capture the full pipeline.",
+  "per_case_usd": {
+    "mean": 0.304,
+    "p50": 0.31,
+    "p95": 0.38,
+    "min": 0.16,
+    "max": 0.43
+  },
+  "alert_thresholds": {
+    "warn_drift": "p95_above 0.46",
+    "blocking_regression": "p95_above 0.60",
+    "blocking_budget": "monthly_total_above 1500 USD at projected pilot volume"
+  }
+}

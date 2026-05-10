@@ -1,0 +1,22 @@
+{
+  "$schema_version": "v1",
+  "baseline_source": "docs/eval-runs/primock57-20260510T223531Z.md",
+  "baseline_run_at_utc": "2026-05-10T22:35:31Z",
+  "dataset": "github.com/babylonhealth/primock57",
+  "sample_size": 56,
+  "scope_notes": "End-to-end wall-clock per case: mix audio + Deepgram batch + Anthropic Opus 4.7 SOAP + Sonnet 4.6 judge. Production pipeline includes more layers (L2/L3/L5/L6/L7) — production p95 will be HIGHER than these numbers. Use this as a partial baseline for the L1 + L4 + judge slice; expand to full pipeline in v2.",
+  "end_to_end_sec": {
+    "mean": 26.6,
+    "p50": 27,
+    "p95": 33,
+    "p99": 33,
+    "min": 16,
+    "max": 33
+  },
+  "stage_breakdown_notes": "stage_breakdown was not captured in this baseline. Future iterations should bucket: ffmpeg-mix vs Deepgram-call vs Anthropic-soap-call vs Anthropic-judge-call. The aggregate p95 (33s) is dominated by the SOAP-generation step (~12-15s); Deepgram is ~5-8s.",
+  "alert_thresholds": {
+    "warn_drift": "p95_above 50 sec (50% above baseline)",
+    "blocking_regression": "p95_above 70 sec (>2x baseline)",
+    "blocking_outage": "p95_above 5 min sustained over 1hr"
+  }
+}
