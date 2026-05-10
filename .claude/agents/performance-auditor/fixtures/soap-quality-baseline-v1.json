@@ -1,0 +1,43 @@
+{
+  "$schema_version": "v1",
+  "baseline_source": "docs/eval-runs/primock57-20260510T223531Z.md",
+  "baseline_run_at_utc": "2026-05-10T22:35:31Z",
+  "dataset": "github.com/babylonhealth/primock57",
+  "judge_model": "claude-sonnet-4-6",
+  "judge_methodology_version": "v2",
+  "judge_methodology_notes": "Methodology v2 (post-2026-05-10 correction): the judge scores the generated SOAP against the TRANSCRIPT as source of truth. The reference clinician note is auxiliary signal only (it is itself imperfect). A fact is a hallucination IF AND ONLY IF the transcript does not support it. See docs/eval-runs/primock57-20260510T222316Z.md for the v1→v2 methodology delta.",
+  "sample_size_for_score": 54,
+  "sample_size_attempted": 57,
+  "judge_parse_failures": 3,
+  "judge_parse_failure_notes": "Sonnet 4.6 occasionally emits chain-of-thought prose before the JSON object, defeating strict JSON.parse. The follow-up script change (extractFirstJsonObject helper) salvages these going forward; 3/57 cases on this baseline are excluded from the score aggregate. See the primock57-run.ts diff in PR #200.",
+  "score_1_to_10": {
+    "mean": 8.68,
+    "p50": 8.70,
+    "p95": 9.00,
+    "min": 7.0,
+    "max": 9.3
+  },
+  "subscores_mean": {
+    "completeness": 8.85,
+    "accuracy": 8.40,
+    "relevance": 8.78,
+    "subscore_methodology": "Means computed across the 54 valid cases. Individual per-case subscores are in the report."
+  },
+  "hallucinations": {
+    "cases_with_at_least_one": 53,
+    "cases_with_zero": 1,
+    "total_flagged": 77,
+    "mean_per_case": 1.43,
+    "hallucination_categories_observed": [
+      "anatomy substitutions (eyebrow vs elbow — likely ASR-side, not L4)",
+      "diagnostic qualifier additions (e.g. 'undiagnosed' migraine)",
+      "family-relationship inferences (e.g. 'maternal' grandmother)",
+      "dosing-ambiguity resolution (resolving to one interpretation without flagging)"
+    ]
+  },
+  "alert_thresholds": {
+    "warn_drift": "mean_score_below 8.0",
+    "blocking_regression": "mean_score_below 7.0",
+    "watch": "cases_with_hallucinations_above 60 percent for two consecutive runs"
+  }
+}
