@@ -1,0 +1,1807 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SOAP edit — 10 interaction directions · QuillMD</title>
+<style>
+/* ============================================================================
+ * Production tokens (mirror of apps/transcribe-md/src/app/globals.css).
+ * Don't drift these — sage = #7AA68C exact.
+ * ============================================================================ */
+:root {
+  --bg: #08090a;
+  --surface-1: #0d0e10;
+  --surface-2: #131416;
+  --surface-3: #1a1c1e;
+  --border: #21232a;
+  --border-strong: #2c2f38;
+  --hairline: rgba(255, 255, 255, 0.05);
+  --hairline-strong: rgba(255, 255, 255, 0.08);
+  --text: #f7f8f8;
+  --text-2: #b4bcc8;
+  --text-3: #828995;
+  --text-4: #4b5159;
+  --sage: #7AA68C;
+  --sage-bright: #9BC4A8;
+  --sage-soft: #5d8a73;
+  --sage-deep: #2F5040;
+  --sage-tint: rgba(122, 166, 140, 0.13);
+  --sage-glow: rgba(122, 166, 140, 0.18);
+  --sage-edge: rgba(122, 166, 140, 0.30);
+  --row-hover: rgba(255, 255, 255, 0.03);
+  --row-active: rgba(255, 255, 255, 0.05);
+  --amber: #D4A574;
+  --danger: #d4574a;
+  --info: #5b8db8;
+
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.45;
+  letter-spacing: -0.005em;
+  font-feature-settings: 'cv11', 'ss01';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+::selection { background: rgba(122, 166, 140, 0.25); color: var(--text); }
+
+/* ============================================================================
+ * Page chrome — page header, diagnostic, pattern wrappers.
+ * ============================================================================ */
+.page {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 64px 32px 96px;
+}
+
+.hero {
+  margin-bottom: 48px;
+  padding-bottom: 32px;
+  border-bottom: 1px solid var(--hairline);
+}
+.hero-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.hero-eyebrow .branch {
+  color: var(--sage-bright);
+  background: var(--sage-tint);
+  border: 1px solid var(--sage-edge);
+  padding: 1px 7px;
+  border-radius: 3px;
+  letter-spacing: 0.06em;
+}
+.hero h1 {
+  font-size: 32px;
+  font-weight: 600;
+  letter-spacing: -0.024em;
+  line-height: 1.12;
+  margin: 0 0 14px;
+  color: var(--text);
+}
+.hero h1 .accent {
+  color: var(--sage-bright);
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 24px;
+  letter-spacing: 0;
+  vertical-align: 4px;
+  margin-left: 2px;
+}
+.hero p {
+  max-width: 740px;
+  color: var(--text-2);
+  font-size: 14.5px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+/* Diagnostic panel — sets the problem space */
+.diag {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 22px 24px 24px;
+  margin-bottom: 64px;
+  display: grid;
+  grid-template-columns: 1.1fr 1.4fr;
+  gap: 28px;
+}
+@media (max-width: 880px) { .diag { grid-template-columns: 1fr; } }
+.diag-block-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.diag-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--sage);
+  box-shadow: 0 0 0 3px rgba(122, 166, 140, 0.12);
+}
+.diag-dot.warn { background: var(--amber); box-shadow: 0 0 0 3px rgba(212, 165, 116, 0.16); }
+.diag h2 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 6px;
+  letter-spacing: -0.008em;
+}
+.diag p {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-2);
+  margin: 0 0 10px;
+}
+.diag ol, .diag ul {
+  margin: 0;
+  padding-left: 18px;
+}
+.diag li {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-2);
+  margin-bottom: 6px;
+}
+.diag code {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--sage-bright);
+  background: rgba(122, 166, 140, 0.07);
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid rgba(122, 166, 140, 0.18);
+}
+
+/* ============================================================================
+ * Pattern section — one per interaction direction.
+ * ============================================================================ */
+.pattern {
+  margin-bottom: 80px;
+  scroll-margin-top: 24px;
+}
+.pattern-head {
+  display: grid;
+  grid-template-columns: 60px 1fr auto;
+  gap: 20px;
+  align-items: start;
+  padding-bottom: 18px;
+  margin-bottom: 22px;
+  border-bottom: 1px solid var(--hairline);
+}
+.pattern-num {
+  font-family: var(--font-mono);
+  font-size: 32px;
+  color: var(--text-4);
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+  line-height: 0.9;
+  padding-top: 2px;
+}
+.pattern-meta h3 {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.014em;
+  margin: 0 0 6px;
+  color: var(--text);
+}
+.pattern-meta p.subtitle {
+  font-size: 13.5px;
+  color: var(--text-2);
+  line-height: 1.55;
+  margin: 0;
+  max-width: 640px;
+}
+.pattern-tags {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  padding-top: 4px;
+}
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.tag.win {
+  color: var(--sage-bright);
+  background: var(--sage-tint);
+  border: 1px solid var(--sage-edge);
+}
+.tag.cost {
+  color: #e3b984;
+  background: rgba(212, 165, 116, 0.06);
+  border: 1px solid rgba(212, 165, 116, 0.25);
+}
+.tag::before {
+  content: '';
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.7;
+}
+
+/* The 3-frame strip */
+.frames {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+@media (max-width: 1080px) { .frames { grid-template-columns: 1fr; } }
+.frame {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+.frame-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--hairline);
+  background: rgba(255, 255, 255, 0.012);
+}
+.frame-step {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.frame-step .num {
+  display: inline-grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  background: var(--surface-3);
+  color: var(--text-2);
+  font-size: 9px;
+}
+.frame-step.active .num {
+  background: var(--sage-tint);
+  color: var(--sage-bright);
+  border: 1px solid var(--sage-edge);
+}
+.frame-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  color: var(--text-4);
+  text-transform: uppercase;
+}
+.frame-body {
+  padding: 18px 18px 20px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  position: relative;
+}
+
+/* The actual mocked SOAP section (matches production .qm-lin-soap-*) */
+.soap {
+  margin-bottom: 0;
+}
+.soap-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--hairline);
+}
+.soap-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.soap-letter {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid rgba(122, 166, 140, 0.28);
+  background: rgba(122, 166, 140, 0.07);
+  border-radius: 4px;
+  color: var(--sage-bright);
+  font-size: 10px;
+  font-weight: 500;
+}
+.soap-title {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  color: var(--text);
+  margin: 0;
+}
+.soap-body {
+  position: relative;
+  padding: 10px 12px;
+  margin: 0 -12px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--text);
+  letter-spacing: -0.005em;
+  white-space: pre-wrap;
+  cursor: text;
+  transition: background-color 130ms ease-out, border-color 130ms ease-out;
+}
+.soap-body strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.soap-body em {
+  font-style: normal;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.soap-body--hover {
+  background: rgba(255, 255, 255, 0.022);
+  border-color: var(--hairline-strong);
+}
+.soap-body--hover::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background: var(--sage);
+  opacity: 1;
+  border-radius: 1px;
+}
+
+/* Ghost section — small read-only collapsed siblings shown above/below
+ * the focal section, to imply the SOAP isn't just one section. */
+.ghost {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0 0;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-4);
+  border-top: 1px dashed var(--hairline);
+  margin-top: 14px;
+}
+.ghost-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ghost-letter {
+  display: inline-grid;
+  place-items: center;
+  width: 13px;
+  height: 13px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text-4);
+  font-size: 8.5px;
+}
+.ghost-line {
+  flex: 1;
+  height: 1px;
+  background: var(--hairline);
+}
+
+/* Hover/edit affordance — pencil hint mirroring production */
+.edit-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  opacity: 1;
+}
+.edit-hint svg {
+  width: 10px;
+  height: 10px;
+  opacity: 0.8;
+}
+
+/* Sage textarea — mirrors .qm-lin-soap-inline-edit-ta */
+.ta {
+  width: 100%;
+  min-height: 92px;
+  resize: vertical;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--sage-edge);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  line-height: 1.6;
+  letter-spacing: -0.005em;
+  box-shadow: 0 0 0 3px rgba(122, 166, 140, 0.16);
+  box-sizing: border-box;
+}
+.ta:focus { outline: none; }
+.ta-foot {
+  margin-top: 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+/* Buttons / chips */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  background: transparent;
+  color: var(--text-2);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+}
+.btn:hover { border-color: var(--border-strong); color: var(--text); }
+.btn-primary {
+  background: var(--sage);
+  color: #0d1611;
+  border: none;
+  box-shadow: 0 0 0 1px rgba(122, 166, 140, 0.3);
+}
+.btn-danger {
+  color: #e6857a;
+  border-color: rgba(212, 87, 74, 0.32);
+  background: rgba(212, 87, 74, 0.06);
+}
+.btn-icon {
+  width: 24px;
+  height: 24px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 5px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  cursor: pointer;
+}
+.btn-icon:hover { border-color: var(--border-strong); color: var(--text); background: var(--row-hover); }
+.btn-icon svg { width: 12px; height: 12px; }
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 7px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: var(--surface-2);
+  color: var(--text-2);
+  border: 1px solid var(--border);
+  cursor: pointer;
+}
+.pill-sage { background: var(--sage-tint); color: var(--sage-bright); border-color: var(--sage-edge); }
+.pill-ready { background: var(--sage-tint); color: var(--sage-bright); border-color: var(--sage-edge); }
+.pill-dim   { background: transparent; color: var(--text-4); border-color: var(--hairline); }
+.pill-amber { background: rgba(212,165,116,0.07); color: #e3b984; border-color: rgba(212,165,116,0.25); }
+.pill-danger { background: rgba(212,87,74,0.06); color: #e6857a; border-color: rgba(212,87,74,0.28); }
+
+/* Floating toolbar (pattern 2) */
+.toolbar {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.02);
+}
+
+/* Coding-rail sliver — visual reminder of right-side context */
+.rail-sliver {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 36px;
+  background:
+    linear-gradient(to right, transparent 0%, rgba(0,0,0,0.18) 80%),
+    var(--surface-1);
+  border-left: 1px solid var(--hairline);
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 14px;
+  gap: 10px;
+}
+.rail-chip {
+  width: 24px;
+  height: 6px;
+  border-radius: 1.5px;
+  background: var(--surface-3);
+  border: 1px solid var(--hairline);
+}
+.rail-chip.sage { background: var(--sage-tint); border-color: var(--sage-edge); }
+.rail-chip.amber { background: rgba(212,165,116,0.08); border-color: rgba(212,165,116,0.25); }
+.frame-body--with-rail { padding-right: 50px; }
+
+/* Sticky bottom action bar (pattern 9) */
+.actionbar {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px 6px 12px;
+  background: rgba(13, 14, 16, 0.94);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  box-shadow: 0 14px 28px rgba(0,0,0,0.5);
+}
+.actionbar-label {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.actionbar-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--sage);
+  box-shadow: 0 0 0 3px rgba(122, 166, 140, 0.18);
+}
+.actionbar-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* Side-panel mode (pattern 6) — split layout inside the frame */
+.split {
+  display: grid;
+  grid-template-columns: 1fr 1.05fr;
+  gap: 10px;
+  height: 100%;
+}
+.split .read {
+  border-right: 1px solid var(--hairline);
+  padding-right: 10px;
+  opacity: 0.62;
+}
+.panel-shell {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 56%;
+  background: var(--surface-2);
+  border-left: 1px solid var(--border-strong);
+  box-shadow: -18px 0 32px rgba(0,0,0,0.45);
+  padding: 14px 14px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.panel-shell-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--hairline);
+  margin-bottom: 4px;
+}
+
+/* Modal (pattern 5) */
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
+  display: grid;
+  place-items: center;
+  padding: 18px;
+}
+.modal-panel {
+  background: var(--surface-1);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  width: 100%;
+  max-width: 460px;
+  box-shadow: 0 30px 60px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.03);
+  overflow: hidden;
+}
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--hairline);
+  background: rgba(255,255,255,0.012);
+}
+.modal-body {
+  padding: 12px;
+}
+.modal-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-top: 1px solid var(--hairline);
+  gap: 6px;
+}
+.fmt-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--hairline);
+}
+.fmt {
+  width: 22px;
+  height: 22px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-2);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  cursor: pointer;
+}
+.fmt:hover { background: var(--surface-3); color: var(--text); }
+.fmt.italic { font-style: italic; }
+.fmt.bold { font-weight: 700; }
+
+/* Caret simulation in contenteditable-style mocks */
+.caret {
+  display: inline-block;
+  width: 1px;
+  height: 1.05em;
+  vertical-align: -2px;
+  background: var(--sage-bright);
+  margin: 0 1px;
+  animation: blink 1.1s steps(1) infinite;
+}
+@keyframes blink { 50% { opacity: 0; } }
+
+/* Voice waveform (pattern 10) */
+.wave {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 14px;
+}
+.wave i {
+  display: block;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--sage-bright);
+  animation: wave 0.9s ease-in-out infinite;
+}
+.wave i:nth-child(1) { height: 4px; animation-delay: 0s; }
+.wave i:nth-child(2) { height: 9px; animation-delay: .1s; }
+.wave i:nth-child(3) { height: 12px; animation-delay: .2s; }
+.wave i:nth-child(4) { height: 7px; animation-delay: .3s; }
+.wave i:nth-child(5) { height: 14px; animation-delay: .4s; }
+.wave i:nth-child(6) { height: 10px; animation-delay: .5s; }
+.wave i:nth-child(7) { height: 5px; animation-delay: .6s; }
+@keyframes wave {
+  0%, 100% { transform: scaleY(0.5); }
+  50%      { transform: scaleY(1); }
+}
+
+.voice-overlay {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 18% 80%, rgba(122, 166, 140, 0.12), transparent 55%),
+    rgba(13, 14, 16, 0.92);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  border-radius: 0;
+}
+
+/* Toggle (pattern 8) */
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.toggle-opt {
+  padding: 4px 10px;
+  color: var(--text-3);
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+}
+.toggle-opt.on {
+  background: var(--sage-tint);
+  color: var(--sage-bright);
+  box-shadow: inset 0 0 0 1px var(--sage-edge);
+}
+
+/* Doc/index nav at the top */
+.toc {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 6px;
+  margin-bottom: 64px;
+  padding: 16px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.toc a {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-decoration: none;
+  color: var(--text-2);
+  padding: 6px 10px;
+  border-radius: 5px;
+  transition: background-color 100ms ease-out;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.toc a:hover { background: var(--row-hover); color: var(--text); }
+.toc a .toc-num {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: var(--surface-3);
+  color: var(--text-3);
+  font-size: 10px;
+}
+
+/* Footer */
+.footer {
+  margin-top: 80px;
+  padding-top: 28px;
+  border-top: 1px solid var(--hairline);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-4);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* SVG icon helpers */
+.ico { width: 11px; height: 11px; flex: 0 0 11px; }
+.ico-12 { width: 12px; height: 12px; flex: 0 0 12px; }
+.ico-14 { width: 14px; height: 14px; flex: 0 0 14px; }
+
+.kbd {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  padding: 0 4px;
+  border-radius: 3px;
+  vertical-align: 1px;
+}
+
+/* Discoverability note panel inside frame */
+.note {
+  margin-top: 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px dashed var(--hairline-strong);
+  background: rgba(255,255,255,0.012);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+  line-height: 1.5;
+  text-transform: none;
+}
+.note strong { color: var(--text-2); }
+</style>
+</head>
+<body>
+<main class="page">
+
+<!-- =====================================================================
+     Hero + diagnostic
+     ===================================================================== -->
+<section class="hero">
+  <div class="hero-eyebrow">
+    <span>QuillMD · Design</span>
+    <span class="branch">design/soap-edit-patterns-v1</span>
+    <span>SOAP edit interactions</span>
+  </div>
+  <h1>SOAP edit — ten interaction directions <span class="accent">v1</span></h1>
+  <p>
+    Kasra reports the current click‑to‑edit flow is &ldquo;very hard.&rdquo;
+    Below: a diagnostic of why it likely feels that way, then ten static
+    mockups exploring different ways to ask &ldquo;edit&rdquo; of a SOAP section.
+    Each pattern shows three frames — <em style="font-style:normal;color:var(--text);">view</em>,
+    <em style="font-style:normal;color:var(--text);">trigger</em>, <em style="font-style:normal;color:var(--text);">active edit</em>
+    — and a one‑line win/cost tag.
+  </p>
+</section>
+
+<section class="diag">
+  <div>
+    <div class="diag-block-eyebrow">
+      <span class="diag-dot"></span>
+      Current flow — <code>SoapInlineEdit.tsx</code>
+    </div>
+    <h2>What clicking a SOAP section does today</h2>
+    <p>
+      Each section body is a <code>&lt;button&gt;</code> wrapping the rendered
+      markdown. Hover lights a subtle background and reveals a mono &ldquo;Click
+      to edit&rdquo; hint with a pencil glyph. Click swaps the body for a single
+      <code>&lt;textarea&gt;</code> with a sage outline and a footer that reads
+      &ldquo;Esc / blur saves.&rdquo; Either key path (or any click outside the
+      textarea) commits the edit via <code>saveSoapDraftAction</code> against
+      the visit&rsquo;s <code>soapVersion</code> optimistic‑lock; failure leaves
+      the textarea open with a toast.
+    </p>
+  </div>
+  <div>
+    <div class="diag-block-eyebrow">
+      <span class="diag-dot warn"></span>
+      Friction — three things the code makes hard
+    </div>
+    <h2>Why doctors call it &ldquo;very hard&rdquo;</h2>
+    <ol>
+      <li>
+        <strong style="color:var(--text);">Section ≠ scope.</strong> The textarea
+        contains the <em style="font-style:normal;color:var(--text-2);">entire</em>
+        SOAP markdown blob, not just the section you clicked
+        (<code>SoapInlineEdit.tsx&nbsp;:&nbsp;13–17</code>). You meant to fix one
+        line in Plan; you&rsquo;re looking at 300 lines covering S, O, A and P.
+      </li>
+      <li>
+        <strong style="color:var(--text);">Blur silently saves.</strong> Any click
+        outside the textarea — the coding rail, the Rx warnings,
+        whitespace — fires <code>onBlur → persist(draft)</code>. There is no
+        explicit Save or Cancel chrome; <em style="font-style:normal;color:var(--text-2);">accidental
+        commits are one stray click away</em>.
+      </li>
+      <li>
+        <strong style="color:var(--text);">Esc saves, not cancels.</strong> <code>Esc</code>
+        calls the same <code>persist(draft)</code> as blur. The control that
+        every other app uses for &ldquo;throw this away&rdquo; here means
+        &ldquo;commit and exit.&rdquo; There is no revert path — undo is up to
+        the browser&rsquo;s own undo stack, which doesn&rsquo;t survive the
+        save round‑trip.
+      </li>
+    </ol>
+  </div>
+</section>
+
+<!-- TOC -->
+<nav class="toc" aria-label="Pattern index">
+  <a href="#p1"><span class="toc-num">01</span>Per‑section inline</a>
+  <a href="#p2"><span class="toc-num">02</span>Hover mini‑toolbar</a>
+  <a href="#p3"><span class="toc-num">03</span>Edit pill toggle</a>
+  <a href="#p4"><span class="toc-num">04</span>Always‑editable</a>
+  <a href="#p5"><span class="toc-num">05</span>Modal editor</a>
+  <a href="#p6"><span class="toc-num">06</span>Side‑panel editor</a>
+  <a href="#p7"><span class="toc-num">07</span>Click select · dbl‑click edit</a>
+  <a href="#p8"><span class="toc-num">08</span>SOAP‑wide View / Edit</a>
+  <a href="#p9"><span class="toc-num">09</span>Sticky action bar</a>
+  <a href="#p10"><span class="toc-num">10</span>Voice‑first edit</a>
+</nav>
+
+<!-- Reusable SVG glyphs (Lucide-aligned strokes) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+    </symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 19v3"/>
+    </symbol>
+    <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6 18 18M18 6 6 18"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-12"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/>
+    </symbol>
+    <symbol id="i-regen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 12a9 9 0 1 1-3.5-7.1"/><path d="M21 4v5h-5"/>
+    </symbol>
+    <symbol id="i-panel" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="4" width="18" height="16" rx="2"/><path d="M14 4v16"/>
+    </symbol>
+    <symbol id="i-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>
+    </symbol>
+    <symbol id="i-cmd" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M6 6a2 2 0 1 1 2 2v8a2 2 0 1 1-2-2zM18 18a2 2 0 1 1-2-2V8a2 2 0 1 1 2 2zM8 8h8v8H8z"/>
+    </symbol>
+    <symbol id="i-dot" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="3"/></symbol>
+  </defs>
+</svg>
+
+
+<!-- =====================================================================
+     PATTERN 01 — Per-section inline edit (replaces near-status-quo seed)
+     ===================================================================== -->
+<section class="pattern" id="p1">
+  <header class="pattern-head">
+    <div class="pattern-num">01</div>
+    <div class="pattern-meta">
+      <h3>Per‑section inline edit</h3>
+      <p class="subtitle">
+        Click a section, edit <em style="font-style:normal;color:var(--text);">only</em>
+        that section. The other three stay rendered as prose, so the SOAP
+        context never disappears under a 300‑line textarea.
+        Swapped in for the seed&rsquo;s &ldquo;click + hover pencil&rdquo;
+        refinement because the seed leaves the worst friction
+        (whole‑blob scope) untouched.
+      </p>
+    </div>
+    <div class="pattern-tags">
+      <span class="tag win">Win · scope = visible section</span>
+      <span class="tag cost">Cost · per‑section serializer</span>
+    </div>
+  </header>
+  <div class="frames">
+    <!-- Frame 1 — view -->
+    <div class="frame">
+      <div class="frame-head">
+        <div class="frame-step"><span class="num">1</span>View</div>
+        <div class="frame-label">cursor elsewhere</div>
+      </div>
+      <div class="frame-body frame-body--with-rail">
+        <div class="rail-sliver">
+          <div class="rail-chip sage"></div>
+          <div class="rail-chip"></div>
+          <div class="rail-chip amber"></div>
+          <div class="rail-chip"></div>
+        </div>
+        <div class="soap">
+          <div class="soap-head">
+            <div class="soap-eyebrow">
+              <span class="soap-letter">S</span>
+              <span>Subjective</span>
+            </div>
+            <span class="pill pill-dim">RSC · 4 elts</span>
+          </div>
+          <div class="soap-body">58 y/o male presents with 3 days of productive cough, fevers to 101 °F, and right‑sided pleuritic chest pain. Yellow‑green sputum, subjective chills, denies hemoptysis. <em>PMH: HTN, T2DM (A1c 7.2%), prior CAP 2018.</em></div>
+        </div>
+        <div class="ghost">
+          <div class="ghost-row"><span class="ghost-letter">O</span>Objective</div>
+          <div class="ghost-line"></div>
+          <div class="ghost-row"><span class="ghost-letter">A</span>Assessment</div>
+          <div class="ghost-line"></div>
+          <div class="ghost-row"><span class="ghost-letter">P</span>Plan</div>
+        </div>
+      </div>
+    </div>
+    <!-- Frame 2 — trigger -->
+    <div class="frame">
+      <div class="frame-head">
+        <div class="frame-step active"><span class="num">2</span>Trigger</div>
+        <div class="frame-label">hover Subjective</div>
+      </div>
+      <div class="frame-body frame-body--with-rail">
+        <div class="rail-sliver">
+          <div class="rail-chip sage"></div>
+          <div class="rail-chip"></div>
+          <div class="rail-chip amber"></div>
+          <div class="rail-chip"></div>
+        </div>
+        <div class="soap">
+          <div class="soap-head">
+            <div class="soap-eyebrow">
+              <span class="soap-letter">S</span>
+              <span>Subjective</span>
+            </div>
+            <span class="pill pill-dim">RSC · 4 elts</span>
+          </div>
+          <div class="soap-body soap-body--hover">58 y/o male presents with 3 days of productive cough, fevers to 101 °F, and right‑sided pleuritic chest pain. Yellow‑green sputum, subjective chills, denies hemoptysis. <em>PMH: HTN, T2DM (A1c 7.2%), prior CAP 2018.</em>
+            <div class="edit-hint"><svg class="ico"><use href="#i-pencil"/></svg>Click to edit · Subjective only</div>
+          </div>
+        </div>
+        <div class="ghost">
+          <div class="ghost-row"><span class="ghost-letter">O</span>Objective</div>
+          <div class="ghost-line"></div>
+          <div class="ghost-row"><span class="ghost-letter">A</span>Assessment</div>
+        </div>
+      </div>
+    </div>
+    <!-- Frame 3 — active edit -->
+    <div class="frame">
+      <div class="frame-head">
+        <div class="frame-step active"><span class="num">3</span>Edit</div>
+        <div class="frame-label">scope: Subjective</div>
+      </div>
+      <div class="frame-body frame-body--with-rail">
+        <div class="rail-sliver">
+          <div class="rail-chip sage"></div>
+          <div class="rail-chip"></div>
+          <div class="rail-chip amber"></div>
+          <div class="rail-chip"></div>
+        </div>
+        <div class="soap">
+          <div class="soap-head">
+            <div class="soap-eyebrow">
+              <span class="soap-letter">S</span>
+              <span>Subjective</span>
+              <span class="pill pill-sage" style="margin-left:6px;">Editing</span>
+            </div>
+            <span class="pill pill-dim">unsaved</span>
+          </div>
+          <textarea class="ta" rows="4">58 y/o male presents with 3 days of productive cough, fevers to 101 °F, and right‑sided pleuritic chest pain. Yellow‑green sputum, subjective chills, denies hemoptysis. Notes mild dyspnea on exertion.</textarea>
+          <div class="ta-foot">
+            <span>scope: <span style="color:var(--sage-bright);">Subjective</span> · <span class="kbd">Esc</span> revert · <span class="kbd">⌘↵</span> save</span>
+            <span style="display:inline-flex;gap:6px;align-items:center;"><span style="color:var(--sage-bright);"><svg class="ico"><use href="#i-check"/></svg></span> saved 12s ago</span>
+          </div>
+        </div>
+        <div class="ghost">
+          <div class="ghost-row"><span class="ghost-letter">O</span>Objective</div>
+          <div class="ghost-line"></div>
+          <div class="ghost-row"><span class="ghost-letter">P</span>Plan</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- =====================================================================
+     PATTERN 02 — Hover floating mini-toolbar
+     ===================================================================== -->
+<section class="pattern" id="p2">
+  <header class="pattern-head">
+    <div class="pattern-num">02</div>
+    <div class="pattern-meta">
+      <h3>Hover floating mini‑toolbar</h3>
+      <p class="subtitle">
+        Hover a section, get a small floating chip in the top‑right
+        with <em style="font-style:normal;color:var(--text);">Edit</em> · <em style="font-style:normal;color:var(--text);">Regenerate</em> · <em style="font-style:normal;color:var(--text);">Copy</em>.
+        Edit then opens the inline textarea with the same toolbar
+        promoted to <em style="font-style:normal;color:var(--text);">Save</em> / <em style="font-style:normal;color:var(--text);">Cancel</em> / <em style="font-style:normal;color:var(--text);">Regenerate</em>.
+      </p>
+    </div>
+    <div class="pattern-tags">
+      <span class="tag win">Win · regenerate in reach</span>
+      <span class="tag cost">Cost · touch ergonomics</span>
+    </div>
+  </header>
+  <div class="frames">
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step"><span class="num">1</span>View</div><div class="frame-label">no chrome</div></div>
+      <div class="frame-body">
+        <div class="soap">
+          <div class="soap-head">
+            <div class="soap-eyebrow"><span class="soap-letter">P</span><span>Plan</span></div>
+            <span class="pill pill-dim">5 items</span>
+          </div>
+          <div class="soap-body">CXR to confirm consolidation; CBC + BMP + procalcitonin. Start <strong>amoxicillin‑clavulanate</strong> 875 mg BID × 7 d + <strong>azithromycin</strong> 500 mg day 1, then 250 mg daily × 4 d. Smoking‑cessation counseling. Return precautions reviewed. F/U 5–7 days or sooner.</div>
+        </div>
+      </div>
+    </div>
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step active"><span class="num">2</span>Trigger</div><div class="frame-label">hover · toolbar appears</div></div>
+      <div class="frame-body">
+        <div class="soap" style="position:relative;">
+          <div class="soap-head">
+            <div class="soap-eyebrow"><span class="soap-letter">P</span><span>Plan</span></div>
+            <span class="pill pill-dim">5 items</span>
+          </div>
+          <div class="soap-body soap-body--hover">CXR to confirm consolidation; CBC + BMP + procalcitonin. Start <strong>amoxicillin‑clavulanate</strong> 875 mg BID × 7 d + <strong>azithromycin</strong> 500 mg day 1, then 250 mg daily × 4 d. Smoking‑cessation counseling. Return precautions reviewed. F/U 5–7 days or sooner.</div>
+          <div class="toolbar" style="top:42px;">
+            <button class="btn-icon" aria-label="Edit"><svg><use href="#i-pencil"/></svg></button>
+            <button class="btn-icon" aria-label="Regenerate"><svg><use href="#i-regen"/></svg></button>
+            <button class="btn-icon" aria-label="Copy"><svg><use href="#i-copy"/></svg></button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step active"><span class="num">3</span>Edit</div><div class="frame-label">toolbar = Save / Cancel</div></div>
+      <div class="frame-body">
+        <div class="soap" style="position:relative;">
+          <div class="soap-head">
+            <div class="soap-eyebrow"><span class="soap-letter">P</span><span>Plan</span></div>
+            <span class="pill pill-sage">Editing</span>
+          </div>
+          <textarea class="ta" rows="5">CXR to confirm consolidation; CBC + BMP + procalcitonin. Start amoxicillin‑clavulanate 875 mg BID × 7 d + azithromycin 500 mg day 1, then 250 mg daily × 4 d. Smoking‑cessation counseling – patient amenable. Return precautions reviewed; f/u 5–7 d.</textarea>
+          <div class="toolbar" style="top:42px;">
+            <button class="btn btn-primary"><svg class="ico"><use href="#i-check"/></svg> Save</button>
+            <button class="btn"><svg class="ico"><use href="#i-x"/></svg> Cancel</button>
+            <button class="btn-icon" aria-label="Regenerate"><svg><use href="#i-regen"/></svg></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- =====================================================================
+     PATTERN 03 — Section-header Edit pill toggle
+     ===================================================================== -->
+<section class="pattern" id="p3">
+  <header class="pattern-head">
+    <div class="pattern-num">03</div>
+    <div class="pattern-meta">
+      <h3>Section‑header &ldquo;Edit&rdquo; pill toggle</h3>
+      <p class="subtitle">
+        The section&rsquo;s right‑side pill is the affordance — visible at
+        rest, never a mystery click. Toggles to <em style="font-style:normal;color:var(--text);">Done</em>
+        in sage during edit; Cancel is always reachable next to it.
+        Doctors who never hover (Ctrl‑F + scroll users) still see how to
+        edit.
+      </p>
+    </div>
+    <div class="pattern-tags">
+      <span class="tag win">Win · always discoverable</span>
+      <span class="tag cost">Cost · header chrome on every section</span>
+    </div>
+  </header>
+  <div class="frames">
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step"><span class="num">1</span>View</div><div class="frame-label">pill at rest</div></div>
+      <div class="frame-body">
+        <div class="soap">
+          <div class="soap-head">
+            <div class="soap-eyebrow"><span class="soap-letter">A</span><span>Assessment</span></div>
+            <span class="pill"><svg class="ico"><use href="#i-pencil"/></svg> Edit</span>
+          </div>
+          <div class="soap-body">Community‑acquired pneumonia, right lower lobe, moderate severity (<strong>CURB‑65 = 1</strong>). Concurrent <strong>HTN</strong> and <strong>T2DM</strong> at baseline. No criteria for hospitalization at present visit.</div>
+        </div>
+      </div>
+    </div>
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step active"><span class="num">2</span>Trigger</div><div class="frame-label">hover · pill darkens</div></div>
+      <div class="frame-body">
+        <div class="soap">
+          <div class="soap-head">
+            <div class="soap-eyebrow"><span class="soap-letter">A</span><span>Assessment</span></div>
+            <span class="pill" style="background:var(--surface-3);color:var(--text);border-color:var(--border-strong);"><svg class="ico"><use href="#i-pencil"/></svg> Edit</span>
+          </div>
+          <div class="soap-body">Community‑acquired pneumonia, right lower lobe, moderate severity (<strong>CURB‑65 = 1</strong>). Concurrent <strong>HTN</strong> and <strong>T2DM</strong> at baseline. No criteria for hospitalization at present visit.</div>
+        </div>
+      </div>
+    </div>
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step active"><span class="num">3</span>Edit</div><div class="frame-label">pill → Done / Cancel</div></div>
+      <div class="frame-body">
+        <div class="soap">
+          <div class="soap-head">
+            <div class="soap-eyebrow"><span class="soap-letter">A</span><span>Assessment</span></div>
+            <div style="display:inline-flex;gap:4px;">
+              <span class="pill pill-sage"><svg class="ico"><use href="#i-check"/></svg> Done</span>
+              <span class="pill pill-dim">Cancel</span>
+            </div>
+          </div>
+          <textarea class="ta" rows="4">Community‑acquired pneumonia, right lower lobe, moderate severity (CURB‑65 = 1). Mild hypoxia at SpO₂ 94% RA. Concurrent HTN and T2DM at baseline; no acute decompensation. No criteria for inpatient management today.</textarea>
+          <div class="ta-foot">
+            <span>scope: <span style="color:var(--sage-bright);">Assessment</span></span>
+            <span>autosave on Done</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- =====================================================================
+     PATTERN 04 — Always-editable inline + autosave
+     ===================================================================== -->
+<section class="pattern" id="p4">
+  <header class="pattern-head">
+    <div class="pattern-num">04</div>
+    <div class="pattern-meta">
+      <h3>Always‑editable inline · autosave</h3>
+      <p class="subtitle">
+        No edit mode at all. Each section&rsquo;s body is
+        <code>contenteditable</code>; cursor lands wherever you click,
+        characters apply immediately, a small autosave dot tracks the
+        debounce. The save/cancel ceremony disappears entirely.
+      </p>
+    </div>
+    <div class="pattern-tags">
+      <span class="tag win">Win · zero ceremony</span>
+      <span class="tag cost">Cost · easy to type by accident</span>
+    </div>
+  </header>
+  <div class="frames">
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step"><span class="num">1</span>View</div><div class="frame-label">idle · last saved 2m</div></div>
+      <div class="frame-body">
+        <div class="soap">
+          <div class="soap-head">
+            <div class="soap-eyebrow"><span class="soap-letter">O</span><span>Objective</span></div>
+            <span class="pill pill-dim"><svg class="ico"><use href="#i-dot"/></svg> Saved 2m ago</span>
+          </div>
+          <div class="soap-body" style="cursor:text;">T 100.4 °F · HR 96 · BP 138/84 · RR 20 · SpO₂ 94 % RA. <strong>Pulm:</strong> decreased breath sounds RLL with dullness to percussion; focal crackles RLL. <strong>Cardiac:</strong> RRR, no murmurs. <strong>Abd:</strong> soft, non‑tender.</div>
+        </div>
+      </div>
+    </div>
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step active"><span class="num">2</span>Trigger</div><div class="frame-label">click drops caret</div></div>
+      <div class="frame-body">
+        <div class="soap">
+          <div class="soap-head">
+            <div class="soap-eyebrow"><span class="soap-letter">O</span><span>Objective</span></div>
+            <span class="pill pill-dim"><svg class="ico"><use href="#i-dot"/></svg> Saved 2m ago</span>
+          </div>
+          <div class="soap-body soap-body--hover" style="border-color:var(--sage-edge);cursor:text;">T 100.4 °F · HR 96 · BP 138/84 · RR 20 · SpO₂ 94 % RA. <strong>Pulm:</strong> decreased breath sounds RLL<span class="caret"></span> with dullness to percussion; focal crackles RLL. <strong>Cardiac:</strong> RRR, no murmurs. <strong>Abd:</strong> soft, non‑tender.</div>
+        </div>
+      </div>
+    </div>
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step active"><span class="num">3</span>Edit</div><div class="frame-label">typing · autosave pending</div></div>
+      <div class="frame-body">
+        <div class="soap">
+          <div class="soap-head">
+            <div class="soap-eyebrow"><span class="soap-letter">O</span><span>Objective</span></div>
+            <span class="pill pill-amber"><svg class="ico"><use href="#i-dot"/></svg> Saving in 600 ms…</span>
+          </div>
+          <div class="soap-body soap-body--hover" style="border-color:var(--sage-edge);cursor:text;">T 100.4 °F · HR 96 · BP 138/84 · RR 20 · SpO₂ 94 % RA. <strong>Pulm:</strong> decreased breath sounds RLL <strong>and dullness to percussion</strong> over the right base; focal crackles RLL, no wheeze<span class="caret"></span>. <strong>Cardiac:</strong> RRR, no murmurs. <strong>Abd:</strong> soft, non‑tender.</div>
+          <div class="ta-foot" style="margin-top:8px;">
+            <span><span class="kbd">⌘Z</span> undo · history kept 60 s</span>
+            <span style="color:var(--amber);">debounced autosave</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- =====================================================================
+     PATTERN 05 — Modal editor with formatting tools
+     ===================================================================== -->
+<section class="pattern" id="p5">
+  <header class="pattern-head">
+    <div class="pattern-num">05</div>
+    <div class="pattern-meta">
+      <h3>Modal editor with formatting tools</h3>
+      <p class="subtitle">
+        Click a section, get a focused modal: more vertical real estate
+        than the section can spare, a tiny formatting toolbar (Bold /
+        Italic / H3 / List), and explicit Save / Cancel / Regenerate.
+        Heavy ceremony — earns its weight when the edit is non‑trivial.
+      </p>
+    </div>
+    <div class="pattern-tags">
+      <span class="tag win">Win · big edit area · formatting</span>
+      <span class="tag cost">Cost · hides coding rail context</span>
+    </div>
+  </header>
+  <div class="frames">
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step"><span class="num">1</span>View</div><div class="frame-label">no modal</div></div>
+      <div class="frame-body">
+        <div class="soap">
+          <div class="soap-head">
+            <div class="soap-eyebrow"><span class="soap-letter">A</span><span>Assessment</span></div>
+            <span class="pill pill-dim">CURB‑65 · 1</span>
+          </div>
+          <div class="soap-body">Community‑acquired pneumonia, right lower lobe, moderate severity. Concurrent HTN and T2DM both at baseline. No criteria for hospitalization at present visit.</div>
+        </div>
+      </div>
+    </div>
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step active"><span class="num">2</span>Trigger</div><div class="frame-label">click · backdrop fades in</div></div>
+      <div class="frame-body" style="padding:0;">
+        <div class="modal-backdrop" style="background:rgba(0,0,0,0.30);">
+          <div style="padding:14px;font-family:var(--font-mono);font-size:10px;letter-spacing:0.08em;color:var(--text-3);text-transform:uppercase;text-align:center;">opening editor…<br><span style="color:var(--sage-bright);font-size:9.5px;">scope: Assessment</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step active"><span class="num">3</span>Edit</div><div class="frame-label">modal · format · save</div></div>
+      <div class="frame-body" style="padding:0;">
+        <div class="modal-backdrop">
+          <div class="modal-panel">
+            <div class="modal-head">
+              <div class="soap-eyebrow"><span class="soap-letter">A</span><span>Edit · Assessment</span></div>
+              <span class="pill pill-dim"><svg class="ico"><use href="#i-x"/></svg></span>
+            </div>
+            <div class="modal-body">
+              <div class="fmt-bar">
+                <span class="fmt bold">B</span>
+                <span class="fmt italic">I</span>
+                <span class="fmt">H₃</span>
+                <span class="fmt">·</span>
+                <span class="fmt">1.</span>
+                <span style="flex:1"></span>
+                <span class="pill pill-dim">v3 · auto</span>
+              </div>
+              <textarea class="ta" rows="6" style="min-height:120px;">Community‑acquired pneumonia, right lower lobe, moderate severity (CURB‑65 = 1). Mild hypoxia at SpO₂ 94% RA. Concurrent HTN and T2DM at baseline.</textarea>
+            </div>
+            <div class="modal-foot">
+              <button class="btn"><svg class="ico"><use href="#i-regen"/></svg> Regenerate</button>
+              <div style="display:flex;gap:6px;">
+                <button class="btn">Cancel</button>
+                <button class="btn btn-primary"><svg class="ico"><use href="#i-check"/></svg> Save</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- =====================================================================
+     PATTERN 06 — Right side-panel editor
+     ===================================================================== -->
+<section class="pattern" id="p6">
+  <header class="pattern-head">
+    <div class="pattern-num">06</div>
+    <div class="pattern-meta">
+      <h3>Right side‑panel editor</h3>
+      <p class="subtitle">
+        Click a section, a panel slides in from the right. The original
+        section stays visible (dimmed, read‑only) on the left so the
+        doctor can <em style="font-style:normal;color:var(--text);">compare</em>
+        as they write. Trades the coding rail for the editor while the
+        panel is open.
+      </p>
+    </div>
+    <div class="pattern-tags">
+      <span class="tag win">Win · keep read context</span>
+      <span class="tag cost">Cost · hides coding rail</span>
+    </div>
+  </header>
+  <div class="frames">
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step"><span class="num">1</span>View</div><div class="frame-label">rail visible</div></div>
+      <div class="frame-body frame-body--with-rail">
+        <div class="rail-sliver">
+          <div class="rail-chip sage"></div>
+          <div class="rail-chip"></div>
+          <div class="rail-chip amber"></div>
+          <div class="rail-chip"></div>
+          <div class="rail-chip"></div>
+        </div>
+        <div class="soap">
+          <div class="soap-head">
+            <div class="soap-eyebrow"><span class="soap-letter">S</span><span>Subjective</span></div>
+            <span class="pill pill-dim">RSC · 4 elts</span>
+          </div>
+          <div class="soap-body">58 y/o male presents with 3 days of productive cough, fevers to 101 °F, and right‑sided pleuritic chest pain. Yellow‑green sputum, subjective chills, denies hemoptysis.</div>
+        </div>
+      </div>
+    </div>
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step active"><span class="num">2</span>Trigger</div><div class="frame-label">panel slides in</div></div>
+      <div class="frame-body" style="padding-right:0;">
+        <div class="soap" style="opacity:0.45;padding-right:14px;">
+          <div class="soap-head">
+            <div class="soap-eyebrow"><span class="soap-letter">S</span><span>Subjective</span></div>
+            <span class="pill pill-dim">opening…</span>
+          </div>
+          <div class="soap-body" style="border-left:2px solid var(--sage);background:rgba(122,166,140,0.04);">58 y/o male presents with 3 days of productive cough, fevers to 101 °F, and right‑sided pleuritic chest pain. Yellow‑green sputum, subjective chills, denies hemoptysis.</div>
+        </div>
+        <div class="panel-shell" style="width:48%;">
+          <div class="panel-shell-head">
+            <div class="soap-eyebrow"><svg class="ico-12" style="color:var(--sage-bright);"><use href="#i-panel"/></svg><span style="color:var(--text-2);">Editing</span></div>
+            <span class="pill pill-dim"><svg class="ico"><use href="#i-x"/></svg></span>
+          </div>
+          <div style="font-family:var(--font-mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-3);">panel mounting…</div>
+        </div>
+      </div>
+    </div>
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step active"><span class="num">3</span>Edit</div><div class="frame-label">read · edit · save</div></div>
+      <div class="frame-body" style="padding-right:0;">
+        <div class="soap" style="opacity:0.55;padding-right:14px;">
+          <div class="soap-head">
+            <div class="soap-eyebrow"><span class="soap-letter">S</span><span>Subjective</span></div>
+          </div>
+          <div class="soap-body">58 y/o male presents with 3 days of productive cough, fevers to 101 °F, and right‑sided pleuritic chest pain. Yellow‑green sputum, subjective chills, denies hemoptysis.</div>
+        </div>
+        <div class="panel-shell">
+          <div class="panel-shell-head">
+            <div class="soap-eyebrow"><span class="soap-letter">S</span><span>Subjective · edit</span></div>
+            <span class="pill pill-dim"><svg class="ico"><use href="#i-x"/></svg></span>
+          </div>
+          <textarea class="ta" rows="6" style="min-height:120px;">58 y/o male presents with 3 days of productive cough, fevers to 101 °F, and right‑sided pleuritic chest pain. Yellow‑green sputum, subjective chills, denies hemoptysis. Notes mild dyspnea on exertion. Smoker, 1 ppd × 30 yr.</textarea>
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-top:auto;">
+            <span class="pill pill-dim">+1 sentence</span>
+            <div style="display:flex;gap:6px;"><button class="btn">Cancel</button><button class="btn btn-primary"><svg class="ico"><use href="#i-check"/></svg> Save</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- =====================================================================
+     PATTERN 07 — Single-click select / double-click edit
+     ===================================================================== -->
+<section class="pattern" id="p7">
+  <header class="pattern-head">
+    <div class="pattern-num">07</div>
+    <div class="pattern-meta">
+      <h3>Click to select · double‑click to edit</h3>
+      <p class="subtitle">
+        Single click marks the section as &ldquo;in focus&rdquo; for copy
+        / referencing (sage left bar, same active state already in
+        production). Double‑click — the Word / Docs gesture — promotes
+        it to edit. Eliminates accidental edits at the cost of one
+        learnability hint.
+      </p>
+    </div>
+    <div class="pattern-tags">
+      <span class="tag win">Win · no accidental edits</span>
+      <span class="tag cost">Cost · double‑click discoverability</span>
+    </div>
+  </header>
+  <div class="frames">
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step"><span class="num">1</span>View</div><div class="frame-label">not selected</div></div>
+      <div class="frame-body">
+        <div class="soap">
+          <div class="soap-head">
+            <div class="soap-eyebrow"><span class="soap-letter">P</span><span>Plan</span></div>
+            <span class="pill pill-dim">5 items</span>
+          </div>
+          <div class="soap-body">CXR to confirm consolidation; CBC + BMP + procalcitonin. Start <strong>amoxicillin‑clavulanate</strong> 875 mg BID × 7 d. Smoking‑cessation counseling. F/U 5–7 days.</div>
+        </div>
+      </div>
+    </div>
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step active"><span class="num">2</span>Trigger</div><div class="frame-label">1× click → selected</div></div>
+      <div class="frame-body">
+        <div class="soap">
+          <div class="soap-head">
+            <div class="soap-eyebrow"><span class="soap-letter">P</span><span>Plan</span></div>
+            <span class="pill pill-dim"><svg class="ico"><use href="#i-copy"/></svg> ⌘C · Copy</span>
+          </div>
+          <div class="soap-body soap-body--hover" style="background:rgba(122,166,140,0.05);border-color:var(--sage-edge);">CXR to confirm consolidation; CBC + BMP + procalcitonin. Start <strong>amoxicillin‑clavulanate</strong> 875 mg BID × 7 d. Smoking‑cessation counseling. F/U 5–7 days.</div>
+          <div class="note"><strong>Tip</strong> double‑click to edit · <span class="kbd">↵</span> works too</div>
+        </div>
+      </div>
+    </div>
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step active"><span class="num">3</span>Edit</div><div class="frame-label">2× click · textarea</div></div>
+      <div class="frame-body">
+        <div class="soap">
+          <div class="soap-head">
+            <div class="soap-eyebrow"><span class="soap-letter">P</span><span>Plan</span> <span class="pill pill-sage" style="margin-left:6px;">Editing</span></div>
+            <span class="pill pill-dim"><span class="kbd">Esc</span> revert</span>
+          </div>
+          <textarea class="ta" rows="4">CXR to confirm consolidation; CBC + BMP + procalcitonin. Start amoxicillin‑clavulanate 875 mg BID × 7 d, plus azithromycin 500 mg day 1, 250 mg daily × 4 d. Smoking‑cessation counseling — patient amenable. F/U 5–7 d.</textarea>
+          <div class="ta-foot">
+            <span>caret at end · <span class="kbd">⌘↵</span> save</span>
+            <span>2 changes</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- =====================================================================
+     PATTERN 08 — Whole-SOAP View / Edit toggle
+     ===================================================================== -->
+<section class="pattern" id="p8">
+  <header class="pattern-head">
+    <div class="pattern-num">08</div>
+    <div class="pattern-meta">
+      <h3>SOAP‑wide View / Edit toggle</h3>
+      <p class="subtitle">
+        One mode switch at the top of the SOAP column flips
+        <em style="font-style:normal;color:var(--text);">every</em> section
+        between rendered prose and textarea. For the &ldquo;I&rsquo;m about
+        to rewrite this whole note&rdquo; flow, where touching one section
+        at a time is friction in itself.
+      </p>
+    </div>
+    <div class="pattern-tags">
+      <span class="tag win">Win · whole‑note refactor</span>
+      <span class="tag cost">Cost · loses focused‑edit model</span>
+    </div>
+  </header>
+  <div class="frames">
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step"><span class="num">1</span>View</div><div class="frame-label">View mode</div></div>
+      <div class="frame-body">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--hairline);">
+          <span style="font-family:var(--font-mono);font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-3);">SOAP · v3 · auto‑saved</span>
+          <div class="toggle"><button class="toggle-opt on">View</button><button class="toggle-opt">Edit</button></div>
+        </div>
+        <div class="soap" style="margin-bottom:10px;">
+          <div class="soap-head" style="margin-bottom:6px;padding-bottom:6px;">
+            <div class="soap-eyebrow"><span class="soap-letter">S</span><span>Subjective</span></div>
+          </div>
+          <div class="soap-body" style="font-size:11.5px;">58 y/o male presents with productive cough × 3 d…</div>
+        </div>
+        <div class="ghost"><div class="ghost-row"><span class="ghost-letter">O</span>Objective</div><div class="ghost-line"></div><div class="ghost-row"><span class="ghost-letter">A</span>Assessment</div><div class="ghost-line"></div><div class="ghost-row"><span class="ghost-letter">P</span>Plan</div></div>
+      </div>
+    </div>
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step active"><span class="num">2</span>Trigger</div><div class="frame-label">flip toggle</div></div>
+      <div class="frame-body">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--hairline);">
+          <span style="font-family:var(--font-mono);font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-3);">SOAP · v3</span>
+          <div class="toggle"><button class="toggle-opt">View</button><button class="toggle-opt on">Edit</button></div>
+        </div>
+        <div class="soap" style="margin-bottom:8px;">
+          <div class="soap-head" style="margin-bottom:6px;padding-bottom:6px;">
+            <div class="soap-eyebrow"><span class="soap-letter">S</span><span>Subjective</span></div>
+          </div>
+          <div class="soap-body soap-body--hover" style="font-size:11.5px;border-color:var(--sage-edge);">58 y/o male presents with productive cough × 3 d…</div>
+        </div>
+        <div style="font-family:var(--font-mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--sage-bright);text-align:center;margin-top:14px;">all 4 sections becoming editable…</div>
+      </div>
+    </div>
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step active"><span class="num">3</span>Edit</div><div class="frame-label">all four open · Save / Cancel</div></div>
+      <div class="frame-body">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--hairline);">
+          <div class="toggle"><button class="toggle-opt">View</button><button class="toggle-opt on">Edit</button></div>
+          <div style="display:flex;gap:5px;"><button class="btn">Cancel all</button><button class="btn btn-primary"><svg class="ico"><use href="#i-check"/></svg> Save all</button></div>
+        </div>
+        <div class="soap-eyebrow" style="margin-bottom:5px;"><span class="soap-letter">S</span>Subjective</div>
+        <textarea class="ta" rows="2" style="min-height:44px;font-size:11px;">58 y/o male, cough × 3 d, fevers 101 °F…</textarea>
+        <div class="soap-eyebrow" style="margin:8px 0 5px;"><span class="soap-letter">O</span>Objective</div>
+        <textarea class="ta" rows="2" style="min-height:44px;font-size:11px;">T 100.4 °F · HR 96 · BP 138/84 · SpO₂ 94 %…</textarea>
+        <div class="soap-eyebrow" style="margin:8px 0 5px;color:var(--text-4);">A · P …</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- =====================================================================
+     PATTERN 09 — Sticky bottom action bar
+     ===================================================================== -->
+<section class="pattern" id="p9">
+  <header class="pattern-head">
+    <div class="pattern-num">09</div>
+    <div class="pattern-meta">
+      <h3>Click‑enters‑edit · sticky bottom action bar</h3>
+      <p class="subtitle">
+        Same click‑to‑edit primitive, but Save / Cancel / Regenerate /
+        Discard never leave the viewport — they live in a sticky bar at
+        the bottom of the column. Directly answers
+        <em style="font-style:normal;color:var(--text);">&ldquo;Esc / blur saves&rdquo;</em>
+        by making the controls visible at all times.
+      </p>
+    </div>
+    <div class="pattern-tags">
+      <span class="tag win">Win · explicit save / cancel</span>
+      <span class="tag cost">Cost · viewport chrome cost</span>
+    </div>
+  </header>
+  <div class="frames">
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step"><span class="num">1</span>View</div><div class="frame-label">no bar</div></div>
+      <div class="frame-body">
+        <div class="soap">
+          <div class="soap-head">
+            <div class="soap-eyebrow"><span class="soap-letter">P</span><span>Plan</span></div>
+            <span class="pill pill-dim">5 items</span>
+          </div>
+          <div class="soap-body">CXR to confirm consolidation; CBC + BMP + procalcitonin. Start <strong>amoxicillin‑clavulanate</strong> 875 mg BID × 7 d. Smoking‑cessation counseling. F/U 5–7 days.</div>
+        </div>
+      </div>
+    </div>
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step active"><span class="num">2</span>Trigger</div><div class="frame-label">click → bar slides up</div></div>
+      <div class="frame-body" style="padding-bottom:60px;">
+        <div class="soap">
+          <div class="soap-head">
+            <div class="soap-eyebrow"><span class="soap-letter">P</span><span>Plan</span> <span class="pill pill-sage" style="margin-left:6px;">Editing</span></div>
+          </div>
+          <textarea class="ta" rows="4">CXR to confirm consolidation; CBC + BMP + procalcitonin. Start amoxicillin‑clavulanate 875 mg BID × 7 d. Smoking‑cessation counseling. F/U 5–7 days.</textarea>
+        </div>
+        <div class="actionbar">
+          <span class="actionbar-label"><span class="actionbar-dot"></span>Editing Plan</span>
+          <div class="actionbar-actions">
+            <button class="btn"><svg class="ico"><use href="#i-regen"/></svg> Regenerate</button>
+            <button class="btn">Cancel</button>
+            <button class="btn btn-primary"><svg class="ico"><use href="#i-check"/></svg> Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step active"><span class="num">3</span>Edit</div><div class="frame-label">typing · unsaved</div></div>
+      <div class="frame-body" style="padding-bottom:60px;">
+        <div class="soap">
+          <div class="soap-head">
+            <div class="soap-eyebrow"><span class="soap-letter">P</span><span>Plan</span> <span class="pill pill-sage" style="margin-left:6px;">Editing</span></div>
+            <span class="pill pill-amber">3 unsaved</span>
+          </div>
+          <textarea class="ta" rows="5">CXR + lateral to confirm consolidation; CBC w/ diff + BMP + procalcitonin. Start amoxicillin‑clavulanate 875 mg BID × 7 d, plus azithromycin 500 mg day 1 then 250 mg daily × 4 d. Smoking‑cessation counseling — patient amenable. F/U 5–7 d or sooner if worsening.<span class="caret"></span></textarea>
+        </div>
+        <div class="actionbar">
+          <span class="actionbar-label"><span class="actionbar-dot" style="background:var(--amber);box-shadow:0 0 0 3px rgba(212,165,116,0.18);"></span>3 unsaved changes</span>
+          <div class="actionbar-actions">
+            <button class="btn btn-danger"><svg class="ico"><use href="#i-x"/></svg> Discard</button>
+            <button class="btn">Cancel</button>
+            <button class="btn btn-primary"><svg class="ico"><use href="#i-check"/></svg> Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- =====================================================================
+     PATTERN 10 — Voice-first edit
+     ===================================================================== -->
+<section class="pattern" id="p10">
+  <header class="pattern-head">
+    <div class="pattern-num">10</div>
+    <div class="pattern-meta">
+      <h3>Voice‑first edit</h3>
+      <p class="subtitle">
+        Each section header carries a small mic. Click to dictate
+        &ldquo;Add to Plan: order chest X‑ray.&rdquo; The system streams
+        a tentative paragraph the doctor approves with <em style="font-style:normal;color:var(--text);">Save</em>;
+        textarea drop‑down is the typed fallback. Aligned with the app&rsquo;s
+        existing voice‑dictation input mode.
+      </p>
+    </div>
+    <div class="pattern-tags">
+      <span class="tag win">Win · medical‑native modality</span>
+      <span class="tag cost">Cost · mic permissions · ambient noise</span>
+    </div>
+  </header>
+  <div class="frames">
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step"><span class="num">1</span>View</div><div class="frame-label">mic chip at rest</div></div>
+      <div class="frame-body">
+        <div class="soap">
+          <div class="soap-head">
+            <div class="soap-eyebrow"><span class="soap-letter">P</span><span>Plan</span></div>
+            <span class="pill"><svg class="ico"><use href="#i-mic"/></svg> Dictate</span>
+          </div>
+          <div class="soap-body">CXR to confirm consolidation; CBC + BMP + procalcitonin. Start <strong>amoxicillin‑clavulanate</strong> 875 mg BID × 7 d. Smoking‑cessation counseling. F/U 5–7 days.</div>
+        </div>
+      </div>
+    </div>
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step active"><span class="num">2</span>Trigger</div><div class="frame-label">click mic · listening</div></div>
+      <div class="frame-body" style="padding:0;position:relative;">
+        <div style="padding:18px 18px 20px;">
+          <div class="soap" style="opacity:0.18;">
+            <div class="soap-head">
+              <div class="soap-eyebrow"><span class="soap-letter">P</span><span>Plan</span></div>
+              <span class="pill"><svg class="ico"><use href="#i-mic"/></svg> Listening…</span>
+            </div>
+            <div class="soap-body">CXR to confirm consolidation; CBC + BMP + procalcitonin. Start <strong>amoxicillin‑clavulanate</strong> 875 mg BID × 7 d…</div>
+          </div>
+        </div>
+        <div class="voice-overlay">
+          <div style="display:inline-flex;align-items:center;gap:10px;padding:8px 14px;background:var(--surface-2);border:1px solid var(--sage-edge);border-radius:999px;box-shadow:0 0 0 4px rgba(122,166,140,0.12);">
+            <svg class="ico-14" style="color:var(--sage-bright);"><use href="#i-mic"/></svg>
+            <div class="wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+            <span style="font-family:var(--font-mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--sage-bright);">Listening · Plan</span>
+          </div>
+          <div style="font-family:var(--font-mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-3);">say &ldquo;cancel&rdquo; · or <span style="color:var(--text-2);">type instead ↓</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step active"><span class="num">3</span>Edit</div><div class="frame-label">tentative · accept / refine</div></div>
+      <div class="frame-body">
+        <div class="soap">
+          <div class="soap-head">
+            <div class="soap-eyebrow"><span class="soap-letter">P</span><span>Plan</span></div>
+            <span class="pill pill-amber"><svg class="ico"><use href="#i-mic"/></svg> Tentative</span>
+          </div>
+          <div class="soap-body" style="background:rgba(212,165,116,0.05);border-color:rgba(212,165,116,0.2);">CXR to confirm consolidation; CBC + BMP + procalcitonin. Start <strong>amoxicillin‑clavulanate</strong> 875 mg BID × 7 d. <span style="color:var(--amber);">Add <em style="font-style:italic;">azithromycin 500 mg day 1, then 250 mg daily × 4 d</em></span>. Smoking‑cessation counseling. F/U 5–7 d.</div>
+          <div class="ta-foot" style="margin-top:8px;">
+            <span><span class="kbd">⌘↵</span> accept · <span class="kbd">⌘D</span> dictate more · <span class="kbd">Esc</span> revert</span>
+            <button class="btn btn-primary" style="padding:3px 8px;font-size:10.5px;"><svg class="ico"><use href="#i-check"/></svg> Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- =====================================================================
+     Footer
+     ===================================================================== -->
+<footer class="footer">
+  <span>QuillMD · design directions · soap‑edit · v1</span>
+  <span><span style="color:var(--sage-bright);">10</span> · patterns · 30 · frames</span>
+</footer>
+
+</main>
+</body>
+</html>
