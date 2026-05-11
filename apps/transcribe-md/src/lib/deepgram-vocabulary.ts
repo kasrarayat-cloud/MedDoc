@@ -441,8 +441,31 @@ export const MEDICATION_KEYTERMS_FULL: readonly string[] = Array.from(
 // ============================================================================
 
 /** Most-commonly-mistranscribed body parts + anatomical regions.
- *  Trimmed to fit the 450-token combined cap with MEDICATION_KEYTERMS. */
+ *  Trimmed to fit the 450-token combined cap with MEDICATION_KEYTERMS.
+ *
+ *  2026-05-11 expansion (issue #202): added common body-part terms
+ *  after the PriMock57 eval surfaced systematic "elbow" → "eyebrow"
+ *  substitutions from Deepgram nova-3-medical. The keyterm bias makes
+ *  the ASR prior favour these common anatomical surface forms in
+ *  ambiguous decoder paths.
+ *
+ *  Design notes:
+ *  - Include BOTH the confusable pair (`elbow` + `eyebrow`,
+ *    `cheek` + `chest`) so neither side is biased against the other —
+ *    the goal is "make anatomy recognisable", not "force elbow."
+ *  - Bias toward terms patients use in their own dialogue (knee,
+ *    shoulder), not Latinate-only forms (genu, articulatio humeri).
+ *  - Medical-anatomical terms (auscultation, periumbilical) kept
+ *    because they're high-value in O / Exam sections; nova-3-medical
+ *    drifts on them too.
+ *
+ *  Budget: 88 estimated tokens across 33 entries (was 28 tokens / 7
+ *  entries). Projected CLINICAL_KEYTERMS total ≈ 426 / 450 cap → 24-
+ *  token headroom; the budget test asserts < 450 with the same
+ *  heuristic (ceil(chunk.len / 3.5)).
+ */
 export const ANATOMY_TERMS: readonly string[] = [
+  // Medical-anatomical (high-value in O/Exam; pre-2026-05-11 set).
   'auscultation',
   'palpation',
   'epigastric',
@@ -450,6 +473,49 @@ export const ANATOMY_TERMS: readonly string[] = [
   'pharyngeal',
   'tympanic membrane',
   'conjunctiva',
+  // Joints + major extremities — the "elbow → eyebrow" class from
+  // issue #202.
+  'elbow',
+  'knee',
+  'wrist',
+  'ankle',
+  'shoulder',
+  'hip',
+  'jaw',
+  // Face / head — clinically-common surface terms.
+  //
+  // **`eyebrow` is deliberately EXCLUDED** despite the initial design
+  // intuition that "including both confusables is neutral." Empirical
+  // test against the PriMock57 case-02 audio (issue #202) showed
+  // Deepgram nova-3-medical picks "eyebrows" over "elbows" when BOTH
+  // are in the keyterm list, but correctly picks "elbows" when only
+  // "elbow" is in the list. The keyterm boost is influence, not
+  // neutral inclusion. "Eyebrow" in a clinical SOAP context is
+  // exceptionally rare (alopecia, dermatitis of the brow), so the
+  // safer prior is to *not* boost it — the few legitimate cases will
+  // still decode from the acoustic model alone.
+  'eyelid',
+  'forehead',
+  'cheek',
+  // Trunk regions — chest/abdomen drift in conversation.
+  'chest',
+  'abdomen',
+  'flank',
+  'groin',
+  'pelvis',
+  // Limb segments.
+  'thigh',
+  'calf',
+  'shin',
+  'forearm',
+  'foot',
+  'hand',
+  // Back regions — frequent in pain-management contexts.
+  'lower back',
+  'upper back',
+  // Medical-anatomical confusables (drift to lay surface forms).
+  'inguinal',
+  'suprapubic',
 ];
 
 /** Common labs / panels / individual tests. Acronyms used over full
