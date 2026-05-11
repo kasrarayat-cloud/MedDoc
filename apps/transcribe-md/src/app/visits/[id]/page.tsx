@@ -644,17 +644,35 @@ async function VisitBody(props: VisitBodyProps) {
   const showPipelineTab =
     process.env.NEXT_PUBLIC_SHOW_PIPELINE_TAB === 'true';
 
-  // Phase 5.2 — server-side initial E&M score for the Coding Coach rail.
-  // Pass mdmCachedJudgement: null to force the deterministic-only fast path
-  // on initial render (<10ms p95). The client re-scores on edit via the
-  // /api/visits/[id]/em-score POST which CAN call the LLM and cache.
-  // Fail-soft: if scoring throws, render the rail in skeleton mode.
+  // Server-side initial E&M score for the Coding Coach rail. As of
+  // feat/em-score-precomputed-judge: routes through the LLM-judge
+  // path (omitting `mdmCachedJudgement`) so the rail's `suggestedCode`
+  // + `bump.toCode` agree with what the apply-additions route will
+  // actually deliver. The pipeline (worker.ts L7 fan-out) pre-warms
+  // the judge cache for every visit before transitioning to READY, so
+  // this call should be a <50ms Redis cache hit on the vast majority
+  // of page loads.
+  //
+  // Fallback: pre-2026-05-11 visits + visits where the pipeline pre-
+  // warm failed silently pay one LLM call here (~10-30s) the first
+  // time the page is opened, then are cached for the next 7 days. The
+  // server-side render blocks on this — fine for a one-time backfill
+  // cost; doesn't recur.
+  //
+  // Note: a previous design (PR pre-#207) used `mdmCachedJudgement:
+  // null` here to keep render at <10ms p95. The trade-off was honest
+  // tier display vs page-load speed. Pre-warm gives us both: the
+  // deterministic shortcut is gone but the cache hit is just as fast.
+  const session = await auth();
+  const sessionPracticeId = session?.user?.practiceId as string | undefined;
   let initialEmScore: import('@/lib/em-coding-ui/types').EmScore | null = null;
   try {
     const { computeEmScore } = await import('@/lib/em-coding/score');
     const { engineToUiScore } = await import('@/lib/em-coding/to-ui-score');
     const engineScore = await computeEmScore(soapText, {
-      mdmCachedJudgement: null,
+      practiceId: sessionPracticeId,
+      visitId: props.visitId,
+      userId: session?.user?.id,
       icdCodes: extractIcdCodesForEngine(props.icdCodes),
       rxDrafts: extractRxForEngine(props.rxDrafts),
     });
