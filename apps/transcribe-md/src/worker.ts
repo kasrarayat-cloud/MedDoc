@@ -735,7 +735,40 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         toRun.push(t);
       }
     }
+    // ── EM-score MDM judge pre-warm ────────────────────────────────
+    // Populates the Redis `em_mdm_cache:<sha256(soap)>` entry so the
+    // visit page's server-side render + the apply-additions route both
+    // hit a warm cache instead of paying the 10-30s LLM cost at click
+    // time. Fires alongside the L7 fan-out (parallel — same SOAP, no
+    // dependency on L7 outputs). Soft-fail: judging is idempotent +
+    // cached, so a missed pre-warm just shifts one judge call back to
+    // the page render. No new Prisma column needed — the cache is
+    // Redis-only with a 7-day TTL.
+    const judgeWarmPromise = (async () => {
+      try {
+        const { judgeMdm } = await import('@/lib/em-coding/llm-mdm');
+        await judgeMdm({
+          soap: soapFinalForFanout,
+          practiceId,
+          visitId,
+          userId: visit.userId,
+        });
+      } catch (err) {
+        console.error(
+          `[transcribe-md-worker] em-judge prewarm failed:`,
+          err instanceof Error ? err.message : err,
+        );
+      }
+    })();
+
     const results = await Promise.allSettled(toRun.map((t) => t.run()));
+    // Wait for the judge pre-warm to finish before transitioning to
+    // READY. Without this await the doctor could open the page while
+    // the cache write is still in flight and trigger a duplicate judge
+    // call. Awaiting after `results` keeps wall-clock the same because
+    // both run in parallel; only matters if pre-warm outlives the L7
+    // tasks (rare — judge p95 ~11s, L7 layers each 5-30s).
+    await judgeWarmPromise;
 
     // Roll settled results up into confidenceScores so the UI + future
     // observability can see per-layer status without re-reading ai_calls.
