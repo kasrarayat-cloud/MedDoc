@@ -1,0 +1,1817 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SOAP edit — 10 paradigms · v2 · QuillMD</title>
+<style>
+/* ─────────────────────────────────────────────────────────────────────
+ * v2 — paradigm exploration. The production-mirror constraint is DROPPED
+ * on purpose; each paradigm gets its own visual language so the user can
+ * see, at a glance, that these are 10 different ways of thinking about
+ * SOAP editing — not 10 variations on a textarea. Winning paradigm gets
+ * re-styled to production later.
+ * ─────────────────────────────────────────────────────────────────────*/
+:root {
+  --page-bg: #08090a;
+  --page-fg: #f4f5f7;
+  --page-fg-dim: #a8acb5;
+  --page-fg-faint: #6b7079;
+  --hair: rgba(255,255,255,0.06);
+  --hair-strong: rgba(255,255,255,0.12);
+  --sage: #7AA68C;
+  --sage-bright: #9BC4A8;
+  --sage-tint: rgba(122,166,140,0.13);
+  --amber: #D4A574;
+  --danger: #d4574a;
+  --info: #5b8db8;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-serif: 'Iowan Old Style', 'Charter', 'Palatino', Georgia, serif;
+}
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--page-bg);
+  color: var(--page-fg);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+  letter-spacing: -0.005em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+* { box-sizing: border-box; }
+
+/* ═══════════════════════════════════════════════════════════════════
+ *  Page chrome
+ * ═══════════════════════════════════════════════════════════════════ */
+.page { max-width: 1240px; margin: 0 auto; padding: 56px 28px 96px; }
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--page-fg-faint);
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 16px;
+}
+.eyebrow .v {
+  color: var(--sage-bright);
+  background: var(--sage-tint);
+  border: 1px solid rgba(122,166,140,0.30);
+  padding: 1px 8px; border-radius: 3px;
+  letter-spacing: 0.08em;
+}
+.hero h1 {
+  margin: 0 0 14px;
+  font-size: 36px;
+  font-weight: 600;
+  letter-spacing: -0.028em;
+  line-height: 1.08;
+}
+.hero h1 .strike {
+  color: var(--page-fg-faint);
+  text-decoration: line-through;
+  text-decoration-color: rgba(255,255,255,0.18);
+  text-decoration-thickness: 2px;
+  font-weight: 500;
+}
+.hero h1 .real { color: var(--sage-bright); font-family: var(--font-mono); font-size: 28px; letter-spacing: 0; }
+.hero p {
+  max-width: 760px; margin: 0;
+  color: var(--page-fg-dim);
+  font-size: 14.5px; line-height: 1.6;
+}
+.hero p em { font-style: normal; color: var(--page-fg); }
+
+.diagnostic {
+  margin: 36px 0 24px;
+  padding: 18px 22px;
+  background: rgba(212, 87, 74, 0.04);
+  border: 1px solid rgba(212, 87, 74, 0.20);
+  border-radius: 8px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 14px;
+  align-items: start;
+}
+.diagnostic .dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--danger);
+  box-shadow: 0 0 0 4px rgba(212, 87, 74, 0.16);
+  margin-top: 6px;
+}
+.diagnostic h2 {
+  margin: 0 0 4px;
+  font-size: 13px; font-weight: 600;
+  font-family: var(--font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #e6857a;
+}
+.diagnostic p {
+  margin: 0; color: var(--page-fg-dim); font-size: 13.5px; line-height: 1.55;
+}
+.diagnostic p .quote {
+  color: var(--page-fg); font-style: italic;
+}
+.diagnostic p strong { color: var(--page-fg); font-weight: 600; }
+
+/* ═══════════════════════════════════════════════════════════════════
+ *  Contact-sheet (all 10 thumbnails)
+ * ═══════════════════════════════════════════════════════════════════ */
+.contact-sheet {
+  margin: 48px 0 56px;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+.contact-sheet .ct {
+  aspect-ratio: 4 / 3;
+  border: 1px solid var(--hair-strong);
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+  text-decoration: none;
+  color: inherit;
+}
+.contact-sheet .ct-num {
+  position: absolute; top: 6px; left: 8px;
+  font-family: var(--font-mono);
+  font-size: 9.5px; letter-spacing: 0.08em;
+  color: rgba(255,255,255,0.6);
+  background: rgba(0,0,0,0.45);
+  padding: 1px 5px; border-radius: 3px;
+  z-index: 2;
+}
+.contact-sheet .ct-name {
+  position: absolute; bottom: 6px; left: 8px; right: 8px;
+  font-family: var(--font-mono);
+  font-size: 9.5px; letter-spacing: 0.05em;
+  color: var(--page-fg);
+  z-index: 2;
+}
+/* miniaturized per-paradigm thumb body, hand-crafted for each */
+.ct-body { position: absolute; inset: 0; }
+
+/* ═══════════════════════════════════════════════════════════════════
+ *  Per-paradigm section frame
+ * ═══════════════════════════════════════════════════════════════════ */
+.paradigm {
+  margin: 0 0 80px;
+  scroll-margin-top: 24px;
+}
+.p-head {
+  display: grid;
+  grid-template-columns: 56px 1fr auto;
+  gap: 18px;
+  align-items: start;
+  padding-bottom: 18px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid var(--hair);
+}
+.p-num {
+  font-family: var(--font-mono);
+  font-size: 34px;
+  color: rgba(255,255,255,0.18);
+  letter-spacing: -0.04em;
+  line-height: 0.9;
+  padding-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.p-meta h3 {
+  margin: 0 0 6px;
+  font-size: 22px; font-weight: 600;
+  letter-spacing: -0.018em;
+}
+.p-meta .sub {
+  margin: 0; font-size: 13.5px; line-height: 1.55;
+  color: var(--page-fg-dim); max-width: 600px;
+}
+.p-tags {
+  display: flex; flex-direction: column; gap: 5px; align-items: flex-end;
+  padding-top: 6px;
+}
+.tag {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 2px 9px; border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 9.5px; letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.tag::before {
+  content: ''; width: 4px; height: 4px; border-radius: 50%;
+  background: currentColor; opacity: 0.7;
+}
+.tag.win  { color: var(--sage-bright); background: var(--sage-tint); border: 1px solid rgba(122,166,140,0.30); }
+.tag.cost { color: #e3b984; background: rgba(212,165,116,0.07); border: 1px solid rgba(212,165,116,0.25); }
+.tag.bold {
+  color: var(--page-fg-dim); background: rgba(255,255,255,0.04);
+  border: 1px solid var(--hair-strong);
+}
+.tag.bold::before { display:none; }
+.tag.bold .pip {
+  display: inline-block; width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--sage); margin-right: 2px;
+}
+.tag.bold .pip.off { background: rgba(255,255,255,0.18); }
+
+/* The 2 frames per paradigm */
+.frames { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 980px) { .frames { grid-template-columns: 1fr; } }
+.frame {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  min-height: 360px;
+  display: flex; flex-direction: column;
+  border: 1px solid var(--hair-strong);
+}
+.frame-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 14px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--hair);
+}
+.frame-step {
+  display: flex; align-items: center; gap: 7px;
+  color: var(--page-fg-dim);
+}
+.frame-step .badge {
+  display: inline-grid; place-items: center;
+  width: 16px; height: 16px;
+  font-size: 9.5px;
+  border-radius: 3px;
+  background: rgba(255,255,255,0.06);
+  color: var(--page-fg-dim);
+}
+.frame-step.active .badge {
+  background: var(--sage-tint);
+  color: var(--sage-bright);
+  border: 1px solid rgba(122,166,140,0.30);
+}
+
+/* SVG glyph helpers */
+.ico { width: 12px; height: 12px; flex: 0 0 12px; }
+.ico-14 { width: 14px; height: 14px; flex: 0 0 14px; }
+.ico-16 { width: 16px; height: 16px; flex: 0 0 16px; }
+
+.kbd {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--hair-strong);
+  color: var(--page-fg-dim);
+  padding: 0 4px;
+  border-radius: 3px;
+}
+
+.foot {
+  margin-top: 80px;
+  padding-top: 24px;
+  border-top: 1px solid var(--hair);
+  display: flex; justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--page-fg-faint);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+ *  PARADIGM 01 — Voice-driven revision
+ *  Vibe: dark glow vignette, no chrome, big listening visualization
+ * ═══════════════════════════════════════════════════════════════════ */
+.p01 .frame {
+  background:
+    radial-gradient(circle at 50% 35%, rgba(122,166,140,0.16), transparent 60%),
+    radial-gradient(circle at 30% 90%, rgba(91, 141, 184, 0.10), transparent 55%),
+    #06090a;
+}
+.p01 .frame-head { color: rgba(255,255,255,0.5); border-bottom-color: rgba(255,255,255,0.03); }
+.p01 .canvas {
+  flex: 1;
+  position: relative;
+  display: grid; place-items: center;
+  padding: 24px;
+}
+.p01 .listen-ring {
+  position: relative; width: 140px; height: 140px;
+  display: grid; place-items: center;
+}
+.p01 .listen-ring::before, .p01 .listen-ring::after {
+  content: ''; position: absolute; inset: 0;
+  border-radius: 50%; border: 1px solid rgba(122,166,140,0.35);
+}
+.p01 .listen-ring::after {
+  inset: -22px;
+  border-color: rgba(122,166,140,0.18);
+}
+.p01 .listen-ring .inner {
+  width: 78px; height: 78px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, rgba(155, 196, 168, 0.55), rgba(122,166,140,0.18) 70%);
+  box-shadow: 0 0 50px rgba(122,166,140,0.45), inset 0 0 30px rgba(255,255,255,0.05);
+  display: grid; place-items: center;
+}
+.p01 .listen-ring svg { width: 26px; height: 26px; color: #06090a; }
+.p01 .listen-label {
+  margin-top: 14px;
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--sage-bright);
+  display: flex; align-items: center; gap: 8px; justify-content: center;
+}
+.p01 .listen-label .dot {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--sage-bright);
+  animation: p01-pulse 1.1s ease-in-out infinite;
+}
+@keyframes p01-pulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
+.p01 .voice-bubble {
+  margin-top: 18px;
+  max-width: 320px; text-align: center;
+  font-family: var(--font-serif); font-size: 15px; font-style: italic;
+  line-height: 1.45; color: var(--page-fg);
+}
+.p01 .voice-bubble .quote { color: var(--sage-bright); }
+.p01 .hint {
+  position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.10em;
+  color: rgba(255,255,255,0.35); text-transform: uppercase;
+  white-space: nowrap;
+}
+.p01 .applied-soap {
+  margin: 8px 16px 16px;
+  padding: 12px 14px;
+  background: rgba(255,255,255,0.025);
+  border-left: 2px solid var(--sage);
+  border-radius: 4px;
+}
+.p01 .applied-soap .lbl {
+  font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.14em;
+  color: var(--sage-bright); text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.p01 .applied-soap .body {
+  font-family: var(--font-serif); font-size: 13.5px; line-height: 1.55;
+  color: var(--page-fg);
+}
+.p01 .applied-soap .added {
+  background: rgba(122,166,140,0.16); padding: 0 3px; border-radius: 2px;
+}
+.p01 .applied-soap .removed {
+  text-decoration: line-through; color: rgba(255,255,255,0.35);
+}
+.p01 .voice-strip {
+  display: flex; align-items: end; gap: 3px;
+  height: 18px; margin-top: 10px;
+  justify-content: center;
+}
+.p01 .voice-strip i {
+  width: 2px; background: var(--sage-bright); border-radius: 1px; display: block;
+  animation: p01-wave 0.9s ease-in-out infinite;
+}
+@keyframes p01-wave { 0%, 100% { transform: scaleY(0.3); } 50% { transform: scaleY(1); } }
+.p01 .voice-strip i:nth-child(1)  { height: 6px;  animation-delay: 0.00s; }
+.p01 .voice-strip i:nth-child(2)  { height: 11px; animation-delay: 0.08s; }
+.p01 .voice-strip i:nth-child(3)  { height: 16px; animation-delay: 0.16s; }
+.p01 .voice-strip i:nth-child(4)  { height: 8px;  animation-delay: 0.24s; }
+.p01 .voice-strip i:nth-child(5)  { height: 14px; animation-delay: 0.32s; }
+.p01 .voice-strip i:nth-child(6)  { height: 9px;  animation-delay: 0.40s; }
+.p01 .voice-strip i:nth-child(7)  { height: 17px; animation-delay: 0.48s; }
+.p01 .voice-strip i:nth-child(8)  { height: 7px;  animation-delay: 0.56s; }
+.p01 .voice-strip i:nth-child(9)  { height: 13px; animation-delay: 0.64s; }
+.p01 .voice-strip i:nth-child(10) { height: 5px;  animation-delay: 0.72s; }
+.p01 .voice-strip i:nth-child(11) { height: 10px; animation-delay: 0.80s; }
+.p01 .voice-strip i:nth-child(12) { height: 15px; animation-delay: 0.88s; }
+
+/* ═══════════════════════════════════════════════════════════════════
+ *  PARADIGM 02 — Diff-based AI suggestions (Cursor-style)
+ * ═══════════════════════════════════════════════════════════════════ */
+.p02 .frame { background: #1a1c1f; }
+.p02 .frame-head {
+  background: #131418; color: #cfd2d8; border-bottom-color: rgba(255,255,255,0.06);
+}
+.p02 .editor {
+  display: grid; grid-template-columns: 36px 1fr; flex: 1;
+  font-family: var(--font-mono); font-size: 12px; line-height: 1.75;
+}
+.p02 .ln {
+  background: rgba(0,0,0,0.20);
+  color: rgba(255,255,255,0.30);
+  text-align: right; padding: 10px 8px;
+  border-right: 1px solid rgba(255,255,255,0.05);
+}
+.p02 .ln .l { display: block; font-size: 11px; font-variant-numeric: tabular-nums; }
+.p02 .code { padding: 10px 12px; color: #d8dbe2; }
+.p02 .code .sec { color: var(--sage-bright); font-weight: 600; }
+.p02 .code .key { color: #74A8C9; }
+.p02 .code .com { color: rgba(255,255,255,0.45); font-style: italic; }
+.p02 .add  { background: rgba(63,185,80,0.14); border-left: 2px solid #3fb950; padding: 2px 6px; display: block; margin: 0 -12px; padding-left: 10px; }
+.p02 .add::before { content: '+ '; color: #3fb950; }
+.p02 .del  { background: rgba(204,47,47,0.12); border-left: 2px solid #cc2f2f; padding: 2px 6px; display: block; margin: 0 -12px; padding-left: 10px; text-decoration: line-through; opacity: 0.7; }
+.p02 .del::before { content: '− '; color: #cc2f2f; text-decoration: none; display: inline-block; }
+.p02 .diff-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 14px; background: rgba(91,141,184,0.08);
+  border-top: 1px solid rgba(91,141,184,0.20);
+  font-family: var(--font-mono); font-size: 10.5px;
+  letter-spacing: 0.06em; color: #9ecaef;
+}
+.p02 .diff-bar .actions { display: flex; gap: 6px; }
+.p02 .btn-ghost, .p02 .btn-accept, .p02 .btn-reject {
+  padding: 3px 9px; border-radius: 4px;
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.04em;
+  cursor: pointer; border: 1px solid;
+}
+.p02 .btn-accept { background: rgba(63,185,80,0.16); color: #80de9a; border-color: rgba(63,185,80,0.5); }
+.p02 .btn-reject { background: rgba(204,47,47,0.12); color: #f08585; border-color: rgba(204,47,47,0.5); }
+.p02 .btn-ghost  { background: transparent; color: #9ecaef; border-color: rgba(91,141,184,0.5); }
+
+/* ═══════════════════════════════════════════════════════════════════
+ *  PARADIGM 03 — Chat-revision sidebar
+ * ═══════════════════════════════════════════════════════════════════ */
+.p03 .frame { background: #0f1013; }
+.p03 .body { display: grid; grid-template-columns: 1.05fr 0.95fr; flex: 1; }
+.p03 .doc {
+  padding: 14px 16px; border-right: 1px solid var(--hair);
+  display: flex; flex-direction: column; gap: 10px;
+}
+.p03 .doc-head {
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--page-fg-faint);
+}
+.p03 .doc-sec {
+  padding: 10px 12px; border-radius: 6px;
+  background: rgba(255,255,255,0.022);
+  border: 1px solid rgba(255,255,255,0.04);
+}
+.p03 .doc-sec .lbl {
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--sage-bright);
+  margin-bottom: 6px;
+}
+.p03 .doc-sec p { margin: 0; font-size: 12px; line-height: 1.55; color: var(--page-fg); }
+.p03 .doc-sec.preview {
+  border-color: rgba(212,165,116,0.30); background: rgba(212,165,116,0.05);
+}
+.p03 .doc-sec.preview .lbl { color: #e3b984; }
+.p03 .doc-sec.preview p { color: var(--page-fg); }
+.p03 .doc-sec.preview .accept {
+  margin-top: 8px; display: flex; gap: 6px;
+}
+.p03 .chat {
+  padding: 14px 14px 12px;
+  background: #0a0b0e;
+  display: flex; flex-direction: column;
+}
+.p03 .chat-head {
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--page-fg-faint);
+  display: flex; align-items: center; gap: 7px; margin-bottom: 12px;
+}
+.p03 .msg {
+  margin-bottom: 10px;
+  font-size: 12.5px; line-height: 1.5;
+}
+.p03 .msg-you {
+  background: rgba(91,141,184,0.10);
+  border: 1px solid rgba(91,141,184,0.30);
+  color: #cfe4f5;
+  border-radius: 10px 10px 2px 10px;
+  padding: 9px 12px; margin-left: 14%;
+}
+.p03 .msg-ai {
+  background: rgba(255,255,255,0.025);
+  border: 1px solid var(--hair);
+  color: var(--page-fg);
+  border-radius: 10px 10px 10px 2px;
+  padding: 9px 12px; margin-right: 14%;
+}
+.p03 .msg-ai .meta {
+  font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.10em;
+  color: var(--sage-bright); text-transform: uppercase; margin-bottom: 4px;
+}
+.p03 .composer {
+  margin-top: auto;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--hair-strong);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-family: var(--font-sans); font-size: 12px;
+  color: var(--page-fg-dim);
+  display: flex; align-items: center; gap: 8px;
+}
+.p03 .composer .arrow {
+  color: var(--sage-bright); margin-left: auto;
+}
+.p03 .pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 8px; border-radius: 4px;
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em;
+  cursor: pointer; border: 1px solid;
+}
+.p03 .pill-accept { background: rgba(122,166,140,0.16); color: var(--sage-bright); border-color: rgba(122,166,140,0.36); }
+.p03 .pill-reject { background: rgba(255,255,255,0.03); color: var(--page-fg-dim); border-color: var(--hair-strong); }
+
+/* ═══════════════════════════════════════════════════════════════════
+ *  PARADIGM 04 — Highlight + AI rewrite (editorial / Medium-ish)
+ * ═══════════════════════════════════════════════════════════════════ */
+.p04 .frame { background: #faf6ef; color: #1a1815; }
+.p04 .frame-head { background: #f0ebe0; color: #5a5448; border-bottom-color: #e0d8c8; }
+.p04 .article {
+  flex: 1; padding: 28px 38px;
+  font-family: var(--font-serif); font-size: 16px; line-height: 1.7;
+  color: #1a1815;
+  position: relative;
+}
+.p04 .article h4 {
+  margin: 0 0 6px;
+  font-family: var(--font-sans);
+  font-size: 11.5px; letter-spacing: 0.18em; text-transform: uppercase;
+  font-weight: 600; color: #6e6354;
+}
+.p04 .article p { margin: 0 0 18px; }
+.p04 .sel {
+  background: rgba(212, 165, 116, 0.38);
+  padding: 0 3px; border-radius: 2px;
+  position: relative;
+}
+.p04 .ai-popover {
+  position: absolute;
+  background: #1a1815;
+  color: #f5efe5;
+  border-radius: 8px;
+  padding: 6px;
+  display: flex; gap: 4px; align-items: center;
+  box-shadow: 0 18px 36px rgba(0,0,0,0.25), 0 0 0 1px rgba(0,0,0,0.08);
+  font-family: var(--font-sans); font-size: 12px;
+}
+.p04 .ai-popover::after {
+  content: ''; position: absolute; left: 22px; bottom: -6px;
+  width: 10px; height: 10px; background: #1a1815;
+  transform: rotate(45deg);
+}
+.p04 .ai-popover .opt {
+  padding: 4px 10px; border-radius: 4px; cursor: pointer; color: #f5efe5;
+  display: flex; align-items: center; gap: 5px;
+}
+.p04 .ai-popover .opt:hover { background: rgba(255,255,255,0.10); }
+.p04 .ai-popover .opt .ico { color: #d4a574; }
+.p04 .ai-popover .sep { width: 1px; height: 16px; background: rgba(255,255,255,0.18); }
+.p04 .ghost-replace {
+  background: #1a1815; color: #f5efe5;
+  border-radius: 8px; padding: 12px 14px;
+  font-family: var(--font-sans); font-size: 13px; line-height: 1.55;
+  position: absolute;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+  max-width: 360px;
+}
+.p04 .ghost-replace .lbl {
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.12em;
+  color: #d4a574; text-transform: uppercase; margin-bottom: 6px;
+}
+.p04 .ghost-replace .actions { margin-top: 8px; display: flex; gap: 6px; }
+.p04 .ghost-replace .b-acc {
+  background: #d4a574; color: #1a1815;
+  border: 0; padding: 4px 10px;
+  font-family: var(--font-sans); font-size: 11px; font-weight: 600;
+  border-radius: 4px; cursor: pointer;
+}
+.p04 .ghost-replace .b-rej {
+  background: transparent; color: #d8d2c6;
+  border: 1px solid rgba(255,255,255,0.18); padding: 4px 10px;
+  font-family: var(--font-sans); font-size: 11px;
+  border-radius: 4px; cursor: pointer;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+ *  PARADIGM 05 — Outline mode (tree + collapse / expand)
+ * ═══════════════════════════════════════════════════════════════════ */
+.p05 .frame { background: #0c0d10; }
+.p05 .toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--hair);
+}
+.p05 .toggle {
+  display: inline-flex; border: 1px solid var(--hair-strong); border-radius: 5px;
+  overflow: hidden; font-family: var(--font-mono); font-size: 9.5px;
+  letter-spacing: 0.10em; text-transform: uppercase;
+}
+.p05 .toggle button {
+  padding: 4px 10px; background: transparent; color: var(--page-fg-faint);
+  border: 0; cursor: pointer;
+}
+.p05 .toggle button.on {
+  background: var(--sage-tint); color: var(--sage-bright);
+  box-shadow: inset 0 0 0 1px rgba(122,166,140,0.30);
+}
+.p05 .lhs {
+  flex: 1; padding: 14px 14px 14px 14px;
+  font-family: var(--font-mono); font-size: 12px; line-height: 1.7;
+  color: var(--page-fg);
+}
+.p05 .row {
+  display: grid; grid-template-columns: 14px 14px 1fr; gap: 6px;
+  align-items: start;
+  padding: 2px 0;
+  position: relative;
+}
+.p05 .row .tri {
+  color: var(--page-fg-faint); cursor: pointer;
+  user-select: none;
+}
+.p05 .row .bul {
+  color: var(--sage-bright); font-weight: 600;
+  font-size: 10px;
+}
+.p05 .row.lvl-0 { padding-left: 0; font-weight: 600; }
+.p05 .row.lvl-1 { padding-left: 22px; }
+.p05 .row.lvl-2 { padding-left: 44px; color: var(--page-fg-dim); }
+.p05 .row.lvl-2 .bul { color: var(--page-fg-faint); }
+.p05 .row.editing {
+  background: rgba(122,166,140,0.06);
+  border-left: 2px solid var(--sage);
+  margin-left: -2px;
+  padding-left: 42px;
+}
+.p05 .row.editing input {
+  background: transparent; border: 0;
+  font-family: var(--font-mono); font-size: 12px; color: var(--page-fg);
+  width: 100%; outline: none;
+  border-bottom: 1px dashed var(--sage);
+}
+.p05 .ai-hint {
+  margin: 8px 0 0 44px;
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.10em;
+  text-transform: uppercase; color: var(--sage-bright);
+  display: flex; align-items: center; gap: 6px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+ *  PARADIGM 06 — Template-fill (structured fields → AI assembles prose)
+ *  Vibe: clinical form, white surface on dark page
+ * ═══════════════════════════════════════════════════════════════════ */
+.p06 .frame { background: #ecedf0; color: #1d2026; }
+.p06 .frame-head {
+  background: #dfe1e6; color: #4a4f57; border-bottom-color: #c8cbd2;
+}
+.p06 .form {
+  flex: 1; padding: 16px 18px;
+  font-family: var(--font-sans);
+  display: flex; flex-direction: column; gap: 10px;
+}
+.p06 .group-title {
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em;
+  text-transform: uppercase; color: #6c727d;
+  margin-bottom: 4px;
+  border-bottom: 1px solid #d0d3da; padding-bottom: 4px;
+}
+.p06 .field {
+  display: grid; grid-template-columns: 110px 1fr; gap: 10px;
+  align-items: center;
+}
+.p06 .field .lbl {
+  font-size: 11.5px; color: #4a4f57;
+  font-weight: 500;
+}
+.p06 .field .ctl {
+  display: flex; align-items: center; gap: 6px;
+  background: #fff;
+  border: 1px solid #c8cbd2;
+  border-radius: 4px;
+  padding: 5px 9px;
+  font-size: 12px;
+  color: #1d2026;
+}
+.p06 .field .ctl.focus {
+  border-color: #4d7d9a; box-shadow: 0 0 0 2px rgba(91,141,184,0.25);
+}
+.p06 .field .ctl.select::after {
+  content: '▾'; margin-left: auto; color: #6c727d;
+}
+.p06 .field .ctl.slider {
+  background: #fff; padding: 0 8px;
+}
+.p06 .slider-rail {
+  flex: 1; height: 4px; border-radius: 2px;
+  background: linear-gradient(to right, #4d7d9a 0% 60%, #d0d3da 60% 100%);
+  position: relative;
+}
+.p06 .slider-rail::after {
+  content: ''; position: absolute; left: 60%; top: -4px;
+  width: 12px; height: 12px; border-radius: 50%;
+  background: #fff; border: 2px solid #4d7d9a; transform: translateX(-6px);
+}
+.p06 .slider-val {
+  font-family: var(--font-mono); font-size: 11px; color: #4d7d9a;
+  font-weight: 600; padding: 6px 0 6px 8px;
+}
+.p06 .chk-row { display: flex; flex-wrap: wrap; gap: 5px; }
+.p06 .chk {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 7px; border-radius: 3px;
+  font-family: var(--font-mono); font-size: 10px;
+  border: 1px solid #c8cbd2; background: #fff; color: #4a4f57;
+}
+.p06 .chk.on { background: #4d7d9a; color: #fff; border-color: #4d7d9a; }
+.p06 .chk.on::before { content: '✓ '; }
+.p06 .assemble {
+  margin-top: 10px;
+  background: rgba(122,166,140,0.10);
+  border: 1px dashed rgba(60,110,80,0.40);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-family: var(--font-sans); font-size: 11.5px; line-height: 1.55;
+  color: #3a4a3f;
+}
+.p06 .assemble .lbl {
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.10em;
+  text-transform: uppercase; color: #4d7d4d;
+  margin-bottom: 5px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+ *  PARADIGM 07 — Source toggle (raw markdown editor)
+ * ═══════════════════════════════════════════════════════════════════ */
+.p07 .frame { background: #0d1117; }
+.p07 .frame-head {
+  background: #161b22; color: #c9d1d9; border-bottom-color: #21262d;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.p07 .src {
+  display: grid; grid-template-columns: 42px 1fr;
+  flex: 1;
+  font-family: var(--font-mono); font-size: 12.5px; line-height: 1.75;
+}
+.p07 .src .ln {
+  text-align: right; padding: 12px 10px;
+  background: #0d1117;
+  color: #484f58; user-select: none;
+  border-right: 1px solid #21262d;
+}
+.p07 .src .body {
+  padding: 12px 14px; color: #c9d1d9;
+  white-space: pre-wrap;
+}
+.p07 .md-h { color: #ff7b72; font-weight: 600; }
+.p07 .md-b { color: #d2a8ff; font-weight: 600; }
+.p07 .md-em { color: #79c0ff; font-style: italic; }
+.p07 .md-list { color: #ffa657; }
+.p07 .md-tag { color: #8b949e; }
+.p07 .caret {
+  display: inline-block; width: 2px; height: 1em;
+  background: #d2a8ff; vertical-align: -2px;
+  animation: p07-blink 1s steps(1) infinite;
+}
+@keyframes p07-blink { 50% { opacity: 0; } }
+.p07 .src-toggle {
+  display: inline-flex; border: 1px solid #21262d; border-radius: 5px;
+  overflow: hidden;
+}
+.p07 .src-toggle button {
+  padding: 4px 10px; background: transparent; color: #8b949e;
+  border: 0; font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: 0.10em; cursor: pointer;
+}
+.p07 .src-toggle button.on {
+  background: #21262d; color: #c9d1d9;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+ *  PARADIGM 08 — Transcript-anchored
+ * ═══════════════════════════════════════════════════════════════════ */
+.p08 .frame { background: #0b0c0e; }
+.p08 .frame-head {
+  display: flex; justify-content: space-between;
+}
+.p08 .split {
+  display: grid; grid-template-columns: 1fr 1fr; flex: 1; position: relative;
+}
+.p08 .pane {
+  padding: 14px 14px; overflow: hidden;
+  display: flex; flex-direction: column; gap: 8px;
+  border-right: 1px solid var(--hair);
+}
+.p08 .pane:last-child { border-right: 0; }
+.p08 .pane-h {
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--page-fg-faint);
+  display: flex; align-items: center; gap: 7px; margin-bottom: 4px;
+}
+.p08 .turn {
+  display: grid; grid-template-columns: 68px 1fr;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 12px; line-height: 1.5;
+  position: relative;
+}
+.p08 .turn .meta {
+  display: flex; flex-direction: column;
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.06em;
+}
+.p08 .turn .ts { color: var(--sage-bright); font-variant-numeric: tabular-nums; }
+.p08 .turn .role { color: var(--page-fg-faint); text-transform: uppercase; letter-spacing: 0.10em; }
+.p08 .turn .role.dr { color: var(--info); }
+.p08 .turn .text { color: var(--page-fg); }
+.p08 .turn.linked {
+  background: rgba(122,166,140,0.07);
+  border-left: 2px solid var(--sage);
+  padding-left: 6px;
+}
+.p08 .turn.linked .ts { color: var(--sage-bright); font-weight: 600; }
+.p08 .soap-line {
+  padding: 6px 8px; border-radius: 4px;
+  font-size: 12px; line-height: 1.55;
+  border-left: 2px solid transparent;
+}
+.p08 .soap-line.linked {
+  background: rgba(122,166,140,0.07);
+  border-left-color: var(--sage);
+}
+.p08 .soap-line .lbl {
+  font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--page-fg-faint);
+  margin-bottom: 3px;
+}
+.p08 .connector {
+  position: absolute; pointer-events: none;
+  z-index: 2;
+}
+.p08 .soap-line.linked .anchor-tip {
+  display: inline-flex; align-items: center; gap: 5px;
+  margin-top: 6px;
+  font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.10em;
+  text-transform: uppercase; color: var(--sage-bright);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+ *  PARADIGM 09 — Conversational scrub (video-editor timeline)
+ * ═══════════════════════════════════════════════════════════════════ */
+.p09 .frame { background: #0a0b0e; }
+.p09 .stage {
+  flex: 1; padding: 14px 16px 0;
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: auto auto; gap: 10px;
+  align-content: start;
+}
+.p09 .card {
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--hair);
+}
+.p09 .card .h {
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--page-fg-faint);
+  margin-bottom: 6px;
+  display: flex; align-items: center; gap: 6px;
+}
+.p09 .card .body { font-size: 11.5px; line-height: 1.5; color: var(--page-fg); }
+.p09 .card.tentative {
+  border-color: rgba(212,165,116,0.30);
+  background: rgba(212,165,116,0.04);
+}
+.p09 .card.tentative .h { color: #e3b984; }
+.p09 .card.empty {
+  border-style: dashed; opacity: 0.55;
+}
+.p09 .card.empty .body { color: var(--page-fg-faint); font-style: italic; }
+.p09 .timeline-area {
+  border-top: 1px solid var(--hair);
+  padding: 14px 16px 12px;
+  background: rgba(0,0,0,0.30);
+}
+.p09 .timeline {
+  position: relative;
+  height: 34px;
+  background:
+    repeating-linear-gradient(to right, transparent 0, transparent 9.9%, rgba(255,255,255,0.06) 9.9%, rgba(255,255,255,0.06) 10%);
+  border: 1px solid var(--hair-strong);
+  border-radius: 4px;
+}
+.p09 .tl-event {
+  position: absolute; top: 8px; width: 14px; height: 18px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.12);
+  border: 1px solid var(--hair-strong);
+}
+.p09 .tl-event.sage  { background: rgba(122,166,140,0.40); border-color: rgba(122,166,140,0.6); }
+.p09 .tl-event.amber { background: rgba(212,165,116,0.40); border-color: rgba(212,165,116,0.6); }
+.p09 .tl-event.info  { background: rgba(91,141,184,0.40);  border-color: rgba(91,141,184,0.6); }
+.p09 .playhead {
+  position: absolute; top: -4px; bottom: -4px; width: 2px;
+  background: var(--sage-bright);
+  box-shadow: 0 0 12px rgba(155,196,168,0.7);
+}
+.p09 .playhead::before {
+  content: '';
+  position: absolute; left: -6px; top: -6px;
+  width: 14px; height: 10px;
+  background: var(--sage-bright);
+  border-radius: 2px;
+  box-shadow: 0 0 12px rgba(155,196,168,0.5);
+}
+.p09 .tl-labels {
+  display: flex; justify-content: space-between;
+  margin-top: 6px;
+  font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.08em;
+  color: var(--page-fg-faint);
+}
+.p09 .now-pill {
+  position: absolute; top: -28px;
+  background: var(--sage); color: #0d1611;
+  padding: 2px 8px; border-radius: 4px;
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.05em;
+  font-weight: 600;
+  transform: translateX(-50%);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+ *  PARADIGM 10 — Block-based (Notion-style)
+ * ═══════════════════════════════════════════════════════════════════ */
+.p10 .frame { background: #fafaf8; color: #2c2d33; }
+.p10 .frame-head { background: #efefea; color: #6b6c72; border-bottom-color: #e0e0db; }
+.p10 .doc {
+  flex: 1; padding: 18px 20px;
+  display: flex; flex-direction: column; gap: 4px;
+  font-family: var(--font-sans);
+  color: #2c2d33;
+  position: relative;
+}
+.p10 .block {
+  display: grid; grid-template-columns: 22px 22px 1fr; gap: 4px;
+  align-items: start;
+  padding: 4px 6px;
+  border-radius: 4px;
+  position: relative;
+}
+.p10 .block:hover { background: rgba(0,0,0,0.025); }
+.p10 .block .plus, .p10 .block .handle {
+  width: 18px; height: 22px;
+  display: inline-grid; place-items: center;
+  color: #a4a4ab;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  cursor: grab;
+  opacity: 0;
+  transition: opacity 100ms ease;
+}
+.p10 .block:hover .plus, .p10 .block:hover .handle { opacity: 1; }
+.p10 .block.hover-active .plus, .p10 .block.hover-active .handle { opacity: 1; }
+.p10 .block h4 {
+  margin: 0 0 4px;
+  font-size: 14px; font-weight: 700;
+  color: #2c2d33;
+  letter-spacing: -0.01em;
+}
+.p10 .block .lbl {
+  display: inline-block;
+  font-family: var(--font-mono); font-size: 9.5px;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: #7b7b82;
+  margin-bottom: 2px;
+}
+.p10 .block .text { font-size: 13px; line-height: 1.55; }
+.p10 .block .text strong { color: #2c2d33; font-weight: 600; }
+.p10 .block.dragging {
+  background: #fff;
+  box-shadow: 0 12px 24px rgba(0,0,0,0.10), 0 0 0 1px rgba(0,0,0,0.05);
+  transform: translateY(-2px);
+  z-index: 3;
+  cursor: grabbing;
+}
+.p10 .drop-indicator {
+  height: 2px; background: #2383e2; border-radius: 1px;
+  margin: 0 24px;
+}
+.p10 .slash-menu {
+  position: absolute;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.16), 0 0 0 1px rgba(0,0,0,0.05);
+  width: 240px;
+  overflow: hidden;
+}
+.p10 .slash-menu .h {
+  padding: 8px 12px;
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: #6b6c72;
+  border-bottom: 1px solid #ececea;
+}
+.p10 .slash-menu .item {
+  display: grid; grid-template-columns: 28px 1fr auto; gap: 8px;
+  align-items: center;
+  padding: 7px 12px;
+  font-size: 13px; color: #2c2d33;
+}
+.p10 .slash-menu .item.on { background: #f0eee9; }
+.p10 .slash-menu .item .icon {
+  display: inline-grid; place-items: center;
+  width: 22px; height: 22px;
+  background: #f0eee9;
+  border-radius: 4px;
+  font-family: var(--font-mono); font-size: 11.5px;
+  color: #2c2d33; font-weight: 600;
+}
+.p10 .slash-menu .item .hint {
+  font-family: var(--font-mono); font-size: 9.5px;
+  color: #7b7b82;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+ *  Contact-sheet thumb stylings (must NOT depend on per-paradigm class
+ *  bodies — they recreate the vibe miniaturized)
+ * ═══════════════════════════════════════════════════════════════════ */
+.ct.t01 { background:
+  radial-gradient(circle at 50% 50%, rgba(122,166,140,0.20), transparent 60%), #06090a; }
+.ct.t01 .glow {
+  position: absolute; left: 50%; top: 45%; transform: translate(-50%, -50%);
+  width: 38px; height: 38px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(155,196,168,0.55) 0, rgba(122,166,140,0.20) 60%, transparent 80%);
+}
+.ct.t02 { background: #1a1c1f; }
+.ct.t02 .row { position: absolute; left: 8px; right: 8px; height: 3px; border-radius: 1px; }
+.ct.t02 .row.a { background: rgba(63,185,80,0.4); }
+.ct.t02 .row.d { background: rgba(204,47,47,0.4); }
+.ct.t03 { background: #0f1013; }
+.ct.t03 .lp, .ct.t03 .rp { position: absolute; top: 8px; bottom: 8px; border-radius: 3px; }
+.ct.t03 .lp { left: 6px; width: 48%; background: rgba(255,255,255,0.05); border: 1px solid var(--hair); }
+.ct.t03 .rp { right: 6px; width: 38%; background: rgba(91,141,184,0.08); border: 1px solid rgba(91,141,184,0.20); }
+.ct.t04 { background: #faf6ef; }
+.ct.t04 .line { position: absolute; left: 12px; right: 18px; height: 3px; background: rgba(30,24,21,0.18); border-radius: 1px; }
+.ct.t04 .sel { background: rgba(212,165,116,0.55); height: 5px; }
+.ct.t05 { background: #0c0d10; }
+.ct.t05 .li { position: absolute; left: 10px; right: 8px; font: 600 8px/1 var(--font-mono); color: var(--sage-bright); }
+.ct.t05 .li.l1 { left: 22px; color: var(--page-fg-dim); }
+.ct.t06 { background: #ecedf0; }
+.ct.t06 .f { position: absolute; left: 8px; right: 8px; height: 7px; border-radius: 2px; background: #fff; border: 1px solid #c8cbd2; }
+.ct.t07 { background: #0d1117; }
+.ct.t07 .ln { position: absolute; left: 14px; right: 6px; height: 3px; border-radius: 1px; background: rgba(255,255,255,0.10); }
+.ct.t07 .ln.h { background: rgba(255,123,114,0.45); }
+.ct.t07 .ln.b { background: rgba(210,168,255,0.40); }
+.ct.t07 .gut { position: absolute; left: 0; top: 0; bottom: 0; width: 10px; background: #161b22; }
+.ct.t08 { background: #0b0c0e; }
+.ct.t08 .col { position: absolute; top: 6px; bottom: 6px; border-radius: 3px; }
+.ct.t08 .col.l { left: 6px; width: 44%; background: rgba(255,255,255,0.04); }
+.ct.t08 .col.r { right: 6px; width: 44%; background: rgba(255,255,255,0.04); }
+.ct.t08 .arrow { position: absolute; left: 47%; top: 38%; color: var(--sage); font-size: 10px; }
+.ct.t09 { background: #0a0b0e; }
+.ct.t09 .tl { position: absolute; left: 6px; right: 6px; bottom: 8px; height: 8px; background: rgba(255,255,255,0.08); border-radius: 2px; }
+.ct.t09 .ph { position: absolute; left: 48%; bottom: 4px; width: 2px; height: 14px; background: var(--sage-bright); }
+.ct.t09 .crd { position: absolute; top: 8px; left: 8px; right: 8px; bottom: 24px; background: rgba(255,255,255,0.03); border: 1px solid var(--hair); border-radius: 3px; }
+.ct.t10 { background: #fafaf8; }
+.ct.t10 .blk { position: absolute; left: 12px; right: 8px; height: 7px; border-radius: 2px; background: rgba(35, 131, 226, 0.15); border: 1px solid rgba(35,131,226,0.30); }
+.ct.t10 .hndl { position: absolute; left: 5px; color: #a4a4ab; font: 600 9px/1 var(--font-mono); }
+</style>
+</head>
+<body>
+<main class="page">
+
+<!-- ════════════════════════════════════════════════════════════════
+     HERO
+     ════════════════════════════════════════════════════════════════ -->
+<section class="hero">
+  <div class="eyebrow">
+    <span>QuillMD · Design</span>
+    <span class="v">design/soap-edit-patterns-v2</span>
+    <span>SOAP edit · paradigms</span>
+  </div>
+  <h1>10 <span class="strike">patterns</span> <span class="real">paradigms</span></h1>
+  <p>
+    v1 explored ten ways to <em>click</em> into editing. Kasra read it as
+    one paradigm shown ten times. v2 explores ten <em>paradigms</em> —
+    different mental models for what &ldquo;editing a SOAP&rdquo; even is.
+    Voice, diff‑review, chat, source mode, an outline, a clinical form,
+    transcript anchoring, a timeline scrub, Notion blocks. Each mockup
+    deliberately uses a different visual language so the differences
+    read at a glance; the winner gets re‑styled to production tokens
+    later.
+  </p>
+  <div class="diagnostic">
+    <span class="dot"></span>
+    <div>
+      <h2>Why v1 collapsed</h2>
+      <p>
+        Every v1 pattern was &ldquo;textarea opens differently.&rdquo;
+        Hover pencil, header pill, click vs double‑click, sticky bar — all
+        variations on the same paradigm: <strong>render prose → swap to
+        textarea → save</strong>. Kasra&rsquo;s read was right:
+        <span class="quote">&ldquo;mostly similar to each other.&rdquo;</span>
+        v2 throws out that frame.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════
+     CONTACT SHEET — all 10 at a glance
+     ════════════════════════════════════════════════════════════════ -->
+<div class="contact-sheet">
+  <a class="ct t01" href="#p1"><span class="ct-num">01</span><span class="ct-body"><span class="glow"></span></span><span class="ct-name">Voice</span></a>
+  <a class="ct t02" href="#p2"><span class="ct-num">02</span><span class="ct-body">
+    <i class="row a" style="top:14%"></i>
+    <i class="row d" style="top:24%"></i>
+    <i class="row" style="top:34%;background:rgba(255,255,255,0.10)"></i>
+    <i class="row a" style="top:52%"></i>
+    <i class="row d" style="top:62%"></i>
+    <i class="row" style="top:74%;background:rgba(255,255,255,0.10)"></i>
+  </span><span class="ct-name">Diff</span></a>
+  <a class="ct t03" href="#p3"><span class="ct-num">03</span><span class="ct-body"><span class="lp"></span><span class="rp"></span></span><span class="ct-name" style="color:#1d2026">Chat sidebar</span></a>
+  <a class="ct t04" href="#p4"><span class="ct-num">04</span><span class="ct-body">
+    <i class="line" style="top:18%"></i>
+    <i class="line" style="top:30%"></i>
+    <i class="line sel" style="top:42%"></i>
+    <i class="line" style="top:55%"></i>
+    <i class="line" style="top:67%"></i>
+  </span><span class="ct-name" style="color:#1a1815">Highlight + AI</span></a>
+  <a class="ct t05" href="#p5"><span class="ct-num">05</span><span class="ct-body">
+    <i class="li" style="top:14%">▼ S</i>
+    <i class="li l1" style="top:30%">• HPI cough × 3 d</i>
+    <i class="li l1" style="top:42%">• PMH HTN T2DM</i>
+    <i class="li" style="top:58%">▶ O</i>
+    <i class="li" style="top:70%">▶ A</i>
+    <i class="li" style="top:82%">▶ P</i>
+  </span><span class="ct-name">Outline</span></a>
+  <a class="ct t06" href="#p6"><span class="ct-num" style="color:#3a3f47;background:rgba(255,255,255,0.65)">06</span><span class="ct-body">
+    <i class="f" style="top:18%"></i>
+    <i class="f" style="top:36%"></i>
+    <i class="f" style="top:54%"></i>
+    <i class="f" style="top:72%"></i>
+  </span><span class="ct-name" style="color:#1d2026">Template form</span></a>
+  <a class="ct t07" href="#p7"><span class="ct-num">07</span><span class="ct-body">
+    <span class="gut"></span>
+    <i class="ln h" style="top:16%"></i>
+    <i class="ln b" style="top:28%"></i>
+    <i class="ln" style="top:40%"></i>
+    <i class="ln" style="top:52%"></i>
+    <i class="ln b" style="top:64%"></i>
+    <i class="ln" style="top:76%"></i>
+  </span><span class="ct-name">Source</span></a>
+  <a class="ct t08" href="#p8"><span class="ct-num">08</span><span class="ct-body"><span class="col l"></span><span class="col r"></span><span class="arrow">↔</span></span><span class="ct-name">Transcript</span></a>
+  <a class="ct t09" href="#p9"><span class="ct-num">09</span><span class="ct-body"><span class="crd"></span><span class="tl"></span><span class="ph"></span></span><span class="ct-name">Timeline scrub</span></a>
+  <a class="ct t10" href="#p10"><span class="ct-num" style="color:#3a3f47;background:rgba(255,255,255,0.65)">10</span><span class="ct-body">
+    <i class="hndl" style="top:20%">⋮⋮</i><i class="blk" style="top:18%;left:24px;height:9px"></i>
+    <i class="hndl" style="top:38%">⋮⋮</i><i class="blk" style="top:36%;left:24px;height:9px"></i>
+    <i class="hndl" style="top:56%">⋮⋮</i><i class="blk" style="top:54%;left:24px;height:9px"></i>
+    <i class="hndl" style="top:74%">⋮⋮</i><i class="blk" style="top:72%;left:24px;height:9px"></i>
+  </span><span class="ct-name" style="color:#1d2026">Blocks</span></a>
+</div>
+
+<!-- Shared SVG glyphs -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="g-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 19v3"/>
+    </symbol>
+    <symbol id="g-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-12"/></symbol>
+    <symbol id="g-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6 18 18M18 6 6 18"/></symbol>
+    <symbol id="g-spark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 3v3M12 18v3M21 12h-3M6 12H3M18 6l-2 2M8 16l-2 2M18 18l-2-2M8 8 6 6"/>
+      <circle cx="12" cy="12" r="2.5"/>
+    </symbol>
+    <symbol id="g-cmd" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M6 6a2 2 0 1 1 2 2v8a2 2 0 1 1-2-2zM18 18a2 2 0 1 1-2-2V8a2 2 0 1 1 2 2zM8 8h8v8H8z"/>
+    </symbol>
+    <symbol id="g-play" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7Z"/></symbol>
+  </defs>
+</svg>
+
+
+<!-- ════════════════════════════════════════════════════════════════
+     PARADIGM 01 — Voice-driven revision
+     ════════════════════════════════════════════════════════════════ -->
+<section class="paradigm p01" id="p1">
+  <header class="p-head">
+    <div class="p-num">01</div>
+    <div class="p-meta">
+      <h3>Voice‑driven revision</h3>
+      <p class="sub">No typing UI. The doctor speaks instructions
+      (&ldquo;revise the assessment to include the new MRI finding&rdquo;);
+      the model rewrites the relevant section in place. Editing is a
+      conversation, not a textarea.</p>
+    </div>
+    <div class="p-tags">
+      <span class="tag win">Win · hands‑free during exam</span>
+      <span class="tag cost">Cost · NL → section routing accuracy</span>
+      <span class="tag bold">Bold <span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span> 5/5</span>
+    </div>
+  </header>
+  <div class="frames">
+    <!-- 1 · Default — idle, prompt to speak -->
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step"><span class="badge">1</span>Default · idle</div><div>tap or say &ldquo;edit&rdquo;</div></div>
+      <div class="canvas">
+        <div class="listen-ring">
+          <div class="inner"><svg><use href="#g-mic"/></svg></div>
+        </div>
+        <div class="listen-label" style="color: var(--page-fg-faint);">tap to start &middot; or <span class="kbd">⌘&#8203;Space</span></div>
+        <div class="hint">SOAP visible · revisions land where you point</div>
+      </div>
+    </div>
+    <!-- 2 · Active — listening + applied -->
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step active"><span class="badge">2</span>Active · listening + applying</div><div>auto‑routed to Assessment</div></div>
+      <div class="canvas" style="padding: 18px 14px 14px;">
+        <div class="listen-ring" style="width: 96px; height: 96px;">
+          <div class="inner" style="width: 56px; height: 56px;"><svg><use href="#g-mic"/></svg></div>
+        </div>
+        <div class="listen-label">
+          <span class="dot"></span>Listening · 00:08
+        </div>
+        <div class="voice-strip">
+          <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+        </div>
+        <div class="voice-bubble">
+          &ldquo;<span class="quote">Update the assessment to include the new MRI finding — small disc bulge at L4&hairsp;–&hairsp;L5 without nerve impingement.</span>&rdquo;
+        </div>
+      </div>
+      <div class="applied-soap">
+        <div class="lbl">Assessment · just rewritten</div>
+        <div class="body">
+          Community‑acquired pneumonia, RLL, moderate (CURB‑65 = 1).
+          <span class="added">New: small L4&hairsp;–&hairsp;L5 disc bulge on MRI without nerve impingement; clinically incidental.</span>
+          Concurrent HTN and T2DM at baseline.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ════════════════════════════════════════════════════════════════
+     PARADIGM 02 — Diff-based AI suggestions
+     ════════════════════════════════════════════════════════════════ -->
+<section class="paradigm p02" id="p2">
+  <header class="p-head">
+    <div class="p-num">02</div>
+    <div class="p-meta">
+      <h3>Diff‑based AI suggestions</h3>
+      <p class="sub">The model continually proposes revisions
+      (&ldquo;Plan reads stale given new vitals&rdquo;) as red/green diffs.
+      The doctor doesn&rsquo;t write — they accept or reject per chunk.
+      Editing collapses to <em>code review</em>.</p>
+    </div>
+    <div class="p-tags">
+      <span class="tag win">Win · doctor reviews instead of writes</span>
+      <span class="tag cost">Cost · over‑suggesting fatigue · trust</span>
+      <span class="tag bold">Bold <span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip off"></span><span class="pip off"></span> 3/5</span>
+    </div>
+  </header>
+  <div class="frames">
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step"><span class="badge">1</span>Default · clean</div><div>no pending suggestions</div></div>
+      <div class="editor">
+        <div class="ln"><span class="l">12</span><span class="l">13</span><span class="l">14</span><span class="l">15</span><span class="l">16</span><span class="l">17</span><span class="l">18</span><span class="l">19</span><span class="l">20</span></div>
+        <div class="code">
+<span class="sec">## Plan</span>
+<span class="key">CXR</span> to confirm consolidation.
+<span class="key">CBC + BMP + procalcitonin</span>.
+Start <span class="key">amoxicillin‑clavulanate</span> 875 mg BID × 7 d
+  &nbsp; + <span class="key">azithromycin</span> 500 mg day 1, 250 daily × 4 d.
+Smoking‑cessation counseling.
+F/U 5–7 days.
+        </div>
+      </div>
+      <div class="diff-bar">
+        <span>Up to date · 0 suggestions</span>
+        <div class="actions"><span class="btn-ghost">Ask AI to review</span></div>
+      </div>
+    </div>
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step active"><span class="badge">2</span>Active · 3 suggestions</div><div>SpO₂ 94% triggered re‑review</div></div>
+      <div class="editor">
+        <div class="ln"><span class="l">12</span><span class="l">13</span><span class="l">14</span><span class="l">15</span><span class="l">16</span><span class="l">17</span><span class="l">18</span><span class="l">19</span><span class="l">20</span><span class="l">21</span></div>
+        <div class="code">
+<span class="sec">## Plan</span>
+<span class="key">CXR</span> to confirm consolidation.
+<span class="key">CBC + BMP + procalcitonin</span>.
+Start <span class="key">amoxicillin‑clavulanate</span> 875 mg BID × 7 d
+  &nbsp; + <span class="key">azithromycin</span> 500 mg day 1, 250 daily × 4 d.
+<span class="del">F/U 5–7 days.</span>
+<span class="add">F/U <strong>48–72 h</strong> given SpO₂ 94 % RA;</span>
+<span class="add">return precautions reviewed.</span>
+<span class="com">// rationale: borderline hypoxia → tighter F/U interval</span>
+        </div>
+      </div>
+      <div class="diff-bar">
+        <span>3 chunks · 1 of 1 shown</span>
+        <div class="actions">
+          <span class="btn-reject">Reject</span>
+          <span class="btn-accept">Accept all</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ════════════════════════════════════════════════════════════════
+     PARADIGM 03 — Chat-revision sidebar
+     ════════════════════════════════════════════════════════════════ -->
+<section class="paradigm p03" id="p3">
+  <header class="p-head">
+    <div class="p-num">03</div>
+    <div class="p-meta">
+      <h3>Chat‑revision sidebar</h3>
+      <p class="sub">A persistent conversation panel on the right.
+      Type natural language (&ldquo;shorten the plan, drop the F/U mention&rdquo;);
+      the AI updates the relevant section and shows a preview inline.
+      The SOAP is read‑only; the only input surface is the chat.</p>
+    </div>
+    <div class="p-tags">
+      <span class="tag win">Win · iterate without re‑typing</span>
+      <span class="tag cost">Cost · multi‑turn ambiguity</span>
+      <span class="tag bold">Bold <span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip off"></span> 4/5</span>
+    </div>
+  </header>
+  <div class="frames">
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step"><span class="badge">1</span>Default · no message yet</div><div>SOAP read‑only</div></div>
+      <div class="body">
+        <div class="doc">
+          <div class="doc-head">Visit · cmp0… · SOAP</div>
+          <div class="doc-sec"><div class="lbl">S · Subjective</div><p>58 y/o male with productive cough × 3 days, fevers to 101 °F, right‑sided pleuritic chest pain.</p></div>
+          <div class="doc-sec"><div class="lbl">P · Plan</div><p>CXR; CBC/BMP/PCT; amoxicillin‑clavulanate 875 mg BID × 7 d + azithromycin 500 mg day 1 then 250 mg × 4 d. Smoking‑cessation counseling. F/U 5–7 days.</p></div>
+        </div>
+        <div class="chat">
+          <div class="chat-head"><svg class="ico" style="color:var(--sage-bright)"><use href="#g-spark"/></svg> Revise with AI</div>
+          <div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--page-fg-faint);font-family:var(--font-mono);font-size:10px;letter-spacing:0.10em;text-align:center;padding:20px;">
+            Ask me to tighten, restructure,<br>or expand any section.
+          </div>
+          <div class="composer">
+            <span>Ask AI to revise the SOAP…</span>
+            <span class="arrow">↵</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step active"><span class="badge">2</span>Active · preview pending</div><div>typing 2 turn 3</div></div>
+      <div class="body">
+        <div class="doc">
+          <div class="doc-head">Visit · cmp0… · SOAP</div>
+          <div class="doc-sec"><div class="lbl">S · Subjective</div><p>58 y/o male with productive cough × 3 days, fevers to 101 °F, right‑sided pleuritic chest pain.</p></div>
+          <div class="doc-sec preview">
+            <div class="lbl">P · Plan · preview</div>
+            <p>CXR + CBC/BMP/PCT. Augmentin 875 mg BID × 7 d + azithromycin. F/U 48–72 h.</p>
+            <div class="accept">
+              <span class="pill pill-accept"><svg class="ico"><use href="#g-check"/></svg> Apply</span>
+              <span class="pill pill-reject">Discard</span>
+            </div>
+          </div>
+        </div>
+        <div class="chat">
+          <div class="chat-head"><svg class="ico" style="color:var(--sage-bright)"><use href="#g-spark"/></svg> Revise with AI</div>
+          <div class="msg msg-you">Tighten the Plan section. Keep abx + F/U; drop the smoking‑cessation note for now.</div>
+          <div class="msg msg-ai"><div class="meta">Assistant · preview applied</div>I&rsquo;ve drafted a shorter Plan that keeps the antibiotic + follow‑up, and removed the cessation note. Preview&nbsp;in&nbsp;document — accept to apply.</div>
+          <div class="composer">
+            <span>Tighter still — &lt; 2 sentences<span style="color:var(--page-fg);">|</span></span>
+            <span class="arrow">↵</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ════════════════════════════════════════════════════════════════
+     PARADIGM 04 — Highlight + AI rewrite
+     ════════════════════════════════════════════════════════════════ -->
+<section class="paradigm p04" id="p4">
+  <header class="p-head">
+    <div class="p-num">04</div>
+    <div class="p-meta">
+      <h3>Highlight + AI rewrite</h3>
+      <p class="sub">Editorial reading surface — wide margins, serif
+      body, easy on the eyes. Select any span of text; a floating
+      tooltip offers <em>rewrite</em> / <em>shorten</em> / <em>expand</em> /
+      <em>more clinical</em>. The replacement previews in place.</p>
+    </div>
+    <div class="p-tags">
+      <span class="tag win">Win · paragraph‑level surgery in 2 clicks</span>
+      <span class="tag cost">Cost · selection ergonomics on touch</span>
+      <span class="tag bold">Bold <span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip off"></span><span class="pip off"></span> 3/5</span>
+    </div>
+  </header>
+  <div class="frames">
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step"><span class="badge">1</span>Default · reading</div><div>no selection</div></div>
+      <div class="article">
+        <h4>Plan</h4>
+        <p>Chest X‑ray to confirm consolidation; CBC, BMP, and procalcitonin. Start amoxicillin‑clavulanate 875 mg PO twice daily for seven days plus azithromycin 500 mg on day one, then 250 mg daily for four days. Smoking‑cessation counseling — patient amenable to a follow‑up call. Return precautions reviewed. Follow up in five to seven days, or sooner if worsening.</p>
+      </div>
+    </div>
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step active"><span class="badge">2</span>Active · rewrite preview</div><div>shorten · clinical</div></div>
+      <div class="article">
+        <h4>Plan</h4>
+        <p>Chest X‑ray to confirm consolidation; CBC, BMP, and procalcitonin. <span class="sel">Start amoxicillin‑clavulanate 875 mg PO twice daily for seven days plus azithromycin 500 mg on day one, then 250 mg daily for four days.</span> Smoking‑cessation counseling — patient amenable to a follow‑up call. Return precautions reviewed. Follow up in five to seven days, or sooner if worsening.</p>
+        <div class="ai-popover" style="left: 38px; top: 102px;">
+          <span class="opt"><svg class="ico"><use href="#g-spark"/></svg>Rewrite</span><span class="sep"></span>
+          <span class="opt">Shorten</span><span class="sep"></span>
+          <span class="opt">Expand</span><span class="sep"></span>
+          <span class="opt">More clinical</span>
+        </div>
+        <div class="ghost-replace" style="right: 38px; top: 130px;">
+          <div class="lbl">Replacement · clinical · 16 words</div>
+          augmentin 875 / 125 mg PO BID × 7 d, azithromycin 500 mg d1 then 250 mg q24h × 4 d
+          <div class="actions">
+            <button class="b-acc">Apply</button>
+            <button class="b-rej">Try again</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ════════════════════════════════════════════════════════════════
+     PARADIGM 05 — Outline mode
+     ════════════════════════════════════════════════════════════════ -->
+<section class="paradigm p05" id="p5">
+  <header class="p-head">
+    <div class="p-num">05</div>
+    <div class="p-meta">
+      <h3>Outline mode</h3>
+      <p class="sub">Toggle the SOAP to a structured outline of short
+      bullets. The doctor edits bullets — short fragments, not paragraphs.
+      On save, the AI re‑expands each bullet to prose. Same content,
+      lower cognitive load: nobody types a sentence when six words will do.</p>
+    </div>
+    <div class="p-tags">
+      <span class="tag win">Win · edit fragments, not paragraphs</span>
+      <span class="tag cost">Cost · bullet → prose round‑trip drift</span>
+      <span class="tag bold">Bold <span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip off"></span> 4/5</span>
+    </div>
+  </header>
+  <div class="frames">
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step"><span class="badge">1</span>Default · collapsed outline</div><div>Outline mode on</div></div>
+      <div class="toolbar">
+        <span style="font-family:var(--font-mono);font-size:10px;letter-spacing:0.12em;color:var(--page-fg-faint);text-transform:uppercase;">SOAP · v3</span>
+        <div class="toggle"><button>Prose</button><button class="on">Outline</button></div>
+      </div>
+      <div class="lhs">
+        <div class="row lvl-0"><span class="tri">▼</span><span class="bul">S</span><span>Subjective</span></div>
+        <div class="row lvl-1"><span class="tri">▼</span><span class="bul">·</span><span>HPI — cough 3 d, fevers 101 °F, pleuritic chest pain</span></div>
+        <div class="row lvl-1"><span class="tri">▼</span><span class="bul">·</span><span>PMH — HTN, T2DM A1c 7.2, prior CAP 2018</span></div>
+        <div class="row lvl-0"><span class="tri">▶</span><span class="bul">O</span><span>Objective <span style="color:var(--page-fg-faint);">(4)</span></span></div>
+        <div class="row lvl-0"><span class="tri">▶</span><span class="bul">A</span><span>Assessment <span style="color:var(--page-fg-faint);">(2)</span></span></div>
+        <div class="row lvl-0"><span class="tri">▼</span><span class="bul">P</span><span>Plan</span></div>
+        <div class="row lvl-1"><span class="tri">▼</span><span class="bul">·</span><span>CXR + CBC/BMP/PCT</span></div>
+        <div class="row lvl-1"><span class="tri">▼</span><span class="bul">·</span><span>Augmentin 7 d + azithro 5 d</span></div>
+        <div class="row lvl-1"><span class="tri">▼</span><span class="bul">·</span><span>F/U 5–7 d · return precautions</span></div>
+      </div>
+    </div>
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step active"><span class="badge">2</span>Active · editing a bullet</div><div>save → AI re‑expands</div></div>
+      <div class="toolbar">
+        <span style="font-family:var(--font-mono);font-size:10px;letter-spacing:0.12em;color:var(--page-fg-faint);text-transform:uppercase;">SOAP · v3</span>
+        <div class="toggle"><button>Prose</button><button class="on">Outline</button></div>
+      </div>
+      <div class="lhs">
+        <div class="row lvl-0"><span class="tri">▶</span><span class="bul">S</span><span>Subjective</span></div>
+        <div class="row lvl-0"><span class="tri">▶</span><span class="bul">O</span><span>Objective <span style="color:var(--page-fg-faint);">(4)</span></span></div>
+        <div class="row lvl-0"><span class="tri">▼</span><span class="bul">P</span><span>Plan</span></div>
+        <div class="row lvl-1"><span class="tri">▼</span><span class="bul">·</span><span>CXR + CBC/BMP/PCT</span></div>
+        <div class="row lvl-2 editing"><span></span><span></span><span><input value="Augmentin 7 d + azithro 5 d + procalcitonin if WBC > 12"></span></div>
+        <div class="ai-hint"><svg class="ico"><use href="#g-spark"/></svg>AI will expand this bullet to prose on save</div>
+        <div class="row lvl-1"><span class="tri">▼</span><span class="bul">·</span><span>F/U 5–7 d · return precautions</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ════════════════════════════════════════════════════════════════
+     PARADIGM 06 — Template-fill (structured fields)
+     ════════════════════════════════════════════════════════════════ -->
+<section class="paradigm p06" id="p6">
+  <header class="p-head">
+    <div class="p-num">06</div>
+    <div class="p-meta">
+      <h3>Template‑fill · structured fields</h3>
+      <p class="sub">Stop pretending SOAP is prose. Each clinical fact
+      gets a typed field — date, dropdown, slider, multi‑select.
+      The AI assembles prose from the filled fields, not the other way
+      around. EHR vibe — but generated.</p>
+    </div>
+    <div class="p-tags">
+      <span class="tag win">Win · field‑level confidence + reuse</span>
+      <span class="tag cost">Cost · field schema drift · feels rigid</span>
+      <span class="tag bold">Bold <span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip off"></span> 4/5</span>
+    </div>
+  </header>
+  <div class="frames">
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step"><span class="badge">1</span>Default · auto‑filled</div><div>fields populated from transcript</div></div>
+      <div class="form">
+        <div class="group-title">Subjective · HPI</div>
+        <div class="field"><div class="lbl">Chief complaint</div><div class="ctl">Productive cough × 3 d, fevers, chest pain</div></div>
+        <div class="field"><div class="lbl">Onset</div><div class="ctl select">2026‑05‑08 · 3 d ago</div></div>
+        <div class="field"><div class="lbl">Quality</div><div class="ctl select">Productive (yellow‑green)</div></div>
+        <div class="field"><div class="lbl">Severity</div><div class="ctl slider"><div class="slider-rail"></div><span class="slider-val">6 / 10</span></div></div>
+        <div class="field"><div class="lbl">ROS reviewed</div><div class="ctl" style="border:0;background:transparent;padding:0;"><div class="chk-row"><span class="chk on">Constitutional</span><span class="chk on">Respiratory</span><span class="chk on">Cardiac</span><span class="chk">GI</span><span class="chk">Neuro</span></div></div></div>
+      </div>
+    </div>
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step active"><span class="badge">2</span>Active · editing one field</div><div>AI re‑assembles prose</div></div>
+      <div class="form">
+        <div class="group-title">Subjective · HPI</div>
+        <div class="field"><div class="lbl">Chief complaint</div><div class="ctl">Productive cough × 3 d, fevers, chest pain</div></div>
+        <div class="field"><div class="lbl">Quality</div><div class="ctl focus">Productive (yellow‑green) → <strong>+ flecks of blood</strong></div></div>
+        <div class="field"><div class="lbl">Severity</div><div class="ctl slider"><div class="slider-rail" style="background: linear-gradient(to right, #4d7d9a 0% 80%, #d0d3da 80% 100%);"></div><span class="slider-val">8 / 10</span></div></div>
+        <div class="field"><div class="lbl">ROS reviewed</div><div class="ctl" style="border:0;background:transparent;padding:0;"><div class="chk-row"><span class="chk on">Constitutional</span><span class="chk on">Respiratory</span><span class="chk on">Cardiac</span><span class="chk on">GU</span><span class="chk">Neuro</span></div></div></div>
+        <div class="assemble">
+          <div class="lbl">Prose preview · auto‑rebuilt</div>
+          58 y/o male with 3 d of <strong>productive cough with sputum flecked with blood</strong>, fevers to 101 °F, and right‑sided pleuritic chest pain; <strong>moderate–severe</strong> (8 / 10).
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ════════════════════════════════════════════════════════════════
+     PARADIGM 07 — Source toggle (raw markdown editor)
+     ════════════════════════════════════════════════════════════════ -->
+<section class="paradigm p07" id="p7">
+  <header class="p-head">
+    <div class="p-num">07</div>
+    <div class="p-meta">
+      <h3>Source toggle · raw markdown</h3>
+      <p class="sub">For power users: flip a switch in the corner and
+      see the raw markdown the renderer is reading. Edit source directly,
+      same as Linear&rsquo;s issue editor or any code‑editor aesthetic.
+      Lower ceiling than AI‑driven paradigms, higher floor for doctors
+      who already think in `**HPI:**`.</p>
+    </div>
+    <div class="p-tags">
+      <span class="tag win">Win · power users get plain text</span>
+      <span class="tag cost">Cost · alienates most clinicians</span>
+      <span class="tag bold">Bold <span class="pip"></span><span class="pip"></span><span class="pip off"></span><span class="pip off"></span><span class="pip off"></span> 2/5</span>
+    </div>
+  </header>
+  <div class="frames">
+    <div class="frame">
+      <div class="frame-head">
+        <div class="frame-step"><span class="badge">1</span>Default · Rendered</div>
+        <div class="src-toggle"><button class="on">Rendered</button><button>Source</button></div>
+      </div>
+      <div class="src">
+        <div class="ln" style="color:#484f58;"><span>1</span><br><span>2</span><br><span>3</span><br><span>4</span><br><span>5</span><br><span>6</span><br><span>7</span><br><span>8</span></div>
+        <div class="body" style="font-family: var(--font-sans); font-size: 12.5px; line-height: 1.7;">
+          <strong style="color:#79c0ff;">Subjective</strong><br>
+          58 y/o male with cough × 3 d, fevers 101 °F, right‑sided pleuritic chest pain.<br><br>
+          <strong style="color:#79c0ff;">Plan</strong><br>
+          CXR + CBC/BMP/PCT. Augmentin 875 mg BID × 7 d + azithromycin 500 mg ×1 then 250 mg ×4 d.<br>
+          F/U 5–7 d.
+        </div>
+      </div>
+    </div>
+    <div class="frame">
+      <div class="frame-head">
+        <div class="frame-step active"><span class="badge">2</span>Active · Source</div>
+        <div class="src-toggle"><button>Rendered</button><button class="on">Source</button></div>
+      </div>
+      <div class="src">
+        <div class="ln"><span>1</span><br><span>2</span><br><span>3</span><br><span>4</span><br><span>5</span><br><span>6</span><br><span>7</span><br><span>8</span></div>
+<div class="body"><span class="md-h">## Subjective</span>
+58 y/o male with cough × 3 d, fevers <span class="md-b">**101 °F**</span>, right‑sided pleuritic chest pain.
+
+<span class="md-h">## Plan</span>
+- CXR + CBC/BMP/PCT
+- <span class="md-b">**Augmentin**</span> 875 mg BID × 7 d
+- <span class="md-em">_F/U 5–7 d_</span><span class="caret"></span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ════════════════════════════════════════════════════════════════
+     PARADIGM 08 — Transcript-anchored
+     ════════════════════════════════════════════════════════════════ -->
+<section class="paradigm p08" id="p8">
+  <header class="p-head">
+    <div class="p-num">08</div>
+    <div class="p-meta">
+      <h3>Transcript‑anchored editing</h3>
+      <p class="sub">Split screen: transcript on the left, SOAP on the
+      right. Every SOAP sentence is anchored to the transcript turns it
+      was inferred from. Click a SOAP sentence → the source utterances
+      light up. Disagree? Edit upstream by amending the inference, not
+      the prose. <strong>Editing happens at the source of truth.</strong></p>
+    </div>
+    <div class="p-tags">
+      <span class="tag win">Win · edits stay grounded in the visit</span>
+      <span class="tag cost">Cost · only works post‑transcription</span>
+      <span class="tag bold">Bold <span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span> 5/5</span>
+    </div>
+  </header>
+  <div class="frames">
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step"><span class="badge">1</span>Default · no anchor</div><div>both panes idle</div></div>
+      <div class="split">
+        <div class="pane">
+          <div class="pane-h">▌Transcript · 11 m 42 s</div>
+          <div class="turn"><div class="meta"><span class="ts">00:14</span><span class="role dr">Dr.</span></div><div class="text">What brings you in today?</div></div>
+          <div class="turn"><div class="meta"><span class="ts">00:18</span><span class="role">Pt.</span></div><div class="text">Been coughing up green stuff for about three days now, fevers too.</div></div>
+          <div class="turn"><div class="meta"><span class="ts">00:34</span><span class="role">Pt.</span></div><div class="text">Right side hurts when I breathe in.</div></div>
+          <div class="turn"><div class="meta"><span class="ts">02:08</span><span class="role dr">Dr.</span></div><div class="text">Any history of pneumonia before?</div></div>
+        </div>
+        <div class="pane">
+          <div class="pane-h">▌SOAP · v3</div>
+          <div class="soap-line"><div class="lbl">S · HPI</div>58 y/o male with productive cough × 3 days, fevers to 101 °F.</div>
+          <div class="soap-line"><div class="lbl">S · HPI cont.</div>Right‑sided pleuritic chest pain worse with deep inspiration.</div>
+          <div class="soap-line"><div class="lbl">S · PMH</div>Prior CAP 2018; HTN; T2DM.</div>
+        </div>
+      </div>
+    </div>
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step active"><span class="badge">2</span>Active · anchored</div><div>SOAP sentence ↔ 2 utterances</div></div>
+      <div class="split">
+        <div class="pane">
+          <div class="pane-h">▌Transcript · 11 m 42 s</div>
+          <div class="turn linked"><div class="meta"><span class="ts">00:18</span><span class="role">Pt.</span></div><div class="text">Been coughing up <strong>green stuff for about three days</strong> now, fevers too.</div></div>
+          <div class="turn"><div class="meta"><span class="ts">00:25</span><span class="role dr">Dr.</span></div><div class="text">Any sweats? Chills?</div></div>
+          <div class="turn linked"><div class="meta"><span class="ts">00:34</span><span class="role">Pt.</span></div><div class="text">Some chills last night. <strong>Temperature got up to 101 at home.</strong></div></div>
+          <div class="turn"><div class="meta"><span class="ts">02:08</span><span class="role dr">Dr.</span></div><div class="text">Any history of pneumonia before?</div></div>
+        </div>
+        <div class="pane">
+          <div class="pane-h">▌SOAP · v3</div>
+          <div class="soap-line linked">
+            <div class="lbl">S · HPI · selected</div>
+            58 y/o male with productive cough × 3 days, fevers to 101 °F.
+            <div class="anchor-tip"><svg class="ico" style="color:var(--sage-bright)"><use href="#g-spark"/></svg>2 utterances · edit upstream to revise</div>
+          </div>
+          <div class="soap-line"><div class="lbl">S · HPI cont.</div>Right‑sided pleuritic chest pain worse with deep inspiration.</div>
+          <div class="soap-line"><div class="lbl">S · PMH</div>Prior CAP 2018; HTN; T2DM.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ════════════════════════════════════════════════════════════════
+     PARADIGM 09 — Conversational scrub (timeline)
+     ════════════════════════════════════════════════════════════════ -->
+<section class="paradigm p09" id="p9">
+  <header class="p-head">
+    <div class="p-num">09</div>
+    <div class="p-meta">
+      <h3>Conversational scrub · timeline</h3>
+      <p class="sub">Video‑editor model. A timeline of the visit runs
+      along the bottom; cards above show what the model inferred at the
+      scrubbed moment. Drag the playhead to a moment — see the SOAP as
+      it stood right after the patient mentioned the chest pain.
+      Edit the AI&rsquo;s reasoning at the moment it formed.</p>
+    </div>
+    <div class="p-tags">
+      <span class="tag win">Win · time travel through the AI&rsquo;s state</span>
+      <span class="tag cost">Cost · novel UI — needs training</span>
+      <span class="tag bold">Bold <span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span> 5/5</span>
+    </div>
+  </header>
+  <div class="frames">
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step"><span class="badge">1</span>Default · end of visit</div><div>playhead at 11:42</div></div>
+      <div class="stage">
+        <div class="card"><div class="h"><svg class="ico"><use href="#g-check"/></svg>S · Subjective</div><div class="body">58 y/o male · productive cough × 3 d · fevers 101 °F · pleuritic chest pain.</div></div>
+        <div class="card"><div class="h"><svg class="ico"><use href="#g-check"/></svg>O · Objective</div><div class="body">T 100.4 · HR 96 · SpO₂ 94 % · focal crackles RLL.</div></div>
+        <div class="card"><div class="h"><svg class="ico"><use href="#g-check"/></svg>A · Assessment</div><div class="body">CAP, RLL · CURB‑65 = 1.</div></div>
+        <div class="card"><div class="h"><svg class="ico"><use href="#g-check"/></svg>P · Plan</div><div class="body">CXR · augmentin + azithro · F/U 5–7 d.</div></div>
+        <div class="card"><div class="h"><svg class="ico"><use href="#g-spark"/></svg>ICD · CPT</div><div class="body">J18.9 · 99214</div></div>
+        <div class="card"><div class="h"><svg class="ico"><use href="#g-spark"/></svg>Confidence</div><div class="body">0.91 overall · 0.83 plan</div></div>
+      </div>
+      <div class="timeline-area">
+        <div class="timeline">
+          <div class="tl-event sage"  style="left: 6%;"></div>
+          <div class="tl-event info"  style="left: 18%;"></div>
+          <div class="tl-event amber" style="left: 36%;"></div>
+          <div class="tl-event sage"  style="left: 48%;"></div>
+          <div class="tl-event sage"  style="left: 62%;"></div>
+          <div class="tl-event amber" style="left: 78%;"></div>
+          <div class="tl-event info"  style="left: 92%;"></div>
+          <div class="playhead" style="left: 96%;"><div class="now-pill">11:42 · END</div></div>
+        </div>
+        <div class="tl-labels"><span>00:00</span><span>03:00</span><span>06:00</span><span>09:00</span><span>11:42</span></div>
+      </div>
+    </div>
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step active"><span class="badge">2</span>Active · scrubbed to 03:15</div><div>SOAP as it stood then</div></div>
+      <div class="stage">
+        <div class="card"><div class="h"><svg class="ico"><use href="#g-check"/></svg>S · Subjective</div><div class="body">58 y/o male · productive cough × 3 d · fevers 101 °F.</div></div>
+        <div class="card tentative"><div class="h"><svg class="ico"><use href="#g-spark"/></svg>Forming · chest pain</div><div class="body">&ldquo;Right side hurts when I breathe in.&rdquo; — pleuritic? · not yet committed.</div></div>
+        <div class="card empty"><div class="h">O · Objective</div><div class="body">not yet examined</div></div>
+        <div class="card empty"><div class="h">A · Assessment</div><div class="body">awaiting exam findings</div></div>
+        <div class="card empty"><div class="h">P · Plan</div><div class="body">—</div></div>
+        <div class="card empty"><div class="h">ICD · CPT</div><div class="body">—</div></div>
+      </div>
+      <div class="timeline-area">
+        <div class="timeline">
+          <div class="tl-event sage"  style="left: 6%;"></div>
+          <div class="tl-event info"  style="left: 18%;"></div>
+          <div class="tl-event amber" style="left: 36%; box-shadow: 0 0 0 3px rgba(212,165,116,0.30);"></div>
+          <div class="tl-event sage"  style="left: 48%;"></div>
+          <div class="tl-event sage"  style="left: 62%;"></div>
+          <div class="tl-event amber" style="left: 78%;"></div>
+          <div class="tl-event info"  style="left: 92%;"></div>
+          <div class="playhead" style="left: 27%;"><div class="now-pill">03:15 · &ldquo;chest pain&rdquo;</div></div>
+        </div>
+        <div class="tl-labels"><span>00:00</span><span>03:00</span><span>06:00</span><span>09:00</span><span>11:42</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ════════════════════════════════════════════════════════════════
+     PARADIGM 10 — Block-based (Notion-style)
+     ════════════════════════════════════════════════════════════════ -->
+<section class="paradigm p10" id="p10">
+  <header class="p-head">
+    <div class="p-num">10</div>
+    <div class="p-meta">
+      <h3>Block‑based · Notion paradigm</h3>
+      <p class="sub">Every SOAP element is a draggable block. Reorder
+      with the handle, delete with backspace, add a new block with the
+      <em>+</em> button, or type <em>/</em> to pull up a command menu
+      (<code>/ros</code>, <code>/pmh</code>, <code>/icd</code>,
+      <code>/regenerate</code>). Composing > editing.</p>
+    </div>
+    <div class="p-tags">
+      <span class="tag win">Win · doctors already know Notion / GDocs</span>
+      <span class="tag cost">Cost · invariants per block · ICD coupling</span>
+      <span class="tag bold">Bold <span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip off"></span> 4/5</span>
+    </div>
+  </header>
+  <div class="frames">
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step"><span class="badge">1</span>Default · 4 blocks</div><div>hover for handles</div></div>
+      <div class="doc">
+        <div class="block hover-active">
+          <span class="plus">＋</span><span class="handle">⋮⋮</span>
+          <div><span class="lbl">S · Subjective</span><div class="text">58 y/o male presents with <strong>productive cough × 3 days</strong>, fevers to 101 °F, right‑sided pleuritic chest pain.</div></div>
+        </div>
+        <div class="block">
+          <span class="plus">＋</span><span class="handle">⋮⋮</span>
+          <div><span class="lbl">O · Objective</span><div class="text">T 100.4 · HR 96 · BP 138/84 · SpO₂ 94 %. Focal crackles RLL.</div></div>
+        </div>
+        <div class="block">
+          <span class="plus">＋</span><span class="handle">⋮⋮</span>
+          <div><span class="lbl">A · Assessment</span><div class="text">CAP, RLL · CURB‑65 = 1.</div></div>
+        </div>
+        <div class="block">
+          <span class="plus">＋</span><span class="handle">⋮⋮</span>
+          <div><span class="lbl">P · Plan</span><div class="text">CXR · CBC/BMP/PCT · augmentin + azithro · F/U 5–7 d.</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="frame">
+      <div class="frame-head"><div class="frame-step active"><span class="badge">2</span>Active · slash menu open</div><div>typed <span class="kbd" style="background:#e7e7e2;border-color:#cfcfca;color:#3a3f47">/</span></div></div>
+      <div class="doc">
+        <div class="block">
+          <span class="plus">＋</span><span class="handle">⋮⋮</span>
+          <div><span class="lbl">S · Subjective</span><div class="text">58 y/o male · productive cough × 3 d, fevers, pleuritic chest pain.</div></div>
+        </div>
+        <div class="block dragging">
+          <span class="plus">＋</span><span class="handle">⋮⋮</span>
+          <div><span class="lbl">P · Plan</span><div class="text">CXR · CBC/BMP/PCT · augmentin + azithro · F/U 5–7 d.</div></div>
+        </div>
+        <div class="drop-indicator"></div>
+        <div class="block">
+          <span class="plus">＋</span><span class="handle">⋮⋮</span>
+          <div><span class="lbl">O · Objective</span><div class="text">T 100.4 · HR 96 · BP 138/84 · SpO₂ 94 %. Focal crackles RLL.</div></div>
+        </div>
+        <div class="slash-menu" style="left: 60px; top: 200px;">
+          <div class="h">Insert block</div>
+          <div class="item on"><span class="icon">/</span><span>/ros · review of systems</span><span class="hint">ROS</span></div>
+          <div class="item"><span class="icon">/</span><span>/pmh · past medical history</span><span class="hint">PMH</span></div>
+          <div class="item"><span class="icon">/</span><span>/icd · billing code</span><span class="hint">ICD</span></div>
+          <div class="item"><span class="icon">★</span><span>/regenerate · with AI</span><span class="hint">AI</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<footer class="foot">
+  <span>QuillMD · design directions · soap‑edit · v2</span>
+  <span><span style="color:var(--sage-bright);">10</span> paradigms · 20 frames</span>
+</footer>
+
+</main>
+</body>
+</html>
