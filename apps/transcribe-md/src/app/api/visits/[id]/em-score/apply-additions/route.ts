@@ -125,17 +125,35 @@ export const POST = withApiHandler<{ id: string }>(
     // without the DB.
     const merge = mergeAdditions(currentSoap, parsed.data.additions);
 
-    // Re-score against the new SOAP. Use the same `mdmCachedJudgement:
-    // null` fast-path the visit page uses on initial render — keeps
-    // the request synchronous + deterministic. The doctor's normal
-    // edit-driven re-score (POST /em-score) handles the LLM path
-    // separately if they edit further.
+    // Re-score against the new SOAP using the LLM MDM judge path.
+    //
+    // Pre-2026-05-11 the route passed `mdmCachedJudgement: null` to
+    // force the deterministic fallback "for synchronous + deterministic
+    // behaviour." That broke the bump UX: the deterministic counter
+    // reads structured ICD codes + Rx warnings from the SOAP, not the
+    // free-text additions the BumpModal writes into Assessment. So the
+    // MDM tier never moved on a successful bump and the rail kept
+    // showing the pre-bump code (e.g. 99212 stays 99212 even when the
+    // doctor's addition was the exact gap-filler the rubric prompted
+    // for). Every EM_BUMP_APPLIED audit row from the 22-day production
+    // window had `toCode === fromCode`.
+    //
+    // The LLM judge path (`judgeMdm` — purpose=`judge`) reads the SOAP
+    // prose and re-evaluates MDM tier. p95 latency 11s in production —
+    // well inside the route's maxDuration=30 — so the synchronous
+    // concern was over-cautious. `priorSoap: currentSoap` lets the
+    // cache's drift bypass fire when the additions move the SOAP
+    // enough (>20% drift) so we don't return a stale cached judgement
+    // built on the pre-bump body.
     const icdCodes = extractIcdCodes(visit.icdCodes);
     const rxDrafts = extractRxDrafts(visit.rxDrafts);
     const engineScore = await computeEmScore(merge.newSoap, {
-      mdmCachedJudgement: null,
+      practiceId,
+      visitId,
+      userId,
       icdCodes,
       rxDrafts,
+      priorSoap: currentSoap,
     });
 
     const durationSec =

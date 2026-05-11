@@ -240,4 +240,50 @@ describe('POST /api/visits/[id]/em-score/apply-additions', () => {
       'ros.systems',
     ]);
   });
+
+  // Regression guard for the 2026-05-11 bump-not-updating bug. Prior
+  // to the fix, the route passed `mdmCachedJudgement: null` to force
+  // the deterministic-fallback MDM scorer. The fallback reads
+  // structured ICD codes + Rx warnings — NOT the free-text additions
+  // the BumpModal writes into the SOAP's Assessment section. Result:
+  // every bump's audit row had `toCode === fromCode` and the rail
+  // stayed pinned to the pre-bump code.
+  //
+  // The fix routes through the LLM judge (purpose=`judge`, p95 ~11s
+  // in production) which reads the SOAP prose. The route now MUST:
+  //   - Pass practiceId / visitId / userId so the judge has tenant
+  //     context for telemetry + cache scoping.
+  //   - Pass priorSoap = currentSoap so the judge cache's >20% drift
+  //     bypass triggers when the additions move the SOAP enough.
+  //   - NOT pass mdmCachedJudgement: null (which would short-circuit
+  //     to the deterministic fallback).
+  it('calls computeEmScore on the LLM-judge path, not the deterministic fallback', async () => {
+    mocks.auth.mockResolvedValue({
+      user: { id: FAKE_USER, practiceId: FAKE_PRACTICE },
+    });
+    mocks.visitFindUnique.mockResolvedValue(READY_VISIT);
+    mocks.visitUpdate.mockResolvedValue({});
+
+    await POST(
+      makeReq({
+        additions: [{ criterionId: 'mdm.problems', text: 'Patient with 2 chronic stable problems plus acute pharyngitis.' }],
+      }),
+      ctx,
+    );
+
+    expect(mocks.computeEmScore).toHaveBeenCalledTimes(1);
+    const opts = mocks.computeEmScore.mock.calls[0][1];
+
+    // The fix invariants — break any of these and the bump silently
+    // stays pinned to the pre-bump tier on prose-only MDM additions.
+    expect(opts.practiceId).toBe(FAKE_PRACTICE);
+    expect(opts.visitId).toBe(FAKE_VISIT);
+    expect(opts.userId).toBe(FAKE_USER);
+    expect(opts).not.toHaveProperty('mdmCachedJudgement', null);
+    // priorSoap MUST be set so the LLM cache's drift bypass works
+    // when the additions push the SOAP past the 20% threshold. The
+    // route picks soapFinal ?? soapDraft as the prior body; this
+    // fixture has soapFinal=null so the prior is soapDraft.
+    expect(opts.priorSoap).toBe(READY_VISIT.soapDraft);
+  });
 });
