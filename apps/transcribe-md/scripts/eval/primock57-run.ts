@@ -270,7 +270,24 @@ async function callDeepgram(audioPath: string): Promise<DeepgramResult> {
   const audio = await readFile(audioPath);
   const apiKey = process.env.DEEPGRAM_API_KEY;
   if (!apiKey) throw new Error('DEEPGRAM_API_KEY not set');
-  const url = `${DEEPGRAM_URL}?model=nova-3-medical&diarize=true&utterances=true&punctuate=true&smart_format=true&language=en`;
+  // Mirror the production L1 keyterm payload (CLINICAL_KEYTERMS from
+  // apps/transcribe-md/src/lib/deepgram-vocabulary.ts). Passed via
+  // repeated `keyterm=` params to match what packages/ai/src/deepgram-
+  // batch.ts emits at runtime. Inline-loaded to keep this eval script
+  // standalone — duplication is intentional per the eval script policy.
+  const { CLINICAL_KEYTERMS } = await import('@/lib/deepgram-vocabulary');
+  const baseParams = new URLSearchParams({
+    model: 'nova-3-medical',
+    diarize: 'true',
+    utterances: 'true',
+    punctuate: 'true',
+    smart_format: 'true',
+    language: 'en',
+  });
+  for (const term of CLINICAL_KEYTERMS) {
+    if (term.trim().length > 0) baseParams.append('keyterm', term.trim());
+  }
+  const url = `${DEEPGRAM_URL}?${baseParams.toString()}`;
   const t0 = Date.now();
   const res = await fetch(url, {
     method: 'POST',
