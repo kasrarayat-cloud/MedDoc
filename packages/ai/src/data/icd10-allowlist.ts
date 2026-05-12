@@ -166,6 +166,60 @@ const STARTER_ICD10_CODES: ReadonlyArray<string> = [
   'T78.40XA', // Allergy, unspecified, initial encounter
   'L50.9', // Urticaria, unspecified
   'J30.9', // Allergic rhinitis, unspecified
+
+  // === Weight Management cohort (2026-05-12) ===
+  // Added with the L7a prompt fix that instructs the model to code
+  // chronic comorbidities documented in PMH. Pre-fix the allowlist
+  // dropped K76.0 / G47.33 silently even after the prompt began
+  // emitting them — the rejection was invisible because audit rows
+  // log "rejectedCodes" which require ICD-shape parse first.
+  //
+  // Scope: comorbidities that routinely co-document on a weight-loss
+  // clinic visit (NAFLD / OSA / GLP-1 surveillance gaps) and the
+  // Z68.x BMI ladder + chronic-Rx Z-codes that capture HCC risk-
+  // adjustment for these cohorts.
+  'K76.0',     // Fatty (change of) liver, not elsewhere classified (NAFLD)
+  'K76.89',    // Other specified diseases of liver
+  'K85.90',    // Acute pancreatitis without necrosis or infection, unspecified
+  'K85.91',    // Acute pancreatitis with uninfected necrosis
+  'K80.20',    // Calculus of gallbladder without cholecystitis, without obstruction (GLP-1 watch)
+  'G47.33',    // Obstructive sleep apnea (adult) (pediatric)
+  'G47.30',    // Sleep apnea, unspecified
+  // I25.2 (old MI) is already in the cardiology block above — not re-added.
+  // CKD stages — N18.3 was the pre-2018 spelling for "stage 3"; CMS now
+  // uses the more-specific N18.30 / .31 / .32 split. We carry both because
+  // older NLP / draft outputs still occasionally emit N18.3 verbatim.
+  'N18.1',     // Chronic kidney disease, stage 1
+  'N18.2',     // Chronic kidney disease, stage 2 (mild)
+  'N18.30',    // Chronic kidney disease, stage 3 unspecified
+  'N18.31',    // Chronic kidney disease, stage 3a
+  'N18.32',    // Chronic kidney disease, stage 3b
+  'N18.4',     // Chronic kidney disease, stage 4 (severe)
+  'N18.5',     // Chronic kidney disease, stage 5
+  'N18.6',     // End stage renal disease
+  'N18.9',     // Chronic kidney disease, unspecified
+  // BMI ladder — class III obesity / class II / class I / overweight
+  'Z68.30',    // BMI 30.0-30.9, adult
+  'Z68.31',    // BMI 31.0-31.9, adult
+  'Z68.32',    // BMI 32.0-32.9, adult
+  'Z68.33',    // BMI 33.0-33.9, adult
+  'Z68.34',    // BMI 34.0-34.9, adult
+  'Z68.35',    // BMI 35.0-35.9, adult
+  'Z68.36',    // BMI 36.0-36.9, adult
+  'Z68.37',    // BMI 37.0-37.9, adult
+  'Z68.38',    // BMI 38.0-38.9, adult
+  'Z68.39',    // BMI 39.0-39.9, adult
+  'Z68.41',    // BMI 40.0-44.9, adult
+  'Z68.42',    // BMI 45.0-49.9, adult
+  'Z68.43',    // BMI 50.0-59.9, adult
+  'Z68.44',    // BMI 60.0-69.9, adult
+  'Z68.45',    // BMI 70 or greater, adult
+  // Z79.4 / Z79.84 / Z79.890 already present in the family-med block; not
+  // re-added. Z79.899 is the catch-all "other long-term drug therapy"
+  // that 07a now emits for chronic statin / ACE-I use captured from the
+  // medication list.
+  'Z79.899',   // Other long-term (current) drug therapy
+  'Z51.81',    // Encounter for therapeutic drug level monitoring
 ];
 
 /**
