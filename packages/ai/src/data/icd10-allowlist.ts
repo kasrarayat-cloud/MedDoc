@@ -545,6 +545,96 @@ const STARTER_ICD10_CODES: ReadonlyArray<string> = [
   // Long-term anticoagulant / antiplatelet Z-codes — every PAD / post-
   // stent / post-bypass / post-EVAR patient carries one.
   'Z79.02',    // Long-term (current) use of antiplatelet/antithrombotic
+
+  // === G1 deep-audit additions (2026-05-12) ===
+  // Codes the L7a layer emitted in the deep-audit's 19-visit synthetic
+  // run but which were missing from the allowlist (and therefore would
+  // have been silently dropped if the model had picked them). Added
+  // here so the L7a prompt extension that hoists these conditions can
+  // produce codes that survive the post-LLM allowlist filter.
+
+  // Heart failure subtypes — the existing I50.9 (unspecified) was the
+  // only HF code present; pre-fix, "HFpEF" / "HFrEF" documentation
+  // upstream had no specific allowlist landing spot. Audit-finding B3
+  // (BPD-DS BMI 55 patient with HFpEF + NYHA Class II) is the index
+  // reproduction.
+  'I50.1',     // Left ventricular failure, unspecified
+  'I50.20',    // Unspecified systolic (congestive) heart failure
+  'I50.21',    // Acute systolic (congestive) heart failure (HFrEF acute)
+  'I50.22',    // Chronic systolic (congestive) heart failure (HFrEF chronic)
+  'I50.23',    // Acute on chronic systolic (congestive) heart failure
+  'I50.30',    // Unspecified diastolic (congestive) heart failure (HFpEF)
+  'I50.31',    // Acute diastolic (congestive) heart failure (HFpEF acute)
+  'I50.32',    // Chronic diastolic (congestive) heart failure (HFpEF chronic)
+  'I50.33',    // Acute on chronic diastolic (congestive) heart failure
+  'I50.40',    // Unspecified combined systolic + diastolic heart failure
+  'I50.41',    // Acute combined systolic + diastolic heart failure
+  'I50.42',    // Chronic combined systolic + diastolic heart failure
+  'I50.43',    // Acute on chronic combined systolic + diastolic heart failure
+
+  // Acute kidney injury — audit-finding B4 (POD #5 RYGB with leak +
+  // dehydration → Cr 1.4 from baseline 0.8) is the index reproduction.
+  'N17.0',     // Acute kidney failure with tubular necrosis
+  'N17.1',     // Acute kidney failure with acute cortical necrosis
+  'N17.2',     // Acute kidney failure with medullary necrosis
+  'N17.8',     // Other acute kidney failure
+  'N17.9',     // Acute kidney failure, unspecified
+
+  // Dehydration / volume depletion — common acute finding on every
+  // post-bariatric leak workup + every CLI / ulcer presentation +
+  // every elderly-fall workup. Audit-finding B4 driver.
+  'E86.0',     // Dehydration
+  'E86.1',     // Hypovolemia
+  'E86.9',     // Volume depletion, unspecified
+
+  // Site-specific abdominal pain — the existing R10.9 (unspecified)
+  // catches everything but loses specificity for billing. B4 (LUQ
+  // tenderness post-RYGB leak workup) wanted R10.12 / R10.13.
+  'R10.10',    // Upper abdominal pain, unspecified
+  'R10.11',    // Right upper quadrant pain
+  'R10.12',    // Left upper quadrant pain
+  'R10.13',    // Epigastric pain
+  'R10.30',    // Lower abdominal pain, unspecified
+  'R10.31',    // Right lower quadrant pain
+  'R10.32',    // Left lower quadrant pain
+  'R10.84',    // Generalized abdominal pain
+  'R10.819',   // Abdominal tenderness, unspecified site
+
+  // Personal-history Z-codes (Z86.7x family) — audit-finding B6
+  // (POD #28 post-RYGB with prior provoked DVT — needed Z86.718) +
+  // V2 (CEAP C6 ulcer with prior left iliofemoral DVT — same gap).
+  'Z86.71',    // Personal history of venous thrombosis and embolism
+  'Z86.718',   // Personal history of other venous thrombosis and embolism
+  'Z86.711',   // Personal history of pulmonary embolism
+  'Z86.73',    // Personal history of TIA / cerebral infarction w/o residual
+  'Z86.74',    // Personal history of sudden cardiac arrest
+  'Z86.79',    // Personal history of other diseases of the circulatory system
+  'Z86.39',    // Personal history of other endocrine, nutritional + metabolic disease
+  'Z86.59',    // Personal history of other mental and behavioral disorders
+
+  // Acquired-absence / post-surgical anatomy Z-codes — audit-finding
+  // B7 (Month-6 post-RYGB with calcium-citrate switch) wanted Z90.3.
+  // Every post-bariatric visit at month 1+ has either Z90.3 or Z90.49.
+  // Z98.84 (status of bariatric surgery) was already present; Z90.3
+  // is the anatomical-status counterpart.
+  // (Z90.3 already in bariatric-surgery cluster above — not re-listed.)
+  'Z90.49',    // Acquired absence of other specified parts of digestive tract
+
+  // Severe protein-calorie malnutrition (E43-E46) — audit-finding B9
+  // (Year-2 post-RYGB with albumin 2.8, sarcopenia, edema → "PROTEIN-
+  // CALORIE MALNUTRITION" documented diagnosis). Prior allowlist only
+  // had the symptom-level codes R63.4 / R53.83.
+  'E40',       // Kwashiorkor
+  'E41',       // Nutritional marasmus
+  'E42',       // Marasmic kwashiorkor
+  'E43',       // Unspecified severe protein-calorie malnutrition
+  'E44.0',     // Moderate protein-calorie malnutrition
+  'E44.1',     // Mild protein-calorie malnutrition
+  'E45',       // Retarded development following protein-calorie malnutrition
+  'E46',       // Unspecified protein-calorie malnutrition
+  'E63.0',     // Essential fatty acid deficiency
+  'E63.1',     // Imbalance of constituents of food intake
+  // (E63.9 already in bariatric-surgery cluster above — not re-listed.)
 ];
 
 /**
