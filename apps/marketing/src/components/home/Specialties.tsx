@@ -1,15 +1,22 @@
 /**
  * Specialties — Phase 7 v6 (Apple Product).
  *
- * Centred stage with 8 huge rounded pills. Hover lifts each pill with sage
- * tint background + glow. Pill labels are derived from the shared
- * specialty catalog (packages/shared) so adding a specialty updates
- * the marketing site, the in-app dropdowns, and the AI pipeline in
- * one PR — no triplicate vocab drift.
+ * Centred stage with rounded pills, one per shared catalog entry. Hover
+ * lifts each pill with sage tint background + glow. Pill labels and
+ * the headline count are both derived from the shared specialty catalog
+ * (packages/shared) so adding a specialty updates the marketing site,
+ * the in-app dropdowns, and the AI pipeline in one PR — no triplicate
+ * vocab drift, and no manual "Eight"/"Nine" typo when the count changes.
  */
 import { SPECIALTIES_FOR_VISIT_CREATE } from '@meddoc/shared/specialties';
 
 const PILLS = SPECIALTIES_FOR_VISIT_CREATE.map((s) => s.label);
+
+const COUNT_WORDS = [
+  'Zero', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight',
+  'Nine', 'Ten', 'Eleven', 'Twelve',
+] as const;
+const COUNT_LABEL: string = COUNT_WORDS[PILLS.length] ?? String(PILLS.length);
 
 export function Specialties() {
   return (
@@ -19,7 +26,7 @@ export function Specialties() {
           <span className="eyebrow-tiny">Tuned per specialty</span>
         </div>
         <h2 className="stage-h2 reveal delay-1">
-          Eight specialty templates. <span className="quiet">More every month.</span>
+          {COUNT_LABEL} specialty templates. <span className="quiet">More every month.</span>
         </h2>
         <p className="stage-sub reveal delay-2">
           Each template adapts to your charting shorthand and preferred note structure within the

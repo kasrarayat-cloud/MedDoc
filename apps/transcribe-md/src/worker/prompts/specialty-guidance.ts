@@ -90,6 +90,31 @@ export const SPECIALTY_GUIDANCE: Record<string, string> = {
     "injections, behavioral). Note any controlled-substance prescribing " +
     "decisions and the documented rationale. Be cautious about " +
     "diagnostic specificity unless the doctor stated a clear diagnosis.",
+
+  // Weight Management — onboarded for weight-loss clinic pilots. Adds two
+  // section requirements (Body Composition, Behavioral Counseling) on top
+  // of the standard SOAP shell, plus GLP-1 safety screening that the L5
+  // critique downstream uses to flag missing items.
+  'weight-management':
+    "Include a 'Body Composition' subsection in Objective documenting: " +
+    "current weight, BMI (calculate if height available), waist " +
+    "circumference if measured, and percent change since the prior visit " +
+    "when stated. Include a 'Behavioral Counseling' subsection in Plan " +
+    "documenting: dietary pattern discussed (e.g. caloric deficit, " +
+    "Mediterranean, low-carb), physical-activity prescription " +
+    "(type / minutes / frequency), behavior-change strategies (sleep, " +
+    "stress, alcohol, eating triggers), and any referrals (RD, " +
+    "behavioral therapy, bariatric eval). Document GLP-1 safety screen " +
+    "explicitly when prescribed or refilled: personal/family history of " +
+    "medullary thyroid carcinoma or MEN-2, history of pancreatitis, " +
+    "active gallbladder disease, severe gastroparesis, and pregnancy " +
+    "status — absence is a documented clinical finding. For diabetic " +
+    "patients note A1c trend (current vs prior). For GLP-1 / GIP " +
+    "agonist (semaglutide, tirzepatide, liraglutide), capture the " +
+    "current dose AND the planned titration step (e.g. " +
+    "'semaglutide 0.5 mg weekly, escalate to 1.0 mg at week 4 if " +
+    "tolerated'); never document a maintenance dose without the " +
+    "titration plan that produced it.",
 };
 
 /** Return specialty-specific guidance or an empty string if none

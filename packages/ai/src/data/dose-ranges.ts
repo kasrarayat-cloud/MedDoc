@@ -335,6 +335,151 @@ export const DOSE_RANGES: ReadonlyArray<DoseRangeEntry> = [
     notes:
       'Titrated to INR (target 2-3 most indications, 2.5-3.5 mechanical mitral valve). Daily dose ranges 1-15 mg+; no fixed cap is meaningful. Validator emits "verify individualized INR-driven dosing" instead.',
   },
+
+  // ── Weight-management pharmacotherapy ──────────────────────────────
+  // Added with the `weight-management` specialty. GLP-1 / GIP agonists
+  // (liraglutide, semaglutide, tirzepatide) use stepwise titration over
+  // weeks → `complexDosing: true` rather than a static cap; the
+  // validator will emit "verify individualized titration plan" and the
+  // L7c prompt is responsible for documenting the step. Phentermine
+  // and the phentermine-topiramate combo carry concrete adult maxes
+  // and a cardiovascular-history contraindication. Naltrexone-
+  // bupropion (Contrave) has its own combined-dose ceiling (16/180
+  // mg/day for naltrexone/bupropion). Orlistat is OTC at 60 mg TID
+  // (Alli) and Rx at 120 mg TID (Xenical). Setmelanotide is rare-
+  // disease (Imcivree) for genetically-confirmed obesity — titrated
+  // SC, complexDosing.
+  {
+    drug: 'liraglutide',
+    aliases: ['saxenda', 'victoza'],
+    complexDosing: true,
+    contraindications: [
+      'liraglutide allergy',
+      'glp-1 allergy',
+      'personal history of medullary thyroid carcinoma',
+      'family history of medullary thyroid carcinoma',
+      'multiple endocrine neoplasia type 2',
+      'men-2',
+      'pregnancy',
+    ],
+    notes:
+      'Weight management (Saxenda): titrate weekly 0.6 → 1.2 → 1.8 → 2.4 → 3.0 mg SC daily. Diabetes (Victoza): 0.6 → 1.2 → 1.8 mg SC daily. No mg/day cap is meaningful without the titration step; validator emits "verify individualized titration plan". Boxed warning: thyroid C-cell tumors (animal data). Watch: pancreatitis, gallbladder disease, severe gastroparesis.',
+  },
+  {
+    drug: 'naltrexone-bupropion',
+    aliases: ['contrave'],
+    adultMaxMgPerDay: 32,
+    contraindications: [
+      'uncontrolled hypertension',
+      'seizure disorder',
+      'bulimia',
+      'anorexia nervosa',
+      'chronic opioid use',
+      'opioid dependence',
+      'mao inhibitor use',
+      'naltrexone allergy',
+      'bupropion allergy',
+      'pregnancy',
+    ],
+    notes:
+      'Fixed-combination tablet (8 mg naltrexone / 90 mg bupropion). Max 4 tabs/day (32 mg naltrexone + 360 mg bupropion). Titrate: week 1 = 1 tab AM; week 2 = 1 AM + 1 PM; week 3 = 2 AM + 1 PM; week 4+ = 2 AM + 2 PM. Boxed warning: bupropion suicidality in young adults.',
+  },
+  {
+    drug: 'orlistat',
+    aliases: ['xenical', 'alli'],
+    adultMaxMgPerDay: 360,
+    contraindications: [
+      'orlistat allergy',
+      'chronic malabsorption syndrome',
+      'cholestasis',
+      'pregnancy',
+    ],
+    notes:
+      'Rx (Xenical) 120 mg TID with each fat-containing meal — max 360 mg/day. OTC (Alli) 60 mg TID — max 180 mg/day. Take a daily multivitamin (fat-soluble vitamin malabsorption). Rare hepatotoxicity reports.',
+  },
+  {
+    drug: 'phentermine',
+    aliases: ['adipex-p', 'lomaira', 'suprenza'],
+    adultMaxMgPerDay: 37.5,
+    contraindications: [
+      'phentermine allergy',
+      'sympathomimetic allergy',
+      'cardiovascular disease',
+      'coronary artery disease',
+      'uncontrolled hypertension',
+      'hyperthyroidism',
+      'glaucoma',
+      'history of drug abuse',
+      'mao inhibitor use',
+      'pregnancy',
+      'breastfeeding',
+    ],
+    notes:
+      'Adult max 37.5 mg/day (single dose) or 8 mg TID (Lomaira). Schedule IV controlled. Short-term use (weeks, not months) per FDA label; some clinicians extend off-label under monitoring. Screen cardiac history + baseline HR/BP before initiating.',
+  },
+  {
+    drug: 'phentermine-topiramate',
+    aliases: ['qsymia'],
+    adultMaxMgPerDay: 15,
+    contraindications: [
+      'phentermine allergy',
+      'topiramate allergy',
+      'sulfonamide allergy',
+      'glaucoma',
+      'hyperthyroidism',
+      'mao inhibitor use',
+      'pregnancy',
+      'breastfeeding',
+      'history of nephrolithiasis',
+    ],
+    notes:
+      'Fixed-combination ER. Max 15 mg phentermine / 92 mg topiramate daily. Titrate: 3.75/23 mg × 14 days → 7.5/46 mg (maintenance for most) → escalate to 11.25/69 mg × 14 days → 15/92 mg only if <3% weight loss at 12 weeks. Discontinue gradually (topiramate withdrawal). Cleft-palate teratogenicity → REMS, pregnancy screen monthly.',
+  },
+  {
+    drug: 'semaglutide',
+    aliases: ['wegovy', 'ozempic', 'rybelsus'],
+    complexDosing: true,
+    contraindications: [
+      'semaglutide allergy',
+      'glp-1 allergy',
+      'personal history of medullary thyroid carcinoma',
+      'family history of medullary thyroid carcinoma',
+      'multiple endocrine neoplasia type 2',
+      'men-2',
+      'pregnancy',
+    ],
+    notes:
+      'Weight management (Wegovy): titrate monthly 0.25 → 0.5 → 1.0 → 1.7 → 2.4 mg SC weekly. Diabetes (Ozempic): titrate 0.25 → 0.5 → 1.0 → 2.0 mg SC weekly. Oral (Rybelsus): 3 → 7 → 14 mg PO daily. No mg/week cap is meaningful without the titration step; validator emits "verify individualized titration plan". Boxed warning: thyroid C-cell tumors. Watch: pancreatitis, severe gastroparesis, gallbladder disease, diabetic retinopathy progression in T2DM.',
+  },
+  {
+    drug: 'setmelanotide',
+    aliases: ['imcivree'],
+    complexDosing: true,
+    contraindications: [
+      'setmelanotide allergy',
+      'pregnancy',
+      'breastfeeding',
+    ],
+    notes:
+      'MC4R agonist for genetically-confirmed obesity (POMC, PCSK1, LEPR deficiency or Bardet-Biedl syndrome). Adult: titrate 2 mg → 3 mg SC daily (max). Peds 6-11 yr: 1 mg → 2 mg → 3 mg. Requires genetic-test confirmation prior to initiation. Watch: skin hyperpigmentation, depressed mood / suicidal ideation, spontaneous penile erections.',
+  },
+  {
+    drug: 'tirzepatide',
+    aliases: ['zepbound', 'mounjaro'],
+    complexDosing: true,
+    contraindications: [
+      'tirzepatide allergy',
+      'glp-1 allergy',
+      'gip allergy',
+      'personal history of medullary thyroid carcinoma',
+      'family history of medullary thyroid carcinoma',
+      'multiple endocrine neoplasia type 2',
+      'men-2',
+      'pregnancy',
+    ],
+    notes:
+      'Dual GIP / GLP-1 agonist. Both weight management (Zepbound) and diabetes (Mounjaro) titrate monthly 2.5 → 5 → 7.5 → 10 → 12.5 → 15 mg SC weekly (max 15 mg). No mg/week cap is meaningful without the titration step; validator emits "verify individualized titration plan". Boxed warning: thyroid C-cell tumors. Watch: pancreatitis, severe gastroparesis, gallbladder disease.',
+  },
 ];
 
 // ----------------------------------------------------------------------------
