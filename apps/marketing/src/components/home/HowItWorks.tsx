@@ -8,7 +8,17 @@
  *  - 03: dimmed orb + sage check ring
  *
  * Animations: orb breathing, wave pulse, doc-line draw, ring pulse — all CSS.
+ *
+ * Step-02 caption derives its specialty count from the shared catalog so
+ * adding a specialty in `packages/shared` doesn't leave the count stale —
+ * QA sweep 2026-05-12 caught the original "8 specialty templates"
+ * hardcode here while the data-derived Specialties section already read
+ * 10 from the catalog.
  */
+import { SPECIALTIES_FOR_VISIT_CREATE } from '@meddoc/shared/specialties';
+
+const SPECIALTY_COUNT = SPECIALTIES_FOR_VISIT_CREATE.length;
+
 export function HowItWorks() {
   return (
     <section id="how">
@@ -83,7 +93,7 @@ export function HowItWorks() {
               SOAP, ICD-10 / CPT, Rx drafts, referral letters, patient summary — in your voice,
               your templates, your specialty.
             </p>
-            <div className="how-cap">~30 seconds · 8 specialty templates</div>
+            <div className="how-cap">~30 seconds · {SPECIALTY_COUNT} specialty templates</div>
           </div>
           <div className="how-visual reveal delay-1">
             <div className="how-visual-frame">
