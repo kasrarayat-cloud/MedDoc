@@ -180,13 +180,23 @@ export async function computeEmScore(
     mdmConfidence: judgement.confidence,
   };
 
+  // Threshold mirrored from bump-suggestion.ts (ALMOST_THERE_GAP_THRESHOLD).
+  // Raised from 2 → 4 on 2026-05-12 to surface the bump CTA on text_notes
+  // and voice_dictation visits whose deterministic counters land lower
+  // than transcribed audio. Pre-fix: 0 EM_BUMP_APPLIED audits across 9
+  // text_notes + 4 voice_dictation visits in the 30-day window; audio
+  // worked because audio SOAPs are word-for-word and hit the 4/2/2/2
+  // element floor naturally. Keep this constant in sync with
+  // bump-suggestion.ts ALMOST_THERE_GAP_THRESHOLD or the page render
+  // and the BumpModal will disagree on whether to show the CTA.
+  const BUMP_GAP_THRESHOLD = 4;
   const next = bumpInternal.nextLevelUp(code);
   let bumpableTo: EmCode | null = null;
   let bumpGaps: string[] | undefined;
   if (next) {
     const required = bumpInternal.requirementsFor(next);
     const gaps = bumpInternal.diffRequirements(bumpScoreInput.satisfied, required);
-    if (gaps.length === 0 || gaps.length <= 2) {
+    if (gaps.length <= BUMP_GAP_THRESHOLD) {
       bumpableTo = next;
       bumpGaps = gaps;
     }
