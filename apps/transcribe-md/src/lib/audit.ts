@@ -127,7 +127,13 @@ export type AuditAction =
   // PR-L follow-up: Whisper-fallback canary. Layer-1 (and 1b dictation)
   // emit this when the transcribe() orchestrator's primary Deepgram
   // call failed and Whisper saved the visit.
-  | 'TRANSCRIPTION_PROVIDER_FALLBACK';
+  | 'TRANSCRIPTION_PROVIDER_FALLBACK'
+  // Deep-audit G9 (2026-05-12) — partial automation failure. Emitted
+  // when at least one load-bearing L7 layer (icd-coding / cpt-coding /
+  // rx-drafting) errored during the fan-out + the worker flipped
+  // needsReview on the visit. Metadata carries the failedLayers list
+  // + per-layer reasons (truncated). Forensics surface in /admin/audit.
+  | 'VISIT_AUTOMATION_INCOMPLETE';
 
 export interface AuditLogInput {
   action: AuditAction;

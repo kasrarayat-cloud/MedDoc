@@ -265,6 +265,16 @@ enum AuditAction {
   // durationSec }. Operators see the rate over time in /admin/queues
   // + audit_logs.
   TRANSCRIPTION_PROVIDER_FALLBACK
+
+  // Deep-audit G9 (2026-05-12) — partial automation failure traceability.
+  // Emitted when at least one load-bearing L7 layer (L7a icd-coding /
+  // L7b cpt-coding / L7c rx-drafting) failed during the fan-out but the
+  // SOAP itself succeeded. The visit transitions to status=READY +
+  // needsReview=true so the doctor sees a banner; this audit row gives
+  // forensics the per-layer error metadata for triage. Pre-fix, a credit-
+  // exhaustion or transient API error in L7 left visits silently marked
+  // READY with empty codes/Rx columns.
+  VISIT_AUTOMATION_INCOMPLETE
 }
 
 /// Document lifecycle status
