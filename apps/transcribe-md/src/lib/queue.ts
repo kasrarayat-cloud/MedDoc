@@ -147,7 +147,11 @@ export function getCleanupQueue(): Queue {
 }
 
 // ---------------------------------------------------------------------------
-// PR-L: Dead Letter Queue — `dlq:permanent-failures`.
+// PR-L: Dead Letter Queue — `dlq-permanent-failures`.
+// (Renamed 2026-05-12 from `dlq:permanent-failures` — the colon
+// triggered `Error: Queue name cannot contain :` from BullMQ at
+// `new Queue()` time, silently dropping every dead-lettered job
+// since the DLQ landed. Deep-audit finding G10.)
 // ---------------------------------------------------------------------------
 // Jobs that exhaust their retry budget on the main queues land here
 // with their original payload + last-error metadata. The DLQ has NO
@@ -163,7 +167,7 @@ export function getCleanupQueue(): Queue {
 // failed event fires, BullMQ has already exhausted the retry budget.
 // ---------------------------------------------------------------------------
 
-export const DLQ_QUEUE_NAME = 'dlq:permanent-failures';
+export const DLQ_QUEUE_NAME = 'dlq-permanent-failures';
 
 export interface DlqJobPayload {
   /** Source queue the failed job came from (e.g. 'transcribe-md'). */
