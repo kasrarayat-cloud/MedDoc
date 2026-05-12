@@ -104,11 +104,33 @@ export async function enqueueProcessVisit(
   const jobId = opts.retry
     ? `visit-${visitId}-retry-${minute}`
     : `visit-${visitId}-${minute}`;
-  await getTranscribeMdQueue().add(
-    JOB_PROCESS_VISIT,
-    { visitId, userId },
-    { jobId }
-  );
+  const queue = getTranscribeMdQueue();
+  // 2026-05-12 stuck-visit fix: BullMQ's `add()` is a silent no-op if a
+  // job with the same jobId already exists in *any* state including
+  // failed. Before the fix, the Kasra stuck-visit incident's 4th retry
+  // landed on the same minute-jobId as a prior failed job → the new
+  // enqueue silently deduped → visit pinned at QUEUED for 2.5 hours.
+  // We remove the prior job iff it's in a TERMINAL state (completed /
+  // failed / unknown) so a real in-flight job is preserved (preserving
+  // the original double-click idempotency contract).
+  try {
+    const existing = await queue.getJob(jobId);
+    if (existing) {
+      const state = await existing.getState();
+      if (state === 'failed' || state === 'completed' || state === 'unknown') {
+        await existing.remove();
+      }
+    }
+  } catch (err) {
+    // Best-effort — if the BullMQ inspect call throws, fall through to
+    // the add(). add() throws cleanly with the dedup error if a live
+    // job collides; that's preferred over masking the symptom.
+    console.error(
+      '[enqueueProcessVisit] prior-job cleanup failed:',
+      err instanceof Error ? err.message : err,
+    );
+  }
+  await queue.add(JOB_PROCESS_VISIT, { visitId, userId }, { jobId });
 }
 
 // ---------------------------------------------------------------------------
@@ -129,6 +151,11 @@ export const JOB_STALE_VISIT_CLEANUP = 'stale_visit_cleanup';
  *  Transcripts + SOAP stay — the 7-year clinical-record retention
  *  window is separate from the 180-day audio window. */
 export const JOB_RETENTION_SWEEP = 'retention_sweep';
+/** 2026-05-12 stuck-visit watchdog. Per-minute sweep that force-fails
+ *  visits stuck in an in-flight status past the global processing
+ *  budget. Catches dropped/deduped/orphaned BullMQ jobs the worker's
+ *  per-attempt timeout can't reach. */
+export const JOB_STUCK_VISIT_WATCHDOG = 'stuck_visit_watchdog';
 
 export function getCleanupQueue(): Queue {
   if (cleanupQueue) return cleanupQueue;
@@ -212,12 +239,21 @@ export function getDlqQueue(): Queue<DlqJobPayload> {
  *  `failed` event handler calls this when `attemptsMade ===
  *  job.opts.attempts` (final retry exhausted). The DLQ job's id is
  *  derived from the original job id so re-attempts on the same
- *  payload don't pile up duplicate DLQ entries. */
+ *  payload don't pile up duplicate DLQ entries.
+ *
+ *  2026-05-12 G10 follow-up: BullMQ rejects job IDs containing ':'
+ *  with `Error: Custom Id cannot contain :`. PR #223 renamed the
+ *  queue (the visible half of G10), but the jobId still composed
+ *  origin-queue + origin-jobId with a colon separator, so EVERY
+ *  dead-lettered job has been failing to enqueue since PR-L (with a
+ *  one-line worker log + no DLQ row). The Kasra stuck-visit incident
+ *  surfaced this — three "DLQ enqueue failed for job ... Error: Custom
+ *  Id cannot contain :" lines appear in the failure-cycle logs.
+ *  Switching to '--' as the separator makes the jobId BullMQ-legal
+ *  while preserving the original uniqueness invariant (origin-queue +
+ *  origin-jobId). */
 export async function enqueueDlq(payload: DlqJobPayload): Promise<void> {
   await getDlqQueue().add('permanent-failure', payload, {
-    // Stable id keyed on origin queue + job id avoids duplicates if
-    // the same exhausted job's failed-event fires twice (rare but
-    // possible during worker restarts mid-event).
-    jobId: `${payload.originalQueue}:${payload.originalJobId ?? 'null'}`,
+    jobId: `${payload.originalQueue}--${payload.originalJobId ?? 'null'}`,
   });
 }
