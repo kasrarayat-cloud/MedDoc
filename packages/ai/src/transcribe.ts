@@ -183,7 +183,11 @@ export async function transcribe(
       provider: 'deepgram-batch',
       transcript: deepgram.transcript,
       durationSec: deepgram.durationSec,
-      language: args.language ?? 'en',
+      // 2026-05-12 interpreter-mode: prefer Deepgram's detected language
+      // when present (returned only when the caller set
+      // options.detectLanguage=true). Falls back to the caller-supplied
+      // language or 'en' on visits that didn't request detection.
+      language: deepgram.detectedLanguage ?? args.language ?? 'en',
       costCents: deepgramBatchCostCentsHelper(deepgram.durationSec),
       fallbackUsed: false,
       raw: { kind: 'deepgram', data: deepgram },

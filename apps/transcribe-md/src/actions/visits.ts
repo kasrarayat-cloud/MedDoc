@@ -54,6 +54,16 @@ const CreateVisitSchema = z.object({
     .nullable()
     .optional(),
   inputMode: z.enum(INPUT_MODES),
+  // 2026-05-12 interpreter-mode (Sylvia incident follow-up). FormData
+  // checkboxes arrive as the literal string 'on' when checked + omitted
+  // entirely when unchecked, so the coercion accepts both 'on' (true)
+  // and 'true' (the explicit JSON-form value future API callers may use).
+  interpreterMode: z
+    .preprocess(
+      (v) => (v === 'on' || v === 'true' || v === true ? true : false),
+      z.boolean(),
+    )
+    .default(false),
 });
 
 /** Resolve the (patientId, patientName) pair into a real TranscribeMdPatient.
@@ -152,6 +162,7 @@ export async function createVisitAction(formData: FormData): Promise<void> {
       specialty: parsed.data.specialty,
       chiefComplaint: parsed.data.chiefComplaint ?? null,
       inputMode: parsed.data.inputMode,
+      interpreterMode: parsed.data.interpreterMode,
     },
     select: { id: true },
   });
@@ -173,6 +184,7 @@ export async function createVisitAction(formData: FormData): Promise<void> {
       inputMode: parsed.data.inputMode,
       specialty: parsed.data.specialty,
       patientId: patient.id,
+      interpreterMode: parsed.data.interpreterMode,
     },
   });
 
