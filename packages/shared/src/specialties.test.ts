@@ -67,6 +67,22 @@ describe('SPECIALTIES catalog', () => {
   it('weight-management has the expected display label', () => {
     expect(findSpecialty('weight-management').label).toBe('Weight Management');
   });
+
+  it('bariatric-surgery is in the catalog (distinct from weight-management)', () => {
+    expect(
+      SPECIALTIES.find((s) => s.id === 'bariatric-surgery'),
+    ).toBeTruthy();
+  });
+
+  it('bariatric-surgery is exposed to the visit-create dropdown', () => {
+    expect(
+      SPECIALTIES_FOR_VISIT_CREATE.find((s) => s.id === 'bariatric-surgery'),
+    ).toBeTruthy();
+  });
+
+  it('bariatric-surgery has the expected display label', () => {
+    expect(findSpecialty('bariatric-surgery').label).toBe('Bariatric Surgery');
+  });
 });
 
 describe('findSpecialty', () => {

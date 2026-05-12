@@ -220,6 +220,70 @@ const STARTER_ICD10_CODES: ReadonlyArray<string> = [
   // medication list.
   'Z79.899',   // Other long-term (current) drug therapy
   'Z51.81',    // Encounter for therapeutic drug level monitoring
+
+  // === Bariatric Surgery cohort (2026-05-12) ===
+  // Added with the `bariatric-surgery` specialty. Covers post-op status,
+  // postsurgical syndromes, common early-postop complications, and the
+  // E61.x nutritional-deficiency block specific to malabsorption after
+  // bypass / sleeve / BPD-DS. T81.4xxA is the FCA-exposure code — it's
+  // billable on a post-op visit where infection at the surgical site is
+  // documented; missing it was the dominant gap on pre-fix bariatric
+  // notes per the QA cohort.
+  'Z98.84',    // Bariatric surgery status
+  'Z90.3',     // Acquired absence of stomach [part of]  (post-sleeve / -bypass)
+  'K91.1',     // Postgastric surgery syndromes
+  'K91.2',     // Postsurgical malabsorption, not elsewhere classified
+  'K91.83',    // Postprocedural hematoma and seroma of a digestive system organ following a digestive system procedure
+  'K91.86',    // Retained cholelithiasis following cholecystectomy
+  'K94.20',    // Gastrostomy complication, unspecified
+  'K94.21',    // Gastrostomy hemorrhage
+  'K94.22',    // Gastrostomy infection
+  'K94.23',    // Gastrostomy malfunction
+  // Mechanical bowel obstruction — small-bowel + adhesive cases are the
+  // dominant post-bariatric obstruction etiologies (internal hernia at
+  // the Petersen's space + mesenteric defects post-RYGB).
+  'K56.0',     // Paralytic ileus
+  'K56.1',     // Intussusception
+  'K56.2',     // Volvulus
+  'K56.5',     // Intestinal adhesions [bands] with obstruction (postinfection)
+  'K56.60',    // Unspecified intestinal obstruction
+  'K56.69',    // Other intestinal obstruction
+  'K56.7',     // Ileus, unspecified
+  // Nutritional deficiencies — E61.x specific deficiencies + E63.9
+  // catch-all. The bariatric multivitamin / supplementation regimen
+  // exists precisely to prevent these; the codes get billable when a
+  // patient presents with documented low-level vitamin or mineral on
+  // labs.
+  'E61.0',     // Copper deficiency
+  'E61.1',     // Iron deficiency
+  'E61.2',     // Magnesium deficiency
+  'E61.3',     // Manganese deficiency
+  'E61.4',     // Chromium deficiency
+  'E61.5',     // Molybdenum deficiency
+  'E61.6',     // Vanadium deficiency
+  'E61.7',     // Deficiency of multiple nutrient elements
+  'E63.9',     // Nutritional deficiency, unspecified
+  'E55.9',     // Vitamin D deficiency, unspecified
+  'E56.9',     // Vitamin deficiency, unspecified
+  'E53.8',     // Deficiency of other specified B group vitamins (B12 sometimes coded here)
+  'D51.0',     // Vitamin B12 deficiency anemia due to intrinsic factor deficiency
+  'D51.1',     // Vitamin B12 deficiency anemia due to selective vitamin B12 malabsorption with proteinuria
+  'D51.8',     // Other vitamin B12 deficiency anemias
+  'D51.9',     // Vitamin B12 deficiency anemia, unspecified
+  'D50.9',     // Iron deficiency anemia, unspecified
+  // Procedure-complication codes the model should reach for when leak /
+  // wound / infection signs are documented post-op.
+  'T81.40XA',  // Infection following a procedure, unspecified, initial encounter
+  'T81.41XA',  // Infection following a procedure, superficial incisional surgical site
+  'T81.42XA',  // Infection following a procedure, deep incisional surgical site
+  'T81.43XA',  // Infection following a procedure, organ and space surgical site
+  'T81.49XA',  // Infection following a procedure, sepsis (organ + space)
+  'T81.30XA',  // Disruption of wound, unspecified, initial encounter
+  'T81.31XA',  // Disruption of external operation (surgical) wound, NEC, initial encounter
+  'T81.32XA',  // Disruption of internal operation (surgical) wound, NEC, initial encounter
+  // Dumping syndrome — post-bypass specific, both early + late forms
+  // share the same R10.x / R11 family root.
+  'K91.89',    // Other postprocedural complications and disorders of digestive system (covers dumping NEC)
 ];
 
 /**

@@ -480,6 +480,91 @@ export const DOSE_RANGES: ReadonlyArray<DoseRangeEntry> = [
     notes:
       'Dual GIP / GLP-1 agonist. Both weight management (Zepbound) and diabetes (Mounjaro) titrate monthly 2.5 → 5 → 7.5 → 10 → 12.5 → 15 mg SC weekly (max 15 mg). No mg/week cap is meaningful without the titration step; validator emits "verify individualized titration plan". Boxed warning: thyroid C-cell tumors. Watch: pancreatitis, severe gastroparesis, gallbladder disease.',
   },
+
+  // ── Bariatric Surgery supplementation + post-op prophylaxis ─────────
+  // Added with the `bariatric-surgery` specialty. Most of these are
+  // OTC vitamins / minerals with no FDA-published mg/day cap; the
+  // clinical risk is UNDER-supplementation (chronic deficiency
+  // post-malabsorption). The validator emits "verify individualized
+  // post-op regimen" so the Rx rail surfaces the drug rather than
+  // staying silent. The calcium-citrate vs carbonate distinction is
+  // load-bearing for bypass patients — they lose the acidic gastric
+  // environment that dissolves carbonate, so citrate is non-
+  // substitutable; this is captured as a separate entry with the
+  // explicit notes so the Rx rail emits the warning if a clinician
+  // drafts "calcium carbonate" for a post-bypass patient.
+  {
+    drug: 'cholecalciferol',
+    aliases: ['vitamin d3', 'vitamin d', 'd3', 'calciferol'],
+    complexDosing: true,
+    contraindications: ['hypercalcemia', 'cholecalciferol allergy'],
+    notes:
+      'Post-bariatric typical: 3000–6000 IU PO daily (some practices use 50,000 IU PO weekly for first 8 weeks then maintenance). Target 25-OH vitamin D > 30 ng/mL; > 50 ng/mL preferred per bariatric guidelines. Monitor levels every 3-6 months in first year post-op then annually.',
+  },
+  {
+    drug: 'cyanocobalamin',
+    aliases: ['vitamin b12', 'b12', 'methylcobalamin', 'hydroxocobalamin'],
+    complexDosing: true,
+    contraindications: ['cobalt allergy', 'cyanocobalamin allergy'],
+    notes:
+      'Post-bariatric typical: 350-500 mcg PO daily sublingual / nasal OR 1000 mcg IM monthly. Oral non-sublingual is unreliable post-bypass (loss of intrinsic factor binding site). Monitor levels every 3-6 months in first year post-op then annually. Deficiency causes irreversible peripheral neuropathy + cognitive symptoms if missed.',
+  },
+  {
+    drug: 'calcium citrate',
+    aliases: ['citracal', 'calcium-citrate'],
+    complexDosing: true,
+    contraindications: ['hypercalcemia', 'severe renal impairment'],
+    notes:
+      'Post-bariatric BYPASS patients: 1200–1500 mg elemental calcium daily, split into ≤ 500 mg doses, taken AS CITRATE (NOT carbonate — bypass eliminates the acidic gastric environment that dissolves carbonate; carbonate is functionally unabsorbed in these patients). Split doses to avoid saturating absorption. Spacing 2+ hr from iron + thyroid replacement required. Post-sleeve patients retain acidity; citrate preferred but carbonate is acceptable.',
+  },
+  {
+    drug: 'calcium carbonate',
+    aliases: ['tums', 'os-cal', 'caltrate'],
+    adultMaxMgPerDay: 2500,
+    contraindications: ['hypercalcemia', 'post-roux-en-y gastric bypass', 'post-duodenal switch', 'post-bpd-ds'],
+    notes:
+      'POST-BYPASS HARD SAFETY BULLET: calcium carbonate is unabsorbed in post-RYGB / post-BPD-DS patients because the acidic gastric environment that dissolves it is absent. Use calcium CITRATE instead. Validator emits a hard warning if a Rx draft pairs "calcium carbonate" with a documented bypass procedure or Z98.84 status code. Max 2500 mg/day elemental Ca for non-bypass adults.',
+  },
+  {
+    drug: 'ferrous sulfate',
+    aliases: ['feosol', 'iron sulfate', 'iron(ii) sulfate'],
+    adultMaxMgPerDay: 325,
+    contraindications: ['iron overload', 'hemochromatosis', 'iron allergy'],
+    notes:
+      'Post-bariatric typical: 325 mg ferrous sulfate (65 mg elemental iron) PO daily to BID. Take with vitamin C and AWAY from calcium + thyroid replacement (2+ hr spacing). Menstruating women + bypass patients often need higher dose; reassess every 3-6 months on ferritin + transferrin saturation. Ferrous bisglycinate is gentler on GI when sulfate not tolerated.',
+  },
+  {
+    drug: 'thiamine',
+    aliases: ['vitamin b1', 'b1', 'thiamine hcl'],
+    complexDosing: true,
+    contraindications: ['thiamine allergy'],
+    notes:
+      'Post-bariatric typical: 50-100 mg PO daily in first 6 months post-op then per bariatric multivitamin. Watch for Wernicke encephalopathy precipitated by persistent vomiting / dehydration / rapid weight loss (triad: confusion, ophthalmoplegia, ataxia) — IV/IM thiamine 100-500 mg for suspected acute Wernicke. The clinical risk is missing the diagnosis, not over-dosing.',
+  },
+  {
+    drug: 'ursodiol',
+    aliases: ['actigall', 'urso', 'ursodeoxycholic acid'],
+    adultMaxMgPerDay: 600,
+    contraindications: ['ursodiol allergy', 'calcified radiopaque stones'],
+    notes:
+      'Post-bariatric gallstone PROPHYLAXIS: 300 mg PO BID for 6 months post-RYGB or post-sleeve (rapid weight loss → cholelithiasis risk). Some practices extend to 12 months. Not for treatment of established symptomatic stones — that needs cholecystectomy. Max 600 mg/day for this indication.',
+  },
+  {
+    drug: 'pantoprazole',
+    aliases: ['protonix'],
+    adultMaxMgPerDay: 80,
+    contraindications: ['ppi allergy', 'pantoprazole allergy'],
+    notes:
+      'Post-bariatric prophylaxis: 40 mg PO daily for 3-6 months post-sleeve gastrectomy (residual gastric acid + small pouch increases ulcer risk) and post-RYGB (marginal ulcer at gastrojejunal anastomosis). Max 80 mg/day for severe/refractory cases. Long-term PPI use post-bariatric carries the same risks as in non-bariatric populations (B12 / Ca / Mg absorption, C. diff risk).',
+  },
+  {
+    drug: 'bariatric multivitamin',
+    aliases: ['bariatric mvi', 'bariatric advantage', 'celebrate vitamins', 'bariatric fusion', 'optisource'],
+    complexDosing: true,
+    contraindications: ['hypervitaminosis a', 'iron overload'],
+    notes:
+      'Bariatric-specific multivitamin (Bariatric Advantage / Celebrate / Fusion / OPTISOURCE / etc.) contains higher doses of B-complex / iron / vitamin D / zinc / folate than standard adult MVI. Standard adult MVI is UNDERSUPPLEMENTED for bariatric patients — typical post-op regimen needs a bariatric-formulated MVI plus separate calcium citrate + vitamin D + B12. Validator emits a warning when "multivitamin" or "MVI" is documented for a bariatric-status patient without the bariatric-specific qualifier.',
+  },
 ];
 
 // ----------------------------------------------------------------------------
