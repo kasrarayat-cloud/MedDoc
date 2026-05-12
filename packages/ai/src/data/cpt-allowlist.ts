@@ -163,6 +163,214 @@ const STARTER_CPT_CODES: ReadonlyArray<string> = [
   '43887', // Gastric restrictive procedure, open; removal of subcutaneous port
   '43888', // Gastric restrictive procedure, open; removal and replacement of subcutaneous port
 
+  // === Vascular Surgery (2026-05-12) — full scope ===
+  // Added with the `vascular-surgery` specialty. Covers endovascular
+  // peripheral (372xx), EVAR / TEVAR (347xx, 33880-33891), open
+  // vascular (35xxx), carotid intervention (37215-37218), endovenous
+  // (RFA / EVLT / sclero), AV fistula creation + maintenance, selective
+  // catheter placement, noninvasive vascular diagnostics (939xx), and
+  // inpatient E&M (99221-99239) that vascular surgery routinely bills
+  // for in-hospital post-op management.
+
+  // ── Inpatient E&M discharge (99221-99233 already present above) ──
+  '99238', // Hospital discharge day management ≤ 30 minutes
+  '99239', // Hospital discharge day management > 30 minutes
+
+  // ── Endovascular peripheral arterial (372xx) ──
+  '37220', // Iliac angioplasty
+  '37221', // Iliac stent placement
+  '37222', // Each additional iliac territory, angioplasty
+  '37223', // Each additional iliac territory, stent
+  '37224', // Femoral / popliteal angioplasty
+  '37225', // Femoral / popliteal angioplasty with atherectomy
+  '37226', // Femoral / popliteal stent
+  '37227', // Femoral / popliteal stent with atherectomy
+  '37228', // Tibial / peroneal angioplasty
+  '37229', // Tibial / peroneal angioplasty with atherectomy
+  '37230', // Tibial / peroneal stent
+  '37231', // Tibial / peroneal stent with atherectomy
+  '37236', // Transcatheter placement of intravascular stent(s), arterial
+  '37237', // Each additional stent
+  '37238', // Transcatheter placement of intravascular stent(s), venous
+  '37239', // Each additional venous stent
+  '37252', // IVUS, initial non-coronary vessel
+  '37253', // IVUS, each additional non-coronary vessel
+
+  // ── Carotid intervention ──
+  '37215', // Transcatheter placement of stent(s), cervical carotid, with distal embolic protection
+  '37216', // Same, without distal embolic protection
+  '37217', // Transcatheter placement of stent(s), intrathoracic common carotid or innominate, retrograde
+  '37218', // Same, intrathoracic common carotid or innominate, antegrade
+
+  // ── EVAR / TEVAR ──
+  '34701', // EVAR, infrarenal aorta, percutaneous
+  '34702', // EVAR, infrarenal aorta with iliac extension, percutaneous
+  '34703', // EVAR, infrarenal aorta, open
+  '34704', // EVAR, infrarenal aorta with iliac extension, open
+  '34705', // EVAR, infrarenal aorta with aorto-uni-iliac configuration
+  '34706', // EVAR, infrarenal aorta + femoral-femoral bypass
+  '34707', // Ipsilateral iliac endoprosthesis with aorto-uni-iliac configuration
+  '34708', // Contralateral iliac endograft extension
+  '34709', // Placement of extension prosthesis for endoleak / migration
+  '34710', // Each additional secondary extension
+  '34711', // Each additional secondary stent
+  '34712', // Percutaneous access closure, large-bore (sheath ≥ 12F)
+  '34714', // Fenestrated EVAR with renal/visceral artery endoprostheses, 1-3 vessels
+  '34715', // Same, 4+ vessels
+  '34716', // Iliac branch endoprosthesis
+  '34717', // Iliac branch with internal iliac endoprosthesis
+  '34718', // Fenestrated visceral aortic endoprosthesis, juxta- or pararenal
+  '33880', // TEVAR thoracic descending aorta, distal subclavian to celiac
+  '33881', // TEVAR thoracic descending aorta, not involving zone 0-2
+  '33883', // TEVAR proximal extension prosthesis
+  '33884', // TEVAR proximal extension, each additional
+  '33886', // TEVAR placement of distal extension
+  '33889', // Open subclavian-to-carotid transposition for TEVAR
+  '33891', // Bypass-graft from carotid to subclavian for TEVAR
+
+  // ── Open vascular — aortic, iliac, carotid, peripheral ──
+  '35081', // Open AAA repair, infrarenal aorta
+  '35082', // Open AAA repair for ruptured AAA, infrarenal aorta
+  '35091', // Open AAA repair, aorto-iliac
+  '35092', // Open AAA repair for ruptured aorto-iliac AAA
+  '35102', // Open AAA repair, suprarenal / juxtarenal
+  '35103', // Open AAA repair for ruptured suprarenal / juxtarenal
+  '35131', // Open iliac aneurysm repair, common iliac
+  '35141', // Open iliac aneurysm repair, internal iliac
+  '35211', // Open vascular repair, carotid (intracranial occlusion / aneurysm)
+  '35221', // Open vascular repair, intra-abdominal vessels other than aorta
+  '35226', // Open vascular repair, blood vessel of lower extremity
+  '35256', // Open repair of femoral / popliteal aneurysm
+  '35286', // Open repair of artery of lower extremity, other
+  '35301', // Carotid endarterectomy (CEA)
+  '35302', // CEA with contralateral CEA same operative session
+  '35311', // Endarterectomy, subclavian / innominate
+  '35321', // Endarterectomy, axillary-brachial
+  '35331', // Endarterectomy, aortoiliac
+  '35341', // Endarterectomy, iliofemoral
+  '35351', // Endarterectomy, aortoiliofemoral
+  '35361', // Endarterectomy, femoral
+  '35363', // Endarterectomy, deep femoral (profunda)
+  '35371', // Endarterectomy, popliteal
+  '35372', // Endarterectomy, tibial
+  '35381', // Endarterectomy, tibioperoneal trunk
+  '35460', // Transluminal balloon angioplasty, open, of artery of the abdomen
+  '35480', // Atherectomy, open, of artery of the abdomen
+  '35481', // Atherectomy, open, of artery of the lower extremity
+  '35482', // Atherectomy, open, of artery of the upper extremity
+  '35483', // Atherectomy, open, other artery
+  '35490', // Atherectomy, percutaneous, of artery of the abdomen
+  '35491', // Atherectomy, percutaneous, of artery of the lower extremity
+  '35495', // Atherectomy, percutaneous, of artery of the upper extremity
+
+  // ── Open vascular bypass (35501-35672 family — common ones) ──
+  '35501', // Bypass graft, common carotid-vertebral
+  '35506', // Carotid-subclavian bypass
+  '35508', // Carotid-axillary bypass
+  '35511', // Subclavian-subclavian bypass
+  '35515', // Subclavian-vertebral bypass
+  '35525', // Brachial-brachial bypass
+  '35526', // Aortosubclavian / aortoinnominate / aortocarotid bypass
+  '35531', // Aortoceliac / aortomesenteric / aortorenal bypass
+  '35536', // Splenorenal bypass
+  '35541', // Aortoiliac / aortobifemoral / aortobi-iliac bypass
+  '35546', // Aortofemoral / aortobifemoral bypass
+  '35551', // Aortofemoral-popliteal bypass
+  '35556', // Femoral-popliteal bypass with vein
+  '35566', // Femoral-tibial / tibial-popliteal bypass with vein
+  '35571', // Popliteal-tibial / tibial-tibial bypass with vein
+  '35583', // Saphenous vein in situ, femoral-popliteal
+  '35585', // Saphenous vein in situ, femoral-tibial
+  '35587', // Saphenous vein in situ, popliteal-tibial
+  '35601', // Axillary-femoral / axillary-axillary bypass
+  '35612', // Axillary-femoral-femoral bypass
+  '35621', // Axillary-femoral bypass with prosthetic graft
+  '35623', // Bypass, with prosthetic graft, of subclavian-axillary
+  '35631', // Aortoceliac / aortomesenteric bypass with prosthetic graft
+  '35641', // Aortoiliac / aortobifemoral bypass with prosthetic graft
+  '35646', // Aortofemoral bypass with prosthetic graft
+  '35651', // Femoral-popliteal bypass with prosthetic graft
+  '35654', // Femoral-femoral cross-over bypass
+  '35656', // Femoral-femoral / fem-pop with prosthetic graft
+  '35661', // Femoral-tibial bypass with prosthetic graft
+  '35666', // Popliteal-tibial bypass with prosthetic graft
+  '35671', // Tibial-tibial / tibial-peroneal bypass with prosthetic graft
+  '35672', // Tibial-pedal bypass with prosthetic graft
+  '35761', // Open ligation of inferior vena cava
+  '37607', // Ligation of carotid artery
+
+  // ── Open venous + endovenous (vein care) ──
+  '37700', // Ligation of saphenofemoral junction
+  '37718', // Ligation, division, and stripping, short saphenous vein
+  '37722', // Ligation, division, and stripping, long (greater) saphenous vein
+  '37735', // Ligation and division and complete stripping of long or short saphenous veins with radical excision of ulcer
+  '37761', // Ligation of perforator veins, open
+  '37765', // Stab phlebectomy of varicose veins, 10-20 incisions
+  '37766', // Stab phlebectomy of varicose veins, > 20 incisions
+  '37780', // Ligation and division of short saphenous vein at sapheno-popliteal junction
+  '36465', // Injection of non-compounded foam sclerosant
+  '36466', // Injection of non-compounded foam sclerosant, multiple veins
+  '36468', // Single or multiple injections of sclerosing solutions, spider veins
+  '36471', // Injection of sclerosing solution, reticular veins
+  '36475', // Endovenous ablation of incompetent vein by radiofrequency, first vein
+  '36476', // Each additional vein, RFA
+  '36478', // Endovenous ablation of incompetent vein by laser, first vein
+  '36479', // Each additional vein, EVLT
+  '36482', // Endovenous ablation of incompetent vein by chemical adhesive (e.g. cyanoacrylate), first vein
+  '36483', // Each additional vein, MOCA / chemical adhesive
+
+  // ── AV fistula + dialysis access ──
+  '36818', // AV anastomosis, open, by upper arm cephalic vein transposition
+  '36819', // AV anastomosis, open, by upper arm basilic vein transposition
+  '36820', // AV anastomosis, open, by forearm vein transposition
+  '36821', // AV anastomosis, open, direct (e.g. Cimino fistula)
+  '36823', // Insertion of arterial and venous cannula(e) for extracorporeal circulation
+  '36825', // Creation of AV fistula by other than direct AV anastomosis, autogenous graft
+  '36830', // Creation of AV fistula by other than direct AV anastomosis, nonautogenous graft (PTFE)
+  '36831', // Thrombectomy, open, AV fistula (without revision)
+  '36832', // Revision, open, AV fistula (without thrombectomy)
+  '36833', // Revision, open, AV fistula with thrombectomy
+  '36901', // Diagnostic dialysis-circuit fistulogram
+  '36902', // Same, with transluminal balloon angioplasty
+  '36903', // Same, with stent placement
+  '36904', // Percutaneous transluminal mechanical thrombectomy / infusion for thrombolysis, dialysis circuit
+  '36905', // Same, with transluminal balloon angioplasty
+  '36906', // Same, with stent placement
+  '36907', // Transluminal balloon angioplasty, central dialysis segment
+  '36908', // Stent placement, central dialysis segment
+  '36909', // Embolization, percutaneous, of dialysis-circuit branch vessels
+
+  // ── Selective catheter placement ──
+  '36223', // Selective catheter placement, common carotid or innominate (with cervicocerebral angio)
+  '36224', // Selective catheter placement, internal carotid (with cerebral angio)
+  '36225', // Selective catheter placement, subclavian or innominate (with vertebral angio)
+  '36245', // Selective catheter placement, arterial, first order, abdominal / pelvic / LE
+  '36246', // Same, second-order branch
+  '36247', // Same, third-order branch
+  '36248', // Each additional second- or third-order selective placement
+  '36251', // Selective renal artery catheter placement, unilateral
+  '36252', // Same, bilateral
+  '36253', // Selective renal artery catheter placement with renal angiography, unilateral
+  '36254', // Same, bilateral
+
+  // ── Diagnostic noninvasive vascular (939xx) ──
+  '93875', // Cerebrovascular bilateral noninvasive physiologic, complete
+  '93880', // Duplex scan of extracranial arteries, complete bilateral study
+  '93882', // Duplex scan of extracranial arteries, unilateral or limited
+  '93922', // Noninvasive physiologic studies of upper or lower extremity arteries, single level
+  '93923', // Same, complete bilateral, multiple levels
+  '93924', // Noninvasive physiologic studies, bilateral, with exercise stress testing
+  '93925', // Duplex scan of LE arteries, complete bilateral
+  '93926', // Same, unilateral or limited
+  '93930', // Duplex scan of UE arteries, complete bilateral
+  '93931', // Same, unilateral or limited
+  '93970', // Duplex scan of extremity veins including responses to compression, complete bilateral
+  '93971', // Same, unilateral or limited
+  '93975', // Duplex scan of arterial inflow and venous outflow of abdominal, pelvic, scrotal contents, retroperitoneal organs, complete
+  '93976', // Same, limited
+  '93978', // Duplex scan of aorta, IVC, iliac vasculature, complete
+  '93979', // Same, unilateral or limited
+
   // === Modifiers (tracked separately from codes) ===
   // These are appended to a CPT code (e.g. "99213-25"). The validator
   // accepts a code with or without a trailing "-NN" modifier.

@@ -88,4 +88,50 @@ describe('SPECIALTY_GUIDANCE', () => {
     // Procedure variants — the SOAP must specify which procedure
     expect(text).toMatch(/RYGB|sleeve|gastric bypass/i);
   });
+
+  it('vascular-surgery guidance branches on all five visit types', () => {
+    const text = specialtyGuidance('vascular-surgery');
+    // Visit-type labels — the SOAP draft is wrong without correct
+    // type identification because required sections differ sharply.
+    expect(text).toMatch(/OFFICE CONSULTATION/);
+    expect(text).toMatch(/ENDOVASCULAR PROCEDURE/);
+    expect(text).toMatch(/OPEN VASCULAR PROCEDURE/);
+    expect(text).toMatch(/POST-PROCEDURE.*SURVEILLANCE|SURVEILLANCE/);
+  });
+
+  it('vascular-surgery office-consult sub-branches by chief-complaint domain', () => {
+    const text = specialtyGuidance('vascular-surgery');
+    expect(text).toMatch(/VENOUS/);
+    expect(text).toMatch(/ARTERIAL/);
+    expect(text).toMatch(/AORTIC/);
+    expect(text).toMatch(/CAROTID/);
+    expect(text).toMatch(/DIALYSIS ACCESS/);
+  });
+
+  it('vascular-surgery surfaces the load-bearing clinical scales', () => {
+    const text = specialtyGuidance('vascular-surgery');
+    // Each of these is a non-substitutable scale the L5 critique uses
+    // as an anchor to flag a vascular SOAP as incomplete. Lose any
+    // single one and a domain visit silently drops billable detail.
+    expect(text).toMatch(/CEAP/);              // venous
+    expect(text).toMatch(/Rutherford/);        // arterial PAD
+    expect(text).toMatch(/Fontaine/);          // arterial PAD secondary
+    expect(text).toMatch(/Ankle-Brachial Index|ABI/);
+    expect(text).toMatch(/Toe-Brachial Index|TBI/);
+    expect(text).toMatch(/NASCET/);            // carotid stenosis %
+    expect(text).toMatch(/5\.5\s*cm|5\.0\s*cm/); // AAA repair threshold
+    expect(text).toMatch(/Rule of 6s|Rule of 6/); // AV fistula maturation
+    expect(text).toMatch(/endoleak|Type I-V/i);   // EVAR surveillance
+  });
+
+  it('vascular-surgery enforces cross-cutting CV-risk-factor optimization', () => {
+    const text = specialtyGuidance('vascular-surgery');
+    // The "absence is a documented finding" rule applies across all
+    // five visit types — the L5 critique flags a vascular SOAP that
+    // doesn't mention smoking-cessation / BP / LDL / DM control.
+    expect(text).toMatch(/smoking cessation/i);
+    expect(text).toMatch(/LDL\s*<\s*70/i);
+    expect(text).toMatch(/diabetes control|A1c/i);
+    expect(text).toMatch(/antiplatelet/i);
+  });
 });
