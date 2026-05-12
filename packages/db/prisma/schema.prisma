@@ -1356,11 +1356,27 @@ model AiCall {
   /// storing the (potentially PHI-laden) prompt text.
   promptHash String
 
-  latencyMs    Int
-  inputTokens  Int?
-  outputTokens Int?
+  latencyMs                Int
+  inputTokens              Int?
+  outputTokens             Int?
+  /// Anthropic prompt-caching: tokens read from the cache for this call.
+  /// Billed at 0.10x the model's base input rate (90% discount). Default
+  /// 0 so historical rows + non-Anthropic providers don't carry NULL
+  /// surprise; columns added 2026-05-12 alongside the costUsdCents
+  /// pricing refresh (Opus 4.7 $15/$75 → $5/$25 fix). Only populated
+  /// when the call attached `cache_control`; everything else is 0.
+  cacheReadInputTokens     Int  @default(0)
+  /// Anthropic prompt-caching: tokens written into the cache for this call.
+  /// Billed at 1.25x the model's base input rate (5-min ephemeral) or
+  /// 2x (1-hour). The schema doesn't distinguish TTL because the SDK
+  /// returns a single `cache_creation_input_tokens` and the multiplier
+  /// is decided at billing time based on the request's `cache_control`
+  /// type — currently always `ephemeral` in our code, so the 1.25x
+  /// multiplier is applied. If we ever opt into 1-hour caches, the
+  /// dispatcher reads `metadata.cacheTtl` to choose 2x instead.
+  cacheCreationInputTokens Int  @default(0)
   /// Integer cents so we can sum without float drift.
-  costUsdCents Int?
+  costUsdCents             Int?
 
   success      Boolean
   errorCode    String?
@@ -1523,7 +1539,7 @@ model TranscribeVisit {
   /// TranscribeVisitStatus comment above.
   status    TranscribeVisitStatus @default(QUEUED)
 
-  audioKey         String?
+  audioKey              String?
   /// PR-L follow-up: which provider produced the transcript on the
   /// most-recent (re-)processing pass. Set by the transcribe()
   /// orchestrator in `worker/layers/01-transcribe.ts` (and 01b for
@@ -1537,7 +1553,7 @@ model TranscribeVisit {
   ///                          review (no diarization on Whisper).
   ///   - null                — pre-orchestrator visits (legacy).
   transcriptionProvider String?
-  transcriptText   String? @db.Text
+  transcriptText        String? @db.Text
   /// Line-level SOAP content (app-redesign-v1+). Each section's value
   /// is either a legacy string OR an array of line objects with the
   /// shape:
@@ -1551,13 +1567,13 @@ model TranscribeVisit {
   /// shapes as valid and never overwrite an array with a string.
   /// Repurposed from the original T-M2 placeholder — the ICD coding
   /// pass this was reserved for ultimately landed in `icdCodes`.
-  soapNote         Json?
-  icdCodes         Json?
-  cptCodes         Json?
-  rxDrafts         Json?
-  referrals        Json?
-  patientSummary   String? @db.Text
-  confidenceScores Json?
+  soapNote              Json?
+  icdCodes              Json?
+  cptCodes              Json?
+  rxDrafts              Json?
+  referrals             Json?
+  patientSummary        String? @db.Text
+  confidenceScores      Json?
 
   // ── T-M4: audio metadata ──
   audioMimeType    String?
@@ -1641,12 +1657,12 @@ model TranscribeVisit {
   /// the next successful run. One of: 'transient' | 'permanent' |
   /// 'provider_down'. Stored as text so we don't have to migrate an
   /// enum every time we add a category.
-  failureCategory String? @db.Text
+  failureCategory  String? @db.Text
   /// How many times the doctor has manually clicked "Try again" on
   /// this visit via /api/visits/[id]/retry. Hard-capped at
   /// MANUAL_RETRY_BUDGET in the route handler so a stuck-button
   /// loop can't drive runaway Anthropic / Deepgram spend.
-  manualRetryCount Int @default(0)
+  manualRetryCount Int     @default(0)
 
   // ── T-M4: pipeline telemetry ──
   processingStartedAt  DateTime?
@@ -1963,10 +1979,18 @@ model ApiUsageEvent {
   operation String
 
   // ── Per-modality metrics (all nullable; populated based on provider) ──
-  audioSeconds Int?
-  inputTokens  Int?
-  outputTokens Int?
-  emailCount   Int?
+  audioSeconds             Int?
+  inputTokens              Int?
+  outputTokens             Int?
+  emailCount               Int?
+  /// Anthropic prompt-caching: tokens read from cache (billed 0.10x).
+  /// Added 2026-05-12 to mirror AiCall.cacheReadInputTokens and close
+  /// the dashboard-vs-actual cost gap. Default 0 so historical rows +
+  /// non-Anthropic events don't carry NULL.
+  cacheReadInputTokens     Int  @default(0)
+  /// Anthropic prompt-caching: tokens written to cache (billed 1.25x
+  /// or 2x — see AiCall comment).
+  cacheCreationInputTokens Int  @default(0)
 
   // ── Cost ──
   /// Generic count for cost calculation (minutes / tokens / emails).
@@ -2021,16 +2045,16 @@ model ApiUsageEvent {
 // ============================================================================
 
 model ThreatResolution {
-  id              String   @id @default(cuid())
+  id String @id @default(cuid())
 
   /// The deterministic threat id from getThreats(). Unique because a
   /// single threat can only be resolved once; subsequent resolve calls
   /// 409 at the API layer.
-  threatId        String   @unique
+  threatId String @unique
 
   /// "RESOLVED" | "FALSE_POSITIVE". String not enum because the set
   /// can grow without a migration.
-  resolutionKind  String
+  resolutionKind String
 
   resolvedAt      DateTime @default(now()) @db.Timestamptz(6)
   resolvedById    String?
@@ -2038,9 +2062,9 @@ model ThreatResolution {
   /// Snapshot — survives soft-delete of the resolving admin.
   resolvedByEmail String?
 
-  note            String?  @db.Text
+  note String? @db.Text
 
-  silencePattern  Json?
+  silencePattern Json?
 
   @@index([resolvedAt])
   @@index([resolvedById])
@@ -2097,13 +2121,13 @@ model HipaaFinding {
   /// Workflow state. 'open' | 'in_progress' | 'resolved'.
   status String @default("open")
 
-  resolvedAt        DateTime? @db.Timestamptz(6)
-  resolvedById      String?
-  resolvedBy        User?     @relation(fields: [resolvedById], references: [id], onDelete: SetNull)
+  resolvedAt      DateTime? @db.Timestamptz(6)
+  resolvedById    String?
+  resolvedBy      User?     @relation(fields: [resolvedById], references: [id], onDelete: SetNull)
   /// Snapshot of the resolver's email at resolve time — survives a
   /// later soft-delete of that admin. Same pattern as ThreatResolution.
-  resolvedByEmail   String?
-  resolutionNote    String?   @db.Text
+  resolvedByEmail String?
+  resolutionNote  String?   @db.Text
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)

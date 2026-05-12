@@ -36,7 +36,7 @@ import {
   logAiCall,
   logApiUsage,
   buildAnthropicUsage,
-  claudeSonnet46CostCents,
+  claudeCostCents,
 } from '@meddoc/ai';
 import { getRedis, isRedisReady } from '@/lib/redis';
 import { log } from '@/lib/log';
@@ -414,7 +414,18 @@ async function callClaudeMdm(args: JudgeMdmArgs): Promise<MdmJudgement | null> {
         .join('\n')
         .trim();
 
-      // Telemetry — same shape modelClient.completeText would have written.
+      // This is the only caller in the pipeline that attaches
+      // `cache_control: ephemeral`, so it's the path that actually
+      // produces non-zero cache_read / cache_creation usage. We have
+      // to extract those fields from the SDK response and pass them
+      // through to both telemetry sinks so the 0.10x / 1.25x billing
+      // multipliers land on AiCall + ApiUsageEvent rows. The
+      // `claudeCostCents` dispatcher applies the multipliers
+      // internally — it's the same path anthropic.ts uses, just
+      // invoked from outside the shared wrapper here because llm-mdm
+      // needs the raw SDK to attach cache_control blocks.
+      const cacheRead = response.usage.cache_read_input_tokens ?? 0;
+      const cacheCreation = response.usage.cache_creation_input_tokens ?? 0;
       logAiCall({
         ...aiLogContext,
         provider: 'anthropic',
@@ -423,9 +434,14 @@ async function callClaudeMdm(args: JudgeMdmArgs): Promise<MdmJudgement | null> {
         latencyMs,
         inputTokens: response.usage.input_tokens,
         outputTokens: response.usage.output_tokens,
-        costUsdCents: claudeSonnet46CostCents(
+        cacheReadInputTokens: cacheRead,
+        cacheCreationInputTokens: cacheCreation,
+        costUsdCents: claudeCostCents(
+          MODEL,
           response.usage.input_tokens,
           response.usage.output_tokens,
+          cacheRead,
+          cacheCreation,
         ),
         success: true,
       });
@@ -441,6 +457,8 @@ async function callClaudeMdm(args: JudgeMdmArgs): Promise<MdmJudgement | null> {
           response.usage.output_tokens,
           MODEL,
           purpose,
+          cacheRead,
+          cacheCreation,
         ),
       );
 

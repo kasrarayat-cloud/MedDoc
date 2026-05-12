@@ -24,7 +24,7 @@ import { randomUUID } from 'node:crypto';
 
 import prisma from '@meddoc/db';
 
-import { claudeCostCents } from './pricing';
+import { claudeCostCents, deepgramCentsPerMin } from './pricing';
 
 // Rates refreshed 2026-05-12 from docs.anthropic.com/en/docs/about-
 // claude/pricing. Opus 4.7 was the dominant overcount source: the
@@ -33,8 +33,15 @@ import { claudeCostCents } from './pricing';
 // never caught up — every Opus row on the admin dashboard was 3x
 // over. Haiku also updated to 4.5 family ($1/$5; was Haiku 3 rates).
 export const PRICING = {
-  // Deepgram Nova-3 Medical — per minute
-  deepgram_nova3_medical: 0.0043,
+  // Deepgram Nova-3 Medical — per minute. Single source of truth lives
+  // in pricing.ts (deepgramCentsPerMin()), env-overridable. Mirrored
+  // here as a cents-fraction for callers that still read this constant
+  // directly; refreshed at module load. Previously this duplicated the
+  // value and disagreed with pricing.ts ($0.0043 vs $0.0145) — the
+  // Deepgram surface on the dashboard read this value while ai_calls
+  // read pricing.ts, producing two non-matching cost rollups. Now both
+  // surfaces point at the same number.
+  deepgram_nova3_medical: deepgramCentsPerMin() / 100,
   // OpenAI Whisper API — per minute
   whisper: 0.006,
   // Anthropic Sonnet 4.6 — per 1M tokens
@@ -77,6 +84,10 @@ export interface UsageEvent {
   audioSeconds?: number;
   inputTokens?: number;
   outputTokens?: number;
+  /** Anthropic prompt-caching: cache_read_input_tokens (billed 0.10x). */
+  cacheReadInputTokens?: number;
+  /** Anthropic prompt-caching: cache_creation_input_tokens (billed 1.25x ephemeral). */
+  cacheCreationInputTokens?: number;
   emailCount?: number;
   unitCount: number;
   unitType: UnitType;
@@ -104,6 +115,8 @@ export function logApiUsage(event: UsageEvent): void {
           audioSeconds: event.audioSeconds ?? null,
           inputTokens: event.inputTokens ?? null,
           outputTokens: event.outputTokens ?? null,
+          cacheReadInputTokens: event.cacheReadInputTokens ?? 0,
+          cacheCreationInputTokens: event.cacheCreationInputTokens ?? 0,
           emailCount: event.emailCount ?? null,
           unitCount: event.unitCount,
           unitType: event.unitType,
@@ -180,7 +193,9 @@ export function buildAnthropicUsage(
   inputTokens: number,
   outputTokens: number,
   modelName: string,
-  operation = 'soap_generate'
+  operation = 'soap_generate',
+  cacheReadInputTokens = 0,
+  cacheCreationInputTokens = 0,
 ): UsageEvent {
   // Per-model pricing. Opus 4.7 lands in the L4/L5/L7c layers (audit
   // Finding 04.1) so the dispatch must recognise it explicitly — the
@@ -204,14 +219,29 @@ export function buildAnthropicUsage(
     outputRate = PRICING.anthropic_sonnet_output;
   }
   // Authoritative per-call total comes from the pricing.ts dispatcher
-  // (which is env-overridable). Falls back to the per-rate computation
-  // for non-dispatchable models so the row still has a sensible figure.
-  const dispatchedCents = claudeCostCents(modelName, inputTokens, outputTokens);
+  // (env-overridable + cache-aware). Falls back to the per-rate
+  // computation for non-dispatchable models so the row still has a
+  // sensible figure; the fallback also applies the cache multipliers
+  // so a model that isn't in the dispatcher's switch still bills cache
+  // tokens honestly.
+  const dispatchedCents = claudeCostCents(
+    modelName,
+    inputTokens,
+    outputTokens,
+    cacheReadInputTokens,
+    cacheCreationInputTokens,
+  );
+  const cacheReadUsd =
+    (cacheReadInputTokens / 1_000_000) * inputRate * PRICING.anthropic_cache_read_multiplier;
+  const cacheWriteUsd =
+    (cacheCreationInputTokens / 1_000_000) * inputRate * PRICING.anthropic_cache_write_5min_multiplier;
   const totalCostUsd =
     dispatchedCents > 0
       ? dispatchedCents / 100
       : (inputTokens / 1_000_000) * inputRate +
-        (outputTokens / 1_000_000) * outputRate;
+        (outputTokens / 1_000_000) * outputRate +
+        cacheReadUsd +
+        cacheWriteUsd;
   return {
     ...ctx,
     requestId: ctx.requestId ?? randomUUID(),
@@ -219,6 +249,8 @@ export function buildAnthropicUsage(
     operation,
     inputTokens,
     outputTokens,
+    cacheReadInputTokens,
+    cacheCreationInputTokens,
     // For Anthropic we record total tokens as `unitCount` and the input
     // rate as `unitCostUsd` for a coarse-but-honest single-figure
     // representation. The accurate per-call cost lives in `totalCostUsd`
