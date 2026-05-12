@@ -86,6 +86,15 @@ const SPECIALTY_TONES: Record<string, ClinicianAvatarTone> = {
   pulmonology: 'sky',
   ophthalmology: 'amber',
   pain: 'coral',
+
+  // Weight Management — amber, the "warm + counseling" pairing.
+  // Counselling-heavy surface, so the same tone family as derm rather
+  // than the clinical-acute coral/sky/teal palette.
+  weightmanagement: 'amber',
+  weight: 'amber',
+  obesity: 'amber',
+  bariatric: 'amber',
+  bariatrics: 'amber',
 };
 
 function normaliseSpecialty(raw: string | null | undefined): string {

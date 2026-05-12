@@ -30,6 +30,7 @@ export const SPECIALTIES = [
   { id: 'orthopedics',     label: 'Orthopedics',     templateId: 'orthopedics' },
   { id: 'urgent-care',     label: 'Urgent Care',     templateId: 'urgent-care' },
   { id: 'pain-management', label: 'Pain Management', templateId: 'pain-management' },
+  { id: 'weight-management', label: 'Weight Management', templateId: 'weight-management' },
 ] as const;
 
 export type Specialty = (typeof SPECIALTIES)[number];
