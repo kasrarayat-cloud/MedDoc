@@ -3,25 +3,23 @@
 // ============================================================================
 // VisitFailedView — terminal-state UI for a FAILED visit row.
 // ----------------------------------------------------------------------------
-// Phase 5 — Linear V1 Faithful. Drops the VioletOrb cinematic and the
-// clinician dual-theme branch. Renders a quiet danger-tinted icon
-// block with a sage primary CTA for transient/provider/unknown
-// retries and a `.qm-lin-btn` ghost "Back to dashboard". The retry
-// semantics + failure categorization are unchanged.
+// 2026-05-12 prod-fix (post-deep-audit follow-up): the failure UI now
+// branches on (failureCategory × failed-layer × inputMode) instead of
+// failureCategory alone, so an L6 polish blip + a Deepgram outage + a
+// 1-second dictation don't all collapse to "Connection issue" + WiFi-off.
+// Copy + icon derivation lives in `./visit-failed-copy.ts` so the table
+// is unit-testable. The WiFi-off icon is gone from this surface — true
+// client-side network failures are surfaced via the retry-handler's
+// sonner toast, not the visit-row UI.
 // ============================================================================
 
-import { useState, useTransition, type ReactNode } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import {
-  Cloud,
-  FileX,
-  Loader2,
-  RefreshCw,
-  Upload,
-  WifiOff,
-} from 'lucide-react';
+import { Loader2, RefreshCw, Upload } from 'lucide-react';
 import { toast } from 'sonner';
+
+import { failureCopyFor } from './visit-failed-copy';
 
 type VisitFailedViewTheme = 'legacy' | 'clinician';
 
@@ -31,75 +29,32 @@ interface Props {
   /** One of 'transient' | 'permanent' | 'provider_down' (or null on
    *  pre-categorization rows). Drives icon + headline + CTA. */
   failureCategory?: string | null;
+  /** Visit inputMode — drives text_notes vs audio-corrupt copy split
+   *  (deep-audit G11). 'audio_upload' | 'voice_dictation' | 'text_notes'. */
+  inputMode?: string | null;
   /** @deprecated kept for back-compat; Linear V1 is single-theme. */
   theme?: VisitFailedViewTheme;
-}
-
-interface CategoryCopy {
-  Icon: typeof WifiOff;
-  headline: string;
-  body: string;
-  /** When set, the primary CTA is a navigation rather than the
-   *  in-place /retry POST. Permanent failures point to /visits/new
-   *  because the same audio will fail the same way. */
-  ctaHref?: string;
-  ctaLabel: string;
-  /** Render an extra hint above the button (e.g. "wait 5 minutes"). */
-  hint?: ReactNode;
-}
-
-function copyForCategory(failureCategory: string | null | undefined): CategoryCopy {
-  switch (failureCategory) {
-    case 'permanent':
-      return {
-        Icon: FileX,
-        headline: "Couldn't process this audio",
-        body:
-          'The audio file may be corrupted or in an unsupported format. Please re-upload using MP3, WAV, M4A, or WebM.',
-        ctaHref: '/visits/new',
-        ctaLabel: 'Upload new audio',
-      };
-    case 'provider_down':
-      return {
-        Icon: Cloud,
-        headline: 'Service temporarily unavailable',
-        body:
-          "Our transcription service is having an outage. We're aware and working on it. Please try again in 5–10 minutes.",
-        ctaLabel: 'Try again',
-        hint: 'Best to wait a few minutes before retrying.',
-      };
-    case 'transient':
-      return {
-        Icon: WifiOff,
-        headline: 'Connection issue',
-        body:
-          "We had trouble reaching our transcription service. Try again — this usually works on the second attempt.",
-        ctaLabel: 'Try again',
-      };
-    default:
-      // Null / 'unknown' / pre-categorization — keep the original
-      // generic copy so existing FAILED rows don't suddenly look
-      // misclassified.
-      return {
-        Icon: RefreshCw,
-        headline: 'Processing failed',
-        body:
-          'Something went wrong while generating your note. You can re-upload the audio to try again.',
-        ctaLabel: 'Try again',
-      };
-  }
 }
 
 export function VisitFailedView({
   visitId,
   reason,
   failureCategory,
+  inputMode,
 }: Props) {
   const router = useRouter();
   const [submitting, startTransition] = useTransition();
   const [pending, setPending] = useState(false);
 
-  const copy = copyForCategory(failureCategory);
+  const copy = failureCopyFor({
+    failureCategory: (failureCategory ?? null) as
+      | 'transient'
+      | 'permanent'
+      | 'provider_down'
+      | null,
+    reviewReason: reason,
+    inputMode: inputMode ?? null,
+  });
   const isPermanent = failureCategory === 'permanent';
 
   const onRetry = () => {
