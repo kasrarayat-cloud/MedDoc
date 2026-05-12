@@ -527,7 +527,20 @@ export const DOSE_RANGES: ReadonlyArray<DoseRangeEntry> = [
   },
   {
     drug: 'ferrous sulfate',
-    aliases: ['feosol', 'iron sulfate', 'iron(ii) sulfate'],
+    aliases: [
+      'feosol',
+      'iron sulfate',
+      'iron(ii) sulfate',
+      // Generic-name forms the LLM commonly emits — deep-audit 2026-05-12
+      // showed "Iron", "Iron (elemental)", "Iron (bariatric formulation)"
+      // all routing here in the absence of more-specific alternates.
+      'iron',
+      'iron elemental',
+      'elemental iron',
+      'ferrous fumarate',
+      'ferrous gluconate',
+      'iron bariatric formulation',
+    ],
     adultMaxMgPerDay: 325,
     contraindications: ['iron overload', 'hemochromatosis', 'iron allergy'],
     notes:
@@ -719,11 +732,118 @@ export const DOSE_RANGES: ReadonlyArray<DoseRangeEntry> = [
 
   {
     drug: 'bariatric multivitamin',
-    aliases: ['bariatric mvi', 'bariatric advantage', 'celebrate vitamins', 'bariatric fusion', 'optisource'],
+    aliases: [
+      'bariatric mvi',
+      'bariatric advantage',
+      'celebrate vitamins',
+      'bariatric fusion',
+      'optisource',
+      // Additional surface forms seen in deep-audit 2026-05-12:
+      'bariatric multivitamin chewable',
+      'bariatric-formulated multivitamin',
+      'bariatric formulated multivitamin',
+    ],
     complexDosing: true,
     contraindications: ['hypervitaminosis a', 'iron overload'],
     notes:
       'Bariatric-specific multivitamin (Bariatric Advantage / Celebrate / Fusion / OPTISOURCE / etc.) contains higher doses of B-complex / iron / vitamin D / zinc / folate than standard adult MVI. Standard adult MVI is UNDERSUPPLEMENTED for bariatric patients — typical post-op regimen needs a bariatric-formulated MVI plus separate calcium citrate + vitamin D + B12. Validator emits a warning when "multivitamin" or "MVI" is documented for a bariatric-status patient without the bariatric-specific qualifier.',
+  },
+
+  // ─── Bariatric / perioperative gap-fill entries ────────────────────────
+  // Added 2026-05-12 after the post-PR-#219/#220 deep clinical audit
+  // surfaced ~12 drug name strings that the L7c validator was flagging
+  // "not in our verified safety database". For each: the canonical
+  // generic name + the LLM-emitted surface variants seen in the audit.
+  // The vitamin entries use complexDosing because dosing is target-
+  // lab-driven (25-OH-D, RBC folate, etc.) rather than mg/day cap-driven.
+
+  {
+    drug: 'multivitamin',
+    aliases: [
+      'mvi',
+      'multi-vitamin',
+      'daily multivitamin',
+      'adult multivitamin',
+      'multivitamin tablet',
+    ],
+    complexDosing: true,
+    contraindications: ['hypervitaminosis a', 'iron overload'],
+    notes:
+      'Generic adult multivitamin — standard dosing is 1 tablet PO daily. Distinct from bariatric multivitamin (see separate entry): post-bariatric patients need the bariatric-formulated product, which has higher B-complex / iron / D / zinc / folate. The validator surfaces a "verify formulation" note when a plain "multivitamin" is drafted for a patient with Z98.84 / Z90.3 status.',
+  },
+
+  {
+    drug: 'vitamin a',
+    aliases: ['retinol', 'retinyl palmitate', 'retinyl acetate', 'beta-carotene'],
+    complexDosing: true,
+    contraindications: [
+      'pregnancy',
+      'hypervitaminosis a',
+      'severe liver disease',
+    ],
+    notes:
+      'Fat-soluble vitamin replacement for malabsorptive bariatric procedures (BPD-DS, SADI-S, distal RYGB). Typical: 5,000–10,000 IU PO daily; higher loading 25,000 IU daily x 2 weeks for documented deficiency. Pregnancy CONTRAINDICATED above 10,000 IU/day (teratogenic). Target serum retinol 30–80 µg/dL. Monitor on every post-BPD-DS visit; deficiency presents as night blindness, xerophthalmia. Restrictive procedures (sleeve, standard RYGB) typically meet needs via bariatric MVI alone.',
+  },
+
+  {
+    drug: 'vitamin e',
+    aliases: ['alpha-tocopherol', 'd-alpha-tocopherol', 'dl-alpha-tocopherol', 'tocopherol'],
+    complexDosing: true,
+    contraindications: ['vitamin e allergy', 'concurrent warfarin without INR monitoring'],
+    notes:
+      'Fat-soluble vitamin replacement for malabsorptive bariatric procedures. Typical: 100–400 IU PO daily; loading 800 IU daily x 4–8 weeks for documented deficiency. Increases bleeding risk at high dose (>800 IU/day) particularly in patients on warfarin or DAPT. Target serum α-tocopherol > 5 µg/mL. Symptoms of deficiency: hyporeflexia, ataxia, hemolysis.',
+  },
+
+  {
+    drug: 'vitamin k',
+    aliases: ['phytonadione', 'phytomenadione', 'vitamin k1', 'mephyton', 'aquamephyton'],
+    complexDosing: true,
+    contraindications: ['warfarin (without coordinated INR adjustment)', 'vitamin k allergy'],
+    notes:
+      'Fat-soluble vitamin replacement for malabsorptive bariatric procedures. Typical: 0.5–1 mg PO daily as maintenance; 5–10 mg PO weekly for loading. For warfarin reversal: 1–10 mg PO/IV depending on INR and bleeding (separate indication). CAUTION in patients on warfarin — supplementation can antagonize anticoagulation; coordinate INR monitoring before adding. Symptoms of deficiency: easy bruising, epistaxis, prolonged PT/INR.',
+  },
+
+  {
+    drug: 'zinc',
+    aliases: ['zinc sulfate', 'zinc gluconate', 'zinc picolinate', 'zinc citrate', 'zinc acetate'],
+    adultMaxMgPerDay: 40,
+    contraindications: ['zinc allergy', 'wilson disease'],
+    notes:
+      'Post-BPD-DS / SADI-S typical: 15–22 mg elemental zinc PO daily — must be co-supplemented with copper 1–2 mg/day to prevent zinc-induced copper deficiency (myelopathy + anemia). Max 40 mg/day for general adult supplementation; higher doses (50–220 mg) used short-term for documented deficiency only. Symptoms of zinc deficiency post-bariatric: hair loss, dysgeusia, poor wound healing, acrodermatitis-like rash. Routine in BPD-DS, optional in standard RYGB.',
+  },
+
+  {
+    drug: 'enoxaparin',
+    aliases: ['lovenox', 'enoxaparin sodium'],
+    complexDosing: true,
+    contraindications: [
+      'active major bleeding',
+      'heparin-induced thrombocytopenia',
+      'severe renal impairment',
+      'creatinine clearance <30',
+      'recent neuraxial anesthesia within bleeding window',
+    ],
+    notes:
+      'Dosing depends on indication:\n  - VTE prophylaxis (general medical/surgical): 40 mg SQ daily (30 mg SQ q12h or BID for high-risk surgical; bariatric/orthopedic protocols extend).\n  - Bariatric / super-obese VTE prophylaxis: 40 mg SQ q12h (some protocols 60 mg BID for BMI > 50).\n  - Treatment of DVT/PE: 1 mg/kg SQ q12h OR 1.5 mg/kg SQ daily.\n  - Renal dose adjustment: CrCl 15–30 → halve treatment dose; <15 contraindicated (use unfractionated heparin or argatroban).\nMonitor anti-Xa for therapeutic levels in pregnancy, obesity (weight > 150 kg), or renal impairment. Holds: 24 hr before neuraxial procedure, longer in renal impairment.',
+  },
+
+  {
+    drug: 'piperacillin-tazobactam',
+    aliases: [
+      'zosyn',
+      'piperacillin/tazobactam',
+      'piperacillin tazobactam',
+      'tazocin',
+      'piperacillin and tazobactam',
+    ],
+    complexDosing: true,
+    contraindications: [
+      'penicillin allergy (anaphylactic)',
+      'beta-lactam allergy',
+      'severe penicillin hypersensitivity',
+    ],
+    notes:
+      'Broad-spectrum beta-lactam / beta-lactamase inhibitor for empiric coverage of complicated intra-abdominal infection (incl. post-bariatric anastomotic leak), nosocomial pneumonia, complicated SSTI. Standard adult: 3.375 g IV q6h (or 4.5 g q8h extended infusion). Renal dose adjustment: CrCl 20–40 → 2.25 g q6h; CrCl <20 → 2.25 g q8h; HD → 2.25 g q12h + 0.75 g post-dialysis dose. PENICILLIN ALLERGY VERIFICATION IS A HARD STOP — anaphylactic histories require alternate empiric coverage (aztreonam-based for gram-negatives, vancomycin for gram-positives).',
   },
 ];
 
@@ -742,12 +862,28 @@ for (const entry of DOSE_RANGES) {
 /** Look up a drug by name (canonical or alias). Case-insensitive.
  *  Returns null if the drug is not in the verified database — call sites
  *  should emit RX_DRUG_NOT_IN_VERIFIED_DATABASE on null and surface a
- *  fall-through warning in the UI. */
+ *  fall-through warning in the UI.
+ *
+ *  Normalisation: strips trailing parenthetical qualifiers so the LLM-
+ *  emitted form "Cholecalciferol (Vitamin D3)" or "Ferrous sulfate
+ *  (Iron)" resolves to the canonical entry without needing every
+ *  parenthetical variant added as an alias. Deep-audit 2026-05-12
+ *  surfaced this gap across the bariatric supplement stack. */
 export function getDoseRange(drugName: string | null | undefined): DoseRangeEntry | null {
   if (!drugName) return null;
-  const key = drugName.trim().toLowerCase();
-  if (!key) return null;
-  return LOOKUP.get(key) ?? null;
+  const trimmed = drugName.trim().toLowerCase();
+  if (!trimmed) return null;
+  // Direct match first — preserves any future entries that intentionally
+  // include parentheticals (none today, but cheap to be safe).
+  const direct = LOOKUP.get(trimmed);
+  if (direct) return direct;
+  // Strip any trailing " (qualifier)" and try again.
+  const stripped = trimmed.replace(/\s*\([^)]*\)\s*$/, '').trim();
+  if (stripped && stripped !== trimmed) {
+    const m = LOOKUP.get(stripped);
+    if (m) return m;
+  }
+  return null;
 }
 
 /** Convenience predicate. */
