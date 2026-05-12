@@ -5,9 +5,18 @@
 // cents for a unit-economics view later. Prices are env-overridable in
 // case a provider changes their rate card mid-flight.
 //
-// Defaults reflect published rates as of the T-M4 implementation:
-//   Claude Sonnet 4.6   $3 / M input, $15 / M output
-//   Claude Opus 4.7     $15 / M input, $75 / M output
+// Rates refreshed 2026-05-12 against the published Anthropic pricing
+// page (https://docs.anthropic.com/en/docs/about-claude/pricing).
+// Opus 4.7 launched at $15/$75 (Opus 4.x rate) and was subsequently
+// cut to $5/$25 when the 4.5/4.6/4.7 family unified on the new
+// pricing tier — the original constants below were 3x stale on input
+// AND output, which alone explains the ~70-100% admin-dashboard
+// overcount on visits where the Opus-driven layers (L4 SOAP draft,
+// L5 critique, L7c Rx drafting) dominate the call mix.
+//
+//   Claude Sonnet 4.6   $3   / M input, $15  / M output  (unchanged)
+//   Claude Opus 4.7     $5   / M input, $25  / M output  (was $15/$75)
+//   Claude Haiku 4.5    $1   / M input, $5   / M output  (new — was absent)
 //   Deepgram Nova-3 Med $0.0145 / min
 //   (OpenAI: not used in T-M4; left unset)
 //
@@ -16,8 +25,10 @@
 
 const DEFAULT_SONNET_INPUT_CENTS_PER_M = 300;   // $3.00 / M tokens
 const DEFAULT_SONNET_OUTPUT_CENTS_PER_M = 1500; // $15.00 / M tokens
-const DEFAULT_OPUS_INPUT_CENTS_PER_M = 1500;    // $15.00 / M tokens
-const DEFAULT_OPUS_OUTPUT_CENTS_PER_M = 7500;   // $75.00 / M tokens
+const DEFAULT_OPUS_INPUT_CENTS_PER_M = 500;     // $5.00  / M tokens (was 1500)
+const DEFAULT_OPUS_OUTPUT_CENTS_PER_M = 2500;   // $25.00 / M tokens (was 7500)
+const DEFAULT_HAIKU_INPUT_CENTS_PER_M = 100;    // $1.00  / M tokens
+const DEFAULT_HAIKU_OUTPUT_CENTS_PER_M = 500;   // $5.00  / M tokens
 const DEFAULT_DEEPGRAM_CENTS_PER_MIN = 1.45;    // $0.0145 / min
 
 function envFloat(name: string, fallback: number): number {
@@ -66,18 +77,74 @@ export function claudeOpus47CostCents(inputTokens: number, outputTokens: number)
   return Math.round(inCents + outCents);
 }
 
+/** Per-million-tokens rate for Claude Haiku 4.5 input. */
+export function haikuInputCentsPerM(): number {
+  return envFloat('CLAUDE_HAIKU_45_INPUT_CENTS_PER_M', DEFAULT_HAIKU_INPUT_CENTS_PER_M);
+}
+
+/** Per-million-tokens rate for Claude Haiku 4.5 output. */
+export function haikuOutputCentsPerM(): number {
+  return envFloat('CLAUDE_HAIKU_45_OUTPUT_CENTS_PER_M', DEFAULT_HAIKU_OUTPUT_CENTS_PER_M);
+}
+
+/** Integer cents for a Claude Haiku 4.5 call. */
+export function claudeHaiku45CostCents(inputTokens: number, outputTokens: number): number {
+  const inCents = (inputTokens / 1_000_000) * haikuInputCentsPerM();
+  const outCents = (outputTokens / 1_000_000) * haikuOutputCentsPerM();
+  return Math.round(inCents + outCents);
+}
+
 /** Per-model dispatcher. Used by `anthropic.ts` so the AiCall row's
  *  `costUsdCents` reflects the model that actually ran. Unknown models
  *  return 0 (don't fabricate cost — let AiCall rows show $0 until
- *  pricing for the new model is added explicitly). */
-export function claudeCostCents(model: string, inputTokens: number, outputTokens: number): number {
+ *  pricing for the new model is added explicitly).
+ *
+ *  Cache token args (`cacheReadInputTokens`, `cacheCreationInputTokens`)
+ *  apply Anthropic's prompt-caching multipliers: cache reads at 0.1x
+ *  the model's base input rate (90% discount), 5-minute cache writes
+ *  at 1.25x. The args default to 0 so existing callers continue to
+ *  work without modification; new callers pass the SDK's
+ *  response.usage.cache_*_input_tokens through.
+ */
+export function claudeCostCents(
+  model: string,
+  inputTokens: number,
+  outputTokens: number,
+  cacheReadInputTokens: number = 0,
+  cacheCreationInputTokens: number = 0,
+): number {
+  let base: number;
   switch (model) {
     case 'claude-opus-4-7':
-      return claudeOpus47CostCents(inputTokens, outputTokens);
+      base = claudeOpus47CostCents(inputTokens, outputTokens);
+      break;
     case 'claude-sonnet-4-6':
-      return claudeSonnet46CostCents(inputTokens, outputTokens);
+      base = claudeSonnet46CostCents(inputTokens, outputTokens);
+      break;
+    case 'claude-haiku-4-5':
+    case 'claude-haiku-4-5-20251001':
+      base = claudeHaiku45CostCents(inputTokens, outputTokens);
+      break;
     default:
       return 0;
+  }
+  if (cacheReadInputTokens === 0 && cacheCreationInputTokens === 0) return base;
+  const inputRate = modelInputCentsPerM(model);
+  const cacheReadCents = (cacheReadInputTokens / 1_000_000) * inputRate * 0.10;
+  const cacheWriteCents = (cacheCreationInputTokens / 1_000_000) * inputRate * 1.25;
+  return Math.round(base + cacheReadCents + cacheWriteCents);
+}
+
+/** Internal: which base-input rate to use for cache-token multipliers.
+ *  Returns 0 for unknown models so they don't synthesize cache cost. */
+function modelInputCentsPerM(model: string): number {
+  switch (model) {
+    case 'claude-opus-4-7':   return opusInputCentsPerM();
+    case 'claude-sonnet-4-6': return sonnetInputCentsPerM();
+    case 'claude-haiku-4-5':
+    case 'claude-haiku-4-5-20251001':
+      return haikuInputCentsPerM();
+    default: return 0;
   }
 }
 
