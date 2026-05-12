@@ -133,7 +133,13 @@ export type AuditAction =
   // rx-drafting) errored during the fan-out + the worker flipped
   // needsReview on the visit. Metadata carries the failedLayers list
   // + per-layer reasons (truncated). Forensics surface in /admin/audit.
-  | 'VISIT_AUTOMATION_INCOMPLETE';
+  | 'VISIT_AUTOMATION_INCOMPLETE'
+  // 2026-05-12 stuck-visit watchdog. Emitted by the per-minute sweep
+  // when a visit is force-failed because its status has been in an
+  // in-flight state (TRANSCRIBING / EXTRACTING / DRAFTING / etc.) past
+  // the global 15-min budget. Metadata carries { prevStatus, elapsedMin,
+  // thresholdMin, processingStartedAt } for admin forensics.
+  | 'VISIT_PROCESSING_TIMEOUT';
 
 export interface AuditLogInput {
   action: AuditAction;
