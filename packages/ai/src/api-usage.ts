@@ -26,20 +26,30 @@ import prisma from '@meddoc/db';
 
 import { claudeCostCents } from './pricing';
 
+// Rates refreshed 2026-05-12 from docs.anthropic.com/en/docs/about-
+// claude/pricing. Opus 4.7 was the dominant overcount source: the
+// $15/$75 stored here were the Opus 4.x rates; Anthropic cut Opus
+// 4.5/4.6/4.7 to $5/$25 (matching their new pricing tier) and we had
+// never caught up — every Opus row on the admin dashboard was 3x
+// over. Haiku also updated to 4.5 family ($1/$5; was Haiku 3 rates).
 export const PRICING = {
   // Deepgram Nova-3 Medical — per minute
   deepgram_nova3_medical: 0.0043,
   // OpenAI Whisper API — per minute
   whisper: 0.006,
-  // Anthropic Sonnet — per 1M tokens
+  // Anthropic Sonnet 4.6 — per 1M tokens
   anthropic_sonnet_input: 3.0,
   anthropic_sonnet_output: 15.0,
-  // Anthropic Opus — per 1M tokens
-  anthropic_opus_input: 15.0,
-  anthropic_opus_output: 75.0,
-  // Anthropic Haiku — per 1M tokens
-  anthropic_haiku_input: 0.25,
-  anthropic_haiku_output: 1.25,
+  // Anthropic Opus 4.7 — per 1M tokens  (was 15 / 75 — STALE; 3x over)
+  anthropic_opus_input: 5.0,
+  anthropic_opus_output: 25.0,
+  // Anthropic Haiku 4.5 — per 1M tokens  (was 0.25 / 1.25 — Haiku 3 rates)
+  anthropic_haiku_input: 1.0,
+  anthropic_haiku_output: 5.0,
+  // Anthropic prompt-caching multipliers
+  anthropic_cache_read_multiplier: 0.10,    // 90% discount
+  anthropic_cache_write_5min_multiplier: 1.25,
+  anthropic_cache_write_1h_multiplier: 2.0,
   // OpenAI text-embedding-3-small — per 1M tokens
   openai_embedding: 0.13,
   // OpenAI GPT-4o — per 1M tokens (kept for completeness; not currently
