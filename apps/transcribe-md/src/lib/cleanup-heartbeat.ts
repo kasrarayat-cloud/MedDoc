@@ -30,7 +30,8 @@ import { getSharedRedisConnection } from '@/lib/queue';
 export type CleanupJobName =
   | 'stale-visit-cleanup'
   | 'retention-sweep'
-  | 'minio-orphan-cleanup';
+  | 'minio-orphan-cleanup'
+  | 'stuck-visit-watchdog';
 
 interface HeartbeatPayload {
   /** Epoch ms when the run completed. */
@@ -88,6 +89,7 @@ export async function readCleanupHeartbeats(): Promise<HeartbeatSnapshot[]> {
     'stale-visit-cleanup',
     'retention-sweep',
     'minio-orphan-cleanup',
+    'stuck-visit-watchdog',
   ];
   const redis = getSharedRedisConnection();
   const now = Date.now();

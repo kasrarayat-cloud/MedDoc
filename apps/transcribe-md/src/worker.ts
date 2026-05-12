@@ -40,6 +40,7 @@ import {
   JOB_MINIO_ORPHAN_CLEANUP,
   JOB_STALE_VISIT_CLEANUP,
   JOB_RETENTION_SWEEP,
+  JOB_STUCK_VISIT_WATCHDOG,
   enqueueDlq,
   getSharedRedisConnection,
   getCleanupQueue,
@@ -49,6 +50,7 @@ import { ensureBucket } from '@/lib/minio';
 import { runMinioOrphanCleanup } from '@/worker/cleanup/minio-orphans';
 import { runStaleVisitCleanup } from '@/worker/cleanup/stale-visits';
 import { runRetentionSweep } from '@/worker/cleanup/retention-sweep';
+import { runStuckVisitWatchdog } from '@/worker/cleanup/stuck-visit-watchdog';
 import { recordCleanupHeartbeat } from '@/lib/cleanup-heartbeat';
 import {
   isLayerComplete,
@@ -99,8 +101,13 @@ const CONCURRENCY = Number.parseInt(
  *  The layer promises keep resolving in the background after timeout
  *  — their writes land on an already-FAILED row, which is harmless.
  *  Configurable via env so ops can tune without redeploy. */
+// 2026-05-12 stuck-visit fix: bumped from 15 min → 20 min so the per-
+// minute watchdog (15-min threshold) catches a stuck visit FIRST and
+// transitions it to FAILED with a clear reviewReason. BullMQ's
+// JOB_TIMEOUT_MS is now the belt-and-braces backstop, hitting only on
+// a worker too wedged to be touched by the DB-side sweep.
 const JOB_TIMEOUT_MS = Number.parseInt(
-  process.env.TRANSCRIBE_MD_JOB_TIMEOUT_MS ?? String(15 * 60 * 1000),
+  process.env.TRANSCRIBE_MD_JOB_TIMEOUT_MS ?? String(20 * 60 * 1000),
   10
 );
 
@@ -143,6 +150,19 @@ const RETENTION_SWEEP_ENABLED =
 const RETENTION_SWEEP_CRON =
   process.env.RETENTION_SWEEP_CRON?.trim() || '0 4 * * *';
 const RETENTION_SWEEP_TIMEOUT_MS = 10 * 60 * 1000;
+
+// 2026-05-12 stuck-visit watchdog. Runs every minute by default so a
+// pipeline stall is caught within ~1 min of crossing the threshold.
+// Default cron `* * * * *` = every minute UTC.
+// Default opt-IN (the failure mode it catches is silent + serious —
+// visits stuck at status=POLISHING/etc for hours). Flip
+// STUCK_VISIT_WATCHDOG_ENABLED=false to disable in dev environments
+// where intentional long sleeps are common.
+const STUCK_VISIT_WATCHDOG_ENABLED =
+  (process.env.STUCK_VISIT_WATCHDOG_ENABLED ?? 'true').toLowerCase() !== 'false';
+const STUCK_VISIT_WATCHDOG_CRON =
+  process.env.STUCK_VISIT_WATCHDOG_CRON?.trim() || '* * * * *';
+const STUCK_VISIT_WATCHDOG_TIMEOUT_MS = 60_000;
 
 function withTimeout<T>(p: Promise<T>, ms: number, tag: string): Promise<T> {
   return Promise.race([
@@ -1060,11 +1080,12 @@ async function startCleanupWorker(): Promise<void> {
   if (
     !CLEANUP_ENABLED &&
     !STALE_VISIT_CLEANUP_ENABLED &&
-    !RETENTION_SWEEP_ENABLED
+    !RETENTION_SWEEP_ENABLED &&
+    !STUCK_VISIT_WATCHDOG_ENABLED
   ) {
     log.info('ops:cleanup', 'disabled', {
       reason:
-        'all three cleanup flags off (MINIO_ORPHAN_CLEANUP_ENABLED, STALE_VISIT_CLEANUP_ENABLED, RETENTION_SWEEP_ENABLED)',
+        'all four cleanup flags off (MINIO_ORPHAN_CLEANUP_ENABLED, STALE_VISIT_CLEANUP_ENABLED, RETENTION_SWEEP_ENABLED, STUCK_VISIT_WATCHDOG_ENABLED)',
     });
     return;
   }
@@ -1119,6 +1140,26 @@ async function startCleanupWorker(): Promise<void> {
           audioDeleted: result.audioDeleted,
           minioFailures: result.minioFailures,
         });
+        return;
+      }
+      if (job.name === JOB_STUCK_VISIT_WATCHDOG) {
+        const result = await withTimeout(
+          runStuckVisitWatchdog(),
+          STUCK_VISIT_WATCHDOG_TIMEOUT_MS,
+          'stuck-visit-watchdog'
+        );
+        // Heartbeat write is intentionally conditional: with the cron
+        // running every minute, an always-on heartbeat would generate
+        // 1,440 Redis writes/day per worker just for a "scan was 0"
+        // signal. Only record when something interesting happened so
+        // the /api/health ageSeconds tracks real activity.
+        if (result.rescued > 0 || result.errors > 0) {
+          await recordCleanupHeartbeat('stuck-visit-watchdog', {
+            scanned: result.scanned,
+            rescued: result.rescued,
+            errors: result.errors,
+          });
+        }
         return;
       }
       throw new Error(`Unknown cleanup job name: ${job.name}`);
@@ -1204,6 +1245,34 @@ async function startCleanupWorker(): Promise<void> {
   } else {
     log.info('ops:retention-sweep', 'disabled', {
       reason: 'RETENTION_SWEEP_ENABLED == "false"',
+    });
+  }
+
+  // ── 2026-05-12 stuck-visit watchdog (default: on) ─────────────
+  if (STUCK_VISIT_WATCHDOG_ENABLED) {
+    await getCleanupQueue().upsertJobScheduler(
+      'stuck-visit-watchdog',
+      { pattern: STUCK_VISIT_WATCHDOG_CRON, tz: 'UTC' },
+      {
+        name: JOB_STUCK_VISIT_WATCHDOG,
+        data: {},
+        opts: { attempts: 1 },
+      }
+    );
+    log.info('ops:stuck-visit-watchdog', 'scheduled', {
+      cron: STUCK_VISIT_WATCHDOG_CRON,
+      tz: 'UTC',
+      timeoutMs: STUCK_VISIT_WATCHDOG_TIMEOUT_MS,
+      thresholdMin: Math.round(
+        Number.parseInt(
+          process.env.STUCK_VISIT_THRESHOLD_MS ?? String(15 * 60 * 1000),
+          10,
+        ) / 60_000,
+      ),
+    });
+  } else {
+    log.info('ops:stuck-visit-watchdog', 'disabled', {
+      reason: 'STUCK_VISIT_WATCHDOG_ENABLED == "false"',
     });
   }
 }
