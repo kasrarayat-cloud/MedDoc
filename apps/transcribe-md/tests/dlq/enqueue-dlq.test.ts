@@ -93,14 +93,20 @@ describe('enqueueDlq — payload shape (PR-L)', () => {
     await enqueueDlq(basePayload);
 
     const [, , opts] = mocks.queueAdd.mock.calls[0];
-    expect(opts.jobId).toBe(`${QUEUE_NAME}:visit-abc-29033710`);
+    // 2026-05-12 stuck-visit fix: separator changed from ':' to '--'
+    // because BullMQ rejects job IDs containing colons with `Error:
+    // Custom Id cannot contain :`. The Kasra stuck-visit incident
+    // surfaced the pre-fix DLQ enqueue failing for every dead-lettered
+    // job since PR-L. Same uniqueness invariant (originalQueue +
+    // originalJobId) preserved.
+    expect(opts.jobId).toBe(`${QUEUE_NAME}--visit-abc-29033710`);
   });
 
   it('falls back to "null" suffix when the original jobId is missing', async () => {
     await enqueueDlq({ ...basePayload, originalJobId: null });
 
     const [, , opts] = mocks.queueAdd.mock.calls[0];
-    expect(opts.jobId).toBe(`${QUEUE_NAME}:null`);
+    expect(opts.jobId).toBe(`${QUEUE_NAME}--null`);
   });
 
   it('uses the canonical DLQ queue name', () => {

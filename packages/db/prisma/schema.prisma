@@ -275,6 +275,18 @@ enum AuditAction {
   // exhaustion or transient API error in L7 left visits silently marked
   // READY with empty codes/Rx columns.
   VISIT_AUTOMATION_INCOMPLETE
+
+  // 2026-05-12 stuck-visit watchdog. Emitted by the per-minute sweep when
+  // a visit's status has been in an in-flight state (TRANSCRIBING /
+  // EXTRACTING / DRAFTING / CRITIQUING / POLISHING / AUTOMATING) for more
+  // than the global processing budget (15 min default). The sweep
+  // transitions the row to FAILED + failureCategory='transient' so the
+  // doctor sees the standard retry UI; this audit row captures the
+  // previous status + elapsed seconds for forensics. Triggered by the
+  // Kasra stuck-visit incident — 4th-retry-within-the-same-minute was
+  // silently deduped against the prior failed BullMQ job, leaving the
+  // visit pinned at QUEUED indefinitely.
+  VISIT_PROCESSING_TIMEOUT
 }
 
 /// Document lifecycle status
