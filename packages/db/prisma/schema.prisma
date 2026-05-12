@@ -1575,6 +1575,22 @@ model TranscribeVisit {
   ///                          review (no diarization on Whisper).
   ///   - null                — pre-orchestrator visits (legacy).
   transcriptionProvider String?
+  /// 2026-05-12 interpreter-mode (Sylvia incident follow-up).
+  /// True when the doctor checked "With interpreter?" on /visits/new
+  /// for an audio/dictation visit. Drives L1 model choice (Nova-3
+  /// multilingual instead of nova-3-medical English-only) +
+  /// diarization-speaker-count hint (3 instead of 2) + L2/L4 prompt
+  /// branches that consolidate the interpreter's English voice with
+  /// the patient's intent in the SOAP narrative. Default false.
+  interpreterMode       Boolean @default(false)
+  /// IETF language tag returned by Deepgram's detect_language pass
+  /// (e.g. 'en', 'es', 'multi'). Populated by L1 when interpreterMode
+  /// is true. Null on visits where detection wasn't requested. Used
+  /// by future surfaces (soft-banner offering reprocess in
+  /// interpreter mode if a non-en language was detected on a
+  /// non-interpreter visit) — but the column is added now so existing
+  /// rows don't need a backfill later.
+  detectedLanguage      String?
   transcriptText        String? @db.Text
   /// Line-level SOAP content (app-redesign-v1+). Each section's value
   /// is either a legacy string OR an array of line objects with the

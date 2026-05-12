@@ -275,6 +275,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       rawTextInput: true,
       specialty: true,
       inputMode: true,
+      interpreterMode: true,
       user: { select: { practiceId: true } },
       // Fix-Pack 1 Q0-2 / audit Finding 01.1 — pull patient demographic
       // + safety context for L7c pediatric framing. Round 3 PR-D added
@@ -371,6 +372,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
           userId: visit.userId,
           audioKey: visit.audioKey!,
           audioMimeType: visit.audioMimeType!,
+          interpreterMode: visit.interpreterMode,
         });
       }
 
@@ -432,6 +434,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
           practiceId,
           userId: visit.userId,
           utterances,
+          interpreterMode: visit.interpreterMode,
         });
         speakerMap = r.speakerMap;
       }
@@ -475,6 +478,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
           // Deepgram auto-detects encoding from the Content-Type header.
           dictationMimeType:
             process.env.TRANSCRIBE_MD_DICTATION_MIME ?? 'audio/webm',
+          interpreterMode: visit.interpreterMode,
         });
         dictationText = r.transcript;
       }
@@ -574,6 +578,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         // confidence aggregate. Drives the L4 hedge prompt when
         // the audio fidelity was poor.
         audioConfidenceStats,
+        interpreterMode: visit.interpreterMode,
       });
     }
 

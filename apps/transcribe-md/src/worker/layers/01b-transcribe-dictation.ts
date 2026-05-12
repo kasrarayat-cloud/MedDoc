@@ -37,11 +37,23 @@ export interface Layer1bInput {
   userId: string | null;
   dictationAudioKey: string;
   dictationMimeType: string;
+  /** 2026-05-12 interpreter-mode flag from the visit row. When true,
+   *  the dictation path switches to nova-3 + detect_language=true +
+   *  language=multi. Note that L1b is a SINGLE-SPEAKER dictation path
+   *  (diarize: false), so interpreter mode on L1b is unusual — most
+   *  interpreted visits land on L1 (audio_upload) or the live-recorder
+   *  L1b that the Sylvia incident hit. We still honor the flag for
+   *  symmetry so a doctor who dictates a code-switching summary gets
+   *  the multilingual model. */
+  interpreterMode?: boolean;
 }
 
 export interface Layer1bOutput {
   durationSec: number;
   transcript: string;
+  /** 2026-05-12 interpreter-mode: detected IETF language tag, surfaces
+   *  on visits where interpreterMode was true. Undefined otherwise. */
+  detectedLanguage?: string;
 }
 
 const BACKOFF_MS = 2_000;
@@ -80,13 +92,22 @@ export async function runLayer1bTranscribeDictation(
         },
       },
       mimeType: input.dictationMimeType,
-      deepgram: {
-        // Single-speaker dictation — disable diarize + utterances.
-        // Whisper has no equivalent toggles (it just transcribes), so
-        // the fallback path produces functionally the same flat text.
-        options: { diarize: false, utterances: false },
-        keyterms: CLINICAL_KEYTERMS,
-      },
+      deepgram: input.interpreterMode
+        ? {
+            // 2026-05-12 interpreter-mode (Sylvia incident follow-up):
+            // switch to multilingual nova-3 + language detection.
+            // Dictation stays single-speaker (diarize off) so the
+            // utterances pipeline behaves identically downstream.
+            model: 'nova-3',
+            options: { diarize: false, utterances: false, detectLanguage: true },
+          }
+        : {
+            // Single-speaker dictation — disable diarize + utterances.
+            // Whisper has no equivalent toggles (it just transcribes), so
+            // the fallback path produces functionally the same flat text.
+            options: { diarize: false, utterances: false },
+            keyterms: CLINICAL_KEYTERMS,
+          },
     });
   };
 
@@ -135,6 +156,9 @@ export async function runLayer1bTranscribeDictation(
       dictationDurationSec: result.durationSec,
       audioConfidenceStats: (audioStats ?? null) as unknown as object,
       transcriptionProvider: result.provider,
+      ...(input.interpreterMode && result.language
+        ? { detectedLanguage: result.language }
+        : {}),
       ...(fallbackReviewReason
         ? { needsReview: true, reviewReason: fallbackReviewReason }
         : lowConfFlag
@@ -165,5 +189,9 @@ export async function runLayer1bTranscribeDictation(
     });
   }
 
-  return { durationSec: result.durationSec, transcript: result.transcript };
+  return {
+    durationSec: result.durationSec,
+    transcript: result.transcript,
+    detectedLanguage: input.interpreterMode ? result.language ?? undefined : undefined,
+  };
 }

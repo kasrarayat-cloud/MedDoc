@@ -29,6 +29,13 @@ export interface DeepgramBatchOptions {
    *  role assignment + evidence quoting. Turn off for dictation where
    *  the whole transcript is treated as one block. */
   utterances?: boolean;
+  /** 2026-05-12 interpreter-mode: request Deepgram to detect the
+   *  spoken language(s) and switch to a multilingual model internally.
+   *  Used in conjunction with `language: 'multi'` for code-switching
+   *  audio (e.g., Spanish patient + English doctor + interpreter).
+   *  When true, the returned `DeepgramBatchResult.detectedLanguage`
+   *  carries the IETF tag Deepgram inferred. */
+  detectLanguage?: boolean;
 }
 
 export interface DeepgramBatchStreamSource {
@@ -131,6 +138,11 @@ export interface DeepgramBatchResult {
   utterances: DeepgramUtterance[];
   /** Duration in whole seconds. Used for cost math + UI ETA hints. */
   durationSec: number;
+  /** 2026-05-12 interpreter-mode: IETF language tag Deepgram detected
+   *  when `detectLanguage: true` was requested. Examples: 'en' (English
+   *  only), 'es' (Spanish only), 'multi' (code-switching). Undefined
+   *  when detection wasn't requested or the response didn't carry it. */
+  detectedLanguage?: string;
 }
 
 /**
@@ -156,17 +168,29 @@ export async function deepgramBatchTranscribe(
 
   const wantDiarize = args.options?.diarize ?? true;
   const wantUtterances = args.options?.utterances ?? true;
-  const params = new URLSearchParams({
+  const wantDetectLanguage = args.options?.detectLanguage ?? false;
+  // Deepgram rejects `language` + `detect_language=true` together; we
+  // drop the explicit language tag when detection is on so the model
+  // chooses based on the audio itself. The result carries the inferred
+  // tag back via `metadata.detected_language`.
+  const baseParams: Record<string, string> = {
     model,
-    language,
     diarize: String(wantDiarize),
     punctuate: 'true',
     smart_format: 'true',
     paragraphs: 'true',
     utterances: String(wantUtterances),
     filler_words: 'false',
-    detect_language: 'false',
-  });
+  };
+  if (wantDetectLanguage) {
+    baseParams.detect_language = 'true';
+    // `language=multi` opts the model into code-switching mode.
+    baseParams.language = 'multi';
+  } else {
+    baseParams.language = language;
+    baseParams.detect_language = 'false';
+  }
+  const params = new URLSearchParams(baseParams);
   // Phase-2 voice: append one ?keyterm= per entry. Deepgram accepts
   // the repeated-param form; URLSearchParams.append preserves order.
   // No-op when the caller omits keyterms.
@@ -269,10 +293,34 @@ export async function deepgramBatchTranscribe(
 
   const raw = (await res.json()) as DeepgramBatchResponse;
 
+  // (Pre-existing variable name `firstChannel` here actually refers to
+  // alternatives[0]; the surrounding code has used the misnomer for
+  // multiple releases. Kept as-is to minimize diff surface.)
   const firstChannel = raw.results?.channels?.[0]?.alternatives?.[0];
   const transcript = (firstChannel?.transcript ?? '').trim();
   const utterances = raw.results?.utterances ?? [];
   const durationSec = Math.round(raw.metadata?.duration ?? 0);
+  // 2026-05-12 interpreter-mode: Deepgram returns the inferred language
+  // when `detect_language` was requested. Per the Deepgram response
+  // shape the tag lives at THE CHANNEL OBJECT level (not the
+  // alternative — see https://developers.deepgram.com/docs/language-
+  // detection). We check the channel first, then fall back to the
+  // alternative (some response shapes carry it there), then metadata,
+  // before giving up with undefined. Keeps `detectedLanguage` safe
+  // against future Deepgram payload reshuffles.
+  const channelObj = raw.results?.channels?.[0] as
+    | { detected_language?: unknown }
+    | undefined;
+  const altObj = firstChannel as { detected_language?: unknown } | undefined;
+  const metaObj = raw.metadata as { detected_language?: unknown } | undefined;
+  const detectedLanguage =
+    typeof channelObj?.detected_language === 'string'
+      ? (channelObj.detected_language as string)
+      : typeof altObj?.detected_language === 'string'
+        ? (altObj.detected_language as string)
+        : typeof metaObj?.detected_language === 'string'
+          ? (metaObj.detected_language as string)
+          : undefined;
 
   logAiCall({
     ...args,
@@ -301,5 +349,6 @@ export async function deepgramBatchTranscribe(
     transcript,
     utterances,
     durationSec,
+    detectedLanguage,
   };
 }
