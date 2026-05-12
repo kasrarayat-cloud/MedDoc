@@ -45,10 +45,13 @@ export interface Layer7aInput {
   entitiesJson: string;
 }
 
-export async function runLayer7aIcdCoding(
-  input: Layer7aInput
-): Promise<IcdResult> {
-  const system = [
+/** L7a system prompt — exported for regression-guard tests. The
+ *  prompt-quality checks live in
+ *  apps/transcribe-md/tests/worker/icd-coding-prompt.test.ts and
+ *  anchor on substrings that are load-bearing for specific clinical
+ *  cohorts (e.g. "chronic GERD on PPI" anchors the K21.9 hoisting
+ *  pattern that audit-finding B2 reproduced). */
+export const L7A_SYSTEM_PROMPT: string = [
     'You are a certified medical coding specialist. Extract ICD-10-CM',
     '(2025) codes from this clinician SOAP note for billing purposes.',
     '',
@@ -61,17 +64,56 @@ export async function runLayer7aIcdCoding(
     '  care / weight management: NAFLD (K76.0) shown on prior imaging;',
     '  obstructive sleep apnea (G47.33) treated with CPAP; CKD (N18.x)',
     '  trended via creatinine; prior MI (I25.2); COPD (J44.x); HFrEF',
-    '  on guideline-directed therapy. The plan need not explicitly act',
-    '  on each chronic condition for that condition to merit coding —',
-    '  ongoing therapy, monitoring, or surveillance counts as "active".',
+    '  (I50.22 chronic / I50.21 acute) on guideline-directed therapy;',
+    '  HFpEF (I50.32 chronic / I50.31 acute) — pick the systolic vs',
+    '  diastolic family based on the documented EF + clinical phenotype;',
+    '  chronic GERD on PPI (K21.9) — chronic PPI use is the marker, not',
+    '  active reflux symptoms this visit. The plan need not explicitly',
+    '  act on each chronic condition for that condition to merit coding',
+    '  — ongoing therapy, monitoring, or surveillance counts as "active".',
     '- INCLUDE chronic medication Z-codes (e.g. Z79.84 long-term oral',
     '  hypoglycemic, Z79.890 long-term hormonal therapy, Z79.01 long-term',
-    '  anticoagulant) when the medication list documents chronic use of',
-    '  a relevant drug class — even when the underlying condition is',
-    '  coded separately.',
+    '  anticoagulant, Z79.02 long-term antiplatelet) when the medication',
+    '  list documents chronic use of a relevant drug class — even when',
+    '  the underlying condition is coded separately.',
+    '- INCLUDE personal-history Z-codes (Z86.7x family) when the PMH or',
+    '  problem list documents a clinically-relevant prior event whose',
+    '  history shapes current management — even when no active symptoms.',
+    '  Examples: Z86.718 personal history of VTE (prior DVT/PE is the',
+    '  driver of extended VTE prophylaxis post-op + the reason behind',
+    '  any continued anticoagulant); Z86.73 personal history of TIA /',
+    '  cerebral infarction without residual deficit (drives statin +',
+    '  antiplatelet decisions); Z87.891 personal history of nicotine',
+    '  dependence (former smoker — code even when not active).',
+    '- INCLUDE acquired-absence Z-codes (Z90.x family) for post-surgical',
+    '  anatomy on every visit at month 1+. Examples: Z90.3 acquired',
+    '  absence of stomach (post-RYGB / post-sleeve / post-BPD-DS — pair',
+    '  with Z98.84 bariatric-surgery-status); Z90.49 acquired absence',
+    '  of other digestive-tract parts. The bariatric anatomy persists',
+    '  for life, so these codes belong on every follow-up encounter.',
+    '- INCLUDE acute findings documented during a workup, even when the',
+    '  encounter is "evaluating" rather than "treating" them. The most',
+    '  commonly missed shapes:',
+    '    * AKI (N17.x) — code when creatinine has shifted from baseline',
+    '      (e.g., Cr 1.4 from baseline 0.8 = N17.9), not only when AKI',
+    '      is the named diagnosis. The shift IS the diagnosis.',
+    '    * Dehydration / volume depletion (E86.0 / E86.9) — code when',
+    '      clinical exam documents it (dry mucous membranes, orthostatic',
+    '      vitals, low PO intake) even when fluid resuscitation is the',
+    '      same encounter\'s treatment.',
+    '    * Site-specific abdominal pain (R10.10-.84) — prefer the site-',
+    '      specific code over R10.9 unspecified when the exam localizes',
+    '      it (LUQ → R10.12, RUQ → R10.11, epigastric → R10.13).',
+    '- PREFER the documented diagnosis over symptom codes. When the SOAP',
+    '  explicitly names a diagnosis (e.g., "PROTEIN-CALORIE MALNUTRITION"',
+    '  with albumin < 3.0 and sarcopenia → E43 / E44.0), code that',
+    '  diagnosis directly. Symptom codes (R63.4 abnormal weight loss,',
+    '  R53.83 fatigue) are appropriate ONLY when no specific diagnosis',
+    '  is established. Same pattern: B12-deficiency anemia → D51.9 over',
+    '  separately coding E53.8 + D50.9.',
     '- Do NOT code "rule out" / "suspected" / "differential" diagnoses',
     '  that the clinician explicitly framed as uncertain. The exclusion',
-    '  is uncertainty, NOT chronicity.',
+    '  is uncertainty, NOT chronicity, NOT documented acute findings.',
     '- Do NOT code one-off historical events that have no bearing on',
     '  current care (e.g. childhood appendectomy with no current sequelae).',
     '- Use the most specific code possible (e.g. I11.0 over I15.9 when',
@@ -103,7 +145,12 @@ export async function runLayer7aIcdCoding(
     '{ "codes": [{ "code": "...", "description": "...",',
     '              "evidence_quote": "...", "confidence": 0.0,',
     '              "confidenceLevel": "high" }] }',
-  ].join('\n');
+].join('\n');
+
+export async function runLayer7aIcdCoding(
+  input: Layer7aInput
+): Promise<IcdResult> {
+  const system = L7A_SYSTEM_PROMPT;
 
   const user = [
     `Specialty: ${input.specialty}`,
