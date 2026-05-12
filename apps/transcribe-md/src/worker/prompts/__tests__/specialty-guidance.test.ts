@@ -50,4 +50,42 @@ describe('SPECIALTY_GUIDANCE', () => {
     expect(text).toMatch(/A1c/i);
     expect(text).toMatch(/titration/i);
   });
+
+  it('bariatric-surgery guidance branches on all three lifecycle phases', () => {
+    const text = specialtyGuidance('bariatric-surgery');
+    // Phase labels — the SOAP draft is wrong without correct phase
+    // identification because the required sections differ per phase.
+    expect(text).toMatch(/PRE-OP/);
+    expect(text).toMatch(/EARLY POST-OP/);
+    expect(text).toMatch(/LATE POST-OP/);
+  });
+
+  it('bariatric-surgery guidance enforces calcium citrate vs carbonate', () => {
+    const text = specialtyGuidance('bariatric-surgery');
+    // Bypass patients lose the acidic gastric environment that dissolves
+    // carbonate — citrate is non-substitutable. The L7c Rx layer treats
+    // this as a hard safety bullet so the guidance MUST surface it.
+    expect(text).toMatch(/calcium citrate/i);
+    expect(text).toMatch(/carbonate/i);
+    expect(text).toMatch(/non-substitutable|hard safety/i);
+  });
+
+  it('bariatric-surgery covers required complication / nutritional / comorbidity screens', () => {
+    const text = specialtyGuidance('bariatric-surgery');
+    // Early post-op MUST screen: anastomotic leak, GI bleed, DVT,
+    // dehydration, wound infection. The L5 critique flags any of these
+    // missing on a POD-30 visit.
+    expect(text).toMatch(/anastomotic leak/i);
+    expect(text).toMatch(/DVT|PE/);
+    expect(text).toMatch(/dehydration/i);
+    // Late post-op nutritional + comorbidity scaffolding
+    expect(text).toMatch(/B12/);
+    expect(text).toMatch(/vitamin D|cholecalciferol/i);
+    expect(text).toMatch(/% EWL|excess weight loss/i);
+    expect(text).toMatch(/dumping syndrome/i);
+    expect(text).toMatch(/T2DM|diabetes/i);
+    expect(text).toMatch(/CPAP|OSA/);
+    // Procedure variants — the SOAP must specify which procedure
+    expect(text).toMatch(/RYGB|sleeve|gastric bypass/i);
+  });
 });

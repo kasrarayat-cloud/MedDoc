@@ -31,6 +31,7 @@ export const SPECIALTIES = [
   { id: 'urgent-care',     label: 'Urgent Care',     templateId: 'urgent-care' },
   { id: 'pain-management', label: 'Pain Management', templateId: 'pain-management' },
   { id: 'weight-management', label: 'Weight Management', templateId: 'weight-management' },
+  { id: 'bariatric-surgery', label: 'Bariatric Surgery', templateId: 'bariatric-surgery' },
 ] as const;
 
 export type Specialty = (typeof SPECIALTIES)[number];
