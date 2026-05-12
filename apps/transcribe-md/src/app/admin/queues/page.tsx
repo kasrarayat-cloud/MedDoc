@@ -4,7 +4,7 @@
 // SUPER_ADMIN-gated read-only view of:
 //   - transcribe-md (visit pipeline, 3 attempts then DLQ)
 //   - transcribe-md-cleanup (MinIO orphan / stale visit / retention sweeps)
-//   - dlq:permanent-failures (PR-L — exhausted-retry sink; no consumer)
+//   - dlq-permanent-failures (PR-L — exhausted-retry sink; no consumer)
 //
 // Auth gate inherits from apps/transcribe-md/src/app/admin/layout.tsx
 // (SUPER_ADMIN product entitlement + ≤12-hour session freshness).
