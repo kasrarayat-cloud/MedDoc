@@ -91,6 +91,62 @@ export const SPECIALTY_GUIDANCE: Record<string, string> = {
     "decisions and the documented rationale. Be cautious about " +
     "diagnostic specificity unless the doctor stated a clear diagnosis.",
 
+  // Bariatric Surgery — onboarded alongside Weight Management for the
+  // weight-loss-clinic pilots that perform both medical + surgical
+  // intervention. Three lifecycle phases must be branched in the SOAP
+  // because the required sections, complication screens, and Rx
+  // recommendations differ sharply: pre-op (work-up + clearance), early
+  // post-op (first 30 days, leak / bleed / DVT / dehydration watch),
+  // and late post-op (>30 days, nutritional + comorbidity tracking).
+  // The guidance below instructs the model to FIRST infer which phase
+  // applies, then apply that phase's required structure.
+  'bariatric-surgery':
+    "Bariatric visits fall into three lifecycle phases with different " +
+    "documentation requirements. Identify which phase applies from the " +
+    "transcript before drafting:\n" +
+    "\n" +
+    "  PHASE = PRE-OP (work-up before surgery):\n" +
+    "Document the anticipated procedure (RYGB / sleeve gastrectomy / " +
+    "adjustable gastric band / BPD-DS / revision). Surgical-risk " +
+    "assessment with BMI, key comorbidities (T2DM, HTN, OSA, NAFLD, " +
+    "cardiac), and cardiopulmonary tolerance findings. Psychological " +
+    "clearance status (cleared / pending / needs further evaluation) — " +
+    "absence of clearance is a documented finding. Nutritional " +
+    "clearance + RD evaluation summary. Pre-op weight loss target " +
+    "and progress when stipulated. Patient motivation, support " +
+    "system, and adherence indicators.\n" +
+    "\n" +
+    "  PHASE = EARLY POST-OP (first 30 days after surgery):\n" +
+    "First line of HPI MUST be 'POD #N, status post [procedure on " +
+    "date]'. Hospital course summary (LOS, complications, discharge " +
+    "criteria). Diet phase: clear liquids / full liquids / pureed / " +
+    "soft / regular — explicit, never assumed. Complication screen, " +
+    "each item documented even when negative: anastomotic leak signs " +
+    "(tachycardia, fever, abdominal pain, leukocytosis), GI bleeding, " +
+    "DVT / PE symptoms, dehydration / unable to tolerate PO, wound " +
+    "infection or dehiscence. Pain control regimen. Activity " +
+    "progression. Anticoagulation status if on prophylaxis.\n" +
+    "\n" +
+    "  PHASE = LATE POST-OP (>30 days after surgery):\n" +
+    "First line MUST be 'POD #N or month-N, status post [procedure on " +
+    "date]'. Weight + BMI trend with % EWL (excess weight loss). " +
+    "Nutritional status: B12, vitamin D, iron, calcium, thiamine, " +
+    "folate values with trend direction. Dumping syndrome screen for " +
+    "post-bypass patients (early vs late dumping symptoms). Dietary " +
+    "adherence + daily protein intake (target 60-80 g/d typical). " +
+    "Hydration status. Comorbidity resolution: T2DM (off insulin / " +
+    "off all meds / partial), HTN improvement, OSA CPAP re-titration " +
+    "needed, GERD course. Adherence to lifelong supplementation " +
+    "(bariatric multivitamin, calcium citrate NOT carbonate for " +
+    "bypass patients, B12 sublingual or IM, iron, ursodiol gallstone " +
+    "prophylaxis during rapid-loss window).\n" +
+    "\n" +
+    "Across all phases: explicitly document calcium citrate vs " +
+    "carbonate distinction in the medication list — post-bypass " +
+    "patients lose the acidic gastric environment that dissolves " +
+    "carbonate, so citrate is non-substitutable. The L7c Rx layer " +
+    "treats this as a hard safety bullet.",
+
   // Weight Management — onboarded for weight-loss clinic pilots. Adds two
   // section requirements (Body Composition, Behavioral Counseling) on top
   // of the standard SOAP shell, plus GLP-1 safety screening that the L5

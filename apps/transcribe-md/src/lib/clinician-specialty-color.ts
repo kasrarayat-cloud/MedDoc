@@ -93,8 +93,16 @@ const SPECIALTY_TONES: Record<string, ClinicianAvatarTone> = {
   weightmanagement: 'amber',
   weight: 'amber',
   obesity: 'amber',
-  bariatric: 'amber',
-  bariatrics: 'amber',
+
+  // Bariatric Surgery — coral, the surgical / clinical-acute family
+  // (matches cardiology + OB-GYN, both of which are operative-room
+  // specialties). Distinct from the counseling-heavy amber that
+  // Weight Management uses, so the dashboard reads a surgical patient
+  // differently from a medical-weight-management patient on first
+  // glance.
+  bariatricsurgery: 'coral',
+  bariatric: 'coral',
+  bariatrics: 'coral',
 };
 
 function normaliseSpecialty(raw: string | null | undefined): string {

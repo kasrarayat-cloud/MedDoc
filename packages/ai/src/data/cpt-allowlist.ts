@@ -139,6 +139,30 @@ const STARTER_CPT_CODES: ReadonlyArray<string> = [
   '20605', // Arthrocentesis, intermediate joint
   '20610', // Arthrocentesis, major joint
 
+  // === Bariatric Surgery (2026-05-12) — laparoscopic + open ===
+  // Captures the procedure codes a bariatric surgeon would bill on the
+  // operative day. Added with the `bariatric-surgery` specialty so the
+  // L7b validator accepts these instead of dropping them as "not in
+  // allowlist." Open codes carried because revisional / complication
+  // cases routinely convert from lap to open.
+  '43644', // Laparoscopic Roux-en-Y gastric bypass (RYGB), with ≤ 150 cm Roux limb
+  '43645', // Laparoscopic RYGB with small intestine reconstruction for malabsorption
+  '43775', // Laparoscopic sleeve gastrectomy
+  '43770', // Laparoscopic adjustable gastric band, placement
+  '43771', // Adjustable gastric band, revision
+  '43772', // Adjustable gastric band, removal of subcutaneous port only
+  '43773', // Adjustable gastric band, removal and replacement of subcutaneous port only
+  '43774', // Adjustable gastric band, removal (entire device, complete)
+  '43842', // Open vertical-banded gastroplasty
+  '43843', // Open gastric restrictive procedure NEC
+  '43845', // Open biliopancreatic diversion with duodenal switch (BPD-DS)
+  '43846', // Open Roux-en-Y gastric bypass (≤ 150 cm Roux limb)
+  '43847', // Open RYGB with small intestine reconstruction for malabsorption
+  '43848', // Revision, open, of bariatric bypass procedure
+  '43886', // Gastric restrictive procedure, open; revision of subcutaneous port
+  '43887', // Gastric restrictive procedure, open; removal of subcutaneous port
+  '43888', // Gastric restrictive procedure, open; removal and replacement of subcutaneous port
+
   // === Modifiers (tracked separately from codes) ===
   // These are appended to a CPT code (e.g. "99213-25"). The validator
   // accepts a code with or without a trailing "-NN" modifier.
