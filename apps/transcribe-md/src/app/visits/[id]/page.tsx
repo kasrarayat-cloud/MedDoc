@@ -606,6 +606,7 @@ async function VisitBody(props: VisitBodyProps) {
         visitId={props.visitId}
         reason={props.reviewReason}
         failureCategory={props.failureCategory}
+        inputMode={props.inputMode}
       />
     );
   }
