@@ -81,6 +81,11 @@ import { runLayer7bCptCoding } from '@/worker/layers/07b-cpt-coding';
 import { runLayer7cRxDrafting } from '@/worker/layers/07c-rx-drafting';
 import { runLayer7dReferrals } from '@/worker/layers/07d-referrals';
 import { runLayer7ePatientSummary } from '@/worker/layers/07e-patient-summary';
+import { logAudit } from '@/lib/audit';
+import {
+  detectIncompleteAutomation,
+  type AutomationConfidenceScores,
+} from '@/worker/automation-incomplete';
 
 const CONCURRENCY = Number.parseInt(
   process.env.TRANSCRIBE_MD_WORKER_CONCURRENCY ?? '2',
@@ -847,6 +852,27 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       0
     );
 
+    // Deep-audit G9 (2026-05-12) — load-bearing L7 failure → needsReview.
+    // Helper lives at worker/automation-incomplete.ts; comments there
+    // explain the design (T-M6 preserved, status stays READY).
+    const incomplete = detectIncompleteAutomation(
+      confidenceScores as AutomationConfidenceScores,
+    );
+    if (incomplete.needsReview) {
+      void logAudit({
+        action: 'VISIT_AUTOMATION_INCOMPLETE',
+        targetId: visitId,
+        targetType: 'TranscribeVisit',
+        userId: visit.userId,
+        practiceId,
+        success: false,
+        metadata: {
+          failedLayers: incomplete.failedLayers,
+          reasons: incomplete.reasonsByLayer,
+        },
+      });
+    }
+
     await prisma.transcribeVisit.update({
       where: { id: visitId },
       data: {
@@ -854,6 +880,8 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         processingFinishedAt: new Date(),
         processingCostCents: totalCents,
         confidenceScores: confidenceScores as unknown as object,
+        needsReview: incomplete.needsReview,
+        reviewReason: incomplete.reviewReason,
       },
     });
 
