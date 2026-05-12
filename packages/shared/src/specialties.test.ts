@@ -83,6 +83,30 @@ describe('SPECIALTIES catalog', () => {
   it('bariatric-surgery has the expected display label', () => {
     expect(findSpecialty('bariatric-surgery').label).toBe('Bariatric Surgery');
   });
+
+  it('vascular-surgery is in the catalog (distinct from bariatric-surgery)', () => {
+    expect(
+      SPECIALTIES.find((s) => s.id === 'vascular-surgery'),
+    ).toBeTruthy();
+  });
+
+  it('vascular-surgery is exposed to the visit-create dropdown', () => {
+    expect(
+      SPECIALTIES_FOR_VISIT_CREATE.find((s) => s.id === 'vascular-surgery'),
+    ).toBeTruthy();
+  });
+
+  it('vascular-surgery has the expected display label', () => {
+    expect(findSpecialty('vascular-surgery').label).toBe('Vascular Surgery');
+  });
+
+  it('catalog row count is 13 (1 unspecified + 12 clinical)', () => {
+    // Guard so the marketing site count-derivation (PR #218) stays in
+    // sync with the catalog growth — adding a specialty without
+    // updating this assertion makes the test prompt for review.
+    expect(SPECIALTIES).toHaveLength(13);
+    expect(SPECIALTIES_FOR_VISIT_CREATE).toHaveLength(12);
+  });
 });
 
 describe('findSpecialty', () => {

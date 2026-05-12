@@ -557,6 +557,166 @@ export const DOSE_RANGES: ReadonlyArray<DoseRangeEntry> = [
     notes:
       'Post-bariatric prophylaxis: 40 mg PO daily for 3-6 months post-sleeve gastrectomy (residual gastric acid + small pouch increases ulcer risk) and post-RYGB (marginal ulcer at gastrojejunal anastomosis). Max 80 mg/day for severe/refractory cases. Long-term PPI use post-bariatric carries the same risks as in non-bariatric populations (B12 / Ca / Mg absorption, C. diff risk).',
   },
+  // ── Vascular Surgery — claudication / antiplatelet / DOAC / contrast ─
+  // Added with the `vascular-surgery` specialty. Aspirin, prasugrel,
+  // ticagrelor, rivaroxaban, edoxaban, dabigatran are general-medicine
+  // staples that were absent from the starter set; the vascular cohort
+  // is the highest-volume Rx context for them so they land here. The
+  // contrast agents (iohexol, iodixanol) carry eGFR + thyroid + allergy
+  // contraindications that the Rx rail must surface before endovascular
+  // procedures; complexDosing because volume is per-procedure, not
+  // per-day.
+  {
+    drug: 'aspirin',
+    aliases: ['acetylsalicylic acid', 'asa', 'bayer', 'ecotrin'],
+    adultMaxMgPerDay: 4000,
+    contraindications: [
+      'aspirin allergy',
+      'nsaid allergy',
+      'active gi bleed',
+      'severe thrombocytopenia',
+      'children with viral illness',
+    ],
+    notes:
+      'Antiplatelet dose 81 mg PO daily (primary + secondary cardiovascular prevention). Anti-inflammatory / analgesic dose 325-650 mg PO q4-6h, max 4 g/day. Reye syndrome risk in children + adolescents with viral illness — contraindicated. Hold 7 days pre-elective surgery unless cardiology / vascular surgery specifically requests continuation through the perioperative window.',
+  },
+  {
+    drug: 'prasugrel',
+    aliases: ['effient'],
+    adultMaxMgPerDay: 10,
+    contraindications: [
+      'prasugrel allergy',
+      'thienopyridine allergy',
+      'history of tia or stroke',
+      'active pathologic bleeding',
+      'severe hepatic impairment',
+    ],
+    notes:
+      'P2Y12 platelet inhibitor. Loading dose 60 mg PO once, maintenance 10 mg PO daily (5 mg/day for patients < 60 kg or > 75 yr). Boxed warning: increased fatal/non-fatal bleeding risk; CONTRAINDICATED with any prior TIA or stroke history (the TRITON-TIMI 38 subgroup harm signal). Hold 7 days pre-elective surgery.',
+  },
+  {
+    drug: 'ticagrelor',
+    aliases: ['brilinta'],
+    adultMaxMgPerDay: 180,
+    contraindications: [
+      'ticagrelor allergy',
+      'active pathologic bleeding',
+      'severe hepatic impairment',
+      'history of intracranial hemorrhage',
+    ],
+    notes:
+      'Reversible P2Y12 inhibitor. ACS loading 180 mg PO once, maintenance 90 mg PO BID × 12 months then 60 mg PO BID. PEGASUS: 60 mg PO BID for long-term prevention after MI. Avoid concomitant strong CYP3A4 inhibitors (ketoconazole, ritonavir). Hold 5 days pre-elective surgery. Dyspnea is a common dose-limiting side effect (~14%).',
+  },
+  {
+    drug: 'rivaroxaban',
+    aliases: ['xarelto'],
+    adultMaxMgPerDay: 20,
+    contraindications: [
+      'rivaroxaban allergy',
+      'active pathologic bleeding',
+      'severe hepatic impairment',
+      'creatinine clearance <15',
+      'pregnancy',
+    ],
+    notes:
+      'Direct factor Xa inhibitor. AF prevention: 20 mg PO daily with evening meal (15 mg if CrCl 15-50). DVT/PE treatment: 15 mg PO BID × 21 days then 20 mg PO daily. CAD/PAD low-dose: 2.5 mg PO BID + aspirin 81 mg (COMPASS trial). Hold 24-48 h pre-procedure depending on bleeding risk and CrCl.',
+  },
+  {
+    drug: 'edoxaban',
+    aliases: ['savaysa', 'lixiana'],
+    adultMaxMgPerDay: 60,
+    contraindications: [
+      'edoxaban allergy',
+      'active pathologic bleeding',
+      'creatinine clearance >95 (af indication — paradoxical reduced efficacy)',
+      'creatinine clearance <15',
+      'pregnancy',
+    ],
+    notes:
+      'Direct factor Xa inhibitor. AF: 60 mg PO daily (30 mg if CrCl 15-50 or weight ≤ 60 kg or on certain P-gp inhibitors). VTE: 60 mg PO daily after 5-10 days of parenteral anticoagulant. Boxed warning: reduced efficacy in AF patients with CrCl > 95 — use a different DOAC there.',
+  },
+  {
+    drug: 'dabigatran',
+    aliases: ['pradaxa'],
+    adultMaxMgPerDay: 300,
+    contraindications: [
+      'dabigatran allergy',
+      'active pathologic bleeding',
+      'mechanical heart valve',
+      'creatinine clearance <15',
+      'severe renal impairment',
+    ],
+    notes:
+      'Direct thrombin inhibitor. AF / VTE: 150 mg PO BID (75 mg BID if CrCl 15-30). Idarucizumab (Praxbind) is the FDA-approved reversal agent. Avoid with P-gp inhibitors (verapamil, dronedarone) when CrCl is reduced. Hold 1-2 days pre-procedure depending on bleeding risk and CrCl.',
+  },
+  {
+    drug: 'cilostazol',
+    aliases: ['pletal'],
+    adultMaxMgPerDay: 200,
+    contraindications: [
+      'cilostazol allergy',
+      'heart failure of any severity',
+      'congestive heart failure',
+      'severe hepatic impairment',
+    ],
+    notes:
+      'Phosphodiesterase-3 inhibitor for intermittent claudication symptom relief (FDA-approved). Adult: 100 mg PO BID, 30 min before or 2 hr after meals. Boxed warning: CONTRAINDICATED in heart failure of any severity — class III/IV PDE-inhibitors caused mortality signal in milrinone HF trials. Common side effects: headache, palpitations, diarrhea. Effect on walking distance takes 8-12 weeks; reassess at 12 weeks before discontinuation.',
+  },
+  {
+    drug: 'pentoxifylline',
+    aliases: ['trental'],
+    adultMaxMgPerDay: 1200,
+    contraindications: [
+      'pentoxifylline allergy',
+      'methylxanthine allergy',
+      'recent cerebral or retinal hemorrhage',
+    ],
+    notes:
+      'Older methylxanthine derivative for claudication; modest effect on walking distance (~25 m improvement in meta-analyses). Adult: 400 mg PO TID with meals, max 1200 mg/day. Largely supplanted by cilostazol when not contraindicated, but remains useful when cilostazol is contraindicated (e.g. concurrent heart failure).',
+  },
+  {
+    drug: 'vorapaxar',
+    aliases: ['zontivity'],
+    adultMaxMgPerDay: 2.5,
+    contraindications: [
+      'vorapaxar allergy',
+      'history of stroke or tia',
+      'history of intracranial hemorrhage',
+      'active pathologic bleeding',
+    ],
+    notes:
+      'PAR-1 antagonist for secondary cardiovascular prevention (post-MI or PAD), as add-on to aspirin and/or clopidogrel. Adult: 2.5 mg PO daily. Boxed warning: CONTRAINDICATED with any history of stroke or TIA or intracranial hemorrhage. Long elimination half-life (~3-4 days) — limited reversibility for emergent bleeding or surgery.',
+  },
+  {
+    drug: 'iohexol',
+    aliases: ['omnipaque'],
+    complexDosing: true,
+    contraindications: [
+      'iohexol allergy',
+      'iodine contrast allergy',
+      'severe renal impairment',
+      'creatinine clearance <30',
+      'untreated hyperthyroidism',
+      'multiple myeloma without adequate hydration',
+    ],
+    notes:
+      'Low-osmolar iodinated contrast for angiography / CT / urography. Volume is procedure-dependent (typical peripheral angiogram 50-150 mL; EVAR up to 200 mL). Contrast-induced nephropathy risk: eGFR < 30 contraindicated for non-emergent imaging; eGFR 30-60 use minimum volume + N-acetylcysteine + IV hydration. Hold metformin 48 hr post-contrast in eGFR 30-60. Pre-medicate with steroids + diphenhydramine for prior contrast allergy (non-anaphylactic).',
+  },
+  {
+    drug: 'iodixanol',
+    aliases: ['visipaque'],
+    complexDosing: true,
+    contraindications: [
+      'iodixanol allergy',
+      'iodine contrast allergy',
+      'severe renal impairment',
+      'creatinine clearance <30',
+      'untreated hyperthyroidism',
+    ],
+    notes:
+      'Iso-osmolar iodinated contrast; preferred for high-risk-of-contrast-nephropathy patients (eGFR 30-60, diabetes, advanced age) per ACR + SVS guidelines. Same total-volume considerations as iohexol. Some evidence of reduced contrast-induced nephropathy vs low-osmolar agents in randomized trials, though magnitude debated.',
+  },
+
   {
     drug: 'bariatric multivitamin',
     aliases: ['bariatric mvi', 'bariatric advantage', 'celebrate vitamins', 'bariatric fusion', 'optisource'],
