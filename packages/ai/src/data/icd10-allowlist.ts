@@ -284,6 +284,267 @@ const STARTER_ICD10_CODES: ReadonlyArray<string> = [
   // Dumping syndrome — post-bypass specific, both early + late forms
   // share the same R10.x / R11 family root.
   'K91.89',    // Other postprocedural complications and disorders of digestive system (covers dumping NEC)
+
+  // === Vascular Surgery cohort (2026-05-12) ===
+  // Added with the `vascular-surgery` specialty. Covers the I65-I77
+  // arterial families (atherosclerosis, aneurysm, dissection, other),
+  // the I82-I83 venous families, G45 TIA, peripheral-bypass status,
+  // dialysis-access mechanical complications, and chronic-Rx Z-codes
+  // for antiplatelet / anticoagulant. The block deliberately includes
+  // the laterality-specific 4th and 5th digits (I70.211 right LE
+  // claudication, I70.212 left, I70.213 bilateral, I70.219 unspecified)
+  // because the L7a model emits the lateralized form when the SOAP
+  // names a side — the unsided I70.21 alone would silently drop the
+  // lateralized code at the allowlist.
+
+  // ── Arterial atherosclerosis (I70.x — full breakdown) ──────────────
+  'I70.0',     // Atherosclerosis of aorta
+  'I70.1',     // Atherosclerosis of renal artery
+  'I70.201',   // Unspecified atherosclerosis of native arteries of extremities, right leg
+  'I70.202',   // … left leg
+  'I70.203',   // … bilateral legs
+  'I70.208',   // … other extremity
+  'I70.209',   // … unspecified extremity
+  'I70.211',   // Atherosclerosis of native arteries of extremities with intermittent claudication, right leg
+  'I70.212',   // … left leg
+  'I70.213',   // … bilateral legs
+  'I70.218',   // … other extremity
+  'I70.219',   // … unspecified extremity
+  'I70.221',   // Atherosclerosis of native arteries of extremities with rest pain, right leg
+  'I70.222',   // … left leg
+  'I70.223',   // … bilateral legs
+  'I70.228',   // … other extremity
+  'I70.229',   // … unspecified extremity
+  'I70.231',   // Atherosclerosis with ulceration, right leg, calf
+  'I70.232',   // … right leg, ankle (other commonly-emitted laterality combo carried)
+  'I70.233',   // … right leg, heel and midfoot
+  'I70.234',   // … right leg, other site of foot
+  'I70.235',   // … right leg, other / unspecified site
+  'I70.241',   // … left leg, calf
+  'I70.244',   // … left leg, other site of foot
+  'I70.245',   // … left leg, other / unspecified site
+  'I70.25',    // Atherosclerosis of native arteries of extremities with gangrene
+  'I70.261',   // … with gangrene, right leg
+  'I70.262',   // … with gangrene, left leg
+  'I70.263',   // … with gangrene, bilateral legs
+  'I70.268',   // … with gangrene, other extremity
+  'I70.269',   // … with gangrene, unspecified extremity
+  'I70.301',   // Unspecified atherosclerosis of unspecified type of bypass graft(s) of the extremities, right leg
+  'I70.302',   // … left leg
+  'I70.311',   // Atherosclerosis of unspec bypass graft of right leg with intermittent claudication
+  'I70.312',   // … left leg
+  'I70.71',    // Atherosclerosis of other type of bypass graft(s) of the extremities with rest pain
+  'I70.79',    // Other atherosclerosis of other type of bypass graft(s) of the extremities
+  'I70.8',     // Atherosclerosis of other arteries
+  'I70.90',    // Unspecified atherosclerosis
+  'I70.92',    // Chronic total occlusion of artery of the extremities
+
+  // ── Peripheral vascular disease (I73.x) ────────────────────────────
+  'I73.00',    // Raynaud syndrome without gangrene
+  'I73.01',    // Raynaud syndrome with gangrene
+  'I73.1',     // Thromboangiitis obliterans (Buerger disease)
+  'I73.81',    // Erythromelalgia
+  'I73.89',    // Other specified peripheral vascular diseases
+  'I73.9',     // Peripheral vascular disease, unspecified
+
+  // ── Arterial embolism / thrombosis (I74.x) ─────────────────────────
+  'I74.01',    // Saddle embolus of abdominal aorta
+  'I74.09',    // Other arterial embolism and thrombosis of abdominal aorta
+  'I74.10',    // Embolism and thrombosis of unspecified parts of aorta
+  'I74.11',    // Embolism and thrombosis of thoracic aorta
+  'I74.19',    // Embolism and thrombosis of other parts of aorta
+  'I74.2',     // Embolism and thrombosis of arteries of the upper extremities
+  'I74.3',     // Embolism and thrombosis of arteries of the lower extremities
+  'I74.4',     // Embolism and thrombosis of arteries of extremities, unspecified
+  'I74.5',     // Embolism and thrombosis of iliac artery
+  'I74.8',     // Embolism and thrombosis of other arteries
+  'I74.9',     // Embolism and thrombosis of unspecified artery
+
+  // ── Other arterial disorders (I77.x) ───────────────────────────────
+  'I77.0',     // Arteriovenous fistula, acquired
+  'I77.1',     // Stricture of artery
+  'I77.2',     // Rupture of artery
+  'I77.3',     // Arterial fibromuscular dysplasia
+  'I77.4',     // Celiac artery compression syndrome
+  'I77.5',     // Necrosis of artery
+  'I77.6',     // Arteritis, unspecified
+  'I77.70',    // Dissection of unspecified artery
+  'I77.71',    // Dissection of carotid artery
+  'I77.72',    // Dissection of iliac artery
+  'I77.73',    // Dissection of renal artery
+  'I77.74',    // Dissection of vertebral artery
+  'I77.75',    // Dissection of other precerebral arteries
+  'I77.76',    // Dissection of artery of upper extremity
+  'I77.77',    // Dissection of artery of lower extremity
+  'I77.79',    // Dissection of other specified artery
+  'I77.810',   // Thoracic aortic ectasia
+  'I77.811',   // Abdominal aortic ectasia
+  'I77.812',   // Thoracoabdominal aortic ectasia
+  'I77.89',    // Other specified disorders of arteries and arterioles
+  'I77.9',     // Disorder of arteries and arterioles, unspecified
+
+  // ── Aortic aneurysm / dissection (I71.x, I72.x) ────────────────────
+  'I71.00',    // Dissection of unspecified site of aorta
+  'I71.01',    // Dissection of thoracic aorta
+  'I71.02',    // Dissection of abdominal aorta
+  'I71.03',    // Dissection of thoracoabdominal aorta
+  'I71.1',     // Thoracic aortic aneurysm, ruptured
+  'I71.2',     // Thoracic aortic aneurysm, without rupture
+  'I71.3',     // Abdominal aortic aneurysm, ruptured
+  'I71.4',     // Abdominal aortic aneurysm, without rupture
+  'I71.5',     // Thoracoabdominal aortic aneurysm, ruptured
+  'I71.6',     // Thoracoabdominal aortic aneurysm, without rupture
+  'I71.8',     // Aortic aneurysm of unspecified site, ruptured
+  'I71.9',     // Aortic aneurysm of unspecified site, without rupture
+  'I72.0',     // Aneurysm of carotid artery
+  'I72.1',     // Aneurysm of artery of upper extremity
+  'I72.2',     // Aneurysm of renal artery
+  'I72.3',     // Aneurysm of iliac artery
+  'I72.4',     // Aneurysm of artery of lower extremity
+  'I72.5',     // Aneurysm of other precerebral arteries
+  'I72.6',     // Aneurysm of vertebral artery
+  'I72.8',     // Aneurysm of other specified arteries
+  'I72.9',     // Aneurysm of unspecified site
+
+  // ── Carotid + cerebrovascular (I65 / I66 / I63 / G45) ──────────────
+  'I65.0',     // Occlusion and stenosis of vertebral artery
+  'I65.1',     // Occlusion and stenosis of basilar artery
+  'I65.21',    // Occlusion and stenosis of right carotid artery
+  'I65.22',    // Occlusion and stenosis of left carotid artery
+  'I65.23',    // Occlusion and stenosis of bilateral carotid arteries
+  // I65.29 already present above (pre-existing cerebrovascular block)
+  'I65.8',     // Occlusion and stenosis of other precerebral arteries
+  'I65.9',     // Occlusion and stenosis of unspecified precerebral artery
+  'I66.01',    // Occlusion and stenosis of right MCA
+  'I66.02',    // Occlusion and stenosis of left MCA
+  'I66.03',    // Occlusion and stenosis of bilateral MCAs
+  'I63.00',    // Cerebral infarction due to thrombosis of unspecified precerebral artery
+  'I63.10',    // Cerebral infarction due to embolism of unspecified precerebral artery
+  'I63.20',    // Cerebral infarction due to unspecified occlusion or stenosis of precerebral arteries
+  'I63.30',    // Cerebral infarction due to thrombosis of unspecified cerebral artery
+  'I63.40',    // Cerebral infarction due to embolism of unspecified cerebral artery
+  'I63.50',    // Cerebral infarction due to unspecified occlusion or stenosis of cerebral arteries
+  'I63.6',     // Cerebral infarction due to cerebral venous thrombosis, nonpyogenic
+  'I63.8',     // Other cerebral infarction
+  // I63.9 already present above (pre-existing cerebrovascular block)
+  'G45.0',     // Vertebro-basilar artery syndrome
+  'G45.1',     // Carotid artery syndrome (hemispheric)
+  'G45.2',     // Multiple and bilateral precerebral artery syndromes
+  'G45.3',     // Amaurosis fugax
+  'G45.4',     // Transient global amnesia
+  'G45.8',     // Other transient cerebral ischemic attacks and related syndromes
+  'G45.9',     // Transient cerebral ischemic attack, unspecified
+
+  // ── Venous (I82.x / I83.x / I80.x / I87.x) ─────────────────────────
+  // The full venous block lands here (Vein Care work referenced in the
+  // brief had not yet shipped to main when this PR landed).
+  'I80.00',    // Phlebitis and thrombophlebitis of unspecified superficial vessels of lower extremities
+  'I80.01',    // … right LE
+  'I80.02',    // … left LE
+  'I80.03',    // … bilateral LE
+  'I80.10',    // Phlebitis and thrombophlebitis of unspecified femoral vein
+  'I80.11',    // … right femoral vein
+  'I80.12',    // … left femoral vein
+  'I80.13',    // … bilateral femoral veins
+  'I80.211',   // Phlebitis and thrombophlebitis of right iliac vein
+  'I80.212',   // … left iliac vein
+  'I80.221',   // Phlebitis and thrombophlebitis of right popliteal vein
+  'I80.222',   // … left popliteal vein
+  'I80.231',   // Phlebitis and thrombophlebitis of right tibial vein
+  'I80.232',   // … left tibial vein
+  'I80.291',   // Phlebitis and thrombophlebitis of other deep vessels of right LE
+  'I80.292',   // … left LE
+  'I80.3',     // Phlebitis and thrombophlebitis of LE, unspecified
+  'I82.401',   // Acute embolism and thrombosis of unspecified deep veins of right LE
+  'I82.402',   // … left LE
+  'I82.403',   // … bilateral LE
+  'I82.4Y1',   // Acute embolism and thrombosis of unspecified deep veins of proximal LE, right
+  'I82.4Z1',   // … distal LE, right
+  'I82.501',   // Chronic embolism and thrombosis of unspecified deep veins of right LE
+  'I82.502',   // … left LE
+  'I82.503',   // … bilateral LE
+  'I82.621',   // Acute embolism and thrombosis of deep veins of right upper extremity
+  'I82.622',   // … left upper extremity
+  'I82.890',   // Other acute embolism and thrombosis of other specified veins
+  'I82.91',    // Embolism and thrombosis of unspecified vein
+  'I83.001',   // Varicose veins of right LE with ulcer of thigh
+  'I83.002',   // … with ulcer of calf
+  'I83.003',   // … with ulcer of ankle
+  'I83.004',   // … with ulcer of heel and midfoot
+  'I83.008',   // … with ulcer of other part of LE
+  'I83.011',   // Varicose veins of left LE with ulcer of thigh
+  'I83.012',   // … calf
+  'I83.013',   // … ankle
+  'I83.014',   // … heel and midfoot
+  'I83.018',   // … other part of LE
+  'I83.10',    // Varicose veins of unspecified LE with inflammation
+  'I83.11',    // … right LE with inflammation
+  'I83.12',    // … left LE with inflammation
+  'I83.20',    // Varicose veins of unspecified LE with both ulcer and inflammation
+  'I83.21',    // … right LE with both ulcer and inflammation
+  'I83.22',    // … left LE with both ulcer and inflammation
+  'I83.81',    // Varicose veins of LE with pain — right
+  'I83.811',   // Varicose veins of right LE with pain
+  'I83.812',   // … left LE
+  'I83.813',   // … bilateral LE
+  'I83.90',    // Asymptomatic varicose veins of unspecified LE
+  'I83.91',    // … right LE
+  'I83.92',    // … left LE
+  'I83.93',    // … bilateral LE
+  'I87.001',   // Postthrombotic syndrome without complications, right LE
+  'I87.002',   // … left LE
+  'I87.003',   // … bilateral LE
+  'I87.011',   // Postthrombotic syndrome with ulcer of right LE
+  'I87.012',   // … left LE
+  'I87.013',   // … bilateral LE
+  'I87.2',     // Venous insufficiency (chronic) (peripheral)
+  'I87.30',    // Chronic venous hypertension (idiopathic) without complications of unspecified LE
+  'I87.31',    // … right LE
+  'I87.32',    // … left LE
+  'I87.33',    // … bilateral LE
+  'I87.8',     // Other specified disorders of veins
+  'I87.9',     // Disorder of vein, unspecified
+
+  // ── Status codes — vascular implants + dialysis dependence ─────────
+  'Z95.5',     // Presence of coronary angioplasty implant and graft
+  'Z95.811',   // Presence of heart assist device
+  'Z95.820',   // Presence of peripheral vascular graft
+  'Z95.828',   // Presence of other vascular implants and grafts
+  'Z95.9',     // Presence of cardiac and vascular implant and graft, unspecified
+  'Z45.89',    // Encounter for adjustment and management of other implanted devices
+  'Z99.2',     // Dependence on renal dialysis
+
+  // ── Mechanical complications of vascular / dialysis devices ────────
+  'T82.41XA',  // Breakdown (mechanical) of dialysis catheter, initial encounter
+  'T82.42XA',  // Displacement of dialysis catheter
+  'T82.43XA',  // Leakage of dialysis catheter
+  'T82.49XA',  // Other complication of dialysis catheter
+  'T82.510A',  // Breakdown of surgically created arteriovenous fistula
+  'T82.520A',  // Displacement of surgically created arteriovenous fistula
+  'T82.530A',  // Leakage of surgically created arteriovenous fistula
+  'T82.590A',  // Other mechanical complication of surgically created AV fistula
+  'T82.510X',  // (shape carried — same family, X-suffix variant for completeness)
+  'T82.61XA',  // Infection and inflammatory reaction due to cardiac valve prosthesis
+  'T82.7XXA',  // Infection and inflammatory reaction due to other cardiac and vascular devices, implants and grafts
+  'T82.818A',  // Embolism due to vascular prosthetic devices, implants and grafts
+  'T82.828A',  // Fibrosis due to vascular prosthetic devices, implants and grafts
+  'T82.838A',  // Hemorrhage due to vascular prosthetic devices, implants and grafts
+  'T82.848A',  // Pain from vascular prosthetic devices, implants and grafts
+  'T82.858A',  // Stenosis of vascular prosthetic devices, implants and grafts
+  'T82.868A',  // Thrombosis due to vascular prosthetic devices, implants and grafts
+  'T82.898A',  // Other specified complication of vascular prosthetic devices, implants and grafts
+  'T85.71XA',  // Infection and inflammatory reaction due to peritoneal dialysis catheter
+  // F-codes — smoking dependence (the BIGGEST PAD risk-factor modifier)
+  // is documented in nearly every vascular consult.
+  'F17.200',   // Nicotine dependence, unspecified, uncomplicated
+  'F17.201',   // … in remission
+  'F17.210',   // Nicotine dependence, cigarettes, uncomplicated
+  'F17.211',   // … in remission
+  'F17.218',   // … with other nicotine-induced disorders
+  'F17.219',   // … with unspecified nicotine-induced disorders
+  // Long-term anticoagulant / antiplatelet Z-codes — every PAD / post-
+  // stent / post-bypass / post-EVAR patient carries one.
+  'Z79.02',    // Long-term (current) use of antiplatelet/antithrombotic
 ];
 
 /**
