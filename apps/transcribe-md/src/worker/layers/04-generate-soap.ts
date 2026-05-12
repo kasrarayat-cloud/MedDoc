@@ -36,6 +36,14 @@ export interface Layer4Input {
    *  and for dictation runs without utterance segmentation. Closes
    *  audit Findings 02.5 + 07.3. */
   audioConfidenceStats: AudioConfidenceStats | null;
+  /** 2026-05-12 interpreter-mode (Sylvia incident follow-up). When
+   *  true, the L4 prompt adds an "INTERPRETED VISIT" guidance block
+   *  instructing the model to consolidate the interpreter's English
+   *  paraphrases with the patient's native-language utterances into a
+   *  single patient-voice narrative in the SOAP. Without this, an
+   *  interpreted visit's HPI/Subjective reads as a 3-way back-and-
+   *  forth instead of a coherent patient story. */
+  interpreterMode?: boolean;
 }
 
 export async function runLayer4GenerateSoap(
@@ -93,6 +101,30 @@ export async function runLayer4GenerateSoap(
         ].join('\n')
       : null;
 
+  const interpreterAlert = input.interpreterMode
+    ? [
+        'INTERPRETED VISIT: this transcript was produced from audio that',
+        'included an interpreter (typically Spanish-English or another',
+        'language pair). The transcript may contain code-switching between',
+        'languages, paraphrased translations, and back-and-forth between',
+        'three voices (doctor, patient, interpreter).',
+        '',
+        'When writing the SOAP:',
+        '- Treat the interpreter\'s English-translation utterances as the',
+        '  patient\'s voice (the interpreter is a conduit, not a separate',
+        '  clinical actor). Consolidate "interpreter says X about patient"',
+        '  + "patient says Y in [language]" into a single patient narrative.',
+        '- The HPI should read as a coherent patient story, not a 3-way',
+        '  back-and-forth. Drop interpreter mechanics ("interpreter relayed",',
+        '  "in Spanish she said") unless clinically load-bearing.',
+        '- If the interpreter rephrased ambiguously, flag the section with',
+        '  "[via interpreter]" so the reviewing clinician knows the source.',
+        '- Write the SOAP in English regardless of the patient\'s native',
+        '  language. Direct quotes that appear in the transcript in the',
+        '  non-English language should be translated to English in the SOAP.',
+      ].join('\n')
+    : null;
+
   const system = [
     'You are a senior clinician writing a SOAP note from a clinical',
     'visit. Use ONLY the entities provided and the transcript as',
@@ -100,6 +132,8 @@ export async function runLayer4GenerateSoap(
     '',
     audioQualityAlert,
     audioQualityAlert ? '' : null,
+    interpreterAlert,
+    interpreterAlert ? '' : null,
     'Structure the note with these markdown headings exactly:',
     '',
     '## Subjective',

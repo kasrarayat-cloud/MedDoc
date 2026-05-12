@@ -57,6 +57,15 @@ export interface Layer2Input {
   practiceId: string;
   userId: string | null;
   utterances: DeepgramUtterance[];
+  /** 2026-05-12 interpreter-mode (Sylvia incident follow-up). When
+   *  true, L2 expects 3 distinct voices (doctor + patient + interpreter)
+   *  and the prompt's "Rules" section adds a paragraph that tells the
+   *  model to recognize the interpreter as a translation conduit —
+   *  their utterances paraphrase the patient's intent in English. The
+   *  speakerMap role enum is unchanged; the interpreter still maps to
+   *  `other`, but L4 reads `interpreterMode` separately to decide how
+   *  to merge interpreter speech into the SOAP narrative. */
+  interpreterMode?: boolean;
 }
 
 export interface Layer2Output {
@@ -114,6 +123,24 @@ export async function runLayer2SpeakerRoles(
     );
   }
 
+  const interpreterParagraph = input.interpreterMode
+    ? [
+        '',
+        'INTERPRETER SESSION CONTEXT:',
+        '- This visit was flagged as having a medical interpreter present.',
+        '  Expect THREE distinct voices: doctor, patient, and interpreter.',
+        '- The interpreter\'s utterances are translation conduits — they',
+        '  paraphrase the patient\'s words to the doctor in English and the',
+        '  doctor\'s words to the patient in the patient\'s native language.',
+        '  Map the interpreter\'s speaker ID to role "other".',
+        '- If the transcript contains both English and Spanish (or another',
+        '  non-English language), the bilingual speaker is almost always',
+        '  the interpreter, not the patient or doctor. The patient typically',
+        '  speaks only in the non-English language; the doctor speaks only',
+        '  in English.',
+      ].join('\n')
+    : '';
+
   const system = [
     'You are a medical scribe assistant. You are given an anonymized',
     'transcript with diarized speakers. Your task is to assign each',
@@ -128,6 +155,7 @@ export async function runLayer2SpeakerRoles(
     '- "other" covers nurses, techs, interpreters — anyone clearly',
     '  clinical-team but not the primary doctor.',
     '- If you cannot confidently determine a role, use "unknown".',
+    interpreterParagraph,
     '',
     'Respond with VALID JSON ONLY, no markdown fences. Shape:',
     '{',
