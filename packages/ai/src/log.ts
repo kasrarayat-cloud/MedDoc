@@ -16,6 +16,13 @@ export interface AiCallLogInput extends AiLogContext {
   latencyMs: number;
   inputTokens?: number | null;
   outputTokens?: number | null;
+  /** Anthropic prompt-caching: cache_read_input_tokens from the SDK
+   *  response.usage. Stored to credit the 0.10x rate at cost time. */
+  cacheReadInputTokens?: number | null;
+  /** Anthropic prompt-caching: cache_creation_input_tokens. Billed at
+   *  1.25x (5-min) or 2x (1-hour). Today everything we write uses
+   *  ephemeral so the 1.25x multiplier applies. */
+  cacheCreationInputTokens?: number | null;
   costUsdCents?: number | null;
   success: boolean;
   errorCode?: string | null;
@@ -36,6 +43,8 @@ export function logAiCall(input: AiCallLogInput): void {
         latencyMs: input.latencyMs,
         inputTokens: input.inputTokens ?? null,
         outputTokens: input.outputTokens ?? null,
+        cacheReadInputTokens: input.cacheReadInputTokens ?? 0,
+        cacheCreationInputTokens: input.cacheCreationInputTokens ?? 0,
         costUsdCents: input.costUsdCents ?? null,
         success: input.success,
         errorCode: input.errorCode ?? null,
