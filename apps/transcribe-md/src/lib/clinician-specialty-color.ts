@@ -103,6 +103,18 @@ const SPECIALTY_TONES: Record<string, ClinicianAvatarTone> = {
   bariatricsurgery: 'coral',
   bariatric: 'coral',
   bariatrics: 'coral',
+
+  // Vascular Surgery — sky, the cool-procedural family. Sits alongside
+  // orthopedics + pulmonology (also sky) as a surgical-but-not-cardiac-
+  // emergency-room specialty. Visually distinct from cardiology /
+  // OB-GYN / bariatric (all coral), which lets the dashboard signal
+  // "this is the vascular service" at a glance even on busy day-of-
+  // surgery lists. Alias `phlebology` covers the vein-only practice
+  // pattern; `cvs` is the common chart abbreviation.
+  vascularsurgery: 'sky',
+  vascular: 'sky',
+  cvs: 'sky',
+  phlebology: 'sky',
 };
 
 function normaliseSpecialty(raw: string | null | undefined): string {
