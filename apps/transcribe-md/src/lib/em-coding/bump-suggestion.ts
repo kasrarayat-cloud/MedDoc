@@ -110,6 +110,22 @@ function revenueDelta(from: EmCode, to: EmCode): number {
   return REVENUE_DELTA[`${from}->${to}`] ?? 0;
 }
 
+/** Maximum number of gaps to surface as an "almost-there" bump CTA.
+ *
+ *  Pre-2026-05-12 this was 2. That choked the bump CTA on text_notes
+ *  visits whose SOAPs are shorter than transcribed audio: the
+ *  deterministic counters land lower (e.g. 3 ROS systems vs 6-10 in a
+ *  transcribed visit), so a 99214 visit looking at 99215 routinely
+ *  produced 3 gaps (ROS + Exam + MDM) and the CTA never surfaced —
+ *  zero EM_BUMP_APPLIED rows across 9 text_notes + 4 voice_dictation
+ *  visits in the 30-day window pre-fix, vs 12 / 35 for audio_upload.
+ *
+ *  Raised to 4 so doctors see the gap list and can act on it via the
+ *  BumpModal even when 3-4 dimensions need work. >4 still hides —
+ *  that's the "you'd need to rewrite the note from scratch" case
+ *  where the CTA noise exceeds the value. */
+const ALMOST_THERE_GAP_THRESHOLD = 4;
+
 /** Produce a BumpSuggestion or null per rubric §5. */
 export function shouldShowBumpCta(
   current: EmCode,
@@ -129,7 +145,7 @@ export function shouldShowBumpCta(
       revenueDelta: revenueDelta(current, next),
     };
   }
-  if (gaps.length <= 2) {
+  if (gaps.length <= ALMOST_THERE_GAP_THRESHOLD) {
     return {
       mode: 'almost-there',
       toCode: next,
