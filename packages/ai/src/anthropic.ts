@@ -40,6 +40,26 @@ function capErrorDetails(raw: string): string {
   );
 }
 
+/** Normalised view of `response.usage`. The Anthropic SDK returns four
+ *  token counts per call; we extract them once at the top of each
+ *  request and pass the shape through every log site so cost + cache
+ *  attribution stays consistent. `cache_*_input_tokens` are nullable in
+ *  the SDK — coalesce to 0 so the dispatcher sees a clean number. */
+interface NormalizedUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadInputTokens: number;
+  cacheCreationInputTokens: number;
+}
+function extractUsage(u: Anthropic.Messages.Usage): NormalizedUsage {
+  return {
+    inputTokens: u.input_tokens,
+    outputTokens: u.output_tokens,
+    cacheReadInputTokens: u.cache_read_input_tokens ?? 0,
+    cacheCreationInputTokens: u.cache_creation_input_tokens ?? 0,
+  };
+}
+
 /** Q2 follow-up — Anthropic deprecated `temperature` on the Opus 4
  *  family (4.7 returns 400 invalid_request_error("`temperature` is
  *  deprecated for this model.")). The Sonnet + Haiku families still
@@ -168,6 +188,8 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
       .replace(/```$/, '')
       .trim();
 
+    const usage = extractUsage(response.usage);
+
     let parsed: unknown;
     try {
       parsed = JSON.parse(unfenced);
@@ -177,12 +199,16 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
         provider: 'anthropic',
         promptHash,
         latencyMs,
-        inputTokens: response.usage.input_tokens,
-        outputTokens: response.usage.output_tokens,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        cacheReadInputTokens: usage.cacheReadInputTokens,
+        cacheCreationInputTokens: usage.cacheCreationInputTokens,
         costUsdCents: claudeCostCents(
           args.model,
-          response.usage.input_tokens,
-          response.usage.output_tokens
+          usage.inputTokens,
+          usage.outputTokens,
+          usage.cacheReadInputTokens,
+          usage.cacheCreationInputTokens,
         ),
         success: false,
         errorCode: 'JSON_PARSE_FAIL',
@@ -198,12 +224,16 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
         provider: 'anthropic',
         promptHash,
         latencyMs,
-        inputTokens: response.usage.input_tokens,
-        outputTokens: response.usage.output_tokens,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        cacheReadInputTokens: usage.cacheReadInputTokens,
+        cacheCreationInputTokens: usage.cacheCreationInputTokens,
         costUsdCents: claudeCostCents(
           args.model,
-          response.usage.input_tokens,
-          response.usage.output_tokens
+          usage.inputTokens,
+          usage.outputTokens,
+          usage.cacheReadInputTokens,
+          usage.cacheCreationInputTokens,
         ),
         success: false,
         errorCode: 'SCHEMA_FAIL',
@@ -225,12 +255,16 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
       provider: 'anthropic',
       promptHash,
       latencyMs,
-      inputTokens: response.usage.input_tokens,
-      outputTokens: response.usage.output_tokens,
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      cacheReadInputTokens: usage.cacheReadInputTokens,
+      cacheCreationInputTokens: usage.cacheCreationInputTokens,
       costUsdCents: claudeCostCents(
         args.model,
-        response.usage.input_tokens,
-        response.usage.output_tokens
+        usage.inputTokens,
+        usage.outputTokens,
+        usage.cacheReadInputTokens,
+        usage.cacheCreationInputTokens,
       ),
       success: true,
     });
@@ -243,10 +277,12 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
           visitId: args.visitId ?? null,
           metadata: { purpose: args.purpose, latencyMs },
         },
-        response.usage.input_tokens,
-        response.usage.output_tokens,
+        usage.inputTokens,
+        usage.outputTokens,
         args.model,
-        args.purpose
+        args.purpose,
+        usage.cacheReadInputTokens,
+        usage.cacheCreationInputTokens,
       )
     );
 
@@ -324,17 +360,23 @@ export async function anthropicCompleteText(
       .join('\n')
       .trim();
 
+    const usage = extractUsage(response.usage);
+
     logAiCall({
       ...args,
       provider: 'anthropic',
       promptHash,
       latencyMs,
-      inputTokens: response.usage.input_tokens,
-      outputTokens: response.usage.output_tokens,
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      cacheReadInputTokens: usage.cacheReadInputTokens,
+      cacheCreationInputTokens: usage.cacheCreationInputTokens,
       costUsdCents: claudeCostCents(
         args.model,
-        response.usage.input_tokens,
-        response.usage.output_tokens
+        usage.inputTokens,
+        usage.outputTokens,
+        usage.cacheReadInputTokens,
+        usage.cacheCreationInputTokens,
       ),
       success: true,
     });
@@ -347,17 +389,19 @@ export async function anthropicCompleteText(
           visitId: args.visitId ?? null,
           metadata: { purpose: args.purpose, latencyMs },
         },
-        response.usage.input_tokens,
-        response.usage.output_tokens,
+        usage.inputTokens,
+        usage.outputTokens,
         args.model,
-        args.purpose
+        args.purpose,
+        usage.cacheReadInputTokens,
+        usage.cacheCreationInputTokens,
       )
     );
 
     return {
       text,
-      inputTokens: response.usage.input_tokens,
-      outputTokens: response.usage.output_tokens,
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
     };
   } catch (err) {
     // Q2 follow-up — capture the structured Anthropic error body so
