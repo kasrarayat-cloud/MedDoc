@@ -106,7 +106,18 @@ describe('enqueueDlq — payload shape (PR-L)', () => {
   it('uses the canonical DLQ queue name', () => {
     // Sanity — the dashboard's bull-board adapter mounts queues by
     // name. If this constant ever drifts the dashboard goes blank.
-    expect(DLQ_QUEUE_NAME).toBe('dlq:permanent-failures');
+    // Renamed 2026-05-12 from `dlq:permanent-failures` (the colon
+    // caused BullMQ to reject the queue at construction time, which
+    // silently dropped every dead-lettered job — deep-audit G10).
+    expect(DLQ_QUEUE_NAME).toBe('dlq-permanent-failures');
+  });
+
+  it('queue name contains no characters BullMQ rejects (no :, no whitespace)', () => {
+    // Regression guard for G10. BullMQ throws "Queue name cannot
+    // contain :" at `new Queue(name, …)` if the name has a colon.
+    // Whitespace is also rejected. Keep this assertion as a hard
+    // pre-commit on any future rename.
+    expect(DLQ_QUEUE_NAME).not.toMatch(/[:\s]/);
   });
 });
 
