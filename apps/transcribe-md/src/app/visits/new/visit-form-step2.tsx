@@ -94,6 +94,35 @@ export function VisitFormStep2({
             placeholder="e.g. Headache for 3 days"
           />
         </div>
+
+        {/*
+          2026-05-12 interpreter mode (Sylvia incident follow-up).
+          Default OFF — the common case is a single-language visit.
+          When ON, L1 switches from nova-3-medical (English-only) to
+          nova-3 + detect_language=true + language=multi so a Spanish
+          patient + English doctor + Spanish interpreter session
+          produces a coherent transcript instead of the fragmentary
+          English-only-questions output we got pre-fix.
+        */}
+        <div className="sm:col-span-2">
+          <label className="flex items-start gap-3 cursor-pointer rounded-md border border-linear-border bg-linear-surface-2 px-3 py-2.5 transition-colors hover:border-linear-sage/50">
+            <input
+              name="interpreterMode"
+              type="checkbox"
+              className="mt-[3px] h-4 w-4 flex-none rounded border-linear-border accent-linear-sage focus:ring-2 focus:ring-linear-sage/30"
+            />
+            <span className="text-[13px] leading-snug text-linear-text">
+              With interpreter?
+              <span
+                className="block text-[12px] text-linear-text-3"
+                style={{ marginTop: 2 }}
+              >
+                Patient and clinician speak different languages? Check
+                to enable multilingual transcription.
+              </span>
+            </span>
+          </label>
+        </div>
       </form>
 
       <div className="mt-10">

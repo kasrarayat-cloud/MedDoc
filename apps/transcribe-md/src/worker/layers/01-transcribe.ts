@@ -37,6 +37,13 @@ export interface Layer1Input {
   userId: string | null;
   audioKey: string;
   audioMimeType: string | null;
+  /** 2026-05-12 interpreter-mode flag from the visit row. When true,
+   *  L1 switches from nova-3-medical (English-only) to nova-3 with
+   *  `detect_language: true` + `language: multi` so the multilingual
+   *  Spanish/English audio of an interpreted visit gets captured
+   *  instead of producing the fragmentary English-only transcript the
+   *  Sylvia incident surfaced. */
+  interpreterMode?: boolean;
 }
 
 export interface Layer1Output {
@@ -45,6 +52,11 @@ export interface Layer1Output {
   /** Count of distinct speaker IDs Deepgram returned (Layer 2 reads
    *  this to know how many roles to assign). */
   speakerCount: number;
+  /** 2026-05-12 interpreter-mode: IETF language tag Deepgram detected
+   *  (e.g. 'en', 'es', 'multi') on visits where interpreterMode was
+   *  set. Undefined on standard English visits. worker.ts persists
+   *  this to transcribe_visits.detectedLanguage. */
+  detectedLanguage?: string;
 }
 
 const BACKOFF_MS = 2_000;
@@ -90,12 +102,34 @@ export async function runLayer1Transcribe(
         },
       },
       mimeType: input.audioMimeType!,
-      deepgram: {
-        // Q2 fix-pack — biases nova-3-medical across the full clinical
-        // surface: medications (drug-name homophones) + anatomy + labs
-        // + procedures + common diagnoses. See `CLINICAL_KEYTERMS`.
-        keyterms: CLINICAL_KEYTERMS,
-      },
+      deepgram: input.interpreterMode
+        ? {
+            // 2026-05-12 interpreter-mode (Sylvia incident follow-up):
+            // nova-3-medical is English-only; running it on a mixed-
+            // language interpreted visit produces a fragmentary
+            // transcript with only the doctor's English questions.
+            // Switching to nova-3 general + detect_language=true +
+            // language=multi captures the code-switching audio.
+            // Domain-specific keyterm biasing is lost (Nova-3 general
+            // doesn't accept it the same way) — accepted trade-off
+            // since we'd rather have the full transcript with weaker
+            // drug-name handling than a half-conversation with strong
+            // medical bias.
+            model: 'nova-3',
+            options: {
+              detectLanguage: true,
+              // The 2-speaker hint is wrong for interpreter visits
+              // (doctor + patient + interpreter = 3 voices). Deepgram
+              // diarization handles N speakers natively; this just
+              // matches the SOAP-side expectation downstream.
+            },
+          }
+        : {
+            // Q2 fix-pack — biases nova-3-medical across the full clinical
+            // surface: medications (drug-name homophones) + anatomy + labs
+            // + procedures + common diagnoses. See `CLINICAL_KEYTERMS`.
+            keyterms: CLINICAL_KEYTERMS,
+          },
     });
   };
 
@@ -165,6 +199,14 @@ export async function runLayer1Transcribe(
       audioDurationSec: result.durationSec,
       audioConfidenceStats: (audioStats ?? null) as unknown as object,
       transcriptionProvider: result.provider,
+      // 2026-05-12 interpreter-mode: persist Deepgram's detected language
+      // tag so the future soft-banner reprocess flow can read it on
+      // English-only-mode visits to detect a non-English mis-classification.
+      // Only write when interpreterMode requested detection — non-interpreter
+      // visits keep the column at its default (null) value.
+      ...(input.interpreterMode && result.language
+        ? { detectedLanguage: result.language }
+        : {}),
       ...(fallbackReviewReason
         ? { needsReview: true, reviewReason: fallbackReviewReason }
         : lowConfFlag
@@ -206,5 +248,16 @@ export async function runLayer1Transcribe(
     durationSec: result.durationSec,
     utteranceCount: utterances.length,
     speakerCount: speakerIds.size || 1,
+    // result.language carries the Deepgram-detected tag on interpreter-
+    // mode visits ('en', 'es', 'multi'); on standard visits it's just
+    // the supplied 'en'. worker.ts persists this to transcribe_visits
+    // .detectedLanguage so the soft-banner reprocess flow can surface
+    // misclassified English-only-mode visits as needing interpreter mode.
+    detectedLanguage:
+      input.interpreterMode && result.language && result.language !== 'en'
+        ? result.language
+        : input.interpreterMode
+          ? result.language ?? undefined
+          : undefined,
   };
 }
