@@ -141,6 +141,44 @@ export const L7A_SYSTEM_PROMPT: string = [
     'CRITICAL: If you cannot cite a specific evidence_quote for a code,',
     'OMIT the code. Hallucinating ICD codes can constitute billing fraud.',
     '',
+    // 2026-05-13 cross-input-mode-audit Finding 3 — procedure-dominant
+    // visits (suspicious-mole biopsy, postpartum visit, acute ankle
+    // sprain) were returning empty `codes: []` because the model
+    // reasoned "the procedure CPT codes carry the billing here." Every
+    // billable encounter has at least one diagnosis or encounter Z-code;
+    // an empty diagnosis list is a billing-compliance gap. The rule
+    // below is the floor.
+    'MINIMUM CODING REQUIREMENT — EVERY VISIT EMITS AT LEAST ONE CODE.',
+    'Every clinical encounter has at minimum ONE billable diagnosis or',
+    'encounter Z-code, even when the visit\'s billing center is a',
+    'procedure or routine follow-up. Returning an empty `codes` array',
+    'is not an acceptable output unless the SOAP itself is empty.',
+    '',
+    'Specific patterns the model SHOULD match (not optional):',
+    '- Routine postpartum visit / lactation check → Z39.0 / Z39.1 / Z39.2.',
+    '- Suspicious-mole biopsy / nevus excision → D22.x (melanocytic nevi',
+    '  by site) or D48.5 (uncertain behavior, pre-pathology). Do NOT',
+    '  leave a derm-biopsy visit without a diagnosis code — the path',
+    '  result is the eventual code; the day-of code is the clinical',
+    '  impression at biopsy time.',
+    '- Acute ankle sprain / joint sprain → S93.4xxA / S83.xxxA / S39.012A',
+    '  for the lumbar strain shape. Acute injuries ALWAYS get an S-code.',
+    '- Knee OA injection / aftercare visit → M17.x (OA), plus M25.x',
+    '  joint-pain-by-site, plus Z47.x aftercare when relevant.',
+    '- Routine well-care / preventive → Z00.00 / Z00.01 / Z12.x screening',
+    '  Z-codes; pair with any chronic comorbidity codes for HCC risk.',
+    '- Counseling-dominant visit (weight, smoking, diet, contraception)',
+    '  → Z71.x family + the underlying condition code(s).',
+    '- Lifestyle / metabolic follow-up → primary chronic-condition',
+    '  code (E11.x for T2DM, E66.x for obesity) is mandatory.',
+    '- Imaging or procedure pre-op → encounter Z-code (Z01.81x pre-procedural',
+    '  exams) + the indication condition code.',
+    '',
+    'If you genuinely cannot identify any diagnosis or encounter Z-code',
+    'from the SOAP, return ONE confidence:0.3-0.4 Z76.89 ("other specified',
+    'reason for encounter") and let the L7a post-validation layer flag',
+    'the visit for review. This is preferable to returning `codes: []`.',
+    '',
     'Respond with VALID JSON ONLY, no markdown fences:',
     '{ "codes": [{ "code": "...", "description": "...",',
     '              "evidence_quote": "...", "confidence": 0.0,',
@@ -230,6 +268,42 @@ export async function runLayer7aIcdCoding(
       data: {
         needsReview: true,
         reviewReason: `${lowConfCodes.length} ICD code${lowConfCodes.length === 1 ? '' : 's'} at low confidence — verify before billing: ${lowConfCodes.map((c) => c.code).join(', ')}.`,
+      },
+    });
+  }
+
+  // 2026-05-13 cross-input-mode-audit Finding 3 post-validation —
+  // even with the prompt's MINIMUM CODING REQUIREMENT instruction, the
+  // model can still return empty codes (it can also return one Z76.89
+  // last-resort code, which we treat as semantically equivalent to
+  // empty for the purposes of the doctor's review banner). Flip
+  // needsReview + reviewReason so the billing-compliance gap surfaces
+  // before sign-off.
+  const isPlaceholderOnly =
+    accepted.length === 1 && accepted[0].code.toUpperCase() === 'Z76.89';
+  if (accepted.length === 0 || isPlaceholderOnly) {
+    const reason = accepted.length === 0
+      ? `Auto-coding returned no diagnoses for this ${input.specialty.replace(/-/g, ' ')} encounter — verify before signing. Every billable visit should carry at least one diagnosis or encounter Z-code.`
+      : 'Auto-coding could not identify a specific diagnosis (placeholder Z76.89 used) — verify before signing.';
+    await prisma.transcribeVisit.update({
+      where: { id: input.visitId },
+      data: {
+        needsReview: true,
+        reviewReason: reason,
+      },
+    });
+    void logAudit({
+      action: 'VISIT_AUTOMATION_INCOMPLETE',
+      targetId: input.visitId,
+      targetType: 'TranscribeVisit',
+      userId: input.userId,
+      practiceId: input.practiceId,
+      success: false,
+      metadata: {
+        layer: 'l7a-icd',
+        emptyArray: accepted.length === 0,
+        placeholderOnly: isPlaceholderOnly,
+        specialty: input.specialty,
       },
     });
   }
