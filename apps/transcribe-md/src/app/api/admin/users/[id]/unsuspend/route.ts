@@ -20,6 +20,18 @@ export const POST = adminApi('users:unsuspend', async (req, ctx) => {
   const id = segs[segs.indexOf('users') + 1];
   if (!id) return NextResponse.json({ error: 'Bad path' }, { status: 400 });
 
+  // Security audit P1-E: defense-in-depth. A suspended admin can't
+  // reach this endpoint anyway (their session is invalidated), but
+  // an admin self-unsuspending after a transient block-then-reload
+  // would be a self-rehabilitation footgun — bounce so the audit
+  // trail captures a peer's action.
+  if (id === ctx.session.user.id) {
+    return NextResponse.json(
+      { error: 'Cannot unsuspend your own account — ask a peer.' },
+      { status: 403 }
+    );
+  }
+
   const user = await prisma.user.findUnique({
     where: { id },
     select: { id: true, email: true, practiceId: true },
