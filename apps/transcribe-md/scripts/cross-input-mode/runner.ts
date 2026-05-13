@@ -299,10 +299,22 @@ async function main() {
     // scenarios across all three modes. Useful for verification re-runs
     // after a targeted fix; avoids the full 72-visit / ~$22 cost.
     const includeIdx = process.argv.indexOf('--include');
-    const includeArg = includeIdx > 0 ? process.argv[includeIdx + 1] : undefined;
-    const includeTags = includeArg
-      ? new Set(includeArg.split(',').map((s) => s.trim()).filter(Boolean))
-      : undefined;
+    let includeTags: Set<string> | undefined;
+    if (includeIdx > 0) {
+      const includeArg = process.argv[includeIdx + 1];
+      // Guard: `--include` at end of argv with no value would otherwise
+      // silently fall through to the full 72-visit batch. Fail loudly
+      // so a typo doesn't burn ~$22.
+      if (!includeArg || includeArg.startsWith('--')) {
+        throw new Error('--include requires a comma-separated tag list (e.g., --include PED1,UC2,DERM1)');
+      }
+      includeTags = new Set(
+        includeArg.split(',').map((s) => s.trim()).filter(Boolean),
+      );
+      if (includeTags.size === 0) {
+        throw new Error('--include received an empty tag list after trim/split');
+      }
+    }
     await runAll(includeTags);
     return;
   }
