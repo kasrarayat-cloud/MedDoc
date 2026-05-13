@@ -20,6 +20,8 @@ import { Loader2, Search, Plus, UserPlus, X } from 'lucide-react';
 
 import { cn } from '@/lib/cn';
 import { MIN_DOB_YEAR, validateDob } from '@/lib/dob';
+import { parseRateLimit } from '@/lib/parse-rate-limit';
+import { RateLimitNotice } from '@/components/rate-limit-notice';
 import { DuplicateModal } from './duplicate-modal';
 import type { FuzzyMatch, SelectedPatient } from './patient-types';
 
@@ -112,6 +114,10 @@ export function PatientPickerCore({ onSelect }: CoreProps) {
   const [newExternalId, setNewExternalId] = useState('');
   const [createError, setCreateError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [rateLimit, setRateLimit] = useState<{
+    retryAfterSec: number;
+    limitType: string | null;
+  } | null>(null);
 
   const [duplicates, setDuplicates] = useState<{
     matches: FuzzyMatch[];
@@ -171,6 +177,16 @@ export function PatientPickerCore({ onSelect }: CoreProps) {
         body: JSON.stringify({ name, dateOfBirth: dobIso, externalId }),
       });
       const body = (await res.json().catch(() => ({}))) as CreateApiResponse;
+      if (res.status === 429) {
+        // Doctor is creating patients faster than PATIENT_CREATE's
+        // burst window allows. Stash retryAfterSec + window label so
+        // the form can render a countdown; clear the inline error so
+        // the two messages don't fight for attention.
+        const parsed = parseRateLimit(res, body as unknown as Record<string, unknown>);
+        setRateLimit(parsed);
+        setCreateError(null);
+        return;
+      }
       if (!res.ok || !body.patient) {
         setCreateError(body.error ?? 'Could not create patient.');
         return;
@@ -209,6 +225,15 @@ export function PatientPickerCore({ onSelect }: CoreProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, dateOfBirth: dob.iso }),
       });
+      if (res.status === 429) {
+        // Fuzzy-match shares PATIENT_READ's window; rejection here
+        // also blocks the create downstream, so surface the notice
+        // and bail out of the submit.
+        const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+        const parsed = parseRateLimit(res, body);
+        setRateLimit(parsed);
+        return;
+      }
       if (res.ok) {
         const body = (await res.json()) as FuzzyApiResponse;
         const strong = body.matches.filter((m) => m.score > 0.6);
@@ -369,7 +394,16 @@ export function PatientPickerCore({ onSelect }: CoreProps) {
               </div>
             </div>
 
-            {createError && (
+            {rateLimit && (
+              <RateLimitNotice
+                retryAfterSec={rateLimit.retryAfterSec}
+                limitType={rateLimit.limitType}
+                resource="patients"
+                onExpire={() => setRateLimit(null)}
+              />
+            )}
+
+            {createError && !rateLimit && (
               <p className="text-[12px] text-linear-danger">{createError}</p>
             )}
 
@@ -382,6 +416,7 @@ export function PatientPickerCore({ onSelect }: CoreProps) {
                   setNewDob('');
                   setNewExternalId('');
                   setCreateError(null);
+                  setRateLimit(null);
                 }}
                 className="qm-lin-btn"
               >
@@ -389,7 +424,7 @@ export function PatientPickerCore({ onSelect }: CoreProps) {
               </button>
               <button
                 type="submit"
-                disabled={submitting}
+                disabled={submitting || rateLimit !== null}
                 className="qm-lin-btn-primary"
               >
                 {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
