@@ -116,27 +116,31 @@ export const authConfig: NextAuthConfig = {
 
   trustHost: true,
 
-  // Only set `cookies` when a domain override is actually configured so
-  // we don't accidentally shadow NextAuth's sensible defaults.
-  ...(cookieDomain
-    ? {
-        cookies: {
-          sessionToken: {
-            name:
-              process.env.NODE_ENV === 'production'
-                ? '__Secure-authjs.session-token'
-                : 'authjs.session-token',
-            options: {
-              httpOnly: true,
-              sameSite: 'lax' as const,
-              path: '/',
-              secure: process.env.NODE_ENV === 'production',
-              domain: cookieDomain,
-            },
-          },
-        },
-      }
-    : {}),
+  // Security audit P1-H (2026-05-13): always emit the cookie
+  // hardening flags. Previously this whole block was gated on
+  // `cookieDomain` being set; with AUTH_COOKIE_DOMAIN unset (the
+  // default), the app silently inherited NextAuth defaults. Auth.js
+  // v5 ships sensible defaults in production, but the only thing
+  // pinning httpOnly/sameSite/secure for THIS app was that
+  // assumption. Emitting the block unconditionally pins the posture
+  // explicitly. The `domain` option is the only field that varies
+  // by env — it's added only when AUTH_COOKIE_DOMAIN is set so the
+  // app retains host-only behaviour by default.
+  cookies: {
+    sessionToken: {
+      name:
+        process.env.NODE_ENV === 'production'
+          ? '__Secure-authjs.session-token'
+          : 'authjs.session-token',
+      options: {
+        httpOnly: true,
+        sameSite: 'lax' as const,
+        path: '/',
+        secure: process.env.NODE_ENV === 'production',
+        ...(cookieDomain ? { domain: cookieDomain } : {}),
+      },
+    },
+  },
 
   callbacks: {
     /**
