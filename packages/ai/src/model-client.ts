@@ -45,6 +45,18 @@ export interface CompleteArgs<T> extends AiLogContext {
   /** Retry on schema-fail or JSON-parse-fail with the prior output + error
    *  appended. Default true. Up to MAX_RETRIES attempts after the initial. */
   retryOnSchemaFail?: boolean;
+  /** 2026-05-13 SCHEMA_FAIL hardening (cross-input-mode-audit Finding 1):
+   *  opt-in to Anthropic's native tool_use structured output. When set,
+   *  the model is forced to call a tool whose `input_schema` matches
+   *  the Zod schema — eliminating free-form JSON.parse failures. See
+   *  AnthropicCompleteArgs.useToolUse for details. Default: undefined
+   *  (free-form JSON path, backwards-compatible with every existing
+   *  layer). Should be enabled per-layer after empirical SCHEMA_FAIL
+   *  monitoring. */
+  useToolUse?: {
+    name: string;
+    description: string;
+  };
 }
 
 export interface CompleteTextArgs extends AiLogContext {
