@@ -66,7 +66,7 @@ export const POST = withApiHandler('api:patients:fuzzy-match', async (req) => {
   const session = await getSession();
   if (!session) return apiError('unauthorized', 401);
 
-  const blocked = rateLimitOr429(RATE_LIMITS.SETTINGS, session.user.id);
+  const blocked = rateLimitOr429(RATE_LIMITS.PATIENT_READ, session.user.id);
   if (blocked) return blocked;
 
   let body: unknown;
