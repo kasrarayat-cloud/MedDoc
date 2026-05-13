@@ -1637,6 +1637,19 @@ model TranscribeVisit {
   /// sees a banner before signing. Closes audit Findings 02.5 + 07.3.
   audioConfidenceStats Json?
 
+  /// 2026-05-13 Issues #202 + #206 — keyterm composition that ran
+  /// on this visit's L1 / L1b transcription. Populated by the
+  /// layer after a successful Deepgram call. Shape (per
+  /// `KeytermsAppliedMetadata` in deepgram-keyterm-builder.ts):
+  ///   { specialty, rawSpecialty, layers: { core, specialty,
+  ///     safetyFloor, patientContext }, totalTerms,
+  ///     estimatedTokens, budgetEnforced, termsHash }
+  /// Used for audit attribution — if a future transcription
+  /// regression appears, the row says which keyterms ran.
+  /// Null on interpreter-mode visits (model swap; no keyterm
+  /// bias). Never includes PHI.
+  keytermsApplied      Json?
+
   // ── T-M5: dictation + text inputs ──
   /// MinIO object key for a voice dictation recording (inputMode
   /// voice_dictation). Separate column from audioKey so a future
