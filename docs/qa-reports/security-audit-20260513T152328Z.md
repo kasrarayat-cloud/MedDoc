@@ -202,29 +202,57 @@ P1 findings should be triaged into a follow-up sprint; none of them are pilot-bl
 
 ### Findings ledger
 
-| ID | Severity | File | One-line description |
-|---|---|---|---|
-| P0-A | P0 | worker.ts:1395 | DLQ persists unscrubbed err.message → PHI durable in DLQ |
-| P1-A | P1 | reset-password/route.ts:91-110 | No `PASSWORD_CHANGED` audit row |
-| P1-B | P1 | sentry.server.config.ts:32 | beforeSend doesn't scrub request.data |
-| P1-C | P1 | /api/patients?search=<name> | Patient names in GET URL → access logs |
-| P1-D | P1 | dictation/upload/route.ts:112 | Missing magic-byte sniff |
-| P1-E | P1 | force-logout + 3 sibling admin routes | Missing self-action guard |
-| P1-F | P1 | worker.ts:1373/1402/1209/1331/787 | Raw err to stdout bypasses redactPhi |
-| P1-G | P1 | client-errors/route.ts | message/url unredacted |
-| P1-H | P1 | packages/auth/src/index.ts:121 | Cookie hardening gated on AUTH_COOKIE_DOMAIN |
-| P1-I | P1 | docker-compose.yml:276,278 | 0.0.0.0 publish without listener (re-uncomment foot-gun) |
-| P1-J | P1 | verify-enrollment/route.ts:97 | No JWT rotation on MFA enable |
-| P1-K | P1 | verify-email + confirm-email GET | GET-mutates (token-mitigated; harden to POST interstitial) |
-| P2-1 | P2 | minio.ts:204 | Audio object keys partially guessable |
-| P2-2 | P2 | force-logout/route.ts | No rate limit + no reason field |
-| P2-3 | P2 | api-error.ts | No Origin/Referer check on /api/** |
-| P2-4 | P2 | sensitive forms | No anti-double-submit idempotency key |
-| P2-5 | P2 | ai_calls.errorDetails | Persists model output on SCHEMA_FAIL |
-| P2-6 | P2 | .env.production.example:38 | Misleading comment |
-| P2-7 | P2 | Caddyfile CSP | unsafe-inline + unsafe-eval |
-| P2-8 | P2 | audit.ts:196 | Silent fall-through to null userId |
-| P2-9 | P2 | /api/patients/[id]/export | Still on SETTINGS (10/h) |
-| P3 | P3 | Path-param IDs | Unvalidated as CUIDs |
+| ID | Severity | File | One-line description | Status |
+|---|---|---|---|---|
+| P0-A | P0 | worker.ts:1395 | DLQ persists unscrubbed err.message → PHI durable in DLQ | **CLOSED** (#240) |
+| P1-A | P1 | reset-password/route.ts:91-110 | No `PASSWORD_CHANGED` audit row | **CLOSED** (#241) |
+| P1-B | P1 | sentry.server.config.ts:32 | beforeSend doesn't scrub request.data | **CLOSED** (#242) |
+| P1-C | P1 | /api/patients?search=<name> | Patient names in GET URL → access logs | **CLOSED** (#242) |
+| P1-D | P1 | dictation/upload/route.ts:112 | Missing magic-byte sniff | **CLOSED** (#242) |
+| P1-E | P1 | force-logout + 3 sibling admin routes | Missing self-action guard | **CLOSED** (#241) |
+| P1-F | P1 | worker.ts:1373/1402/1209/1331/787 | Raw err to stdout bypasses redactPhi | **CLOSED** (#240) |
+| P1-G | P1 | client-errors/route.ts | message/url unredacted | **CLOSED** (#242) |
+| P1-H | P1 | packages/auth/src/index.ts:121 | Cookie hardening gated on AUTH_COOKIE_DOMAIN | **CLOSED** (#243) |
+| P1-I | P1 | docker-compose.yml:276,278 | 0.0.0.0 publish without listener (re-uncomment foot-gun) | **CLOSED** (#243) |
+| P1-J | P1 | verify-enrollment/route.ts:97 | No JWT rotation on MFA enable | **CLOSED** (#241) |
+| P1-K | P1 | verify-email + confirm-email GET | GET-mutates (token-mitigated; harden to POST interstitial) | **CLOSED** (#241) |
+| P2-1 | P2 | minio.ts:204 | Audio object keys partially guessable | open |
+| P2-2 | P2 | force-logout/route.ts | No rate limit + no reason field | open |
+| P2-3 | P2 | api-error.ts | No Origin/Referer check on /api/** | open |
+| P2-4 | P2 | sensitive forms | No anti-double-submit idempotency key | open |
+| P2-5 | P2 | ai_calls.errorDetails | Persists model output on SCHEMA_FAIL | open |
+| P2-6 | P2 | .env.production.example:38 | Misleading comment | open |
+| P2-7 | P2 | Caddyfile CSP | unsafe-inline + unsafe-eval | open |
+| P2-8 | P2 | audit.ts:196 | Silent fall-through to null userId | open |
+| P2-9 | P2 | /api/patients/[id]/export | Still on SETTINGS (10/h) | open |
+| P3 | P3 | Path-param IDs | Unvalidated as CUIDs | open |
 
 **Total: 1 P0 / 11 P1 / 9 P2 / 1 P3.**
+
+---
+
+## Section E — P0 + P1 Closure (2026-05-13)
+
+**All 12 P0 + P1 findings closed.** Pilot-readiness verdict: **GREEN**.
+
+**PRs:**
+
+| PR | Findings closed | Shipped |
+|---|---|---|
+| **#240** | P0-A (DLQ unscrubbed err.message) + P1-F (5 worker stdout sites) | 2026-05-13 |
+| **#241** | P1-A (reset-password audit row) + P1-E (admin self-action ×4) + P1-J (MFA JWT rotation) + P1-K (email-link GET→POST interstitial) | 2026-05-13 |
+| **#242** | P1-B (Sentry beforeSend extension to request.data/headers/contexts/user) + P1-C (patient search via POST) + P1-D (dictation magic-byte sniff) + P1-G (client-errors message/url scrub) | 2026-05-13 |
+| **#243** | P1-H (cookie config always-emit) + P1-I (docker-compose port publishes commented in lockstep with Caddyfile MODE A) | 2026-05-13 |
+
+**Empirical verifications post-deploy:**
+- **P0-A**: DLQ payload now passes through `redactPhi` (source-pin test + 5 sibling worker.ts sites confirmed wrapped).
+- **P1-E**: `POST /api/admin/users/<self>/force-logout` returns 403 instead of 200 (verified via auditor walk-through).
+- **P1-K**: `GET /api/auth/verify-email?token=…` now returns an HTML interstitial that auto-POSTs the token; no DB mutation on GET (empirically verified via `wget` inside the container — interstitial HTML returned with `Referrer-Policy: same-origin`).
+- **P1-C**: `POST /api/patients/search` returns 401 unauthorized when called without a session (auth gate correct); `GET` on the same path returns 405 Method Not Allowed (route exports POST only).
+- **P1-I**: `docker port meddoc-pro-caddy-1` shows only `80` and `443` on 0.0.0.0 — ports 9010 and 9020 are no longer published.
+
+**Total regression test count across the fix-pack: 69 source-pin cases across 10 files in `apps/transcribe-md/tests/security/`.** Tests follow the source-pin pattern established by PR #240 and prior conventions (`tests/audit/page-rsc-audits.test.ts`, `tests/lib/audit-worker-context.test.ts`).
+
+**Remaining backlog: 9 P2 + 1 P3 (hardening; document only).** P2 ordering left to future-milestone judgement; this audit doesn't gate on them.
+
+**Pilot IT/compliance review status: GREEN.** The fundamentals (auth-gating, multi-tenant isolation, audit-log integrity, transport security, secrets management, input validation, rate limiting, PHI scrub posture, credential rotation on MFA, durable-storage hygiene) are all explicitly verified or pinned with regression-pinning tests. The P1 backlog that existed at the start of 2026-05-13 is closed.
