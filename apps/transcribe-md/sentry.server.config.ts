@@ -13,6 +13,7 @@
 
 import * as Sentry from '@sentry/nextjs';
 import { redactPhi } from '@meddoc/ai';
+import { scrubSentryEvent } from '@/lib/sentry-scrub';
 
 const dsn =
   process.env.SENTRY_DSN_TRANSCRIBE_MD?.trim() ||
@@ -33,23 +34,10 @@ Sentry.init({
     // Don't send anything without an explicit DSN — prevents stderr
     // spam when devs start the app locally without Sentry configured.
     if (!dsn) return null;
-    if (typeof event.message === 'string') {
-      event.message = redactPhi(event.message);
-    }
-    if (event.extra && typeof event.extra === 'object') {
-      const extra = event.extra as Record<string, unknown>;
-      for (const k of Object.keys(extra)) {
-        const v = extra[k];
-        if (typeof v === 'string') extra[k] = redactPhi(v);
-      }
-    }
-    if (Array.isArray(event.breadcrumbs)) {
-      for (const crumb of event.breadcrumbs) {
-        if (typeof crumb.message === 'string') {
-          crumb.message = redactPhi(crumb.message);
-        }
-      }
-    }
+    // 2026-05-13 audit P1-B: extend the scrub to event.request.data /
+    // .url / .query_string / .headers / .cookies and event.user.
+    // See sentry-scrub.ts for the field inventory.
+    scrubSentryEvent(event, redactPhi);
     return event;
   },
 });
