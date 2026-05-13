@@ -109,9 +109,11 @@ export async function sendVisitPdfEmail(
   const result = await client.emails.send({
     from,
     to: args.toEmail,
+    replyTo: resendReplyTo(),
     subject,
     html,
     text,
+    headers: buildDeliverabilityHeaders({ category: 'visit_pdf' }),
     attachments: [
       {
         filename,
@@ -187,19 +189,93 @@ function resendFrom(): string {
   return process.env.RESEND_FROM?.trim() || DEFAULT_FROM;
 }
 
+/** Reply-To address. Defaults to support@quillmd.com so doctor replies
+ *  go to a real inbox instead of bouncing off `noreply@`. Override via
+ *  RESEND_REPLY_TO in .env (e.g., for a per-tenant routing inbox). */
+const DEFAULT_REPLY_TO = 'support@quillmd.com';
+
+function resendReplyTo(): string {
+  return process.env.RESEND_REPLY_TO?.trim() || DEFAULT_REPLY_TO;
+}
+
+/** Public-facing app URL used as the unsubscribe destination. Mirrors
+ *  the same fallback chain Auth.js uses. Forces https: because Gmail
+ *  silently ignores `List-Unsubscribe` URLs that aren't https — if a
+ *  dev override (e.g., AUTH_URL=http://localhost:3000) ever reached
+ *  production mail, we'd be quietly degrading deliverability. */
+function appUrl(): string {
+  const raw =
+    process.env.AUTH_URL?.replace(/\/$/, '') ?? 'https://app.quillmd.com';
+  if (!raw.startsWith('https://')) return 'https://app.quillmd.com';
+  return raw;
+}
+
+/** Headers every transactional email carries. Two deliverability wins
+ *  here, both 2026-05-13 audit follow-ups:
+ *
+ *  - **List-Unsubscribe** + **List-Unsubscribe-Post** (RFC 8058): even
+ *    on transactional mail, Microsoft Exchange Online / Outlook 365
+ *    treat absence as a yellow flag. Including `mailto:` AND `https://`
+ *    options gives every receiver a path they understand. The
+ *    one-click `List-Unsubscribe-Post` header tells Gmail/Yahoo this
+ *    sender supports their one-click unsubscribe button.
+ *
+ *  - **X-Entity-Ref-ID**: opaque correlation token, helps the receiver
+ *    distinguish per-message threads (some filters use it to dedupe).
+ *    A short random ID per send.
+ *
+ *  Exported for unit testing — sendOne and sendVisitPdfEmail are the
+ *  intended callers.
+ */
+export function buildDeliverabilityHeaders(args: {
+  /** Short slug identifying which transactional template this is.
+   *  Used to scope the unsubscribe URL so the operator can correlate
+   *  which template a click came from. */
+  category: string;
+}): Record<string, string> {
+  const replyTo = resendReplyTo();
+  const unsubMailto = `mailto:${replyTo}?subject=Unsubscribe%20${encodeURIComponent(
+    args.category,
+  )}`;
+  const unsubUrl = `${appUrl()}/api/email/unsubscribe?category=${encodeURIComponent(
+    args.category,
+  )}`;
+  return {
+    'List-Unsubscribe': `<${unsubMailto}>, <${unsubUrl}>`,
+    'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+    'X-Entity-Ref-ID': randomRefId(),
+  };
+}
+
+function randomRefId(): string {
+  // 96 bits of randomness, base36; ~20 chars. Not cryptographically
+  // load-bearing — just an opaque correlation ID per send.
+  let out = '';
+  for (let i = 0; i < 4; i++) {
+    out += Math.random().toString(36).slice(2, 10);
+  }
+  return out.slice(0, 20);
+}
+
 async function sendOne(args: {
   to: string;
   subject: string;
   html: string;
   text: string;
+  /** Short slug identifying which transactional template this is.
+   *  Used in the List-Unsubscribe URL so an unsubscribe click can
+   *  scope to the category (verification, reset, etc.). */
+  category: string;
 }): Promise<SenderResult> {
   const client = getClient();
   const result = await client.emails.send({
     from: resendFrom(),
     to: args.to,
+    replyTo: resendReplyTo(),
     subject: args.subject,
     html: args.html,
     text: args.text,
+    headers: buildDeliverabilityHeaders({ category: args.category }),
   });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const id = ((result as any)?.data?.id as string | undefined) ?? null;
@@ -278,7 +354,7 @@ export async function sendPasswordResetEmail(
     '',
     '— QuillMD',
   ].join('\n');
-  return sendOne({ to: args.toEmail, subject, html, text });
+  return sendOne({ to: args.toEmail, subject, html, text, category: 'password_reset' });
 }
 
 // ---------------------------------------------------------------------------
@@ -315,7 +391,7 @@ export async function sendEmailVerification(
     '',
     '— QuillMD',
   ].join('\n');
-  return sendOne({ to: args.toEmail, subject, html, text });
+  return sendOne({ to: args.toEmail, subject, html, text, category: 'verify_email' });
 }
 
 // ---------------------------------------------------------------------------
@@ -357,7 +433,7 @@ export async function sendAccountExistsEmail(
     '',
     '— QuillMD',
   ].join('\n');
-  return sendOne({ to: args.toEmail, subject, html, text });
+  return sendOne({ to: args.toEmail, subject, html, text, category: 'account_exists' });
 }
 
 // ---------------------------------------------------------------------------
@@ -394,7 +470,7 @@ export async function sendEmailChangeRequestEmail(
     '',
     '— QuillMD',
   ].join('\n');
-  return sendOne({ to: args.toEmail, subject, html, text });
+  return sendOne({ to: args.toEmail, subject, html, text, category: 'email_change_request' });
 }
 
 // ---------------------------------------------------------------------------
@@ -428,7 +504,7 @@ export async function sendEmailChangedNotification(
     '',
     '— QuillMD',
   ].join('\n');
-  return sendOne({ to: args.toEmail, subject, html, text });
+  return sendOne({ to: args.toEmail, subject, html, text, category: 'email_changed_notification' });
 }
 
 // ---------------------------------------------------------------------------
@@ -461,5 +537,5 @@ export async function sendAccountDeletedConfirmation(
     '',
     '— QuillMD',
   ].join('\n');
-  return sendOne({ to: args.toEmail, subject, html, text });
+  return sendOne({ to: args.toEmail, subject, html, text, category: 'account_deleted' });
 }
