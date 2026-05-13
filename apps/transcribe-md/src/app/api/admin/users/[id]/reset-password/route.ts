@@ -27,6 +27,17 @@ export const POST = adminApi('users:reset-password', async (req, ctx) => {
   const id = segs[segs.indexOf('users') + 1];
   if (!id) return NextResponse.json({ error: 'Bad path' }, { status: 400 });
 
+  // Security audit P1-E: an admin emailing themselves a reset link
+  // via this admin-only route is a self-service end-run around the
+  // public /forgot-password flow. Block by symmetry with the other
+  // self-targeting admin actions.
+  if (id === ctx.session.user.id) {
+    return NextResponse.json(
+      { error: 'Use /forgot-password for your own password reset.' },
+      { status: 403 }
+    );
+  }
+
   const user = await prisma.user.findUnique({
     where: { id },
     select: { id: true, email: true, name: true, practiceId: true },

@@ -94,14 +94,35 @@ export const POST = withApiHandler(
     const plaintextCodes = generateRecoveryCodes(10);
     const hashedCodes = hashRecoveryCodes(plaintextCodes);
 
-    await prisma.user.update({
-      where: { id: userId },
-      data: {
-        mfaEnabled: true,
-        mfaVerifiedAt: new Date(),
-        mfaBackupCodes: hashedCodes,
-      },
-    });
+    // Security audit P1-J — flipping mfaEnabled=true while sibling
+    // sessions stay live means "MFA-enabled" no longer implies "this
+    // session went through an MFA challenge". Revoke every OTHER
+    // UserSession on enrollment so any pre-MFA tab/device must
+    // re-authenticate AND complete the new MFA challenge. Keep the
+    // current session (the user just finished a TOTP challenge in
+    // this tab — kicking them off the page that confirmed enrollment
+    // is poor UX). Legacy tokens have no sessionId — fall back to
+    // revoking ALL sessions, which is correct-but-strict.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const currentSessionId = (session?.user as any)?.sessionId as
+      | string
+      | undefined;
+
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: userId },
+        data: {
+          mfaEnabled: true,
+          mfaVerifiedAt: new Date(),
+          mfaBackupCodes: hashedCodes,
+        },
+      }),
+      prisma.userSession.deleteMany({
+        where: currentSessionId
+          ? { userId, NOT: { sessionToken: currentSessionId } }
+          : { userId },
+      }),
+    ]);
 
     void logAudit({
       action: 'MFA_ENABLED',
@@ -109,7 +130,11 @@ export const POST = withApiHandler(
       userEmail: user.email,
       practiceId: user.practiceId,
       success: true,
-      metadata: { stage: 'enrollment_completed', recoveryCodesIssued: 10 },
+      metadata: {
+        stage: 'enrollment_completed',
+        recoveryCodesIssued: 10,
+        keptCurrentSession: !!currentSessionId,
+      },
     });
 
     return NextResponse.json(
