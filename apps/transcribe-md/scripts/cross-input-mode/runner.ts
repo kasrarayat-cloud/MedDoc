@@ -139,12 +139,27 @@ async function uploadAudioForVisit(scenario: Scenario, mode: InputMode, visitId:
   }
 }
 
-async function runAll(): Promise<void> {
+async function runAll(includeTags?: Set<string>): Promise<void> {
   const patientId = await findOrCreatePatient();
   console.log(`[runner] test patient ${patientId}`);
 
+  const targetScenarios = includeTags
+    ? SCENARIOS.filter((s) => includeTags.has(s.tag))
+    : SCENARIOS;
+  if (includeTags) {
+    const missing = [...includeTags].filter(
+      (t) => !targetScenarios.find((s) => s.tag === t),
+    );
+    if (missing.length > 0) {
+      throw new Error(`--include refers to unknown tags: ${missing.join(', ')}`);
+    }
+    console.log(
+      `[runner] include filter: ${targetScenarios.length}/${SCENARIOS.length} scenarios — ${targetScenarios.map((s) => s.tag).join(', ')}`,
+    );
+  }
+
   // Pre-check: confirm all audio fixtures exist.
-  for (const s of SCENARIOS) {
+  for (const s of targetScenarios) {
     const p = `${AUDIO_DIR}/${s.tag}.mp3`;
     if (!existsSync(p)) {
       throw new Error(`Audio fixture missing for ${s.tag}. Run synthesize.py first (or rebuild missing fixtures).`);
@@ -156,7 +171,7 @@ async function runAll(): Promise<void> {
   // prior-job-cleanup logic (PR #228) match what the production code
   // path uses — keeps the harness inside the production envelope.
   const records: VisitRecord[] = [];
-  for (const s of SCENARIOS) {
+  for (const s of targetScenarios) {
     for (const mode of INPUT_MODES) {
       const visitId = await createVisitForScenario(s, mode, patientId);
       if (mode !== 'text_notes') {
@@ -280,10 +295,32 @@ async function main() {
     return;
   }
   if (flag === '--run') {
-    await runAll();
+    // Optional --include TAG1,TAG2,... — runs the targeted subset of
+    // scenarios across all three modes. Useful for verification re-runs
+    // after a targeted fix; avoids the full 72-visit / ~$22 cost.
+    const includeIdx = process.argv.indexOf('--include');
+    let includeTags: Set<string> | undefined;
+    if (includeIdx > 0) {
+      const includeArg = process.argv[includeIdx + 1];
+      // Guard: `--include` at end of argv with no value would otherwise
+      // silently fall through to the full 72-visit batch. Fail loudly
+      // so a typo doesn't burn ~$22.
+      if (!includeArg || includeArg.startsWith('--')) {
+        throw new Error('--include requires a comma-separated tag list (e.g., --include PED1,UC2,DERM1)');
+      }
+      includeTags = new Set(
+        includeArg.split(',').map((s) => s.trim()).filter(Boolean),
+      );
+      if (includeTags.size === 0) {
+        throw new Error('--include received an empty tag list after trim/split');
+      }
+    }
+    await runAll(includeTags);
     return;
   }
-  console.error('Usage: runner.ts --emit-manifest | --emit-rule-labels | --run');
+  console.error(
+    'Usage: runner.ts --emit-manifest | --emit-rule-labels | --run [--include TAG1,TAG2,...]',
+  );
   process.exit(1);
 }
 
