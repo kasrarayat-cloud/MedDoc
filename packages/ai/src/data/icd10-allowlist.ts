@@ -635,6 +635,166 @@ const STARTER_ICD10_CODES: ReadonlyArray<string> = [
   'E63.0',     // Essential fatty acid deficiency
   'E63.1',     // Imbalance of constituents of food intake
   // (E63.9 already in bariatric-surgery cluster above — not re-listed.)
+
+  // === Procedure-dominant cohort additions (2026-05-13) ===
+  // Cross-input-mode audit (PR #232) surfaced empty `codes: []` returns
+  // for procedure-dominant scenarios — DERM1 (suspicious nevus biopsy),
+  // OB2 (postpartum visit), ORT2 (acute ankle sprain). Pattern: the L7a
+  // model treated the visit as procedure-billing-dominant and emitted
+  // zero diagnosis codes. OB2 missing Z39.2 (routine postpartum
+  // encounter) is the most-concerning miss for billing compliance.
+  //
+  // Adds the canonical "every visit needs at least one diagnosis or
+  // encounter code" coverage for these three families so the L7a
+  // prompt strengthening that requires a minimum 1 code per visit has
+  // valid codes to choose from.
+
+  // ── OB-GYN postpartum + supervision-of-pregnancy + delivery ──────
+  // Z39.x — postpartum-care encounter codes. OB2 demands Z39.2.
+  'Z39.0',     // Encounter for care + examination of mother immediately after delivery
+  'Z39.1',     // Encounter for care + examination of lactating mother
+  'Z39.2',     // Encounter for routine postpartum follow-up
+  // Z34.x — supervision of normal pregnancy by trimester. The starter
+  // set had Z34.00 + Z34.80 only; full coverage avoids precision drift.
+  'Z34.01',    // Supervision of normal first pregnancy, 1st trimester
+  'Z34.02',    // … 2nd trimester
+  'Z34.03',    // … 3rd trimester
+  'Z34.81',    // Supervision of other normal pregnancy, 1st trimester
+  'Z34.82',    // … 2nd trimester
+  'Z34.83',    // … 3rd trimester
+  'Z34.90',    // Supervision of normal pregnancy, unspecified, unspecified trimester
+  'Z34.91',    // … 1st trimester
+  'Z34.92',    // … 2nd trimester
+  'Z34.93',    // … 3rd trimester
+  // O80 + O82 — uncomplicated delivery encounter codes.
+  'O82',       // Encounter for cesarean delivery without indication
+  // O36.x — surveillance of high-risk pregnancy for maternal+fetal problems
+  'O36.0991',  // Supervision other materno-fetal problems w/o suspected immune incompatibility, third trimester, fetus 1
+  // GDM — O24.4xx family.
+  'O24.410',   // Gestational diabetes mellitus in pregnancy, diet controlled
+  'O24.414',   // … insulin controlled
+  'O24.415',   // … controlled by oral hypoglycemic drugs
+  'O24.419',   // … unspecified control
+  // Common pregnancy ICDs for billing context.
+  'O09.211',   // Supervision of pregnancy w/ history of pre-term labor, 1st trimester
+  'O09.213',   // … 3rd trimester
+  // Z30.x — contraception encounter codes (postpartum visits often pair).
+  'Z30.430',   // Encounter for IUD insertion
+  'Z30.431',   // Encounter for routine IUD checking
+  'Z30.432',   // Encounter for IUD removal
+  'Z30.433',   // Encounter for IUD removal + reinsertion
+  'Z30.09',    // Encounter for other general counseling and advice on contraception
+
+  // ── Dermatology — benign-lesion + biopsy + skin-malignancy hx ────
+  // D22.x — melanocytic nevi by site (the actual diagnosis for a
+  // suspicious-mole biopsy when path is benign nevus).
+  'D22.0',     // Melanocytic nevi of lip
+  'D22.1',     // Melanocytic nevi of eyelid (incl. canthus)
+  'D22.2',     // Melanocytic nevi of ear + external auricular canal
+  'D22.3',     // Melanocytic nevi of other + unspecified parts of face
+  'D22.4',     // Melanocytic nevi of scalp + neck
+  'D22.5',     // Melanocytic nevi of trunk
+  'D22.60',    // Melanocytic nevi of unspecified upper limb (incl. shoulder)
+  'D22.70',    // Melanocytic nevi of unspecified lower limb (incl. hip)
+  'D22.9',     // Melanocytic nevi, unspecified
+  // L82.x — seborrheic keratosis (the second-most-common derm biopsy).
+  'L82.0',     // Inflamed seborrheic keratosis
+  'L82.1',     // Other seborrheic keratosis
+  // L57.x — UV-damage / solar keratosis (already partially present
+  // via I77/L57 in vascular block; explicit derm coverage below).
+  'L57.0',     // Actinic keratosis
+  'L57.8',     // Other skin changes due to chronic UV-exposure
+  // Z85.828 — personal history of malignant melanoma + other skin
+  // (drives surveillance + influences current biopsy decisions).
+  'Z85.828',   // Personal history of malignant neoplasm of other skin
+  'Z85.820',   // Personal history of malignant melanoma of skin
+  // Z80.8 — family history of other malignant neoplasm (e.g. paternal
+  // melanoma in the DERM1 scenario).
+  'Z80.8',     // Family history of malignant neoplasm of other organs/systems
+  // Z12.83 — screening encounter for skin malignancy (annual full-skin
+  // exam in a high-risk patient).
+  'Z12.83',   // Encounter for screening for malignant neoplasm of skin
+  // D48.5 — neoplasm of uncertain behavior of skin (pre-pathology
+  // placeholder when biopsy is pending).
+  'D48.5',    // Neoplasm of uncertain behavior of skin
+  // Acne family — for the isotretinoin/dermatology scenarios.
+  // (L70.0 already present above — not re-listed.)
+  'L70.1',    // Acne conglobata
+  'L70.8',    // Other acne
+  'L70.9',    // Acne, unspecified
+
+  // ── Orthopedics — joint pain + aftercare + acute injury ──────────
+  // M25.x — joint pain by site. Starter set only had M25.50 + M25.51x.
+  // The full family closes the ortho-encounter coverage.
+  'M25.511',   // Pain in right shoulder
+  'M25.512',   // Pain in left shoulder
+  'M25.519',   // Pain in unspecified shoulder
+  'M25.521',   // Pain in right elbow
+  'M25.522',   // Pain in left elbow
+  'M25.531',   // Pain in right wrist
+  'M25.532',   // Pain in left wrist
+  'M25.551',   // Pain in right hip
+  'M25.552',   // Pain in left hip
+  'M25.561',   // Pain in right knee
+  'M25.562',   // Pain in left knee
+  'M25.571',   // Pain in right ankle and joints of right foot
+  'M25.572',   // Pain in left ankle and joints of left foot
+  // S93.x — acute ankle/foot ligament sprains (ORT2 acute injury).
+  'S93.401A',  // Sprain of unspecified ligament of right ankle, initial encounter
+  'S93.402A',  // Sprain of unspecified ligament of left ankle, initial encounter
+  'S93.409A',  // Sprain of unspecified ligament of unspecified ankle, initial encounter
+  'S93.411A',  // Sprain of calcaneofibular ligament of right ankle, initial encounter
+  'S93.412A',  // Sprain of calcaneofibular ligament of left ankle, initial encounter
+  'S93.421A',  // Sprain of deltoid ligament of right ankle, initial encounter
+  'S93.422A',  // Sprain of deltoid ligament of left ankle, initial encounter
+  'S93.491A',  // Sprain of other specified ligament of right ankle, initial encounter
+  'S93.492A',  // Sprain of other specified ligament of left ankle, initial encounter
+  // S83.x — knee sprains.
+  'S83.401A',  // Sprain of unspecified CL of right knee, initial encounter
+  'S83.402A',  // Sprain of unspecified CL of left knee, initial encounter
+  // S39.012A — strain of muscle of lower back (paired with UC2 mech-LBP).
+  'S39.012A',  // Strain of muscle, fascia, tendon of lower back, initial encounter
+  // Z47.x — aftercare following orthopedic surgery.
+  'Z47.1',     // Aftercare following joint replacement surgery
+  'Z47.2',     // Encounter for removal of internal fixation device
+  'Z47.81',    // Encounter for orthopedic aftercare following surgical amputation
+  'Z47.82',    // Encounter for orthopedic aftercare following scoliosis surgery
+  'Z47.89',    // Encounter for other orthopedic aftercare
+  // M79.6xx — limb pain by site (commonly used when joint-specific
+  // M25 code doesn't fit).
+  'M79.601',   // Pain in right arm
+  'M79.602',   // Pain in left arm
+  'M79.604',   // Pain in right leg
+  'M79.605',   // Pain in left leg
+  'M79.606',   // Pain in unspecified leg
+
+  // ── General encounter Z-codes (procedure-dominant fallback) ──────
+  // Z48.x — post-procedural surgical follow-up (general, not specific
+  // to any system).
+  'Z48.0',     // Encounter for attention to dressings + sutures
+  'Z48.00',    // Encounter for change/removal of nonsurgical wound dressing
+  'Z48.01',    // Encounter for change/removal of surgical wound dressing
+  'Z48.02',    // Encounter for removal of sutures
+  'Z48.03',    // Encounter for change/removal of drains
+  'Z48.298',   // Encounter for aftercare following other organ transplant (catch-all)
+  // Z09 — follow-up after completed treatment for conditions other
+  // than malignancy (often the right code when the doctor is just
+  // checking on resolved problems).
+  'Z09',
+  // Z71.x — counseling + medical advice (often the right encounter
+  // code for "lifestyle" or "weight-management" check-ins where the
+  // chief complaint is already coded elsewhere).
+  'Z71.3',     // Dietary counseling and surveillance
+  'Z71.4',     // Alcohol abuse counseling and surveillance
+  'Z71.5',     // Drug abuse counseling and surveillance
+  'Z71.82',    // Exercise counseling
+  'Z71.89',    // Other specified counseling
+  // Z76.89 — last-resort "other specified reason for encounter" code
+  // that the L7a prompt instructs the model to emit when literally no
+  // other diagnosis code applies, rather than returning an empty
+  // codes array. The L7a post-validation layer will pick up the
+  // Z76.89-only case + flag the visit for review.
+  'Z76.89',    // Persons encountering health services in other specified circumstances
 ];
 
 /**
