@@ -66,6 +66,8 @@ export async function runLayer4GenerateSoap(
       action: 'PIPELINE_REJECTED_INJECTION_DELIMITER',
       targetType: 'transcribe_visit',
       targetId: input.visitId,
+      userId: input.userId,
+      practiceId: input.practiceId,
       success: false,
       errorCode: 'INJECTION_DELIMITER_DETECTED',
       metadata: {
