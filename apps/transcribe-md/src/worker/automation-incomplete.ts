@@ -30,6 +30,17 @@
 // 7d (referrals) and 7e (patient summary) are NOT load-bearing — they
 // augment the visit page but the doctor doesn't need them to sign the
 // SOAP. Their failures roll up into confidenceScores only.
+//
+// 2026-05-13 extension (Step 2 of post-cross-input-mode-audit fix matrix,
+// closes Finding 2): the helper now ALSO detects the "model returned
+// status:ok with codes:[] / em:none" shape. PR #232's UC2 audio_upload
+// scenario surfaced this — L7a completed without throwing but emitted
+// an empty codes array. Pre-extension G9 didn't catch this because
+// status:ok masks the empty output. The helper now accepts an
+// optional `outputs` parameter carrying the L7a + L7b results; when
+// the output is empty despite status:ok the helper flags it with a
+// distinct EMPTY label so audit-log forensics can separate "the layer
+// crashed" from "the model returned nothing."
 // ============================================================================
 
 /** Per-layer outcome shape written into `confidenceScores` by the
@@ -52,63 +63,142 @@ export const LOAD_BEARING_L7_TASKS = [
 
 export type LoadBearingTaskKey = (typeof LOAD_BEARING_L7_TASKS)[number];
 
+/** Output shapes the helper inspects to catch "empty result with
+ *  status:ok" cases. Both shapes are optional — call sites that don't
+ *  yet pass them keep the historic failed-only detection behavior. */
+export interface IcdLikeResult {
+  codes?: ReadonlyArray<unknown>;
+}
+export interface CptLikeResult {
+  em?: { code?: string | null } | null;
+  procedures?: ReadonlyArray<unknown>;
+}
+
+export interface LayerOutputs {
+  icdCodes?: IcdLikeResult | null;
+  cptCodes?: CptLikeResult | null;
+}
+
+/** Distinguishes "the layer crashed" from "the layer returned nothing
+ *  successfully." Both flip needsReview, but the audit-log metadata
+ *  uses the discriminator so admin forensics can grep separately. */
+export type IncompleteCause = 'failed' | 'empty';
+
 export interface IncompleteAutomationResult {
-  /** True iff at least one load-bearing layer failed. */
+  /** True iff at least one load-bearing layer failed OR returned empty. */
   needsReview: boolean;
-  /** Doctor-facing one-line reason; null when nothing failed. Capped
+  /** Doctor-facing one-line reason; null when nothing tripped. Capped
    *  at 500 chars so a verbose stack trace can't blow past Postgres
    *  TEXT-row sane sizes. */
   reviewReason: string | null;
-  /** Which load-bearing layers failed (subset of LOAD_BEARING_L7_TASKS).
-   *  Empty when nothing failed. */
+  /** Which load-bearing layers tripped (subset of LOAD_BEARING_L7_TASKS).
+   *  Empty when nothing tripped. */
   failedLayers: LoadBearingTaskKey[];
-  /** Per-failed-layer reason strings, mirror of `reviewReason` but
+  /** Per-tripped-layer reason strings, mirror of `reviewReason` but
    *  structured for the audit-log row's metadata field. Each value
    *  truncated to 300 chars. */
   reasonsByLayer: Record<LoadBearingTaskKey, string | null>;
+  /** Per-tripped-layer cause discriminator. Helps the audit-log row
+   *  separate genuine crashes ('failed') from "model returned nothing
+   *  successfully" ('empty'). */
+  causeByLayer: Record<LoadBearingTaskKey, IncompleteCause | null>;
 }
 
-/** Inspect a confidenceScores roll-up + report whether the visit
- *  needs review because a load-bearing L7 task errored. */
+/** Inspect a confidenceScores roll-up + (optionally) the L7a/L7b
+ *  output columns. Reports whether the visit needs review because a
+ *  load-bearing L7 task errored OR returned empty.
+ *
+ *  Backwards-compatible: existing callers that pass only `scores`
+ *  keep the historic failed-only detection. Callers that pass
+ *  `outputs` get the additional empty-codes detection (closes the
+ *  PR #232 Finding 2 / UC2 audio_upload anomaly). */
 export function detectIncompleteAutomation(
   scores: AutomationConfidenceScores | null | undefined,
+  outputs?: LayerOutputs,
 ): IncompleteAutomationResult {
-  const failed: LoadBearingTaskKey[] = [];
+  const tripped: LoadBearingTaskKey[] = [];
   const reasonsByLayer: Record<LoadBearingTaskKey, string | null> = {
     icd_coding: null,
     cpt_coding: null,
     rx_drafting: null,
   };
+  const causeByLayer: Record<LoadBearingTaskKey, IncompleteCause | null> = {
+    icd_coding: null,
+    cpt_coding: null,
+    rx_drafting: null,
+  };
 
+  // Pass 1: scores → 'failed' detection (the original G9 behavior).
   if (scores) {
     for (const key of LOAD_BEARING_L7_TASKS) {
       const entry = scores[key];
       if (entry && entry.status === 'failed') {
-        failed.push(key);
+        tripped.push(key);
         reasonsByLayer[key] = entry.reason?.slice(0, 300) ?? 'unknown';
+        causeByLayer[key] = 'failed';
       }
     }
   }
 
-  if (failed.length === 0) {
+  // Pass 2: outputs → 'empty' detection. Only inspects layers that
+  // weren't ALREADY counted as 'failed' (a failed layer's empty output
+  // is a known consequence, not a distinct signal). Only inspects
+  // load-bearing layers icd_coding + cpt_coding — rx_drafting is
+  // intentionally excluded because many visits legitimately carry no
+  // Rx (e.g. derm-biopsy follow-up, screening encounters).
+  if (outputs) {
+    if (causeByLayer.icd_coding == null && isIcdEmpty(outputs.icdCodes)) {
+      tripped.push('icd_coding');
+      reasonsByLayer.icd_coding = 'returned empty codes array (status:ok)';
+      causeByLayer.icd_coding = 'empty';
+    }
+    if (causeByLayer.cpt_coding == null && isCptEmpty(outputs.cptCodes)) {
+      tripped.push('cpt_coding');
+      reasonsByLayer.cpt_coding = 'no E&M code emitted (status:ok)';
+      causeByLayer.cpt_coding = 'empty';
+    }
+  }
+
+  if (tripped.length === 0) {
     return {
       needsReview: false,
       reviewReason: null,
       failedLayers: [],
       reasonsByLayer,
+      causeByLayer,
     };
   }
 
-  const perLayer = failed.map((k) => {
-    const e = scores?.[k];
-    const reason = e?.status === 'failed' ? e.reason : 'unknown';
+  const perLayer = tripped.map((k) => {
+    const reason = reasonsByLayer[k] ?? 'unknown';
     return `${k.replace('_', '-')}: ${reason}`;
   });
   const joined = perLayer.join('; ').slice(0, 500);
   return {
     needsReview: true,
     reviewReason: `Auto-coding incomplete — ${joined}. Click Retry to reprocess.`,
-    failedLayers: failed,
+    failedLayers: tripped,
     reasonsByLayer,
+    causeByLayer,
   };
+}
+
+/** Empty when the column is null or codes is missing / not an array /
+ *  zero-length. */
+function isIcdEmpty(icd: IcdLikeResult | null | undefined): boolean {
+  if (icd == null) return true;
+  const codes = icd.codes;
+  if (!Array.isArray(codes)) return true;
+  return codes.length === 0;
+}
+
+/** Empty when the column is null or no E&M code was emitted. Procedures
+ *  + modifiers being empty does NOT trip the rule — many established-
+ *  patient visits legitimately bill only the E&M tier. */
+function isCptEmpty(cpt: CptLikeResult | null | undefined): boolean {
+  if (cpt == null) return true;
+  const em = cpt.em;
+  if (em == null) return true;
+  const code = em.code;
+  return typeof code !== 'string' || code.trim() === '';
 }
