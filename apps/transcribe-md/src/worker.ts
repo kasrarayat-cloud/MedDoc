@@ -373,6 +373,9 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
           audioKey: visit.audioKey!,
           audioMimeType: visit.audioMimeType!,
           interpreterMode: visit.interpreterMode,
+          // Issues #202 + #206 — scope keyterm payload to the visit's
+          // clinical context. Free-text; builder normalizes.
+          specialty: visit.specialty,
         });
       }
 
@@ -479,6 +482,9 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
           dictationMimeType:
             process.env.TRANSCRIBE_MD_DICTATION_MIME ?? 'audio/webm',
           interpreterMode: visit.interpreterMode,
+          // Issues #202 + #206 — scope keyterm payload to the visit's
+          // clinical context.
+          specialty: visit.specialty,
         });
         dictationText = r.transcript;
       }
