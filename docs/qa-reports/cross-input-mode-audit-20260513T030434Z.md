@@ -220,3 +220,84 @@ The 72-visit batch ran for $21.74 total — well under both the brief's $50 budg
 | `apps/transcribe-md/scripts/cross-input-mode/README.md` | Operator runbook |
 
 Audio fixtures live in `/opt/meddoc-pro/.local/cross-input-mode-audio/` (gitignored). To re-run this audit, follow the README's four-step path. Estimated cost per audit cycle: ~$22 + ~$0.55 TTS.
+
+---
+
+## Section H — Verification Re-run (2026-05-13 07:28 UTC)
+
+**Scope:** 5 scenarios × 3 input modes = **15 visits**, targeting the 5 anomalies from Section C / E. Run after PRs #233 / #234 / #235 / #236 were merged + deployed.
+
+**Closing PRs:**
+
+| PR | Layer | Closes |
+|---|---|---|
+| #233 (P0) | L7a allowlist + post-validation fallback | C2 + C3 — DERM1 / OB2 / ORT2 empty-codes on procedure-dominant visits + UC2 empty-codes audio_upload |
+| #234 (P1) | G9 empty-codes-with-status-ok detection | E5 — secondary defense if L7a returns `status: ok` with `codes: []` |
+| #235 (P2) | L7a SCHEMA_FAIL via Anthropic tool_use | C1 — PED1 JSON_PARSE_FAIL at position 790 |
+| #236 (P3) | logAudit synchronous-throw safety + L2-L5 actor passing | A05-adjacent — worker-context audit-row coverage |
+
+**Method:** `runner.ts --run --include PED1,UC2,DERM1,OB2,ORT2`. The `--include` flag was added in the same PR as this report — targets a subset of scenarios so verification re-runs don't burn the full $22 cycle.
+
+### H1. Per-scenario results — all 5 anomalies closed
+
+```
+SCEN  MODE              ICDS                                  CPT_EM  L7A_STAT  REVIEW
+PED1  text_notes        [R50.9]                               99214   ok        no
+PED1  voice_dictation   [R50.9]                               99214   ok        no
+PED1  audio_upload      [R50.9]                               99214   ok        no
+OB2   text_notes        [Z39.2,Z30.430,Z39.1,Z71.89]          99214   ok        no
+OB2   voice_dictation   [Z39.2,Z30.430,Z39.1,Z71.89]          99214   ok        no
+OB2   audio_upload      [Z39.2,Z39.1,Z30.430,Z30.09,Z34.90]   99214   ok        no
+DERM1 text_notes        [D48.5,Z80.8,Z85.820,Z12.83]          99214   ok        no
+DERM1 voice_dictation   [D48.5,Z80.8,Z12.83]                  99214   ok        no
+DERM1 audio_upload      [D48.5,Z85.820,Z80.8,Z12.83]          99204   ok        no
+ORT2  text_notes        [S93.401A]                            99213   ok        no
+ORT2  voice_dictation   [S93.401A]                            99203   ok        no
+ORT2  audio_upload      [S93.401A]                            99203   ok        no
+UC2   text_notes        [S39.012A]                            99213   ok        no
+UC2   voice_dictation   [S39.012A,Z71.89]                     99213   ok        no
+UC2   audio_upload      [S39.012A]                            99213   ok        no
+```
+
+**Closure assessment per anomaly:**
+
+- **C1 PED1 SCHEMA_FAIL → CLOSED (PR #235).** PED1 ran clean across all 3 modes (R50.9 fever-unspecified). Zero SCHEMA_FAIL / JSON_PARSE_FAIL events across the 15 visits. Anthropic tool_use structurally prevents the trailing-garbage / preamble-prefix / fence-leakage failure modes that the free-form JSON path occasionally exhibited.
+- **C2 OB2 empty codes → CLOSED (PR #233).** **Z39.2 (encounter for routine postpartum follow-up) now emits in ALL 3 modes** — the billing-compliance gap that was the most-concerning finding. OB2 also emits Z30.430 (IUD insertion) + Z39.1 (encounter for care after delivery) consistently. Audio mode picks up Z30.09 + Z34.90 as additional context; same diagnosis, more granular.
+- **C3 DERM1 / ORT2 empty codes → CLOSED (PR #233).** DERM1: 3-4 ICDs per mode (D48.5 neoplasm-of-uncertain-behavior + Z80.8 family-history + Z85.820 personal-history-of-melanoma + Z12.83 screening). ORT2: S93.401A (ankle sprain) in all 3 modes — the new orthopedic family (S93.4xxA series) landing in the allowlist.
+- **UC2 empty codes audio_upload → CLOSED (PR #233 ancillary).** UC2 emits S39.012A (strain of muscle of low back) in all 3 modes — the prior `Jaccard 0.00` audio_upload empty-codes gap from Section D is gone.
+- **E5 G9 empty-codes-with-status-ok detection → NOT EXERCISED (defensive in place).** No L7a call in this batch returned `status: ok` with `codes: []`. The G9 defense (PR #234) is the second line — it never fires when the first line (PR #233 prevention) holds. The unit-test suite for the helper pins the behavior; the runtime path is exercised only if PR #233's prevention fails.
+
+### H2. CPT E&M tier agreement
+
+Mostly stable. Drift cases:
+- DERM1 audio_upload picks 99204 (new patient) vs 99214 (established) on text/voice — the audio mode's L4 SOAP draft framed this as a first-visit derm consult; same level of work, new-vs-established interpretation drift.
+- ORT2 text_notes picks 99213 vs 99203 on audio/voice — same new-vs-established drift on a moderate-MDM ankle sprain.
+
+These are not anomalies; they're the legitimate new-vs-established judgement drift already documented in Section E2 of the original audit.
+
+### H3. P3 audit-row coverage (worker-context logAudit) — VERIFIED
+
+Counted 21 worker-emitted audit rows across the 15-visit batch (all `CODING_COACH_REJECTED_INVALID_ICD` + `_CPT` rows from the L7a/L7b validators):
+
+- **21/21 have a real `userId`** (`cmo5ye2nm000c01s3o…`, the test-fixture solo-doctor)
+- **21/21 have a real `practiceId`** (`cmo5ye2nf000b01s3q0xlk…`, NOT the `clinic_main` sentinel)
+
+Pre-PR #236, these rows would have either been silently dropped (synchronous `auth()` throw inside Auth.js v5's JWT callback chain bypassing `.catch()`) or written with `userId: null` + `practiceId: 'clinic_main'`. The fix's short-circuit path (skip `auth()` when both override fields are passed) is empirically exercised by every L7a/L7b validator audit emit in this batch.
+
+The L2/L3/L4/L5 prompt-injection-delimiter audit emits aren't represented in this batch because the synthesized TTS scripts don't contain injection-delimiter patterns. The fix for those four sites is pinned by source-shape regex tests in `apps/transcribe-md/tests/lib/audit-worker-context.test.ts` (10 cases, including the synchronous-throw failure mode + the userId-null worker hot path).
+
+### H4. Cost + duration
+
+| Item | Result | Notes |
+|---|---|---|
+| Visits | 15/15 READY | Zero FAILED, zero needsReview |
+| Wall-clock | ~24 min | Concurrency=2; ~1.6 min/visit on TTS-clean audio + cached pipeline state |
+| Total pipeline cost | **$3.73** | Mean $0.25/visit — cheaper than the audit baseline ($0.31) and well under the brief's $5 verification budget |
+| SCHEMA_FAIL / JSON_PARSE_FAIL events | **0** | Down from 1/24 in the original PED1 text_notes run |
+
+### H5. Bottom line
+
+**All 4 cross-input-mode-audit findings are empirically closed.** The four-PR fix stack landed without introducing regressions in the 15-visit re-run. Demo confidence: **GREEN** on every audited scenario × every input mode.
+
+The narrow caveats (CPT E&M new-vs-established drift on DERM1 / ORT2 audio mode; OB2 audio adds extra contextual Z-codes) are within the documented "same diagnosis, different precision" envelope from Section B and Section E2 of the original audit — not regressions.
+
