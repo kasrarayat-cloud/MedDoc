@@ -8,7 +8,7 @@
 // ============================================================================
 
 import Anthropic from '@anthropic-ai/sdk';
-import type { z } from 'zod';
+import { z } from 'zod';
 import { hashPrompt } from './prompt-hash';
 import { logAiCall } from './log';
 import { claudeCostCents } from './pricing';
@@ -149,6 +149,24 @@ export interface AnthropicCompleteArgs<T> extends AiLogContext {
   temperature?: number;
   /** Extra messages appended for retry — e.g. the prior invalid response + error. */
   retryContext?: string;
+  /** 2026-05-13 (cross-input-mode-audit Finding 1 hardening): when set,
+   *  use Anthropic's native tool_use feature for structured output
+   *  instead of free-form text + JSON.parse. The schema is converted
+   *  to JSON Schema via Zod's built-in `z.toJSONSchema()` and forced
+   *  via `tool_choice: { type: 'tool', name }`. The tool's `input` is
+   *  read directly off the response — there's no JSON to malform.
+   *  Eliminates the SCHEMA_FAIL / JSON_PARSE_FAIL class entirely on
+   *  this layer.
+   *
+   *  Backwards-compatible — callers that omit this field keep the
+   *  historic free-form-text path. */
+  useToolUse?: {
+    /** Tool name surfaced to the model. Keep snake_case + short
+     *  (the model echoes it in reasoning when the call works). */
+    name: string;
+    /** One-sentence description of what the tool does. */
+    description: string;
+  };
 }
 
 export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Promise<T> {
@@ -160,61 +178,141 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
   const promptHash = hashPrompt(args.system, userContent);
   const started = Date.now();
 
+  // 2026-05-13 tool_use path (cross-input-mode-audit Finding 1
+  // hardening). When the caller opts in, build the request with
+  // `tools` + `tool_choice` so the model returns a structured
+  // `tool_use` content block. No free-form text → no JSON.parse fail.
+  // The model's output is the tool's `input` object, which we still
+  // validate with the Zod schema (Anthropic's tool_use is
+  // best-effort on schema adherence; defense-in-depth via Zod).
+  const useToolUse = args.useToolUse;
+
   try {
-    const response = await client.messages.create({
-      model: args.model,
-      max_tokens: args.maxTokens ?? 4096,
-      ...(args.temperature !== undefined && !shouldOmitTemperature(args.model)
-        ? { temperature: args.temperature }
-        : {}),
-      system: args.system,
-      messages: [{ role: 'user', content: userContent }],
-    });
-
-    const latencyMs = Date.now() - started;
-
-    // Concatenate all text content blocks. Anthropic responses usually
-    // have one block but the API is arrayed.
-    const text = response.content
-      .filter((b): b is Anthropic.TextBlock => b.type === 'text')
-      .map((b) => b.text)
-      .join('\n')
-      .trim();
-
-    // Claude sometimes wraps JSON in ```json … ``` fences even when told
-    // not to. Strip fences before parsing.
-    const unfenced = text
-      .replace(/^```(?:json)?\s*/i, '')
-      .replace(/```$/, '')
-      .trim();
-
-    const usage = extractUsage(response.usage);
-
     let parsed: unknown;
-    try {
-      parsed = JSON.parse(unfenced);
-    } catch (err) {
-      logAiCall({
-        ...args,
-        provider: 'anthropic',
-        promptHash,
-        latencyMs,
-        inputTokens: usage.inputTokens,
-        outputTokens: usage.outputTokens,
-        cacheReadInputTokens: usage.cacheReadInputTokens,
-        cacheCreationInputTokens: usage.cacheCreationInputTokens,
-        costUsdCents: claudeCostCents(
-          args.model,
-          usage.inputTokens,
-          usage.outputTokens,
-          usage.cacheReadInputTokens,
-          usage.cacheCreationInputTokens,
-        ),
-        success: false,
-        errorCode: 'JSON_PARSE_FAIL',
-        errorDetails: capErrorDetails(unfenced),
+    let unfenced: string;
+    let usage: ReturnType<typeof extractUsage>;
+    let latencyMs: number;
+
+    if (useToolUse) {
+      // Convert Zod → JSON Schema via Zod v4's built-in. Cast through
+      // `unknown` because the Anthropic SDK's InputSchema type is
+      // narrowly typed (`type: 'object'` literal) while Zod's output
+      // is a more general JSONSchema7-ish shape.
+      const jsonSchema = z.toJSONSchema(args.schema) as unknown as Anthropic.Messages.Tool.InputSchema;
+
+      const response = await client.messages.create({
+        model: args.model,
+        max_tokens: args.maxTokens ?? 4096,
+        ...(args.temperature !== undefined && !shouldOmitTemperature(args.model)
+          ? { temperature: args.temperature }
+          : {}),
+        system: args.system,
+        messages: [{ role: 'user', content: userContent }],
+        tools: [
+          {
+            name: useToolUse.name,
+            description: useToolUse.description,
+            input_schema: jsonSchema,
+          },
+        ],
+        tool_choice: { type: 'tool', name: useToolUse.name },
       });
-      throw new Error(`Anthropic response was not valid JSON: ${String(err)}`);
+
+      latencyMs = Date.now() - started;
+      usage = extractUsage(response.usage);
+
+      // Find the tool_use content block. Anthropic guarantees one
+      // when `tool_choice: { type: 'tool', name }` is set + the
+      // call succeeds; we still defend against the empty case in
+      // logs because malformed responses are rare-but-possible.
+      const toolBlock = response.content.find(
+        (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use',
+      );
+      if (!toolBlock) {
+        unfenced = '(no tool_use block returned)';
+        logAiCall({
+          ...args,
+          provider: 'anthropic',
+          promptHash,
+          latencyMs,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          cacheReadInputTokens: usage.cacheReadInputTokens,
+          cacheCreationInputTokens: usage.cacheCreationInputTokens,
+          costUsdCents: claudeCostCents(
+            args.model,
+            usage.inputTokens,
+            usage.outputTokens,
+            usage.cacheReadInputTokens,
+            usage.cacheCreationInputTokens,
+          ),
+          success: false,
+          errorCode: 'JSON_PARSE_FAIL',
+          errorDetails: capErrorDetails(unfenced),
+        });
+        throw new Error(
+          'Anthropic response was not valid JSON: tool_use block missing',
+        );
+      }
+      parsed = toolBlock.input;
+      // Keep `unfenced` populated so the retry-context surface
+      // downstream gets a useful payload (the tool input as JSON).
+      unfenced = JSON.stringify(parsed);
+    } else {
+      const response = await client.messages.create({
+        model: args.model,
+        max_tokens: args.maxTokens ?? 4096,
+        ...(args.temperature !== undefined && !shouldOmitTemperature(args.model)
+          ? { temperature: args.temperature }
+          : {}),
+        system: args.system,
+        messages: [{ role: 'user', content: userContent }],
+      });
+
+      latencyMs = Date.now() - started;
+
+      // Concatenate all text content blocks. Anthropic responses usually
+      // have one block but the API is arrayed.
+      const text = response.content
+        .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+        .map((b) => b.text)
+        .join('\n')
+        .trim();
+
+      // Claude sometimes wraps JSON in ```json … ``` fences even when told
+      // not to. Strip fences before parsing.
+      unfenced = text
+        .replace(/^```(?:json)?\s*/i, '')
+        .replace(/```$/, '')
+        .trim();
+
+      usage = extractUsage(response.usage);
+
+      try {
+        parsed = JSON.parse(unfenced);
+      } catch (err) {
+        logAiCall({
+          ...args,
+          provider: 'anthropic',
+          promptHash,
+          latencyMs,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          cacheReadInputTokens: usage.cacheReadInputTokens,
+          cacheCreationInputTokens: usage.cacheCreationInputTokens,
+          costUsdCents: claudeCostCents(
+            args.model,
+            usage.inputTokens,
+            usage.outputTokens,
+            usage.cacheReadInputTokens,
+            usage.cacheCreationInputTokens,
+          ),
+          success: false,
+          errorCode: 'JSON_PARSE_FAIL',
+          errorDetails: capErrorDetails(unfenced),
+        });
+        throw new Error(`Anthropic response was not valid JSON: ${String(err)}`);
+      }
     }
 
     const schemaResult = args.schema.safeParse(parsed);
