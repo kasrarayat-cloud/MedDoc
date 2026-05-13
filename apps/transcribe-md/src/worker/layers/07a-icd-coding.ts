@@ -176,6 +176,17 @@ export async function runLayer7aIcdCoding(
     // Q2 fix-pack — billing codes are deterministic; tightened from
     // 0.1 to 0 so the same SOAP produces the same code list every time.
     temperature: 0,
+    // 2026-05-13 SCHEMA_FAIL hardening (cross-input-mode-audit Finding 1):
+    // Force Anthropic to return structured output via tool_use instead
+    // of free-form text + JSON.parse. PED1 in the cross-input-mode-audit
+    // hit a JSON_PARSE_FAIL at position 790 (trailing-garbage shape) which
+    // exhausted the 2-retry budget; tool_use eliminates that failure
+    // class because the response is a structured object, not free text.
+    useToolUse: {
+      name: 'submit_icd_codes',
+      description:
+        'Submit the final ICD-10-CM code list for this visit. Each code carries the verbatim SOAP evidence and per-code confidence.',
+    },
   });
 
   // Round 3 PR-D — A06-P0-002 deterministic ICD-10 allowlist floor.
