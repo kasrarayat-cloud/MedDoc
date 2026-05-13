@@ -18,6 +18,7 @@ import prisma from '@meddoc/db';
 import { AuthTokenPurpose } from '@prisma/client';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
+import { logAudit } from '@/lib/audit';
 import { consumeAuthToken } from '@/lib/auth-tokens';
 import {
   RATE_LIMITS,
@@ -111,6 +112,19 @@ export const POST = withApiHandler('api:auth:reset-password', async (req) => {
 
   log.info('auth:reset-password', 'password reset + sessions revoked', {
     userId: consumed.userId,
+  });
+
+  // Security audit P1-A — HIPAA §164.312(b) requires logging
+  // credential-material changes regardless of trigger. The
+  // change-password route already emits PASSWORD_CHANGED; this
+  // reset-via-token path was the missing case. `via: 'reset_token'`
+  // lets forensics distinguish the two paths.
+  void logAudit({
+    action: 'PASSWORD_CHANGED',
+    targetType: 'User',
+    targetId: consumed.userId,
+    userId: consumed.userId,
+    metadata: { via: 'reset_token' },
   });
 
   return NextResponse.json({ ok: true }, { status: 200 });
