@@ -20,10 +20,9 @@ import prisma from '@meddoc/db';
 // text Deepgram does (with `diarize: false`).
 import { transcribe, type TranscribeResult } from '@meddoc/ai';
 import { statAudio, streamAudio } from '@/lib/minio';
-// Q2 fix-pack — dictation is the path where the doctor speaks
-// medication names, anatomy, labs, and diagnoses directly. Until now
-// L1b passed no keyterms — the densest-yield case for the boost.
-import { CLINICAL_KEYTERMS } from '@/lib/deepgram-vocabulary';
+// 2026-05-13 Issues #202 + #206 — keyterms are now scoped per-visit
+// via the builder rather than a single global list.
+import { buildKeytermsForVisit } from '@/lib/deepgram-keyterm-builder';
 import { logAudit } from '@/lib/audit';
 import {
   computeAudioConfidenceStats,
@@ -46,6 +45,10 @@ export interface Layer1bInput {
    *  symmetry so a doctor who dictates a code-switching summary gets
    *  the multilingual model. */
   interpreterMode?: boolean;
+  /** 2026-05-13 Issues #202 + #206 — visit specialty used to scope
+   *  the Deepgram keyterm list. Free-text from
+   *  `transcribe_visits.specialty`; the builder normalizes. */
+  specialty?: string | null;
 }
 
 export interface Layer1bOutput {
@@ -72,6 +75,12 @@ export async function runLayer1bTranscribeDictation(
   }
   const nodeStream = await streamAudio(input.dictationAudioKey);
   const webStream = Readable.toWeb(nodeStream) as ReadableStream<Uint8Array>;
+
+  // 2026-05-13 Issues #202 + #206 — per-visit keyterm composition.
+  // Interpreter mode skips this (model swap to nova-3 general).
+  const built = input.interpreterMode
+    ? null
+    : buildKeytermsForVisit({ specialty: input.specialty });
 
   const attempt = async () => {
     return transcribe({
@@ -106,7 +115,8 @@ export async function runLayer1bTranscribeDictation(
             // Whisper has no equivalent toggles (it just transcribes), so
             // the fallback path produces functionally the same flat text.
             options: { diarize: false, utterances: false },
-            keyterms: CLINICAL_KEYTERMS,
+            // 2026-05-13 Issues #202 + #206 — scoped per-visit keyterms.
+            keyterms: built?.keyterms ?? [],
           },
     });
   };
@@ -187,6 +197,23 @@ export async function runLayer1bTranscribeDictation(
         durationSec: result.durationSec,
       },
     });
+  }
+
+  // Persist keyterm composition for audit attribution. Fire-and-
+  // forget; never block the visit. Skipped for interpreter-mode.
+  if (built?.metadata) {
+    void (async () => {
+      try {
+        await prisma.transcribeVisit.update({
+          where: { id: input.visitId },
+          data: {
+            keytermsApplied: built.metadata as unknown as object,
+          },
+        });
+      } catch {
+        // Non-load-bearing for the visit.
+      }
+    })();
   }
 
   return {

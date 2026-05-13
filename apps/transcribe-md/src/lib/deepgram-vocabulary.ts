@@ -562,7 +562,13 @@ export const COMMON_DIAGNOSES: readonly string[] = [
  *  L1b (dictation) transcription calls. Order: medications first
  *  (highest-stakes — a wrong drug name is a clinical-safety event),
  *  then anatomy / labs / procedures / diagnoses. Deduped (rare
- *  overlap) so the budget test sees what the runtime sees. */
+ *  overlap) so the budget test sees what the runtime sees.
+ *
+ *  2026-05-13 (Issues #202 + #206): production paths shifted to
+ *  `buildKeytermsForVisit` (see deepgram-keyterm-builder.ts) — this
+ *  global constant is kept for the eval harness and back-compat but
+ *  L1 + L1b no longer use it directly. The eval harness still wants
+ *  a deterministic global baseline to compare against. */
 export const CLINICAL_KEYTERMS: readonly string[] = Array.from(
   new Set<string>([
     ...MEDICATION_KEYTERMS,
@@ -572,3 +578,543 @@ export const CLINICAL_KEYTERMS: readonly string[] = Array.from(
     ...COMMON_DIAGNOSES,
   ])
 );
+
+// ============================================================================
+// 2026-05-13 Issues #202 + #206 — per-specialty keyterm bundles.
+// ----------------------------------------------------------------------------
+// The pre-2026-05-13 strategy shipped CLINICAL_KEYTERMS (~124 terms) on
+// EVERY visit regardless of specialty. Production audit confirmed
+// dilution: every visit got cardiothoracic terms + dermatologic terms +
+// obstetric terms, etc., so each individual term received less
+// attentional weight. Rare/specialty-specific terms (the Implanon /
+// Nexplanon contraceptive implants from Issue #206) were entirely
+// absent because they didn't make the cut for the global list.
+//
+// Per-specialty bundles are layered on top of a smaller core via the
+// builder (see deepgram-keyterm-builder.ts). Each bundle stays small
+// (~20-30 terms) so the per-visit payload sits in Deepgram's
+// recommended 20-50 sweet spot rather than the historical ~124.
+//
+// Bundle authorship guidelines:
+//   - Specialty-IDIOSYNCRATIC terms only — common cardiac meds belong
+//     in the core, not in cardiology's bundle.
+//   - Brand AND generic for medications likely to be dictated by brand
+//     (Ozempic, Mounjaro, Zepbound, Wegovy, Implanon, Nexplanon).
+//   - Procedure names this specialty uses heavily.
+//   - Avoid generic English words that aren't clinical-domain.
+// ============================================================================
+
+/** Terms that ride on EVERY visit regardless of specialty — the
+ *  universal clinical-vocabulary baseline. Sized ~80 entries so the
+ *  per-visit budget has room for a specialty bundle + safety floor +
+ *  patient-context boost (added in subsequent PRs).
+ *
+ *  Composition: anatomy (~32) + labs (~9) + procedures (~8) +
+ *  common diagnoses (~8) + top-25 highest-frequency medications
+ *  drawn from `MEDICATION_KEYTERMS`. Drug list deliberately picks
+ *  cross-specialty common ones (ibuprofen, metformin, lisinopril,
+ *  atorvastatin) and omits specialty-specific ones (semaglutide
+ *  goes in bariatric / weight_management; warfarin goes in
+ *  vascular_surgery). */
+export const CORE_KEYTERMS: readonly string[] = Array.from(
+  new Set<string>([
+    // Anatomy + labs + procedures + diagnoses — already cross-specialty
+    ...ANATOMY_TERMS,
+    ...LAB_TESTS,
+    ...PROCEDURES,
+    ...COMMON_DIAGNOSES,
+    // Top universal medications (drawn from MEDICATION_KEYTERMS — these
+    // cross every specialty)
+    'acetaminophen',
+    'ibuprofen',
+    'aspirin',
+    'metformin',
+    'lisinopril',
+    'amlodipine',
+    'atorvastatin',
+    'rosuvastatin',
+    'metoprolol',
+    'losartan',
+    'omeprazole',
+    'pantoprazole',
+    'levothyroxine',
+    'amoxicillin',
+    'azithromycin',
+    'doxycycline',
+    'cephalexin',
+    'prednisone',
+    'methylprednisolone',
+    'albuterol',
+    'fluticasone',
+    'sertraline',
+    'fluoxetine',
+    'gabapentin',
+    'tramadol',
+  ]),
+);
+
+/** Specialty bundles — per-specialty term lists layered on top of
+ *  CORE_KEYTERMS by the builder. Each bundle should stay under ~30
+ *  terms to keep the per-visit total below Deepgram's recommended
+ *  sweet spot (~50). Most entries are drawn from
+ *  MEDICATION_KEYTERMS_TAIL plus specialty-specific additions
+ *  (Implanon / Nexplanon for ob_gyn — these were absent from any
+ *  prior list and that's the Issue #206 root cause). */
+export const SPECIALTY_KEYTERMS: Record<string, readonly string[]> = {
+  // ─── Bariatric surgery ────────────────────────────────────────
+  // GLP-1 family + bariatric procedures. The GLP-1 brand collisions
+  // (Ozempic / Wegovy / Mounjaro / Zepbound) are addressed more
+  // densely by the PR-2 confused-drug-names floor; this bundle
+  // pre-stages them in case the safety floor isn't yet loaded.
+  bariatric_surgery: [
+    'semaglutide',
+    'Ozempic',
+    'Wegovy',
+    'tirzepatide',
+    'Mounjaro',
+    'Zepbound',
+    'liraglutide',
+    'Saxenda',
+    'Victoza',
+    'Trulicity',
+    'dulaglutide',
+    'phentermine',
+    'topiramate',
+    'Qsymia',
+    'naltrexone',
+    'Contrave',
+    'orlistat',
+    'gastric bypass',
+    'sleeve gastrectomy',
+    'duodenal switch',
+    'lap band',
+    'Roux-en-Y',
+    'GERD',
+    'dumping syndrome',
+    'BMI',
+    'body mass index',
+  ],
+
+  // ─── Weight management (non-surgical) ─────────────────────────
+  // Overlap with bariatric_surgery on GLP-1 brands; differs by
+  // including more metabolic-panel + lifestyle terms.
+  weight_management: [
+    'semaglutide',
+    'Ozempic',
+    'Wegovy',
+    'tirzepatide',
+    'Mounjaro',
+    'Zepbound',
+    'liraglutide',
+    'Rybelsus',
+    'phentermine',
+    'Adipex',
+    'topiramate',
+    'Qsymia',
+    'naltrexone',
+    'Contrave',
+    'bupropion',
+    'metformin',
+    'orlistat',
+    'lipid panel',
+    'A1C',
+    'fasting glucose',
+    'TSH',
+    'body composition',
+    'waist circumference',
+    'visceral fat',
+  ],
+
+  // ─── Primary care / family medicine / internal medicine ───────
+  primary_care: [
+    'lisinopril',
+    'losartan',
+    'hydrochlorothiazide',
+    'amlodipine',
+    'metoprolol',
+    'atorvastatin',
+    'metformin',
+    'glipizide',
+    'glyburide',
+    'Januvia',
+    'sitagliptin',
+    'levothyroxine',
+    'liothyronine',
+    'sertraline',
+    'fluoxetine',
+    'escitalopram',
+    'duloxetine',
+    'bupropion',
+    'gabapentin',
+    'tramadol',
+    'omeprazole',
+    'pantoprazole',
+    'ibuprofen',
+    'acetaminophen',
+    'amoxicillin',
+    'azithromycin',
+  ],
+
+  // ─── Cardiology ───────────────────────────────────────────────
+  cardiology: [
+    'apixaban',
+    'rivaroxaban',
+    'dabigatran',
+    'warfarin',
+    'Coumadin',
+    'Eliquis',
+    'Xarelto',
+    'clopidogrel',
+    'Plavix',
+    'ticagrelor',
+    'Brilinta',
+    'metoprolol',
+    'carvedilol',
+    'bisoprolol',
+    'atorvastatin',
+    'rosuvastatin',
+    'simvastatin',
+    'ezetimibe',
+    'amiodarone',
+    'digoxin',
+    'sacubitril',
+    'valsartan',
+    'Entresto',
+    'EKG',
+    'echocardiogram',
+    'troponin',
+    'BNP',
+    'NT-proBNP',
+  ],
+
+  // ─── Orthopedics ──────────────────────────────────────────────
+  orthopedics: [
+    'meloxicam',
+    'naproxen',
+    'celecoxib',
+    'cyclobenzaprine',
+    'tizanidine',
+    'methocarbamol',
+    'tramadol',
+    'oxycodone',
+    'hydrocodone',
+    'morphine',
+    'gabapentin',
+    'pregabalin',
+    'arthrocentesis',
+    'corticosteroid injection',
+    'hyaluronic acid injection',
+    'rotator cuff',
+    'anterior cruciate ligament',
+    'meniscus',
+    'osteoarthritis',
+    'rheumatoid arthritis',
+    'plantar fasciitis',
+    'carpal tunnel',
+    'lumbar radiculopathy',
+    'fracture',
+    'sprain',
+    'strain',
+  ],
+
+  // ─── Dermatology ──────────────────────────────────────────────
+  dermatology: [
+    'tretinoin',
+    'adapalene',
+    'tazarotene',
+    'isotretinoin',
+    'clindamycin topical',
+    'benzoyl peroxide',
+    'minocycline',
+    'doxycycline',
+    'spironolactone',
+    'hydroquinone',
+    'mupirocin',
+    'fluconazole',
+    'terbinafine',
+    'permethrin',
+    'triamcinolone',
+    'clobetasol',
+    'tacrolimus',
+    'pimecrolimus',
+    'dupilumab',
+    'Dupixent',
+    'biopsy',
+    'excision',
+    'cryotherapy',
+    'melanoma',
+    'basal cell carcinoma',
+    'squamous cell carcinoma',
+    'actinic keratosis',
+    'rosacea',
+    'psoriasis',
+    'eczema',
+  ],
+
+  // ─── Obstetrics & Gynecology ──────────────────────────────────
+  // CRITICAL: this bundle includes Implanon + Nexplanon — the seed
+  // case from Issue #206. Pre-fix, these contraceptive implants
+  // were ABSENT from any keyterm list, causing TTS/ASR to substitute
+  // "insulin" via 3-syllable medical-context match.
+  ob_gyn: [
+    'Implanon',
+    'Nexplanon',
+    'etonogestrel',
+    'levonorgestrel',
+    'Mirena',
+    'Kyleena',
+    'Skyla',
+    'Liletta',
+    'Paragard',
+    'medroxyprogesterone',
+    'Depo-Provera',
+    'norethindrone',
+    'drospirenone',
+    'Yaz',
+    'Yasmin',
+    'estradiol',
+    'tranexamic acid',
+    'misoprostol',
+    'methotrexate',
+    'colposcopy',
+    'endometriosis',
+    'polycystic ovary syndrome',
+    'gestational diabetes',
+    'preeclampsia',
+    'group B strep',
+    'human papillomavirus',
+  ],
+
+  // ─── Urgent care ──────────────────────────────────────────────
+  urgent_care: [
+    'amoxicillin',
+    'azithromycin',
+    'cephalexin',
+    'doxycycline',
+    'sulfamethoxazole',
+    'trimethoprim',
+    'metronidazole',
+    'fluconazole',
+    'oseltamivir',
+    'Tamiflu',
+    'albuterol',
+    'methylprednisolone',
+    'Medrol',
+    'prednisone',
+    'ondansetron',
+    'Zofran',
+    'sumatriptan',
+    'lidocaine',
+    'tetanus',
+    'group A strep',
+    'rapid strep',
+    'urinary tract infection',
+    'otitis media',
+    'pneumonia',
+    'cellulitis',
+    'laceration',
+    'sprain',
+    'abscess',
+  ],
+
+  // ─── Pain management ──────────────────────────────────────────
+  pain_management: [
+    'oxycodone',
+    'hydrocodone',
+    'morphine',
+    'fentanyl',
+    'buprenorphine',
+    'Suboxone',
+    'naloxone',
+    'naltrexone',
+    'methadone',
+    'tramadol',
+    'tapentadol',
+    'gabapentin',
+    'pregabalin',
+    'duloxetine',
+    'nortriptyline',
+    'amitriptyline',
+    'lidocaine patch',
+    'capsaicin',
+    'baclofen',
+    'cyclobenzaprine',
+    'epidural steroid injection',
+    'radiofrequency ablation',
+    'nerve block',
+    'PCA',
+    'PDMP',
+    'opioid agreement',
+  ],
+
+  // ─── Pediatrics ───────────────────────────────────────────────
+  pediatrics: [
+    'amoxicillin',
+    'augmentin',
+    'cephalexin',
+    'azithromycin',
+    'acetaminophen',
+    'ibuprofen',
+    'diphenhydramine',
+    'Benadryl',
+    'cetirizine',
+    'Zyrtec',
+    'albuterol',
+    'fluticasone',
+    'Flovent',
+    'montelukast',
+    'Singulair',
+    'methylphenidate',
+    'amphetamine',
+    'guanfacine',
+    'risperidone',
+    'otitis media',
+    'strep pharyngitis',
+    'bronchiolitis',
+    'croup',
+    'viral exanthem',
+    'attention deficit',
+    'autism spectrum',
+  ],
+
+  // ─── Vascular surgery ─────────────────────────────────────────
+  vascular_surgery: [
+    'apixaban',
+    'rivaroxaban',
+    'dabigatran',
+    'edoxaban',
+    'warfarin',
+    'enoxaparin',
+    'Lovenox',
+    'heparin',
+    'aspirin',
+    'clopidogrel',
+    'cilostazol',
+    'iohexol',
+    'gadolinium',
+    'eGFR',
+    'creatinine clearance',
+    'endovascular aneurysm repair',
+    'EVAR',
+    'TEVAR',
+    'carotid endarterectomy',
+    'angioplasty',
+    'stent',
+    'fistula',
+    'graft',
+    'deep vein thrombosis',
+    'peripheral artery disease',
+    'aortic aneurysm',
+  ],
+
+  // ─── Endocrinology ────────────────────────────────────────────
+  // T-family insulins + GLP-1 + thyroid. Heavy overlap with
+  // bariatric_surgery; the difference is broader thyroid + adrenal
+  // + pituitary coverage. ISMP confused-drug pairs Trulicity /
+  // Tradjenta / Toujeo / Tresiba / Tanzeum live here too.
+  endocrinology: [
+    'levothyroxine',
+    'liothyronine',
+    'levothyroxine sodium',
+    'methimazole',
+    'propylthiouracil',
+    'hydrocortisone',
+    'fludrocortisone',
+    'desmopressin',
+    'cabergoline',
+    'bromocriptine',
+    'semaglutide',
+    'Ozempic',
+    'Rybelsus',
+    'tirzepatide',
+    'Mounjaro',
+    'liraglutide',
+    'Trulicity',
+    'Tradjenta',
+    'Toujeo',
+    'Tresiba',
+    'Lantus',
+    'Levemir',
+    'Humalog',
+    'Novolog',
+    'insulin glargine',
+    'insulin aspart',
+    'TSH',
+    'free T4',
+    'free T3',
+    'A1C',
+  ],
+
+  // ─── Functional medicine / integrative ────────────────────────
+  // Charm Health's target segment per the EHR roadmap. Supplements
+  // + functional labs (DUTCH, GI-MAP) heavily-dictated.
+  functional_medicine: [
+    'methylated folate',
+    'vitamin D3',
+    'vitamin B12',
+    'methylcobalamin',
+    'magnesium glycinate',
+    'omega-3',
+    'fish oil',
+    'curcumin',
+    'berberine',
+    'ashwagandha',
+    'NAD+',
+    'glutathione',
+    'CoQ10',
+    'probiotic',
+    'L-theanine',
+    'melatonin',
+    'GLP-1',
+    'cortisol',
+    'DUTCH test',
+    'GI-MAP',
+    'Genova',
+    'hormone replacement',
+    'bioidentical hormone',
+    'low FODMAP',
+    'autoimmune',
+    'leaky gut',
+  ],
+
+  // ─── Psychiatry ───────────────────────────────────────────────
+  // SSRI / SNRI / antipsychotic / mood stabilizer cluster. Many
+  // ISMP confused-name pairs (Celexa/Celebrex/Cerebyx, Lexapro/
+  // Loxitane) live here.
+  psychiatry: [
+    'sertraline',
+    'Zoloft',
+    'fluoxetine',
+    'Prozac',
+    'escitalopram',
+    'Lexapro',
+    'citalopram',
+    'Celexa',
+    'duloxetine',
+    'Cymbalta',
+    'venlafaxine',
+    'Effexor',
+    'bupropion',
+    'Wellbutrin',
+    'mirtazapine',
+    'Remeron',
+    'trazodone',
+    'lithium',
+    'lamotrigine',
+    'Lamictal',
+    'valproate',
+    'aripiprazole',
+    'Abilify',
+    'quetiapine',
+    'Seroquel',
+    'olanzapine',
+    'Zyprexa',
+    'risperidone',
+    'Risperdal',
+  ],
+
+  // ─── Unspecified — empty bundle ───────────────────────────────
+  // Practice didn't tag a specialty, or the tag didn't match any
+  // canonical key. Visit uses CORE_KEYTERMS only.
+  unspecified: [],
+};
