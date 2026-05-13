@@ -786,7 +786,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       } catch (err) {
         console.error(
           `[transcribe-md-worker] em-judge prewarm failed:`,
-          err instanceof Error ? err.message : err,
+          redactPhi(err instanceof Error ? err.message : err),
         );
       }
     })();
@@ -1209,7 +1209,7 @@ async function startCleanupWorker(): Promise<void> {
   cleanupWorker.on('failed', (job, err) => {
     console.error(
       `[ops:cleanup] job ${job?.name}/${job?.id} failed:`,
-      err
+      redactPhi(err instanceof Error ? err.message : err)
     );
   });
 
@@ -1331,7 +1331,7 @@ async function startHeartbeat(): Promise<void> {
     } catch (err) {
       console.error(
         '[transcribe-md-worker] heartbeat write failed:',
-        err instanceof Error ? err.message : err
+        redactPhi(err instanceof Error ? err.message : err)
       );
     }
   };
@@ -1372,7 +1372,7 @@ async function main() {
   worker.on('failed', (job, err) => {
     console.error(
       `[transcribe-md-worker] job ${job?.id} visit ${job?.data.visitId} FAILED:`,
-      err
+      redactPhi(err instanceof Error ? err.message : err)
     );
     // PR-L: when the retry budget is exhausted, ship the job to the
     // DLQ so an operator can see + decide via /admin/queues. The
@@ -1392,16 +1392,24 @@ async function main() {
         originalJobId: job.id ?? null,
         originalJobName: job.name,
         originalPayload: job.data,
-        lastError:
+        // Audit P0-A (2026-05-13): the DLQ row is DURABLE storage
+        // reviewed via /admin/queues. Prisma errors + Anthropic 400
+        // bodies frequently quote prompt fragments (transcript +
+        // SOAP draft), so an unscrubbed err.message leaks PHI into
+        // an admin-visible table indefinitely. redactPhi keeps the
+        // operational signal (column name, error class, generic
+        // shape) and drops the verbatim content.
+        lastError: redactPhi(
           err instanceof Error
             ? err.message
             : String(err ?? '(no error message)'),
+        ),
         exhaustedAt: new Date().toISOString(),
         totalAttempts: job.opts.attempts,
       }).catch((dlqErr) => {
         console.error(
           `[transcribe-md-worker] DLQ enqueue failed for job ${job.id}:`,
-          dlqErr
+          redactPhi(dlqErr instanceof Error ? dlqErr.message : dlqErr)
         );
       });
     }
