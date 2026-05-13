@@ -1,11 +1,18 @@
 // ============================================================================
 // Per-user + per-IP rate limiter — evolution of T-M16.2's inline helper
 // ----------------------------------------------------------------------------
-// Fixed-window counters keyed by a composite `<bucket>:<identifier>`
+// Fixed-window counters keyed by a composite `<bucket>:<windowMs>:<identifier>`
 // string where identifier is either a userId (authed routes) or an IP
 // (unauthed routes). Named rule presets in `RATE_LIMITS` are the SSOT
 // for every limit the app applies — tuning one number in one place
 // is always enough.
+//
+// 2026-05-13 — multi-window rules. A rule now declares an array of
+// `{ limit, windowMs }` checks; ALL must pass for the request to be
+// allowed. This lets a single rule combine a short burst window (e.g.,
+// 10/30s) with a sustained-volume window (e.g., 60/hour) without
+// needing two named rules at the call site. Each window owns its own
+// counter (keyed by windowMs), so they're truly independent.
 //
 // Scope (T-M16.3):
 //   • apps/transcribe-md only. meddoc-pro keeps its own
@@ -39,16 +46,42 @@ export interface RateLimitResult {
   /** Seconds until the bucket resets. Safe to use directly as the
    *  Retry-After header value when allowed=false. */
   retryAfterSec: number;
+  /** When allowed=false, which window tripped — useful for client
+   *  diagnostics and the 429 body. `undefined` when allowed=true. */
+  limitType?: string;
+}
+
+export interface RateLimitWindow {
+  /** Max requests in this window. */
+  limit: number;
+  /** Window length in milliseconds. */
+  windowMs: number;
+  /** Optional label exposed on 429 responses (e.g., `burst_30s`,
+   *  `sustained_5min`, `hourly`). Defaults to `${windowMs}ms`. */
+  label?: string;
 }
 
 export interface RateLimitRule {
   /** Bucket name shared across all identifiers under this rule. */
   bucket: string;
-  /** Max requests per window. */
-  limit: number;
-  /** Window length in milliseconds. */
-  windowMs: number;
+  /** One or more windows. ALL must pass for the request to be
+   *  allowed. Each window has an independent counter. */
+  windows: RateLimitWindow[];
 }
+
+// ---------------------------------------------------------------------------
+// Window-builder shorthands — keeps preset definitions readable.
+// ---------------------------------------------------------------------------
+
+const SEC = 1000;
+const MIN = 60 * SEC;
+const HOUR = 60 * MIN;
+
+const w = (label: string, limit: number, windowMs: number): RateLimitWindow => ({
+  limit,
+  windowMs,
+  label,
+});
 
 // ---------------------------------------------------------------------------
 // Named presets — the app's rate-limit catalog
@@ -66,34 +99,103 @@ export interface RateLimitRule {
 //
 //   UPLOAD:        audio + dictation + text-pipeline kickoff endpoints.
 //                  Per-user. Each upload burns real Deepgram / Anthropic
-//                  cost — this is the cost shield.
+//                  cost — this is the cost shield. Clinical reality:
+//                  10-15 audio uploads per morning rounds, 50 over a
+//                  full clinical day; burst tolerates batch-import.
 //
 //   CLIENT_ERRORS: /api/client-errors sink. Per-IP. Generous limit
 //                  because legit users can trip React errors in
 //                  bursts; anti-abuse not anti-user.
 //
 //   SETTINGS:      change-password, change-email, delete-account,
-//                  export-data. Per-user. Lower than UPLOAD because
-//                  these shouldn't be called often.
+//                  export-data, account-recovery surfaces. Per-user.
+//                  Genuinely-low-frequency operations; tight limit OK.
 //
-const HOUR_MS = 60 * 60 * 1000;
-
+//   PATIENT_READ:  GET /api/patients (search), POST /api/patients/
+//                  fuzzy-match (duplicate check), GET /api/patients/
+//                  [id]. Per-user. High-volume because the patient
+//                  picker debounces a GET per keystroke + fires
+//                  fuzzy-match on every new-patient attempt.
+//
+//   PATIENT_CREATE: POST /api/patients. Per-user. Clinical reality:
+//                  AM rounds in a busy primary-care practice creates
+//                  10-15 new patients in 30 min; burst tolerates
+//                  back-to-back creation; hourly caps a runaway
+//                  script. Numbers match the operator brief.
+//
+//   PATIENT_OPS:   PATCH/PUT/DELETE on /api/patients/[id]. Per-user.
+//                  Tighter than CREATE — destructive ops shouldn't
+//                  fire in tight loops in real workflows.
+//
+//   VISIT_OPS:     visit-management mutations (delete/archive/restore/
+//                  edit/retry). Per-user. Already in clinical-realism
+//                  range; tightened bursts to catch scripted misuse.
+//
 export const RATE_LIMITS = {
-  AUTH_EMAIL:    { bucket: 'auth-email',    limit: 5,  windowMs: HOUR_MS },
-  LOGIN:         { bucket: 'login',         limit: 10, windowMs: HOUR_MS },
-  SIGNUP:        { bucket: 'signup',        limit: 5,  windowMs: HOUR_MS },
-  UPLOAD:        { bucket: 'upload',        limit: 20, windowMs: HOUR_MS },
-  CLIENT_ERRORS: { bucket: 'client-errors', limit: 30, windowMs: HOUR_MS },
-  SETTINGS:      { bucket: 'settings',      limit: 10, windowMs: HOUR_MS },
-  /// T-M17.3 visit-management mutations (delete/archive/restore/edit).
-  /// Higher than SETTINGS because a doctor cleaning up an old visit
-  /// queue can legitimately fire these in quick succession; lower
-  /// than CLIENT_ERRORS because they write DB state.
-  VISIT_OPS:     { bucket: 'visit-ops',     limit: 30, windowMs: HOUR_MS },
+  AUTH_EMAIL: {
+    bucket: 'auth-email',
+    windows: [w('hourly', 5, HOUR)],
+  },
+  LOGIN: {
+    bucket: 'login',
+    windows: [w('hourly', 10, HOUR)],
+  },
+  SIGNUP: {
+    bucket: 'signup',
+    windows: [w('hourly', 5, HOUR)],
+  },
+  UPLOAD: {
+    bucket: 'upload',
+    windows: [
+      w('burst_30s', 5, 30 * SEC),
+      w('sustained_5min', 15, 5 * MIN),
+      w('hourly', 50, HOUR),
+    ],
+  },
+  CLIENT_ERRORS: {
+    bucket: 'client-errors',
+    windows: [w('hourly', 30, HOUR)],
+  },
+  SETTINGS: {
+    bucket: 'settings',
+    windows: [w('hourly', 10, HOUR)],
+  },
+  PATIENT_READ: {
+    bucket: 'patient-read',
+    windows: [
+      w('burst_30s', 30, 30 * SEC),
+      w('sustained_5min', 60, 5 * MIN),
+      w('hourly', 200, HOUR),
+    ],
+  },
+  PATIENT_CREATE: {
+    bucket: 'patient-create',
+    windows: [
+      w('burst_30s', 10, 30 * SEC),
+      w('sustained_5min', 20, 5 * MIN),
+      w('hourly', 60, HOUR),
+    ],
+  },
+  PATIENT_OPS: {
+    bucket: 'patient-ops',
+    windows: [
+      w('sustained_5min', 20, 5 * MIN),
+      w('hourly', 60, HOUR),
+    ],
+  },
+  VISIT_OPS: {
+    bucket: 'visit-ops',
+    windows: [
+      w('burst_30s', 10, 30 * SEC),
+      w('hourly', 60, HOUR),
+    ],
+  },
 } satisfies Record<string, RateLimitRule>;
 
 // ---------------------------------------------------------------------------
-// Low-level primitive — unchanged signature from T-M16.2.
+// Low-level primitive — unchanged signature from T-M16.2. Independent
+// counters per `key`. Callers that want multi-window semantics should
+// use checkRateLimit instead.
 // ---------------------------------------------------------------------------
 
 /** Consume one slot in the named bucket. If the bucket expired OR is
@@ -123,6 +225,27 @@ export function tryConsume(
   return { allowed: true, retryAfterSec: 0 };
 }
 
+/** Non-mutating peek — would `tryConsume(key, limit)` allow the next
+ *  request? Used by checkRateLimit's two-phase commit so a multi-
+ *  window rule can reject without partially consuming the windows
+ *  that WOULD have allowed it. Doesn't need windowMs because it
+ *  doesn't create a fresh bucket — only inspects state set by a
+ *  prior tryConsume. */
+function peekConsume(key: string, limit: number): RateLimitResult {
+  const now = Date.now();
+  const existing = buckets.get(key);
+  if (!existing || existing.resetAt <= now) {
+    return { allowed: true, retryAfterSec: 0 };
+  }
+  if (existing.count >= limit) {
+    return {
+      allowed: false,
+      retryAfterSec: Math.max(1, Math.ceil((existing.resetAt - now) / 1000)),
+    };
+  }
+  return { allowed: true, retryAfterSec: 0 };
+}
+
 function pruneExpired(now: number): void {
   for (const [key, bucket] of buckets.entries()) {
     if (bucket.resetAt <= now) buckets.delete(key);
@@ -139,16 +262,50 @@ export function __resetForTests(): void {
 
 /** Check a rule against an identifier (userId or IP). Returns the raw
  *  result so callers that aren't in a Next route handler (server
- *  actions) can build their own rejection shape. */
+ *  actions) can build their own rejection shape.
+ *
+ *  Multi-window semantics: every window must pass for the request to
+ *  be allowed. Two-phase: peek every window first (no mutation); if
+ *  ALL would allow, commit by calling tryConsume on each. This way
+ *  rejection by ANY window doesn't accidentally consume slots in the
+ *  windows that would have allowed it.
+ *
+ *  When multiple windows would reject, we return the LONGEST
+ *  retryAfterSec — the client must wait that long for the rule as a
+ *  whole to clear.
+ */
 export function checkRateLimit(
   rule: RateLimitRule,
   identifier: string
 ): RateLimitResult {
-  return tryConsume(
-    `${rule.bucket}:${identifier}`,
-    rule.limit,
-    rule.windowMs
-  );
+  let worstRejection: RateLimitResult | null = null;
+  // Phase 1 — peek every window. Track the LONGEST retryAfterSec
+  // across all rejecting windows.
+  for (const win of rule.windows) {
+    const key = `${rule.bucket}:${win.windowMs}:${identifier}`;
+    const r = peekConsume(key, win.limit);
+    if (r.allowed) continue;
+    const label = win.label ?? `${win.windowMs}ms`;
+    if (
+      !worstRejection ||
+      r.retryAfterSec > worstRejection.retryAfterSec
+    ) {
+      worstRejection = {
+        allowed: false,
+        retryAfterSec: r.retryAfterSec,
+        limitType: label,
+      };
+    }
+  }
+  if (worstRejection) return worstRejection;
+  // Phase 2 — every window would allow; commit consumption. JS is
+  // single-threaded so there's no race between peek and consume
+  // within this synchronous call.
+  for (const win of rule.windows) {
+    const key = `${rule.bucket}:${win.windowMs}:${identifier}`;
+    tryConsume(key, win.limit, win.windowMs);
+  }
+  return { allowed: true, retryAfterSec: 0 };
 }
 
 /** Route-handler-friendly one-shot: check the limit, return a
@@ -157,6 +314,9 @@ export function checkRateLimit(
  *    const blocked = rateLimitOr429(RATE_LIMITS.UPLOAD, userId);
  *    if (blocked) return blocked;
  *    // ... continue request handling ...
+ *
+ *  2026-05-13: the 429 body now carries `retryAfterSec` + `limitType`
+ *  so the client can render a countdown without parsing the header.
  */
 export function rateLimitOr429(
   rule: RateLimitRule,
@@ -165,7 +325,11 @@ export function rateLimitOr429(
   const rl = checkRateLimit(rule, identifier);
   if (rl.allowed) return null;
   return NextResponse.json(
-    { error: 'Too many requests. Try again later.' },
+    {
+      error: "You're working faster than the system allows — please pause briefly and retry.",
+      retryAfterSec: rl.retryAfterSec,
+      limitType: rl.limitType ?? null,
+    },
     {
       status: 429,
       headers: { 'Retry-After': String(rl.retryAfterSec) },
