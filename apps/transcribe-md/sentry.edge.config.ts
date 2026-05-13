@@ -5,9 +5,15 @@
 // which uses node:crypto). The PHI scrubber is short — inlined here
 // so the edge config stays edge-safe. Keep the regex patterns in sync
 // with packages/ai/src/log.ts.
+// ----------------------------------------------------------------------------
+// 2026-05-13 audit P1-B — scrubSentryEvent extended to walk
+// event.request.data / .url / .query_string / .headers / .cookies and
+// event.user. The helper is pure string-ops (no node-crypto), so it's
+// edge-safe.
 // ============================================================================
 
 import * as Sentry from '@sentry/nextjs';
+import { scrubSentryEvent } from '@/lib/sentry-scrub';
 
 const dsn =
   process.env.SENTRY_DSN_TRANSCRIBE_MD?.trim() ||
@@ -40,9 +46,7 @@ Sentry.init({
   sendDefaultPii: false,
   beforeSend(event) {
     if (!dsn) return null;
-    if (typeof event.message === 'string') {
-      event.message = redactPhi(event.message);
-    }
+    scrubSentryEvent(event, redactPhi);
     return event;
   },
 });

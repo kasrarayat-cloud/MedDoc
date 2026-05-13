@@ -7,6 +7,7 @@
 
 import * as Sentry from '@sentry/nextjs';
 import { redactPhi } from '@meddoc/ai';
+import { scrubSentryEvent } from '@/lib/sentry-scrub';
 
 const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN_TRANSCRIBE_MD?.trim();
 
@@ -21,16 +22,8 @@ Sentry.init({
   sendDefaultPii: false,
   beforeSend(event) {
     if (!dsn) return null;
-    if (typeof event.message === 'string') {
-      event.message = redactPhi(event.message);
-    }
-    if (Array.isArray(event.breadcrumbs)) {
-      for (const crumb of event.breadcrumbs) {
-        if (typeof crumb.message === 'string') {
-          crumb.message = redactPhi(crumb.message);
-        }
-      }
-    }
+    // 2026-05-13 audit P1-B — see server config for rationale.
+    scrubSentryEvent(event, redactPhi);
     return event;
   },
 });

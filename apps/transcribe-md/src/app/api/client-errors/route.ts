@@ -64,19 +64,31 @@ export const POST = withApiHandler(
     if (!parsed.success) return apiError('invalid payload', 400);
 
     const d = parsed.data;
+    // 2026-05-13 audit P1-G — the file's posture was "stack might
+    // carry stringified props; message/digest/url shouldn't". The
+    // audit findings disagreed: Next.js render errors stringify
+    // props on the message too, and URL pathSearch may carry
+    // patient names (per P1-C). Redact symmetrically so the log
+    // line is PHI-safe regardless of upstream behavior. URL gets
+    // its query string stripped entirely — operational triage
+    // needs the path, not the query.
+    const safeUrl =
+      typeof d.url === 'string'
+        ? (() => {
+            const q = d.url.indexOf('?');
+            return q >= 0 ? d.url.slice(0, q) : d.url;
+          })()
+        : undefined;
     console.error(
       '[client-error]',
       JSON.stringify({
         errorId: d.errorId,
         scope: d.scope,
-        message: d.message,
-        digest: d.digest,
-        url: d.url,
+        message: d.message ? redactPhi(d.message) : undefined,
+        digest: d.digest ? redactPhi(d.digest) : undefined,
+        url: safeUrl,
         userAgent: d.userAgent,
-        // stack on its own line to keep the single-line JSON grep-
-        // friendly. Multi-line stack traces break one-line log
-        // aggregators; drop them to a separate error() call so
-        // correlation still works via errorId.
+        // stack on its own line — see below.
       })
     );
     if (d.stack) {
