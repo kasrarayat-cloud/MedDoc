@@ -877,11 +877,41 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       0
     );
 
-    // Deep-audit G9 (2026-05-12) — load-bearing L7 failure → needsReview.
-    // Helper lives at worker/automation-incomplete.ts; comments there
-    // explain the design (T-M6 preserved, status stays READY).
+    // Deep-audit G9 (2026-05-12) + cross-input-mode-audit Finding 2
+    // extension (2026-05-13) — load-bearing L7 failure OR empty-codes-
+    // with-status-ok flips needsReview. Helper lives at
+    // worker/automation-incomplete.ts; comments there explain the
+    // design (T-M6 preserved, status stays READY).
+    //
+    // Re-read the visit's icdCodes + cptCodes columns post-fan-out so
+    // the helper can detect the "model returned nothing successfully"
+    // case (UC2 audio_upload on PR #232). Includes resumed layers — if
+    // a prior attempt landed empty codes the resume keeps them empty,
+    // and the doctor still deserves the review banner.
+    // DB-blip semantics worth noting (auditor NIT 2026-05-13): if this
+    // re-read throws, we fall through with `outputs.icdCodes=null` +
+    // `outputs.cptCodes=null`, which the helper interprets as empty
+    // → flips needsReview=true with cause='empty'. That's intentional
+    // defense-in-depth — the visit lands in review (doctor sees a
+    // banner, can retry) rather than silently passing through. A
+    // transient false-positive empty flag is preferable to silently
+    // missing a genuine empty-codes case during a real DB hiccup.
+    const automationOutputs = await prisma.transcribeVisit
+      .findUnique({
+        where: { id: visitId },
+        select: { icdCodes: true, cptCodes: true },
+      })
+      .catch(() => null);
     const incomplete = detectIncompleteAutomation(
       confidenceScores as AutomationConfidenceScores,
+      {
+        icdCodes: (automationOutputs?.icdCodes ?? null) as
+          | { codes?: unknown[] }
+          | null,
+        cptCodes: (automationOutputs?.cptCodes ?? null) as
+          | { em?: { code?: string | null } | null; procedures?: unknown[] }
+          | null,
+      },
     );
     if (incomplete.needsReview) {
       void logAudit({
@@ -894,6 +924,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         metadata: {
           failedLayers: incomplete.failedLayers,
           reasons: incomplete.reasonsByLayer,
+          causes: incomplete.causeByLayer,
         },
       });
     }
