@@ -208,3 +208,179 @@ describe('LOAD_BEARING_L7_TASKS — registry stability guard', () => {
     expect(LOAD_BEARING_L7_TASKS).toEqual(['icd_coding', 'cpt_coding', 'rx_drafting']);
   });
 });
+
+// ── 2026-05-13 extension: empty-codes detection ──────────────────────
+// Closes cross-input-mode-audit Finding 2 (UC2 audio_upload). The
+// helper now accepts an `outputs` parameter carrying L7a + L7b
+// results; when the output is empty despite status:ok the helper
+// flags it with cause='empty' so audit-log forensics can separate
+// "the layer crashed" from "the model returned nothing."
+
+describe('detectIncompleteAutomation — empty L7a output detection (Finding 2)', () => {
+  const okScores: AutomationConfidenceScores = {
+    icd_coding: { status: 'ok' },
+    cpt_coding: { status: 'ok' },
+    rx_drafting: { status: 'ok' },
+  };
+
+  // "Healthy" CPT output used as the control field in L7a-focused
+  // tests so we can isolate the icd_coding trip from the cpt_coding
+  // trip. The helper checks both whenever the caller passes the
+  // `outputs` parameter; providing a known-good CPT keeps the
+  // assertion focused.
+  const healthyCpt = { em: { code: '99213' }, procedures: [] };
+  const healthyIcd = { codes: [{ code: 'Z39.2' }] };
+
+  it('flags review when icdCodes is null', () => {
+    const r = detectIncompleteAutomation(okScores, {
+      icdCodes: null,
+      cptCodes: healthyCpt,
+    });
+    expect(r.needsReview).toBe(true);
+    expect(r.failedLayers).toEqual(['icd_coding']);
+    expect(r.causeByLayer.icd_coding).toBe('empty');
+    expect(r.reviewReason).toMatch(/icd-coding: returned empty codes array/);
+  });
+
+  it('flags review when icdCodes.codes is []', () => {
+    const r = detectIncompleteAutomation(okScores, {
+      icdCodes: { codes: [] },
+      cptCodes: healthyCpt,
+    });
+    expect(r.needsReview).toBe(true);
+    expect(r.causeByLayer.icd_coding).toBe('empty');
+  });
+
+  it('flags review when icdCodes.codes is missing entirely', () => {
+    const r = detectIncompleteAutomation(okScores, {
+      icdCodes: {},
+      cptCodes: healthyCpt,
+    });
+    expect(r.needsReview).toBe(true);
+    expect(r.causeByLayer.icd_coding).toBe('empty');
+  });
+
+  it('does NOT flag review when icdCodes has ≥1 code', () => {
+    const r = detectIncompleteAutomation(okScores, {
+      icdCodes: healthyIcd,
+      cptCodes: healthyCpt,
+    });
+    expect(r.needsReview).toBe(false);
+  });
+
+  it('icd_coding=failed wins over empty when both apply (preserves "failed" semantics)', () => {
+    // If L7a threw AND wrote nothing, the cause should be reported as
+    // 'failed' (the actionable signal) not 'empty' (the consequence).
+    const scores: AutomationConfidenceScores = {
+      icd_coding: { status: 'failed', reason: 'Anthropic 529 overload' },
+      cpt_coding: { status: 'ok' },
+      rx_drafting: { status: 'ok' },
+    };
+    const r = detectIncompleteAutomation(scores, {
+      icdCodes: { codes: [] },
+      cptCodes: healthyCpt,
+    });
+    expect(r.needsReview).toBe(true);
+    expect(r.causeByLayer.icd_coding).toBe('failed');
+    expect(r.reasonsByLayer.icd_coding).toBe('Anthropic 529 overload');
+  });
+});
+
+describe('detectIncompleteAutomation — empty L7b output detection (Finding 2)', () => {
+  const okScores: AutomationConfidenceScores = {
+    icd_coding: { status: 'ok' },
+    cpt_coding: { status: 'ok' },
+    rx_drafting: { status: 'ok' },
+  };
+
+  it('flags review when cptCodes is null', () => {
+    const r = detectIncompleteAutomation(okScores, {
+      icdCodes: { codes: [{ code: 'Z39.2' }] },
+      cptCodes: null,
+    });
+    expect(r.needsReview).toBe(true);
+    expect(r.causeByLayer.cpt_coding).toBe('empty');
+    expect(r.reviewReason).toMatch(/cpt-coding: no E&M code emitted/);
+  });
+
+  it('flags review when cptCodes.em is missing', () => {
+    const r = detectIncompleteAutomation(okScores, {
+      icdCodes: { codes: [{ code: 'Z39.2' }] },
+      cptCodes: { procedures: [{ code: '99213' }] },
+    });
+    expect(r.needsReview).toBe(true);
+    expect(r.causeByLayer.cpt_coding).toBe('empty');
+  });
+
+  it('flags review when cptCodes.em.code is empty string', () => {
+    const r = detectIncompleteAutomation(okScores, {
+      icdCodes: { codes: [{ code: 'Z39.2' }] },
+      cptCodes: { em: { code: '   ' } },
+    });
+    expect(r.needsReview).toBe(true);
+    expect(r.causeByLayer.cpt_coding).toBe('empty');
+  });
+
+  it('does NOT flag review when em.code is a non-empty string + procedures empty', () => {
+    // Many established-patient visits legitimately bill only the E&M
+    // tier with no procedures — that must NOT trip the empty-codes guard.
+    const r = detectIncompleteAutomation(okScores, {
+      icdCodes: { codes: [{ code: 'Z39.2' }] },
+      cptCodes: { em: { code: '99213' }, procedures: [] },
+    });
+    expect(r.needsReview).toBe(false);
+  });
+});
+
+describe('detectIncompleteAutomation — both L7a + L7b empty (UC2-style)', () => {
+  it('flags review with BOTH layers in failedLayers + both causes=empty', () => {
+    const okScores: AutomationConfidenceScores = {
+      icd_coding: { status: 'ok' },
+      cpt_coding: { status: 'ok' },
+      rx_drafting: { status: 'ok' },
+    };
+    const r = detectIncompleteAutomation(okScores, {
+      icdCodes: { codes: [] },
+      cptCodes: null,
+    });
+    expect(r.needsReview).toBe(true);
+    expect(r.failedLayers).toContain('icd_coding');
+    expect(r.failedLayers).toContain('cpt_coding');
+    expect(r.causeByLayer.icd_coding).toBe('empty');
+    expect(r.causeByLayer.cpt_coding).toBe('empty');
+    expect(r.reviewReason).toMatch(/icd-coding[\s\S]*cpt-coding/);
+  });
+});
+
+describe('detectIncompleteAutomation — Rx is intentionally NOT subject to empty-check', () => {
+  it('empty rxDrafts does NOT flag review (many visits have no Rx legitimately)', () => {
+    const okScores: AutomationConfidenceScores = {
+      icd_coding: { status: 'ok' },
+      cpt_coding: { status: 'ok' },
+      rx_drafting: { status: 'ok' },
+    };
+    // Derm-biopsy follow-up, screening encounter, etc. — empty Rx is normal.
+    // We pass valid icd + cpt so only the (intentionally-missing) rx
+    // empty-check would be the only way this could trip — confirming
+    // the helper does NOT trip on rx emptiness.
+    const r = detectIncompleteAutomation(okScores, {
+      icdCodes: { codes: [{ code: 'Z12.83' }] },
+      cptCodes: { em: { code: '99213' }, procedures: [] },
+    });
+    expect(r.needsReview).toBe(false);
+  });
+});
+
+describe('detectIncompleteAutomation — backwards-compatible single-arg call', () => {
+  it('callers that pass only scores get the historic failed-only behavior', () => {
+    const scores: AutomationConfidenceScores = {
+      icd_coding: { status: 'ok' },
+      cpt_coding: { status: 'ok' },
+      rx_drafting: { status: 'ok' },
+    };
+    // No outputs passed → empty-codes detection is silent. This is the
+    // T-M14 behavior every existing test in this file relies on.
+    const r = detectIncompleteAutomation(scores);
+    expect(r.needsReview).toBe(false);
+  });
+});
