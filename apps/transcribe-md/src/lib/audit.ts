@@ -180,7 +180,24 @@ async function getRequestContext(): Promise<{
 /** Write a single audit row. Never throws. */
 export async function logAudit(input: AuditLogInput): Promise<void> {
   try {
-    const session = await auth().catch(() => null);
+    // 2026-05-13 — when callers pass both userId AND practiceId we
+    // skip session resolution entirely. Two wins: (1) saves the
+    // round-trip in request scope; (2) avoids the worker-context
+    // failure mode where `auth()` throws synchronously inside the
+    // Auth.js v5 internals (it reads `headers()` while computing the
+    // JWT callback chain, and headers() is request-scoped only).
+    //
+    // The `Promise.resolve().then(...)` wrap is the synchronous-throw
+    // belt: `.catch()` only fires for REJECTED promises, but auth()
+    // can throw BEFORE returning a thenable (the worker-context
+    // path); wrapping the call in a `.then` callback re-routes the
+    // throw into a promise rejection that `.catch` then handles.
+    const hasFullOverride = !!input.userId && !!input.practiceId;
+    const session = hasFullOverride
+      ? null
+      : await Promise.resolve()
+          .then(() => auth())
+          .catch(() => null);
     const { ipAddress, userAgent } = await getRequestContext();
 
     const userId = input.userId ?? session?.user?.id ?? null;
