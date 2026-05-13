@@ -21,9 +21,10 @@ import prisma from '@meddoc/db';
 // fallback semantics + the foundation-scope rationale (PR #162).
 import { transcribe, type TranscribeResult } from '@meddoc/ai';
 import { statAudio, streamAudio } from '@/lib/minio';
-// Q2 fix-pack — keyterm coverage now spans medications + anatomy + labs
-// + procedures + common diagnoses. See `CLINICAL_KEYTERMS`.
-import { CLINICAL_KEYTERMS } from '@/lib/deepgram-vocabulary';
+// 2026-05-13 Issues #202 + #206 — keyterms are now scoped per-visit
+// via the builder rather than a single global list. See
+// `buildKeytermsForVisit` for the composition rules.
+import { buildKeytermsForVisit } from '@/lib/deepgram-keyterm-builder';
 import { logAudit } from '@/lib/audit';
 import {
   computeAudioConfidenceStats,
@@ -44,6 +45,10 @@ export interface Layer1Input {
    *  instead of producing the fragmentary English-only transcript the
    *  Sylvia incident surfaced. */
   interpreterMode?: boolean;
+  /** 2026-05-13 Issues #202 + #206 — visit specialty used to scope the
+   *  Deepgram keyterm list. Pulled from `transcribe_visits.specialty`
+   *  by the worker. Free-text — the builder normalizes internally. */
+  specialty?: string | null;
 }
 
 export interface Layer1Output {
@@ -80,6 +85,13 @@ export async function runLayer1Transcribe(
   }
   const nodeStream = await streamAudio(input.audioKey);
   const webStream = Readable.toWeb(nodeStream) as ReadableStream<Uint8Array>;
+
+  // Compose per-visit keyterm list. Interpreter mode skips this
+  // entirely (model swaps to nova-3 general which doesn't accept
+  // keyterm bias the same way); see the deepgram branch below.
+  const built = input.interpreterMode
+    ? null
+    : buildKeytermsForVisit({ specialty: input.specialty });
 
   const attempt = async () => {
     return transcribe({
@@ -125,10 +137,12 @@ export async function runLayer1Transcribe(
             },
           }
         : {
-            // Q2 fix-pack — biases nova-3-medical across the full clinical
-            // surface: medications (drug-name homophones) + anatomy + labs
-            // + procedures + common diagnoses. See `CLINICAL_KEYTERMS`.
-            keyterms: CLINICAL_KEYTERMS,
+            // 2026-05-13 Issues #202 + #206 — keyterms composed per-visit
+            // from core + specialty + (PR-2 safety floor). Persisted to
+            // transcribe_visits.keytermsApplied below so a future
+            // transcription regression can be attributed to the exact
+            // keyterm set that ran.
+            keyterms: built?.keyterms ?? [],
           },
     });
   };
@@ -242,6 +256,26 @@ export async function runLayer1Transcribe(
         durationSec: result.durationSec,
       },
     });
+  }
+
+  // Persist the keyterm metadata so a future transcription regression
+  // can be attributed to the exact composition that ran. Fire-and-
+  // forget; never block the visit on this write. Skipped for
+  // interpreter-mode runs (the metadata is null there — model swap).
+  if (built?.metadata) {
+    void (async () => {
+      try {
+        await prisma.transcribeVisit.update({
+          where: { id: input.visitId },
+          data: {
+            keytermsApplied: built.metadata as unknown as object,
+          },
+        });
+      } catch {
+        // Audit-attribution metadata is not load-bearing for the
+        // visit — never block on it. The pipeline proceeds.
+      }
+    })();
   }
 
   return {
