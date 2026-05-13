@@ -21,6 +21,17 @@ export const POST = adminApi('users:force-logout', async (req, ctx) => {
   const id = segs[segs.indexOf('users') + 1];
   if (!id) return NextResponse.json({ error: 'Bad path' }, { status: 400 });
 
+  // Security audit P1-E: a single-SUPER_ADMIN tenant clicking
+  // force-logout on themselves locks the only admin out — DB-level
+  // intervention required to recover. Mirror the guard pattern from
+  // revoke-admin / suspend / soft-delete (all sibling routes).
+  if (id === ctx.session.user.id) {
+    return NextResponse.json(
+      { error: 'Cannot force-logout yourself — ask a peer.' },
+      { status: 403 }
+    );
+  }
+
   const user = await prisma.user.findUnique({
     where: { id },
     select: { id: true, email: true, practiceId: true },

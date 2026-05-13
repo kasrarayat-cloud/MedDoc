@@ -24,6 +24,17 @@ export const POST = adminApi('users:grant-admin', async (req, ctx) => {
   const id = segs[segs.indexOf('users') + 1];
   if (!id) return NextResponse.json({ error: 'Bad path' }, { status: 400 });
 
+  // Security audit P1-E: granting yourself a role you already have is
+  // benign (the alreadyAdmin shortcut below catches it), but blocking
+  // the self-target here keeps the audit trail clean — every
+  // privilege escalation goes through a peer.
+  if (id === ctx.session.user.id) {
+    return NextResponse.json(
+      { error: 'Cannot grant admin to yourself — ask a peer.' },
+      { status: 403 }
+    );
+  }
+
   const raw = await req.json().catch(() => null);
   const parsed = Body.safeParse(raw);
   if (!parsed.success) {
