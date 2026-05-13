@@ -270,12 +270,15 @@ services:
     ports:
       - "80:80"
       - "443:443"
-      # T-M1: public entry for TranscribeMD marketing site. 9001 was
-      # already claimed by MinIO's web console (see minio service), so
-      # marketing lives on 9010 until DNS + TLS are configured.
-      - "9010:9010"
-      # T-M2: the TranscribeMD solo app itself. Doctors sign up + work here.
-      - "9020:9020"
+      # Security audit P1-I (2026-05-13): the legacy MODE A plaintext
+      # ports (9010 = marketing, 9020 = TranscribeMD) are commented
+      # out IN LOCKSTEP with the matching Caddyfile MODE A blocks.
+      # Both are kept as rollback reference — but a rollback must
+      # uncomment BOTH places, ensuring the operator can't
+      # accidentally expose plaintext HTTP on a public port while
+      # MODE B's HSTS preload is still in effect.
+      # - "9010:9010"   # rollback: uncomment WITH Caddyfile MODE A :9010 block
+      # - "9020:9020"   # rollback: uncomment WITH Caddyfile MODE A :9020 block
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data       # persistent Let's Encrypt certs (when TLS on)
