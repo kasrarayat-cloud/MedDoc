@@ -25,6 +25,11 @@ import { apiError, withApiHandler } from '@/lib/api-error';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 import { redactPhi } from '@meddoc/ai';
 import { logAudit } from '@/lib/audit';
+import {
+  sniffAudioMagicBytes,
+  magicBytesMatchClaimedMime,
+  SNIFF_MIN_BYTES,
+} from '@/lib/audio-sniff';
 
 export const runtime = 'nodejs';
 export const maxDuration = 120;
@@ -126,15 +131,84 @@ export const POST = withApiHandler<{ id: string }>(
       });
     }
 
+    // 2026-05-13 audit P1-D — Content-Type is client-supplied and
+    // trivially spoofable. Buffer the body, sniff the leading bytes,
+    // reject if the claimed MIME doesn't match the binary header.
+    // Mirrors the bulk upload route's posture (Round 3 PR-J).
+    // 50 MB ceiling fits comfortably in the worker's mem_limit; if
+    // that ceiling rises this becomes a streaming PassThrough pattern.
+    const bodyBuffer = Buffer.from(await req.arrayBuffer());
+    if (bodyBuffer.byteLength === 0) {
+      return apiError('Empty body.', 400, {
+        code: 'INVALID_REQUEST',
+        retry: false,
+      });
+    }
+    if (bodyBuffer.byteLength > MAX_BYTES) {
+      // Defensive — content-length lied about size. Audit + reject.
+      void logAudit({
+        action: 'AUDIO_REJECTED_FILE_TOO_LARGE',
+        targetType: 'transcribe_visit',
+        targetId: visitId,
+        userId,
+        success: false,
+        errorCode: 'FILE_TOO_LARGE_BODY',
+        metadata: {
+          claimedSizeBytes: contentLength,
+          actualSizeBytes: bodyBuffer.byteLength,
+          maxBytes: MAX_BYTES,
+          source: 'dictation',
+        },
+      });
+      return apiError(
+        `Dictation too large: actual body size exceeds the ${Math.round(MAX_BYTES / 1024 / 1024)} MB limit.`,
+        413,
+        { code: 'FILE_TOO_LARGE', retry: false }
+      );
+    }
+
+    const sniff = sniffAudioMagicBytes(
+      bodyBuffer.subarray(0, Math.max(SNIFF_MIN_BYTES, 32))
+    );
+    if (!magicBytesMatchClaimedMime(sniff.detected, mimeType)) {
+      void logAudit({
+        action: 'AUDIO_REJECTED_INVALID_MAGIC_BYTES',
+        targetType: 'transcribe_visit',
+        targetId: visitId,
+        userId,
+        success: false,
+        errorCode: 'INVALID_MAGIC_BYTES',
+        metadata: {
+          claimedMime: mimeType,
+          detectedMime: sniff.detected,
+          detectedFormat: sniff.format,
+          sizeBytes: bodyBuffer.byteLength,
+          source: 'dictation',
+        },
+      });
+      return apiError(
+        sniff.detected
+          ? `Dictation contents (${sniff.format}) don't match the declared format (${mimeType}). Re-record and retry.`
+          : `Unrecognised dictation format. The browser should produce WebM/Opus.`,
+        415,
+        { code: 'INVALID_MAGIC_BYTES', retry: false }
+      );
+    }
+
     // Object-key prefix distinguishes dictation from the bulk audio the
     // other route uses — simplifies bucket policy + debugging later.
     const objectKey = `${userId}/${visitId}/dictation-${Date.now()}.webm`;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const nodeReadable = Readable.fromWeb(req.body as any);
+    // Adapt the buffered body to a Node Readable for the MinIO SDK.
+    const nodeReadable = Readable.from(bodyBuffer);
 
     try {
-      await putAudioStream(objectKey, nodeReadable, contentLength, mimeType);
+      await putAudioStream(
+        objectKey,
+        nodeReadable,
+        bodyBuffer.byteLength,
+        mimeType,
+      );
     } catch (err) {
       const msg = err instanceof Error ? err.message.toLowerCase() : '';
       const permanent =

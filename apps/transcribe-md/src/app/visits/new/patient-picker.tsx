@@ -4,7 +4,9 @@
 // Step 1 of /visits/new — patient picker (T-M17.2 Phase 3 Commit 9)
 // ----------------------------------------------------------------------------
 // Three behaviours surfaced in one panel:
-//   1. Debounced search of existing patients via GET /api/patients?search=
+//   1. Debounced search of existing patients via POST /api/patients/search
+//      (the search term moved off the URL on 2026-05-13 — audit P1-C —
+//      to keep patient names out of access logs / Referer / history).
 //   2. Inline "Create new patient" form (name + DOB + optional externalId)
 //   3. On submit-create, first POST /api/patients/fuzzy-match; if matches
 //      with score > 0.6 are found, render the DuplicateModal so the
@@ -133,10 +135,15 @@ export function PatientPickerCore({ onSelect }: CoreProps) {
     const timer = setTimeout(async () => {
       setSearching(true);
       try {
-        const res = await fetch(
-          `/api/patients?search=${encodeURIComponent(term)}`,
-          { signal: controller.signal }
-        );
+        // 2026-05-13 audit P1-C — search via POST body, not the URL.
+        // Keeps patient names out of access logs / browser history /
+        // Referer headers. Endpoint at /api/patients/search.
+        const res = await fetch('/api/patients/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ search: term }),
+          signal: controller.signal,
+        });
         if (!res.ok) throw new Error(`search ${res.status}`);
         const body = (await res.json()) as PatientListApiResponse;
         setResults(body.patients.slice(0, 10));
