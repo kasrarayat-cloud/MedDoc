@@ -92,15 +92,23 @@ vi.mock('@/lib/minio', () => ({
   }),
 }));
 
-// Avoid pulling the full vocabulary list into the test process.
-// Q2 fix-pack — L1 now consumes CLINICAL_KEYTERMS (medications +
-// anatomy + labs + procedures + diagnoses). Mock both names with
-// empty arrays since the test cares about confidence-stat plumbing,
-// not keyterm payload content.
-vi.mock('@/lib/deepgram-vocabulary', () => ({
-  CLINICAL_KEYTERMS: [],
-  MEDICATION_KEYTERMS: [],
-}));
+// Stub the legacy aggregate lists with empty arrays so the test
+// doesn't pull the full pre-PR-1 vocabulary into the test process.
+// L1 itself no longer consumes those — the per-visit keyterm builder
+// (PR-1 #246) reads SPECIALTY_KEYTERMS + CORE_KEYTERMS via
+// buildKeytermsForVisit, and PR-2 wires CONFUSED_DRUG_NAMES_FLAT
+// in as the safetyFloor argument. Those imports must resolve, so we
+// preserve them via importOriginal — only the two big legacy
+// aggregates get the empty-array override.
+vi.mock('@/lib/deepgram-vocabulary', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@/lib/deepgram-vocabulary')>();
+  return {
+    ...actual,
+    CLINICAL_KEYTERMS: [],
+    MEDICATION_KEYTERMS: [],
+  };
+});
 
 import { runLayer1Transcribe } from '../01-transcribe';
 
@@ -200,7 +208,12 @@ describe('runLayer1Transcribe — audio confidence wiring', () => {
 
     await runLayer1Transcribe(baseInput);
 
-    expect(updateCalls).toHaveLength(1);
+    // L1 may schedule a fire-and-forget keytermsApplied metadata write
+    // (PR-1 #246) after the main visit-row update; that's an audit-
+    // attribution side-effect, not part of the confidence-stats path.
+    // The confidence-stats call is the awaited one and always sits at
+    // updateCalls[0].
+    expect(updateCalls.length).toBeGreaterThanOrEqual(1);
     const data = updateCalls[0].data;
 
     // The aggregate stats made it onto the row.
@@ -226,7 +239,9 @@ describe('runLayer1Transcribe — audio confidence wiring', () => {
 
     await runLayer1Transcribe(baseInput);
 
-    expect(updateCalls).toHaveLength(1);
+    // See note above: keytermsApplied write may trail; updateCalls[0] is the
+    // confidence-stats row.
+    expect(updateCalls.length).toBeGreaterThanOrEqual(1);
     const data = updateCalls[0].data;
 
     const stats = data.audioConfidenceStats as
@@ -262,7 +277,9 @@ describe('runLayer1Transcribe — audio confidence wiring', () => {
 
     await runLayer1Transcribe(baseInput);
 
-    expect(updateCalls).toHaveLength(1);
+    // See note above: keytermsApplied write may trail; updateCalls[0] is the
+    // confidence-stats row.
+    expect(updateCalls.length).toBeGreaterThanOrEqual(1);
     const data = updateCalls[0].data;
 
     expect(data.audioConfidenceStats).toBeNull();
@@ -305,8 +322,11 @@ describe('runLayer1Transcribe — Whisper fallback (PR-L follow-up)', () => {
 
     const out = await runLayer1Transcribe(baseInput);
 
-    // Visit row tagged with the canary provider.
-    expect(updateCalls).toHaveLength(1);
+    // Visit row tagged with the canary provider. The L1 layer may
+    // schedule an additional keytermsApplied fire-and-forget update
+    // (PR-1 #246) — the awaited primary write at updateCalls[0] is
+    // the one the canary check inspects.
+    expect(updateCalls.length).toBeGreaterThanOrEqual(1);
     const data = updateCalls[0].data;
     expect(data.transcriptionProvider).toBe('whisper-fallback');
     expect(data.transcriptText).toBe('patient reports headache');

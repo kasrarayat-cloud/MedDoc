@@ -55,9 +55,13 @@ describe('buildKeytermsForVisit — composition', () => {
     expect(r.metadata.specialty).toBe('unspecified');
     expect(r.metadata.layers.specialty).toBe(0);
     expect(r.keyterms.length).toBeGreaterThan(0);
-    // CORE includes anatomy + labs + procedures
-    expect(r.keyterms).toContain('lisinopril');
+    // CORE is anatomy + labs + procedures + common diagnoses; meds
+    // were removed from CORE in PR-2 (the safety floor + per-specialty
+    // bundles cover medication vocabulary) — see CORE_KEYTERMS doc
+    // block in deepgram-vocabulary.ts.
     expect(r.keyterms).toContain('hemoglobin a1c');
+    expect(r.keyterms).toContain('auscultation');
+    expect(r.keyterms).toContain('hypertension');
   });
 
   it('safetyFloor terms ride alongside CORE + specialty', () => {
