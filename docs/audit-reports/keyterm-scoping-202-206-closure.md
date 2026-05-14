@@ -13,7 +13,7 @@
 | Issue | Status | Evidence |
 |---|---|---|
 | **#206** — Implanon → insulin substitution | **CLOSED** | Both `Implanon` + `Nexplanon` boosted via the safety floor on every visit (not just ob-gyn). Regression baseline transcribes the Implanon seed-case dictation as "Implanon", primary hit count = 2, zero `insulin` substitutions. |
-| **#202** — Global CLINICAL_KEYTERMS dilution | **CLOSED** | Pre-fix: 124 keyterms shipped on every visit (no scoping). Post-fix: per-visit composition via `buildKeytermsForVisit` — CORE (~57) + specialty bundle (~24–30) + ISMP safety floor (44) + patient-context boost (capped 15). 29/31 high-severity primaries transcribe correctly under live Deepgram. |
+| **#202** — Global CLINICAL_KEYTERMS dilution | **CLOSED** | Pre-fix: 124 keyterms shipped on every visit (no scoping). Post-fix: per-visit composition via `buildKeytermsForVisit` — CORE (~57) + specialty bundle (~24–30) + ISMP safety floor (45 after PR-5) + patient-context boost (capped 15). 30/32 high-severity primaries transcribe correctly under live Deepgram (PR-5 baseline). |
 
 **Pilot-readiness verdict for the clinical-accuracy axis: GREEN.**
 
@@ -88,21 +88,39 @@ Net: ~44 × ~3 tokens ≈ 150 tokens for the safety floor. Leaves headroom for C
 
 **Strict serial throughout** — TTS and Deepgram calls one-at-a-time. Inherited from the PR-2 operator note on parallel-sub-agent RAM pressure.
 
-**One-time baseline captured by this PR** (`docs/keyterm-regression-baseline/baseline-2026-05-14T01-19-05-787Z.md`):
+**Historical PR-3 baseline** (`docs/keyterm-regression-baseline/baseline-2026-05-14T01-19-05-787Z.md`):
 
 - **29 / 31 PASS (93.5%)**
 - Cost: $0.088 Deepgram + $0.09 OpenAI = $0.18 total
 - **Builder budget invariant verified live:** `budgetEnforced: NO` across ALL 31 specialty + safety-floor composites. The PR-2 architecture refactor holds — no silent specialty trimming under any specialty.
 
+**Current results** (post-PR-5) — `docs/keyterm-regression-baseline/results.md`:
+
+- **30 / 32 PASS (93.75%)**
+- Cost: $0.092 Deepgram + ~$0.005 OpenAI (one new fixture; 31 cached)
+- Budget invariant still `NO ✓`.
+
 ### PR-4 (this doc) — Audit closure
 
-This document.
+This document, including the PR-5 follow-up section in §F.1.
+
+### PR-5 (#TBD) — Levemir↔levetiracetam empirical class
+
+Closes §F.1 (data-add) and proves the regression framework's empirical value:
+
+- Adds `levetiracetam` to `Levemir.confusedWith`.
+- Adds new symmetric primary entry for `levetiracetam` (with `Levemir`, `lamotrigine`, `levothyroxine` in its own `confusedWith`).
+- Adds a new regression scenario at `scripts/keyterm-regression/scenarios.ts` (`levetiracetam` / specialty `unspecified`).
+- Adds regression-guard test in `tests/lib/confused-drug-names.test.ts`.
+- Refactors `run.ts` to write to a stable `results.md` path (instead of the timestamped pattern); the PR-3 timestamped file is retained alongside as the one-time historical snapshot.
+
+**Outcome:** the new `levetiracetam` scenario passes (the safety floor biases Deepgram correctly in that direction). Levemir still fails — see §F.1 for the detailed empirical interpretation.
 
 ---
 
 ## Section D — Findings from the regression baseline
 
-### 29 passing — selected attestations
+### 30 passing — selected attestations (PR-5 run; PR-3 had 29/31)
 
 | Tag | Specialty | Layers (core/sp/sf/pc) | Tokens | Primary hits | Transcript excerpt |
 |---|---|---|---|---|---|
@@ -113,19 +131,22 @@ This document.
 | `tramadol` | pain_management | 57/22/44/0 | 396 | 2 | "Tramadol fifty milligrams every six hours as needed for breakthrough pain…" |
 | `metformin` | primary_care | 57/13/44/0 | 360 | 2 | "Increasing metformin from five hundred milligrams twice daily…" |
 | `metoprolol` | primary_care | 57/13/44/0 | 360 | 2 | "Continuing metoprolol succinate fifty milligrams daily…" |
+| `levetiracetam` (PR-5) | unspecified | 57/0/45/0 | 317 | 2 | "Starting levetiracetam five hundred milligrams twice daily for seizure prophylaxis…" |
 
 The two `confusedWith` co-occurrences in the baseline are both legitimate co-mentions in the dictation script (e.g., the `implanon` script also mentions `Nexplanon` as the replacement option). No substitutions were observed — every reach into a `confusedWith` was an intentional co-mention.
 
 ### 2 failing — phonetic-artifact discoveries
 
-**`levemir` — Levemir → "levetiracil"**
+**`levemir` — Levemir → "levetiracetamol" (post-PR-5; was "levetiracil" pre-PR-5)**
 
 - **Specialty:** endocrinology
 - **Script:** "She is currently on Levemir twenty-two units twice daily. Morning hypoglycemia at three a.m. Plan to drop the evening Levemir dose to eighteen units and reassess."
-- **Transcript:** "She is currently on levetiracil twenty two units twice daily, morning hypoglycemia at 3AM. Plan to drop the evening levetiracil dose to eighteen units and reassess."
-- **Interpretation:** Deepgram morphed toward levetiracetam (Keppra — anticonvulsant) but truncated to a non-word ("levetiracil"). The pull-toward is the canonical sign of an unrecognized rare term getting bent toward a similar-sounding common term. Wrong-class substitution risk: levetiracetam vs Levemir is insulin-vs-anticonvulsant — catastrophic if it had matched cleanly.
-- **Class:** ASR phonetic artifact, not ISMP-documented.
-- **Recommendation:** Add `levetiracetam` to `Levemir.confusedWith` in `confused-drug-names.ts`. Rationale: "ASR phonetic artifact (PR-3 baseline 2026-05-14): Deepgram morphed Levemir toward levetiracetam under continuous-speech prosody — insulin vs anticonvulsant wrong-class". Optionally consider adding `Levetiracetam` as a separate `primary` in the safety floor with the same severity rating.
+- **PR-3 transcript:** "She is currently on **levetiracil** twenty two units twice daily…" (truncated non-word, Levemir biased alone in safety floor)
+- **PR-5 transcript:** "She is currently on **levetiracetamol** twenty two units twice daily…" (full anticonvulsant name with trailing "ol"; Levemir + levetiracetam both biased symmetrically)
+- **Interpretation:** PR-5 added `levetiracetam` to the safety floor as a symmetric primary, which DID change Deepgram's output (from a truncated non-word toward the canonical anticonvulsant spelling) — confirming the bias is active. But the LM prior on levetiracetam remains strong enough that biasing `Levemir` doesn't yet flip the output. The keyterm API increases the prior; it doesn't override the acoustic likelihood for this near-homophone pair. **Wrong-class substitution risk:** insulin vs anticonvulsant — still catastrophic if a real visit hit this path.
+- **Class:** ASR acoustic-prior limitation, not a data-correctness gap.
+- **Mitigation in place (PR-5):** structured safety-floor data documents the substitution class; future Deepgram model improvements OR a fallback to an alternative ASR would benefit from the data. The new `levetiracetam` regression scenario empirically PASSES, so the epilepsy-patient direction is empirically guarded.
+- **Open follow-up (F.1-extension):** Re-synthesize Levemir at slower TTS speed (`speed: 0.85-0.9`); if Deepgram then transcribes "Levemir" correctly, the production fix is to either accept a small speech-rate dependency or apply a Deepgram-side phonetic hint (see [Deepgram docs](https://developers.deepgram.com/docs/keyterm)). If the slower-speed re-synth still fails, file a Deepgram support ticket — this is a near-homophone pair (Levemir vs levetiracetam) that nova-3-medical should disambiguate from clinical context.
 
 **`tradjenta` — Tradjenta → "trajena"**
 
@@ -147,7 +168,7 @@ The two `confusedWith` co-occurrences in the baseline are both legitimate co-men
 | Implanon explicitly in safety floor | ✓ (`confused-drug-names.ts:243-249`) |
 | Nexplanon explicitly in safety floor | ✓ (sibling entry) |
 | Both ride on every non-interpreter visit regardless of specialty | ✓ (L1 + L1b wiring, #247) |
-| Live regression confirms "Implanon" → "Implanon" in transcript | ✓ (baseline 2026-05-14 `implanon` row, primary hits = 2) |
+| Live regression confirms "Implanon" → "Implanon" in transcript | ✓ (PR-5 results `implanon` row, primary hits = 2; stable across PR-3 → PR-5 runs) |
 | Audit attribution available for future regressions | ✓ (`transcribe_visits.keytermsApplied` JSONB persisted by L1; layer counts include safetyFloor) |
 
 ### Issue #202 (global CLINICAL_KEYTERMS dilution)
@@ -157,7 +178,7 @@ The two `confusedWith` co-occurrences in the baseline are both legitimate co-men
 | Per-visit keyterm composition (not a single global list) | ✓ (`buildKeytermsForVisit`, #246) |
 | Specialty layer composed alongside CORE + safety floor | ✓ (14 canonical specialties, #246) |
 | Token budget enforced with documented trim policy | ✓ (450 cap; never trims safety floor or CORE; #246) |
-| Builder budget invariant holds across all specialty composites | ✓ (live regression 2026-05-14: `budgetEnforced: NO` in 31/31 runs) |
+| Builder budget invariant holds across all specialty composites | ✓ (live regression: `budgetEnforced: NO` in 32/32 runs as of PR-5) |
 | Forensic attribution column persists per visit | ✓ (`keytermsApplied` JSONB, #246) |
 | Re-runnable regression check guards against future drift | ✓ (`scripts/keyterm-regression/`, #248) |
 
@@ -167,9 +188,19 @@ The two `confusedWith` co-occurrences in the baseline are both legitimate co-men
 
 ### F.1 — Levemir → levetiracetam class
 
+**Status (post-PR-5):** Data add SHIPPED. Empirical fix PARTIAL.
+
 **Severity:** high (insulin vs anticonvulsant wrong-class).
-**Effort:** ~5 lines in `confused-drug-names.ts` + re-run regression baseline.
-**Recommendation:** Ship in the next safety-floor expansion PR. Track as a child of #202.
+
+**What PR-5 did:**
+- Added `levetiracetam` to `Levemir.confusedWith`.
+- Added symmetric primary entry `levetiracetam` to `CONFUSED_DRUG_NAMES` with `Levemir`, `lamotrigine`, `levothyroxine` in its own `confusedWith`.
+- Added a new regression scenario; it PASSES (2 primary hits on a TBI/seizure dictation, no `confusedWith` co-occurrence).
+- Re-ran the full regression: 30/32 (up from 29/31). Budget invariant intact.
+
+**Residual:** the `levemir` scenario still fails. Deepgram now transcribes "Levemir" as "levetiracetamol" instead of the pre-PR-5 truncated "levetiracil" — confirming the bias is active, but the LM prior on the anticonvulsant is too strong to flip the output via keyterm bias alone. See §D `levemir` row for the side-by-side transcripts.
+
+**F.1-extension (next step):** Re-synthesize the Levemir fixture at TTS `speed: 0.85` and rerun. If Deepgram then transcribes "Levemir" correctly, the production fix is to accept a small speech-rate dependency or apply a Deepgram-side phonetic hint. If slower-speed re-synth still fails, file a Deepgram support ticket — this is a near-homophone pair that nova-3-medical should disambiguate from clinical context.
 
 ### F.2 — Tradjenta TTS-side investigation
 

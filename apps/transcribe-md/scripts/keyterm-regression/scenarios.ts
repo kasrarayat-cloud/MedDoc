@@ -316,4 +316,21 @@ export const KEYTERM_REGRESSION_SCENARIOS: readonly KeytermRegressionScenario[] 
     dictation:
       'Starting atorvastatin twenty milligrams daily for primary prevention given her LDL of one-sixty-five and family history. Atorvastatin tolerated by most patients with rare myalgia at this dose.',
   },
+
+  // ─── Empirical Deepgram findings (post-ISMP 2024) ─────────────
+  // Pairs surfaced by the PR-3 regression baseline that aren't in
+  // the canonical ISMP list. Each scenario verifies the symmetric
+  // safety-floor entry (added in PR-5) preserves the target name.
+  // Specialty key: 'unspecified' — `neurology` isn't a canonical
+  // SPECIALTY_KEYTERMS bundle today, so the run exercises CORE +
+  // safety floor only (no specialty layer to amplify the bias).
+  // This is the strictest test of the safety floor in isolation.
+  {
+    tag: 'levetiracetam',
+    primary: 'levetiracetam',
+    confusedWith: ['Levemir', 'lamotrigine'],
+    specialty: 'unspecified',
+    dictation:
+      'Starting levetiracetam five hundred milligrams twice daily for seizure prophylaxis following her recent traumatic brain injury. Counseled on potential mood side effects and will reassess the levetiracetam dose in three months.',
+  },
 ];
