@@ -72,8 +72,12 @@ export const CONFUSED_DRUG_NAMES: readonly ConfusedDrugPair[] = [
   },
   {
     primary: 'Levemir',
-    confusedWith: ['Lovenox'],
-    rationale: 'ISMP 2024: Levemir↔Lovenox (insulin vs LMWH — wrong-class, both SC injections).',
+    confusedWith: ['Lovenox', 'levetiracetam'],
+    rationale:
+      'ISMP 2024: Levemir↔Lovenox (insulin vs LMWH — wrong-class, both SC injections). ' +
+      'PR-3 empirical (2026-05-14, baseline #248): Deepgram morphed "Levemir" → "levetiracil" ' +
+      '(truncated levetiracetam = Keppra anticonvulsant) under continuous-speech prosody — ' +
+      'insulin vs anticonvulsant wrong-class. Not in ISMP 2024.',
     severity: 'high',
     boostWeight: 5,
   },
@@ -392,6 +396,26 @@ export const CONFUSED_DRUG_NAMES: readonly ConfusedDrugPair[] = [
     rationale: 'ISMP 2024: statin vs ADHD med — wrong-class.',
     severity: 'high',
     boostWeight: 3,
+  },
+
+  // ─── Empirical Deepgram findings (post-ISMP 2024) ───────────
+  // Pairs discovered via the PR-3 regression baseline (#248) that
+  // are NOT in the canonical ISMP 2024 list — TTS/ASR phonetic
+  // artifacts specific to dictation pipelines. Each is documented
+  // with the discovery PR for provenance.
+  {
+    primary: 'levetiracetam',
+    confusedWith: ['Levemir', 'lamotrigine', 'levothyroxine'],
+    rationale:
+      'PR-5 empirical (2026-05-14): Levemir↔levetiracetam surfaced by ' +
+      'PR-3 baseline (#248) when Deepgram morphed "Levemir" → "levetiracil". ' +
+      'Insulin vs anticonvulsant — high-severity wrong-class. Also within-' +
+      'class with lamotrigine (anticonvulsant) and prosodically adjacent to ' +
+      'levothyroxine (lev- prefix). Symmetric boost (both Levemir + ' +
+      'levetiracetam as primaries) since either could be the target word in ' +
+      'real clinical dictation.',
+    severity: 'high',
+    boostWeight: 5,
   },
 ];
 
