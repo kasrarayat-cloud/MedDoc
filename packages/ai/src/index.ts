@@ -57,6 +57,10 @@ export {
   type RetryOptions,
   type RetryAttemptInfo,
 } from './retry';
+// FIND-P1-010 (2026-05-14) — typed error for Anthropic JSON.parse fails
+// after retry exhaustion. instanceof gate replaces err.message scraping
+// in model-client.ts retry loop + worker error-categorize.ts.
+export { ModelOutputMalformedError } from './errors';
 // Round 3 PR-D — deterministic AI safety backstops (audit findings
 // A06-P0-002, A06-P0-004). Allowlist + dose-range validators live in
 // ./data and are consumed by the worker's 07a/07b/07c layers.
