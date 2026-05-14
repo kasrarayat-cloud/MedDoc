@@ -24,6 +24,7 @@ import OpenAI from 'openai';
 
 import { logAiCall } from './log';
 import { PRICING } from './api-usage';
+import { withRetry, type RetryAttemptInfo } from './retry';
 import type { AiLogContext } from './types';
 import { logApiUsage, buildWhisperUsage } from './api-usage';
 
@@ -144,10 +145,43 @@ export function isPermanent4xxError(err: unknown): boolean {
  *   - Whisper API 4xx (mostly permanent; 408/429 are transient)
  *   - Network failure (transient — caller can retry)
  *
+ *  FIND-P1-007 (2026-05-14): Whisper is the load-bearing fallback when
+ *  Deepgram fails. Wrapped in `withRetry` (full-jitter, 2 attempts) so
+ *  a transient OpenAI 5xx during the Deepgram-failed path doesn't
+ *  produce hard FAILED state with no automatic recovery.
+ *
  *  Returns a `WhisperBatchResult` with the transcript + timing +
  *  cost stamp on success.
  */
 export async function whisperBatchTranscribe(
+  args: WhisperBatchArgs
+): Promise<WhisperBatchResult> {
+  return withRetry(() => whisperBatchTranscribeOnce(args), {
+    maxAttempts: 2,
+    baseDelayMs: 1000,
+    onRetry: (info: RetryAttemptInfo) => {
+      const err = info.error as {
+        status?: number;
+        code?: string;
+        type?: string;
+      };
+      console.warn(
+        '[whisper-batch] retrying',
+        JSON.stringify({
+          attempt: info.attempt,
+          maxAttempts: info.maxAttempts,
+          delayMs: info.delayMs,
+          status: err?.status ?? null,
+          code: err?.code ?? null,
+        })
+      );
+    },
+  });
+}
+
+/** Internal single-attempt Whisper transcribe. Renamed from
+ *  `whisperBatchTranscribe` during FIND-P1-007 closure. */
+async function whisperBatchTranscribeOnce(
   args: WhisperBatchArgs
 ): Promise<WhisperBatchResult> {
   const t0 = Date.now();

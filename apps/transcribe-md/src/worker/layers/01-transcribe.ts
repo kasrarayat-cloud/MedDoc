@@ -19,7 +19,12 @@ import prisma from '@meddoc/db';
 // so the visit row + audit trail record which provider produced
 // transcript. See packages/ai/src/transcribe.ts header for the full
 // fallback semantics + the foundation-scope rationale (PR #162).
-import { transcribe, type TranscribeResult } from '@meddoc/ai';
+import {
+  transcribe,
+  withRetry,
+  type TranscribeResult,
+  type RetryAttemptInfo,
+} from '@meddoc/ai';
 import { statAudio, streamAudio } from '@/lib/minio';
 // 2026-05-13 Issues #202 + #206 — keyterms are now scoped per-visit
 // via the builder rather than a single global list. See
@@ -158,18 +163,33 @@ export async function runLayer1Transcribe(
     });
   };
 
-  let result: TranscribeResult;
-  try {
-    result = await attempt();
-  } catch (err) {
-    // Retry once on 5xx / network blips. 4xx (bad file, bad mime) is
-    // terminal and the catch in worker.ts will surface it as a
-    // reviewReason on the visit.
-    const status = (err as { status?: number }).status;
-    if (status && status >= 400 && status < 500) throw err;
-    await new Promise((r) => setTimeout(r, BACKOFF_MS));
-    result = await attempt();
-  }
+  // FIND-P1-008 (2026-05-14): replaced inline retry+setTimeout with the
+  // shared `withRetry` helper. 2 attempts (1 retry) preserves the prior
+  // semantic. Full-jitter backoff is the policy change — pure
+  // randomization within [0, baseDelayMs * 2^attempt] decorrelates
+  // retries across concurrent workers, avoiding a thundering-herd on a
+  // Deepgram region's recovery.
+  // `defaultIsTransient` skips 4xx (except 408/429), matching the prior
+  // "4xx is terminal" guard; it ALSO skips plain Error-without-status,
+  // which used to retry — more correct: a no-status throw is almost
+  // always a code bug, not a transient API failure.
+  const result: TranscribeResult = await withRetry(attempt, {
+    maxAttempts: 2,
+    baseDelayMs: BACKOFF_MS,
+    onRetry: (info: RetryAttemptInfo) => {
+      const err = info.error as { status?: number; code?: string };
+      console.warn(
+        '[layer-01-transcribe] retrying',
+        JSON.stringify({
+          attempt: info.attempt,
+          maxAttempts: info.maxAttempts,
+          delayMs: info.delayMs,
+          status: err?.status ?? null,
+          code: err?.code ?? null,
+        })
+      );
+    },
+  });
 
   // PR-L: discriminated-union of provider raw shape. Deepgram path
   // gives us speaker labels + per-utterance confidence; Whisper has
