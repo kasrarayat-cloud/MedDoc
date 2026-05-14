@@ -31,6 +31,8 @@ import {
   categorizeError,
   type ErrorCategory,
 } from './worker/error-categorize';
+import { loadResumeState, VisitNotFoundError } from './worker/resume-state';
+import { persistFailedState } from './worker/persist-failed';
 import { notifyAdminOnFailure } from './lib/admin-notifications';
 
 import {
@@ -56,7 +58,6 @@ import {
   isLayerComplete,
   logSkipSummary,
   logSkippedLayer,
-  type LayerSkipState,
   type PipelineLayer,
 } from '@/worker/layer-skip';
 import { runLayer1Transcribe } from '@/worker/layers/01-transcribe';
@@ -208,50 +209,11 @@ async function clearAutomationColumn(
   });
 }
 
-/** T-M13 — load every layer's checkpoint column in one query. Returns
- *  a LayerSkipState the skip checks consume. An all-nulls shape on
- *  the first attempt ⇒ every isLayerComplete() returns false ⇒ the
- *  pipeline runs end-to-end as before. A partially-populated shape
- *  on retry ⇒ skips fire for completed layers. */
-async function loadResumeState(visitId: string): Promise<LayerSkipState> {
-  const row = await prisma.transcribeVisit.findUnique({
-    where: { id: visitId },
-    select: {
-      transcriptRaw: true,
-      transcriptText: true,
-      speakerMap: true,
-      entities: true,
-      soapDraft: true,
-      critique: true,
-      soapFinal: true,
-      icdCodes: true,
-      cptCodes: true,
-      rxDrafts: true,
-      referrals: true,
-      patientSummary: true,
-    },
-  });
-  if (!row) {
-    // Defensive — if the row disappeared between the top-level
-    // findUnique and here, fall back to all-nulls so everything runs
-    // fresh. The caller's next DB write will error, which is fine.
-    return {
-      transcriptRaw: null,
-      transcriptText: null,
-      speakerMap: null,
-      entities: null,
-      soapDraft: null,
-      critique: null,
-      soapFinal: null,
-      icdCodes: null,
-      cptCodes: null,
-      rxDrafts: null,
-      referrals: null,
-      patientSummary: null,
-    };
-  }
-  return row as LayerSkipState;
-}
+// T-M13 / FIND-P1-011 — `loadResumeState` was extracted to
+// `./worker/resume-state.ts` so it could be unit-tested for the
+// "visit deleted during retry" race (worker.ts has module-level side
+// effects — Worker creation, Redis connect, Sentry init — which make
+// it un-importable from tests).
 
 async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
   const { visitId } = job.data;
@@ -344,7 +306,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
   // columns — the checks below short-circuit those and the retry
   // resumes at the first non-populated layer.
   const attempt = job.attemptsMade + 1;
-  const resumeState = await loadResumeState(visitId);
+  const resumeState = await loadResumeState(visitId, job.attemptsMade);
   const skipped: PipelineLayer[] = [];
 
   try {
@@ -951,6 +913,21 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
     // skipped, so happy-path first attempts stay quiet.
     logSkipSummary(visitId, attempt, skipped);
   } catch (err) {
+    // FIND-P1-011: visit deleted between top-level findUnique and a
+    // BullMQ retry's resume-state load. Short-circuit: don't try to
+    // write FAILED state to a non-existent row (P2025), don't burn
+    // the admin notify, don't pretend this needs further retry.
+    // Returning cleanly tells BullMQ the job is done — which it is,
+    // the visit's gone. The cleanup sweep handles the orphaned audio.
+    if (err instanceof VisitNotFoundError) {
+      log.info(
+        'transcribe-md-worker',
+        'visit deleted during retry, dropping job',
+        { visitId, attemptsMade: job.attemptsMade ?? 0 }
+      );
+      return;
+    }
+
     // T-M16.3: Deepgram/Anthropic errors can quote audio/file metadata
     // or URLs — scrub before emitting to container stdout. Sentry path
     // (captureWorkerException below) does its own redactPhi via the
@@ -1005,28 +982,23 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       );
     }
 
-    await prisma.transcribeVisit
-      .update({
-        where: { id: visitId },
-        data: {
-          status: TranscribeVisitStatus.FAILED,
-          processingFinishedAt: new Date(),
-          needsReview: true,
-          // T-M18.1 A2: DO NOT write the raw err.message to reviewReason
-          // — it renders as the failure banner on /visits/[id] and a
-          // Prisma/Deepgram/Anthropic error can quote patient content
-          // (PHI in the DB + UI). Instead, write a phase-tagged
-          // user-friendly string derived only from currentLayer.
-          reviewReason: buildUserFacingFailureReason(currentLayer, category, err),
-          failureCategory: category,
-        },
-      })
-      .catch((writeErr: unknown) => {
-        console.error(
-          '[transcribe-md-worker] failed to write FAILED state:',
-          redactPhi(writeErr instanceof Error ? writeErr.message : writeErr)
-        );
-      });
+    // FIND-P1-014: persist FAILED-state via a helper that returns
+    // a structured {persistOk, persistErr} result instead of silently
+    // swallowing write failures. The original `err` already went to
+    // Sentry above; the helper additionally logs + captures the
+    // *secondary* (persist) failure so post-mortems have both halves.
+    // Policy: re-throw `persistErr` below so BullMQ marks the job
+    // failed with the persist failure as the proximate cause —
+    // silent stuck-in-non-terminal is the worse failure mode.
+    const { persistOk, persistErr } = await persistFailedState({
+      visitId,
+      category,
+      layer: currentLayer,
+      originalErr: err,
+      reviewReason: buildUserFacingFailureReason(currentLayer, category, err),
+      userId: visit.userId,
+      practiceId: visit.user?.practiceId ?? null,
+    });
 
     // Best-effort admin alert. notifyAdminOnFailure swallows every
     // failure path internally — a misconfigured Resend account must
@@ -1056,6 +1028,17 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
           redactPhi(notifyErr instanceof Error ? notifyErr.message : notifyErr)
         );
       });
+
+    // FIND-P1-014: if FAILED-state persist failed, surface the
+    // persist error to BullMQ. The visit row remains in its
+    // non-terminal status (POLISHING / AUTOMATING / etc.) until the
+    // stuck-visit watchdog catches it at the 15-min threshold and
+    // force-fails it. Re-throwing here (rather than the original
+    // `err`) gives BullMQ the persist context as the job's proximate
+    // failure; the original error is already in Sentry.
+    if (!persistOk) {
+      throw persistErr;
+    }
 
     throw err;
   }
