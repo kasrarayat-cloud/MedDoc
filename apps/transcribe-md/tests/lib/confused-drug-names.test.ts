@@ -143,6 +143,16 @@ describe('CONFUSED_DRUG_NAMES_FLAT — derived flat list (primaries only)', () =
     expect(CONFUSED_DRUG_NAMES_FLAT).toContain('Nexplanon');
   });
 
+  it('contains Levemir + levetiracetam (PR-5 empirical class — insulin vs anticonvulsant)', () => {
+    // PR-3 regression baseline (#248) surfaced Deepgram morphing
+    // "Levemir" → "levetiracil" (truncated levetiracetam). PR-5
+    // (#TBD) added the substitution class symmetrically so either
+    // medication is biased correctly regardless of which one the
+    // clinician spoke.
+    expect(CONFUSED_DRUG_NAMES_FLAT).toContain('Levemir');
+    expect(CONFUSED_DRUG_NAMES_FLAT).toContain('levetiracetam');
+  });
+
   it('contains the T-cluster primaries (Trulicity / Tradjenta / Toujeo / Tresiba)', () => {
     // Tanzeum is a confusedWith only (no primary entry — it's
     // discontinued), so it shouldn't appear. Tresiba/Toujeo/Trulicity/
