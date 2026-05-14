@@ -18,7 +18,12 @@ import prisma from '@meddoc/db';
 // dictation path is single-speaker so there are no diarization
 // concerns on the fallback branch — Whisper produces the same flat
 // text Deepgram does (with `diarize: false`).
-import { transcribe, type TranscribeResult } from '@meddoc/ai';
+import {
+  transcribe,
+  withRetry,
+  type TranscribeResult,
+  type RetryAttemptInfo,
+} from '@meddoc/ai';
 import { statAudio, streamAudio } from '@/lib/minio';
 // 2026-05-13 Issues #202 + #206 — keyterms are now scoped per-visit
 // via the builder rather than a single global list.
@@ -126,15 +131,28 @@ export async function runLayer1bTranscribeDictation(
     });
   };
 
-  let result: TranscribeResult;
-  try {
-    result = await attempt();
-  } catch (err) {
-    const status = (err as { status?: number }).status;
-    if (status && status >= 400 && status < 500) throw err;
-    await new Promise((r) => setTimeout(r, BACKOFF_MS));
-    result = await attempt();
-  }
+  // FIND-P1-009 (2026-05-14): same shape as L1's FIND-P1-008 fix —
+  // shared `withRetry` with full-jitter backoff. Preserves the prior
+  // 2-attempt semantic; the jitter change decorrelates dictation-mode
+  // retries from conversation-mode retries when both workers hit a
+  // Deepgram outage simultaneously.
+  const result: TranscribeResult = await withRetry(attempt, {
+    maxAttempts: 2,
+    baseDelayMs: BACKOFF_MS,
+    onRetry: (info: RetryAttemptInfo) => {
+      const err = info.error as { status?: number; code?: string };
+      console.warn(
+        '[layer-01b-transcribe-dictation] retrying',
+        JSON.stringify({
+          attempt: info.attempt,
+          maxAttempts: info.maxAttempts,
+          delayMs: info.delayMs,
+          status: err?.status ?? null,
+          code: err?.code ?? null,
+        })
+      );
+    },
+  });
 
   // Round 3 quality fix-pack Q0-5 (audit Findings 02.5 + 07.3) —
   // dictation also runs through Deepgram's batch endpoint, so the

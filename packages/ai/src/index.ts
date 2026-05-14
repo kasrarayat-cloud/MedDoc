@@ -49,6 +49,14 @@ export {
 } from './pricing';
 export { hashPrompt } from './prompt-hash';
 export { logAiCall, redactPhi } from './log';
+// FIND-P1-006/-007/-008/-009 (2026-05-14) — shared transient-error
+// retry helper with full-jitter backoff + Retry-After parsing.
+export {
+  withRetry,
+  defaultIsTransient,
+  type RetryOptions,
+  type RetryAttemptInfo,
+} from './retry';
 // Round 3 PR-D — deterministic AI safety backstops (audit findings
 // A06-P0-002, A06-P0-004). Allowlist + dose-range validators live in
 // ./data and are consumed by the worker's 07a/07b/07c layers.

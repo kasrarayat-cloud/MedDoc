@@ -15,6 +15,7 @@
 import { logAiCall } from './log';
 import { isMockEnabled, mockDeepgramBatch } from './mock';
 import { deepgramBatchCostCents } from './pricing';
+import { withRetry, type RetryAttemptInfo } from './retry';
 import type { AiLogContext } from './types';
 import { logApiUsage, buildDeepgramUsage } from './api-usage';
 
@@ -146,10 +147,49 @@ export interface DeepgramBatchResult {
 }
 
 /**
- * One-shot batch transcription. Throws on 4xx/5xx. Caller is responsible
- * for retry policy (L1 wraps this with one network retry on 5xx).
+ * Public entry point — wraps the underlying transcribe call in
+ * `withRetry` (full-jitter backoff, default 2 attempts) for transient
+ * Deepgram failures. FIND-P1-006 (2026-05-14): non-L1 callers (eval
+ * harness, regression baseline) used to get zero retries on Deepgram
+ * 5xx; this gives them the same safety net as the worker path.
+ *
+ * The L1 worker layer ALSO retries this call (via its own withRetry).
+ * For pilot scale that double-retry is acceptable; the helper's
+ * `defaultIsTransient` predicate matches both layers' intent.
+ *
+ * Throws on 4xx (permanent input error) or after retries exhaust.
  */
 export async function deepgramBatchTranscribe(
+  args: DeepgramBatchArgs
+): Promise<DeepgramBatchResult> {
+  return withRetry(() => deepgramBatchTranscribeOnce(args), {
+    maxAttempts: 2,
+    baseDelayMs: 1000,
+    onRetry: (info: RetryAttemptInfo) => {
+      // Structured telemetry — NO PHI in payload, just operational shape.
+      // The error.status (or .code) is enough to debug post-mortem
+      // without surfacing audio metadata or transcripts.
+      const err = info.error as { status?: number; code?: string };
+      console.warn(
+        '[deepgram-batch] retrying',
+        JSON.stringify({
+          attempt: info.attempt,
+          maxAttempts: info.maxAttempts,
+          delayMs: info.delayMs,
+          status: err?.status ?? null,
+          code: err?.code ?? null,
+        })
+      );
+    },
+  });
+}
+
+/**
+ * Internal single-attempt transcribe. Renamed from `deepgramBatchTranscribe`
+ * during FIND-P1-006 closure; the public wrapper above adds retry. Throws
+ * on 4xx/5xx.
+ */
+async function deepgramBatchTranscribeOnce(
   args: DeepgramBatchArgs
 ): Promise<DeepgramBatchResult> {
   // T-M10: MOCK_AI_CALLS short-circuit. See packages/ai/src/mock.ts.
