@@ -25,6 +25,7 @@ import { statAudio, streamAudio } from '@/lib/minio';
 // via the builder rather than a single global list. See
 // `buildKeytermsForVisit` for the composition rules.
 import { buildKeytermsForVisit } from '@/lib/deepgram-keyterm-builder';
+import { CONFUSED_DRUG_NAMES_FLAT } from '@/lib/confused-drug-names';
 import { logAudit } from '@/lib/audit';
 import {
   computeAudioConfidenceStats,
@@ -89,9 +90,19 @@ export async function runLayer1Transcribe(
   // Compose per-visit keyterm list. Interpreter mode skips this
   // entirely (model swaps to nova-3 general which doesn't accept
   // keyterm bias the same way); see the deepgram branch below.
+  //
+  // PR-2 (Issues #202 + #206): the ISMP confused-drug-names ride as
+  // the always-loaded safety floor. The Implanon → insulin
+  // substitution from Issue #206 is the seed case for the floor;
+  // the T-cluster (Trulicity/Tradjenta/Toujeo/Tresiba/Tanzeum) is
+  // the highest-density ISMP confusion cluster in QuillMD's
+  // endocrine wedge.
   const built = input.interpreterMode
     ? null
-    : buildKeytermsForVisit({ specialty: input.specialty });
+    : buildKeytermsForVisit({
+        specialty: input.specialty,
+        safetyFloor: CONFUSED_DRUG_NAMES_FLAT,
+      });
 
   const attempt = async () => {
     return transcribe({

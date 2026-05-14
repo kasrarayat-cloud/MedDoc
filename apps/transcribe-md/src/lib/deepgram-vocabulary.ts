@@ -605,51 +605,32 @@ export const CLINICAL_KEYTERMS: readonly string[] = Array.from(
 // ============================================================================
 
 /** Terms that ride on EVERY visit regardless of specialty — the
- *  universal clinical-vocabulary baseline. Sized ~80 entries so the
- *  per-visit budget has room for a specialty bundle + safety floor +
- *  patient-context boost (added in subsequent PRs).
+ *  universal clinical-vocabulary baseline.
  *
  *  Composition: anatomy (~32) + labs (~9) + procedures (~8) +
- *  common diagnoses (~8) + top-25 highest-frequency medications
- *  drawn from `MEDICATION_KEYTERMS`. Drug list deliberately picks
- *  cross-specialty common ones (ibuprofen, metformin, lisinopril,
- *  atorvastatin) and omits specialty-specific ones (semaglutide
- *  goes in bariatric / weight_management; warfarin goes in
- *  vascular_surgery). */
+ *  common diagnoses (~8). Sized ~57 entries / ~200 estimated tokens.
+ *
+ *  Why no medications in CORE (2026-05-13 PR-2 audit follow-up): the
+ *  per-visit token budget is ~450 estimated tokens (10% under
+ *  Deepgram's 500 cap). After PR-2 wired the ISMP confused-drug
+ *  safety floor (~150 tokens) + per-specialty bundles (~85 tokens),
+ *  a CORE that also carried top-25 universal meds pushed the total
+ *  over the cap and forced the builder to drop the specialty layer
+ *  entirely (the regression caught by the auditor before merge). The
+ *  specialty bundles + safety floor together cover every medication
+ *  that's broadly common (primary_care carries lisinopril, losartan,
+ *  metoprolol, atorvastatin, metformin; bariatric carries GLP-1s;
+ *  vascular carries anticoagulants; etc.). Visits with
+ *  `specialty=unspecified` get the safety floor + CORE only — which
+ *  still covers the most-confused-name pairs (the safety floor IS
+ *  the most-load-bearing medication coverage) and the universal
+ *  anatomy/labs/procedure vocabulary. */
 export const CORE_KEYTERMS: readonly string[] = Array.from(
   new Set<string>([
-    // Anatomy + labs + procedures + diagnoses — already cross-specialty
     ...ANATOMY_TERMS,
     ...LAB_TESTS,
     ...PROCEDURES,
     ...COMMON_DIAGNOSES,
-    // Top universal medications (drawn from MEDICATION_KEYTERMS — these
-    // cross every specialty)
-    'acetaminophen',
-    'ibuprofen',
-    'aspirin',
-    'metformin',
-    'lisinopril',
-    'amlodipine',
-    'atorvastatin',
-    'rosuvastatin',
-    'metoprolol',
-    'losartan',
-    'omeprazole',
-    'pantoprazole',
-    'levothyroxine',
-    'amoxicillin',
-    'azithromycin',
-    'doxycycline',
-    'cephalexin',
-    'prednisone',
-    'methylprednisolone',
-    'albuterol',
-    'fluticasone',
-    'sertraline',
-    'fluoxetine',
-    'gabapentin',
-    'tramadol',
   ]),
 );
 

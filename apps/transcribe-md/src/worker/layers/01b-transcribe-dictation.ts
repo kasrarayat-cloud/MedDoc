@@ -23,6 +23,7 @@ import { statAudio, streamAudio } from '@/lib/minio';
 // 2026-05-13 Issues #202 + #206 — keyterms are now scoped per-visit
 // via the builder rather than a single global list.
 import { buildKeytermsForVisit } from '@/lib/deepgram-keyterm-builder';
+import { CONFUSED_DRUG_NAMES_FLAT } from '@/lib/confused-drug-names';
 import { logAudit } from '@/lib/audit';
 import {
   computeAudioConfidenceStats,
@@ -76,11 +77,15 @@ export async function runLayer1bTranscribeDictation(
   const nodeStream = await streamAudio(input.dictationAudioKey);
   const webStream = Readable.toWeb(nodeStream) as ReadableStream<Uint8Array>;
 
-  // 2026-05-13 Issues #202 + #206 — per-visit keyterm composition.
+  // 2026-05-13 Issues #202 + #206 — per-visit keyterm composition
+  // with ISMP confused-drug-names safety floor (PR-2).
   // Interpreter mode skips this (model swap to nova-3 general).
   const built = input.interpreterMode
     ? null
-    : buildKeytermsForVisit({ specialty: input.specialty });
+    : buildKeytermsForVisit({
+        specialty: input.specialty,
+        safetyFloor: CONFUSED_DRUG_NAMES_FLAT,
+      });
 
   const attempt = async () => {
     return transcribe({
