@@ -244,6 +244,10 @@ export async function reassignSpeakerAction(
     confidence: number;
     reasoning: string;
   }> | null) ?? {};
+  // Capture the previous role BEFORE mutating the map — feeds the
+  // audit metadata below so forensics can see what changed without
+  // reading DB row history.
+  const previousRole = map[parsed.data.speakerId]?.role ?? null;
   map[parsed.data.speakerId] = {
     ...(map[parsed.data.speakerId] ?? { confidence: 1, reasoning: '' }),
     role: parsed.data.role,
@@ -256,6 +260,28 @@ export async function reassignSpeakerAction(
   await prisma.transcribeVisit.update({
     where: { id: visitId },
     data: { speakerMap: map as unknown as object },
+  });
+
+  // FIND-P1-003 (2026-05-14) — HIPAA §164.312(b) audit row. The
+  // speakerMap mutation affects the SOAP note's history-vs-plan
+  // segmentation downstream; this row gives "who reassigned what,
+  // when" a single grep target rather than requiring DB row-history
+  // reconstruction. Fire-and-forget: logAudit never throws.
+  // Metadata has NO PHI: speakerId is an internal numeric label,
+  // role is the SpeakerRoleKeys enum (doctor/patient/family/other/
+  // unknown), source disambiguates against any future route-path
+  // emit. The user identity is captured by logAudit's own session
+  // resolution (audit_logs.userId + userEmailSnapshot columns).
+  void logAudit({
+    action: 'SPEAKER_ROLE_REASSIGNED',
+    targetType: 'TranscribeVisit',
+    targetId: visitId,
+    metadata: {
+      source: 'server_action',
+      speakerId: parsed.data.speakerId,
+      previousRole,
+      newRole: parsed.data.role,
+    },
   });
 
   revalidatePath(`/visits/${visitId}`);
