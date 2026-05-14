@@ -18,6 +18,7 @@ import {
   LOW_CONFIDENCE_THRESHOLD,
   type AudioConfidenceStats,
 } from './audio-confidence';
+import { validateSoapStructure } from './soap-structure-validator';
 
 const MODEL = 'claude-opus-4-7';
 
@@ -223,6 +224,42 @@ export async function runLayer4GenerateSoap(
     maxTokens: 8192,
     temperature: 0.2,
   });
+
+  // FIND-P1-015 (2026-05-14) — lenient SOAP structure check. The L4
+  // prompt says "Structure the note with these markdown headings
+  // exactly: ## Subjective / ## Objective / ## Assessment / ## Plan"
+  // — the validator pins that contract without locking the prompt
+  // into a specific spacing/casing. On fail we DON'T crash: write the
+  // raw output (doctor can fix it manually), flip needsReview, emit
+  // a MODEL_OUTPUT_VALIDATION_FAIL audit row for forensics.
+  const validation = validateSoapStructure(text);
+  if (!validation.ok) {
+    void logAudit({
+      action: 'MODEL_OUTPUT_VALIDATION_FAIL',
+      targetType: 'transcribe_visit',
+      targetId: input.visitId,
+      userId: input.userId,
+      practiceId: input.practiceId,
+      success: false,
+      metadata: {
+        layer: 'L4',
+        reason: validation.reason,
+        outputLength: validation.outputLength,
+        missingSections: validation.missingSections,
+        // NO raw output — PHI surface. Just the structural fail-class.
+      },
+    });
+    await prisma.transcribeVisit.update({
+      where: { id: input.visitId },
+      data: {
+        soapDraft: text,
+        needsReview: true,
+        reviewReason:
+          'SOAP draft didn\'t match expected markdown structure — manual review required.',
+      },
+    });
+    return text;
+  }
 
   await prisma.transcribeVisit.update({
     where: { id: input.visitId },
