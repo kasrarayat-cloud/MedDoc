@@ -16,6 +16,7 @@ import {
   anthropicCompleteText,
   type AnthropicCompleteTextResult,
 } from './anthropic';
+import { ModelOutputMalformedError } from './errors';
 import {
   isMockEnabled,
   mockComplete,
@@ -91,18 +92,30 @@ export const modelClient = {
           retryContext,
         });
       } catch (err) {
+        // FIND-P1-010 (2026-05-14): prefer instanceof over message scraping.
+        // ModelOutputMalformedError is the new typed JSON.parse-fail; the
+        // `.startsWith('Anthropic response was not valid JSON')` branch
+        // stays as a belt-and-suspenders fallback while any in-flight
+        // pre-typed throws drain.
         const isRetryable =
-          err instanceof Error &&
-          (err.message === 'SCHEMA_FAIL' ||
-            err.message.startsWith('Anthropic response was not valid JSON'));
+          err instanceof ModelOutputMalformedError ||
+          (err instanceof Error &&
+            (err.message === 'SCHEMA_FAIL' ||
+              err.message.startsWith('Anthropic response was not valid JSON')));
         if (!retryEnabled || !isRetryable || attempt === MAX_RETRIES) {
           throw err;
         }
-        const rawOutput = (err as Error & { rawOutput?: string }).rawOutput;
-        const zodErrors = (err as Error & { zodErrors?: unknown }).zodErrors;
-        retryContext = zodErrors
-          ? `${rawOutput ?? ''}\n\nZod errors:\n${JSON.stringify(zodErrors, null, 2)}`
-          : `Previous response failed to parse: ${err.message}`;
+        // Retry context: ModelOutputMalformedError carries the raw text
+        // slice directly; SCHEMA_FAIL stamps it on the legacy fields.
+        if (err instanceof ModelOutputMalformedError) {
+          retryContext = `Previous response failed JSON.parse:\n${err.rawTextSlice}`;
+        } else {
+          const rawOutput = (err as Error & { rawOutput?: string }).rawOutput;
+          const zodErrors = (err as Error & { zodErrors?: unknown }).zodErrors;
+          retryContext = zodErrors
+            ? `${rawOutput ?? ''}\n\nZod errors:\n${JSON.stringify(zodErrors, null, 2)}`
+            : `Previous response failed to parse: ${(err as Error).message}`;
+        }
       }
     }
     // TS needs a terminal return — unreachable given the loop above.

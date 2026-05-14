@@ -12,6 +12,7 @@ import { z } from 'zod';
 import { hashPrompt } from './prompt-hash';
 import { logAiCall } from './log';
 import { claudeCostCents } from './pricing';
+import { ModelOutputMalformedError } from './errors';
 import type { AiLogContext } from './types';
 import { logApiUsage, buildAnthropicUsage } from './api-usage';
 
@@ -311,7 +312,15 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
           errorCode: 'JSON_PARSE_FAIL',
           errorDetails: capErrorDetails(unfenced),
         });
-        throw new Error(`Anthropic response was not valid JSON: ${String(err)}`);
+        // FIND-P1-010 (2026-05-14): typed error replaces the prior
+        // generic `Error('Anthropic response was not valid JSON: ...')`.
+        // The error class carries the truncated body + parseError; the
+        // message preserves the legacy "Anthropic response was not valid
+        // JSON" prefix so the model-client retry loop (which still does
+        // the message-startsWith check as a fallback) keeps working.
+        // categorizeError.ts now keys off the class via instanceof for
+        // permanent classification.
+        throw new ModelOutputMalformedError(unfenced, err);
       }
     }
 
@@ -393,7 +402,15 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
     // worker logs to find the actual failure mode (e.g., the Opus 4.7
     // temperature-deprecation 400 was invisible at the DB level until now).
     const latencyMs = Date.now() - started;
-    if (!(err instanceof Error) || (err.message !== 'SCHEMA_FAIL' && !err.message.startsWith('Anthropic response'))) {
+    // FIND-P1-010: instanceof check supersedes the message-startsWith
+    // fallback for ModelOutputMalformedError; the message-prefix branch
+    // remains so legacy/in-flight Error throws stay deduped.
+    if (
+      !(err instanceof Error) ||
+      (err.message !== 'SCHEMA_FAIL' &&
+        !err.message.startsWith('Anthropic response') &&
+        !(err instanceof ModelOutputMalformedError))
+    ) {
       logAiCall({
         ...args,
         provider: 'anthropic',

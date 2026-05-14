@@ -164,6 +164,14 @@ function isPermanentInputError(msg: string, err: unknown): boolean {
   // BullMQ retries cannot help. Mark permanent so the worker's
   // shouldFailNow short-circuit fires immediately.
   if (err instanceof Error && err.name === 'PipelineRejectError') return true;
+  // FIND-P1-010 (2026-05-14) — model returned non-JSON after the
+  // model-client retry exhausted. The body won't parse on the next
+  // BullMQ retry either (Claude doesn't see prior responses across
+  // BullMQ attempts; the only retry-context that helped lived inside
+  // the model-client loop, which already burned its budget). Mark
+  // permanent so shouldFailNow fires and the visit fails fast with
+  // a clearer reviewReason rather than burning two more attempts.
+  if (err instanceof Error && err.name === 'ModelOutputMalformedError') return true;
   const lower = msg.toLowerCase();
   if (
     /unsupported( (audio|file))? format/.test(lower) ||
