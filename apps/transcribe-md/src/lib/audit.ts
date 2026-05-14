@@ -144,7 +144,12 @@ export type AuditAction =
   // closure. Emitted by reassignSpeakerAction when a doctor reassigns
   // a speaker on the Transcript tab. Metadata carries { source,
   // speakerId, previousRole, newRole } — no PHI.
-  | 'SPEAKER_ROLE_REASSIGNED';
+  | 'SPEAKER_ROLE_REASSIGNED'
+  // FIND-P1-015 + FIND-P1-016 (2026-05-14) — emitted by L4 / L6 when
+  // the lenient SOAP-structure validator (soap-structure-validator.ts)
+  // rejects the model output (empty / JSON-shape / missing sections).
+  // Metadata: { layer, reason, outputLength, missingSections } — no PHI.
+  | 'MODEL_OUTPUT_VALIDATION_FAIL';
 
 export interface AuditLogInput {
   action: AuditAction;

@@ -299,6 +299,19 @@ enum AuditAction {
   // no PHI (the speakerId is an internal numeric label, the role enum
   // is one of doctor/patient/family/other/unknown).
   SPEAKER_ROLE_REASSIGNED
+
+  // FIND-P1-015 + FIND-P1-016 (2026-05-14) — close the L4/L6 markdown
+  // validation gap. L4 (SOAP generation) and L6 (polish) emit markdown
+  // output (not JSON), so the Zod / useToolUse pattern from L7a / L2
+  // doesn't apply. The lenient validator at
+  // `apps/transcribe-md/src/worker/layers/soap-structure-validator.ts`
+  // checks (1) non-empty, (2) not JSON-shaped, (3) all 4 SOAP section
+  // headers present. On fail the layer still persists the raw output
+  // (doctor can fix it manually) and emits this audit action so
+  // operators can grep audit_logs for model-contract regressions.
+  // Metadata: { layer, reason, outputLength, missingSections } — no PHI
+  // (no raw output content, just structured fail-class signal).
+  MODEL_OUTPUT_VALIDATION_FAIL
 }
 
 /// Document lifecycle status
