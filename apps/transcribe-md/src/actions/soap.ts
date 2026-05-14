@@ -40,7 +40,43 @@ export interface SaveSoapResult {
  *  `expectedVersion` is provided (preferred), the write is gated by
  *  `WHERE soapVersion = expectedVersion`; mismatch returns
  *  `error: 'conflict'` with current state. If omitted (legacy
- *  callers during deploy window), falls back to last-write-wins. */
+ *  callers during deploy window), falls back to last-write-wins.
+ *
+ *  FIND-P1-002 (comprehensive-audit 2026-05-14, RESOLVED-WITH-DOCS):
+ *  this action intentionally does NOT write an `audit_logs` row per
+ *  save. The audit doc's options were (A) emit `EDITED_NOTE` on
+ *  every save — 5-20 rows per editing session — or (B) introduce
+ *  a debounced `SOAP_DRAFT_SAVED` enum value. Both inflate
+ *  `audit_logs` with intermediate draft churn for coverage we
+ *  already get elsewhere:
+ *
+ *    - **Legal audit event**: `VISIT_SIGNED` fires from
+ *      `signVisitAction` (this file, ~line 181) and from the
+ *      sign route at `app/api/visits/[id]/sign/route.ts:268`.
+ *      Closed by PR #251 / FIND-P1-001.
+ *
+ *    - **Per-save evidence**: `soapVersion` increments here on
+ *      every successful update (counter only — `soapFinal` itself
+ *      holds the current text; prior textual states are not
+ *      preserved). Operators can see "this visit had N draft
+ *      saves before signing" but not the intermediate content.
+ *
+ *    - **Cumulative edit forensics**: `DoctorEditPattern` (table
+ *      `doctor_edit_patterns`) captures one row per signed visit
+ *      via `captureEditPattern(...)` in `signVisitAction` — the
+ *      cumulative `originalSoap` (L6's AI output) → `editedSoap`
+ *      (what the doctor signed) diff plus a char-level Levenshtein
+ *      distance. This is the ML/quality surface, not a per-save
+ *      capture.
+ *
+ *  The `audit_logs` table contract targets discrete legal events
+ *  (sign, export, delete, view). Intermediate draft saves are
+ *  operational state — the legal event is the sign transition,
+ *  fully wired by PR #251.
+ *
+ *  If future regulatory guidance (or a multi-doctor scale need)
+ *  requires per-save evidence with full content, options A or B
+ *  remain viable. */
 export async function saveSoapDraftAction(
   visitId: string,
   text: string,
