@@ -234,4 +234,21 @@ describe('categorizeError — provider_down', () => {
     expect(categorizeError(make())).toBe('permanent');
     // Permanent errors don't feed the provider-down ring.
   });
+
+  it('FIND-P1-010 — treats ModelOutputMalformedError as permanent (by name)', () => {
+    // The categorizer can't import the class without a cross-package
+    // edge (worker → packages/ai/src/errors), so it matches by
+    // `err.name`. The class sets name='ModelOutputMalformedError' in
+    // its constructor — these tests pin the contract on both sides.
+    class ModelOutputMalformedError extends Error {
+      constructor(message: string) {
+        super(message);
+        this.name = 'ModelOutputMalformedError';
+      }
+    }
+    const err = new ModelOutputMalformedError(
+      'Anthropic response was not valid JSON: Unexpected token'
+    );
+    expect(categorizeError(err)).toBe('permanent');
+  });
 });
