@@ -97,13 +97,21 @@ export async function runLayer2SpeakerRoles(
     // Diarization failed upstream or one-speaker audio. Default to
     // single-speaker doctor with modest confidence; Layer 3 handles
     // missing role labels gracefully.
-    const fallback: SpeakerMap = {
+    //
+    // FIND-P1-017 (comprehensive-audit 2026-05-14): the fallback's
+    // hardcoded shape used to skip the Zod schema check that the
+    // AI-success branch runs. If the SpeakerAssignment shape ever
+    // drifts (e.g., a new required field), the fallback succeeds at
+    // DB write-time but L3+ choke on the malformed shape. Running
+    // the constant through SpeakerMap.parse(...) makes the drift
+    // surface during a dev rebuild rather than in production.
+    const fallback = SpeakerMap.parse({
       '0': {
         role: 'doctor',
         confidence: 0.5,
         reasoning: 'Diarization returned no speaker tags; defaulting to single-speaker doctor.',
       },
-    };
+    });
     await prisma.transcribeVisit.update({
       where: { id: input.visitId },
       data: { speakerMap: fallback as unknown as object, needsReview: true },
@@ -206,6 +214,20 @@ export async function runLayer2SpeakerRoles(
     // oscillate between confidence 0.65 (needsReview) and 0.75 (clean)
     // run-to-run. Pin to 0 so the lowestConfidence gate is consistent.
     temperature: 0,
+    // FIND-P1-017 (comprehensive-audit 2026-05-14) / Cluster 3 zod
+    // hardening: force Anthropic to return the speaker map via
+    // tool_use rather than free-form text + JSON.parse. The schema
+    // (SpeakerMap above) doubles as the tool's input_schema; the
+    // model's response is a structured object, not a JSON-encoded
+    // string. Eliminates the JSON_PARSE_FAIL class for L2; the
+    // Zod parse on the result still runs as defense-in-depth.
+    // Pattern matches L7a icd-coding (PR #235) — the canonical
+    // useToolUse adoption in the worker pipeline.
+    useToolUse: {
+      name: 'submit_speaker_roles',
+      description:
+        'Submit the per-speaker role classification. Each entry carries a confidence (0-1) and a short reasoning snippet for the Transcript-tab tooltip.',
+    },
   });
 
   const confidences = Object.values(speakerMap).map((s) => s.confidence);
