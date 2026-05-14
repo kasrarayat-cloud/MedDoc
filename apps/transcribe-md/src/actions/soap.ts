@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import prisma from '@meddoc/db';
 import { TranscribeVisitStatus } from '@prisma/client';
+import { redactPhi } from '@meddoc/ai';
 import { requireSession } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
 import { captureEditPattern } from '@/lib/edit-tracking';
@@ -183,10 +184,22 @@ export async function signVisitAction(
     metadata: { source: 'server_action' },
   });
 
-  // T-M14.1: fire-and-forget edit-pattern capture. captureEditPattern
-  // swallows every error internally — discarding the promise with
-  // `void` keeps this action's happy path unaffected.
-  void captureEditPattern({ visitId, doctorId: session.user.id });
+  // T-M14.1 + FIND-P1-005 (2026-05-14): fire-and-forget edit-pattern
+  // capture. captureEditPattern swallows its own async errors by
+  // design (per its docstring), but a SYNCHRONOUS throw (constructor
+  // error, third-party dep regression) would propagate up and break
+  // the sign flow. The `Promise.resolve().then(...)` wrap routes
+  // both async + sync throws into the .catch handler — same pattern
+  // lib/audit.ts:198 uses for auth(). Errors are redacted before
+  // logging since Prisma error messages can echo column data.
+  Promise.resolve()
+    .then(() => captureEditPattern({ visitId, doctorId: session.user.id }))
+    .catch((err) => {
+      console.warn(
+        `[actions:signVisit] captureEditPattern failed for visit=${visitId}:`,
+        redactPhi(err instanceof Error ? err.message : String(err ?? ''))
+      );
+    });
 
   revalidatePath(`/visits/${visitId}`);
   revalidatePath('/dashboard');

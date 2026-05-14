@@ -33,6 +33,7 @@ import {
 } from './worker/error-categorize';
 import { loadResumeState, VisitNotFoundError } from './worker/resume-state';
 import { persistFailedState } from './worker/persist-failed';
+import { sanitizeConfidenceScores } from './worker/confidence-scores';
 import { notifyAdminOnFailure } from './lib/admin-notifications';
 
 import {
@@ -897,13 +898,27 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       });
     }
 
+    // FIND-P1-012 (2026-05-14): parse + JSON-round-trip
+    // confidenceScores before the write. Prisma's JSONB adapter
+    // silently coerces non-serializable values (Map → {}, function
+    // → drop) which can leave the column with a shape that L2/L7
+    // can't read back. The sanitizer returns null on schema-fail or
+    // serialize-fail; null is the same shape the column carries on
+    // first-attempt initial state (worker.ts:297), so downstream
+    // readers handle it.
+    const safeConfidenceScores = sanitizeConfidenceScores(confidenceScores);
+    if (safeConfidenceScores === null) {
+      console.warn(
+        `[transcribe-md-worker] confidenceScores schema/serialize fail for visit=${visitId}, writing null`
+      );
+    }
     await prisma.transcribeVisit.update({
       where: { id: visitId },
       data: {
         status: TranscribeVisitStatus.READY,
         processingFinishedAt: new Date(),
         processingCostCents: totalCents,
-        confidenceScores: confidenceScores as unknown as object,
+        confidenceScores: safeConfidenceScores as unknown as object | null,
         needsReview: incomplete.needsReview,
         reviewReason: incomplete.reviewReason,
       },
