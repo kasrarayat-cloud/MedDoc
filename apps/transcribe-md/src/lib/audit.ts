@@ -139,7 +139,12 @@ export type AuditAction =
   // in-flight state (TRANSCRIBING / EXTRACTING / DRAFTING / etc.) past
   // the global 15-min budget. Metadata carries { prevStatus, elapsedMin,
   // thresholdMin, processingStartedAt } for admin forensics.
-  | 'VISIT_PROCESSING_TIMEOUT';
+  | 'VISIT_PROCESSING_TIMEOUT'
+  // FIND-P1-003 (2026-05-14) — Layer-2 manual speaker-role override
+  // closure. Emitted by reassignSpeakerAction when a doctor reassigns
+  // a speaker on the Transcript tab. Metadata carries { source,
+  // speakerId, previousRole, newRole } — no PHI.
+  | 'SPEAKER_ROLE_REASSIGNED';
 
 export interface AuditLogInput {
   action: AuditAction;
