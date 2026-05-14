@@ -6,6 +6,7 @@ import { z } from 'zod';
 import prisma from '@meddoc/db';
 import { TranscribeVisitStatus } from '@prisma/client';
 import { requireSession } from '@/lib/auth';
+import { logAudit } from '@/lib/audit';
 import { captureEditPattern } from '@/lib/edit-tracking';
 
 const SaveSoapSchema = z.object({
@@ -169,6 +170,17 @@ export async function signVisitAction(
       signedSoap: visit.soapFinal,
       signedAt: new Date(),
     },
+  });
+
+  // HIPAA audit (§164.312(b)) — mirrors the route-path emit at
+  // app/api/visits/[id]/sign/route.ts. `source: 'server_action'`
+  // disambiguates the action-path vs route-path surfaces for
+  // downstream telemetry. Fire-and-forget: logAudit never throws.
+  void logAudit({
+    action: 'VISIT_SIGNED',
+    targetType: 'TranscribeVisit',
+    targetId: visitId,
+    metadata: { source: 'server_action' },
   });
 
   // T-M14.1: fire-and-forget edit-pattern capture. captureEditPattern
