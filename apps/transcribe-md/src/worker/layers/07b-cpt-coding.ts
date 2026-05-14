@@ -215,19 +215,30 @@ export async function runLayer7bCptCoding(
   const lowConfProcedures = filteredProcedures.filter(
     (p) => p.confidenceLevel === 'low'
   );
-  if (lowConfProcedures.length > 0) {
-    await prisma.transcribeVisit.update({
-      where: { id: input.visitId },
-      data: {
+
+  // FIND-P1-004 (comprehensive-audit 2026-05-14) — collapse the
+  // previous two-step write (needsReview update + cptCodes update)
+  // into ONE atomic update. The dual-write pattern could leave the
+  // visit with `needsReview=true` + a "verify before billing: ..."
+  // reviewReason BUT `cptCodes=null` if the worker crashed between
+  // the two `prisma.update` calls. Doctor would then see the
+  // warning banner with no codes to verify. BullMQ retry rescued
+  // most of these via L7b re-run, and the stuck-visit watchdog
+  // backstopped the rest at 15 min — but the inconsistent window
+  // is closed entirely by collapsing to a single atomic write.
+  const reviewFields = lowConfProcedures.length > 0
+    ? {
         needsReview: true,
         reviewReason: `${lowConfProcedures.length} CPT procedure code${lowConfProcedures.length === 1 ? '' : 's'} at low confidence — verify before billing: ${lowConfProcedures.map((p) => p.code).join(', ')}.`,
-      },
-    });
-  }
+      }
+    : {};
 
   await prisma.transcribeVisit.update({
     where: { id: input.visitId },
-    data: { cptCodes: filtered as unknown as object },
+    data: {
+      cptCodes: filtered as unknown as object,
+      ...reviewFields,
+    },
   });
 
   return filtered;
