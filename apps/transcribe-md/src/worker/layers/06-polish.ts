@@ -9,11 +9,13 @@
 
 import { modelClient } from '@meddoc/ai';
 import prisma from '@meddoc/db';
+import { logAudit } from '@/lib/audit';
 import {
   classifyCritique,
   type CritiqueReport,
   type CritiqueIssue,
 } from './05-self-critique';
+import { validateSoapStructure } from './soap-structure-validator';
 
 const MODEL = 'claude-sonnet-4-6';
 
@@ -35,6 +37,14 @@ export interface Layer6Output {
 export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output> {
   const { fixable, unfixable } = classifyCritique(input.critique);
   let soapFinal: string;
+  // FIND-P1-016 (2026-05-14) — when the model edits the draft, the
+  // output goes through the same SOAP-structure validator L4 uses.
+  // Passthrough branch (fixable.length === 0) doesn't need re-validation
+  // because L4 already validated `soapDraft` when it landed in the row.
+  // On model-call validation fail, the layer still persists the raw
+  // output and flips needsReview so a doctor can fix it manually; the
+  // audit row gives operators a grep target for prompt regressions.
+  let polishValidationFailReason: string | null = null;
 
   if (fixable.length === 0) {
     // Nothing to auto-patch — the draft itself is our final note.
@@ -87,10 +97,35 @@ export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output>
       temperature: 0.1,
     });
     soapFinal = text;
+
+    // FIND-P1-016 — same validator L4 uses. Fail → keep raw output,
+    // flag the validation reason so the reviewReason calculation below
+    // includes it alongside the unfixable-criticals reason.
+    const validation = validateSoapStructure(text);
+    if (!validation.ok) {
+      void logAudit({
+        action: 'MODEL_OUTPUT_VALIDATION_FAIL',
+        targetType: 'transcribe_visit',
+        targetId: input.visitId,
+        userId: input.userId,
+        practiceId: input.practiceId,
+        success: false,
+        metadata: {
+          layer: 'L6',
+          reason: validation.reason,
+          outputLength: validation.outputLength,
+          missingSections: validation.missingSections,
+          // NO raw output — PHI surface.
+        },
+      });
+      polishValidationFailReason = `Polish output didn't match expected markdown structure — manual review required (${validation.reason}).`;
+    }
   }
 
-  // Surface unfixable critical issues as a review banner reason.
-  const reviewReason =
+  // Surface unfixable critical issues as a review banner reason. The
+  // FIND-P1-016 validation-fail reason (when present) prepends so the
+  // operator/clinician sees the most urgent structural issue first.
+  const baseReason =
     unfixable.length > 0
       ? `Auto-polish could not fix ${unfixable.length} critical issue${
           unfixable.length === 1 ? '' : 's'
@@ -98,8 +133,16 @@ export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output>
       : !input.critique.safe_to_sign_without_review
         ? 'Auditor flagged issues worth a quick review before signing.'
         : null;
+  const reviewReason = polishValidationFailReason
+    ? baseReason
+      ? `${polishValidationFailReason} ${baseReason}`
+      : polishValidationFailReason
+    : baseReason;
 
-  const needsReview = unfixable.length > 0 || !input.critique.safe_to_sign_without_review;
+  const needsReview =
+    unfixable.length > 0 ||
+    !input.critique.safe_to_sign_without_review ||
+    polishValidationFailReason !== null;
 
   await prisma.transcribeVisit.update({
     where: { id: input.visitId },
