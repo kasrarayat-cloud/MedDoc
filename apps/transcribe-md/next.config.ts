@@ -10,7 +10,11 @@ const nextConfig: NextConfig = {
   // Next's bundler can't handle. Marking them external tells Next to
   // leave the imports as-is and require() them at runtime from the
   // standalone build's node_modules/.
-  serverExternalPackages: ['pdfkit', 'fontkit', 'resend'],
+  // Phase 2b: mammoth (.docx → text) is likewise node-only — bundling it via
+  // webpack/tracing failed (it ended up in neither .next/server nor
+  // node_modules, so .docx silently fell back to paste). Externalizing it makes
+  // node-file-trace copy node_modules/mammoth into the standalone output.
+  serverExternalPackages: ['pdfkit', 'fontkit', 'resend', 'mammoth'],
   experimental: {
     optimizePackageImports: ['lucide-react'],
   },
