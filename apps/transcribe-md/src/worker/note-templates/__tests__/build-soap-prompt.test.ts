@@ -248,3 +248,68 @@ describe('generalized validator', () => {
     ]);
   });
 });
+
+// ── Phase 2b end-to-end SAFETY re-verification ──────────────────────────────
+// A template as PERSISTED by the 2b save action: a Prisma row whose styleProfile
+// carries ONLY { tense, tone, abbreviations } — NO preamble/globalRules (the
+// save action never stores them) — and Dr. A's COMBINED "Impression & Plan"
+// section. Proves: the activated custom template still gets the immutable
+// preamble (sourced from the canonical default, not the row), L5 normals-
+// scrutiny stays active on inserted defaults, and a combined A&P survives intact
+// for L7 (which codes from the full SOAP text, not per-heading).
+describe('Phase 2b — activated custom template keeps the safety boundary', () => {
+  // exactly what saveNoteTemplateAction persists (no safety fields)
+  const DR_A_ROW = {
+    id: 'tmpl_dr_a',
+    version: 2,
+    isSystemDefault: false,
+    sections: [
+      { key: 'subjective', label: 'Interval History', order: 1, formatHint: 'prose', styleInstructions: 'Narrative interval history.', defaultText: null, defaultTextMode: 'omit_unless_supported' },
+      { key: 'objective', label: 'Exam', order: 2, formatHint: 'bullets', styleInstructions: 'By system.', defaultText: 'General: well-appearing. CV: RRR. Resp: CTAB.', defaultTextMode: 'scaffold_confirm' },
+      { key: 'assessment_plan', label: 'Impression & Plan', order: 3, formatHint: 'numbered', styleInstructions: 'Numbered problem list; plan under each.', defaultText: null, defaultTextMode: 'omit_unless_supported' },
+    ],
+    styleProfile: { tense: 'past', tone: 'concise', abbreviations: null },
+  };
+  const tmpl = normalizeTemplate(DR_A_ROW);
+  const prompt = buildSoapSystemPrompt(tmpl, {
+    specialty: 'primary-care',
+    audioQualityAlert: null,
+    interpreterAlert: null,
+    specialtyGuidanceText: null,
+  });
+
+  it('(a) still emits the immutable preamble, sourced from the canonical default', () => {
+    expect(prompt.startsWith('You are a senior clinician')).toBe(true);
+    expect(prompt).toContain('Do NOT invent clinical findings');
+    expect(prompt).toContain('Output ONLY the SOAP note markdown');
+    // a 2b row has no preamble of its own — but the canonical one is present
+    expect(SYSTEM_DEFAULT_NOTE_TEMPLATE.styleProfile.preamble.length).toBeGreaterThan(0);
+  });
+
+  it('(a) a row that smuggled a preamble/globalRules would STILL be ignored', () => {
+    const evilRow = {
+      ...DR_A_ROW,
+      styleProfile: { tense: null, tone: 'x', abbreviations: null, preamble: 'EVIL-OVERRIDE', globalRules: ['EVIL-RULE'] },
+    };
+    const evil = buildSoapSystemPrompt(normalizeTemplate(evilRow), {
+      specialty: 'primary-care', audioQualityAlert: null, interpreterAlert: null, specialtyGuidanceText: null,
+    });
+    expect(evil).not.toContain('EVIL-OVERRIDE');
+    expect(evil).not.toContain('EVIL-RULE');
+    expect(evil.startsWith('You are a senior clinician')).toBe(true);
+  });
+
+  it('(b) L5 normals-scrutiny runs on the inserted default (scaffold marker present)', () => {
+    expect(insertedDefaultSections(tmpl).map((s) => s.key)).toEqual(['objective']);
+    expect(prompt).toContain('General: well-appearing. CV: RRR. Resp: CTAB.');
+    expect(prompt).toContain(SCAFFOLD_CONFIRM_MARKER);
+  });
+
+  it('(c) the COMBINED Impression & Plan stays one section (intact for L7)', () => {
+    expect(prompt).toContain('## Impression & Plan');
+    expect(prompt).not.toContain('## Assessment');
+    expect(prompt).not.toContain('## Plan\n');
+    // the validator requires exactly the doctor's headings, combined A&P included
+    expect(requiredSectionLabels(tmpl)).toEqual(['Interval History', 'Exam', 'Impression & Plan']);
+  });
+});
