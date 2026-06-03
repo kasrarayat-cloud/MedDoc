@@ -7,6 +7,9 @@ import {
   detectStructuredPhi,
   enumerateTextFields,
   applyPhiGate,
+  detectPhiKeywords,
+  isAdministrativeChrome,
+  dropAdministrativeChrome,
 } from '../phi-gate';
 import type { ParsedTemplateDraft } from '../note-template-schema';
 
@@ -146,5 +149,80 @@ describe('applyPhiGate — fail-safe policy', () => {
     const r = applyPhiGate(draft(), ['a normal cardiac line — confirm'], [], false);
     expect(r.rejected).toBe(false);
     if (!r.rejected) expect(r.flags).toContain('a normal cardiac line — confirm');
+  });
+});
+
+// ── Over-rejection fix: VALUE-shape detection, NOT bare keywords ──────────
+describe('detectStructuredPhi — value-shape, not field-name keywords', () => {
+  it('catches actual ID VALUES — including alphanumeric-prefixed + hyphenated', () => {
+    // The exact bug-hunt MRN must still be caught (no leak).
+    expect(detectStructuredPhi('MRN: RFM-0098214')).toContain('id');
+    expect(detectStructuredPhi('RFM-0098214')).toEqual(
+      expect.arrayContaining(['id'])
+    );
+    expect(detectStructuredPhi('Insurance #XQ4471892')).toContain('id');
+    expect(detectStructuredPhi('NPI 1487654321')).toContain('long-id');
+    expect(detectStructuredPhi('MRN 0093312')).toContain('mrn');
+    expect(detectStructuredPhi('record number 4421')).toContain('mrn');
+  });
+
+  it('does NOT fire on bare PHI field-NAME labels (the over-rejection trigger)', () => {
+    // This is the styleInstructions string that wrongly rejected 4/5 bug-hunt runs.
+    expect(
+      detectStructuredPhi('patient identifiers (name, MRN, DOB/age/sex, date of visit, insurance, provider)')
+    ).toEqual([]);
+    expect(detectStructuredPhi('a labeled key:value line with MRN and DOB')).toEqual([]);
+    expect(detectStructuredPhi('record number')).toEqual([]);
+    expect(detectStructuredPhi('include the date of birth field')).toEqual([]);
+  });
+
+  it('is not vulnerable to catastrophic backtracking (ReDoS) on a label + long dash run', () => {
+    // Attacker-influenceable defaultText: a record label with no terminal
+    // value. The detector classes must not overlap on "-" (quadratic) — this
+    // must stay linear/fast and return no match (no value present).
+    const evil = 'medical record ' + '-'.repeat(50000);
+    const t0 = Date.now();
+    expect(detectStructuredPhi(evil)).toEqual([]);
+    expect(Date.now() - t0).toBeLessThan(150);
+    // And the value form still matches after the fix.
+    expect(detectStructuredPhi('MRN: RFM-0098214')).toContain('mrn');
+  });
+});
+
+describe('detectPhiKeywords — soft signal only', () => {
+  it('flags label words for LLM double-check, without auto-rejecting', () => {
+    expect(detectPhiKeywords('patient identifiers (name, MRN, DOB)')).toBe(true);
+    expect(detectPhiKeywords('record number field')).toBe(true);
+    expect(detectPhiKeywords('Exam grouped by region; positives first.')).toBe(false);
+    expect(detectPhiKeywords(null)).toBe(false);
+  });
+});
+
+// ── Administrative-chrome exclusion ──────────────────────────────────────
+describe('isAdministrativeChrome / dropAdministrativeChrome', () => {
+  it('flags letterhead / demographics / signature chrome (by key OR label)', () => {
+    expect(isAdministrativeChrome('Clinic & Patient Header', 'header')).toBe(true);
+    expect(isAdministrativeChrome('Signature', 'signature')).toBe(true);
+    expect(isAdministrativeChrome('Patient Demographics', 'misc')).toBe(true);
+    expect(isAdministrativeChrome('Letterhead', 'x')).toBe(true);
+  });
+
+  it('does NOT flag clinical sections', () => {
+    expect(isAdministrativeChrome('Subjective', 'subjective')).toBe(false);
+    expect(isAdministrativeChrome('EXAM', 'objective')).toBe(false);
+    expect(isAdministrativeChrome('IMPRESSION & PLAN', 'assessment_plan')).toBe(false);
+    expect(isAdministrativeChrome('PATIENT INSTRUCTIONS', 'patient_education')).toBe(false);
+  });
+
+  it('drops chrome, keeps the clinical body', () => {
+    const secs = [
+      { key: 'header', label: 'Clinic & Patient Header' },
+      { key: 'subjective', label: 'INTERVAL HISTORY' },
+      { key: 'objective', label: 'EXAM' },
+      { key: 'signature', label: 'Signature' },
+    ];
+    const { kept, droppedLabels } = dropAdministrativeChrome(secs);
+    expect(kept.map((s) => s.key)).toEqual(['subjective', 'objective']);
+    expect(droppedLabels).toEqual(['Clinic & Patient Header', 'Signature']);
   });
 });
