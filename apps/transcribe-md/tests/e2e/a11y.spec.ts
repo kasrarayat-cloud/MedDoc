@@ -111,6 +111,14 @@ const ROUTES: RouteSpec[] = [
   { path: '/visits/:READY/record',   label: 'visit-record',
     auth: 'user', requiresVisit: 'READY' },
 
+  // Settings — includes the Phase-2b "My Note Format" section. On load the
+  // note-format manager renders its default view (the form-dense entry screen
+  // for a doctor with no template, or the templates list otherwise). The
+  // review / rejected sub-states are gated behind a paste+parse (LLM-backed)
+  // interaction, so they rely on component-level a11y attributes rather than
+  // this static scan.
+  { path: '/settings',               label: 'settings',        auth: 'user' },
+
   // /admin/* — TODO(v1.1.0): cover after JWT-refresh helper exists.
   // /dev/rx-warnings — excluded; production build prunes /dev/*.
 ];
