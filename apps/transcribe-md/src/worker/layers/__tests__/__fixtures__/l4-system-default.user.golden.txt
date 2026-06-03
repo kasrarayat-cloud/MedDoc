@@ -1,0 +1,23 @@
+Specialty: primary-care
+
+Extracted entities (structured, with evidence):
+{
+  "chief_complaint": null,
+  "hpi": null,
+  "past_medical_history": [],
+  "medications": [],
+  "allergies": [],
+  "family_history": [],
+  "social_history": {},
+  "ros": [],
+  "exam_findings": [],
+  "tests_mentioned": [],
+  "assessment_discussed": [],
+  "plan_discussed": []
+}
+
+Role-labeled transcript:
+<transcript_HEX>
+Doctor #0: What brings you in?
+Patient #1: A headache for three days.
+</transcript_HEX>
