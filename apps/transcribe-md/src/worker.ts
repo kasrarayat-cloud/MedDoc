@@ -80,6 +80,12 @@ import { runLayer4GenerateSoap } from '@/worker/layers/04-generate-soap';
 import { runLayer5SelfCritique } from '@/worker/layers/05-self-critique';
 import type { AudioConfidenceStats } from '@/worker/layers/audio-confidence';
 import { runLayer6Polish } from '@/worker/layers/06-polish';
+import { resolveActiveTemplate } from '@/worker/note-templates/resolve-active-template';
+import {
+  normalizeTemplate,
+  type ResolvedNoteTemplate,
+} from '@/worker/note-templates/build-soap-prompt';
+import { SYSTEM_DEFAULT_NOTE_TEMPLATE } from '@/worker/note-templates/system-default-template';
 import { runLayer7aIcdCoding } from '@/worker/layers/07a-icd-coding';
 import { runLayer7bCptCoding } from '@/worker/layers/07b-cpt-coding';
 import { runLayer7cRxDrafting } from '@/worker/layers/07c-rx-drafting';
@@ -529,6 +535,27 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       where: { id: visitId },
       data: { status: TranscribeVisitStatus.DRAFTING },
     });
+    // Phase 1: resolve the doctor's active note-format template ONCE per
+    // visit and thread it to L4/L5/L6. In Phase 1 prod this always resolves
+    // to the system default (no custom templates exist yet) → byte-identical
+    // output + provenance populated. Defensive fallback to the constant so a
+    // DB hiccup never breaks generation.
+    let noteTemplate: ResolvedNoteTemplate;
+    try {
+      noteTemplate = normalizeTemplate(
+        await resolveActiveTemplate({
+          doctorId: visit.userId ?? '',
+          encounterType: visit.specialty,
+        })
+      );
+    } catch (err) {
+      log.warn(
+        'worker:note-template',
+        'resolveActiveTemplate failed; falling back to system default',
+        { visitId, err: err instanceof Error ? err.message : String(err) }
+      );
+      noteTemplate = SYSTEM_DEFAULT_NOTE_TEMPLATE;
+    }
     let soapDraft: string;
     if (isLayerComplete(resumeState, 'L4')) {
       logSkippedLayer(visitId, 'L4', attempt);
@@ -548,6 +575,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         // the audio fidelity was poor.
         audioConfidenceStats,
         interpreterMode: visit.interpreterMode,
+        noteTemplate,
       });
     }
 
@@ -574,6 +602,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         // so the auditor can flag SOAP content the audio doesn't
         // clearly support as critical hallucinations.
         audioConfidenceStats,
+        noteTemplate,
       });
     }
 
@@ -594,6 +623,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         userId: visit.userId,
         soapDraft,
         critique,
+        noteTemplate,
       });
     }
 

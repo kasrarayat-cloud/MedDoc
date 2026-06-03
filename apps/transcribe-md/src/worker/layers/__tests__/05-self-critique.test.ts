@@ -58,6 +58,7 @@ import {
   type Layer5Input,
 } from '../05-self-critique';
 import type { AudioConfidenceStats } from '../audio-confidence';
+import type { ResolvedNoteTemplate } from '../../note-templates/build-soap-prompt';
 
 const FAKE_VISIT = 'vis-5';
 const FAKE_USER = 'u1';
@@ -503,5 +504,75 @@ describe('classifyCritique — severity routing', () => {
     });
     expect(fixable).toEqual([]);
     expect(unfixable).toEqual([]);
+  });
+
+  // Phase 1 normals-scrutiny routing — unsupported template-default findings
+  // must NOT be auto-patched (same posture as missing red-flag screening).
+  it('routes an "Unsupported template default" critical to UNFIXABLE', () => {
+    const { fixable, unfixable } = classifyCritique({
+      issues: [
+        issue(
+          'critical',
+          'Unsupported template default: Mental Status Exam scaffold not supported by the transcript',
+          'Mental Status Exam'
+        ),
+        issue('critical', 'hallucinated BP value 120/80 not in transcript'),
+      ],
+      overall_quality: 'low',
+      safe_to_sign_without_review: false,
+    });
+    // The unsupported-default critical is unfixable; the plain hallucination
+    // critical stays fixable (existing behavior preserved).
+    expect(unfixable).toHaveLength(1);
+    expect(unfixable[0].description).toMatch(/Unsupported template default/);
+    expect(fixable).toHaveLength(1);
+  });
+});
+
+// ============================================================================
+// Phase 1 normals-scrutiny — the L5 critique prompt gains a scrutiny block
+// ONLY when the resolved template inserted defaults. Dormant (no block) for
+// the system default → critique prompt byte-identical to today.
+// ============================================================================
+
+const SCAFFOLD_TEMPLATE: ResolvedNoteTemplate = {
+  id: 'tmpl_scaffold',
+  version: 1,
+  isSystemDefault: false,
+  styleProfile: {
+    tense: null,
+    tone: 'concise',
+    abbreviations: null,
+    preamble: 'ignored',
+    globalRules: ['ignored'],
+  },
+  sections: [
+    {
+      key: 'mse',
+      label: 'Mental Status Exam',
+      order: 1,
+      formatHint: 'bullets',
+      styleInstructions: null,
+      defaultText: 'Appearance: WNL. Mood: euthymic.',
+      defaultTextMode: 'scaffold_confirm',
+    },
+  ],
+};
+
+describe('runLayer5SelfCritique — normals-scrutiny block', () => {
+  it('ABSENT for the system default (no inserted defaults)', async () => {
+    mocks.modelComplete.mockResolvedValueOnce(CLEAN_REPORT);
+    await runLayer5SelfCritique(makeInput());
+    const { system } = mocks.modelComplete.mock.calls[0][0];
+    expect(system).not.toMatch(/TEMPLATE-DEFAULT SCRUTINY/);
+  });
+
+  it('PRESENT (naming the inserted section) when the template scaffolds a default', async () => {
+    mocks.modelComplete.mockResolvedValueOnce(CLEAN_REPORT);
+    await runLayer5SelfCritique(makeInput({ noteTemplate: SCAFFOLD_TEMPLATE }));
+    const { system } = mocks.modelComplete.mock.calls[0][0];
+    expect(system).toMatch(/TEMPLATE-DEFAULT SCRUTINY/);
+    expect(system).toContain('Mental Status Exam');
+    expect(system).toMatch(/Unsupported\s+template default:/);
   });
 });
