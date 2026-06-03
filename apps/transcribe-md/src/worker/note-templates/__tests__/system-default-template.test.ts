@@ -25,7 +25,13 @@ import {
 } from '../system-default-template';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const L4_PATH = path.resolve(HERE, '../../layers/04-generate-soap.ts');
+// Phase 1: L4 no longer hard-codes the prompt — the canonical pre-Phase-1
+// prompt now lives in the golden fixture, which the golden test locks against
+// builder(system-default). We guard the template's directives against THAT.
+const GOLDEN_SYS = path.resolve(
+  HERE,
+  '../../layers/__tests__/__fixtures__/l4-system-default.system.golden.txt'
+);
 const MIGRATIONS_DIR = path.resolve(
   HERE,
   '../../../../../../packages/db/prisma/migrations'
@@ -97,8 +103,9 @@ describe('system-default template — carries L4 directives + global guardrails'
   });
 
   it('Objective encodes the no-exam fallback line', () => {
+    // Phrase chosen to not span L4's line-wrap (".. in this\nencounter.").
     expect(byKey('objective').styleInstructions).toContain(
-      'Formal exam not documented in this encounter'
+      'Formal exam not documented in this'
     );
   });
 
@@ -121,13 +128,14 @@ describe('system-default template — carries L4 directives + global guardrails'
 });
 
 describe('system-default template — drift guards', () => {
-  it('L4 source still contains the directives this template mirrors', () => {
-    // Each phrase lives within a SINGLE source string literal in
-    // 04-generate-soap.ts (not split across array elements), so a raw
-    // substring check is reliable. If L4 changes one of these, this fails —
-    // forcing the template to be re-synced before the additive guarantee
-    // can silently break in Phase 1.
-    const l4 = readFileSync(L4_PATH, 'utf8');
+  it('the canonical golden prompt contains the directives this template mirrors', () => {
+    // Phase 1: L4 builds its prompt FROM this template, so the golden
+    // fixture (the locked pre-Phase-1 prompt) is the canonical snapshot. Each
+    // phrase is contiguous within a single golden line (no wrap span), so a
+    // raw substring check is reliable. The golden test separately proves
+    // builder(system-default) === this golden, so together these guarantee
+    // the template still reproduces every safety directive.
+    const golden = readFileSync(GOLDEN_SYS, 'utf8');
     const required = [
       '## Subjective',
       '## Objective',
@@ -143,15 +151,20 @@ describe('system-default template — drift guards', () => {
       'Numbered list: diagnostics ordered',
     ];
     for (const phrase of required) {
-      expect(l4, `L4 no longer contains: "${phrase}"`).toContain(phrase);
+      expect(golden, `golden prompt no longer contains: "${phrase}"`).toContain(
+        phrase
+      );
     }
   });
 
   it("the migration's seeded JSON deep-equals this TS source of truth", () => {
+    // Phase 1 re-synced the seed content (byte-exact wrapping), so the
+    // effective seeded JSON is the resync migration's UPDATE — that's what
+    // must match the constant now.
     const dir = readdirSync(MIGRATIONS_DIR).find((d) =>
-      d.endsWith('_add_note_templates_phase0')
+      d.endsWith('_resync_system_default_template_phase1')
     );
-    expect(dir, 'add_note_templates_phase0 migration dir not found').toBeTruthy();
+    expect(dir, 'resync_system_default_template_phase1 migration dir not found').toBeTruthy();
     const sql = readFileSync(
       path.join(MIGRATIONS_DIR, dir!, 'migration.sql'),
       'utf8'
@@ -160,7 +173,10 @@ describe('system-default template — drift guards', () => {
     // Each JSONB literal sits on its own marked line: `@seed:<name> */ '...'::jsonb`.
     // SQL doubles single quotes ('') — undo that before JSON.parse.
     const extract = (marker: string): unknown => {
-      const re = new RegExp(`@seed:${marker} \\*/ '(.*)'::jsonb`);
+      // Match `@seed:<marker> */ ... '<json>'::jsonb` — `[^']*` skips any
+      // column assignment (e.g. `"sections" = `) between the marker and the
+      // opening quote of the JSONB literal.
+      const re = new RegExp(`@seed:${marker} \\*/[^']*'(.*)'::jsonb`);
       const m = sql.match(re);
       expect(m, `seed marker @seed:${marker} not found in migration.sql`).toBeTruthy();
       return JSON.parse(m![1].replace(/''/g, "'"));
