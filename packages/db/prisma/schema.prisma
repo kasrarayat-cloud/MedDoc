@@ -2012,8 +2012,14 @@ model NoteTemplate {
   /// TranscribeVisit.noteTemplateVersion at generation time (Phase 1).
   version Int @default(1)
 
-  /// Lifecycle: "draft" | "active". TEXT (not enum) per convention;
-  /// resolveActiveTemplate() only considers "active" rows.
+  /// Lifecycle: "draft" | "active" | "inactive". TEXT (not enum) per
+  /// convention; resolveActiveTemplate() only considers "active" rows.
+  /// Phase 2b: a partial-unique index (note_templates_one_active_per_doctor_
+  /// encounter, NULLS NOT DISTINCT) enforces at most one "active" row per
+  /// (doctorId, encounterType) for doctor-owned rows — the DB backstop for the
+  /// transactional activation supersede. "inactive" = a superseded prior
+  /// version, kept for history (ignored by resolve + the active index).
+  /// Expressed in raw SQL since Prisma's DSL can't model partial uniqueness.
   status String @default("active")
 
   /// Exactly one row is the system default (doctorId = NULL). The resolve
