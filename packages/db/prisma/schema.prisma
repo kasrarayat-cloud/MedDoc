@@ -577,6 +577,11 @@ model User {
   userSessions           UserSession[]
   // T-M14.1: per-doctor edit tracking (one row per signed visit).
   doctorEditPatterns     DoctorEditPattern[]
+  // Note-format customization (Phase 0) — a doctor's custom note-format
+  // templates. Empty for every doctor in Phase 0 (they only get a row
+  // when they customize in Phase 2+); the resolve-logic falls back to the
+  // system-default NoteTemplate (doctorId = null) until then.
+  noteTemplates          NoteTemplate[]
   // T-M16.2: one-time tokens for password reset, email verification,
   // email change. All cascade-deleted with the user.
   authTokens             AuthToken[]
@@ -1800,6 +1805,19 @@ model TranscribeVisit {
   /// glyph at the right spot. `label` is optional free-text.
   markedMoments    Json?
 
+  // ── Note-format customization provenance (Phase 0 foundation) ──
+  /// Which NoteTemplate (and which version of it) L4 used to generate
+  /// this visit's note. BOTH stay NULL in Phase 0 — the resolve-logic is
+  /// dormant and L4 is untouched. Phase 1 populates them when L4 runs
+  /// (resolveActiveTemplate → template id + version). Nullable + onDelete
+  /// SetNull so removing a template never blocks; noteTemplateVersion
+  /// independently preserves which lineage version ran even if the
+  /// NoteTemplate row is later deleted. NO behavior depends on these in
+  /// Phase 0.
+  noteTemplateId      String?
+  noteTemplate        NoteTemplate? @relation(fields: [noteTemplateId], references: [id], onDelete: SetNull)
+  noteTemplateVersion Int?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1824,6 +1842,9 @@ model TranscribeVisit {
   /// current scale the cost of indexing NULL values is negligible
   /// and the sweep's single-scan cost dominates the index tradeoff.
   @@index([deletedAt])
+  /// Phase 0 note-format provenance FK. Indexed for the eventual
+  /// "which visits used template X" lookup; unused in Phase 0.
+  @@index([noteTemplateId])
   @@map("transcribe_visits")
 }
 
@@ -1915,6 +1936,99 @@ model DoctorEditPattern {
   @@index([doctorId, createdAt])
   @@index([doctorId, editDistance])
   @@map("doctor_edit_patterns")
+}
+
+// ============================================================================
+// NOTE TEMPLATE — doctor-customizable note format (Phase 0 foundation)
+// ----------------------------------------------------------------------------
+// The data-model spine of the note-format customization feature. PURELY
+// ADDITIVE + opt-in. Today's fixed SOAP format is seeded as ONE system-
+// default row (doctorId = NULL, isSystemDefault = true) that encodes the
+// exact Layer-4 (04-generate-soap.ts) format as data. resolveActiveTemplate()
+// falls back to it for any doctor without a custom template, so a non-
+// customizing doctor's note is byte-identical to today's. Doctors get their
+// own row only when they customize (Phase 2+) — no per-doctor backfill.
+//
+// Phase 0 ships this DORMANT: nothing in the L4 pipeline reads it yet, and
+// the two TranscribeVisit provenance columns stay NULL. Phase 1 wires
+// resolveActiveTemplate() into L4 and populates the provenance.
+//
+// NO PHI EVER lives in this table — templates are format/style scaffolding,
+// never patient content. (Hard constraint; load-bearing for Phase 2 parsing.)
+//
+// `sections` / `styleProfile` are JSONB — same posture as soapNote / entities
+// on TranscribeVisit. The shape contracts (NoteTemplateSection /
+// NoteTemplateStyleProfile) + the seeded system-default content live in
+// apps/transcribe-md/src/worker/note-templates/system-default-template.ts.
+//
+// Prior art: T-M24 `transcribe_templates` (file-upload approach) was dropped
+// 2026-04-22; this is a clean structured-data redesign with distinct naming.
+// ============================================================================
+
+model NoteTemplate {
+  id String @id @default(cuid())
+
+  /// Owning doctor (User.id). NULL = system-level template. Exactly one row
+  /// is the system default (isSystemDefault = true, doctorId = NULL),
+  /// enforced by a PARTIAL UNIQUE INDEX added in the migration — Prisma's
+  /// schema DSL can't express partial uniqueness (same constraint noted on
+  /// TranscribeVisit's partial-index comments). Cascade so a doctor's
+  /// templates vanish with the doctor.
+  doctorId String?
+  doctor   User?   @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  /// Human label — "System Default — SOAP", or a doctor's "My ortho note".
+  name String
+
+  /// Encounter type this template applies to (specialty / visit-type slug).
+  /// NULL = applies to ALL encounter types (a doctor's catch-all default).
+  /// Stored as TEXT (not an enum) per the codebase's extensible-categorical
+  /// convention and because the encounter taxonomy is open-ended. Modeled
+  /// now though Phase-0 resolve-logic uses it minimally — cheap now,
+  /// expensive to retrofit.
+  encounterType String?
+
+  /// Optional specialty-baseline this template builds on. A slug into the
+  /// CODE-based specialty catalog (apps/transcribe-md/src/lib/specialty-
+  /// keys.ts), NOT a FK: the relational M5 `scribe_specialty_templates`
+  /// table was dropped 2026-04-19 and the live specialty system is
+  /// code/config. A full relational tie-in is DEFERRED to if/when M5 is
+  /// rebuilt as a table.
+  specialtyBaseline String?
+
+  /// Ordered section definitions. JSONB array; each element is a
+  /// NoteTemplateSection: { key, label, order, formatHint, styleInstructions,
+  /// defaultText, defaultTextMode }. `key` is a canonical section slug
+  /// (subjective/objective/ros/pe/assessment/plan/patient_education/…). The
+  /// seeded system default uses the 4 SOAP sections L4 emits today, in order.
+  sections Json
+
+  /// Optional doctor-level global style (tense/tone/abbreviations) plus the
+  /// global generation guardrails. JSONB NoteTemplateStyleProfile | null.
+  styleProfile Json?
+
+  /// Monotonic version for this template lineage; bumped on doctor edits
+  /// (Phase 2+). The system default starts at 1. Copied to
+  /// TranscribeVisit.noteTemplateVersion at generation time (Phase 1).
+  version Int @default(1)
+
+  /// Lifecycle: "draft" | "active". TEXT (not enum) per convention;
+  /// resolveActiveTemplate() only considers "active" rows.
+  status String @default("active")
+
+  /// Exactly one row is the system default (doctorId = NULL). The resolve
+  /// fallback chain terminates here.
+  isSystemDefault Boolean @default(false)
+
+  /// Phase-1 provenance back-reference — visits generated with this template.
+  visits TranscribeVisit[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([doctorId, status])
+  @@index([isSystemDefault])
+  @@map("note_templates")
 }
 
 // ============================================================================
