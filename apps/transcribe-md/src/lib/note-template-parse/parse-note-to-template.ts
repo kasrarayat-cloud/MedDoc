@@ -33,7 +33,12 @@ import {
   type ParseNoteResult,
   type NoteTemplateSection,
 } from './note-template-schema';
-import { applyPhiGate, enumerateTextFields } from './phi-gate';
+import {
+  applyPhiGate,
+  enumerateTextFields,
+  dropAdministrativeChrome,
+  detectPhiKeywords,
+} from './phi-gate';
 
 const MODEL = 'claude-opus-4-7';
 
@@ -72,6 +77,19 @@ const PARSE_SYSTEM = [
   'OMIT it and add a short note to `flags` describing the FORMAT of what you',
   'omitted (e.g. "a normal cardiac exam line — confirm before adding"). NEVER',
   'quote patient content in `flags` either.',
+  '',
+  'EXCLUDE administrative chrome — extract ONLY the clinical note body. Do NOT',
+  'create sections for the practice letterhead / clinic metadata, the patient',
+  'demographics or header block (name, MRN, DOB, age, insurance, date of',
+  'visit, provider line, etc.), or the signature / attestation footer. Those',
+  'are system-rendered identifiers, not note format. If present, note their',
+  'omission in `flags` ("skipped the patient header — added automatically").',
+  '',
+  'Do NOT write instructions to generate ICD/CPT codes or include specific code',
+  'values — medical coding is produced by a separate validated step, not this',
+  'note. If the clinician uses inline ICD/CPT codes as a convention, note that',
+  'in `flags` ("you include ICD codes inline — our coding step produces those")',
+  'rather than putting code generation into styleInstructions.',
   '',
   'Submit via the submit_note_template tool.',
   delimiterSystemSuffix('transcript'),
@@ -156,16 +174,54 @@ export async function parseNoteToTemplate(
       defaultTextMode: s.defaultText ? 'scaffold_confirm' : 'omit_unless_supported',
     }));
 
+  // ── 2b. Drop administrative chrome (letterhead / demographics / signature)
+  //    DETERMINISTICALLY — regardless of LLM run-to-run variance — BEFORE the
+  //    PHI gate. These blocks are system-rendered identifiers or pure PHI, not
+  //    clinical note FORMAT, and are where MRN/DOB-style content appears. The
+  //    gate then runs on the surviving clinical sections and stays the
+  //    fail-safe backstop on everything that survives. ──
+  const { kept, droppedLabels } = dropAdministrativeChrome(sections);
+  const clinicalSections = kept.map((s, i) => ({ ...s, order: i + 1 }));
+  const flags = [...llm.flags];
+  if (droppedLabels.length > 0) {
+    flags.push(
+      'Skipped the patient header and signature block — those are added automatically, not part of your note format.'
+    );
+  }
+  if (clinicalSections.length === 0) {
+    return {
+      rejected: true,
+      template: null,
+      reason:
+        "Couldn't find a clinical note body to template — the note looked like header/signature only. Paste the clinical sections (history, exam, assessment, plan) and try again.",
+    };
+  }
+
   const draft: ParsedTemplateDraft = {
     name: llm.name,
     encounterType: llm.encounterType,
-    sections,
+    sections: clinicalSections,
     styleProfile: llm.styleProfile,
   };
 
-  // ── 3. PHI-scan LLM over the built fields (the gate's content-aware layer). ──
+  // ── 3. PHI-scan LLM over the built fields (the gate's content-aware layer).
+  //    Bare PHI field-name keywords (no value) are demoted to a SOFT signal:
+  //    the affected paths are handed to the LLM scan for extra scrutiny rather
+  //    than auto-rejected (a label word alone carries no patient data). ──
   const fields = enumerateTextFields(draft);
   const fieldsForScan = Object.fromEntries(fields.map((f) => [f.path, f.value]));
+  const keywordFields = fields
+    .filter((f) => detectPhiKeywords(f.value))
+    .map((f) => f.path);
+  const scanUser = [
+    'Template fields to audit (path → value):',
+    wrapAsData(JSON.stringify(fieldsForScan, null, 2), 'transcript').wrapped,
+  ];
+  if (keywordFields.length > 0) {
+    scanUser.push(
+      `Extra scrutiny: these fields mention identifier LABELS — confirm they carry no patient VALUES (a label word alone is fine): ${keywordFields.join(', ')}.`
+    );
+  }
   const scan = await modelClient.complete({
     practiceId: ctx.practiceId,
     visitId: null,
@@ -174,10 +230,7 @@ export async function parseNoteToTemplate(
     provider: 'anthropic',
     model: MODEL,
     system: PHI_SCAN_SYSTEM,
-    user: [
-      'Template fields to audit (path → value):',
-      wrapAsData(JSON.stringify(fieldsForScan, null, 2), 'transcript').wrapped,
-    ].join('\n'),
+    user: scanUser.join('\n'),
     schema: PhiScanSchema,
     maxTokens: 1024,
     temperature: 0,
@@ -189,5 +242,5 @@ export async function parseNoteToTemplate(
   });
 
   // ── 4. Fail-safe gate (regex + LLM scan): scrub defaults / reject on doubt. ──
-  return applyPhiGate(draft, llm.flags, scan.phiFields, scan.anyUncertain);
+  return applyPhiGate(draft, flags, scan.phiFields, scan.anyUncertain);
 }

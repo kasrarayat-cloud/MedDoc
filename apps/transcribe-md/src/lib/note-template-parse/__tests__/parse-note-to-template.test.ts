@@ -177,3 +177,112 @@ describe('parseNoteToTemplate — rejection + error paths', () => {
     expect(mocks.complete).toHaveBeenCalledTimes(1);
   });
 });
+
+// ── Over-rejection fix (note-parse-bughunt-20260603) ─────────────────────
+describe('parseNoteToTemplate — chrome exclusion + value-not-keyword', () => {
+  it('drops a demographics-header note to a clean clinical template — does NOT over-reject', async () => {
+    // Reproduces the bug-hunt: the LLM emits a "Clinic & Patient Header"
+    // section whose styleInstructions NAME "MRN"/"DOB" (no value). Pre-fix
+    // this rejected; now the chrome is dropped + the bare keyword no longer
+    // fires the regex.
+    const out = parseOut({
+      sections: [
+        {
+          key: 'header',
+          label: 'Clinic & Patient Header',
+          order: 0,
+          formatHint: 'prose',
+          styleInstructions:
+            'Top-of-note block with clinic name and patient identifiers (name, MRN, DOB/age/sex, date of visit, insurance).',
+          defaultText: null,
+        },
+        {
+          key: 'subjective',
+          label: 'INTERVAL HISTORY',
+          order: 1,
+          formatHint: 'prose',
+          styleInstructions: 'Narrative interval history.',
+          defaultText: null,
+        },
+        {
+          key: 'objective',
+          label: 'EXAM',
+          order: 2,
+          formatHint: 'bullets',
+          styleInstructions: 'Exam by system.',
+          defaultText: 'General: Well-appearing. CV: RRR. Resp: CTAB.',
+        },
+        {
+          key: 'assessment_plan',
+          label: 'IMPRESSION & PLAN',
+          order: 3,
+          formatHint: 'numbered',
+          styleInstructions: 'Numbered problem list.',
+          defaultText: null,
+        },
+        {
+          key: 'signature',
+          label: 'Signature',
+          order: 4,
+          formatHint: 'prose',
+          styleInstructions: 'Electronic signature line.',
+          defaultText: null,
+        },
+      ],
+    });
+    mocks.complete.mockResolvedValueOnce(out).mockResolvedValueOnce(scanClean);
+
+    const r = await parseNoteToTemplate('note', ctx);
+    expect(r.rejected).toBe(false);
+    if (!r.rejected) {
+      // Chrome gone; clinical body kept; combined A&P preserved as ONE section.
+      expect(r.template.sections.map((s) => s.key)).toEqual([
+        'subjective',
+        'objective',
+        'assessment_plan',
+      ]);
+      expect(r.template.sections.map((s) => s.order)).toEqual([1, 2, 3]);
+      expect(r.flags.join(' ')).toMatch(/Skipped the patient header/);
+      // No PHI anywhere; the "MRN"/"DOB" label words went out with the header.
+      const dump = JSON.stringify(r.template);
+      expect(dump).not.toMatch(/MRN|DOB/);
+    }
+  });
+
+  it('STILL catches an actual ID value in a defaultText (scrubs it) — no leak', async () => {
+    const out = parseOut();
+    out.sections[1].defaultText = 'Normal exam. Recorded under MRN: RFM-0098214.';
+    mocks.complete.mockResolvedValueOnce(out).mockResolvedValueOnce(scanClean);
+
+    const r = await parseNoteToTemplate('note', ctx);
+    expect(r.rejected).toBe(false);
+    if (!r.rejected) {
+      expect(r.template.sections[1].defaultText).toBeNull();
+      expect(JSON.stringify(r.template)).not.toContain('RFM-0098214');
+    }
+  });
+
+  it('STILL rejects an actual ID value in a structural field — no leak', async () => {
+    const out = parseOut();
+    out.sections[0].styleInstructions = 'Reference chart RFM-0098214 layout.';
+    mocks.complete.mockResolvedValueOnce(out).mockResolvedValueOnce(scanClean);
+
+    const r = await parseNoteToTemplate('note', ctx);
+    expect(r.rejected).toBe(true);
+  });
+
+  it('rejects when ALL sections are administrative chrome (no clinical body)', async () => {
+    const out = parseOut({
+      sections: [
+        { key: 'header', label: 'Header', order: 0, formatHint: 'prose', styleInstructions: 'x', defaultText: null },
+        { key: 'signature', label: 'Signature', order: 1, formatHint: 'prose', styleInstructions: 'x', defaultText: null },
+      ],
+    });
+    // PHI scan should NOT run — we reject before it.
+    mocks.complete.mockResolvedValueOnce(out);
+    const r = await parseNoteToTemplate('note', ctx);
+    expect(r.rejected).toBe(true);
+    if (r.rejected) expect(r.reason).toMatch(/clinical note body/i);
+    expect(mocks.complete).toHaveBeenCalledTimes(1);
+  });
+});
