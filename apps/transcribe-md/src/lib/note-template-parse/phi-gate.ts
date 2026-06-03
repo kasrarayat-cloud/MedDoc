@@ -45,14 +45,84 @@ const DETECTORS: ReadonlyArray<{ label: string; re: RegExp }> = [
   // Ages: "45-year-old", "45 yo", "45 y/o", "aged 7".
   { label: 'age', re: /\b\d{1,3}\s*-?\s*(?:year|yr|y\/o|yo)s?(?:[ -]?old)?\b/i },
   { label: 'age', re: /\bage[d]?\s*:?\s*\d{1,3}\b/i },
-  // Record identifiers. (No trailing \b — it fails after a `#`, which is a
-  // non-word char.)
-  { label: 'mrn', re: /\bmrn\b/i },
-  { label: 'mrn', re: /\b(?:medical record|(?:record|chart)\s*(?:no\.?|number|#))/i },
-  // Long digit runs — possible MRN/account/ID. A FORMAT template should never
-  // carry a 5+ digit literal.
+  // Record identifiers — VALUE-shaped only. The bare label word ("MRN",
+  // "record number") is NOT PHI; it's a field name that legitimately appears
+  // in format descriptions, and firing on it caused the over-rejection bug
+  // (note-parse-bughunt-20260603). We require an actual value — a token with a
+  // digit — adjacent to the label.
+  { label: 'mrn', re: /\bmrn\b[\s:#.=]*[a-z0-9-]*\d/i },
+  {
+    label: 'mrn',
+    re: /\b(?:medical record|(?:record|chart)\s*(?:no\.?|number|#))[\s:#.=]*[a-z0-9-]*\d/i,
+  },
+  // Alphanumeric ID token — letter prefix + 4+ digits (optional hyphen):
+  // e.g. an MRN "RFM-0098214" or an insurance id "XQ4471892".
+  { label: 'id', re: /\b[a-z]{2,6}-?\d{4,}\b/i },
+  // Long pure-digit run — possible MRN/account/NPI/ID (e.g. NPI 1487654321).
+  // A FORMAT template should never carry a 5+ digit literal.
   { label: 'long-id', re: /\b\d{5,}\b/ },
 ];
+
+// Bare PHI-FIELD-NAME keywords (no value). These are NOT auto-rejected — they
+// are demoted to a SOFT signal: the caller hands the affected field paths to
+// the independent LLM PHI-scan to double-check they carry no values. A label
+// word alone never carries patient data.
+// Per-alternative boundaries: `\bmrn\b` avoids matching "mRNA"; the record/
+// chart/insurance alternatives drop the trailing \b (it fails after a `#`).
+const PHI_KEYWORD_RE =
+  /\bmrn\b|\b(?:medical\s+record|record|chart)\s*(?:no\.?|number|#)|\bdate of birth\b|\bd\.?o\.?b\.?\b|\bssn\b|\bsocial security\b|\b(?:insurance|policy)\s*(?:id|no\.?|number|#)/i;
+
+/** True when `text` mentions a PHI field-name keyword (no value required).
+ *  Used only to enrich the LLM PHI-scan; never an auto-reject signal. */
+export function detectPhiKeywords(text: string | null | undefined): boolean {
+  return !!text && PHI_KEYWORD_RE.test(text);
+}
+
+// ── Administrative chrome — letterhead / demographics / signature blocks are
+//    system-rendered metadata or pure PHI, never the CLINICAL note FORMAT.
+//    They're dropped before the PHI gate (the gate stays the backstop on
+//    whatever survives). ──
+const ADMIN_KEYS = new Set([
+  'header',
+  'demographics',
+  'demographic',
+  'letterhead',
+  'signature',
+  'attestation',
+  'footer',
+  'patient_header',
+  'patient_info',
+  'patient_information',
+  'patient_demographics',
+  'provider',
+  'provider_info',
+  'clinic',
+  'clinic_header',
+  'metadata',
+]);
+const ADMIN_LABEL_RE =
+  /\b(?:letterhead|demographics?|signature|attestation|patient\s+(?:header|info\w*|identif\w*|demographic\w*)|clinic\s+(?:header|info\w*|letterhead)|provider\s+(?:header|info\w*)|note\s+header|header\s+block|footer)\b/i;
+
+/** True when a section is administrative chrome (letterhead / demographics /
+ *  signature), not clinical note format — matched by key OR label so it holds
+ *  across LLM variance. */
+export function isAdministrativeChrome(label: string, key: string): boolean {
+  if (ADMIN_KEYS.has((key ?? '').toLowerCase().trim())) return true;
+  return ADMIN_LABEL_RE.test(label ?? '');
+}
+
+/** Split sections into clinical (kept) vs administrative chrome (dropped). */
+export function dropAdministrativeChrome<T extends { label: string; key: string }>(
+  sections: readonly T[]
+): { kept: T[]; droppedLabels: string[] } {
+  const kept: T[] = [];
+  const droppedLabels: string[] = [];
+  for (const s of sections) {
+    if (isAdministrativeChrome(s.label, s.key)) droppedLabels.push(s.label);
+    else kept.push(s);
+  }
+  return { kept, droppedLabels };
+}
 
 /** Return the distinct structured-PHI class labels found in `text`. Empty
  *  when none. Deterministic. */
