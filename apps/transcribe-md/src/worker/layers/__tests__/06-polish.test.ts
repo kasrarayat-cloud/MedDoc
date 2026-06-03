@@ -46,6 +46,7 @@ vi.mock('@meddoc/db', () => ({
 vi.mock('@/lib/audit', () => ({ logAudit: mocks.logAudit }));
 
 import { runLayer6Polish, type Layer6Input } from '../06-polish';
+import type { ResolvedNoteTemplate } from '../../note-templates/build-soap-prompt';
 import type {
   CritiqueReport,
   CritiqueIssue,
@@ -418,5 +419,83 @@ describe('runLayer6Polish — error propagation', () => {
       runLayer6Polish(makeInput({ critique: reportWithFixable() }))
     ).rejects.toThrow(/Anthropic response was not valid JSON/);
     expect(mocks.prismaUpdate).not.toHaveBeenCalled();
+  });
+});
+
+// ============================================================================
+// Phase 1 — L6 polishes in (and validates against) the TEMPLATE's structure,
+// not the fixed 4 SOAP headers. System default → unchanged (covered above).
+// ============================================================================
+describe('runLayer6Polish — custom template structure validation', () => {
+  function reportWithFixable(): CritiqueReport {
+    return {
+      issues: [issue('major', 'plan missing')],
+      overall_quality: 'medium',
+      safe_to_sign_without_review: false,
+    };
+  }
+
+  const CUSTOM_TEMPLATE: ResolvedNoteTemplate = {
+    id: 'tmpl_custom_psych',
+    version: 2,
+    isSystemDefault: false,
+    styleProfile: {
+      tense: null,
+      tone: 'concise',
+      abbreviations: null,
+      preamble: 'ignored',
+      globalRules: ['ignored'],
+    },
+    sections: [
+      { key: 'pc', label: 'Presenting Concern', order: 1, formatHint: 'prose', styleInstructions: 'x', defaultText: null, defaultTextMode: 'omit_unless_supported' },
+      { key: 'mse', label: 'Mental Status Exam', order: 2, formatHint: 'bullets', styleInstructions: 'x', defaultText: null, defaultTextMode: 'omit_unless_supported' },
+    ],
+  };
+
+  const CUSTOM_POLISHED = `## Presenting Concern
+Patient reports low mood for two weeks.
+
+## Mental Status Exam
+Appearance appropriate; mood depressed; no SI/HI.`;
+
+  it('a custom-structured polished note PASSES validation against its template', async () => {
+    mocks.modelCompleteText.mockResolvedValueOnce({ text: CUSTOM_POLISHED });
+
+    // Clean-but-fixable critique (minor issue → model-call branch fires,
+    // safe_to_sign=true → needsReview hinges only on the validator).
+    const result = await runLayer6Polish(
+      makeInput({
+        critique: {
+          issues: [issue('minor', 'tighten wording')],
+          overall_quality: 'high',
+          safe_to_sign_without_review: true,
+        },
+        noteTemplate: CUSTOM_TEMPLATE,
+      })
+    );
+
+    expect(mocks.logAudit).not.toHaveBeenCalled(); // validation PASSED
+    expect(result.soapFinal).toBe(CUSTOM_POLISHED);
+    const updateArgs = mocks.prismaUpdate.mock.calls[0][0];
+    expect(updateArgs.data.needsReview).toBeUndefined();
+  });
+
+  it('a DEFAULT SOAP-shaped note FAILS validation against a custom template', async () => {
+    // POLISHED_SOAP has Subjective/Objective/Assessment/Plan, NOT the
+    // custom template's sections → must fail + flag for review.
+    mocks.modelCompleteText.mockResolvedValueOnce({ text: POLISHED_SOAP });
+
+    const result = await runLayer6Polish(
+      makeInput({ critique: reportWithFixable(), noteTemplate: CUSTOM_TEMPLATE })
+    );
+
+    expect(mocks.logAudit).toHaveBeenCalledTimes(1);
+    const auditArgs = mocks.logAudit.mock.calls[0][0];
+    expect(auditArgs.metadata.layer).toBe('L6');
+    expect(auditArgs.metadata.missingSections).toEqual([
+      'Presenting Concern',
+      'Mental Status Exam',
+    ]);
+    expect(result.needsReview).toBe(true);
   });
 });
