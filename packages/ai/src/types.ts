@@ -35,7 +35,13 @@ export type ModelCallPurpose =
   | 'tm_patient_summary'
   // T-M14.1: OpenAI text-embedding-3-small for per-doctor edit
   // pattern capture at sign time. One call per signed visit.
-  | 'tm_embed';
+  | 'tm_embed'
+  // Note-format customization Phase 2a — bring-your-own-note parse engine.
+  // `tm_template_parse` extracts FORMAT/STYLE from a doctor's note;
+  // `tm_template_phi_scan` is the separate PHI-detection gate over the
+  // parsed output. Stateless — the source note is never persisted.
+  | 'tm_template_parse'
+  | 'tm_template_phi_scan';
 
 export interface AiLogContext {
   practiceId: string;
