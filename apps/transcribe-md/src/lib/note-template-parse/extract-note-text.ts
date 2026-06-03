@@ -4,7 +4,8 @@
 // Turns an uploaded note file into clean text for the parse engine. PASTE is
 // the guaranteed path; uploads are best-effort with reliable libs only:
 //   - .txt  → UTF-8 decode (reliable)
-//   - .docx → mammoth raw-text extraction (reliable; dynamically imported)
+//   - .docx → mammoth raw-text extraction (reliable; via ./docx-to-text, a
+//             webpack-bundled helper loaded lazily)
 //   - .pdf  → DEFERRED to paste. Server-side PDF text extraction is
 //             unreliable for clinical notes (column collapse, OCR gaps — see
 //             the bug-hunt). Rather than ship flaky extraction we ask the
@@ -137,11 +138,12 @@ export async function extractNoteTextFromUpload(
     if (kind === 'txt') {
       rawText = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
     } else {
-      // .docx — mammoth turns the document XML into plain text. Buffer required.
-      const m = await import('mammoth');
-      const mammoth = (m.default ?? m) as typeof import('mammoth');
-      const result = await mammoth.extractRawText({ buffer: Buffer.from(bytes) });
-      rawText = result.value;
+      // .docx — defer to the local mammoth helper. It's a STATIC import there,
+      // so webpack bundles mammoth into the server chunk (a bare dynamic
+      // import of the package itself is not traced into standalone). The local
+      // dynamic import keeps it lazy: mammoth only loads for an actual .docx.
+      const { docxToText } = await import('./docx-to-text');
+      rawText = await docxToText(bytes);
     }
     const text = normalizeExtractedText(rawText);
     if (text.trim().length === 0) {
