@@ -34,11 +34,16 @@ import { ChangePasswordForm } from './change-password-form';
 import { ChangeEmailDialog } from './change-email-dialog';
 import { EmailChangeToast } from './email-change-toast';
 import { isDataExportEnabled } from '../api/settings/export-data/route';
+import { NoteFormatManager } from './note-format/note-format-manager';
+import { listDoctorTemplates } from '@/lib/note-template-persist/read';
+import { findSpecialty } from '@meddoc/shared/specialties';
+import type { ClientTemplateListItem } from '@/lib/note-template-persist/types';
 
 export const metadata: Metadata = { title: 'Settings' };
 
 const SECTIONS = [
   { id: 'profile', label: 'Profile' },
+  { id: 'note-format', label: 'My Note Format' },
   { id: 'security', label: 'Security' },
   { id: 'sessions', label: 'Active sessions' },
   { id: 'data', label: 'Your data' },
@@ -103,6 +108,22 @@ export default async function SettingsPage() {
       hasActiveSession: activeSession !== null,
     },
   });
+
+  // Phase 2b — the doctor's own note-format templates (scoped to session.user.id;
+  // a doctor never sees another's). Date → ISO + display labels for the client.
+  const noteTemplates: ClientTemplateListItem[] = (
+    await listDoctorTemplates(session.user.id)
+  ).map((t) => ({
+    id: t.id,
+    name: t.name,
+    encounterType: t.encounterType,
+    encounterLabel: t.encounterType ? findSpecialty(t.encounterType).label : 'All my visits',
+    status: t.status,
+    version: t.version,
+    sectionCount: t.sectionCount,
+    defaultCount: t.defaultCount,
+    updatedAtIso: t.updatedAt.toISOString(),
+  }));
 
   return (
     <AppFrame>
@@ -243,8 +264,16 @@ export default async function SettingsPage() {
           </Section>
 
           <Section
+            id="note-format"
+            eyebrow="02 / Note format"
+            title="My Note Format"
+          >
+            <NoteFormatManager templates={noteTemplates} />
+          </Section>
+
+          <Section
             id="security"
-            eyebrow="02 / Security"
+            eyebrow="03 / Security"
             title="Security"
             subtitle="Change your password. Other devices are signed out; this one stays."
           >
@@ -310,7 +339,7 @@ export default async function SettingsPage() {
 
           <Section
             id="sessions"
-            eyebrow="03 / Sessions"
+            eyebrow="04 / Sessions"
             title="Active session"
             subtitle="One device at a time. Signing in elsewhere revokes this session automatically."
           >
@@ -341,7 +370,7 @@ export default async function SettingsPage() {
           {isDataExportEnabled() && (
             <Section
               id="data"
-              eyebrow="04 / Data"
+              eyebrow="05 / Data"
               title="Your data"
               subtitle="Download a ZIP containing every visit, transcript, SOAP note, audio file, and signed PDF."
             >
@@ -383,7 +412,7 @@ export default async function SettingsPage() {
 
           <Section
             id="billing"
-            eyebrow="05 / Billing"
+            eyebrow="06 / Billing"
             title="Billing"
             subtitle="Manage your subscription and payment method."
           >
@@ -425,7 +454,7 @@ export default async function SettingsPage() {
 
           <Section
             id="danger"
-            eyebrow="06 / Danger"
+            eyebrow="07 / Danger"
             title="Danger zone"
             subtitle="Delete your account. Every visit, transcript, and exported file gets erased."
             danger
