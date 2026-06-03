@@ -8,7 +8,7 @@
 // "Per patient, …" are encouraged where the ground truth is weak.
 // ============================================================================
 
-import { modelClient, wrapAsData, delimiterSystemSuffix } from '@meddoc/ai';
+import { modelClient, wrapAsData } from '@meddoc/ai';
 import prisma from '@meddoc/db';
 import { specialtyGuidance } from '../prompts/specialty-guidance';
 import type { ExtractedEntities } from './03-extract-entities';
@@ -19,6 +19,13 @@ import {
   type AudioConfidenceStats,
 } from './audio-confidence';
 import { validateSoapStructure } from './soap-structure-validator';
+import {
+  buildSoapSystemPrompt,
+  buildSoapUserPrompt,
+  requiredSectionLabels,
+  type ResolvedNoteTemplate,
+} from '../note-templates/build-soap-prompt';
+import { SYSTEM_DEFAULT_NOTE_TEMPLATE } from '../note-templates/system-default-template';
 
 const MODEL = 'claude-opus-4-7';
 
@@ -45,12 +52,22 @@ export interface Layer4Input {
    *  interpreted visit's HPI/Subjective reads as a 3-way back-and-
    *  forth instead of a coherent patient story. */
   interpreterMode?: boolean;
+  /** Phase 1: the resolved note-format template L4 builds its prompt from.
+   *  Threaded from the worker orchestrator (resolveActiveTemplate). Defaults
+   *  to the system-default template when omitted — every Phase-0/1 prod visit
+   *  resolves to it, so the built prompt is byte-identical to today's. */
+  noteTemplate?: ResolvedNoteTemplate;
 }
 
 export async function runLayer4GenerateSoap(
   input: Layer4Input
 ): Promise<string> {
   const guidance = specialtyGuidance(input.specialty);
+  // Phase 1: build the prompt FROM the resolved template (no hard-coded
+  // prompt string). For the system default this reproduces today's prompt
+  // byte-for-byte — see worker/layers/__tests__/l4-golden-prompt.test.ts.
+  const template: ResolvedNoteTemplate =
+    input.noteTemplate ?? SYSTEM_DEFAULT_NOTE_TEMPLATE;
 
   // Round 3 PR-J — A07-P0 prompt-injection delimiter.
   // The transcript is user-supplied (whatever the doctor + patient
@@ -128,89 +145,24 @@ export async function runLayer4GenerateSoap(
       ].join('\n')
     : null;
 
-  const system = [
-    'You are a senior clinician writing a SOAP note from a clinical',
-    'visit. Use ONLY the entities provided and the transcript as',
-    'evidence. Write in a professional medical tone.',
-    '',
+  // Build system + user from the resolved template. The immutable safety
+  // preamble + guardrails live in the builder (sourced from the canonical
+  // system-default styleProfile) and can never be overridden by a custom
+  // template; the template contributes the section structure. The audio /
+  // interpreter hedge slices and the specialty-guidance mechanism are
+  // unchanged. See build-soap-prompt.ts.
+  const system = buildSoapSystemPrompt(template, {
+    specialty: input.specialty,
     audioQualityAlert,
-    audioQualityAlert ? '' : null,
     interpreterAlert,
-    interpreterAlert ? '' : null,
-    'Structure the note with these markdown headings exactly:',
-    '',
-    '## Subjective',
-    '**Chief Complaint:** …',
-    '**HPI:** narrative paragraph incorporating onset, duration,',
-    '  quality, severity, location, timing, context, modifying factors,',
-    '  associated symptoms.',
-    '**PMH:** bullet list or "[not documented]" if silent.',
-    '**Medications:** bullet list with dose/route/frequency where stated.',
-    '**Allergies:** bullet list with reactions where stated.',
-    '**Family History:** brief list or "[not documented]".',
-    '**Social History:** smoking / alcohol / drugs / occupation if',
-    '  mentioned; omit unmentioned lines.',
-    '**ROS:** by system when documented; else the single line',
-    '  "ROS not formally documented in this encounter."',
-    '',
-    '## Objective',
-    'Physical exam findings grouped by system. Include vitals if',
-    'mentioned. Include test results mentioned. If no formal exam was',
-    'discussed, write exactly: "Formal exam not documented in this',
-    'encounter."',
-    '',
-    '## Assessment',
-    'Primary clinical consideration with supporting reasoning.',
-    'Differentials if the doctor discussed them. Severity/staging if',
-    'applicable. Use [not documented] rather than inventing.',
-    '',
-    '## Plan',
-    'Numbered list: diagnostics ordered, medications changed/started,',
-    'follow-up, referrals, patient education. Each item should be',
-    'actionable.',
-    '',
-    'Critical rules:',
-    '- Do NOT invent clinical findings. If a claim lacks transcript',
-    '  evidence, either omit it or explicitly mark it "[not documented]".',
-    '- When information came exclusively from the patient, prefix with',
-    '  "Per patient, …" so the source is clear on downstream review.',
-    '- Never add test results, medication doses, or vital-sign numbers',
-    '  that were not stated.',
-    // ── Narrow hallucination rules added 2026-05-10 ────────────────
-    // Driven by the v2 judge findings on the PriMock57 5-case slice
-    // (PR #200 locked baseline). Each rule targets a specific
-    // hallucination class that surfaced 1+ time and is unambiguously
-    // L4-side (anatomy-substitution class is ASR-side, out of scope).
-    "- Don't add diagnostic qualifiers (acute, chronic, undiagnosed,",
-    "  severe, mild, sudden, gradual) unless the transcript uses them",
-    '  explicitly. "Migraines" stays "migraines" — not "undiagnosed',
-    '  migraines." Onset is "sudden" only if the patient said sudden.',
-    "- Don't infer maternal/paternal side or a specific relative when",
-    "  the transcript only mentions a relative type. \"My grandmother\"",
-    '  stays "grandmother" — not "maternal grandmother" unless stated.',
-    "- When a dose, frequency, or strength is ambiguous in the",
-    "  transcript, write what was actually said and append",
-    "  '[clarify with patient]' rather than picking the most likely",
-    "  value. Don't silently resolve \"two tablets... one tablet twice",
-    '  a day" to a single interpretation.',
-    '- Output ONLY the SOAP note markdown. No preamble, no postscript.',
-    guidance ? '' : undefined,
-    guidance ? `Specialty guidance (${input.specialty}):\n${guidance}` : undefined,
-    // Round 3 PR-J — instruction-as-data boundary.
-    delimiterSystemSuffix('transcript'),
-  ]
-    .filter((l): l is string => typeof l === 'string')
-    .join('\n');
+    specialtyGuidanceText: guidance || null,
+  });
 
-  const user = [
-    `Specialty: ${input.specialty}`,
-    '',
-    'Extracted entities (structured, with evidence):',
-    JSON.stringify(input.entities, null, 2),
-    '',
-    'Role-labeled transcript:',
-    wrap.wrapped,
-  ].join('\n');
+  const user = buildSoapUserPrompt({
+    specialty: input.specialty,
+    entitiesJson: JSON.stringify(input.entities, null, 2),
+    wrappedTranscript: wrap.wrapped,
+  });
 
   const { text } = await modelClient.completeText({
     practiceId: input.practiceId,
@@ -232,7 +184,9 @@ export async function runLayer4GenerateSoap(
   // into a specific spacing/casing. On fail we DON'T crash: write the
   // raw output (doctor can fix it manually), flip needsReview, emit
   // a MODEL_OUTPUT_VALIDATION_FAIL audit row for forensics.
-  const validation = validateSoapStructure(text);
+  // Validate against THIS template's required sections. System default →
+  // the 4 SOAP headers → identical to the prior fixed check.
+  const validation = validateSoapStructure(text, requiredSectionLabels(template));
   if (!validation.ok) {
     void logAudit({
       action: 'MODEL_OUTPUT_VALIDATION_FAIL',
@@ -256,6 +210,9 @@ export async function runLayer4GenerateSoap(
         needsReview: true,
         reviewReason:
           'SOAP draft didn\'t match expected markdown structure — manual review required.',
+        // Phase 1 provenance — which template + version generated this note.
+        noteTemplateId: template.id,
+        noteTemplateVersion: template.version,
       },
     });
     return text;
@@ -263,7 +220,12 @@ export async function runLayer4GenerateSoap(
 
   await prisma.transcribeVisit.update({
     where: { id: input.visitId },
-    data: { soapDraft: text },
+    data: {
+      soapDraft: text,
+      // Phase 1 provenance — which template + version generated this note.
+      noteTemplateId: template.id,
+      noteTemplateVersion: template.version,
+    },
   });
 
   return text;

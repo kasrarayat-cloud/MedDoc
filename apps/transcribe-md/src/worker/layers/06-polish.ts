@@ -16,6 +16,11 @@ import {
   type CritiqueIssue,
 } from './05-self-critique';
 import { validateSoapStructure } from './soap-structure-validator';
+import {
+  requiredSectionLabels,
+  type ResolvedNoteTemplate,
+} from '../note-templates/build-soap-prompt';
+import { SYSTEM_DEFAULT_NOTE_TEMPLATE } from '../note-templates/system-default-template';
 
 const MODEL = 'claude-sonnet-4-6';
 
@@ -25,6 +30,13 @@ export interface Layer6Input {
   userId: string | null;
   soapDraft: string;
   critique: CritiqueReport;
+  /** Phase 1: the resolved template, so polish validates against ITS
+   *  structure (not the fixed 4 SOAP headers). Defaults to the system
+   *  default — whose labels ARE the 4 SOAP headers, so behavior is
+   *  unchanged for non-customizing doctors. The polish prompt already
+   *  preserves "the same markdown structure as the draft", so the model
+   *  polishes in whatever structure the draft has. */
+  noteTemplate?: ResolvedNoteTemplate;
 }
 
 export interface Layer6Output {
@@ -36,6 +48,11 @@ export interface Layer6Output {
 
 export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output> {
   const { fixable, unfixable } = classifyCritique(input.critique);
+  // Phase 1: validate the polished note against the resolved template's
+  // required sections. System default → the 4 SOAP headers → unchanged.
+  const template: ResolvedNoteTemplate =
+    input.noteTemplate ?? SYSTEM_DEFAULT_NOTE_TEMPLATE;
+  const requiredSections = requiredSectionLabels(template);
   let soapFinal: string;
   // FIND-P1-016 (2026-05-14) — when the model edits the draft, the
   // output goes through the same SOAP-structure validator L4 uses.
@@ -98,10 +115,11 @@ export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output>
     });
     soapFinal = text;
 
-    // FIND-P1-016 — same validator L4 uses. Fail → keep raw output,
-    // flag the validation reason so the reviewReason calculation below
-    // includes it alongside the unfixable-criticals reason.
-    const validation = validateSoapStructure(text);
+    // FIND-P1-016 — same validator L4 uses, now scoped to the resolved
+    // template's required sections. Fail → keep raw output, flag the
+    // validation reason so the reviewReason calculation below includes it
+    // alongside the unfixable-criticals reason.
+    const validation = validateSoapStructure(text, requiredSections);
     if (!validation.ok) {
       void logAudit({
         action: 'MODEL_OUTPUT_VALIDATION_FAIL',

@@ -70,9 +70,15 @@ const REQUIRED_SECTIONS = [
  *  caller maps to {persist + audit + needsReview} or {persist only}.
  *
  *  Lenient by design — only checks the contract the prompt actually
- *  asks the model to follow. */
+ *  asks the model to follow.
+ *
+ *  Phase 1: `requiredSections` generalizes the check from the fixed 4 SOAP
+ *  headers to ANY template's required section labels. It defaults to the
+ *  4 SOAP headers, so callers that pass nothing (and the system-default
+ *  template, whose labels ARE those 4) get exactly today's behavior. */
 export function validateSoapStructure(
-  rawText: string | null | undefined
+  rawText: string | null | undefined,
+  requiredSections: readonly string[] = REQUIRED_SECTIONS
 ): SoapStructureValidation {
   const text = (rawText ?? '').trim();
 
@@ -81,7 +87,7 @@ export function validateSoapStructure(
       ok: false,
       reason: 'empty output',
       outputLength: 0,
-      missingSections: REQUIRED_SECTIONS,
+      missingSections: requiredSections,
     };
   }
 
@@ -90,7 +96,7 @@ export function validateSoapStructure(
       ok: false,
       reason: `output too short (${text.length} chars, threshold ${MIN_OUTPUT_LENGTH})`,
       outputLength: text.length,
-      missingSections: REQUIRED_SECTIONS,
+      missingSections: requiredSections,
     };
   }
 
@@ -107,7 +113,7 @@ export function validateSoapStructure(
       ok: false,
       reason: 'output is JSON-shaped, expected markdown',
       outputLength: text.length,
-      missingSections: REQUIRED_SECTIONS,
+      missingSections: requiredSections,
     };
   }
 
@@ -115,7 +121,7 @@ export function validateSoapStructure(
   // between `##` and the section name. The `\\b` (word boundary) on
   // the section name prevents partial matches like
   // `## Subjective findings present in HPI`.
-  const missing = REQUIRED_SECTIONS.filter((section) => {
+  const missing = requiredSections.filter((section) => {
     const re = new RegExp(`##\\s*${section}\\b`, 'i');
     return !re.test(text);
   });

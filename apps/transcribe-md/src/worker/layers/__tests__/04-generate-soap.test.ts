@@ -49,6 +49,7 @@ import {
   type Layer4Input,
 } from '../04-generate-soap';
 import type { AudioConfidenceStats } from '../audio-confidence';
+import type { ResolvedNoteTemplate } from '../../note-templates/build-soap-prompt';
 
 const FAKE_VISIT = 'vis-4';
 const FAKE_USER = 'u1';
@@ -402,5 +403,79 @@ describe('runLayer4GenerateSoap — prompt-injection delimiter audit', () => {
     const auditArgs = injectionCalls[0][0];
     expect(auditArgs.metadata.layer).toBe('L4');
     expect(typeof auditArgs.metadata.suffix).toBe('string');
+  });
+});
+
+describe('runLayer4GenerateSoap — Phase 1 provenance + custom template', () => {
+  const CUSTOM_OUTPUT = `## Reason For Visit
+Patient here for medication follow-up.
+
+## Care Plan
+1. Continue current regimen.
+2. Recheck labs in 3 months.`;
+
+  const customTemplate: ResolvedNoteTemplate = {
+    id: 'tmpl_custom_x',
+    version: 7,
+    isSystemDefault: false,
+    styleProfile: {
+      tense: null,
+      tone: 'concise',
+      abbreviations: null,
+      preamble: 'CUSTOM-PREAMBLE-IGNORED',
+      globalRules: ['CUSTOM-RULE-IGNORED'],
+    },
+    sections: [
+      {
+        key: 'reason',
+        label: 'Reason For Visit',
+        order: 1,
+        formatHint: 'prose',
+        styleInstructions: 'Why the patient is here.',
+        defaultText: null,
+        defaultTextMode: 'omit_unless_supported',
+      },
+      {
+        key: 'care_plan',
+        label: 'Care Plan',
+        order: 2,
+        formatHint: 'numbered',
+        styleInstructions: 'Numbered next steps.',
+        defaultText: null,
+        defaultTextMode: 'omit_unless_supported',
+      },
+    ],
+  };
+
+  it('populates noteTemplateId + noteTemplateVersion (system default) on the happy write', async () => {
+    mocks.modelCompleteText.mockResolvedValueOnce({ text: GOOD_SOAP });
+    await runLayer4GenerateSoap(makeInput());
+    const updateArgs = mocks.prismaUpdate.mock.calls[0][0];
+    expect(updateArgs.data.noteTemplateId).toBe('tmpl_system_default_soap');
+    expect(updateArgs.data.noteTemplateVersion).toBe(1);
+  });
+
+  it('builds the custom structure, keeps the immutable safety layer, and records custom provenance', async () => {
+    mocks.modelCompleteText.mockResolvedValueOnce({ text: CUSTOM_OUTPUT });
+    await runLayer4GenerateSoap(
+      makeInput({ noteTemplate: customTemplate })
+    );
+
+    const { system } = mocks.modelCompleteText.mock.calls[0][0];
+    // Custom structure reflected, default SOAP shape NOT imposed.
+    expect(system).toContain('## Reason For Visit');
+    expect(system).toContain('## Care Plan');
+    expect(system).not.toContain('## Subjective');
+    // Immutable safety preserved; custom override ignored.
+    expect(system).toContain('Do NOT invent clinical findings');
+    expect(system).not.toContain('CUSTOM-PREAMBLE-IGNORED');
+    expect(system).not.toContain('CUSTOM-RULE-IGNORED');
+
+    // Provenance from the custom template; output validated against ITS
+    // sections (CUSTOM_OUTPUT has both → passes → no needsReview).
+    const updateArgs = mocks.prismaUpdate.mock.calls[0][0];
+    expect(updateArgs.data.noteTemplateId).toBe('tmpl_custom_x');
+    expect(updateArgs.data.noteTemplateVersion).toBe(7);
+    expect(updateArgs.data.needsReview).toBeUndefined();
   });
 });

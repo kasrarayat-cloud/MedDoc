@@ -21,6 +21,11 @@ import {
   LOW_CONFIDENCE_THRESHOLD,
   type AudioConfidenceStats,
 } from './audio-confidence';
+import {
+  insertedDefaultSections,
+  type ResolvedNoteTemplate,
+} from '../note-templates/build-soap-prompt';
+import { SYSTEM_DEFAULT_NOTE_TEMPLATE } from '../note-templates/system-default-template';
 
 const MODEL = 'claude-opus-4-7';
 
@@ -54,6 +59,12 @@ export interface Layer5Input {
    *  doesn't clearly support. Null for text_notes and dictation runs
    *  without utterance segmentation. Closes audit Findings 02.5 + 07.3. */
   audioConfidenceStats: AudioConfidenceStats | null;
+  /** Phase 1: the resolved template. When it inserted scaffold/always-include
+   *  defaults, L5 gains a normals-scrutiny block that flags unsupported
+   *  inserted findings for review. Defaults to the system default — whose
+   *  sections are all omit_unless_supported, so NOTHING is inserted and the
+   *  critique prompt is byte-identical to today. */
+  noteTemplate?: ResolvedNoteTemplate;
 }
 
 export async function runLayer5SelfCritique(
@@ -96,6 +107,31 @@ export async function runLayer5SelfCritique(
         ].join('\n')
       : null;
 
+  // Phase 1 normals-scrutiny (additive — strengthens L5, removes nothing).
+  // When the resolved template inserted default text (scaffold_confirm /
+  // always_include), instruct the auditor to verify those inserted findings
+  // against the transcript and flag unsupported ones. Empty for the system
+  // default (all sections omit_unless_supported → nothing inserted) → null →
+  // the critique prompt is byte-identical to today.
+  const template: ResolvedNoteTemplate =
+    input.noteTemplate ?? SYSTEM_DEFAULT_NOTE_TEMPLATE;
+  const insertedSections = insertedDefaultSections(template);
+  const normalsScrutinyAlert =
+    insertedSections.length > 0
+      ? [
+          'TEMPLATE-DEFAULT SCRUTINY: the SOAP draft may contain text inserted',
+          'from the note template as a default/scaffold (NOT derived from this',
+          `encounter) in these sections: ${insertedSections
+            .map((s) => s.label)
+            .join(', ')}.`,
+          'For each such inserted finding, verify it is actually supported by',
+          'the transcript or entities. If an inserted finding is NOT supported,',
+          'raise it as a CRITICAL issue whose description begins "Unsupported',
+          'template default:" so it is surfaced for clinician review rather',
+          'than silently kept. Supported inserted content needs no issue.',
+        ].join('\n')
+      : null;
+
   const system = [
     'You are an auditor reviewing a SOAP note for clinical quality. The',
     'note was generated from a transcript + extracted entities by a',
@@ -103,6 +139,8 @@ export async function runLayer5SelfCritique(
     '',
     audioQualityAlert,
     audioQualityAlert ? '' : null,
+    normalsScrutinyAlert,
+    normalsScrutinyAlert ? '' : null,
     'CRITICAL issues (must fix):',
     '1. Any factual claim in the SOAP that CANNOT be traced to the',
     '   transcript or entities — i.e. hallucination.',
@@ -214,6 +252,15 @@ function isStructurallyFixable(issue: CritiqueIssue): boolean {
     d.includes('red-flag') ||
     d.includes('screening missing') ||
     d.includes('missing red')
+  ) {
+    return false;
+  }
+  // Phase 1 normals-scrutiny: an unsupported template-default finding must
+  // NOT be auto-patched away — it surfaces for clinician review, same posture
+  // as missing red-flag screening. Additive; existing classes unchanged.
+  if (
+    d.includes('unsupported template default') ||
+    d.includes('unsupported inserted')
   ) {
     return false;
   }
