@@ -328,7 +328,7 @@ function EntryState({
             Paste one of your notes, or upload a file. QuillMD reads the format and shows you what it understood — you
             edit and confirm.
           </div>
-          <div style={{ ...subLabel, marginTop: 12 }}>Paste · .docx · .txt</div>
+          <div style={{ ...subLabel, marginTop: 12 }}>Paste · .pdf · .docx · .txt · .md</div>
         </div>
         <button
           type="button"
@@ -362,7 +362,7 @@ function EntryState({
           <button type="button" style={btnPrimary} onClick={onParse} disabled={pending}>Read my format</button>
           <span style={{ color: 'var(--color-linear-text-3)', fontSize: 11.5 }}>or</span>
           <button type="button" style={btn} onClick={onUploadClick} disabled={pending}>Upload a file</button>
-          <input ref={fileRef} type="file" accept=".docx,.txt,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={onUpload} style={{ display: 'none' }} aria-hidden tabIndex={-1} />
+          <input ref={fileRef} type="file" accept=".pdf,application/pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.txt,text/plain,.md,.markdown,text/markdown" onChange={onUpload} style={{ display: 'none' }} aria-hidden tabIndex={-1} />
         </div>
       </div>
 
