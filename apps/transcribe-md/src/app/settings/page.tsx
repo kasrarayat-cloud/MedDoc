@@ -51,6 +51,24 @@ const SECTIONS = [
   { id: 'danger', label: 'Danger zone' },
 ] as const;
 
+// Runtime upload-capability probe (incident 2026-06-04 defense-in-depth). A
+// build-time assertion already guarantees the extractor libs bundle into the
+// standalone output; this is the belt-and-suspenders so a (hypothetical)
+// missing lib degrades to "format not offered" instead of advertise-then-fail.
+// It probes the SAME dynamic-import the extractor uses, so the UI advertises a
+// format only if its extractor actually loads in THIS image. Module cache makes
+// repeat calls free; .txt/.md need no lib and are always available.
+let uploadCapsCache: { pdf: boolean; docx: boolean } | null = null;
+async function getUploadCaps(): Promise<{ pdf: boolean; docx: boolean }> {
+  if (uploadCapsCache) return uploadCapsCache;
+  const [pdf, docx] = await Promise.all([
+    import('@/lib/note-template-parse/pdf-to-text').then(() => true).catch(() => false),
+    import('@/lib/note-template-parse/docx-to-text').then(() => true).catch(() => false),
+  ]);
+  uploadCapsCache = { pdf, docx };
+  return uploadCapsCache;
+}
+
 export default async function SettingsPage() {
   const session = await auth();
   if (!session?.user?.id) redirect('/login');
@@ -124,6 +142,9 @@ export default async function SettingsPage() {
     defaultCount: t.defaultCount,
     updatedAtIso: t.updatedAt.toISOString(),
   }));
+
+  // Which upload formats can this image actually extract (see getUploadCaps).
+  const uploadCaps = await getUploadCaps();
 
   return (
     <AppFrame>
@@ -268,7 +289,7 @@ export default async function SettingsPage() {
             eyebrow="02 / Note format"
             title="My Note Format"
           >
-            <NoteFormatManager templates={noteTemplates} />
+            <NoteFormatManager templates={noteTemplates} uploadCaps={uploadCaps} />
           </Section>
 
           <Section
