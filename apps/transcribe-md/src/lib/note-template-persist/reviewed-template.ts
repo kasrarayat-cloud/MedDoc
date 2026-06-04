@@ -18,6 +18,7 @@
 // ============================================================================
 
 import { z } from 'zod';
+import { TEMPLATE_FIELD_LIMITS as LIM } from '@/lib/note-template-parse/note-template-schema';
 import type {
   ParsedTemplateDraft,
   NoteTemplateSection,
@@ -29,21 +30,21 @@ export const FormatHintSchema = z.enum(['prose', 'bullets', 'numbered']);
  *  (coerced) here, never accepted from the client. */
 export const ReviewedSectionSchema = z
   .object({
-    key: z.string().trim().min(1).max(80),
-    label: z.string().trim().min(1).max(120),
+    key: z.string().trim().min(1).max(LIM.key),
+    label: z.string().trim().min(1).max(LIM.label),
     order: z.number().int().nonnegative(),
     formatHint: FormatHintSchema,
-    styleInstructions: z.string().trim().max(2000).nullable().default(null),
-    defaultText: z.string().max(8000).nullable().default(null),
+    styleInstructions: z.string().trim().max(LIM.styleInstructions).nullable().default(null),
+    defaultText: z.string().max(LIM.defaultText).nullable().default(null),
   })
   .strict();
 
 /** Doctor-level prose style. `.strict()` — no preamble/globalRules accepted. */
 export const ReviewedStyleProfileSchema = z
   .object({
-    tense: z.string().trim().max(60).nullable().default(null),
-    tone: z.string().trim().max(120).default(''),
-    abbreviations: z.string().trim().max(200).nullable().default(null),
+    tense: z.string().trim().max(LIM.tense).nullable().default(null),
+    tone: z.string().trim().max(LIM.tone).default(''),
+    abbreviations: z.string().trim().max(LIM.abbreviations).nullable().default(null),
   })
   .strict();
 
@@ -51,10 +52,10 @@ export const ReviewedTemplateSchema = z
   .object({
     /** Present when editing an existing template; absent for a brand-new one. */
     id: z.string().cuid().optional(),
-    name: z.string().trim().min(1, 'Give your format a name').max(120),
+    name: z.string().trim().min(1, 'Give your format a name').max(LIM.name),
     /** Matches the visit's specialty slug at generation time; null = applies to
      *  all of the doctor's visits (the catch-all). */
-    encounterType: z.string().trim().min(1).max(80).nullable().default(null),
+    encounterType: z.string().trim().min(1).max(LIM.encounterType).nullable().default(null),
     sections: z.array(ReviewedSectionSchema).min(1, 'Keep at least one section').max(40),
     styleProfile: ReviewedStyleProfileSchema,
   })
@@ -97,4 +98,62 @@ export function normalizeReviewedTemplate(input: ReviewedTemplateInput): {
     },
   };
   return { draft };
+}
+
+// ── Friendly validation messaging ───────────────────────────────────────────
+// The save action must never surface a raw Zod technical message (e.g. "Too
+// big: expected string to have <=60 characters") to the doctor. This maps a
+// ReviewedTemplateSchema failure to a clear, field-named sentence. Custom
+// schema messages (e.g. "Give your format a name") pass through unchanged.
+
+const TOP_FIELD_LABELS: Record<string, string> = {
+  name: 'Format name',
+  encounterType: 'Specialty',
+  'styleProfile.tense': 'Writing tense',
+  'styleProfile.tone': 'Writing tone',
+  'styleProfile.abbreviations': 'Abbreviations',
+};
+
+function fieldLabel(path: ReadonlyArray<PropertyKey>): string {
+  const p = path.map(String);
+  if (p[0] === 'sections' && p.length >= 3) {
+    const idx = Number(p[1]);
+    const sub: Record<string, string> = {
+      label: 'heading',
+      key: 'key',
+      styleInstructions: 'formatting note',
+      defaultText: 'default text',
+    };
+    return `Section ${Number.isFinite(idx) ? idx + 1 : ''} ${sub[p[2]] ?? p[2]}`
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+  return TOP_FIELD_LABELS[p.join('.')] ?? TOP_FIELD_LABELS[p[p.length - 1]] ?? p[p.length - 1] ?? 'A field';
+}
+
+/** Map a ReviewedTemplateSchema failure to a doctor-friendly message — NEVER the
+ *  raw Zod technical text. Branches on `issue.code` (stable API), not the
+ *  message string (cosmetic + version-volatile), so a Zod wording change can't
+ *  silently start leaking raw text. Use in place of `error.issues[0].message`. */
+export function friendlyValidationError(error: z.ZodError): string {
+  const issue = error.issues[0];
+  if (!issue) return 'This format has fields we couldn’t accept — please review and try again.';
+  const field = fieldLabel(issue.path);
+  switch (issue.code) {
+    case 'too_big':
+      return `${field} is too long — please shorten it.`;
+    case 'unrecognized_keys':
+      // e.g. a crafted payload smuggling preamble/globalRules (.strict()).
+      return 'This format has fields we couldn’t accept — please review and try again.';
+    case 'too_small':
+    case 'custom': {
+      // The schema sets its own doctor-friendly message on these (e.g. "Give
+      // your format a name", "Keep at least one section") — surface it, but
+      // guard against a bare Zod default sneaking through.
+      const raw = issue.message ?? '';
+      return /^(too small|invalid|expected )/i.test(raw) ? `${field} is required.` : raw;
+    }
+    default:
+      return `${field} isn’t valid — please review it.`;
+  }
 }
