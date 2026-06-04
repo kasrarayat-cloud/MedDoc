@@ -29,6 +29,7 @@ import {
 import {
   ParsedTemplateLlmSchema,
   PhiScanSchema,
+  clampDraftToLimits,
   type ParsedTemplateDraft,
   type ParseNoteResult,
   type NoteTemplateSection,
@@ -67,6 +68,11 @@ const PARSE_SYSTEM = [
   '  recurs across patients (e.g. a normal-exam boilerplate with NO patient',
   '  specifics). If a passage mixes generic + patient-specific, OMIT it.',
   '- `styleProfile`: overall tense / tone / abbreviation style.',
+  '',
+  'Keep generated text CONCISE: `name` is a short label (a few words); each',
+  '`styleProfile` value (tense / tone / abbreviations) is a brief phrase, not a',
+  "sentence; `label`s are the clinician's own headings. Over-long values are",
+  'truncated, so be succinct.',
   '',
   'NEVER include patient-specific content of ANY kind: names, dates, ages,',
   'MRNs, contact info, specific findings, measurements, values, sites, or any',
@@ -197,12 +203,16 @@ export async function parseNoteToTemplate(
     };
   }
 
-  const draft: ParsedTemplateDraft = {
+  // Clamp generated string fields to their persisted caps so a verbose value
+  // (e.g. a long styleProfile.tense) can never break review/save or leak a raw
+  // Zod "Too big". Done BEFORE the PHI gate below, so the gate scans the final
+  // (clamped) values; truncation only removes content (PHI-neutral).
+  const draft: ParsedTemplateDraft = clampDraftToLimits({
     name: llm.name,
     encounterType: llm.encounterType,
     sections: clinicalSections,
     styleProfile: llm.styleProfile,
-  };
+  });
 
   // ── 3. PHI-scan LLM over the built fields (the gate's content-aware layer).
   //    Bare PHI field-name keywords (no value) are demoted to a SOFT signal:

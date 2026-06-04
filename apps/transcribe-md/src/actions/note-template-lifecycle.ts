@@ -31,6 +31,7 @@ import { applyPhiGate } from '@/lib/note-template-parse/phi-gate';
 import {
   ReviewedTemplateSchema,
   normalizeReviewedTemplate,
+  friendlyValidationError,
 } from '@/lib/note-template-persist/reviewed-template';
 import { rowToReviewModel } from '@/lib/note-template-persist/read';
 import type { TemplateReviewModel } from '@/lib/note-template-persist/types';
@@ -63,8 +64,8 @@ export async function saveNoteTemplateAction(
 
   const parsed = ReviewedTemplateSchema.safeParse(rawInput);
   if (!parsed.success) {
-    const first = parsed.error.issues[0];
-    return { ok: false, error: first?.message ?? 'This template has invalid fields.' };
+    // Friendly, field-named message — never leak a raw Zod "Too big …".
+    return { ok: false, error: friendlyValidationError(parsed.error) };
   }
 
   const { draft } = normalizeReviewedTemplate(parsed.data);
