@@ -25,6 +25,8 @@
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
+import { assertNonProdDatabase } from '@meddoc/db/guard';
+
 export const FIXTURE_USER_EMAIL = 'qa-auditor@quillmd.test';
 export const FIXTURE_PRACTICE_ID = 'clinic_main';
 
@@ -299,6 +301,9 @@ interface SeededIds {
 
 async function main() {
   await import('dotenv/config').catch(() => null);
+
+  // FAIL-CLOSED: never seed prod (see packages/db/src/db-guard.ts).
+  assertNonProdDatabase();
 
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { PrismaClient } = require('@prisma/client');
