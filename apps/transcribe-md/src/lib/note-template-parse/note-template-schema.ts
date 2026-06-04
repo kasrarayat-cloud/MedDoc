@@ -20,6 +20,25 @@ import type {
   SectionFormatHint,
 } from '@/worker/note-templates/system-default-template';
 
+/** Persisted-field length caps, shared by the review/save Zod schema
+ *  (reviewed-template.ts) and the parse engine's pre-validation clamp so the
+ *  two never drift. The LLM output schema stays UNBOUNDED — the engine clamps a
+ *  generated draft to these before it leaves the parse (see clampDraftToLimits),
+ *  so a verbose generated value can never break review/save. `tense` is 120
+ *  (raised from 60: a tense descriptor can be a short phrase, parallel to
+ *  `tone`). */
+export const TEMPLATE_FIELD_LIMITS = {
+  name: 120,
+  encounterType: 80,
+  key: 80,
+  label: 120,
+  styleInstructions: 2000,
+  defaultText: 8000,
+  tense: 120,
+  tone: 120,
+  abbreviations: 200,
+} as const;
+
 export const FormatHintSchema = z.enum(['prose', 'bullets', 'numbered']);
 
 /** A section as the LLM is allowed to emit it — note: NO defaultTextMode
@@ -99,3 +118,40 @@ export type ParseNoteResult =
   | { rejected: true; template: null; reason: string };
 
 export type { NoteTemplateSection, SectionFormatHint };
+
+// ── Generated-value clamping ────────────────────────────────────────────────
+// The parse LLM schema is intentionally lenient (min only). Before a draft
+// leaves the engine we hard-cap each string field to TEMPLATE_FIELD_LIMITS so
+// the draft is ALWAYS review/save-schema-valid — a long generated name/label/
+// tense can never surface a raw Zod "Too big" or block the parse. Truncation
+// only removes content (PHI-neutral); applied BEFORE the PHI gate so the gate
+// scans the final values. The doctor edits anything truncated in review.
+
+function clampStr(value: string, max: number): string {
+  const t = value.trim();
+  return t.length > max ? t.slice(0, max).trimEnd() : value;
+}
+function clampNullable(value: string | null, max: number): string | null {
+  return value == null ? null : clampStr(value, max);
+}
+
+/** Clamp every generated string field of a parsed draft to its persisted cap. */
+export function clampDraftToLimits(draft: ParsedTemplateDraft): ParsedTemplateDraft {
+  const L = TEMPLATE_FIELD_LIMITS;
+  return {
+    name: clampStr(draft.name, L.name),
+    encounterType: clampNullable(draft.encounterType, L.encounterType),
+    sections: draft.sections.map((s) => ({
+      ...s,
+      key: clampStr(s.key, L.key),
+      label: clampStr(s.label, L.label),
+      styleInstructions: clampNullable(s.styleInstructions, L.styleInstructions),
+      defaultText: clampNullable(s.defaultText, L.defaultText),
+    })),
+    styleProfile: {
+      tense: clampNullable(draft.styleProfile.tense, L.tense),
+      tone: clampStr(draft.styleProfile.tone, L.tone),
+      abbreviations: clampNullable(draft.styleProfile.abbreviations, L.abbreviations),
+    },
+  };
+}
