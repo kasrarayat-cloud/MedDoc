@@ -1,16 +1,25 @@
 // ============================================================================
-// Note-format customization: .pdf → text (webpack-bundled helper)
+// Note-format customization: .pdf → text (unpdf, server-external helper)
 // ----------------------------------------------------------------------------
-// unpdf is imported STATICALLY here so Next/webpack bundles it (and add it to
-// serverExternalPackages in next.config — the #275 mammoth lesson: a bare
-// dynamic import of the package is NOT traced into the standalone build and the
-// format silently degrades to paste in prod). extract-note-text.ts dynamically
-// imports THIS local module, so unpdf loads lazily (only for an actual .pdf).
+// unpdf is imported STATICALLY here and added to serverExternalPackages in
+// next.config. THE #275 MAMMOTH LESSON + THE 2026-06-04 INCIDENT: a node-only
+// parse lib must be externalized (so webpack doesn't try to bundle pdfjs) AND
+// then be present in the standalone's node_modules at runtime. unpdf (an ESM
+// dual-package wrapping pdfjs) is NOT copied there by node-file-trace — it
+// silently missed (MODULE_NOT_FOUND in the shipped image → .pdf advertised-but-
+// failed). unpdf works fine once present and is self-contained (zero deps,
+// vendored pdfjs), so the Dockerfile copies its single dir into the runner
+// EXPLICITLY, and a build-time bundle-assert FAILS THE BUILD if it's ever
+// absent. extract-note-text.ts dynamically imports THIS local module, so unpdf
+// loads lazily (only for an actual .pdf).
 //
-// unpdf is a serverless-oriented wrapper over pdfjs (pure JS, no native deps,
-// no worker file) — it extracts a clean text layer. Image-only / scanned PDFs
-// have no text layer → it returns empty (caller maps that to a paste fallback,
-// never an OCR attempt). Encrypted / malformed PDFs throw → caller falls back.
+// (We tried pdf-parse — it traces cleanly but its 2018 vendored pdfjs hangs on
+// Node 22, failing extraction; unpdf extracts reliably. So: unpdf + explicit
+// COPY, not a library swap.)
+//
+// unpdf extracts a clean text layer. Image-only / scanned PDFs have no text
+// layer → it returns empty (caller maps that to a paste fallback, never an OCR
+// attempt). Encrypted / malformed PDFs throw → caller falls back.
 // ============================================================================
 
 import { extractText, getDocumentProxy } from 'unpdf';
