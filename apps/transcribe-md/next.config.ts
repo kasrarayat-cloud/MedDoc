@@ -14,7 +14,9 @@ const nextConfig: NextConfig = {
   // webpack/tracing failed (it ended up in neither .next/server nor
   // node_modules, so .docx silently fell back to paste). Externalizing it makes
   // node-file-trace copy node_modules/mammoth into the standalone output.
-  serverExternalPackages: ['pdfkit', 'fontkit', 'resend', 'mammoth'],
+  // unpdf (.pdf → text, wraps pdfjs) gets the same treatment for the same
+  // reason — verified require('unpdf') resolves in the live standalone container.
+  serverExternalPackages: ['pdfkit', 'fontkit', 'resend', 'mammoth', 'unpdf'],
   experimental: {
     optimizePackageImports: ['lucide-react'],
   },
