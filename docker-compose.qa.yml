@@ -1,0 +1,161 @@
+# ============================================================================
+# Isolated QA / E2E stack — compose project "meddoc-qa".
+# ----------------------------------------------------------------------------
+# A fully self-contained, throwaway clone of the transcribe-md runtime for
+# aggressive QA / E2E WITHOUT ever touching the production `meddoc` database
+# (QA report finding F1). It is isolated from prod by construction:
+#   - separate compose PROJECT  → separate network; service name `postgres`
+#     resolves to THIS postgres, never prod's.
+#   - FRESH named volumes        → never the prod /mnt/pgdata-encrypted mount.
+#   - DB NAME `meddoc_qa_test`   → the fail-closed db-guard (packages/db/
+#     src/db-guard.ts) only proceeds for a qa/test-marked DB, so the seeders
+#     + E2E cleanup physically cannot run against prod's `meddoc`.
+#   - reuses the ALREADY-BUILT prod images (no rebuild → no heap-OOM).
+#   - MOCK_AI_CALLS=true + dummy API keys → cannot reach real APIs / burn tokens.
+#   - app published on 127.0.0.1:9020 only; pg/redis/minio internal.
+#
+# Full flow + commands: docs/qa/README.md
+# Teardown (removes the qa volumes too):
+#   docker compose -f docker-compose.qa.yml down -v
+# ============================================================================
+name: meddoc-qa
+
+x-qa-db-url: &qa-db-url postgresql://meddoc:qa_test_pw@postgres:5432/meddoc_qa_test?schema=public
+x-qa-secret: &qa-secret "qa-throwaway-secret-not-used-in-prod-000000000000000="
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: "no"
+    mem_limit: 512m
+    cpus: '1.0'
+    environment:
+      POSTGRES_DB: meddoc_qa_test        # qa/test marker → db-guard allows mutation
+      POSTGRES_USER: meddoc
+      POSTGRES_PASSWORD: qa_test_pw
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - qa_pgdata:/var/lib/postgresql/data   # FRESH isolated volume (NOT prod)
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U meddoc"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: "no"
+    mem_limit: 128m
+    cpus: '0.5'
+    command: ["redis-server", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    restart: "no"
+    mem_limit: 256m
+    cpus: '0.5'
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: qa_minio
+      MINIO_ROOT_PASSWORD: qa_minio_pw
+    volumes:
+      - qa_minio:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # One-shot schema apply (cached builder image — has the prisma CLI; no build).
+  # Invoke: docker compose -f docker-compose.qa.yml run --rm db-migrate
+  db-migrate:
+    image: meddoc-pro-db-migrate:latest
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: *qa-db-url
+    working_dir: /app/packages/db
+    entrypoint: ["npx", "--no-install", "prisma"]
+    command: ["migrate", "deploy"]
+
+  transcribe-md:
+    image: meddoc-pro-transcribe-md:latest
+    restart: "no"
+    mem_limit: 512m
+    cpus: '1.0'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: *qa-db-url
+      REDIS_URL: redis://redis:6379
+      AUTH_URL: http://localhost:9020
+      NEXTAUTH_URL: http://localhost:9020
+      AUTH_TRUST_HOST: "true"
+      AUTH_SECRET: *qa-secret
+      NEXTAUTH_SECRET: *qa-secret
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: qa_minio
+      MINIO_SECRET_KEY: qa_minio_pw
+      TRANSCRIBE_MD_MINIO_BUCKET: transcribe-md-audio
+      MINIO_USE_SSL: "false"
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: "1"
+      # E2E signups use @test.dev; auto-confirm needs BOTH the allowlist and
+      # the prod-gate flag (the image runs NODE_ENV=production). SAFE ONLY in
+      # this throwaway :9020 stack — these two vars must NEVER appear in the
+      # real production compose env (they would bypass email verification).
+      EMAIL_AUTO_CONFIRM_DOMAINS: "test.dev,quillmd-test.local"
+      EMAIL_AUTO_CONFIRM_ALLOW_IN_PROD: "true"
+      # No real API calls anywhere in this stack.
+      MOCK_AI_CALLS: "true"
+      ANTHROPIC_API_KEY: mock-key-qa
+      DEEPGRAM_API_KEY: mock-key-qa
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "--spider", "http://127.0.0.1:3011/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    ports:
+      - "127.0.0.1:9020:3011"
+
+  transcribe-md-worker:
+    image: meddoc-pro-transcribe-md-worker:latest
+    restart: "no"
+    mem_limit: 1g
+    cpus: '1.0'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: *qa-db-url
+      REDIS_URL: redis://redis:6379
+      AUTH_SECRET: *qa-secret
+      NEXTAUTH_SECRET: *qa-secret
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: qa_minio
+      MINIO_SECRET_KEY: qa_minio_pw
+      TRANSCRIBE_MD_MINIO_BUCKET: transcribe-md-audio
+      MINIO_USE_SSL: "false"
+      TRANSCRIBE_MD_WORKER_CONCURRENCY: "2"
+      MOCK_AI_CALLS: "true"
+      ANTHROPIC_API_KEY: mock-key-qa
+      DEEPGRAM_API_KEY: mock-key-qa
+
+volumes:
+  qa_pgdata:
+  qa_minio:

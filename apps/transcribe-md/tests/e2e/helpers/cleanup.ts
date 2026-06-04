@@ -16,15 +16,26 @@
 
 import { execSync } from 'node:child_process';
 
+import { assertNonProdDbName } from '@meddoc/db/guard';
+
 import { TEST_EMAIL_PREFIX } from './test-utils';
 
-const COMPOSE = 'docker compose -f /opt/meddoc-pro/docker-compose.yml';
+// Safe-by-default: target the ISOLATED meddoc-qa stack, NOT prod. Both the
+// compose target and the database name are overridable for other isolated
+// envs, but the fail-closed db-guard refuses anything that isn't positively
+// a non-prod database (see packages/db/src/db-guard.ts).
+const COMPOSE =
+  process.env.E2E_CLEANUP_COMPOSE ??
+  'docker compose -f /opt/meddoc-pro/docker-compose.qa.yml';
+const CLEANUP_DB = process.env.E2E_CLEANUP_DB ?? 'meddoc_qa_test';
 
 function psql(sql: string): void {
+  // FAIL-CLOSED: never run a DELETE against a prod (or unconfirmable) DB.
+  assertNonProdDbName(CLEANUP_DB);
   // -A -t trims psql formatting so stderr output is actually diagnostic
   // when something goes wrong. Each call uses its own connection; the
   // volume is small enough that it doesn't matter.
-  execSync(`${COMPOSE} exec -T postgres psql -U meddoc -d meddoc -A -t -c "${sql.replace(/"/g, '\\"')}"`, {
+  execSync(`${COMPOSE} exec -T postgres psql -U meddoc -d ${CLEANUP_DB} -A -t -c "${sql.replace(/"/g, '\\"')}"`, {
     stdio: ['ignore', 'pipe', 'inherit'],
   });
 }
