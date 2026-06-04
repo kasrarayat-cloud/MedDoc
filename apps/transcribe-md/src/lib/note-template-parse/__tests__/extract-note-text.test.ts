@@ -3,10 +3,18 @@
 // ============================================================================
 
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   normalizeExtractedText,
   classifyUpload,
+  extractNoteTextFromUpload,
 } from '../extract-note-text';
+import { pdfToText, PdfTooLongError } from '../pdf-to-text';
+
+const FIX = path.join(path.dirname(fileURLToPath(import.meta.url)), '__fixtures__');
+const readFix = (name: string) => new Uint8Array(readFileSync(path.join(FIX, name)));
 
 describe('normalizeExtractedText — unicode punctuation', () => {
   it('folds en/em-dash, NBSP, smart quotes, ellipsis, middot', () => {
@@ -63,12 +71,85 @@ describe('normalizeExtractedText — header/footer de-bleed', () => {
 });
 
 describe('classifyUpload', () => {
-  it('routes by extension and mime', () => {
+  it('routes by extension and mime — pdf/docx/txt/md supported, rest unsupported', () => {
     expect(classifyUpload('note.txt', '')).toBe('txt');
     expect(classifyUpload('x', 'text/plain')).toBe('txt');
+    expect(classifyUpload('note.md', '')).toBe('md');
+    expect(classifyUpload('note.markdown', '')).toBe('md');
+    expect(classifyUpload('x', 'text/markdown')).toBe('md');
     expect(classifyUpload('note.docx', '')).toBe('docx');
     expect(classifyUpload('x', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')).toBe('docx');
-    expect(classifyUpload('note.pdf', '')).toBe('pdf'); // routes to paste fallback
+    expect(classifyUpload('note.pdf', '')).toBe('pdf'); // now a supported extraction path
+    expect(classifyUpload('x', 'application/pdf')).toBe('pdf');
+    // not reliably extractable → paste fallback
+    expect(classifyUpload('note.rtf', '')).toBe('unsupported');
     expect(classifyUpload('scan.jpg', 'image/jpeg')).toBe('unsupported');
+  });
+});
+
+// ── PDF extraction (unpdf) ───────────────────────────────────────────────────
+describe('extractNoteTextFromUpload — .pdf', () => {
+  it('extracts a multi-page clinical PDF into text (headers + body intact)', async () => {
+    const r = await extractNoteTextFromUpload(readFix('dra-multipage.pdf'), 'note.pdf', 'application/pdf');
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.kind).toBe('pdf');
+      // Both pages' content present — section labels the parser keys on.
+      expect(r.text).toContain('CHIEF COMPLAINT');
+      expect(r.text).toContain('IMPRESSION & PLAN');
+      expect(r.text).toContain('PATIENT INSTRUCTIONS');
+      // PHI is PRESENT in the extracted text — it's stripped later, at PARSE
+      // time, by the unchanged PHI gate (same path as pasted text).
+      expect(r.text).toContain('RFM-0098214');
+    }
+  });
+
+  it('a text-less (scanned/image-only) PDF → graceful paste fallback, no crash', async () => {
+    const r = await extractNoteTextFromUpload(readFix('blank.pdf'), 'scan.pdf', 'application/pdf');
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.fallbackToPaste).toBe(true);
+      expect(r.error).toMatch(/scan or image|paste/i);
+    }
+  });
+
+  it('a malformed / non-PDF byte stream → graceful paste fallback, no crash', async () => {
+    const garbage = new TextEncoder().encode('this is not a pdf at all %%%% \x00\x01\x02');
+    const r = await extractNoteTextFromUpload(garbage, 'broken.pdf', 'application/pdf');
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.fallbackToPaste).toBe(true);
+      expect(r.error).toMatch(/encrypted|damaged|paste/i);
+    }
+  });
+
+  it('an unsupported type → clear paste fallback message', async () => {
+    const r = await extractNoteTextFromUpload(new Uint8Array([1, 2, 3]), 'photo.png', 'image/png');
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/PDF, Word|paste/i);
+  });
+});
+
+// ── .md / page-bound DoS guard ───────────────────────────────────────────────
+describe('extractNoteTextFromUpload — .md + guards', () => {
+  it('reads a Markdown file as text', async () => {
+    const md = new TextEncoder().encode('# Note format\n\n**Subjective:** interval history.\n\n**Plan:** numbered.');
+    const r = await extractNoteTextFromUpload(md, 'fmt.md', 'text/markdown');
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.kind).toBe('md');
+      expect(r.text).toContain('Subjective');
+    }
+  });
+
+  it('pdfToText enforces the page bound (PdfTooLongError, code PDF_TOO_LONG)', async () => {
+    // The fixture is 2 pages; cap at 1 to trip the bound deterministically.
+    await expect(pdfToText(readFix('dra-multipage.pdf'), 1)).rejects.toBeInstanceOf(PdfTooLongError);
+    try {
+      await pdfToText(readFix('dra-multipage.pdf'), 1);
+    } catch (e) {
+      expect((e as PdfTooLongError).code).toBe('PDF_TOO_LONG');
+      expect((e as PdfTooLongError).pages).toBe(2);
+    }
   });
 });

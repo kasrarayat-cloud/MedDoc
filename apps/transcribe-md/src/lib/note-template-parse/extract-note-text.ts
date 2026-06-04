@@ -3,22 +3,27 @@
 // ----------------------------------------------------------------------------
 // Turns an uploaded note file into clean text for the parse engine. PASTE is
 // the guaranteed path; uploads are best-effort with reliable libs only:
-//   - .txt  → UTF-8 decode (reliable)
-//   - .docx → mammoth raw-text extraction (reliable; via ./docx-to-text, a
-//             webpack-bundled helper loaded lazily)
-//   - .pdf  → DEFERRED to paste. Server-side PDF text extraction is
-//             unreliable for clinical notes (column collapse, OCR gaps — see
-//             the bug-hunt). Rather than ship flaky extraction we ask the
-//             doctor to paste. No PDF lib is bundled.
+//   - .txt / .md → UTF-8 decode (reliable; Markdown is just text)
+//   - .docx → mammoth raw-text extraction (via ./docx-to-text, bundled lazily)
+//   - .pdf  → unpdf text-layer extraction (via ./pdf-to-text, bundled lazily);
+//             image-only/scanned PDFs (no text layer) + encrypted/malformed
+//             PDFs fall back to paste with a clear message — never OCR, never
+//             a crash. A page bound guards against DoS.
+//   - anything else (.rtf, images, …) → paste fallback. We don't ship flaky
+//     extraction; if a format can't be read cleanly the doctor pastes.
+//
+// SAFETY: extraction only produces TEXT. That text flows into the SAME
+// validated parse + PHI gate as pasted text — adding input formats does not
+// change the safety path. The RAW FILE IS NEVER PERSISTED — the action holds
+// the buffer in memory, extracts, and discards it.
 //
 // `normalizeExtractedText` is PURE + unit-tested — it repairs the artifacts the
 // bug-hunt found: mid-sentence line-wrap newlines, unicode punctuation
 // (en/em-dash, NBSP, smart quotes), and repeating multi-page header/footer
-// bleed. The RAW FILE IS NEVER PERSISTED — the action holds the buffer in
-// memory, extracts, and discards it.
+// bleed.
 // ============================================================================
 
-export type SupportedUpload = 'txt' | 'docx';
+export type SupportedUpload = 'txt' | 'md' | 'docx' | 'pdf';
 
 export interface ExtractOk {
   ok: true;
@@ -92,19 +97,20 @@ export function normalizeExtractedText(raw: string): string {
   return t;
 }
 
-/** Classify an upload by filename + mime. Returns the handler kind or 'pdf' /
- *  'unsupported' (both route to paste). */
-export function classifyUpload(filename: string, mime: string): SupportedUpload | 'pdf' | 'unsupported' {
+/** Classify an upload by filename + mime. Returns the handler kind or
+ *  'unsupported' (routes to paste). */
+export function classifyUpload(filename: string, mime: string): SupportedUpload | 'unsupported' {
   const name = (filename || '').toLowerCase();
   const m = (mime || '').toLowerCase();
-  if (name.endsWith('.txt') || m === 'text/plain') return 'txt';
+  if (name.endsWith('.pdf') || m === 'application/pdf') return 'pdf';
   if (
     name.endsWith('.docx') ||
     m === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
   ) {
     return 'docx';
   }
-  if (name.endsWith('.pdf') || m === 'application/pdf') return 'pdf';
+  if (name.endsWith('.md') || name.endsWith('.markdown') || m === 'text/markdown') return 'md';
+  if (name.endsWith('.txt') || m === 'text/plain') return 'txt';
   return 'unsupported';
 }
 
@@ -117,48 +123,61 @@ export async function extractNoteTextFromUpload(
 ): Promise<ExtractResult> {
   const kind = classifyUpload(filename, mime);
 
-  if (kind === 'pdf') {
-    return {
-      ok: false,
-      fallbackToPaste: true,
-      error:
-        "We can't reliably read PDFs — the text often comes out scrambled. Open the PDF, copy the note, and paste it instead.",
-    };
-  }
   if (kind === 'unsupported') {
     return {
       ok: false,
       fallbackToPaste: true,
-      error: 'Upload a .docx or .txt file, or paste the note text directly.',
+      error:
+        'Upload a PDF, Word (.docx), text (.txt), or Markdown (.md) file — or paste the note text directly.',
     };
   }
 
   try {
     let rawText: string;
-    if (kind === 'txt') {
+    if (kind === 'txt' || kind === 'md') {
+      // Plain text / Markdown — decode as UTF-8 (Markdown is read as-is; the
+      // parse engine treats the prose like any pasted note).
       rawText = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
-    } else {
-      // .docx — defer to the local mammoth helper. It's a STATIC import there,
-      // so webpack bundles mammoth into the server chunk (a bare dynamic
-      // import of the package itself is not traced into standalone). The local
-      // dynamic import keeps it lazy: mammoth only loads for an actual .docx.
+    } else if (kind === 'docx') {
+      // Lazy local helpers with STATIC lib imports → webpack bundles the lib
+      // (a bare dynamic import of the package is not traced into standalone —
+      // the #275 mammoth lesson). Lazy so .txt/.md/paste never load them.
       const { docxToText } = await import('./docx-to-text');
       rawText = await docxToText(bytes);
+    } else {
+      const { pdfToText } = await import('./pdf-to-text');
+      rawText = await pdfToText(bytes);
     }
     const text = normalizeExtractedText(rawText);
     if (text.trim().length === 0) {
       return {
         ok: false,
         fallbackToPaste: true,
-        error: "That file looked empty once read. Paste the note text instead.",
+        error:
+          kind === 'pdf'
+            ? "We couldn't find any text in that PDF — it may be a scan or image. Paste the note text instead."
+            : 'That file looked empty once read. Paste the note text instead.',
       };
     }
     return { ok: true, text, kind };
-  } catch {
+  } catch (err) {
+    // Page-bound exceeded → a specific, actionable message.
+    if (err && typeof err === 'object' && (err as { code?: string }).code === 'PDF_TOO_LONG') {
+      const pages = (err as { pages?: number }).pages;
+      return {
+        ok: false,
+        fallbackToPaste: true,
+        error: `That PDF is long (${pages ?? 'many'} pages). Upload a single note, or paste the text.`,
+      };
+    }
+    // Encrypted / malformed / unreadable → graceful paste fallback, never a crash.
     return {
       ok: false,
       fallbackToPaste: true,
-      error: "We couldn't read that file. Paste the note text instead.",
+      error:
+        kind === 'pdf'
+          ? "We couldn't read that PDF — it may be encrypted or damaged. Paste the note text instead."
+          : "We couldn't read that file. Paste the note text instead.",
     };
   }
 }
