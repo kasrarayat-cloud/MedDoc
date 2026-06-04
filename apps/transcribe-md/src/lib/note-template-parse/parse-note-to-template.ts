@@ -40,7 +40,7 @@ import {
   detectPhiKeywords,
 } from './phi-gate';
 
-const MODEL = 'claude-opus-4-7';
+const MODEL = 'claude-opus-4-8';
 
 export interface ParseContext {
   /** Tenant for AI-call cost attribution (never persisted with the note). */
