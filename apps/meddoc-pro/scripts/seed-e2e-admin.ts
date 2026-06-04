@@ -13,8 +13,12 @@
 
 import 'dotenv/config';
 import bcrypt from 'bcryptjs';
+import { assertNonProdDatabase } from '@meddoc/db/guard';
 
 async function main() {
+  // FAIL-CLOSED: never seed prod (see packages/db/src/db-guard.ts).
+  assertNonProdDatabase();
+
   const { PrismaClient } = require('@prisma/client');
   const { PrismaPg } = require('@prisma/adapter-pg');
 
