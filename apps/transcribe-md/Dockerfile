@@ -67,6 +67,14 @@ ARG NEXT_PUBLIC_SHOW_PIPELINE_TAB=false
 ENV NEXT_PUBLIC_SHOW_PIPELINE_TAB=${NEXT_PUBLIC_SHOW_PIPELINE_TAB}
 
 ENV NEXT_TELEMETRY_DISABLED=1
+
+# ── Build heap (incident 2026-06-04) ──
+# `next build` of this app hit V8's DEFAULT old-space ceiling and heap-OOM'd
+# mid-build (a pure V8 heap limit — no kernel OOM in dmesg). The box has ~10GB
+# free + 4GB swap, so a 6GB old-space builds comfortably. Builder-stage ENV
+# only — the runner stage (512MB mem_limit) is a separate FROM and never
+# inherits this.
+ENV NODE_OPTIONS=--max-old-space-size=6144
 RUN npm run build -w transcribe-md
 
 # ── Stage 3: Production Runner ──
@@ -101,6 +109,25 @@ COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 # runtime container. The dedicated `db-migrate` compose service targets
 # the `builder` stage which already has the full toolchain. See
 # docker-compose.yml and the "Migrations" note at the top of this file.
+
+# unpdf (.pdf text extraction) — copied EXPLICITLY (incident 2026-06-04).
+# node-file-trace does NOT pull unpdf into .next/standalone (it's an ESM dual-
+# package; the shipped #277 image had MODULE_NOT_FOUND so .pdf advertised-but-
+# failed). unpdf is self-contained (zero deps, vendored pdfjs) and extracts
+# fine once present, so copy its single dir into the runtime node_modules —
+# same pattern as the Prisma artifacts above. (pdf-parse traces on its own but
+# its 2018 pdfjs hangs on Node 22, so a lib swap was rejected for this COPY.)
+COPY --from=builder /app/node_modules/unpdf ./node_modules/unpdf
+
+# ── Bundling assertion (incident 2026-06-04 — the permanent guardrail) ──
+# Load every server-external extractor lib FROM the FINAL runtime node_modules
+# (unpdf copied above + mammoth traced into the standalone). It ALSO imports
+# `unpdf/pdfjs` — the import-only ESM subpath unpdf lazy-loads at parse time
+# (dist/pdfjs.mjs) — so a partial COPY that dropped pdfjs can't slip through a
+# require()-only check. A miss exits non-zero → the docker build FAILS, so an
+# image that advertises .pdf/.docx upload but can't load its extractor can never
+# ship again. Same class-kill as the #275 mammoth lesson; add new libs here.
+RUN node --input-type=module -e "import{createRequire}from'module';const require=createRequire('/app/apps/transcribe-md/server.js');const fail=(m,e)=>{console.error('[bundle-assert] FAILED: '+m+' is not loadable from the runtime node_modules ('+((e&&(e.code||e.message))||e)+'); refusing to ship.');process.exit(1)};for(const m of ['unpdf','mammoth']){try{require(m)}catch(e){fail(m,e)}}try{await import('unpdf/pdfjs')}catch(e){fail('unpdf/pdfjs (lazy pdfjs subpath)',e)}console.log('[bundle-assert] OK -> unpdf, mammoth, unpdf/pdfjs')"
 
 USER nextjs
 

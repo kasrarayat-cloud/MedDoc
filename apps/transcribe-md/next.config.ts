@@ -14,8 +14,12 @@ const nextConfig: NextConfig = {
   // webpack/tracing failed (it ended up in neither .next/server nor
   // node_modules, so .docx silently fell back to paste). Externalizing it makes
   // node-file-trace copy node_modules/mammoth into the standalone output.
-  // unpdf (.pdf → text, wraps pdfjs) gets the same treatment for the same
-  // reason — verified require('unpdf') resolves in the live standalone container.
+  // unpdf (.pdf → text, wraps pdfjs) is externalized too — so webpack doesn't
+  // try (and fail) to bundle pdfjs. BUT node-file-trace does NOT copy unpdf into
+  // the standalone (it's an ESM dual-package; the 2026-06-04 incident shipped a
+  // MODULE_NOT_FOUND). unpdf works fine once present + is self-contained (zero
+  // deps), so the Dockerfile COPYs its dir into the runner explicitly and a
+  // build-time bundle-assert enforces presence on every build.
   serverExternalPackages: ['pdfkit', 'fontkit', 'resend', 'mammoth', 'unpdf'],
   experimental: {
     optimizePackageImports: ['lucide-react'],
