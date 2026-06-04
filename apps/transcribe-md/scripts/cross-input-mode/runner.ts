@@ -35,6 +35,7 @@
 // ============================================================================
 
 import { prisma } from '@meddoc/db';
+import { assertNonProdDatabase } from '@meddoc/db/guard';
 import { putAudioStream } from '../../src/lib/minio';
 import { enqueueProcessVisit } from '../../src/lib/queue';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
@@ -315,6 +316,8 @@ async function main() {
         throw new Error('--include received an empty tag list after trim/split');
       }
     }
+    // FAIL-CLOSED: never create visits against prod (see packages/db/src/db-guard.ts).
+    assertNonProdDatabase();
     await runAll(includeTags);
     return;
   }

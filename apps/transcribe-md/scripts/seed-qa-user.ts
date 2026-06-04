@@ -35,6 +35,8 @@ import { dirname, resolve } from 'node:path';
 
 import bcrypt from 'bcryptjs';
 
+import { assertNonProdDatabase } from '@meddoc/db/guard';
+
 export const QA_EMAIL_DEFAULT = 'qa-auditor@quillmd.test';
 export const PRACTICE_ID = 'clinic_main';
 export const PATIENT_NAME = 'QA Test Patient';
@@ -99,6 +101,9 @@ async function main() {
   // dotenv/config is dynamically required so the unit test (which sets
   // env vars directly) doesn't trip on a missing .env file.
   await import('dotenv/config').catch(() => null);
+
+  // FAIL-CLOSED: never seed prod (see packages/db/src/db-guard.ts).
+  assertNonProdDatabase();
 
   const QA_EMAIL = process.env.QA_AUDITOR_EMAIL ?? QA_EMAIL_DEFAULT;
   const QA_PASSWORD = process.env.QA_AUDITOR_PASSWORD;
