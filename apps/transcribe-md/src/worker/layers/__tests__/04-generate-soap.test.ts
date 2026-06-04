@@ -9,7 +9,7 @@
 //     `mocks.modelCompleteText` check.
 //   - 8192 maxTokens, temperature 0.2 (looser than L3/L5's 0.1 — SOAP
 //     generation benefits from a bit more creative flexibility).
-//   - claude-opus-4-7 (matches L5; not Sonnet like L3).
+//   - claude-opus-4-8 (matches L5; not Sonnet like L3).
 //   - Two dynamic system-prompt slices: audio-quality-alert + interpreter-mode.
 //   - **FIND-P1-015 validator**: post-call SOAP-structure check at
 //     `validateSoapStructure(text)`. On fail: raw text persisted +
@@ -130,7 +130,7 @@ describe('runLayer4GenerateSoap — modelClient.completeText contract', () => {
 
     expect(callArgs.provider).toBe('anthropic');
     expect(callArgs.purpose).toBe('tm_soap_draft');
-    expect(callArgs.model).toBe('claude-opus-4-7');
+    expect(callArgs.model).toBe('claude-opus-4-8');
     expect(callArgs.temperature).toBe(0.2);
     expect(callArgs.maxTokens).toBe(8192);
     // L4 uses completeText (no schema), so there's no `schema` field

@@ -27,7 +27,7 @@ import {
 } from '../note-templates/build-soap-prompt';
 import { SYSTEM_DEFAULT_NOTE_TEMPLATE } from '../note-templates/system-default-template';
 
-const MODEL = 'claude-opus-4-7';
+const MODEL = 'claude-opus-4-8';
 
 export interface Layer4Input {
   visitId: string;
@@ -100,7 +100,7 @@ export async function runLayer4GenerateSoap(
 
   // Round 3 quality fix-pack Q0-5 (audit Findings 02.5 + 07.3) —
   // when L1 reports the audio was mostly low-confidence, expand the
-  // prompt with a hedge instruction. Stronger model (Opus 4.7) is
+  // prompt with a hedge instruction. Stronger model (Opus 4.8) is
   // already on L4 per SA3 — the prompt change shapes how it phrases
   // uncertainty rather than asking it to invent uncertainty out of
   // thin air.
