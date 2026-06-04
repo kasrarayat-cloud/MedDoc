@@ -48,7 +48,21 @@ const subLabel: React.CSSProperties = {
 
 type View = 'home' | 'entry' | 'parsing' | 'review' | 'rejected';
 
-export function NoteFormatManager({ templates }: { templates: ClientTemplateListItem[] }) {
+/** Which uploadable formats this image can actually extract. Computed server-
+ *  side (see SettingsPage.getUploadCaps) so the UI never advertises a format
+ *  whose extractor isn't loadable. .txt/.md need no lib and are always on. */
+export interface UploadCaps {
+  pdf: boolean;
+  docx: boolean;
+}
+
+export function NoteFormatManager({
+  templates,
+  uploadCaps,
+}: {
+  templates: ClientTemplateListItem[];
+  uploadCaps: UploadCaps;
+}) {
   const router = useRouter();
   const hasTemplates = templates.length > 0;
   const [view, setView] = useState<View>(hasTemplates ? 'home' : 'entry');
@@ -193,6 +207,7 @@ export function NoteFormatManager({ templates }: { templates: ClientTemplateList
         onBack={hasTemplates ? () => setView('home') : undefined}
         pending={pending}
         fileRef={fileRef}
+        uploadCaps={uploadCaps}
       />
     );
   }
@@ -299,7 +314,7 @@ function TemplateRow({
 
 // ── Entry ───────────────────────────────────────────────────────────────────
 function EntryState({
-  pasteText, setPasteText, onParse, onUploadClick, onUpload, onStandard, onBack, pending, fileRef,
+  pasteText, setPasteText, onParse, onUploadClick, onUpload, onStandard, onBack, pending, fileRef, uploadCaps,
 }: {
   pasteText: string;
   setPasteText: (v: string) => void;
@@ -310,7 +325,23 @@ function EntryState({
   onBack?: () => void;
   pending: boolean;
   fileRef: React.RefObject<HTMLInputElement | null>;
+  uploadCaps: UploadCaps;
 }) {
+  // Only offer a format whose extractor actually loads in this image (incident
+  // 2026-06-04). .txt/.md always available; .pdf/.docx gated on uploadCaps so we
+  // never advertise-then-fail. Drives both the label and the <input accept>.
+  const uploadKinds = [
+    uploadCaps.pdf && { label: '.pdf', accept: '.pdf,application/pdf' },
+    uploadCaps.docx && {
+      label: '.docx',
+      accept:
+        '.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    },
+    { label: '.txt', accept: '.txt,text/plain' },
+    { label: '.md', accept: '.md,.markdown,text/markdown' },
+  ].filter(Boolean) as { label: string; accept: string }[];
+  const uploadSubLabel = ['Paste', ...uploadKinds.map((k) => k.label)].join(' · ');
+  const uploadAccept = uploadKinds.map((k) => k.accept).join(',');
   return (
     <div>
       {onBack && (
@@ -328,7 +359,7 @@ function EntryState({
             Paste one of your notes, or upload a file. QuillMD reads the format and shows you what it understood — you
             edit and confirm.
           </div>
-          <div style={{ ...subLabel, marginTop: 12 }}>Paste · .pdf · .docx · .txt · .md</div>
+          <div style={{ ...subLabel, marginTop: 12 }}>{uploadSubLabel}</div>
         </div>
         <button
           type="button"
@@ -362,7 +393,7 @@ function EntryState({
           <button type="button" style={btnPrimary} onClick={onParse} disabled={pending}>Read my format</button>
           <span style={{ color: 'var(--color-linear-text-3)', fontSize: 11.5 }}>or</span>
           <button type="button" style={btn} onClick={onUploadClick} disabled={pending}>Upload a file</button>
-          <input ref={fileRef} type="file" accept=".pdf,application/pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.txt,text/plain,.md,.markdown,text/markdown" onChange={onUpload} style={{ display: 'none' }} aria-hidden tabIndex={-1} />
+          <input ref={fileRef} type="file" accept={uploadAccept} onChange={onUpload} style={{ display: 'none' }} aria-hidden tabIndex={-1} />
         </div>
       </div>
 
