@@ -57,6 +57,16 @@ describe('claudeCostCents — per-model dispatcher', () => {
     expect(claudeCostCents('claude-opus-4-7', 1_000_000, 1_000_000)).toBe(3000);
   });
 
+  it('prices claude-opus-4-8 identically to 4.7 (stacked case, same rate card)', () => {
+    // Locks the stacked opus-4-8 case so a future un-stack can't silently drop
+    // it into `default: return 0` (zeroed cost attribution).
+    expect(claudeCostCents('claude-opus-4-8', 1_000_000, 0)).toBe(500);
+    expect(claudeCostCents('claude-opus-4-8', 0, 1_000_000)).toBe(2500);
+    expect(claudeCostCents('claude-opus-4-8', 1_000_000, 1_000_000)).toBe(3000);
+    // cache-multiplier path resolves the opus base rate (not the 0 default)
+    expect(claudeCostCents('claude-opus-4-8', 0, 0, 0, 1_000_000)).toBe(625);
+  });
+
   it('applies the 0.1x cache-read multiplier on top of base input', () => {
     // 1M Sonnet input ($3) + 1M cache reads ($0.30) = 330 cents
     expect(claudeCostCents('claude-sonnet-4-6', 1_000_000, 0, 1_000_000, 0)).toBe(330);
