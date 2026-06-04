@@ -16,6 +16,7 @@ import Link from 'next/link';
 import { ArrowLeft, RefreshCw } from 'lucide-react';
 
 import { SpecularButton } from '@/components/specular-button';
+import { isStaleDeploymentError } from '@/lib/stale-deployment';
 
 type ErrorFallbackTheme = 'legacy' | 'clinician';
 
@@ -49,6 +50,11 @@ export function ErrorFallback({
   scope,
 }: ErrorFallbackProps) {
   const errorId = useMemo(() => makeErrorId(error.digest), [error.digest]);
+  // Next.js "deployment skew": this tab loaded before a deploy, so an action it
+  // posted no longer exists on the server. reset() re-mounts the SAME stale
+  // bundle and fails again — only a full reload fixes it. Show an accurate
+  // "updated, reload" message + a real Reload button instead of a crash.
+  const isStale = useMemo(() => isStaleDeploymentError(error), [error]);
 
   useEffect(() => {
     // Fire-and-forget: sendBeacon if available (survives page unload),
@@ -138,7 +144,7 @@ export function ErrorFallback({
             color: 'var(--color-linear-text)',
           }}
         >
-          Something went wrong
+          {isStale ? 'QuillMD was just updated' : 'Something went wrong'}
         </h1>
 
         <p
@@ -151,8 +157,9 @@ export function ErrorFallback({
             color: 'var(--color-linear-text-2)',
           }}
         >
-          We hit an unexpected error. The issue has been logged. Try again in a
-          moment — if it keeps happening, send the error ID below to support.
+          {isStale
+            ? 'This page was open before our latest update, so that action isn’t available anymore. Reload to get the current version.'
+            : 'We hit an unexpected error. The issue has been logged. Try again in a moment — if it keeps happening, send the error ID below to support.'}
         </p>
 
         <div
@@ -182,10 +189,17 @@ export function ErrorFallback({
             gap: 12,
           }}
         >
-          <SpecularButton variant="primary" size="md" onClick={reset}>
-            <RefreshCw className="h-3.5 w-3.5" aria-hidden />
-            Try again
-          </SpecularButton>
+          {isStale ? (
+            <SpecularButton variant="primary" size="md" onClick={() => window.location.reload()}>
+              <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+              Reload
+            </SpecularButton>
+          ) : (
+            <SpecularButton variant="primary" size="md" onClick={reset}>
+              <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+              Try again
+            </SpecularButton>
+          )}
           <Link
             href="/dashboard"
             style={{
