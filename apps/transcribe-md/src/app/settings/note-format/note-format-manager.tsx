@@ -20,6 +20,7 @@ import { toast } from 'sonner';
 
 import { parseNoteTemplateAction } from '@/actions/parse-note-template';
 import { extractNoteFileAction } from '@/actions/extract-note-file';
+import { isStaleDeploymentError } from '@/lib/stale-deployment';
 import {
   activateNoteTemplateAction,
   duplicateNoteTemplateAction,
@@ -79,24 +80,49 @@ export function NoteFormatManager({
     setView('home');
   }
 
+  // A server action THREW (rejected) rather than returning a typed result —
+  // most often Next.js "deployment skew" (this tab loaded before a deploy, so
+  // its server-action IDs no longer exist on the server). Never let that crash
+  // to the full-page error boundary, which would lose the doctor's input: show
+  // a clear message and return to a safe view with their text still visible.
+  // Skew → a reload is the only fix (a re-mount keeps the stale bundle).
+  function handleActionError(err: unknown, recoverView: View) {
+    if (isStaleDeploymentError(err)) {
+      toast.error('QuillMD was just updated', {
+        description: 'Reload the page to continue — copy any unsaved text first.',
+        action: { label: 'Reload', onClick: () => window.location.reload() },
+        duration: 12000,
+      });
+    } else {
+      toast.error('Something went wrong', {
+        description: 'Please try again. If it keeps happening, reload the page.',
+      });
+    }
+    setView(recoverView);
+  }
+
   function runParse(text: string) {
     setView('parsing');
     startTransition(async () => {
-      const res = await parseNoteTemplateAction(text);
-      if (res.rejected) {
-        setRejectReason(res.reason);
-        setView('rejected');
-      } else {
-        setReview({
-          model: {
-            name: res.template.name,
-            encounterType: res.template.encounterType,
-            sections: res.template.sections,
-            styleProfile: res.template.styleProfile,
-          },
-          flags: res.flags,
-        });
-        setView('review');
+      try {
+        const res = await parseNoteTemplateAction(text);
+        if (res.rejected) {
+          setRejectReason(res.reason);
+          setView('rejected');
+        } else {
+          setReview({
+            model: {
+              name: res.template.name,
+              encounterType: res.template.encounterType,
+              sections: res.template.sections,
+              styleProfile: res.template.styleProfile,
+            },
+            flags: res.flags,
+          });
+          setView('review');
+        }
+      } catch (err) {
+        handleActionError(err, 'entry');
       }
     });
   }
@@ -118,14 +144,20 @@ export function NoteFormatManager({
     fd.append('file', file);
     setView('parsing');
     startTransition(async () => {
-      const ex = await extractNoteFileAction(fd);
-      if (!ex.ok) {
-        toast.error('Could not read that file', { description: ex.error });
-        setView('entry');
-        return;
+      try {
+        const ex = await extractNoteFileAction(fd);
+        if (!ex.ok) {
+          toast.error('Could not read that file', { description: ex.error });
+          setView('entry');
+          return;
+        }
+        setPasteText(ex.text);
+        // runParse opens its own transition + owns its own error recovery (also
+        // to 'entry'); this catch only covers the extract action itself.
+        runParse(ex.text);
+      } catch (err) {
+        handleActionError(err, 'entry');
       }
-      setPasteText(ex.text);
-      runParse(ex.text);
     });
   }
 
@@ -138,34 +170,50 @@ export function NoteFormatManager({
 
   function onEdit(id: string) {
     startTransition(async () => {
-      const res = await getNoteTemplateForEditAction(id);
-      if (!res.ok) {
-        toast.error(res.error);
-        return;
+      try {
+        const res = await getNoteTemplateForEditAction(id);
+        if (!res.ok) {
+          toast.error(res.error);
+          return;
+        }
+        setReview({ model: res.template, flags: [] });
+        setView('review');
+      } catch (err) {
+        handleActionError(err, 'home');
       }
-      setReview({ model: res.template, flags: [] });
-      setView('review');
     });
   }
   function onDuplicate(id: string) {
     startTransition(async () => {
-      const res = await duplicateNoteTemplateAction(id);
-      if (res.ok) { toast.success('Duplicated as a draft'); router.refresh(); }
-      else toast.error(res.error);
+      try {
+        const res = await duplicateNoteTemplateAction(id);
+        if (res.ok) { toast.success('Duplicated as a draft'); router.refresh(); }
+        else toast.error(res.error);
+      } catch (err) {
+        handleActionError(err, 'home');
+      }
     });
   }
   function onActivate(id: string) {
     startTransition(async () => {
-      const res = await activateNoteTemplateAction(id);
-      if (res.ok) { toast.success('Format activated'); router.refresh(); }
-      else toast.error(res.error);
+      try {
+        const res = await activateNoteTemplateAction(id);
+        if (res.ok) { toast.success('Format activated'); router.refresh(); }
+        else toast.error(res.error);
+      } catch (err) {
+        handleActionError(err, 'home');
+      }
     });
   }
   function onDelete(id: string) {
     startTransition(async () => {
-      const res = await deleteNoteTemplateAction(id);
-      if (res.ok) { toast.success('Format deleted'); router.refresh(); }
-      else toast.error(res.error);
+      try {
+        const res = await deleteNoteTemplateAction(id);
+        if (res.ok) { toast.success('Format deleted'); router.refresh(); }
+        else toast.error(res.error);
+      } catch (err) {
+        handleActionError(err, 'home');
+      }
     });
   }
 
