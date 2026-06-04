@@ -142,7 +142,7 @@ describe('runLayer5SelfCritique — modelClient contract', () => {
     expect(callArgs.maxTokens).toBe(4096);
     // L5 uses Opus (not Sonnet) — the auditor pass gets the strongest
     // model since it's the safety net for hallucinations.
-    expect(callArgs.model).toBe('claude-opus-4-7');
+    expect(callArgs.model).toBe('claude-opus-4-8');
     // Context passthrough for ai_calls observability.
     expect(callArgs.visitId).toBe(FAKE_VISIT);
     expect(callArgs.practiceId).toBe(FAKE_PRACTICE);

@@ -86,7 +86,7 @@ const OUTPUT_DIR = path.resolve(
   '../../docs/eval-runs',
 );
 
-const SOAP_MODEL = 'claude-opus-4-7'; // L4 production model
+const SOAP_MODEL = 'claude-opus-4-8'; // L4 production model (kept in sync with 04-generate-soap.ts)
 const JUDGE_MODEL = 'claude-sonnet-4-6'; // LLM-as-judge
 
 const DEEPGRAM_URL = 'https://api.deepgram.com/v1/listen';
@@ -450,7 +450,7 @@ async function callAnthropicSoap(roleLabeledTranscript: string): Promise<SoapRes
     body: JSON.stringify({
       model: SOAP_MODEL,
       max_tokens: 4096,
-      // Opus 4.7 rejects `temperature` (deprecated server-side); rely
+      // Opus 4.x rejects `temperature` (deprecated server-side); rely
       // on default. Sonnet path still accepts it.
       system,
       messages: [{ role: 'user', content: user }],
@@ -921,7 +921,7 @@ async function writeReport(
   lines.push('');
   lines.push(`**Dataset:** github.com/babylonhealth/primock57 — 57 mock consultations.`);
   lines.push(`**Cases run:** ${args.count} (seed: ${args.seed})`);
-  lines.push(`**Pipeline path:** direct Deepgram (nova-3-medical) + Anthropic Opus 4.7 (SOAP). L4 prompt mirrors \`apps/transcribe-md/src/worker/layers/04-generate-soap.ts:96-150\`.`);
+  lines.push(`**Pipeline path:** direct Deepgram (nova-3-medical) + Anthropic ${SOAP_MODEL} (SOAP). L4 prompt mirrors \`apps/transcribe-md/src/worker/layers/04-generate-soap.ts:96-150\`.`);
   lines.push(`**Judge:** Anthropic Sonnet 4.6, 1–10 scoring on completeness + accuracy + relevance. **Methodology v2 (post-2026-05-10 correction):** scores accuracy against the TRANSCRIPT (source of truth), not the reference note. Reference is auxiliary signal only.`);
   lines.push('');
 

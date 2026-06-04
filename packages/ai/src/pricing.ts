@@ -115,7 +115,9 @@ export function claudeCostCents(
 ): number {
   let base: number;
   switch (model) {
+    // Opus 4.8 shares 4.7's rate card ($5/M in, $25/M out) — same opus path.
     case 'claude-opus-4-7':
+    case 'claude-opus-4-8':
       base = claudeOpus47CostCents(inputTokens, outputTokens);
       break;
     case 'claude-sonnet-4-6':
@@ -139,7 +141,8 @@ export function claudeCostCents(
  *  Returns 0 for unknown models so they don't synthesize cache cost. */
 function modelInputCentsPerM(model: string): number {
   switch (model) {
-    case 'claude-opus-4-7':   return opusInputCentsPerM();
+    case 'claude-opus-4-7':
+    case 'claude-opus-4-8':   return opusInputCentsPerM();
     case 'claude-sonnet-4-6': return sonnetInputCentsPerM();
     case 'claude-haiku-4-5':
     case 'claude-haiku-4-5-20251001':
