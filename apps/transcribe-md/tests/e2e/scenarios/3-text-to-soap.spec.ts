@@ -14,6 +14,7 @@ import { resolve } from 'node:path';
 import { expect, test } from '@playwright/test';
 
 import { cleanupTestUsers } from '../helpers/cleanup';
+import { createPatientAndContinue } from '../helpers/patient';
 import { signupFreshUser } from '../helpers/signup';
 import { waitForVisitStatus } from '../helpers/waitForReady';
 
@@ -30,6 +31,8 @@ test('scenario 3: fresh signup → text → READY → sign PDF', async ({ page }
   await signupFreshUser(page, 's3');
 
   await page.goto('/visits/new');
+  // Step 1 (two-step flow): pick a patient so the capture-mode tiles render.
+  await createPatientAndContinue(page);
   await page.getByRole('button', { name: /text to soap/i }).click();
 
   // Cuid format — matches /visits/c<alphanumeric> but NOT /visits/new
