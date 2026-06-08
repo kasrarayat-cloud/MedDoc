@@ -414,17 +414,22 @@ services:
       MINIO_ORPHAN_CLEANUP_RETENTION_DAYS: ${MINIO_ORPHAN_CLEANUP_RETENTION_DAYS:-30}
       MINIO_ORPHAN_CLEANUP_CRON: ${MINIO_ORPHAN_CLEANUP_CRON:-0 3 * * 0}
     # Round 3 PR-H — A11-P1 worker liveness probe.
-    # The worker writes /tmp/worker-heartbeat (Unix-ms timestamp)
-    # every 15s via setInterval. The probe rejects a heartbeat
-    # older than 60s — that catches a deadlocked event loop, a
-    # hung Anthropic stream, or an OOM-stuck worker that hasn't
-    # been killed yet. start_period: 60s gives the boot sequence
-    # (ensureBucket + queue connect + scheduler register) time
-    # to land before the first probe.
+    # The worker writes /tmp/worker-heartbeat every 15s, but ONLY once it is
+    # genuinely ready (worker.ts gates this on BullMQ waitUntilReady), so the
+    # file's presence + freshness reflects real health.
+    # F6 (full-qa-20260604T202447Z): freshness now compares the file's MTIME to
+    # `date +%s` — BOTH in seconds. The old probe did `(date +%s%3N) - <heartbeat
+    # millis>`, but busybox/alpine `date +%s%3N` silently yields SECONDS (no %N
+    # support), so the diff was always hugely negative → `-lt 60000` always true
+    # → the probe passed for ANY existing file, stale or not (existence-only,
+    # proven). mtime-vs-`date +%s` in seconds is busybox-safe and actually
+    # rejects a >60s-stale heartbeat, so a worker that dies/disconnects after
+    # boot goes UNHEALTHY within the window. start_period: 60s covers boot
+    # (ensureBucket + waitUntilReady + scheduler register).
     healthcheck:
       test:
         - CMD-SHELL
-        - "test -f /tmp/worker-heartbeat && [ $(($(date +%s%3N) - $(cat /tmp/worker-heartbeat))) -lt 60000 ]"
+        - "test -f /tmp/worker-heartbeat && [ $(( $(date +%s) - $(stat -c %Y /tmp/worker-heartbeat) )) -lt 60 ]"
       interval: 30s
       timeout: 5s
       retries: 3
