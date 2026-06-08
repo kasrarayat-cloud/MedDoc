@@ -13,6 +13,7 @@
 import { expect, test } from '@playwright/test';
 
 import { cleanupTestUsers } from '../helpers/cleanup';
+import { createPatientAndContinue } from '../helpers/patient';
 import { signupFreshUser } from '../helpers/signup';
 
 test.afterEach(() => {
@@ -29,22 +30,31 @@ test('scenario 4: back-to-dashboard navigates from a visit page', async ({
   // default specialty from SPECIALTIES[0], so a mode-tile click is
   // valid even without opening the dropdown (T-M8 Bug 1 fix).
   await page.goto('/visits/new');
+  // Step 1 (two-step flow): pick a patient so the capture-mode tiles render.
+  await createPatientAndContinue(page);
   await page.getByRole('button', { name: /text to soap/i }).click();
 
   await page.waitForURL(/\/visits\/c[a-z0-9]{10,}/, { timeout: 15_000 });
-  const visitUrl = page.url();
 
-  // The back link is an <a href="/dashboard"> rendered by
-  // BackToDashboardLink (client component). role=link matches.
-  await page.getByRole('link', { name: /back to dashboard/i }).click();
+  // In-content back-nav is now a breadcrumb (Dashboard › Patient › Visit) — the
+  // Linear V1 redesign replaced the old inline "Back to dashboard" link. T-M8
+  // Bug 4 regression still holds: this breadcrumb link must navigate, not be
+  // eaten by an overlay. Scope to #main so we hit the breadcrumb's "Dashboard",
+  // not the sidebar's identically-named nav link.
+  await page
+    .locator('#main')
+    .getByRole('link', { name: 'Dashboard', exact: true })
+    .click();
 
   await expect(page).toHaveURL(/\/dashboard$/);
 
-  // Dashboard renders visit cards. A fresh user has exactly one,
-  // and it was the one we just created. Its href points back to
-  // the visit we came from.
-  const visitId = new URL(visitUrl).pathname.split('/').pop()!;
+  // The redesigned dashboard groups visits BY PATIENT (no per-visit anchors on
+  // the overview) — confirm the just-created visit surfaces via its patient
+  // card. Match the patient *href* (not just the name) so this can't collide
+  // with a READY-only "drafts ready to sign" row that also carries the patient
+  // name — scenario 4's draft never reaches READY, but scoping by href keeps
+  // the assertion unambiguous regardless.
   await expect(
-    page.locator(`a[href="/visits/${visitId}"]`).first()
+    page.locator('#main').locator('a[href^="/patients/"]', { hasText: 'QA Patient' }),
   ).toBeVisible({ timeout: 10_000 });
 });

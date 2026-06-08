@@ -23,6 +23,7 @@ import { resolve } from 'node:path';
 import { expect, test } from '@playwright/test';
 
 import { cleanupTestUsers } from '../helpers/cleanup';
+import { createPatientAndContinue } from '../helpers/patient';
 import { signupFreshUser } from '../helpers/signup';
 import { waitForVisitStatus } from '../helpers/waitForReady';
 
@@ -40,6 +41,8 @@ test('scenario 2: fresh signup → voice dictation → READY → sign clipboard'
   await signupFreshUser(page, 's2');
 
   await page.goto('/visits/new');
+  // Step 1 (two-step flow): pick a patient so the capture-mode tiles render.
+  await createPatientAndContinue(page);
   await page.getByRole('button', { name: /dictate live/i }).click();
 
   await page.waitForURL(/\/visits\/c[a-z0-9]{10,}/, { timeout: 15_000 });
@@ -61,9 +64,14 @@ test('scenario 2: fresh signup → voice dictation → READY → sign clipboard'
   const response = await page.request.post(uploadUrl, {
     data: audioBytes,
     headers: {
-      'content-type': 'audio/webm',
+      // The fixture is an MP3 (ID3 header) — declare it honestly. The dictation
+      // route now sniffs leading magic bytes and rejects a declared MIME that
+      // doesn't match the actual bytes (INVALID_MAGIC_BYTES, 415); audio/mpeg is
+      // an accepted dictation format. (Earlier this declared audio/webm while
+      // sending MP3 bytes — a mismatch the hardened endpoint correctly rejects.)
+      'content-type': 'audio/mpeg',
       'content-length': String(audioBytes.byteLength),
-      'x-tm-filename': 'qa-dictation.webm',
+      'x-tm-filename': 'qa-dictation.mp3',
     },
   });
   expect(
