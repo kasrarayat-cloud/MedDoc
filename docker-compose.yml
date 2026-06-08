@@ -268,8 +268,17 @@ services:
       - marketing
       - transcribe-md
     ports:
-      - "80:80"
-      - "443:443"
+      # 2026-06-03 site-down recovery: a host-level nginx now owns :80/:443 on
+      # this box (shared with LeatherERP / dealmason / dealhunter). Caddy can no
+      # longer bind the public web ports, so it is demoted to a localhost-only
+      # upstream — the host nginx terminates public TLS (Let's Encrypt, grey-
+      # cloud) and reverse-proxies the quillmd vhosts → 127.0.0.1:8443 → this
+      # Caddy, which retains per-host routing + the MODE B security headers.
+      # To restore Caddy-as-public-ingress: re-enable the two lines below AND
+      # remove the quillmd vhost from /etc/nginx (host nginx must free 80/443).
+      # - "80:80"     # disabled 2026-06-03: host nginx owns :80
+      # - "443:443"   # disabled 2026-06-03: host nginx owns :443
+      - "127.0.0.1:8443:443"
       # Security audit P1-I (2026-05-13): the legacy MODE A plaintext
       # ports (9010 = marketing, 9020 = TranscribeMD) are commented
       # out IN LOCKSTEP with the matching Caddyfile MODE A blocks.
@@ -612,7 +621,14 @@ services:
       BACKBLAZE_APPLICATION_KEY: "${BACKBLAZE_APPLICATION_KEY:-}"
       BACKBLAZE_BUCKET: "${BACKBLAZE_BUCKET:-}"
     volumes:
-      - ./backups:/backups
+      # 2026-06-08 backup-fix: destination is a named volume, NOT the in-repo
+      # ./backups bind-mount. The bind-mount lived inside the repo tree; a
+      # host-side `chown -R` flipped its owner 999->1000, so the non-root (999)
+      # container lost write access and crash-looped (8095x: "BACKUP_DIR points
+      # to a file or folder with insufficient permissions") — never producing a
+      # single backup. A named volume lives outside the tree, is owned 999:999,
+      # and is immune to repo chown/checkout. Historical dumps stay in ./backups.
+      - pgbackups:/backups
       - ./infra/postgres-backup/postscript.sh:/scripts/postscript.sh:ro
       - ./infra/backup-offsite-sync.sh:/scripts/backup-offsite-sync.sh:ro
       # h16-offsite-backup (encrypted): host-resident age keypair lives in
@@ -632,6 +648,9 @@ services:
 
 volumes:
   pgdata:
+  # prod pg_dump destination (postgres-backup service). Named volume so it
+  # survives outside the repo tree — see the backup-fix note above (2026-06-08).
+  pgbackups:
   redis_data:
   minio_data:
   caddy_data:
