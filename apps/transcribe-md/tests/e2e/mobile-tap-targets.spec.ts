@@ -47,7 +47,9 @@ const ROUTES: RouteSpec[] = [
   { path: '/visits/:READY',            label: 'visit-detail-ready', requiresVisit: 'READY' },
   { path: '/patients',                 label: 'patients' },
   { path: '/settings',                 label: 'settings' },
-  { path: '/settings/security',        label: 'settings-security' },
+  // F3 (full-qa-20260604T202447Z): the bare /settings/security has no page
+  // (404) and nothing links to it — only /settings/security/mfa exists.
+  { path: '/settings/security/mfa',    label: 'settings-security-mfa' },
 ];
 
 // Apple HIG floor (points). Browser CSS pixels at DPR 1 are equivalent.
