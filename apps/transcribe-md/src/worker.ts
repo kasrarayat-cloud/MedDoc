@@ -1348,19 +1348,34 @@ async function startCleanupWorker(): Promise<void> {
 }
 
 /** Round 3 PR-H — A11-P1 worker liveness heartbeat.
- *  Writes a Unix-timestamp file every 15s. The compose healthcheck
- *  reads this file and treats the worker as unhealthy when the
- *  timestamp is more than 60s stale, so a deadlocked event loop
- *  (Prisma deadlock, infinite-loop guard, hung Anthropic stream)
- *  surfaces as an unhealthy container instead of a silently-stuck
- *  worker. The heartbeat is decoupled from BullMQ — it fires even
- *  when the queue is empty, so an idle worker still reports healthy. */
-async function startHeartbeat(): Promise<void> {
-  const fs = await import('node:fs/promises');
+ *  Writes a Unix-timestamp file every 15s. The compose healthcheck reads it and
+ *  treats the worker as unhealthy when the timestamp is >60s stale, so a
+ *  deadlocked event loop (Prisma deadlock, infinite-loop guard, hung Anthropic
+ *  stream) surfaces as an unhealthy container instead of a silently-stuck worker.
+ *
+ *  F6 (full-qa-20260604T202447Z) — make the heartbeat HONEST:
+ *   1. START gating (in main): it is only started after worker.waitUntilReady()
+ *      resolves, so a worker that fails boot (missing AUTH_SECRET → module-load
+ *      crash) or can't reach Redis never writes it → healthcheck UNHEALTHY.
+ *   2. Per-tick liveness: each tick SKIPS the write while the shared Redis
+ *      connection isn't 'ready', so a persistent disconnect lets the file go
+ *      stale (unhealthy) within the 60s window. Transient reconnects are
+ *      tolerated — the 60s window absorbs ~3 missed 15s ticks, so a healthy
+ *      worker (whose status is 'ready') never flaps unhealthy.
+ *  Returns a handle so a graceful 'closed' can stop refreshing.
+ *  (Was: a bare setInterval(...).unref() started BEFORE the Redis connection,
+ *  so a crash-looping or disconnected worker still reported HEALTHY.) */
+async function startHeartbeat(
+  connection: ReturnType<typeof getSharedRedisConnection>
+): Promise<{ stop: () => void }> {
   const HEARTBEAT_PATH = '/tmp/worker-heartbeat';
   const HEARTBEAT_INTERVAL_MS = 15_000;
   const tick = async () => {
+    // Only assert liveness while Redis is genuinely up; otherwise let the file
+    // go stale rather than claim a health the disconnected worker doesn't have.
+    if (connection.status !== 'ready') return;
     try {
+      const fs = await import('node:fs/promises');
       await fs.writeFile(HEARTBEAT_PATH, String(Date.now()));
     } catch (err) {
       console.error(
@@ -1370,14 +1385,15 @@ async function startHeartbeat(): Promise<void> {
     }
   };
   await tick();
-  setInterval(() => void tick(), HEARTBEAT_INTERVAL_MS).unref();
+  const timer = setInterval(() => void tick(), HEARTBEAT_INTERVAL_MS);
+  timer.unref();
+  return { stop: () => clearInterval(timer) };
 }
 
 async function main() {
   log.info('transcribe-md-worker', 'booting');
   await ensureBucket();
   log.info('transcribe-md-worker', 'bucket ready');
-  await startHeartbeat();
 
   const worker = new Worker<ProcessVisitPayload>(
     QUEUE_NAME,
@@ -1449,10 +1465,24 @@ async function main() {
     }
   });
 
-  log.info('transcribe-md-worker', 'listening on queue', {
+  // F6 (full-qa-20260604T202447Z) — honest heartbeat. Do NOT write the liveness
+  // heartbeat until the worker is GENUINELY ready: waitUntilReady() resolves
+  // only once both the main + blocking Redis connections are up (the worker can
+  // fetch + process jobs). A worker that fails boot (missing AUTH_SECRET →
+  // module-load crash) or can't reach Redis never reaches here → never writes
+  // the heartbeat → the file-freshness healthcheck correctly reports UNHEALTHY.
+  // (Was: startHeartbeat ran before the Worker connected, so a boot/Redis
+  // failure still looked healthy.)
+  await worker.waitUntilReady();
+  log.info('transcribe-md-worker', 'ready — listening on queue', {
     queue: QUEUE_NAME,
     concurrency: CONCURRENCY,
   });
+  const heartbeat = await startHeartbeat(getSharedRedisConnection());
+  // Graceful shutdown stops the heartbeat so the file goes stale (unhealthy)
+  // within the 60s window. A crash kills the process (→ stale too); a persistent
+  // Redis disconnect is handled inside the tick (skips the write while down).
+  worker.on('closed', () => heartbeat.stop());
 
   // T-M12 — schedule cleanup AFTER the main worker is up. Cleanup
   // failure should never block pipeline processing.
