@@ -17,6 +17,7 @@ import { resolve } from 'node:path';
 import { expect, test } from '@playwright/test';
 
 import { cleanupTestUsers } from '../helpers/cleanup';
+import { createPatientAndContinue } from '../helpers/patient';
 import { signupFreshUser } from '../helpers/signup';
 import { waitForVisitStatus } from '../helpers/waitForReady';
 
@@ -32,6 +33,8 @@ test('scenario 1: fresh signup → audio upload → sign clipboard+PDF+DOCX', as
   await signupFreshUser(page, 's1');
 
   await page.goto('/visits/new');
+  // Step 1 (two-step flow): pick a patient so the capture-mode tiles render.
+  await createPatientAndContinue(page);
   await page.getByRole('button', { name: /upload audio/i }).click();
 
   await page.waitForURL(/\/visits\/c[a-z0-9]{10,}/, { timeout: 15_000 });

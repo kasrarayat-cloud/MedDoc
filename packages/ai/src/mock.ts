@@ -74,7 +74,74 @@ const MOCK_COMPLETE_FIXTURES: Partial<Record<ModelCallPurpose, unknown>> = {
   tm_patient_summary: {
     summary: '[MOCK] Your visit went well. Drink fluids, rest, and come back if symptoms worsen.',
   },
+  // Note-format customization (Phase 2a). parseNoteToTemplate() makes two
+  // complete() calls — without fixtures here the mock throws, so the whole
+  // upload→parse→review→activate flow can't run under MOCK_AI_CALLS (full-qa
+  // F7). `tm_template_parse` extracts a note FORMAT (ParsedTemplateLlmSchema);
+  // a small, realistic 4-section template with no patient specifics — the lone
+  // defaultText is generic normal-exam boilerplate, so the PHI gate stays clean.
+  tm_template_parse: {
+    name: '[MOCK] General Follow-up',
+    // null = "All my visits". Avoids coupling the fixture to the specialty
+    // taxonomy; the parse schema allows encounterType to be null.
+    encounterType: null,
+    sections: [
+      {
+        key: 'subjective',
+        label: 'Subjective',
+        order: 0,
+        formatHint: 'prose',
+        styleInstructions: '[MOCK] Brief HPI in the patient’s words; one short paragraph.',
+        defaultText: null,
+      },
+      {
+        key: 'objective',
+        label: 'Objective',
+        order: 1,
+        formatHint: 'bullets',
+        styleInstructions: '[MOCK] Vitals first, then a focused exam by system.',
+        defaultText: '[MOCK] General: well-appearing, no acute distress. Normal exam.',
+      },
+      {
+        key: 'assessment',
+        label: 'Assessment',
+        order: 2,
+        formatHint: 'numbered',
+        styleInstructions: '[MOCK] One numbered line per active problem.',
+        defaultText: null,
+      },
+      {
+        key: 'plan',
+        label: 'Plan',
+        order: 3,
+        formatHint: 'bullets',
+        styleInstructions: '[MOCK] Action items per problem; meds and follow-up interval.',
+        defaultText: null,
+      },
+    ],
+    styleProfile: {
+      tense: 'past',
+      tone: 'concise clinical',
+      abbreviations: 'standard medical',
+    },
+    flags: [],
+  },
+  // PHI scan over the parsed fields (PhiScanSchema). CLEAN by default so the
+  // happy-path parse succeeds under MOCK. The FLAGGED variant
+  // (MOCK_TEMPLATE_PHI_SCAN_FLAGGED) is returned instead when
+  // MOCK_TEMPLATE_PHI_FLAG=true, so the PHI-gate REJECT path is testable too.
+  tm_template_phi_scan: { phiFields: [], anyUncertain: false },
 };
+
+// Note-format PHI gate — the FLAGGED counterpart to the clean
+// `tm_template_phi_scan` fixture above. `anyUncertain: true` forces the
+// fail-safe gate to reject/scrub even though it also names a field. Exported
+// for direct unit-test use, and returned by mockComplete() when
+// MOCK_TEMPLATE_PHI_FLAG=true so the reject path is reachable under MOCK.
+export const MOCK_TEMPLATE_PHI_SCAN_FLAGGED = {
+  phiFields: ['sections[1].defaultText'],
+  anyUncertain: true,
+} as const;
 
 // ---------------------------------------------------------------------------
 // Fixtures for modelClient.completeText() — plain-text paths.
@@ -161,6 +228,16 @@ export function mockComplete<T>(args: {
   purpose: ModelCallPurpose;
   schema: ZodType<T>;
 }): T {
+  // Note-format PHI gate: opt into the FLAGGED scan result (the reject path)
+  // via env. The mock keys on `purpose` only and can't see the input, so a
+  // content-aware "this note has PHI" branch isn't possible; the env flag is
+  // the deterministic knob. Unset (the default) returns the clean fixture.
+  if (
+    args.purpose === 'tm_template_phi_scan' &&
+    process.env.MOCK_TEMPLATE_PHI_FLAG === 'true'
+  ) {
+    return args.schema.parse(MOCK_TEMPLATE_PHI_SCAN_FLAGGED);
+  }
   const fixture = MOCK_COMPLETE_FIXTURES[args.purpose];
   if (fixture === undefined) {
     throw new Error(
