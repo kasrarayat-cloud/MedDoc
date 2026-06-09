@@ -112,6 +112,22 @@ jobs:
           CI: "true"
         run: npx playwright test --project=chromium
 
+      # ── Note-format PARSE-time PHI rejection (scenario 23). It needs the app's
+      #    MOCK_TEMPLATE_PHI_FLAG=true, which flips the mocked PHI scan to its
+      #    flagged variant so EVERY parse rejects — incompatible with the
+      #    happy-path parses the main suite depends on. So recreate just the app
+      #    with the flag and run the isolated `phi-reject` project against it. ──
+      - name: Recreate app with the parse-time PHI-reject flag
+        run: MOCK_TEMPLATE_PHI_FLAG=true docker compose -f docker-compose.qa.yml up -d --wait transcribe-md
+
+      - name: Run E2E (phi-reject project — parse-time PHI rejection)
+        working-directory: apps/transcribe-md
+        env:
+          PW_BASE_URL: http://localhost:9020
+          NOTE_FORMAT_E2E: "1"
+          CI: "true"
+        run: npx playwright test --project=phi-reject
+
       # ── Debuggability for a red run. ──
       - name: App + worker logs (on failure)
         if: failure()
