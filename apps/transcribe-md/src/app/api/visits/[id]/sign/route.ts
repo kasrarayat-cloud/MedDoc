@@ -1,9 +1,9 @@
 // ============================================================================
 // POST /api/visits/[id]/sign (T-M7)
 // ----------------------------------------------------------------------------
-// Replaces the old T-M4 signVisitAction with a unified sign + deliver
-// path. Accepts a multi-destination body so the doctor can, in one
-// click, freeze the note AND paste-to-Epic AND email themselves AND
+// The unified sign + deliver path (T-M7) — the SOLE path that transitions a
+// visit READY→SIGNED. Accepts a multi-destination body so the doctor can, in
+// one click, freeze the note AND paste-to-Epic AND email themselves AND
 // download the PDF.
 //
 // Body: {
@@ -45,6 +45,7 @@ import { apiError, withApiHandler } from '@/lib/api-error';
 import { redactPhi } from '@meddoc/ai';
 import { log } from '@/lib/log';
 import { logAudit } from '@/lib/audit';
+import { criticalWarningRefs } from '@/lib/rx-warnings';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -171,35 +172,36 @@ export const POST = withApiHandler<{ id: string }>(
       return apiError('visit has no SOAP to sign', 409);
     }
 
-    // F5-1: Critical Rx warnings require an override audit row before
-    // sign. Pre-fix the sign endpoint accepted the transition without
-    // checking — the override modal was UI-only enforcement and direct
-    // API callers (or scripted clients) bypassed the audit completely.
-    // Already-SIGNED visits skip this guard; the gate fires on the
-    // READY → SIGNED transition only.
+    // F5-1 + fix/rx-override-gate-correlation: Critical Rx warnings require a
+    // PER-WARNING override before sign. Pre-F5-1 the endpoint accepted the
+    // transition without checking (the override modal was UI-only, so direct/
+    // scripted callers bypassed it). F5-1 added a server gate but compared a
+    // BARE COUNT of severity='critical' override rows against the critical-
+    // warning count — which a caller could satisfy by minting fabricated/
+    // duplicate 'critical' rows. The gate now clears the READY→SIGNED
+    // transition ONLY when EVERY persisted critical warning has a matching
+    // override keyed by its REAL id (rx-warning-<index>). recordOverride
+    // validates the id+severity against rxDrafts on write; this coverage check
+    // is the second line of defence at sign time. Already-SIGNED visits skip
+    // the gate; it fires on the READY → SIGNED transition only.
     if (visit.status === TranscribeVisitStatus.READY) {
-      const rxBlob = visit.rxDrafts as
-        | {
-            warnings?: Array<{
-              severity?: string;
-              rx_drug?: string;
-              message?: string;
-            }>;
-          }
-        | null;
-      const criticalWarnings = (rxBlob?.warnings ?? []).filter(
-        (w) => w?.severity === 'critical'
-      );
-      if (criticalWarnings.length > 0) {
-        const overrideCount = await prisma.rxWarningOverride.count({
+      const criticalRefs = criticalWarningRefs(visit.rxDrafts);
+      if (criticalRefs.length > 0) {
+        const overrideRows = await prisma.rxWarningOverride.findMany({
           where: { visitId, severity: 'critical' },
+          select: { warningId: true },
         });
-        if (overrideCount < criticalWarnings.length) {
+        const overriddenIds = new Set(
+          overrideRows.map((o: { warningId: string }) => o.warningId)
+        );
+        const unmet = criticalRefs.filter((ref) => !overriddenIds.has(ref.id));
+        if (unmet.length > 0) {
           log.warn('api:visits:sign', 'override required', {
             userId,
             visitId,
-            criticalCount: criticalWarnings.length,
-            overrideCount,
+            criticalCount: criticalRefs.length,
+            overriddenCount: overriddenIds.size,
+            unmetCount: unmet.length,
           });
           void logAudit({
             action: 'RX_SIGN_BLOCKED_NO_OVERRIDE',
@@ -208,18 +210,20 @@ export const POST = withApiHandler<{ id: string }>(
             success: false,
             errorCode: 'OVERRIDE_REQUIRED',
             metadata: {
-              criticalCount: criticalWarnings.length,
-              overrideCount,
+              criticalCount: criticalRefs.length,
+              overriddenCount: overriddenIds.size,
+              unmetCount: unmet.length,
             },
           });
           return NextResponse.json(
             {
               error: 'Critical Rx warnings require an override before signing.',
               code: 'OVERRIDE_REQUIRED',
-              warnings: criticalWarnings.map((w) => ({
-                severity: w.severity ?? 'critical',
-                drug: w.rx_drug ?? '',
-                message: w.message ?? '',
+              warnings: unmet.map((ref) => ({
+                severity: 'critical',
+                drug: ref.warning.rx_drug ?? '',
+                message: ref.warning.message ?? '',
+                warningId: ref.id,
               })),
             },
             { status: 422 }

@@ -81,6 +81,7 @@ export default defineConfig({
         '**/a11y.spec.ts',
         '**/23-note-format-phi-parse-reject.spec.ts',
         '**/24-rx-clinical-safety.spec.ts',
+        '**/25-rx-override-correlation.spec.ts',
       ],
       use: { ...devices['Desktop Chrome'] },
     },
@@ -109,12 +110,17 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
     {
-      // Rx clinical-safety (scenario 24). Runs ONLY via `--project=rx-safety`,
-      // against an app started with MOCK_RX_WARNINGS=true (the populated
-      // tm_rx_drafting fixture with a critical warning). Kept out of the default
-      // run so that critical warning never blocks the other specs' sign flows.
+      // Rx clinical-safety (scenarios 24 + 25). Runs ONLY via
+      // `--project=rx-safety`, against an app started with MOCK_RX_WARNINGS=true
+      // (the populated tm_rx_drafting fixture with a critical warning). Kept out
+      // of the default run so that critical warning never blocks the other
+      // specs' sign flows. Scenario 25 is the per-warning-correlation regression
+      // (fix/rx-override-gate-correlation) and shares the same app env.
       name: 'rx-safety',
-      testMatch: '**/24-rx-clinical-safety.spec.ts',
+      testMatch: [
+        '**/24-rx-clinical-safety.spec.ts',
+        '**/25-rx-override-correlation.spec.ts',
+      ],
       use: { ...devices['Desktop Chrome'] },
     },
   ],

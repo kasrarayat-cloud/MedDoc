@@ -5,10 +5,8 @@ import { z } from 'zod';
 
 import prisma from '@meddoc/db';
 import { TranscribeVisitStatus } from '@prisma/client';
-import { redactPhi } from '@meddoc/ai';
 import { requireSession } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
-import { captureEditPattern } from '@/lib/edit-tracking';
 
 const SaveSoapSchema = z.object({
   visitId: z.string().min(1),
@@ -50,10 +48,9 @@ export interface SaveSoapResult {
  *  `audit_logs` with intermediate draft churn for coverage we
  *  already get elsewhere:
  *
- *    - **Legal audit event**: `VISIT_SIGNED` fires from
- *      `signVisitAction` (this file, ~line 181) and from the
- *      sign route at `app/api/visits/[id]/sign/route.ts:268`.
- *      Closed by PR #251 / FIND-P1-001.
+ *    - **Legal audit event**: `VISIT_SIGNED` fires from the sign
+ *      route at `app/api/visits/[id]/sign/route.ts` — the sole
+ *      READY→SIGNED path. Closed by PR #251 / FIND-P1-001.
  *
  *    - **Per-save evidence**: `soapVersion` increments here on
  *      every successful update (counter only — `soapFinal` itself
@@ -63,7 +60,7 @@ export interface SaveSoapResult {
  *
  *    - **Cumulative edit forensics**: `DoctorEditPattern` (table
  *      `doctor_edit_patterns`) captures one row per signed visit
- *      via `captureEditPattern(...)` in `signVisitAction` — the
+ *      via `captureEditPattern(...)` in the sign route — the
  *      cumulative `originalSoap` (L6's AI output) → `editedSoap`
  *      (what the doctor signed) diff plus a char-level Levenshtein
  *      distance. This is the ML/quality surface, not a per-save
@@ -162,85 +159,12 @@ export async function saveSoapDraftAction(
   return { ok: true, newVersion: updated.soapVersion };
 }
 
-/** Freezes the current soapFinal into signedSoap and flips status to
- *  SIGNED. Idempotent — signing an already-signed visit is a no-op
- *  from the client's perspective. */
-export async function signVisitAction(
-  visitId: string
-): Promise<SaveSoapResult> {
-  const session = await requireSession();
-
-  const visit = await prisma.transcribeVisit.findUnique({
-    where: { id: visitId },
-    select: {
-      id: true,
-      userId: true,
-      status: true,
-      soapFinal: true,
-      signedAt: true,
-      deletedAt: true,
-      archivedAt: true,
-    },
-  });
-  if (!visit || visit.userId !== session.user.id) {
-    return { ok: false, error: 'Visit not found.' };
-  }
-  // T-M17.3: never re-sign a trashed or archived visit silently. The
-  // UI hides these but a stale tab could still reach here.
-  if (visit.deletedAt !== null || visit.archivedAt !== null) {
-    return { ok: false, error: 'Visit is no longer active. Restore it first.' };
-  }
-  if (visit.status === TranscribeVisitStatus.SIGNED) {
-    return { ok: true };
-  }
-  if (visit.status !== TranscribeVisitStatus.READY) {
-    return { ok: false, error: 'Note is still processing.' };
-  }
-  if (!visit.soapFinal?.trim()) {
-    return { ok: false, error: 'No SOAP content to sign.' };
-  }
-
-  await prisma.transcribeVisit.update({
-    where: { id: visitId },
-    data: {
-      status: TranscribeVisitStatus.SIGNED,
-      signedSoap: visit.soapFinal,
-      signedAt: new Date(),
-    },
-  });
-
-  // HIPAA audit (§164.312(b)) — mirrors the route-path emit at
-  // app/api/visits/[id]/sign/route.ts. `source: 'server_action'`
-  // disambiguates the action-path vs route-path surfaces for
-  // downstream telemetry. Fire-and-forget: logAudit never throws.
-  void logAudit({
-    action: 'VISIT_SIGNED',
-    targetType: 'TranscribeVisit',
-    targetId: visitId,
-    metadata: { source: 'server_action' },
-  });
-
-  // T-M14.1 + FIND-P1-005 (2026-05-14): fire-and-forget edit-pattern
-  // capture. captureEditPattern swallows its own async errors by
-  // design (per its docstring), but a SYNCHRONOUS throw (constructor
-  // error, third-party dep regression) would propagate up and break
-  // the sign flow. The `Promise.resolve().then(...)` wrap routes
-  // both async + sync throws into the .catch handler — same pattern
-  // lib/audit.ts:198 uses for auth(). Errors are redacted before
-  // logging since Prisma error messages can echo column data.
-  Promise.resolve()
-    .then(() => captureEditPattern({ visitId, doctorId: session.user.id }))
-    .catch((err) => {
-      console.warn(
-        `[actions:signVisit] captureEditPattern failed for visit=${visitId}:`,
-        redactPhi(err instanceof Error ? err.message : String(err ?? ''))
-      );
-    });
-
-  revalidatePath(`/visits/${visitId}`);
-  revalidatePath('/dashboard');
-  return { ok: true };
-}
+// NOTE: the legacy `signVisitAction` server action was removed in
+// fix/rx-override-gate-correlation. It was the pre-T-M7 sign path, orphaned
+// (no client/route/job referenced it) yet still registered as a server action
+// — and, critically, it flipped READY→SIGNED with NO critical-Rx-warning
+// override gate. The unified POST /api/visits/[id]/sign route is now the SOLE
+// path that transitions a visit to SIGNED, and it enforces the gate.
 
 const SpeakerRoleKeys = z.enum(['doctor', 'patient', 'family', 'other', 'unknown']);
 

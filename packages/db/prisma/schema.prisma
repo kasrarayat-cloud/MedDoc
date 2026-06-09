@@ -2102,13 +2102,20 @@ model RxWarningOverride {
   /// for joining back to the line in replay without parsing JSON.
   rxLineNumber Int
 
-  /// Worker-emitted stable identifier for the warning — a hash of
-  /// (severity + headline + rxLineNumber) at worker time.
+  /// Canonical warning identity — the positional id `rx-warning-<index>`
+  /// of the warning in TranscribeVisit.rxDrafts.warnings[]. Derived by
+  /// `warningIdForIndex` in apps/transcribe-md/src/lib/rx-warnings.ts (the
+  /// single source of truth shared by the rail client, recordOverride, and
+  /// the sign gate). recordOverride VALIDATES a submitted warningId against
+  /// the persisted warnings before insert, so fabricated/guessed ids are
+  /// never written. (NB: not a worker-emitted hash — the worker emits no id.)
   warningId String
 
-  /// Frozen 'critical' | 'warning' | 'info' at override time. Kept
-  /// as a raw string so schema changes to the client-side enum don't
-  /// invalidate historical rows.
+  /// Frozen rail severity ('critical' | 'serious' | 'moderate' | 'info') at
+  /// override time. Kept as a raw string so schema changes to the client-side
+  /// enum don't invalidate historical rows. Only 'critical' rows are counted
+  /// by the sign gate. recordOverride validates this against the warning's
+  /// server-derived severity (mapWorkerSeverity), so it can't be spoofed.
   severity String
 
   /// Frozen copy of the warning's headline — compliance view doesn't
@@ -2125,11 +2132,14 @@ model RxWarningOverride {
   overriddenAt DateTime @default(now()) @db.Timestamptz(6)
 
   /// Round 3 PR-E (A09-P0-001) — same (visit, warning) pair can be
-  /// re-clicked by an anxious doctor or a flaky network retry. Without
-  /// this constraint the sign-gate's `count(distinct visit)` could be
-  /// fooled into permitting a sign by inflating the override count
-  /// while leaving warnings actually un-overridden. Enforced at the
-  /// DB layer; recordOverride() upserts on this key.
+  /// re-clicked by an anxious doctor or a flaky network retry; this
+  /// constraint keeps that idempotent (one row per real warning). The
+  /// sign gate now requires a matching override for EACH critical
+  /// warning's real id (apps/transcribe-md/.../sign/route.ts), so the
+  /// uniqueness here also stops duplicate rows from inflating coverage.
+  /// recordOverride() does NOT upsert — it catches P2002 and returns the
+  /// original row, preserving the first overriddenAt/reason for the audit
+  /// trail (lib/rx-warning-audit.ts).
   @@unique([visitId, warningId], name: "rx_warning_overrides_visit_warning_unique", map: "rx_warning_overrides_visitId_warningId_key")
   @@index([visitId])
   @@index([overriddenBy])
