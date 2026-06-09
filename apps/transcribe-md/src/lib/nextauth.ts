@@ -22,7 +22,7 @@ import * as Sentry from '@sentry/nextjs';
 
 import authConfig from '@/lib/auth.config';
 import prisma from '@meddoc/db';
-import type { UserRole } from '@meddoc/auth';
+import { revokeSession, revokeAllUserSessions, type UserRole } from '@meddoc/auth';
 import { Product } from '@prisma/client';
 import { redactPhi } from '@meddoc/ai';
 import { isEmailDeliveryEnabled } from '@/lib/email-enabled';
@@ -352,6 +352,26 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token && typeof token === 'object' && 'sub' in token
           ? ((token as { sub?: string }).sub ?? null)
           : null;
+      // Revoke the server-side UserSession row on sign-out. Without this only
+      // the cookie is cleared and the row survives — so a JWT that lingers
+      // in-flight (e.g. the post-sign-out /login redirect load racing the
+      // cookie-clear) re-validates the session and re-mints the cookie,
+      // intermittently leaving the user signed in. Revoke by the token's
+      // sessionId claim, with a userId fallback. Fires for EVERY sign-out path
+      // (TopNav signOut(), the menu, the API route).
+      const sessionId =
+        token && typeof token === 'object' && 'sessionId' in token
+          ? ((token as { sessionId?: string }).sessionId ?? null)
+          : null;
+      try {
+        if (sessionId) await revokeSession(sessionId);
+        else if (userId) await revokeAllUserSessions(userId);
+      } catch (err) {
+        console.error(
+          '[auth:signOut] session revoke failed',
+          redactPhi(err instanceof Error ? err.message : String(err)),
+        );
+      }
       if (userId) {
         void logAudit({ action: 'LOGOUT', userId });
       }
