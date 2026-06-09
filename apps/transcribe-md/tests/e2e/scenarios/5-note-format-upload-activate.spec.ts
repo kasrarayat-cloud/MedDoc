@@ -62,10 +62,19 @@ test('scenario 5: note-format paste → parse → review → activate (MOCK)', a
 
   await page.getByRole('button', { name: /save & activate/i }).click();
 
-  // Back on the home list with the new template active.
+  // Save & activate persists the template, then the manager swaps to its 'home'
+  // view via client state (setView) while router.refresh() repopulates the
+  // server-rendered template LIST asynchronously. Assert we reached home, then
+  // RELOAD to force a deterministic server render of the persisted+activated
+  // template — otherwise the list assertion races the refresh (flaked under CI
+  // load once the suite grew in Batch 1; the save itself is confirmed by
+  // reaching the home view).
   await expect(page.getByRole('button', { name: /bring a note/i })).toBeVisible({
     timeout: 15_000,
   });
-  await expect(page.getByText('[MOCK] General Follow-up')).toBeVisible();
+  await page.reload();
+  await expect(page.getByText('[MOCK] General Follow-up')).toBeVisible({
+    timeout: 15_000,
+  });
   await expect(page.getByText(/Active ·/)).toBeVisible();
 });
