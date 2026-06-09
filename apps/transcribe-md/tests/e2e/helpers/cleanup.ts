@@ -45,6 +45,21 @@ function psql(sql: string): void {
  *  anything. Logs how many users were deleted so the test output
  *  shows whether cleanup is actually running. */
 export function cleanupTestUsers(): void {
+  // audit_logs.practiceId has an IMMEDIATE FK to practices, so the practices
+  // DELETE in the cascade below cannot proceed while audit rows reference the
+  // practice — and a single multi-CTE statement can't fix that (data-modifying
+  // CTE order is undefined and each CTE sees the statement-start snapshot, so
+  // the practices DELETE still sees the un-deleted audit rows → the whole
+  // statement rolls back). The page surfaces (VIEWED_PATIENT_LIST / _FILE /
+  // VISIT_LIST) write these rows, so Phase 2's patient/visit specs trip it.
+  // Delete the test practices' audit rows FIRST, in their own guarded
+  // statement (test data only — the db-guard still forbids prod).
+  const auditSql = `
+    DELETE FROM audit_logs
+    WHERE "practiceId" IN (
+      SELECT "practiceId" FROM users WHERE email LIKE '${TEST_EMAIL_PREFIX}%'
+    );
+  `;
   const sql = `
     WITH target AS (
       SELECT id, "practiceId"
@@ -83,6 +98,7 @@ export function cleanupTestUsers(): void {
     SELECT COUNT(*) FROM deleted_users;
   `;
   try {
+    psql(auditSql);
     psql(sql);
   } catch (err) {
     // Don't fail the whole suite if cleanup hits a transient DB
