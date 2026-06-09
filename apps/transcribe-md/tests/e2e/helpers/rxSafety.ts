@@ -66,6 +66,27 @@ export function countCriticalOverrides(visitId: string): number {
   );
 }
 
+/** Insert a fabricated severity='critical' override row DIRECTLY into the DB,
+ *  bypassing recordOverride's server-side validation. Simulates the override-
+ *  count-inflation attack: a caller minting bogus 'critical' rows whose
+ *  `warningId` corresponds to NO real warning on the visit. The hardened sign
+ *  gate must not let these clear the critical-warning coverage. `overriddenBy`
+ *  is set to the visit's own owner so the row is realistic + the User FK holds.
+ *  (fix/rx-override-gate-correlation regression scaffolding.) */
+export function seedFabricatedCriticalOverride(
+  visitId: string,
+  warningId: string,
+): void {
+  const id = `fab-${visitId}-${warningId}`;
+  psql(
+    `INSERT INTO rx_warning_overrides ` +
+      `(id, "visitId", "rxLineNumber", "warningId", severity, headline, reason, "overriddenBy", "overriddenAt") ` +
+      `SELECT ${lit(id)}, ${lit(visitId)}, 1, ${lit(warningId)}, 'critical', ` +
+      `'fabricated', 'fabricated inflation row — must not clear the gate', ` +
+      `v."userId", NOW() FROM transcribe_visits v WHERE v.id = ${lit(visitId)};`,
+  );
+}
+
 export interface RxOverrideRow {
   warningId: string;
   /** NB: the OVERRIDE-ROW severity vocabulary is the rail's frozen
