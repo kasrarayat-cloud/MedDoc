@@ -112,21 +112,25 @@ jobs:
           CI: "true"
         run: npx playwright test --project=chromium
 
-      # ── Note-format PARSE-time PHI rejection (scenario 23). It needs the app's
-      #    MOCK_TEMPLATE_PHI_FLAG=true, which flips the mocked PHI scan to its
-      #    flagged variant so EVERY parse rejects — incompatible with the
-      #    happy-path parses the main suite depends on. So recreate just the app
-      #    with the flag and run the isolated `phi-reject` project against it. ──
-      - name: Recreate app with the parse-time PHI-reject flag
-        run: MOCK_TEMPLATE_PHI_FLAG=true docker compose -f docker-compose.qa.yml up -d --wait transcribe-md
+      # ── Flag-gated MOCK fixtures that can't share the main suite's app env:
+      #    • MOCK_TEMPLATE_PHI_FLAG=true → every note-format parse rejects
+      #      (scenario 23, phi-reject project) — flips the mocked PHI scan flagged.
+      #    • MOCK_RX_WARNINGS=true → L7c emits a critical Rx warning on every visit
+      #      (scenario 24, rx-safety project) — would block every other spec's sign.
+      #    The two flags are independent (different mock purposes), so recreate the
+      #    app + worker once with both and run both isolated projects. ──
+      - name: Recreate app + worker with the flag-gated MOCK fixtures
+        run: >
+          MOCK_TEMPLATE_PHI_FLAG=true MOCK_RX_WARNINGS=true
+          docker compose -f docker-compose.qa.yml up -d --wait transcribe-md transcribe-md-worker
 
-      - name: Run E2E (phi-reject project — parse-time PHI rejection)
+      - name: Run E2E (flag-on projects — phi-reject + rx-safety)
         working-directory: apps/transcribe-md
         env:
           PW_BASE_URL: http://localhost:9020
           NOTE_FORMAT_E2E: "1"
           CI: "true"
-        run: npx playwright test --project=phi-reject
+        run: npx playwright test --project=phi-reject --project=rx-safety
 
       # ── Debuggability for a red run. ──
       - name: App + worker logs (on failure)

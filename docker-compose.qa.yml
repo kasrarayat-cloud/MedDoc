@@ -133,6 +133,13 @@ services:
       # which flips the mocked PHI scan to its FLAGGED variant so every parse
       # rejects. Only honored under MOCK_AI_CALLS — never touches a real call.
       MOCK_TEMPLATE_PHI_FLAG: "${MOCK_TEMPLATE_PHI_FLAG:-}"
+      # Rx clinical-safety (E2E scenario 24). Default empty (off) so signing
+      # isn't blocked elsewhere; the e2e workflow recreates the worker with
+      # MOCK_RX_WARNINGS=true for the dedicated rx-safety pass, which returns the
+      # populated tm_rx_drafting fixture (a critical + major + minor warning).
+      # L7c runs in the WORKER; set here on the app too for symmetry (harmless —
+      # the app never calls tm_rx_drafting). Only honored under MOCK_AI_CALLS.
+      MOCK_RX_WARNINGS: "${MOCK_RX_WARNINGS:-}"
       ANTHROPIC_API_KEY: mock-key-qa
       DEEPGRAM_API_KEY: mock-key-qa
     healthcheck:
@@ -168,6 +175,11 @@ services:
       MINIO_USE_SSL: "false"
       TRANSCRIBE_MD_WORKER_CONCURRENCY: "2"
       MOCK_AI_CALLS: "true"
+      # Rx clinical-safety (E2E scenario 24): L7c rx-drafting runs HERE. Default
+      # empty (off); the e2e workflow recreates this worker with
+      # MOCK_RX_WARNINGS=true for the rx-safety pass so new visits get the
+      # populated tm_rx_drafting fixture (critical + major + minor warnings).
+      MOCK_RX_WARNINGS: "${MOCK_RX_WARNINGS:-}"
       ANTHROPIC_API_KEY: mock-key-qa
       DEEPGRAM_API_KEY: mock-key-qa
 
