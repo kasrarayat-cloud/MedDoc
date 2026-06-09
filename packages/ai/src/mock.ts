@@ -64,6 +64,10 @@ const MOCK_COMPLETE_FIXTURES: Partial<Record<ModelCallPurpose, unknown>> = {
   },
   tm_icd_coding: { codes: [] },
   tm_cpt_coding: { em: null },
+  // EMPTY by default → no prescriptions/warnings, so the existing specs that
+  // sign visits aren't blocked by a critical Rx warning. The populated variant
+  // (MOCK_RX_DRAFTING_WITH_WARNINGS) is returned instead when MOCK_RX_WARNINGS=true,
+  // so the Rx warnings rail + critical-override sign-gate are testable under MOCK.
   tm_rx_drafting: {},
   tm_referrals: {},
   // Layer 7e calls modelClient.complete<PatientSummaryResult>({ schema }),
@@ -141,6 +145,74 @@ const MOCK_COMPLETE_FIXTURES: Partial<Record<ModelCallPurpose, unknown>> = {
 export const MOCK_TEMPLATE_PHI_SCAN_FLAGGED = {
   phiFields: ['sections[1].defaultText'],
   anyUncertain: true,
+} as const;
+
+// Rx & clinical-safety (Layer 7c) — the POPULATED tm_rx_drafting variant.
+// Returned by mockComplete() when MOCK_RX_WARNINGS=true so the Rx warnings rail,
+// the critical-override flow, and the sign-time override GATE are testable under
+// MOCK (the default fixture is {} so signing isn't blocked elsewhere). Shapes
+// satisfy the RxResult/Prescription/RxWarning Zod schemas in 07c-rx-drafting.ts.
+// One CRITICAL warning (gates sign), one major + one minor (inform only). L7c's
+// deterministic validateRxDose floor appends one extra MINOR here (warfarin is
+// flagged complex-dosing); it adds NO critical — the test patient has no
+// allergies (no contraindication match) and the doses are in range / the drugs
+// are all in the verified dose DB — so the critical count stays exactly 1.
+// Actions kept to the new|continue subset that the export wire-type
+// (visit-export.ts) also accepts.
+export const MOCK_RX_DRAFTING_WITH_WARNINGS = {
+  prescriptions: [
+    {
+      drug: 'Warfarin',
+      strength: '5 mg',
+      form: 'tablet',
+      sig: 'Take 1 tablet by mouth once daily',
+      quantity: '30',
+      refills: '0',
+      action: 'new',
+      evidence_quote: '[MOCK] start warfarin for new atrial fibrillation',
+    },
+    {
+      drug: 'Amoxicillin',
+      strength: '500 mg',
+      form: 'capsule',
+      sig: 'Take 1 capsule by mouth three times daily',
+      quantity: '21',
+      refills: '0',
+      action: 'new',
+      evidence_quote: '[MOCK] treat acute bacterial sinusitis',
+    },
+    {
+      drug: 'Lisinopril',
+      strength: '10 mg',
+      form: 'tablet',
+      sig: 'Take 1 tablet by mouth once daily',
+      quantity: '30',
+      refills: '3',
+      action: 'continue',
+      evidence_quote: '[MOCK] continue home lisinopril for hypertension',
+    },
+  ],
+  warnings: [
+    {
+      severity: 'critical',
+      rx_drug: 'Warfarin',
+      message:
+        '[MOCK] Critical interaction: warfarin + amoxicillin can raise INR and bleeding risk — confirm the indication and plan close INR monitoring.',
+      evidence_quote: '[MOCK] both newly started this visit',
+    },
+    {
+      severity: 'major',
+      rx_drug: 'Lisinopril',
+      message: '[MOCK] Major: monitor renal function and serum potassium on an ACE inhibitor.',
+      evidence_quote: null,
+    },
+    {
+      severity: 'minor',
+      rx_drug: 'Amoxicillin',
+      message: '[MOCK] Minor: advise taking amoxicillin with food to reduce GI upset.',
+      evidence_quote: null,
+    },
+  ],
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -237,6 +309,16 @@ export function mockComplete<T>(args: {
     process.env.MOCK_TEMPLATE_PHI_FLAG === 'true'
   ) {
     return args.schema.parse(MOCK_TEMPLATE_PHI_SCAN_FLAGGED);
+  }
+  // Rx & clinical-safety (Layer 7c): opt into a populated draft (prescriptions +
+  // critical/major/minor warnings) via env, so the Rx warnings rail + sign-time
+  // override gate are exercisable under MOCK. Default (unset) returns the empty
+  // fixture so visits sign without an Rx block.
+  if (
+    args.purpose === 'tm_rx_drafting' &&
+    process.env.MOCK_RX_WARNINGS === 'true'
+  ) {
+    return args.schema.parse(MOCK_RX_DRAFTING_WITH_WARNINGS);
   }
   const fixture = MOCK_COMPLETE_FIXTURES[args.purpose];
   if (fixture === undefined) {
