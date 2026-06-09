@@ -24,17 +24,34 @@
 
 import { execSync } from 'node:child_process';
 
-const COMPOSE = 'docker compose -f /opt/meddoc-pro/docker-compose.yml';
+import { assertNonProdDbName } from '@meddoc/db/guard';
+
+import { QA_COMPOSE as COMPOSE, QA_DB as SEED_DB } from './qa-compose';
+
+// Safe-by-default: the compose path targets the ISOLATED meddoc-qa stack +
+// `meddoc_qa_test`, NOT prod — same F1/F4 posture as cleanup.ts (was hardwired
+// to docker-compose.yml / db `meddoc`, so the E2E gate couldn't seed and
+// mobile-tap-targets' visit-detail-ready route always skipped). Resolution +
+// the fail-closed db-guard live in ./qa-compose.
 
 /** PSQL_BIN, when set by CI, is a full prefix like
- *  `psql "postgresql://meddoc:meddoc@localhost:5432/meddoc"`. The CI
- *  workflow sets this so the spec doesn't need a docker daemon. */
+ *  `psql "postgresql://meddoc:meddoc@localhost:5432/meddoc"`. The a11y workflow
+ *  sets this so the spec doesn't need a docker daemon — a trusted CI channel
+ *  pointed at that workflow's own throwaway Postgres sidecar (named `meddoc`),
+ *  so it bypasses the compose path + the qa-stack db-guard. */
 function psql(sql: string): string {
   const psqlBin = process.env.PSQL_BIN;
-  const cmd = psqlBin
-    ? `${psqlBin} -A -t -c "${sql.replace(/"/g, '\\"')}"`
-    : `${COMPOSE} exec -T postgres psql -U meddoc -d meddoc -A -t -c "${sql.replace(/"/g, '\\"')}"`;
-  return execSync(cmd, { encoding: 'utf8' }).trim();
+  if (psqlBin) {
+    return execSync(`${psqlBin} -A -t -c "${sql.replace(/"/g, '\\"')}"`, {
+      encoding: 'utf8',
+    }).trim();
+  }
+  // Compose path → the isolated qa stack. FAIL-CLOSED: never seed a prod DB.
+  assertNonProdDbName(SEED_DB);
+  return execSync(
+    `${COMPOSE} exec -T postgres psql -U meddoc -d ${SEED_DB} -A -t -c "${sql.replace(/"/g, '\\"')}"`,
+    { encoding: 'utf8' },
+  ).trim();
 }
 
 export interface SeededVisitIds {

@@ -19,15 +19,11 @@ import { execSync } from 'node:child_process';
 import { assertNonProdDbName } from '@meddoc/db/guard';
 
 import { TEST_EMAIL_PREFIX } from './test-utils';
+import { QA_COMPOSE as COMPOSE, QA_DB as CLEANUP_DB } from './qa-compose';
 
-// Safe-by-default: target the ISOLATED meddoc-qa stack, NOT prod. Both the
-// compose target and the database name are overridable for other isolated
-// envs, but the fail-closed db-guard refuses anything that isn't positively
-// a non-prod database (see packages/db/src/db-guard.ts).
-const COMPOSE =
-  process.env.E2E_CLEANUP_COMPOSE ??
-  'docker compose -f /opt/meddoc-pro/docker-compose.qa.yml';
-const CLEANUP_DB = process.env.E2E_CLEANUP_DB ?? 'meddoc_qa_test';
+// Safe-by-default: target the ISOLATED meddoc-qa stack, NOT prod (resolution +
+// the fail-closed db-guard live in ./qa-compose). The previous hardwired
+// /opt/meddoc-pro path made this a silent no-op on the CI runner.
 
 function psql(sql: string): void {
   // FAIL-CLOSED: never run a DELETE against a prod (or unconfirmable) DB.
