@@ -116,6 +116,11 @@ services:
       # real production compose env (they would bypass email verification).
       EMAIL_AUTO_CONFIRM_DOMAINS: "test.dev,quillmd-test.local"
       EMAIL_AUTO_CONFIRM_ALLOW_IN_PROD: "true"
+      # TEST-ONLY: the E2E suite drives ~6 signups from one runner IP and would
+      # trip the per-IP SIGNUP limit (5/hour), making the gate flaky. Disable
+      # rate limiting in this throwaway stack only. Like the two flags above,
+      # this MUST NEVER appear in the real production compose env.
+      RATE_LIMIT_DISABLED: "true"
       # No real API calls anywhere in this stack.
       MOCK_AI_CALLS: "true"
       ANTHROPIC_API_KEY: mock-key-qa

@@ -1,0 +1,128 @@
+# ============================================================================
+# CI — Playwright E2E gate for the transcribe-md app (Phase 1)
+# ----------------------------------------------------------------------------
+# Builds the REAL app + worker + db-migrate images from the PR code, brings up
+# an EPHEMERAL non-prod stack (the committed docker-compose.qa.yml: own
+# postgres/redis/minio, MOCK_AI_CALLS=true, dummy keys, :9020), migrates +
+# guard-seeds the throwaway `meddoc_qa_test` DB, then runs the Playwright
+# chromium suite headless against :9020. Fails the check if any spec fails;
+# uploads the HTML report + traces for debugging.
+#
+# This is ADDITIVE to the existing checks (CI unit / npm audit / axe-core /
+# TruffleHog). It never touches the prod stack — the images are built fresh in
+# the runner and torn down with `down -v` at the end.
+#
+# Faithfulness: builds the same Dockerfiles prod ships (the app build runs the
+# bundle-assert + 6 GB builder heap), and runs the real BullMQ worker pipeline
+# under MOCK — so a build/bundle regression (the PDF-incident class) or a
+# broken visit→SOAP→sign path fails the gate.
+# ============================================================================
+
+name: e2e
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: Playwright E2E (transcribe-md)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    env:
+      # Build args: point the client bundle + auth URL at the CI app (:9020)
+      # instead of the prod IP defaults baked into docker-compose.yml.
+      TRANSCRIBE_MD_AUTH_URL: http://localhost:9020
+      MARKETING_URL: http://localhost:9010
+      DOCKER_BUILDKIT: "1"
+      # NOTE: the build steps pass `-p meddoc-pro` so the built images are named
+      # `meddoc-pro-transcribe-md{,-worker,-db-migrate}` (the prod compose has no
+      # `name:`, so the project would otherwise default to the checkout dir).
+      # That is build-scoped on purpose — the qa stack keeps its own
+      # `name: meddoc-qa` project (images are global, looked up by name).
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # ── Build the real images from the PR (app build = the OOM-sensitive
+      #    step; the Dockerfile bakes --max-old-space-size=6144 + the
+      #    unpdf/mammoth bundle-assert, both of which run here). The 16 GB
+      #    GitHub runner absorbs the 6 GB build heap. ──
+      - name: Build app + worker images
+        run: docker compose -p meddoc-pro -f docker-compose.yml build transcribe-md transcribe-md-worker
+
+      - name: Build db-migrate image (prisma CLI)
+        run: docker compose -p meddoc-pro -f docker-compose.yml --profile migrations build db-migrate
+
+      # ── Bring up the isolated qa stack from the committed recipe. ──
+      - name: Start qa infra (postgres + redis + minio)
+        run: docker compose -f docker-compose.qa.yml up -d --wait postgres redis minio
+
+      - name: Migrate schema → meddoc_qa_test
+        run: docker compose -f docker-compose.qa.yml run --rm db-migrate
+
+      # The #278 fail-closed db-guard (assertNonProdDatabase) refuses to seed
+      # unless DATABASE_URL is a positively non-prod DB. meddoc_qa_test carries
+      # the qa/test marker, so it proceeds; a prod URL here would abort.
+      - name: Guarded seed (proves the #278 non-prod guard)
+        run: >
+          docker compose -f docker-compose.qa.yml run --rm --entrypoint sh db-migrate
+          -c 'cd /app/apps/transcribe-md && npx --no-install tsx scripts/seed-qa-user.ts'
+
+      - name: Start app + worker
+        run: docker compose -f docker-compose.qa.yml up -d --wait transcribe-md transcribe-md-worker
+
+      - name: Create the audio bucket in minio
+        run: >
+          docker compose -f docker-compose.qa.yml exec -T minio sh -c
+          'export MC_CONFIG_DIR=/tmp/mc; mc alias set local http://127.0.0.1:9000 qa_minio qa_minio_pw && mc mb --ignore-existing local/transcribe-md-audio'
+
+      # ── Run the suite from the runner against the dockerized app at :9020. ──
+      - name: Install Playwright chromium
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Run E2E (chromium; scenario 5 note-format UN-GATED via NOTE_FORMAT_E2E)
+        working-directory: apps/transcribe-md
+        env:
+          PW_BASE_URL: http://localhost:9020
+          NOTE_FORMAT_E2E: "1"
+          CI: "true"
+        run: npx playwright test --project=chromium
+
+      # ── Debuggability for a red run. ──
+      - name: App + worker logs (on failure)
+        if: failure()
+        run: docker compose -f docker-compose.qa.yml logs --tail=300 transcribe-md transcribe-md-worker
+
+      - name: Upload Playwright HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/transcribe-md/playwright-report/
+          retention-days: 14
+
+      - name: Upload Playwright traces + videos
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: apps/transcribe-md/test-results/
+          retention-days: 14
+
+      - name: Tear down the qa stack (volumes too)
+        if: always()
+        run: docker compose -f docker-compose.qa.yml down -v

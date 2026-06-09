@@ -278,6 +278,18 @@ export function checkRateLimit(
   rule: RateLimitRule,
   identifier: string
 ): RateLimitResult {
+  // TEST-ONLY bypass. The E2E suite drives many signups/uploads from a SINGLE
+  // runner IP, which trips these per-IP limits and makes the CI gate flaky.
+  // Gated on an EXPLICIT opt-in env that exists ONLY in the throwaway qa/CI
+  // stack (docker-compose.qa.yml) — NEVER in the production env — the same
+  // posture as EMAIL_AUTO_CONFIRM_ALLOW_IN_PROD. Unset (the default) ⇒ every
+  // window is enforced exactly as before, so production rate-limiting is
+  // unchanged. This is the central choke point: actionRateLimitOrError (signup)
+  // and rateLimitOr429 (API routes) both funnel through here.
+  if (process.env.RATE_LIMIT_DISABLED === 'true') {
+    return { allowed: true, retryAfterSec: 0 };
+  }
+
   let worstRejection: RateLimitResult | null = null;
   // Phase 1 — peek every window. Track the LONGEST retryAfterSec
   // across all rejecting windows.
