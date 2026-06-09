@@ -16,12 +16,18 @@
 // with no browser-specific quirks.
 //
 // Projects:
-//   - chromium  → existing scenario suite (excludes a11y.spec.ts)
-//   - a11y      → opt-in a11y CI gate; runs ONLY a11y.spec.ts. Triggered
-//                 from .github/workflows/a11y.yml via
-//                 `playwright test --project=a11y`. The default
-//                 `playwright test` invocation (no --project) runs only
-//                 chromium so the existing CI doesn't double-run a11y.
+//   - chromium    → existing scenario suite (excludes a11y.spec.ts and the
+//                   phi-reject spec, which needs a different app env).
+//   - a11y        → opt-in a11y CI gate; runs ONLY a11y.spec.ts. Triggered
+//                   from .github/workflows/a11y.yml via
+//                   `playwright test --project=a11y`. The default
+//                   `playwright test` invocation (no --project) runs only
+//                   chromium so the existing CI doesn't double-run a11y.
+//   - phi-reject  → note-format PARSE-time PHI rejection (scenario 23). Needs
+//                   the app started with MOCK_TEMPLATE_PHI_FLAG=true (every
+//                   parse then rejects), so it can't share the chromium run.
+//                   Run explicitly via `playwright test --project=phi-reject`
+//                   against an app instance recreated with that flag.
 // ============================================================================
 
 import { defineConfig, devices } from '@playwright/test';
@@ -67,7 +73,9 @@ export default defineConfig({
       // so the a11y gate doesn't run twice (once here, once under the
       // a11y project below).
       name: 'chromium',
-      testIgnore: '**/a11y.spec.ts',
+      // a11y → its own project; 23-…phi-parse-reject → the phi-reject project
+      // (it needs MOCK_TEMPLATE_PHI_FLAG=true, which would reject every parse).
+      testIgnore: ['**/a11y.spec.ts', '**/23-note-format-phi-parse-reject.spec.ts'],
       use: { ...devices['Desktop Chrome'] },
     },
     {
@@ -82,6 +90,16 @@ export default defineConfig({
       // default `playwright test` run.
       name: 'a11y',
       testMatch: '**/a11y.spec.ts',
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      // Note-format PARSE-time PHI rejection (scenario 23). Runs ONLY when
+      // invoked with `--project=phi-reject`, against an app started with
+      // MOCK_TEMPLATE_PHI_FLAG=true (see .github/workflows/e2e.yml + the qa
+      // compose passthrough). Kept out of the default run so the flag-on app
+      // env never rejects the happy-path parses the other specs depend on.
+      name: 'phi-reject',
+      testMatch: '**/23-note-format-phi-parse-reject.spec.ts',
       use: { ...devices['Desktop Chrome'] },
     },
   ],
