@@ -56,6 +56,20 @@ export function cleanupTestUsers(): void {
       SELECT "practiceId" FROM users WHERE email LIKE '${TEST_EMAIL_PREFIX}%'
     );
   `;
+  // rx_warning_overrides.visitId is an FK to transcribe_visits with onDelete
+  // RESTRICT (verified: confdeltype='r'), checked IMMEDIATELY — so the
+  // transcribe_visits DELETE in the cascade below fails if any override rows
+  // still reference a test visit. CTE order can't be relied on (same reason as
+  // audit_logs above), so delete the test visits' override rows FIRST, in their
+  // own guarded statement. The Batch-4 Rx clinical-safety specs write these rows.
+  const rxOverrideSql = `
+    DELETE FROM rx_warning_overrides
+    WHERE "visitId" IN (
+      SELECT id FROM transcribe_visits WHERE "userId" IN (
+        SELECT id FROM users WHERE email LIKE '${TEST_EMAIL_PREFIX}%'
+      )
+    );
+  `;
   const sql = `
     WITH target AS (
       SELECT id, "practiceId"
@@ -95,6 +109,7 @@ export function cleanupTestUsers(): void {
   `;
   try {
     psql(auditSql);
+    psql(rxOverrideSql);
     psql(sql);
   } catch (err) {
     // Don't fail the whole suite if cleanup hits a transient DB

@@ -74,8 +74,14 @@ export default defineConfig({
       // a11y project below).
       name: 'chromium',
       // a11y → its own project; 23-…phi-parse-reject → the phi-reject project
-      // (it needs MOCK_TEMPLATE_PHI_FLAG=true, which would reject every parse).
-      testIgnore: ['**/a11y.spec.ts', '**/23-note-format-phi-parse-reject.spec.ts'],
+      // (needs MOCK_TEMPLATE_PHI_FLAG=true, which would reject every parse);
+      // 24-…rx-clinical-safety → the rx-safety project (needs MOCK_RX_WARNINGS=true,
+      // whose critical warning would block every other spec's sign).
+      testIgnore: [
+        '**/a11y.spec.ts',
+        '**/23-note-format-phi-parse-reject.spec.ts',
+        '**/24-rx-clinical-safety.spec.ts',
+      ],
       use: { ...devices['Desktop Chrome'] },
     },
     {
@@ -100,6 +106,15 @@ export default defineConfig({
       // env never rejects the happy-path parses the other specs depend on.
       name: 'phi-reject',
       testMatch: '**/23-note-format-phi-parse-reject.spec.ts',
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      // Rx clinical-safety (scenario 24). Runs ONLY via `--project=rx-safety`,
+      // against an app started with MOCK_RX_WARNINGS=true (the populated
+      // tm_rx_drafting fixture with a critical warning). Kept out of the default
+      // run so that critical warning never blocks the other specs' sign flows.
+      name: 'rx-safety',
+      testMatch: '**/24-rx-clinical-safety.spec.ts',
       use: { ...devices['Desktop Chrome'] },
     },
   ],
