@@ -75,9 +75,15 @@ jobs:
       # The #278 fail-closed db-guard (assertNonProdDatabase) refuses to seed
       # unless DATABASE_URL is a positively non-prod DB. meddoc_qa_test carries
       # the qa/test marker, so it proceeds; a prod URL here would abort.
+      # QA_AUDITOR_PASSWORD is a throwaway: it sets the password of a seeded
+      # user in the meddoc_qa_test DB that is destroyed with `down -v` at the
+      # end of the job and is never used by the E2E specs (they self-signup).
+      # Not a real credential — not verifiable by TruffleHog.
       - name: Guarded seed (proves the #278 non-prod guard)
         run: >
-          docker compose -f docker-compose.qa.yml run --rm --entrypoint sh db-migrate
+          docker compose -f docker-compose.qa.yml run --rm
+          -e QA_AUDITOR_PASSWORD=QaE2eSeedThrowaway9
+          --entrypoint sh db-migrate
           -c 'cd /app/apps/transcribe-md && npx --no-install tsx scripts/seed-qa-user.ts'
 
       - name: Start app + worker
