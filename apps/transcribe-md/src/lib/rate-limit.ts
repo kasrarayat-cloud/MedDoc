@@ -280,13 +280,20 @@ export function checkRateLimit(
 ): RateLimitResult {
   // TEST-ONLY bypass. The E2E suite drives many signups/uploads from a SINGLE
   // runner IP, which trips these per-IP limits and makes the CI gate flaky.
-  // Gated on an EXPLICIT opt-in env that exists ONLY in the throwaway qa/CI
-  // stack (docker-compose.qa.yml) — NEVER in the production env — the same
-  // posture as EMAIL_AUTO_CONFIRM_ALLOW_IN_PROD. Unset (the default) ⇒ every
-  // window is enforced exactly as before, so production rate-limiting is
-  // unchanged. This is the central choke point: actionRateLimitOrError (signup)
-  // and rateLimitOr429 (API routes) both funnel through here.
-  if (process.env.RATE_LIMIT_DISABLED === 'true') {
+  // TWO-flag posture, mirroring EMAIL_AUTO_CONFIRM_ALLOW_IN_PROD: in production
+  // (NODE_ENV==='production', which the qa/CI image runs) BOTH RATE_LIMIT_DISABLED
+  // AND the explicit RATE_LIMIT_DISABLE_ALLOW_IN_PROD must be set, so a single
+  // stray env var can NEVER silently kill the signup-farm / login-bruteforce /
+  // upload-cost shields in real prod (the failure mode Round-3 PR-F hardened
+  // against for email auto-confirm). Both flags exist ONLY in the throwaway
+  // qa/CI stack (docker-compose.qa.yml). Unset (the default) ⇒ every window is
+  // enforced exactly as before. This is the central choke point:
+  // actionRateLimitOrError (signup) + rateLimitOr429 (API routes) funnel here.
+  if (
+    process.env.RATE_LIMIT_DISABLED === 'true' &&
+    (process.env.NODE_ENV !== 'production' ||
+      process.env.RATE_LIMIT_DISABLE_ALLOW_IN_PROD === 'true')
+  ) {
     return { allowed: true, retryAfterSec: 0 };
   }
 

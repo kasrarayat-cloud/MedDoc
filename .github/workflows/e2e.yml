@@ -29,6 +29,10 @@ concurrency:
   group: e2e-${{ github.ref }}
   cancel-in-progress: true
 
+# Least-privilege: the job only checks out, builds images, and uploads artifacts.
+permissions:
+  contents: read
+
 jobs:
   e2e:
     name: Playwright E2E (transcribe-md)
