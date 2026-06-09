@@ -196,8 +196,9 @@ All under `apps/transcribe-md/src/actions/` plus 4 lib files marked `'use server
 | Function | Args | Return | Consumed by |
 |---|---|---|---|
 | `saveSoapDraftAction` | `visitId: string, text: string` | `Promise<SaveSoapResult>` | `visit-ready-view.tsx` editor submit |
-| `signVisitAction` | `visitId: string` | `Promise<SaveSoapResult>` | `visit-ready-view.tsx` sign button |
 | `reassignSpeakerAction` | `visitId: string, utteranceIndex: number, newSpeaker: string` | `Promise<SaveSoapResult>` | `visit-ready-view.tsx` transcript editor |
+
+> Signing is **not** a server action. The sole READY→SIGNED path is `POST /api/visits/[id]/sign` (it enforces the critical-Rx override gate). The legacy `signVisitAction` was removed in fix/rx-override-gate-correlation.
 
 **Interface exports**:
 - `SaveSoapResult` — `{ ok: boolean; error?: string }`

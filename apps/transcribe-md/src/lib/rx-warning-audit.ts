@@ -20,6 +20,7 @@
 import prisma from '@meddoc/db';
 import { getSession } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
+import { resolveWarning, mapWorkerSeverity } from '@/lib/rx-warnings';
 
 export interface RecordOverrideInput {
   visitId: string;
@@ -77,13 +78,35 @@ export async function recordOverride(
       return { ok: false, error: 'Not signed in.' };
     }
 
-    type VisitRow = { userId: string } | null;
+    type VisitRow = { userId: string; rxDrafts: unknown } | null;
     const visit: VisitRow = await prisma.transcribeVisit.findUnique({
       where: { id: input.visitId },
-      select: { userId: true },
+      select: { userId: true, rxDrafts: true },
     });
     if (!visit || visit.userId !== session.user.id) {
       return { ok: false, error: 'Visit not found.' };
+    }
+
+    // ── 2.5 Correlate the override to a REAL warning ──
+    // fix/rx-override-gate-correlation: the client supplies warningId +
+    // severity, but they MUST NOT be trusted verbatim into a clinical-safety
+    // audit row. Resolve the submitted warningId against the visit's persisted
+    // rxDrafts.warnings[]; reject if it names no real warning, or if the
+    // claimed severity doesn't match the warning's server-derived severity.
+    // This is what stops a caller minting fabricated 'critical' override rows
+    // (distinct bogus warningIds) to inflate the sign-gate's count.
+    const warning = resolveWarning(visit.rxDrafts, input.warningId);
+    if (!warning) {
+      return {
+        ok: false,
+        error: 'That warning is not on this visit.',
+      };
+    }
+    if (input.severity !== mapWorkerSeverity(warning.severity)) {
+      return {
+        ok: false,
+        error: 'Warning severity does not match this visit.',
+      };
     }
 
     // ── 3. Write audit row ──

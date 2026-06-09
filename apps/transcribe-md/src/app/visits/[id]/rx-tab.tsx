@@ -30,6 +30,10 @@ import {
   type RailSeverity,
   type RailWarning,
 } from './rx-warnings-rail';
+// Canonical warning identity + severity mapping — shared with recordOverride
+// and the sign gate so the override warningId the rail emits is exactly what
+// the server validates + correlates against (fix/rx-override-gate-correlation).
+import { warningIdForIndex, mapWorkerSeverity } from '@/lib/rx-warnings';
 
 type RxTabTheme = 'legacy' | 'clinician';
 
@@ -81,14 +85,6 @@ interface RxTabProps {
   initialOverriddenIds?: string[];
   /** @deprecated kept for back-compat; Linear V1 is single-theme. */
   theme?: RxTabTheme;
-}
-
-// Worker emits a 3-band severity; the rail expects a 4-band severity.
-// Map until the worker contract is tightened. (Backward compat.)
-function mapWorkerSeverity(s: WorkerWarning['severity']): RailSeverity {
-  if (s === 'critical') return 'critical';
-  if (s === 'major') return 'serious';
-  return 'info';
 }
 
 // Public component
@@ -145,7 +141,7 @@ export function RxTab({
       const rxId = matched?.rxId ?? decoratedRx[0]?.rxId ?? '—';
       const matchedIx = matched?._ix ?? decoratedRx[0]?._ix ?? 0;
       return {
-        id: `rx-warning-${i}`,
+        id: warningIdForIndex(i),
         severity: mapWorkerSeverity(w.severity),
         headline: w.rx_drug,
         body: w.message + (w.evidence_quote ? ` "${w.evidence_quote}"` : ''),
