@@ -127,6 +127,12 @@ services:
       RATE_LIMIT_DISABLE_ALLOW_IN_PROD: "true"
       # No real API calls anywhere in this stack.
       MOCK_AI_CALLS: "true"
+      # Note-format PHI-gate reject path (E2E scenario 23). Default empty (off)
+      # so the normal suite's parses succeed; the e2e workflow recreates this
+      # app with MOCK_TEMPLATE_PHI_FLAG=true for the dedicated phi-reject pass,
+      # which flips the mocked PHI scan to its FLAGGED variant so every parse
+      # rejects. Only honored under MOCK_AI_CALLS — never touches a real call.
+      MOCK_TEMPLATE_PHI_FLAG: "${MOCK_TEMPLATE_PHI_FLAG:-}"
       ANTHROPIC_API_KEY: mock-key-qa
       DEEPGRAM_API_KEY: mock-key-qa
     healthcheck:
