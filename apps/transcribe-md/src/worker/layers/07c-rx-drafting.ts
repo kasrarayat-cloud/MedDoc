@@ -23,7 +23,8 @@ import { RX_PEDIATRIC_FEWSHOT_EXAMPLES } from '@/worker/prompts/rx-pediatric-exa
 import { logAudit, type AuditAction } from '@/lib/audit';
 import { parseRxToMgPerDay } from './rx-sig-parser';
 
-const MODEL = 'claude-opus-4-8';
+// TRANSCRIBE_MD_CLINICAL_MODEL — eval override (feat/fable5-eval); unset → default unchanged.
+const MODEL = process.env.TRANSCRIBE_MD_CLINICAL_MODEL || 'claude-opus-4-8';
 
 /** Round 3 PR-D + Fix-Pack 1 Q0-2: shared peds threshold. Mirrors the
  *  threshold in packages/ai/src/data/dose-ranges-validator.ts. Hoisting to a
