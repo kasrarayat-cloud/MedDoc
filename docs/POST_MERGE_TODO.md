@@ -2121,6 +2121,15 @@ What landed:
 - ❌ Any Q1 finding — those land in Fix-Pack 2 (recommend
   shipping Phase 2 eval suite first; see audit recommendations
   §10).
+  - **UPDATE 2026-06-10:** the Q1 backlog was re-triaged
+    (`docs/qa-reports/q1-fixpack-triage-20260610T183416Z.md`):
+    16 → 12 open (05.1/03.1/06.2 incidentally closed, 02.4 partial),
+    and the **pre-pilot FIX-NOW batch — 09.1 (refusal categorization),
+    02.2 (single-speaker), 02.8 (allergy conflict, caution-first) —
+    SHIPPED + deployed (PR #296)**, none of which needed the eval suite.
+    Remaining open backlog → 9 (FIX-LATER: 02.9, 01.2/01.3/01.4,
+    02.3, 03.3/03.4/03.7, 07.1) — still eval-suite / clinical / UX /
+    architecture gated.
 - ❌ Cost framing in any PR body — quality > cost discipline
   per memory #14.
 
