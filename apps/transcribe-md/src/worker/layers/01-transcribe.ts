@@ -22,10 +22,15 @@ import prisma from '@meddoc/db';
 import {
   transcribe,
   withRetry,
+  CrossProviderFallbackDisabledError,
   type TranscribeResult,
   type RetryAttemptInfo,
 } from '@meddoc/ai';
 import { statAudio, streamAudio } from '@/lib/minio';
+import {
+  isWhisperFallbackEnabled,
+  WHISPER_FALLBACK_FLAG,
+} from '@/worker/transcription-fallback-flag';
 // 2026-05-13 Issues #202 + #206 — keyterms are now scoped per-visit
 // via the builder rather than a single global list. See
 // `buildKeytermsForVisit` for the composition rules.
@@ -109,12 +114,19 @@ export async function runLayer1Transcribe(
         safetyFloor: CONFUSED_DRUG_NAMES_FLAT,
       });
 
+  // 2026-06-10 kill-switch (audit 4.2): the Deepgram→Whisper hop ships
+  // raw audio to OpenAI (no BAA). Fail-closed — resolve the gate from
+  // env per-run so the orchestrator only crosses providers when the
+  // operator has explicitly enabled it post-BAA.
+  const allowCrossProviderFallback = isWhisperFallbackEnabled();
+
   const attempt = async () => {
     return transcribe({
       practiceId: input.practiceId,
       visitId: input.visitId,
       userId: input.userId,
       purpose: 'tm_transcribe',
+      allowCrossProviderFallback,
       audio: {
         stream: webStream,
         sizeBytes: stat.size,
@@ -173,23 +185,56 @@ export async function runLayer1Transcribe(
   // "4xx is terminal" guard; it ALSO skips plain Error-without-status,
   // which used to retry — more correct: a no-status throw is almost
   // always a code bug, not a transient API failure.
-  const result: TranscribeResult = await withRetry(attempt, {
-    maxAttempts: 2,
-    baseDelayMs: BACKOFF_MS,
-    onRetry: (info: RetryAttemptInfo) => {
-      const err = info.error as { status?: number; code?: string };
-      console.warn(
-        '[layer-01-transcribe] retrying',
-        JSON.stringify({
-          attempt: info.attempt,
-          maxAttempts: info.maxAttempts,
-          delayMs: info.delayMs,
-          status: err?.status ?? null,
-          code: err?.code ?? null,
-        })
-      );
-    },
-  });
+  let result: TranscribeResult;
+  try {
+    result = await withRetry(attempt, {
+      maxAttempts: 2,
+      baseDelayMs: BACKOFF_MS,
+      onRetry: (info: RetryAttemptInfo) => {
+        const err = info.error as { status?: number; code?: string };
+        console.warn(
+          '[layer-01-transcribe] retrying',
+          JSON.stringify({
+            attempt: info.attempt,
+            maxAttempts: info.maxAttempts,
+            delayMs: info.delayMs,
+            status: err?.status ?? null,
+            code: err?.code ?? null,
+          })
+        );
+      },
+    });
+  } catch (err) {
+    // 2026-06-10 kill-switch (audit 4.2): Deepgram failed and a Whisper
+    // fallback WAS eligible, but the cross-provider hop is disabled. Emit
+    // a suppressed-fallback audit row so operators can see how often a
+    // real Deepgram failure would have shipped audio to OpenAI, then
+    // re-throw — the worker's outer catch fails the visit into the DLQ
+    // (retryable). Raw audio never leaves to OpenAI. Fire-and-forget,
+    // matching the success-fallback audit below.
+    if (err instanceof CrossProviderFallbackDisabledError) {
+      void logAudit({
+        action: 'TRANSCRIPTION_PROVIDER_FALLBACK',
+        targetType: 'TranscribeVisit',
+        targetId: input.visitId,
+        userId: input.userId,
+        practiceId: input.practiceId,
+        success: false,
+        errorCode: 'CROSS_PROVIDER_FALLBACK_DISABLED',
+        metadata: {
+          layer: 'L1',
+          suppressed: true,
+          reason: 'fallback_disabled',
+          flag: WHISPER_FALLBACK_FLAG,
+          primaryProvider: 'deepgram-batch',
+          wouldHaveUsed: 'whisper-fallback',
+          primaryError: err.primaryError.message ?? null,
+          primaryStatus: err.primaryError.status ?? null,
+        },
+      });
+    }
+    throw err;
+  }
 
   // PR-L: discriminated-union of provider raw shape. Deepgram path
   // gives us speaker labels + per-utterance confidence; Whisper has
