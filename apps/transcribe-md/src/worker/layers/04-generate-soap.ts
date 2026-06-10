@@ -27,7 +27,9 @@ import {
 } from '../note-templates/build-soap-prompt';
 import { SYSTEM_DEFAULT_NOTE_TEMPLATE } from '../note-templates/system-default-template';
 
-const MODEL = 'claude-opus-4-8';
+// TRANSCRIBE_MD_CLINICAL_MODEL overrides the clinical model for evals on the
+// isolated qa stack (feat/fable5-eval). UNSET in prod → default unchanged.
+const MODEL = process.env.TRANSCRIBE_MD_CLINICAL_MODEL || 'claude-opus-4-8';
 
 export interface Layer4Input {
   visitId: string;
