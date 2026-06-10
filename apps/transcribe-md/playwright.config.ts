@@ -83,6 +83,8 @@ export default defineConfig({
         '**/24-rx-clinical-safety.spec.ts',
         '**/25-rx-override-correlation.spec.ts',
         '**/28-marketing-smoke.spec.ts',
+        // Real-model eval specs (real tokens) — NEVER in the default/CI run.
+        '**/*.eval.spec.ts',
       ],
       use: { ...devices['Desktop Chrome'] },
     },
@@ -137,6 +139,18 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
         baseURL: process.env.PW_MARKETING_URL ?? 'http://localhost:9010',
       },
+    },
+    {
+      // Real-model model-evaluation specs (e.g. feat/fable5-eval). Runs ONLY via
+      // `--project=real-model-eval` against an isolated qa stack on REAL keys
+      // (MOCK_AI_CALLS=false) — they SPEND REAL TOKENS, so they are excluded
+      // from the default run + the required CI gate, and additionally self-skip
+      // unless REAL_MODEL_EVAL=1. Manual/operator-invoked only. Generous timeout:
+      // real Fable/Opus pipeline runs are far slower than MOCK.
+      name: 'real-model-eval',
+      testMatch: '**/*.eval.spec.ts',
+      timeout: 300_000,
+      use: { ...devices['Desktop Chrome'] },
     },
   ],
 

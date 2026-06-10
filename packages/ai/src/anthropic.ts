@@ -63,12 +63,14 @@ function extractUsage(u: Anthropic.Messages.Usage): NormalizedUsage {
 
 /** Q2 follow-up — Anthropic deprecated `temperature` on the Opus 4
  *  family (4.7 returns 400 invalid_request_error("`temperature` is
- *  deprecated for this model.")). The Sonnet + Haiku families still
- *  accept it. Strip silently for Opus 4.x; pass through for everything
- *  else. Layer source files keep their `temperature: 0.x` lines as
- *  documentation of intent — the library honors the wire contract. */
+ *  deprecated for this model.")). The Mythos-class Fable 5 family does
+ *  the same (confirmed 2026-06-10 in the feat/fable5-eval smoke). The
+ *  Sonnet + Haiku families still accept it. Strip silently for those
+ *  families; pass through for everything else. Layer source files keep
+ *  their `temperature: 0.x` lines as documentation of intent — the
+ *  library honors the wire contract. */
 function shouldOmitTemperature(model: string): boolean {
-  return model.startsWith('claude-opus-4');
+  return model.startsWith('claude-opus-4') || model.startsWith('claude-fable');
 }
 
 /** Q2 follow-up — when an Anthropic SDK call throws (network blip,

@@ -126,7 +126,7 @@ services:
       RATE_LIMIT_DISABLED: "true"
       RATE_LIMIT_DISABLE_ALLOW_IN_PROD: "true"
       # No real API calls anywhere in this stack.
-      MOCK_AI_CALLS: "true"
+      MOCK_AI_CALLS: "${MOCK_AI_CALLS:-true}"
       # Note-format PHI-gate reject path (E2E scenario 23). Default empty (off)
       # so the normal suite's parses succeed; the e2e workflow recreates this
       # app with MOCK_TEMPLATE_PHI_FLAG=true for the dedicated phi-reject pass,
@@ -140,8 +140,13 @@ services:
       # L7c runs in the WORKER; set here on the app too for symmetry (harmless —
       # the app never calls tm_rx_drafting). Only honored under MOCK_AI_CALLS.
       MOCK_RX_WARNINGS: "${MOCK_RX_WARNINGS:-}"
-      ANTHROPIC_API_KEY: mock-key-qa
-      DEEPGRAM_API_KEY: mock-key-qa
+      # Real keys are injected via shell env ONLY for model evals (never committed);
+      # default mock-key-qa keeps the standard MOCK qa/CI flow self-contained.
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-mock-key-qa}"
+      DEEPGRAM_API_KEY: "${DEEPGRAM_API_KEY:-mock-key-qa}"
+      # Clinical-model override for evals (feat/fable5-eval). Empty default →
+      # the app/worker keep their hardcoded per-layer models (prod behaviour).
+      TRANSCRIBE_MD_CLINICAL_MODEL: "${TRANSCRIBE_MD_CLINICAL_MODEL:-}"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "--spider", "http://127.0.0.1:3011/api/health"]
       interval: 15s
@@ -174,14 +179,19 @@ services:
       TRANSCRIBE_MD_MINIO_BUCKET: transcribe-md-audio
       MINIO_USE_SSL: "false"
       TRANSCRIBE_MD_WORKER_CONCURRENCY: "2"
-      MOCK_AI_CALLS: "true"
+      MOCK_AI_CALLS: "${MOCK_AI_CALLS:-true}"
       # Rx clinical-safety (E2E scenario 24): L7c rx-drafting runs HERE. Default
       # empty (off); the e2e workflow recreates this worker with
       # MOCK_RX_WARNINGS=true for the rx-safety pass so new visits get the
       # populated tm_rx_drafting fixture (critical + major + minor warnings).
       MOCK_RX_WARNINGS: "${MOCK_RX_WARNINGS:-}"
-      ANTHROPIC_API_KEY: mock-key-qa
-      DEEPGRAM_API_KEY: mock-key-qa
+      # Real keys are injected via shell env ONLY for model evals (never committed);
+      # default mock-key-qa keeps the standard MOCK qa/CI flow self-contained.
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-mock-key-qa}"
+      DEEPGRAM_API_KEY: "${DEEPGRAM_API_KEY:-mock-key-qa}"
+      # Clinical-model override for evals (feat/fable5-eval). Empty default →
+      # the app/worker keep their hardcoded per-layer models (prod behaviour).
+      TRANSCRIBE_MD_CLINICAL_MODEL: "${TRANSCRIBE_MD_CLINICAL_MODEL:-}"
 
   # Marketing site (apps/marketing) — static Next, no backend. Opt-in via the
   # `marketing` profile so the default qa flow (transcribe-md E2E) never starts
