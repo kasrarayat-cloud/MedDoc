@@ -22,7 +22,8 @@ import {
 } from '../note-templates/build-soap-prompt';
 import { SYSTEM_DEFAULT_NOTE_TEMPLATE } from '../note-templates/system-default-template';
 
-const MODEL = 'claude-sonnet-4-6';
+// TRANSCRIBE_MD_CLINICAL_MODEL — eval override (feat/fable5-eval); unset → default unchanged.
+const MODEL = process.env.TRANSCRIBE_MD_CLINICAL_MODEL || 'claude-sonnet-4-6';
 
 export interface Layer6Input {
   visitId: string;
