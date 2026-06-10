@@ -208,6 +208,51 @@ describe('runLayer2SpeakerRoles — fallback branch (no samples, FIND-P1-017)', 
   });
 });
 
+describe('runLayer2SpeakerRoles — single speaker (Q1 #02.2)', () => {
+  it('size===1 → dictation: assigns doctor + needsReview, NO model call', async () => {
+    // All utterances from one diarized speaker (e.g. a dictation submitted
+    // through a conversation-mode upload). The size===1 short-circuit must
+    // fire — no L2 model call.
+    const result = await runLayer2SpeakerRoles(
+      makeInput({
+        utterances: [
+          { speaker: 0, transcript: 'This is a dictation for a follow-up visit.', start: 0, end: 3 },
+          { speaker: 0, transcript: 'The patient has hypertension, blood pressure 148 over 90.', start: 3, end: 7 },
+          { speaker: 0, transcript: 'Plan is to increase lisinopril.', start: 7, end: 10 },
+        ] as Layer2Input['utterances'],
+      })
+    );
+
+    // Model NEVER called — one voice doesn't need role-splitting.
+    expect(mocks.modelComplete).not.toHaveBeenCalled();
+    expect(mocks.prismaUpdate).toHaveBeenCalledTimes(1);
+
+    // Lone speaker (id 0) assigned doctor; flagged for review.
+    expect(result.speakerMap['0'].role).toBe('doctor');
+    expect(result.needsReview).toBe(true);
+    expect(result.speakerMap['0'].reasoning).toMatch(/dictation/i);
+
+    const updateArg = mocks.prismaUpdate.mock.calls[0][0];
+    expect(updateArg.data.needsReview).toBe(true);
+  });
+
+  it('size===1 preserves the actual diarized speaker id (not hardcoded 0)', async () => {
+    // A dictation where Deepgram tagged the lone voice as speaker 1.
+    const result = await runLayer2SpeakerRoles(
+      makeInput({
+        utterances: [
+          { speaker: 1, transcript: 'Dictating the assessment now.', start: 0, end: 3 },
+          { speaker: 1, transcript: 'Continue current medications.', start: 3, end: 6 },
+        ] as Layer2Input['utterances'],
+      })
+    );
+    expect(mocks.modelComplete).not.toHaveBeenCalled();
+    expect(result.speakerMap['1'].role).toBe('doctor');
+    expect(result.speakerMap['0']).toBeUndefined();
+    expect(() => SpeakerMap.parse(result.speakerMap)).not.toThrow();
+  });
+});
+
 describe('runLayer2SpeakerRoles — propagation of model errors', () => {
   it('SCHEMA_FAIL from modelClient propagates up to the caller', async () => {
     // modelClient.complete internally retries on SCHEMA_FAIL up to

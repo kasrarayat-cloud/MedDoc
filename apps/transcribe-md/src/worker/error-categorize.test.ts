@@ -5,6 +5,7 @@ import {
   categorizeError,
   _resetProviderFailuresForTesting,
 } from './error-categorize';
+import { AnthropicRefusalError } from '@meddoc/ai';
 
 beforeEach(() => {
   _resetProviderFailuresForTesting();
@@ -16,6 +17,12 @@ describe('categorizeError — permanent', () => {
     const parsed = schema.safeParse({ x: 1 });
     if (parsed.success) throw new Error('test setup: should have failed');
     expect(categorizeError(parsed.error)).toBe('permanent');
+  });
+
+  it('Q1 #09.1: treats AnthropicRefusalError as permanent (no retry burn)', () => {
+    expect(
+      categorizeError(new AnthropicRefusalError('claude-opus-4-8', 'tm_soap_draft'))
+    ).toBe('permanent');
   });
 
   it('flags "unsupported audio format" as permanent', () => {

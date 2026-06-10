@@ -172,6 +172,10 @@ function isPermanentInputError(msg: string, err: unknown): boolean {
   // permanent so shouldFailNow fires and the visit fails fast with
   // a clearer reviewReason rather than burning two more attempts.
   if (err instanceof Error && err.name === 'ModelOutputMalformedError') return true;
+  // Q1 #09.1: an Anthropic content-policy refusal (stop_reason=refusal) is
+  // deterministic for the same input — retrying just re-spends tokens and
+  // re-refuses. Permanent → fail fast into the DLQ with a clear reason.
+  if (err instanceof Error && err.name === 'AnthropicRefusalError') return true;
   const lower = msg.toLowerCase();
   if (
     /unsupported( (audio|file))? format/.test(lower) ||
