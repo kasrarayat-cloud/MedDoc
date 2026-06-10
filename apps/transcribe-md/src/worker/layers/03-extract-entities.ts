@@ -129,6 +129,17 @@ export const ExtractedEntities = z.object({
         evidence_quote: z.string().min(1),
         speaker: z.string().optional(),
         timestamp: z.number().nonnegative().optional(),
+        // Q1 #02.8 — allergy conflict resolution. When the visit contains
+        // conflicting allergy statements (e.g. "no allergies" then "I'm
+        // allergic to penicillin", or a later retraction), the extractor
+        // keeps BOTH entries and flags the contradicted/earlier one with
+        // `superseded: true` + a short `conflict_note`. NEVER drop either
+        // statement. SAFETY INVARIANT: `superseded` is a doctor-review hint
+        // ONLY — it must NEVER remove an allergy from a safety check
+        // (Rx contraindication still warns on a superseded allergy; only
+        // the doctor resolves the conflict). See 07c-rx-drafting.ts.
+        superseded: z.boolean().optional(),
+        conflict_note: z.string().nullable().optional(),
       })
     )
     .default([]),
@@ -282,7 +293,25 @@ const COMMON_CATEGORIES = [
   '  sub-fields are optional; one evidence_quote covers the paragraph.',
   '- past_medical_history: list of {condition, evidence_quote, ...}',
   '- medications: list of {name, dose?, route?, frequency?, evidence_quote, ...}',
-  '- allergies: list of {substance, reaction?, evidence_quote, ...}',
+  '- allergies: list of {substance, reaction?, evidence_quote,',
+  '  superseded?, conflict_note?, ...}',
+  '',
+  '  ALLERGY CONFLICT RESOLUTION (clinical safety — read carefully):',
+  '  If the visit contains CONFLICTING allergy statements — e.g. "no known',
+  '  allergies" early then "I\'m allergic to penicillin" later, or a stated',
+  '  allergy that is later retracted/corrected — you MUST:',
+  '    1. Keep a SEPARATE entry for EACH conflicting statement. NEVER drop,',
+  '       merge, or silently pick one. Both go in the allergies list.',
+  '    2. Set "superseded": true on the entry the conversation contradicts',
+  '       or supersedes (the earlier "no allergies", or a retracted claim),',
+  '       and leave "superseded" false/absent on the operative one.',
+  '    3. Put a one-line "conflict_note" on the superseded entry naming the',
+  '       conflict (e.g. "patient first denied allergies, then reported',
+  '       penicillin"). No PHI beyond the allergy facts themselves.',
+  '  "superseded" is a REVIEW HINT for the doctor — it does NOT mean the',
+  '  allergy is safe to ignore. Downstream safety checks still treat a',
+  '  superseded allergy as active until the doctor resolves it. When in',
+  '  doubt, mark BOTH active (superseded absent) — fail toward caution.',
   '- family_history: list of {relation, condition, evidence_quote, ...}',
   //
   // T-M23.B: expanded social_history shape guidance. Prior wording

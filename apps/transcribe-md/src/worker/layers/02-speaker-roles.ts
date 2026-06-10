@@ -123,6 +123,35 @@ export async function runLayer2SpeakerRoles(
     };
   }
 
+  if (samples.size === 1) {
+    // Q1 #02.2: diarization detected exactly ONE speaker — almost always a
+    // dictation (single voice) submitted through a conversation-mode upload,
+    // or a true monologue. Splitting one voice into doctor/patient roles via
+    // an L2 model call is wasted + error-prone: assign the lone speaker as
+    // the doctor (the dictating clinician) and flag needsReview so the doctor
+    // verifies the attribution (it could be a patient monologue). Mirrors the
+    // size===0 fallback's schema-checked shape (FIND-P1-017). The size===0
+    // path above (diarization returned NO tags) is unchanged.
+    const speakerId = [...samples.keys()][0];
+    const fallback = SpeakerMap.parse({
+      [String(speakerId)]: {
+        role: 'doctor',
+        confidence: 0.5,
+        reasoning:
+          'Single speaker detected (one diarized voice) — treated as dictation and assigned doctor; flagged for review in case of a patient monologue.',
+      },
+    });
+    await prisma.transcribeVisit.update({
+      where: { id: input.visitId },
+      data: { speakerMap: fallback as unknown as object, needsReview: true },
+    });
+    return {
+      speakerMap: fallback,
+      lowestConfidence: 0.5,
+      needsReview: true,
+    };
+  }
+
   const blocks: string[] = [];
   for (const [speakerId, lines] of [...samples.entries()].sort((a, b) => a[0] - b[0])) {
     blocks.push(
