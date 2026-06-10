@@ -69,3 +69,31 @@ export class ModelOutputMalformedError extends Error {
     this.attempt = options?.attempt;
   }
 }
+
+/**
+ *  Thrown when Anthropic returns `stop_reason: 'refusal'` — the model
+ *  declined to generate (content-policy / safety). A refusal is
+ *  deterministic for the same input, so `categorizeError` maps it
+ *  PERMANENT (by `name`) to avoid burning the BullMQ retry budget; the
+ *  worker fails the visit into the DLQ with a clear reason + an
+ *  `AI_REFUSAL` audit row. The note-format preview catches it and
+ *  degrades (it must never block parse/save/activate).
+ *
+ *  PHI-safe: carries only the model id + purpose — NO model output /
+ *  transcript content.
+ */
+export class AnthropicRefusalError extends Error {
+  readonly code = 'AI_REFUSAL';
+  readonly model: string;
+  readonly purpose?: string;
+
+  constructor(model: string, purpose?: string) {
+    super(
+      `Anthropic declined to generate (stop_reason=refusal)` +
+        `${purpose ? ` for purpose=${purpose}` : ''} on model ${model}.`
+    );
+    this.name = 'AnthropicRefusalError';
+    this.model = model;
+    this.purpose = purpose;
+  }
+}

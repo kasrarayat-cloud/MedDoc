@@ -172,6 +172,29 @@ export const CORPUS: EvalEncounter[] = [
       notStated: ['head CT', 'hip fracture', 'syncope confirmed', 'pacemaker', 'stroke', 'cognitive impairment / dementia diagnosis', 'hospital admission'],
     },
   },
+  {
+    // Q1 #02.8 — conflicting allergy statements WITHIN the visit. The patient
+    // first denies allergies, then later reports a penicillin allergy. The
+    // extractor must keep BOTH statements (flag the earlier "no allergies"
+    // superseded) and never silently drop either; nothing fabricated. The
+    // plan deliberately still names a penicillin-class drug to exercise the
+    // caution-first Rx safety net (a stated allergy — even a conflicting one
+    // — should drive a contraindication warning until the doctor resolves it).
+    id: 'allergyconflict1-sinusitis',
+    specialty: 'primary-care',
+    complexity: 'moderate',
+    title: 'Primary care — sinusitis with a conflicting allergy history',
+    transcript: `Established patient visit for sinus symptoms. 40-year-old with four days of facial pressure, nasal congestion, and thick discolored discharge. Early in the visit, when asked about allergies, the patient said they have no known drug allergies. Later, while we were discussing starting an antibiotic, the patient paused and said, actually, now that I think about it, I am allergic to penicillin — I got a rash from it as a child. Denies fever, denies tooth pain, denies vision changes, denies shortness of breath. Exam: tenderness over the bilateral maxillary sinuses, oropharynx without exudate, lungs clear, no periorbital swelling. Assessment: acute bacterial rhinosinusitis. Plan: amoxicillin 500 milligrams twice daily for seven days, saline nasal irrigation, ibuprofen as needed, return or call if symptoms worsen or if any rash, swelling, or trouble breathing develops.`,
+    ground: {
+      mustInclude: ['facial pressure', 'acute bacterial rhinosinusitis', 'amoxicillin', 'penicillin allergy', 'conflicting allergy history'],
+      negations: ['denies fever', 'denies tooth pain', 'denies vision changes', 'denies shortness of breath'],
+      medsWithDose: ['amoxicillin 500 mg twice daily for seven days'],
+      // BOTH statements are part of the stated allergy history — neither may
+      // be dropped. The "no known drug allergies" is the superseded one.
+      allergies: 'Conflicting: initially "no known drug allergies", later reported penicillin allergy (childhood rash)',
+      notStated: ['anaphylaxis', 'sulfa allergy', 'CT sinus', 'nasal endoscopy', 'ENT referral', 'oral steroids'],
+    },
+  },
 ];
 
 /** The 3 anchor encounters re-run on Opus for the head-to-head (Phase 5). */

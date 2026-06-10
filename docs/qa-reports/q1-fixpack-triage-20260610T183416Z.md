@@ -2,6 +2,8 @@
 
 **Read-only triage. No code changed.** Re-verifies the 16 STILL-OPEN items from the 2026-05-06 Q1 fix-pack triage (PR #171, `docs/audit-reports/q1-fixpack-triage-20260506T190348Z.md`) against current production code — months of Round-3 / v3.x / note-format / Rx-safety / interpreter-mode / FIND-P1 churn may have incidentally fixed or obsoleted items. **Verified, not trusted.**
 
+> **UPDATE 2026-06-10 — FIX-NOW batch SHIPPED (PR #296).** 09.1, 02.2, 02.8 are implemented, reviewed (code-quality-auditor SHIP), unit + real-model validated, and deployed to prod. Remaining open backlog → **9** (the FIX-LATER items below, unchanged).
+
 Source audit: `docs/ai-pipeline-audit-phase-1-2026-05-05/`. All items scoped to `apps/transcribe-md` + `packages/ai` + `packages/shared` (no `apps/meddoc-pro`).
 
 ## Re-triage outcome
@@ -49,13 +51,13 @@ Severity key: S ≤ ~half-day, M ≈ 1-3 days, L = multi-day / cross-layer.
 
 ---
 
-## Recommended FIX-NOW batch (single follow-up branch, ordered)
+## Recommended FIX-NOW batch — ✅ SHIPPED 2026-06-10 (PR #296, branch `fix/q1-pre-pilot-batch`)
 
-A tight, low-risk, pre-pilot branch — all three are small/self-contained, pilot-relevant, and **not** gated on the Phase-2 eval suite. Suggested branch: `fix/q1-pre-pilot-batch`.
+A tight, low-risk, pre-pilot branch — all three small/self-contained, pilot-relevant, **not** gated on the Phase-2 eval suite. All three are implemented, code-quality-auditor SHIP, unit + real-model validated, and deployed to prod.
 
-1. **09.1 — Anthropic refusal handling.** Detect `stop_reason === 'refusal'` in `packages/ai/src/anthropic.ts`; map to a `permanent` category (+ optional `ANTHROPIC_REFUSAL` audit) in `error-categorize.ts` so a refusal fails fast with a clear reason instead of burning 3 retries. *Most self-contained; do first.* (S)
-2. **02.2 — Single-speaker short-circuit.** In `02-speaker-roles.ts`, when `samples.size === 1` assign doctor + set `needsReview` with a mode-mismatch reason (mirror the `size===0` fallback). Stops the conversation-mode-on-a-monologue footgun. (S)
-3. **02.8 — Allergy conflict resolution.** Add an additive optional `superseded` flag to the L3 `allergies` schema + a CONFLICT-RESOLUTION block in the L3 prompt (prefer the later/more-specific allergy statement; never silently drop a stated allergy). Safety-justified; keep it additive so L4/L6 readers need no change. (S–M)
+1. **09.1 — Anthropic refusal handling.** ✅ SHIPPED. `anthropic.ts` detects `stop_reason==='refusal'` at all 3 call sites → typed `AnthropicRefusalError` + `AI_REFUSAL` ai_calls row; `error-categorize.ts` maps it `permanent` (fail-fast into DLQ); worker emits an `AI_REFUSAL` audit + accurate reviewReason. AuditAction enum + migration. (S)
+2. **02.2 — Single-speaker short-circuit.** ✅ SHIPPED. `02-speaker-roles.ts` `size===1` → dictation/doctor + needsReview, no model call. Real-model: the dictation fixture diarized to 1 speaker → the short-circuit fires. (S)
+3. **02.8 — Allergy conflict resolution.** ✅ SHIPPED. Additive `superseded`/`conflict_note` + L3 CONFLICT-RESOLUTION prompt (keep BOTH, flag the contradicted one, never drop either). **Caution-first safety invariant:** `mergeAllergiesForSafety` feeds chart ∪ in-visit allergies (incl. superseded) into the Rx contraindication check — a retracted allergy still warns until the doctor resolves it. Real-model: both statements kept, superseded flagged, 0 fabrication. (S–M)
 
 **Explicitly NOT in the FIX-NOW batch:** 02.9 (polarity — do with the schema-design pass: it ripples to L4/L5/L6); 01.4/03.3/03.4/03.7 (specialty/schema/eval-gated — sequence behind the eval suite, and only if the pilot includes those specialties); 01.2/01.3 (clinical-curation + eval-gated); 02.3 (caregiver — prompt/UX); 07.1 (cache-key architecture decision); 02.4 (already mitigated by interpreter-mode).
 

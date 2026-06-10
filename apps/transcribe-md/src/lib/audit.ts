@@ -128,6 +128,12 @@ export type AuditAction =
   // emit this when the transcribe() orchestrator's primary Deepgram
   // call failed and Whisper saved the visit.
   | 'TRANSCRIPTION_PROVIDER_FALLBACK'
+  // Q1 #09.1 (2026-06-10) — Anthropic content-policy refusal
+  // (stop_reason=refusal). Emitted by the worker's outer catch when a
+  // layer's model call was declined; categorized PERMANENT so the visit
+  // fails fast into the DLQ. Metadata carries { layer, model, purpose? } —
+  // never model output. Operators count refusals in /admin/audit.
+  | 'AI_REFUSAL'
   // Deep-audit G9 (2026-05-12) — partial automation failure. Emitted
   // when at least one load-bearing L7 layer (icd-coding / cpt-coding /
   // rx-drafting) errored during the fan-out + the worker flipped

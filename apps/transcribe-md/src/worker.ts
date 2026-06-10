@@ -528,6 +528,29 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       }
     }
 
+    // Q1 #02.8: if the extractor flagged a conflicting/superseded allergy
+    // statement, surface a visible needsReview so the doctor resolves it.
+    // (The conflict also renders in the SOAP allergies via conflict_note +
+    // drives the Rx contraindication warning.) COALESCE keeps any existing
+    // reviewReason (low-conf / fallback) rather than clobbering it; the
+    // needsReview boolean is purely additive. Never blocks the pipeline.
+    if (entities.allergies?.some((a) => a.superseded === true)) {
+      try {
+        await prisma.$executeRaw`
+          UPDATE "transcribe_visits"
+          SET "needsReview" = true,
+              "reviewReason" = COALESCE(
+                "reviewReason",
+                'Conflicting allergy statements were detected in this visit — verify the allergy list before signing.'
+              )
+          WHERE id = ${visitId}
+        `;
+      } catch {
+        // Review-flag is advisory; the conflict still surfaces in the SOAP
+        // + the Rx warning. Never fail the visit on this write.
+      }
+    }
+
     // -------------------------------------------------------------------
     // Layers 4-6 — mode-agnostic.
     // -------------------------------------------------------------------
@@ -1001,6 +1024,27 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
     // for the same outcome. Fail-fast in that case so the doctor
     // sees the actionable banner ~5s instead of ~25s after submit.
     const category: ErrorCategory = categorizeError(err);
+    // Q1 #09.1: surface Anthropic content-policy refusals as a distinct,
+    // countable audit action (categorizeError maps them permanent → the
+    // fail-fast path below fires on the first attempt, so this emits once).
+    // Fire-and-forget; never blocks the failure path. PHI-safe metadata.
+    if (err instanceof Error && err.name === 'AnthropicRefusalError') {
+      const refusal = err as Error & { model?: string; purpose?: string };
+      void logAudit({
+        action: 'AI_REFUSAL',
+        targetType: 'TranscribeVisit',
+        targetId: visitId,
+        userId: visit.userId,
+        practiceId: visit.user?.practiceId ?? null,
+        success: false,
+        errorCode: 'AI_REFUSAL',
+        metadata: {
+          layer: currentLayer,
+          model: refusal.model ?? null,
+          purpose: refusal.purpose ?? null,
+        },
+      });
+    }
     const attemptsMade = job.attemptsMade ?? 0;
     const attempts = job.opts.attempts ?? 1;
     const isFinalAttempt = shouldMarkVisitFailed(attemptsMade, attempts);
@@ -1115,6 +1159,13 @@ function buildUserFacingFailureReason(
     typeof (err as unknown as { humanReason?: unknown }).humanReason === 'string'
   ) {
     return (err as unknown as { humanReason: string }).humanReason;
+  }
+
+  // Q1 #09.1: a content-policy refusal is NOT an audio/format problem —
+  // the generic "permanent" copy ("file may be corrupt") would mislead.
+  // Give the doctor an accurate, actionable banner.
+  if (err instanceof Error && err.name === 'AnthropicRefusalError') {
+    return 'Processing was declined by the AI provider’s safety system for this visit’s content. This is not an audio problem — please review the recording/notes, and if the content is clinically appropriate, contact support.';
   }
 
   const phraseByLayer: Record<string, string> = {
