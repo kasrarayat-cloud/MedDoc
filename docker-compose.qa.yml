@@ -183,6 +183,30 @@ services:
       ANTHROPIC_API_KEY: mock-key-qa
       DEEPGRAM_API_KEY: mock-key-qa
 
+  # Marketing site (apps/marketing) — static Next, no backend. Opt-in via the
+  # `marketing` profile so the default qa flow (transcribe-md E2E) never starts
+  # it. Used by the `--project=marketing` smoke (scenario 28); the signup-CTA
+  # URL is BAKED at image-build time (NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL), so
+  # build with TRANSCRIBE_MD_AUTH_URL=http://localhost:9020 for the funnel
+  # assertion. NOT wired into the required e2e CI gate (see scenario 28 header).
+  marketing:
+    image: meddoc-pro-marketing:latest
+    profiles: ["marketing"]
+    restart: "no"
+    mem_limit: 256m
+    cpus: '0.5'
+    environment:
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: "1"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "--spider", "http://127.0.0.1:3010/"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    ports:
+      - "127.0.0.1:9010:3010"
+
 volumes:
   qa_pgdata:
   qa_minio:
