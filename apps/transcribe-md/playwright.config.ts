@@ -82,6 +82,7 @@ export default defineConfig({
         '**/23-note-format-phi-parse-reject.spec.ts',
         '**/24-rx-clinical-safety.spec.ts',
         '**/25-rx-override-correlation.spec.ts',
+        '**/28-marketing-smoke.spec.ts',
       ],
       use: { ...devices['Desktop Chrome'] },
     },
@@ -122,6 +123,20 @@ export default defineConfig({
         '**/25-rx-override-correlation.spec.ts',
       ],
       use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      // Marketing site smoke (scenario 28). Runs ONLY via `--project=marketing`
+      // with MARKETING_E2E=1, against the marketing app (default :9010, its OWN
+      // baseURL — distinct from the transcribe-md app the other projects hit).
+      // Deliberately NOT wired into the required e2e CI gate (a 2nd full app
+      // build for a static-page smoke would bloat the gate); validated locally
+      // against a marketing container on the qa network. See docker-compose.qa.yml.
+      name: 'marketing',
+      testMatch: '**/28-marketing-smoke.spec.ts',
+      use: {
+        ...devices['Desktop Chrome'],
+        baseURL: process.env.PW_MARKETING_URL ?? 'http://localhost:9010',
+      },
     },
   ],
 
