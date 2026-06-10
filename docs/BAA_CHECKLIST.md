@@ -28,7 +28,7 @@ This is the **operator's signing checklist**. For each processor:
 | Processor | Role | PHI exposure | Where it flows | Portal | BAA status |
 |---|---|---|---|---|---|
 | **Anthropic** | LLM provider — `claude-opus-4-8` (L3/L4/L5/L7c-Rx + note-format parse + synthetic preview) + `claude-sonnet-4-6` (L2/L6/L7a/L7b/L7d/L7e); env-overridable via `TRANSCRIBE_MD_CLINICAL_MODEL` (default unchanged) | Cleaned transcript text, SOAP note text, Rx drafts, referral letters, patient summaries (note-format **preview** sends a FIXED SYNTHETIC demo transcript only — no PHI) | `packages/ai/src/anthropic.ts` → `api.anthropic.com` | [trust.anthropic.com](https://trust.anthropic.com/) → "Request a BAA" form. Available on Tier-2+ usage; lower tiers require Anthropic Sales engagement. | ☐ NOT YET |
-| **OpenAI** | **LIVE** ASR fallback (`whisper-1`) — fires when the Deepgram primary fails (5xx / 408 / 429 / network / timeout) for audio ≤ 25 MB | Raw patient audio, transcribed text | `packages/ai/src/whisper-batch.ts` (via `transcribe.ts` orchestrator + worker L1) → `api.openai.com` `POST /v1/audio/transcriptions` | [openai.com/policies/business-associate-agreement](https://openai.com/policies/business-associate-agreement) — self-serve for orgs on Enterprise / Scale tiers via the Compliance API portal. | ☐ NOT YET |
+| **OpenAI** | ASR fallback (`whisper-1`) — **GATED, DISABLED BY DEFAULT** (2026-06-10 kill-switch, audit 4.2). Would fire on a Deepgram failure (5xx/408/429/network/timeout, audio ≤ 25 MB) ONLY if `TRANSCRIBE_MD_WHISPER_FALLBACK_ENABLED=true`. Unset/false → a Deepgram failure fails the visit into the retryable DLQ, never OpenAI. | Raw patient audio, transcribed text — **only if the flag is enabled** | `packages/ai/src/whisper-batch.ts` (via `transcribe.ts` orchestrator + worker L1) → `api.openai.com` `POST /v1/audio/transcriptions` | [openai.com/policies/business-associate-agreement](https://openai.com/policies/business-associate-agreement) — self-serve for orgs on Enterprise / Scale tiers via the Compliance API portal. | ☐ NOT REQUIRED while the fallback is disabled (current prod state). **Sign + file BEFORE setting the enable flag.** |
 | **Deepgram** | **PRIMARY batch ASR** (nova-3-medical) | Uploaded + dictation audio bytes, transcript text | `packages/ai/src/deepgram-batch.ts` (HTTPS `POST /v1/listen`) → `api.deepgram.com` | [deepgram.com/security/hipaa](https://deepgram.com/security/hipaa) → "Request HIPAA BAA" form. Nova-3 Medical is HIPAA-eligible by default; BAA must be on file before any nova-3-medical call carries identifiable audio. | ☐ NOT YET |
 | **Resend** | Transactional email delivery (visit-note export + auth emails) | **Visit-export email carries PHI: patient name in the subject + the signed SOAP note as a PDF attachment** (`apps/transcribe-md/src/lib/email.ts:80-83,117-122`; destination hard-gated to the caller's own account email). Auth emails (verification/reset/etc.) are link/text-only — no PHI. | `apps/transcribe-md/src/lib/email.ts` → `api.resend.com` | [resend.com/legal](https://resend.com/legal) → request a HIPAA BAA via Resend support. | ☐ NOT YET |
 | **Sentry (M7)** | Error + performance monitoring | Error messages, breadcrumbs, stack traces. `beforeSend` hook applies `redactPhi()` scrubber (email / phone / SSN masking + >20-word collapse) before events leave the process. **See `apps/*/sentry.*.config.ts` + `packages/ai/src/log.ts`.** | `sentry.io` (or self-hosted Sentry instance) | [sentry.io/legal/baa](https://sentry.io/legal/baa) — Business plan or above. | ☐ NOT YET — required before turning on `SENTRY_DSN_*` env vars; currently DSN unset in prod containers (SDK no-ops) |
@@ -117,7 +117,7 @@ Before flipping any production traffic — each row maps to a `Status`
 column above + a date stamp once countersigned:
 
 - [ ] Anthropic BAA `COUNTERSIGNED <YYYY-MM-DD>`; copy at `secrets/baa/anthropic-<date>.pdf`
-- [ ] OpenAI BAA `COUNTERSIGNED <YYYY-MM-DD>`; copy at `secrets/baa/openai-<date>.pdf`
+- [ ] OpenAI BAA — **NOT REQUIRED for pilot** while the Whisper fallback is disabled (default; 2026-06-10 kill-switch). Required ONLY before setting `TRANSCRIBE_MD_WHISPER_FALLBACK_ENABLED=true` → then `COUNTERSIGNED <YYYY-MM-DD>`; copy at `secrets/baa/openai-<date>.pdf`
 - [ ] Deepgram BAA `COUNTERSIGNED <YYYY-MM-DD>`; copy at `secrets/baa/deepgram-<date>.pdf`
 - [ ] Resend BAA `COUNTERSIGNED <YYYY-MM-DD>`; copy at `secrets/baa/resend-<date>.pdf` (visit-export email transports the signed SOAP PDF + patient-named subject — PHI, not metadata-only)
 - [ ] Sentry BAA `COUNTERSIGNED <YYYY-MM-DD>` (or Sentry disabled via empty DSN); copy at `secrets/baa/sentry-<date>.pdf`
@@ -171,14 +171,22 @@ Every new third party that will see PHI must:
   `docs/qa-reports/fable5-flip-baa-gate-20260610T144302Z.md`.
 
 ### OpenAI
-- In `apps/transcribe-md`, OpenAI is used ONLY as the **live Whisper
-  fallback** (`whisper-1`, `packages/ai/src/whisper-batch.ts`), reached
-  via the `transcribe()` orchestrator (`transcribe.ts`) from worker L1.
-  The fallback fires when the Deepgram primary throws and the error is
-  not a permanent 4xx — `isPermanent4xxError` treats **408 + 429 as
-  recoverable**, so a routine Deepgram rate-limit / 5xx / network blip
-  routes raw patient audio to OpenAI (for audio ≤ 25 MB). Transcript is
-  tagged `provider:'whisper-fallback'`. Same `AiCall` logging pattern.
+- In `apps/transcribe-md`, OpenAI is used ONLY as a **Whisper ASR fallback**
+  (`whisper-1`, `packages/ai/src/whisper-batch.ts`), reached via the
+  `transcribe()` orchestrator (`transcribe.ts`) from worker L1.
+- **KILL-SWITCH (2026-06-10, audit 4.2): the cross-provider fallback is
+  FAIL-CLOSED / disabled by default.** It fires ONLY when
+  `TRANSCRIBE_MD_WHISPER_FALLBACK_ENABLED=true`. With the flag unset (current
+  prod state), a Deepgram failure that WOULD have been fallback-eligible
+  (5xx / 408 / 429 / network / timeout, audio ≤ 25 MB) instead throws
+  `CrossProviderFallbackDisabledError` → the visit fails into the retryable
+  BullMQ DLQ (surfaced on `/admin/queues`) + a `TRANSCRIPTION_PROVIDER_FALLBACK`
+  audit row (`suppressed:true`) is emitted. **Raw patient audio never reaches
+  OpenAI unless the flag is explicitly enabled.** `isPermanent4xxError` still
+  treats 408/429 as recoverable for the eligibility check; the gate sits after
+  it. Do NOT set the flag until an OpenAI BAA is countersigned + filed.
+- When enabled, a transcript produced by the fallback is tagged
+  `provider:'whisper-fallback'`. Same `AiCall` logging pattern.
 - (Stale refs removed: `gpt-4o-transcribe`, `packages/ai/src/openai.ts`,
   and "MedDoc Pro Realtime voice" — that file does not exist in the
   live app; MedDoc Pro is decommissioned. Any OpenAI *embeddings* /
