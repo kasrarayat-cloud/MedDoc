@@ -14,6 +14,8 @@
 // ============================================================================
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+// Real class (the @meddoc/ai mock below spreads ...actual).
+import { AnthropicRefusalError } from '@meddoc/ai';
 
 const h = vi.hoisted(() => ({
   completeText: vi.fn(),
@@ -135,6 +137,14 @@ describe('previewNoteTemplateAction', () => {
 
   it('degrades to { ok:false } (never throws) when the model call fails', async () => {
     completeText.mockRejectedValueOnce(new Error('model down'));
+    const res = await previewNoteTemplateAction(draft());
+    expect(res.ok).toBe(false);
+  });
+
+  it('Q1 #09.1: a content-policy refusal degrades to { ok:false } — never blocks parse/save/activate', async () => {
+    completeText.mockRejectedValueOnce(
+      new AnthropicRefusalError('claude-opus-4-8', 'tm_soap_draft')
+    );
     const res = await previewNoteTemplateAction(draft());
     expect(res.ok).toBe(false);
   });

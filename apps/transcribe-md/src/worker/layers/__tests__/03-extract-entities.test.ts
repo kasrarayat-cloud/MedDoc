@@ -399,3 +399,35 @@ describe('runLayer3ExtractEntities — prompt-injection delimiter audit', () => 
     ]);
   });
 });
+
+describe('allergies conflict-resolution schema (Q1 #02.8)', () => {
+  it('accepts an allergy flagged superseded + conflict_note (additive)', () => {
+    const parsed = ExtractedEntities.safeParse({
+      ...EMPTY_BUT_VALID,
+      allergies: [
+        { substance: 'penicillin', evidence_quote: 'I am allergic to penicillin' },
+        {
+          substance: 'no known allergies',
+          evidence_quote: 'no allergies that I know of',
+          superseded: true,
+          conflict_note: 'patient first denied allergies, then reported penicillin',
+        },
+      ],
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      // BOTH statements preserved — neither dropped.
+      expect(parsed.data.allergies).toHaveLength(2);
+      expect(parsed.data.allergies[1].superseded).toBe(true);
+    }
+  });
+
+  it('legacy allergies without the new fields still parse (backward-compat)', () => {
+    const parsed = ExtractedEntities.safeParse({
+      ...EMPTY_BUT_VALID,
+      allergies: [{ substance: 'sulfa', evidence_quote: 'allergic to sulfa' }],
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data.allergies[0].superseded).toBeUndefined();
+  });
+});

@@ -12,7 +12,7 @@ import { z } from 'zod';
 import { hashPrompt } from './prompt-hash';
 import { logAiCall } from './log';
 import { claudeCostCents } from './pricing';
-import { ModelOutputMalformedError } from './errors';
+import { ModelOutputMalformedError, AnthropicRefusalError } from './errors';
 import type { AiLogContext } from './types';
 import { logApiUsage, buildAnthropicUsage } from './api-usage';
 
@@ -224,6 +224,34 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
       latencyMs = Date.now() - started;
       usage = extractUsage(response.usage);
 
+      // Q1 #09.1: the model declined (content-policy / safety). A refusal
+      // is deterministic for the same input — log the token-spending call
+      // as AI_REFUSAL and throw a typed PERMANENT error so the retry
+      // budget isn't burned. (`stop_reason as string` is a defensive
+      // widening kept for SDK forward/backward-compat — harmless.)
+      if ((response.stop_reason as string | null) === 'refusal') {
+        logAiCall({
+          ...args,
+          provider: 'anthropic',
+          promptHash,
+          latencyMs,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          cacheReadInputTokens: usage.cacheReadInputTokens,
+          cacheCreationInputTokens: usage.cacheCreationInputTokens,
+          costUsdCents: claudeCostCents(
+            args.model,
+            usage.inputTokens,
+            usage.outputTokens,
+            usage.cacheReadInputTokens,
+            usage.cacheCreationInputTokens,
+          ),
+          success: false,
+          errorCode: 'AI_REFUSAL',
+        });
+        throw new AnthropicRefusalError(args.model, args.purpose);
+      }
+
       // Find the tool_use content block. Anthropic guarantees one
       // when `tool_choice: { type: 'tool', name }` is set + the
       // call succeeds; we still defend against the empty case in
@@ -290,6 +318,30 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
         .trim();
 
       usage = extractUsage(response.usage);
+
+      // Q1 #09.1: refusal → AI_REFUSAL + PERMANENT (see tool branch above).
+      if ((response.stop_reason as string | null) === 'refusal') {
+        logAiCall({
+          ...args,
+          provider: 'anthropic',
+          promptHash,
+          latencyMs,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          cacheReadInputTokens: usage.cacheReadInputTokens,
+          cacheCreationInputTokens: usage.cacheCreationInputTokens,
+          costUsdCents: claudeCostCents(
+            args.model,
+            usage.inputTokens,
+            usage.outputTokens,
+            usage.cacheReadInputTokens,
+            usage.cacheCreationInputTokens,
+          ),
+          success: false,
+          errorCode: 'AI_REFUSAL',
+        });
+        throw new AnthropicRefusalError(args.model, args.purpose);
+      }
 
       try {
         parsed = JSON.parse(unfenced);
@@ -411,7 +463,10 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
       !(err instanceof Error) ||
       (err.message !== 'SCHEMA_FAIL' &&
         !err.message.startsWith('Anthropic response') &&
-        !(err instanceof ModelOutputMalformedError))
+        !(err instanceof ModelOutputMalformedError) &&
+        // Q1 #09.1 (SF-1): the refusal branch already logged AI_REFUSAL above
+        // — don't double-log a spurious ANTHROPICREFUSALERROR row here.
+        !(err instanceof AnthropicRefusalError))
     ) {
       logAiCall({
         ...args,
@@ -479,6 +534,30 @@ export async function anthropicCompleteText(
 
     const usage = extractUsage(response.usage);
 
+    // Q1 #09.1: refusal → AI_REFUSAL + PERMANENT (completeText path).
+    if ((response.stop_reason as string | null) === 'refusal') {
+      logAiCall({
+        ...args,
+        provider: 'anthropic',
+        promptHash,
+        latencyMs,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        cacheReadInputTokens: usage.cacheReadInputTokens,
+        cacheCreationInputTokens: usage.cacheCreationInputTokens,
+        costUsdCents: claudeCostCents(
+          args.model,
+          usage.inputTokens,
+          usage.outputTokens,
+          usage.cacheReadInputTokens,
+          usage.cacheCreationInputTokens,
+        ),
+        success: false,
+        errorCode: 'AI_REFUSAL',
+      });
+      throw new AnthropicRefusalError(args.model, args.purpose);
+    }
+
     logAiCall({
       ...args,
       provider: 'anthropic',
@@ -525,15 +604,19 @@ export async function anthropicCompleteText(
     // post-mortems read directly from ai_calls.errorDetails (no worker
     // log scrape required).
     const latencyMs = Date.now() - started;
-    logAiCall({
-      ...args,
-      provider: 'anthropic',
-      promptHash,
-      latencyMs,
-      success: false,
-      errorCode: err instanceof Error ? err.name.toUpperCase() : 'UNKNOWN',
-      errorDetails: anthropicErrorDetailsJson(err),
-    });
+    // Q1 #09.1 (SF-1): the refusal branch already logged AI_REFUSAL above —
+    // don't double-log a spurious ANTHROPICREFUSALERROR row here.
+    if (!(err instanceof AnthropicRefusalError)) {
+      logAiCall({
+        ...args,
+        provider: 'anthropic',
+        promptHash,
+        latencyMs,
+        success: false,
+        errorCode: err instanceof Error ? err.name.toUpperCase() : 'UNKNOWN',
+        errorDetails: anthropicErrorDetailsJson(err),
+      });
+    }
     throw err;
   }
 }

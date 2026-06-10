@@ -32,6 +32,47 @@ const MODEL = process.env.TRANSCRIBE_MD_CLINICAL_MODEL || 'claude-opus-4-8';
  *  drift here would surface immediately in the SA1 validator integration. */
 const PEDS_AGE_THRESHOLD_YEARS = 18;
 
+/**
+ * Q1 #02.8 — caution-first allergy set for the deterministic Rx
+ * contraindication check. Returns the de-duplicated (case-insensitive) UNION
+ * of the patient-chart allergies AND every allergy SUBSTANCE stated in THIS
+ * visit (parsed from the L3 entities JSON), INCLUDING entries flagged
+ * `superseded`.
+ *
+ * SAFETY INVARIANT: `superseded` is a doctor-review hint, NOT a filter. A
+ * conflicting / retracted in-visit allergy still participates in the
+ * contraindication warning until the doctor explicitly resolves it — the
+ * extraction layer never drops an allergy from a safety check. Malformed
+ * entitiesJson degrades to the chart allergies (the floor) rather than
+ * throwing.
+ */
+export function mergeAllergiesForSafety(
+  chartAllergies: ReadonlyArray<string> | null | undefined,
+  entitiesJson: string
+): string[] {
+  const set = new Map<string, string>(); // lowercased key → first-seen casing
+  const add = (raw: unknown) => {
+    if (typeof raw !== 'string') return;
+    const s = raw.trim();
+    if (s.length === 0) return;
+    const key = s.toLowerCase();
+    if (!set.has(key)) set.set(key, s);
+  };
+  for (const a of chartAllergies ?? []) add(a);
+  try {
+    const parsed = JSON.parse(entitiesJson) as {
+      allergies?: Array<{ substance?: unknown }>;
+    };
+    if (Array.isArray(parsed?.allergies)) {
+      // Deliberately NOT filtering on `superseded` — see the invariant above.
+      for (const a of parsed.allergies) add(a?.substance);
+    }
+  } catch {
+    // Malformed entities → fall back to the chart allergies (already added).
+  }
+  return [...set.values()];
+}
+
 // Q2 fix-pack §06.7 — RxAction enum expanded with clinically distinct
 // scenarios that previously had to be encoded as discontinue+new pairs
 // (switch) or were missing entirely (refill, hold, restart). Existing
@@ -335,6 +376,18 @@ export async function runLayer7cRxDrafting(
   // RX_DRUG_NOT_IN_VERIFIED_DATABASE) and always-on for the
   // contraindication check (allergy substring match) — those run even
   // when the (strength, sig) → mg/day parse fails.
+  //
+  // Q1 #02.8 — caution-first allergy set. The contraindication check runs
+  // against the UNION of the patient-chart allergies AND every allergy
+  // stated in THIS visit (from the L3 entities). In-visit allergies flagged
+  // `superseded` (a conflicting/retracted statement) are INCLUDED, not
+  // filtered: a superseded allergy still triggers the warning until the
+  // doctor explicitly resolves it. Exclusion from a safety check is only
+  // ever a deliberate doctor action — never an extraction-layer decision.
+  const effectiveAllergies = mergeAllergiesForSafety(
+    input.patient.allergies,
+    input.entitiesJson
+  );
   for (const rx of result.prescriptions) {
     const doseMgPerDay = parseRxToMgPerDay(
       rx.strength ?? null,
@@ -346,7 +399,7 @@ export async function runLayer7cRxDrafting(
       patient: {
         dateOfBirth: input.patient.dateOfBirth ?? null,
         weightKg: input.patient.weightKg ?? null,
-        allergies: input.patient.allergies ?? [],
+        allergies: effectiveAllergies,
       },
     });
 
