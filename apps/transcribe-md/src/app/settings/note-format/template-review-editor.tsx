@@ -7,18 +7,21 @@
 // Mirrors docs/design-directions-v9-note-format/3-review.html using the live
 // Linear V1 tokens (inline style + --color-linear-*, the settings convention).
 // The default-text SAFETY callout + the per-default scaffold microcopy are
-// non-optional. The preview is a STRUCTURAL outline (live sample DEFERRED — no
-// generation here). The save payload is stripped to the strict schema shape
-// (no defaultTextMode — the server coerces it to scaffold_confirm).
+// non-optional. The right column shows a LIVE sample note generated in the
+// doctor's format from a fixed SYNTHETIC demo visit (SamplePreview) — it
+// degrades to a structural outline on failure and NEVER blocks save. The save
+// payload is stripped to the strict schema shape (no defaultTextMode — the
+// server coerces it to scaffold_confirm).
 // ============================================================================
 
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
 import { SPECIALTIES } from '@meddoc/shared/specialties';
 import {
   saveNoteTemplateAction,
 } from '@/actions/note-template-lifecycle';
+import { previewNoteTemplateAction } from '@/actions/preview-note-template';
 import type {
   NoteTemplateSection,
   SectionFormatHint,
@@ -325,8 +328,8 @@ export function TemplateReviewEditor({
           )}
         </div>
 
-        {/* RIGHT — structural preview (live sample DEFERRED) */}
-        <StructuralPreview sections={sections} />
+        {/* RIGHT — live sample note generated in the doctor's format (synthetic) */}
+        <SamplePreview sections={sections} getPayload={buildPayload} />
       </div>
 
       {/* Sticky action bar */}
@@ -539,34 +542,154 @@ function SafetyCallout() {
   );
 }
 
-// ── Structural preview (live sample DEFERRED — no generation) ───────────────
-function StructuralPreview({ sections }: { sections: EditableSection[] }) {
+// ── Structure outline rows (fallback shown while the sample renders) ─────────
+function StructureOutline({ sections }: { sections: EditableSection[] }) {
+  return (
+    <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 460, overflow: 'auto' }}>
+      {sections.map((s, i) => (
+        <div key={s._uid} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+          <span style={{ fontFamily: mono, fontSize: 10, color: 'var(--color-linear-text-4)', marginTop: 2 }}>{String(i + 1).padStart(2, '0')}</span>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-linear-text)' }}>{s.label || 'Section'}</div>
+            <div style={{ fontSize: 11, color: 'var(--color-linear-text-3)', marginTop: 1 }}>
+              {s.formatHint}
+              {s.defaultText?.trim() ? ' · has a confirm-before-sign default' : ' · written from the visit'}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Minimal SOAP-markdown render (## headings, **bold**, bullets, paragraphs).
+//    Deliberately no markdown lib + no dangerouslySetInnerHTML — clinicians
+//    need headings + bold, nothing more (mirrors SoapSection's SoapMarkdown). ──
+function renderInlineBold(text: string, keyBase: string): React.ReactNode[] {
+  return text.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
+    part.startsWith('**') && part.endsWith('**') ? (
+      <strong key={`${keyBase}-${i}`} style={{ fontWeight: 600, color: 'var(--color-linear-text)' }}>{part.slice(2, -2)}</strong>
+    ) : (
+      <span key={`${keyBase}-${i}`}>{part}</span>
+    ),
+  );
+}
+function SampleMarkdown({ text }: { text: string }) {
+  const lines = text.split('\n');
+  const out: React.ReactNode[] = [];
+  lines.forEach((raw, i) => {
+    const l = raw.trimEnd();
+    const k = `ln${i}`;
+    if (l.startsWith('## ')) {
+      out.push(<div key={k} style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--color-linear-text)', marginTop: i === 0 ? 0 : 12, marginBottom: 2 }}>{l.slice(3)}</div>);
+    } else if (l.startsWith('# ')) {
+      out.push(<div key={k} style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--color-linear-text)', marginTop: i === 0 ? 0 : 12 }}>{l.slice(2)}</div>);
+    } else if (l.startsWith('- ') || l.startsWith('* ')) {
+      out.push(<div key={k} style={{ display: 'flex', gap: 6, fontSize: 12, color: 'var(--color-linear-text-2)', lineHeight: 1.55 }}><span aria-hidden style={{ color: 'var(--color-linear-text-4)' }}>•</span><span>{renderInlineBold(l.slice(2), k)}</span></div>);
+    } else if (l === '') {
+      out.push(<div key={k} style={{ height: 6 }} />);
+    } else {
+      out.push(<div key={k} style={{ fontSize: 12, color: 'var(--color-linear-text-2)', lineHeight: 1.55 }}>{renderInlineBold(l, k)}</div>);
+    }
+  });
+  return <div style={{ display: 'flex', flexDirection: 'column' }}>{out}</div>;
+}
+
+// ── Live sample-note preview ─────────────────────────────────────────────────
+// Generates a sample note IN THE DOCTOR'S FORMAT from a FIXED SYNTHETIC demo
+// visit (never a real patient). ADDITIVE: a generation failure degrades to the
+// structural outline + a quiet message and NEVER blocks save/activate.
+type PreviewStatus = 'loading' | 'ready' | 'error';
+function SamplePreview({
+  sections,
+  getPayload,
+}: {
+  sections: EditableSection[];
+  getPayload: () => unknown;
+}) {
+  const [status, setStatus] = useState<PreviewStatus>('loading');
+  const [markdown, setMarkdown] = useState<string | null>(null);
+  const [, startPreview] = useTransition();
+  // StrictMode double-invokes effects in dev; guard the initial auto-generate.
+  const didInit = useRef(false);
+
+  function generate() {
+    setStatus('loading');
+    startPreview(async () => {
+      try {
+        const res = await previewNoteTemplateAction(getPayload());
+        if (res.ok) {
+          setMarkdown(res.markdown);
+          setStatus('ready');
+        } else {
+          setStatus('error');
+        }
+      } catch {
+        // The preview is additive — a thrown error must never reach the page
+        // boundary or block the editor. Degrade to the outline.
+        setStatus('error');
+      }
+    });
+  }
+
+  // Auto-generate once after parse (the review screen mounts post-parse).
+  useEffect(() => {
+    if (didInit.current) return;
+    didInit.current = true;
+    generate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div style={{ position: 'sticky', top: 64, alignSelf: 'start' }}>
       <div style={{ border: '1px solid var(--color-linear-border)', borderRadius: 10, background: 'var(--color-linear-surface-1)', overflow: 'hidden' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 14px', borderBottom: '1px solid var(--color-linear-hairline)' }}>
-          <span style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--color-linear-text)' }}>Your note structure</span>
-          <span style={{ fontFamily: mono, fontSize: 9.5, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-linear-text-4)' }}>Outline</span>
+          <span style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--color-linear-text)' }}>Sample note in your format</span>
+          <span
+            title="Generated from a synthetic demo visit — not a real patient."
+            style={{ fontFamily: mono, fontSize: 9.5, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-linear-sage)', border: '1px solid rgba(122,166,140,0.32)', borderRadius: 5, padding: '2px 6px' }}
+          >
+            Demo visit · synthetic
+          </span>
         </div>
-        <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 460, overflow: 'auto' }}>
-          {sections.map((s, i) => (
-            <div key={s._uid} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-              <span style={{ fontFamily: mono, fontSize: 10, color: 'var(--color-linear-text-4)', marginTop: 2 }}>{String(i + 1).padStart(2, '0')}</span>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-linear-text)' }}>{s.label || 'Section'}</div>
-                <div style={{ fontSize: 11, color: 'var(--color-linear-text-3)', marginTop: 1 }}>
-                  {s.formatHint}
-                  {s.defaultText?.trim() ? ' · has a confirm-before-sign default' : ' · written from the visit'}
-                </div>
+
+        <div style={{ padding: status === 'ready' ? '14px 16px' : 0, maxHeight: 460, overflow: 'auto' }}>
+          {status === 'ready' && markdown ? (
+            <SampleMarkdown text={markdown} />
+          ) : status === 'loading' ? (
+            <>
+              <div style={{ padding: '10px 16px 0', fontSize: 11.5, color: 'var(--color-linear-text-3)', display: 'flex', alignItems: 'center', gap: 7 }}>
+                <span aria-hidden style={{ width: 11, height: 11, border: '1.5px solid var(--color-linear-text-4)', borderTopColor: 'var(--color-linear-sage)', borderRadius: '50%', display: 'inline-block', animation: 'qm-spin 1.1s linear infinite' }} />
+                Rendering a sample in your format…
               </div>
-            </div>
-          ))}
+              <StructureOutline sections={sections} />
+            </>
+          ) : (
+            <>
+              <div style={{ padding: '10px 16px 0', fontSize: 11.5, color: 'var(--color-linear-text-3)' }}>
+                Couldn’t render a sample right now — your structure is below. This doesn’t affect saving or activating.
+              </div>
+              <StructureOutline sections={sections} />
+            </>
+          )}
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '10px 14px', borderTop: '1px solid var(--color-linear-hairline)', fontSize: 11.5, color: 'var(--color-linear-text-3)' }}>
-          <span aria-hidden style={{ color: 'var(--color-linear-info)' }}>ⓘ</span>
-          A live sample of a note in your format is coming soon. Default lines a visit doesn’t support are always flagged, never asserted.
+
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderTop: '1px solid var(--color-linear-hairline)' }}>
+          <span style={{ fontSize: 11, color: 'var(--color-linear-text-3)', lineHeight: 1.45 }}>
+            <span aria-hidden style={{ color: 'var(--color-linear-info)' }}>ⓘ</span>{' '}
+            A synthetic demo visit — not a real patient. Default lines a visit doesn’t support are flagged, never asserted.
+          </span>
+          <button
+            type="button"
+            style={{ ...btn, padding: '4px 9px', fontSize: 11 }}
+            onClick={generate}
+            disabled={status === 'loading'}
+          >
+            {status === 'loading' ? 'Rendering…' : 'Regenerate'}
+          </button>
         </div>
       </div>
+      <style>{`@keyframes qm-spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }

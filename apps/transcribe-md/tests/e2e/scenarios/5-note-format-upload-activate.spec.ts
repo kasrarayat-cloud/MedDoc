@@ -78,3 +78,45 @@ test('scenario 5: note-format paste → parse → review → activate (MOCK)', a
   });
   await expect(page.getByText(/Active ·/)).toBeVisible();
 });
+
+test('scenario 5: the live sample-note preview renders in the parsed format (synthetic) + never blocks activate (MOCK)', async ({
+  page,
+}) => {
+  test.skip(
+    process.env.NOTE_FORMAT_E2E !== '1',
+    'Needs an app image built with the note-format mock fixtures. Run with NOTE_FORMAT_E2E=1 against a fresh build.',
+  );
+
+  await signupFreshUser(page, 's5p');
+
+  await page.goto('/settings');
+  await page.getByLabel('Paste a note').fill(SAMPLE_NOTE);
+  await page.getByRole('button', { name: /read my format/i }).click();
+
+  // Review editor reached.
+  await expect(
+    page.getByRole('button', { name: /save & activate/i }),
+  ).toBeVisible({ timeout: 15_000 });
+
+  // The live sample panel is present + CLEARLY LABELLED synthetic, so no doctor
+  // mistakes it for a real patient's note.
+  await expect(page.getByText('Sample note in your format')).toBeVisible();
+  await expect(page.getByText(/demo visit · synthetic/i)).toBeVisible();
+  await expect(page.getByText(/not a real patient/i)).toBeVisible();
+
+  // The sample auto-generates after parse and renders a real note (under MOCK,
+  // the canned SOAP) — i.e. it actually rendered output, not stuck on loading.
+  await expect(
+    page.getByText('[MOCK] Patient reports mild tension headache', { exact: false }),
+  ).toBeVisible({ timeout: 15_000 });
+
+  // ADDITIVE: the preview never gates the action bar — Save & activate works,
+  // and the template persists + activates exactly as without the preview.
+  await page.getByRole('button', { name: /save & activate/i }).click();
+  await expect(page.getByRole('button', { name: /bring a note/i })).toBeVisible({
+    timeout: 15_000,
+  });
+  await page.reload();
+  await expect(page.getByText('[MOCK] General Follow-up')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(/Active ·/)).toBeVisible();
+});
