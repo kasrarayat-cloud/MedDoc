@@ -22,6 +22,7 @@ export {
 } from './whisper-batch';
 export {
   transcribe,
+  CrossProviderFallbackDisabledError,
   type TranscribeArgs,
   type TranscribeResult,
   type TranscribeAudioSource,
