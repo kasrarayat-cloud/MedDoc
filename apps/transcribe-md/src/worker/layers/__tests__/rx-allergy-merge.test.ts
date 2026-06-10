@@ -101,4 +101,29 @@ describe('Rx-layer handling: superseded allergy still fires a contraindication (
       result.warnings.some((w) => w.code === 'RX_CONTRAINDICATION_MATCH')
     ).toBe(false);
   });
+
+  it('documents the validateRxDose match boundary (N-2): a BARE "penicillin" substance does NOT match the "penicillin allergy" needle', () => {
+    // validateRxDose matches `patientAllergy.includes(contraindication)`
+    // (dose-ranges-validator.ts) and amoxicillin's needle is the literal
+    // "penicillin allergy". A bare-substance allergy ("penicillin") therefore
+    // does NOT fire — a PRE-EXISTING property of the matcher, unchanged by the
+    // merge. mergeAllergiesForSafety faithfully passes the substring through;
+    // it correctly INCLUDES the superseded substance regardless of whether the
+    // downstream matcher fires. (Normalizing bare substances → "<x> allergy"
+    // is a separate follow-up, out of this batch's scope.)
+    const allergies = mergeAllergiesForSafety(
+      [],
+      entities([{ substance: 'penicillin', superseded: true }])
+    );
+    expect(allergies).toContain('penicillin'); // merge included it (the invariant)
+    const result = validateRxDose({
+      drug: 'amoxicillin',
+      doseMgPerDay: 1500,
+      patient: { dateOfBirth: '1980-01-01', weightKg: 80, allergies },
+    });
+    // No match — documents the matcher boundary, not a merge defect.
+    expect(
+      result.warnings.some((w) => w.code === 'RX_CONTRAINDICATION_MATCH')
+    ).toBe(false);
+  });
 });

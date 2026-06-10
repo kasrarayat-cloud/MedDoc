@@ -227,8 +227,8 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
       // Q1 #09.1: the model declined (content-policy / safety). A refusal
       // is deterministic for the same input — log the token-spending call
       // as AI_REFUSAL and throw a typed PERMANENT error so the retry
-      // budget isn't burned. (`stop_reason` cast: 'refusal' may not be in
-      // the installed SDK's union yet.)
+      // budget isn't burned. (`stop_reason as string` is a defensive
+      // widening kept for SDK forward/backward-compat — harmless.)
       if ((response.stop_reason as string | null) === 'refusal') {
         logAiCall({
           ...args,
@@ -463,7 +463,10 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
       !(err instanceof Error) ||
       (err.message !== 'SCHEMA_FAIL' &&
         !err.message.startsWith('Anthropic response') &&
-        !(err instanceof ModelOutputMalformedError))
+        !(err instanceof ModelOutputMalformedError) &&
+        // Q1 #09.1 (SF-1): the refusal branch already logged AI_REFUSAL above
+        // — don't double-log a spurious ANTHROPICREFUSALERROR row here.
+        !(err instanceof AnthropicRefusalError))
     ) {
       logAiCall({
         ...args,
@@ -601,15 +604,19 @@ export async function anthropicCompleteText(
     // post-mortems read directly from ai_calls.errorDetails (no worker
     // log scrape required).
     const latencyMs = Date.now() - started;
-    logAiCall({
-      ...args,
-      provider: 'anthropic',
-      promptHash,
-      latencyMs,
-      success: false,
-      errorCode: err instanceof Error ? err.name.toUpperCase() : 'UNKNOWN',
-      errorDetails: anthropicErrorDetailsJson(err),
-    });
+    // Q1 #09.1 (SF-1): the refusal branch already logged AI_REFUSAL above —
+    // don't double-log a spurious ANTHROPICREFUSALERROR row here.
+    if (!(err instanceof AnthropicRefusalError)) {
+      logAiCall({
+        ...args,
+        provider: 'anthropic',
+        promptHash,
+        latencyMs,
+        success: false,
+        errorCode: err instanceof Error ? err.name.toUpperCase() : 'UNKNOWN',
+        errorDetails: anthropicErrorDetailsJson(err),
+      });
+    }
     throw err;
   }
 }

@@ -97,6 +97,9 @@ describe('anthropic refusal (Q1 #09.1)', () => {
     expect(mocks.logAiCall).toHaveBeenCalledWith(
       expect.objectContaining({ success: false, errorCode: 'AI_REFUSAL' })
     );
+    // SF-1 guard: exactly ONE ai_calls row — the refusal branch logs
+    // AI_REFUSAL and the outer catch must NOT re-log an ANTHROPICREFUSALERROR.
+    expect(mocks.logAiCall).toHaveBeenCalledTimes(1);
   });
 
   it('anthropicComplete (text-mode): refusal throws BEFORE the JSON parse', async () => {
