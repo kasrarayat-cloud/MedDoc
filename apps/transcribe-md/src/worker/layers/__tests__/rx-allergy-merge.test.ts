@@ -102,15 +102,15 @@ describe('Rx-layer handling: superseded allergy still fires a contraindication (
     ).toBe(false);
   });
 
-  it('documents the validateRxDose match boundary (N-2): a BARE "penicillin" substance does NOT match the "penicillin allergy" needle', () => {
-    // validateRxDose matches `patientAllergy.includes(contraindication)`
-    // (dose-ranges-validator.ts) and amoxicillin's needle is the literal
-    // "penicillin allergy". A bare-substance allergy ("penicillin") therefore
-    // does NOT fire — a PRE-EXISTING property of the matcher, unchanged by the
-    // merge. mergeAllergiesForSafety faithfully passes the substring through;
-    // it correctly INCLUDES the superseded substance regardless of whether the
-    // downstream matcher fires. (Normalizing bare substances → "<x> allergy"
-    // is a separate follow-up, out of this batch's scope.)
+  it('N-2 FIXED: a BARE "penicillin" substance now matches the "penicillin allergy" needle', () => {
+    // Follow-up to #296 (branch fix/rx-allergy-match-normalization): validateRxDose
+    // now derives the bare substance from each "<substance> allergy" needle and
+    // matches it as a whole word (dose-ranges-validator.ts →
+    // allergyMatchesContraindication). Amoxicillin's "penicillin allergy" needle
+    // therefore fires on the bare "penicillin" exactly as L3 extracts it and as
+    // charts commonly write it. This was the inverse of this test before the fix.
+    // The merge still faithfully INCLUDES the superseded substance (the invariant
+    // pinned above); now the deterministic backstop fires on it too.
     const allergies = mergeAllergiesForSafety(
       [],
       entities([{ substance: 'penicillin', superseded: true }])
@@ -121,9 +121,9 @@ describe('Rx-layer handling: superseded allergy still fires a contraindication (
       doseMgPerDay: 1500,
       patient: { dateOfBirth: '1980-01-01', weightKg: 80, allergies },
     });
-    // No match — documents the matcher boundary, not a merge defect.
+    // The deterministic net now catches the bare-substance allergy.
     expect(
       result.warnings.some((w) => w.code === 'RX_CONTRAINDICATION_MATCH')
-    ).toBe(false);
+    ).toBe(true);
   });
 });
