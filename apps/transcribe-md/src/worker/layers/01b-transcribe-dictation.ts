@@ -21,10 +21,15 @@ import prisma from '@meddoc/db';
 import {
   transcribe,
   withRetry,
+  CrossProviderFallbackDisabledError,
   type TranscribeResult,
   type RetryAttemptInfo,
 } from '@meddoc/ai';
 import { statAudio, streamAudio } from '@/lib/minio';
+import {
+  isWhisperFallbackEnabled,
+  WHISPER_FALLBACK_FLAG,
+} from '@/worker/transcription-fallback-flag';
 // 2026-05-13 Issues #202 + #206 — keyterms are now scoped per-visit
 // via the builder rather than a single global list.
 import { buildKeytermsForVisit } from '@/lib/deepgram-keyterm-builder';
@@ -92,12 +97,17 @@ export async function runLayer1bTranscribeDictation(
         safetyFloor: CONFUSED_DRUG_NAMES_FLAT,
       });
 
+  // 2026-06-10 kill-switch (audit 4.2): fail-closed gate on the
+  // Deepgram→Whisper hop (ships raw audio to non-BAA'd OpenAI).
+  const allowCrossProviderFallback = isWhisperFallbackEnabled();
+
   const attempt = async () => {
     return transcribe({
       practiceId: input.practiceId,
       visitId: input.visitId,
       userId: input.userId,
       purpose: 'tm_transcribe',
+      allowCrossProviderFallback,
       audio: {
         stream: webStream,
         sizeBytes: stat.size,
@@ -136,23 +146,53 @@ export async function runLayer1bTranscribeDictation(
   // 2-attempt semantic; the jitter change decorrelates dictation-mode
   // retries from conversation-mode retries when both workers hit a
   // Deepgram outage simultaneously.
-  const result: TranscribeResult = await withRetry(attempt, {
-    maxAttempts: 2,
-    baseDelayMs: BACKOFF_MS,
-    onRetry: (info: RetryAttemptInfo) => {
-      const err = info.error as { status?: number; code?: string };
-      console.warn(
-        '[layer-01b-transcribe-dictation] retrying',
-        JSON.stringify({
-          attempt: info.attempt,
-          maxAttempts: info.maxAttempts,
-          delayMs: info.delayMs,
-          status: err?.status ?? null,
-          code: err?.code ?? null,
-        })
-      );
-    },
-  });
+  let result: TranscribeResult;
+  try {
+    result = await withRetry(attempt, {
+      maxAttempts: 2,
+      baseDelayMs: BACKOFF_MS,
+      onRetry: (info: RetryAttemptInfo) => {
+        const err = info.error as { status?: number; code?: string };
+        console.warn(
+          '[layer-01b-transcribe-dictation] retrying',
+          JSON.stringify({
+            attempt: info.attempt,
+            maxAttempts: info.maxAttempts,
+            delayMs: info.delayMs,
+            status: err?.status ?? null,
+            code: err?.code ?? null,
+          })
+        );
+      },
+    });
+  } catch (err) {
+    // 2026-06-10 kill-switch (audit 4.2): same suppressed-fallback audit
+    // as L1, scoped to L1b. Deepgram failed + Whisper was eligible but
+    // the cross-provider hop is disabled → audit + re-throw → DLQ. Raw
+    // dictation audio never leaves to OpenAI.
+    if (err instanceof CrossProviderFallbackDisabledError) {
+      void logAudit({
+        action: 'TRANSCRIPTION_PROVIDER_FALLBACK',
+        targetType: 'TranscribeVisit',
+        targetId: input.visitId,
+        userId: input.userId,
+        practiceId: input.practiceId,
+        success: false,
+        errorCode: 'CROSS_PROVIDER_FALLBACK_DISABLED',
+        metadata: {
+          layer: 'L1b',
+          suppressed: true,
+          reason: 'fallback_disabled',
+          flag: WHISPER_FALLBACK_FLAG,
+          primaryProvider: 'deepgram-batch',
+          wouldHaveUsed: 'whisper-fallback',
+          primaryError: err.primaryError.message ?? null,
+          primaryStatus: err.primaryError.status ?? null,
+        },
+      });
+    }
+    throw err;
+  }
 
   // Round 3 quality fix-pack Q0-5 (audit Findings 02.5 + 07.3) —
   // dictation also runs through Deepgram's batch endpoint, so the
