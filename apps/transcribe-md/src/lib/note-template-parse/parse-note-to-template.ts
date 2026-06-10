@@ -41,7 +41,8 @@ import {
   detectPhiKeywords,
 } from './phi-gate';
 
-const MODEL = 'claude-opus-4-8';
+// TRANSCRIBE_MD_CLINICAL_MODEL — eval override (feat/fable5-eval); unset → default unchanged.
+const MODEL = process.env.TRANSCRIBE_MD_CLINICAL_MODEL || 'claude-opus-4-8';
 
 export interface ParseContext {
   /** Tenant for AI-call cost attribution (never persisted with the note). */

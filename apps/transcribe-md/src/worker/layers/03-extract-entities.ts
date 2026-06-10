@@ -23,7 +23,8 @@ import prisma from '@meddoc/db';
 import type { SpeakerMap } from './02-speaker-roles';
 import { logAudit } from '@/lib/audit';
 
-const MODEL = 'claude-sonnet-4-6';
+// TRANSCRIBE_MD_CLINICAL_MODEL — eval override (feat/fable5-eval); unset → default unchanged.
+const MODEL = process.env.TRANSCRIBE_MD_CLINICAL_MODEL || 'claude-sonnet-4-6';
 
 // ---------------------------------------------------------------------------
 // Schema — evidence_quote is always required (no hallucination rule), but

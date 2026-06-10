@@ -49,7 +49,8 @@ import {
   setCachedPreview,
 } from '@/lib/sample-preview-cache';
 
-const PREVIEW_MODEL = 'claude-opus-4-8';
+// TRANSCRIBE_MD_CLINICAL_MODEL — eval override (feat/fable5-eval); unset → default unchanged.
+const PREVIEW_MODEL = process.env.TRANSCRIBE_MD_CLINICAL_MODEL || 'claude-opus-4-8';
 
 export type PreviewTemplateResult =
   | { ok: true; markdown: string; cached: boolean }
