@@ -49,14 +49,15 @@ services:
       # initdb. Standard postgres-image pattern when bind-mounting an
       # ext4 filesystem.
       PGDATA: /var/lib/postgresql/data/pgdata
-    # Phase 3 / HIPAA h8 — encryption-at-rest. The bind-mount to the
-    # encrypted /var/lib/meddoc-postgres-data path is gated on the
-    # operator running infra/setup-encrypted-volume.sh in a maintenance
-    # window FIRST (see docs/RUNBOOK_ENCRYPTED_VOLUME.md). Until that
-    # migration runs, postgres uses the legacy named `pgdata` volume so
-    # routine deploys don't crash. The migration runbook flips this line
-    # to `- /var/lib/meddoc-postgres-data:/var/lib/postgresql/data` as
-    # the final activation step after rsyncing data into the new mount.
+    # Phase 6.1 / HIPAA h8 — encryption-at-rest (MIGRATION COMPLETE, verified
+    # 2026-06-10). The volume below bind-mounts the LUKS dm-crypt device
+    # /dev/mapper/pg-encrypted (mounted at /mnt/pgdata-encrypted), so all
+    # postgres data rests encrypted. This supersedes the earlier pre-migration
+    # plan (legacy named `pgdata` volume → flip to /var/lib/meddoc-postgres-data
+    # after setup-encrypted-volume.sh); the encrypted bind-mount is already the
+    # live data path. The `pgdata` named volume declared at the bottom of this
+    # file is now vestigial. Key-escrow/rotation + the boot-remount unit are
+    # operator-owned per docs/RUNBOOK_ENCRYPTED_VOLUME.md.
     volumes:
       - /mnt/pgdata-encrypted:/var/lib/postgresql/data
     ports:
