@@ -23,6 +23,9 @@ import type {
   TranscribeResult,
   WhisperBatchResult,
 } from '@meddoc/ai';
+// Real class (the @meddoc/ai mock below spreads ...actual, so this is the
+// same reference L1 checks via instanceof).
+import { CrossProviderFallbackDisabledError } from '@meddoc/ai';
 
 // Captured Prisma update calls — the test inspects the data argument to
 // verify the new column + reviewReason.
@@ -51,6 +54,8 @@ type AuditCall = {
   userId?: string | null;
   practiceId?: string | null;
   metadata?: Record<string, unknown>;
+  success?: boolean;
+  errorCode?: string | null;
 };
 const auditCalls: AuditCall[] = [];
 
@@ -61,10 +66,17 @@ vi.mock('@/lib/audit', () => ({
 }));
 
 // Per-test fixture for what the orchestrator returns. Each test sets
-// it via `setNextTranscribeResult(...)` before invoking the layer.
+// it via `setNextTranscribeResult(...)` (resolve) or
+// `setNextTranscribeError(...)` (reject) before invoking the layer.
 let nextTranscribeResult: TranscribeResult | null = null;
+let nextTranscribeError: unknown = null;
 function setNextTranscribeResult(r: TranscribeResult): void {
   nextTranscribeResult = r;
+  nextTranscribeError = null;
+}
+function setNextTranscribeError(e: unknown): void {
+  nextTranscribeError = e;
+  nextTranscribeResult = null;
 }
 
 vi.mock('@meddoc/ai', async () => {
@@ -73,6 +85,9 @@ vi.mock('@meddoc/ai', async () => {
   return {
     ...actual,
     transcribe: vi.fn(async () => {
+      if (nextTranscribeError) {
+        throw nextTranscribeError;
+      }
       if (!nextTranscribeResult) {
         throw new Error('test forgot to setNextTranscribeResult');
       }
@@ -194,6 +209,7 @@ beforeEach(() => {
   updateCalls.length = 0;
   auditCalls.length = 0;
   nextTranscribeResult = null;
+  nextTranscribeError = null;
 });
 
 afterEach(() => {
@@ -359,5 +375,44 @@ describe('runLayer1Transcribe — Whisper fallback (PR-L follow-up)', () => {
     expect(audit.metadata?.fallbackProvider).toBe('whisper-fallback');
     expect(audit.metadata?.primaryStatus).toBe(503);
     expect(audit.metadata?.primaryError).toMatch(/503/);
+  });
+});
+
+describe('runLayer1Transcribe — cross-provider fallback kill-switch (audit 4.2)', () => {
+  it('re-throws + emits a suppressed-fallback audit (no visit write) when the fallback is disabled', async () => {
+    // The orchestrator throws this when Deepgram fails, a Whisper
+    // fallback WAS eligible, but the kill-switch is off — see
+    // packages/ai/src/transcribe.ts.
+    setNextTranscribeError(
+      new CrossProviderFallbackDisabledError({
+        message: 'Deepgram 503 Service Unavailable',
+        status: 503,
+      })
+    );
+
+    // The visit fails closed — L1 re-throws so the worker's outer catch
+    // moves it to FAILED + the DLQ. (Retryable: categorizeError defaults
+    // to transient, so BullMQ re-runs the job with a fresh Deepgram try.)
+    await expect(runLayer1Transcribe(baseInput)).rejects.toBeInstanceOf(
+      CrossProviderFallbackDisabledError
+    );
+
+    // No transcript was produced → the visit row is NOT stamped with a
+    // provider (the success-path update never runs).
+    expect(updateCalls.length).toBe(0);
+
+    // A suppressed-fallback audit row IS emitted so ops can see how
+    // often a real Deepgram failure WOULD have shipped audio to OpenAI.
+    expect(auditCalls).toHaveLength(1);
+    const audit = auditCalls[0];
+    expect(audit.action).toBe('TRANSCRIPTION_PROVIDER_FALLBACK');
+    expect(audit.targetId).toBe(baseInput.visitId);
+    expect(audit.errorCode).toBe('CROSS_PROVIDER_FALLBACK_DISABLED');
+    expect(audit.success).toBe(false);
+    expect(audit.metadata?.layer).toBe('L1');
+    expect(audit.metadata?.suppressed).toBe(true);
+    expect(audit.metadata?.reason).toBe('fallback_disabled');
+    expect(audit.metadata?.wouldHaveUsed).toBe('whisper-fallback');
+    expect(audit.metadata?.primaryStatus).toBe(503);
   });
 });

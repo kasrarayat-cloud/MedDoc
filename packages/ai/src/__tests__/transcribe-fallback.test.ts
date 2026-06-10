@@ -39,7 +39,7 @@ vi.mock('../whisper-batch', async () => {
   };
 });
 
-import { transcribe } from '../transcribe';
+import { transcribe, CrossProviderFallbackDisabledError } from '../transcribe';
 
 const baseArgs = {
   practiceId: 'p1',
@@ -48,6 +48,10 @@ const baseArgs = {
   purpose: 'transcribe' as const,
   audio: Buffer.from(new Uint8Array(1024)), // 1 KB synthetic
   mimeType: 'audio/mpeg',
+  // The cross-provider Whisper fallback is fail-closed (kill-switch).
+  // These mechanism tests exercise the ENABLED path, so opt in
+  // explicitly. The disabled path has its own describe block below.
+  allowCrossProviderFallback: true,
 };
 
 beforeEach(() => {
@@ -191,5 +195,66 @@ describe('transcribe() — both providers fail', () => {
     await expect(transcribe(baseArgs)).rejects.toThrow(/whisper down/);
     expect(mocks.deepgramBatch).toHaveBeenCalledTimes(1);
     expect(mocks.whisperBatch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('transcribe() — cross-provider fallback kill-switch (fail-closed)', () => {
+  it('does NOT call OpenAI on a Deepgram 5xx when fallback is disabled — throws CrossProviderFallbackDisabledError', async () => {
+    const err503 = Object.assign(new Error('deepgram 503'), { status: 503 });
+    mocks.deepgramBatch.mockRejectedValueOnce(err503);
+
+    await expect(
+      transcribe({ ...baseArgs, allowCrossProviderFallback: false })
+    ).rejects.toBeInstanceOf(CrossProviderFallbackDisabledError);
+    // The whole point: raw audio never reaches OpenAI.
+    expect(mocks.whisperBatch).not.toHaveBeenCalled();
+  });
+
+  it('carries the primary Deepgram error on the thrown error (for the audit row)', async () => {
+    const err502 = Object.assign(new Error('deepgram 502'), { status: 502 });
+    mocks.deepgramBatch.mockRejectedValueOnce(err502);
+
+    await expect(
+      transcribe({ ...baseArgs, allowCrossProviderFallback: false })
+    ).rejects.toMatchObject({
+      name: 'CrossProviderFallbackDisabledError',
+      code: 'CROSS_PROVIDER_FALLBACK_DISABLED',
+      primaryError: { status: 502 },
+    });
+    expect(mocks.whisperBatch).not.toHaveBeenCalled();
+  });
+
+  it('blocks the fallback on a Deepgram network error (no status) when disabled', async () => {
+    mocks.deepgramBatch.mockRejectedValueOnce(new Error('ECONNRESET'));
+
+    await expect(
+      transcribe({ ...baseArgs, allowCrossProviderFallback: false })
+    ).rejects.toBeInstanceOf(CrossProviderFallbackDisabledError);
+    expect(mocks.whisperBatch).not.toHaveBeenCalled();
+  });
+
+  it('FAIL-CLOSED by default: omitting the flag entirely also blocks the fallback', async () => {
+    const { allowCrossProviderFallback, ...noFlag } = baseArgs;
+    void allowCrossProviderFallback;
+    mocks.deepgramBatch.mockRejectedValueOnce(
+      Object.assign(new Error('deepgram 503'), { status: 503 })
+    );
+
+    await expect(transcribe(noFlag)).rejects.toBeInstanceOf(
+      CrossProviderFallbackDisabledError
+    );
+    expect(mocks.whisperBatch).not.toHaveBeenCalled();
+  });
+
+  it('a permanent 4xx still re-throws the ORIGINAL Deepgram error (eligibility precedes the kill-switch), no fallback error', async () => {
+    const err400 = Object.assign(new Error('unsupported MIME'), { status: 400 });
+    mocks.deepgramBatch.mockRejectedValueOnce(err400);
+
+    // Disabled flag must NOT mask a permanent input error as a
+    // kill-switch error — the worker still needs the real reason.
+    await expect(
+      transcribe({ ...baseArgs, allowCrossProviderFallback: false })
+    ).rejects.toThrow(/unsupported MIME/);
+    expect(mocks.whisperBatch).not.toHaveBeenCalled();
   });
 });

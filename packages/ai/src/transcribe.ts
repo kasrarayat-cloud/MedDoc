@@ -13,6 +13,19 @@
 //      DON'T fall back — a different provider won't fix bad input.
 //      Re-throw so the worker surfaces a `reviewReason` to the visit.
 //
+// KILL-SWITCH (2026-06-10, fail-closed) — the cross-provider hop in
+// step 2 ships raw patient AUDIO to OpenAI, which requires a
+// countersigned BAA (none on file — see docs/BAA_CHECKLIST.md). The
+// fallback is therefore GATED behind `args.allowCrossProviderFallback`,
+// which is fail-closed: ONLY `=== true` enables it; absent/false/
+// anything-else = disabled. When disabled and a fallback WOULD have
+// fired (transient Deepgram failure, audio fits), the orchestrator
+// throws `CrossProviderFallbackDisabledError` instead of calling
+// OpenAI — the worker catches it, emits a suppressed-fallback audit
+// row, and fails the visit into the DLQ (retryable). The eligibility
+// check (permanent-4xx / oversize) and Deepgram's own internal retries
+// are unchanged — only the cross-provider hop is gated.
+//
 // PR-L NOTE — direction inversion from the task brief:
 // The brief described "OpenAI Whisper → Deepgram" fallback. Reality
 // (verified at PR-L time): the project has been Deepgram-only since
@@ -92,6 +105,14 @@ export interface TranscribeArgs extends AiLogContext {
   deepgram?: Pick<DeepgramBatchArgs, 'options' | 'keyterms' | 'model' | 'timeoutMs'>;
   /** Pass-through to Whisper fallback call. */
   whisper?: { model?: string; timeoutMs?: number };
+  /** Kill-switch for the cross-provider (Deepgram → OpenAI Whisper)
+   *  fallback. FAIL-CLOSED: the cross-provider hop fires ONLY when this
+   *  is exactly `true`. Absent / `false` / any other value = disabled,
+   *  in which case an otherwise-eligible Deepgram failure throws
+   *  {@link CrossProviderFallbackDisabledError} instead of shipping raw
+   *  patient audio to OpenAI (which needs a countersigned BAA). The
+   *  worker resolves this from `TRANSCRIBE_MD_WHISPER_FALLBACK_ENABLED`. */
+  allowCrossProviderFallback?: boolean;
 }
 
 /** Unified result shape regardless of which provider succeeded. */
@@ -126,6 +147,35 @@ export interface TranscribeResult {
 /** Audio byte size — works for both Buffer + TranscribeStreamSource. */
 function audioByteLength(source: TranscribeAudioSource): number {
   return Buffer.isBuffer(source) ? source.byteLength : source.sizeBytes;
+}
+
+/** Thrown when a cross-provider Whisper fallback WAS eligible (transient
+ *  Deepgram failure, audio fits) but the fail-closed kill-switch
+ *  (`allowCrossProviderFallback !== true`) blocked it. The worker
+ *  catches this to emit a suppressed-fallback audit row and fail the
+ *  visit into the DLQ — raw patient audio is NEVER sent to OpenAI.
+ *
+ *  Deliberately does NOT expose an HTTP `.status`: that keeps the L1
+ *  `withRetry` from re-attempting (the job-level BullMQ retry already
+ *  gives Deepgram fresh attempts) and lets `categorizeError` fall to
+ *  its generous `transient` default so the visit stays retryable. The
+ *  underlying primary error rides on `primaryError` for the audit. */
+export class CrossProviderFallbackDisabledError extends Error {
+  readonly code = 'CROSS_PROVIDER_FALLBACK_DISABLED';
+  readonly primaryError: { message: string; status?: number };
+  constructor(
+    primaryError: { message: string; status?: number },
+    options?: { cause?: unknown }
+  ) {
+    super(
+      `Cross-provider transcription fallback is disabled (kill-switch); ` +
+        `primary Deepgram transcription failed` +
+        `${primaryError.status ? ` [${primaryError.status}]` : ''}: ${primaryError.message}`,
+      options
+    );
+    this.name = 'CrossProviderFallbackDisabledError';
+    this.primaryError = primaryError;
+  }
 }
 
 /** Decide whether to attempt fallback after a primary failure.
@@ -204,6 +254,15 @@ export async function transcribe(
       // Permanent failure or audio too large for Whisper — re-throw
       // the original error so the worker surfaces it to the visit.
       throw err;
+    }
+    // Fallback IS eligible for this transient failure — but is the
+    // cross-provider hop allowed? FAIL-CLOSED: only an explicit
+    // `=== true` opt-in (env-driven in the worker) lets raw patient
+    // audio reach OpenAI. Otherwise throw a typed error so the worker
+    // emits a suppressed-fallback audit + DLQs the visit. Never silent,
+    // never OpenAI.
+    if (args.allowCrossProviderFallback !== true) {
+      throw new CrossProviderFallbackDisabledError(primaryError, { cause: err });
     }
   }
 
