@@ -266,6 +266,12 @@ enum AuditAction {
   // + audit_logs.
   TRANSCRIPTION_PROVIDER_FALLBACK
 
+  // Q1 #09.1 (2026-06-10) — Anthropic content-policy refusal
+  // (stop_reason=refusal). Emitted by the worker's outer catch; the visit
+  // is categorized PERMANENT and fails fast into the DLQ. Metadata:
+  // { layer, model, purpose? } — never model output.
+  AI_REFUSAL
+
   // Deep-audit G9 (2026-05-12) — partial automation failure traceability.
   // Emitted when at least one load-bearing L7 layer (L7a icd-coding /
   // L7b cpt-coding / L7c rx-drafting) failed during the fan-out but the
