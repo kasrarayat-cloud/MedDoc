@@ -31,12 +31,31 @@ each branch lands.
 
 ## h8 — Encryption at rest for postgres
 
-**Approach.** LUKS-on-loop-file (`cryptsetup luksFormat` over a sparse
-50 GB image at `/var/lib/meddoc-postgres-encrypted.img`), self-managed
+**Approach.** LUKS-on-loop-file (`cryptsetup luksFormat`), self-managed
 key custody. The earlier Hetzner-managed-volume design in
 `docs/H3_ENCRYPTED_VOLUME_PROCEDURE.md` is **superseded** —
 production deployment is on Zap Hosting, which does not expose
 Hetzner-style managed volumes.
+
+**Deployed reality (verified 2026-06-10).** The migration is **complete and
+live** — postgres runs on the encrypted volume in production. Verified from
+the host: the postgres data dir is a LUKS `dm-crypt` device
+`/dev/mapper/pg-encrypted` mounted at `/mnt/pgdata-encrypted` (ext4), which
+the `postgres` service bind-mounts at `docker-compose.yml` (`- /mnt/pgdata-encrypted:/var/lib/postgresql/data`); the container is healthy on it.
+This **replaces** the pre-deploy design paths this section originally
+described (`/var/lib/meddoc-postgres-encrypted.img` / a `…-postgres-data`
+bind target / a sparse 50 GB image — the deployed dm-crypt device is ~1 GB).
+The "Cryptographic posture" specifics below (exact key-file path
+`/etc/meddoc/postgres-volume.key`, cipher params, the boot-remount
+`meddoc-postgres-volume.service`) describe the intended design per
+[RUNBOOK_ENCRYPTED_VOLUME.md](RUNBOOK_ENCRYPTED_VOLUME.md); they are
+root-owned and were **not** re-verified in this docs pass.
+
+**Operator residual (Kasra).** Per `RUNBOOK_ENCRYPTED_VOLUME.md`: confirm the
+LUKS key-escrow + rotation procedure and that the on-disk key-custody path +
+boot-remount unit match the deployed `/dev/mapper/pg-encrypted` setup. This
+is the only remaining h8 sub-item; the encryption-at-rest control itself is
+verified live (above).
 
 **Cryptographic posture.**
 
