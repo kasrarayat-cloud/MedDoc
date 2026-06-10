@@ -45,8 +45,9 @@ export interface RxValidationInput {
     dateOfBirth: string | Date | null;
     /** Kilograms. Required for peds mg/kg cap check. */
     weightKg: number | null;
-    /** Free-text allergies — case-insensitive substring match against
-     *  contraindications. */
+    /** Free-text allergies. Matched against each contraindication needle by
+     *  full-needle substring OR (for "<substance> allergy" needles) the bare
+     *  substance as a whole word. See allergyMatchesContraindication. */
     allergies: ReadonlyArray<string>;
   };
 }
@@ -77,13 +78,74 @@ function computeAgeYears(dob: string | Date | null): number | null {
   return age;
 }
 
-/** Case-insensitive substring match — `allergy.includes(needle)`. */
+/** Escape a string for safe literal use inside a RegExp. */
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Derive the bare substance from an `"<substance> allergy[…]"` contraindication
+ * needle by stripping the ` allergy` token and everything after it.
+ *
+ *   "penicillin allergy"                     → "penicillin"
+ *   "penicillin allergy (cross-reactivity …)" → "penicillin"
+ *   "ace inhibitor allergy"                  → "ace inhibitor"
+ *   "iodine contrast allergy"                → "iodine contrast"
+ *   "glp-1 allergy"                          → "glp-1"
+ *
+ * Returns null for needles that are NOT substance-allergy patterns (clinical
+ * states/conditions like "active bleeding", "men-2", "egfr <30") — those keep
+ * their existing full-string substring semantics.
+ */
+function deriveAllergySubstance(needleLower: string): string | null {
+  const m = needleLower.match(/^(.+?)\s+allergy\b/);
+  if (!m) return null;
+  const substance = m[1].trim();
+  return substance.length > 0 ? substance : null;
+}
+
+/**
+ * Does any patient allergy string match this contraindication needle?
+ *
+ * Two complementary, purely ADDITIVE rules (either fires the warning):
+ *
+ *  1) Full-needle substring (legacy behaviour, preserved) — covers the
+ *     clinical-state needles ("active bleeding", "pregnancy") and exact
+ *     chart phrasings. No regression: this is the original matcher.
+ *
+ *  2) Substance word-match (the N-2 fix) — for "<substance> allergy" needles
+ *     we derive the bare substance and match it as a whole word (plural
+ *     tolerated) anywhere in the patient string. This makes the deterministic
+ *     backstop fire on the natural phrasings L3 actually extracts and that
+ *     charts actually carry: bare "penicillin", "Penicillin (childhood rash)",
+ *     "penicillins", "allergic to penicillin — hives".
+ *
+ * Word-boundary anchoring is what keeps (2) from over-firing: substance "iron"
+ * matches "iron" / "irons" / "iron-dextran" but NOT "environmental". We err
+ * toward WARNING (a false positive is doctor-reviewable through the override
+ * gate; a false negative is the danger), but never so loosely that a substring
+ * collision invents an allergy that isn't written.
+ *
+ * Cross-reactivity classes (penicillin↔cephalosporin, sulfa↔sulfonamide) are
+ * intentionally OUT of scope here — those live in the curated needle lists
+ * (e.g. amoxicillin already lists "beta-lactam allergy"), not in the matcher.
+ */
 function allergyMatchesContraindication(
   patientAllergies: ReadonlyArray<string>,
   contraindication: string
 ): boolean {
   const needle = contraindication.toLowerCase();
-  return patientAllergies.some((a) => a.toLowerCase().includes(needle));
+  const substance = deriveAllergySubstance(needle);
+  const substanceRe = substance
+    ? new RegExp('\\b' + escapeRegExp(substance) + '(?:s|es)?\\b', 'i')
+    : null;
+
+  return patientAllergies.some((a) => {
+    const allergy = a.toLowerCase();
+    if (allergy.includes(needle)) return true; // rule 1 — legacy/full-needle
+    if (substanceRe && substanceRe.test(allergy)) return true; // rule 2 — N-2 fix
+    return false;
+  });
 }
 
 /**
