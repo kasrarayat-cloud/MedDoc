@@ -339,6 +339,77 @@ function werFromTokens(ref: string[], hyp: string[]): number {
 // Single source of truth for marker counting (audit NIT-4).
 import { countUnclearMarkers as countMarkers } from '@/worker/layers/transcript-clarity';
 
+// ─── Pre-registered protocol 20260611T201252Z: per-claim majority resolution ─
+// Flags from the 3 independent judge passes are clustered by normalized-token
+// Jaccard ≥ 0.5 on invented_text; a claim is majority-(c) iff ≥2 passes flag
+// its cluster as (c) with final presence (both|final_only). Degraded mode
+// (only 2 valid passes after one retry): unanimity required — logged.
+interface ResolvedClaim {
+  text: string;                      // representative invented_text (first seen)
+  majorityClass: 'a' | 'b' | 'c' | null; // class by majority among final-present flags
+  severity: string;
+  finalPresent: boolean;
+  passesFlagged: number[];           // distinct pass indices in the cluster
+  cFinalPasses: number[];            // pass indices with class=c AND final presence
+}
+
+function tokenSet(s: string): Set<string> {
+  return new Set((s.toLowerCase().match(/[a-z0-9]+/g) ?? []));
+}
+function jaccard(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 && b.size === 0) return 1;
+  let inter = 0;
+  for (const t of a) if (b.has(t)) inter++;
+  const union = a.size + b.size - inter;
+  return union === 0 ? 0 : inter / union;
+}
+const isFinalPresent = (f: JudgeFlag) =>
+  f.present_in === 'both' || f.present_in === 'final_only';
+
+function resolveMajority(passes: JudgeFlag[][]): {
+  claims: ResolvedClaim[];
+  majorityC: ResolvedClaim[];
+  validPasses: number;
+} {
+  const valid = passes.filter((p) => Array.isArray(p));
+  const need = valid.length >= 3 ? 2 : valid.length; // unanimity in degraded mode
+  type Member = { flag: JudgeFlag; pass: number };
+  const clusters: { rep: Set<string>; members: Member[] }[] = [];
+  valid.forEach((flags, pi) => {
+    for (const f of flags) {
+      const toks = tokenSet(f.invented_text ?? '');
+      const home = clusters.find((c) => jaccard(c.rep, toks) >= 0.5);
+      if (home) home.members.push({ flag: f, pass: pi });
+      else clusters.push({ rep: toks, members: [{ flag: f, pass: pi }] });
+    }
+  });
+  const claims: ResolvedClaim[] = clusters.map((c) => {
+    const finals = c.members.filter((m) => isFinalPresent(m.flag));
+    const cFinalPasses = [...new Set(finals.filter((m) => m.flag.class === 'c').map((m) => m.pass))];
+    // majority class among final-present members (ties → the stricter class)
+    const counts: Record<string, number> = {};
+    for (const m of finals) counts[m.flag.class] = (counts[m.flag.class] ?? 0) + 1;
+    const order: ('c' | 'a' | 'b')[] = ['c', 'a', 'b'];
+    let majorityClass: 'a' | 'b' | 'c' | null = null;
+    let best = 0;
+    for (const k of order) {
+      if ((counts[k] ?? 0) > best) { best = counts[k]; majorityClass = k; }
+    }
+    const sev = finals.find((m) => m.flag.class === 'c')?.flag.severity
+      ?? c.members[0].flag.severity ?? 'low';
+    return {
+      text: c.members[0].flag.invented_text ?? '',
+      majorityClass: finals.length > 0 ? majorityClass : null,
+      severity: sev,
+      finalPresent: finals.length > 0,
+      passesFlagged: [...new Set(c.members.map((m) => m.pass))],
+      cFinalPasses,
+    };
+  });
+  const majorityC = claims.filter((cl) => cl.cFinalPasses.length >= need);
+  return { claims, majorityC, validPasses: valid.length };
+}
+
 function computeWer(reference: string, hyp: string): number {
   return werFromTokens(normalizeForWer(reference), normalizeForWer(hyp));
 }
@@ -450,23 +521,32 @@ async function judgeBothSoaps(
     'explicitly hedges/attributes ("[not documented]", "per patient",',
     '"[unclear in recording]"), that is NOT a fabrication.',
     '',
-    'BOUNDARY ADJUDICATIONS — (c) means an INVENTED PATIENT-SPECIFIC clinical',
-    'fact. Apply these consistently:',
-    '- CORRECT arithmetic from stated data (age computed from a stated DOB;',
-    '  a total daily dose computed from stated per-dose × frequency) = (b).',
-    '  A MIScomputed value is (c).',
-    '- A correct, generic PROPERTY of a correctly-heard entity (drug class or',
-    '  generic name of a named brand — "Microgynon (combined oral',
-    '  contraceptive)"; the standard instrument of a described exam — an',
-    '  otoscope for "a look down the ear") = (b): drug/exam knowledge, no',
-    '  patient-specific information introduced.',
-    '- A SOAP reading of garbled ASR text that the REFERENCE transcript',
-    '  CONFIRMS correct = (a): the input was wrong, the model was right.',
-    '- STILL (c): a patient-specific fact not stated — possession or',
-    '  availability claims ("had the inhaler on hand"), causal links between',
-    '  separately-stated facts, a specific device/product prescribed where',
-    '  only a vague reference was made, any invented name, dose, vital,',
-    '  finding, or instruction.',
+    'BOUNDARY — LOCKED (pre-registered protocol 20260611T201252Z). The (b)',
+    'elaboration allowances are EXHAUSTIVE — no catch-all. (b) covers ONLY:',
+    '  1. The expected/default route of administration for a named outpatient',
+    '     drug formulation ("orally" for a prescribed tablet course).',
+    '  2. Tense/temporal normalization — restating an explicitly described',
+    '     event in note tense WITHOUT adding outcome, severity, or causal',
+    '     content.',
+    '  3. CORRECT arithmetic from explicitly stated values (DOB → age; stated',
+    '     per-dose × stated frequency → daily total). A miscomputed value',
+    '     is (c).',
+    '(plus faithful rewording/reordering/summarization that introduces NO',
+    'clinical content, as defined for (b) above).',
+    '',
+    '(c) stays strict: ANY clinically consequential assertion without support',
+    'in the ASR transcript — laterality, severity, negative findings,',
+    'diagnoses, plans, referrals, screenings, devices, names, doses, drugs,',
+    'possession/availability claims, causal links. Worked examples:',
+    '- "trimethoprim, twice daily for 3 days" + note "orally" = (b) (allow 1).',
+    '- "it only lasted a couple of days" + note "self-resolving" = (c)',
+    '  (outcome characterization — NOT an enumerated allowance).',
+    '- "your injections" + note "adrenaline auto-injector" = (c) (device',
+    '  specification).',
+    '- ASR contains a term the reference shows was garbled; note repeats it',
+    '  = (a), not (c).',
+    'When a claim is ambiguous under these rules, classify it (c) — the',
+    'protocol resolves ambiguity AGAINST passing.',
     '',
     'Classify each claim by its CONTENT once; the class must NOT depend on which',
     'version it sits in. Then set present_in to where the claim appears:',
@@ -582,6 +662,10 @@ interface CaseResult {
   /** 2026-06-11 L6b gate — true when polish was rejected and finalSoap is
    *  the pre-L6 draft. Drives the polish-survival-rate metric. */
   polishRejected: boolean | null;
+  /** Pre-registered protocol: the 3 independent judge passes + the
+   *  deterministic per-claim majority resolution. */
+  judgePasses: JudgeOut[] | null;
+  resolved: { claims: ResolvedClaim[]; majorityC: ResolvedClaim[]; validPasses: number } | null;
   critiqueSummary: { overall: string; safe: boolean; issues: number; criticalIssues: number } | null;
   judge: JudgeOut | null;
 }
@@ -595,6 +679,7 @@ async function runCase(
     id: cf.id, status: 'success', source: 'audio', wer: null, audioDurationSec: null,
     postL4Soap: null, finalSoap: null, asrTranscript: null, unclearMarkerCount: null,
     polishRejected: null, critiqueSummary: null, judge: null,
+    judgePasses: null, resolved: null,
   };
   let mixedPath: string | null = null;
   // Synthetic identifiers — these never hit the DB (writes are stubbed) but the
@@ -659,13 +744,28 @@ async function runCase(
     r.finalSoap = polished.soapFinal;
     r.polishRejected = polished.polishRejected === true;
 
-    // ── Judge BOTH SOAPs in one call — support-checking against the ASR
-    // transcript the model ACTUALLY consumed (contextText, marker-bearing),
-    // with the reference as the ASR-error ground truth (2026-06-11
-    // measurement-validity fix). Persisted for verification.
+    // ── Judge — pre-registered protocol: 3 INDEPENDENT passes per case,
+    // each retried once on error; per-claim majority resolution. The judge
+    // support-checks against the ASR transcript the model ACTUALLY consumed
+    // (contextText, marker-bearing); reference = ASR-error ground truth.
     r.asrTranscript = contextText;
     r.unclearMarkerCount = countMarkers(contextText);
-    r.judge = await judgeBothSoaps(refTranscript, contextText, soapDraft, polished.soapFinal);
+    const passes: JudgeOut[] = [];
+    for (let pi = 0; pi < 3; pi++) {
+      try {
+        passes.push(await judgeBothSoaps(refTranscript, contextText, soapDraft, polished.soapFinal));
+      } catch {
+        try {
+          passes.push(await judgeBothSoaps(refTranscript, contextText, soapDraft, polished.soapFinal));
+        } catch (e2) {
+          console.warn(`[fullchain] ${cf.id} judge pass ${pi + 1} failed twice: ${e2 instanceof Error ? e2.message.slice(0, 120) : e2}`);
+        }
+      }
+    }
+    if (passes.length === 0) throw new Error('all judge passes failed');
+    r.judgePasses = passes;
+    r.judge = passes[0]; // legacy single-pass fields (per-pass-1 table cells)
+    r.resolved = resolveMajority(passes.map((p) => p.flags));
 
     return r;
   } catch (err) {
@@ -708,7 +808,35 @@ async function writeReports(results: CaseResult[], utc: string): Promise<{ md: s
   lines.push(`| DATABASE_URL | meddoc_qa_test on isolated meddoc-qa stack (NOT prod \`meddoc\`); prisma writes additionally stubbed to no-ops (zero rows) |`);
   lines.push(`| Visits signed | 0 (chain stops at L6; no sign, no email) |`);
   lines.push('');
-  lines.push('## HEADLINE');
+  // ── Pre-registered protocol verdict block (majority-of-3) ──
+  {
+    const withRes = ok.filter((r) => r.resolved !== null);
+    if (withRes.length > 0) {
+      const allMajC = withRes.flatMap((r) => r.resolved!.majorityC.map((c) => ({ id: r.id, c })));
+      const majA = withRes.flatMap((r) =>
+        r.resolved!.claims.filter((cl) => cl.finalPresent && cl.majorityClass === 'a' && cl.passesFlagged.length >= 2)
+      );
+      const majB = withRes.flatMap((r) =>
+        r.resolved!.claims.filter((cl) => cl.finalPresent && cl.majorityClass === 'b' && cl.passesFlagged.length >= 2)
+      );
+      const degraded = withRes.filter((r) => r.resolved!.validPasses < 3);
+      lines.push('## PROTOCOL VERDICT (pre-registered 20260611T201252Z — majority-of-3, per-claim)');
+      lines.push('');
+      lines.push(`- **MAJORITY class-(c) claims across all ${withRes.length} FINAL notes: ${allMajC.length}** → **${allMajC.length === 0 ? 'GREEN' : 'RED'}**`);
+      if (allMajC.length > 0) {
+        for (const { id, c } of allMajC) {
+          lines.push(`  - [${id}] sev=${c.severity} (c-passes: ${c.cFinalPasses.map((p) => p + 1).join(',')}) — ${JSON.stringify(c.text.slice(0, 140))}`);
+        }
+      }
+      lines.push(`- Disclosed (a)-survival (majority-(a) reaching the FINAL note, ≥2 passes): ${majA.length}`);
+      lines.push(`- Disclosed (b)-allowance rate (majority-(b) in FINAL, ≥2 passes): ${majB.length}`);
+      if (degraded.length > 0) {
+        lines.push(`- DEGRADED-MODE cases (<3 valid passes; unanimity required): ${degraded.map((r) => `${r.id}(${r.resolved!.validPasses})`).join(', ')}`);
+      }
+      lines.push('');
+    }
+  }
+  lines.push('## HEADLINE (legacy single-pass-1 view — NOT the verdict)');
   lines.push('');
   lines.push(`- **TODAY's total class-(c) genuine fabrications across the sample (FINAL post-L6 SOAP): ${totalFinalC}** across n=${ok.length} cases (${casesWithFinalC} case(s) carry ≥1 class-c).`);
   lines.push(`- Post-L4 (pre-critique) class-(c): ${totalL4C}. Net L5/L6 change on class-c: ${totalFinalC - totalL4C >= 0 ? '+' : ''}${totalFinalC - totalL4C}.`);
@@ -732,17 +860,21 @@ async function writeReports(results: CaseResult[], utc: string): Promise<{ md: s
   lines.push('');
   lines.push('## Per-case table');
   lines.push('');
-  lines.push('| Case | src | WER | [unclear] | post-L4 (a/b/c) | FINAL (a/b/c) | L5 overall (crit) | L6b gate | notes |');
-  lines.push('|---|---|---|---|---|---|---|---|---|');
+  lines.push('| Case | src | WER | [unclear] | MAJ-c | per-pass FINAL-c | post-L4 (a/b/c) | FINAL (a/b/c) | L5 (crit) | L6b gate | notes |');
+  lines.push('|---|---|---|---|---|---|---|---|---|---|---|');
   for (const r of results) {
-    if (r.status !== 'success') { lines.push(`| ${r.id} | ${r.source} | — | — | — | — | — | — | ERROR: ${r.error} |`); continue; }
+    if (r.status !== 'success') { lines.push(`| ${r.id} | ${r.source} | — | — | — | — | — | — | — | — | ERROR: ${r.error} |`); continue; }
     const f = r.judge!.flags;
     const crit = r.critiqueSummary!;
     const note = r.source === 'reference' ? 'audio missing → reference transcript (text mode)' : '';
     const gateCell = r.polishRejected === null ? '—' : r.polishRejected ? 'REJECTED→draft' : 'kept';
     const l4Cell = `${tally(f, inL4, 'a')}/${tally(f, inL4, 'b')}/${tally(f, inL4, 'c')}`;
     const finCell = `${tally(f, inFinal, 'a')}/${tally(f, inFinal, 'b')}/${tally(f, inFinal, 'c')}`;
-    lines.push(`| ${r.id} | ${r.source} | ${r.wer != null ? pct(r.wer) : '—'} | ${r.unclearMarkerCount ?? '—'} | ${l4Cell} | ${finCell} | ${crit.overall} (${crit.criticalIssues}) | ${gateCell} | ${note} |`);
+    const majCell = r.resolved ? String(r.resolved.majorityC.length) : '—';
+    const perPass = r.judgePasses
+      ? r.judgePasses.map((p) => p.flags.filter((x) => x.class === 'c' && isFinalPresent(x)).length).join('/')
+      : '—';
+    lines.push(`| ${r.id} | ${r.source} | ${r.wer != null ? pct(r.wer) : '—'} | ${r.unclearMarkerCount ?? '—'} | **${majCell}** | ${perPass} | ${l4Cell} | ${finCell} | ${crit.overall} (${crit.criticalIssues}) | ${gateCell} | ${note} |`);
   }
   lines.push('');
   const allFinalFlags = ok.flatMap((r) => r.judge!.flags.filter(inFinal));
