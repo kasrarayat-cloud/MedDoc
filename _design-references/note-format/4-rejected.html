@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>My Note Format — Couldn't read · QuillMD</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="note-format.css" rel="stylesheet" />
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand"><div class="brand-mark">Q</div><div class="brand-name">QuillMD</div></div>
+    <div class="nav-eyebrow">Workspace</div>
+    <a class="nav-item" href="#"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.7"><path d="M12 5v14M5 12h14"/></svg> New visit</a>
+    <a class="nav-item" href="#"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.7"><path d="M4 6h16M4 12h16M4 18h10"/></svg> Visits</a>
+    <a class="nav-item" href="#"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.7"><circle cx="12" cy="8" r="3.2"/><path d="M5 20c0-3.3 3-5 7-5s7 1.7 7 5"/></svg> Patients</a>
+    <div class="nav-eyebrow">Account</div>
+    <a class="nav-item nav-item--active" href="#"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.6-2-3.4-2.4 1a7 7 0 0 0-1.7-1l-.4-2.6H10l-.4 2.6a7 7 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.6a7 7 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 1.7 1l.4 2.6h3.6l.4-2.6a7 7 0 0 0 1.7-1l2.4 1 2-3.4-2-1.6a7 7 0 0 0 .1-1Z"/></svg> Settings</a>
+    <div class="sidebar-foot"><div class="avatar">RA</div><div style="font-size:12px;color:var(--text-2)">Dr. R. Almeida</div></div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar"><span class="crumb"><b>Settings</b><span class="sep">/</span>My Note Format</span></div>
+
+    <div class="settings-grid" style="grid-template-columns:1fr;max-width:820px;padding-top:30px;">
+      <div class="col">
+        <section class="section">
+          <div class="sec-eyebrow">02 / Note format</div>
+          <h3 class="sec-title">We couldn't safely read this note</h3>
+
+          <div class="reject" role="alert" style="margin-top:16px;">
+            <div class="r-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M10.3 3.8 2.5 18a1.8 1.8 0 0 0 1.6 2.7h15.8a1.8 1.8 0 0 0 1.6-2.7L13.7 3.8a1.9 1.9 0 0 0-3.4 0Z"/><path d="M12 9v5M12 17h.01"/></svg></div>
+            <div>
+              <div class="r-head">This note has patient details we can't fully separate</div>
+              <div class="r-body">To keep your patients safe, QuillMD won't build a template it isn't sure is clean. This note looks like it has specifics — names, dates, or findings — woven through the wording in a way we can't reliably strip. Nothing was saved.</div>
+              <div class="r-acts">
+                <a class="btn-primary" href="1-entry.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 4h14v16H5z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg> Start from the standard format</a>
+                <a class="btn" href="1-entry.html">Remove patient details &amp; try again</a>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top:16px;display:flex;flex-direction:column;gap:9px;">
+            <div class="label" style="margin-bottom:2px;">What usually helps</div>
+            <div style="display:flex;gap:9px;align-items:flex-start;font-size:12.5px;color:var(--text-2);line-height:1.55;"><span style="color:var(--sage)">·</span> Replace patient names with a blank or "[patient]", and remove dates of birth and MRNs.</div>
+            <div style="display:flex;gap:9px;align-items:flex-start;font-size:12.5px;color:var(--text-2);line-height:1.55;"><span style="color:var(--sage)">·</span> Keep your headings, ordering, and any "normal exam" boilerplate — that's all QuillMD needs.</div>
+            <div style="display:flex;gap:9px;align-items:flex-start;font-size:12.5px;color:var(--text-2);line-height:1.55;"><span style="color:var(--sage)">·</span> Or skip it entirely — the standard format works well, and you can bring a note later.</div>
+          </div>
+
+          <div class="privacy" role="note" style="margin-top:18px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3l7 3v5c0 4.4-3 8-7 10-4-2-7-5.6-7-10V6l7-3Z"/><path d="M9.2 12l2 2 3.6-4"/></svg>
+            <p>The note you pasted was <b>not saved</b> — it was discarded the moment we finished reading it.</p>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+</div>
+</body>
+</html>

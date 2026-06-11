@@ -37,6 +37,10 @@ vi.mock('@meddoc/db', () => ({
 
 vi.mock('@meddoc/ai', () => ({
   embedText: mockEmbedText,
+  // edit-tracking.ts wraps caught errors through redactPhi before logging
+  // (originalSoap is in scope). Identity stub is enough — we only assert the
+  // function degrades gracefully, not the scrubbing itself.
+  redactPhi: (v: unknown) => v,
 }));
 
 // Import AFTER the mocks so the module picks them up.
@@ -90,6 +94,7 @@ describe('captureEditPattern — happy path', () => {
     expect(mockEmbedText).toHaveBeenCalledWith({
       text: ORIGINAL,
       practiceId: 'p1',
+      userId: 'u1',
       visitId: 'v1',
       purpose: 'tm_embed',
     });

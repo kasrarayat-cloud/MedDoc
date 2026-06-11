@@ -111,3 +111,26 @@ _design-references/quillmd-processing-mockups.html
 # `apps/transcribe-md/scripts/eval/primock57-run.ts`. Local-only; eval
 # scripts read from this path but never write to it.
 .local/
+
+# ── Pre-pilot hygiene sweep (2026-06-11, chore/pre-pilot-hygiene) ──
+# Playwright MCP page snapshots — transient per-run tool artifacts.
+.playwright-mcp/
+
+# Bulky design-exploration / landing render dirs: image-heavy (PNG renders),
+# 0 tracked precedent, host-side reference only — same class as the
+# already-ignored design-directions-v5/v6 above. Kept on disk, never committed.
+docs/design-directions-v3-landing/
+docs/design-directions-v4-landing/
+docs/design-directions-v5-designer/
+docs/design-directions-v9-note-format/
+docs/landing-immersive-enhance/
+docs/landing-v6-migration/screenshots/
+
+# Authenticated QA sweeps — carry test-account credential traces
+# (stage2-signup-trace.json / verify-bypass-trace.json) + bulky screenshots.
+# Host-side only; the markdown audit trail lives under docs/qa-reports/.
+docs/qa-sweep-2026-05-03/
+docs/qa-sweep-authenticated-2026-05-03/
+
+# Co-tenant Caddyfile backup snapshot (LeatherERP host config) — host-only.
+Caddyfile.bak-T0.19-followup
