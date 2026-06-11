@@ -1,0 +1,75 @@
+id,severity,domain,title,file,effort,status
+FIND-P1-001,P1,Reliability / HIPAA audit completeness,signVisitAction HIPAA audit-trail gap (action path),apps/transcribe-md/src/actions/soap.ts:130,Small,open
+FIND-P1-002,P1,Reliability / HIPAA audit completeness,saveSoapDraftAction SOAP-edit audit visibility gap,apps/transcribe-md/src/actions/soap.ts:42,Small,open
+FIND-P1-003,P1,Reliability / HIPAA audit completeness,reassignSpeakerAction no audit emission,apps/transcribe-md/src/actions/soap.ts:197,Small,open
+FIND-P1-004,P1,Data integrity,L7b CPT-coding non-transactional dual write,"apps/transcribe-md/src/worker/layers/07b-cpt-coding.ts:219,229",Small,open
+FIND-P1-005,P1,Async correctness,actions/soap.ts:177 fire-and-forget captureEditPattern,apps/transcribe-md/src/actions/soap.ts:177,Small,open
+FIND-P1-006,P1,Reliability,Deepgram batch has no inline retry,packages/ai/src/deepgram-batch.ts:237,Medium,open
+FIND-P1-007,P1,Reliability,Whisper batch has no retry,packages/ai/src/whisper-batch.ts:189,Small,open
+FIND-P1-008,P1,Reliability,L1 retry backoff has no jitter (thunder-herd surface),apps/transcribe-md/src/worker/layers/01-transcribe.ts:170,Small,open
+FIND-P1-009,P1,Reliability,L1b retry backoff has no jitter (duplicate of P1-008),apps/transcribe-md/src/worker/layers/01b-transcribe-dictation.ts:135,Small,open
+FIND-P1-010,P1,Reliability,Anthropic JSON.parse(unfenced) on final attempt throws,packages/ai/src/anthropic.ts:292,Small,open
+FIND-P1-011,P1,Worker / data integrity,loadResumeState P2025 race on deleted visit,apps/transcribe-md/src/worker.ts:234-252,Small,open
+FIND-P1-012,P1,Worker / data integrity,confidenceScores Prisma JSON silent coerce,apps/transcribe-md/src/worker.ts:944,Small,open
+FIND-P1-013,P1,Worker / reliability,shouldFailNow categorize-error false-positive bypasses retries,apps/transcribe-md/src/worker.ts:984-1000,Medium,open
+FIND-P1-014,P1,Worker / reliability,Nested .catch() inside outer catch swallows FAILED-write failure,apps/transcribe-md/src/worker.ts:1008-1027,Small,open
+FIND-P1-015,P1,AI pipeline,L4 SOAP generation: output not Zod-validated,apps/transcribe-md/src/worker/layers/04-generate-soap.ts:214,Medium,open
+FIND-P1-016,P1,AI pipeline,L6 polish: no structural validation on soapFinal write,apps/transcribe-md/src/worker/layers/06-polish.ts:74-89,Medium,open
+FIND-P1-017,P1,AI pipeline,L2 speaker-role fallback skips schema validation,apps/transcribe-md/src/worker/layers/02-speaker-roles.ts:100-115,Small,open
+FIND-P1-018,P1,Test coverage,Pipeline layers L2-L6 have NO sibling unit tests,"apps/transcribe-md/src/worker/layers/{02-speaker-roles,03-extract-entities,04-generate-soap,05-self-critique,06-polish}.ts",Large,open
+FIND-P2-001,P2,Type safety,Type safety: (prisma as any) casts (9 sites),apps/transcribe-md/src/app/admin/users/_lib/users-data.ts + adjacent,Small,open
+FIND-P2-002,P2,Type safety,Type safety: session/auth as any casts (7 sites),"apps/transcribe-md/src/lib/{auth,nextauth,admin-api-gate}.ts",Small,open
+FIND-P2-003,P2,Type safety,Type safety: resume-state casts in worker (5 sites),"apps/transcribe-md/src/worker.ts:449,527,546,599 + 01-transcribe.ts:240",Small,open
+FIND-P2-004,P2,Type safety,Type safety: model-response casts (3 sites),"packages/ai/src/{whisper-batch.ts:197,anthropic.ts:201} + 03-extract-entities.ts:58",Small,open
+FIND-P2-005,P2,Async correctness,Fire-and-forget user.update — Prisma errors silently dropped,apps/transcribe-md/src/worker.ts:1034,Small,open
+FIND-P2-006,P2,Async correctness,Fire-and-forget logAudit VISIT_AUTOMATION_INCOMPLETE,apps/transcribe-md/src/worker.ts:923,Small,open
+FIND-P2-007,P2,Async correctness,void IIFE keytermsApplied write — silent drop,apps/transcribe-md/src/worker/layers/01-transcribe.ts:277,Small,open
+FIND-P2-008,P2,Async correctness,Same IIFE pattern duplicated in dictation layer,apps/transcribe-md/src/worker/layers/01b-transcribe-dictation.ts:210,Small,open
+FIND-P2-009,P2,Reliability,Three nested JSON.parse fallbacks in llm-mdm tryParseJson,"apps/transcribe-md/src/lib/em-coding/llm-mdm.ts:239,247,257",Small,open
+FIND-P2-010,P2,Worker,await judgeWarmPromise adds latency to READY transition,apps/transcribe-md/src/worker.ts:807,Small,open
+FIND-P2-011,P2,Worker,findUnique().catch(() => null) — DB error indistinguishable from clean nulls,apps/transcribe-md/src/worker.ts:905,Small,open
+FIND-P2-012,P2,Worker,clearAutomationColumn map undocumented runtime fall-through,apps/transcribe-md/src/worker.ts:189-208,Small,open
+FIND-P2-013,P2,Worker,findUnique with no row-version — race vs FAILED-state update,apps/transcribe-md/src/worker.ts:267-291,Medium,open
+FIND-P2-014,P2,Worker,Visit not-found raw Error → P2025 mask on subsequent update,apps/transcribe-md/src/worker.ts:293,Small,open
+FIND-P2-015,P2,Reliability,enqueueDlq race — Redis blip silently misses DLQ,apps/transcribe-md/src/worker.ts:1396,Medium,open
+FIND-P2-016,P2,Code pattern,Multi-cast humanReason (err as unknown as ...),apps/transcribe-md/src/worker.ts:1086-1090,Small,open
+FIND-P2-017,P2,Code pattern,console.error mixed with log.info in worker.ts (10 sites),apps/transcribe-md/src/worker.ts (10x),Small,open
+FIND-P2-018,P2,Code pattern,Per-mode input validation if/else over discriminated union,apps/transcribe-md/src/worker.ts:300-311,Small,open
+FIND-P2-019,P2,Code pattern,clearAutomationColumn literal column-name duplication,apps/transcribe-md/src/worker.ts:198-204,Small,open
+FIND-P2-020,P2,Code pattern,Resend SDK response casts (result as any).data/.error (4 sites),apps/transcribe-md/src/lib/email.ts (4x),Small,open
+FIND-P2-021,P2,AI pipeline,liftStringToFact preprocess only top-level — nested arrays fail silently,apps/transcribe-md/src/worker/layers/03-extract-entities.ts:68-79,Small,open
+FIND-P2-022,P2,AI pipeline,L5 writes critique JSON — verify modelClient.complete enforces Zod,apps/transcribe-md/src/worker/layers/05-self-critique.ts:181,Small,open
+FIND-P2-023,P2,Data integrity,input.patient.allergies ?? [] — null allergies → no Rx safety context,apps/transcribe-md/src/worker/layers/07c-rx-drafting.ts:348,Small,open
+FIND-P2-024,P2,Data integrity,reassignSpeakerAction non-atomic read-modify-write on speakerMap,apps/transcribe-md/src/actions/soap.ts:230-247,Medium,open
+FIND-P2-025,P2,Data integrity,confidenceScores cleared to null on attempt N — prior valid signal lost,apps/transcribe-md/src/worker.ts:335,Small,open
+FIND-P2-026,P2,Data integrity,Status transitions DRAFTING→CRITIQUING→POLISHING standalone updates,apps/transcribe-md/src/worker.ts:565-635,Medium,open
+FIND-P2-027,P2,Data integrity,transcript + keytermsApplied separate transactions (fire-and-forget 2nd),"apps/transcribe-md/src/worker/layers/01-transcribe.ts:219,279",Small,open
+FIND-P2-028,P2,Database,Multi-tenancy enforcement reliance — 7 models without practiceId,packages/db/prisma/schema.prisma (TranscribeVisit/VisitDelivery/etc),Medium,open
+FIND-P2-029,P2,Database,audit_logs.userId has NO FK to users.id (deliberate; verify snapshot on every emission),packages/db/prisma/schema.prisma (audit_logs),Small,open
+FIND-P2-030,P2,Database,AccountDeletion purge TODO (T-M16.3+) — rows accumulate indefinitely,packages/db/prisma/schema.prisma:702-731,Small,open
+FIND-P2-031,P2,Database,Multi-tenancy migration irreversibility (ALTER COLUMN NOT NULL on 5 tables),packages/db/prisma/migrations/20260412234252_add_multi_tenancy/migration.sql,Medium,open
+FIND-P2-032,P2,Performance,Postgres slow-query logging disabled (log_min_duration_statement = -1),postgres config,Small,open
+FIND-P2-033,P2,Performance,pg_stat_statements not installed — no per-query telemetry,postgres extensions,Small,open
+FIND-P2-034,P2,Performance,Worker concurrency hardcoded at 2 — could scale to 4-6,apps/transcribe-md/src/worker.ts CONCURRENCY env,Small,open
+FIND-P2-035,P2,Frontend / UX,"Missing loading.tsx on 3 high-traffic routes (patients, visits, visits/new)","apps/transcribe-md/src/app/{patients,visits,visits/new}/",Small,open
+FIND-P2-036,P2,Frontend / UX,"Missing error.tsx on 5+ routes (patients, admin/*, signup, forgot-password)","apps/transcribe-md/src/app/{patients,admin/*,signup,forgot-password}/",Small,open
+FIND-P2-037,P2,Frontend / UX,.then((r) => r.json()) without .catch on 5+ admin client-side fetches,apps/transcribe-md/src/app/admin/*/_components/*.client.tsx (5x),Small,open
+FIND-P2-038,P2,Frontend / UX,Loading-state inconsistency (34 empty-state vs 8 explicit loading),"apps/transcribe-md/src/{components,app}/ (147 .tsx files)",Medium,open
+FIND-P2-039,P2,Accessibility,Limited aria-live coverage (4 components total; visit-record + patient-picker not in list),apps/transcribe-md/src/components/* (audit needed),Medium,open
+FIND-P2-040,P2,Test coverage,Vitest coverage NOT configured (no c8/v8/istanbul); thresholds unenforced,apps/transcribe-md/vitest.config.*,Small,open
+FIND-P2-041,P2,Test coverage,"72 test files vs 185 source TS files (~39% colocation, no critical-path matrix)",apps/transcribe-md/src/**,Large,open
+FIND-P2-042,P2,Test coverage,transcribe-md vitest NOT in CI (apps/meddoc-pro test:all is decommissioned echo),apps/meddoc-pro/package.json test:all + .github/workflows/test.yml,Medium,open
+FIND-P2-043,P2,Operational,Sentry verification — only 1 explicit captureException; verify worker captureWorkerException flows,apps/transcribe-md/src/* (audit),Small,open
+FIND-P2-044,P2,Operational,Postgres backup sidecar 'Up 9 days (unhealthy)' — verify backups completing,docker compose (meddoc-pro-postgres-backup-1),Small,open
+FIND-P2-045,P2,Operational,No heap monitoring in worker (process.memoryUsage polling),apps/transcribe-md/src/worker.ts,Small,open
+FIND-P3-001,P3,Async correctness,setInterval void tick() — sync throw silently dropped (defensive only),apps/transcribe-md/src/worker.ts:1345,Small,open
+FIND-P3-002,P3,Code pattern,"L1 + L1b massive duplication (retry block, audioStats, keyterms, casts)","apps/transcribe-md/src/worker/layers/{01-transcribe.ts,01b-transcribe-dictation.ts}",Large,open
+FIND-P3-003,P3,Database,No migration rollback artifacts (Prisma forward-only by design; PITR backup is recovery),packages/db/prisma/migrations/*,Large,open
+FIND-P3-004,P3,Database,ALTER TYPE ENUM ADD VALUE migrations can't be wrapped in transaction,packages/db/prisma/migrations/* (multiple),Medium,open
+FIND-P3-005,P3,Performance,No bundle-analyze hygiene — client-bundle drift untracked,apps/transcribe-md/next.config.*,Small,open
+FIND-P3-006,P3,Performance,Docker build cache 156.9 GB on host (125.6 GB reclaimable),host (docker system df),Small,open
+FIND-P3-007,P3,Frontend / UX,.then w/o .catch on visits rx-tab click handler,apps/transcribe-md/src/app/visits/[id]/rx-tab.tsx:294,Small,open
+FIND-P3-008,P3,Frontend / UX,.then w/o .catch on command palette — recent items silently miss,apps/transcribe-md/src/components/command-palette.tsx:65,Small,open
+FIND-P3-009,P3,Accessibility,No screen-reader flow audit recorded (axe-core catches structural only),all routes (manual SR walk-through needed),Medium,open
+FIND-P3-010,P3,Operational,No alert rules for queue depth / DLQ size / pg connections / health 5xx,(no rules file in repo),Medium,open
+FIND-P3-011,P3,Operational,Production-recovery runbook not documented in repo (oral with Kasra),(no runbook file in repo),Small,open

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Note-Format Customization — Phase 2b UI · QuillMD</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="note-format.css" rel="stylesheet" />
+</head>
+<body>
+<div style="max-width:760px;margin:0 auto;padding:56px 24px 80px;">
+  <div class="brand" style="padding:0 0 22px;"><div class="brand-mark">Q</div><div class="brand-name">QuillMD</div></div>
+  <div class="settings-eyebrow">Phase 2b · Note-format customization</div>
+  <h1 style="margin:0;font-size:26px;font-weight:600;letter-spacing:-0.018em;">Bring your own note → review → activate</h1>
+  <p style="color:var(--text-2);font-size:13.5px;line-height:1.6;margin:8px 0 0;max-width:62ch;">Production-fidelity screens for the "My Note Format" section inside Settings. Mirrors the live Phase 5 Linear V1 system (pure dark canvas, hairline borders, sage accent, Inter + JetBrains Mono). The review screen is the centerpiece; the default-text safety messaging is built in, not optional.</p>
+
+  <div class="tpl-list" style="margin-top:26px;">
+    <a class="tpl-row" href="1-entry.html" style="text-decoration:none;color:inherit;">
+      <div><div class="tpl-name">1 · Entry</div><div class="tpl-meta">Two paths (bring a note / standard), paste + upload, privacy line, active-template status</div></div>
+      <span class="pill">Settings section</span><span class="muted">→</span>
+    </a>
+    <a class="tpl-row" href="2-parsing.html" style="text-decoration:none;color:inherit;">
+      <div><div class="tpl-name">2 · Parsing</div><div class="tpl-meta">Calm "Reading your format…" — removes details, never saves the note</div></div>
+      <span class="pill pill--info">Transient</span><span class="muted">→</span>
+    </a>
+    <a class="tpl-row" href="3-review.html" style="text-decoration:none;color:inherit;">
+      <div><div class="tpl-name">3 · Review <span class="muted" style="font-weight:400">— the hero</span></div><div class="tpl-meta">Reorderable sections editor · format toggles · default-text safety messaging · flagged suggestions · live sample-note preview</div></div>
+      <span class="pill pill--active">Core</span><span class="muted">→</span>
+    </a>
+    <a class="tpl-row" href="4-rejected.html" style="text-decoration:none;color:inherit;">
+      <div><div class="tpl-name">4 · Rejected</div><div class="tpl-meta">Calm, non-judgmental — offers the standard path right there</div></div>
+      <span class="pill" style="color:var(--amber);border-color:rgba(212,164,55,.3)">Variant</span><span class="muted">→</span>
+    </a>
+    <a class="tpl-row" href="5-templates.html" style="text-decoration:none;color:inherit;">
+      <div><div class="tpl-name">5 · Templates</div><div class="tpl-meta">Lightweight list — active per encounter type, edit / duplicate, standard fallback</div></div>
+      <span class="pill">Management</span><span class="muted">→</span>
+    </a>
+  </div>
+
+  <p class="hint" style="margin-top:20px;">Built against the Phase 2a parse-engine contract: <span class="mono" style="font-size:11px;">{ name, encounterType, sections[{label, formatHint, styleInstructions, defaultText, defaultTextMode}], styleProfile, flags[] }</span> on success; <span class="mono" style="font-size:11px;">{ rejected, reason }</span> on rejection.</p>
+</div>
+</body>
+</html>

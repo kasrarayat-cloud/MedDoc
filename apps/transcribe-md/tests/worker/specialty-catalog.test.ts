@@ -29,10 +29,14 @@ describe('SPECIALTIES catalog', () => {
       'cardiology',
       'psychiatry',
       'pediatrics',
+      'ob-gyn',
       'dermatology',
       'orthopedics',
       'urgent-care',
       'pain-management',
+      'weight-management',
+      'bariatric-surgery',
+      'vascular-surgery',
     ]);
   });
 
