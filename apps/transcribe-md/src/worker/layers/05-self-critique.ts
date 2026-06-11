@@ -151,6 +151,15 @@ export async function runLayer5SelfCritique(
     '   Examples: "chest pain" without SOB/radiation/diaphoresis',
     '   screen; new-onset headache in an adult without red-flag',
     '   questions; pediatric fever without hydration/activity check.',
+    // 2026-06-11 inaudible-span hardening — aim the critique at the class
+    // the transcript markers now make visible.
+    '3b. Any claim whose only transcript support overlaps an',
+    '   "[unclear in recording]" marker — a medication, dose, diagnosis,',
+    '   finding, or name asserted where the audio was unintelligible is a',
+    '   CRITICAL hallucination-class issue: the note must carry the marker',
+    '   (hedged), never a guessed value. Also flag patient-reported',
+    '   sensations rewritten as examination findings when no exam is',
+    '   documented in the transcript.',
     '',
     'MAJOR issues (should fix):',
     '4. Assessment not supported by Subjective + Objective.',
