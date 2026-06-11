@@ -188,6 +188,14 @@ const GLOBAL_RULES: string[] = [
     "  '[unclear in recording]' appended rather than substituting the",
     '  closest real term.',
   ].join('\n'),
+  [
+    '- Never specify or elaborate a medication, device, or product beyond',
+    '  what was said — even when the elaboration is pharmacologically',
+    '  correct. A brand name stays as said: "Implanon" — do NOT append the',
+    '  generic or route ("etonogestrel subdermal implant"). A vague device',
+    '  reference stays vague: "your injections" is NOT "adrenaline',
+    '  auto-injector" unless the transcript names it.',
+  ].join('\n'),
   '- Output ONLY the SOAP note markdown. No preamble, no postscript.',
 ];
 
