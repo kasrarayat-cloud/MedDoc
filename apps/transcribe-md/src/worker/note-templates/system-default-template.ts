@@ -165,6 +165,29 @@ const GLOBAL_RULES: string[] = [
     '  value. Don\'t silently resolve "two tablets... one tablet twice',
     '  a day" to a single interpretation.',
   ].join('\n'),
+  // 2026-06-11 inaudible-span hardening — the three observed failure modes
+  // (garbled drug name asserted as fact; patient-reported sensation written
+  // as an exam finding; garble normalized into a specific clinical term).
+  [
+    '- "[unclear in recording]" in the transcript means the audio was not',
+    '  intelligible there. Never guess what it might have been. Never',
+    '  assert a medication, dose, diagnosis, finding, or proper name whose',
+    '  only evidence overlaps such a marker — reproduce the marker in the',
+    '  note instead (e.g. \'prescribed [unclear in recording] — clarify\').',
+  ].join('\n'),
+  [
+    '- Never present patient-reported sensations as examination findings.',
+    '  "Sore when I press on it" is Subjective, per patient — it is NOT',
+    '  "tender to palpation" unless the transcript documents a clinician',
+    '  examination. If no exam occurred, the Objective section says so.',
+  ].join('\n'),
+  [
+    '- Never normalize an unfamiliar, garbled, or partial term into a',
+    '  specific drug or clinical term. If a word does not clearly match a',
+    '  known medication or condition, quote it as heard with',
+    "  '[unclear in recording]' appended rather than substituting the",
+    '  closest real term.',
+  ].join('\n'),
   '- Output ONLY the SOAP note markdown. No preamble, no postscript.',
 ];
 
