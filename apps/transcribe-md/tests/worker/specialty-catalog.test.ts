@@ -20,9 +20,13 @@ import { SPECIALTY_GUIDANCE } from '@/worker/prompts/specialty-guidance';
 describe('SPECIALTIES catalog', () => {
   it('exposes a stable id list (snapshot)', () => {
     // Adding/removing a specialty here is intentional — update this
-    // snapshot AND the marketing H2 copy ("Eight specialty templates")
-    // in apps/marketing/src/components/home/Specialties.tsx if the
-    // count outside 'unspecified' changes.
+    // snapshot to match. NO marketing copy edit is needed: the
+    // "N specialty templates" headline + pill list (apps/marketing
+    // Specialties.tsx + HowItWorks.tsx) DERIVE the count from
+    // SPECIALTIES_FOR_VISIT_CREATE, so they follow the catalog
+    // automatically. packages/shared specialties.test.ts ("catalog row
+    // count is 13") is the count tripwire; both it and this snapshot are
+    // enforced by the CI unit gate (test.yml `unit` job).
     expect(SPECIALTY_IDS).toEqual([
       'unspecified',
       'primary-care',
