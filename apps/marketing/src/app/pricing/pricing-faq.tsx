@@ -26,7 +26,7 @@ const FAQ = [
   },
   {
     q: 'How accurate is the transcription?',
-    a: '94–96% accuracy on medical audio, measured against a held-out set of 200+ real-clinic recordings. Hallucination rate on SOAP generation is under 2%, verified via an evidence-quote detector that checks every finding against the transcript verbatim.',
+    a: `Transcription uses Deepgram's medical model — accurate, but not flawless on live clinic audio, so the note generator is built to confirm-not-fabricate: it won't assert a finding it can't tie back to the transcript — gaps are marked "[not documented]" and unclear audio "[unclear in recording]" rather than guessed — and a separate critique pass re-checks the draft for unsupported claims. On PriMock57, a public benchmark of 57 mock consultations, our notes score a mean 8.7/10 for completeness and accuracy; we don't publish numbers from live clinic audio yet — those arrive with the pilot, and will replace this answer before any figure here outruns the data.`,
   },
   {
     q: 'Can I cancel anytime?',
@@ -38,7 +38,7 @@ const FAQ = [
   },
   {
     q: 'Is the audio stored permanently?',
-    a: 'No. Audio auto-deletes 90 days after the visit ends (clinic-configurable). Signed clinical notes retain per HIPAA (6-year minimum + a buffer year by default). You can tighten either window from the retention settings.',
+    a: 'No. Audio auto-deletes 90 days after the visit is signed; the signed clinical note is kept separately for 7 years (the 6-year HIPAA minimum plus a buffer year). Shortening the audio window never touches the note.',
   },
   {
     q: 'What about controlled substances?',
