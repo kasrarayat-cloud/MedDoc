@@ -39,15 +39,18 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./vitest.setup.ts'],
     // Default `include` is `**/*.{test,spec}.?(c|m)[jt]s?(x)` relative
-    // to root — i.e. only files inside apps/transcribe-md. The
-    // @meddoc/ai package has no vitest of its own (no build step,
-    // either), so its tests live under packages/ai/src/__tests__/ and
-    // are folded into this config so they run alongside the worker
-    // tests they guard. Path is absolute so the resolution doesn't
-    // depend on cwd when CI invokes vitest.
+    // to root — i.e. only files inside apps/transcribe-md. The shared
+    // workspace packages (@meddoc/ai, @meddoc/shared, …) have no vitest
+    // of their own (no build step, either), so their tests live under
+    // packages/<pkg>/src/ and are folded into THIS config so they run
+    // alongside the worker tests they guard — and so a single
+    // `vitest run` is the one in-scope unit suite the CI gate enforces.
+    // The glob is `packages/*` (not a fixed `packages/ai` path) on
+    // purpose: a new package's tests can't silently escape the gate.
+    // Paths are absolute so resolution doesn't depend on cwd in CI.
     include: [
       '**/*.{test,spec}.?(c|m)[jt]s?(x)',
-      path.resolve(__dirname, '../../packages/ai/src/**/*.test.ts'),
+      path.resolve(__dirname, '../../packages/*/src/**/*.{test,spec}.?(c|m)[jt]s?(x)'),
     ],
     exclude: [
       '**/node_modules/**',
