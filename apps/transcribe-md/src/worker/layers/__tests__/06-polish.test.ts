@@ -121,6 +121,19 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.prismaUpdate.mockResolvedValue({ id: FAKE_VISIT });
   mocks.logAudit.mockResolvedValue(undefined);
+  // 2026-06-11 fabrication gate: the model branch now makes a SECOND
+  // completeText call (purpose tm_polish_gate — the L6b fidelity
+  // verifier). Default it to a clean verdict so the pre-gate behavioral
+  // contracts in this file keep testing what they always tested; the
+  // gate's own reject/fail-closed paths live in 06-polish.gate.test.ts.
+  // Tests that override the POLISH response with mockResolvedValueOnce
+  // still work — Once consumes the first (polish) call, the gate call
+  // falls through to this implementation.
+  mocks.modelCompleteText.mockImplementation(async (args: { purpose?: string }) =>
+    args?.purpose === 'tm_polish_gate'
+      ? { text: '{"violations":[]}' }
+      : { text: POLISHED_SOAP }
+  );
 });
 
 afterEach(() => {
@@ -201,7 +214,9 @@ describe('runLayer6Polish — model-call branch contract', () => {
 
     await runLayer6Polish(makeInput({ critique: reportWithFixable() }));
 
-    expect(mocks.modelCompleteText).toHaveBeenCalledTimes(1);
+    // 2 calls since the fabrication gate: [0] = polish, [1] = tm_polish_gate.
+    expect(mocks.modelCompleteText).toHaveBeenCalledTimes(2);
+    expect(mocks.modelCompleteText.mock.calls[1][0].purpose).toBe('tm_polish_gate');
     const callArgs = mocks.modelCompleteText.mock.calls[0][0];
 
     expect(callArgs.provider).toBe('anthropic');
