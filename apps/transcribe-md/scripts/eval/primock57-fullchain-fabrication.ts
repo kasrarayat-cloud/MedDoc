@@ -336,10 +336,8 @@ function werFromTokens(ref: string[], hyp: string[]): number {
   }
   return prev[n] / ref.length;
 }
-/** Count "[unclear in recording]" markers (the clarity pass's output). */
-function countMarkers(text: string): number {
-  return text.split('[unclear in recording]').length - 1;
-}
+// Single source of truth for marker counting (audit NIT-4).
+import { countUnclearMarkers as countMarkers } from '@/worker/layers/transcript-clarity';
 
 function computeWer(reference: string, hyp: string): number {
   return werFromTokens(normalizeForWer(reference), normalizeForWer(hyp));
@@ -454,8 +452,9 @@ async function judgeBothSoaps(
     '',
     'BOUNDARY ADJUDICATIONS — (c) means an INVENTED PATIENT-SPECIFIC clinical',
     'fact. Apply these consistently:',
-    '- Arithmetic from stated data (age computed from a stated DOB; a total',
-    '  daily dose computed from stated per-dose × frequency) = (b).',
+    '- CORRECT arithmetic from stated data (age computed from a stated DOB;',
+    '  a total daily dose computed from stated per-dose × frequency) = (b).',
+    '  A MIScomputed value is (c).',
     '- A correct, generic PROPERTY of a correctly-heard entity (drug class or',
     '  generic name of a named brand — "Microgynon (combined oral',
     '  contraceptive)"; the standard instrument of a described exam — an',

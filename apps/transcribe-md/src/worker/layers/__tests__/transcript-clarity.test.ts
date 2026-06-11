@@ -28,11 +28,12 @@ function utt(words: DeepgramWord[], transcript?: string): DeepgramUtterance {
 }
 
 describe('markUnclearTranscript — the measured garble cases', () => {
-  it('marks the fake drug name ("sphenitol" @0.61 — the HIGH finding)', () => {
+  it('marks the fake drug name ("sphenitol" @0.61 — the HIGH finding), keeping the sentence boundary', () => {
     const u = utt([
       w("it's", 0.94), w('called', 1.0), w('sphenitol', 0.61, 'sphenitol.'),
     ]);
-    expect(markUnclearTranscript(u)).toBe(`it's called ${UNCLEAR_MARKER}`);
+    // NIT-3: the trailing period survives the marking — sentences don't merge.
+    expect(markUnclearTranscript(u)).toBe(`it's called ${UNCLEAR_MARKER}.`);
   });
 
   it('collapses an adjacent low-confidence run into ONE marker ("fat pup")', () => {
@@ -40,18 +41,41 @@ describe('markUnclearTranscript — the measured garble cases', () => {
       w('place', 0.97), w('called', 0.95), w('fat', 0.38), w('pup', 0.51, 'pup.'),
     ]);
     const out = markUnclearTranscript(u);
-    expect(out).toBe(`place called ${UNCLEAR_MARKER}`);
+    expect(out).toBe(`place called ${UNCLEAR_MARKER}.`);
     expect(countUnclearMarkers(out)).toBe(1);
   });
 
-  it('does NOT mark stopword confidence dips ("okay" @0.64, "or" @0.53)', () => {
+  it('AUDIT WARN-1: a low-confidence dose NUMERAL is marked (digits = always content)', () => {
+    const u = utt([w('take', 0.95), w('500', 0.32), w('milligrams', 0.9)]);
+    expect(markUnclearTranscript(u)).toBe(`take ${UNCLEAR_MARKER} milligrams`);
+  });
+
+  it('AUDIT WARN-3: an open run ABSORBS a low-confidence stopword (no phantom negation)', () => {
+    // A 0.31-confidence "no" between garble must NOT surface as confident text.
+    const u = utt([
+      w('garblea', 0.3), w('no', 0.31), w('garbleb', 0.3), w('allergies', 0.9),
+    ]);
+    const out = markUnclearTranscript(u);
+    expect(out).toBe(`${UNCLEAR_MARKER} allergies`);
+    expect(countUnclearMarkers(out)).toBe(1);
+  });
+
+  it('a CLEAR stopword still closes a run (absorption needs low confidence)', () => {
+    const u = utt([
+      w('garblea', 0.3), w('no', 0.98), w('allergies', 0.9),
+    ]);
+    expect(markUnclearTranscript(u)).toBe(`${UNCLEAR_MARKER} no allergies`);
+  });
+
+  it('does NOT mark stopword confidence dips ("okay" @0.64, "or" @0.53) — zero-marker fast path returns the raw transcript', () => {
     const u = utt([w('okay', 0.64, 'Okay,'), w('or', 0.53), w('maybe', 0.9)]);
-    expect(markUnclearTranscript(u)).toBe('Okay, or maybe');
+    // NIT-2: nothing markable → byte-identical to u.transcript.
+    expect(markUnclearTranscript(u)).toBe(u.transcript);
   });
 
   it('does NOT mark 1-2 letter tokens regardless of confidence', () => {
     const u = utt([w('a', 0.35), w('it', 0.41), w('fine', 0.9)]);
-    expect(markUnclearTranscript(u)).toBe('a it fine');
+    expect(markUnclearTranscript(u)).toBe(u.transcript);
   });
 
   it('marks a low-confidence content word mid-sentence ("sedative" @0.48)', () => {
@@ -78,7 +102,7 @@ describe('markUnclearTranscript — degradation + edges', () => {
   it('words missing confidence are NOT marked (defensive)', () => {
     const broken = { word: 'amoxicillin', start: 0, end: 0 } as DeepgramWord;
     const u = utt([broken, w('daily', 0.9)]);
-    expect(markUnclearTranscript(u)).toBe('amoxicillin daily');
+    expect(markUnclearTranscript(u)).toBe(u.transcript);
   });
 
   it('ALL words low-confidence → the whole line becomes one marker', () => {
@@ -95,9 +119,11 @@ describe('markUnclearTranscript — degradation + edges', () => {
     expect(countUnclearMarkers(out)).toBe(2);
   });
 
-  it('uses punctuated_word for clear words (readable output)', () => {
-    const u = utt([w('yes', 0.99, 'Yes,'), w('doctor', 0.98, 'doctor.')]);
-    expect(markUnclearTranscript(u)).toBe('Yes, doctor.');
+  it('uses punctuated_word for clear words when a marker exists in the line', () => {
+    const u = utt([
+      w('yes', 0.99, 'Yes,'), w('doctor', 0.98, 'doctor.'), w('mumbled', 0.4),
+    ]);
+    expect(markUnclearTranscript(u)).toBe(`Yes, doctor. ${UNCLEAR_MARKER}`);
   });
 
   it('is deterministic (same input → same output)', () => {

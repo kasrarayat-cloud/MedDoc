@@ -21,9 +21,23 @@
 // THRESHOLD (documented per the hardening spec):
 //   UNCLEAR_WORD_CONFIDENCE = 0.65 — chosen from measured garble
 //   (sphenitol 0.61, trabalotza 0.64, pup 0.48-0.51, sedative 0.48 all
-//   caught) vs the clear-speech cost (content words <0.65 on the noisiest
-//   mixed-mono PriMock57 cases ≈ 8-15/visit; far fewer on clean prod audio).
-//   Adjacent marked words merge into ONE marker.
+//   caught) vs the clear-speech cost. Measured marker rate on the noisiest
+//   mixed-mono PriMock57 cases (WER 14-20%): 11-23 markers/case (~17 avg);
+//   clean prod audio is estimated at ~2-6/visit (audit 2026-06-11).
+//   Adjacent marked words merge into ONE marker, and an OPEN run absorbs
+//   ANY adjacent sub-threshold word (stopwords included) — the stopword/
+//   length filter gates run INITIATION only, so a low-confidence "no"
+//   inside garble can't be emitted as a confident fragment ("phantom
+//   negation", audit WARN-3). Digit-bearing tokens (doses, vitals, B12)
+//   are ALWAYS content words (audit WARN-1).
+//
+// DELIBERATE TRADE-OFF (audit WARN-4): negation/laterality function words
+// ("no", "not", "yes", "right") stay in the stopword set — their discourse
+// frequency would flood markers if they could INITIATE runs. The risk that
+// remains: a STANDALONE low-confidence negation before clear content
+// ("no(0.4) chest(0.9) pain") stays asserted. Accepted: marking can never
+// flip a negation (the marked-object direction is safe), and run-absorption
+// covers the inside-garble case.
 //
 // DEGRADES SAFELY: utterances without word-level data (the dictation path
 // runs Deepgram with utterances disabled; legacy rows) pass through
@@ -51,40 +65,73 @@ const CLARITY_STOPWORDS = new Set([
   'yes', 'you', 'your', 'mhmm', 'hmm', 'right',
 ]);
 
+/** Below the confidence threshold at all? (run-ABSORPTION criterion —
+ *  stopwords and short tokens included, audit WARN-3). */
+function isLowConfidence(w: DeepgramWord): boolean {
+  return typeof w.confidence === 'number' && w.confidence < UNCLEAR_WORD_CONFIDENCE;
+}
+
+/** May this word INITIATE a marked run? Content words only — but any token
+ *  carrying a digit (doses, vitals, "b12") is always content (audit WARN-1:
+ *  the letters-only strip used to exempt a 0.32-confidence dose numeral). */
 function isMarkable(w: DeepgramWord): boolean {
-  if (typeof w.confidence !== 'number' || w.confidence >= UNCLEAR_WORD_CONFIDENCE) {
-    return false;
-  }
+  if (!isLowConfidence(w)) return false;
+  if (/\d/.test(w.word ?? '')) return true; // digit-bearing = always content
   const raw = (w.word ?? '').toLowerCase().replace(/[^a-z']/g, '');
   if (raw.length < 3) return false; // 1-2 letter tokens are function noise
   if (CLARITY_STOPWORDS.has(raw)) return false;
   return true;
 }
 
+/** Trailing sentence punctuation of a word, so a marked run keeps its
+ *  sentence boundary (audit NIT-3: "called sphenitol. Take it" must not
+ *  merge sentences when the drug name is marked). */
+function trailingPunct(w: DeepgramWord): string {
+  const p = (w.punctuated_word ?? '').trim();
+  const m = p.match(/[.?!,]$/);
+  return m ? m[0] : '';
+}
+
 /**
  * Rebuild an utterance's text from its word stream with low-confidence
  * content-word runs replaced by the `[unclear in recording]` marker.
  * Pure + deterministic. Returns `u.transcript` untouched when no
- * word-level data is available (additive guard, never a gate).
+ * word-level data is available OR nothing is markable (strictly additive:
+ * zero-marker utterances stay byte-identical to the raw transcript —
+ * audit NIT-2).
  */
 export function markUnclearTranscript(u: DeepgramUtterance): string {
   const words = Array.isArray(u.words) ? u.words : [];
   if (words.length === 0) return (u.transcript ?? '').trim();
+  if (!words.some(isMarkable)) return (u.transcript ?? '').trim();
 
   const out: string[] = [];
   let inMarkedRun = false;
+  let runPunct = '';
+  const closeRun = () => {
+    if (inMarkedRun && runPunct) {
+      // restore the sentence boundary the marked run swallowed
+      out[out.length - 1] = `${UNCLEAR_MARKER}${runPunct}`;
+    }
+    inMarkedRun = false;
+    runPunct = '';
+  };
   for (const w of words) {
-    if (isMarkable(w)) {
+    // An OPEN run absorbs ANY sub-threshold word (stopwords included) —
+    // a 0.31-confidence "no" between garble must not surface as confident
+    // text (audit WARN-3 "phantom negation"). Initiation stays content-only.
+    if (isMarkable(w) || (inMarkedRun && isLowConfidence(w))) {
       if (!inMarkedRun) {
         out.push(UNCLEAR_MARKER);
         inMarkedRun = true;
       }
-      // adjacent low-confidence words collapse into the open marker
+      runPunct = trailingPunct(w) || runPunct;
       continue;
     }
-    inMarkedRun = false;
+    closeRun();
     out.push((w.punctuated_word ?? w.word ?? '').trim());
   }
+  closeRun();
   const text = out.filter(Boolean).join(' ').trim();
   // Word stream empty after filtering (defensive) → fall back to raw text.
   return text.length > 0 ? text : (u.transcript ?? '').trim();
