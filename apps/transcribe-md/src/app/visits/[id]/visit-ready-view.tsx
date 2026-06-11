@@ -12,7 +12,7 @@
 // is preserved as a no-op for caller back-compat.
 // ============================================================================
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { EmScore } from '@/lib/em-coding-ui/types';
 import {
   FileText as FileTextIcon,
@@ -27,6 +27,7 @@ import {
 
 import { cn } from '@/lib/cn';
 import { SoapEditor } from './soap-editor';
+import { SuggestionsLane, type SuggestedClaimView } from './suggestions-lane';
 import { CodesTab, codesTabHasWarnings } from './codes-tab';
 import { RxTab, rxTabWarningLevel } from './rx-tab';
 import { ExtrasTab, extrasTabHasFlag } from './extras-tab';
@@ -68,6 +69,11 @@ export interface VisitReadyViewProps {
    *  Rendered as a banner above the tabs; suppressed once signed. */
   needsReview?: boolean;
   reviewReason?: string | null;
+  /** Hybrid anchored generation (2026-06-11) — claims the L4b fail-closed
+   *  verifier demoted from the note body, rendered in the "Suggested by AI —
+   *  not stated in this visit" lane below the SOAP editor for explicit
+   *  doctor adoption. Null/empty (or signed) → lane hidden. */
+  suggestedClaims?: SuggestedClaimView[] | null;
   /** Determines which "input" tab is shown + whether speaker reassignment
    *  is available. */
   inputMode: string;
@@ -152,6 +158,28 @@ export interface VisitReadyViewProps {
 
 export function VisitReadyView(props: VisitReadyViewProps) {
   const [tab, setTab] = useState<TabKey>('soap');
+
+  // Hybrid anchored generation (2026-06-11) — when the doctor adopts a
+  // suggestion the server appends to soapFinal + bumps soapVersion; the
+  // lane reports the new state back here and we REMOUNT the editor (seq
+  // in its key) so its useState(initialText) re-initializes with the
+  // adopted line. Normal section saves never change the key, so the
+  // editor's in-flight state is untouched outside adoption.
+  const [adoption, setAdoption] = useState<{
+    text: string;
+    version: number;
+    seq: number;
+  } | null>(null);
+  const handleSuggestionAdopted = useCallback(
+    (r: { soapFinal: string; soapVersion: number }) => {
+      setAdoption((prev) => ({
+        text: r.soapFinal,
+        version: r.soapVersion,
+        seq: (prev?.seq ?? 0) + 1,
+      }));
+    },
+    []
+  );
 
   // The second tab is labelled "Input" for text_notes, "Transcript" for
   // the other two modes. Everything else renders identically.
@@ -261,16 +289,30 @@ export function VisitReadyView(props: VisitReadyViewProps) {
               />
             )}
             <SoapEditor
+              key={`soap-editor-${adoption?.seq ?? 0}`}
               visitId={props.visitId}
               doctorEmail={props.doctorEmail}
               emailEnabled={props.emailEnabled}
-              initialText={props.soapText}
-              initialSoapVersion={props.soapVersion}
+              initialText={adoption?.text ?? props.soapText}
+              initialSoapVersion={adoption?.version ?? props.soapVersion}
               readonly={props.readonly}
               signedAt={props.signedAt}
               sources={soapSources}
               initialScore={props.initialEmScore}
             />
+            {/* Hybrid anchored generation — verifier-demoted claims for
+                explicit doctor adoption. Hidden once signed (the note is
+                locked; the lane's actions reject SIGNED anyway) and on
+                readonly views. */}
+            {!props.readonly &&
+              !props.signedAt &&
+              (props.suggestedClaims?.length ?? 0) > 0 && (
+                <SuggestionsLane
+                  visitId={props.visitId}
+                  claims={props.suggestedClaims ?? []}
+                  onAdopted={handleSuggestionAdopted}
+                />
+              )}
           </div>
         )}
         {tab === 'transcript' &&
