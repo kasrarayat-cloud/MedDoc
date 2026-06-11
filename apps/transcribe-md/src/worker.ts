@@ -56,6 +56,7 @@ import {
   runRetentionSweep,
   resolveRetentionDays,
 } from '@/worker/cleanup/retention-sweep';
+import { applyAdditiveReviewState } from '@/worker/finalize-review-state';
 import { runStuckVisitWatchdog } from '@/worker/cleanup/stuck-visit-watchdog';
 import { recordCleanupHeartbeat } from '@/lib/cleanup-heartbeat';
 import {
@@ -976,10 +977,14 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         processingFinishedAt: new Date(),
         processingCostCents: totalCents,
         confidenceScores: safeConfidenceScores as unknown as object | null,
-        needsReview: incomplete.needsReview,
-        reviewReason: incomplete.reviewReason,
       },
     });
+    // 2026-06-11 audit BLOCK-2: the automation-incomplete review flag is
+    // applied ADDITIVELY — assigning it in the update above clobbered
+    // review state set earlier in the pipeline (the L6 fabrication-gate
+    // rejection banner, L6 unfixable-criticals, the 02.8 allergy flag)
+    // whenever the L7 fan-out was clean, so the doctor never saw it.
+    await applyAdditiveReviewState(visitId, incomplete);
 
     // T-M13 summary line — logs only when at least one layer was
     // skipped, so happy-path first attempts stay quiet.

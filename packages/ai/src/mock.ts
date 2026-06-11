@@ -250,6 +250,15 @@ const MOCK_COMPLETE_TEXT_FIXTURES: Partial<
     inputTokens: 1,
     outputTokens: 1,
   },
+  // L6 fabrication gate verifier — MOCK always reports a faithful edit
+  // (empty violations) so the qa/CI pipeline keeps its polish output.
+  // The gate's reject/fail-closed paths are covered by deterministic
+  // unit tests, not the MOCK e2e flow.
+  tm_polish_gate: {
+    text: '{"violations":[]}',
+    inputTokens: 1,
+    outputTokens: 1,
+  },
   // tm_patient_summary lives in MOCK_COMPLETE_FIXTURES (L7e uses
   // modelClient.complete(), not completeText).
 };

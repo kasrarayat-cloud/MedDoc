@@ -530,6 +530,9 @@ interface CaseResult {
   audioDurationSec: number | null;
   postL4Soap: string | null;
   finalSoap: string | null;
+  /** 2026-06-11 L6b gate — true when polish was rejected and finalSoap is
+   *  the pre-L6 draft. Drives the polish-survival-rate metric. */
+  polishRejected: boolean | null;
   critiqueSummary: { overall: string; safe: boolean; issues: number; criticalIssues: number } | null;
   judge: JudgeOut | null;
 }
@@ -541,7 +544,7 @@ async function runCase(
 ): Promise<CaseResult> {
   const r: CaseResult = {
     id: cf.id, status: 'success', source: 'audio', wer: null, audioDurationSec: null,
-    postL4Soap: null, finalSoap: null, critiqueSummary: null, judge: null,
+    postL4Soap: null, finalSoap: null, polishRejected: null, critiqueSummary: null, judge: null,
   };
   let mixedPath: string | null = null;
   // Synthetic identifiers — these never hit the DB (writes are stubbed) but the
@@ -604,6 +607,7 @@ async function runCase(
     // ── L6 — polish (applies fixable critique items) ──
     const polished = await layers.runLayer6Polish({ ...base, soapDraft, critique, noteTemplate: layers.SYSTEM_DEFAULT_NOTE_TEMPLATE });
     r.finalSoap = polished.soapFinal;
+    r.polishRejected = polished.polishRejected === true;
 
     // ── Judge BOTH SOAPs in one call against the reference transcript ──
     // (single call → no cross-call variance on identical strings; the judge
@@ -655,20 +659,30 @@ async function writeReports(results: CaseResult[], utc: string): Promise<{ md: s
   lines.push('');
   lines.push(`- **TODAY's total class-(c) genuine fabrications across the sample (FINAL post-L6 SOAP): ${totalFinalC}** across n=${ok.length} cases (${casesWithFinalC} case(s) carry ≥1 class-c).`);
   lines.push(`- Post-L4 (pre-critique) class-(c): ${totalL4C}. Net L5/L6 change on class-c: ${totalFinalC - totalL4C >= 0 ? '+' : ''}${totalFinalC - totalL4C}.`);
+  {
+    // 2026-06-11 L6b gate — polish-survival rate (gate fallbacks lose the
+    // polish; the metric shows how often the fix costs formatting).
+    const gateKnown = ok.filter((r) => r.polishRejected !== null);
+    const rejected = gateKnown.filter((r) => r.polishRejected === true);
+    lines.push(
+      `- **Polish-survival rate:** ${gateKnown.length - rejected.length}/${gateKnown.length} polished notes kept (${rejected.length} L6b gate fallback${rejected.length === 1 ? '' : 's'} → pre-L6 draft served${rejected.length ? ': ' + rejected.map((r) => r.id).join(', ') : ''}).`
+    );
+  }
   lines.push('- (a)=ASR-propagation, (b)=benign inference, (c)=genuine fabrication. Only (c) is the dangerous "hallucination" number.');
   lines.push('');
   lines.push('## Per-case table');
   lines.push('');
-  lines.push('| Case | src | WER | post-L4 (a/b/c) | FINAL (a/b/c) | L5 overall (crit) | notes |');
-  lines.push('|---|---|---|---|---|---|---|');
+  lines.push('| Case | src | WER | post-L4 (a/b/c) | FINAL (a/b/c) | L5 overall (crit) | L6b gate | notes |');
+  lines.push('|---|---|---|---|---|---|---|---|');
   for (const r of results) {
-    if (r.status !== 'success') { lines.push(`| ${r.id} | ${r.source} | — | — | — | — | ERROR: ${r.error} |`); continue; }
+    if (r.status !== 'success') { lines.push(`| ${r.id} | ${r.source} | — | — | — | — | — | ERROR: ${r.error} |`); continue; }
     const f = r.judge!.flags;
     const crit = r.critiqueSummary!;
     const note = r.source === 'reference' ? 'audio missing → reference transcript (text mode)' : '';
+    const gateCell = r.polishRejected === null ? '—' : r.polishRejected ? 'REJECTED→draft' : 'kept';
     const l4Cell = `${tally(f, inL4, 'a')}/${tally(f, inL4, 'b')}/${tally(f, inL4, 'c')}`;
     const finCell = `${tally(f, inFinal, 'a')}/${tally(f, inFinal, 'b')}/${tally(f, inFinal, 'c')}`;
-    lines.push(`| ${r.id} | ${r.source} | ${r.wer != null ? pct(r.wer) : '—'} | ${l4Cell} | ${finCell} | ${crit.overall} (${crit.criticalIssues}) | ${note} |`);
+    lines.push(`| ${r.id} | ${r.source} | ${r.wer != null ? pct(r.wer) : '—'} | ${l4Cell} | ${finCell} | ${crit.overall} (${crit.criticalIssues}) | ${gateCell} | ${note} |`);
   }
   lines.push('');
   const allFinalFlags = ok.flatMap((r) => r.judge!.flags.filter(inFinal));

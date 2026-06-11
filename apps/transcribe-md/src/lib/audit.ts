@@ -155,7 +155,14 @@ export type AuditAction =
   // the lenient SOAP-structure validator (soap-structure-validator.ts)
   // rejects the model output (empty / JSON-shape / missing sections).
   // Metadata: { layer, reason, outputLength, missingSections } — no PHI.
-  | 'MODEL_OUTPUT_VALIDATION_FAIL';
+  | 'MODEL_OUTPUT_VALIDATION_FAIL'
+  // L6 fabrication gate (2026-06-11 — hallucination-reconciliation RED
+  // finding). Post-polish fidelity gate rejected L6's output (new
+  // clinical claims vs its input / meaning flip / ANY gate failure —
+  // fail-closed) → fell back to the pre-L6 (L4) draft. Metadata:
+  // { layer, violationCount, kinds, novelTermCount, gateError?,
+  // fellBackToDraft } — counts + class strings only, no note content.
+  | 'L6_FABRICATION_REJECTED';
 
 export interface AuditLogInput {
   action: AuditAction;
