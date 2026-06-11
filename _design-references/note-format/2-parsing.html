@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>My Note Format — Reading · QuillMD</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="note-format.css" rel="stylesheet" />
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand"><div class="brand-mark">Q</div><div class="brand-name">QuillMD</div></div>
+    <div class="nav-eyebrow">Workspace</div>
+    <a class="nav-item" href="#"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.7"><path d="M12 5v14M5 12h14"/></svg> New visit</a>
+    <a class="nav-item" href="#"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.7"><path d="M4 6h16M4 12h16M4 18h10"/></svg> Visits</a>
+    <a class="nav-item" href="#"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.7"><circle cx="12" cy="8" r="3.2"/><path d="M5 20c0-3.3 3-5 7-5s7 1.7 7 5"/></svg> Patients</a>
+    <div class="nav-eyebrow">Account</div>
+    <a class="nav-item nav-item--active" href="#"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.6-2-3.4-2.4 1a7 7 0 0 0-1.7-1l-.4-2.6H10l-.4 2.6a7 7 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.6a7 7 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 1.7 1l.4 2.6h3.6l.4-2.6a7 7 0 0 0 1.7-1l2.4 1 2-3.4-2-1.6a7 7 0 0 0 .1-1Z"/></svg> Settings</a>
+    <div class="sidebar-foot"><div class="avatar">RA</div><div style="font-size:12px;color:var(--text-2)">Dr. R. Almeida</div></div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar"><span class="crumb"><b>Settings</b><span class="sep">/</span>My Note Format<span class="sep">/</span>Reading</span></div>
+
+    <div class="settings-grid" style="grid-template-columns:1fr;max-width:760px;margin:0 auto;padding-top:36px;">
+      <div class="col">
+        <section class="section">
+          <div class="parsing">
+            <div class="parse-orb" role="status" aria-live="polite" aria-label="Reading your format">
+              <div class="ring"></div><div class="arc"></div>
+            </div>
+            <h3>Reading your format…</h3>
+            <p>QuillMD is studying the structure and wording of your note — not the patient. This takes a moment.</p>
+
+            <div class="parse-steps" aria-hidden="true">
+              <div class="parse-step done"><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 12l4 4 10-12"/></svg></span> Removing patient details</div>
+              <div class="parse-step done"><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 12l4 4 10-12"/></svg></span> Mapping your sections &amp; order</div>
+              <div class="parse-step active"><span class="tick"></span> Detecting formatting &amp; style</div>
+              <div class="parse-step"><span class="tick"></span> Checking it's free of patient information</div>
+            </div>
+
+            <div class="privacy" role="note" style="max-width:48ch;margin-top:18px;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3l7 3v5c0 4.4-3 8-7 10-4-2-7-5.6-7-10V6l7-3Z"/><path d="M9.2 12l2 2 3.6-4"/></svg>
+              <p>The note stays in memory only — it's <b>never saved</b>. We keep your format, then discard the text.</p>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+</div>
+</body>
+</html>
