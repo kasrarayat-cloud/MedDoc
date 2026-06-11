@@ -2,10 +2,10 @@
 // llm-mdm.ts unit tests (Phase 5.2)
 // ----------------------------------------------------------------------------
 // Tests cache key derivation, drift detection, and the JSON
-// validation path. Does NOT exercise the live ModelClient — that
-// requires a real Anthropic API key + wall-clock latency. The
-// fallback path (when the LLM throws) is covered by mocking
-// modelClient.completeText to throw.
+// validation path. Does NOT exercise a live model — llm-mdm calls the
+// raw @anthropic-ai/sdk directly (to attach cache_control), so the
+// warm/drift/fallback paths mock '@anthropic-ai/sdk' (messages.create)
+// and stub a dummy ANTHROPIC_API_KEY so getAnthropicClient() resolves.
 // ============================================================================
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -100,9 +100,11 @@ describe('validateMdmJudgement', () => {
 describe('judgeMdm — cache warm path', () => {
   beforeEach(() => {
     vi.resetModules();
+    process.env.ANTHROPIC_API_KEY = 'test-key-not-used-network-mocked';
   });
   afterEach(() => {
     vi.restoreAllMocks();
+    delete process.env.ANTHROPIC_API_KEY;
   });
 
   it('cold call → LLM hit → store cached; warm call → cache hit, no LLM', async () => {
@@ -118,23 +120,24 @@ describe('judgeMdm — cache warm path', () => {
       confidence: 0.85,
       rationale: 'unit-test',
     };
-    vi.doMock('@meddoc/ai', async (orig) => {
-      const real: any = await orig();
-      return {
-        ...real,
-        modelClient: {
-          completeText: async () => {
+    vi.doMock('@anthropic-ai/sdk', () => ({
+      default: class {
+        messages = {
+          create: async () => {
             llmCallCount++;
             return {
-              text: JSON.stringify(fakeJudgement),
-              tokensIn: 0,
-              tokensOut: 0,
+              content: [{ type: 'text', text: JSON.stringify(fakeJudgement) }],
+              usage: {
+                input_tokens: 10,
+                output_tokens: 20,
+                cache_read_input_tokens: 0,
+                cache_creation_input_tokens: 0,
+              },
             };
           },
-          complete: () => Promise.reject(new Error('not used')),
-        },
-      };
-    });
+        };
+      },
+    }));
     vi.doMock('@/lib/redis', () => ({
       getRedis: () => ({
         get: async (k: string) => store.get(k) ?? null,
@@ -178,22 +181,24 @@ describe('judgeMdm — cache warm path', () => {
       confidence: 0.85,
       rationale: 'unit-test',
     };
-    vi.doMock('@meddoc/ai', async (orig) => {
-      const real: any = await orig();
-      return {
-        ...real,
-        modelClient: {
-          completeText: async () => {
+    vi.doMock('@anthropic-ai/sdk', () => ({
+      default: class {
+        messages = {
+          create: async () => {
             llmCallCount++;
             return {
-              text: JSON.stringify(fakeJudgement),
-              tokensIn: 0,
-              tokensOut: 0,
+              content: [{ type: 'text', text: JSON.stringify(fakeJudgement) }],
+              usage: {
+                input_tokens: 10,
+                output_tokens: 20,
+                cache_read_input_tokens: 0,
+                cache_creation_input_tokens: 0,
+              },
             };
           },
-        },
-      };
-    });
+        };
+      },
+    }));
     vi.doMock('@/lib/redis', () => ({
       getRedis: () => ({
         get: async (k: string) => store.get(k) ?? null,
@@ -224,23 +229,22 @@ describe('judgeMdm — cache warm path', () => {
 describe('judgeMdm — fallback path', () => {
   beforeEach(() => {
     vi.resetModules();
+    process.env.ANTHROPIC_API_KEY = 'test-key-not-used-network-mocked';
   });
   afterEach(() => {
     vi.restoreAllMocks();
+    delete process.env.ANTHROPIC_API_KEY;
   });
 
   it('falls back to deterministicMdm with llmJudged:false on LLM error', async () => {
-    // Mock the model client to throw a 5xx-like error.
-    vi.doMock('@meddoc/ai', async (orig) => {
-      const real: any = await orig();
-      return {
-        ...real,
-        modelClient: {
-          completeText: () => Promise.reject(new Error('Anthropic 503')),
-          complete: () => Promise.reject(new Error('Anthropic 503')),
-        },
-      };
-    });
+    // Mock the raw SDK to throw a 5xx-like error on every attempt.
+    vi.doMock('@anthropic-ai/sdk', () => ({
+      default: class {
+        messages = {
+          create: () => Promise.reject(new Error('Anthropic 503')),
+        };
+      },
+    }));
     // Mock redis to skip cache (so we go straight to the LLM call).
     vi.doMock('@/lib/redis', () => ({
       getRedis: () => ({ get: () => Promise.resolve(null), set: () => Promise.resolve('OK') }),
