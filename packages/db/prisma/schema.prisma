@@ -318,6 +318,17 @@ enum AuditAction {
   // Metadata: { layer, reason, outputLength, missingSections } — no PHI
   // (no raw output content, just structured fail-class signal).
   MODEL_OUTPUT_VALIDATION_FAIL
+
+  // L6 fabrication gate (2026-06-11 — hallucination-reconciliation RED
+  // finding, docs/qa-reports/hallucination-reconciliation-*.md). Emitted
+  // when the post-polish fidelity gate rejects L6's output (new clinical
+  // claims relative to its input, a negation/meaning flip, or ANY
+  // gate/verifier failure — fail-closed) and the visit falls back to the
+  // pre-L6 (L4) draft. Metadata: { layer:'L6', violationCount, kinds,
+  // novelTermCount, gateError?, fellBackToDraft:true } — counts + enum
+  // class strings only, never note content. Rejection frequency =
+  // SELECT count(*) FROM audit_logs WHERE action='L6_FABRICATION_REJECTED'.
+  L6_FABRICATION_REJECTED
 }
 
 /// Document lifecycle status

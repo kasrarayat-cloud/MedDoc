@@ -10,6 +10,7 @@
 import { modelClient } from '@meddoc/ai';
 import prisma from '@meddoc/db';
 import { logAudit } from '@/lib/audit';
+import { runPolishFidelityGate } from './06b-polish-fidelity-gate';
 import {
   classifyCritique,
   type CritiqueReport,
@@ -45,6 +46,9 @@ export interface Layer6Output {
   needsReview: boolean;
   reviewReason: string | null;
   unfixable: CritiqueIssue[];
+  /** 2026-06-11 fabrication gate — true when the polish output was
+   *  rejected and soapFinal fell back to the pre-L6 draft. */
+  polishRejected: boolean;
 }
 
 export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output> {
@@ -63,6 +67,7 @@ export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output>
   // output and flips needsReview so a doctor can fix it manually; the
   // audit row gives operators a grep target for prompt regressions.
   let polishValidationFailReason: string | null = null;
+  let polishRejected = false;
 
   if (fixable.length === 0) {
     // Nothing to auto-patch — the draft itself is our final note.
@@ -70,33 +75,54 @@ export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output>
     // soapDraft (simpler UI state machine).
     soapFinal = input.soapDraft;
   } else {
+    // 2026-06-11 fabrication-fix (a): immutable preamble, same discipline
+    // as L4's unconditional rules. The PriMock57 full-chain eval proved
+    // the polish step ADDS clinical content (contraindication reasoning,
+    // referrals, red-flag narratives) when "applying" expansive critique
+    // fixes — these rules override that, and the L6b gate below catches
+    // whatever slips through anyway.
     const system = [
-      'You are a clinician editing a SOAP note. A separate auditor has',
+      'IMMUTABLE RULES — these override every other instruction below:',
+      '1. You are a copy editor, not a clinician author. You may reword,',
+      '   reorganize, and reformat ONLY content already present in the',
+      '   draft.',
+      '2. Do NOT introduce new clinical facts. Do NOT add, infer, or',
+      '   expand clinical content of any kind — no new findings, symptoms,',
+      '   exam results, diagnoses, differentials, contraindication or risk',
+      '   reasoning, referrals, screenings or red-flag statements,',
+      '   follow-up instructions, patient education, medications, or doses',
+      '   — even if a suggested fix appears to call for them.',
+      '3. If a fix requires information that is not in the draft, leave',
+      '   the flagged area as-is and keep moving.',
+      '4. Never flip a negation or change the clinical meaning of a',
+      '   statement.',
+      '',
+      'You are editing a clinical SOAP note. A separate auditor has',
       'flagged specific issues; apply ONLY those fixes and return the',
       'complete revised SOAP note in the same markdown structure as the',
       'draft.',
       '',
       'Rules:',
       '- Preserve all clinical content that the auditor did not flag.',
-      '- Apply each "suggested_fix" as closely as possible.',
-      '- Do NOT introduce new clinical facts. If a fix requires',
-      '  information that is not in the draft, leave the flagged area',
-      '  as-is and keep moving.',
+      '- Apply each "suggested_fix" as closely as possible, using only',
+      '  information already present in the draft.',
       '- Output ONLY the revised SOAP markdown. No preamble, no summary',
       '  of changes.',
     ].join('\n');
+
+    const fixesText = fixable
+      .map(
+        (i, idx) =>
+          `${idx + 1}. [${i.severity}] ${i.location}: ${i.description}\n    Fix: ${i.suggested_fix}`
+      )
+      .join('\n');
 
     const user = [
       'Draft:',
       input.soapDraft,
       '',
       'Issues to apply (apply in order):',
-      fixable
-        .map(
-          (i, idx) =>
-            `${idx + 1}. [${i.severity}] ${i.location}: ${i.description}\n    Fix: ${i.suggested_fix}`
-        )
-        .join('\n'),
+      fixesText,
     ].join('\n');
 
     const { text } = await modelClient.completeText({
@@ -116,34 +142,83 @@ export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output>
     });
     soapFinal = text;
 
+    // 2026-06-11 fabrication-fix (b) — L6b post-polish fidelity gate.
+    // The L5 critique runs BEFORE this model call and structurally cannot
+    // catch what it adds; the gate verifies the polished note introduces
+    // no new clinical claims relative to its input. FAIL-CLOSED: any
+    // violation OR any gate/verifier failure falls back to the pre-L6
+    // draft (the measured-clean artifact) — losing polish is acceptable,
+    // gaining content is not. Empty output is exempt (it cannot carry an
+    // addition; the structure validator below owns that failure class).
+    if (soapFinal.trim().length > 0) {
+      const gate = await runPolishFidelityGate({
+        practiceId: input.practiceId,
+        visitId: input.visitId,
+        userId: input.userId,
+        draft: input.soapDraft,
+        fixesText,
+        polished: soapFinal,
+      });
+      if (!gate.ok) {
+        polishRejected = true;
+        soapFinal = input.soapDraft;
+        void logAudit({
+          action: 'L6_FABRICATION_REJECTED',
+          targetType: 'transcribe_visit',
+          targetId: input.visitId,
+          userId: input.userId,
+          practiceId: input.practiceId,
+          success: false,
+          metadata: {
+            layer: 'L6',
+            violationCount: gate.violationCount,
+            kinds: gate.kinds,
+            novelTermCount: gate.novelTermCount,
+            gateError: gate.gateError,
+            fellBackToDraft: true,
+            // NO note content — counts + enum-class strings only.
+          },
+        });
+      }
+    }
+
     // FIND-P1-016 — same validator L4 uses, now scoped to the resolved
     // template's required sections. Fail → keep raw output, flag the
     // validation reason so the reviewReason calculation below includes it
-    // alongside the unfixable-criticals reason.
-    const validation = validateSoapStructure(text, requiredSections);
-    if (!validation.ok) {
-      void logAudit({
-        action: 'MODEL_OUTPUT_VALIDATION_FAIL',
-        targetType: 'transcribe_visit',
-        targetId: input.visitId,
-        userId: input.userId,
-        practiceId: input.practiceId,
-        success: false,
-        metadata: {
-          layer: 'L6',
-          reason: validation.reason,
-          outputLength: validation.outputLength,
-          missingSections: validation.missingSections,
-          // NO raw output — PHI surface.
-        },
-      });
-      polishValidationFailReason = `Polish output didn't match expected markdown structure — manual review required (${validation.reason}).`;
+    // alongside the unfixable-criticals reason. Skipped on gate fallback:
+    // the draft we fell back to was already L4-validated when it landed.
+    if (!polishRejected) {
+      const validation = validateSoapStructure(soapFinal, requiredSections);
+      if (!validation.ok) {
+        void logAudit({
+          action: 'MODEL_OUTPUT_VALIDATION_FAIL',
+          targetType: 'transcribe_visit',
+          targetId: input.visitId,
+          userId: input.userId,
+          practiceId: input.practiceId,
+          success: false,
+          metadata: {
+            layer: 'L6',
+            reason: validation.reason,
+            outputLength: validation.outputLength,
+            missingSections: validation.missingSections,
+            // NO raw output — PHI surface.
+          },
+        });
+        polishValidationFailReason = `Polish output didn't match expected markdown structure — manual review required (${validation.reason}).`;
+      }
     }
   }
 
   // Surface unfixable critical issues as a review banner reason. The
-  // FIND-P1-016 validation-fail reason (when present) prepends so the
-  // operator/clinician sees the most urgent structural issue first.
+  // fabrication-gate rejection (when present) or the FIND-P1-016
+  // validation-fail reason prepends so the operator/clinician sees the
+  // most urgent issue first. (Rejection and validation-fail are mutually
+  // exclusive — validation is skipped on the gate-fallback path.)
+  const polishRejectedReason = polishRejected
+    ? 'Auto-polish was rejected by the fabrication gate and not applied — the auditor-flagged fixes remain unapplied; review the draft.'
+    : null;
+  const prefixReason = polishRejectedReason ?? polishValidationFailReason;
   const baseReason =
     unfixable.length > 0
       ? `Auto-polish could not fix ${unfixable.length} critical issue${
@@ -152,16 +227,17 @@ export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output>
       : !input.critique.safe_to_sign_without_review
         ? 'Auditor flagged issues worth a quick review before signing.'
         : null;
-  const reviewReason = polishValidationFailReason
+  const reviewReason = prefixReason
     ? baseReason
-      ? `${polishValidationFailReason} ${baseReason}`
-      : polishValidationFailReason
+      ? `${prefixReason} ${baseReason}`
+      : prefixReason
     : baseReason;
 
   const needsReview =
     unfixable.length > 0 ||
     !input.critique.safe_to_sign_without_review ||
-    polishValidationFailReason !== null;
+    polishValidationFailReason !== null ||
+    polishRejected;
 
   await prisma.transcribeVisit.update({
     where: { id: input.visitId },
@@ -180,5 +256,5 @@ export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output>
     },
   });
 
-  return { soapFinal, needsReview, reviewReason, unfixable };
+  return { soapFinal, needsReview, reviewReason, unfixable, polishRejected };
 }
