@@ -73,7 +73,7 @@ export interface RetentionSweepResult {
   minioFailures: number;
 }
 
-function resolveRetentionDays(): number {
+export function resolveRetentionDays(): number {
   const raw = process.env.AUDIO_RETENTION_DAYS?.trim();
   if (!raw) return DEFAULT_AUDIO_RETENTION_DAYS;
   const n = Number.parseInt(raw, 10);
