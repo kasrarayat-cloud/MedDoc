@@ -28,7 +28,7 @@
 //   use each practice's own retention setting.
 //
 // Env:
-//   AUDIO_RETENTION_DAYS         default 180 (6 months)
+//   AUDIO_RETENTION_DAYS         default 90 (3 months)
 //   RETENTION_SWEEP_ENABLED      default 'true'
 //   RETENTION_SWEEP_CRON         default '0 4 * * *' (4am UTC daily —
 //                                offset 1h from T-M17.3 stale-visit
@@ -44,14 +44,20 @@ import { deleteAudioObject } from '@/lib/minio';
 import { log } from '@/lib/log';
 import { redactPhi } from '@meddoc/ai';
 
-/** Default audio retention window. 180 days = 6 months.
+/** Default audio retention window. 90 days = 3 months.
  *  Rationale: the HIPAA 6-year minimum applies to the clinical
  *  RECORD (transcript + SOAP + codes), not to the audio-evidence
  *  input. The audio's real re-use window is 30-90 days for any
- *  legitimate "wait, what did the patient actually say?" review;
- *  6 months is a generous floor that catches the rare delayed-audit
- *  case without indefinite storage of patient voice clips. */
-const DEFAULT_AUDIO_RETENTION_DAYS = 180;
+ *  legitimate "wait, what did the patient actually say?" review.
+ *  90 days is the value the schema already promises
+ *  (Practice.audioRetentionDays @default(90)) AND the value the public
+ *  pricing page states ("audio auto-deletes 90 days after the visit is
+ *  signed" — apps/marketing/src/app/pricing/pricing-faq.tsx). KEEP THIS
+ *  CONSTANT == that copy; the gated retention-sweep-default test
+ *  enforces it. (Was a placeholder 180 pre-2026-06-11; it never fired
+ *  in prod — at the change the oldest signed visit was 53 days old, so
+ *  shortening to 90 deleted nothing.) */
+export const DEFAULT_AUDIO_RETENTION_DAYS = 90;
 
 interface RetentionTarget {
   id: string;
