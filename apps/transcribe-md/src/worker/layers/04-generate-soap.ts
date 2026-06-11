@@ -13,6 +13,9 @@ import prisma from '@meddoc/db';
 import { specialtyGuidance } from '../prompts/specialty-guidance';
 import type { ExtractedEntities } from './03-extract-entities';
 import { logAudit } from '@/lib/audit';
+import { log } from '@/lib/log';
+import { evidenceAnchorsEnabled } from '../evidence-anchors-flag';
+import { ANCHOR_GENERATION_ADDENDUM, runAnchorVerify } from './04b-anchor-verify';
 import {
   shouldFlagForReview,
   LOW_CONFIDENCE_THRESHOLD,
@@ -153,12 +156,19 @@ export async function runLayer4GenerateSoap(
   // template; the template contributes the section structure. The audio /
   // interpreter hedge slices and the specialty-guidance mechanism are
   // unchanged. See build-soap-prompt.ts.
-  const system = buildSoapSystemPrompt(template, {
-    specialty: input.specialty,
-    audioQualityAlert,
-    interpreterAlert,
-    specialtyGuidanceText: guidance || null,
-  });
+  // Hybrid anchored generation (2026-06-11, flag-gated): when ON, the model
+  // anchors every clinical claim with a verbatim transcript quote and the
+  // fail-closed L4b verifier splits the output into a verified BODY (which
+  // becomes soapDraft — downstream L5/L6/resume untouched) + a suggestions
+  // lane. Flag OFF (prod default) → prompt and behavior byte-identical.
+  const anchorsOn = evidenceAnchorsEnabled();
+  const system =
+    buildSoapSystemPrompt(template, {
+      specialty: input.specialty,
+      audioQualityAlert,
+      interpreterAlert,
+      specialtyGuidanceText: guidance || null,
+    }) + (anchorsOn ? ANCHOR_GENERATION_ADDENDUM : '');
 
   const user = buildSoapUserPrompt({
     specialty: input.specialty,
@@ -166,7 +176,7 @@ export async function runLayer4GenerateSoap(
     wrappedTranscript: wrap.wrapped,
   });
 
-  const { text } = await modelClient.completeText({
+  const { text: rawText } = await modelClient.completeText({
     practiceId: input.practiceId,
     visitId: input.visitId,
     userId: input.userId,
@@ -178,6 +188,28 @@ export async function runLayer4GenerateSoap(
     maxTokens: 8192,
     temperature: 0.2,
   });
+
+  let text = rawText;
+  let suggestedClaims: object | undefined;
+  if (anchorsOn) {
+    const verified = await runAnchorVerify({
+      visitId: input.visitId,
+      practiceId: input.practiceId,
+      userId: input.userId,
+      anchoredDraft: rawText,
+      roleLabeledTranscript: input.roleLabeledTranscript,
+    });
+    text = verified.body;
+    suggestedClaims = verified.suggestions.length > 0 ? verified.suggestions : undefined;
+    // Telemetry — the living fabrication monitor (counts only, no content).
+    log.info('anchored-generation', 'verify split', {
+      visitId: input.visitId,
+      anchored: verified.stats.anchored,
+      demoted: verified.stats.demoted,
+      entailmentChecked: verified.stats.entailmentChecked,
+      verifierErrored: verified.stats.verifierErrored,
+    });
+  }
 
   // FIND-P1-015 (2026-05-14) — lenient SOAP structure check. The L4
   // prompt says "Structure the note with these markdown headings
@@ -209,6 +241,7 @@ export async function runLayer4GenerateSoap(
       where: { id: input.visitId },
       data: {
         soapDraft: text,
+        ...(suggestedClaims !== undefined ? { suggestedClaims } : {}),
         needsReview: true,
         reviewReason:
           'SOAP draft didn\'t match expected markdown structure — manual review required.',
@@ -224,6 +257,7 @@ export async function runLayer4GenerateSoap(
     where: { id: input.visitId },
     data: {
       soapDraft: text,
+      ...(suggestedClaims !== undefined ? { suggestedClaims } : {}),
       // Phase 1 provenance — which template + version generated this note.
       noteTemplateId: template.id,
       noteTemplateVersion: template.version,

@@ -259,6 +259,14 @@ const MOCK_COMPLETE_TEXT_FIXTURES: Partial<
     inputTokens: 1,
     outputTokens: 1,
   },
+  // Anchored-generation entailment verifier — MOCK entails everything so a
+  // flag-on MOCK pipeline keeps its body intact; reject/fail-closed paths
+  // are unit-tested deterministically.
+  tm_anchor_entailment: {
+    text: '{"verdicts":[]}',
+    inputTokens: 1,
+    outputTokens: 1,
+  },
   // tm_patient_summary lives in MOCK_COMPLETE_FIXTURES (L7e uses
   // modelClient.complete(), not completeText).
 };

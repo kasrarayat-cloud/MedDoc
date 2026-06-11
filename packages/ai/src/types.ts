@@ -32,6 +32,10 @@ export type ModelCallPurpose =
   // rejects new clinical claims. Own tag so rejection-path unit
   // economics + call rates are cheap to pivot in SQL.
   | 'tm_polish_gate'
+  // Hybrid anchored generation (2026-06-11) — per-claim entailment verifier:
+  // judges each anchored claim against its quoted transcript span(s).
+  // Fail-closed (uncertain/error → claim demoted to the suggestions lane).
+  | 'tm_anchor_entailment'
   // T-M6: parallel automation layers that fan out after polish.
   | 'tm_icd_coding'
   | 'tm_cpt_coding'
