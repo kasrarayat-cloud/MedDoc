@@ -111,25 +111,25 @@ describe('LoginSchema email cap', () => {
 describe('static check — every email schema has .max(254)', () => {
   it('admin user routes + visit export-email + visit sign cap all email fields', async () => {
     const fs = await import('node:fs/promises');
+    const nodePath = await import('node:path');
+    // Resolve route files relative to THIS test file
+    // (apps/transcribe-md/tests/worker) — NOT a hardcoded host path or cwd.
+    // The CI unit gate runs vitest with cwd=apps/transcribe-md on a runner
+    // where the repo is not at /opt/meddoc-pro; __dirname is correct in both
+    // places (same pattern as corpus.test.ts).
+    const APP_ROOT = nodePath.resolve(__dirname, '../..');
     const files = [
-      'apps/transcribe-md/src/app/api/admin/users/[id]/grant-admin/route.ts',
-      'apps/transcribe-md/src/app/api/admin/users/[id]/revoke-admin/route.ts',
-      'apps/transcribe-md/src/app/api/admin/users/[id]/soft-delete/route.ts',
-      'apps/transcribe-md/src/app/api/visits/[id]/export/email/route.ts',
-      'apps/transcribe-md/src/app/api/visits/[id]/sign/route.ts',
-      'apps/transcribe-md/src/app/api/auth/forgot-password/route.ts',
-      'apps/transcribe-md/src/app/api/auth/resend-verification/route.ts',
-      'apps/transcribe-md/src/app/api/settings/change-email/route.ts',
+      'src/app/api/admin/users/[id]/grant-admin/route.ts',
+      'src/app/api/admin/users/[id]/revoke-admin/route.ts',
+      'src/app/api/admin/users/[id]/soft-delete/route.ts',
+      'src/app/api/visits/[id]/export/email/route.ts',
+      'src/app/api/visits/[id]/sign/route.ts',
+      'src/app/api/auth/forgot-password/route.ts',
+      'src/app/api/auth/resend-verification/route.ts',
+      'src/app/api/settings/change-email/route.ts',
     ];
     for (const rel of files) {
-      const path = '/opt/meddoc-pro/' + rel;
-      let src: string;
-      try {
-        src = await fs.readFile(path, 'utf8');
-      } catch {
-        // CI runs from a checked-out tree; fall back to repo-relative
-        src = await fs.readFile(rel, 'utf8');
-      }
+      const src = await fs.readFile(nodePath.join(APP_ROOT, rel), 'utf8');
       // For every z.string().email() chain, walk to the end of the
       // chain (until newline / semicolon) and assert .max(254) is
       // somewhere along it. Tolerant of whitespace + .optional() +
