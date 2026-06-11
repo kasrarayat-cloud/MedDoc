@@ -9,6 +9,24 @@
 // ============================================================================
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+// File-level mock (hoisted; survives vi.resetModules): keep @meddoc/ai REAL
+// except the two fire-and-forget telemetry sinks. With them real, every
+// judgeMdm test fires `void prisma.aiCall.create().catch(console.error)`
+// against a non-existent DB — the rejection can settle AFTER afterEach
+// restores the console, landing in vitest worker teardown as
+// "EnvironmentTeardownError: Closing rpc while onUserConsoleLog was
+// pending" (the PR #304 CI flake; all tests green, exit 1). No-op the
+// sinks so the async chain never exists.
+vi.mock('@meddoc/ai', async () => {
+  const actual = await vi.importActual<typeof import('@meddoc/ai')>('@meddoc/ai');
+  return {
+    ...actual,
+    logAiCall: () => undefined,
+    logApiUsage: () => undefined,
+  };
+});
+
 import {
   buildCacheKey,
   charDistanceRatio,
@@ -97,9 +115,24 @@ describe('validateMdmJudgement', () => {
   });
 });
 
+// Silence the expected console noise these tests produce (the fallback
+// path's "llm call failed" warn + fire-and-forget logAiCall/logApiUsage
+// prisma errors with no DB). Beyond tidiness this is load-bearing on CI:
+// pending onUserConsoleLog RPCs at worker teardown intermittently raise
+// "EnvironmentTeardownError: Closing rpc while onUserConsoleLog was
+// pending" → vitest exits 1 with all tests green (seen on PR #304).
+// Same pattern as edit-tracking.test.ts.
+function silenceExpectedConsole() {
+  vi.spyOn(console, 'info').mockImplementation(() => {});
+  vi.spyOn(console, 'warn').mockImplementation(() => {});
+  vi.spyOn(console, 'error').mockImplementation(() => {});
+  vi.spyOn(console, 'log').mockImplementation(() => {});
+}
+
 describe('judgeMdm — cache warm path', () => {
   beforeEach(() => {
     vi.resetModules();
+    silenceExpectedConsole();
     process.env.ANTHROPIC_API_KEY = 'test-key-not-used-network-mocked';
   });
   afterEach(() => {
@@ -229,6 +262,7 @@ describe('judgeMdm — cache warm path', () => {
 describe('judgeMdm — fallback path', () => {
   beforeEach(() => {
     vi.resetModules();
+    silenceExpectedConsole();
     process.env.ANTHROPIC_API_KEY = 'test-key-not-used-network-mocked';
   });
   afterEach(() => {
