@@ -29,6 +29,15 @@
 //      reasoning / referrals / screenings / follow-up / education / meds /
 //      doses) and meaning changes (negation flips). Any violation → reject.
 //
+// TRUST BOUNDARY (deliberate asymmetry — do not "fix" in either direction):
+// the verifier allows content "taken directly from the permitted fixes"
+// while the polish prompt forbids adding clinical content even when a fix
+// calls for it. fixesText is trusted here because L5 is TRANSCRIPT-GROUNDED
+// (it sees the transcript; L6/L6b do not) — a hallucinating critique fix is
+// L5's failure class, audited by L5's own rubric, not this gate's. The gate
+// exists to catch L6 EXPANDING beyond draft+fixes, which is exactly what the
+// PriMock57 RED finding showed.
+//
 // PHI: the gate result carries counts + enum-class strings only. Verifier
 // violation summaries are NOT propagated into audit metadata by the caller.
 // ============================================================================
@@ -39,25 +48,30 @@ import { modelClient } from '@meddoc/ai';
 // Same env override pattern as L4/L5/L6 (feat/fable5-eval); unset → Sonnet.
 const MODEL = process.env.TRANSCRIBE_MD_CLINICAL_MODEL || 'claude-sonnet-4-6';
 
+// STRICT shape — `violations` is REQUIRED. A `.default([])` here would turn
+// any missing-key / wrapped / key-drifted verdict (`{}`, `{"verdict":{...}}`,
+// `{"violation":[...]}`) into a CLEAN verdict — fail-open, the exact failure
+// class this gate exists to stop (audit BLOCK-1, 2026-06-11). Missing key →
+// safeParse fail → verifier_verdict_malformed → fallback to draft.
 const VerifierVerdict = z.object({
-  violations: z
-    .array(
-      z.object({
-        kind: z.enum(['addition', 'meaning_change']),
-        summary: z.string(),
-      })
-    )
-    .default([]),
+  violations: z.array(
+    z.object({
+      kind: z.enum(['addition', 'meaning_change']),
+      summary: z.string(),
+    })
+  ),
 });
 export type VerifierVerdict = z.infer<typeof VerifierVerdict>;
+
+export type ViolationKind = 'addition' | 'meaning_change';
 
 export type PolishFidelityGateResult =
   | { ok: true; novelTermCount: number }
   | {
       ok: false;
       violationCount: number;
-      /** Distinct violation kinds — enum-class strings, PHI-safe. */
-      kinds: string[];
+      /** Distinct violation kinds — Zod-enum-constrained, PHI-safe. */
+      kinds: ViolationKind[];
       novelTermCount: number;
       /** Non-null when the gate itself failed (fail-closed reject). */
       gateError: string | null;
@@ -118,30 +132,48 @@ export function findNovelContentTerms(
 // Verifier-verdict extraction. Tolerates prose/fences around the JSON (the
 // #200 judge-parse lesson) but stays STRICT about shape: anything that does
 // not Zod-parse to { violations: [...] } is a gate error → fail-closed.
+//
+// Audit WARN-1 (2026-06-11): extracting only the FIRST balanced object is
+// fail-open when the model's prose contains an example clean verdict before
+// the real one ("a faithful edit looks like {"violations":[]} but I found
+// {...violations...}"). So we extract ALL balanced top-level objects and the
+// caller resolves them fail-closed: any valid verdict WITH violations wins;
+// multiple all-clean verdicts are ambiguous → gate error → fallback.
 // ---------------------------------------------------------------------------
-function extractFirstJsonObject(text: string): string | null {
-  const start = text.indexOf('{');
-  if (start === -1) return null;
-  let depth = 0;
-  let inString = false;
-  let escaped = false;
-  for (let i = start; i < text.length; i++) {
-    const c = text[i];
-    if (escaped) {
-      escaped = false;
-    } else if (c === '\\') {
-      escaped = true;
-    } else if (c === '"') {
-      inString = !inString;
-    } else if (!inString) {
-      if (c === '{') depth++;
-      else if (c === '}') {
-        depth--;
-        if (depth === 0) return text.slice(start, i + 1);
+function extractAllJsonObjects(text: string): string[] {
+  const out: string[] = [];
+  let i = 0;
+  while (i < text.length) {
+    const start = text.indexOf('{', i);
+    if (start === -1) break;
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    let end = -1;
+    for (let j = start; j < text.length; j++) {
+      const c = text[j];
+      if (escaped) {
+        escaped = false;
+      } else if (c === '\\') {
+        escaped = true;
+      } else if (c === '"') {
+        inString = !inString;
+      } else if (!inString) {
+        if (c === '{') depth++;
+        else if (c === '}') {
+          depth--;
+          if (depth === 0) {
+            end = j;
+            break;
+          }
+        }
       }
     }
+    if (end === -1) break; // unbalanced tail — stop scanning
+    out.push(text.slice(start, end + 1));
+    i = end + 1;
   }
-  return null;
+  return out;
 }
 
 const VERIFIER_SYSTEM = [
@@ -208,8 +240,8 @@ export async function runPolishFidelityGate(
       temperature: 0,
     });
 
-    const raw = extractFirstJsonObject(text ?? '');
-    if (!raw) {
+    const rawObjects = extractAllJsonObjects(text ?? '');
+    if (rawObjects.length === 0) {
       return {
         ok: false,
         violationCount: 0,
@@ -218,8 +250,21 @@ export async function runPolishFidelityGate(
         gateError: 'verifier_output_not_json',
       };
     }
-    const parsed = VerifierVerdict.safeParse(JSON.parse(raw));
-    if (!parsed.success) {
+
+    // Parse every balanced object; keep the ones that match the verdict
+    // shape. Resolution is fail-closed: a verdict WITH violations always
+    // wins over a clean one; >1 clean verdict (and no violating one) is
+    // ambiguous → gate error; zero valid verdicts → malformed.
+    const verdicts: VerifierVerdict[] = [];
+    for (const raw of rawObjects) {
+      try {
+        const parsed = VerifierVerdict.safeParse(JSON.parse(raw));
+        if (parsed.success) verdicts.push(parsed.data);
+      } catch {
+        // not JSON — skip; shape resolution below decides the outcome
+      }
+    }
+    if (verdicts.length === 0) {
       return {
         ok: false,
         violationCount: 0,
@@ -229,14 +274,23 @@ export async function runPolishFidelityGate(
       };
     }
 
-    const violations = parsed.data.violations;
-    if (violations.length > 0) {
+    const violating = verdicts.find((v) => v.violations.length > 0);
+    if (violating) {
       return {
         ok: false,
-        violationCount: violations.length,
-        kinds: [...new Set(violations.map((v) => v.kind))],
+        violationCount: violating.violations.length,
+        kinds: [...new Set(violating.violations.map((v) => v.kind))],
         novelTermCount,
         gateError: null,
+      };
+    }
+    if (verdicts.length > 1) {
+      return {
+        ok: false,
+        violationCount: 0,
+        kinds: [],
+        novelTermCount,
+        gateError: 'verifier_output_ambiguous',
       };
     }
     return { ok: true, novelTermCount };

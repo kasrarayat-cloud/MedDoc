@@ -275,6 +275,84 @@ describe('L6b gate — FAIL-CLOSED on every gate failure', () => {
     );
   });
 
+  it('AUDIT BLOCK-1: missing-violations-key verdict ({}) must NOT pass as clean', async () => {
+    // A `.default([])` on the Zod schema would turn `{}` into an approval —
+    // fail-open. Pinned: missing key = malformed = fallback.
+    mockPolishAndGate(FABRICATED_POLISH, '{}');
+
+    const result = await runLayer6Polish(makeInput());
+
+    expect(result.polishRejected).toBe(true);
+    expect(result.soapFinal).toBe(DRAFT);
+    expect(mocks.logAudit.mock.calls[0][0].metadata.gateError).toBe(
+      'verifier_verdict_malformed'
+    );
+  });
+
+  it('AUDIT BLOCK-1: a WRAPPED verdict ({"verdict":{...}}) must NOT pass as clean', async () => {
+    // Top-level extraction does NOT descend into the wrapper; the outer
+    // object lacks a `violations` key → schema fail → fallback. (Strictly
+    // fail-closed: a wrapped CLEAN verdict also falls back rather than
+    // shipping — non-conforming shape never approves.)
+    mockPolishAndGate(
+      FABRICATED_POLISH,
+      '{"verdict":{"violations":[{"kind":"addition","summary":"new referral"}]}}'
+    );
+
+    const result = await runLayer6Polish(makeInput());
+
+    expect(result.polishRejected).toBe(true);
+    expect(result.soapFinal).toBe(DRAFT);
+    expect(mocks.logAudit.mock.calls[0][0].metadata.gateError).toBe(
+      'verifier_verdict_malformed'
+    );
+  });
+
+  it('AUDIT WARN-1: prose with an example CLEAN verdict before the REAL violating one → rejects', async () => {
+    mockPolishAndGate(
+      FABRICATED_POLISH,
+      'A faithful edit looks like {"violations":[]} but here I found: ' +
+        '{"violations":[{"kind":"addition","summary":"invented contraindication"}]}'
+    );
+
+    const result = await runLayer6Polish(makeInput());
+
+    expect(result.polishRejected).toBe(true);
+    expect(result.soapFinal).toBe(DRAFT);
+    expect(mocks.logAudit.mock.calls[0][0].metadata.violationCount).toBe(1);
+  });
+
+  it('AUDIT WARN-1: MULTIPLE all-clean verdicts are ambiguous → fail-closed fallback', async () => {
+    mockPolishAndGate(
+      CLEAN_POLISH,
+      'Example: {"violations":[]} — and my verdict: {"violations":[]}'
+    );
+
+    const result = await runLayer6Polish(makeInput());
+
+    expect(result.polishRejected).toBe(true);
+    expect(result.soapFinal).toBe(DRAFT);
+    expect(mocks.logAudit.mock.calls[0][0].metadata.gateError).toBe(
+      'verifier_output_ambiguous'
+    );
+  });
+
+  it('whitespace-only polish output skips the gate (no verifier call); structure validator owns it', async () => {
+    mockPolishAndGate('   \n  ', '{"violations":[]}');
+
+    const result = await runLayer6Polish(makeInput());
+
+    // Gate not invoked — only ONE completeText call (the polish itself).
+    const gateCalls = mocks.modelCompleteText.mock.calls.filter(
+      (c) => c[0]?.purpose === 'tm_polish_gate'
+    );
+    expect(gateCalls).toHaveLength(0);
+    expect(result.polishRejected).toBe(false);
+    // FIND-P1-016 policy: raw output persisted + flagged for review.
+    expect(result.needsReview).toBe(true);
+    expect(result.reviewReason).toMatch(/didn't match expected markdown structure/);
+  });
+
   it('gate fallback SKIPS structure validation (draft already L4-validated) — single audit row', async () => {
     mockPolishAndGate(CLEAN_POLISH, new Error('boom'));
 

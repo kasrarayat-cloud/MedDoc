@@ -188,7 +188,7 @@ export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output>
     // alongside the unfixable-criticals reason. Skipped on gate fallback:
     // the draft we fell back to was already L4-validated when it landed.
     if (!polishRejected) {
-      const validation = validateSoapStructure(text, requiredSections);
+      const validation = validateSoapStructure(soapFinal, requiredSections);
       if (!validation.ok) {
         void logAudit({
           action: 'MODEL_OUTPUT_VALIDATION_FAIL',

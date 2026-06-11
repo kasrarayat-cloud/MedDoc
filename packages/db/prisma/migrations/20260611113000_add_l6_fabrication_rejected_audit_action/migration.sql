@@ -6,4 +6,4 @@
 -- failure — fail-closed) and the visit falls back to the pre-L6 (L4) draft.
 -- Metadata carries counts + enum-class strings only, never note content.
 -- Additive enum value — safe on a live database.
-ALTER TYPE "AuditAction" ADD VALUE 'L6_FABRICATION_REJECTED';
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'L6_FABRICATION_REJECTED';
