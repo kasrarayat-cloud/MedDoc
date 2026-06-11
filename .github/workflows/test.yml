@@ -143,3 +143,44 @@ jobs:
         # added — we want the gate to fail the job on a vulnerability
         # above threshold.
         run: npm audit --audit-level=high --workspaces --include-workspace-root
+
+  # ──────────────────────────────────────────────────────────────────
+  # In-scope unit gate (chore/ci-unit-gate-and-marketing-copy).
+  # ----------------------------------------------------------------------------
+  # GAP this closes: the `test` job above runs `npm run test:all`, which
+  # delegates to the decommissioned meddoc-pro workspace and is now a no-op
+  # echo — so NO unit tests gated merge. The whole transcribe-md + packages/*
+  # suite (1500+ tests incl. the caution-first allergy merge, refusal
+  # categorization, admin-gate structural test, rx-warning identity, dose
+  # validator, db-guard, …) rotted unenforced (proven by the 2026-06-11
+  # hygiene sweep: 7 tests were red on main while every PR's `test` check
+  # stayed green).
+  #
+  # This job runs the ONE in-scope unit suite — `vitest run` in
+  # apps/transcribe-md, whose config folds in packages/*/src tests. It needs
+  # NO postgres/redis service and NO real API keys: the suite mocks @meddoc/db
+  # + @meddoc/ai and runs fully on a bare runner (the sweep removed the last
+  # env coupling). DATABASE_URL is deliberately left UNSET — db-guard tests
+  # assert the fail-closed "DATABASE_URL is not set" path. Runs in parallel
+  # with `test` / `audit` / the e2e workflow, so the CI critical path does
+  # not lengthen. apps/meddoc-pro (decommissioned) stays out of scope.
+  unit:
+    name: unit tests (transcribe-md + packages)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Generate Prisma client
+        # @meddoc/db imports resolve to the generated @prisma/client; generate
+        # reads the schema only (no DATABASE_URL / DB connection required).
+        run: npm run db:generate
+      - name: Run in-scope unit suite (transcribe-md + packages/*)
+        run: npm run test:unit -w transcribe-md
