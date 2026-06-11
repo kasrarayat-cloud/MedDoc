@@ -27,6 +27,11 @@ export type ModelCallPurpose =
   | 'tm_soap_draft'
   | 'tm_critique'
   | 'tm_polish'
+  // L6 post-polish fabrication gate (2026-06-11, RED finding fix) — a
+  // focused verifier that diffs the polished note against its input and
+  // rejects new clinical claims. Own tag so rejection-path unit
+  // economics + call rates are cheap to pivot in SQL.
+  | 'tm_polish_gate'
   // T-M6: parallel automation layers that fan out after polish.
   | 'tm_icd_coding'
   | 'tm_cpt_coding'
