@@ -816,10 +816,12 @@ Same labels, same count, same order as the dropdown.
   functional pressure — `findSpecialty()` keeps the app working
   on legacy rows — but normalizing makes
   `SELECT specialty, COUNT(*)` reports honest.
-- Marketing H2 copy "Eight specialty templates." is hardcoded; the
-  catalog snapshot test will trip if the count changes, prompting
-  a copy update. (Not auto-derived to keep the snapshot test
-  meaningful.)
+- ✅ RESOLVED (2026-06-11) — Marketing specialty count is AUTO-DERIVED,
+  not hardcoded. The H2 ("N specialty templates") + pill list
+  (apps/marketing Specialties.tsx + HowItWorks.tsx) derive the count from
+  SPECIALTIES_FOR_VISIT_CREATE (@meddoc/shared) → live site renders
+  "Twelve"/12. The packages/shared "catalog row count" test is the gated
+  tripwire (CI `unit` job, PR #299). No manual copy update needed.
 
 
 ## 17. ✅ Phase 7-QA — P2-003 mobile tap targets (Apple HIG 44pt) — completed 2026-05-04
