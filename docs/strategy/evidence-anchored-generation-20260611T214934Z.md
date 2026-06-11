@@ -178,3 +178,28 @@ audit semantics; out of scope.
   the share a judge finds actually transcript-supported); (4) readability
   excerpt comparison. One spike. No iteration spiral. Fail → Option-2
   counter-scope.
+
+---
+
+# SPIKE RESULTS + VERDICT (appended 2026-06-11, runs committed under docs/eval-runs/)
+
+## Runs
+- **Run 1 (`evidence-anchor-spike-20260611T215603Z.*`) — VOIDED, instrument defect.** The addendum's anchor grammar example was `⟦A:"a ... b"⟧`; the model reasonably emitted `⟦A:"a" ... "b"⟧`; the prototype regex saw no anchor on anchor-rich paragraphs. 99% false-demotion measured the regex, not the architecture. Repair: accept both grammars, strip role-prefixes for cross-utterance matching, fix label+placeholder exemptions. Same prompt, same thresholds.
+- **Run 2 (`evidence-anchor-spike-20260611T220456Z.*`) — the honest numbers:**
+  - Anchored (body) 1–3 claims/case; demoted 16–24; **false-demotion 106/106 (≈100% of demotions judged transcript-supported)** — Swiss-cheese body, extreme form.
+  - **Anchor capture of the prior n=30 fabrications: 8 in lane, 0 in body** (6 not regenerated this run — model nondeterminism). The lane mechanism works.
+  - Body class-(c): 1 flag, itself judge noise ("No chest pain." with explicit transcript support — single-judge spike scale).
+  - **Direct quote fidelity: 58/59 sub-spans (98%) literal-match the transcript after normalization** — the MODEL anchors reliably.
+
+## Why the verifier failed (the architecture finding)
+The residual false-demotion is dominated by the **semantic gap between colloquial speech and clinical register**: "told you you've had migraines in the past? No. No." supports "No prior diagnosis of migraines." with ~1 shared content token. Register translation — the scribe's core function — has near-zero token overlap with its evidence. Secondary: whole-anchor voiding on `[unclear]`-overlapping quotes (over-strict on noisy audio), date-format digit mismatches, paragraph-level negation XOR. **There is no deterministic token-threshold setting that admits legitimate register translation while blocking "olecranon bursitis" — loosening and tightening move on the same axis.** This is precisely what the spike existed to surface; per the no-tuning rule, not iterated further.
+
+## VERDICT
+- **Anchoring (model behavior): GO** — 98% verbatim-quote fidelity, dense coverage, suggestions-lane mechanics work, fabrications route to the lane.
+- **Deterministic token-level derivability (design §2 as specced): NO-GO.**
+- **Option 1 as specced: NO-GO for the full build.**
+
+## Paths forward (decision for Kasra — nothing built)
+1. **Hybrid (recommended to scope next): anchors + entailment-verifier model.** Keep §1 anchors (proven) and the suggestions lane; replace §2's token rules with a focused per-note entailment pass ("is each claim entailed by its quoted span(s)?" — the L6b-gate pattern: cheap Sonnet call, fail-closed to the lane, deterministic digits/negation checks retained as hard overrides). Honest disclosure: the guarantee weakens from "deterministic" to "deterministic anchor existence + fail-closed model-judged entailment" — but the L6b gate already validated that pattern in prod (caught a real fabrication on its first live visit). Cost +1 Sonnet call/visit.
+2. **Option 2 counter-scope (the directive's fallback) — structured ROS/Assessment:** free prose is retained ONLY for HPI narrative; ROS-negatives and Assessment render DETERMINISTICALLY from verified L3 entities (each entity already carries a verbatim `evidence_quote` — the existing extraction contract): ROS = template-rendered from `ros[]` entities with polarity; Assessment = `assessment_discussed[]` quotes register-polished by a constrained call whose output is gated by the L6b verifier. Unstated negatives/differentials structurally CANNOT enter (nothing renders without an entity, no entity without a quote). Cost: stylistic uniformity in those sections; HPI keeps prose quality. Smaller blast radius than option 1; doesn't protect HPI/Plan prose (the L6b gate + prompt rules remain those sections' only guard).
+3. Ship neither; pilot under the current posture (L6 gate + banner + review-before-sign) with the fabrication rate disclosed to pilot doctors — a product/consent decision, not an engineering one.
