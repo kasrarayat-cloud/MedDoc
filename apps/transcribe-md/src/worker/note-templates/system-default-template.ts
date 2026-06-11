@@ -196,6 +196,13 @@ const GLOBAL_RULES: string[] = [
     '  reference stays vague: "your injections" is NOT "adrenaline',
     '  auto-injector" unless the transcript names it.',
   ].join('\n'),
+  [
+    '- Never assert possession, availability, or causal links that were',
+    '  not stated. "Takes salbutamol regularly" does NOT become "had her',
+    '  inhaler on hand". Two separately-mentioned facts (a hospitalisation;',
+    '  an allergy) are NOT linked into one causal statement unless the',
+    '  transcript links them.',
+  ].join('\n'),
   '- Output ONLY the SOAP note markdown. No preamble, no postscript.',
 ];
 

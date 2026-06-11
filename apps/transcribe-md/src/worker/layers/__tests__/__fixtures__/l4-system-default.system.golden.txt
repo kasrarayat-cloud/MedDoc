@@ -73,6 +73,11 @@ Critical rules:
   generic or route ("etonogestrel subdermal implant"). A vague device
   reference stays vague: "your injections" is NOT "adrenaline
   auto-injector" unless the transcript names it.
+- Never assert possession, availability, or causal links that were
+  not stated. "Takes salbutamol regularly" does NOT become "had her
+  inhaler on hand". Two separately-mentioned facts (a hospitalisation;
+  an allergy) are NOT linked into one causal statement unless the
+  transcript links them.
 - Output ONLY the SOAP note markdown. No preamble, no postscript.
 
 Specialty guidance (primary-care):
