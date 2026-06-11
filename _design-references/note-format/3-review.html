@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>My Note Format — Review · QuillMD</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="note-format.css" rel="stylesheet" />
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand"><div class="brand-mark">Q</div><div class="brand-name">QuillMD</div></div>
+    <div class="nav-eyebrow">Workspace</div>
+    <a class="nav-item" href="#"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.7"><path d="M12 5v14M5 12h14"/></svg> New visit</a>
+    <a class="nav-item" href="#"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.7"><path d="M4 6h16M4 12h16M4 18h10"/></svg> Visits</a>
+    <a class="nav-item" href="#"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.7"><circle cx="12" cy="8" r="3.2"/><path d="M5 20c0-3.3 3-5 7-5s7 1.7 7 5"/></svg> Patients</a>
+    <div class="nav-eyebrow">Account</div>
+    <a class="nav-item nav-item--active" href="#"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.6-2-3.4-2.4 1a7 7 0 0 0-1.7-1l-.4-2.6H10l-.4 2.6a7 7 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.6a7 7 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 1.7 1l.4 2.6h3.6l.4-2.6a7 7 0 0 0 1.7-1l2.4 1 2-3.4-2-1.6a7 7 0 0 0 .1-1Z"/></svg> Settings</a>
+    <div class="sidebar-foot"><div class="avatar">RA</div><div style="font-size:12px;color:var(--text-2)">Dr. R. Almeida</div></div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar"><span class="crumb"><b>Settings</b><span class="sep">/</span>My Note Format<span class="sep">/</span>Review</span></div>
+
+    <div class="settings-grid" style="grid-template-columns:1fr;max-width:1180px;padding-top:24px;">
+      <div class="col">
+        <section class="section">
+          <!-- Header -->
+          <div class="review-bar">
+            <div>
+              <div class="sec-eyebrow">Review the parsed format</div>
+              <div class="ttl">Here's the format I understood — edit anything.</div>
+            </div>
+            <div class="actions">
+              <button class="btn" id="previewToggle" aria-pressed="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="2.6"/></svg> Sample note</button>
+              <a class="btn" href="1-entry.html">Cancel</a>
+            </div>
+          </div>
+
+          <!-- Name + encounter type -->
+          <div class="review-meta">
+            <div class="field">
+              <label class="label" for="tpl-name">Template name</label>
+              <input id="tpl-name" class="input" value="Ortho Follow-up" />
+            </div>
+            <div class="field">
+              <label class="label" for="tpl-enc">Use for</label>
+              <select id="tpl-enc" class="select">
+                <option>Any encounter</option>
+                <option>New patient</option>
+                <option selected>Follow-up</option>
+                <option>Telehealth</option>
+                <option>Procedure</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- ── DEFAULT-TEXT SAFETY MESSAGE (visible, calm, info-toned) ── -->
+          <div class="safety" role="note" style="margin-top:16px;">
+            <div class="s-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3l7 3v5c0 4.4-3 8-7 10-4-2-7-5.6-7-10V6l7-3Z"/><path d="M9.2 12l2 2 3.6-4"/></svg></div>
+            <div class="s-body">
+              <div class="s-head">How your default ("normal") text is used — safely</div>
+              <p>Default text is a <b>starting point</b>. QuillMD only states findings the visit actually supports — <b>anything from your defaults that wasn't discussed is flagged for your review before you sign</b>, never silently asserted. You stay in control of every finding.</p>
+            </div>
+          </div>
+
+          <div class="split with-preview" id="split">
+            <!-- LEFT: editor -->
+            <div>
+              <div class="editor">
+                <div class="editor-head">
+                  <span class="lbl">Sections · drag or use ▲▼ to reorder</span>
+                  <span class="muted" style="font-size:11.5px;">4 sections</span>
+                </div>
+
+                <!-- Section: Subjective (expanded, prose, no default) -->
+                <div class="sec-card" data-sec>
+                  <div class="sec-row">
+                    <span class="drag-handle" tabindex="0" role="button" aria-label="Drag to reorder Subjective"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="6" r=".6"/><circle cx="15" cy="6" r=".6"/><circle cx="9" cy="12" r=".6"/><circle cx="15" cy="12" r=".6"/><circle cx="9" cy="18" r=".6"/><circle cx="15" cy="18" r=".6"/></svg></span>
+                    <div>
+                      <input class="sec-label-input" value="Subjective" aria-label="Section label" />
+                      <div class="sec-key">key: subjective</div>
+                    </div>
+                    <div class="sec-controls">
+                      <div class="seg" role="group" aria-label="Format for Subjective">
+                        <button class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 10h16M4 14h12M4 18h16"/></svg> Prose</button>
+                        <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="5" cy="7" r="1"/><circle cx="5" cy="12" r="1"/><circle cx="5" cy="17" r="1"/><path d="M9 7h11M9 12h11M9 17h11"/></svg> Bullets</button>
+                        <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h1M4 12h1M4 17h1M9 7h11M9 12h11M9 17h11"/></svg> Numbered</button>
+                      </div>
+                      <div class="reorder"><button aria-label="Move Subjective up" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 15l6-6 6 6"/></svg></button><button aria-label="Move Subjective down"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 9l6 6 6-6"/></svg></button></div>
+                    </div>
+                  </div>
+                  <div class="sec-body">
+                    <div><div class="sub-lbl">Style notes</div><input class="input" value="Brief interval history; chief complaint in the patient's own words." /></div>
+                    <div style="display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--text-3)">
+                      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>
+                      No default text — this section is written entirely from the visit.
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Section: Objective (expanded, bullets, HAS default → safety-critical) -->
+                <div class="sec-card" data-sec>
+                  <div class="sec-row">
+                    <span class="drag-handle" tabindex="0" role="button" aria-label="Drag to reorder Objective"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="6" r=".6"/><circle cx="15" cy="6" r=".6"/><circle cx="9" cy="12" r=".6"/><circle cx="15" cy="12" r=".6"/><circle cx="9" cy="18" r=".6"/><circle cx="15" cy="18" r=".6"/></svg></span>
+                    <div>
+                      <input class="sec-label-input" value="Objective / Exam" aria-label="Section label" />
+                      <div class="sec-key">key: objective · has default</div>
+                    </div>
+                    <div class="sec-controls">
+                      <div class="seg" role="group" aria-label="Format for Objective">
+                        <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 10h16M4 14h12M4 18h16"/></svg> Prose</button>
+                        <button class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="5" cy="7" r="1"/><circle cx="5" cy="12" r="1"/><circle cx="5" cy="17" r="1"/><path d="M9 7h11M9 12h11M9 17h11"/></svg> Bullets</button>
+                        <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h1M4 12h1M4 17h1M9 7h11M9 12h11M9 17h11"/></svg> Numbered</button>
+                      </div>
+                      <div class="reorder"><button aria-label="Move Objective up"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 15l6-6 6 6"/></svg></button><button aria-label="Move Objective down"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 9l6 6 6-6"/></svg></button></div>
+                    </div>
+                  </div>
+                  <div class="sec-body">
+                    <div><div class="sub-lbl">Style notes</div><input class="input" value="Exam grouped by region; positives first." /></div>
+                    <div>
+                      <div class="sub-lbl">Default ("normal") text · confirmed at sign time</div>
+                      <div class="default-box">
+                        <div class="db-head">
+                          <span class="t"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 4h14v16H5z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg> Inserted only when supported</span>
+                          <span class="pill pill--info" style="font-size:10px;">Scaffold · confirm</span>
+                        </div>
+                        <textarea class="textarea" rows="3" aria-label="Default text for Objective">Gait normal. No effusion. Full range of motion. Neurovascularly intact distally.</textarea>
+                      </div>
+                      <div style="display:flex;gap:7px;align-items:flex-start;font-size:11px;color:var(--text-3);margin-top:7px;line-height:1.5;">
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="var(--info)" stroke-width="1.7" style="flex-shrink:0;margin-top:1px;"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>
+                        <span>Lines here are a template, not a record. Any line the visit didn't support is <b style="color:var(--text-2);font-weight:500">held back and flagged</b> on the note for you to confirm or drop before signing — see the sample on the right.</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Section: Assessment (collapsed) -->
+                <div class="sec-card" data-sec>
+                  <div class="sec-row">
+                    <span class="drag-handle" tabindex="0" role="button" aria-label="Drag to reorder Assessment"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="6" r=".6"/><circle cx="15" cy="6" r=".6"/><circle cx="9" cy="12" r=".6"/><circle cx="15" cy="12" r=".6"/><circle cx="9" cy="18" r=".6"/><circle cx="15" cy="18" r=".6"/></svg></span>
+                    <div><input class="sec-label-input" value="Assessment" aria-label="Section label" /><div class="sec-key">key: assessment · prose</div></div>
+                    <div class="sec-controls">
+                      <button class="btn btn-icon" aria-label="Expand Assessment"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></button>
+                      <div class="reorder"><button aria-label="Move Assessment up"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 15l6-6 6 6"/></svg></button><button aria-label="Move Assessment down"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 9l6 6 6-6"/></svg></button></div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Section: Plan (collapsed, numbered) -->
+                <div class="sec-card" data-sec>
+                  <div class="sec-row">
+                    <span class="drag-handle" tabindex="0" role="button" aria-label="Drag to reorder Plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="6" r=".6"/><circle cx="15" cy="6" r=".6"/><circle cx="9" cy="12" r=".6"/><circle cx="15" cy="12" r=".6"/><circle cx="9" cy="18" r=".6"/><circle cx="15" cy="18" r=".6"/></svg></span>
+                    <div><input class="sec-label-input" value="Plan" aria-label="Section label" /><div class="sec-key">key: plan · numbered</div></div>
+                    <div class="sec-controls">
+                      <button class="btn btn-icon" aria-label="Expand Plan"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></button>
+                      <div class="reorder"><button aria-label="Move Plan up"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 15l6-6 6 6"/></svg></button><button aria-label="Move Plan down" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 9l6 6 6-6"/></svg></button></div>
+                    </div>
+                  </div>
+                </div>
+
+                <button class="btn" style="margin-top:4px;align-self:flex-start;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14M5 12h14"/></svg> Add a section</button>
+              </div>
+
+              <!-- Flagged suggestions (engine noticed, did NOT auto-add) -->
+              <div style="margin-top:22px;">
+                <div class="editor-head" style="margin-bottom:9px;"><span class="lbl">Suggestions — you opt in, nothing was pre-filled</span></div>
+                <div class="flags">
+                  <div class="flag">
+                    <div class="f-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3l2 5 5 .5-3.8 3.4 1.1 5L12 19l-4.4 2.4 1.1-5L5 8.5 10 8z"/></svg></div>
+                    <div class="f-text">You tend to open the exam with a <b>normal ROS template</b>. Add it as a default for the Subjective section? <span class="muted">(It'll follow the same confirm-before-sign rule.)</span></div>
+                    <div class="f-acts"><button class="btn">Dismiss</button><button class="btn-primary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14M5 12h14"/></svg> Add</button></div>
+                  </div>
+                  <div class="flag">
+                    <div class="f-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3l2 5 5 .5-3.8 3.4 1.1 5L12 19l-4.4 2.4 1.1-5L5 8.5 10 8z"/></svg></div>
+                    <div class="f-text">Your notes often end with a <b>standard return-precautions line</b> in the Plan. Add it as a default?</div>
+                    <div class="f-acts"><button class="btn">Dismiss</button><button class="btn-primary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14M5 12h14"/></svg> Add</button></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- RIGHT: preview panel -->
+            <div class="preview-wrap" id="previewWrap">
+              <div class="preview-panel" style="position:sticky;top:64px;">
+                <div class="preview-head">
+                  <span class="t"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="2.6"/></svg> Sample note in your format</span>
+                  <span class="demo">Demo visit</span>
+                </div>
+                <div class="sample">
+                  <h4>Subjective</h4>
+                  <p>52-year-old returns for right-knee follow-up 6 weeks after arthroscopy. Reports steady improvement in pain (now 2/10, was 6/10) and improved weight-bearing. No new locking or giving-way.</p>
+                  <h4>Objective / Exam</h4>
+                  <ul>
+                    <li>Gait normal, no antalgia.</li>
+                    <li>Right knee: no effusion; full range of motion.</li>
+                    <li class="unsupported"><span class="hl">Neurovascularly intact distally</span> — <i>from your default; not discussed this visit, <b style="color:var(--info-fg)">flagged for your review</b> before signing.</i></li>
+                  </ul>
+                  <h4>Assessment</h4>
+                  <p>Status post right knee arthroscopy, healing as expected. No signs of complication.</p>
+                  <h4>Plan</h4>
+                  <ol>
+                    <li>Continue home strengthening program.</li>
+                    <li>Advance activity as tolerated.</li>
+                    <li>Return in 6 weeks or sooner for new swelling or instability.</li>
+                  </ol>
+                </div>
+                <div class="sample-foot">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>
+                  Sample from a demo visit. Default lines the visit didn't support are flagged, never asserted.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Sticky action bar -->
+          <div class="action-bar">
+            <div class="left">Saved as you go · last edited just now</div>
+            <div class="right">
+              <a class="btn" href="1-entry.html">Cancel</a>
+              <button class="btn">Save as draft</button>
+              <button class="btn-primary btn-lg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M5 12l5 5 9-11"/></svg> Save &amp; activate</button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+  // Format segmented toggle — visual active state.
+  document.querySelectorAll('.seg').forEach(seg => {
+    seg.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+      seg.querySelectorAll('button').forEach(x => x.classList.remove('on'));
+      b.classList.add('on');
+    }));
+  });
+  // Keyboard-accessible reorder (move section card up/down in the list).
+  document.querySelectorAll('.reorder button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const card = btn.closest('[data-sec]');
+      const up = /up/i.test(btn.getAttribute('aria-label') || '');
+      if (up && card.previousElementSibling?.matches('[data-sec]')) card.parentNode.insertBefore(card, card.previousElementSibling);
+      else if (!up && card.nextElementSibling?.matches('[data-sec]')) card.parentNode.insertBefore(card.nextElementSibling, card);
+    });
+  });
+  // Preview panel toggle.
+  const split = document.getElementById('split');
+  const wrap = document.getElementById('previewWrap');
+  const tgl = document.getElementById('previewToggle');
+  tgl.addEventListener('click', () => {
+    const on = split.classList.toggle('with-preview');
+    wrap.style.display = on ? '' : 'none';
+    tgl.setAttribute('aria-pressed', String(on));
+  });
+  // Flagged-suggestion add/dismiss.
+  document.querySelectorAll('.flag .f-acts button').forEach(b => b.addEventListener('click', () => b.closest('.flag').remove()));
+</script>
+</body>
+</html>
