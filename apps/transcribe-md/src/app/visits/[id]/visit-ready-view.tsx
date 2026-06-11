@@ -61,6 +61,13 @@ export interface SpeakerInfo {
 
 export interface VisitReadyViewProps {
   visitId: string;
+  /** 2026-06-11 (L6-gate prod smoke finding): READY visits can carry a
+   *  pipeline review flag (fabrication-gate rejection, unfixable critique
+   *  criticals, allergy-conflict) — previously written to the DB but never
+   *  rendered, so the doctor saw a bare "Needs review" pill with no reason.
+   *  Rendered as a banner above the tabs; suppressed once signed. */
+  needsReview?: boolean;
+  reviewReason?: string | null;
   /** Determines which "input" tab is shown + whether speaker reassignment
    *  is available. */
   inputMode: string;
@@ -203,6 +210,25 @@ export function VisitReadyView(props: VisitReadyViewProps) {
 
   return (
     <div className="w-full">
+      {/* Pipeline review banner — the WHY behind the "Needs review" pill.
+          Suppressed once signed (the doctor has reviewed by definition). */}
+      {props.needsReview && props.reviewReason && !props.signedAt && (
+        <div
+          role="status"
+          data-testid="review-reason-banner"
+          className="mb-4 rounded-lg border px-4 py-3 text-[13px] leading-relaxed"
+          style={{
+            borderColor: 'color-mix(in srgb, var(--color-linear-amber) 35%, transparent)',
+            background: 'color-mix(in srgb, var(--color-linear-amber) 8%, transparent)',
+            color: 'var(--color-linear-amber)',
+          }}
+        >
+          <span className="font-medium">Review before signing — </span>
+          <span style={{ color: 'var(--color-linear-text-2)' }}>
+            {props.reviewReason}
+          </span>
+        </div>
+      )}
       <Tabs
         tab={tab}
         onChange={setTab}
