@@ -52,7 +52,10 @@ import {
 import { ensureBucket } from '@/lib/minio';
 import { runMinioOrphanCleanup } from '@/worker/cleanup/minio-orphans';
 import { runStaleVisitCleanup } from '@/worker/cleanup/stale-visits';
-import { runRetentionSweep } from '@/worker/cleanup/retention-sweep';
+import {
+  runRetentionSweep,
+  resolveRetentionDays,
+} from '@/worker/cleanup/retention-sweep';
 import { runStuckVisitWatchdog } from '@/worker/cleanup/stuck-visit-watchdog';
 import { recordCleanupHeartbeat } from '@/lib/cleanup-heartbeat';
 import {
@@ -150,7 +153,8 @@ const STALE_VISIT_CLEANUP_CRON =
   process.env.STALE_VISIT_CLEANUP_CRON?.trim() || '0 3 * * *';
 const STALE_VISIT_CLEANUP_TIMEOUT_MS = 5 * 60 * 1000;
 
-// T-M18.1 A3 — audio retention sweep (SIGNED visits past 180d).
+// T-M18.1 A3 — audio retention sweep (SIGNED visits past the audio
+// retention window; default 90d — see retention-sweep.ts).
 // Opt-out via env. Cron offset 1h from the T-M17.3 stale-visit sweep
 // so the two don't contend for DB + MinIO connections.
 const RETENTION_SWEEP_ENABLED =
@@ -1358,10 +1362,11 @@ async function startCleanupWorker(): Promise<void> {
       cron: RETENTION_SWEEP_CRON,
       tz: 'UTC',
       timeoutMs: RETENTION_SWEEP_TIMEOUT_MS,
-      retentionDays: Number.parseInt(
-        process.env.AUDIO_RETENTION_DAYS?.trim() || '180',
-        10
-      ),
+      // Single source of truth — same resolver the sweep uses, so the
+      // logged window can't drift from the actual deletion behavior (the
+      // pre-2026-06-11 duplicate hardcoded '180' here logged 180 while the
+      // sweep already ran at its 90-day default).
+      retentionDays: resolveRetentionDays(),
     });
   } else {
     log.info('ops:retention-sweep', 'disabled', {
