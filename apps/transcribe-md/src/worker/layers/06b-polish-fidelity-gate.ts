@@ -29,14 +29,19 @@
 //      reasoning / referrals / screenings / follow-up / education / meds /
 //      doses) and meaning changes (negation flips). Any violation → reject.
 //
-// TRUST BOUNDARY (deliberate asymmetry — do not "fix" in either direction):
-// the verifier allows content "taken directly from the permitted fixes"
-// while the polish prompt forbids adding clinical content even when a fix
-// calls for it. fixesText is trusted here because L5 is TRANSCRIPT-GROUNDED
-// (it sees the transcript; L6/L6b do not) — a hallucinating critique fix is
-// L5's failure class, audited by L5's own rubric, not this gate's. The gate
-// exists to catch L6 EXPANDING beyond draft+fixes, which is exactly what the
-// PriMock57 RED finding showed.
+// TRUST BOUNDARY — REVISED (iteration 1, 2026-06-11 re-measure): the gate
+// originally allowed content "taken directly from the permitted fixes" on
+// the theory that L5 is transcript-grounded. The re-measure FALSIFIED that:
+// L5's clinical-quality critique recommends documenting safety reasoning the
+// encounter never contained ("COC + migraine-with-aura stroke risk, urgent
+// review" recurred verbatim through this channel and the gate approved it).
+// The fixes channel is now CLOSED: the verifier compares the polished note
+// against the DRAFT ONLY. A suggested fix that REWORDS draft content still
+// passes (rewording is explicitly not a violation); a fix that ADDS clinical
+// content is rejected and the draft is served — losing that fix is the
+// correct cost. L5's prose critique still reaches the doctor through
+// needsReview/reviewReason; it just can't silently write clinical claims
+// into the note via L6 anymore.
 //
 // PHI: the gate result carries counts + enum-class strings only. Verifier
 // violation summaries are NOT propagated into audit metadata by the caller.
@@ -81,10 +86,9 @@ export interface PolishFidelityGateInput {
   practiceId: string;
   visitId: string;
   userId: string | null;
-  /** The pre-L6 note (L4 draft) — the gate's source of truth. */
+  /** The pre-L6 note (L4 draft) — the gate's ONLY source of truth.
+   *  Deliberately NOT the critique fixes — see TRUST BOUNDARY above. */
   draft: string;
-  /** The critique's fixable-issue text L6 was permitted to apply. */
-  fixesText: string;
   /** L6's model output under test. */
   polished: string;
 }
@@ -178,10 +182,9 @@ function extractAllJsonObjects(text: string): string[] {
 
 const VERIFIER_SYSTEM = [
   'You are a fidelity auditor for clinical-note editing. You receive a',
-  'SOURCE draft note, a list of PERMITTED FIXES, and an EDITED note. Your',
-  'only job is to detect whether the EDITED note contains clinical content',
-  'that is NOT present in (or directly entailed by) the SOURCE draft or',
-  'the permitted fixes.',
+  'SOURCE draft note and an EDITED note. Your only job is to detect',
+  'whether the EDITED note contains clinical content that is NOT present',
+  'in (or directly entailed by) the SOURCE draft.',
   '',
   'Report a violation for ANY of:',
   '- a new finding, symptom, exam result, diagnosis, or differential',
@@ -191,9 +194,12 @@ const VERIFIER_SYSTEM = [
   '- a new medication, dose, or dosing change',
   '- a negation flip or meaning change of an existing statement',
   '',
+  'These rules are absolute: a new clinical claim is a violation EVEN IF',
+  'it is clinically correct, prudent, or reads like something an auditor',
+  'asked for. The draft is the only source of truth.',
+  '',
   'Do NOT report: rewording, reordering, formatting, structural-header',
-  'changes, abbreviation expansion of the same content, deletions, or text',
-  'taken directly from the permitted fixes.',
+  'changes, abbreviation expansion of the same content, or deletions.',
   '',
   'Output STRICT JSON only — no prose, no markdown fences:',
   '{"violations":[{"kind":"addition","summary":"<max 20 words>"}]}',
@@ -212,16 +218,13 @@ export async function runPolishFidelityGate(
   let novelTermCount = 0;
   try {
     novelTermCount = findNovelContentTerms(
-      [input.draft, input.fixesText],
+      [input.draft],
       input.polished
     ).length;
 
     const user = [
       'SOURCE DRAFT:',
       input.draft,
-      '',
-      'PERMITTED FIXES:',
-      input.fixesText || '(none)',
       '',
       'EDITED NOTE:',
       input.polished,
