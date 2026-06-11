@@ -21,6 +21,7 @@ import {
 } from '@meddoc/ai';
 import prisma from '@meddoc/db';
 import type { SpeakerMap } from './02-speaker-roles';
+import { markUnclearTranscript } from './transcript-clarity';
 import { logAudit } from '@/lib/audit';
 
 // TRANSCRIBE_MD_CLINICAL_MODEL — eval override (feat/fable5-eval); unset → default unchanged.
@@ -225,7 +226,12 @@ function formatRoleLabeledLine(
   const ts = Math.max(0, Math.floor(u.start ?? 0));
   const mm = Math.floor(ts / 60);
   const ss = (ts % 60).toString().padStart(2, '0');
-  return `[${displayRole} #${speakerKey}, ${mm}:${ss}]: ${u.transcript.trim()}`;
+  // 2026-06-11 inaudible-span hardening: low-confidence content-word runs
+  // become explicit "[unclear in recording]" markers so L4/L5 can hedge
+  // spans they previously couldn't see (Deepgram garbles unintelligible
+  // audio into plausible words — measured: "sphenitol" @0.61 shipped as a
+  // drug name). No word-level data → raw text unchanged (dictation/legacy).
+  return `[${displayRole} #${speakerKey}, ${mm}:${ss}]: ${markUnclearTranscript(u)}`;
 }
 
 export function buildRoleLabeledTranscript(
@@ -359,6 +365,9 @@ function buildConversationPrompt(): { system: string; userPrefix: string } {
     '   invent. Hallucinating is a critical failure.',
     '4. If the transcript is silent on a category, return [] (or null',
     '   for singleton categories) — do not stretch to populate.',
+    '5. "[unclear in recording]" marks unintelligible audio. NEVER extract',
+    '   it as an entity value and NEVER guess the underlying word — if the',
+    '   only evidence for an entity overlaps such a marker, OMIT it.',
     '',
     COMMON_CATEGORIES,
     '',
