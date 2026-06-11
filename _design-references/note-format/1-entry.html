@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>My Note Format — Entry · QuillMD</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="note-format.css" rel="stylesheet" />
+</head>
+<body>
+<div class="app">
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar">
+    <div class="brand"><div class="brand-mark">Q</div><div class="brand-name">QuillMD</div></div>
+    <div class="nav-eyebrow">Workspace</div>
+    <a class="nav-item" href="#"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.7"><path d="M12 5v14M5 12h14"/></svg> New visit</a>
+    <a class="nav-item" href="#"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.7"><path d="M4 6h16M4 12h16M4 18h10"/></svg> Visits</a>
+    <a class="nav-item" href="#"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.7"><circle cx="12" cy="8" r="3.2"/><path d="M5 20c0-3.3 3-5 7-5s7 1.7 7 5"/></svg> Patients</a>
+    <div class="nav-eyebrow">Account</div>
+    <a class="nav-item nav-item--active" href="#"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.6-2-3.4-2.4 1a7 7 0 0 0-1.7-1l-.4-2.6H10l-.4 2.6a7 7 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.6a7 7 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 1.7 1l.4 2.6h3.6l.4-2.6a7 7 0 0 0 1.7-1l2.4 1 2-3.4-2-1.6a7 7 0 0 0 .1-1Z"/></svg> Settings</a>
+    <div class="sidebar-foot"><div class="avatar">RA</div><div style="font-size:12px;color:var(--text-2)">Dr. R. Almeida</div></div>
+  </aside>
+
+  <!-- ── Main ── -->
+  <main class="main">
+    <div class="topbar"><span class="crumb"><b>Settings</b><span class="sep">/</span>My Note Format</span></div>
+
+    <div class="settings-head">
+      <div class="settings-eyebrow">Account</div>
+      <h1>Settings</h1>
+      <p>Profile, security, sessions, exports, billing — and how QuillMD writes your notes.</p>
+    </div>
+
+    <div class="settings-grid">
+      <!-- left section index -->
+      <aside class="settings-nav">
+        <div class="label">On this page</div>
+        <nav aria-label="Settings sections">
+          <a href="#">Profile</a>
+          <a href="#" class="is-active">My Note Format</a>
+          <a href="#">Security</a>
+          <a href="#">Active sessions</a>
+          <a href="#">Your data</a>
+          <a href="#">Billing</a>
+          <a href="#">Danger zone</a>
+        </nav>
+      </aside>
+
+      <!-- content -->
+      <div class="col">
+        <section class="section" id="note-format" aria-labelledby="nf-title">
+          <div class="sec-eyebrow">02 / Note format</div>
+          <h3 class="sec-title" id="nf-title">My Note Format</h3>
+          <p class="sec-sub">Bring a note you've already written and QuillMD will draft your future notes in that format — your sections, your order, your wording. Or stay on the standard format; you can change this anytime.</p>
+
+          <!-- Active template status (doctor already has one) -->
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 14px;border:1px solid var(--border);border-radius:9px;background:var(--surface-2);margin-bottom:16px;">
+            <div style="display:flex;align-items:center;gap:11px;min-width:0;">
+              <div style="width:30px;height:30px;border-radius:7px;background:var(--sage-tint);border:1px solid rgba(122,166,140,.3);display:grid;place-items:center;color:var(--sage-bright)">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 12l5 5 9-11"/></svg>
+              </div>
+              <div style="min-width:0">
+                <div style="font-size:13px;font-weight:500;">Ortho Follow-up</div>
+                <div style="font-size:11.5px;color:var(--text-3);margin-top:1px;">Active for <b style="color:var(--text-2);font-weight:500">Follow-up</b> visits · 6 sections</div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span class="pill pill--active">Active</span>
+              <a class="btn" href="3-review.html">Edit</a>
+            </div>
+          </div>
+
+          <!-- Two paths -->
+          <div class="paths">
+            <a class="path path--primary" href="2-parsing.html">
+              <div class="path-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 16V4m0 0L8 8m4-4 4 4"/><path d="M5 20h14"/></svg></div>
+              <div class="path-title">Bring your own note</div>
+              <div class="path-desc">Paste one of your notes, or upload a file. QuillMD reads the format and shows you what it understood — you edit and confirm.</div>
+              <div class="path-meta">Paste · .docx · .pdf · .txt</div>
+            </a>
+            <a class="path" href="#">
+              <div class="path-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 4h14v16H5z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></div>
+              <div class="path-title">Start from the standard format</div>
+              <div class="path-desc">Use QuillMD's default SOAP structure. The right choice if you don't want to customize — nothing changes about how notes are written today.</div>
+              <div class="path-meta">Subjective · Objective · Assessment · Plan</div>
+            </a>
+          </div>
+
+          <!-- Paste affordance (revealed under "Bring your own note") -->
+          <div style="margin-top:16px;">
+            <div class="field">
+              <label class="label" for="note-paste">Paste a note</label>
+              <textarea id="note-paste" class="textarea" rows="5" placeholder="Paste one representative note here — e.g. a recent follow-up you wrote. Patient details are fine; they're removed automatically and never saved."></textarea>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;margin-top:10px;">
+              <a class="btn-primary" href="2-parsing.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12l5 5 9-11"/></svg> Read my format</a>
+              <span class="muted" style="font-size:11.5px;">or</span>
+              <a class="btn" href="2-parsing.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 16V4m0 0L8 8m4-4 4 4"/><path d="M5 20h14"/></svg> Upload a file</a>
+            </div>
+          </div>
+
+          <!-- Privacy reassurance -->
+          <div class="privacy" role="note">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3l7 3v5c0 4.4-3 8-7 10-4-2-7-5.6-7-10V6l7-3Z"/><path d="M9.2 12l2 2 3.6-4"/></svg>
+            <p>Your note is read <b>for format only</b>. Patient details — names, dates, findings — are removed automatically before anything is shown, and <b>the note itself is never saved</b>. QuillMD keeps your structure, not your patients.</p>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+</div>
+</body>
+</html>
