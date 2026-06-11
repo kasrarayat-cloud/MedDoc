@@ -9,6 +9,24 @@
 // ============================================================================
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+// File-level mock (hoisted; survives vi.resetModules): keep @meddoc/ai REAL
+// except the two fire-and-forget telemetry sinks. With them real, every
+// judgeMdm test fires `void prisma.aiCall.create().catch(console.error)`
+// against a non-existent DB — the rejection can settle AFTER afterEach
+// restores the console, landing in vitest worker teardown as
+// "EnvironmentTeardownError: Closing rpc while onUserConsoleLog was
+// pending" (the PR #304 CI flake; all tests green, exit 1). No-op the
+// sinks so the async chain never exists.
+vi.mock('@meddoc/ai', async () => {
+  const actual = await vi.importActual<typeof import('@meddoc/ai')>('@meddoc/ai');
+  return {
+    ...actual,
+    logAiCall: () => undefined,
+    logApiUsage: () => undefined,
+  };
+});
+
 import {
   buildCacheKey,
   charDistanceRatio,
