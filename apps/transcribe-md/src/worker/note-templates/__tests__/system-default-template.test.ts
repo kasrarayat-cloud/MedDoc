@@ -158,13 +158,16 @@ describe('system-default template — drift guards', () => {
   });
 
   it("the migration's seeded JSON deep-equals this TS source of truth", () => {
-    // Phase 1 re-synced the seed content (byte-exact wrapping), so the
-    // effective seeded JSON is the resync migration's UPDATE — that's what
-    // must match the constant now.
-    const dir = readdirSync(MIGRATIONS_DIR).find((d) =>
-      d.endsWith('_resync_system_default_template_phase1')
-    );
-    expect(dir, 'resync_system_default_template_phase1 migration dir not found').toBeTruthy();
+    // The effective seeded JSON is the LATEST resync migration's UPDATE —
+    // that's what must match the constant. Resyncs are append-only (a new
+    // dated `…_resync_system_default_template_*` migration per deliberate
+    // rules change — phase1 2026-06-03, inaudible-hardening 2026-06-11);
+    // timestamped dir names sort lexicographically, so the last one wins.
+    const dir = readdirSync(MIGRATIONS_DIR)
+      .filter((d) => d.includes('_resync_system_default_template'))
+      .sort()
+      .pop();
+    expect(dir, 'no resync_system_default_template migration dir found').toBeTruthy();
     const sql = readFileSync(
       path.join(MIGRATIONS_DIR, dir!, 'migration.sql'),
       'utf8'

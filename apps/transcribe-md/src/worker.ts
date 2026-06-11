@@ -57,6 +57,7 @@ import {
   resolveRetentionDays,
 } from '@/worker/cleanup/retention-sweep';
 import { applyAdditiveReviewState } from '@/worker/finalize-review-state';
+import { countUnclearMarkers } from '@/worker/layers/transcript-clarity';
 import { runStuckVisitWatchdog } from '@/worker/cleanup/stuck-visit-watchdog';
 import { recordCleanupHeartbeat } from '@/lib/cleanup-heartbeat';
 import {
@@ -436,6 +437,20 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         });
         entities = l3.entities;
         contextText = l3.contextText;
+      }
+      // 2026-06-11 inaudible-span hardening telemetry (audit WARN-2): the
+      // per-visit marker count is the observable for threshold tuning and
+      // doctor-habituation monitoring during the pilot. Clean prod audio is
+      // expected at ~2-6; a flood means the mic or threshold needs review.
+      {
+        const unclearMarkers = countUnclearMarkers(contextText);
+        if (unclearMarkers > 0) {
+          log.info('transcribe-md-worker', 'unclear-span markers in transcript', {
+            visitId,
+            unclearMarkers,
+            utterances: utterances.length,
+          });
+        }
       }
     } else if (visit.inputMode === 'voice_dictation') {
       // ── L1' — single-speaker Deepgram ──────────────────────────
