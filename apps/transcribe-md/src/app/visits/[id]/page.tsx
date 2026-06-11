@@ -694,6 +694,11 @@ async function VisitBody(props: VisitBodyProps) {
   return (
     <VisitReadyView
       visitId={props.visitId}
+      // 2026-06-11 L6-gate smoke finding: the review reason was DB-only —
+      // the READY view never received it, so the doctor saw a bare
+      // "Needs review" pill with no explanation.
+      needsReview={props.needsReview}
+      reviewReason={props.reviewReason}
       inputMode={props.inputMode}
       soapText={soapText}
       soapVersion={props.soapVersion}

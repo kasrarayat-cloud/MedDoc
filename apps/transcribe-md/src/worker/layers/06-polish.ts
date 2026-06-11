@@ -145,18 +145,20 @@ export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output>
     // 2026-06-11 fabrication-fix (b) — L6b post-polish fidelity gate.
     // The L5 critique runs BEFORE this model call and structurally cannot
     // catch what it adds; the gate verifies the polished note introduces
-    // no new clinical claims relative to its input. FAIL-CLOSED: any
-    // violation OR any gate/verifier failure falls back to the pre-L6
-    // draft (the measured-clean artifact) — losing polish is acceptable,
-    // gaining content is not. Empty output is exempt (it cannot carry an
-    // addition; the structure validator below owns that failure class).
+    // no new clinical claims relative to the DRAFT (iteration 1: the
+    // critique's suggested_fixes are deliberately NOT an allowance — the
+    // re-measure proved L5 fixes carry encounter-ungrounded clinical
+    // reasoning into the note; an additive fix now causes rejection).
+    // FAIL-CLOSED: any violation OR any gate/verifier failure falls back
+    // to the pre-L6 draft (the measured-clean artifact) — losing polish is
+    // acceptable, gaining content is not. Empty output is exempt (it
+    // cannot carry an addition; the structure validator owns that class).
     if (soapFinal.trim().length > 0) {
       const gate = await runPolishFidelityGate({
         practiceId: input.practiceId,
         visitId: input.visitId,
         userId: input.userId,
         draft: input.soapDraft,
-        fixesText,
         polished: soapFinal,
       });
       if (!gate.ok) {
