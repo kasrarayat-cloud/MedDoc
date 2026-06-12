@@ -49,6 +49,7 @@ const REASON_LABELS: Record<string, string> = {
   anchor_overlaps_unclear: 'unclear audio',
   digits_unsupported: 'numbers not supported',
   negation_mismatch: 'negation mismatch',
+  gloss_unsupported: 'explanation not in transcript',
   not_entailed: "couldn't verify",
   verifier_failed: "couldn't verify",
 };
