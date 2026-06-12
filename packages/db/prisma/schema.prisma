@@ -329,6 +329,13 @@ enum AuditAction {
   // class strings only, never note content. Rejection frequency =
   // SELECT count(*) FROM audit_logs WHERE action='L6_FABRICATION_REJECTED'.
   L6_FABRICATION_REJECTED
+
+  // Hybrid anchored generation (2026-06-11) — the explicit doctor adoption
+  // flow for verifier-demoted claims ("Suggested by AI" lane). Adopted
+  // claims enter the note as DOCTOR-attested. Metadata: { section, reason,
+  // remaining } — never claim text (PHI).
+  SUGGESTION_ADOPTED
+  SUGGESTION_DISMISSED
 }
 
 /// Document lifecycle status
@@ -1657,6 +1664,12 @@ model TranscribeVisit {
   cptCodes              Json?
   rxDrafts              Json?
   referrals             Json?
+  /// Hybrid anchored generation (2026-06-11, flag-gated): claims the
+  /// fail-closed verifier demoted from the note body — rendered in the
+  /// "Suggested by AI — not stated in this visit" lane for explicit doctor
+  /// adoption. Shape: [{text, reason, section, anchor}]. NULL when the flag
+  /// is off or nothing was demoted.
+  suggestedClaims       Json?
   patientSummary        String? @db.Text
   confidenceScores      Json?
 

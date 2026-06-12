@@ -162,7 +162,12 @@ export type AuditAction =
   // fail-closed) → fell back to the pre-L6 (L4) draft. Metadata:
   // { layer, violationCount, kinds, novelTermCount, gateError?,
   // fellBackToDraft } — counts + class strings only, no note content.
-  | 'L6_FABRICATION_REJECTED';
+  | 'L6_FABRICATION_REJECTED'
+  // Hybrid anchored generation (2026-06-11) — explicit doctor adoption of a
+  // verifier-demoted claim ("Suggested by AI" lane). Metadata: { section,
+  // reason, remaining } — never claim text.
+  | 'SUGGESTION_ADOPTED'
+  | 'SUGGESTION_DISMISSED';
 
 export interface AuditLogInput {
   action: AuditAction;
