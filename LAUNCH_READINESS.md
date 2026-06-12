@@ -140,6 +140,25 @@ Total: **74 PASS / 0 FAIL** across the three production suites.
 
 ---
 
+## C2. AI documentation disclosure (doctor-facing — include in pilot consent/onboarding)
+
+*Added 2026-06-12 with the anchored-generation enablement (product decision recorded in
+`docs/qa-reports/hallucination-reconciliation-20260611T072219Z.md`; state AMBER — enabled with disclosure).*
+
+**Give pilot doctors this paragraph verbatim:**
+
+> QuillMD drafts your note from the visit transcript using AI, with a verification layer in
+> between: every sentence must quote the transcript it came from, and an automated checker
+> verifies each claim against its quote — anything it cannot verify is kept OUT of the note
+> and shown to you separately as "Suggested by AI — not stated in this visit," for you to
+> add or dismiss explicitly. In our pre-registered testing on 30 recorded consultations,
+> this reduced unsupported clinical statements from 28 per 30 visits to 2–4 per 30 — the
+> remainder were low-severity wording issues (for example a symptom described as
+> "significant" when the patient didn't use that word), not invented medications, doses, or
+> diagnoses. The system is designed to surface what it isn't sure of rather than hide it,
+> but it is not perfect: every note is a draft until you review and sign it, and adopting a
+> suggestion is recorded as your own attestation.
+
 ## D. Launch guardrails
 
 ### Pilot user count
