@@ -525,3 +525,102 @@ describe('iteration 3 — run-3 residual classes + ensemble majority', () => {
     expect(mocks.modelCompleteText).toHaveBeenCalledTimes(3);
   });
 });
+
+// ─── Iteration 4 — decisive-run residual class: clinical-reasoning verbs ────
+// The three unanimous class-(c) of run 20260612T153417Z, pinned as the
+// deterministic process-verb override (approving ensemble cannot overrule).
+describe('iteration 4 — clinical-reasoning verb override', () => {
+  it('"if migraine with aura is confirmed" (contingency plan) demotes when the span never speaks the act', async () => {
+    entailAll();
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft:
+        '## Plan\nMay need to change the pill if migraine with aura is confirmed. ⟦A:"I get a flashing in my eyes before the headache starts"⟧',
+      roleLabeledTranscript:
+        '[Patient #1, 0:10]: I get a flashing in my eyes before the headache starts.',
+    });
+    expect(r.body).not.toContain('is confirmed');
+    expect(r.suggestions[0].reason).toBe('process_assertion_unsupported');
+  });
+
+  it('"mother confirmed antihistamines are available at home" demotes against a span that merely mentions them', async () => {
+    entailAll();
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft:
+        '## Plan\nMother confirmed antihistamines are available at home. ⟦A:"we have antihistamines at home"⟧',
+      roleLabeledTranscript:
+        '[Patient #1, 0:10]: we have antihistamines at home.',
+    });
+    expect(r.body).not.toContain('confirmed');
+    expect(r.suggestions[0].reason).toBe('process_assertion_unsupported');
+  });
+
+  it('"PE was considered and partially addressed by history" demotes (process assertion never spoken)', async () => {
+    entailAll();
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft:
+        '## Assessment\nPulmonary embolism was considered and partially addressed by history. ⟦A:"have you been on any long flights recently? No."⟧',
+      roleLabeledTranscript:
+        '[Doctor #0, 0:10]: have you been on any long flights recently? No.',
+    });
+    expect(r.body).not.toContain('considered');
+    expect(r.suggestions[0].reason).toBe('process_assertion_unsupported');
+  });
+
+  it('a span that SPEAKS the act legitimately supports it ("can you confirm…? I confirm")', async () => {
+    entailAll();
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft:
+        '## Subjective\nPatient confirmed she takes the medication daily. ⟦A:"can you confirm you take it every day? yes, I confirm"⟧',
+      roleLabeledTranscript:
+        '[Doctor #0, 0:10]: can you confirm you take it every day? yes, I confirm.',
+    });
+    expect(r.body).toContain('Patient confirmed');
+    expect(r.suggestions).toHaveLength(0);
+  });
+
+  it('"ruled out" demotes unless the span uses the verb ("we can rule that out" survives)', async () => {
+    entailAll();
+    const demoted = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft:
+        '## Assessment\nSerious causes ruled out. ⟦A:"your blood tests came back normal"⟧',
+      roleLabeledTranscript:
+        '[Doctor #0, 0:10]: your blood tests came back normal.',
+    });
+    expect(demoted.suggestions[0].reason).toBe('process_assertion_unsupported');
+    const kept = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft:
+        '## Assessment\nSerious causes ruled out. ⟦A:"the tests were normal so we can rule that out"⟧',
+      roleLabeledTranscript:
+        '[Doctor #0, 0:10]: the tests were normal so we can rule that out.',
+    });
+    expect(kept.body).toContain('ruled out');
+    expect(kept.suggestions).toHaveLength(0);
+  });
+});
+
+describe('iteration 4 — noun homonyms stay exempt; boilerplate verb forms demote', () => {
+  it('"screened and denied" boilerplate demotes; noun "screen-related" does not trip the override', async () => {
+    entailAll();
+    const demoted = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft:
+        '## Subjective\nSuicidal ideation screened and denied. ⟦A:"I have been feeling tired"⟧',
+      roleLabeledTranscript: '[Patient #1, 0:10]: I have been feeling tired.',
+    });
+    expect(demoted.suggestions[0].reason).toBe('process_assertion_unsupported');
+    const kept = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft:
+        '## Assessment\nLikely screen-related eye strain. ⟦A:"my eyes get tired when I work at the computer all day"⟧',
+      roleLabeledTranscript:
+        '[Patient #1, 0:10]: my eyes get tired when I work at the computer all day.',
+    });
+    expect(kept.body).toContain('screen-related');
+  });
+});

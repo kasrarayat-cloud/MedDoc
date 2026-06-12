@@ -67,6 +67,7 @@ export type DemotionReason =
   | 'digits_unsupported'
   | 'negation_mismatch'
   | 'gloss_unsupported'
+  | 'process_assertion_unsupported'
   | 'not_entailed'
   | 'verifier_failed';
 
@@ -98,6 +99,27 @@ const NEGATION_RE = /\b(no|not|denies|denied|without|negative|none)\b/i;
  *  ONE list shared by the negation-subject and gloss overrides (auditor
  *  NIT-1: was maintained by copy-paste). */
 const REGISTER_WORDS = ['known', 'other', 'further', 'significant', 'formal', 'prior'];
+
+// Iteration 4 (decisive-run attribution) — CLINICAL-REASONING VERBS. All
+// three unanimous residuals asserted a reasoning/certainty ACT the visit
+// never spoke: "if migraine with aura is CONFIRMED" (a contingency plan),
+// "mother CONFIRMED antihistamines available", "PE was CONSIDERED and
+// partially ADDRESSED by history". Deterministic rule: a claim using one
+// of these verbs must cite a span that uses the same verb stem — symptom
+// talk or Q&A never entails that something was confirmed / considered /
+// ruled out / screened / addressed.
+// Verb INFLECTIONS only — bare "screen"/"address"/"rule" are common nouns
+// ("screen-related eye strain", "home address", "as a rule") and must not
+// trip the override; the fabrication register uses the verb forms
+// ("screened and denied", "addressed by history", "ruled out").
+const PROCESS_VERB_RE =
+  /\b(confirm\w*|consider\w*|exclud\w*|screen(?:ed|ing)\w*|establish\w*|address(?:ed|ing)\w*|verif\w*|rul(?:e|es|ing)\s+out|ruled)\b/gi;
+/** Stem (≥4 chars, enough to match across inflections) for span lookup. */
+function processStems(s: string): string[] {
+  return [...s.matchAll(PROCESS_VERB_RE)].map((m) =>
+    m[1].toLowerCase().startsWith('rul') ? 'rule' : m[1].toLowerCase().slice(0, 5)
+  );
+}
 
 function norm(s: string): string {
   return s
@@ -267,6 +289,17 @@ function deterministicStage(
       if (tokens.length > 0 && !tokens.some((t) => spanText.includes(t.slice(0, 5))))
         return demote('gloss_unsupported');
     }
+    // Iteration 4 — clinical-reasoning verbs must be span-stated. The
+    // span check uses the verb STEM ("rule" matches "ruled out"; "confi"
+    // matches "confirm/confirmed/confirming"); a span that itself speaks
+    // the act legitimately supports it.
+    for (const stem of processStems(claimCore)) {
+      const spanStem = stem === 'rule' ? /\brul(?:e|ed|es|ing)\b/ : null;
+      const supported = spanStem
+        ? spanStem.test(spanText)
+        : spanText.includes(stem);
+      if (!supported) return demote('process_assertion_unsupported');
+    }
     if (NEGATION_RE.test(claimCore) !== NEGATION_RE.test(spanText))
       return demote('negation_mismatch');
     // Iteration 2 — negation SUBJECT matching (deterministic): a negative
@@ -376,6 +409,12 @@ const ENTAILMENT_SYSTEM = [
   '- CAUSAL ATTRIBUTION ("screen-related", "due to", "secondary to") is',
   '  entailed ONLY if the span states that cause, not because it is',
   '  clinically plausible.',
+  '- CLINICAL-REASONING ACTS AND CONTINGENCIES: a claim that something was',
+  '  "confirmed", "considered", "ruled out", "screened", "addressed", or a',
+  '  plan contingency ("may need to change X if Y is confirmed") is',
+  '  entailed ONLY if the span states that act or contingency in words.',
+  '  Symptom descriptions or question-and-answer NEVER entail that a',
+  '  diagnosis was considered, confirmed, or excluded.',
   '',
   'Respond STRICT JSON only, no prose, no fences:',
   '{"verdicts":[{"i":<claim number>,"entailed":true|false}]}',
