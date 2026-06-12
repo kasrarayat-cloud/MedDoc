@@ -221,6 +221,7 @@ export async function runLayer4GenerateSoap(
       demoted: verified.stats.demoted,
       entailmentChecked: verified.stats.entailmentChecked,
       verifierErrored: verified.stats.verifierErrored,
+      entailmentPassErrors: verified.stats.entailmentPassErrors ?? 0,
     });
   }
 

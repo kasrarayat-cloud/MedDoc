@@ -369,6 +369,12 @@ const BASELINE_JSON = path.join(
   'docs/eval-runs/primock57-fullchain-fabrication-20260611T201726Z.json'
 );
 
+import {
+  laneCaptured,
+  conservationCheck,
+  type ConservationResult,
+} from './conservation-matcher';
+
 const COMPLETENESS_JUDGE_SYSTEM = [
   'You compare two clinical notes for the SAME visit against its transcript.',
   'List every TRANSCRIPT-SUPPORTED clinical fact that is present in the',
@@ -739,7 +745,11 @@ interface CaseResult {
   resolved: { claims: ResolvedClaim[]; majorityC: ResolvedClaim[]; validPasses: number } | null;
   /** --anchored mode: the captured suggestions lane + Gate-2 omissions. */
   suggestions: { text: string; reason: string; section: string; anchor: string }[] | null;
-  omissions: { fact: string; transcript_span: string }[] | null;
+  omissions:
+    | { fact: string; transcript_span: string; laneCaptured?: boolean }[]
+    | null;
+  /** Deterministic conservation: baseline lines vs new body ∪ lane. */
+  conservation: ConservationResult | null;
   critiqueSummary: { overall: string; safe: boolean; issues: number; criticalIssues: number } | null;
   judge: JudgeOut | null;
 }
@@ -754,6 +764,7 @@ async function runCase(
     postL4Soap: null, finalSoap: null, asrTranscript: null, unclearMarkerCount: null,
     polishRejected: null, critiqueSummary: null, judge: null,
     judgePasses: null, resolved: null, suggestions: null, omissions: null,
+    conservation: null,
   };
   let mixedPath: string | null = null;
   // Synthetic identifiers — these never hit the DB (writes are stubbed) but the
@@ -851,11 +862,26 @@ async function runCase(
           (b) => b.id === cf.id
         );
         if (baseline?.finalSoap) {
-          r.omissions = await judgeCompleteness(
+          const judged = await judgeCompleteness(
             contextText,
             baseline.finalSoap,
             polished.soapFinal,
             (r.suggestions ?? []).map((s) => s.text)
+          );
+          // Instrument fix 2026-06-12 (run-3 forensics): the judge decides
+          // transcript support + body absence; the pre-registered "AND not
+          // in lane" clause is enforced DETERMINISTICALLY — run 3 listed
+          // facts as omissions that were verbatim in the lane it was shown.
+          r.omissions = judged
+            ? judged.map((o) => ({
+                ...o,
+                laneCaptured: laneCaptured(o.fact, r.suggestions ?? []),
+              }))
+            : null;
+          r.conservation = conservationCheck(
+            baseline.finalSoap,
+            polished.soapFinal,
+            r.suggestions ?? []
           );
         }
       } catch { r.omissions = null; }
@@ -931,7 +957,16 @@ async function writeReports(results: CaseResult[], utc: string): Promise<{ md: s
       // ── Gate 2 (anchored mode): pre-registered completeness floor ──
       if (anchoredMode) {
         const withOm = withRes.filter((r) => r.omissions !== null);
-        const counts = withOm.map((r) => r.omissions!.length);
+        // Pre-registered definition (addendum 20260611T230650Z): a material
+        // omission is absent from the new body AND not in the lane. The
+        // lane clause is enforced deterministically (instrument fix
+        // 2026-06-12 — run-3's judge listed lane-present facts as omitted).
+        const material = (r: CaseResult) =>
+          (r.omissions ?? []).filter((o) => !o.laneCaptured);
+        const counts = withOm.map((r) => material(r).length);
+        const rawCounts = withOm.map((r) => r.omissions!.length);
+        const laneCapturedTotal =
+          rawCounts.reduce((s, n) => s + n, 0) - counts.reduce((s, n) => s + n, 0);
         const mean = counts.length ? counts.reduce((s, n) => s + n, 0) / counts.length : 0;
         const max = counts.length ? Math.max(...counts) : 0;
         const judgeUnavailable = withRes.length - withOm.length;
@@ -941,11 +976,26 @@ async function writeReports(results: CaseResult[], utc: string): Promise<{ md: s
         lines.push('## GATE 2 — completeness floor (addendum 20260611T230650Z: mean ≤ 1.5, max ≤ 5)');
         lines.push('');
         lines.push(`- **Material omissions: mean ${mean.toFixed(2)}/case, max ${max}** → **${gate2 ? 'PASS' : 'FAIL'}**${judgeUnavailable ? ` (judge unavailable on ${judgeUnavailable} case(s) — counts as FAIL per fail-toward-strict)` : ''}`);
+        lines.push(`- Judge-listed facts deterministically found IN THE LANE (pre-registered: not omissions): ${laneCapturedTotal} across the run`);
         lines.push(`- Suggestions-lane volume: mean ${laneMean.toFixed(1)}/case (sizes: ${laneSizes.join(',')})`);
         for (const r of withRes) {
-          if ((r.omissions ?? []).length > 0) {
-            lines.push(`  - [${r.id}] ${r.omissions!.length} omission(s): ${r.omissions!.map((o) => JSON.stringify(o.fact.slice(0, 70))).join('; ')}`);
+          const m = material(r);
+          const lc = (r.omissions ?? []).length - m.length;
+          if (m.length > 0 || lc > 0) {
+            lines.push(`  - [${r.id}] ${m.length} material omission(s)${lc ? ` (+${lc} lane-captured, not counted)` : ''}: ${m.map((o) => JSON.stringify(o.fact.slice(0, 70))).join('; ') || '—'}`);
           }
+        }
+        lines.push('');
+        // ── Deterministic conservation check (diagnostic, judge-free) ──
+        const withCons = withRes.filter((r) => r.conservation !== null);
+        const totalLines = withCons.reduce((s, r) => s + r.conservation!.total, 0);
+        const conservedLines = withCons.reduce((s, r) => s + r.conservation!.conserved, 0);
+        const violCases = withCons.filter((r) => r.conservation!.violations.length > 0);
+        lines.push('## CONSERVATION CHECK (deterministic: baseline lines vs new body ∪ lane)');
+        lines.push('');
+        lines.push(`- **${conservedLines}/${totalLines} baseline content lines conserved (${totalLines ? ((100 * conservedLines) / totalLines).toFixed(1) : '0'}%)** across ${withCons.length} case(s); ${violCases.length} case(s) with silent loss`);
+        for (const r of violCases) {
+          lines.push(`  - [${r.id}] ${r.conservation!.violations.length} lost: ${r.conservation!.violations.map((v) => JSON.stringify(v.slice(0, 70))).join('; ')}`);
         }
         lines.push('');
       }
