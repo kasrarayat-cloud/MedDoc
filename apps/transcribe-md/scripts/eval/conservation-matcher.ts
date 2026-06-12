@@ -57,6 +57,14 @@ export function tokenCoverage(factTokens: string[], bag: string[]): number {
 
 export const CAPTURE_THRESHOLD = 0.5;
 
+/** Auditor WARN-1 (fail-toward-strict): prefix-5 equivalence can collide
+ *  clinically distinct terms; for SHORT facts (≤3 content tokens) one
+ *  collision crosses 0.5 and would wrongly relax Gate 2. Short facts must
+ *  match COMPLETELY to count as captured. */
+export function captureBar(factTokens: string[]): number {
+  return factTokens.length <= 3 ? 1 : CAPTURE_THRESHOLD;
+}
+
 /** HARD DIGIT VETO: if the fact carries digit tokens, EVERY one must appear
  *  exactly in the candidate bag — token overlap can never "capture" a fact
  *  whose numbers differ ("Aspirin 300 mg" vs the 75 mg lane item). */
@@ -82,7 +90,7 @@ export function laneCaptured(fact: string, lane: LaneItem[]): boolean {
     const bag = contentTokens(`${item.text} ${item.section ?? ''}`);
     return (
       digitVeto(factTokens, bag) &&
-      tokenCoverage(factTokens, bag) >= CAPTURE_THRESHOLD
+      tokenCoverage(factTokens, bag) >= captureBar(factTokens)
     );
   });
 }
@@ -98,14 +106,14 @@ export function bodyCaptured(fact: string, body: string): boolean {
     const single = contentTokens(lines[i]);
     if (
       digitVeto(factTokens, single) &&
-      tokenCoverage(factTokens, single) >= CAPTURE_THRESHOLD
+      tokenCoverage(factTokens, single) >= captureBar(factTokens)
     )
       return true;
     if (i + 1 < lines.length) {
       const pair = contentTokens(`${lines[i]} ${lines[i + 1]}`);
       if (
         digitVeto(factTokens, pair) &&
-        tokenCoverage(factTokens, pair) >= CAPTURE_THRESHOLD
+        tokenCoverage(factTokens, pair) >= captureBar(factTokens)
       )
         return true;
     }

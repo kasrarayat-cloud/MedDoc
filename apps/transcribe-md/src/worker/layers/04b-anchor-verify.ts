@@ -94,6 +94,11 @@ export interface AnchorVerifyResult {
 // ─── Normalization + deterministic rules (spike rules, kept verbatim) ───────
 const NEGATION_RE = /\b(no|not|denies|denied|without|negative|none)\b/i;
 
+/** Clinical-register filler excluded from subject/gloss token matching —
+ *  ONE list shared by the negation-subject and gloss overrides (auditor
+ *  NIT-1: was maintained by copy-paste). */
+const REGISTER_WORDS = ['known', 'other', 'further', 'significant', 'formal', 'prior'];
+
 function norm(s: string): string {
   return s
     .toLowerCase()
@@ -257,7 +262,7 @@ function deterministicStage(
     // gloss with no ≥5-char token (e.g. an acronym "(COC)") is not checked.
     for (const g of claimCore.matchAll(/\(([^)]{3,})\)/g)) {
       const tokens = (norm(g[1]).match(/[a-z]{5,}/g) ?? []).filter(
-        (t) => !['known', 'other', 'further', 'significant', 'formal', 'prior'].includes(t)
+        (t) => !REGISTER_WORDS.includes(t)
       );
       if (tokens.length > 0 && !tokens.some((t) => spanText.includes(t.slice(0, 5))))
         return demote('gloss_unsupported');
@@ -276,7 +281,7 @@ function deterministicStage(
     );
     if (negPhrase) {
       const tokens = (negPhrase[1].match(/[a-z]{5,}/g) ?? []).filter(
-        (t) => !['known', 'other', 'further', 'significant', 'formal', 'prior'].includes(t)
+        (t) => !REGISTER_WORDS.includes(t)
       );
       if (tokens.length > 0 && !tokens.some((t) => spanText.includes(t.slice(0, 5))))
         return demote('negation_mismatch');

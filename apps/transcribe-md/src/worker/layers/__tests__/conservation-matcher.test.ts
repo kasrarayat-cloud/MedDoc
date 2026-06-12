@@ -167,3 +167,23 @@ describe('conservationCheck — silent loss only', () => {
     expect(r.conserved).toBe(3);
   });
 });
+
+describe('short-fact strictness (auditor WARN-1, fail-toward-strict)', () => {
+  it('a ≤3-token fact with only PARTIAL coverage is NOT captured (no 0.5 shortcut for short facts)', () => {
+    // {penicillin, rash}: 1/2 tokens match the lane item — 0.5 would have
+    // captured it before; short facts now require full coverage.
+    expect(
+      laneCaptured('Penicillin rash', [
+        { text: '- Penicillin (reaction not stated).', section: 'Drug Allergies' },
+      ])
+    ).toBe(false);
+  });
+
+  it('a fully-covered short fact still captures ("Allergy to penicillin" pin holds)', () => {
+    expect(
+      laneCaptured('Allergy to penicillin', [
+        { text: '- Penicillin (reaction not stated).', section: 'Drug Allergies' },
+      ])
+    ).toBe(true);
+  });
+});
