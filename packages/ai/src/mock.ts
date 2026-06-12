@@ -259,9 +259,10 @@ const MOCK_COMPLETE_TEXT_FIXTURES: Partial<
     inputTokens: 1,
     outputTokens: 1,
   },
-  // Anchored-generation entailment verifier — MOCK entails everything so a
-  // flag-on MOCK pipeline keeps its body intact; reject/fail-closed paths
-  // are unit-tested deterministically.
+  // Anchored-generation entailment verifier — UNREACHABLE in practice: the
+  // verifier short-circuits to all-entailed under MOCK_AI_CALLS before any
+  // model call (04b-anchor-verify.ts). Defensive fixture only, and it
+  // deliberately fails CLOSED (empty verdicts → demote) if ever consumed.
   tm_anchor_entailment: {
     text: '{"verdicts":[]}',
     inputTokens: 1,

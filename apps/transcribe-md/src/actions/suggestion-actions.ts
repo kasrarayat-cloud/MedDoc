@@ -18,6 +18,10 @@
 //   - dismissSuggestionAction → removes the claim from the lane only; never
 //     touches soapFinal / soapVersion.
 //
+// Both actions take the exact claim TEXT the client rendered alongside the
+// index and refuse on mismatch — a stale tab whose lane has been re-indexed
+// by another tab's adopt/dismiss can therefore never act on the wrong claim.
+//
 // Both audit with PHI-SAFE metadata: { section, reason, remaining } — NEVER
 // claim text. Both reject SIGNED visits (read-only after signing). Neither
 // throws raw — every failure is { ok: false, error }.
@@ -57,7 +61,15 @@ export interface SuggestionActionResult {
 const SuggestionInputSchema = z.object({
   visitId: z.string().min(1),
   index: z.number().int().nonnegative(),
+  // Content-identity check: the exact claim text the client rendered at
+  // `index`. The DB array can shift under a stale tab (another tab's
+  // dismiss/adopt re-indexes it); a bare index would then silently act on
+  // the WRONG claim. Text+index must both match or the action refuses.
+  expectedText: z.string().min(1),
 });
+
+const STALE_LANE_ERROR =
+  'The suggestions changed in another tab — reload and try again.';
 
 // ─── Helpers (module-private — 'use server' files may only export async) ────
 
@@ -181,11 +193,12 @@ async function loadVisitForSuggestion(
  *  with { section, reason, remaining } only (never claim text). */
 export async function adoptSuggestionAction(
   visitId: string,
-  index: number
+  index: number,
+  expectedText: string
 ): Promise<SuggestionActionResult> {
   try {
     const session = await requireSession();
-    const parsed = SuggestionInputSchema.safeParse({ visitId, index });
+    const parsed = SuggestionInputSchema.safeParse({ visitId, index, expectedText });
     if (!parsed.success) {
       return { ok: false, error: 'Invalid input.' };
     }
@@ -199,6 +212,9 @@ export async function adoptSuggestionAction(
       return { ok: false, error: 'Suggestion not found.' };
     }
     const claim = claims[parsed.data.index];
+    if (claim.text !== parsed.data.expectedText) {
+      return { ok: false, error: STALE_LANE_ERROR };
+    }
     const remaining = claims.filter((_, i) => i !== parsed.data.index);
     const newSoap = appendClaimToSoap(visit.soapFinal ?? '', claim.section, claim.text);
 
@@ -249,11 +265,12 @@ export async function adoptSuggestionAction(
  *  PHI-safe { section, reason, remaining } metadata. */
 export async function dismissSuggestionAction(
   visitId: string,
-  index: number
+  index: number,
+  expectedText: string
 ): Promise<SuggestionActionResult> {
   try {
     const session = await requireSession();
-    const parsed = SuggestionInputSchema.safeParse({ visitId, index });
+    const parsed = SuggestionInputSchema.safeParse({ visitId, index, expectedText });
     if (!parsed.success) {
       return { ok: false, error: 'Invalid input.' };
     }
@@ -267,6 +284,9 @@ export async function dismissSuggestionAction(
       return { ok: false, error: 'Suggestion not found.' };
     }
     const claim = claims[parsed.data.index];
+    if (claim.text !== parsed.data.expectedText) {
+      return { ok: false, error: STALE_LANE_ERROR };
+    }
     const remaining = claims.filter((_, i) => i !== parsed.data.index);
 
     await prisma.transcribeVisit.update({

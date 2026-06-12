@@ -10,6 +10,7 @@
 
 import { modelClient, wrapAsData } from '@meddoc/ai';
 import prisma from '@meddoc/db';
+import { Prisma } from '@prisma/client';
 import { specialtyGuidance } from '../prompts/specialty-guidance';
 import type { ExtractedEntities } from './03-extract-entities';
 import { logAudit } from '@/lib/audit';
@@ -191,6 +192,9 @@ export async function runLayer4GenerateSoap(
 
   let text = rawText;
   let suggestedClaims: object | undefined;
+  // Flag OFF → {} so the persisted shape is byte-identical to the pre-anchor
+  // path (test-pinned). Flag ON → set unconditionally inside the branch.
+  let suggestedClaimsWrite: { suggestedClaims?: Prisma.InputJsonValue | typeof Prisma.DbNull } = {};
   if (anchorsOn) {
     const verified = await runAnchorVerify({
       visitId: input.visitId,
@@ -201,6 +205,15 @@ export async function runLayer4GenerateSoap(
     });
     text = verified.body;
     suggestedClaims = verified.suggestions.length > 0 ? verified.suggestions : undefined;
+    suggestedClaimsWrite = {
+      // Always write the column when anchoring ran — a re-run that demotes
+      // nothing must CLEAR the previous run's lane (stale suggestions would
+      // point at a superseded draft), not leave it behind.
+      suggestedClaims:
+        suggestedClaims !== undefined
+          ? (suggestedClaims as Prisma.InputJsonValue)
+          : Prisma.DbNull,
+    };
     // Telemetry — the living fabrication monitor (counts only, no content).
     log.info('anchored-generation', 'verify split', {
       visitId: input.visitId,
@@ -241,7 +254,7 @@ export async function runLayer4GenerateSoap(
       where: { id: input.visitId },
       data: {
         soapDraft: text,
-        ...(suggestedClaims !== undefined ? { suggestedClaims } : {}),
+        ...suggestedClaimsWrite,
         needsReview: true,
         reviewReason:
           'SOAP draft didn\'t match expected markdown structure — manual review required.',
@@ -257,7 +270,7 @@ export async function runLayer4GenerateSoap(
     where: { id: input.visitId },
     data: {
       soapDraft: text,
-      ...(suggestedClaims !== undefined ? { suggestedClaims } : {}),
+      ...suggestedClaimsWrite,
       // Phase 1 provenance — which template + version generated this note.
       noteTemplateId: template.id,
       noteTemplateVersion: template.version,

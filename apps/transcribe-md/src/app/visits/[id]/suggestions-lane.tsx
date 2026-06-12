@@ -84,10 +84,13 @@ export function SuggestionsLane({
   async function handle(index: number, kind: 'adopt' | 'dismiss') {
     setPending({ index, kind });
     try {
+      // The rendered claim text rides along as a content-identity check —
+      // the server refuses if the DB array shifted under a stale tab.
+      const expectedText = claims[index].text;
       const res =
         kind === 'adopt'
-          ? await adoptSuggestionAction(visitId, index)
-          : await dismissSuggestionAction(visitId, index);
+          ? await adoptSuggestionAction(visitId, index, expectedText)
+          : await dismissSuggestionAction(visitId, index, expectedText);
       if (!res.ok) {
         toast.error(
           kind === 'adopt'
