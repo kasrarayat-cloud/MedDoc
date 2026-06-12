@@ -55,7 +55,7 @@
 import { config as dotenvConfig } from 'dotenv';
 import { spawn } from 'node:child_process';
 import { readFile, writeFile, mkdir, unlink } from 'node:fs/promises';
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
@@ -138,10 +138,25 @@ async function patchPrismaWritesOrAbort(): Promise<void> {
 
   const noop = async () => ({});
   // Neutralize every write the layers + modelClient telemetry + audit perform.
+  // ANCHORED-PATH instrumentation: the L4 flag-on persist carries the
+  // suggestions lane in data.suggestedClaims — capture it (keyed by visitId)
+  // so the enablement-gate report can show lane content; everything else
+  // stays a no-op (zero rows written).
   for (const model of ['transcribeVisit', 'aiCall', 'apiUsageEvent', 'auditLog']) {
     if (!prisma[model]) continue;
     for (const m of ['create', 'update', 'updateMany', 'upsert', 'delete', 'deleteMany', 'createMany']) {
-      if (typeof prisma[model][m] === 'function') prisma[model][m] = noop;
+      if (typeof prisma[model][m] === 'function') {
+        prisma[model][m] =
+          model === 'transcribeVisit' && m === 'update'
+            ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              async (args: any) => {
+                if (args?.data?.suggestedClaims !== undefined && args?.where?.id) {
+                  capturedSuggestions.set(String(args.where.id), args.data.suggestedClaims);
+                }
+                return {};
+              }
+            : noop;
+      }
     }
   }
   // findUnique on transcribeVisit is read-only and the layers don't call it on
@@ -174,6 +189,13 @@ interface CliArgs {
 }
 function parseArgs(argv: string[]): CliArgs {
   const args: CliArgs = { cases: null, count: 10, merge: null };
+  if (argv.includes('--anchored')) {
+    // Enablement-gate mode (protocol addendum 20260611T230650Z): run the
+    // HYBRID ANCHORED path + the Gate-2 completeness judge vs the flag-off
+    // baseline run.
+    process.env.TRANSCRIBE_MD_EVIDENCE_ANCHORS = 'true';
+    anchoredMode = true;
+  }
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
     if (k === '--cases') args.cases = (argv[++i] ?? '').split(',').map((s) => s.trim()).filter(Boolean);
@@ -338,6 +360,55 @@ function werFromTokens(ref: string[], hyp: string[]): number {
 }
 // Single source of truth for marker counting (audit NIT-4).
 import { countUnclearMarkers as countMarkers } from '@/worker/layers/transcript-clarity';
+
+// ─── Anchored enablement-gate mode (protocol addendum 20260611T230650Z) ─────
+let anchoredMode = false;
+const capturedSuggestions = new Map<string, unknown>();
+const BASELINE_JSON = path.join(
+  REPO_ROOT,
+  'docs/eval-runs/primock57-fullchain-fabrication-20260611T201726Z.json'
+);
+
+const COMPLETENESS_JUDGE_SYSTEM = [
+  'You compare two clinical notes for the SAME visit against its transcript.',
+  'List every TRANSCRIPT-SUPPORTED clinical fact that is present in the',
+  'BASELINE note but ABSENT from BOTH the NEW note body AND the SUGGESTIONS',
+  'list. A fact only counts if you can cite the transcript span supporting',
+  'it (an omitted baseline FABRICATION is not an omission). One entry per',
+  'distinct clinical fact. Respond STRICT JSON only:',
+  '{"omissions":[{"fact":"...","transcript_span":"..."}]}',
+].join('\n');
+
+async function judgeCompleteness(
+  asrTranscript: string,
+  baselineNote: string,
+  newBody: string,
+  laneTexts: string[]
+): Promise<{ fact: string; transcript_span: string }[] | null> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return null;
+  try {
+    const user = [
+      '## TRANSCRIPT', asrTranscript, '',
+      '## BASELINE NOTE', baselineNote, '',
+      '## NEW NOTE BODY', newBody, '',
+      '## SUGGESTIONS LIST', laneTexts.length ? laneTexts.map((t, i) => `${i}. ${t}`).join('\n') : '(empty)',
+    ].join('\n');
+    const res = await fetch(ANTHROPIC_URL, {
+      method: 'POST',
+      headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      body: JSON.stringify({ model: JUDGE_MODEL, max_tokens: 2048, temperature: 0, system: COMPLETENESS_JUDGE_SYSTEM, messages: [{ role: 'user', content: user }] }),
+    });
+    if (!res.ok) return null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const j = (await res.json()) as any;
+    const text: string = (j.content ?? []).find((b: { type: string }) => b.type === 'text')?.text ?? '';
+    const parsed = JSON.parse(extractFirstJsonObject(text.replace(/```(?:json)?\s*|\s*```/g, '')));
+    return Array.isArray(parsed.omissions) ? parsed.omissions : null;
+  } catch {
+    return null; // disclosed in the report as judge-unavailable for the case
+  }
+}
 
 // ─── Pre-registered protocol 20260611T201252Z: per-claim majority resolution ─
 // Flags from the 3 independent judge passes are clustered by normalized-token
@@ -666,6 +737,9 @@ interface CaseResult {
    *  deterministic per-claim majority resolution. */
   judgePasses: JudgeOut[] | null;
   resolved: { claims: ResolvedClaim[]; majorityC: ResolvedClaim[]; validPasses: number } | null;
+  /** --anchored mode: the captured suggestions lane + Gate-2 omissions. */
+  suggestions: { text: string; reason: string; section: string; anchor: string }[] | null;
+  omissions: { fact: string; transcript_span: string }[] | null;
   critiqueSummary: { overall: string; safe: boolean; issues: number; criticalIssues: number } | null;
   judge: JudgeOut | null;
 }
@@ -679,7 +753,7 @@ async function runCase(
     id: cf.id, status: 'success', source: 'audio', wer: null, audioDurationSec: null,
     postL4Soap: null, finalSoap: null, asrTranscript: null, unclearMarkerCount: null,
     polishRejected: null, critiqueSummary: null, judge: null,
-    judgePasses: null, resolved: null,
+    judgePasses: null, resolved: null, suggestions: null, omissions: null,
   };
   let mixedPath: string | null = null;
   // Synthetic identifiers — these never hit the DB (writes are stubbed) but the
@@ -767,6 +841,26 @@ async function runCase(
     r.judge = passes[0]; // legacy single-pass fields (per-pass-1 table cells)
     r.resolved = resolveMajority(passes.map((p) => p.flags));
 
+    // ── --anchored: lane capture + Gate-2 completeness vs baseline ──
+    if (anchoredMode) {
+      const cap = capturedSuggestions.get(base.visitId);
+      r.suggestions = Array.isArray(cap) ? (cap as CaseResult['suggestions']) : [];
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const baseline = (JSON.parse(readFileSync(BASELINE_JSON, 'utf8')) as any[]).find(
+          (b) => b.id === cf.id
+        );
+        if (baseline?.finalSoap) {
+          r.omissions = await judgeCompleteness(
+            contextText,
+            baseline.finalSoap,
+            polished.soapFinal,
+            (r.suggestions ?? []).map((s) => s.text)
+          );
+        }
+      } catch { r.omissions = null; }
+    }
+
     return r;
   } catch (err) {
     r.status = 'error';
@@ -834,6 +928,27 @@ async function writeReports(results: CaseResult[], utc: string): Promise<{ md: s
         lines.push(`- DEGRADED-MODE cases (<3 valid passes; unanimity required): ${degraded.map((r) => `${r.id}(${r.resolved!.validPasses})`).join(', ')}`);
       }
       lines.push('');
+      // ── Gate 2 (anchored mode): pre-registered completeness floor ──
+      if (anchoredMode) {
+        const withOm = withRes.filter((r) => r.omissions !== null);
+        const counts = withOm.map((r) => r.omissions!.length);
+        const mean = counts.length ? counts.reduce((s, n) => s + n, 0) / counts.length : 0;
+        const max = counts.length ? Math.max(...counts) : 0;
+        const judgeUnavailable = withRes.length - withOm.length;
+        const laneSizes = withRes.map((r) => (r.suggestions ?? []).length);
+        const laneMean = laneSizes.length ? laneSizes.reduce((s, n) => s + n, 0) / laneSizes.length : 0;
+        const gate2 = mean <= 1.5 && max <= 5 && judgeUnavailable === 0;
+        lines.push('## GATE 2 — completeness floor (addendum 20260611T230650Z: mean ≤ 1.5, max ≤ 5)');
+        lines.push('');
+        lines.push(`- **Material omissions: mean ${mean.toFixed(2)}/case, max ${max}** → **${gate2 ? 'PASS' : 'FAIL'}**${judgeUnavailable ? ` (judge unavailable on ${judgeUnavailable} case(s) — counts as FAIL per fail-toward-strict)` : ''}`);
+        lines.push(`- Suggestions-lane volume: mean ${laneMean.toFixed(1)}/case (sizes: ${laneSizes.join(',')})`);
+        for (const r of withRes) {
+          if ((r.omissions ?? []).length > 0) {
+            lines.push(`  - [${r.id}] ${r.omissions!.length} omission(s): ${r.omissions!.map((o) => JSON.stringify(o.fact.slice(0, 70))).join('; ')}`);
+          }
+        }
+        lines.push('');
+      }
     }
   }
   lines.push('## HEADLINE (legacy single-pass-1 view — NOT the verdict)');
