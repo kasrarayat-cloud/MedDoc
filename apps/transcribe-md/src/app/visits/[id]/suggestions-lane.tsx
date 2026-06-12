@@ -50,6 +50,8 @@ const REASON_LABELS: Record<string, string> = {
   digits_unsupported: 'numbers not supported',
   negation_mismatch: 'negation mismatch',
   gloss_unsupported: 'explanation not in transcript',
+  process_assertion_unsupported: 'reasoning not stated',
+  form_route_unsupported: 'form/route not stated',
   not_entailed: "couldn't verify",
   verifier_failed: "couldn't verify",
 };
