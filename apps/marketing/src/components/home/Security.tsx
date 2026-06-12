@@ -73,7 +73,7 @@ const ITEMS: Item[] = [
   },
   {
     title: 'US-only hosting',
-    body: 'AWS us-east-1. Data never leaves US borders. No offshore contractors.',
+    body: 'US-based servers (Los Angeles). PHI is stored and processed inside the United States.',
     icon: (
       <svg
         viewBox="0 0 24 24"

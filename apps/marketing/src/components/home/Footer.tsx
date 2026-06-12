@@ -77,8 +77,6 @@ export function Footer() {
           <div className="legal">
             <span>HIPAA</span>
             <span>·</span>
-            <span>SOC 2 TYPE II</span>
-            <span>·</span>
             <span>US-HOSTED</span>
           </div>
         </div>

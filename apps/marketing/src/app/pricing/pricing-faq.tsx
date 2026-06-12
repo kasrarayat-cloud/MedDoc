@@ -26,7 +26,7 @@ const FAQ = [
   },
   {
     q: 'How accurate is the transcription?',
-    a: `Transcription uses Deepgram's medical model — accurate, but not flawless on live clinic audio — so the note-drafting stage is built to confirm-not-fabricate: it is instructed to document only what it can tie back to the transcript, marking gaps "[not documented]" and unclear audio "[unclear in recording]" rather than guessing, and a separate critique pass re-checks the draft for unsupported claims. Every note is a draft until you review and sign it. On PriMock57, a public benchmark of 57 mock consultations, our notes score a mean 8.7/10 for completeness and accuracy; we don't publish numbers from live clinic audio yet — those arrive with the pilot, and will replace this answer before any figure here outruns the data.`,
+    a: `Transcription uses Deepgram's medical model — accurate, but not flawless on live clinic audio — so the note layer is built to verify, not trust: every sentence the AI drafts must quote the transcript span it came from, and an automated verifier checks each claim against its quote before it enters the note. Anything it can't verify is never silently written — it appears in a separate "Suggested by AI — not stated in this visit" list for you to add or dismiss explicitly. Gaps are marked "[not documented]" and unclear audio "[unclear in recording]" rather than guessed. Every note is a draft until you review and sign it. On PriMock57, a public benchmark of 57 mock consultations, our notes score a mean 8.7/10 for completeness and accuracy; we don't publish numbers from live clinic audio yet — those arrive with the pilot, and will replace this answer before any figure here outruns the data.`,
   },
   {
     q: 'Can I cancel anytime?',
