@@ -9,7 +9,7 @@ const BADGES = [
   { top: 'BAA', bottom: 'On request' },
   { top: 'Encrypted', bottom: 'By default' },
   { top: 'AES-256', bottom: 'Transit + at rest' },
-  { top: 'US-hosted', bottom: 'AWS us-east-1' },
+  { top: 'US-hosted', bottom: 'Los Angeles, USA' },
 ];
 
 export function Trust() {

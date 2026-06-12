@@ -13,7 +13,7 @@ const ITEMS: QA[] = [
   },
   {
     q: 'Where does the audio go after the visit?',
-    a: "Audio is stored encrypted in our US-east-1 MinIO cluster, retained per your practice's policy (default 30 days), and then permanently deleted. The transcript and SOAP note remain. You can purge audio earlier from any visit detail view.",
+    a: "Audio is stored encrypted on our US-based servers and retained for 90 days after you sign the note (configurable per practice), then permanently deleted. The transcript and SOAP note remain. You can purge audio earlier from any visit detail view.",
   },
   {
     q: 'Which EHRs do you export to?',
