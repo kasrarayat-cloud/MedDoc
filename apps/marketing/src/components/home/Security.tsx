@@ -73,7 +73,7 @@ const ITEMS: Item[] = [
   },
   {
     title: 'US-only hosting',
-    body: 'Dedicated US server, Los Angeles. PHI is stored and processed inside the United States.',
+    body: 'US-based servers (Los Angeles). PHI is stored and processed inside the United States.',
     icon: (
       <svg
         viewBox="0 0 24 24"
