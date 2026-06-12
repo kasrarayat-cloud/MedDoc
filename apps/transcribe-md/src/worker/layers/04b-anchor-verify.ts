@@ -68,6 +68,7 @@ export type DemotionReason =
   | 'negation_mismatch'
   | 'gloss_unsupported'
   | 'process_assertion_unsupported'
+  | 'form_route_unsupported'
   | 'not_entailed'
   | 'verifier_failed';
 
@@ -127,9 +128,11 @@ function processStems(s: string): string[] {
 // A form/route/class adjective in a claim must appear in the anchored
 // span (prefix-5, like every other override). Bounded lexicon — these
 // adjectives are near-always model register, near-never patient speech.
+// 'nasal' deliberately EXCLUDED (auditor WARN-2): "nasal congestion" is
+// everyday symptom register and would demote constantly on ENT visits.
 const FORM_ROUTE_WORDS = [
   'oral', 'topical', 'intravenous', 'intramuscular', 'subcutaneous',
-  'inhaled', 'nasal', 'rectal', 'sublingual', 'transdermal', 'ophthalmic',
+  'inhaled', 'rectal', 'sublingual', 'transdermal', 'ophthalmic',
   'contraceptive', 'systemic',
 ];
 function formRouteTokens(s: string): string[] {
@@ -320,7 +323,7 @@ function deterministicStage(
     // ("the pill" does not entail "oral contraceptive pill").
     for (const t of formRouteTokens(claimCore)) {
       if (!spanText.includes(t.slice(0, 5)))
-        return demote('not_entailed');
+        return demote('form_route_unsupported');
     }
     if (NEGATION_RE.test(claimCore) !== NEGATION_RE.test(spanText))
       return demote('negation_mismatch');

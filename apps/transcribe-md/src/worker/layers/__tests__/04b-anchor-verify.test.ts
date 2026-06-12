@@ -95,8 +95,8 @@ describe('canaries — the historical offenders MUST demote', () => {
     expect(r.suggestions[0].text).toContain('olecranon bursitis');
   });
 
-  it('COC/aura chain: anchored to a REAL quote but NOT entailed → demoted, captured with its anchor', async () => {
-    mockEntailment(() => JSON.stringify({ verdicts: [{ i: 0, entailed: false }] }));
+  it('COC/aura chain: demoted DETERMINISTICALLY since iteration 5 — "oral contraceptive" is form/class specification the span never states (an approving mock cannot save it)', async () => {
+    entailAll();
     const r = await runAnchorVerify({
       ...IDS,
       anchoredDraft:
@@ -104,7 +104,7 @@ describe('canaries — the historical offenders MUST demote', () => {
       roleLabeledTranscript: TRANSCRIPT,
     });
     expect(r.body).not.toContain('stroke');
-    expect(r.suggestions[0]).toMatchObject({ reason: 'not_entailed' });
+    expect(r.suggestions[0]).toMatchObject({ reason: 'form_route_unsupported' });
     expect(r.suggestions[0].anchor).toContain('Microgynon');
   });
 
@@ -636,7 +636,7 @@ describe('iteration 5 — drug form/route/class specification override', () => {
       roleLabeledTranscript: '[Patient #1, 0:10]: I take the pill every day.',
     });
     expect(r.body).not.toContain('Oral contraceptive');
-    expect(r.suggestions[0].reason).toBe('not_entailed');
+    expect(r.suggestions[0].reason).toBe('form_route_unsupported');
   });
 
   it('"topical steroid cream" demotes against a span that only says "steroid cream"', async () => {
@@ -649,7 +649,7 @@ describe('iteration 5 — drug form/route/class specification override', () => {
         '[Patient #1, 0:10]: I put some steroid cream on it last night.',
     });
     expect(r.body).not.toContain('Topical');
-    expect(r.suggestions[0].reason).toBe('not_entailed');
+    expect(r.suggestions[0].reason).toBe('form_route_unsupported');
   });
 
   it('a span that states the form supports it ("oral antibiotics" ↔ "oral antibiotics")', async () => {
@@ -674,6 +674,6 @@ describe('iteration 5 — drug form/route/class specification override', () => {
       roleLabeledTranscript: '[Patient #1, 0:10]: I take the pill every day.',
     });
     expect(r.body).not.toContain('Contraceptive');
-    expect(r.suggestions[0].reason).toBe('not_entailed');
+    expect(r.suggestions[0].reason).toBe('form_route_unsupported');
   });
 });
