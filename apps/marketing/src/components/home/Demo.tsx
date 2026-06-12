@@ -67,7 +67,7 @@ export function Demo() {
             </div>
             <div className="pane">
               <div className="pane-label">
-                SOAP draft <span className="src">/ claude-sonnet-4.6 · validated</span>
+                SOAP draft <span className="src">/ claude-opus-4.8 · verified</span>
               </div>
               <div className="soap-section lit">
                 <div className="soap-head">
