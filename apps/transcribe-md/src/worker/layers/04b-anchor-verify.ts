@@ -135,6 +135,27 @@ const FORM_ROUTE_WORDS = [
   'inhaled', 'rectal', 'sublingual', 'transdermal', 'ophthalmic',
   'contraceptive', 'systemic',
 ];
+/** Does a negation word in the SPAN target the CLAIM's content? Window
+ *  scan: any negation token followed within 4 tokens by a claim content
+ *  token (len ≥4, prefix-5 equivalence). Incidental negations about other
+ *  subjects ("…, no missed doses") do not conflict with a positive claim. */
+function spanNegationTargetsClaim(spanText: string, claimCore: string): boolean {
+  const claimTokens = (norm(claimCore).match(/[a-z]{4,}/g) ?? []).filter(
+    (t) => !REGISTER_WORDS.includes(t)
+  );
+  if (claimTokens.length === 0) return true; // nothing to compare — stay strict
+  const spanTokens = norm(spanText).split(' ');
+  for (let i = 0; i < spanTokens.length; i++) {
+    if (!NEGATION_RE.test(spanTokens[i])) continue;
+    for (let j = i + 1; j <= Math.min(i + 4, spanTokens.length - 1); j++) {
+      const w = spanTokens[j];
+      if (w.length < 4) continue;
+      if (claimTokens.some((c) => c.slice(0, 5) === w.slice(0, 5))) return true;
+    }
+  }
+  return false;
+}
+
 function formRouteTokens(s: string): string[] {
   const toks = norm(s).match(/[a-z]+/g) ?? [];
   return toks.filter((t) => FORM_ROUTE_WORDS.includes(t));
@@ -325,8 +346,25 @@ function deterministicStage(
       if (!spanText.includes(t.slice(0, 5)))
         return demote('form_route_unsupported');
     }
-    if (NEGATION_RE.test(claimCore) !== NEGATION_RE.test(spanText))
-      return demote('negation_mismatch');
+    // POLARITY ALIGNMENT (precision fix, 2026-06-13 — the lisinopril
+    // misfire from the #311 prod smoke). The rule as specced: claim and
+    // span must agree on the polarity OF THE CLAIM'S CONTENT.
+    //   - NEGATIVE claim + span with no negation → demote (an invented
+    //     denial — the dangerous direction, unchanged).
+    //   - POSITIVE claim + span containing a negation → demote ONLY if
+    //     the span's negation TARGETS the claim's content (a negation
+    //     word followed within 4 tokens by a claim content token).
+    //     "On lisinopril 20mg once daily, no missed doses" carries an
+    //     INCIDENTAL negation about doses — it still supports
+    //     "Lisinopril 20 mg once daily"; "not taking lisinopril anymore"
+    //     targets it and still demotes.
+    {
+      const claimNeg = NEGATION_RE.test(claimCore);
+      const spanNeg = NEGATION_RE.test(spanText);
+      if (claimNeg && !spanNeg) return demote('negation_mismatch');
+      if (!claimNeg && spanNeg && spanNegationTargetsClaim(spanText, claimCore))
+        return demote('negation_mismatch');
+    }
     // Iteration 2 — negation SUBJECT matching (deterministic): a negative
     // claim ("No nausea or vomiting") is only anchorable to a span that
     // mentions at least ONE content token of the negated phrase; a span
