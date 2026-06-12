@@ -47,6 +47,32 @@ function extractRxForEngine(raw: unknown): RxDraftRow[] {
   }));
 }
 
+/** Hybrid anchored generation (2026-06-11) — coerce the suggestedClaims
+ *  jsonb into the lane's typed shape. STRICT: any malformed entry voids the
+ *  whole array (returns null → lane hidden) so the lane's rendered indices
+ *  can never drift from the DB array's indices, which the adopt/dismiss
+ *  server actions validate against. */
+function extractSuggestedClaims(
+  raw: unknown
+): { text: string; reason: string; section: string; anchor: string }[] | null {
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+  const out: { text: string; reason: string; section: string; anchor: string }[] = [];
+  for (const entry of raw) {
+    if (entry === null || typeof entry !== 'object') return null;
+    const c = entry as Record<string, unknown>;
+    if (
+      typeof c.text !== 'string' ||
+      typeof c.reason !== 'string' ||
+      typeof c.section !== 'string' ||
+      typeof c.anchor !== 'string'
+    ) {
+      return null;
+    }
+    out.push({ text: c.text, reason: c.reason, section: c.section, anchor: c.anchor });
+  }
+  return out;
+}
+
 /** Phase 5.2 orphan-completion — hydrate the doctor's previously-set
  *  E&M override from cptCodes.em.override so the rail renders the
  *  doctor-set code on initial load instead of the AI suggestion.
@@ -189,6 +215,8 @@ export default async function VisitPage({
     cptCodes: unknown;
     rxDrafts: unknown;
     referrals: unknown;
+    /** Hybrid anchored generation — verifier-demoted claims jsonb. */
+    suggestedClaims: unknown;
     patientSummary: string | null;
     confidenceScores: unknown;
   };
@@ -252,6 +280,7 @@ export default async function VisitPage({
         cptCodes: true,
         rxDrafts: true,
         referrals: true,
+        suggestedClaims: true,
         patientSummary: true,
         confidenceScores: true,
       },
@@ -481,6 +510,7 @@ export default async function VisitPage({
           rxDrafts={visit.rxDrafts}
           rxOverriddenWarningIds={rxOverrides.map((o) => o.warningId)}
           referrals={visit.referrals}
+          suggestedClaims={visit.suggestedClaims}
           patientSummary={visit.patientSummary}
           confidenceScores={visit.confidenceScores}
           // Phase 5.1.1 — V4 Extras card-stream wiring
@@ -536,6 +566,9 @@ interface VisitBodyProps {
    *  on initial paint so reload + cross-tab persistence works. */
   rxOverriddenWarningIds: string[];
   referrals: unknown;
+  /** Hybrid anchored generation — verifier-demoted claims jsonb (coerced
+   *  via extractSuggestedClaims before reaching VisitReadyView). */
+  suggestedClaims: unknown;
   patientSummary: string | null;
   confidenceScores: unknown;
 
@@ -714,6 +747,9 @@ async function VisitBody(props: VisitBodyProps) {
       rxDrafts={props.rxDrafts}
       rxOverriddenWarningIds={props.rxOverriddenWarningIds}
       referrals={props.referrals}
+      // Hybrid anchored generation — lane claims (strictly coerced; null
+      // when absent/malformed so the lane simply doesn't render).
+      suggestedClaims={extractSuggestedClaims(props.suggestedClaims)}
       patientSummary={props.patientSummary}
       confidenceScores={props.confidenceScores}
       durationSec={durationSec}
