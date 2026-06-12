@@ -121,6 +121,22 @@ function processStems(s: string): string[] {
   );
 }
 
+// Iteration 5 (gate re-run #1 attribution) — DRUG FORM / ROUTE / CLASS
+// SPECIFICATION. Both residuals specified beyond the span: "the pill" →
+// "ORAL CONTRACEPTIVE pill", "steroid cream" → "TOPICAL steroid cream".
+// A form/route/class adjective in a claim must appear in the anchored
+// span (prefix-5, like every other override). Bounded lexicon — these
+// adjectives are near-always model register, near-never patient speech.
+const FORM_ROUTE_WORDS = [
+  'oral', 'topical', 'intravenous', 'intramuscular', 'subcutaneous',
+  'inhaled', 'nasal', 'rectal', 'sublingual', 'transdermal', 'ophthalmic',
+  'contraceptive', 'systemic',
+];
+function formRouteTokens(s: string): string[] {
+  const toks = norm(s).match(/[a-z]+/g) ?? [];
+  return toks.filter((t) => FORM_ROUTE_WORDS.includes(t));
+}
+
 function norm(s: string): string {
   return s
     .toLowerCase()
@@ -300,6 +316,12 @@ function deterministicStage(
         : spanText.includes(stem);
       if (!supported) return demote('process_assertion_unsupported');
     }
+    // Iteration 5 — form/route/class adjectives must be span-stated
+    // ("the pill" does not entail "oral contraceptive pill").
+    for (const t of formRouteTokens(claimCore)) {
+      if (!spanText.includes(t.slice(0, 5)))
+        return demote('not_entailed');
+    }
     if (NEGATION_RE.test(claimCore) !== NEGATION_RE.test(spanText))
       return demote('negation_mismatch');
     // Iteration 2 — negation SUBJECT matching (deterministic): a negative
@@ -409,6 +431,10 @@ const ENTAILMENT_SYSTEM = [
   '- CAUSAL ATTRIBUTION ("screen-related", "due to", "secondary to") is',
   '  entailed ONLY if the span states that cause, not because it is',
   '  clinically plausible.',
+  '- DRUG FORM / ROUTE / CLASS SPECIFICATION beyond the span ("the pill"',
+  '  does NOT entail "oral contraceptive pill"; "steroid cream" does NOT',
+  '  entail "topical steroid cream") is NOT entailed — the form, route, or',
+  '  drug class must appear in the span.',
   '- CLINICAL-REASONING ACTS AND CONTINGENCIES: a claim that something was',
   '  "confirmed", "considered", "ruled out", "screened", "addressed", or a',
   '  plan contingency ("may need to change X if Y is confirmed") is',

@@ -624,3 +624,56 @@ describe('iteration 4 — noun homonyms stay exempt; boilerplate verb forms demo
     expect(kept.body).toContain('screen-related');
   });
 });
+
+// ─── Iteration 5 — gate re-run #1 residual class: form/route specification ──
+describe('iteration 5 — drug form/route/class specification override', () => {
+  it('"oral contraceptive pill" demotes against a span that only says "the pill"', async () => {
+    entailAll();
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft:
+        '## Medications\nOral contraceptive pill, ongoing. ⟦A:"I take the pill every day"⟧',
+      roleLabeledTranscript: '[Patient #1, 0:10]: I take the pill every day.',
+    });
+    expect(r.body).not.toContain('Oral contraceptive');
+    expect(r.suggestions[0].reason).toBe('not_entailed');
+  });
+
+  it('"topical steroid cream" demotes against a span that only says "steroid cream"', async () => {
+    entailAll();
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft:
+        '## Medications\nTopical steroid cream applied last night. ⟦A:"I put some steroid cream on it last night"⟧',
+      roleLabeledTranscript:
+        '[Patient #1, 0:10]: I put some steroid cream on it last night.',
+    });
+    expect(r.body).not.toContain('Topical');
+    expect(r.suggestions[0].reason).toBe('not_entailed');
+  });
+
+  it('a span that states the form supports it ("oral antibiotics" ↔ "oral antibiotics")', async () => {
+    entailAll();
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft:
+        '## Plan\nStart oral antibiotics. ⟦A:"I will start you on some oral antibiotics"⟧',
+      roleLabeledTranscript:
+        '[Doctor #0, 0:10]: I will start you on some oral antibiotics.',
+    });
+    expect(r.body).toContain('oral antibiotics');
+    expect(r.suggestions).toHaveLength(0);
+  });
+
+  it('"contraceptive" alone (class specification) demotes when the span never says it', async () => {
+    entailAll();
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft:
+        '## Medications\nContraceptive pill, ongoing. ⟦A:"I take the pill every day"⟧',
+      roleLabeledTranscript: '[Patient #1, 0:10]: I take the pill every day.',
+    });
+    expect(r.body).not.toContain('Contraceptive');
+    expect(r.suggestions[0].reason).toBe('not_entailed');
+  });
+});
