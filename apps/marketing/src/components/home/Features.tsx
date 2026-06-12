@@ -191,7 +191,7 @@ export function Features() {
           <div className="feature-num">Feature 06</div>
           <h3 className="feature-h">Audit-logged + US-hosted.</h3>
           <p className="feature-body">
-            Every action emits an immutable event. Servers in us-east-1. Your data never crosses a
+            Every action emits an immutable event. US-based servers. Your data never crosses a
             border.
           </p>
         </div>
