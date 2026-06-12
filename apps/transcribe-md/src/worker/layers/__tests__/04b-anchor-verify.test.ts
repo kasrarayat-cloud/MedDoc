@@ -333,3 +333,195 @@ describe('flag-off byte-identity (the rollout guarantee)', () => {
     expect(data.suggestedClaims[0].text).toContain('olecranon bursitis');
   });
 });
+
+// ─── Iteration 3 — gate run-3 residual canaries ─────────────────────────────
+// The four majority class-(c) claims that survived the single-verdict
+// verifier, pinned as the CLASSES that killed them: parenthetical gloss +
+// spelled quantification are now DETERMINISTIC (an approving model cannot
+// resurrect them); cross-site negation + causal attribution are pinned at
+// the k=3 ensemble level (majority ≥2-of-3, errored pass votes no).
+describe('iteration 3 — run-3 residual classes + ensemble majority', () => {
+  /** Route per-pass verdicts by lens posture in the system prompt. */
+  function mockEnsemble(votes: {
+    base: boolean | 'error';
+    hunter: boolean | 'error';
+    skeptic: boolean | 'error';
+  }) {
+    mocks.modelCompleteText.mockImplementation(
+      async (args: { purpose?: string; system?: string; user?: string }) => {
+        if (args?.purpose !== 'tm_anchor_entailment')
+          throw new Error(`unexpected purpose ${args?.purpose}`);
+        const sys = args.system ?? '';
+        const v = sys.includes('ELABORATION HUNTER')
+          ? votes.hunter
+          : sys.includes('CLINICAL SKEPTIC')
+            ? votes.skeptic
+            : votes.base;
+        if (v === 'error') throw new Error('pass down');
+        const n = (args.user?.match(/^CLAIM \d+:/gm) ?? []).length;
+        return {
+          text: JSON.stringify({
+            verdicts: Array.from({ length: n }, (_, i) => ({ i, entailed: v })),
+          }),
+        };
+      }
+    );
+  }
+
+  it('parenthetical gloss ("fundoscopy (examination of the back of the eyes)") demotes DETERMINISTICALLY — approving ensemble cannot overrule', async () => {
+    entailAll();
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft:
+        '## Plan\nFundoscopy (examination of the back of the eyes) to be arranged. ⟦A:"we will arrange fundoscopy for you"⟧',
+      roleLabeledTranscript:
+        '[Doctor #0, 0:10]: we will arrange fundoscopy for you.',
+    });
+    expect(r.body).not.toContain('Fundoscopy');
+    expect(r.suggestions).toHaveLength(1);
+    expect(r.suggestions[0].reason).toBe('gloss_unsupported');
+  });
+
+  it('span-supported gloss survives (explanation present in the span)', async () => {
+    entailAll();
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft:
+        '## Plan\nFundoscopy (examination of the back of the eyes). ⟦A:"fundoscopy, that is an examination of the back of the eyes"⟧',
+      roleLabeledTranscript:
+        '[Doctor #0, 0:10]: fundoscopy, that is an examination of the back of the eyes.',
+    });
+    expect(r.body).toContain('Fundoscopy');
+    expect(r.suggestions).toHaveLength(0);
+  });
+
+  it('spelled quantification ("two glasses per week") falls under the digits override — approving ensemble cannot overrule', async () => {
+    entailAll();
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft:
+        '## Plan\nCut down to two glasses of wine per week initially. ⟦A:"you should try and cut down on the drinking"⟧',
+      roleLabeledTranscript:
+        '[Doctor #0, 0:10]: you should try and cut down on the drinking.',
+    });
+    expect(r.body).not.toContain('two glasses');
+    expect(r.suggestions[0].reason).toBe('digits_unsupported');
+  });
+
+  it('spelled quantification stated in the span survives ("twice daily" ↔ "twice daily")', async () => {
+    entailAll();
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft:
+        '## Plan\nTake amoxicillin twice daily. ⟦A:"take the amoxicillin twice daily"⟧',
+      roleLabeledTranscript:
+        '[Doctor #0, 0:10]: take the amoxicillin twice daily.',
+    });
+    expect(r.body).toContain('twice daily');
+    expect(r.suggestions).toHaveLength(0);
+  });
+
+  it('digit ↔ word equivalence: claim "2 glasses" supported by span "two glasses"', async () => {
+    entailAll();
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft:
+        '## Subjective\nDrinks 2 glasses of wine nightly. ⟦A:"I have two glasses of wine most nights"⟧',
+      roleLabeledTranscript:
+        '[Patient #1, 0:10]: I have two glasses of wine most nights.',
+    });
+    expect(r.body).toContain('2 glasses');
+    expect(r.suggestions).toHaveLength(0);
+  });
+
+  it('cross-site negation ("ears: no blockage" anchored to a NOSE span) demotes on ensemble majority', async () => {
+    mockEnsemble({ base: true, hunter: false, skeptic: false });
+    const r = await runAnchorVerify({
+      ...IDS,
+      // The run-3 escape shape: negation polarity matches (both sides
+      // negate) and the subject prefix ("block…") appears in the span — the
+      // deterministic overrides PASS by design; the ensemble must catch it.
+      anchoredDraft:
+        '## Subjective\nEars feel okay with no pain or blockage. ⟦A:"no, my nose just feels blocked all the time"⟧',
+      roleLabeledTranscript:
+        '[Patient #1, 0:10]: no, my nose just feels blocked all the time.',
+    });
+    expect(r.body).not.toContain('Ears feel okay');
+    expect(r.suggestions[0].reason).toBe('not_entailed');
+  });
+
+  it('causal attribution ("screen-related eye strain") with 2-of-3 entailed SURVIVES (majority keeps)', async () => {
+    mockEnsemble({ base: true, hunter: true, skeptic: false });
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft:
+        '## Assessment\nLikely screen-related eye strain. ⟦A:"my eyes get tired when I work at the computer all day"⟧',
+      roleLabeledTranscript:
+        '[Patient #1, 0:10]: my eyes get tired when I work at the computer all day.',
+    });
+    expect(r.body).toContain('screen-related eye strain');
+    expect(r.suggestions).toHaveLength(0);
+  });
+
+  it('causal attribution with 1-of-3 entailed demotes (majority rejects)', async () => {
+    mockEnsemble({ base: false, hunter: true, skeptic: false });
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft:
+        '## Assessment\nLikely screen-related eye strain. ⟦A:"my eyes get tired when I work at the computer all day"⟧',
+      roleLabeledTranscript:
+        '[Patient #1, 0:10]: my eyes get tired when I work at the computer all day.',
+    });
+    expect(r.body).not.toContain('eye strain');
+    expect(r.suggestions[0].reason).toBe('not_entailed');
+  });
+
+  it('one errored pass + both remaining entailed → survives (error votes no, 2 yes ≥ majority)', async () => {
+    mockEnsemble({ base: 'error', hunter: true, skeptic: true });
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft:
+        '## Subjective\nReports tiredness. ⟦A:"I have been feeling tired"⟧',
+      roleLabeledTranscript: '[Patient #1, 0:10]: I have been feeling tired.',
+    });
+    expect(r.body).toContain('Reports tiredness');
+    expect(r.suggestions).toHaveLength(0);
+    expect(r.stats.entailmentPassErrors).toBe(1);
+  });
+
+  it('one errored pass + split remaining → demotes (1 yes < majority)', async () => {
+    mockEnsemble({ base: 'error', hunter: true, skeptic: false });
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft:
+        '## Subjective\nReports tiredness. ⟦A:"I have been feeling tired"⟧',
+      roleLabeledTranscript: '[Patient #1, 0:10]: I have been feeling tired.',
+    });
+    expect(r.body).not.toContain('Reports tiredness');
+    expect(r.suggestions[0].reason).toBe('not_entailed');
+  });
+
+  it('two errored passes → whole stage fails closed (verifier_failed)', async () => {
+    mockEnsemble({ base: 'error', hunter: 'error', skeptic: true });
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft:
+        '## Subjective\nReports tiredness. ⟦A:"I have been feeling tired"⟧',
+      roleLabeledTranscript: '[Patient #1, 0:10]: I have been feeling tired.',
+    });
+    expect(r.body).not.toContain('Reports tiredness');
+    expect(r.suggestions[0].reason).toBe('verifier_failed');
+    expect(r.stats.verifierErrored).toBe(true);
+  });
+
+  it('ensemble fires exactly 3 entailment calls per verify', async () => {
+    entailAll();
+    await runAnchorVerify({
+      ...IDS,
+      anchoredDraft:
+        '## Subjective\nReports tiredness. ⟦A:"I have been feeling tired"⟧',
+      roleLabeledTranscript: '[Patient #1, 0:10]: I have been feeling tired.',
+    });
+    expect(mocks.modelCompleteText).toHaveBeenCalledTimes(3);
+  });
+});

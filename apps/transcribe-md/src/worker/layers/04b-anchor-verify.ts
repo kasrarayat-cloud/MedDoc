@@ -66,6 +66,7 @@ export type DemotionReason =
   | 'anchor_overlaps_unclear'
   | 'digits_unsupported'
   | 'negation_mismatch'
+  | 'gloss_unsupported'
   | 'not_entailed'
   | 'verifier_failed';
 
@@ -85,6 +86,8 @@ export interface AnchorVerifyResult {
     demoted: number;
     entailmentChecked: number;
     verifierErrored: boolean;
+    /** Ensemble passes (of 3) that errored — telemetry only. */
+    entailmentPassErrors?: number;
   };
 }
 
@@ -107,6 +110,45 @@ export function transcriptForMatching(roleLabeled: string): string {
 
 function digitTokens(s: string): string[] {
   return norm(s).match(/\d+(?:\.\d+)?/g) ?? [];
+}
+
+// Iteration 3 (gate run-3 attribution) — QUANTIFICATION uses words as often
+// as digits ("cut down to two glasses per week, then one"). Spelled numbers
+// fall under the digits hard override: a claim's number-words must be
+// supported by the span in word OR digit form. Bare "one" is excluded
+// (pronoun homonym — "no one", "which one" — would false-demote constantly);
+// "once"/"twice" and all other number words are checked.
+const NUMBER_WORDS: Record<string, string> = {
+  two: '2', three: '3', four: '4', five: '5', six: '6', seven: '7',
+  eight: '8', nine: '9', ten: '10', eleven: '11', twelve: '12',
+  thirteen: '13', fourteen: '14', fifteen: '15', sixteen: '16',
+  seventeen: '17', eighteen: '18', nineteen: '19', twenty: '20',
+  thirty: '30', forty: '40', fifty: '50', sixty: '60', seventy: '70',
+  eighty: '80', ninety: '90', hundred: '100', thousand: '1000',
+  once: '1', twice: '2',
+};
+const DIGIT_TO_WORD: Record<string, string[]> = Object.entries(
+  NUMBER_WORDS
+).reduce<Record<string, string[]>>((acc, [w, d]) => {
+  (acc[d] = acc[d] ?? []).push(w);
+  return acc;
+}, {});
+
+function numberWordTokens(s: string): { word: string; digit: string }[] {
+  const out: { word: string; digit: string }[] = [];
+  for (const t of norm(s).match(/[a-z]+/g) ?? []) {
+    if (NUMBER_WORDS[t]) out.push({ word: t, digit: NUMBER_WORDS[t] });
+  }
+  return out;
+}
+
+/** Span supports a digit if it contains the digit string or a word form of
+ *  it ("2" ↔ "two"/"twice"). Used by both directions of the quant override. */
+function spanSupportsDigit(spanText: string, digit: string): boolean {
+  if (spanText.includes(digit)) return true;
+  return (DIGIT_TO_WORD[digit] ?? []).some((w) =>
+    new RegExp(`\\b${w}\\b`).test(spanText)
+  );
 }
 
 /** All sub-span strings from one anchor block body (both grammars). */
@@ -197,7 +239,28 @@ function deterministicStage(
     const claimCore = stripped.replace(/^\s*(?:\d+[.)]\s+|[-*]\s+)/, '');
     const spanText = spans.join(' ');
     for (const d of digitTokens(claimCore)) {
-      if (!spanText.includes(d)) return demote('digits_unsupported');
+      if (!spanSupportsDigit(spanText, d)) return demote('digits_unsupported');
+    }
+    // Iteration 3 — spelled quantification is digits ("two glasses per week,
+    // then one" must be in the span as words or digits, like "75 mg").
+    for (const { word, digit } of numberWordTokens(claimCore)) {
+      if (
+        !new RegExp(`\\b${word}\\b`).test(spanText) &&
+        !spanText.includes(digit)
+      )
+        return demote('digits_unsupported');
+    }
+    // Iteration 3 — PARENTHETICAL GLOSS: an explanation/definition/expansion
+    // the model adds in parentheses ("fundoscopy (examination of the back of
+    // the eyes)") is clinical content; if NO content token of the gloss
+    // appears in the span (prefix-5, like the negation rule), demote. A
+    // gloss with no ≥5-char token (e.g. an acronym "(COC)") is not checked.
+    for (const g of claimCore.matchAll(/\(([^)]{3,})\)/g)) {
+      const tokens = (norm(g[1]).match(/[a-z]{5,}/g) ?? []).filter(
+        (t) => !['known', 'other', 'further', 'significant', 'formal', 'prior'].includes(t)
+      );
+      if (tokens.length > 0 && !tokens.some((t) => spanText.includes(t.slice(0, 5))))
+        return demote('gloss_unsupported');
     }
     if (NEGATION_RE.test(claimCore) !== NEGATION_RE.test(spanText))
       return demote('negation_mismatch');
@@ -290,10 +353,54 @@ const ENTAILMENT_SYSTEM = [
   '  span states THAT instruction — a general safety-net statement does',
   '  not entail specific thresholds or materials.',
   '',
+  'And these (iteration 3 — the residual escape classes):',
+  '- ELABORATION BEYOND THE SPAN is not entailment: a claim that adds ANY',
+  '  specification, quantification, explanation, or detail the span does',
+  '  not state is NOT entailed, even when the addition is medically',
+  '  correct or "obvious".',
+  '- A parenthetical gloss, definition, or expansion ("auscultation',
+  '  (listening to the chest)") is NOT entailed unless the span itself',
+  '  states that explanation.',
+  '- Quantification not in the span ("cut down" does NOT entail "two',
+  '  units per week, then one") is NOT entailed — numbers, frequencies,',
+  '  and stepped plans must appear in the span.',
+  '- BODY-SITE / SUBJECT TRANSFER: a span about one site, organ, or topic',
+  '  never entails a claim about another ("nose feels blocked" does NOT',
+  '  entail "ears: no blockage"; a denial about chest pain does not cover',
+  '  abdominal pain).',
+  '- CAUSAL ATTRIBUTION ("screen-related", "due to", "secondary to") is',
+  '  entailed ONLY if the span states that cause, not because it is',
+  '  clinically plausible.',
+  '',
   'Respond STRICT JSON only, no prose, no fences:',
   '{"verdicts":[{"i":<claim number>,"entailed":true|false}]}',
   'Include EVERY claim number exactly once.',
 ].join('\n');
+
+// Iteration 3 — k=3 SELF-CONSISTENT ENSEMBLE. Three passes share the full
+// rule set above but adopt distinct review postures; a claim survives only
+// on MAJORITY (≥2 of 3) entailed=true. An errored/ambiguous pass votes
+// not-entailed for every claim (fail-closed); ≥2 errored passes fail the
+// whole stage (verifier_failed). Single-verdict run-to-run wobble was the
+// measured residual escape path (gate runs 1–3: 4–5 register-inference
+// claims each passed the single verdict).
+const ENSEMBLE_LENSES: readonly string[] = [
+  '', // pass 1 — the base rules, unmodified posture
+  [
+    '',
+    'YOUR POSTURE FOR THIS PASS — ELABORATION HUNTER: read each claim word',
+    'by word against its span and hunt for ANY added word that carries',
+    'clinical meaning the span does not state (a qualifier, a number, a',
+    'mechanism, an explanation, a site). One such word = not entailed.',
+  ].join('\n'),
+  [
+    '',
+    'YOUR POSTURE FOR THIS PASS — CLINICAL SKEPTIC: assume each claim is an',
+    'embellished clinical-register rewrite until the span proves otherwise.',
+    'The span must carry the FULL content of the claim; clinical plausibility',
+    'or convention is never evidence.',
+  ].join('\n'),
+];
 
 /** Surrounding utterance context for a span (the line(s) containing it). */
 function spanContext(spans: string[], roleLabeled: string): string {
@@ -308,28 +415,17 @@ function spanContext(spans: string[], roleLabeled: string): string {
   return [...hits].join('\n');
 }
 
-async function entailmentStage(
+/** One verifier pass: returns the set of claim POSITIONS (0..k-1) it entails,
+ *  or null when the pass errored (API failure, malformed/ambiguous verdict).
+ *  All the single-pass fail-closed rules are unchanged: exactly one valid
+ *  verdict object per response, exactly one verdict per claim. */
+async function entailmentPass(
   claims: ClaimRow[],
-  roleLabeledTranscript: string,
+  user: string,
+  lens: string,
   ids: { practiceId: string; visitId: string; userId: string | null }
-): Promise<{ entailedIdx: Set<number>; errored: boolean }> {
-  if (claims.length === 0) return { entailedIdx: new Set(), errored: false };
-  // MOCK short-circuit: under MOCK_AI_CALLS the mock "model" approves —
-  // mirrors every other mock fixture; reject/fail-closed paths are covered
-  // by deterministic unit tests, never by the MOCK e2e flow.
-  if (process.env.MOCK_AI_CALLS === 'true') {
-    return { entailedIdx: new Set(claims.map((c) => c.index)), errored: false };
-  }
+): Promise<Set<number> | null> {
   try {
-    const user = claims
-      .map((c, k) =>
-        [
-          `CLAIM ${k}: ${c.text}`,
-          `CITED SPAN(S): ${c.anchorRaw}`,
-          `CONTEXT: ${spanContext(c.spans, roleLabeledTranscript) || '(no context located)'}`,
-        ].join('\n')
-      )
-      .join('\n\n');
     const { text } = await modelClient.completeText({
       practiceId: ids.practiceId,
       visitId: ids.visitId,
@@ -337,7 +433,7 @@ async function entailmentStage(
       purpose: 'tm_anchor_entailment',
       provider: 'anthropic',
       model: MODEL,
-      system: ENTAILMENT_SYSTEM,
+      system: ENTAILMENT_SYSTEM + lens,
       user,
       maxTokens: 2048,
       temperature: 0,
@@ -349,18 +445,62 @@ async function entailmentStage(
       })
       .filter((p): p is NonNullable<typeof p> => p !== null && p.success)
       .map((p) => (p as { data: z.infer<typeof EntailmentVerdicts> }).data);
-    if (valid.length !== 1) return { entailedIdx: new Set(), errored: true }; // none or ambiguous → fail-closed
+    if (valid.length !== 1) return null; // none or ambiguous → pass errored (fail-closed)
     const verdicts = valid[0].verdicts;
-    const entailedIdx = new Set<number>();
-    claims.forEach((c, k) => {
+    const entailedPos = new Set<number>();
+    claims.forEach((_, k) => {
       const v = verdicts.filter((x) => x.i === k);
-      // exactly one verdict per claim; duplicates/missing → demote (fail-closed)
-      if (v.length === 1 && v[0].entailed === true) entailedIdx.add(c.index);
+      // exactly one verdict per claim; duplicates/missing → not entailed
+      if (v.length === 1 && v[0].entailed === true) entailedPos.add(k);
     });
-    return { entailedIdx, errored: false };
+    return entailedPos;
   } catch {
-    return { entailedIdx: new Set(), errored: true }; // API failure → demote all
+    return null; // API failure → pass errored
   }
+}
+
+async function entailmentStage(
+  claims: ClaimRow[],
+  roleLabeledTranscript: string,
+  ids: { practiceId: string; visitId: string; userId: string | null }
+): Promise<{ entailedIdx: Set<number>; errored: boolean; passErrors: number }> {
+  if (claims.length === 0)
+    return { entailedIdx: new Set(), errored: false, passErrors: 0 };
+  // MOCK short-circuit: under MOCK_AI_CALLS the mock "model" approves —
+  // mirrors every other mock fixture; reject/fail-closed paths are covered
+  // by deterministic unit tests, never by the MOCK e2e flow.
+  if (process.env.MOCK_AI_CALLS === 'true') {
+    return {
+      entailedIdx: new Set(claims.map((c) => c.index)),
+      errored: false,
+      passErrors: 0,
+    };
+  }
+  const user = claims
+    .map((c, k) =>
+      [
+        `CLAIM ${k}: ${c.text}`,
+        `CITED SPAN(S): ${c.anchorRaw}`,
+        `CONTEXT: ${spanContext(c.spans, roleLabeledTranscript) || '(no context located)'}`,
+      ].join('\n')
+    )
+    .join('\n\n');
+  // k=3 ensemble, distinct lenses, majority ≥2 entailed to survive. An
+  // errored pass votes not-entailed for everything (fail-closed): one error
+  // leaves survival possible only by BOTH remaining passes agreeing; two
+  // errors make majority unreachable → the whole stage is verifier_failed.
+  const passes = await Promise.all(
+    ENSEMBLE_LENSES.map((lens) => entailmentPass(claims, user, lens, ids))
+  );
+  const passErrors = passes.filter((p) => p === null).length;
+  if (passErrors >= 2)
+    return { entailedIdx: new Set(), errored: true, passErrors };
+  const entailedIdx = new Set<number>();
+  claims.forEach((c, k) => {
+    const votes = passes.filter((p) => p !== null && p.has(k)).length;
+    if (votes >= 2) entailedIdx.add(c.index);
+  });
+  return { entailedIdx, errored: false, passErrors };
 }
 
 // ─── Public entry ───────────────────────────────────────────────────────────
@@ -418,6 +558,7 @@ export async function runAnchorVerify(input: {
         demoted: suggestions.length,
         entailmentChecked: det.toEntail.length,
         verifierErrored: ent.errored,
+        entailmentPassErrors: ent.passErrors,
       },
     };
   } catch {
