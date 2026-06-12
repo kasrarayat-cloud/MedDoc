@@ -42,22 +42,21 @@ export const SUGGEST_MARK = '⟦S⟧';
 export const ANCHOR_GENERATION_ADDENDUM = [
   '',
   'EVIDENCE ANCHORS (required — adds to, never overrides, the rules above):',
-  'After EVERY sentence that asserts clinical content (symptoms, findings,',
-  'negatives, history, medications, doses, diagnoses, assessments, plan',
-  'items, instructions, education), append one or more anchors of the form',
-  '⟦A:"<verbatim transcript quote>"⟧ quoting the transcript span(s) that',
-  'support it, copied EXACTLY as written in the transcript (you may join up',
-  'to 3 sub-spans with " ... "). If a sentence is clinically appropriate but',
-  'you CANNOT quote transcript support for it, append ⟦S⟧ instead — it will',
-  'be routed to a clinician suggestions list rather than the note body.',
-  'Structural headers and "[not documented]" placeholders need no anchor.',
+  'FIRST write the COMPLETE note you would normally write — the same length,',
+  'coverage, and detail as if anchors did not exist: every ROS answer',
+  'including denials, all social history, medications with timing, patient',
+  'concerns and expectations, demographics, and every plan item. Anchoring',
+  'must never make the note shorter or less complete.',
   '',
-  'ANCHORING MUST NOT REDUCE COMPLETENESS (iteration 1): document EVERY',
-  'clinically relevant statement from the transcript — each ROS answer',
-  'including denials, social history, patient concerns and expectations,',
-  'instructions, demographics — each with its anchor. When you are unsure',
-  'whether support is quotable, WRITE THE SENTENCE with ⟦S⟧ rather than',
-  'omitting it: an omitted fact is lost, a suggested one is one click away.',
+  'THEN, after EVERY sentence that asserts clinical content, append one or',
+  'more anchors of the form ⟦A:"<verbatim transcript quote>"⟧ quoting the',
+  'transcript span(s) that support it, copied EXACTLY as written (you may',
+  'join up to 3 sub-spans with " ... "). If a sentence is clinically',
+  'appropriate but you CANNOT quote transcript support for it, append ⟦S⟧',
+  'instead — it will be routed to a clinician suggestions list rather than',
+  'the note body. NEVER omit a fact because its anchor is hard to find:',
+  'an omitted fact is lost, a suggested one is one click away.',
+  'Structural headers and "[not documented]" placeholders need no anchor.',
 ].join('\n');
 
 export type DemotionReason =
@@ -202,6 +201,23 @@ function deterministicStage(
     }
     if (NEGATION_RE.test(claimCore) !== NEGATION_RE.test(spanText))
       return demote('negation_mismatch');
+    // Iteration 2 — negation SUBJECT matching (deterministic): a negative
+    // claim ("No nausea or vomiting") is only anchorable to a span that
+    // mentions at least ONE content token of the negated phrase; a span
+    // denying something ELSE never supports a different negative (the
+    // recurring Gate-1 escape; boolean polarity alone could not see it).
+    // Phrase-ANY (not ALL): "No prior diagnosis of migraines" passes via
+    // "migraines" even though "prior"/"diagnosis" are register words.
+    const negPhrase = norm(claimCore).match(
+      /\b(?:no|not|denies|denied|without|negative)\s+([a-z][a-z\s]{3,60})/
+    );
+    if (negPhrase) {
+      const tokens = (negPhrase[1].match(/[a-z]{5,}/g) ?? []).filter(
+        (t) => !['known', 'other', 'further', 'significant', 'formal', 'prior'].includes(t)
+      );
+      if (tokens.length > 0 && !tokens.some((t) => spanText.includes(t.slice(0, 5))))
+        return demote('negation_mismatch');
+    }
 
     toEntail.push({ index, text: stripped.trim(), section, spans, anchorRaw });
   });
@@ -268,6 +284,11 @@ const ENTAILMENT_SYSTEM = [
   '  what was screened, what was documented) are entailed ONLY if the',
   '  span states the mechanism — "we will send the prescription" does NOT',
   '  entail "sent electronically to the pharmacy".',
+  '- PLAN instructions and orders (a test "sent to the lab for culture",',
+  '  an education "leaflet to be provided", callback thresholds like',
+  '  "call back urgently if high temperature") are entailed ONLY if the',
+  '  span states THAT instruction — a general safety-net statement does',
+  '  not entail specific thresholds or materials.',
   '',
   'Respond STRICT JSON only, no prose, no fences:',
   '{"verdicts":[{"i":<claim number>,"entailed":true|false}]}',
