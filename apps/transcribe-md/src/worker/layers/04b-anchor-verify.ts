@@ -585,6 +585,15 @@ async function entailmentStage(
   return { entailedIdx, errored: false, passErrors };
 }
 
+// Matches the `## {label}` grammar EVERY note template emits
+// (note-templates/build-soap-prompt.ts renders `## ${s.label}`, and the L4
+// structure validator requires exactly those `##` labels). The empty-section
+// guard is anchored to that one grammar ON PURPOSE: a model that deviates to a
+// non-`##` header (e.g. a bold-only `**Assessment:**`) fails L4 structure
+// validation first → needsReview before READY, so it can't reach a signed
+// note un-flagged either way. If a future custom-header grammar is ever added,
+// this regex, the structure validator, and backfillEmptySections MUST be
+// updated together so the "no empty section" guarantee can't silently drift.
 const SECTION_HEADER_RE = /^#{1,6}\s+(.*)$/;
 function normSection(s: string): string {
   return s.replace(/\*\*/g, '').replace(/:\s*$/, '').trim().toLowerCase();
