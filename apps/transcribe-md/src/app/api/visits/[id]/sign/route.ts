@@ -38,6 +38,7 @@ import { Prisma, TranscribeVisitStatus } from '@prisma/client';
 import { auth } from '@/lib/nextauth';
 import { formatVisitDate } from '@/lib/visit-export';
 import { loadVisitExportData } from '@/lib/visit-export-server';
+import { computeDisplayedEmCode } from '@/lib/em-coding/displayed-level';
 import { formatForEhr, type EhrFormat } from '@/lib/ehr-formatters';
 import { generateVisitPdf } from '@/lib/pdf-generator';
 import { sendVisitPdfEmail } from '@/lib/email';
@@ -161,7 +162,9 @@ export const POST = withApiHandler<{ id: string }>(
         userId: true,
         status: true,
         soapFinal: true,
+        icdCodes: true,
         rxDrafts: true,
+        cptCodes: true,
         signedAt: true,
         deletedAt: true,
         archivedAt: true,
@@ -301,6 +304,42 @@ export const POST = withApiHandler<{ id: string }>(
 
     let signedAt = visit.signedAt;
     if (visit.status === TranscribeVisitStatus.READY) {
+      // E/M PARITY (2026-06-13, #315 obs#2): FREEZE the authoritative billing
+      // code at sign time. The signed note's DISPLAYED level (override ??
+      // engine, via computeDisplayedEmCode — the SAME projection the rail
+      // shows and the confirm gate guards) becomes cptCodes.em.signedCode, so
+      // every downstream artifact (PDF, DOCX, EHR exports) prints the level
+      // the doctor reviewed and attested — NOT the raw L7b model suggestion in
+      // em.code. Frozen here (not recomputed at export) so it can't drift.
+      // Fail-SAFE: a scoring error must never block a sign — the export loader
+      // falls back to override ?? code when signedCode is absent.
+      let cptWrite: Prisma.InputJsonValue | undefined;
+      const cptBlob =
+        visit.cptCodes && typeof visit.cptCodes === 'object' && !Array.isArray(visit.cptCodes)
+          ? (visit.cptCodes as Record<string, unknown>)
+          : null;
+      const emBlob =
+        cptBlob && cptBlob.em && typeof cptBlob.em === 'object'
+          ? (cptBlob.em as Record<string, unknown>)
+          : null;
+      if (emBlob) {
+        try {
+          const signedCode = await computeDisplayedEmCode(
+            visit.soapFinal ?? '',
+            { icdCodes: visit.icdCodes, rxDrafts: visit.rxDrafts, cptCodes: visit.cptCodes },
+            { practiceId: session?.user?.practiceId, visitId, userId }
+          );
+          cptWrite = {
+            ...cptBlob,
+            em: { ...emBlob, signedCode },
+          } as Prisma.InputJsonValue;
+        } catch (err) {
+          log.warn('api:visits:sign', 'em signedCode freeze failed — export falls back to override ?? code', {
+            visitId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
       const updated = await prisma.transcribeVisit.updateMany({
         where: {
           id: visitId,
@@ -310,6 +349,7 @@ export const POST = withApiHandler<{ id: string }>(
           status: TranscribeVisitStatus.SIGNED,
           signedSoap: visit.soapFinal,
           signedAt: new Date(),
+          ...(cptWrite !== undefined ? { cptCodes: cptWrite } : {}),
           // E/M visible-confirm: the gate above verified the explicit
           // acknowledgement — MARK (not clear) the record so the row
           // keeps the forensic trail alongside the audit rows.

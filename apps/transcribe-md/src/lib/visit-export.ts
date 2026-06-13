@@ -23,6 +23,10 @@ export interface IcdCode {
 }
 
 export interface CptEm {
+  /** The E/M code to PRINT. The export loader projects the authoritative
+   *  displayed level onto this field (signed → frozen signedCode; otherwise
+   *  override ?? raw) so every artifact prints what the doctor reviewed —
+   *  NOT the raw L7b suggestion. See visit-export-server.loadVisitExportData. */
   code: string;
   description: string;
   reasoning: {
@@ -31,6 +35,12 @@ export interface CptEm {
     risk: string;
   };
   evidence_quote: string;
+  /** Doctor override set via the override route (cptCodes.em.override). */
+  override?: { code: string; reason?: string; overriddenAt?: string };
+  /** The displayed E/M level FROZEN at sign time (#315 obs#2 parity fix).
+   *  Present on visits signed after 2026-06-13; the authoritative billing
+   *  code for a signed visit. */
+  signedCode?: string;
 }
 
 export interface CptProcedure {

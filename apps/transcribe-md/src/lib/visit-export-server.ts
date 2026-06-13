@@ -79,6 +79,22 @@ export async function loadVisitExportData(
   const refBlob =
     (visit.referrals as { referrals?: Referral[] } | null) ?? null;
 
+  // E/M PARITY (#315 obs#2): project the AUTHORITATIVE displayed level onto
+  // em.code so every artifact (PDF, DOCX, all EHR clipboard formats) prints
+  // what the doctor reviewed — never the raw L7b suggestion. SIGNED visits
+  // print the level frozen at sign time (signedCode); a signed visit predating
+  // the freeze, or an unsigned draft, falls back to override ?? raw code.
+  const rawEm = cptBlob?.em ?? null;
+  const emForExport: CptEm | null = rawEm
+    ? {
+        ...rawEm,
+        code:
+          visit.status === 'SIGNED'
+            ? rawEm.signedCode ?? rawEm.override?.code ?? rawEm.code
+            : rawEm.override?.code ?? rawEm.code,
+      }
+    : null;
+
   return {
     visitId: visit.id,
     patientName: visit.patientName,
@@ -96,7 +112,7 @@ export async function loadVisitExportData(
     clinicianEmail: visit.user.email,
     soapText,
     icdCodes: icdBlob?.codes ?? [],
-    em: cptBlob?.em ?? null,
+    em: emForExport,
     procedures: cptBlob?.procedures ?? [],
     modifiers: cptBlob?.modifiers ?? [],
     prescriptions: rxBlob?.prescriptions ?? [],

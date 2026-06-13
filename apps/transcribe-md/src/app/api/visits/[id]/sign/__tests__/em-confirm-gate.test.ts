@@ -31,6 +31,7 @@ const mocks = vi.hoisted(() => ({
   criticalWarningRefs: vi.fn(),
   logDelivery: vi.fn(),
   captureEditPattern: vi.fn(),
+  computeDisplayedEmCode: vi.fn(),
 }));
 
 // Minimal NextResponse stand-in — deterministic across vitest
@@ -87,6 +88,9 @@ vi.mock('@/lib/edit-tracking', () => ({
 vi.mock('@/lib/rx-warnings', () => ({
   criticalWarningRefs: mocks.criticalWarningRefs,
 }));
+vi.mock('@/lib/em-coding/displayed-level', () => ({
+  computeDisplayedEmCode: mocks.computeDisplayedEmCode,
+}));
 
 import type { NextRequest } from 'next/server';
 import { TranscribeVisitStatus } from '@prisma/client';
@@ -135,6 +139,7 @@ beforeEach(() => {
   mocks.updateMany.mockResolvedValue({ count: 1 });
   mocks.rxOverrideFindMany.mockResolvedValue([]);
   mocks.criticalWarningRefs.mockReturnValue([]);
+  mocks.computeDisplayedEmCode.mockResolvedValue('99214');
   mocks.loadVisitExportData.mockResolvedValue({
     clinicianName: 'Dr. Test',
     patientName: 'P',
@@ -284,5 +289,71 @@ describe('sign gate — explicit acknowledgement signs + leaves the trail', () =
     expect(res.status).toBe(200);
     // Deliver-only: no READY→SIGNED transition attempted.
     expect(mocks.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('sign — E/M parity freeze (#315 obs#2): the confirmed displayed level is persisted as the authoritative billing code', () => {
+  const EM_BLOB = {
+    em: { code: '99213', description: 'Established, low', reasoning: { problems: [], data: '', risk: '' }, evidence_quote: '' },
+  };
+
+  it('freezes cptCodes.em.signedCode = computeDisplayedEmCode(signedSoap) in the SAME READY→SIGNED update; raw em.code preserved', async () => {
+    mocks.computeDisplayedEmCode.mockResolvedValue('99214');
+    mocks.findUnique
+      .mockResolvedValueOnce(
+        visitRow({ emPendingChange: PENDING, cptCodes: EM_BLOB, icdCodes: null })
+      )
+      .mockResolvedValue({ signedAt: new Date(), status: TranscribeVisitStatus.SIGNED });
+
+    const res = await call({ destinations: [], acknowledgedEmChange: { from: '99213', to: '99214' } });
+    expect(res.status).toBe(200);
+
+    const data = mocks.updateMany.mock.calls[0][0].data;
+    // signedCode === the acknowledged TO-level → printed === confirmed.
+    expect(data.cptCodes.em.signedCode).toBe('99214');
+    expect(data.cptCodes.em.signedCode).toBe(PENDING.to);
+    // The raw L7b suggestion is preserved for provenance.
+    expect(data.cptCodes.em.code).toBe('99213');
+    // It rode the SAME atomic transition that flips status → SIGNED.
+    expect(data.status).toBe(TranscribeVisitStatus.SIGNED);
+  });
+
+  it('an OVERRIDDEN visit freezes the override level (computeDisplayedEmCode returns override ?? engine)', async () => {
+    mocks.computeDisplayedEmCode.mockResolvedValue('99215');
+    mocks.findUnique
+      .mockResolvedValueOnce(
+        visitRow({
+          cptCodes: { em: { ...EM_BLOB.em, override: { code: '99215', overriddenAt: 'x' } } },
+        })
+      )
+      .mockResolvedValue({ signedAt: new Date(), status: TranscribeVisitStatus.SIGNED });
+
+    const res = await call({ destinations: [] });
+    expect(res.status).toBe(200);
+    expect(mocks.updateMany.mock.calls[0][0].data.cptCodes.em.signedCode).toBe('99215');
+  });
+
+  it('FAIL-SAFE: a scoring error never blocks signing — no cptCodes write, status still flips', async () => {
+    mocks.computeDisplayedEmCode.mockRejectedValue(new Error('judge down'));
+    mocks.findUnique
+      .mockResolvedValueOnce(visitRow({ cptCodes: EM_BLOB }))
+      .mockResolvedValue({ signedAt: new Date(), status: TranscribeVisitStatus.SIGNED });
+
+    const res = await call({ destinations: [] });
+    expect(res.status).toBe(200);
+    const data = mocks.updateMany.mock.calls[0][0].data;
+    expect(data.status).toBe(TranscribeVisitStatus.SIGNED);
+    expect('cptCodes' in data).toBe(false);
+  });
+
+  it('a visit with NO em block does not compute or write a signed code (backward compatible)', async () => {
+    mocks.findUnique
+      .mockResolvedValueOnce(visitRow({ cptCodes: { procedures: [] } }))
+      .mockResolvedValue({ signedAt: new Date(), status: TranscribeVisitStatus.SIGNED });
+
+    const res = await call({ destinations: [] });
+    expect(res.status).toBe(200);
+    expect(mocks.computeDisplayedEmCode).not.toHaveBeenCalled();
+    expect('cptCodes' in mocks.updateMany.mock.calls[0][0].data).toBe(false);
   });
 });
