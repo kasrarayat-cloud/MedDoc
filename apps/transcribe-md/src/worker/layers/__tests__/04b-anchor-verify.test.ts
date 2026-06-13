@@ -677,3 +677,78 @@ describe('iteration 5 — drug form/route/class specification override', () => {
     expect(r.suggestions[0].reason).toBe('form_route_unsupported');
   });
 });
+
+// ─── Live-voice prod-smoke defects (2026-06-13) ─────────────────────────────
+// Phase 1: an Assessment whose every narrative line demotes must NOT render
+// empty — it back-fills with the visible review placeholder + flags the
+// section. Phase 2: surviving Plan items renumber contiguously.
+import { EMPTY_SECTION_PLACEHOLDER } from '@/lib/soap-format';
+
+describe('empty-section back-fill (Phase 1 blocker) + plan renumber (Phase 2)', () => {
+  it('an Assessment with EVERY line demoted renders the placeholder, never blank; the section is flagged', async () => {
+    // Both Assessment sentences are unanchored boilerplate → no_anchor demote.
+    // Plan keeps anchored items; Subjective keeps one.
+    entailAll();
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft: [
+        '## Subjective',
+        'Patient reports blood pressure has been high at home. ⟦A:"my blood pressure has been running high at home"⟧',
+        '## Assessment',
+        'Hypertension, uncontrolled, likely requiring intensification.',
+        'Hyperlipidemia, stable on current therapy.',
+        '## Plan',
+        '1. Continue lisinopril. ⟦A:"keep taking the lisinopril"⟧',
+        '2. Start amlodipine. ⟦A:"I am going to start you on amlodipine"⟧',
+      ].join('\n'),
+      roleLabeledTranscript: [
+        '[Patient #1, 0:10]: my blood pressure has been running high at home.',
+        '[Doctor #0, 0:20]: keep taking the lisinopril.',
+        '[Doctor #0, 0:30]: I am going to start you on amlodipine.',
+      ].join('\n'),
+    });
+    // Assessment is NOT blank — it carries the placeholder.
+    const assessmentBlock = r.body.split('## Assessment')[1].split('##')[0];
+    expect(assessmentBlock).toContain(EMPTY_SECTION_PLACEHOLDER);
+    expect(assessmentBlock.replace(EMPTY_SECTION_PLACEHOLDER, '').trim().length).toBe(0);
+    // The demoted assessment content is in the lane, not the body.
+    expect(r.body).not.toContain('uncontrolled, likely requiring');
+    expect(r.suggestions.some((s) => s.text.includes('Hypertension, uncontrolled'))).toBe(true);
+    // Flagged for the review banner.
+    expect(r.stats.filledEmptySections).toContain('Assessment');
+  });
+
+  it('a section that legitimately holds [not documented] is NOT back-filled', async () => {
+    entailAll();
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft: ['## Objective', '[not documented]', '## Plan', '1. Continue meds. ⟦A:"keep taking your meds"⟧'].join('\n'),
+      roleLabeledTranscript: '[Doctor #0, 0:10]: keep taking your meds.',
+    });
+    expect(r.body).not.toContain(EMPTY_SECTION_PLACEHOLDER);
+    expect(r.stats.filledEmptySections ?? []).toHaveLength(0);
+  });
+
+  it('surviving Plan items renumber contiguously when middle items demote', async () => {
+    // Items 1 and 3 anchored+kept; item 2 unanchored → demoted → body should
+    // renumber the two survivors to 1,2 (not 1,3).
+    entailAll();
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft: [
+        '## Plan',
+        '1. Continue lisinopril 20 mg daily. ⟦A:"continue the lisinopril twenty milligrams"⟧',
+        '2. Refer to bariatric surgery for evaluation.',
+        '3. Recheck in four weeks. ⟦A:"come back in four weeks"⟧',
+      ].join('\n'),
+      roleLabeledTranscript: [
+        '[Doctor #0, 0:10]: continue the lisinopril twenty milligrams.',
+        '[Doctor #0, 0:20]: come back in four weeks.',
+      ].join('\n'),
+    });
+    expect(r.body).toContain('1. Continue lisinopril 20 mg daily.');
+    expect(r.body).toContain('2. Recheck in four weeks.');
+    expect(r.body).not.toMatch(/^3\./m);
+    expect(r.body).not.toContain('bariatric surgery');
+  });
+});
