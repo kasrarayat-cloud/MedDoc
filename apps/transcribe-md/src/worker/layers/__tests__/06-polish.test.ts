@@ -23,6 +23,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   modelCompleteText: vi.fn(),
   prismaUpdate: vi.fn(),
+  applyAdditiveReviewState: vi.fn(),
   logAudit: vi.fn(),
 }));
 
@@ -44,6 +45,9 @@ vi.mock('@meddoc/db', () => ({
 }));
 
 vi.mock('@/lib/audit', () => ({ logAudit: mocks.logAudit }));
+vi.mock('@/worker/finalize-review-state', () => ({
+  applyAdditiveReviewState: mocks.applyAdditiveReviewState,
+}));
 
 import { runLayer6Polish, type Layer6Input } from '../06-polish';
 import type { ResolvedNoteTemplate } from '../../note-templates/build-soap-prompt';
@@ -120,6 +124,7 @@ function makeInput(
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.prismaUpdate.mockResolvedValue({ id: FAKE_VISIT });
+  mocks.applyAdditiveReviewState.mockResolvedValue(undefined);
   mocks.logAudit.mockResolvedValue(undefined);
   // 2026-06-11 fabrication gate: the model branch now makes a SECOND
   // completeText call (purpose tm_polish_gate — the L6b fidelity
@@ -284,6 +289,11 @@ describe('runLayer6Polish — model-call branch contract', () => {
     expect(updateArgs.data.soapFinal).toBe(POLISHED_SOAP);
     expect(updateArgs.data.soapL6Original).toBe(POLISHED_SOAP);
     expect(updateArgs.data.needsReview).toBeUndefined();
+    // clean note: needsReview=false → the additive writer is a no-op (not called with a reason)
+    expect(mocks.applyAdditiveReviewState).toHaveBeenCalledWith(FAKE_VISIT, {
+      needsReview: false,
+      reviewReason: null,
+    });
   });
 });
 
@@ -310,14 +320,18 @@ describe('runLayer6Polish — FIND-P1-016 validator-fail path', () => {
     expect(auditArgs.metadata.layer).toBe('L6');
     expect(auditArgs.metadata.reason).toBe('empty output');
 
-    // Raw output still persisted.
+    // Raw output still persisted by the direct update ...
     const updateArgs = mocks.prismaUpdate.mock.calls[0][0];
     expect(updateArgs.data.soapFinal).toBe('');
     expect(updateArgs.data.soapL6Original).toBe('');
-    expect(updateArgs.data.needsReview).toBe(true);
-    expect(updateArgs.data.reviewReason).toMatch(
-      /Polish output didn't match expected markdown structure/
-    );
+    // ... but review state is now ADDITIVE (composes with any earlier reason),
+    // never a direct overwrite (#315 obs#1).
+    expect('needsReview' in updateArgs.data).toBe(false);
+    expect('reviewReason' in updateArgs.data).toBe(false);
+    const addArgs = mocks.applyAdditiveReviewState.mock.calls[0];
+    expect(addArgs[0]).toBe(FAKE_VISIT);
+    expect(addArgs[1].needsReview).toBe(true);
+    expect(addArgs[1].reviewReason).toMatch(/Polish output didn't match expected markdown structure/);
 
     expect(result.needsReview).toBe(true);
     expect(result.reviewReason).toMatch(/Polish output didn't match/);
@@ -512,5 +526,31 @@ Appearance appropriate; mood depressed; no SI/HI.`;
       'Mental Status Exam',
     ]);
     expect(result.needsReview).toBe(true);
+  });
+});
+
+describe('review-reason composition (#315 obs#1) — L6 never overwrites an earlier reason', () => {
+  it('L6 routes its review state through applyAdditiveReviewState (so an L4 anchor-set-aside reason composes, not clobbered)', async () => {
+    // Unfixable critical → L6 needs review with its own reason.
+    const report: CritiqueReport = {
+      issues: [issue('critical', 'No red-flag screening documented')],
+      overall_quality: 'low',
+      safe_to_sign_without_review: false,
+    };
+    mocks.modelCompleteText.mockResolvedValueOnce({ text: '{"oops":"x"}' });
+
+    await runLayer6Polish(makeInput({ critique: report }));
+
+    // The DIRECT update writes only soapFinal/soapL6Original — no review fields.
+    const updateArgs = mocks.prismaUpdate.mock.calls[0][0];
+    expect('needsReview' in updateArgs.data).toBe(false);
+    expect('reviewReason' in updateArgs.data).toBe(false);
+    // L6's reason goes through the ADDITIVE writer (which SQL-side composes
+    // with whatever the row already holds — e.g. the L4 set-aside reason),
+    // so the doctor sees EVERY reason, not just L6's.
+    const addArgs = mocks.applyAdditiveReviewState.mock.calls[0];
+    expect(addArgs[0]).toBe(FAKE_VISIT);
+    expect(addArgs[1].needsReview).toBe(true);
+    expect(addArgs[1].reviewReason).toMatch(/Auto-polish could not fix 1 critical issue/);
   });
 });

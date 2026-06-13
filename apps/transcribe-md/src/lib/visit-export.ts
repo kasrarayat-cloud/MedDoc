@@ -23,6 +23,10 @@ export interface IcdCode {
 }
 
 export interface CptEm {
+  /** The E/M code to PRINT. The export loader projects the authoritative
+   *  displayed level onto this field (signed → frozen signedCode; otherwise
+   *  override ?? raw) so every artifact prints what the doctor reviewed —
+   *  NOT the raw L7b suggestion. See visit-export-server.loadVisitExportData. */
   code: string;
   description: string;
   reasoning: {
@@ -31,6 +35,38 @@ export interface CptEm {
     risk: string;
   };
   evidence_quote: string;
+  /** Doctor override set via the override route (cptCodes.em.override). */
+  override?: { code: string; reason?: string; overriddenAt?: string };
+  /** The displayed E/M level FROZEN at sign time (#315 obs#2 parity fix).
+   *  Present on visits signed after 2026-06-13; the authoritative billing
+   *  code for a signed visit. */
+  signedCode?: string;
+}
+
+/** The AUTHORITATIVE E/M code to show/print — the level the doctor reviewed,
+ *  never the raw L7b suggestion. Pure + client-safe, so EVERY surface (the
+ *  server export loader, the on-screen Codes tab, the "Copy codes" clipboard)
+ *  projects identically: signed → frozen signedCode, else the doctor override,
+ *  else the raw code. (#315 obs#2 — the divergence is impossible by
+ *  construction only if all surfaces call THIS.) */
+export function projectDisplayedEmCode(
+  em: CptEm | null | undefined,
+  isSigned: boolean
+): string | null {
+  if (!em) return null;
+  return isSigned
+    ? em.signedCode ?? em.override?.code ?? em.code
+    : em.override?.code ?? em.code;
+}
+
+/** `em` with its `code` projected to the authoritative displayed level. */
+export function projectEmForDisplay(
+  em: CptEm | null | undefined,
+  isSigned: boolean
+): CptEm | null {
+  if (!em) return null;
+  const code = projectDisplayedEmCode(em, isSigned);
+  return code ? { ...em, code } : em;
 }
 
 export interface CptProcedure {
