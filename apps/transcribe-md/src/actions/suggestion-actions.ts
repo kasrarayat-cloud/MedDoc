@@ -49,8 +49,8 @@ import prisma from '@meddoc/db';
 import { Prisma, TranscribeVisitStatus } from '@prisma/client';
 import { requireSession } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
-import { computeEmScore } from '@/lib/em-coding/score';
-import type { IcdCodeRow, RxDraftRow } from '@/lib/em-coding/fallback-mdm';
+import { computeDisplayedEmCode } from '@/lib/em-coding/displayed-level';
+import { log } from '@/lib/log';
 import {
   unacknowledgedEmChange,
   type EmChangeCause,
@@ -178,6 +178,7 @@ type LoadedVisit = {
   suggestedClaims: unknown;
   icdCodes: unknown;
   rxDrafts: unknown;
+  cptCodes: unknown;
   emPendingChange: unknown;
 };
 
@@ -202,6 +203,7 @@ async function loadVisitForSuggestion(
       // record so a second change merges against the doctor's baseline.
       icdCodes: true,
       rxDrafts: true,
+      cptCodes: true,
       emPendingChange: true,
     },
   })) as LoadedVisit | null;
@@ -223,47 +225,27 @@ async function loadVisitForSuggestion(
 
 // ─── E/M level delta (visible-confirm, never silent) ────────────────────────
 
-/** Coerce icdCodes jsonb → engine rows. Mirror of page.tsx's
- *  extractIcdCodesForEngine (Layer 7a writes { codes: [{code, …}] }). */
-function extractIcdCodesForEngine(raw: unknown): IcdCodeRow[] {
-  const blob = raw as { codes?: Array<{ code?: string; description?: string }> } | null;
-  const codes = blob?.codes ?? [];
-  return codes
-    .filter((c): c is { code: string; description?: string } => typeof c?.code === 'string')
-    .map((c) => ({ code: c.code, description: c.description }));
-}
+/** Sentinel recorded when scoring ERRORS — fail toward REQUIRING
+ *  confirmation (the GOAL's invariant: never toward a silent sign). `from`
+ *  and `to` differ so it survives the merge-cancel and forces the gate; the
+ *  sign dialog renders an honest "couldn't recompute — review" prompt. */
+const EM_DELTA_INDETERMINATE = { from: 'unknown', to: 'review' } as const;
 
-/** Coerce rxDrafts jsonb → engine rows. Mirror of page.tsx's
- *  extractRxForEngine (Layer 7c writes { prescriptions: [{drug, action,
- *  …}], warnings: […] }). */
-function extractRxForEngine(raw: unknown): RxDraftRow[] {
-  const blob = raw as {
-    prescriptions?: Array<{ drug?: string; action?: string }>;
-  } | null;
-  const rx = blob?.prescriptions ?? [];
-  return rx.map((r) => ({
-    drug: typeof r?.drug === 'string' ? r.drug : undefined,
-    action: typeof r?.action === 'string' ? r.action : undefined,
-  }));
-}
-
-/** Score the note BEFORE vs AFTER the action with the SAME engine inputs
- *  the /em-score route and page.tsx use, so {from, to} matches what the
- *  CodingRail displays. Returns null when the computed code is unchanged.
+/** The level change an action produced, as the DOCTOR SEES IT. Computes the
+ *  DISPLAYED code (override ?? engine, via the shared computeDisplayedEmCode)
+ *  for the note BEFORE vs AFTER — the SAME projection and the SAME extractors
+ *  the CodingRail uses (POST /em-score). Sharing that one function is what
+ *  makes a rail-vs-gate divergence impossible: if any surface shows the
+ *  physician a changed level at sign time, this returns it and the gate fires.
+ *  Returns null when the displayed code is unchanged.
  *
- *  Short-circuits on byte-identical text — the engine reads ONLY the note
- *  body (plus the icd/rx structured signals, which neither action touches),
- *  so an action that doesn't change the note cannot change the level. That
- *  makes today's dismiss path a guaranteed null; the machinery still runs
- *  through it so the `suggestion_dismissed` cause is live the day dismiss
- *  ever influences scoring.
+ *  Short-circuits on byte-identical text (today's dismiss path is a
+ *  guaranteed null; the machinery still runs so the `suggestion_dismissed`
+ *  cause is live the day dismiss ever influences scoring).
  *
- *  Cost note: the before-score is a warm Redis judgement-cache hit on the
- *  normal path (page load / last rescore cached it); the after-score is the
- *  same judge call the rail's post-action rescore would make moments later —
- *  running it here warms the cache, so steady-state LLM call count is
- *  unchanged. Throws bubble to the actions' outer catch → { ok: false }
- *  (fail-closed: no recording also means no note change). */
+ *  FAIL TOWARD CONFIRM: a scoring error returns the indeterminate sentinel
+ *  (forces confirmation) rather than throwing — the note change still lands
+ *  and the doctor must confirm before signing, never silently. */
 async function computeEmLevelDelta(args: {
   beforeSoap: string;
   afterSoap: string;
@@ -272,21 +254,33 @@ async function computeEmLevelDelta(args: {
   practiceId?: string;
   icdCodes: unknown;
   rxDrafts: unknown;
+  cptCodes: unknown;
 }): Promise<{ from: string; to: string } | null> {
   if (args.beforeSoap === args.afterSoap) return null;
-  const engineOpts = {
+  const signals = {
+    icdCodes: args.icdCodes,
+    rxDrafts: args.rxDrafts,
+    cptCodes: args.cptCodes,
+  };
+  const ctx = {
     practiceId: args.practiceId,
     visitId: args.visitId,
     userId: args.userId,
-    icdCodes: extractIcdCodesForEngine(args.icdCodes),
-    rxDrafts: extractRxForEngine(args.rxDrafts),
   };
-  const [before, after] = await Promise.all([
-    computeEmScore(args.beforeSoap, engineOpts),
-    computeEmScore(args.afterSoap, engineOpts),
-  ]);
-  if (before.code === after.code) return null;
-  return { from: before.code, to: after.code };
+  try {
+    const [from, to] = await Promise.all([
+      computeDisplayedEmCode(args.beforeSoap, signals, ctx),
+      computeDisplayedEmCode(args.afterSoap, signals, ctx),
+    ]);
+    if (from === to) return null;
+    return { from, to };
+  } catch (err) {
+    log.warn('suggestion-actions', 'em-delta scoring failed — forcing confirm', {
+      visitId: args.visitId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return { ...EM_DELTA_INDETERMINATE };
+  }
 }
 
 /** Merge the per-action delta against an existing UNACKNOWLEDGED record:
@@ -370,6 +364,7 @@ export async function adoptSuggestionAction(
       practiceId: session.user.practiceId,
       icdCodes: visit.icdCodes,
       rxDrafts: visit.rxDrafts,
+      cptCodes: visit.cptCodes,
     });
     const priorPending = unacknowledgedEmChange(visit.emPendingChange);
     const emPendingWrite = mergeEmPendingChange(
@@ -485,6 +480,7 @@ export async function dismissSuggestionAction(
       practiceId: session.user.practiceId,
       icdCodes: visit.icdCodes,
       rxDrafts: visit.rxDrafts,
+      cptCodes: visit.cptCodes,
     });
     const priorPending = unacknowledgedEmChange(visit.emPendingChange);
     const emPendingWrite = mergeEmPendingChange(
