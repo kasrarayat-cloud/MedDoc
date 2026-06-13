@@ -382,7 +382,11 @@ export async function adoptSuggestionAction(
     // same optimistic-concurrency pattern as saveSoapDraftAction. count=0
     // means a section save (or another adopt) landed in between.
     const result = await prisma.transcribeVisit.updateMany({
-      where: { id: visit.id, soapVersion: visit.soapVersion },
+      // status:READY too (auditor WARN-1): the LLM-scoring window between
+      // this action's READY check and its write can straddle a concurrent
+      // READY→SIGNED transition — the write must MISS a signed row, never
+      // mutate it or deposit an unacknowledgeable emPendingChange.
+      where: { id: visit.id, soapVersion: visit.soapVersion, status: TranscribeVisitStatus.READY },
       data: {
         soapFinal: newSoap,
         soapVersion: { increment: 1 },
@@ -489,8 +493,10 @@ export async function dismissSuggestionAction(
       'suggestion_dismissed'
     );
 
-    await prisma.transcribeVisit.update({
-      where: { id: visit.id },
+    // updateMany + status:READY (auditor WARN-1): a dismiss racing the
+    // sign transition must miss the signed row entirely.
+    const dismissResult = await prisma.transcribeVisit.updateMany({
+      where: { id: visit.id, status: TranscribeVisitStatus.READY },
       data: {
         suggestedClaims:
           remaining.length > 0
@@ -501,6 +507,9 @@ export async function dismissSuggestionAction(
           : {}),
       },
     });
+    if (dismissResult.count === 0) {
+      return { ok: false, error: 'The visit was signed in another tab — reload.' };
+    }
 
     void logAudit({
       action: 'SUGGESTION_DISMISSED',

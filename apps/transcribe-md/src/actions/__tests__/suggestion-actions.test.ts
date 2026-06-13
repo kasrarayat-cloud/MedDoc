@@ -138,7 +138,14 @@ describe('adoptSuggestionAction — append + filter + version bump', () => {
 
     const args = mocks.updateMany.mock.calls[0][0];
     // ONE atomic update, gated on the soapVersion read in this request.
-    expect(args.where).toEqual({ id: VISIT, soapVersion: 3 });
+    // status:READY in the WHERE (auditor WARN-1): an adopt whose LLM-scoring
+    // window straddles the READY→SIGNED transition must MISS (count=0),
+    // never mutate a signed row or deposit an unacknowledgeable record.
+    expect(args.where).toEqual({
+      id: VISIT,
+      soapVersion: 3,
+      status: TranscribeVisitStatus.READY,
+    });
     expect(args.data.soapVersion).toEqual({ increment: 1 });
 
     const newSoap: string = args.data.soapFinal;
@@ -239,9 +246,8 @@ describe('dismissSuggestionAction — filter only, never the note', () => {
     expect(r.ok).toBe(true);
     expect(r.suggestedClaims).toEqual([CLAIMS[0]]);
 
-    expect(mocks.updateMany).not.toHaveBeenCalled();
-    const args = mocks.update.mock.calls[0][0];
-    expect(args.where).toEqual({ id: VISIT });
+    const args = mocks.updateMany.mock.calls[0][0];
+    expect(args.where).toEqual({ id: VISIT, status: TranscribeVisitStatus.READY });
     expect(args.data.suggestedClaims).toEqual([CLAIMS[0]]);
     expect('soapFinal' in args.data).toBe(false);
     expect('soapVersion' in args.data).toBe(false);
@@ -257,7 +263,7 @@ describe('dismissSuggestionAction — filter only, never the note', () => {
     mocks.findUnique.mockResolvedValue(visitRow({ suggestedClaims: [CLAIMS[1]] }));
     const r = await dismissSuggestionAction(VISIT, 0, claimsAt(1));
     expect(r.ok).toBe(true);
-    expect(mocks.update.mock.calls[0][0].data.suggestedClaims).toBe(Prisma.DbNull);
+    expect(mocks.updateMany.mock.calls[0][0].data.suggestedClaims).toBe(Prisma.DbNull);
     expect(r.suggestedClaims).toBeNull();
   });
 
@@ -480,7 +486,7 @@ describe('dismiss — E/M level delta (never changes the note → never records)
     // Identical before/after note short-circuits ahead of the engine.
     expect(mocks.computeEmScore).not.toHaveBeenCalled();
 
-    const args = mocks.update.mock.calls[0][0];
+    const args = mocks.updateMany.mock.calls[0][0];
     expect('emPendingChange' in args.data).toBe(false);
 
     expect(mocks.logAudit).toHaveBeenCalledTimes(1);
@@ -503,6 +509,6 @@ describe('dismiss — E/M level delta (never changes the note → never records)
     const r = await dismissSuggestionAction(VISIT, 1, claimsAt(1));
     expect(r.ok).toBe(true);
     expect(r.emPendingChange).toEqual({ from: '99213', to: '99214' });
-    expect('emPendingChange' in mocks.update.mock.calls[0][0].data).toBe(false);
+    expect('emPendingChange' in mocks.updateMany.mock.calls[0][0].data).toBe(false);
   });
 });
