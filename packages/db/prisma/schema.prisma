@@ -336,6 +336,17 @@ enum AuditAction {
   // remaining } — never claim text (PHI).
   SUGGESTION_ADOPTED
   SUGGESTION_DISMISSED
+
+  // E/M recompute on adoption — visible-confirm, never silent (2026-06-12,
+  // prod smoke #311). EM_LEVEL_CHANGED is emitted by the adopt/dismiss
+  // suggestion actions when the action changed the computed E/M level.
+  // Metadata: EXACTLY { from, to, cause } where cause ∈
+  // {'suggestion_adopted','suggestion_dismissed'} — CPT codes + cause class
+  // only, never note text. EM_SIGN_BLOCKED_UNACKNOWLEDGED_CHANGE is emitted
+  // by the sign route when a sign request was rejected because a recorded
+  // E/M change had not been explicitly acknowledged by the doctor.
+  EM_LEVEL_CHANGED
+  EM_SIGN_BLOCKED_UNACKNOWLEDGED_CHANGE
 }
 
 /// Document lifecycle status
@@ -1670,6 +1681,15 @@ model TranscribeVisit {
   /// adoption. Shape: [{text, reason, section, anchor}]. NULL when the flag
   /// is off or nothing was demoted.
   suggestedClaims       Json?
+  /// E/M recompute on adoption — visible-confirm gate (2026-06-12, prod
+  /// smoke #311). Set by the adopt/dismiss suggestion actions when the
+  /// action changed the computed E/M level. Shape: { from, to, cause, at,
+  /// acknowledgedAt? } — CPT codes + cause class + ISO timestamps only,
+  /// NEVER note text. An entry WITHOUT acknowledgedAt blocks
+  /// POST /api/visits/[id]/sign until the doctor explicitly confirms the
+  /// new level; the winning READY→SIGNED transition stamps acknowledgedAt.
+  /// NULL when no suggestion action has changed the level.
+  emPendingChange       Json?
   patientSummary        String? @db.Text
   confidenceScores      Json?
 

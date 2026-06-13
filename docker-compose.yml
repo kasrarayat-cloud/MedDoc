@@ -220,7 +220,12 @@ services:
       - "127.0.0.1:9000:9000"  # S3 API
       - "127.0.0.1:9001:9001"  # Web console
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      # Config-independent liveness probe (2026-06-13). The previous
+      # `mc ready local` probe depended on the container's mc alias
+      # config, which does not survive a recreate — it false-reported
+      # UNHEALTHY for days while the service was fine (three preflight
+      # escalations). /minio/health/live needs no credentials or config.
+      test: ["CMD", "curl", "-sf", "http://localhost:9000/minio/health/live"]
       interval: 10s
       timeout: 5s
       retries: 5

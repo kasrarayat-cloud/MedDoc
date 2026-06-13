@@ -12,7 +12,13 @@
 //     | 'clipboard_eclinicalworks' | 'clipboard_generic'
 //     | 'pdf' | 'docx' | 'email'
 //   >,
-//   emailTo?: string
+//   emailTo?: string,
+//   // E/M visible-confirm (prod smoke #311): REQUIRED (echoing the
+//   // recorded {from, to} exactly) when an unacknowledged suggestion-
+//   // caused E/M level change exists on the visit — otherwise the
+//   // READY→SIGNED transition is refused with 400
+//   // { ok:false, error, code:'EM_CHANGE_UNACKNOWLEDGED' }.
+//   acknowledgedEmChange?: { from: string, to: string }
 // }
 //
 // Response: {
@@ -28,7 +34,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import prisma from '@meddoc/db';
-import { TranscribeVisitStatus } from '@prisma/client';
+import { Prisma, TranscribeVisitStatus } from '@prisma/client';
 import { auth } from '@/lib/nextauth';
 import { formatVisitDate } from '@/lib/visit-export';
 import { loadVisitExportData } from '@/lib/visit-export-server';
@@ -46,6 +52,7 @@ import { redactPhi } from '@meddoc/ai';
 import { log } from '@/lib/log';
 import { logAudit } from '@/lib/audit';
 import { criticalWarningRefs } from '@/lib/rx-warnings';
+import { unacknowledgedEmChange } from '@/lib/em-pending-change';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -65,6 +72,17 @@ const Destination = z.enum([
 const BodySchema = z.object({
   destinations: z.array(Destination).max(10).default([]),
   emailTo: z.string().email().max(254).optional(),
+  /** E/M visible-confirm (prod smoke #311): the doctor's explicit
+   *  acknowledgement of a suggestion-caused E/M level change. Must echo
+   *  the recorded {from, to} EXACTLY (content-identity check, same
+   *  philosophy as the suggestions lane's expectedText) — a stale tab
+   *  can never acknowledge a change the doctor didn't see. */
+  acknowledgedEmChange: z
+    .object({
+      from: z.string().min(1).max(16),
+      to: z.string().min(1).max(16),
+    })
+    .optional(),
 });
 
 const FORMAT_FOR_CHANNEL: Partial<
@@ -147,6 +165,7 @@ export const POST = withApiHandler<{ id: string }>(
         signedAt: true,
         deletedAt: true,
         archivedAt: true,
+        emPendingChange: true,
       },
     });
     if (!visit || visit.userId !== userId) return apiError('not found', 404);
@@ -232,6 +251,54 @@ export const POST = withApiHandler<{ id: string }>(
       }
     }
 
+    // ── E/M visible-confirm gate (prod smoke #311) ─────────────────────
+    // Adopting/dismissing an AI suggestion that changed the computed E/M
+    // level records {from, to, cause, at} on the visit (suggestion-
+    // actions.ts). The READY→SIGNED transition is REFUSED until the
+    // request explicitly echoes that exact {from, to} back — fail-closed
+    // server-side, so a UI that forgot to render the confirm control (or
+    // a direct/scripted caller) can never sign through a silent level
+    // change. Already-SIGNED visits skip the gate (this route only
+    // re-delivers them; the change was acknowledged when they signed).
+    const pendingEm =
+      visit.status === TranscribeVisitStatus.READY
+        ? unacknowledgedEmChange(visit.emPendingChange)
+        : null;
+    if (pendingEm) {
+      const ack = parsed.data.acknowledgedEmChange;
+      if (!ack || ack.from !== pendingEm.from || ack.to !== pendingEm.to) {
+        log.warn('api:visits:sign', 'em change unacknowledged', {
+          userId,
+          visitId,
+          from: pendingEm.from,
+          to: pendingEm.to,
+          cause: pendingEm.cause,
+          ackProvided: !!ack,
+        });
+        void logAudit({
+          action: 'EM_SIGN_BLOCKED_UNACKNOWLEDGED_CHANGE',
+          targetType: 'TranscribeVisit',
+          targetId: visitId,
+          success: false,
+          errorCode: 'EM_CHANGE_UNACKNOWLEDGED',
+          metadata: {
+            from: pendingEm.from,
+            to: pendingEm.to,
+            cause: pendingEm.cause,
+          },
+        });
+        return NextResponse.json(
+          {
+            ok: false,
+            error: `Documentation level changed (${pendingEm.from} → ${pendingEm.to}) by an AI-suggestion action — confirm the new level before signing.`,
+            code: 'EM_CHANGE_UNACKNOWLEDGED',
+            pendingEmChange: { from: pendingEm.from, to: pendingEm.to },
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     let signedAt = visit.signedAt;
     if (visit.status === TranscribeVisitStatus.READY) {
       const updated = await prisma.transcribeVisit.updateMany({
@@ -243,6 +310,17 @@ export const POST = withApiHandler<{ id: string }>(
           status: TranscribeVisitStatus.SIGNED,
           signedSoap: visit.soapFinal,
           signedAt: new Date(),
+          // E/M visible-confirm: the gate above verified the explicit
+          // acknowledgement — MARK (not clear) the record so the row
+          // keeps the forensic trail alongside the audit rows.
+          ...(pendingEm
+            ? {
+                emPendingChange: {
+                  ...pendingEm,
+                  acknowledgedAt: new Date().toISOString(),
+                } as unknown as Prisma.InputJsonValue,
+              }
+            : {}),
         },
       });
       if (updated.count === 0) {
@@ -275,6 +353,17 @@ export const POST = withApiHandler<{ id: string }>(
           targetId: visitId,
           metadata: {
             destinations: parsed.data.destinations,
+            // E/M visible-confirm: record on the SIGN audit row that the
+            // doctor explicitly acknowledged the suggestion-caused level
+            // change ({from, to} codes only — never note text).
+            ...(pendingEm
+              ? {
+                  emChangeAcknowledged: {
+                    from: pendingEm.from,
+                    to: pendingEm.to,
+                  },
+                }
+              : {}),
           },
         });
       }
