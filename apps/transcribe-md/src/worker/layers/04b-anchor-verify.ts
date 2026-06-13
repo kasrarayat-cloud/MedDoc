@@ -30,6 +30,10 @@
 
 import { z } from 'zod';
 import { modelClient } from '@meddoc/ai';
+import {
+  EMPTY_SECTION_PLACEHOLDER,
+  renumberOrderedLists,
+} from '@/lib/soap-format';
 
 const MODEL = process.env.TRANSCRIBE_MD_CLINICAL_MODEL || 'claude-sonnet-4-6';
 
@@ -90,8 +94,13 @@ export interface AnchorVerifyResult {
     verifierErrored: boolean;
     /** Ensemble passes (of 3) that errored — telemetry only. */
     entailmentPassErrors?: number;
+    /** Section headers whose every content line demoted to the lane — they
+     *  were back-filled with the review placeholder so they never render
+     *  blank (the live-smoke empty-Assessment blocker). Drives needsReview. */
+    filledEmptySections?: string[];
   };
 }
+
 
 // ─── Normalization + deterministic rules (spike rules, kept verbatim) ───────
 const NEGATION_RE = /\b(no|not|denies|denied|without|negative|none)\b/i;
@@ -576,6 +585,40 @@ async function entailmentStage(
   return { entailedIdx, errored: false, passErrors };
 }
 
+const SECTION_HEADER_RE = /^#{1,6}\s+(.*)$/;
+function normSection(s: string): string {
+  return s.replace(/\*\*/g, '').replace(/:\s*$/, '').trim().toLowerCase();
+}
+
+/** After body composition, inject EMPTY_SECTION_PLACEHOLDER into any section
+ *  header whose block (until the next header / EOF) has NO content line, BUT
+ *  ONLY when that section actually lost content to demotion. A section that
+ *  legitimately holds "[not documented]" counts as having content; a section
+ *  that never had drafted content is left alone (an empty section the model
+ *  never filled is an L4 concern, not a verification artifact). */
+function backfillEmptySections(
+  bodyLines: string[],
+  demotedSections: Set<string>
+): { lines: string[]; filledSections: string[] } {
+  const out: string[] = [];
+  const filledSections: string[] = [];
+  for (let i = 0; i < bodyLines.length; i++) {
+    out.push(bodyLines[i]);
+    const m = bodyLines[i].match(SECTION_HEADER_RE);
+    if (!m) continue;
+    let hasContent = false;
+    for (let j = i + 1; j < bodyLines.length; j++) {
+      if (SECTION_HEADER_RE.test(bodyLines[j])) break;
+      if (bodyLines[j].trim().length > 0) { hasContent = true; break; }
+    }
+    if (!hasContent && demotedSections.has(normSection(m[1]))) {
+      out.push(EMPTY_SECTION_PLACEHOLDER);
+      filledSections.push(m[1].trim());
+    }
+  }
+  return { lines: out, filledSections };
+}
+
 // ─── Public entry ───────────────────────────────────────────────────────────
 export async function runAnchorVerify(input: {
   visitId: string;
@@ -618,7 +661,34 @@ export async function runAnchorVerify(input: {
       // lines that are neither exempt, demoted, nor verified claims do not
       // exist (deterministicStage covers every line) — defensive: drop.
     });
-    const body = bodyLines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+
+    // FAIL TOWARD COMPLETENESS (live-smoke empty-Assessment blocker): a
+    // section whose every drafted line demoted to the lane would otherwise
+    // render as a bare header. Back-fill those — and ONLY those (a section
+    // that lost content) — with the visible review placeholder, so a section
+    // that HAD content can never be EMPTY in a signed note. Demoted content
+    // is NOT re-served to the body (that would reintroduce the fabrication
+    // the lane exists to quarantine); the placeholder points to the lane.
+    const demotedSections = new Set<string>(
+      det.demoted
+        .concat(
+          det.toEntail
+            .filter((c) => !ent.entailedIdx.has(c.index))
+            .map((c) => ({ ...c, reason: 'not_entailed' as DemotionReason, anchor: c.anchorRaw }))
+        )
+        .map((d) => normSection(d.section))
+    );
+    const { lines: filledLines, filledSections } = backfillEmptySections(
+      bodyLines,
+      demotedSections
+    );
+
+    // Plan-numbering fix: surviving ordered-list items kept their original
+    // ordinals after demotion (the note rendered 4,5,6,8,9). Renumber every
+    // section's list contiguously over whatever lines actually composed it.
+    const body = renumberOrderedLists(
+      filledLines.join('\n').replace(/\n{3,}/g, '\n\n').trim()
+    );
     const suggestions = [...demotedByIndex.entries()]
       .sort((a, b) => a[0] - b[0])
       .map(([, s]) => s);
@@ -632,6 +702,7 @@ export async function runAnchorVerify(input: {
         entailmentChecked: det.toEntail.length,
         verifierErrored: ent.errored,
         entailmentPassErrors: ent.passErrors,
+        filledEmptySections: filledSections,
       },
     };
   } catch {

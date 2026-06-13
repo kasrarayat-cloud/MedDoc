@@ -195,6 +195,10 @@ export async function runLayer4GenerateSoap(
   // Flag OFF → {} so the persisted shape is byte-identical to the pre-anchor
   // path (test-pinned). Flag ON → set unconditionally inside the branch.
   let suggestedClaimsWrite: { suggestedClaims?: Prisma.InputJsonValue | typeof Prisma.DbNull } = {};
+  // Sections back-filled with the review placeholder (every drafted line
+  // demoted) — drives a visible needsReview state so an emptied section is
+  // never a SILENT placeholder in a signed note.
+  let filledEmptySections: string[] = [];
   if (anchorsOn) {
     const verified = await runAnchorVerify({
       visitId: input.visitId,
@@ -205,6 +209,7 @@ export async function runLayer4GenerateSoap(
     });
     text = verified.body;
     suggestedClaims = verified.suggestions.length > 0 ? verified.suggestions : undefined;
+    filledEmptySections = verified.stats.filledEmptySections ?? [];
     suggestedClaimsWrite = {
       // Always write the column when anchoring ran — a re-run that demotes
       // nothing must CLEAR the previous run's lane (stale suggestions would
@@ -267,11 +272,23 @@ export async function runLayer4GenerateSoap(
     return text;
   }
 
+  // An emptied-then-back-filled section is a fail-toward-completeness review
+  // trigger (NOT a silent placeholder): surface it so the READY banner tells
+  // the doctor where to look.
+  const anchorReview =
+    filledEmptySections.length > 0
+      ? {
+          needsReview: true,
+          reviewReason: `Anchored verification moved all drafted content out of ${filledEmptySections.length} section(s) — ${filledEmptySections.join(', ')} — to the review suggestions. Review and adopt before signing.`,
+        }
+      : {};
+
   await prisma.transcribeVisit.update({
     where: { id: input.visitId },
     data: {
       soapDraft: text,
       ...suggestedClaimsWrite,
+      ...anchorReview,
       // Phase 1 provenance — which template + version generated this note.
       noteTemplateId: template.id,
       noteTemplateVersion: template.version,

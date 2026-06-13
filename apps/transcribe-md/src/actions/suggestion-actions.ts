@@ -50,6 +50,10 @@ import { Prisma, TranscribeVisitStatus } from '@prisma/client';
 import { requireSession } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
 import { computeDisplayedEmCode } from '@/lib/em-coding/displayed-level';
+import {
+  renumberOrderedLists,
+  stripEmptySectionPlaceholder,
+} from '@/lib/soap-format';
 import { log } from '@/lib/log';
 import {
   unacknowledgedEmChange,
@@ -134,7 +138,7 @@ function normalizeHeading(s: string): string {
  *  adoption is the doctor's attestation and the audit row is the record. */
 function appendClaimToSoap(soap: string, section: string, claimText: string): string {
   const target = normalizeHeading(section);
-  const lines = soap.split('\n');
+  let lines = soap.split('\n');
 
   let headingIdx = -1;
   if (target.length > 0) {
@@ -149,8 +153,14 @@ function appendClaimToSoap(soap: string, section: string, claimText: string): st
 
   if (headingIdx === -1) {
     const trimmed = soap.replace(/\s+$/, '');
-    return trimmed.length > 0 ? `${trimmed}\n\n${claimText}` : claimText;
+    return renumberOrderedLists(
+      trimmed.length > 0 ? `${trimmed}\n\n${claimText}` : claimText
+    );
   }
+
+  // Adopting real content into a section retires its empty-section
+  // placeholder (the section now has content again — no stale review note).
+  lines = stripEmptySectionPlaceholder(lines, headingIdx);
 
   // Section block ends at the next heading (or EOF). Insert before the
   // trailing blank line(s) that separate it from the next heading.
@@ -164,7 +174,9 @@ function appendClaimToSoap(soap: string, section: string, claimText: string): st
   let insertAt = end;
   while (insertAt > headingIdx + 1 && lines[insertAt - 1].trim() === '') insertAt--;
   lines.splice(insertAt, 0, claimText);
-  return lines.join('\n');
+  // Renumber so an adopted Plan item never reintroduces an ordinal hole
+  // (its lane text may carry the original ordinal, e.g. "7. ...").
+  return renumberOrderedLists(lines.join('\n'));
 }
 
 type LoadedVisit = {
