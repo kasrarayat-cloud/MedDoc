@@ -167,7 +167,17 @@ export type AuditAction =
   // verifier-demoted claim ("Suggested by AI" lane). Metadata: { section,
   // reason, remaining } — never claim text.
   | 'SUGGESTION_ADOPTED'
-  | 'SUGGESTION_DISMISSED';
+  | 'SUGGESTION_DISMISSED'
+  // E/M recompute on adoption — visible-confirm, never silent (2026-06-12,
+  // prod smoke #311). EM_LEVEL_CHANGED: an adopt/dismiss suggestion action
+  // changed the computed E/M level. Metadata: EXACTLY { from, to, cause }
+  // where cause ∈ {'suggestion_adopted','suggestion_dismissed'} — CPT codes
+  // + cause class only, never note text.
+  // EM_SIGN_BLOCKED_UNACKNOWLEDGED_CHANGE: a sign request was rejected
+  // because a recorded E/M change had not been acknowledged. Metadata:
+  // { from, to, cause } of the pending change.
+  | 'EM_LEVEL_CHANGED'
+  | 'EM_SIGN_BLOCKED_UNACKNOWLEDGED_CHANGE';
 
 export interface AuditLogInput {
   action: AuditAction;

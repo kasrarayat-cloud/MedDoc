@@ -23,6 +23,7 @@ import { EditDraftDialog } from './edit-draft-dialog';
 
 import { isEmailDeliveryEnabled } from '@/lib/email-enabled';
 import type { IcdCodeRow, RxDraftRow } from '@/lib/em-coding/fallback-mdm';
+import { unacknowledgedEmChange } from '@/lib/em-pending-change';
 
 export const metadata: Metadata = { title: 'Visit' };
 
@@ -217,6 +218,8 @@ export default async function VisitPage({
     referrals: unknown;
     /** Hybrid anchored generation — verifier-demoted claims jsonb. */
     suggestedClaims: unknown;
+    /** E/M visible-confirm (prod smoke #311) — pending-change jsonb. */
+    emPendingChange: unknown;
     patientSummary: string | null;
     confidenceScores: unknown;
   };
@@ -281,6 +284,7 @@ export default async function VisitPage({
         rxDrafts: true,
         referrals: true,
         suggestedClaims: true,
+        emPendingChange: true,
         patientSummary: true,
         confidenceScores: true,
       },
@@ -511,6 +515,7 @@ export default async function VisitPage({
           rxOverriddenWarningIds={rxOverrides.map((o) => o.warningId)}
           referrals={visit.referrals}
           suggestedClaims={visit.suggestedClaims}
+          emPendingChange={visit.emPendingChange}
           patientSummary={visit.patientSummary}
           confidenceScores={visit.confidenceScores}
           // Phase 5.1.1 — V4 Extras card-stream wiring
@@ -569,6 +574,9 @@ interface VisitBodyProps {
   /** Hybrid anchored generation — verifier-demoted claims jsonb (coerced
    *  via extractSuggestedClaims before reaching VisitReadyView). */
   suggestedClaims: unknown;
+  /** E/M visible-confirm (prod smoke #311) — pending-change jsonb (coerced
+   *  via unacknowledgedEmChange before reaching VisitReadyView). */
+  emPendingChange: unknown;
   patientSummary: string | null;
   confidenceScores: unknown;
 
@@ -724,6 +732,13 @@ async function VisitBody(props: VisitBodyProps) {
     console.error('[em-score] initial render failed:', e);
   }
 
+  // E/M visible-confirm (prod smoke #311) — strict coercion of the
+  // pending-change jsonb to the {from, to} pair the modal renders.
+  const pendingEm = unacknowledgedEmChange(props.emPendingChange);
+  const pendingEmChange = pendingEm
+    ? { from: pendingEm.from, to: pendingEm.to }
+    : null;
+
   return (
     <VisitReadyView
       visitId={props.visitId}
@@ -750,6 +765,12 @@ async function VisitBody(props: VisitBodyProps) {
       // Hybrid anchored generation — lane claims (strictly coerced; null
       // when absent/malformed so the lane simply doesn't render).
       suggestedClaims={extractSuggestedClaims(props.suggestedClaims)}
+      // E/M visible-confirm (prod smoke #311) — the unacknowledged
+      // suggestion-caused level change, hydrating the Sign & Send
+      // modal's confirm control ({from, to} codes only; null = nothing
+      // to confirm). The server-side sign gate is the enforcement; this
+      // is the visible half.
+      emPendingChange={pendingEmChange}
       patientSummary={props.patientSummary}
       confidenceScores={props.confidenceScores}
       durationSec={durationSec}

@@ -139,6 +139,12 @@ export interface VisitReadyViewProps {
    *  rail. Null when the engine fail-soft'd (rail renders skeleton). */
   initialEmScore?: EmScore | null;
 
+  /** E/M visible-confirm (prod smoke #311) — the UNACKNOWLEDGED
+   *  suggestion-caused E/M level change ({from, to} codes only — no PHI),
+   *  or null when there is nothing to confirm. Hydrates the Sign & Send
+   *  modal's confirm control; the sign route enforces it server-side. */
+  emPendingChange?: { from: string; to: string } | null;
+
   // Phase 5.1.1 — V4 Extras card-stream wiring.
   // Patient identity (powers DemographicsCard) + problem list (powers
   // ProblemsCard) come from the patient row; the rest is derived from
@@ -156,6 +162,17 @@ export interface VisitReadyViewProps {
   theme?: VisitReadyViewTheme;
 }
 
+/** E/M visible-confirm — value equality for the {from, to} pair (the RSC
+ *  payload re-creates the object on every refresh, so reference equality
+ *  would re-sync forever). */
+function pendingEmChangeEq(
+  a: { from: string; to: string } | null,
+  b: { from: string; to: string } | null
+): boolean {
+  if (a === null || b === null) return a === b;
+  return a.from === b.from && a.to === b.to;
+}
+
 export function VisitReadyView(props: VisitReadyViewProps) {
   const [tab, setTab] = useState<TabKey>('soap');
 
@@ -170,13 +187,35 @@ export function VisitReadyView(props: VisitReadyViewProps) {
     version: number;
     seq: number;
   } | null>(null);
+  // E/M visible-confirm (prod smoke #311) — the unacknowledged change the
+  // Sign & Send modal must surface. Server-rendered prop is the source of
+  // truth (re-synced on every RSC refresh via the adjust-state-during-
+  // render pattern, compared by VALUE — the RSC payload re-creates the
+  // object); the adopt action's response updates it immediately so the
+  // confirm control appears without waiting for the refresh round-trip.
+  const propPendingEm = props.emPendingChange ?? null;
+  const [pendingEmChange, setPendingEmChange] = useState<
+    { from: string; to: string } | null
+  >(propPendingEm);
+  const [syncedPendingEm, setSyncedPendingEm] = useState(propPendingEm);
+  if (!pendingEmChangeEq(syncedPendingEm, propPendingEm)) {
+    setSyncedPendingEm(propPendingEm);
+    setPendingEmChange(propPendingEm);
+  }
   const handleSuggestionAdopted = useCallback(
-    (r: { soapFinal: string; soapVersion: number }) => {
+    (r: {
+      soapFinal: string;
+      soapVersion: number;
+      emPendingChange?: { from: string; to: string } | null;
+    }) => {
       setAdoption((prev) => ({
         text: r.soapFinal,
         version: r.soapVersion,
         seq: (prev?.seq ?? 0) + 1,
       }));
+      if (r.emPendingChange !== undefined) {
+        setPendingEmChange(r.emPendingChange);
+      }
     },
     []
   );
@@ -299,6 +338,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
               signedAt={props.signedAt}
               sources={soapSources}
               initialScore={props.initialEmScore}
+              emPendingChange={pendingEmChange}
             />
             {/* Hybrid anchored generation — verifier-demoted claims for
                 explicit doctor adoption. Hidden once signed (the note is

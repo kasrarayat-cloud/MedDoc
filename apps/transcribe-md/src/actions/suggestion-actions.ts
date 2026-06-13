@@ -25,6 +25,21 @@
 // Both audit with PHI-SAFE metadata: { section, reason, remaining } — NEVER
 // claim text. Both reject SIGNED visits (read-only after signing). Neither
 // throws raw — every failure is { ok: false, error }.
+//
+// E/M recompute on adoption — visible-confirm, never silent (2026-06-12,
+// prod smoke #311). The E/M level is recomputed on-read (page.tsx) and on
+// every client rescore (CodingRail → POST /em-score) — adopting a med-change
+// suggestion used to flip the displayed code (99213 → 99214) silently. Both
+// actions now run the SAME scoring engine (computeEmScore, same inputs as
+// the /em-score route so the result matches what the rail displays) on the
+// note BEFORE vs AFTER the action. A changed level is persisted PHI-free to
+// `emPendingChange` ({from, to, cause, at}) IN THE SAME atomic update as the
+// note write, and audited as EM_LEVEL_CHANGED with metadata EXACTLY
+// { from, to, cause }. The sign route then refuses READY→SIGNED until the
+// doctor explicitly acknowledges the recorded change (fail-closed). When a
+// second action changes the level again before signing, the record keeps the
+// ORIGINAL `from` (the level the doctor last reviewed) and the changes
+// cancel out to SQL NULL when the level returns to that baseline.
 // ============================================================================
 
 import { revalidatePath } from 'next/cache';
@@ -34,6 +49,13 @@ import prisma from '@meddoc/db';
 import { Prisma, TranscribeVisitStatus } from '@prisma/client';
 import { requireSession } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
+import { computeEmScore } from '@/lib/em-coding/score';
+import type { IcdCodeRow, RxDraftRow } from '@/lib/em-coding/fallback-mdm';
+import {
+  unacknowledgedEmChange,
+  type EmChangeCause,
+  type EmPendingChange,
+} from '@/lib/em-pending-change';
 
 /** Mirror of the verifier's SuggestedClaim — duplicated here (rather than
  *  imported from the worker layer) so the server-action bundle never pulls
@@ -56,6 +78,11 @@ export interface SuggestionActionResult {
   suggestedClaims?: SuggestedClaimDto[] | null;
   /** New optimistic-concurrency token after a successful ADOPT. */
   soapVersion?: number;
+  /** Post-action UNACKNOWLEDGED E/M change ({from, to} codes only — no
+   *  PHI), or null when there is nothing for the doctor to confirm at
+   *  signing. Present on every success so the client can update the Sign
+   *  & Send confirm control without waiting for the RSC refresh. */
+  emPendingChange?: { from: string; to: string } | null;
 }
 
 const SuggestionInputSchema = z.object({
@@ -149,6 +176,9 @@ type LoadedVisit = {
   soapFinal: string | null;
   soapVersion: number;
   suggestedClaims: unknown;
+  icdCodes: unknown;
+  rxDrafts: unknown;
+  emPendingChange: unknown;
 };
 
 /** Shared auth + ownership + lifecycle gate (mirrors actions/soap.ts). */
@@ -167,6 +197,12 @@ async function loadVisitForSuggestion(
       soapFinal: true,
       soapVersion: true,
       suggestedClaims: true,
+      // E/M visible-confirm — structured signals for the scoring engine
+      // (same inputs as the /em-score route) + the existing pending-change
+      // record so a second change merges against the doctor's baseline.
+      icdCodes: true,
+      rxDrafts: true,
+      emPendingChange: true,
     },
   })) as LoadedVisit | null;
 
@@ -183,6 +219,110 @@ async function loadVisitForSuggestion(
     return { error: 'Note is still processing.' };
   }
   return { visit };
+}
+
+// ─── E/M level delta (visible-confirm, never silent) ────────────────────────
+
+/** Coerce icdCodes jsonb → engine rows. Mirror of page.tsx's
+ *  extractIcdCodesForEngine (Layer 7a writes { codes: [{code, …}] }). */
+function extractIcdCodesForEngine(raw: unknown): IcdCodeRow[] {
+  const blob = raw as { codes?: Array<{ code?: string; description?: string }> } | null;
+  const codes = blob?.codes ?? [];
+  return codes
+    .filter((c): c is { code: string; description?: string } => typeof c?.code === 'string')
+    .map((c) => ({ code: c.code, description: c.description }));
+}
+
+/** Coerce rxDrafts jsonb → engine rows. Mirror of page.tsx's
+ *  extractRxForEngine (Layer 7c writes { prescriptions: [{drug, action,
+ *  …}], warnings: […] }). */
+function extractRxForEngine(raw: unknown): RxDraftRow[] {
+  const blob = raw as {
+    prescriptions?: Array<{ drug?: string; action?: string }>;
+  } | null;
+  const rx = blob?.prescriptions ?? [];
+  return rx.map((r) => ({
+    drug: typeof r?.drug === 'string' ? r.drug : undefined,
+    action: typeof r?.action === 'string' ? r.action : undefined,
+  }));
+}
+
+/** Score the note BEFORE vs AFTER the action with the SAME engine inputs
+ *  the /em-score route and page.tsx use, so {from, to} matches what the
+ *  CodingRail displays. Returns null when the computed code is unchanged.
+ *
+ *  Short-circuits on byte-identical text — the engine reads ONLY the note
+ *  body (plus the icd/rx structured signals, which neither action touches),
+ *  so an action that doesn't change the note cannot change the level. That
+ *  makes today's dismiss path a guaranteed null; the machinery still runs
+ *  through it so the `suggestion_dismissed` cause is live the day dismiss
+ *  ever influences scoring.
+ *
+ *  Cost note: the before-score is a warm Redis judgement-cache hit on the
+ *  normal path (page load / last rescore cached it); the after-score is the
+ *  same judge call the rail's post-action rescore would make moments later —
+ *  running it here warms the cache, so steady-state LLM call count is
+ *  unchanged. Throws bubble to the actions' outer catch → { ok: false }
+ *  (fail-closed: no recording also means no note change). */
+async function computeEmLevelDelta(args: {
+  beforeSoap: string;
+  afterSoap: string;
+  visitId: string;
+  userId: string;
+  practiceId?: string;
+  icdCodes: unknown;
+  rxDrafts: unknown;
+}): Promise<{ from: string; to: string } | null> {
+  if (args.beforeSoap === args.afterSoap) return null;
+  const engineOpts = {
+    practiceId: args.practiceId,
+    visitId: args.visitId,
+    userId: args.userId,
+    icdCodes: extractIcdCodesForEngine(args.icdCodes),
+    rxDrafts: extractRxForEngine(args.rxDrafts),
+  };
+  const [before, after] = await Promise.all([
+    computeEmScore(args.beforeSoap, engineOpts),
+    computeEmScore(args.afterSoap, engineOpts),
+  ]);
+  if (before.code === after.code) return null;
+  return { from: before.code, to: after.code };
+}
+
+/** Merge the per-action delta against an existing UNACKNOWLEDGED record:
+ *  `from` stays the level the doctor last reviewed (the baseline), and a
+ *  change back to that baseline cancels the record (SQL NULL — nothing to
+ *  confirm). Returns the value to write, or undefined for "don't touch the
+ *  column" (no delta this action). */
+function mergeEmPendingChange(
+  existing: EmPendingChange | null,
+  delta: { from: string; to: string } | null,
+  cause: EmChangeCause
+): Prisma.InputJsonValue | typeof Prisma.DbNull | undefined {
+  if (!delta) return undefined;
+  const baselineFrom = existing?.from ?? delta.from;
+  if (baselineFrom === delta.to) return Prisma.DbNull;
+  const record: EmPendingChange = {
+    from: baselineFrom,
+    to: delta.to,
+    cause,
+    at: new Date().toISOString(),
+  };
+  return record as unknown as Prisma.InputJsonValue;
+}
+
+/** Project the post-action column state → the result's {from, to} (or
+ *  null). `write === undefined` means the column was left untouched. */
+function pendingChangeForResult(
+  existing: EmPendingChange | null,
+  write: Prisma.InputJsonValue | typeof Prisma.DbNull | undefined
+): { from: string; to: string } | null {
+  if (write === undefined) {
+    return existing ? { from: existing.from, to: existing.to } : null;
+  }
+  if (write === Prisma.DbNull) return null;
+  const w = write as unknown as EmPendingChange;
+  return { from: w.from, to: w.to };
 }
 
 // ─── Actions ────────────────────────────────────────────────────────────────
@@ -218,6 +358,26 @@ export async function adoptSuggestionAction(
     const remaining = claims.filter((_, i) => i !== parsed.data.index);
     const newSoap = appendClaimToSoap(visit.soapFinal ?? '', claim.section, claim.text);
 
+    // E/M visible-confirm (prod smoke #311): did THIS adoption change the
+    // computed level? Scored BEFORE the write so the pending-change record
+    // lands in the SAME atomic update as the note — a crash between "note
+    // changed" and "change recorded" (the silent-flip window) cannot exist.
+    const emDelta = await computeEmLevelDelta({
+      beforeSoap: visit.soapFinal ?? '',
+      afterSoap: newSoap,
+      visitId: visit.id,
+      userId: session.user.id,
+      practiceId: session.user.practiceId,
+      icdCodes: visit.icdCodes,
+      rxDrafts: visit.rxDrafts,
+    });
+    const priorPending = unacknowledgedEmChange(visit.emPendingChange);
+    const emPendingWrite = mergeEmPendingChange(
+      priorPending,
+      emDelta,
+      'suggestion_adopted'
+    );
+
     // Single atomic update, gated on the soapVersion we just read — the
     // same optimistic-concurrency pattern as saveSoapDraftAction. count=0
     // means a section save (or another adopt) landed in between.
@@ -230,6 +390,9 @@ export async function adoptSuggestionAction(
           remaining.length > 0
             ? (remaining as unknown as Prisma.InputJsonValue)
             : Prisma.DbNull,
+        ...(emPendingWrite !== undefined
+          ? { emPendingChange: emPendingWrite }
+          : {}),
       },
     });
     if (result.count === 0) {
@@ -247,6 +410,21 @@ export async function adoptSuggestionAction(
       targetId: visit.id,
       metadata: { section: claim.section, reason: claim.reason, remaining: remaining.length },
     });
+    // One row per level-changing action (this leg's own {from, to} — the
+    // persisted record may carry an older baseline `from`). Metadata is
+    // EXACTLY { from, to, cause }: CPT codes + cause class, never note text.
+    if (emDelta) {
+      void logAudit({
+        action: 'EM_LEVEL_CHANGED',
+        targetType: 'TranscribeVisit',
+        targetId: visit.id,
+        metadata: {
+          from: emDelta.from,
+          to: emDelta.to,
+          cause: 'suggestion_adopted',
+        },
+      });
+    }
 
     revalidatePath(`/visits/${visit.id}`);
     return {
@@ -254,6 +432,7 @@ export async function adoptSuggestionAction(
       soapFinal: newSoap,
       suggestedClaims: remaining.length > 0 ? remaining : null,
       soapVersion: visit.soapVersion + 1,
+      emPendingChange: pendingChangeForResult(priorPending, emPendingWrite),
     };
   } catch {
     return { ok: false, error: 'Something went wrong adopting the suggestion.' };
@@ -289,6 +468,27 @@ export async function dismissSuggestionAction(
     }
     const remaining = claims.filter((_, i) => i !== parsed.data.index);
 
+    // E/M visible-confirm: dismiss never touches the note, and the engine
+    // scores ONLY the note body (+ icd/rx signals dismiss also never
+    // touches), so the delta short-circuits to null today. The machinery
+    // still runs so the `suggestion_dismissed` cause is live the day the
+    // lane's content ever influences scoring.
+    const emDelta = await computeEmLevelDelta({
+      beforeSoap: visit.soapFinal ?? '',
+      afterSoap: visit.soapFinal ?? '',
+      visitId: visit.id,
+      userId: session.user.id,
+      practiceId: session.user.practiceId,
+      icdCodes: visit.icdCodes,
+      rxDrafts: visit.rxDrafts,
+    });
+    const priorPending = unacknowledgedEmChange(visit.emPendingChange);
+    const emPendingWrite = mergeEmPendingChange(
+      priorPending,
+      emDelta,
+      'suggestion_dismissed'
+    );
+
     await prisma.transcribeVisit.update({
       where: { id: visit.id },
       data: {
@@ -296,6 +496,9 @@ export async function dismissSuggestionAction(
           remaining.length > 0
             ? (remaining as unknown as Prisma.InputJsonValue)
             : Prisma.DbNull,
+        ...(emPendingWrite !== undefined
+          ? { emPendingChange: emPendingWrite }
+          : {}),
       },
     });
 
@@ -305,11 +508,24 @@ export async function dismissSuggestionAction(
       targetId: visit.id,
       metadata: { section: claim.section, reason: claim.reason, remaining: remaining.length },
     });
+    if (emDelta) {
+      void logAudit({
+        action: 'EM_LEVEL_CHANGED',
+        targetType: 'TranscribeVisit',
+        targetId: visit.id,
+        metadata: {
+          from: emDelta.from,
+          to: emDelta.to,
+          cause: 'suggestion_dismissed',
+        },
+      });
+    }
 
     revalidatePath(`/visits/${visit.id}`);
     return {
       ok: true,
       suggestedClaims: remaining.length > 0 ? remaining : null,
+      emPendingChange: pendingChangeForResult(priorPending, emPendingWrite),
     };
   } catch {
     return { ok: false, error: 'Something went wrong dismissing the suggestion.' };
