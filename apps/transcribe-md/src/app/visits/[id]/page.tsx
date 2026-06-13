@@ -22,31 +22,18 @@ import { VisitLifecycleActions } from './visit-lifecycle-actions';
 import { EditDraftDialog } from './edit-draft-dialog';
 
 import { isEmailDeliveryEnabled } from '@/lib/email-enabled';
-import type { IcdCodeRow, RxDraftRow } from '@/lib/em-coding/fallback-mdm';
+import {
+  extractIcdRows,
+  extractRxRows,
+  extractEmOverride,
+} from '@/lib/em-coding/displayed-level';
 import { unacknowledgedEmChange } from '@/lib/em-pending-change';
 
 export const metadata: Metadata = { title: 'Visit' };
 
-/** Phase 5.2 — coerce icdCodes jsonb into the engine's row shape. */
-function extractIcdCodesForEngine(raw: unknown): IcdCodeRow[] {
-  const blob = raw as { codes?: Array<{ code?: string; description?: string }> } | null;
-  const codes = blob?.codes ?? [];
-  return codes
-    .filter((c): c is { code: string; description?: string } => typeof c?.code === 'string')
-    .map((c) => ({ code: c.code, description: c.description }));
-}
-
-/** Phase 5.2 — coerce rxDrafts jsonb into the engine's row shape. */
-function extractRxForEngine(raw: unknown): RxDraftRow[] {
-  const blob = raw as {
-    prescriptions?: Array<{ drug?: string; action?: string }>;
-  } | null;
-  const rx = blob?.prescriptions ?? [];
-  return rx.map((r) => ({
-    drug: typeof r?.drug === 'string' ? r.drug : undefined,
-    action: typeof r?.action === 'string' ? r.action : undefined,
-  }));
-}
+// E/M signal extractors (icd/rx/override) now come from the shared
+// @/lib/em-coding/displayed-level so the initial render, the rescore route,
+// and the sign gate all coerce identically (2026-06-13 trigger-parity fix).
 
 /** Hybrid anchored generation (2026-06-11) — coerce the suggestedClaims
  *  jsonb into the lane's typed shape. STRICT: any malformed entry voids the
@@ -74,26 +61,6 @@ function extractSuggestedClaims(
   return out;
 }
 
-/** Phase 5.2 orphan-completion — hydrate the doctor's previously-set
- *  E&M override from cptCodes.em.override so the rail renders the
- *  doctor-set code on initial load instead of the AI suggestion.
- *  Returns undefined when the doctor has not set an override. */
-function extractEmOverride(
-  raw: unknown
-): import('@/lib/em-coding-ui/types').EmOverride | undefined {
-  if (typeof raw !== 'object' || raw === null) return undefined;
-  const blob = raw as { em?: { override?: unknown } };
-  const override = blob.em?.override;
-  if (typeof override !== 'object' || override === null) return undefined;
-  const o = override as Record<string, unknown>;
-  if (typeof o.code !== 'string') return undefined;
-  return {
-    code: o.code as import('@/lib/em-coding-ui/types').EmCode,
-    reason: typeof o.reason === 'string' ? o.reason : undefined,
-    overriddenAt:
-      typeof o.overriddenAt === 'string' ? o.overriddenAt : '',
-  };
-}
 
 const PROCESSING_STATES: ReadonlyArray<TranscribeVisitStatus> = [
   TranscribeVisitStatus.TRANSCRIBING,
@@ -715,8 +682,8 @@ async function VisitBody(props: VisitBodyProps) {
       practiceId: sessionPracticeId,
       visitId: props.visitId,
       userId: session?.user?.id,
-      icdCodes: extractIcdCodesForEngine(props.icdCodes),
-      rxDrafts: extractRxForEngine(props.rxDrafts),
+      icdCodes: extractIcdRows(props.icdCodes),
+      rxDrafts: extractRxRows(props.rxDrafts),
     });
     // Hydrate the doctor's previously-set override (if any) from
     // cptCodes.em.override so the rail renders the doctor-set code on
