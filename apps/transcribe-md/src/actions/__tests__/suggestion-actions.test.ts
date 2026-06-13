@@ -467,13 +467,24 @@ describe('adopt — E/M level delta recording (visible-confirm, never silent)', 
     expect(mocks.logAudit).not.toHaveBeenCalled();
   });
 
-  it('scoring engine failure → { ok:false }, NO write (fail-closed: no note change means no unrecorded flip)', async () => {
+  it('scoring engine failure → FAIL TOWARD CONFIRM: the note write lands AND an indeterminate pending change forces sign-time confirmation (never a silent flip)', async () => {
     mocks.computeEmScore.mockRejectedValue(new Error('redis down'));
 
     const r = await adoptSuggestionAction(VISIT, 0, claimsAt(0));
-    expect(r.ok).toBe(false);
-    expect(mocks.updateMany).not.toHaveBeenCalled();
-    expect(mocks.logAudit).not.toHaveBeenCalled();
+    // The adoption succeeds (the note change must not be lost) ...
+    expect(r.ok).toBe(true);
+    expect(mocks.updateMany).toHaveBeenCalled();
+    // ... but an indeterminate delta is recorded so the sign gate fires.
+    expect(r.emPendingChange).toEqual({ from: 'unknown', to: 'review' });
+    const written = mocks.updateMany.mock.calls[0][0].data.emPendingChange;
+    expect(written.from).toBe('unknown');
+    expect(written.to).toBe('review');
+    // EM_LEVEL_CHANGED still audits the (indeterminate) change, PHI-free.
+    const emRow = mocks.logAudit.mock.calls
+      .map((c) => c[0])
+      .find((c) => c.action === 'EM_LEVEL_CHANGED');
+    expect(emRow).toBeTruthy();
+    expect(Object.keys(emRow.metadata).sort()).toEqual(['cause', 'from', 'to']);
   });
 });
 
