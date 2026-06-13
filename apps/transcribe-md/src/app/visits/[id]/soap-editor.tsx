@@ -117,6 +117,10 @@ interface SoapEditorProps {
    *  when null the rail renders in fail-soft mode (Subagent B owns the
    *  scoring engine; Subagent C consumes it). */
   initialScore?: EmScore | null;
+  /** E/M visible-confirm (prod smoke #311) — unacknowledged suggestion-
+   *  caused level change for the Sign & Send modal's confirm control.
+   *  Null/undefined = nothing to confirm. */
+  emPendingChange?: { from: string; to: string } | null;
   /** @deprecated kept for back-compat; Linear V1 is single-theme. */
   theme?: SoapEditorTheme;
 }
@@ -130,6 +134,7 @@ export function SoapEditor({
   readonly = false,
   signedAt = null,
   initialScore = null,
+  emPendingChange = null,
 }: SoapEditorProps) {
   const [text, setText] = useState(initialText);
   const [soapVersion, setSoapVersion] = useState(initialSoapVersion);
@@ -418,6 +423,7 @@ export function SoapEditor({
             triggerIcon={<Lock className="h-3.5 w-3.5" aria-hidden />}
             controlledOpen={signModalOpen}
             onControlledOpenChange={setSignModalOpen}
+            emPendingChange={emPendingChange}
           />
         )}
 

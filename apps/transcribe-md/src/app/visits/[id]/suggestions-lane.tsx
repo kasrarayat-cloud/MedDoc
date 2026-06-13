@@ -64,8 +64,16 @@ interface SuggestionsLaneProps {
   visitId: string;
   claims: SuggestedClaimView[];
   /** Fired after a successful adopt with the server's new note state so the
-   *  parent can remount the SOAP editor with the appended text. */
-  onAdopted: (r: { soapFinal: string; soapVersion: number }) => void;
+   *  parent can remount the SOAP editor with the appended text.
+   *  `emPendingChange` (E/M visible-confirm, prod smoke #311) is the
+   *  post-action unacknowledged level change ({from, to} codes — no PHI;
+   *  null = nothing to confirm) so the Sign & Send confirm control updates
+   *  without waiting for the RSC refresh. */
+  onAdopted: (r: {
+    soapFinal: string;
+    soapVersion: number;
+    emPendingChange?: { from: string; to: string } | null;
+  }) => void;
 }
 
 export function SuggestionsLane({
@@ -109,7 +117,20 @@ export function SuggestionsLane({
         typeof res.soapFinal === 'string' &&
         typeof res.soapVersion === 'number'
       ) {
-        onAdopted({ soapFinal: res.soapFinal, soapVersion: res.soapVersion });
+        onAdopted({
+          soapFinal: res.soapFinal,
+          soapVersion: res.soapVersion,
+          emPendingChange: res.emPendingChange,
+        });
+        // E/M visible-confirm (prod smoke #311): when this adoption
+        // changed the computed E/M level, say so out loud — the silent
+        // 99213 → 99214 flip is the bug this closes.
+        if (res.emPendingChange) {
+          toast.warning('Documentation level changed', {
+            description: `Suggested E/M level is now ${res.emPendingChange.to} (was ${res.emPendingChange.from}). You'll confirm this when signing.`,
+            duration: 8_000,
+          });
+        }
         toast.success('Added to the note', {
           description: 'Adopted as your own attestation — review before signing.',
         });
