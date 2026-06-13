@@ -21,6 +21,7 @@
 // ============================================================================
 
 import { useMemo, useState } from 'react';
+import { projectEmForDisplay } from '@/lib/visit-export';
 import { cn } from '@/lib/cn';
 import { Ic } from '@/components/ui/icon';
 import { CodeEvidencePopover } from './code-evidence-popover';
@@ -93,7 +94,9 @@ export function CodesTab({ icd, cpt, readonly = false }: CodesTabProps) {
   const icdBlob = (icd as IcdBlob | null) ?? null;
   const cptBlob = (cpt as CptBlob | null) ?? null;
   const icdCodes = icdBlob?.codes ?? [];
-  const em = cptBlob?.em ?? null;
+  // #315 obs#2: render the displayed E/M code (signed → frozen, else
+  // override ?? raw), the same projection every export surface uses.
+  const em = projectEmForDisplay(cptBlob?.em ?? null, readonly);
   const procedures = cptBlob?.procedures ?? [];
   const modifiers = cptBlob?.modifiers ?? [];
 
