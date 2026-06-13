@@ -16,6 +16,7 @@ vi.mock('@meddoc/shared/specialties', () => ({
 }));
 
 import { loadVisitExportData } from '../visit-export-server';
+import { projectDisplayedEmCode } from '../visit-export';
 
 const DOCTOR = 'doc1';
 const EM = {
@@ -92,5 +93,25 @@ describe('loadVisitExportData — printed E/M code === confirmed displayed level
     mocks.findUnique.mockResolvedValue(row({ cptCodes: { procedures: [] } }));
     const data = await loadVisitExportData('v1', DOCTOR);
     expect(data?.em).toBeNull();
+  });
+});
+
+describe('projectDisplayedEmCode — the one projection all surfaces share', () => {
+  const base = { code: '99213', description: '', reasoning: { problems: [], data: '', risk: '' }, evidence_quote: '' };
+  it('signed → frozen signedCode wins', () => {
+    expect(projectDisplayedEmCode({ ...base, signedCode: '99214', override: { code: '99212' } }, true)).toBe('99214');
+  });
+  it('signed, no signedCode → override', () => {
+    expect(projectDisplayedEmCode({ ...base, override: { code: '99215' } }, true)).toBe('99215');
+  });
+  it('signed, neither → raw', () => {
+    expect(projectDisplayedEmCode(base, true)).toBe('99213');
+  });
+  it('unsigned → override ?? raw (signedCode ignored while unsigned)', () => {
+    expect(projectDisplayedEmCode({ ...base, signedCode: '99214', override: { code: '99215' } }, false)).toBe('99215');
+    expect(projectDisplayedEmCode(base, false)).toBe('99213');
+  });
+  it('null em → null', () => {
+    expect(projectDisplayedEmCode(null, true)).toBeNull();
   });
 });

@@ -43,6 +43,32 @@ export interface CptEm {
   signedCode?: string;
 }
 
+/** The AUTHORITATIVE E/M code to show/print — the level the doctor reviewed,
+ *  never the raw L7b suggestion. Pure + client-safe, so EVERY surface (the
+ *  server export loader, the on-screen Codes tab, the "Copy codes" clipboard)
+ *  projects identically: signed → frozen signedCode, else the doctor override,
+ *  else the raw code. (#315 obs#2 — the divergence is impossible by
+ *  construction only if all surfaces call THIS.) */
+export function projectDisplayedEmCode(
+  em: CptEm | null | undefined,
+  isSigned: boolean
+): string | null {
+  if (!em) return null;
+  return isSigned
+    ? em.signedCode ?? em.override?.code ?? em.code
+    : em.override?.code ?? em.code;
+}
+
+/** `em` with its `code` projected to the authoritative displayed level. */
+export function projectEmForDisplay(
+  em: CptEm | null | undefined,
+  isSigned: boolean
+): CptEm | null {
+  if (!em) return null;
+  const code = projectDisplayedEmCode(em, isSigned);
+  return code ? { ...em, code } : em;
+}
+
 export interface CptProcedure {
   code: string;
   description: string;

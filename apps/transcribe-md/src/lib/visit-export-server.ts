@@ -13,6 +13,7 @@
 import prisma from '@meddoc/db';
 import type { TranscribeVisitStatus } from '@prisma/client';
 import { findSpecialty } from '@meddoc/shared/specialties';
+import { projectEmForDisplay } from './visit-export';
 import type {
   CptEm,
   CptModifier,
@@ -81,19 +82,9 @@ export async function loadVisitExportData(
 
   // E/M PARITY (#315 obs#2): project the AUTHORITATIVE displayed level onto
   // em.code so every artifact (PDF, DOCX, all EHR clipboard formats) prints
-  // what the doctor reviewed — never the raw L7b suggestion. SIGNED visits
-  // print the level frozen at sign time (signedCode); a signed visit predating
-  // the freeze, or an unsigned draft, falls back to override ?? raw code.
-  const rawEm = cptBlob?.em ?? null;
-  const emForExport: CptEm | null = rawEm
-    ? {
-        ...rawEm,
-        code:
-          visit.status === 'SIGNED'
-            ? rawEm.signedCode ?? rawEm.override?.code ?? rawEm.code
-            : rawEm.override?.code ?? rawEm.code,
-      }
-    : null;
+  // what the doctor reviewed — never the raw L7b suggestion. The SAME helper
+  // the client Codes tab + "Copy codes" use, so all surfaces agree.
+  const emForExport = projectEmForDisplay(cptBlob?.em ?? null, visit.status === 'SIGNED');
 
   return {
     visitId: visit.id,
