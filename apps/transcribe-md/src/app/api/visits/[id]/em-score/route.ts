@@ -30,8 +30,11 @@ import { auth } from '@/lib/nextauth';
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { computeEmScore } from '@/lib/em-coding/score';
 import { engineToUiScore } from '@/lib/em-coding/to-ui-score';
-import type { IcdCodeRow, RxDraftRow } from '@/lib/em-coding/fallback-mdm';
-import type { EmCode, EmOverride } from '@/lib/em-coding-ui/types';
+import {
+  extractIcdRows,
+  extractRxRows,
+  extractEmOverride,
+} from '@/lib/em-coding/displayed-level';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -92,8 +95,8 @@ export const POST = withApiHandler<{ id: string }>(
     // Extract structured signals from the visit row. The Prisma JSON
     // typing is loose; we narrow at the boundary so the engine sees a
     // well-shaped array regardless of older drafts.
-    const icdCodes = extractIcdCodes(visit.icdCodes);
-    const rxDrafts = extractRxDrafts(visit.rxDrafts);
+    const icdCodes = extractIcdRows(visit.icdCodes);
+    const rxDrafts = extractRxRows(visit.rxDrafts);
 
     const engineScore = await computeEmScore(parsed.data.soapText, {
       practiceId,
@@ -119,62 +122,5 @@ export const POST = withApiHandler<{ id: string }>(
     );
   },
 );
-
-/** Hydrate the doctor's previously-set override (if any) from
- *  cptCodes.em.override. Mirror of the helper in
- *  apps/transcribe-md/src/app/visits/[id]/page.tsx so the rescore route
- *  preserves the override across re-scores. Kept inline to avoid a
- *  refactor for a single-call site; lift to a shared util if a third
- *  consumer ever needs it. */
-function extractEmOverride(raw: unknown): EmOverride | undefined {
-  if (typeof raw !== 'object' || raw === null) return undefined;
-  const blob = raw as { em?: { override?: unknown } };
-  const override = blob.em?.override;
-  if (typeof override !== 'object' || override === null) return undefined;
-  const o = override as Record<string, unknown>;
-  if (typeof o.code !== 'string') return undefined;
-  return {
-    code: o.code as EmCode,
-    reason: typeof o.reason === 'string' ? o.reason : undefined,
-    overriddenAt: typeof o.overriddenAt === 'string' ? o.overriddenAt : '',
-  };
-}
-
-/** The icdCodes column shape varies across migrations — Layer 7a writes
- *  `{ codes: [{ code, description, ... }] }` but legacy writes were a
- *  bare array. Normalize to IcdCodeRow[]. */
-function extractIcdCodes(raw: unknown): IcdCodeRow[] {
-  if (!raw) return [];
-  if (Array.isArray(raw)) {
-    return raw
-      .filter((r): r is Record<string, unknown> => !!r && typeof r === 'object')
-      .map((r) => ({
-        code: typeof r.code === 'string' ? r.code : '',
-        description: typeof r.description === 'string' ? r.description : undefined,
-      }))
-      .filter((r) => r.code.length > 0);
-  }
-  if (typeof raw === 'object' && raw !== null) {
-    const blob = raw as { codes?: unknown };
-    if (Array.isArray(blob.codes)) return extractIcdCodes(blob.codes);
-  }
-  return [];
-}
-
-/** rxDrafts shape: `{ drafts: [{ drug, action, ... }], warnings?: [...] }`. */
-function extractRxDrafts(raw: unknown): RxDraftRow[] {
-  if (!raw) return [];
-  if (typeof raw === 'object' && raw !== null) {
-    const blob = raw as { drafts?: unknown };
-    if (Array.isArray(blob.drafts)) {
-      return blob.drafts
-        .filter((d): d is Record<string, unknown> => !!d && typeof d === 'object')
-        .map((d) => ({
-          drug: typeof d.drug === 'string' ? d.drug : (typeof d.drug_name === 'string' ? d.drug_name : undefined),
-          drug_name: typeof d.drug_name === 'string' ? d.drug_name : undefined,
-          action: typeof d.action === 'string' ? d.action : undefined,
-        }));
-    }
-  }
-  return [];
-}
+// E/M signal extractors now live in @/lib/em-coding/displayed-level (the
+// single source shared with the sign gate — 2026-06-13 trigger-parity fix).

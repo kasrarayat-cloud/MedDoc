@@ -24,8 +24,8 @@ import { auth } from '@/lib/nextauth';
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { computeEmScore } from '@/lib/em-coding/score';
 import { engineToUiScore } from '@/lib/em-coding/to-ui-score';
+import { extractIcdRows, extractRxRows } from '@/lib/em-coding/displayed-level';
 import { mergeAdditions } from '@/lib/em-coding/merge-additions';
-import type { IcdCodeRow, RxDraftRow } from '@/lib/em-coding/fallback-mdm';
 import { logAudit } from '@/lib/audit';
 
 export const runtime = 'nodejs';
@@ -145,8 +145,8 @@ export const POST = withApiHandler<{ id: string }>(
     // cache's drift bypass fire when the additions move the SOAP
     // enough (>20% drift) so we don't return a stale cached judgement
     // built on the pre-bump body.
-    const icdCodes = extractIcdCodes(visit.icdCodes);
-    const rxDrafts = extractRxDrafts(visit.rxDrafts);
+    const icdCodes = extractIcdRows(visit.icdCodes);
+    const rxDrafts = extractRxRows(visit.rxDrafts);
     const engineScore = await computeEmScore(merge.newSoap, {
       practiceId,
       visitId,
@@ -214,43 +214,5 @@ export const POST = withApiHandler<{ id: string }>(
 // route ever needs them, lift to a shared util.
 // ──────────────────────────────────────────────────────────────────────
 
-function extractIcdCodes(raw: unknown): IcdCodeRow[] {
-  if (!raw) return [];
-  if (Array.isArray(raw)) {
-    return raw
-      .filter((r): r is Record<string, unknown> => !!r && typeof r === 'object')
-      .map((r) => ({
-        code: typeof r.code === 'string' ? r.code : '',
-        description:
-          typeof r.description === 'string' ? r.description : undefined,
-      }))
-      .filter((r) => r.code.length > 0);
-  }
-  if (typeof raw === 'object' && raw !== null) {
-    const blob = raw as { codes?: unknown };
-    if (Array.isArray(blob.codes)) return extractIcdCodes(blob.codes);
-  }
-  return [];
-}
-
-function extractRxDrafts(raw: unknown): RxDraftRow[] {
-  if (!raw) return [];
-  if (typeof raw === 'object' && raw !== null) {
-    const blob = raw as { drafts?: unknown };
-    if (Array.isArray(blob.drafts)) {
-      return blob.drafts
-        .filter((d): d is Record<string, unknown> => !!d && typeof d === 'object')
-        .map((d) => ({
-          drug:
-            typeof d.drug === 'string'
-              ? d.drug
-              : typeof d.drug_name === 'string'
-                ? d.drug_name
-                : undefined,
-          drug_name: typeof d.drug_name === 'string' ? d.drug_name : undefined,
-          action: typeof d.action === 'string' ? d.action : undefined,
-        }));
-    }
-  }
-  return [];
-}
+// E/M signal extractors now come from @/lib/em-coding/displayed-level
+// (the single source shared with the rail + sign gate — 2026-06-13).
