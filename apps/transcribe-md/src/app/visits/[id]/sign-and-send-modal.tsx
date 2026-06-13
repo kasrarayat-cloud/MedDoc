@@ -14,7 +14,7 @@
 import { useCallback, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import * as Dialog from '@radix-ui/react-dialog';
-import { Check, Loader2, Lock, Send, X } from 'lucide-react';
+import { Check, Loader2, Lock, Send, TrendingUp, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { cn } from '@/lib/cn';
@@ -89,6 +89,14 @@ interface SignAndSendModalProps {
    *  state (existing behavior — backward compatible). */
   controlledOpen?: boolean;
   onControlledOpenChange?: (open: boolean) => void;
+  /** E/M visible-confirm (prod smoke #311) — the UNACKNOWLEDGED
+   *  suggestion-caused E/M level change ({from, to} CPT codes — no PHI).
+   *  When set (and signOnSubmit), the modal renders a "Documentation
+   *  level changed" notice + an explicit confirm control; Sign & Deliver
+   *  stays disabled until confirmed, and the confirmation is echoed to
+   *  POST /sign as `acknowledgedEmChange`. The server gate is the
+   *  enforcement — this is the visible half. Null = nothing to confirm. */
+  emPendingChange?: { from: string; to: string } | null;
   /** @deprecated kept for back-compat; Linear V1 is single-theme. */
   theme?: SignAndSendModalTheme;
 }
@@ -119,6 +127,20 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
   // Selections persist across open/close so a doctor who always picks
   // the same two targets doesn't re-check them every time.
 
+  // E/M visible-confirm — the explicit checkbox. Deliberately NOT
+  // persisted across open/close (unlike destination selections): each
+  // open of the sign dialog requires a fresh, conscious confirmation.
+  // Reset uses the adjust-state-during-render pattern (not an effect)
+  // so the checkbox is already cleared in the same render that closes.
+  const emChangeRequired =
+    props.signOnSubmit && props.emPendingChange != null;
+  const [emChangeConfirmed, setEmChangeConfirmed] = useState(false);
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (prevOpen !== open) {
+    setPrevOpen(open);
+    if (!open) setEmChangeConfirmed(false);
+  }
+
   const toggle = useCallback((key: Destination) => {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -139,6 +161,13 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
       toast.error('Pick at least one destination.');
       return;
     }
+    // E/M visible-confirm: belt to the disabled button — never submit a
+    // sign while an unconfirmed level change is showing. The server gate
+    // would reject it anyway (fail-closed); this just keeps the UX clean.
+    if (emChangeRequired && !emChangeConfirmed) {
+      toast.error('Confirm the documentation level change before signing.');
+      return;
+    }
     startTransition(async () => {
       try {
         // Step 1: the server-side work (sign + collect clipboard text /
@@ -146,7 +175,13 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
         // inside the transition — once it returns, the visit is signed
         // in the DB and we know what to hand to the browser.
         const payload = props.signOnSubmit
-          ? await fetchSignAndDeliver(props.visitId, destinations)
+          ? await fetchSignAndDeliver(
+              props.visitId,
+              destinations,
+              emChangeRequired && emChangeConfirmed
+                ? (props.emPendingChange ?? undefined)
+                : undefined
+            )
           : await prepareDeliverOnly(props.visitId, destinations);
 
         // Step 2: close the modal + refresh the page BEFORE firing any
@@ -220,7 +255,16 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
         toast.error('Could not deliver', { description: msg });
       }
     });
-  }, [props.visitId, props.signOnSubmit, props.emailEnabled, router, selected]);
+  }, [
+    props.visitId,
+    props.signOnSubmit,
+    props.emailEnabled,
+    props.emPendingChange,
+    emChangeRequired,
+    emChangeConfirmed,
+    router,
+    selected,
+  ]);
 
   const triggerVariant = props.triggerVariant ?? 'primary';
 
@@ -329,6 +373,97 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
             )}
           </div>
 
+          {/* E/M visible-confirm (prod smoke #311) — an adopted/dismissed
+              AI suggestion changed the computed E/M level; signing requires
+              an explicit confirmation. Amber review-surface recipe (same
+              color-mix family as the suggestions lane / review banner).
+              Rendered OUTSIDE the scroll area so it can never scroll out
+              of sight behind a long destination list. */}
+          {emChangeRequired && props.emPendingChange && (
+            <div
+              role="group"
+              aria-label="Documentation level changed — confirmation required"
+              data-testid="em-change-confirm"
+              className="rounded-lg border"
+              style={{
+                margin: '4px 24px 12px',
+                padding: '10px 12px',
+                borderColor:
+                  'color-mix(in srgb, var(--color-linear-amber) 35%, transparent)',
+                background:
+                  'color-mix(in srgb, var(--color-linear-amber) 8%, transparent)',
+              }}
+            >
+              <div className="flex items-center gap-2">
+                <TrendingUp
+                  className="h-3.5 w-3.5 flex-none"
+                  aria-hidden
+                  style={{ color: 'var(--color-linear-amber)' }}
+                />
+                <span
+                  className="text-[13px] font-medium"
+                  style={{ color: 'var(--color-linear-amber)' }}
+                >
+                  Documentation level changed:{' '}
+                  <span style={{ fontFamily: 'var(--font-mono)' }}>
+                    {props.emPendingChange.from} → {props.emPendingChange.to}
+                  </span>
+                </span>
+              </div>
+              <p
+                className="mb-0 mt-1.5 text-[12px] leading-relaxed"
+                style={{ color: 'var(--color-linear-text-3)' }}
+              >
+                An AI-suggestion you adopted or dismissed changed the
+                suggested E/M level. Signing requires confirming the
+                updated level.
+              </p>
+              <button
+                type="button"
+                onClick={() => setEmChangeConfirmed((c) => !c)}
+                aria-pressed={emChangeConfirmed}
+                data-testid="em-change-confirm-toggle"
+                className="mt-2 flex w-full items-center gap-3 rounded-md border px-3 py-2 text-left transition-colors duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-linear-sage focus-visible:ring-offset-2 focus-visible:ring-offset-linear-bg"
+                style={{
+                  borderColor: emChangeConfirmed
+                    ? 'color-mix(in srgb, var(--color-linear-amber) 45%, transparent)'
+                    : 'var(--color-linear-border)',
+                  background: emChangeConfirmed
+                    ? 'color-mix(in srgb, var(--color-linear-amber) 14%, transparent)'
+                    : 'var(--color-linear-surface-2)',
+                  color: emChangeConfirmed
+                    ? 'var(--color-linear-text)'
+                    : 'var(--color-linear-text-2)',
+                }}
+              >
+                <span
+                  aria-hidden
+                  className="flex h-4 w-4 flex-none items-center justify-center rounded-[4px] border"
+                  style={{
+                    borderColor: emChangeConfirmed
+                      ? 'var(--color-linear-amber)'
+                      : 'var(--color-linear-border-strong)',
+                    background: emChangeConfirmed
+                      ? 'var(--color-linear-amber)'
+                      : 'transparent',
+                    color: '#16120a',
+                  }}
+                >
+                  {emChangeConfirmed && (
+                    <Check className="h-3 w-3" strokeWidth={3} aria-hidden />
+                  )}
+                </span>
+                <span className="flex-1 text-[13px]">
+                  I&apos;ve reviewed the change and confirm{' '}
+                  <span style={{ fontFamily: 'var(--font-mono)' }}>
+                    {props.emPendingChange.to}
+                  </span>{' '}
+                  as the documentation level
+                </span>
+              </button>
+            </div>
+          )}
+
           <div
             className="flex items-center justify-between gap-3"
             style={{
@@ -358,7 +493,10 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
                 type="button"
                 className="qm-lin-btn-primary"
                 onClick={submit}
-                disabled={pending}
+                // E/M visible-confirm: the sign CTA stays disabled until
+                // the doctor explicitly confirms a recorded level change.
+                // The server gate rejects unconfirmed signs regardless.
+                disabled={pending || (emChangeRequired && !emChangeConfirmed)}
               >
                 {pending ? (
                   <>
@@ -468,12 +606,21 @@ function CheckboxRow({
 
 async function fetchSignAndDeliver(
   visitId: string,
-  destinations: Destination[]
+  destinations: Destination[],
+  /** E/M visible-confirm — the doctor's explicit acknowledgement of a
+   *  suggestion-caused level change, echoing the recorded {from, to}.
+   *  Omitted when there is nothing to confirm. The server rejects the
+   *  sign (400, EM_CHANGE_UNACKNOWLEDGED) if a recorded change exists
+   *  and this is absent or stale. */
+  acknowledgedEmChange?: { from: string; to: string }
 ): Promise<SignResponse> {
   const res = await fetch(`/api/visits/${visitId}/sign`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ destinations }),
+    body: JSON.stringify({
+      destinations,
+      ...(acknowledgedEmChange ? { acknowledgedEmChange } : {}),
+    }),
   });
   const body = (await res.json()) as SignResponse & { error?: string };
   if (!res.ok) {
