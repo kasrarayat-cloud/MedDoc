@@ -75,6 +75,14 @@ export const DOSE_RANGES: ReadonlyArray<DoseRangeEntry> = [
       'Adult max 4 g/day per FDA package insert; some refs cite 3 g/day for chronic alcoholics or hepatic impairment. Peds: 10-15 mg/kg/dose q4-6h, max 75 mg/kg/day or adult cap, whichever is lower.',
   },
   {
+    drug: 'amlodipine',
+    aliases: ['norvasc'],
+    adultMaxMgPerDay: 10,
+    contraindications: ['amlodipine allergy', 'dihydropyridine allergy'],
+    notes:
+      'FDA adult max 10 mg/day (HTN + chronic stable/vasospastic angina). Very common first-line antihypertensive. Peds 6-17 yr: 2.5-5 mg/day.',
+  },
+  {
     drug: 'amoxicillin',
     aliases: ['amoxil'],
     adultMaxMgPerDay: 4000,
@@ -85,12 +93,28 @@ export const DOSE_RANGES: ReadonlyArray<DoseRangeEntry> = [
       'Standard adult cap 4 g/day for most indications. AOM in peds: 80-90 mg/kg/day divided BID per AAP Red Book.',
   },
   {
+    drug: 'amoxicillin-clavulanate',
+    aliases: ['augmentin', 'amoxicillin/clavulanate', 'amox-clav', 'co-amoxiclav'],
+    complexDosing: true,
+    contraindications: ['penicillin allergy', 'amoxicillin allergy', 'beta-lactam allergy', 'history of amoxicillin-clavulanate cholestatic jaundice'],
+    notes:
+      'Component-ratio dependent (875/125 BID standard; clavulanate ceiling drives formulation). Verify against the specific product; no single amoxicillin-component mg/day cap.',
+  },
+  {
     drug: 'apixaban',
     aliases: ['eliquis'],
     complexDosing: true,
     contraindications: ['active bleeding'],
     notes:
       'Dosing is indication-dependent (5 mg BID standard for AFib NVAF; 2.5 mg BID with renal adjustment criteria; VTE treatment uses different schedule). Validator should not enforce a mg/day cap — verify against indication-specific protocol.',
+  },
+  {
+    drug: 'atenolol',
+    aliases: ['tenormin'],
+    adultMaxMgPerDay: 100,
+    contraindications: ['atenolol allergy', 'severe bradycardia', 'second- or third-degree heart block', 'decompensated heart failure'],
+    notes:
+      'Adult HTN/angina max 100 mg/day. Renally cleared — reduce in CrCl <35. Cardioselective beta-1 blocker.',
   },
   {
     drug: 'atorvastatin',
@@ -124,6 +148,24 @@ export const DOSE_RANGES: ReadonlyArray<DoseRangeEntry> = [
       'Max 450 mg/day for SR/XL formulations. IR formulation max 450 mg/day with no single dose >150 mg.',
   },
   {
+    drug: 'carvedilol',
+    aliases: ['coreg'],
+    adultMaxMgPerDay: 50,
+    contraindications: ['carvedilol allergy', 'decompensated heart failure', 'severe bradycardia', 'second- or third-degree heart block', 'severe asthma or bronchospasm'],
+    notes:
+      'IR HTN max 50 mg/day; HF up to 50 mg/day (<85 kg) or 100 mg/day (>85 kg) — conservative cap 50. Non-selective beta + alpha-1 blocker.',
+  },
+  {
+    drug: 'cefdinir',
+    aliases: ['omnicef'],
+    adultMaxMgPerDay: 600,
+    pedsMgPerKgPerDay: { min: 7, max: 14 },
+    pedsMaxMgPerDay: 600,
+    contraindications: ['cephalosporin allergy', 'penicillin allergy (cross-reactivity ~1-3%)'],
+    notes:
+      'Adult max 600 mg/day. Peds 14 mg/kg/day (max 600). Third-generation oral cephalosporin.',
+  },
+  {
     drug: 'cephalexin',
     aliases: ['keflex'],
     adultMaxMgPerDay: 4000,
@@ -147,12 +189,30 @@ export const DOSE_RANGES: ReadonlyArray<DoseRangeEntry> = [
       'Adult oral max 1500 mg/day. Use peds-cautiously (FDA: only when no alternative; tendinopathy + arthropathy risk).',
   },
   {
+    drug: 'clindamycin',
+    aliases: ['cleocin'],
+    adultMaxMgPerDay: 1800,
+    pedsMgPerKgPerDay: { min: 8, max: 25 },
+    pedsMaxMgPerDay: 1800,
+    contraindications: ['clindamycin allergy', 'lincomycin allergy'],
+    notes:
+      'Adult oral max ~1800 mg/day (higher IV in severe infection). C. difficile risk. Peds 8-25 mg/kg/day divided.',
+  },
+  {
     drug: 'clopidogrel',
     aliases: ['plavix'],
     complexDosing: true,
     contraindications: ['active bleeding'],
     notes:
       'Dosing is indication-dependent: 75 mg/day maintenance after a 300-600 mg loading dose for ACS/PCI. Validator should not enforce a mg/day cap.',
+  },
+  {
+    drug: 'diltiazem',
+    aliases: ['cardizem', 'tiazac', 'cartia'],
+    adultMaxMgPerDay: 360,
+    contraindications: ['diltiazem allergy', 'severe bradycardia', 'second- or third-degree heart block', 'decompensated heart failure', 'acute mi with pulmonary congestion'],
+    notes:
+      'Adult max ~360 mg/day (formulation-dependent ER vs IR). Non-dihydropyridine CCB — caution combining with beta-blockers.',
   },
   {
     drug: 'doxycycline',
@@ -189,12 +249,28 @@ export const DOSE_RANGES: ReadonlyArray<DoseRangeEntry> = [
       'Max 80 mg/day for MDD and OCD. Bulimia: max 60 mg/day. Peds (8+ MDD, 7+ OCD): max 20 mg/day usually.',
   },
   {
+    drug: 'furosemide',
+    aliases: ['lasix'],
+    complexDosing: true,
+    contraindications: ['anuria', 'furosemide allergy', 'sulfonamide allergy'],
+    notes:
+      'Highly variable, titrated to response (oral 20-80 mg/dose; far higher in renal impairment/HF). Loop diuretic — verify against indication + renal function, no fixed mg/day cap.',
+  },
+  {
     drug: 'gabapentin',
     aliases: ['neurontin'],
     adultMaxMgPerDay: 3600,
     contraindications: ['gabapentin allergy'],
     notes:
       'Adult max 3600 mg/day divided TID. Renal-adjusted (CrCl-based, can drop to <300 mg/day at CrCl <15).',
+  },
+  {
+    drug: 'hydralazine',
+    aliases: ['apresoline'],
+    adultMaxMgPerDay: 300,
+    contraindications: ['hydralazine allergy', 'coronary artery disease', 'rheumatic mitral valve disease'],
+    notes:
+      'Adult oral max 300 mg/day (drug-induced lupus risk at higher chronic doses). Direct arteriolar vasodilator.',
   },
   {
     drug: 'hydrochlorothiazide',
@@ -221,6 +297,14 @@ export const DOSE_RANGES: ReadonlyArray<DoseRangeEntry> = [
       'Prescription max 3200 mg/day; OTC 1200 mg/day. Peds 5-10 mg/kg/dose q6-8h, max 40 mg/kg/day (analgesic) or 30 mg/kg/day (chronic).',
   },
   {
+    drug: 'levofloxacin',
+    aliases: ['levaquin'],
+    adultMaxMgPerDay: 750,
+    contraindications: ['fluoroquinolone allergy', 'levofloxacin allergy', 'tendinopathy history', 'myasthenia gravis'],
+    notes:
+      'Adult max 750 mg/day. FDA boxed warnings: tendinitis/rupture, neuropathy, CNS, QT — reserve when alternatives unsuitable.',
+  },
+  {
     drug: 'levothyroxine',
     aliases: ['synthroid', 'levoxyl', 'tirosint'],
     complexDosing: true,
@@ -240,6 +324,22 @@ export const DOSE_RANGES: ReadonlyArray<DoseRangeEntry> = [
       'bilateral renal artery stenosis',
     ],
     notes: 'FDA max 80 mg/day for HTN. HF: max 40 mg/day. Renal-adjusted.',
+  },
+  {
+    drug: 'losartan',
+    aliases: ['cozaar'],
+    adultMaxMgPerDay: 100,
+    contraindications: ['losartan allergy', 'pregnancy', 'bilateral renal artery stenosis', 'concomitant aliskiren in diabetes'],
+    notes:
+      'Adult max 100 mg/day. ARB — pregnancy category D (fetal toxicity). Common first-line antihypertensive.',
+  },
+  {
+    drug: 'lovastatin',
+    aliases: ['mevacor', 'altoprev'],
+    adultMaxMgPerDay: 80,
+    contraindications: ['active liver disease', 'pregnancy', 'breastfeeding', 'lovastatin allergy', 'strong cyp3a4 inhibitor use'],
+    notes:
+      'Adult max 80 mg/day (IR); 40 mg/day with certain interacting drugs. Significant CYP3A4 interaction profile.',
   },
   {
     drug: 'metformin',
@@ -264,6 +364,14 @@ export const DOSE_RANGES: ReadonlyArray<DoseRangeEntry> = [
       'Tartrate (IR) max 450 mg/day for HTN; succinate (XL) max 400 mg/day for HTN/HF. Lower max in HF on succinate (200 mg/day routine).',
   },
   {
+    drug: 'nitrofurantoin',
+    aliases: ['macrobid', 'macrodantin'],
+    adultMaxMgPerDay: 400,
+    contraindications: ['nitrofurantoin allergy', 'creatinine clearance below 30', 'g6pd deficiency', 'pregnancy at term (38-42 weeks)', 'anuria'],
+    notes:
+      'UTI treatment max ~400 mg/day; prophylaxis far lower. Contraindicated in significant renal impairment (CrCl <30).',
+  },
+  {
     drug: 'omeprazole',
     aliases: ['prilosec'],
     adultMaxMgPerDay: 40,
@@ -280,6 +388,14 @@ export const DOSE_RANGES: ReadonlyArray<DoseRangeEntry> = [
     contraindications: ['ondansetron allergy', 'congenital long QT'],
     notes:
       'FDA: single IV dose >16 mg removed from labeling 2012 due to QT prolongation. Oral max ~32 mg/day across split doses.',
+  },
+  {
+    drug: 'pravastatin',
+    aliases: ['pravachol'],
+    adultMaxMgPerDay: 80,
+    contraindications: ['active liver disease', 'pregnancy', 'breastfeeding', 'pravastatin allergy'],
+    notes:
+      'Adult max 80 mg/day. Hydrophilic statin, minimal CYP interactions — often preferred with polypharmacy.',
   },
   {
     drug: 'prednisone',
@@ -319,6 +435,14 @@ export const DOSE_RANGES: ReadonlyArray<DoseRangeEntry> = [
     contraindications: ['mao inhibitor use', 'severe respiratory depression', 'tramadol allergy'],
     notes:
       'IR max 400 mg/day; ER 300 mg/day. Schedule IV controlled. Lower max with serotonergic concomitants (interaction risk).',
+  },
+  {
+    drug: 'valsartan',
+    aliases: ['diovan'],
+    adultMaxMgPerDay: 320,
+    contraindications: ['valsartan allergy', 'pregnancy', 'bilateral renal artery stenosis', 'concomitant aliskiren in diabetes'],
+    notes:
+      'Adult max 320 mg/day. ARB — pregnancy category D. Common first-line antihypertensive.',
   },
   {
     drug: 'venlafaxine',
@@ -494,6 +618,14 @@ export const DOSE_RANGES: ReadonlyArray<DoseRangeEntry> = [
   // explicit notes so the Rx rail emits the warning if a clinician
   // drafts "calcium carbonate" for a post-bypass patient.
   {
+    drug: 'chlorthalidone',
+    aliases: ['thalitone'],
+    adultMaxMgPerDay: 100,
+    contraindications: ['anuria', 'sulfonamide allergy', 'thiazide allergy'],
+    notes:
+      'HTN typical 12.5-25 mg/day; cap 100 mg/day. Thiazide-like diuretic, longer-acting than HCTZ.',
+  },
+  {
     drug: 'cholecalciferol',
     aliases: ['vitamin d3', 'vitamin d', 'd3', 'calciferol'],
     complexDosing: true,
@@ -553,6 +685,14 @@ export const DOSE_RANGES: ReadonlyArray<DoseRangeEntry> = [
     contraindications: ['thiamine allergy'],
     notes:
       'Post-bariatric typical: 50-100 mg PO daily in first 6 months post-op then per bariatric multivitamin. Watch for Wernicke encephalopathy precipitated by persistent vomiting / dehydration / rapid weight loss (triad: confusion, ophthalmoplegia, ataxia) — IV/IM thiamine 100-500 mg for suspected acute Wernicke. The clinical risk is missing the diagnosis, not over-dosing.',
+  },
+  {
+    drug: 'trimethoprim-sulfamethoxazole',
+    aliases: ['bactrim', 'septra', 'tmp-smx', 'co-trimoxazole', 'sulfamethoxazole-trimethoprim'],
+    complexDosing: true,
+    contraindications: ['sulfonamide allergy', 'trimethoprim allergy', 'megaloblastic anemia from folate deficiency', 'severe renal impairment', 'third-trimester pregnancy', 'infants under 2 months'],
+    notes:
+      'Weight/indication-based, dosed by trimethoprim component (UTI DS BID; PJP 15-20 mg/kg/day TMP). Verify against indication; hyperkalemia + warfarin interaction.',
   },
   {
     drug: 'ursodiol',
@@ -757,6 +897,16 @@ export const DOSE_RANGES: ReadonlyArray<DoseRangeEntry> = [
   // The vitamin entries use complexDosing because dosing is target-
   // lab-driven (25-OH-D, RBC folate, etc.) rather than mg/day cap-driven.
 
+  {
+    drug: 'metronidazole',
+    aliases: ['flagyl'],
+    adultMaxMgPerDay: 4000,
+    pedsMgPerKgPerDay: { min: 15, max: 35 },
+    pedsMaxMgPerDay: 4000,
+    contraindications: ['metronidazole allergy', 'first-trimester pregnancy', 'concurrent or recent alcohol use (disulfiram-like reaction)'],
+    notes:
+      'Adult max ~4 g/day (anaerobic/C. diff/parasitic). Counsel strict alcohol avoidance during and 3 days after.',
+  },
   {
     drug: 'multivitamin',
     aliases: [

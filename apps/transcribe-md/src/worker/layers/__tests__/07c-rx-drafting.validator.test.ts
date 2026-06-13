@@ -63,6 +63,7 @@ vi.mock('@meddoc/db', () => ({
   },
 }));
 
+import { mapWorkerSeverity } from '@/lib/rx-warnings';
 import { runLayer7cRxDrafting } from '../07c-rx-drafting';
 import type { RxResult } from '../07c-rx-drafting';
 
@@ -175,9 +176,12 @@ describe('runLayer7cRxDrafting — validateRxDose integration (Finding 06.1)', (
     ).toBe(true);
   });
 
-  it('C — drug not in dose-ranges DB (pregabalin) → fires RX_DRUG_NOT_IN_VERIFIED_DATABASE (major)', async () => {
-    // pregabalin is intentionally NOT in the 29-drug PR-D dose-ranges
-    // table; this is the fail-closed "we cannot verify" path.
+  it('C — drug not in dose-ranges DB (pregabalin) → fires RX_DRUG_NOT_IN_VERIFIED_DATABASE at COACHING tier (minor → rail info), still audited', async () => {
+    // pregabalin is intentionally NOT in the dose-ranges table; this is the
+    // fail-closed "we cannot verify" path. RE-TIERED 2026-06-13 (live-smoke):
+    // a coverage gap is a coaching nudge (minor → rail `info`), NOT a `major`
+    // (rail `serious`) clinical alarm — that miscalibration flagged common
+    // safe drugs alarmingly.
     setNextRxResult({
       prescriptions: [
         {
@@ -196,25 +200,75 @@ describe('runLayer7cRxDrafting — validateRxDose integration (Finding 06.1)', (
 
     const out: RxResult = await runLayer7cRxDrafting({
       ...baseInput,
-      patient: {
-        dateOfBirth: '1980-01-01',
-        weightKg: 75,
-        allergies: [],
-      },
+      patient: { dateOfBirth: '1980-01-01', weightKg: 75, allergies: [] },
     });
 
     const unknownWarnings = out.warnings.filter((w) =>
       w.message.includes('not in our verified safety database')
     );
     expect(unknownWarnings.length).toBe(1);
-    expect(unknownWarnings[0].severity).toBe('major');
+    expect(unknownWarnings[0].severity).toBe('minor'); // was 'major' — re-tiered
+    expect(mapWorkerSeverity(unknownWarnings[0].severity)).toBe('info');
     expect(unknownWarnings[0].rx_drug).toBe('pregabalin');
     expect(unknownWarnings[0].message).toMatch(/^\[deterministic\]/);
-
+    // Still audited (coverage gaps remain on the forensic trail).
     expect(
-      auditCalls.some(
-        (c) => c.action === 'RX_DRUG_NOT_IN_VERIFIED_DATABASE'
-      )
+      auditCalls.some((c) => c.action === 'RX_DRUG_NOT_IN_VERIFIED_DATABASE')
     ).toBe(true);
+  });
+
+  it('D — amlodipine (the live-smoke drug, now in the verified DB) → NO not-in-database warning', async () => {
+    setNextRxResult({
+      prescriptions: [
+        {
+          drug: 'amlodipine',
+          strength: '5 mg',
+          form: 'tablet',
+          sig: 'Take 1 tablet daily',
+          quantity: '30',
+          refills: '3',
+          action: 'new',
+          evidence_quote: 'Start amlodipine 5 mg daily for blood pressure',
+        },
+      ],
+      warnings: [],
+    });
+    const out: RxResult = await runLayer7cRxDrafting({
+      ...baseInput,
+      patient: { dateOfBirth: '1965-01-01', weightKg: 85, allergies: [] },
+    });
+    expect(
+      out.warnings.some((w) => w.message.includes('not in our verified safety database'))
+    ).toBe(false);
+    expect(
+      auditCalls.some((c) => c.action === 'RX_DRUG_NOT_IN_VERIFIED_DATABASE')
+    ).toBe(false);
+  });
+
+  it('E — a GENUINE contraindication stays CRITICAL (losartan in a pregnant patient is unaffected by the re-tier)', async () => {
+    setNextRxResult({
+      prescriptions: [
+        {
+          drug: 'losartan',
+          strength: '50 mg',
+          form: 'tablet',
+          sig: 'Take 1 tablet daily',
+          quantity: '30',
+          refills: '3',
+          action: 'new',
+          evidence_quote: 'Start losartan for hypertension',
+        },
+      ],
+      warnings: [],
+    });
+    const out: RxResult = await runLayer7cRxDrafting({
+      ...baseInput,
+      patient: { dateOfBirth: '1992-01-01', weightKg: 70, allergies: ['pregnancy'] },
+    });
+    const contra = out.warnings.filter((w) =>
+      w.message.includes('contraindication')
+    );
+    expect(contra.length).toBeGreaterThanOrEqual(1);
+    expect(contra[0].severity).toBe('critical');
   });
 });
