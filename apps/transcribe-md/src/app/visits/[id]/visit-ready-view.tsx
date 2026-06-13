@@ -33,6 +33,7 @@ import { RxTab, rxTabWarningLevel } from './rx-tab';
 import { ExtrasTab, extrasTabHasFlag } from './extras-tab';
 import { CopySectionButton } from './copy-section-button';
 import { TranscriptTab, utterancesToSources } from './transcript-tab';
+import { projectEmForDisplay } from '@/lib/visit-export';
 import type { VisitExportData } from '@/lib/visit-export';
 import {
   sectionSoap,
@@ -629,7 +630,9 @@ function buildSectionData(props: VisitReadyViewProps): VisitExportData {
     clinicianEmail: props.doctorEmail,
     soapText: props.soapText,
     icdCodes: icdBlob?.codes ?? [],
-    em: cptBlob?.em ?? null,
+    // #315 obs#2: project the displayed E/M code so the "Copy codes"
+    // clipboard prints what the doctor reviewed, not the raw L7b suggestion.
+    em: projectEmForDisplay(cptBlob?.em ?? null, !!props.signedAt),
     procedures: cptBlob?.procedures ?? [],
     modifiers: cptBlob?.modifiers ?? [],
     prescriptions: rxBlob?.prescriptions ?? [],

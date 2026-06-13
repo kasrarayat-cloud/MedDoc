@@ -13,6 +13,7 @@
 import prisma from '@meddoc/db';
 import type { TranscribeVisitStatus } from '@prisma/client';
 import { findSpecialty } from '@meddoc/shared/specialties';
+import { projectEmForDisplay } from './visit-export';
 import type {
   CptEm,
   CptModifier,
@@ -79,6 +80,12 @@ export async function loadVisitExportData(
   const refBlob =
     (visit.referrals as { referrals?: Referral[] } | null) ?? null;
 
+  // E/M PARITY (#315 obs#2): project the AUTHORITATIVE displayed level onto
+  // em.code so every artifact (PDF, DOCX, all EHR clipboard formats) prints
+  // what the doctor reviewed — never the raw L7b suggestion. The SAME helper
+  // the client Codes tab + "Copy codes" use, so all surfaces agree.
+  const emForExport = projectEmForDisplay(cptBlob?.em ?? null, visit.status === 'SIGNED');
+
   return {
     visitId: visit.id,
     patientName: visit.patientName,
@@ -96,7 +103,7 @@ export async function loadVisitExportData(
     clinicianEmail: visit.user.email,
     soapText,
     icdCodes: icdBlob?.codes ?? [],
-    em: cptBlob?.em ?? null,
+    em: emForExport,
     procedures: cptBlob?.procedures ?? [],
     modifiers: cptBlob?.modifiers ?? [],
     prescriptions: rxBlob?.prescriptions ?? [],

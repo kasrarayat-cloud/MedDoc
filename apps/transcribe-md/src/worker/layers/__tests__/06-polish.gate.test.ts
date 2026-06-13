@@ -45,6 +45,9 @@ vi.mock('@meddoc/db', () => ({
 }));
 
 vi.mock('@/lib/audit', () => ({ logAudit: mocks.logAudit }));
+vi.mock('@/worker/finalize-review-state', () => ({
+  applyAdditiveReviewState: vi.fn(async () => {}),
+}));
 
 import { runLayer6Polish, type Layer6Input } from '../06-polish';
 import { findNovelContentTerms } from '../06b-polish-fidelity-gate';
