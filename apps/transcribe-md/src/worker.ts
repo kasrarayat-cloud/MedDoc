@@ -22,6 +22,8 @@ import './worker-sentry';
 import { captureWorkerException } from './worker-sentry';
 import { Worker, type Job } from 'bullmq';
 import prisma from '@meddoc/db';
+import { evidenceAnchorsEnabled } from './worker/evidence-anchors-flag';
+import { ANCHOR_GENERATION_ADDENDUM } from './worker/layers/04b-anchor-verify';
 import { TranscribeVisitStatus } from '@prisma/client';
 import type { DeepgramBatchResponse, DeepgramUtterance } from '@meddoc/ai';
 import { redactPhi } from '@meddoc/ai';
@@ -1468,6 +1470,36 @@ async function startHeartbeat(
 
 async function main() {
   log.info('transcribe-md-worker', 'booting');
+  // Flag-vs-capability assertion (#311 lesson: a flag flipped ON against a
+  // stale image that lacks the capability is SILENTLY inert — no error, no
+  // log). This line is the operator check: after any flag flip + recreate,
+  // its presence proves the image carries the capability; its ABSENCE on a
+  // flag-on deploy means a stale image. A flag-on/capability-missing
+  // combination logs at error level.
+  {
+    const flags: { flag: string; on: boolean; capability: () => boolean }[] = [
+      {
+        flag: 'TRANSCRIBE_MD_EVIDENCE_ANCHORS',
+        on: evidenceAnchorsEnabled(),
+        capability: () => ANCHOR_GENERATION_ADDENDUM.length > 0,
+      },
+      {
+        flag: 'TRANSCRIBE_MD_WHISPER_FALLBACK_ENABLED',
+        on: process.env.TRANSCRIBE_MD_WHISPER_FALLBACK_ENABLED === 'true',
+        capability: () => true, // shipped with the kill-switch itself
+      },
+    ];
+    for (const f of flags) {
+      let present = false;
+      try { present = f.capability(); } catch { present = false; }
+      const line = { flag: f.flag, enabled: f.on, capabilityPresent: present };
+      if (f.on && !present) {
+        log.error('transcribe-md-worker', 'FLAG ON BUT CAPABILITY MISSING — stale image?', line);
+      } else {
+        log.info('transcribe-md-worker', 'feature-flag state', line);
+      }
+    }
+  }
   await ensureBucket();
   log.info('transcribe-md-worker', 'bucket ready');
 
