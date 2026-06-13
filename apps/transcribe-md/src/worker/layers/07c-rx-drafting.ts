@@ -406,18 +406,21 @@ export async function runLayer7cRxDrafting(
     for (const w of validation.warnings) {
       // Severity mapping mirrors the prompt's severity ladder. Dose-
       // exceeds-range and explicit allergy/contraindication matches are
-      // patient-harm risks — critical. "Drug not in verified DB" is a
-      // major (verify-against-reference) signal, not critical, because
-      // the model's pharmacology may still be correct; we just lack a
-      // deterministic check. Complex-dosing is minor — it's a "verify
-      // individually" nudge, not a hard block.
+      // patient-harm risks — critical. Everything else is `minor` →
+      // rail `info` (coaching). RE-TIERED 2026-06-13 (live-smoke): "drug
+      // not in verified DB" is a COVERAGE GAP, not a clinical emergency —
+      // it used to emit at `major` (rail `serious`), which alarmingly
+      // flagged common, safe drugs like amlodipine that simply weren't in
+      // the table yet. A missing deterministic check is a verify-against-
+      // reference nudge, the same tier as complex-dosing. Genuine
+      // contraindications + dose-exceeds keep their `critical` tier and
+      // the sign gate still counts ONLY `critical`, so this changes the
+      // alarm level, never the safety gate.
       const severity: 'critical' | 'major' | 'minor' =
         w.code === 'RX_DOSE_EXCEEDS_VERIFIED_RANGE' ||
         w.code === 'RX_CONTRAINDICATION_MATCH'
           ? 'critical'
-          : w.code === 'RX_DRUG_NOT_IN_VERIFIED_DATABASE'
-            ? 'major'
-            : 'minor';
+          : 'minor';
 
       result.warnings.push({
         severity,
