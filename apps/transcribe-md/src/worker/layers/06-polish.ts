@@ -10,6 +10,7 @@
 import { modelClient } from '@meddoc/ai';
 import prisma from '@meddoc/db';
 import { logAudit } from '@/lib/audit';
+import { applyAdditiveReviewState } from '@/worker/finalize-review-state';
 import { runPolishFidelityGate } from './06b-polish-fidelity-gate';
 import {
   classifyCritique,
@@ -252,11 +253,17 @@ export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output>
       // Always written alongside soapFinal so the two columns agree at
       // the end of a clean pipeline run.
       soapL6Original: soapFinal,
-      ...(needsReview
-        ? { needsReview: true, reviewReason }
-        : {}),
     },
   });
+
+  // Review state is ADDITIVE (2026-06-13, #315 obs#1): an earlier layer may
+  // already have flagged review with its own reason — most notably L4's
+  // anchored-generation "all content moved out of section X" set-aside. A
+  // direct `reviewReason` write here CLOBBERED that, so the doctor saw only
+  // the L6 reason. Compose instead, so the banner shows EVERY reason the note
+  // needs review (existing reason first — it's usually the more safety-
+  // relevant one; applyAdditiveReviewState concatenates SQL-side, atomic).
+  await applyAdditiveReviewState(input.visitId, { needsReview, reviewReason });
 
   return { soapFinal, needsReview, reviewReason, unfixable, polishRejected };
 }
