@@ -408,3 +408,120 @@ html.js .reveal.is-in { opacity: 1; transform: translateY(0); }
 
 .site-foot { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin-top: 3rem; padding-top: 1.4rem; border-top: 1px solid var(--hair-2); color: var(--ink-3); font-size: 0.74rem; letter-spacing: 0.04em; }
 .foot-mid { color: var(--ink-2); }
+
+/* ============================================================================
+ * QUILL HERO (2026-06-14) — the quill writes the headline on load and the
+ * SOAP note on scroll. Replaces the static monolith hero. Motion = the brand.
+ * Progressive enhancement: real <h1> text, visible without JS, fully static
+ * under prefers-reduced-motion. GPU-only (transform / opacity / mask).
+ * ========================================================================== */
+.hero-quill { min-height: 100svh; overflow: hidden; }
+
+/* Faint monolith backdrop — atmosphere only; the quill is the star. */
+.hero-backdrop {
+  position: absolute; inset: 0; margin: auto; z-index: 0;
+  width: min(120vw, 1500px); height: auto; object-fit: cover;
+  opacity: 0.1; filter: saturate(0.7) blur(2px);
+  -webkit-mask-image: radial-gradient(60% 55% at 50% 42%, #000, transparent 75%);
+  mask-image: radial-gradient(60% 55% at 50% 42%, #000, transparent 75%);
+  pointer-events: none;
+}
+
+.hero-quill .hero-stage {
+  position: relative; z-index: 2; flex: 1;
+  display: flex; flex-direction: column; align-items: center;
+  width: 100%; max-width: 1100px; margin: 0 auto;
+  padding: 0 clamp(1.25rem, 5vw, 3rem) 14vh;
+}
+.hero-quill .hero-copy {
+  min-height: 82svh; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; text-align: center;
+  padding-top: 2vh;
+}
+
+/* ── The headline: real <h1>; each line ink-reveals via a left→right mask ── */
+.quill-title { display: flex; flex-direction: column; align-items: center; gap: 0; }
+.qline-wrap { display: block; overflow: visible; }
+.qline {
+  --p: 1; /* default fully revealed (no-JS / reduced motion) */
+  display: inline-block; position: relative;
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(var(--p) * 100% - 0.35ch), transparent calc(var(--p) * 100% + 0.15ch));
+  mask-image: linear-gradient(90deg, #000 calc(var(--p) * 100% - 0.35ch), transparent calc(var(--p) * 100% + 0.15ch));
+}
+/* JS-capable browsers start the lines un-inked (no flash); JS writes them in. */
+html.js .hero-quill .qline { --p: 0; }
+/* the gold ink trail under the nib as each line is written */
+.qline::after {
+  content: ""; position: absolute; left: 0; bottom: 0.04em; height: 2px;
+  width: calc(var(--p) * 100%);
+  background: linear-gradient(90deg, transparent, var(--gold) 30%, #fff0cf);
+  box-shadow: 0 0 10px rgba(232, 184, 92, 0.8);
+  opacity: 0; transition: opacity 0.5s ease;
+}
+.hero-quill.is-writing .qline::after { opacity: 0.9; }
+.hero-quill.write-done .qline::after { opacity: 0; }
+
+/* ── The flying quill ── */
+.quill {
+  position: absolute; top: 0; left: 0; z-index: 4; width: 120px; height: 160px;
+  opacity: 0; pointer-events: none;
+  /* nib (bottom-left of the SVG, ~41,149 of 120x160) anchored to (--qx,--qy) */
+  transform: translate(calc(var(--qx, 0px) - 41px), calc(var(--qy, 0px) - 149px)) rotate(8deg);
+  filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.6)) drop-shadow(0 0 12px rgba(232, 184, 92, 0.35));
+  will-change: transform, opacity;
+}
+.hero-quill.is-writing .quill { opacity: 1; transition: opacity 0.4s ease; }
+.quill.quill-rest { animation: quill-float 5.5s ease-in-out infinite; }
+@keyframes quill-float {
+  0%, 100% { transform: translate(calc(var(--qx, 0px) - 41px), calc(var(--qy, 0px) - 149px)) rotate(8deg); }
+  50%      { transform: translate(calc(var(--qx, 0px) - 41px), calc(var(--qy, 0px) - 149px - 10px)) rotate(6deg); }
+}
+
+/* ── Scroll-driven SOAP note, on faint ruled ink lines ── */
+.hero-soap {
+  position: relative; z-index: 2; list-style: none; margin: clamp(1rem, 4vh, 3rem) 0 0; padding: 0;
+  width: min(640px, 92vw); display: flex; flex-direction: column; gap: 0.2rem;
+  font-size: clamp(0.8rem, 1.5vw, 0.95rem);
+}
+.hsoap-ln {
+  --p: 1; display: grid; grid-template-columns: auto 1fr auto; gap: 0.7rem; align-items: center;
+  padding: 0.7rem 0.2rem; border-bottom: 1px solid var(--hair-2);
+}
+html.js .hero-quill .hsoap-ln { --p: 0; }
+.hsoap-tag {
+  width: 22px; height: 22px; display: grid; place-items: center; border-radius: 3px;
+  font-weight: 700; font-size: 0.72rem; border: 1px solid var(--hair);
+  opacity: calc(0.3 + var(--p) * 0.7);
+}
+.hsoap-S { color: var(--turq); border-color: rgba(63,216,200,0.4); }
+.hsoap-O { color: #8ad6ff; border-color: rgba(138,214,255,0.35); }
+.hsoap-A { color: var(--gold); border-color: rgba(232,184,92,0.4); }
+.hsoap-P { color: #c8a6ff; border-color: rgba(200,166,255,0.35); }
+.hsoap-text {
+  color: #d6efe9; text-align: left; line-height: 1.4;
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(var(--p) * 100%), transparent calc(var(--p) * 100% + 1ch));
+  mask-image: linear-gradient(90deg, #000 calc(var(--p) * 100%), transparent calc(var(--p) * 100% + 1ch));
+}
+.hsoap-ln .chip { opacity: 0; transition: opacity 0.4s ease; transform: translateY(0); }
+.hsoap-ln.inked .chip { opacity: 1; }
+
+/* ── Mobile: quill steps aside; the headline still inks in, SOAP just fades ── */
+@media (max-width: 720px) {
+  .quill { display: none; }
+  .hero-soap { font-size: 0.82rem; }
+  .hsoap-text {
+    -webkit-mask-image: none; mask-image: none;
+    opacity: var(--p); transition: opacity 0.4s ease;
+  }
+}
+
+/* ── Reduced motion: NOTHING animates; all content fully visible ── */
+@media (prefers-reduced-motion: reduce) {
+  .hero-quill .qline,
+  .hero-quill .hsoap-ln { --p: 1 !important; }
+  .qline { -webkit-mask-image: none !important; mask-image: none !important; }
+  .hsoap-text { -webkit-mask-image: none !important; mask-image: none !important; opacity: 1 !important; }
+  .quill { display: none !important; }
+  .hsoap-ln .chip { opacity: 1 !important; }
+  .qline::after { opacity: 0 !important; }
+}
