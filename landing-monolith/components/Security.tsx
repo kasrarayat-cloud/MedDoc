@@ -43,11 +43,11 @@ export function Security() {
               render when its URL is provided. The streaming data + lock CSS
               layer reads as encryption even before/behind the art. */}
           <img
-            src="/assets/security-vault.svg"
+            src="/assets/security-vault.webp"
             alt=""
             className="vault-img"
-            width={720}
-            height={720}
+            width={1344}
+            height={768}
             decoding="async"
           />
           <div className="vault-stream font-mono" aria-hidden>

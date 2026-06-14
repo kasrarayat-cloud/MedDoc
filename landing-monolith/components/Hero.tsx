@@ -69,11 +69,11 @@ export function Hero() {
           {/* The HERO_MONOLITH image. Self-hosted; swapped to the real
               Higgsfield render when its URL is provided. */}
           <img
-            src="/assets/hero-monolith.svg"
+            src="/assets/hero-monolith.webp"
             alt="A floating obsidian-glass prism with glowing internal data streams"
             className="monolith"
-            width={920}
-            height={920}
+            width={1344}
+            height={768}
             decoding="async"
           />
           <div className="monolith-floor" aria-hidden />
