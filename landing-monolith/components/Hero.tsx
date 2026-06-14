@@ -14,11 +14,11 @@ const HEADLINE: { text: string; accent?: boolean }[] = [
 ];
 
 // The quill keeps writing as you scroll — one short SOAP note, scroll-driven.
-const SOAP: { tag: string; text: string; chip?: 'verified' | 'review' }[] = [
-  { tag: 'S', text: '54M, 3-mo HTN follow-up, home BP ~150/90.', chip: 'verified' },
-  { tag: 'O', text: 'BP 148/92, HR 78, lungs clear.', chip: 'verified' },
-  { tag: 'A', text: 'Hypertension, uncontrolled.', chip: 'review' },
-  { tag: 'P', text: 'Add amlodipine 5 mg; f/u 4 wks.', chip: 'verified' },
+const SOAP: { tag: string; label: string; text: string; chip?: 'verified' | 'review' }[] = [
+  { tag: 'S', label: 'Subjective', text: '54M, 3-mo HTN follow-up, home BP ~150/90.', chip: 'verified' },
+  { tag: 'O', label: 'Objective', text: 'BP 148/92, HR 78, lungs clear.', chip: 'verified' },
+  { tag: 'A', label: 'Assessment', text: 'Hypertension, uncontrolled.', chip: 'review' },
+  { tag: 'P', label: 'Plan', text: 'Add amlodipine 5 mg; f/u 4 wks.', chip: 'verified' },
 ];
 
 export function Hero() {
@@ -67,16 +67,27 @@ export function Hero() {
 
     let writeRaf = 0;
     let start = 0;
+    // Line geometry (relative to the stage) is MEASURED ONCE — the headline is
+    // static during the write, so we cache it on the first frame and never call
+    // getBoundingClientRect again in the loop (no per-frame reads, no thrash).
+    let geom: { left: number; top: number; width: number; height: number }[] | null = null;
     const PER_LINE = 620; // ms to write one line
     const GAP = 130; // ms pen lifts between lines
     const total = lines.length * (PER_LINE + GAP);
 
     const writeFrame = (now: number) => {
       if (!start) start = now;
+      if (!geom) {
+        const sr = stage.getBoundingClientRect();
+        geom = lines.map((ln) => {
+          const r = ln.getBoundingClientRect();
+          return { left: r.left - sr.left, top: r.top - sr.top, width: r.width, height: r.height };
+        });
+      }
       const t = now - start;
-      const stageRect = stage.getBoundingClientRect();
 
       lines.forEach((ln, i) => {
+        const g = geom![i];
         const lineStart = i * (PER_LINE + GAP);
         const local = Math.min(Math.max((t - lineStart) / PER_LINE, 0), 1);
         // easeInOutSine for a hand-drawn cadence
@@ -85,11 +96,8 @@ export function Hero() {
 
         // Park the quill at the pen edge of the line currently being written.
         if (t >= lineStart && t < lineStart + PER_LINE + GAP && quill) {
-          const r = ln.getBoundingClientRect();
-          const qx = r.left - stageRect.left + r.width * e;
-          const qy = r.top - stageRect.top + r.height * 0.82;
-          quill.style.setProperty('--qx', `${qx}px`);
-          quill.style.setProperty('--qy', `${qy}px`);
+          quill.style.setProperty('--qx', `${g.left + g.width * e}px`);
+          quill.style.setProperty('--qy', `${g.top + g.height * 0.82}px`);
         }
       });
 
@@ -98,11 +106,10 @@ export function Hero() {
       } else {
         lines.forEach((ln) => ln.style.setProperty('--p', '1'));
         // Settle the quill to an elegant resting float near the last line's end.
-        const last = lines[lines.length - 1].getBoundingClientRect();
-        const sr = stage.getBoundingClientRect();
+        const last = geom[geom.length - 1];
         if (quill) {
-          quill.style.setProperty('--qx', `${last.right - sr.left + 14}px`);
-          quill.style.setProperty('--qy', `${last.top - sr.top + last.height * 0.5}px`);
+          quill.style.setProperty('--qx', `${last.left + last.width + 14}px`);
+          quill.style.setProperty('--qy', `${last.top + last.height * 0.5}px`);
           quill.classList.add('quill-rest');
         }
         section.classList.add('write-done');
@@ -223,7 +230,7 @@ export function Hero() {
               className="hsoap-ln"
               style={{ ['--p' as string]: 1 }}
             >
-              <span className={`hsoap-tag hsoap-${l.tag}`}>{l.tag}</span>
+              <span className={`hsoap-tag hsoap-${l.tag}`} title={l.label} aria-label={l.label}>{l.tag}</span>
               <span className="hsoap-text">{l.text}</span>
               {l.chip && (
                 <span className={`chip chip-${l.chip}`}>
