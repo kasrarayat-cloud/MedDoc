@@ -5162,3 +5162,103 @@ body {
     gap: 6px;
   }
 }
+
+/* ── Stage 4 — Auth (one quiet centered card) ────────────────────────────── */
+.qm-c3-auth {
+  min-height: 100vh;
+  width: 100%;
+  display: grid;
+  place-items: center;
+  padding: 40px 20px;
+  background: var(--color-linear-bg);
+  color: var(--color-linear-text);
+}
+.qm-c3-auth-card {
+  width: 100%;
+  max-width: 410px;
+  background: var(--color-linear-surface-1);
+  border: 1px solid var(--color-linear-border);
+  border-radius: 16px;
+  padding: clamp(28px, 5vw, 38px);
+}
+.qm-c3-auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 26px;
+}
+.qm-c3-auth-mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: linear-gradient(
+    135deg,
+    var(--color-linear-sage) 0%,
+    var(--color-linear-sage-deep) 100%
+  );
+  display: grid;
+  place-items: center;
+  color: #0c1410;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+.qm-c3-auth-word {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--color-linear-text);
+}
+.qm-c3-auth-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-linear-text-3);
+  margin-bottom: 12px;
+}
+.qm-c3-auth-h {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 25px;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  line-height: 1.2;
+  color: var(--color-linear-text);
+}
+.qm-c3-auth-sub {
+  margin: 8px 0 0;
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--color-linear-text-2);
+  letter-spacing: -0.005em;
+}
+.qm-c3-auth-form {
+  margin-top: 26px;
+}
+.qm-c3-auth-trust {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 26px;
+  color: var(--color-linear-text-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+.qm-c3-auth-trust > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+/* <em> accent in the C3 auth title (the OFF shell scopes this in an inline
+   <style>; redeclare globally so the accent also applies under the flag). */
+.qm-c3-auth .qm-auth-em-host em {
+  color: var(--color-linear-sage-bright);
+  font-style: normal;
+}
