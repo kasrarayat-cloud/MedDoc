@@ -24,8 +24,12 @@
 
 import type { ReactNode } from 'react';
 import { auth } from '@/lib/nextauth';
+import { isSkinBeta } from '@/config/skin-beta';
 import { TopNav } from './top-nav';
 import { IconRail } from './icon-rail';
+import { SidebarC3 } from './sidebar-c3';
+import { TopNavC3 } from './top-nav-c3';
+import { MobileNavC3 } from './mobile-nav-c3';
 
 type AppFrameTheme = 'legacy' | 'clinician';
 
@@ -41,6 +45,25 @@ export async function AppFrame({ children }: AppFrameProps) {
   const session = await auth();
   const userName = session?.user?.name || session?.user?.email || 'Doctor';
   const userEmail = session?.user?.email ?? undefined;
+
+  // ── C3 calm-skin chrome (Stage 1b, flag-gated) ──────────────────────────────
+  // Reuses the SAME .qm-lin-app grid + content-column + <main> overflow parent as
+  // the original (so the §8.2 sticky contract holds), with the C3 sidebar/top-bar
+  // content + a real mobile bottom nav. Flag OFF → the original below, unchanged.
+  if (isSkinBeta()) {
+    return (
+      <div className="qm-lin-app qm-c3-app">
+        <SidebarC3 userName={userName} userEmail={userEmail} />
+        <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', minWidth: 0 }}>
+          <TopNavC3 />
+          <main id="main" tabIndex={-1} style={{ flex: 1, minWidth: 0, position: 'relative', outline: 'none' }}>
+            {children}
+          </main>
+        </div>
+        <MobileNavC3 />
+      </div>
+    );
+  }
 
   return (
     <div className="qm-lin-app">
