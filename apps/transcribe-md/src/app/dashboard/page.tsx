@@ -25,7 +25,9 @@ import prisma from '@meddoc/db';
 import { TranscribeVisitStatus } from '@prisma/client';
 import { auth } from '@/lib/nextauth';
 import { logAudit } from '@/lib/audit';
+import { isSkinBeta } from '@/config/skin-beta';
 import { AppFrame } from '@/components/ui/app-frame';
+import { DashboardC3Body } from '@/components/dashboard/dashboard-c3';
 import { StatCard } from '@/components/dashboard/stat-card';
 import { Greeting } from '@/components/dashboard/greeting';
 import {
@@ -69,12 +71,18 @@ export default async function DashboardPage({
   return (
     <AppFrame>
       <Suspense fallback={<DashboardSkeleton />}>
-        <DashboardBody
-          userId={session.user.id}
-          practiceId={user.practiceId}
-          userName={user.name}
-          activeTab={activeTab}
-        />
+        {isSkinBeta() ? (
+          // Stage 1 calm-skin dashboard (flag-gated). Same read-only data,
+          // re-laid-out as the "notes to sign" inbox. Old UI is the default.
+          <DashboardC3Body userId={session.user.id} userName={user.name} />
+        ) : (
+          <DashboardBody
+            userId={session.user.id}
+            practiceId={user.practiceId}
+            userName={user.name}
+            activeTab={activeTab}
+          />
+        )}
       </Suspense>
     </AppFrame>
   );
