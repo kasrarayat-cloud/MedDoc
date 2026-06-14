@@ -91,12 +91,12 @@ export function Sandbox() {
 
         <div className="sandbox-grid">
           {/* LEFT — audio waveform */}
-          <div className="wave-pane" aria-label="Live audio waveform (illustrative)">
-            <div className="wave-meta font-mono">
+          <div className="wave-pane" role="img" aria-label="Live audio waveform — two speakers, illustrative">
+            <div className="wave-meta font-mono" aria-hidden>
               <span>AUDIO IN</span>
               <span className="text-turq">2 speakers</span>
             </div>
-            <div className="wave" role="img" aria-label="Oscillating audio waveform">
+            <div className="wave" aria-hidden>
               {Array.from({ length: WAVE_BARS }).map((_, i) => (
                 <span
                   key={i}

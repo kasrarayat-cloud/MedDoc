@@ -75,8 +75,10 @@ export function Journey() {
               >
                 <button
                   className="node-dot"
+                  type="button"
                   aria-expanded={open}
                   aria-controls={`step-${n.key}`}
+                  onClick={() => setActive(n.key)}
                 >
                   <span className="node-glyph" aria-hidden>{n.glyph}</span>
                   <span className="node-index font-mono" aria-hidden>0{i + 1}</span>
