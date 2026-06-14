@@ -1,7 +1,10 @@
 # QuillMD — SOAP review redesign concepts (`/concepts/soap`)
 
-Staging-only design exploration. Three distinct redesigns of the worst + most-used screen
+Staging-only design exploration. **Ten** distinct redesigns of the worst + most-used screen
 (`/visits/[id]` in the live app), toward **simple, calm, one-clear-action** clinical review.
+Switcher: `staging.quillmd.com/concepts/soap?v=1..10` (keys 1–9; v=10 via the pill).
+C1–C3 are the original set; **C4–C10 are seven further information architectures** — each a
+genuinely different *shape* for the same screen, not a reskin (see the distinctness notes).
 **Static mockups** with synthetic no-PHI data — NOT wired to the real visit pipeline, server
 actions, auth, or data. The live app, pipeline, production and co-tenants are untouched.
 
@@ -52,9 +55,51 @@ thing on screen until the doctor chooses to review.
 - **Kills the 3 buttons:** the note dominates; everything else is one calm drawer behind one
   count pill; Sign is the only button. The pill is informational (a count), not a CTA.
 
-All three keep ALL real functionality represented — note editing, the AI suggestions lane with
+## C4 — ZERO-CHROME / NOTE-ONLY (ref: distraction-free editor + floating action)
+No top bar, no rail, no visible Sign. The note **fills the screen**; a single floating affordance
+(bottom-right) is the only UI — it summons ONE calm sheet holding patient, flagged items, coding,
+and Sign, then dismisses back to a pure document. **Distinct from C3:** C3 keeps a persistent
+header + visible Sign + count pill; C4 hides *everything* (even identity + Sign) behind one dot.
+
+## C5 — SPLIT BEFORE/AFTER (ref: Descript transcript↔doc)
+Two panes: the raw **visit transcript** (left) and the **note assembling from it** (right).
+Provenance *is* the layout — hovering/focusing a note section lights the transcript lines it came
+from, and a tagged transcript line lights its note section. Flagged items + Sign sit beneath the
+note. No other concept pairs source and output.
+
+## C6 — LINE-BY-LINE APPROVE (ref: checklist / accept-each)
+The note is decomposed into **atomic claims**, each a checklist row with its transcript anchor and
+inline edit. The doctor reviews each line; a held suggestion and the critical Rx are rows too. A
+progress bar tracks "N of M reviewed"; Sign unlocks only when every line is reviewed **and** the
+critical interaction overridden. **Distinct from C2:** C2 is 3 macro-steps; C6 is per-*claim*.
+
+## C7 — COMMAND-BAR DRIVEN (ref: ⌘K spotlight palette)
+The note is the page; the only action surface is a **⌘K command bar**. It lists the things that
+need doing (resolve interaction, adopt suggestion, review held, coding, sign), filtered by typing,
+moved by ↑↓, run by Enter. Keyboard-first, no buttons/rail/drawer. (Combobox+listbox a11y: options
+hold no focusable children; the action panel is a sibling region; `aria-activedescendant` roves.)
+
+## C8 — TWO-PANE READING VIEW + MARGIN PINS (ref: editorial doc + footnotes)
+The note reads like a **clean editorial document**; every flagged item is a **numbered footnote
+pin** in the right margin, anchored to where it applies (the Plan carries inline ① ② ③ markers).
+Click a pin — or its inline marker — to resolve it in place. **Distinct from C1's rail:** C1's
+cards are an always-open flat stack; C8's flags are collapsed footnotes tied to document positions.
+
+## C9 — CARD / FEED (ref: single-column feed)
+**One vertical column, no rail and no tabs.** The visit reads top to bottom: patient header, each
+SOAP section as a card, a divider, the flagged items as inline cards in reading order, then the one
+**Sign card at the very bottom**. One scroll resolves the whole visit.
+
+## C10 — DASHBOARD / SUMMARY-FIRST (ref: readiness dashboard)
+Opens on a one-glance **readiness view**: status tiles (note ✓ / 1 critical ⚠ / suggestions /
+coding) + a plain "what's left" line and the single Sign; the blocker is resolved from the summary.
+The full note is a **drill-in**, not the default. **Inverts every other concept** — the decision
+leads, the document follows.
+
+All ten keep ALL real functionality represented — note editing, the AI suggestions lane with
 adopt/dismiss, Rx warnings + critical override, the E/M confirm-before-sign, and sign + export —
-just arranged simply with one clear primary.
+just arranged differently with one clear primary. C4–C10 reuse the same `useReview()` state engine,
+`NoteDoc`/`NoteSection`, and the Lane/Rx/Em/Sign cards as C1–C3; only the *shell* changes.
 
 ## Synthetic sample (no PHI)
 The hypertension follow-up: amlodipine 5 mg (new) + lisinopril 20 mg + simvastatin 40 mg; BP
