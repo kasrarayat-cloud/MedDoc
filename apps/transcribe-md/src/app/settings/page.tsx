@@ -20,6 +20,11 @@ import prisma from '@meddoc/db';
 import { auth } from '@/lib/nextauth';
 import { getCurrentSessionId } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
+import { isSkinBeta } from '@/config/skin-beta';
+import {
+  SettingsSectionsC3,
+  type SettingsSectionC3,
+} from './settings-sections-c3';
 import {
   describeIpLocation,
   parseUserAgent,
@@ -145,6 +150,323 @@ export default async function SettingsPage() {
 
   // Which upload formats can this image actually extract (see getUploadCaps).
   const uploadCaps = await getUploadCaps();
+
+  // ── C3 calm-skin settings (Stage 3, flag-gated) ───────────────────────────
+  // SKIN-ONLY: identical auth + Prisma reads + VIEWED_SETTINGS audit row + the
+  // doctor-scoped template read above. This is a re-layout — the long 7-section
+  // scroll collapses to a calm section rail showing ONE panel at a time. Every
+  // panel renders the SAME server-action-wired component (ProfileForm,
+  // NoteFormatManager, ChangePasswordForm, SessionPanel, DeleteAccountDialog,
+  // export/billing links) the legacy layout uses. Flag OFF → the stacked
+  // layout below runs, byte-identical.
+  if (isSkinBeta()) {
+    const c3Sections: SettingsSectionC3[] = [
+      {
+        id: 'profile',
+        label: 'Profile',
+        title: 'Profile',
+        content: (
+          <>
+            <ProfileForm
+              defaultName={user.name ?? ''}
+              defaultSpecialty={user.specialty ?? ''}
+              defaultNpi={user.npi ?? ''}
+              defaultClinicName={user.clinicName ?? ''}
+              defaultTimeZone={user.timeZone ?? ''}
+            />
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: 14,
+                marginTop: 18,
+                paddingTop: 16,
+                borderTop: '1px solid var(--color-linear-hairline)',
+              }}
+            >
+              <EmailWithChangeButton email={user.email} />
+              <ReadOnlyRow
+                label="Member since"
+                value={
+                  <LocalTime
+                    iso={user.createdAt.toISOString()}
+                    variant="date"
+                  />
+                }
+              />
+            </div>
+          </>
+        ),
+      },
+      {
+        id: 'note-format',
+        label: 'Note format',
+        title: 'My Note Format',
+        subtitle:
+          'QuillMD writes in a standard SOAP format. Most doctors leave this as-is — teaching it your own template is an explicit, opt-in step below.',
+        content: (
+          <NoteFormatManager templates={noteTemplates} uploadCaps={uploadCaps} />
+        ),
+      },
+      {
+        id: 'security',
+        label: 'Security',
+        title: 'Security',
+        subtitle:
+          'Change your password. Other devices are signed out; this one stays.',
+        content: (
+          <>
+            <ChangePasswordForm />
+            <div style={{ marginTop: 20 }}>
+              <div
+                style={{
+                  padding: '14px 16px',
+                  borderRadius: 8,
+                  border: '1px dashed var(--color-linear-border-strong)',
+                  background: 'var(--color-linear-row-hover)',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    marginBottom: 6,
+                  }}
+                >
+                  <Ic.shield
+                    width={14}
+                    height={14}
+                    style={{ color: 'var(--color-linear-sage-bright)' }}
+                  />
+                  <span
+                    style={{
+                      fontFamily: 'var(--font-sans)',
+                      fontSize: 13,
+                      fontWeight: 500,
+                      color: 'var(--color-linear-text)',
+                    }}
+                  >
+                    Two-factor authentication
+                  </span>
+                  <span
+                    className={
+                      user.mfaEnabled
+                        ? 'qm-lin-pill qm-lin-pill--ready'
+                        : 'qm-lin-pill qm-lin-pill--review'
+                    }
+                  >
+                    {user.mfaEnabled ? 'Enabled' : 'Off'}
+                  </span>
+                </div>
+                <p
+                  style={{
+                    margin: 0,
+                    fontFamily: 'var(--font-sans)',
+                    fontSize: 12.5,
+                    color: 'var(--color-linear-text-2)',
+                    lineHeight: 1.55,
+                  }}
+                >
+                  TOTP setup + recovery codes UI lands in the next batch of
+                  Settings work. The database supports it today (mfaSecret,
+                  mfaBackupCodes[]).
+                </p>
+              </div>
+            </div>
+          </>
+        ),
+      },
+      {
+        id: 'sessions',
+        label: 'Active session',
+        title: 'Active session',
+        subtitle:
+          'One device at a time. Signing in elsewhere revokes this session automatically.',
+        content: activeSession ? (
+          <SessionPanel
+            ipAddress={activeSession.ipAddress}
+            browser={browser}
+            os={os}
+            locationLabel={describeIpLocation(activeSession.ipAddress)}
+            loggedInAtIso={activeSession.createdAt.toISOString()}
+            expiresAtIso={activeSession.expiresAt.toISOString()}
+            lastActiveAtIso={activeSession.lastActiveAt.toISOString()}
+          />
+        ) : (
+          <p
+            style={{
+              fontFamily: 'var(--font-sans)',
+              fontSize: 13,
+              color: 'var(--color-linear-text-2)',
+            }}
+          >
+            Your current session predates the single-device enforcement
+            rollout. Sign out and back in to enable it.
+          </p>
+        ),
+      },
+      ...(isDataExportEnabled()
+        ? [
+            {
+              id: 'data',
+              label: 'Your data',
+              title: 'Your data',
+              subtitle:
+                'Download a ZIP containing every visit, transcript, SOAP note, audio file, and signed PDF.',
+              content: (
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: 16,
+                    flexWrap: 'wrap',
+                    alignItems: 'flex-start',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <p
+                    style={{
+                      margin: 0,
+                      fontFamily: 'var(--font-sans)',
+                      fontSize: 13,
+                      color: 'var(--color-linear-text-2)',
+                      lineHeight: 1.55,
+                      flex: 1,
+                      minWidth: 220,
+                    }}
+                  >
+                    Export includes visit metadata, original audio, signed PDFs,
+                    and your per-doctor edit patterns. No passwords or MFA
+                    secrets. Large exports can take up to five minutes.
+                  </p>
+                  <a
+                    href="/api/settings/export-data"
+                    className="qm-lin-btn"
+                    style={{ textDecoration: 'none' }}
+                  >
+                    <Ic.download width={13} height={13} />
+                    Export my data
+                  </a>
+                </div>
+              ),
+            } satisfies SettingsSectionC3,
+          ]
+        : []),
+      {
+        id: 'billing',
+        label: 'Billing',
+        title: 'Billing',
+        subtitle: 'Manage your subscription and payment method.',
+        content: (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 16,
+              flexWrap: 'wrap',
+            }}
+          >
+            <p
+              style={{
+                margin: 0,
+                fontFamily: 'var(--font-sans)',
+                fontSize: 13,
+                color: 'var(--color-linear-text-2)',
+                maxWidth: 400,
+              }}
+            >
+              Stripe customer portal integration lands in the next Settings
+              wave. Trial usage + invoices will appear here.
+            </p>
+            <button
+              type="button"
+              disabled
+              className="qm-lin-btn"
+              title="Coming soon"
+              style={{ opacity: 0.45, cursor: 'not-allowed' }}
+            >
+              Manage billing
+            </button>
+          </div>
+        ),
+      },
+      {
+        id: 'danger',
+        label: 'Danger zone',
+        title: 'Danger zone',
+        subtitle:
+          'Delete your account. Every visit, transcript, and exported file gets erased.',
+        danger: true,
+        content: (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 16,
+              flexWrap: 'wrap',
+            }}
+          >
+            <p
+              style={{
+                margin: 0,
+                fontFamily: 'var(--font-sans)',
+                fontSize: 13,
+                color: 'var(--color-linear-text-2)',
+                lineHeight: 1.55,
+                maxWidth: 440,
+              }}
+            >
+              A compliance record (email, deletion date, visit count) is kept
+              for 90 days and then purged. You&apos;ll be asked to re-enter your
+              password and type DELETE to confirm.
+            </p>
+            <DeleteAccountDialog />
+          </div>
+        ),
+      },
+    ];
+
+    return (
+      <AppFrame>
+        <Suspense fallback={null}>
+          <EmailChangeToast />
+        </Suspense>
+        <div style={{ padding: '18px 24px 0' }}>
+          <div
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10.5,
+              fontWeight: 500,
+              color: 'var(--color-linear-text-3)',
+              letterSpacing: '0.07em',
+              textTransform: 'uppercase',
+              marginBottom: 8,
+            }}
+          >
+            Account
+          </div>
+          <h1
+            style={{
+              margin: 0,
+              fontFamily: 'var(--font-sans)',
+              fontSize: 22,
+              fontWeight: 500,
+              color: 'var(--color-linear-text)',
+              letterSpacing: '-0.012em',
+              lineHeight: 1.2,
+            }}
+          >
+            Settings
+          </h1>
+        </div>
+        <div style={{ padding: '20px 24px 48px', maxWidth: 1100 }}>
+          <SettingsSectionsC3 sections={c3Sections} />
+        </div>
+      </AppFrame>
+    );
+  }
 
   return (
     <AppFrame>

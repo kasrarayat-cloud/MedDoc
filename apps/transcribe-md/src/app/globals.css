@@ -5071,3 +5071,94 @@ body {
     animation: none;
   }
 }
+
+/* ── Stage 3 — Settings (section rail + one panel at a time) ──────────────── */
+.qm-c3-set-body {
+  display: grid;
+  grid-template-columns: 188px 1fr;
+  gap: 32px;
+  align-items: flex-start;
+}
+.qm-c3-set-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  position: sticky;
+  top: 64px;
+  align-self: flex-start;
+}
+.qm-c3-set-tab {
+  display: flex;
+  align-items: center;
+  padding: 8px 11px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  text-align: left;
+  color: var(--color-linear-text-2);
+  cursor: pointer;
+  transition: background-color 90ms ease, color 90ms ease;
+}
+.qm-c3-set-tab:hover {
+  color: var(--color-linear-text);
+  background: var(--color-linear-row-hover);
+}
+.qm-c3-set-tab.on {
+  background: var(--color-linear-sage-tint);
+  color: var(--color-linear-text);
+  font-weight: 500;
+}
+.qm-c3-set-tab.danger {
+  color: var(--color-linear-text-3);
+}
+.qm-c3-set-tab.danger.on {
+  background: color-mix(in srgb, var(--color-linear-danger) 12%, transparent);
+  color: var(--color-linear-danger);
+}
+.qm-c3-set-panels {
+  min-width: 0;
+}
+.qm-c3-set-panel {
+  padding: 22px 24px;
+  background: var(--color-linear-surface-1);
+  border: 1px solid var(--color-linear-border);
+  border-radius: 12px;
+}
+.qm-c3-set-panel.danger {
+  border-color: rgba(212, 87, 74, 0.3);
+}
+.qm-c3-set-h {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 19px;
+  font-weight: 500;
+  letter-spacing: -0.012em;
+  color: var(--color-linear-text);
+}
+.qm-c3-set-h.danger {
+  color: var(--color-linear-danger);
+}
+.qm-c3-set-sub {
+  margin: 7px 0 0;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--color-linear-text-2);
+}
+.qm-c3-set-content {
+  margin-top: 18px;
+}
+@media (max-width: 720px) {
+  .qm-c3-set-body {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .qm-c3-set-rail {
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+}
