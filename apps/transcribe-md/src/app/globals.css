@@ -4679,3 +4679,222 @@ body {
     box-shadow: 0 8px 20px -8px rgba(122, 166, 140, 0.6);
   }
 }
+
+/* ── Stage 1c — Record (calm single-card recorder) ───────────────────────── */
+.qm-c3-rec-wrap {
+  min-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 40px 20px 88px;
+}
+.qm-c3-rec-sample {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--color-linear-text-3);
+}
+.qm-c3-rec-card {
+  width: 100%;
+  max-width: 460px;
+  background: var(--color-linear-surface-1);
+  border: 1px solid var(--color-linear-border);
+  border-radius: 16px;
+  padding: clamp(26px, 4vw, 38px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 7px;
+}
+.qm-c3-rec-kicker {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-linear-text-3);
+}
+.qm-c3-rec-h {
+  margin: 2px 0;
+  font-family: var(--font-sans);
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--color-linear-text);
+  line-height: 1.2;
+}
+.qm-c3-rec-p {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--color-linear-text-2);
+}
+.qm-c3-rec-error {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--color-linear-danger);
+}
+.qm-c3-rec-go {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  width: 100%;
+  margin-top: 18px;
+  padding: 13px 20px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--color-linear-sage);
+  color: #0d1611;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 140ms ease;
+}
+.qm-c3-rec-go:hover:not(:disabled) {
+  background: var(--color-linear-sage-bright);
+}
+.qm-c3-rec-go:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+.qm-c3-rec-go-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--color-linear-danger);
+  flex: none;
+}
+.qm-c3-rec-hint {
+  margin: 5px 0 0;
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  color: var(--color-linear-text-3);
+}
+.qm-c3-rec-statusline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--color-linear-text-2);
+}
+.qm-c3-rec-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+}
+.qm-c3-rec-dot.live {
+  background: var(--color-linear-danger);
+  box-shadow: 0 0 8px rgba(212, 87, 74, 0.7);
+}
+.qm-c3-rec-timer {
+  font-family: var(--font-mono);
+  font-size: 48px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--color-linear-text);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.qm-c3-rec-wave {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  height: 48px;
+  margin: 6px auto 2px;
+  width: 100%;
+  max-width: 340px;
+}
+.qm-c3-rec-honest {
+  margin: 10px 0 0;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--color-linear-text-3);
+}
+.qm-c3-rec-controls {
+  display: flex;
+  gap: 12px;
+  margin-top: 22px;
+  width: 100%;
+}
+.qm-c3-rec-stop {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex: 1;
+  padding: 13px;
+  border: 1px solid rgba(212, 87, 74, 0.45);
+  border-radius: 10px;
+  background: rgba(212, 87, 74, 0.12);
+  color: var(--color-linear-danger);
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 13.5px;
+  cursor: pointer;
+  transition: background-color 140ms ease;
+}
+.qm-c3-rec-stop:hover {
+  background: rgba(212, 87, 74, 0.2);
+}
+.qm-c3-rec-spin {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 2.5px solid var(--color-linear-surface-3, var(--color-linear-border));
+  border-top-color: var(--color-linear-sage);
+  animation: qm-c3-rec-spin 0.85s linear infinite;
+  margin-bottom: 4px;
+}
+.qm-c3-rec-spin.done {
+  border-color: var(--color-linear-sage);
+  animation: none;
+}
+@keyframes qm-c3-rec-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.qm-c3-rec-steps {
+  list-style: none;
+  margin: 12px 0 4px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+  width: 100%;
+  max-width: 288px;
+}
+.qm-c3-rec-steps li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--color-linear-text-3);
+}
+.qm-c3-rec-steps li.now {
+  color: var(--color-linear-text);
+}
+.qm-c3-rec-mark {
+  font-family: var(--font-mono);
+  width: 16px;
+  text-align: center;
+  color: var(--color-linear-sage-bright);
+}
+@media (prefers-reduced-motion: reduce) {
+  .qm-c3-rec-dot.live,
+  .qm-c3-rec-spin {
+    animation: none !important;
+  }
+}
