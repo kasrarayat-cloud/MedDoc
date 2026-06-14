@@ -23,6 +23,7 @@ const Loading = () => (
 const V2Monolith = dynamic(() => import('./concepts/V2Monolith'), { ssr: false, loading: Loading });
 const V4Kinetic = dynamic(() => import('./concepts/V4Kinetic'), { ssr: false, loading: Loading });
 const V5Particle = dynamic(() => import('./concepts/V5Particle'), { ssr: false, loading: Loading });
+const V6Combined = dynamic(() => import('./concepts/V6Combined'), { ssr: false, loading: Loading });
 
 const CONCEPTS = [
   { v: 1, label: 'Quill', sub: 'ink + reveal' },
@@ -30,9 +31,10 @@ const CONCEPTS = [
   { v: 3, label: 'Cinematic', sub: 'scroll film' },
   { v: 4, label: 'Kinetic', sub: 'live type' },
   { v: 5, label: 'Particles', sub: 'generative' },
+  { v: 6, label: 'Genesis', sub: 'quill+type+ink' },
 ];
 
-function clampV(n: number) { return n >= 1 && n <= 5 ? n : 1; }
+function clampV(n: number) { return n >= 1 && n <= 6 ? n : 1; }
 
 export function MotionLab() {
   // default to v1 (the SSR'd, no-JS-readable concept); hydrate to the ?v= choice
@@ -52,12 +54,12 @@ export function MotionLab() {
     window.history.replaceState({}, '', url);
   };
 
-  // keyboard: 1–5 jump straight to a concept
+  // keyboard: 1–6 jump straight to a concept
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLElement && /INPUT|TEXTAREA/.test(e.target.tagName)) return;
       const n = parseInt(e.key, 10);
-      if (n >= 1 && n <= 5) select(n);
+      if (n >= 1 && n <= 6) select(n);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -71,6 +73,7 @@ export function MotionLab() {
         {v === 3 && <V3Cinematic />}
         {v === 4 && <V4Kinetic />}
         {v === 5 && <V5Particle />}
+        {v === 6 && <V6Combined />}
       </div>
 
       <nav className="ml-switch" aria-label="Motion concept switcher">
