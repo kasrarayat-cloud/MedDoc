@@ -1,0 +1,101 @@
+/* ============================================================================
+ * /concepts/soap/c3-final — the COMPLETE C3 "Drawer" SOAP-review concept
+ * (static mockup, synthetic no-PHI data). Inherits the scoped fonts + --sc-*
+ * tokens + shared .sc-* base styles from the parent route's soap.css
+ * (app/concepts/soap/layout.tsx wraps this nested route). Only c3f-specific
+ * styles live here. Floor: real text, prefers-reduced-motion, visible focus
+ * (.sc-root :focus-visible from soap.css), keyboard drawer, mobile graceful.
+ * ========================================================================== */
+
+/* ── top bar: identity + draft/signed status ──────────────────────────────── */
+.c3f-id { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; }
+.c3f-status { font-family: var(--soap-mono); font-size: 0.62rem; letter-spacing: 0.06em; padding: 0.12rem 0.5rem; border-radius: 999px; border: 1px solid var(--sc-border-strong); }
+.c3f-status.draft { color: var(--sc-text3); }
+.c3f-status.signed { color: var(--sc-sage-bright); background: var(--sc-sage-tint); border-color: rgba(122, 166, 140, 0.4); }
+.c3f-actions { gap: 0.8rem; }
+
+/* ── note area (full-width primary) ───────────────────────────────────────── */
+.c3f-main { flex: 1; padding: clamp(1.4rem, 4vw, 3rem) clamp(1.2rem, 6vw, 4rem); }
+.c3f-main .sc-note { margin: 0 auto; }
+.c3f-hint { font-size: 0.68rem; color: var(--sc-text3); }
+.c3f-note-ro .sc-sec-text { color: var(--sc-text2); }
+
+/* ── the single count pill ────────────────────────────────────────────────── */
+.c3f-pill { font-family: var(--soap-sans); font-size: 0.78rem; font-weight: 500; color: var(--sc-text3); background: var(--sc-s2); border: 1px solid var(--sc-border-strong); border-radius: 999px; padding: 0.5rem 0.95rem; cursor: pointer; transition: color 0.15s, border-color 0.15s, background 0.15s; }
+.c3f-pill.has { color: var(--sc-amber); border-color: rgba(212, 165, 116, 0.45); }
+.c3f-pill.clear { color: var(--sc-sage-bright); border-color: rgba(122, 166, 140, 0.35); }
+.c3f-pill:hover:not(:disabled) { color: var(--sc-text); }
+.c3f-pill:disabled { opacity: 0.5; cursor: default; }
+
+/* ── the review drawer ────────────────────────────────────────────────────── */
+.c3f-scrim { position: fixed; inset: 0; z-index: 40; background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(2px); }
+.c3f-drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(420px, 94vw); z-index: 50; background: var(--sc-s1); border-left: 1px solid var(--sc-border-strong); transform: translateX(100%); transition: transform 0.3s cubic-bezier(0.2, 0.7, 0.2, 1); display: flex; flex-direction: column; box-shadow: -30px 0 70px -30px rgba(0, 0, 0, 0.85); }
+.c3f-drawer.open { transform: translateX(0); }
+.c3f-drawer-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.8rem; padding: 1rem; border-bottom: 1px solid var(--sc-border); }
+.c3f-drawer-title { display: flex; flex-direction: column; gap: 0.32rem; }
+.c3f-resolve { font-size: 0.72rem; }
+.c3f-resolve.blocked { color: var(--sc-amber); }
+.c3f-resolve.clear { color: var(--sc-sage-bright); }
+.c3f-drawer-body { flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 1.3rem; }
+.c3f-drawer-foot { padding: 0.9rem 1rem; border-top: 1px solid var(--sc-border); background: var(--sc-s1); }
+
+/* drawer groups */
+.c3f-group { display: flex; flex-direction: column; gap: 0.6rem; }
+.c3f-group-h { margin: 0 0 0.1rem; font-size: 0.66rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--sc-text3); display: flex; align-items: center; gap: 0.5rem; }
+.c3f-group-flag { font-family: var(--soap-mono); font-size: 0.56rem; letter-spacing: 0.04em; text-transform: none; color: var(--sc-amber); background: rgba(212, 165, 116, 0.13); border-radius: 4px; padding: 0.05rem 0.4rem; }
+
+/* drawer empty / clean state */
+.c3f-empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 0.45rem; padding: 3rem 1.2rem; margin: auto 0; }
+.c3f-empty-mark { width: 2.6rem; height: 2.6rem; line-height: 2.6rem; border-radius: 50%; font-size: 1.2rem; color: var(--sc-sage-bright); background: var(--sc-sage-tint); border: 1px solid rgba(122, 166, 140, 0.4); }
+.c3f-empty-head { margin: 0.4rem 0 0; font-size: 1rem; font-weight: 600; color: var(--sc-text); }
+.c3f-empty-sub { margin: 0; font-size: 0.8rem; line-height: 1.55; color: var(--sc-text3); max-width: 22rem; }
+
+/* ── signed banner + the one calm export affordance ───────────────────────── */
+.c3f-signed { display: flex; align-items: center; gap: 0.9rem; flex-wrap: wrap; }
+.c3f-signed-l { display: flex; align-items: center; gap: 0.6rem; }
+.c3f-signed-check { width: 1.7rem; height: 1.7rem; line-height: 1.7rem; text-align: center; border-radius: 50%; font-size: 0.85rem; color: #0d1611; background: var(--sc-sage); flex: none; }
+.c3f-signed-text { display: flex; flex-direction: column; }
+.c3f-signed-head { font-size: 0.85rem; font-weight: 600; color: var(--sc-sage-bright); }
+.c3f-signed-sub { font-size: 0.68rem; color: var(--sc-text3); font-family: var(--soap-mono); }
+.c3f-export { position: relative; display: inline-flex; align-items: center; gap: 0.5rem; }
+/* default: open downward (works for the desktop top-right banner) */
+.c3f-export-menu { position: absolute; right: 0; top: calc(100% + 0.4rem); min-width: 12rem; background: var(--sc-s2); border: 1px solid var(--sc-border-strong); border-radius: 8px; box-shadow: 0 16px 40px -16px rgba(0, 0, 0, 0.8); padding: 0.3rem; display: flex; flex-direction: column; z-index: 90; }
+/* in the bottom contexts (drawer foot, sticky mobile bar) open upward instead */
+.c3f-drawer-foot .c3f-export-menu, .sc-mobilebar .c3f-export-menu { top: auto; bottom: calc(100% + 0.4rem); }
+.c3f-export-item { display: flex; align-items: center; gap: 0.55rem; padding: 0.55rem 0.6rem; background: transparent; border: 0; border-radius: 6px; cursor: pointer; color: var(--sc-text2); font-family: var(--soap-sans); font-size: 0.8rem; text-align: left; }
+.c3f-export-item:hover { background: rgba(255, 255, 255, 0.05); color: var(--sc-text); }
+.c3f-export-ico { font-size: 0.9rem; color: var(--sc-text3); }
+.c3f-export-done { font-size: 0.7rem; color: var(--sc-sage-bright); }
+
+/* ── mockup control (bottom-center, like the lab switcher; clearly a demo) ─── */
+.c3f-mock { position: fixed; bottom: clamp(0.9rem, 3vh, 1.6rem); left: 50%; transform: translateX(-50%); z-index: 80; display: flex; align-items: center; gap: 0.6rem; padding: 0.4rem 0.6rem; background: rgba(13, 14, 16, 0.92); border: 1px dashed var(--sc-border-strong); border-radius: 12px; backdrop-filter: blur(14px); }
+.c3f-mock.is-hidden { display: none; }
+.c3f-mock-tag { font-family: var(--soap-mono); font-size: 0.54rem; letter-spacing: 0.18em; color: var(--sc-text3); padding-right: 0.3rem; }
+.c3f-mock-grp { display: flex; gap: 0.15rem; background: var(--sc-s2); border: 1px solid var(--sc-border); border-radius: 8px; padding: 0.15rem; }
+.c3f-mock-grp button { font-family: var(--soap-sans); font-size: 0.7rem; color: var(--sc-text3); background: transparent; border: 0; border-radius: 6px; padding: 0.3rem 0.6rem; cursor: pointer; }
+.c3f-mock-grp button:hover { color: var(--sc-text); }
+.c3f-mock-grp button.on { color: #0d1611; background: var(--sc-sage); }
+.c3f-mock-reset { font-family: var(--soap-mono); font-size: 0.64rem; color: var(--sc-text3); background: transparent; border: 0; cursor: pointer; padding: 0.2rem 0.3rem; }
+.c3f-mock-reset:hover { color: var(--sc-text); }
+
+.sc-mobilebar.c3f-mobilebar { gap: 0.6rem; }
+/* when the full-screen drawer is open on mobile, it owns the screen — hide the redundant
+   sticky bar so its own foot Sign is the single bottom action and focus stays trapped */
+.c3f.is-drawer-open .sc-mobilebar { display: none; }
+
+/* ── mobile / tablet: drawer → full sheet, top-right collapses to bottom bar ── */
+@media (max-width: 860px) {
+  .c3f-drawer { width: 100vw; }
+  .c3f .sc-top-r { display: none; }
+  .sc-mobilebar.c3f-mobilebar .c3f-pill { flex: none; }
+  .sc-mobilebar.c3f-mobilebar .sc-signwrap { flex: 1; align-items: stretch; }
+  .sc-mobilebar.c3f-mobilebar .c3f-signed { flex: 1; justify-content: space-between; }
+  /* lift the demo control clear of the (up to 2-line) sticky sign bar so it never covers Sign */
+  .c3f-mock { bottom: calc(7.2rem + env(safe-area-inset-bottom, 0px)); flex-wrap: wrap; justify-content: center; max-width: 94vw; }
+  .c3f-mock-tag { display: none; }
+}
+
+/* ── reduced motion ──────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .c3f-drawer, .c3f-pill { transition: none !important; }
+}
