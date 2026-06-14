@@ -594,3 +594,313 @@ html.js .hero-quill .hsoap-ln { --p: 0; }
   .encnote { width: min(420px, 100%); }
   .security-visual { padding-top: 0.5rem; }
 }
+
+/* ============================================================================
+ * MOTION LAB — /motion (staging exploration; isolated from the main landing).
+ * Five hero concepts sharing the same real content, fonts and palette. Each is
+ * a full-viewport hero; a fixed switcher (1–5) swaps concepts via ?v=.
+ * a11y floor on every concept: real selectable <h1>, readable without JS,
+ * visible focus, and a no-motion fallback under prefers-reduced-motion.
+ * ========================================================================== */
+
+.ml-root { position: relative; min-height: 100vh; }
+.ml-concept { position: relative; }
+
+/* ── Shared hero scaffold ─────────────────────────────────────────────────── */
+.ml-hero {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100svh;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  isolation: isolate;
+}
+.ml-stage {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: clamp(5rem, 12vh, 8rem) clamp(1.25rem, 5vw, 5rem) clamp(6rem, 14vh, 9rem);
+}
+.ml-copy { position: relative; z-index: 2; max-width: 660px; }
+
+.ml-eyebrow {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--turq);
+  margin: 0 0 1.4rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.ml-eyebrow::before {
+  content: "";
+  width: 1.8rem;
+  height: 1px;
+  background: linear-gradient(90deg, var(--turq), transparent);
+}
+
+.ml-title {
+  margin: 0;
+  font-size: clamp(3.2rem, 11vw, 8.8rem);
+  color: var(--ink);
+}
+.ml-line-wrap { display: block; overflow: hidden; padding-bottom: 0.04em; }
+.ml-line { display: inline-block; will-change: transform; }
+
+/* Baseline headline entrance (v2/v3/v5): rise + fade, staggered. Pure CSS so it
+ * runs without JS; reduced-motion forces it visible. */
+.js .ml-line { animation: ml-rise 0.86s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.js .ml-line-wrap:nth-child(1) .ml-line { animation-delay: 0.05s; }
+.js .ml-line-wrap:nth-child(2) .ml-line { animation-delay: 0.16s; }
+.js .ml-line-wrap:nth-child(3) .ml-line { animation-delay: 0.27s; }
+@keyframes ml-rise { from { transform: translateY(108%); } to { transform: translateY(0); } }
+
+.ml-sub {
+  margin: 1.8rem 0 2.2rem;
+  max-width: 36rem;
+  font-size: clamp(1rem, 1.25vw, 1.12rem);
+  line-height: 1.62;
+  color: var(--ink-2);
+}
+.ml-cta { display: flex; flex-wrap: wrap; gap: 0.9rem; }
+.ml-trust {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 2.1rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.74rem;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+}
+.ml-trust li { display: inline-flex; align-items: center; gap: 0.5rem; }
+.ml-trust-dot { color: var(--turq-dim); }
+.ml-scrollcue {
+  position: absolute;
+  bottom: 1.6rem; left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.7rem; letter-spacing: 0.3em; text-transform: uppercase;
+  color: var(--ink-3);
+  animation: ml-cue 2.2s ease-in-out infinite;
+}
+@keyframes ml-cue { 0%, 100% { opacity: 0.35; transform: translate(-50%, 0); } 50% { opacity: 0.8; transform: translate(-50%, 6px); } }
+
+/* ── Switcher ─────────────────────────────────────────────────────────────── */
+.ml-switch {
+  position: fixed;
+  bottom: clamp(0.9rem, 3vh, 1.8rem);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.6rem 0.5rem 0.95rem;
+  background: rgba(10, 12, 17, 0.72);
+  border: 1px solid var(--hair);
+  border-radius: 999px;
+  backdrop-filter: blur(16px) saturate(130%);
+  -webkit-backdrop-filter: blur(16px) saturate(130%);
+  box-shadow: 0 20px 50px -24px rgba(0, 0, 0, 0.95);
+}
+.ml-switch-tag {
+  font-size: 0.6rem;
+  letter-spacing: 0.28em;
+  color: var(--ink-3);
+  padding-right: 0.55rem;
+  border-right: 1px solid var(--hair);
+}
+.ml-switch-btns { display: flex; gap: 0.25rem; }
+.ml-switch-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.7rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+  font-family: var(--font-body), sans-serif;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  transition: color 0.18s ease, background 0.18s ease;
+}
+.ml-switch-num { font-size: 0.68rem; opacity: 0.7; }
+.ml-switch-btn:hover { color: var(--ink); background: rgba(255, 255, 255, 0.04); }
+.ml-switch-btn.active {
+  color: var(--obsidian);
+  background: linear-gradient(135deg, var(--gold), var(--turq));
+}
+.ml-switch-btn.active .ml-switch-num { opacity: 0.85; }
+.ml-switch-btn:focus-visible { outline: 2px solid var(--turq); outline-offset: 2px; }
+
+/* ============================================================================
+ * v1 — THE QUILL (ink reveal + scroll-written SOAP)
+ * ========================================================================== */
+.v1-stage {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  align-items: center;
+  gap: clamp(2rem, 5vw, 4rem);
+}
+.v1-glow {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background:
+    radial-gradient(60% 50% at 30% 35%, rgba(232, 184, 92, 0.10), transparent 70%),
+    radial-gradient(50% 60% at 80% 70%, rgba(63, 216, 200, 0.10), transparent 70%);
+}
+.v1-quill {
+  position: absolute;
+  left: 0; top: 0;
+  z-index: 4;
+  transform: translate(var(--qx, 0), var(--qy, 0)) rotate(-18deg);
+  filter: drop-shadow(0 8px 20px rgba(232, 184, 92, 0.35));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+.v1-stage.is-writing .v1-quill { opacity: 1; }
+.v1-quill.quill-rest { opacity: 0.25; transition: opacity 1.2s ease 0.3s; }
+/* Headline ink-reveal driven by --p (typewriter mask). Default visible (no-JS). */
+.v1-line {
+  --p: 1;
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(var(--p) * 100%), transparent calc(var(--p) * 100% + 1ch));
+  mask-image: linear-gradient(90deg, #000 calc(var(--p) * 100%), transparent calc(var(--p) * 100% + 1ch));
+  animation: none !important; /* override baseline rise; the quill writes it */
+  transform: none !important;
+}
+.v1-stage.is-writing .v1-line { --p: 0; }
+.v1-soap {
+  position: relative;
+  z-index: 2;
+  margin: 0;
+  padding: 1.4rem 1.5rem;
+  list-style: none;
+  font-size: 0.86rem;
+  line-height: 1.5;
+  color: #cfe6e0;
+  background: rgba(11, 13, 18, 0.5);
+  border: 1px solid var(--hair);
+  border-radius: 4px;
+}
+.v1-soap-ln { display: flex; gap: 0.7rem; padding: 0.32rem 0; opacity: var(--p, 1); transform: translateY(calc((1 - var(--p, 1)) * 8px)); transition: opacity 0.2s linear; }
+.v1-soap-tag { flex: none; width: 1.4rem; font-weight: 700; color: var(--obsidian); text-align: center; border-radius: 3px; height: 1.4rem; line-height: 1.4rem; }
+.v1-S { background: var(--turq); } .v1-O { background: #7fc9e8; } .v1-A { background: var(--gold); } .v1-P { background: #d8a0e8; }
+
+/* ============================================================================
+ * v2 — WEBGL MONOLITH (Three.js prism behind the copy)
+ * ========================================================================== */
+.v2-stage { display: flex; }
+.v2-canvas { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; }
+.v2-vignette {
+  position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background: radial-gradient(80% 80% at 50% 50%, transparent 30%, rgba(6, 7, 10, 0.7) 100%),
+              linear-gradient(90deg, rgba(6, 7, 10, 0.85) 0%, transparent 45%);
+}
+.v2-copy { max-width: 600px; }
+
+/* ============================================================================
+ * v3 — SCROLL-CINEMATIC (GSAP pin + Lenis; layered parallax SOAP assembly)
+ * ========================================================================== */
+.v3-stage {
+  display: grid;
+  grid-template-columns: 1fr 0.9fr;
+  align-items: center;
+  gap: clamp(2rem, 5vw, 4rem);
+}
+.v3-glow {
+  position: absolute; inset: -20% 0 0; z-index: 0; transform-origin: 50% 30%;
+  background:
+    radial-gradient(45% 40% at 70% 30%, rgba(63, 216, 200, 0.14), transparent 70%),
+    radial-gradient(50% 45% at 25% 70%, rgba(232, 184, 92, 0.10), transparent 72%);
+}
+.v3-fx { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+.v3-dot {
+  position: absolute;
+  width: 3px; height: 3px; border-radius: 50%;
+  background: var(--turq);
+  opacity: calc(0.25 + var(--d, 0) * 0.08);
+  box-shadow: 0 0 8px rgba(63, 216, 200, 0.6);
+}
+.v3-card { z-index: 2; padding: 1.5rem 1.6rem; }
+.v3-card-head {
+  display: flex; justify-content: space-between;
+  font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--ink-3); margin-bottom: 1rem;
+}
+.v3-soap { margin: 0; padding: 0; list-style: none; font-size: 0.9rem; line-height: 1.5; }
+.v3-soap-ln { display: flex; gap: 0.75rem; padding: 0.45rem 0; color: #cfe6e0; }
+.v3-tag { flex: none; width: 1.5rem; height: 1.5rem; line-height: 1.5rem; text-align: center; font-weight: 700; border-radius: 3px; color: var(--obsidian); }
+.v3-S { background: var(--turq); } .v3-O { background: #7fc9e8; } .v3-A { background: var(--gold); } .v3-P { background: #d8a0e8; }
+
+/* ============================================================================
+ * v4 — KINETIC TYPOGRAPHY (the type IS the visual)
+ * ========================================================================== */
+.v4 { background: radial-gradient(120% 100% at 50% 0%, rgba(18, 22, 30, 0.6), transparent 60%); }
+.v4-grid {
+  position: absolute; inset: 0; z-index: 0; pointer-events: none; opacity: 0.5;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 64px 64px;
+  -webkit-mask-image: radial-gradient(70% 70% at 50% 45%, #000, transparent 80%);
+  mask-image: radial-gradient(70% 70% at 50% 45%, #000, transparent 80%);
+}
+.v4-stage { display: flex; padding-top: clamp(3.5rem, 7vh, 5.5rem); padding-bottom: clamp(4.5rem, 9vh, 6.5rem); }
+.v4-copy { max-width: 100%; }
+.v4-title {
+  margin: 0;
+  font-family: var(--font-display), sans-serif;
+  text-transform: uppercase;
+  line-height: 0.86;
+  font-size: clamp(3.4rem, 12vw, 9.2rem);
+  color: var(--ink);
+}
+.v4-line { display: block; }
+.v4-word { display: inline-block; }
+
+/* ============================================================================
+ * v5 — PARTICLE / GENERATIVE (canvas; converge → waveform → reform)
+ * ========================================================================== */
+.v5-canvas { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; }
+.v5-vignette {
+  position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background: linear-gradient(90deg, rgba(6, 7, 10, 0.82) 0%, transparent 50%),
+              radial-gradient(90% 90% at 50% 50%, transparent 40%, rgba(6, 7, 10, 0.55) 100%);
+}
+.v5-copy { max-width: 600px; }
+
+/* ── Mobile: collapse two-column concepts; keep type legible ──────────────── */
+@media (max-width: 820px) {
+  .v1-stage, .v3-stage { grid-template-columns: 1fr; gap: 1.6rem; }
+  .v1-quill { display: none; }
+  .v1-soap, .v3-card { max-width: 520px; }
+  .ml-switch { gap: 0.5rem; padding: 0.45rem 0.5rem; }
+  .ml-switch-tag { display: none; }
+  .ml-switch-label { display: none; }
+  .ml-switch-btn { padding: 0.5rem 0.62rem; }
+  .ml-switch-num { font-size: 0.8rem; opacity: 1; }
+  .v4-title { font-size: clamp(3rem, 19vw, 7rem); }
+}
+
+/* ── Reduced motion: every concept settles to a static, fully-visible frame ── */
+@media (prefers-reduced-motion: reduce) {
+  .ml-line { animation: none !important; transform: none !important; }
+  .v1-line { --p: 1 !important; -webkit-mask-image: none !important; mask-image: none !important; }
+  .v1-quill { display: none !important; }
+  .v1-soap-ln { opacity: 1 !important; transform: none !important; }
+  .ml-scrollcue { display: none !important; }
+  .v3-dot { animation: none !important; }
+}
