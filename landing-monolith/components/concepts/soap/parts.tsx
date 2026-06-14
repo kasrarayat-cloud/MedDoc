@@ -25,7 +25,7 @@ export function PatientMeta() {
   );
 }
 
-function EditableSection({ s }: { s: Section }) {
+export function NoteSection({ s }: { s: Section }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(s.text);
   return (
@@ -59,7 +59,7 @@ export function NoteDoc() {
   return (
     <div className="sc-note">
       {SOAP.map((s) => (
-        <EditableSection key={s.tag} s={s} />
+        <NoteSection key={s.tag} s={s} />
       ))}
     </div>
   );

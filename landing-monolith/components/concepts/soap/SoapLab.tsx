@@ -7,14 +7,29 @@ import { useEffect, useState } from 'react';
 import { C1Grammarly } from './C1Grammarly';
 import { C2Stepped } from './C2Stepped';
 import { C3Drawer } from './C3Drawer';
+import { C4Zen } from './C4Zen';
+import { C5Split } from './C5Split';
+import { C6Claims } from './C6Claims';
+import { C7Command } from './C7Command';
+import { C8Margin } from './C8Margin';
+import { C9Feed } from './C9Feed';
+import { C10Summary } from './C10Summary';
 
 const CONCEPTS = [
-  { v: 1, label: 'Rail', sub: 'Grammarly model' },
+  { v: 1, label: 'Rail', sub: 'note + right rail (Grammarly)' },
   { v: 2, label: 'Stepped', sub: 'one step at a time' },
   { v: 3, label: 'Drawer', sub: 'note-only + drawer' },
+  { v: 4, label: 'Zen', sub: 'note-only + one floating action' },
+  { v: 5, label: 'Split', sub: 'transcript ↔ note provenance' },
+  { v: 6, label: 'Lines', sub: 'approve claim by claim' },
+  { v: 7, label: 'Command', sub: '⌘K command bar' },
+  { v: 8, label: 'Margin', sub: 'document + footnote pins' },
+  { v: 9, label: 'Feed', sub: 'single vertical feed' },
+  { v: 10, label: 'Summary', sub: 'readiness dashboard first' },
 ];
+const MAX = CONCEPTS.length;
 function clampV(n: number) {
-  return n >= 1 && n <= 3 ? n : 1;
+  return n >= 1 && n <= MAX ? n : 1;
 }
 
 export function SoapLab() {
@@ -38,8 +53,9 @@ export function SoapLab() {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.target instanceof HTMLElement && /INPUT|TEXTAREA/.test(e.target.tagName)) return;
+      // single keypress 1–9 only; concept 10 is reachable via the switcher button or ?v=10
       const n = parseInt(e.key, 10);
-      if (n >= 1 && n <= 3) select(n);
+      if (n >= 1 && n <= 9) select(n);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -51,6 +67,13 @@ export function SoapLab() {
         {v === 1 && <C1Grammarly />}
         {v === 2 && <C2Stepped />}
         {v === 3 && <C3Drawer />}
+        {v === 4 && <C4Zen />}
+        {v === 5 && <C5Split />}
+        {v === 6 && <C6Claims />}
+        {v === 7 && <C7Command />}
+        {v === 8 && <C8Margin />}
+        {v === 9 && <C9Feed />}
+        {v === 10 && <C10Summary />}
       </div>
 
       <nav className="sc-switch" aria-label="SOAP concept switcher">
