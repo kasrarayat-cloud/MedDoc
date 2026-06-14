@@ -4575,3 +4575,37 @@ body {
     transition: none;
   }
 }
+
+/* ============================================================================
+ * C3 calm-skin (Stage 1, flag-gated by NEXT_PUBLIC_SKIN_BETA). Additive,
+ * scoped `qm-c3-*` classes only — no existing rule is modified, so with the
+ * flag OFF nothing below is referenced and the existing UI is byte-identical.
+ * ========================================================================== */
+.qm-c3-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-linear-border);
+  border-radius: 11px;
+  overflow: hidden;
+  background: var(--color-linear-surface-1);
+}
+.qm-c3-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--color-linear-hairline);
+  transition: background-color 100ms ease;
+}
+.qm-c3-row:last-child {
+  border-bottom: 0;
+}
+.qm-c3-row:hover {
+  background: var(--color-linear-row-hover);
+}
+@media (prefers-reduced-motion: reduce) {
+  .qm-c3-row {
+    transition: none;
+  }
+}
