@@ -12,6 +12,22 @@ const CLAIMS: { k: string; v: string }[] = [
   { k: 'You sign every note', v: 'Nothing is final until a clinician reviews and signs it.' },
 ];
 
+// THIS note, protected — the page's own SOAP language, encrypted. Each line is
+// an elegant redaction bar (deterministic widths) under an encryption shimmer.
+const ENC_LINES: { tag: string; w: number }[] = [
+  { tag: 'S', w: 86 },
+  { tag: 'O', w: 64 },
+  { tag: 'A', w: 44 },
+  { tag: 'P', w: 72 },
+];
+
+// Quiet, append-only audit trail at the base — readable events, not hex noise.
+const AUDIT: string[] = [
+  '09:24:01  note.created',
+  '09:31:18  note.signed      ✓',
+  '09:31:18  record.sealed    🔒',
+];
+
 export function Security() {
   return (
     <section id="security" className="section security" aria-label="Security">
@@ -37,32 +53,36 @@ export function Security() {
           </ul>
         </div>
 
-        <div className="security-vault reveal" aria-hidden>
-          <div className="vault-glow" />
-          {/* SECURITY_VAULT image — self-hosted; swapped to the real Higgsfield
-              render when its URL is provided. The streaming data + lock CSS
-              layer reads as encryption even before/behind the art. */}
-          <img
-            src="/assets/security-vault.webp"
-            alt=""
-            className="vault-img"
-            width={1344}
-            height={768}
-            decoding="async"
-          />
-          <div className="vault-stream font-mono" aria-hidden>
-            {Array.from({ length: 7 }).map((_, i) => (
-              <span key={i} className="stream-line" style={{ animationDelay: `${i * 0.5}s` }}>
-                {hex(i)}
+        {/* In-code "encrypted clinical record" visual — pure DOM/SVG/CSS, no
+            raster asset. Decorative: the real information is the claims list. */}
+        <div className="security-visual reveal" aria-hidden>
+          <div className="encnote glass glass-edge">
+            <div className="enc-shimmer" />
+            <header className="encnote-head font-mono">
+              <span className="encnote-kind">SOAP · clinical note</span>
+              <span className="encnote-state">
+                <LockMark />
+                ENCRYPTED
               </span>
-            ))}
-          </div>
-          <div className="vault-lock" aria-hidden>
-            <svg viewBox="0 0 48 48" width="48" height="48" fill="none">
-              <rect x="9" y="21" width="30" height="22" rx="3" stroke="currentColor" strokeWidth="2" />
-              <path d="M15 21v-5a9 9 0 0 1 18 0v5" stroke="currentColor" strokeWidth="2" />
-              <circle cx="24" cy="31" r="3" fill="currentColor" />
-            </svg>
+            </header>
+
+            <div className="encnote-body">
+              {ENC_LINES.map((l, i) => (
+                <div className="encline" key={l.tag} style={{ ['--w' as string]: `${l.w}%`, ['--i' as string]: i }}>
+                  <span className={`encline-tag enc-${l.tag}`}>{l.tag}</span>
+                  <span className="encline-bar" />
+                </div>
+              ))}
+            </div>
+
+            <footer className="encnote-audit font-mono">
+              {AUDIT.map((a, i) => (
+                <span className="audit-line" key={a} style={{ ['--i' as string]: i }}>
+                  <span className="audit-tick" />
+                  {a}
+                </span>
+              ))}
+            </footer>
           </div>
         </div>
       </div>
@@ -70,9 +90,18 @@ export function Security() {
   );
 }
 
-function hex(seed: number): string {
-  const chars = '0123456789ABCDEF';
-  let s = '';
-  for (let i = 0; i < 26; i++) s += chars[(seed * 7 + i * 13) % 16];
-  return s.replace(/(.{4})/g, '$1 ').trim();
+function LockMark() {
+  return (
+    <svg className="enc-lockmark" viewBox="0 0 24 24" width="14" height="14" fill="none" aria-hidden>
+      <defs>
+        <linearGradient id="lockg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#e8b85c" />
+          <stop offset="1" stopColor="#3fd8c8" />
+        </linearGradient>
+      </defs>
+      <rect x="5.5" y="10.5" width="13" height="9.5" rx="2" stroke="url(#lockg)" strokeWidth="1.6" />
+      <path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5" stroke="url(#lockg)" strokeWidth="1.6" />
+      <circle cx="12" cy="15" r="1.4" fill="url(#lockg)" />
+    </svg>
+  );
 }
