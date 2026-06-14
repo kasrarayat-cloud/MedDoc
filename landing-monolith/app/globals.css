@@ -373,13 +373,69 @@ html.js .reveal.is-in { opacity: 1; transform: translateY(0); }
 .claim-key { font-size: 0.82rem; letter-spacing: 0.04em; }
 .claim-val { color: var(--ink-2); font-size: 0.92rem; line-height: 1.5; }
 
-.security-vault { position: relative; aspect-ratio: 1; display: grid; place-items: center; }
-.vault-glow { position: absolute; inset: 8%; border-radius: 50%; background: radial-gradient(closest-side, rgba(63,216,200,0.18), rgba(232,184,92,0.08) 50%, transparent 72%); filter: blur(10px); animation: glow-pulse 5s ease-in-out infinite; }
-.vault-img { position: relative; width: 100%; height: 100%; max-width: 560px; object-fit: contain; filter: drop-shadow(0 30px 80px rgba(0,0,0,0.8)); }
-.vault-stream { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; gap: 0.7rem; padding: 0 8%; opacity: 0.5; pointer-events: none; overflow: hidden; }
-.stream-line { font-size: 0.66rem; letter-spacing: 0.12em; color: var(--turq); white-space: nowrap; opacity: 0; transform: translateX(-12px); animation: stream 5s linear infinite; }
-@keyframes stream { 0% { opacity: 0; transform: translateX(-18px); } 10%,80% { opacity: 0.7; } 100% { opacity: 0; transform: translateX(18px); } }
-.vault-lock { position: absolute; color: var(--gold); filter: drop-shadow(0 0 14px rgba(232,184,92,0.6)); animation: glow-pulse 3.5s ease-in-out infinite; }
+/* ── In-code "encrypted clinical record" visual (2026-06-14) ──────────────────
+ * THIS note, protected: a SOAP card (the page's own visual language) with its
+ * clinical lines redacted into gold/turquoise bars under an encryption shimmer,
+ * a small integrated lock, and a quiet append-only audit trail. Pure DOM/SVG/
+ * CSS — replaced the generic padlock image + scattered hex blocks. */
+.security-visual { position: relative; display: grid; place-items: center; padding: clamp(0.5rem, 2vw, 1.5rem); }
+.encnote {
+  position: relative; width: min(440px, 100%); padding: 0; overflow: hidden;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 30px 70px -30px rgba(0,0,0,0.9), 0 0 0 1px rgba(63,216,200,0.06);
+}
+/* the encryption shimmer sweep */
+.enc-shimmer {
+  position: absolute; inset: 0; z-index: 3; pointer-events: none;
+  background: linear-gradient(115deg, transparent 35%, rgba(63,216,200,0.10) 47%, rgba(232,184,92,0.14) 50%, rgba(63,216,200,0.10) 53%, transparent 65%);
+  background-size: 280% 100%; mix-blend-mode: screen;
+  animation: enc-sweep 5.5s ease-in-out infinite;
+}
+@keyframes enc-sweep { 0% { background-position: 130% 0; } 55%, 100% { background-position: -30% 0; } }
+
+.encnote-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.85rem 1.1rem; border-bottom: 1px solid var(--hair);
+  background: rgba(255,255,255,0.015); font-size: 0.72rem; letter-spacing: 0.06em;
+}
+.encnote-kind { color: var(--ink-3); text-transform: uppercase; }
+.encnote-state {
+  display: inline-flex; align-items: center; gap: 0.4rem; letter-spacing: 0.14em;
+  color: var(--gold); font-weight: 500;
+}
+.enc-lockmark { display: block; filter: drop-shadow(0 0 6px rgba(232,184,92,0.5)); }
+
+.encnote-body { padding: 1.3rem 1.1rem; display: flex; flex-direction: column; gap: 1.05rem; }
+.encline { display: grid; grid-template-columns: 22px 1fr; gap: 0.7rem; align-items: center; }
+.encline-tag {
+  width: 22px; height: 22px; display: grid; place-items: center; border-radius: 3px;
+  font-weight: 700; font-size: 0.72rem; font-family: var(--font-mono), monospace;
+  border: 1px solid var(--hair);
+}
+.enc-S { color: var(--turq); border-color: rgba(63,216,200,0.4); }
+.enc-O { color: #8ad6ff; border-color: rgba(138,214,255,0.35); }
+.enc-A { color: var(--gold); border-color: rgba(232,184,92,0.4); }
+.enc-P { color: #c8a6ff; border-color: rgba(200,166,255,0.35); }
+/* the redacted clinical line — a protected bar, not readable text */
+.encline-bar {
+  height: 11px; width: var(--w, 70%); border-radius: 3px;
+  background:
+    repeating-linear-gradient(90deg, rgba(255,255,255,0.10) 0 14px, transparent 14px 19px),
+    linear-gradient(90deg, rgba(63,216,200,0.22), rgba(232,184,92,0.20));
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05);
+}
+
+.encnote-audit {
+  display: flex; flex-direction: column; gap: 0.35rem;
+  padding: 0.9rem 1.1rem 1.1rem; border-top: 1px solid var(--hair-2);
+  font-size: 0.66rem; letter-spacing: 0.04em; color: var(--ink-3);
+}
+.audit-line {
+  display: inline-flex; align-items: center; gap: 0.5rem; white-space: pre;
+  opacity: 0; transform: translateY(4px);
+  animation: audit-in 0.6s ease forwards; animation-delay: calc(0.5s + var(--i) * 0.55s);
+}
+.audit-tick { width: 5px; height: 5px; border-radius: 50%; background: var(--turq); box-shadow: 0 0 6px var(--turq); flex: none; }
+@keyframes audit-in { to { opacity: 0.75; transform: translateY(0); } }
 
 /* ============================================================================
  * TERMINAL CTA
@@ -524,4 +580,17 @@ html.js .hero-quill .hsoap-ln { --p: 0; }
   .quill { display: none !important; }
   .hsoap-ln .chip { opacity: 1 !important; }
   .qline::after { opacity: 0 !important; }
+}
+
+/* Encrypted-note visual: static, fully-visible fallback (no motion-locked
+ * content — the audit lines use an animation-delay the global rule doesn't
+ * zero, so force them visible and stop the shimmer explicitly). */
+@media (prefers-reduced-motion: reduce) {
+  .enc-shimmer { display: none !important; }
+  .audit-line { opacity: 0.75 !important; transform: none !important; animation: none !important; }
+}
+/* Mobile: keep the card readable and centered; nothing clips. */
+@media (max-width: 880px) {
+  .encnote { width: min(420px, 100%); }
+  .security-visual { padding-top: 0.5rem; }
 }
