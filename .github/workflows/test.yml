@@ -152,6 +152,9 @@ jobs:
         # surface to zero. This narrows SCOPE only — it does NOT lower the
         # threshold; high/critical coverage for every in-scope workspace
         # (transcribe-md, marketing, @meddoc/*) is fully intact.
+        # `shell: bash` is explicit so the `mapfile`/process-substitution snippet
+        # never breaks if a future runner default changes the shell to sh/dash.
+        shell: bash
         run: |
           mapfile -t WS < <(npm query .workspace --json \
             | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{for(const w of JSON.parse(s)){if(w.name!=='meddoc-pro')console.log(w.name)}})")
