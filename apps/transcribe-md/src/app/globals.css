@@ -5377,6 +5377,114 @@ body {
   opacity: 0.6;
   cursor: default;
 }
+
+/* --- Queue v2: prominent search + date-grouped sections + Page X of N pager --- */
+/* Prominent search — taller, the primary way into a large queue. */
+.qm-c3-search--lg {
+  margin-bottom: 18px;
+}
+.qm-c3-search--lg .qm-c3-search-ic {
+  left: 14px;
+}
+.qm-c3-search--lg .qm-c3-search-input {
+  height: 46px;
+  padding: 0 42px;
+  border-radius: 12px;
+  font-size: 14.5px;
+}
+/* keep the spinner + clear affordances symmetric with the larger left icon */
+.qm-c3-search--lg .qm-c3-search-spin {
+  right: 15px;
+}
+.qm-c3-search--lg .qm-c3-search-clear {
+  right: 10px;
+}
+/* Grouped sections — small headers so the eye lands instead of scrolling one wall. */
+.qm-c3-queue {
+  transition: opacity 120ms ease;
+}
+.qm-c3-queue.is-pending {
+  opacity: 0.55;
+}
+.qm-c3-grp + .qm-c3-grp {
+  margin-top: 18px;
+}
+.qm-c3-grp-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 2px 8px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-linear-text-3);
+}
+.qm-c3-grp-n {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--color-linear-surface-2);
+  border: 1px solid var(--color-linear-border);
+  color: var(--color-linear-text-3);
+  font-size: 10px;
+}
+/* Pager — Page X of N + prev/next; a finite queue stays finite. */
+.qm-c3-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 0 2px;
+  flex-wrap: wrap;
+}
+.qm-c3-pager-ctrls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.qm-c3-pager-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-linear-text-3);
+  letter-spacing: 0.02em;
+  min-width: 96px;
+  text-align: center;
+}
+.qm-c3-pager-btn {
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 1px solid var(--color-linear-border);
+  background: var(--color-linear-surface-1);
+  color: var(--color-linear-text-2);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 120ms ease, color 120ms ease, background-color 120ms ease;
+}
+.qm-c3-pager-btn:hover:not(:disabled) {
+  border-color: var(--color-linear-sage);
+  color: var(--color-linear-text);
+  background: var(--color-linear-row-hover);
+}
+.qm-c3-pager-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+@media (prefers-reduced-motion: reduce) {
+  .qm-c3-queue {
+    transition: none;
+  }
+}
+
 .qm-c3-pt-avatar {
   display: inline-flex;
   align-items: center;
