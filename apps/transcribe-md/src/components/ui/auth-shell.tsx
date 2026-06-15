@@ -13,6 +13,7 @@
 // runtime ignores both. Stage 5 will drop the props in one sweep.
 
 import type { ReactNode } from 'react';
+import { isSkinBeta } from '@/config/skin-beta';
 import { Ic } from './icon';
 
 export type AuthShellTheme = 'legacy' | 'clinician';
@@ -44,6 +45,47 @@ export function AuthShell({
   /** @deprecated kept for back-compat; cinematic band is removed. */
   cinematic?: AuthShellCinematic;
 }) {
+  // ── C3 calm-skin auth (Stage 4, flag-gated) ───────────────────────────────
+  // SKIN-ONLY: a re-skin of the auth chrome only. The split-screen shell
+  // collapses to one quiet centered card on the dark canvas (matching
+  // /concepts/signin). The form `children` — the real LoginForm / SignupForm /
+  // reset forms carrying the next-auth signIn + server-action flows — are
+  // rendered verbatim and UNTOUCHED. No auth logic is gated or changed. Flag
+  // OFF → the split-screen shell below renders, byte-identical.
+  if (isSkinBeta()) {
+    return (
+      <div className="qm-c3-auth">
+        <main className="qm-c3-auth-card">
+          <div className="qm-c3-auth-brand">
+            <span aria-hidden className="qm-c3-auth-mark">
+              Q
+            </span>
+            <span className="qm-c3-auth-word">QuillMD</span>
+          </div>
+          {eyebrow && <div className="qm-c3-auth-eyebrow">{eyebrow}</div>}
+          <h1 className="qm-c3-auth-h qm-auth-em-host">
+            <AuthTitle>{title}</AuthTitle>
+          </h1>
+          {subtitle && <p className="qm-c3-auth-sub">{subtitle}</p>}
+          <div className="qm-c3-auth-form">{children}</div>
+          <div className="qm-c3-auth-trust">
+            <span>
+              <Ic.shield width={12} height={12} aria-hidden />
+              HIPAA ready
+            </span>
+            <span aria-hidden>·</span>
+            <span>
+              <Ic.lock width={12} height={12} aria-hidden />
+              BAA included
+            </span>
+            <span aria-hidden>·</span>
+            <span>US-hosted</span>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div
       style={{
