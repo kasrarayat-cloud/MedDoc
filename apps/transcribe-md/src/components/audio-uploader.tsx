@@ -18,6 +18,7 @@ import { UploadCloud, Mic, File as FileIcon, X, ArrowRight } from 'lucide-react'
 import { toast } from 'sonner';
 
 import { cn } from '@/lib/cn';
+import { isSkinBeta } from '@/config/skin-beta';
 
 // Mirror the server-side allow-list. `audio/*` also covers provider-
 // specific variants like audio/x-wav; we re-validate on the server.
@@ -157,21 +158,32 @@ export function AudioUploader({ visitId }: AudioUploaderProps) {
 
   const uploading = progress !== null && progress < 100;
 
+  // C3 calm skin (flag-gated) — same drop-zone + same XHR upload to
+  // /api/visits/[id]/upload, with the calm header + honest tone. Flag OFF →
+  // the centered Linear V1 layout renders.
+  const c3 = isSkinBeta();
+
   return (
-    <div className="mx-auto w-full max-w-2xl">
-      <div className="mb-6 text-center">
+    <div className={c3 ? 'qm-c3-cap' : 'mx-auto w-full max-w-2xl'}>
+      <div className={c3 ? 'qm-c3-cap-head' : 'mb-6 text-center'}>
+        {c3 && <span className="qm-c3-cap-kicker">Audio upload</span>}
         <h2
-          style={{
-            margin: 0,
-            fontFamily: 'var(--font-sans)',
-            fontSize: 28,
-            fontWeight: 500,
-            lineHeight: 1.15,
-            letterSpacing: '-0.015em',
-            color: 'var(--color-linear-text)',
-          }}
+          style={
+            c3
+              ? undefined
+              : {
+                  margin: 0,
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 28,
+                  fontWeight: 500,
+                  lineHeight: 1.15,
+                  letterSpacing: '-0.015em',
+                  color: 'var(--color-linear-text)',
+                }
+          }
+          className={c3 ? 'qm-c3-cap-h' : undefined}
         >
-          Upload your visit audio
+          {c3 ? 'Add the visit audio' : 'Upload your visit audio'}
         </h2>
         <p
           className="mt-2"
