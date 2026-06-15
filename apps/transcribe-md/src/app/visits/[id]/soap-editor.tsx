@@ -122,6 +122,12 @@ interface SoapEditorProps {
    *  caused level change for the Sign & Send modal's confirm control.
    *  Null/undefined = nothing to confirm. */
   emPendingChange?: { from: string; to: string } | null;
+  /** V2 tabbed review (skin-only, flag-gated) — when true, render the note
+   *  body ONLY and suppress this editor's own bottom action bar (the E/M chip
+   *  + the Sign & Send / Export-again modal). The V2 shell hosts the ONE Sign
+   *  action in its persistent bottom bar instead (same SignAndSendModal, same
+   *  gate, same props). Presentation-only: no save/sign/E-M logic changes. */
+  chromeless?: boolean;
   /** @deprecated kept for back-compat; Linear V1 is single-theme. */
   theme?: SoapEditorTheme;
 }
@@ -136,6 +142,7 @@ export function SoapEditor({
   signedAt = null,
   initialScore = null,
   emPendingChange = null,
+  chromeless = false,
 }: SoapEditorProps) {
   const [text, setText] = useState(initialText);
   const [soapVersion, setSoapVersion] = useState(initialSoapVersion);
@@ -424,7 +431,9 @@ export function SoapEditor({
 
       {/* Bottom action bar — Sign & Send / Export-again.
           The Copy SOAP button moved INTO <SoapBody>'s notebody-foot,
-          per the v6 mockup. */}
+          per the v6 mockup. V2 chromeless: the shell's persistent bottom
+          Sign bar hosts this instead, so suppress it here. */}
+      {!chromeless && (
       <div className="flex flex-wrap items-center justify-end gap-2 border-t border-linear-hairline pt-4">
         {/* C3 billing-simplify — a calm confirmable code chip next to Sign so
             the doctor sees the E/M code at the moment of signing without the
@@ -482,6 +491,7 @@ export function SoapEditor({
           />
         )}
       </div>
+      )}
     </div>
   );
 }
