@@ -19,8 +19,10 @@ import { notFound, redirect } from 'next/navigation';
 
 import prisma from '@meddoc/db';
 import { auth } from '@/lib/nextauth';
+import { isSkinBeta } from '@/config/skin-beta';
 import { AppFrame } from '@/components/ui/app-frame';
 import { RecordingClient } from './recording-client';
+import { RecordingClientC3 } from './recording-client-c3';
 
 export const metadata: Metadata = { title: 'Recording' };
 
@@ -60,11 +62,22 @@ export default async function RecordVisitPage({
 
   return (
     <AppFrame>
-      <RecordingClient
-        visitId={visit.id}
-        patientName={visit.patient?.name ?? 'Patient'}
-        specialty={visit.specialty}
-      />
+      {isSkinBeta() ? (
+        // Stage 1c calm-skin recorder (flag-gated). Same MediaRecorder
+        // lifecycle + same /api/visits/[id]/dictation/upload endpoint; only
+        // the presentation differs. Old UI is the default.
+        <RecordingClientC3
+          visitId={visit.id}
+          patientName={visit.patient?.name ?? 'Patient'}
+          specialty={visit.specialty}
+        />
+      ) : (
+        <RecordingClient
+          visitId={visit.id}
+          patientName={visit.patient?.name ?? 'Patient'}
+          specialty={visit.specialty}
+        />
+      )}
     </AppFrame>
   );
 }

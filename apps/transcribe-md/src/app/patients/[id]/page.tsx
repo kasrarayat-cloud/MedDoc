@@ -25,6 +25,7 @@ import { notFound, redirect } from 'next/navigation';
 import prisma from '@meddoc/db';
 import { auth } from '@/lib/nextauth';
 import { logAudit } from '@/lib/audit';
+import { isSkinBeta } from '@/config/skin-beta';
 import { AppFrame } from '@/components/ui/app-frame';
 import { Avatar } from '@/components/ui/avatar';
 import { Ic } from '@/components/ui/icon';
@@ -217,7 +218,7 @@ export default async function PatientPage({
           archivedAt: null,
         },
         orderBy: { createdAt: 'desc' },
-        select: { createdAt: true, specialty: true },
+        select: { id: true, createdAt: true, specialty: true },
       }),
     ]);
 
@@ -226,6 +227,186 @@ export default async function PatientPage({
   const dobIso = formatDob(dob);
   const isDeleted = patient.deletedAt !== null;
   const problems = parseProblemList(patient.problemList);
+
+  // ── C3 calm-skin patient detail (Stage 2, flag-gated) ─────────────────────
+  // SKIN-ONLY: identical auth + Prisma reads + audit row above; this is a
+  // re-layout. The 4 vanity stat tiles collapse to one quiet line, the dead
+  // "Coming soon" Notes/Files tabs are dropped, and the page resolves to a
+  // calm header (ONE "New visit" primary + "Open last note") over the SAME
+  // <VisitsTab>/<TrashTab>/dialogs the legacy view renders. Flag OFF → the
+  // existing tabbed layout below runs, byte-identical.
+  if (isSkinBeta()) {
+    const age = dob ? yearsFrom(dob) : null;
+    const metaBits = [
+      dobIso ? `DOB ${dobIso}${age != null ? ` (${age})` : ''}` : null,
+      patient.mrn ? `MRN ${patient.mrn}` : null,
+      patient.externalId ? `ID ${patient.externalId}` : null,
+      patient.insurance ?? null,
+    ].filter(Boolean) as string[];
+
+    return (
+      <AppFrame>
+        <div className="flex items-center gap-2 px-6 pt-5 text-[13px] text-linear-text-3 sm:px-10">
+          <Link
+            href="/patients"
+            className="text-linear-text-3 no-underline hover:text-linear-text-2"
+          >
+            Patients
+          </Link>
+          <Ic.chevRight width={12} height={12} />
+          <span className="font-medium text-linear-text">{patient.name}</span>
+        </div>
+
+        {isDeleted && <DeletedBanner />}
+
+        {/* Calm header — identity + the few facts at a glance + ONE primary. */}
+        <div className="flex flex-col gap-5 border-b border-linear-border px-6 pb-7 pt-5 sm:px-10 lg:flex-row lg:items-start">
+          <div className="flex min-w-0 flex-1 items-start gap-5">
+            <Avatar name={patient.name} size={64} theme="clinician" />
+            <div className="min-w-0 flex-1">
+              <h1 className="m-0 text-[26px] font-semibold leading-tight tracking-tight text-linear-text">
+                {patient.name}
+              </h1>
+              {metaBits.length > 0 ? (
+                <p className="mt-2 font-mono text-[12.5px] text-linear-text-3">
+                  {metaBits.join('  ·  ')}
+                </p>
+              ) : (
+                <p className="mt-2 font-mono text-[12.5px] italic text-linear-text-3">
+                  No MRN / DOB / insurance on file — edit to add
+                </p>
+              )}
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {problems.map((p, i) => {
+                  const tone = problemTone(p.status);
+                  return (
+                    <span
+                      key={`${p.condition}-${i}`}
+                      className="inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 font-mono text-[10px] font-medium uppercase tracking-[0.05em]"
+                      style={{ background: tone.bg, color: tone.fg }}
+                      title={`${statusLabel(p.status)}${p.icd10 ? ` · ${p.icd10}` : ''}`}
+                    >
+                      <span
+                        className="h-1.5 w-1.5 rounded-full"
+                        style={{ background: tone.dot }}
+                      />
+                      {p.condition}
+                    </span>
+                  );
+                })}
+                {problems.length === 0 && (
+                  <span className="font-mono text-[12px] text-linear-text-3">
+                    No problem list yet.
+                  </span>
+                )}
+                <ProblemListDialog
+                  patientId={patient.id}
+                  initialProblemList={patient.problemList}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {!isDeleted && (
+              <Link
+                href={`/visits/new?patientId=${patient.id}`}
+                className="qm-lin-btn-primary"
+                style={{ textDecoration: 'none' }}
+              >
+                <Ic.plus width={14} height={14} />
+                New visit
+              </Link>
+            )}
+            {latestVisit && (
+              <Link
+                href={`/visits/${latestVisit.id}`}
+                className="qm-lin-btn"
+                style={{ textDecoration: 'none' }}
+              >
+                Open last note
+              </Link>
+            )}
+            <EditPatientDialog
+              patientId={patient.id}
+              initialName={patient.name}
+              initialDob={dobIso}
+              initialExternalId={patient.externalId}
+              initialMrn={patient.mrn}
+              initialInsurance={patient.insurance}
+            />
+            {activeCount > 0 && (
+              <a
+                href={`/api/patients/${patient.id}/export`}
+                className="qm-lin-btn"
+                style={{ textDecoration: 'none' }}
+              >
+                <Ic.download width={13} height={13} />
+                Export
+              </a>
+            )}
+            <DeletePatientDialog
+              patientId={patient.id}
+              patientName={patient.name}
+              visitCount={activeCount}
+            />
+          </div>
+        </div>
+
+        {/* Quiet one-line summary — replaces the 4 vanity stat cards. */}
+        <div className="px-6 pt-4 font-mono text-[12px] text-linear-text-3 sm:px-10">
+          {activeCount} visit{activeCount === 1 ? '' : 's'}
+          {' · '}
+          {signedCount} signed
+          {latestVisit && (
+            <>
+              {' · '}last {relTime(latestVisit.createdAt)}
+            </>
+          )}
+          {' · '}
+          {visitsThisMonth} this {now.toLocaleString('en-US', { month: 'short' })}
+        </div>
+
+        {/* Visits — the calm primary list. */}
+        <section aria-labelledby="c3-pt-visits" className="pt-3">
+          <div className="flex items-center gap-2 px-6 pb-1 sm:px-10">
+            <h2
+              id="c3-pt-visits"
+              className="m-0 font-mono text-[10.5px] font-medium uppercase tracking-[0.08em] text-linear-text-3"
+            >
+              Visits
+            </h2>
+            <span className="font-mono text-[11px] tabular-nums text-linear-text-3">
+              {activeCount}
+            </span>
+          </div>
+          {activeCount === 0 ? (
+            <VisitsEmpty deleted={isDeleted} patientId={patient.id} />
+          ) : (
+            <VisitsTab patientId={patient.id} userId={user.id} />
+          )}
+        </section>
+
+        {/* Deleted visits — shown only when present; no dead tab. */}
+        {trashCount > 0 && (
+          <section aria-labelledby="c3-pt-trash" className="pt-4">
+            <div className="flex items-center gap-2 px-6 pb-1 sm:px-10">
+              <h2
+                id="c3-pt-trash"
+                className="m-0 font-mono text-[10.5px] font-medium uppercase tracking-[0.08em] text-linear-text-3"
+              >
+                Deleted
+              </h2>
+              <span className="font-mono text-[11px] tabular-nums text-linear-text-3">
+                {trashCount}
+              </span>
+            </div>
+            <TrashTab patientId={patient.id} userId={user.id} />
+          </section>
+        )}
+      </AppFrame>
+    );
+  }
 
   return (
     <AppFrame>
