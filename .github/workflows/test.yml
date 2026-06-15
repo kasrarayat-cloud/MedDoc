@@ -136,13 +136,35 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
-      - name: Audit (fail on high/critical only)
-        # `--workspaces` walks every workspace; `--audit-level=high`
-        # gates exit code on high/critical (moderate + low are
-        # printed but don't fail). `|| true` is intentionally NOT
-        # added — we want the gate to fail the job on a vulnerability
-        # above threshold.
-        run: npm audit --audit-level=high --workspaces --include-workspace-root
+      - name: Audit (fail on high/critical only; decommissioned meddoc-pro excluded)
+        # `--audit-level=high` gates the exit code on high/critical only
+        # (moderate + low are printed but don't fail). `|| true` is
+        # intentionally NOT added — we want the gate to fail on a
+        # vulnerability above threshold.
+        #
+        # Scope: `--workspaces` would also scan apps/meddoc-pro, which is
+        # decommissioned and slated for deletion — its dead dep tree must
+        # not gate live PRs. npm has no `--workspace-exclude`, so we
+        # enumerate every OTHER workspace dynamically (a NEW in-scope
+        # workspace is auto-covered; only meddoc-pro is dropped) and audit
+        # them plus the workspace root. The empty-list guard fail-closes so
+        # a `npm query` regression can never silently shrink the audit
+        # surface to zero. This narrows SCOPE only — it does NOT lower the
+        # threshold; high/critical coverage for every in-scope workspace
+        # (transcribe-md, marketing, @meddoc/*) is fully intact.
+        # `shell: bash` is explicit so the `mapfile`/process-substitution snippet
+        # never breaks if a future runner default changes the shell to sh/dash.
+        shell: bash
+        run: |
+          mapfile -t WS < <(npm query .workspace --json \
+            | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{for(const w of JSON.parse(s)){if(w.name!=='meddoc-pro')console.log(w.name)}})")
+          if [ "${#WS[@]}" -eq 0 ]; then
+            echo "::error::no in-scope workspaces resolved — refusing to run an empty audit"
+            exit 1
+          fi
+          args=(); for w in "${WS[@]}"; do args+=(--workspace "$w"); done
+          echo "Auditing ${#WS[@]} in-scope workspaces (meddoc-pro excluded): ${WS[*]}"
+          npm audit --audit-level=high "${args[@]}" --include-workspace-root
 
   # ──────────────────────────────────────────────────────────────────
   # In-scope unit gate (chore/ci-unit-gate-and-marketing-copy).
