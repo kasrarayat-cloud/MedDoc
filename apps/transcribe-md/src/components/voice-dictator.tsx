@@ -30,6 +30,8 @@ import { useRouter } from 'next/navigation';
 import { Mic, Square, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
+import { isSkinBeta } from '@/config/skin-beta';
+
 type Phase = 'idle' | 'requesting' | 'listening' | 'uploading' | 'error';
 type VoiceDictatorTheme = 'legacy' | 'clinician';
 
@@ -254,6 +256,117 @@ export function VoiceDictator({ visitId }: VoiceDictatorProps) {
   const isUploading = phase === 'uploading';
   const isError = phase === 'error';
   const isRequesting = phase === 'requesting';
+
+  // ── C3 calm-skin dictation (Stage-1 capture-finish, flag-gated) ────────────
+  // SKIN-ONLY: the 🔴 PROTECTED MediaRecorder / AudioContext / analyser /
+  // finalizeAndUpload / start/stopRecording lifecycle above is untouched. This
+  // branch only re-skins the presentation into the calm C3 capture card (the
+  // same qm-c3-rec-* language as the record screen), reusing the SAME handlers
+  // (startRecording / stopRecording / error-reset), the SAME {mm}:{ss} binding,
+  // the SAME phase booleans, and the SAME analyser-driven <Waveform level>.
+  // Flag OFF → the original Linear V1 render below runs verbatim.
+  if (isSkinBeta()) {
+    return (
+      <div style={{ maxWidth: 520, margin: '40px auto 64px', padding: '0 20px' }}>
+        <div className="qm-c3-rec-card" style={{ margin: '0 auto' }}>
+          {phase === 'idle' || isRequesting ? (
+            <>
+              <span className="qm-c3-rec-kicker">Voice note</span>
+              <h1 className="qm-c3-rec-h">Dictate the visit</h1>
+              <p className="qm-c3-rec-p">
+                Tap start and speak naturally — we&apos;ll turn your dictation
+                into a structured SOAP note after you stop. Nothing is processed
+                until you do.
+              </p>
+              <button
+                type="button"
+                onClick={startRecording}
+                disabled={isRequesting}
+                className="qm-c3-rec-go"
+              >
+                <span className="qm-c3-rec-go-dot" aria-hidden />
+                {isRequesting ? 'Getting mic ready…' : 'Start dictating'}
+              </button>
+              <p className="qm-c3-rec-hint">
+                Up to 10 minutes · WebM/Opus · stays private
+              </p>
+            </>
+          ) : isListening ? (
+            <>
+              <div className="qm-c3-rec-statusline" aria-live="polite">
+                <span
+                  className={
+                    reducedMotion
+                      ? 'qm-c3-rec-dot live'
+                      : 'qm-c3-rec-dot live qm-lin-mic-dot'
+                  }
+                  aria-hidden
+                />
+                <span>Recording</span>
+              </div>
+              <div className="qm-c3-rec-timer">
+                {mm}:{ss}
+              </div>
+              <div className="qm-c3-rec-wave" aria-hidden>
+                <Waveform
+                  active={isListening}
+                  processing={false}
+                  level={level}
+                  reducedMotion={reducedMotion}
+                />
+              </div>
+              <p className="qm-c3-rec-honest">
+                Listening to your dictation. The note is written after you stop —
+                there&apos;s no live transcript to watch.
+              </p>
+              <div className="qm-c3-rec-controls">
+                <button
+                  type="button"
+                  onClick={stopRecording}
+                  className="qm-c3-rec-stop"
+                >
+                  <Square style={{ width: 13, height: 13, fill: 'currentColor' }} aria-hidden />
+                  Stop &amp; process
+                </button>
+              </div>
+              <p className="qm-c3-rec-hint">Auto-stops at 10:00</p>
+            </>
+          ) : isUploading ? (
+            <>
+              <div
+                className={reducedMotion ? 'qm-c3-rec-spin done' : 'qm-c3-rec-spin'}
+                aria-hidden
+              />
+              <h1 className="qm-c3-rec-h" aria-live="polite">
+                Processing your dictation…
+              </h1>
+              <p className="qm-c3-rec-hint" aria-live="polite">
+                Uploading and queuing for SOAP generation — you can leave; it&apos;ll
+                be ready on your dashboard.
+              </p>
+            </>
+          ) : (
+            <>
+              <h1 className="qm-c3-rec-h">Something went wrong</h1>
+              <p className="qm-c3-rec-error" role="alert">
+                {error ?? 'Unknown error.'}
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setError(null);
+                  setPhase('idle');
+                }}
+                className="qm-c3-rec-go"
+              >
+                Try again
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
