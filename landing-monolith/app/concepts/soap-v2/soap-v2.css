@@ -1,0 +1,195 @@
+/* ============================================================================
+ * /concepts/soap-v2 — TWO full-width SOAP-review redesigns that NEVER place secondary content
+ * beside the note (kills the note/panel side-by-side collision). Layers on top of the v1 lab's
+ * soap.css (tokens + note + buttons + cards + Rx/lane + switcher), so /concepts/soap stays
+ * byte-identical. Both concepts: note is ALWAYS full-width; secondary content (Rx, coding, AI
+ * suggestions) appears full-width in the vertical flow (V1) or on its own full-width tab (V2).
+ * Floor: real text, prefers-reduced-motion static, visible focus, mobile = the same single column.
+ * ========================================================================== */
+
+/* On the v2 route the patient header scrolls away; the summary / tab bar sticks to the top and
+ * the Sign bar is fixed to the bottom, so the gate state is ALWAYS on screen. */
+.v2v1 .sc-top,
+.v2v2 .sc-top { position: static; }
+.v2v1,
+.v2v2 { padding-bottom: 5.5rem; } /* clearance for the fixed bottom Sign bar */
+
+/* Lift the lab switcher above both fixed Sign bars (this CSS only loads on /concepts/soap-v2). */
+.sc-switch { bottom: calc(4.7rem + env(safe-area-inset-bottom, 0px)); }
+
+/* shared readiness dots */
+.v1-dot,
+.v2-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; flex: none; background: var(--sc-text3); }
+.v1-dot.ok,
+.v2-dot.ok { background: var(--sc-sage); box-shadow: 0 0 0 3px var(--sc-sage-tint); }
+.v1-dot.warn,
+.v2-dot.warn { background: var(--sc-amber); box-shadow: 0 0 0 3px rgba(212, 165, 116, 0.16); }
+
+/* ============================================================================
+ * V1 — READ DOWN TO SIGN
+ * ========================================================================== */
+.v1-summary {
+  position: sticky; top: 0; z-index: 30;
+  background: rgba(13, 14, 16, 0.86); backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--sc-border);
+}
+.v1-summary-in {
+  max-width: 960px; margin: 0 auto;
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+  padding: 0.7rem clamp(1rem, 4vw, 1.6rem);
+}
+.v1-sum-lead { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.82rem; color: var(--sc-text2); font-weight: 500; }
+.v1-badges { display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; }
+.v1-badge {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  font-family: var(--soap-sans); font-size: 0.74rem; font-weight: 500; color: var(--sc-text2);
+  background: var(--sc-s2); border: 1px solid var(--sc-border-strong); border-radius: 999px;
+  padding: 0.32rem 0.7rem 0.32rem 0.6rem; cursor: pointer; transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.v1-badge:hover { color: var(--sc-text); border-color: var(--sc-sage); }
+.v1-badge-dot { width: 0.42rem; height: 0.42rem; border-radius: 50%; flex: none; background: var(--sc-text3); }
+.v1-badge.crit { color: var(--sc-coral); border-color: rgba(201, 123, 110, 0.45); background: rgba(201, 123, 110, 0.09); }
+.v1-badge.crit .v1-badge-dot { background: var(--sc-coral); }
+.v1-badge.warn { color: var(--sc-amber); border-color: rgba(212, 165, 116, 0.4); background: rgba(212, 165, 116, 0.09); }
+.v1-badge.warn .v1-badge-dot { background: var(--sc-amber); }
+.v1-badge.info .v1-badge-dot { background: var(--sc-info); }
+.v1-badge.done { color: var(--sc-sage-bright); border-color: rgba(122, 166, 140, 0.4); background: var(--sc-sage-tint); cursor: default; }
+
+.v1-doc {
+  flex: 1; width: 100%; max-width: 720px; margin: 0 auto;
+  padding: clamp(1.6rem, 4vw, 2.8rem) clamp(1.2rem, 6vw, 2rem) 0;
+  display: flex; flex-direction: column; gap: 1.4rem;
+}
+.v1-note { }
+.v1-masthead { margin-bottom: 1.8rem; padding-bottom: 1.1rem; border-bottom: 1px solid var(--sc-border); }
+.v1-pt-name { margin: 0; font-size: clamp(1.5rem, 4vw, 1.85rem); font-weight: 650; letter-spacing: -0.015em; color: var(--sc-text); }
+.v1-pt-meta { margin: 0.45rem 0 0; font-family: var(--soap-mono); font-size: 0.72rem; color: var(--sc-text3); }
+.v1-note .sc-note { max-width: none; }
+
+/* inline full-width resolve blocks (stacked vertically below the note — never beside it) */
+.v1-block { scroll-margin-top: 5.2rem; padding-top: 1.4rem; border-top: 1px solid var(--sc-border); }
+.v1-block-rx { } /* critical block reads with a soft coral kicker, not a loud frame */
+.v1-block-head { display: flex; align-items: baseline; gap: 0.7rem; margin-bottom: 0.3rem; flex-wrap: wrap; }
+.v1-block-kicker { font-family: var(--soap-mono); font-size: 0.6rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--sc-text3); }
+.v1-block-kicker.crit { color: var(--sc-coral); }
+.v1-block-kicker.warn { color: var(--sc-amber); }
+.v1-block-title { margin: 0; font-size: 1.05rem; font-weight: 600; color: var(--sc-text); flex: 1; }
+.v1-block-count { font-family: var(--soap-mono); font-size: 0.66rem; color: var(--sc-text3); }
+.v1-block-count.crit { color: var(--sc-coral); }
+.v1-block-count.warn { color: var(--sc-amber); }
+.v1-block-sub { margin: 0 0 0.9rem; font-size: 0.78rem; line-height: 1.5; color: var(--sc-text3); }
+.v1-stack { display: flex; flex-direction: column; gap: 0.7rem; margin-top: 0.9rem; }
+.v1-allclear { margin: 0; font-size: 0.78rem; color: var(--sc-sage-bright); }
+.v1-doc-foot { height: 0.5rem; }
+
+.v1-signbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
+  background: rgba(13, 14, 16, 0.96); border-top: 1px solid var(--sc-border);
+  box-shadow: 0 -16px 40px -28px rgba(0, 0, 0, 0.8);
+}
+.v1-signbar-in {
+  max-width: 960px; margin: 0 auto;
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  padding: 0.7rem clamp(1rem, 4vw, 1.6rem);
+}
+.v1-sign-status { display: inline-flex; align-items: center; gap: 0.55rem; min-width: 0; }
+.v1-sign-msg { font-size: 0.82rem; color: var(--sc-text2); font-weight: 500; }
+
+/* ============================================================================
+ * V2 — TABBED SIGN-GATE WORKSPACE
+ * ========================================================================== */
+.v2-bar { position: sticky; top: 0; z-index: 30; background: rgba(13, 14, 16, 0.9); backdrop-filter: blur(14px); border-bottom: 1px solid var(--sc-border); }
+.v2-ready {
+  max-width: 960px; margin: 0 auto;
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.6rem clamp(1rem, 4vw, 1.6rem) 0;
+}
+.v2-ready-text { font-size: 0.78rem; color: var(--sc-text2); font-weight: 500; }
+.v2-pips { display: inline-flex; gap: 0.3rem; margin-left: 0.2rem; }
+.v2-pip { width: 1.4rem; height: 0.28rem; border-radius: 999px; background: var(--sc-s3); transition: background 0.2s; }
+.v2-pip.on { background: var(--sc-sage); }
+.v2-tabs { max-width: 960px; margin: 0 auto; display: flex; gap: 0.25rem; padding: 0.45rem clamp(1rem, 4vw, 1.6rem) 0.55rem; overflow-x: auto; scrollbar-width: none; }
+.v2-tabs::-webkit-scrollbar { display: none; }
+.v2-tab {
+  display: inline-flex; align-items: center; gap: 0.45rem; flex: none;
+  font-family: var(--soap-sans); font-size: 0.82rem; font-weight: 500; color: var(--sc-text3);
+  background: transparent; border: 0; border-bottom: 2px solid transparent;
+  padding: 0.45rem 0.7rem 0.5rem; cursor: pointer; transition: color 0.15s, border-color 0.15s;
+}
+.v2-tab:hover { color: var(--sc-text2); }
+.v2-tab.on { color: var(--sc-text); border-bottom-color: var(--sc-sage); }
+.v2-tab-badge {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 1.05rem; height: 1.05rem;
+  padding: 0 0.28rem; border-radius: 999px; font-family: var(--soap-mono); font-size: 0.6rem; font-weight: 500;
+  background: var(--sc-s3); color: var(--sc-text3);
+}
+.v2-tab-badge.ok { background: var(--sc-sage-tint); color: var(--sc-sage-bright); }
+.v2-tab-badge.info { background: rgba(91, 141, 184, 0.16); color: var(--sc-info); }
+.v2-tab-badge.warn { background: rgba(212, 165, 116, 0.16); color: var(--sc-amber); }
+.v2-tab-badge.crit { background: var(--sc-coral); color: #1a0f0d; }
+
+.v2-panel { flex: 1; width: 100%; max-width: 720px; margin: 0 auto; padding: clamp(1.6rem, 4vw, 2.6rem) clamp(1.2rem, 6vw, 2rem) 0; }
+.v2-masthead { margin-bottom: 1.8rem; padding-bottom: 1.1rem; border-bottom: 1px solid var(--sc-border); }
+.v2-pt-name { margin: 0; font-size: clamp(1.5rem, 4vw, 1.85rem); font-weight: 650; letter-spacing: -0.015em; color: var(--sc-text); }
+.v2-pt-meta { margin: 0.45rem 0 0; font-family: var(--soap-mono); font-size: 0.72rem; color: var(--sc-text3); }
+.v2-note .sc-note { max-width: none; }
+.v2-section { }
+.v2-sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.7rem; margin-bottom: 0.3rem; }
+.v2-sec-title { margin: 0; font-size: 1.1rem; font-weight: 600; color: var(--sc-text); }
+.v2-sec-sub { font-family: var(--soap-mono); font-size: 0.66rem; color: var(--sc-text3); }
+.v2-sec-sub.crit { color: var(--sc-coral); }
+.v2-sec-sub.warn { color: var(--sc-amber); }
+.v2-sec-lead { margin: 0 0 1rem; font-size: 0.8rem; line-height: 1.5; color: var(--sc-text3); }
+.v2-stack { display: flex; flex-direction: column; gap: 0.7rem; }
+
+.v2-signbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 60; background: rgba(13, 14, 16, 0.96); border-top: 1px solid var(--sc-border); box-shadow: 0 -16px 40px -28px rgba(0, 0, 0, 0.8); }
+.v2-signbar-in { max-width: 960px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.7rem clamp(1rem, 4vw, 1.6rem); }
+.v2-signbar .sc-block { display: none; } /* the jump-button already names the blocker (with aria) */
+.v2-sign-status { display: inline-flex; align-items: center; gap: 0.55rem; min-width: 0; }
+.v2-sign-jump { background: transparent; border: 0; cursor: pointer; text-align: left; font-family: var(--soap-sans); padding: 0.2rem 0; }
+.v2-sign-msg { font-size: 0.82rem; color: var(--sc-text2); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.v2-sign-top { color: var(--sc-amber); }
+.v2-sign-jump:hover .v2-sign-msg { color: var(--sc-text); }
+.v2-sign-go { color: var(--sc-text3); font-size: 0.8rem; }
+
+/* ============================================================================
+ * E/M card (neutral confirm-before-sign — no dollar framing) — shared by V1 + V2
+ * ========================================================================== */
+.v2-em { background: var(--sc-s1); border: 1px solid var(--sc-border); border-radius: 10px; padding: 0.9rem 1rem; }
+.v2-em.is-ok { border-color: rgba(122, 166, 140, 0.35); }
+.v2-em-row { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; }
+.v2-em-codes { display: inline-flex; align-items: center; gap: 0.5rem; font-family: var(--soap-mono); }
+.v2-em-from { font-size: 0.86rem; color: var(--sc-text3); }
+.v2-em-arrow { color: var(--sc-text3); }
+.v2-em-to { font-size: 0.98rem; font-weight: 500; color: var(--sc-text); }
+.v2-em-state { font-family: var(--soap-mono); font-size: 0.62rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--sc-amber); background: rgba(212, 165, 116, 0.13); border-radius: 999px; padding: 0.12rem 0.5rem; }
+.v2-em-state.ok { color: var(--sc-sage-bright); background: var(--sc-sage-tint); }
+.v2-em-basis { margin: 0.7rem 0 0.8rem; font-size: 0.8rem; line-height: 1.55; color: var(--sc-text2); }
+.v2-em-done { margin: 0; font-size: 0.78rem; color: var(--sc-sage-bright); }
+.v2-check { display: flex; align-items: flex-start; gap: 0.55rem; font-size: 0.82rem; line-height: 1.5; color: var(--sc-text2); cursor: pointer; padding: 0.65rem 0.75rem; border-radius: 8px; background: var(--sc-s2); border: 1px solid var(--sc-border); }
+.v2-check input { margin-top: 0.18rem; accent-color: var(--sc-sage); width: 1rem; height: 1rem; flex: none; }
+.v2-check strong { color: var(--sc-text); font-weight: 600; }
+
+/* ============================================================================
+ * Mobile — already single column; just tighten paddings + keep both bars usable.
+ * ========================================================================== */
+@media (max-width: 860px) {
+  .v2v1, .v2v2 { padding-bottom: 5.5rem; }
+  .v1-summary-in { padding: 0.6rem 1rem; gap: 0.5rem; }
+  .v1-sum-lead { width: 100%; }
+  .v1-badges { width: 100%; }
+  .v1-signbar-in, .v2-signbar-in { padding: 0.6rem 1rem; gap: 0.6rem; }
+  .v1-sign-status .v1-sign-msg, .v2-sign-msg { font-size: 0.78rem; }
+  .v2-sign-msg { max-width: 56vw; }
+  /* the sticky summary bar already carries the blockers as badges; drop the Sign button's own
+     blocker line on phones so the bottom bar stays one tidy row under the switcher. */
+  .v1-signbar .sc-block { display: none; }
+  /* the lab switcher already lifts itself above the bars via the route override above */
+}
+
+/* ============================================================================
+ * Reduced motion — no transitions, instant tab/scroll (scrollToId honours this in JS too).
+ * ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  .v1-badge, .v2-tab, .v2-pip, .v2-sign-jump .v2-sign-msg, .v1-dot, .v2-dot { transition: none !important; }
+}
