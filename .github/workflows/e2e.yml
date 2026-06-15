@@ -97,13 +97,22 @@ jobs:
           --entrypoint sh db-migrate
           -c 'cd /app/apps/transcribe-md && npx --no-install tsx scripts/seed-qa-user.ts'
 
-      - name: Start app + worker
-        run: docker compose -f docker-compose.qa.yml up -d --wait transcribe-md transcribe-md-worker
-
+      # MUST run BEFORE the app starts. /api/health (the app's docker
+      # healthcheck, docker-compose.qa.yml) gates on
+      # `bucketExists(transcribe-md-audio)` as a REQUIRED check — so with no
+      # bucket the app returns 503 and never goes healthy, and the
+      # `up --wait transcribe-md` step below fails with "container
+      # meddoc-qa-transcribe-md-1 is unhealthy". (Previously this step ran
+      # AFTER "Start app + worker", which made the gate a latent race against
+      # docker compose's `--wait` strictness — green on lenient runners, red
+      # on strict ones. minio is already up+healthy from the infra step.)
       - name: Create the audio bucket in minio
         run: >
           docker compose -f docker-compose.qa.yml exec -T minio sh -c
           'export MC_CONFIG_DIR=/tmp/mc; mc alias set local http://127.0.0.1:9000 qa_minio qa_minio_pw && mc mb --ignore-existing local/transcribe-md-audio'
+
+      - name: Start app + worker
+        run: docker compose -f docker-compose.qa.yml up -d --wait transcribe-md transcribe-md-worker
 
       # ── Run the suite from the runner against the dockerized app at :9020. ──
       - name: Install Playwright chromium
@@ -126,6 +135,11 @@ jobs:
       #      (scenario 24, rx-safety project) — would block every other spec's sign.
       #    The two flags are independent (different mock purposes), so recreate the
       #    app + worker once with both and run both isolated projects. ──
+      # Safe to re-run the bucket-gated `up --wait` here: this recreates only
+      # transcribe-md + the worker (minio is NOT touched), so the audio bucket
+      # created above persists in the qa_minio named volume → /api/health stays
+      # healthy. If a future edit adds minio to this step (or a `down`), the
+      # bucket-create step must run again before this.
       - name: Recreate app + worker with the flag-gated MOCK fixtures
         run: >
           MOCK_TEMPLATE_PHI_FLAG=true MOCK_RX_WARNINGS=true
