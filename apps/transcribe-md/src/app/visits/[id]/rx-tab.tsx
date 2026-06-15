@@ -21,7 +21,7 @@
 // tile and edit affordances are suppressed.
 // ============================================================================
 
-import { useCallback, useId, useMemo, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/cn';
 import { Ic } from '@/components/ui/icon';
@@ -33,7 +33,7 @@ import {
 // Canonical warning identity + severity mapping — shared with recordOverride
 // and the sign gate so the override warningId the rail emits is exactly what
 // the server validates + correlates against (fix/rx-override-gate-correlation).
-import { warningIdForIndex, mapWorkerSeverity } from '@/lib/rx-warnings';
+import { warningIdForIndex, mapWorkerSeverity, criticalWarningRefs } from '@/lib/rx-warnings';
 
 type RxTabTheme = 'legacy' | 'clinician';
 
@@ -83,6 +83,13 @@ interface RxTabProps {
    *  ✓ Overridden chip persists across reloads + tabs. New overrides
    *  recorded in this session are merged into local state. */
   initialOverriddenIds?: string[];
+  /** V2 tabbed review (skin-only, read-only) — reports whether EVERY
+   *  critical warning has an override row, so the V2 shell can mirror the
+   *  server's fail-closed Rx sign gate as the VISIBLE half (disable the
+   *  Sign trigger + the readiness pip). Derived from the SAME shared
+   *  warningId/severity identity the server validates; this callback
+   *  reads state only and never changes the override flow. */
+  onResolvedChange?: (allCriticalResolved: boolean) => void;
   /** @deprecated kept for back-compat; Linear V1 is single-theme. */
   theme?: RxTabTheme;
 }
@@ -95,6 +102,7 @@ export function RxTab({
   visitId,
   readonly = false,
   initialOverriddenIds = [],
+  onResolvedChange,
 }: RxTabProps) {
   const blob = (rx as RxBlob | null) ?? null;
   const prescriptions = blob?.prescriptions ?? [];
@@ -150,6 +158,20 @@ export function RxTab({
       };
     });
   }, [warnings, decoratedRx]);
+
+  // V2 read-only Rx gate mirror — report whether EVERY critical warning has an
+  // override, using the SAME `criticalWarningRefs` identity the sign route's
+  // fail-closed gate validates. The V2 shell uses this to disable the Sign
+  // trigger (the visible half) until the critical override is recorded; the
+  // server gate (POST /sign → 422) remains the authoritative enforcement.
+  const criticalRefIds = useMemo(() => criticalWarningRefs(rx).map((r) => r.id), [rx]);
+  const allCriticalResolved = useMemo(
+    () => criticalRefIds.every((id) => overriddenIds.has(id)),
+    [criticalRefIds, overriddenIds]
+  );
+  useEffect(() => {
+    onResolvedChange?.(allCriticalResolved);
+  }, [allCriticalResolved, onResolvedChange]);
 
   // Active card → matching warnings rail highlight.
   const [activeRxId, setActiveRxId] = useState<string | null>(null);
