@@ -37,6 +37,7 @@ import { toast } from 'sonner';
 
 import { saveSoapDraftAction } from '@/actions/soap';
 import { parseSoapSections, type SoapSectionKey } from '@/lib/parse-soap-sections';
+import { isSkinBeta } from '@/config/skin-beta';
 import { CodingRail } from '@/components/visits/CodingRail';
 import { CodingRailSkeleton } from '@/components/visits/CodingRailSkeleton';
 import type {
@@ -326,9 +327,20 @@ export function SoapEditor({
     [visitId, soapVersion]
   );
 
+  // C3 billing-simplify (flag-gated): the dense permanent coding rail moves
+  // into the review drawer (BillingCardC3) and a calm confirm chip sits next to
+  // Sign, so the note runs FULL-WIDTH (fixes the cramped narrow-viewport rail).
+  // SKIN-ONLY: only the rail's PRESENTATION location changes; the Sign & Send
+  // modal + the emPendingChange E/M confirm gate below are untouched. Flag OFF
+  // → the original 1fr/340px rail layout renders verbatim.
+  const c3 = isSkinBeta();
+  const displayedEmCode = emScore
+    ? emScore.override?.code ?? emScore.suggestedCode
+    : null;
+
   return (
     <div className="space-y-4">
-      <div className="qm-lin-coach-grid">
+      <div className={c3 ? 'qm-lin-coach-grid qm-lin-coach-grid--solo' : 'qm-lin-coach-grid'}>
         {/* LEFT — v6 SOAP body (4 section blocks + bottom strip). */}
         <SoapBody
           text={text}
@@ -345,6 +357,9 @@ export function SoapEditor({
             persistence endpoint). The rail's `emScore` prop is the
             local state mirror so apply-additions responses update
             the displayed tier without a page reload. */}
+        {/* C3 hides the permanent rail (its content moves to the drawer's
+            BillingCardC3); flag OFF renders the rail verbatim. */}
+        {!c3 && (
         <aside className="qm-lin-coding-rail-slot" aria-label="Billing support">
           {emScore ? (
             <CodingRail
@@ -404,12 +419,38 @@ export function SoapEditor({
             <CodingRailSkeleton />
           )}
         </aside>
+        )}
       </div>
 
       {/* Bottom action bar — Sign & Send / Export-again.
           The Copy SOAP button moved INTO <SoapBody>'s notebody-foot,
           per the v6 mockup. */}
       <div className="flex flex-wrap items-center justify-end gap-2 border-t border-linear-hairline pt-4">
+        {/* C3 billing-simplify — a calm confirmable code chip next to Sign so
+            the doctor sees the E/M code at the moment of signing without the
+            dense rail. Amber + "confirm" when a level change is pending; it
+            just opens the sign modal — the actual E/M confirm GATE stays in
+            <SignAndSendModal>. Flag OFF → no chip (the rail showed the code). */}
+        {c3 && !readonly && !isSigned && displayedEmCode && (
+          <button
+            type="button"
+            className={`qm-c3-bill-chip ${emPendingChange ? 'pending' : ''} qm-tap-44`}
+            onClick={() => setSignModalOpen(true)}
+            aria-label={
+              emPendingChange
+                ? `Billing code ${emPendingChange.to} — confirm at sign`
+                : `Billing code ${displayedEmCode}`
+            }
+          >
+            <span className="qm-c3-bill-chip-code">
+              {emPendingChange ? emPendingChange.to : displayedEmCode}
+            </span>
+            <span className="qm-c3-bill-chip-tag">
+              {emPendingChange ? 'confirm' : 'E/M'}
+            </span>
+          </button>
+        )}
+
         {/* Batch H — the Sign & Send CTA renders ONLY when the visit
             is unsigned (signedAt == null). Once a note has a sign
             timestamp it's locked. */}
