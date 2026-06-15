@@ -53,6 +53,7 @@ import {
   type SoapSection,
   type VisitPhase,
 } from '@/lib/visit-phase';
+import { isSkinBeta } from '@/config/skin-beta';
 
 interface StatusResponse {
   visitId: string;
@@ -392,6 +393,93 @@ export function ProcessingTypewriter({
     }
     return null;
   }, [sectionTargets]);
+
+  // ── C3 calm-skin processing (Stage-1 capture-finish, flag-gated) ───────────
+  // SKIN-ONLY: the polling loop, StatusResponse handling, phase governor, and
+  // typewriter engine above are all untouched. This branch re-skins the
+  // presentation into the calm C3 capture language — an honest checklist driven
+  // by the SAME real displayPhase / phaseIndex(displayPhase), the SAME
+  // elapsedFmt + stuckLevel, and the SAME RetryButton recovery — matching the
+  // record screen's processing state. The load-bearing "You can leave this
+  // page" reassurance is preserved verbatim. Flag OFF → the typewriter below
+  // renders verbatim.
+  if (isSkinBeta()) {
+    const di = phaseIndex(displayPhase);
+    const allDone = di >= VISIT_PHASES.length - 1 && displayPhase === 'Coding';
+    return (
+      <div style={{ maxWidth: 520, margin: '40px auto 64px', padding: '0 20px' }}>
+        <div className="qm-c3-rec-card" style={{ margin: '0 auto' }}>
+          <div
+            className={allDone ? 'qm-c3-rec-spin done' : 'qm-c3-rec-spin'}
+            aria-hidden
+          />
+          <h1 className="qm-c3-rec-h" aria-live="polite" data-testid="qm-tw-phase">
+            Writing the note…
+          </h1>
+          <p className="qm-c3-rec-p">
+            {eyebrow?.primary ?? 'Queued'} ·{' '}
+            <span style={{ color: 'var(--color-linear-text-3)' }}>
+              {eyebrow?.sub ?? 'Waiting for a worker'}
+            </span>
+          </p>
+          <ol
+            className="qm-c3-rec-steps"
+            aria-label={`SOAP processing — step ${Math.max(0, di + 1)} of ${VISIT_PHASES.length}: ${eyebrow?.primary ?? 'Queued'}`}
+          >
+            {VISIT_PHASES.map((p, i) => {
+              const state = i < di ? 'done' : i === di ? 'now' : 'pending';
+              return (
+                <li key={p} className={state === 'now' ? 'now' : ''}>
+                  <span className="qm-c3-rec-mark" aria-hidden>
+                    {state === 'done' ? '✓' : state === 'now' ? '◴' : '○'}
+                  </span>{' '}
+                  {PHASE_EYEBROW[p].primary}
+                  {state === 'now' && (
+                    <span style={{ color: 'var(--color-linear-text-3)' }}>
+                      {' '}— {PHASE_EYEBROW[p].sub.toLowerCase()}
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+          {showCodingChips && icdCount + cptCount > 0 && (
+            <p className="qm-c3-rec-hint">
+              {icdCount} ICD-10 · {cptCount} CPT selected
+            </p>
+          )}
+          <p className="qm-c3-rec-hint" aria-live="polite">
+            <strong style={{ color: 'var(--color-linear-text-2)' }}>
+              You can leave this page.
+            </strong>{' '}
+            We&apos;ll keep working in the background and notify you when the note
+            is ready to sign. · elapsed{' '}
+            <span data-testid="qm-tw-elapsed">{elapsedFmt}</span>
+          </p>
+          {stuckLevel !== 'ok' && (
+            <div
+              className="qm-c3-rec-honest"
+              style={{
+                color:
+                  stuckLevel === 'stuck'
+                    ? 'var(--color-linear-danger)'
+                    : 'var(--color-linear-warning)',
+              }}
+            >
+              {stuckLevel === 'warn'
+                ? `Taking longer than usual · elapsed ${elapsedFmt}`
+                : `This visit appears stuck · elapsed ${elapsedFmt}`}
+              {stuckLevel === 'stuck' && (
+                <div style={{ marginTop: 12 }}>
+                  <RetryButton visitId={visitId} />
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="qm-typewriter">
