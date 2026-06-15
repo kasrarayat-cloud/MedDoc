@@ -66,6 +66,14 @@ ENV NEXT_PUBLIC_MARKETING_URL=${NEXT_PUBLIC_MARKETING_URL}
 ARG NEXT_PUBLIC_SHOW_PIPELINE_TAB=false
 ENV NEXT_PUBLIC_SHOW_PIPELINE_TAB=${NEXT_PUBLIC_SHOW_PIPELINE_TAB}
 
+# Stage-1 core-flow redesign (C3 calm skin) gate. NEXT_PUBLIC_* must be set in
+# the BUILDER env so `next build` inlines it into the client bundle (it is a
+# build-time constant; a runtime override cannot flip it). Default "false" so
+# an image built with no override ships the existing UI — production posture.
+# Promote by building with `--build-arg NEXT_PUBLIC_SKIN_BETA=true`.
+ARG NEXT_PUBLIC_SKIN_BETA=false
+ENV NEXT_PUBLIC_SKIN_BETA=${NEXT_PUBLIC_SKIN_BETA}
+
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # ── Build heap (incident 2026-06-04) ──
