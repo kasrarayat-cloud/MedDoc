@@ -11,11 +11,13 @@ import { redirect } from 'next/navigation';
 
 import prisma from '@meddoc/db';
 import { auth } from '@/lib/nextauth';
+import { isSkinBeta } from '@/config/skin-beta';
 import { AppFrame } from '@/components/ui/app-frame';
 import { Ic } from '@/components/ui/icon';
 import { PageHeader } from '@/components/ui/page-header';
 import { SPECIALTIES_FOR_VISIT_CREATE, findSpecialty } from '@meddoc/shared/specialties';
 import { NewVisitClient } from './new-visit-client';
+import { NewVisitClientC3 } from './new-visit-client-c3';
 import type { SelectedPatient } from './patient-types';
 
 export const metadata: Metadata = { title: 'New visit' };
@@ -103,6 +105,30 @@ export default async function NewVisitPage({
   const defaultSpecialty = mostRecentVisit?.specialty
     ? findSpecialty(mostRecentVisit.specialty).id
     : SPECIALTIES_FOR_VISIT_CREATE[0].id;
+
+  // \u2500\u2500 C3 calm "just start" create flow (flag-gated) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  // SKIN-ONLY: identical auth + patient-scope reads + defaultSpecialty above.
+  // The 3-step stepper + side rail collapse to one calm card; the SAME
+  // PatientPicker + VisitFormStep2 (createVisitAction) do the real work. Flag
+  // OFF \u2192 the stepper below renders verbatim.
+  if (isSkinBeta()) {
+    return (
+      <AppFrame>
+        <div className="qm-c3-nv-top">
+          <span className="qm-c3-nv-eyebrow">New visit</span>
+          <a href="/dashboard" className="qm-lin-btn" style={{ textDecoration: 'none' }}>
+            <Ic.close width={13} height={13} />
+            Cancel
+          </a>
+        </div>
+        <NewVisitClientC3
+          initialPatient={initialPatient}
+          specialties={SPECIALTIES_FOR_VISIT_CREATE}
+          defaultSpecialty={defaultSpecialty}
+        />
+      </AppFrame>
+    );
+  }
 
   return (
     <AppFrame>

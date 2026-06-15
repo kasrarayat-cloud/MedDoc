@@ -18,8 +18,13 @@ import { TranscribeVisitStatus } from '@prisma/client';
 import { logAudit } from '@/lib/audit';
 import { Greeting } from './greeting';
 import { c3Status } from '@/lib/visit-status-c3';
+import { DashboardInboxC3 } from './dashboard-inbox-c3';
+import {
+  C3_INBOX_PAGE_SIZE,
+  type C3InboxCursor,
+  type C3InboxRow,
+} from '@/lib/c3-list-pagination';
 
-const INBOX_LIMIT = 20;
 const INPROGRESS_LIMIT = 10;
 
 const PROCESSING_STATUSES: TranscribeVisitStatus[] = [
@@ -71,29 +76,57 @@ export async function DashboardC3Body({
     return d;
   })();
 
-  const [inbox, inProgress, visitsThisMonth, signedThisWeek] = await Promise.all([
-    prisma.transcribeVisit.findMany({
-      where: { userId, deletedAt: null, archivedAt: null, status: TranscribeVisitStatus.READY, signedAt: null },
-      orderBy: { updatedAt: 'desc' },
-      take: INBOX_LIMIT,
-      select: ROW_SELECT,
-    }) as Promise<Row[]>,
-    prisma.transcribeVisit.findMany({
-      where: { userId, deletedAt: null, archivedAt: null, status: { in: PROCESSING_STATUSES } },
-      orderBy: { updatedAt: 'desc' },
-      take: INPROGRESS_LIMIT,
-      select: ROW_SELECT,
-    }) as Promise<Row[]>,
-    prisma.transcribeVisit.count({ where: { userId, deletedAt: null, createdAt: { gte: startOfMonth } } }),
-    prisma.transcribeVisit.count({ where: { userId, status: TranscribeVisitStatus.SIGNED, signedAt: { gte: startOfWeek } } }),
-  ]);
+  const inboxWhere = {
+    userId,
+    deletedAt: null,
+    archivedAt: null,
+    status: TranscribeVisitStatus.READY,
+    signedAt: null,
+  };
+
+  const [inboxRaw, inboxTotal, inProgress, visitsThisMonth, signedThisWeek] =
+    await Promise.all([
+      // First inbox page (+1 to derive the cursor). The rest streams in via
+      // the read-only searchInboxAction — the list never renders all rows.
+      prisma.transcribeVisit.findMany({
+        where: inboxWhere,
+        orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+        take: C3_INBOX_PAGE_SIZE + 1,
+        select: ROW_SELECT,
+      }) as Promise<Row[]>,
+      prisma.transcribeVisit.count({ where: inboxWhere }),
+      prisma.transcribeVisit.findMany({
+        where: { userId, deletedAt: null, archivedAt: null, status: { in: PROCESSING_STATUSES } },
+        orderBy: { updatedAt: 'desc' },
+        take: INPROGRESS_LIMIT,
+        select: ROW_SELECT,
+      }) as Promise<Row[]>,
+      prisma.transcribeVisit.count({ where: { userId, deletedAt: null, createdAt: { gte: startOfMonth } } }),
+      prisma.transcribeVisit.count({ where: { userId, status: TranscribeVisitStatus.SIGNED, signedAt: { gte: startOfWeek } } }),
+    ]);
+
+  const inboxHasMore = inboxRaw.length > C3_INBOX_PAGE_SIZE;
+  const inboxPage = inboxHasMore ? inboxRaw.slice(0, C3_INBOX_PAGE_SIZE) : inboxRaw;
+  const inboxRows: C3InboxRow[] = inboxPage.map((v) => ({
+    id: v.id,
+    patientName: v.patient?.name ?? v.patientName,
+    specialty: v.specialty,
+    status: v.status,
+    needsReview: v.needsReview,
+    chiefComplaint: v.chiefComplaint,
+  }));
+  const inboxLast = inboxPage[inboxPage.length - 1];
+  const inboxCursor: C3InboxCursor | null =
+    inboxHasMore && inboxLast
+      ? { updatedAt: inboxLast.updatedAt.toISOString(), id: inboxLast.id }
+      : null;
 
   // Same fire-and-forget §164.312(b) audit row as the existing dashboard.
   void logAudit({
     action: 'VIEWED_DASHBOARD',
     targetType: 'User',
     targetId: userId,
-    metadata: { source: 'rsc:/dashboard:c3', toSign: inbox.length, inProgress: inProgress.length },
+    metadata: { source: 'rsc:/dashboard:c3', toSign: inboxTotal, inProgress: inProgress.length },
   });
 
   const firstName = userName ? (userName.trim().split(/\s+/)[0] ?? null) : null;
@@ -107,15 +140,15 @@ export async function DashboardC3Body({
     <div style={{ maxWidth: 880, margin: '0 auto', padding: '22px 24px 80px' }}>
       <Greeting firstName={firstName} subtitle={subtitle} />
 
-      <Section title="Ready to sign" count={inbox.length} style={{ marginTop: 26 }}>
-        {inbox.length === 0 ? (
+      <Section title="Ready to sign" count={inboxTotal} style={{ marginTop: 26 }}>
+        {inboxTotal === 0 ? (
           <EmptyInbox />
         ) : (
-          <div className="qm-c3-list">
-            {inbox.map((v) => (
-              <VisitRow key={v.id} v={v} interactive />
-            ))}
-          </div>
+          <DashboardInboxC3
+            initialRows={inboxRows}
+            initialCursor={inboxCursor}
+            total={inboxTotal}
+          />
         )}
       </Section>
 
