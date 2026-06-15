@@ -468,6 +468,12 @@ services:
         # rebuild needed because the gate is read server-side at
         # request time, not inlined into the client bundle).
         NEXT_PUBLIC_SHOW_PIPELINE_TAB: ${NEXT_PUBLIC_SHOW_PIPELINE_TAB:-false}
+        # PROMOTED 2026-06-15 — Stage-1 C3 calm-skin redesign is now the
+        # production UI (PRs #331/#332/#333; all 4 review fail-closed gates
+        # proven firing in the new UI). This is build-time inlined into the
+        # client bundle. ROLLBACK: set to "false" and rebuild + recreate
+        # transcribe-md → the previous UI returns byte-for-byte.
+        NEXT_PUBLIC_SKIN_BETA: "true"
     restart: unless-stopped
     logging:
       driver: json-file
