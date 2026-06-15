@@ -128,7 +128,7 @@ export function PatientsListC3({
             ))}
           </div>
           <div className="qm-c3-list-foot">
-            <span className="qm-c3-list-count">
+            <span className="qm-c3-list-count" aria-live="polite">
               Showing {rows.length}
               {isFiltered ? ` match${rows.length === 1 ? '' : 'es'}` : ''}
               {!isFiltered && total > rows.length ? ` of ${total}` : ''}

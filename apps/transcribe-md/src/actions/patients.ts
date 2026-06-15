@@ -120,7 +120,10 @@ export async function searchPatientsAction(
       })
     : [];
   const countBy = new Map<string, number>(
-    counts.map((c) => [c.patientId, c._count._all])
+    counts.map((c: { patientId: string; _count: { _all: number } }) => [
+      c.patientId,
+      c._count._all,
+    ])
   );
 
   const last = page[page.length - 1];

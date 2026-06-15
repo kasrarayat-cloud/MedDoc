@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
 import prisma from '@meddoc/db';
-import { Prisma } from '@prisma/client';
+import { Prisma, type TranscribeVisitStatus } from '@prisma/client';
 import { SPECIALTY_IDS } from '@meddoc/shared/specialties';
 import { requireSession } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
@@ -308,7 +308,17 @@ export async function searchInboxAction(
     });
   }
 
-  const rows = await prisma.transcribeVisit.findMany({
+  type C3InboxRaw = {
+    id: string;
+    patientName: string | null;
+    specialty: string;
+    status: TranscribeVisitStatus;
+    needsReview: boolean;
+    chiefComplaint: string | null;
+    updatedAt: Date;
+    patient: { name: string } | null;
+  };
+  const rows = (await prisma.transcribeVisit.findMany({
     where: {
       userId: session.user.id,
       deletedAt: null,
@@ -329,7 +339,7 @@ export async function searchInboxAction(
       updatedAt: true,
       patient: { select: { name: true } },
     },
-  });
+  })) as C3InboxRaw[];
 
   const hasMore = rows.length > C3_INBOX_PAGE_SIZE;
   const page = hasMore ? rows.slice(0, C3_INBOX_PAGE_SIZE) : rows;

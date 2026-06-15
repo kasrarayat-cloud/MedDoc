@@ -113,7 +113,10 @@ export default async function PatientsPage() {
         })
       : [];
     const countBy = new Map<string, number>(
-      counts.map((c) => [c.patientId, c._count._all])
+      counts.map((c: { patientId: string; _count: { _all: number } }) => [
+        c.patientId,
+        c._count._all,
+      ])
     );
     const firstRows: C3PatientRow[] = firstPage.map((p) => {
       const lv = p.transcribeVisits[0];

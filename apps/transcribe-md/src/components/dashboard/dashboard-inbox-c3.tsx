@@ -136,7 +136,7 @@ export function DashboardInboxC3({
           </div>
 
           <div className="qm-c3-list-foot">
-            <span className="qm-c3-list-count">
+            <span className="qm-c3-list-count" aria-live="polite">
               Showing {showing}
               {isFiltered ? ' match' : ''}
               {isFiltered && showing !== 1 ? 'es' : ''}
