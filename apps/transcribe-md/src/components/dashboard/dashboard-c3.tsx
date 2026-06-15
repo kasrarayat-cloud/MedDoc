@@ -21,7 +21,6 @@ import { c3Status } from '@/lib/visit-status-c3';
 import { DashboardInboxC3 } from './dashboard-inbox-c3';
 import {
   C3_INBOX_PAGE_SIZE,
-  type C3InboxCursor,
   type C3InboxRow,
 } from '@/lib/c3-list-pagination';
 
@@ -45,6 +44,7 @@ type Row = {
   needsReview: boolean;
   chiefComplaint: string | null;
   updatedAt: Date;
+  createdAt: Date;
   patient: { name: string } | null;
 };
 
@@ -56,6 +56,7 @@ const ROW_SELECT = {
   needsReview: true,
   chiefComplaint: true,
   updatedAt: true,
+  createdAt: true,
   patient: { select: { name: true } },
 };
 
@@ -86,12 +87,12 @@ export async function DashboardC3Body({
 
   const [inboxRaw, inboxTotal, inProgress, visitsThisMonth, signedThisWeek] =
     await Promise.all([
-      // First inbox page (+1 to derive the cursor). The rest streams in via
-      // the read-only searchInboxAction — the list never renders all rows.
+      // First bounded page (offset). Later pages load via the read-only
+      // searchInboxAction (Page X of N) — the list never renders all rows.
       prisma.transcribeVisit.findMany({
         where: inboxWhere,
         orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
-        take: C3_INBOX_PAGE_SIZE + 1,
+        take: C3_INBOX_PAGE_SIZE,
         select: ROW_SELECT,
       }) as Promise<Row[]>,
       prisma.transcribeVisit.count({ where: inboxWhere }),
@@ -105,21 +106,16 @@ export async function DashboardC3Body({
       prisma.transcribeVisit.count({ where: { userId, status: TranscribeVisitStatus.SIGNED, signedAt: { gte: startOfWeek } } }),
     ]);
 
-  const inboxHasMore = inboxRaw.length > C3_INBOX_PAGE_SIZE;
-  const inboxPage = inboxHasMore ? inboxRaw.slice(0, C3_INBOX_PAGE_SIZE) : inboxRaw;
-  const inboxRows: C3InboxRow[] = inboxPage.map((v) => ({
+  const inboxRows: C3InboxRow[] = inboxRaw.map((v) => ({
     id: v.id,
     patientName: v.patient?.name ?? v.patientName,
     specialty: v.specialty,
     status: v.status,
     needsReview: v.needsReview,
     chiefComplaint: v.chiefComplaint,
+    createdAt: v.createdAt.toISOString(),
   }));
-  const inboxLast = inboxPage[inboxPage.length - 1];
-  const inboxCursor: C3InboxCursor | null =
-    inboxHasMore && inboxLast
-      ? { updatedAt: inboxLast.updatedAt.toISOString(), id: inboxLast.id }
-      : null;
+  const inboxTotalPages = Math.max(1, Math.ceil(inboxTotal / C3_INBOX_PAGE_SIZE));
 
   // Same fire-and-forget §164.312(b) audit row as the existing dashboard.
   void logAudit({
@@ -146,8 +142,8 @@ export async function DashboardC3Body({
         ) : (
           <DashboardInboxC3
             initialRows={inboxRows}
-            initialCursor={inboxCursor}
             total={inboxTotal}
+            totalPages={inboxTotalPages}
           />
         )}
       </Section>
