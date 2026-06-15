@@ -63,7 +63,14 @@ jobs:
       #    step; the Dockerfile bakes --max-old-space-size=6144 + the
       #    unpdf/mammoth bundle-assert, both of which run here). The 16 GB
       #    GitHub runner absorbs the 6 GB build heap. ──
+      # The E2E specs target the stable (pre-C3) UI contract. The prod
+      # docker-compose pins NEXT_PUBLIC_SKIN_BETA=true (the C3 skin is the
+      # live UI); pin it OFF here so the regression gate stays decoupled from
+      # the deploy flag and its specs keep matching. (C3-flag-ON E2E coverage
+      # is a tracked follow-up.)
       - name: Build app + worker images
+        env:
+          NEXT_PUBLIC_SKIN_BETA: "false"
         run: docker compose -p meddoc-pro -f docker-compose.yml build transcribe-md transcribe-md-worker
 
       - name: Build db-migrate image (prisma CLI)

@@ -16,6 +16,7 @@ import { PenLine, ArrowRight, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { cn } from '@/lib/cn';
+import { isSkinBeta } from '@/config/skin-beta';
 
 const MIN_CHARS = 30;
 const MAX_CHARS = 5000;
@@ -82,32 +83,43 @@ export function TextComposer({ visitId }: TextComposerProps) {
     });
   }, [visitId, text, router]);
 
+  // C3 calm skin (flag-gated) — same textarea + same POST /api/visits/[id]/text
+  // submit, presented as the calm single card with an honest "written after you
+  // submit" tone. Flag OFF → the centered Linear V1 layout below renders.
+  const c3 = isSkinBeta();
+
   return (
-    <div className="mx-auto w-full max-w-2xl">
-      <div className="mb-6 text-center">
+    <div className={c3 ? 'qm-c3-cap' : 'mx-auto w-full max-w-2xl'}>
+      <div className={c3 ? 'qm-c3-cap-head' : 'mb-6 text-center'}>
+        {c3 && <span className="qm-c3-cap-kicker">Text note</span>}
         <h2
-          style={{
-            margin: 0,
-            fontFamily: 'var(--font-sans)',
-            fontSize: 28,
-            fontWeight: 500,
-            lineHeight: 1.15,
-            letterSpacing: '-0.015em',
-            color: 'var(--color-linear-text)',
-          }}
+          style={
+            c3
+              ? undefined
+              : {
+                  margin: 0,
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 28,
+                  fontWeight: 500,
+                  lineHeight: 1.15,
+                  letterSpacing: '-0.015em',
+                  color: 'var(--color-linear-text)',
+                }
+          }
+          className={c3 ? 'qm-c3-cap-h' : undefined}
         >
-          Text to SOAP
+          {c3 ? 'Type the visit' : 'Text to SOAP'}
         </h2>
         <p
-          className="mt-2"
-          style={{
-            fontSize: 14,
-            lineHeight: 1.55,
-            color: 'var(--color-linear-text-2)',
-          }}
+          className={c3 ? 'qm-c3-cap-p' : 'mt-2'}
+          style={
+            c3
+              ? undefined
+              : { fontSize: 14, lineHeight: 1.55, color: 'var(--color-linear-text-2)' }
+          }
         >
           Paste bullet points or shorthand. We&apos;ll expand them into a
-          complete SOAP note.
+          complete SOAP note after you submit.
         </p>
       </div>
 
