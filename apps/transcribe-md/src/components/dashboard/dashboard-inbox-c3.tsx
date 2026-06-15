@@ -1,15 +1,19 @@
 'use client';
 
 // ============================================================================
-// DashboardInboxC3 — the calm "Ready to sign" inbox, made to scale.
+// DashboardInboxC3 — the "Ready to sign" inbox as a finite WORK QUEUE.
 // ----------------------------------------------------------------------------
-// Renders the server-SSR'd first page, then a debounced name search + a
-// "Load more" affordance, both driven by the READ-ONLY searchInboxAction
-// (cursor pagination over the same READY+unsigned, user-scoped query). The
-// list never holds more than the pages the doctor has actually asked for —
-// a 1,000-visit queue paints one 25-row page, not 1,000 rows.
+// A sign queue is a do-this-next list, not an endless feed, so it's:
+//   1. GROUPED into Today / This week / Older (by visit date) with small
+//      headers, so the eye lands on a section instead of scrolling one wall;
+//   2. PAGINATED into bounded pages (Page X of N + prev/next, ≤18 rows) so the
+//      list NEVER runs off the screen regardless of total count;
+//   3. SEARCHABLE up front — a prominent box that filters the WHOLE queue
+//      server-side (all pages), not just the visible page.
 //
-// PRESENTATION ONLY: no write path. Rows link to the existing /visits/[id].
+// PRESENTATION ONLY: every page/search is the READ-ONLY, user-scoped
+// searchInboxAction (offset paging + count over the SAME READY+unsigned query).
+// Rows link to the existing /visits/[id]. No write path.
 // ============================================================================
 
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
@@ -17,49 +21,84 @@ import Link from 'next/link';
 
 import { c3Status } from '@/lib/visit-status-c3';
 import { searchInboxAction } from '@/actions/visits';
-import type { C3InboxCursor, C3InboxRow } from '@/lib/c3-list-pagination';
+import type { C3InboxRow } from '@/lib/c3-list-pagination';
+
+type Group = { key: 'today' | 'week' | 'older'; label: string; rows: C3InboxRow[] };
+
+/** Split the visible page into Today / This week / Older by visit date (local
+ *  time). Newest-first order means Today leads; the labelled Older section
+ *  keeps the backlog visible wherever it falls. Empty groups are dropped. */
+function groupByDate(rows: C3InboxRow[]): Group[] {
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const sow = new Date(startOfToday);
+  const dow = now.getDay();
+  sow.setDate(sow.getDate() + (dow === 0 ? -6 : 1 - dow)); // Monday 00:00
+  const startOfWeek = sow.getTime();
+
+  const today: C3InboxRow[] = [];
+  const week: C3InboxRow[] = [];
+  const older: C3InboxRow[] = [];
+  for (const r of rows) {
+    const t = new Date(r.createdAt).getTime();
+    if (Number.isNaN(t) || t >= startOfToday) today.push(r);
+    else if (t >= startOfWeek) week.push(r);
+    else older.push(r);
+  }
+  return (
+    [
+      { key: 'today', label: 'Today', rows: today },
+      { key: 'week', label: 'This week', rows: week },
+      { key: 'older', label: 'Older', rows: older },
+    ] as Group[]
+  ).filter((g) => g.rows.length > 0);
+}
 
 export function DashboardInboxC3({
   initialRows,
-  initialCursor,
-  total,
+  total: initialTotal,
+  totalPages: initialTotalPages,
 }: {
   initialRows: C3InboxRow[];
-  initialCursor: C3InboxCursor | null;
   total: number;
+  totalPages: number;
 }) {
   const [rows, setRows] = useState<C3InboxRow[]>(initialRows);
-  const [cursor, setCursor] = useState<C3InboxCursor | null>(initialCursor);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(initialTotal);
+  const [totalPages, setTotalPages] = useState(initialTotalPages);
   const [query, setQuery] = useState('');
-  const [searching, setSearching] = useState(false);
-  const [loadingMore, startLoadMore] = useTransition();
+  const [pending, startTransition] = useTransition();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Guards against an out-of-order search response overwriting a newer one.
+  // Guards against an out-of-order response overwriting a newer one.
   const reqIdRef = useRef(0);
 
-  const runSearch = useCallback((q: string) => {
+  const fetchPage = useCallback((q: string, p: number) => {
     const myReq = ++reqIdRef.current;
-    setSearching(true);
-    searchInboxAction(null, q)
-      .then((page) => {
-        if (reqIdRef.current !== myReq) return; // a newer search superseded this
-        setRows(page.rows);
-        setCursor(page.nextCursor);
-      })
-      .catch(() => {
-        if (reqIdRef.current !== myReq) return;
-        // Leave the current rows in place on a transient failure; the
-        // doctor can retype. No behaviour change — read-only path.
-      })
-      .finally(() => {
-        if (reqIdRef.current === myReq) setSearching(false);
-      });
+    startTransition(async () => {
+      try {
+        const res = await searchInboxAction(q, p);
+        if (reqIdRef.current !== myReq) return; // superseded
+        setRows(res.rows);
+        setPage(res.page);
+        setTotal(res.total);
+        setTotalPages(res.totalPages);
+      } catch {
+        // Transient failure on a read-only path — leave the current view.
+      }
+    });
   }, []);
 
   const onQueryChange = (value: string) => {
     setQuery(value);
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => runSearch(value.trim()), 220);
+    // A new search always restarts at page 1 (it filters the WHOLE queue).
+    debounceRef.current = setTimeout(() => fetchPage(value.trim(), 1), 220);
+  };
+
+  const goToPage = (p: number) => {
+    if (p < 1 || p > totalPages || p === page) return;
+    fetchPage(query.trim(), p);
   };
 
   useEffect(() => {
@@ -68,28 +107,15 @@ export function DashboardInboxC3({
     };
   }, []);
 
-  const loadMore = () => {
-    if (!cursor) return;
-    const q = query.trim();
-    startLoadMore(async () => {
-      try {
-        const page = await searchInboxAction(cursor, q);
-        setRows((prev) => [...prev, ...page.rows]);
-        setCursor(page.nextCursor);
-      } catch {
-        /* transient — keep current list */
-      }
-    });
-  };
-
   const isFiltered = query.trim().length > 0;
-  const showing = rows.length;
+  const groups = groupByDate(rows);
 
   return (
     <div>
-      <div className="qm-c3-search">
+      {/* Prominent search — the primary way into a large queue. */}
+      <div className="qm-c3-search qm-c3-search--lg">
         <span className="qm-c3-search-ic" aria-hidden>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="11" cy="11" r="7" />
             <line x1="21" y1="21" x2="16.65" y2="16.65" />
           </svg>
@@ -97,15 +123,15 @@ export function DashboardInboxC3({
         <input
           type="search"
           inputMode="search"
-          className="qm-c3-search-input"
-          placeholder="Search notes to sign by patient or chief complaint…"
+          className="qm-c3-search-input qm-tap-44-input"
+          placeholder="Search the whole queue by patient or chief complaint…"
           aria-label="Search notes to sign"
           value={query}
           onChange={(e) => onQueryChange(e.target.value)}
           autoComplete="off"
         />
-        {searching && <span className="qm-c3-search-spin" aria-hidden />}
-        {isFiltered && !searching && (
+        {pending && <span className="qm-c3-search-spin" aria-hidden />}
+        {isFiltered && !pending && (
           <button
             type="button"
             className="qm-c3-search-clear qm-tap-44"
@@ -113,7 +139,7 @@ export function DashboardInboxC3({
             onClick={() => {
               setQuery('');
               if (debounceRef.current) clearTimeout(debounceRef.current);
-              runSearch('');
+              fetchPage('', 1);
             }}
           >
             ✕
@@ -129,28 +155,54 @@ export function DashboardInboxC3({
         </div>
       ) : (
         <>
-          <div className="qm-c3-list" role="list">
-            {rows.map((v) => (
-              <InboxRow key={v.id} v={v} />
+          <div className={pending ? 'qm-c3-queue is-pending' : 'qm-c3-queue'}>
+            {groups.map((g) => (
+              <section className="qm-c3-grp" key={g.key} aria-label={g.label}>
+                <h4 className="qm-c3-grp-h">
+                  <span>{g.label}</span>
+                  <span className="qm-c3-grp-n">{g.rows.length}</span>
+                </h4>
+                <div className="qm-c3-list" role="list">
+                  {g.rows.map((v) => (
+                    <InboxRow key={v.id} v={v} />
+                  ))}
+                </div>
+              </section>
             ))}
           </div>
 
-          <div className="qm-c3-list-foot">
+          {/* Pager — keeps a finite queue finite. "Page X of N" + prev/next so
+              the list never runs off the screen regardless of total count. */}
+          <div className="qm-c3-pager">
             <span className="qm-c3-list-count" aria-live="polite">
-              Showing {showing}
-              {isFiltered ? ' match' : ''}
-              {isFiltered && showing !== 1 ? 'es' : ''}
-              {!isFiltered && total > showing ? ` of ${total}` : ''}
+              {isFiltered
+                ? `${total} match${total === 1 ? '' : 'es'}`
+                : `${total} to sign`}
             </span>
-            {cursor && (
-              <button
-                type="button"
-                className="qm-c3-loadmore qm-tap-44"
-                onClick={loadMore}
-                disabled={loadingMore}
-              >
-                {loadingMore ? 'Loading…' : 'Load more'}
-              </button>
+            {totalPages > 1 && (
+              <div className="qm-c3-pager-ctrls">
+                <button
+                  type="button"
+                  className="qm-c3-pager-btn qm-tap-44"
+                  onClick={() => goToPage(page - 1)}
+                  disabled={page <= 1 || pending}
+                  aria-label="Previous page"
+                >
+                  ← Prev
+                </button>
+                <span className="qm-c3-pager-label" aria-live="polite">
+                  Page {page} of {totalPages}
+                </span>
+                <button
+                  type="button"
+                  className="qm-c3-pager-btn qm-tap-44"
+                  onClick={() => goToPage(page + 1)}
+                  disabled={page >= totalPages || pending}
+                  aria-label="Next page"
+                >
+                  Next →
+                </button>
+              </div>
             )}
           </div>
         </>

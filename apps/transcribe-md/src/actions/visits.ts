@@ -16,8 +16,7 @@ import {
 } from '@/lib/dashboard-pagination';
 import {
   C3_INBOX_PAGE_SIZE,
-  type C3InboxCursor,
-  type C3InboxPage,
+  type C3InboxPageResult,
 } from '@/lib/c3-list-pagination';
 
 const INPUT_MODES = ['audio_upload', 'voice_dictation', 'text_notes'] as const;
@@ -271,42 +270,43 @@ export async function loadMoreVisitsAction(
 //
 // Powers the flag-gated dashboard inbox (dashboard-inbox-c3.tsx). PURELY
 // READ-ONLY: same user-scoped READY + unsigned filter the existing dashboard
-// already runs, plus an optional case-insensitive name search and a stable
-// (updatedAt desc, id desc) cursor so the list scales to any size without ever
-// rendering more than one page. No write path, no behavior change, no gate
-// touched. Always scoped to the authed user regardless of cursor/query input.
+// already runs, plus an optional case-insensitive search (whole queue, all
+// pages) and BOUNDED OFFSET pages (Page X of N) so a sign queue stays finite
+// and never runs off the screen. No write path, no behavior change, no gate
+// touched. The tenant filter is ALWAYS the authed user — neither `query` nor
+// `page` can widen it (page is clamped to [1, totalPages] server-side).
 export async function searchInboxAction(
-  cursor: C3InboxCursor | null,
-  query: string
-): Promise<C3InboxPage> {
+  query: string,
+  page: number
+): Promise<C3InboxPageResult> {
   const session = await requireSession();
   const q = query.trim().slice(0, 100);
 
-  let cur: { updatedAt: Date; id: string } | null = null;
-  if (cursor) {
-    const d = new Date(cursor.updatedAt);
-    if (Number.isNaN(d.getTime())) throw new Error('Invalid cursor');
-    cur = { updatedAt: d, id: cursor.id };
-  }
+  const where: Prisma.TranscribeVisitWhereInput = {
+    userId: session.user.id,
+    deletedAt: null,
+    archivedAt: null,
+    status: 'READY',
+    signedAt: null,
+    ...(q
+      ? {
+          OR: [
+            { patient: { is: { name: { contains: q, mode: 'insensitive' } } } },
+            { patientName: { contains: q, mode: 'insensitive' } },
+            { chiefComplaint: { contains: q, mode: 'insensitive' } },
+          ],
+        }
+      : {}),
+  };
 
-  const andClauses: Prisma.TranscribeVisitWhereInput[] = [];
-  if (q) {
-    andClauses.push({
-      OR: [
-        { patient: { is: { name: { contains: q, mode: 'insensitive' } } } },
-        { patientName: { contains: q, mode: 'insensitive' } },
-        { chiefComplaint: { contains: q, mode: 'insensitive' } },
-      ],
-    });
-  }
-  if (cur) {
-    andClauses.push({
-      OR: [
-        { updatedAt: { lt: cur.updatedAt } },
-        { AND: [{ updatedAt: cur.updatedAt }, { id: { lt: cur.id } }] },
-      ],
-    });
-  }
+  const total = await prisma.transcribeVisit.count({ where });
+  const pageSize = C3_INBOX_PAGE_SIZE;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  // Clamp caller-supplied page into range (never trust client input to widen
+  // the read; an out-of-range page just lands on a valid bounded page).
+  const safePage = Number.isFinite(page)
+    ? Math.min(Math.max(1, Math.trunc(page)), totalPages)
+    : 1;
 
   type C3InboxRaw = {
     id: string;
@@ -315,20 +315,14 @@ export async function searchInboxAction(
     status: TranscribeVisitStatus;
     needsReview: boolean;
     chiefComplaint: string | null;
-    updatedAt: Date;
+    createdAt: Date;
     patient: { name: string } | null;
   };
   const rows = (await prisma.transcribeVisit.findMany({
-    where: {
-      userId: session.user.id,
-      deletedAt: null,
-      archivedAt: null,
-      status: 'READY',
-      signedAt: null,
-      ...(andClauses.length ? { AND: andClauses } : {}),
-    },
+    where,
     orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
-    take: C3_INBOX_PAGE_SIZE + 1,
+    skip: (safePage - 1) * pageSize,
+    take: pageSize,
     select: {
       id: true,
       patientName: true,
@@ -336,28 +330,24 @@ export async function searchInboxAction(
       status: true,
       needsReview: true,
       chiefComplaint: true,
-      updatedAt: true,
+      createdAt: true,
       patient: { select: { name: true } },
     },
   })) as C3InboxRaw[];
 
-  const hasMore = rows.length > C3_INBOX_PAGE_SIZE;
-  const page = hasMore ? rows.slice(0, C3_INBOX_PAGE_SIZE) : rows;
-  const last = page[page.length - 1];
-  const nextCursor: C3InboxCursor | null =
-    hasMore && last
-      ? { updatedAt: last.updatedAt.toISOString(), id: last.id }
-      : null;
-
   return {
-    rows: page.map((r) => ({
+    rows: rows.map((r) => ({
       id: r.id,
       patientName: r.patient?.name ?? r.patientName,
       specialty: r.specialty,
       status: r.status,
       needsReview: r.needsReview,
       chiefComplaint: r.chiefComplaint,
+      createdAt: r.createdAt.toISOString(),
     })),
-    nextCursor,
+    total,
+    page: safePage,
+    pageSize,
+    totalPages,
   };
 }
