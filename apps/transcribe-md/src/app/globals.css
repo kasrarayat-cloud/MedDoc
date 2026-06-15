@@ -5663,3 +5663,204 @@ body {
 .qm-c3-bill-chip.pending .qm-c3-bill-chip-tag {
   color: var(--color-linear-amber);
 }
+
+/* ============================================================================
+ * V2 "Tabbed sign-gate workspace" review skin (flag-gated, additive).
+ * Full-width note + secondary surfaces each on their OWN full-width tab — no
+ * side-by-side. Lives INSIDE the app chrome: the tab bar sticks below the 48px
+ * .qm-lin-chrome; the Sign bar sticks to the bottom of <main> (offset above the
+ * 60px fixed mobile nav at ≤980px) so it never collides with the chrome or the
+ * sidebar. Tokens reuse the app's --color-linear-* palette.
+ * ========================================================================== */
+.qm-c3-rev2 {
+  display: flex;
+  flex-direction: column;
+}
+.qm-c3-rev2-bar {
+  position: sticky;
+  top: 48px; /* below the .qm-lin-chrome top bar */
+  z-index: 20;
+  background: rgba(13, 14, 16, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--color-linear-hairline);
+  margin: 0 -4px;
+}
+.qm-c3-rev2-ready {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 4px 0;
+}
+.qm-c3-rev2-ready-text {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--color-linear-text-2);
+}
+.qm-c3-rev2-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  flex: none;
+  background: var(--color-linear-text-3);
+}
+.qm-c3-rev2-dot.ok {
+  background: var(--color-linear-sage);
+  box-shadow: 0 0 0 3px var(--color-linear-sage-tint);
+}
+.qm-c3-rev2-dot.warn {
+  background: var(--color-linear-amber);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-linear-amber) 16%, transparent);
+}
+.qm-c3-rev2-pips {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 2px;
+}
+.qm-c3-rev2-pip {
+  width: 20px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--color-linear-surface-3);
+}
+.qm-c3-rev2-pip.on {
+  background: var(--color-linear-sage);
+}
+.qm-c3-rev2-pip.atsign {
+  background: var(--color-linear-amber);
+}
+.qm-c3-rev2-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 6px 4px 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.qm-c3-rev2-tabs::-webkit-scrollbar {
+  display: none;
+}
+.qm-c3-rev2-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: none;
+  padding: 7px 11px 9px;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--color-linear-text-3);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 100ms ease, border-color 100ms ease;
+}
+.qm-c3-rev2-tab:hover {
+  color: var(--color-linear-text-2);
+}
+.qm-c3-rev2-tab.on {
+  color: var(--color-linear-text);
+  border-bottom-color: var(--color-linear-sage);
+}
+.qm-c3-rev2-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  background: var(--color-linear-surface-3);
+  color: var(--color-linear-text-3);
+}
+.qm-c3-rev2-tab-badge.ok {
+  background: var(--color-linear-sage-tint);
+  color: var(--color-linear-sage-bright);
+}
+.qm-c3-rev2-tab-badge.info {
+  background: color-mix(in srgb, var(--color-linear-info, #5b8db8) 16%, transparent);
+  color: var(--color-linear-info, #5b8db8);
+}
+.qm-c3-rev2-tab-badge.warn {
+  background: color-mix(in srgb, var(--color-linear-amber) 16%, transparent);
+  color: var(--color-linear-amber);
+}
+.qm-c3-rev2-tab-badge.danger {
+  background: var(--color-linear-danger);
+  color: #1a0f0d;
+}
+.qm-c3-rev2-panel {
+  padding: 20px 0 8px;
+}
+/* Focusable panel (tabIndex=0): suppress only the mouse-focus ring, keep a
+   visible keyboard focus indicator (a11y — don't out-specify the sage ring). */
+.qm-c3-rev2-panel:focus {
+  outline: none;
+}
+.qm-c3-rev2-panel:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-linear-sage) 60%, transparent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+.qm-c3-rev2-signbar {
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
+  background: rgba(13, 14, 16, 0.96);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid var(--color-linear-border);
+  margin: 0 -4px;
+}
+.qm-c3-rev2-signbar-in {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 4px;
+}
+.qm-c3-rev2-sign-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.qm-c3-rev2-jump {
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-sans);
+  padding: 2px 0;
+}
+.qm-c3-rev2-sign-msg {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--color-linear-text-2);
+}
+.qm-c3-rev2-jump:hover .qm-c3-rev2-sign-msg {
+  color: var(--color-linear-text);
+}
+.qm-c3-rev2-go {
+  color: var(--color-linear-text-3);
+}
+.qm-c3-rev2-sign-action {
+  flex: none;
+}
+@media (max-width: 980px) {
+  /* lift the Sign bar above the 60px fixed mobile nav so they never overlap */
+  .qm-c3-rev2-signbar {
+    bottom: calc(60px + env(safe-area-inset-bottom, 0px));
+  }
+  .qm-c3-rev2-sign-msg {
+    font-size: 12px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .qm-c3-rev2-tab {
+    transition: none;
+  }
+}
