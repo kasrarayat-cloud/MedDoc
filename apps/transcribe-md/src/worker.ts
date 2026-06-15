@@ -103,6 +103,7 @@ import {
   detectIncompleteAutomation,
   type AutomationConfidenceScores,
 } from '@/worker/automation-incomplete';
+import { isImagingReportSpecialty } from '@meddoc/shared/specialties';
 
 const CONCURRENCY = Number.parseInt(
   process.env.TRANSCRIBE_MD_WORKER_CONCURRENCY ?? '2',
@@ -689,9 +690,16 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
 
     // Env feature flags — operators can disable any layer without a
     // code change if costs spike or a layer misbehaves in prod.
+    // An IMAGING REPORT (e.g. ultrasound) has no office-visit E/M level, so
+    // suppress L7b (CPT/E&M) for those specialties — its task records
+    // status:'skipped' (never a needsReview false-flag). ICD/Rx/referrals stay
+    // on (a venous study can still carry an indication diagnosis). This is the
+    // pipeline-level E/M suppression; the on-read E/M coaching score is
+    // suppressed separately at the visit-detail read (see page.tsx).
+    const isImagingReport = isImagingReportSpecialty(visit.specialty);
     const flags = {
       icd: process.env.TM_ENABLE_ICD_CPT !== 'false',
-      cpt: process.env.TM_ENABLE_ICD_CPT !== 'false',
+      cpt: process.env.TM_ENABLE_ICD_CPT !== 'false' && !isImagingReport,
       rx: process.env.TM_ENABLE_RX !== 'false',
       referrals: process.env.TM_ENABLE_REFERRALS !== 'false',
       summary: process.env.TM_ENABLE_PATIENT_SUMMARY !== 'false',

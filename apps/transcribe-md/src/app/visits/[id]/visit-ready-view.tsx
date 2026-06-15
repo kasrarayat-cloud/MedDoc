@@ -144,6 +144,11 @@ export interface VisitReadyViewProps {
    *  rail. Null when the engine fail-soft'd (rail renders skeleton). */
   initialEmScore?: EmScore | null;
 
+  /** Ultrasound (flag-gated) — true when this visit is an IMAGING REPORT, for
+   *  which an office-visit E/M level does not apply. The Billing tab then
+   *  renders a clear "not applicable" note instead of a coding score. */
+  emNotApplicable?: boolean;
+
   /** E/M visible-confirm (prod smoke #311) — the UNACKNOWLEDGED
    *  suggestion-caused E/M level change ({from, to} codes only — no PHI),
    *  or null when there is nothing to confirm. Hydrates the Sign & Send
@@ -413,13 +418,15 @@ export function VisitReadyView(props: VisitReadyViewProps) {
     tabs.push({
       key: 'billing',
       label: 'Billing',
-      badge: pendingEmChange ? { tone: 'warn', text: '!' } : null,
+      badge:
+        props.emNotApplicable ? null : pendingEmChange ? { tone: 'warn', text: '!' } : null,
       node: (
         <BillingCardC3
           initialScore={props.initialEmScore ?? null}
           visitId={props.visitId}
           readonly={props.readonly}
           emPendingChange={pendingEmChange}
+          notApplicable={props.emNotApplicable}
         />
       ),
     });

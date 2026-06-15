@@ -15,9 +15,11 @@
  * hardcode here while the data-derived Specialties section already read
  * 10 from the catalog.
  */
-import { SPECIALTIES_FOR_VISIT_CREATE } from '@meddoc/shared/specialties';
+import { visibleSpecialties } from '@meddoc/shared/specialties';
 
-const SPECIALTY_COUNT = SPECIALTIES_FOR_VISIT_CREATE.length;
+// Flag-aware count — excludes flag-gated specialties (Ultrasound) when their
+// flag is OFF, so the public "N specialties" headline stays accurate.
+const SPECIALTY_COUNT = visibleSpecialties({ forVisitCreate: true }).length;
 
 export function HowItWorks() {
   return (

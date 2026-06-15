@@ -33,6 +33,13 @@ export const SPECIALTIES = [
   { id: 'weight-management', label: 'Weight Management', templateId: 'weight-management' },
   { id: 'bariatric-surgery', label: 'Bariatric Surgery', templateId: 'bariatric-surgery' },
   { id: 'vascular-surgery', label: 'Vascular Surgery', templateId: 'vascular-surgery' },
+  // Ultrasound is an IMAGING-REPORT specialty, NOT a SOAP clinic visit: its
+  // templateId routes L4 to the ultrasound report generator (Exam/Indication/
+  // Technique/Comparison/Findings/Impression), not the SOAP scaffold. Kept in
+  // the catalog so Zod accepts it; the PICKER only shows it when the
+  // NEXT_PUBLIC_ULTRASOUND_SPECIALTY flag is on (default OFF — see
+  // ultrasoundSpecialtyEnabled / visibleSpecialties below).
+  { id: 'ultrasound', label: 'Ultrasound', templateId: 'ultrasound' },
 ] as const;
 
 export type Specialty = (typeof SPECIALTIES)[number];
@@ -49,6 +56,36 @@ export const SPECIALTY_IDS = SPECIALTIES.map((s) => s.id) as unknown as readonly
  *  "haven't set my profile yet" sentinel, not a clinical category. */
 export const SPECIALTIES_FOR_VISIT_CREATE: readonly Specialty[] =
   SPECIALTIES.filter((s) => s.id !== 'unspecified');
+
+// ── Ultrasound specialty flag (default OFF) ─────────────────────────────────
+// Gates VISIBILITY of the Ultrasound option in the specialty pickers + the L4
+// imaging-report routing. NEXT_PUBLIC_ so the same value is readable at build
+// time in the frontend and at runtime in the worker. Default OFF: prod is
+// byte-identical (Ultrasound is never offered and the report path never runs)
+// until Kasra enables it. Rollback = unset the env var.
+export const ULTRASOUND_SPECIALTY_FLAG = 'NEXT_PUBLIC_ULTRASOUND_SPECIALTY';
+export function ultrasoundSpecialtyEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_ULTRASOUND_SPECIALTY === 'true';
+}
+
+/** Specialty ids that produce an IMAGING REPORT (not a SOAP clinic note).
+ *  Drives the L4 report-type routing + the E/M suppression (an imaging report
+ *  has no office-visit E/M level). */
+export function isImagingReportSpecialty(id: string | null | undefined): boolean {
+  return id === 'ultrasound';
+}
+
+/** Catalog filtered for the pickers: hides flag-gated specialties (Ultrasound)
+ *  unless their flag is on. `forVisitCreate` additionally drops 'unspecified'.
+ *  When the flag is OFF this returns exactly the pre-ultrasound list. */
+export function visibleSpecialties(opts?: {
+  forVisitCreate?: boolean;
+}): readonly Specialty[] {
+  const usOn = ultrasoundSpecialtyEnabled();
+  return (opts?.forVisitCreate ? SPECIALTIES_FOR_VISIT_CREATE : SPECIALTIES).filter(
+    (s) => (s.id === 'ultrasound' ? usOn : true)
+  );
+}
 
 /** Pre-catalog DB rows used display names ('Cardiology', 'Primary
  *  Care / Family Medicine') in transcribe_visits.specialty and a

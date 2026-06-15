@@ -8,23 +8,41 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { SPECIALTIES } from '@meddoc/shared/specialties';
+import { SPECIALTIES, isImagingReportSpecialty } from '@meddoc/shared/specialties';
 import {
   SPECIALTY_GUIDANCE,
   specialtyGuidance,
 } from '../specialty-guidance';
+import { ULTRASOUND_REPORT_TEMPLATE } from '../../note-templates/ultrasound-report-template';
 
 describe('SPECIALTY_GUIDANCE', () => {
-  it('every non-generic templateId has guidance text', () => {
+  it('every non-generic SOAP templateId has guidance text', () => {
     const missing: string[] = [];
     for (const s of SPECIALTIES) {
       if (s.templateId === 'generic') continue;
+      // Imaging-report specialties (e.g. ultrasound) do NOT use the SOAP
+      // SPECIALTY_GUIDANCE append — L4 routes them to the imaging report
+      // template, whose study-type guidance lives in its Findings section.
+      // Asserting SOAP guidance for them would require dead, never-read text.
+      if (isImagingReportSpecialty(s.id)) continue;
       const text = SPECIALTY_GUIDANCE[s.templateId];
       if (!text || text.trim().length === 0) {
         missing.push(s.templateId);
       }
     }
     expect(missing).toEqual([]);
+  });
+
+  it('the ultrasound imaging report carries its own study-type guidance', () => {
+    // Coverage for the imaging path: the report template's Findings section
+    // holds the study-type routing (venous reflux / DVT / post-ablation / …)
+    // in place of a SOAP SPECIALTY_GUIDANCE entry.
+    const findings = ULTRASOUND_REPORT_TEMPLATE.sections.find(
+      (s) => s.key === 'findings'
+    );
+    expect(findings?.styleInstructions).toContain('VENOUS REFLUX');
+    expect(findings?.styleInstructions).toContain('VENOUS DVT');
+    expect(findings?.styleInstructions).toContain('POST-ABLATION');
   });
 
   it('specialtyGuidance() returns the per-specialty append', () => {

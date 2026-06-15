@@ -15,7 +15,7 @@ import { isSkinBeta } from '@/config/skin-beta';
 import { AppFrame } from '@/components/ui/app-frame';
 import { Ic } from '@/components/ui/icon';
 import { PageHeader } from '@/components/ui/page-header';
-import { SPECIALTIES_FOR_VISIT_CREATE, findSpecialty } from '@meddoc/shared/specialties';
+import { visibleSpecialties, findSpecialty } from '@meddoc/shared/specialties';
 import { NewVisitClient } from './new-visit-client';
 import { NewVisitClientC3 } from './new-visit-client-c3';
 import type { SelectedPatient } from './patient-types';
@@ -102,9 +102,12 @@ export default async function NewVisitPage({
   // Default to the doctor's most recent visit's specialty, normalized
   // through the legacy-value table so a row that still holds a display
   // name maps onto the canonical id the dropdown expects.
+  // Flag-aware picker list: Ultrasound appears only when its flag is on
+  // (default OFF → exactly the pre-ultrasound list).
+  const pickerSpecialties = visibleSpecialties({ forVisitCreate: true });
   const defaultSpecialty = mostRecentVisit?.specialty
     ? findSpecialty(mostRecentVisit.specialty).id
-    : SPECIALTIES_FOR_VISIT_CREATE[0].id;
+    : pickerSpecialties[0].id;
 
   // \u2500\u2500 C3 calm "just start" create flow (flag-gated) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
   // SKIN-ONLY: identical auth + patient-scope reads + defaultSpecialty above.
@@ -123,7 +126,7 @@ export default async function NewVisitPage({
         </div>
         <NewVisitClientC3
           initialPatient={initialPatient}
-          specialties={SPECIALTIES_FOR_VISIT_CREATE}
+          specialties={pickerSpecialties}
           defaultSpecialty={defaultSpecialty}
         />
       </AppFrame>
@@ -155,7 +158,7 @@ export default async function NewVisitPage({
       <div style={{ padding: '24px 24px 48px', maxWidth: 1280 }}>
         <NewVisitClient
           initialPatient={initialPatient}
-          specialties={SPECIALTIES_FOR_VISIT_CREATE}
+          specialties={pickerSpecialties}
           defaultSpecialty={defaultSpecialty}
         />
       </div>
