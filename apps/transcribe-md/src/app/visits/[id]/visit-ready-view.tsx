@@ -28,6 +28,7 @@ import {
 import { cn } from '@/lib/cn';
 import { isSkinBeta } from '@/config/skin-beta';
 import { ReviewDrawerC3 } from './review-drawer-c3';
+import { BillingCardC3 } from './billing-card-c3';
 import { SoapEditor } from './soap-editor';
 import { SuggestionsLane, type SuggestedClaimView } from './suggestions-lane';
 import { CodesTab, codesTabHasWarnings } from './codes-tab';
@@ -396,6 +397,15 @@ export function VisitReadyView(props: VisitReadyViewProps) {
                   visitId={props.visitId}
                   readonly={props.readonly}
                   initialOverriddenIds={props.rxOverriddenWarningIds}
+                />
+              </section>
+              <section className="qm-c3-rev-group" aria-label="Billing">
+                <h3 className="qm-c3-rev-group-h">Billing</h3>
+                <BillingCardC3
+                  initialScore={props.initialEmScore ?? null}
+                  visitId={props.visitId}
+                  readonly={props.readonly}
+                  emPendingChange={pendingEmChange}
                 />
               </section>
               <section className="qm-c3-rev-group" aria-label="Codes">
