@@ -27,7 +27,8 @@ import {
 
 import { cn } from '@/lib/cn';
 import { isSkinBeta } from '@/config/skin-beta';
-import { ReviewDrawerC3 } from './review-drawer-c3';
+import { criticalWarningRefs } from '@/lib/rx-warnings';
+import { ReviewTabsV2, type V2Tab } from './review-tabs-v2';
 import { BillingCardC3 } from './billing-card-c3';
 import { SoapEditor } from './soap-editor';
 import { SuggestionsLane, type SuggestedClaimView } from './suggestions-lane';
@@ -224,6 +225,22 @@ export function VisitReadyView(props: VisitReadyViewProps) {
     []
   );
 
+  // V2 review (skin-only, flag-gated) — live mirror of the server's fail-closed
+  // critical-Rx sign gate, so the V2 shell can disable the Sign trigger until
+  // every critical interaction is overridden (the VISIBLE half; POST /sign 422
+  // remains the enforcement). Seeded from the persisted override rows using the
+  // SAME criticalWarningRefs identity the sign route validates, then kept live
+  // by RxTab's onResolvedChange. Computed unconditionally (hooks rule); only the
+  // flag-ON branch consumes it.
+  const initialRxResolved = useMemo(
+    () =>
+      criticalWarningRefs(props.rxDrafts).every((ref) =>
+        (props.rxOverriddenWarningIds ?? []).includes(ref.id)
+      ),
+    [props.rxDrafts, props.rxOverriddenWarningIds]
+  );
+  const [rxResolved, setRxResolved] = useState(initialRxResolved);
+
   // The second tab is labelled "Input" for text_notes, "Transcript" for
   // the other two modes. Everything else renders identically.
   const secondTabLabel =
@@ -279,15 +296,17 @@ export function VisitReadyView(props: VisitReadyViewProps) {
       ? formatDurationLabel(props.durationSec)
       : null;
 
-  // ── C3 "Drawer" review skin (Stage 1d, flag-gated) ────────────────────────
-  // SKIN-ONLY: the full-width SOAP note + the ONE real Sign action (inside
-  // <SoapEditor> → <SignAndSendModal>, incl. the E/M confirm gate + the coding
-  // rail) stay in the main column, byte-for-byte. The five secondary surfaces
-  // — AI suggestions (anchored verifier gate), Rx safety (critical-override
-  // gate), Codes, Extras, Input — collapse into ONE accessible drawer reached
-  // by a single "N to review" pill. Every child below is the SAME gate-bearing
-  // component the legacy tabs render; only their container changes. No sign /
-  // Rx / E/M / audit logic is touched. Flag OFF → the legacy tabs below run.
+  // ── V2 "Tabbed sign-gate workspace" review skin (flag-gated) ──────────────
+  // SKIN-ONLY: replaces the C3 review drawer AND the side coding rail. The note
+  // (SoapEditor, chromeless) and every secondary surface live on their OWN
+  // full-width tab — nothing is ever beside the note, at any screen size. The
+  // ONE Sign action moves into ReviewTabsV2's persistent bottom bar (the SAME
+  // SignAndSendModal, with the E/M confirm gate intact). Every tab child is the
+  // SAME gate-bearing component the legacy tabs render; only the container
+  // changes. No sign / Rx / E/M / audit logic is touched. Both sign gates keep
+  // firing — critical-Rx (server POST /sign 422; visible half = Sign trigger
+  // disabled until rxResolved) and E/M confirm (inside SignAndSendModal). Flag
+  // OFF → the legacy tabs below run verbatim.
   if (isSkinBeta()) {
     const isSigned = props.readonly || props.signedAt !== null;
     const showSuggestions =
@@ -297,20 +316,6 @@ export function VisitReadyView(props: VisitReadyViewProps) {
     const suggestionCount = showSuggestions
       ? (props.suggestedClaims?.length ?? 0)
       : 0;
-    const c3ReviewCount =
-      suggestionCount +
-      (rxWarn ? 1 : 0) +
-      (codesWarn ? 1 : 0) +
-      (extrasWarn ? 1 : 0) +
-      (pendingEmChange ? 1 : 0);
-    const mustResolve = rxWarn === 'critical' || pendingEmChange !== null;
-    const c3BlockerHint = isSigned
-      ? 'This note is signed.'
-      : mustResolve
-        ? 'Resolve the flagged items below, then sign from the note.'
-        : c3ReviewCount > 0
-          ? 'Suggestions and details to review — signing is not blocked.'
-          : 'All clear — ready to sign from the note.';
 
     const transcriptInner =
       props.inputMode === 'audio_upload' ? (
@@ -334,8 +339,177 @@ export function VisitReadyView(props: VisitReadyViewProps) {
         <RawTextInputView text={props.rawTextInput} />
       );
 
+    const rxBadge: V2Tab['badge'] =
+      rxWarn === 'critical'
+        ? rxResolved
+          ? { tone: 'ok', text: '✓' }
+          : { tone: 'danger', text: '!' }
+        : rxWarn === 'any'
+          ? { tone: 'warn', text: '!' }
+          : null;
+
+    // Tabs — each child is the SAME gate-bearing component the legacy tabs
+    // render; only the container is the V2 full-width tab strip. Built with
+    // pushes so each literal is contextually typed as V2Tab.
+    const tabs: V2Tab[] = [];
+    tabs.push({
+      key: 'note',
+      label: isSigned ? 'Note · signed' : 'Note',
+      node: (
+        <>
+          {props.signedAt && (
+            <SignedStateCard
+              signedAt={props.signedAt}
+              signedByName={props.signedByName}
+            />
+          )}
+          <div className={props.signedAt ? 'mt-3' : undefined}>
+            <SoapEditor
+              key={`soap-editor-${adoption?.seq ?? 0}`}
+              visitId={props.visitId}
+              doctorEmail={props.doctorEmail}
+              emailEnabled={props.emailEnabled}
+              initialText={adoption?.text ?? props.soapText}
+              initialSoapVersion={adoption?.version ?? props.soapVersion}
+              readonly={props.readonly}
+              signedAt={props.signedAt}
+              sources={soapSources}
+              initialScore={props.initialEmScore}
+              emPendingChange={pendingEmChange}
+              chromeless
+            />
+          </div>
+        </>
+      ),
+    });
+    if (showSuggestions) {
+      tabs.push({
+        key: 'review',
+        label: 'Review',
+        badge: { tone: 'info', text: String(suggestionCount) },
+        node: (
+          <SuggestionsLane
+            visitId={props.visitId}
+            claims={props.suggestedClaims ?? []}
+            onAdopted={handleSuggestionAdopted}
+          />
+        ),
+      });
+    }
+    tabs.push({
+      key: 'rx',
+      label: 'Rx',
+      badge: rxBadge,
+      node: (
+        <RxTab
+          rx={props.rxDrafts}
+          visitId={props.visitId}
+          readonly={props.readonly}
+          initialOverriddenIds={props.rxOverriddenWarningIds}
+          onResolvedChange={setRxResolved}
+        />
+      ),
+    });
+    tabs.push({
+      key: 'billing',
+      label: 'Billing',
+      badge: pendingEmChange ? { tone: 'warn', text: '!' } : null,
+      node: (
+        <BillingCardC3
+          initialScore={props.initialEmScore ?? null}
+          visitId={props.visitId}
+          readonly={props.readonly}
+          emPendingChange={pendingEmChange}
+        />
+      ),
+    });
+    tabs.push({
+      key: 'codes',
+      label: 'Codes',
+      badge: codesWarn ? { tone: 'warn', text: '!' } : null,
+      node: (
+        <CodesTab
+          icd={props.icdCodes}
+          cpt={props.cptCodes}
+          readonly={props.readonly}
+        />
+      ),
+    });
+    tabs.push({
+      key: 'extras',
+      label: 'Extras',
+      badge: extrasWarn ? { tone: 'warn', text: '!' } : null,
+      node: (
+        <ExtrasTab
+          referrals={props.referrals}
+          patientSummary={props.patientSummary}
+          fleschKincaid={fleschKincaid}
+          flagged={summaryFlagged}
+          readonly={props.readonly}
+          demographics={
+            props.patientName
+              ? {
+                  name: props.patientName,
+                  dateOfBirth: props.patientDob ?? null,
+                  externalId: props.patientExternalId ?? null,
+                  address: null,
+                  insurance: props.patientInsurance ?? null,
+                  insuranceVerified: null,
+                  preferredLanguage: null,
+                  emergencyContact: null,
+                  emergencyRelation: null,
+                }
+              : undefined
+          }
+          vitals={{}}
+          allergies={[]}
+          chronicMedications={[]}
+          problems={parseProblemList(props.patientProblemList)}
+          visitMeta={{
+            specialty:
+              props.specialtyLabel ?? props.inputMode ?? 'Encounter',
+            durationSec: props.durationSec,
+            audioDurationSec: props.durationSec,
+            inputMode: props.inputMode,
+            billingProvider: props.recordedByName ?? null,
+            providerNpi: null,
+            encounterId: props.visitId,
+          }}
+          auditEvents={synthesizeAuditEvents({
+            createdAt: props.visitCreatedAt,
+            processingStartedAt: props.processingStartedAt,
+            processingFinishedAt: props.processingFinishedAt,
+            signedAt: props.signedAt,
+            signedByName: props.signedByName,
+            doctorName: props.recordedByName,
+          })}
+        />
+      ),
+    });
+    tabs.push({
+      key: 'transcript',
+      label: secondTabLabel,
+      node: transcriptInner,
+    });
+    if (props.showPipelineTab) {
+      tabs.push({
+        key: 'pipeline',
+        label: 'Pipeline',
+        node: (
+          <PipelineView
+            entities={props.entities}
+            critique={props.critique}
+            durationSec={props.durationSec}
+            costCents={props.costCents}
+            processingStartedAt={props.processingStartedAt}
+            processingFinishedAt={props.processingFinishedAt}
+          />
+        ),
+      });
+    }
+
     return (
-      <div className="w-full qm-c3-rev">
+      <div className="w-full qm-c3-rev2-root">
         {props.needsReview && props.reviewReason && !props.signedAt && (
           <div
             role="status"
@@ -355,161 +529,17 @@ export function VisitReadyView(props: VisitReadyViewProps) {
             </span>
           </div>
         )}
-
-        {/* Pane header — title + the single "N to review" pill that opens the
-            drawer. The Copy-SOAP affordance stays here too. */}
-        <div className="qm-c3-rev-bar">
-          <span className="qm-c3-rev-bar-title">
-            Note · SOAP{isSigned ? ' · signed' : ''}
-          </span>
-          <div className="qm-c3-rev-bar-actions">
-            <CopySectionButton
-              text={sectionSoap(sectionData)}
-              label="Copy SOAP"
-              section="SOAP note"
-            />
-            <ReviewDrawerC3 count={c3ReviewCount} blockerHint={c3BlockerHint}>
-              {showSuggestions && (
-                <section
-                  className="qm-c3-rev-group"
-                  aria-label="AI suggestions"
-                >
-                  <h3 className="qm-c3-rev-group-h">AI suggestions</h3>
-                  <SuggestionsLane
-                    visitId={props.visitId}
-                    claims={props.suggestedClaims ?? []}
-                    onAdopted={handleSuggestionAdopted}
-                  />
-                </section>
-              )}
-              <section
-                className="qm-c3-rev-group"
-                aria-label="Prescription safety"
-              >
-                <h3 className="qm-c3-rev-group-h">
-                  Prescription safety
-                  {rxWarn === 'critical' && (
-                    <span className="qm-c3-rev-group-flag">must resolve</span>
-                  )}
-                </h3>
-                <RxTab
-                  rx={props.rxDrafts}
-                  visitId={props.visitId}
-                  readonly={props.readonly}
-                  initialOverriddenIds={props.rxOverriddenWarningIds}
-                />
-              </section>
-              <section className="qm-c3-rev-group" aria-label="Billing">
-                <h3 className="qm-c3-rev-group-h">Billing</h3>
-                <BillingCardC3
-                  initialScore={props.initialEmScore ?? null}
-                  visitId={props.visitId}
-                  readonly={props.readonly}
-                  emPendingChange={pendingEmChange}
-                />
-              </section>
-              <section className="qm-c3-rev-group" aria-label="Codes">
-                <h3 className="qm-c3-rev-group-h">Codes</h3>
-                <CodesTab
-                  icd={props.icdCodes}
-                  cpt={props.cptCodes}
-                  readonly={props.readonly}
-                />
-              </section>
-              <section className="qm-c3-rev-group" aria-label="Extras">
-                <h3 className="qm-c3-rev-group-h">Extras</h3>
-                <ExtrasTab
-                  referrals={props.referrals}
-                  patientSummary={props.patientSummary}
-                  fleschKincaid={fleschKincaid}
-                  flagged={summaryFlagged}
-                  readonly={props.readonly}
-                  demographics={
-                    props.patientName
-                      ? {
-                          name: props.patientName,
-                          dateOfBirth: props.patientDob ?? null,
-                          externalId: props.patientExternalId ?? null,
-                          address: null,
-                          insurance: props.patientInsurance ?? null,
-                          insuranceVerified: null,
-                          preferredLanguage: null,
-                          emergencyContact: null,
-                          emergencyRelation: null,
-                        }
-                      : undefined
-                  }
-                  vitals={{}}
-                  allergies={[]}
-                  chronicMedications={[]}
-                  problems={parseProblemList(props.patientProblemList)}
-                  visitMeta={{
-                    specialty:
-                      props.specialtyLabel ?? props.inputMode ?? 'Encounter',
-                    durationSec: props.durationSec,
-                    audioDurationSec: props.durationSec,
-                    inputMode: props.inputMode,
-                    billingProvider: props.recordedByName ?? null,
-                    providerNpi: null,
-                    encounterId: props.visitId,
-                  }}
-                  auditEvents={synthesizeAuditEvents({
-                    createdAt: props.visitCreatedAt,
-                    processingStartedAt: props.processingStartedAt,
-                    processingFinishedAt: props.processingFinishedAt,
-                    signedAt: props.signedAt,
-                    signedByName: props.signedByName,
-                    doctorName: props.recordedByName,
-                  })}
-                />
-              </section>
-              <section
-                className="qm-c3-rev-group"
-                aria-label={secondTabLabel}
-              >
-                <h3 className="qm-c3-rev-group-h">{secondTabLabel}</h3>
-                {transcriptInner}
-              </section>
-              {props.showPipelineTab && (
-                <section className="qm-c3-rev-group" aria-label="Pipeline">
-                  <h3 className="qm-c3-rev-group-h">Pipeline</h3>
-                  <PipelineView
-                    entities={props.entities}
-                    critique={props.critique}
-                    durationSec={props.durationSec}
-                    costCents={props.costCents}
-                    processingStartedAt={props.processingStartedAt}
-                    processingFinishedAt={props.processingFinishedAt}
-                  />
-                </section>
-              )}
-            </ReviewDrawerC3>
-          </div>
-        </div>
-
-        {/* Primary surface — the SOAP note + the ONE real Sign action (with
-            the E/M confirm gate + coding rail), reused byte-for-byte. */}
-        {props.signedAt && (
-          <SignedStateCard
-            signedAt={props.signedAt}
-            signedByName={props.signedByName}
-          />
-        )}
-        <div className={props.signedAt ? 'mt-3' : undefined}>
-          <SoapEditor
-            key={`soap-editor-${adoption?.seq ?? 0}`}
-            visitId={props.visitId}
-            doctorEmail={props.doctorEmail}
-            emailEnabled={props.emailEnabled}
-            initialText={adoption?.text ?? props.soapText}
-            initialSoapVersion={adoption?.version ?? props.soapVersion}
-            readonly={props.readonly}
-            signedAt={props.signedAt}
-            sources={soapSources}
-            initialScore={props.initialEmScore}
-            emPendingChange={pendingEmChange}
-          />
-        </div>
+        <ReviewTabsV2
+          tabs={tabs}
+          rxCritical={rxWarn === 'critical'}
+          rxResolved={rxResolved}
+          pendingEmChange={pendingEmChange}
+          rxTabKey="rx"
+          visitId={props.visitId}
+          doctorEmail={props.doctorEmail}
+          emailEnabled={props.emailEnabled}
+          signed={isSigned}
+        />
       </div>
     );
   }
