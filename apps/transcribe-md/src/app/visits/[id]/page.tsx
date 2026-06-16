@@ -5,7 +5,11 @@ import * as Sentry from '@sentry/nextjs';
 
 import prisma from '@meddoc/db';
 import { TranscribeVisitStatus } from '@prisma/client';
-import { findSpecialty } from '@meddoc/shared/specialties';
+import {
+  findSpecialty,
+  isImagingReportSpecialty,
+  ultrasoundSpecialtyEnabled,
+} from '@meddoc/shared/specialties';
 import { auth } from '@/lib/nextauth';
 import { logAudit } from '@/lib/audit';
 import { AppFrame } from '@/components/ui/app-frame';
@@ -674,7 +678,16 @@ async function VisitBody(props: VisitBodyProps) {
   // deterministic shortcut is gone but the cache hit is just as fast.
   const session = await auth();
   const sessionPracticeId = session?.user?.practiceId as string | undefined;
+  // E/M does not apply to an IMAGING REPORT (e.g. ultrasound) — it has no
+  // office-visit E/M level. Suppress the on-read coaching score (the pipeline
+  // already skips L7b CPT/E&M). The Billing surface shows an explicit
+  // "not applicable" note instead of a forced clinic-visit code.
+  const emNotApplicable =
+    ultrasoundSpecialtyEnabled() && isImagingReportSpecialty(props.specialty);
+  // Imaging reports skip E/M scoring entirely (left null → the Billing surface
+  // renders the "not applicable" note). Only clinic encounters are scored.
   let initialEmScore: import('@/lib/em-coding-ui/types').EmScore | null = null;
+  if (!emNotApplicable) {
   try {
     const { computeEmScore } = await import('@/lib/em-coding/score');
     const { engineToUiScore } = await import('@/lib/em-coding/to-ui-score');
@@ -698,10 +711,14 @@ async function VisitBody(props: VisitBodyProps) {
   } catch (e) {
     console.error('[em-score] initial render failed:', e);
   }
+  }
 
   // E/M visible-confirm (prod smoke #311) — strict coercion of the
   // pending-change jsonb to the {from, to} pair the modal renders.
-  const pendingEm = unacknowledgedEmChange(props.emPendingChange);
+  // Imaging reports have no E/M level → never a pending E/M change to confirm.
+  const pendingEm = emNotApplicable
+    ? null
+    : unacknowledgedEmChange(props.emPendingChange);
   const pendingEmChange = pendingEm
     ? { from: pendingEm.from, to: pendingEm.to }
     : null;
@@ -763,6 +780,8 @@ async function VisitBody(props: VisitBodyProps) {
       recordedByName={props.doctorName}
       // Phase 5.2 — server-rendered initial E&M score for the Coding Coach
       initialEmScore={initialEmScore}
+      // Ultrasound (flag-gated): imaging report → no E/M level applies.
+      emNotApplicable={emNotApplicable}
       // Phase 5.1.1 — V4 Extras card-stream wiring
       patientName={props.patient?.name ?? props.patientName}
       patientDob={
