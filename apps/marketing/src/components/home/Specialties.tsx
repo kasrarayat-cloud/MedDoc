@@ -8,9 +8,12 @@
  * the in-app dropdowns, and the AI pipeline in one PR — no triplicate
  * vocab drift, and no manual "Eight"/"Nine" typo when the count changes.
  */
-import { SPECIALTIES_FOR_VISIT_CREATE } from '@meddoc/shared/specialties';
+import { visibleSpecialties } from '@meddoc/shared/specialties';
 
-const PILLS = SPECIALTIES_FOR_VISIT_CREATE.map((s) => s.label);
+// Flag-aware: a flag-gated specialty (Ultrasound) is not advertised publicly
+// until NEXT_PUBLIC_ULTRASOUND_SPECIALTY is on at the marketing build. Flag
+// OFF → exactly the pre-ultrasound pill list.
+const PILLS = visibleSpecialties({ forVisitCreate: true }).map((s) => s.label);
 
 const COUNT_WORDS = [
   'Zero', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight',

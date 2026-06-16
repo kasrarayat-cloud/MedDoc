@@ -14,19 +14,20 @@ import {
   SPECIALTY_IDS,
   SPECIALTIES_FOR_VISIT_CREATE,
   findSpecialty,
+  isImagingReportSpecialty,
 } from '@meddoc/shared/specialties';
 import { SPECIALTY_GUIDANCE } from '@/worker/prompts/specialty-guidance';
 
 describe('SPECIALTIES catalog', () => {
   it('exposes a stable id list (snapshot)', () => {
     // Adding/removing a specialty here is intentional — update this
-    // snapshot to match. NO marketing copy edit is needed: the
-    // "N specialty templates" headline + pill list (apps/marketing
-    // Specialties.tsx + HowItWorks.tsx) DERIVE the count from
-    // SPECIALTIES_FOR_VISIT_CREATE, so they follow the catalog
-    // automatically. packages/shared specialties.test.ts ("catalog row
-    // count is 13") is the count tripwire; both it and this snapshot are
-    // enforced by the CI unit gate (test.yml `unit` job).
+    // snapshot to match. The marketing pill list + "N specialty
+    // templates" headline (apps/marketing Specialties.tsx + HowItWorks.tsx)
+    // derive from visibleSpecialties({forVisitCreate:true}) — flag-gated
+    // specialties (Ultrasound) only appear publicly when their flag is on,
+    // so the catalog can carry Ultrasound without changing the public count
+    // while the flag is OFF. packages/shared specialties.test.ts ("catalog
+    // row count") is the count tripwire; both are enforced by the CI unit gate.
     expect(SPECIALTY_IDS).toEqual([
       'unspecified',
       'primary-care',
@@ -41,6 +42,7 @@ describe('SPECIALTIES catalog', () => {
       'weight-management',
       'bariatric-surgery',
       'vascular-surgery',
+      'ultrasound',
     ]);
   });
 
@@ -64,7 +66,11 @@ describe('SPECIALTY_GUIDANCE coverage', () => {
   // falls back to generic — fine for 'unspecified', a soft
   // regression for clinical specialties.
   for (const spec of SPECIALTIES) {
-    const expectsGuidance = spec.templateId !== 'generic';
+    // Imaging-report specialties (Ultrasound) route to the imaging report
+    // template, NOT the SOAP SPECIALTY_GUIDANCE append — their study-type
+    // guidance lives in the report template's Findings section. Exempt.
+    const expectsGuidance =
+      spec.templateId !== 'generic' && !isImagingReportSpecialty(spec.id);
     if (!expectsGuidance) continue;
     it(`has SOAP guidance text for ${spec.id} (templateId=${spec.templateId})`, () => {
       expect(Object.keys(SPECIALTY_GUIDANCE)).toContain(spec.templateId);

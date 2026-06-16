@@ -31,7 +31,7 @@ import {
 import { toast } from 'sonner';
 
 import { SpecialtyDropdown } from '@/components/specialty-dropdown';
-import { SPECIALTIES_FOR_VISIT_CREATE, findSpecialty } from '@meddoc/shared/specialties';
+import { visibleSpecialties, findSpecialty } from '@meddoc/shared/specialties';
 import { cn } from '@/lib/cn';
 import { PatientPickerCore } from '@/app/visits/new/patient-picker';
 import type { SelectedPatient } from '@/app/visits/new/patient-types';
@@ -316,7 +316,7 @@ export function EditDraftDialog({
             <div>
               <label className={FIELD_LABEL}>Specialty</label>
               <SpecialtyDropdown
-                options={SPECIALTIES_FOR_VISIT_CREATE}
+                options={visibleSpecialties({ forVisitCreate: true })}
                 name="specialty"
                 defaultValue={specialty}
                 onChange={setSpecialty}

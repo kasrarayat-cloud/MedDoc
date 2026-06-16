@@ -30,6 +30,12 @@ import {
   type ResolvedNoteTemplate,
 } from '../note-templates/build-soap-prompt';
 import { SYSTEM_DEFAULT_NOTE_TEMPLATE } from '../note-templates/system-default-template';
+import { ULTRASOUND_REPORT_TEMPLATE } from '../note-templates/ultrasound-report-template';
+import { buildUltrasoundSystemPrompt } from '../note-templates/build-ultrasound-prompt';
+import {
+  isImagingReportSpecialty,
+  ultrasoundSpecialtyEnabled,
+} from '@meddoc/shared/specialties';
 
 // TRANSCRIBE_MD_CLINICAL_MODEL overrides the clinical model for evals on the
 // isolated qa stack (feat/fable5-eval). UNSET in prod → default unchanged.
@@ -68,12 +74,26 @@ export interface Layer4Input {
 export async function runLayer4GenerateSoap(
   input: Layer4Input
 ): Promise<string> {
-  const guidance = specialtyGuidance(input.specialty);
+  // Ultrasound (flag-gated): an imaging study is a REPORT, not a SOAP note.
+  // When the specialty is an imaging-report type AND the flag is on, route to
+  // the ultrasound report template (Exam/Indication/Technique/Comparison/
+  // Findings/Impression) + its dedicated prompt builder. Everything ELSE in
+  // this layer (completeText, the anchored verifier, the section-label
+  // structure validator, persistence) is report-agnostic and shared. Flag OFF
+  // (prod default) → this is false and the SOAP path below is byte-identical.
+  const isUltrasoundReport =
+    ultrasoundSpecialtyEnabled() && isImagingReportSpecialty(input.specialty);
+
+  // SOAP specialty guidance does not apply to an imaging report — the
+  // ultrasound study-type routing lives in the report template's Findings
+  // section, not in the SOAP specialtyGuidance() table.
+  const guidance = isUltrasoundReport ? null : specialtyGuidance(input.specialty);
   // Phase 1: build the prompt FROM the resolved template (no hard-coded
   // prompt string). For the system default this reproduces today's prompt
   // byte-for-byte — see worker/layers/__tests__/l4-golden-prompt.test.ts.
-  const template: ResolvedNoteTemplate =
-    input.noteTemplate ?? SYSTEM_DEFAULT_NOTE_TEMPLATE;
+  const template: ResolvedNoteTemplate = isUltrasoundReport
+    ? (ULTRASOUND_REPORT_TEMPLATE as ResolvedNoteTemplate)
+    : input.noteTemplate ?? SYSTEM_DEFAULT_NOTE_TEMPLATE;
 
   // Round 3 PR-J — A07-P0 prompt-injection delimiter.
   // The transcript is user-supplied (whatever the doctor + patient
@@ -163,13 +183,21 @@ export async function runLayer4GenerateSoap(
   // becomes soapDraft — downstream L5/L6/resume untouched) + a suggestions
   // lane. Flag OFF (prod default) → prompt and behavior byte-identical.
   const anchorsOn = evidenceAnchorsEnabled();
+  const systemOpts = {
+    specialty: input.specialty,
+    audioQualityAlert,
+    interpreterAlert,
+    specialtyGuidanceText: guidance || null,
+  };
+  // The anchored-generation addendum (when the flag is on) is appended to BOTH
+  // report types — the verifier guards ultrasound measurements / reflux times /
+  // laterality exactly as it guards SOAP vitals (it anchors claims to
+  // transcript quotes; it is section-agnostic).
   const system =
-    buildSoapSystemPrompt(template, {
-      specialty: input.specialty,
-      audioQualityAlert,
-      interpreterAlert,
-      specialtyGuidanceText: guidance || null,
-    }) + (anchorsOn ? ANCHOR_GENERATION_ADDENDUM : '');
+    (isUltrasoundReport
+      ? buildUltrasoundSystemPrompt(template, systemOpts)
+      : buildSoapSystemPrompt(template, systemOpts)) +
+    (anchorsOn ? ANCHOR_GENERATION_ADDENDUM : '');
 
   const user = buildSoapUserPrompt({
     specialty: input.specialty,
