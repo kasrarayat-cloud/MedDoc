@@ -17,7 +17,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
-import { SPECIALTIES } from '@meddoc/shared/specialties';
+import { visibleSpecialties } from '@meddoc/shared/specialties';
 import {
   saveNoteTemplateAction,
 } from '@/actions/note-template-lifecycle';
@@ -93,7 +93,9 @@ const FORMATS: { value: SectionFormatHint; label: string }[] = [
 // "applies to everything" choice.
 const ENCOUNTER_OPTIONS: { value: string; label: string }[] = [
   { value: '', label: 'All my visits' },
-  ...SPECIALTIES.filter((s) => s.id !== 'unspecified').map((s) => ({
+  // flag-aware: Ultrasound appears only when NEXT_PUBLIC_ULTRASOUND_SPECIALTY
+  // is on; forVisitCreate drops 'unspecified' (null IS "applies to everything").
+  ...visibleSpecialties({ forVisitCreate: true }).map((s) => ({
     value: s.id,
     label: s.label,
   })),

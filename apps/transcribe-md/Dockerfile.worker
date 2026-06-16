@@ -27,6 +27,7 @@ COPY packages/db/package.json ./packages/db/package.json
 COPY packages/auth/package.json ./packages/auth/package.json
 COPY packages/types/package.json ./packages/types/package.json
 COPY packages/ai/package.json ./packages/ai/package.json
+COPY packages/shared/package.json ./packages/shared/package.json
 RUN npm ci
 
 # ── Stage 2: prod-deps (prune dev deps for the runtime layer) ──
@@ -40,6 +41,7 @@ COPY packages/db/package.json ./packages/db/package.json
 COPY packages/auth/package.json ./packages/auth/package.json
 COPY packages/types/package.json ./packages/types/package.json
 COPY packages/ai/package.json ./packages/ai/package.json
+COPY packages/shared/package.json ./packages/shared/package.json
 RUN npm ci --omit=dev
 
 # ── Stage 3: prisma-generate ──
@@ -86,6 +88,12 @@ COPY packages/types/package.json ./packages/types/package.json
 COPY packages/types/src ./packages/types/src
 COPY packages/ai/package.json ./packages/ai/package.json
 COPY packages/ai/src ./packages/ai/src
+# @meddoc/shared/specialties — the worker resolves the specialty catalog
+# (isImagingReportSpecialty / ultrasoundSpecialtyEnabled) at runtime via tsx.
+# Unlike the Next app it is NOT bundled, so the package.json (for the npm-ci
+# workspace symlink) + src must ship in the image.
+COPY packages/shared/package.json ./packages/shared/package.json
+COPY packages/shared/src ./packages/shared/src
 
 # Non-root for defense in depth.
 RUN addgroup --system --gid 1001 nodejs && \

@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
-import { SPECIALTIES, findSpecialty } from '@meddoc/shared/specialties';
+import { visibleSpecialties, findSpecialty } from '@meddoc/shared/specialties';
 import { updateProfileAction, type ProfileState } from '@/actions/profile';
 
 // Phase 5 — Linear V1 Faithful profile form. Server-action signature
@@ -81,7 +81,7 @@ export function ProfileForm({
           // anything unknown lands on 'unspecified'.
           defaultValue={findSpecialty(defaultSpecialty).id}
           as="select"
-          options={SPECIALTIES.map((s) => ({ value: s.id, label: s.label }))}
+          options={visibleSpecialties().map((s) => ({ value: s.id, label: s.label }))}
           error={errors.specialty}
         />
       </Row>
