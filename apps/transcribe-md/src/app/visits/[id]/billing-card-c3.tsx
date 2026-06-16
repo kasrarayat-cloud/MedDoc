@@ -46,6 +46,7 @@ export function BillingCardC3({
   visitId,
   readonly,
   emPendingChange,
+  notApplicable,
 }: {
   initialScore: EmScore | null;
   visitId: string;
@@ -53,9 +54,26 @@ export function BillingCardC3({
   /** E/M confirm gate signal (codes only). When set, surface — never block;
    *  the actual fail-closed enforcement stays in <SignAndSendModal>. */
   emPendingChange: { from: string; to: string } | null;
+  /** Ultrasound (flag-gated) — an IMAGING REPORT has no office-visit E/M
+   *  level. Render an explicit "not applicable" note rather than a coding
+   *  score (the pipeline already skips L7b CPT/E&M for these). */
+  notApplicable?: boolean;
 }) {
   const [score, setScore] = useState<EmScore | null>(initialScore);
   const [overriding, setOverriding] = useState(false);
+
+  if (notApplicable) {
+    return (
+      <div className="qm-c3-bill-card">
+        <span className="qm-c3-bill-kicker">Billing</span>
+        <p className="qm-c3-bill-level" style={{ color: 'var(--color-linear-text-2)' }}>
+          E/M coding does not apply to an imaging report. This is a diagnostic
+          ultrasound study, not an office visit — code it with the appropriate
+          imaging CPT in your billing system.
+        </p>
+      </div>
+    );
+  }
 
   if (!score) {
     return (

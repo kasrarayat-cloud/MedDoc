@@ -100,12 +100,13 @@ describe('SPECIALTIES catalog', () => {
     expect(findSpecialty('vascular-surgery').label).toBe('Vascular Surgery');
   });
 
-  it('catalog row count is 13 (1 unspecified + 12 clinical)', () => {
-    // Guard so the marketing site count-derivation (PR #218) stays in
-    // sync with the catalog growth — adding a specialty without
-    // updating this assertion makes the test prompt for review.
-    expect(SPECIALTIES).toHaveLength(13);
-    expect(SPECIALTIES_FOR_VISIT_CREATE).toHaveLength(12);
+  it('catalog row count is 14 (1 unspecified + 13 clinical incl. flag-gated ultrasound)', () => {
+    // Guard so catalog growth is a deliberate test-update. NOTE: marketing now
+    // derives its count from visibleSpecialties({forVisitCreate:true}) (flag-
+    // aware), so Ultrasound is in the raw catalog (14/13) but is NOT shown
+    // publicly until NEXT_PUBLIC_ULTRASOUND_SPECIALTY is on.
+    expect(SPECIALTIES).toHaveLength(14);
+    expect(SPECIALTIES_FOR_VISIT_CREATE).toHaveLength(13);
   });
 });
 
