@@ -477,6 +477,13 @@ services:
         # ROLLBACK: NEXT_PUBLIC_SKIN_BETA=false docker compose build transcribe-md
         #           && docker compose up -d --no-deps transcribe-md  (→ old UI).
         NEXT_PUBLIC_SKIN_BETA: "${NEXT_PUBLIC_SKIN_BETA:-true}"
+        # Ultrasound specialty gate (build-time inlined into the frontend; the
+        # worker reads the same var at runtime via env_file: .env). Default OFF
+        # so a build with no override never offers Ultrasound; prod enables it
+        # by setting NEXT_PUBLIC_ULTRASOUND_SPECIALTY=true in .env (compose reads
+        # .env for both this interpolation AND the worker's runtime env_file).
+        # ROLLBACK: unset/false in .env, rebuild + up -d --no-deps transcribe-md.
+        NEXT_PUBLIC_ULTRASOUND_SPECIALTY: "${NEXT_PUBLIC_ULTRASOUND_SPECIALTY:-false}"
     restart: unless-stopped
     logging:
       driver: json-file
