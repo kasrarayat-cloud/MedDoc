@@ -105,6 +105,29 @@ export interface AnchorVerifyResult {
 // ─── Normalization + deterministic rules (spike rules, kept verbatim) ───────
 const NEGATION_RE = /\b(no|not|denies|denied|without|negative|none)\b/i;
 
+/** Function words / particles used ONLY by the anchor content-token floor
+ *  below. An anchor whose EVERY token is one of these anchors nothing — the
+ *  verbatim substring check would match such a span trivially ("of the", "is
+ *  no"). This list is deliberately NOT clinical vocabulary: "clear", "normal",
+ *  "stable", "edema", "lungs", "continue", "swollen" are content words and a
+ *  short anchor built from them ("lungs clear", "continue lisinopril") MUST
+ *  pass. Negations ("no"/"not") are particles HERE — polarity is enforced
+ *  separately by NEGATION_RE — so "no edema" still carries one content token
+ *  ("edema") and survives. */
+const ANCHOR_STOPWORDS = new Set([
+  'a', 'an', 'the', 'and', 'or', 'but', 'nor', 'so', 'yet',
+  'of', 'in', 'on', 'to', 'for', 'with', 'at', 'by', 'from', 'as',
+  'into', 'onto', 'upon', 'about', 'over', 'under', 'per', 'than', 'then',
+  'is', 'are', 'was', 'were', 'be', 'been', 'being', 'am',
+  'has', 'have', 'had', 'do', 'does', 'did',
+  'will', 'would', 'shall', 'should', 'can', 'could', 'may', 'might', 'must',
+  'no', 'not', 'none', 'this', 'that', 'these', 'those',
+  'it', 'its', 'he', 'she', 'him', 'her', 'his', 'they', 'them', 'their',
+  'i', 'you', 'we', 'us', 'our', 'your', 'my', 'me',
+  'there', 'here', 'if', 'when', 'while', 'because',
+  'just', 'only', 'also', 'very', 'too',
+]);
+
 /** Clinical-register filler excluded from subject/gloss token matching —
  *  ONE list shared by the negation-subject and gloss overrides (auditor
  *  NIT-1: was maintained by copy-paste). */
@@ -218,7 +241,18 @@ function isExemptLine(stripped: string): boolean {
   if (t.length === 0) return true;
   if (/^#{1,6}\s/.test(t)) return true;
   if (/^\*\*[^*]+\*\*:?\s*$/.test(t)) return true;
-  if (/^(?:[-*\d.]\s*)*(?:\*\*[^*]+\*\*:?\s*)?\[not documented\]\.?$/i.test(t)) return true;
+  // "[not documented]" placeholder — exempt after an optional list marker and
+  // an optional label. The label may be BOLD ("**Allergies:**") OR a plain
+  // "Label:" prefix ("Family History:", "Comparison:") — both are scaffolding,
+  // not a clinical claim. The plain form REQUIRES its trailing colon so a real
+  // sentence that merely precedes the marker is never swept in; the line must
+  // still END in "[not documented]", which asserts no clinical fact.
+  if (/^(?:[-*\d.]\s*)*(?:(?:\*\*[^*]+\*\*:?|[A-Za-z][A-Za-z0-9 /&()'-]*:)\s*)?\[not documented\]\.?$/i.test(t)) return true;
+  // Canonical ultrasound Comparison-negative — the imaging template mandates
+  // the EXACT line "No prior study available for comparison." when no prior is
+  // dictated. Standard radiology scaffolding, not a dictated finding, so it
+  // needs no transcript anchor (light study/imaging + is/are tolerance only).
+  if (/^(?:\*\*comparison\*\*:?\s*|comparison:\s*)?no prior (?:study|studies|imaging) (?:is |are )?available for comparison\.?$/i.test(t)) return true;
   if (/not (formally )?documented in this encounter/i.test(t) && t.length < 100) return true;
   return false;
 }
@@ -280,7 +314,15 @@ function deterministicStage(
       if (/unclear in recording/i.test(sub)) continue; // contributes nothing
       sawUnclearOnly = false;
       const nsub = norm(sub);
-      if ((nsub.match(/[a-z0-9]+/g) ?? []).length < 3)
+      // CONTENT-token floor (was: ≥3 raw alphanumeric tokens). The blunt
+      // 3-token count demoted genuine short clinical anchors that ARE verbatim
+      // in the transcript ("lungs clear", "no edema", "continue lisinopril").
+      // Reject ONLY a span with no content token — an all-stopword/all-particle
+      // (or punctuation-only) span that anchors nothing. The verbatim substring
+      // guarantee on the NEXT line is UNCHANGED, so a 2-content-token anchor
+      // still cannot smuggle a quote that is not literally in the transcript.
+      const subToks = nsub.match(/[a-z0-9]+/g) ?? [];
+      if (subToks.every((t) => ANCHOR_STOPWORDS.has(t)))
         return demote('anchor_not_in_transcript');
       if (!asrNorm.includes(nsub)) return demote('anchor_not_in_transcript');
       spans.push(nsub);
