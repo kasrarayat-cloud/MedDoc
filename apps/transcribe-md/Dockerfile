@@ -74,6 +74,17 @@ ENV NEXT_PUBLIC_SHOW_PIPELINE_TAB=${NEXT_PUBLIC_SHOW_PIPELINE_TAB}
 ARG NEXT_PUBLIC_SKIN_BETA=false
 ENV NEXT_PUBLIC_SKIN_BETA=${NEXT_PUBLIC_SKIN_BETA}
 
+# Ultrasound specialty gate. Like SKIN_BETA, NEXT_PUBLIC_* must be set in the
+# BUILDER env so `next build` inlines it into the frontend bundle (the specialty
+# pickers read it at build time; the worker reads the same var at runtime).
+# Default "false" so an image built with no override never offers Ultrasound —
+# production-byte-identical until promoted. Promote by building with
+# `--build-arg NEXT_PUBLIC_ULTRASOUND_SPECIALTY=true`.
+# ROLLBACK: NEXT_PUBLIC_ULTRASOUND_SPECIALTY=false docker compose build transcribe-md
+#           && docker compose up -d --no-deps transcribe-md  (→ Ultrasound hidden).
+ARG NEXT_PUBLIC_ULTRASOUND_SPECIALTY=false
+ENV NEXT_PUBLIC_ULTRASOUND_SPECIALTY=${NEXT_PUBLIC_ULTRASOUND_SPECIALTY}
+
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # ── Build heap (incident 2026-06-04) ──
