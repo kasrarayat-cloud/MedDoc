@@ -752,3 +752,135 @@ describe('empty-section back-fill (Phase 1 blocker) + plan renumber (Phase 2)', 
     expect(r.body).not.toContain('bariatric surgery');
   });
 });
+
+// ─── Verifier false-positive recovery (2026-06-16) ──────────────────────────
+// Two SAFE mechanical false positives in the deterministic stage demoted
+// correctly-dictated content. FIX 1: the ≥3 raw-token anchor floor killed
+// genuine SHORT anchors that are verbatim in the transcript. FIX 2: the
+// "[not documented]" exemption only fired after a BOLD label, and the
+// canonical ultrasound Comparison-negative was treated as an unanchored
+// claim. The fabrication-catch guarantees (verbatim substring + every
+// deterministic override + entailment) are UNCHANGED — proven by the safety
+// canaries below, which still demote a degenerate and a fabricated anchor.
+describe('FIX 1 — short content-token anchors are recovered to the body', () => {
+  // Transcript carries each short span VERBATIM so the (unchanged) substring
+  // check passes; the OLD ≥3-token floor would have demoted all three.
+  const SHORT_TRANSCRIPT = [
+    '[Doctor #0, 0:10]: blood pressure is fine, lungs clear, no edema today.',
+    '[Doctor #0, 0:20]: continue lisinopril and recheck in four weeks.',
+  ].join('\n');
+
+  it('"lungs clear" (2 content tokens, verbatim) survives — body, not lane', async () => {
+    entailAll();
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft: '## Objective\nLungs clear. ⟦A:"lungs clear"⟧',
+      roleLabeledTranscript: SHORT_TRANSCRIPT,
+    });
+    expect(r.body).toContain('Lungs clear.');
+    expect(r.body).not.toContain('⟦');
+    expect(r.suggestions).toHaveLength(0);
+  });
+
+  it('"No edema." anchored to the 2-token "no edema" span survives (one content token is enough)', async () => {
+    entailAll();
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft: '## Objective\nNo edema. ⟦A:"no edema"⟧',
+      roleLabeledTranscript: SHORT_TRANSCRIPT,
+    });
+    expect(r.body).toContain('No edema.');
+    expect(r.suggestions).toHaveLength(0);
+  });
+
+  it('"Continue lisinopril." anchored to the 2-token span survives', async () => {
+    entailAll();
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft: '## Plan\n1. Continue lisinopril. ⟦A:"continue lisinopril"⟧',
+      roleLabeledTranscript: SHORT_TRANSCRIPT,
+    });
+    expect(r.body).toContain('Continue lisinopril.');
+    expect(r.suggestions).toHaveLength(0);
+  });
+});
+
+describe('FIX 1 safety — the content-token floor still rejects degenerate + fabricated anchors', () => {
+  it('an all-stopword anchor ("of the") anchors nothing → demoted, NOT smuggled to the body', async () => {
+    entailAll();
+    const r = await runAnchorVerify({
+      ...IDS,
+      // "of the" IS a literal substring of the transcript — the verbatim check
+      // alone would let it through; the content-token floor is what blocks it.
+      anchoredDraft: '## Assessment\nLikely olecranon bursitis. ⟦A:"of the"⟧',
+      roleLabeledTranscript: '[Doctor #0, 0:10]: it is on the side of the elbow.',
+    });
+    expect(r.body).not.toContain('bursitis');
+    expect(r.suggestions[0].reason).toBe('anchor_not_in_transcript');
+    expect(mocks.modelCompleteText).not.toHaveBeenCalled();
+  });
+
+  it('a short FABRICATED anchor (2 content tokens, NOT in transcript) still demotes via the unchanged substring check', async () => {
+    entailAll();
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft: '## Assessment\nSevere sepsis. ⟦A:"severe sepsis"⟧',
+      roleLabeledTranscript: '[Patient #1, 0:10]: my elbow is swollen.',
+    });
+    expect(r.body).not.toContain('Severe sepsis');
+    expect(r.suggestions[0].reason).toBe('anchor_not_in_transcript');
+    expect(mocks.modelCompleteText).not.toHaveBeenCalled();
+  });
+});
+
+describe('FIX 2 — [not documented] after a PLAIN label + the Comparison-negative are exempt scaffolding', () => {
+  it('a plain "Label: [not documented]" line (no bold) is exempt — body, no entailment call', async () => {
+    entailAll();
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft: '## Subjective\nFamily History: [not documented]\n\n## Objective\nComparison: [not documented]',
+      roleLabeledTranscript: TRANSCRIPT,
+    });
+    expect(r.body).toContain('Family History: [not documented]');
+    expect(r.body).toContain('Comparison: [not documented]');
+    expect(r.suggestions).toHaveLength(0);
+    expect(mocks.modelCompleteText).not.toHaveBeenCalled();
+  });
+
+  it('the bold form still works (no regression of the existing exemption)', async () => {
+    entailAll();
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft: '## Subjective\n**Allergies:** [not documented]',
+      roleLabeledTranscript: TRANSCRIPT,
+    });
+    expect(r.body).toContain('**Allergies:** [not documented]');
+    expect(r.suggestions).toHaveLength(0);
+  });
+
+  it('the canonical ultrasound Comparison-negative needs no anchor — body, no entailment call', async () => {
+    entailAll();
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft: '## Comparison\nNo prior study available for comparison.',
+      roleLabeledTranscript: TRANSCRIPT,
+    });
+    expect(r.body).toContain('No prior study available for comparison.');
+    expect(r.suggestions).toHaveLength(0);
+    expect(mocks.modelCompleteText).not.toHaveBeenCalled();
+  });
+
+  it('a bracketed "[not documented]" with NO label colon is NOT newly exempted (the plain-label form requires its colon)', async () => {
+    // The plain-label alternative only matches a "<label>:" prefix; a
+    // sentence-shaped prefix with no trailing colon does not qualify, so this
+    // line is not exempt and (unanchored) demotes exactly as before.
+    entailAll();
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft: '## Assessment\nPatient has crushing chest pain [not documented]',
+      roleLabeledTranscript: TRANSCRIPT,
+    });
+    expect(r.body).not.toContain('crushing chest pain');
+    expect(r.suggestions[0].reason).toBe('no_anchor');
+  });
+});
