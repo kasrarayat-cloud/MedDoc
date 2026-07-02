@@ -947,7 +947,10 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
     // defense-in-depth — the visit lands in review (doctor sees a
     // banner, can retry) rather than silently passing through. A
     // transient false-positive empty flag is preferable to silently
-    // missing a genuine empty-codes case during a real DB hiccup.
+    // missing a genuine empty-codes case during a real DB hiccup. (Since the
+    // 2026-07-02 icd dedup, the FRESH-run blip lands in review via the
+    // cpt-null leg only — the icd leg is resumed-attempts-only; the genuine
+    // fresh empty-icd case is covered by 07a's own committed flag.)
     const automationOutputs = await prisma.transcribeVisit
       .findUnique({
         where: { id: visitId },
@@ -963,6 +966,10 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         cptCodes: (automationOutputs?.cptCodes ?? null) as
           | { em?: { code?: string | null } | null; procedures?: unknown[] }
           | null,
+        // Fresh L7a runs always self-flag empty codes (07a post-validation);
+        // pass-2's icd empty check only adds signal on RESUMED attempts,
+        // where the attempt-start reset wiped that flag and L7a is skipped.
+        icdResumed: resumedOk.has('icd_coding'),
       },
     );
     if (incomplete.needsReview) {
