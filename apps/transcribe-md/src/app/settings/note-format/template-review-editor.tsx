@@ -199,6 +199,9 @@ export function TemplateReviewEditor({
         formatHint: s.formatHint,
         styleInstructions: s.styleInstructions,
         defaultText: s.defaultText,
+        // feat/structured-templates: tables/option-sets round-trip verbatim
+        // (read-only in v1 — parsed structure is displayed, not edited).
+        structure: s.structure ?? null,
       })),
       styleProfile: {
         tense: styleProfile.tense,
@@ -415,7 +418,22 @@ function SectionCard({
           />
           <div style={{ fontFamily: mono, fontSize: 9.5, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-linear-text-4)', paddingLeft: 8, marginTop: 2 }}>
             key: {section.key}{hasDefault ? ' · has default' : ''}
+            {section.structure?.kind === 'table'
+              ? ` · table: ${section.structure.columns.join(' | ')}${section.structure.rowLabels ? ` (${section.structure.rowLabels.length} fixed rows)` : ''}`
+              : null}
+            {section.structure?.kind === 'options'
+              ? ` · ${section.structure.multi ? 'check-all' : 'pick-one'}: ${section.structure.options.length} options`
+              : null}
           </div>
+          {section.structure?.kind === 'options' ? (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, paddingLeft: 8, marginTop: 4 }}>
+              {section.structure.options.map((o) => (
+                <span key={o} style={{ fontSize: 11, padding: '1px 7px', borderRadius: 9, border: '1px solid var(--color-linear-border)', color: 'var(--color-linear-text-2)', background: 'var(--color-linear-surface-1)' }}>
+                  {o}
+                </span>
+              ))}
+            </div>
+          ) : null}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {/* format segmented toggle */}
@@ -594,13 +612,81 @@ function renderInlineBold(text: string, keyBase: string): React.ReactNode[] {
     ),
   );
 }
+// Structure-aware note line shapes (mirrors SoapSection's SoapMarkdown):
+// GitHub-style pipe rows buffer into a real <table>; task-list lines render
+// a ☒/☐ glyph row. Prose-only samples never hit either branch.
+const SAMPLE_TABLE_ROW_RE = /^\s*\|.*\|\s*$/;
+const SAMPLE_TABLE_SEPARATOR_ROW_RE = /^\s*\|[\s:|-]+\|\s*$/;
+const SAMPLE_TASK_LINE_RE = /^\s*[-*]\s+\[( |x|X)\]\s+(.*)$/;
+function splitSampleTableRow(line: string): string[] {
+  return line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
+}
+const sampleCellStyle: React.CSSProperties = {
+  padding: '4px 10px',
+  borderBottom: '1px solid var(--color-linear-hairline)',
+  fontSize: 12,
+  lineHeight: 1.5,
+  color: 'var(--color-linear-text-2)',
+  textAlign: 'left',
+  verticalAlign: 'top',
+};
 function SampleMarkdown({ text }: { text: string }) {
   const lines = text.split('\n');
   const out: React.ReactNode[] = [];
+  let tableBuffer: string[] = [];
+  const flushTable = (k: string) => {
+    if (tableBuffer.length === 0) return;
+    const rows = tableBuffer
+      .filter((r) => !SAMPLE_TABLE_SEPARATOR_ROW_RE.test(r))
+      .map(splitSampleTableRow);
+    tableBuffer = [];
+    if (rows.length === 0) return;
+    const [header, ...body] = rows;
+    out.push(
+      <div key={`tbl-${k}`} style={{ overflowX: 'auto', margin: '6px 0', border: '1px solid var(--color-linear-border)', borderRadius: 6 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              {header.map((cell, ci) => (
+                <th key={ci} style={{ ...sampleCellStyle, background: 'var(--color-linear-surface-2)', borderBottom: '1px solid var(--color-linear-border)', fontFamily: mono, fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--color-linear-text-3)', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                  {renderInlineBold(cell, `tbl-${k}-h${ci}`)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          {body.length > 0 ? (
+            <tbody>
+              {body.map((cells, ri) => (
+                <tr key={ri}>
+                  {cells.map((cell, ci) => (
+                    <td key={ci} style={sampleCellStyle}>{renderInlineBold(cell, `tbl-${k}-r${ri}c${ci}`)}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          ) : null}
+        </table>
+      </div>
+    );
+  };
   lines.forEach((raw, i) => {
     const l = raw.trimEnd();
     const k = `ln${i}`;
-    if (l.startsWith('## ')) {
+    if (SAMPLE_TABLE_ROW_RE.test(l)) {
+      tableBuffer.push(l);
+      return;
+    }
+    flushTable(k);
+    const task = l.match(SAMPLE_TASK_LINE_RE);
+    if (task) {
+      const checked = task[1].toLowerCase() === 'x';
+      out.push(
+        <div key={k} style={{ display: 'flex', gap: 6, alignItems: 'baseline', fontSize: 12, color: 'var(--color-linear-text-2)', lineHeight: 1.55 }}>
+          <span style={{ flex: 'none', color: checked ? 'var(--color-linear-sage)' : 'var(--color-linear-text-3)' }}>{checked ? '☒' : '☐'}</span>
+          <span>{renderInlineBold(task[2], k)}</span>
+        </div>
+      );
+    } else if (l.startsWith('## ')) {
       out.push(<div key={k} style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--color-linear-text)', marginTop: i === 0 ? 0 : 12, marginBottom: 2 }}>{l.slice(3)}</div>);
     } else if (l.startsWith('# ')) {
       out.push(<div key={k} style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--color-linear-text)', marginTop: i === 0 ? 0 : 12 }}>{l.slice(2)}</div>);
@@ -612,6 +698,7 @@ function SampleMarkdown({ text }: { text: string }) {
       out.push(<div key={k} style={{ fontSize: 12, color: 'var(--color-linear-text-2)', lineHeight: 1.55 }}>{renderInlineBold(l, k)}</div>);
     }
   });
+  flushTable('end');
   return <div style={{ display: 'flex', flexDirection: 'column' }}>{out}</div>;
 }
 

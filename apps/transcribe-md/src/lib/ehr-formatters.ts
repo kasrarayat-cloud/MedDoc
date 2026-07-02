@@ -76,12 +76,90 @@ function formatSignedBy(data: VisitExportData, lineBreak = '\n'): string {
 }
 
 /** Strip markdown bold (** **) and section-header hashes (## ) for EHRs
- *  that don't render markdown. Preserves text content, newlines, bullets. */
+ *  that don't render markdown. Preserves text content, newlines, bullets.
+ *  Structure-aware notes (GitHub tables + task lists) are flattened to
+ *  ASCII first so Epic/Cerner/eCW paste degrades identically — an EHR
+ *  plain-text field has an unknown font stack, so `[x]`/`[ ]` and
+ *  `Header: value` lines are the safe wire format (never raw pipes). */
 function stripMarkdown(s: string): string {
-  return s
+  return flattenTasks(flattenTables(s))
     .replace(/^#{1,6}\s+/gm, '') // ## Heading → Heading
     .replace(/\*\*(.+?)\*\*/g, '$1') // **bold** → bold
     .replace(/(?<!\*)\*(?!\*)(.+?)\*(?!\*)/g, '$1'); // *italic* → italic
+}
+
+const TABLE_ROW_RE = /^\s*\|.*\|\s*$/;
+const TABLE_SEPARATOR_ROW_RE = /^\s*\|[\s:|-]+\|\s*$/;
+const TASK_LINE_RE = /^(\s*)[-*]\s+\[( |x|X)\]\s+(.*)$/;
+
+function parseTableRow(line: string): string[] {
+  return line
+    .trim()
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map((c) => c.trim());
+}
+
+/** Flatten GitHub-style markdown tables into plain lines an EHR text
+ *  field can hold. A 2-column table collapses to `label: value` (the
+ *  familiar shape today's parse already emits); wider tables zip the
+ *  header with each body row → `Header1: cell1 · Header2: cell2`.
+ *  Separator rows (|---|:---|) are dropped. A table with no body rows
+ *  degrades to a single `Header1 · Header2` line so nothing is silently
+ *  lost. Prose-only text (no pipe rows) passes through byte-identically. */
+export function flattenTables(s: string): string {
+  const lines = s.split('\n');
+  const out: string[] = [];
+  let buf: string[] = [];
+  const flush = () => {
+    if (buf.length === 0) return;
+    const rows = buf
+      .filter((l) => !TABLE_SEPARATOR_ROW_RE.test(l))
+      .map(parseTableRow);
+    buf = [];
+    if (rows.length === 0) return;
+    const [header, ...body] = rows;
+    if (body.length === 0) {
+      out.push(header.join(' · '));
+      return;
+    }
+    for (const cells of body) {
+      if (header.length === 2) {
+        // 2-column table → `cell1: cell2` (label/value), matching the
+        // shape today's parse produces so EHR paste stays familiar.
+        out.push(`${cells[0] ?? ''}: ${cells[1] ?? ''}`);
+        continue;
+      }
+      out.push(header.map((h, i) => `${h}: ${cells[i] ?? ''}`).join(' · '));
+    }
+  };
+  for (const raw of lines) {
+    if (TABLE_ROW_RE.test(raw)) {
+      buf.push(raw);
+      continue;
+    }
+    flush();
+    out.push(raw);
+  }
+  flush();
+  return out.join('\n');
+}
+
+/** Flatten task-list rows to ASCII: `- [x] Foo` → `[x] Foo`,
+ *  `- [ ] Foo` → `[ ] Foo`. Unchecked options stay VISIBLE — an
+ *  unchecked "chaperone offered" is a meaningful clinical fact, not
+ *  noise. Indentation is preserved. Prose passes through unchanged. */
+export function flattenTasks(s: string): string {
+  return s
+    .split('\n')
+    .map((line) => {
+      const m = line.match(TASK_LINE_RE);
+      if (!m) return line;
+      const mark = m[2].toLowerCase() === 'x' ? 'x' : ' ';
+      return `${m[1]}[${mark}] ${m[3]}`;
+    })
+    .join('\n');
 }
 
 function icdSection(data: VisitExportData, label = 'DIAGNOSES'): string[] {

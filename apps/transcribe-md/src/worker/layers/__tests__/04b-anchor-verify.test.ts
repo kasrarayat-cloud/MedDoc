@@ -884,3 +884,116 @@ describe('FIX 2 — [not documented] after a PLAIN label + the Comparison-negati
     expect(r.suggestions[0].reason).toBe('no_anchor');
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// feat/structured-templates (2026-07-02) — table/option scaffolding exemptions.
+// Pre-registered: docs/eval-runs/verifier-table-option-fix-20260702T165454Z.md.
+// The safety invariant these pin: SCAFFOLDING (separators, headers, unfilled
+// rows, unchecked options) is exempt; CLAIMS (checked options, filled cells)
+// still anchor + verify — a fabricated selection must ALWAYS demote.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('structure-aware exemptions — tables + option-sets (pre-registered pass)', () => {
+  it('(a) an UNCHECKED option line is exempt scaffolding — body, no lane row, no entailment call', async () => {
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft: '## Lungs\n- [ ] Clear to auscultation\n- [ ] Wheezes\n- [ ] Crackles',
+      roleLabeledTranscript: TRANSCRIPT,
+    });
+    expect(r.body).toContain('- [ ] Clear to auscultation');
+    expect(r.body).toContain('- [ ] Crackles');
+    expect(r.suggestions).toHaveLength(0);
+    expect(mocks.modelCompleteText).not.toHaveBeenCalled();
+  });
+
+  it('(b1) FABRICATED-OPTION canary: a checked option with NO anchor demotes no_anchor', async () => {
+    entailAll();
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft: '## Lungs\n- [x] Wheezes present',
+      roleLabeledTranscript: TRANSCRIPT,
+    });
+    expect(r.body).not.toContain('[x] Wheezes');
+    expect(r.suggestions[0].reason).toBe('no_anchor');
+  });
+
+  it('(b2) FABRICATED-OPTION canary: a checked option with a NON-TRANSCRIPT anchor demotes anchor_not_in_transcript', async () => {
+    entailAll();
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft: '## Lungs\n- [x] Wheezes present ⟦A:"diffuse expiratory wheezes heard"⟧',
+      roleLabeledTranscript: TRANSCRIPT,
+    });
+    expect(r.body).not.toContain('[x] Wheezes');
+    expect(r.suggestions[0].reason).toBe('anchor_not_in_transcript');
+  });
+
+  it('(c1) an anchored table DATA row with dictated digits survives to the body', async () => {
+    entailAll();
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft:
+        '## Medications\n| Medication | Dose |\n| --- | --- |\n| The pill | 500 milligrams twice daily | ⟦A:"take 500 milligrams twice daily"⟧',
+      roleLabeledTranscript: TRANSCRIPT,
+    });
+    expect(r.body).toContain('| The pill | 500 milligrams twice daily |');
+    expect(r.suggestions).toHaveLength(0);
+  });
+
+  it('(c2) an UNANCHORED table data row still demotes — table shape is not a free pass', async () => {
+    entailAll();
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft: '## Medications\n| Medication | Dose |\n| --- | --- |\n| Amoxicillin | 875 mg |',
+      roleLabeledTranscript: TRANSCRIPT,
+    });
+    expect(r.body).not.toContain('Amoxicillin');
+    expect(r.suggestions[0].reason).toBe('no_anchor');
+  });
+
+  it('(d) header + separator rows are exempt scaffolding — no lane rows, no entailment call', async () => {
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft: '## Vitals\n| Vital | Value |\n| --- | --- |',
+      roleLabeledTranscript: TRANSCRIPT,
+    });
+    expect(r.body).toContain('| Vital | Value |');
+    expect(r.body).toContain('| --- | --- |');
+    expect(r.suggestions).toHaveLength(0);
+    expect(mocks.modelCompleteText).not.toHaveBeenCalled();
+  });
+
+  it('(e) unfilled fixed-row + empty-cell rows are exempt scaffolding', async () => {
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft:
+        '## Vitals\n| Vital | Value |\n| --- | --- |\n| BP | [not documented] |\n| Allergies |  |\n| Comparison | — |',
+      roleLabeledTranscript: TRANSCRIPT,
+    });
+    expect(r.body).toContain('| BP | [not documented] |');
+    expect(r.body).toContain('| Allergies |  |');
+    expect(r.suggestions).toHaveLength(0);
+    expect(mocks.modelCompleteText).not.toHaveBeenCalled();
+  });
+
+  it('(f) "Label: [not addressed]" is exempt like [not documented]', async () => {
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft: '## ROS\nSmoking status: [not addressed]',
+      roleLabeledTranscript: TRANSCRIPT,
+    });
+    expect(r.body).toContain('Smoking status: [not addressed]');
+    expect(r.suggestions).toHaveLength(0);
+    expect(mocks.modelCompleteText).not.toHaveBeenCalled();
+  });
+
+  it('(g) a sentence merely containing "[not addressed]" without the label-colon shape is NOT swept', async () => {
+    entailAll();
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft: '## Assessment\nPatient has severe sepsis [not addressed]',
+      roleLabeledTranscript: TRANSCRIPT,
+    });
+    expect(r.body).not.toContain('severe sepsis');
+    expect(r.suggestions[0].reason).toBe('no_anchor');
+  });
+});

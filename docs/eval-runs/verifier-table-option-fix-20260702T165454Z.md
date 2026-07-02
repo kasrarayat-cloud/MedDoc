@@ -28,7 +28,8 @@
 
 f4-a's 17 demotions → ~12-13 under the deterministic A/B (2 header + 2 separator rows recovered; `[not addressed]`-class rows when present). The 7 unanchored vitals DATA rows and the 5 frozen-override rows must remain demoted in the A/B. (Full end-to-end improvement additionally comes from the constrained-fill generation making rows anchorable — measured separately in the Phase-3 matrix, NOT part of this eval's acceptance.)
 
-## Results (filled AFTER the runs)
-- Phase B: [PENDING]
-- Phase C: [PENDING]
-- Phase D Gate-1: [PENDING] · Gate-2: [PENDING]
+## Results (filled AFTER the runs — one run each, no rerolls)
+- **Phase B: PASS** — 62/62 04b canaries (53 pre-existing + 9 new: a, b1, b2, c1, c2, d, e, f, g) + full worker suite green. The fabricated-option canaries (b1/b2) prove a checked-but-undictated option ALWAYS demotes (`no_anchor` / `anchor_not_in_transcript`).
+- **Phase C: PASS** — cached-draft deterministic A/B (4 real Opus anchored drafts, entailment approve-all): AFTER ⊆ BEFORE on every draft, **0 newly demoted**; recovered set EXCLUSIVELY scaffolding — f4-tables 16→12 (2 header + 2 separator rows), structured-synthetic 11→3 (4 unchecked options + header + separator + 2 unfilled fixed rows), reflux 0→0, clean-SOAP control 0→0. Full diff: scratchpad ab-verify-report.json; harness committed at scripts/eval/table-option-ab.ts.
+- **Phase D Gate-1: GREEN** — majority class-(c) = 0 across all 4 FINAL notes (report `primock57-fullchain-fabrication-20260702T170257Z.md`; disclosed (a)-survival 1, (b) 0). **Gate-2: PASS** — material omissions mean 1.00/case, max 1 (floor ≤1.5 / ≤5); lane-captured facts correctly not counted (3).
+**VERDICT: the exemption seam ships. Frozen surfaces verified byte-unchanged at ship time via diff.**

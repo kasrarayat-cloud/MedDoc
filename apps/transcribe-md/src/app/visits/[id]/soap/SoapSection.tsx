@@ -135,6 +135,7 @@ function SoapMarkdown({ text }: { text: string }) {
   const lines = text.split('\n');
   const out: React.ReactNode[] = [];
   let listBuffer: string[] = [];
+  let tableBuffer: string[] = [];
   const flushList = (k: number) => {
     if (listBuffer.length === 0) return;
     out.push(
@@ -146,8 +147,52 @@ function SoapMarkdown({ text }: { text: string }) {
     );
     listBuffer = [];
   };
+  // Structure-aware notes: consecutive GitHub-style pipe rows collect in
+  // tableBuffer, then flush as a real <table>. Separator rows (|---|---|)
+  // are dropped; the first remaining row becomes the header. Prose-only
+  // notes never populate the buffer, so their output is byte-identical.
+  const flushTable = (k: number) => {
+    if (tableBuffer.length === 0) return;
+    const rows = tableBuffer
+      .filter((r) => !TABLE_SEPARATOR_ROW_RE.test(r))
+      .map(splitTableRow);
+    tableBuffer = [];
+    if (rows.length === 0) return;
+    const [header, ...body] = rows;
+    out.push(
+      <div key={`tbl-${k}`} className="qm-lin-soap-md-table-wrap">
+        <table className="qm-lin-soap-md-table">
+          <thead>
+            <tr>
+              {header.map((cell, i) => (
+                <th key={i}>{renderInline(cell)}</th>
+              ))}
+            </tr>
+          </thead>
+          {body.length > 0 ? (
+            <tbody>
+              {body.map((cells, ri) => (
+                <tr key={ri}>
+                  {cells.map((cell, ci) => (
+                    <td key={ci}>{renderInline(cell)}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          ) : null}
+        </table>
+      </div>
+    );
+  };
   lines.forEach((raw, k) => {
     const l = raw.trimEnd();
+    // Table rows buffer until the first non-pipe line ends the run.
+    if (TABLE_ROW_RE.test(l)) {
+      flushList(k);
+      tableBuffer.push(l);
+      return;
+    }
+    flushTable(k);
     // ### sub-headings (F-9): parse-note-sections folds them into the parent
     // section body (ultrasound `### Right`/`### Left`), so render them as
     // sub-heads instead of literal `###` text. Checked before `## `.
@@ -178,6 +223,27 @@ function SoapMarkdown({ text }: { text: string }) {
       );
       return;
     }
+    // Task-list rows (- [x] / - [ ] / * [x]) — checked BEFORE the bullet
+    // branch so they don't render as disc bullets with literal brackets.
+    const task = l.match(TASK_LINE_RE);
+    if (task) {
+      flushList(k);
+      const checked = task[1].toLowerCase() === 'x';
+      out.push(
+        <div key={k} className="qm-lin-soap-md-task">
+          <span
+            className={cn(
+              'qm-lin-soap-md-task-glyph',
+              checked && 'qm-lin-soap-md-task-glyph--checked'
+            )}
+          >
+            {checked ? '☒' : '☐'}
+          </span>
+          <span className="qm-lin-soap-md-task-text">{renderInline(task[2])}</span>
+        </div>
+      );
+      return;
+    }
     if (/^\s*[-*]\s+/.test(l)) {
       listBuffer.push(l.replace(/^\s*[-*]\s+/, ''));
       return;
@@ -194,7 +260,25 @@ function SoapMarkdown({ text }: { text: string }) {
     );
   });
   flushList(lines.length);
+  flushTable(lines.length);
   return <div className="qm-lin-soap-md">{out}</div>;
+}
+
+// Structure-aware note line shapes. A table row is any line that starts and
+// ends with a pipe; a separator row is the |---|:---| divider under the
+// header. Task lines are GitHub-style checklist items.
+const TABLE_ROW_RE = /^\s*\|.*\|\s*$/;
+const TABLE_SEPARATOR_ROW_RE = /^\s*\|[\s:|-]+\|\s*$/;
+const TASK_LINE_RE = /^\s*[-*]\s+\[( |x|X)\]\s+(.*)$/;
+
+/** `| a | b |` → `['a', 'b']` — trims the outer pipes + per-cell whitespace. */
+function splitTableRow(line: string): string[] {
+  return line
+    .trim()
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map((c) => c.trim());
 }
 
 /** Inline markdown: **bold** only. Everything else renders verbatim. */

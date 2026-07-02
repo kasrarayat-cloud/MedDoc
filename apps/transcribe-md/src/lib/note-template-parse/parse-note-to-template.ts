@@ -33,6 +33,7 @@ import {
   type ParsedTemplateDraft,
   type ParseNoteResult,
   type NoteTemplateSection,
+  type SectionStructure,
 } from './note-template-schema';
 import {
   applyPhiGate,
@@ -65,6 +66,20 @@ const PARSE_SYSTEM = [
   '  part of the heading itself (e.g. "1. Subjective Data", "2.1 Vital',
   '  Signs"), verbatim. Numbered headings are part of the format.',
   '- `formatHint` per section: prose | bullets | numbered.',
+  '- `structure` per section, ONLY when the note clearly shows one:',
+  '  * a TABLE (values organized in columns): {"kind":"table","columns":',
+  '    [...], "rowLabels":[...]} — columns verbatim; rowLabels ONLY when the',
+  '    template fixes the rows (e.g. a vitals grid BP/HR/RR); omit rowLabels',
+  '    when rows vary per patient (e.g. a medication list). Note: a Word',
+  '    table may reach you flattened to alternating label/value lines —',
+  '    reconstruct the grid when the pattern is clear.',
+  '  * an OPTION SET (checkbox glyphs like ☐, "circle one", "check all',
+  '    that apply", Normal/Abnormal picks, severity or 0-10 scales):',
+  '    {"kind":"options","options":[...],"multi":true|false} — options',
+  "    VERBATIM from the note (keep the clinician's own wording and",
+  '    spelling; a 0-10 scale becomes options "0".."10"); multi=true ONLY',
+  '    for "check all that apply"-style sets.',
+  '  Sections without a clear table/option structure OMIT `structure`.',
   '- `styleInstructions`: brief GENERIC guidance on how the section is written',
   '  (structure/tone). Describe the FORMAT; never copy patient content.',
   '- `defaultText`: ONLY clearly-generic, reusable templated language that',
@@ -131,6 +146,45 @@ const PHI_SCAN_SYSTEM = [
  * fails schema validation after retries — the caller maps that to a generic
  * "couldn't parse" without surfacing raw content.
  */
+// ── Structure sanitizer (feat/structured-templates, 2026-07-02) ────────────
+// Deterministic cleanup of LLM-emitted structure BEFORE the draft leaves the
+// parse: trims entries, drops empties, DEDUPES options case-insensitively
+// (first-seen casing wins — a doctor's duplicated "☐ Moderate ☐ Moderate"
+// collapses to one), and drops degenerate structures (an empty option set or
+// a single-option "set" falls back to prose). The doctor's own wording —
+// including typos — is preserved verbatim: constrained fill may only pick
+// from THEIR list, so their list is reproduced as-is.
+function sanitizeStructure(
+  structure: SectionStructure | null
+): SectionStructure | null {
+  if (!structure) return null;
+  if (structure.kind === 'options') {
+    const seen = new Set<string>();
+    const options: string[] = [];
+    for (const raw of structure.options) {
+      const o = raw.trim();
+      if (!o) continue;
+      const k = o.toLowerCase();
+      if (seen.has(k)) continue;
+      seen.add(k);
+      options.push(o);
+    }
+    if (options.length < 2) return null; // degenerate → prose
+    return { kind: 'options', options: options.slice(0, 24), multi: structure.multi };
+  }
+  const columns = structure.columns.map((c: string) => c.trim()).filter(Boolean).slice(0, 8);
+  if (columns.length < 2) return null;
+  const rowLabels = structure.rowLabels
+    ?.map((r: string) => r.trim())
+    .filter(Boolean)
+    .slice(0, 30);
+  return {
+    kind: 'table',
+    columns,
+    ...(rowLabels && rowLabels.length > 0 ? { rowLabels } : {}),
+  };
+}
+
 export async function parseNoteToTemplate(
   noteText: string,
   ctx: ParseContext
@@ -181,6 +235,7 @@ export async function parseNoteToTemplate(
       styleInstructions: s.styleInstructions,
       defaultText: s.defaultText,
       defaultTextMode: s.defaultText ? 'scaffold_confirm' : 'omit_unless_supported',
+      structure: sanitizeStructure(s.structure ?? null),
     }));
 
   // ── 2b. Drop administrative chrome (letterhead / demographics / signature)

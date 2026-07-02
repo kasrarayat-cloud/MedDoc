@@ -70,7 +70,13 @@ export interface Layer6Output {
 // Caution-first bias: a rewording fix wrongly deferred costs one cosmetic
 // edit; an additive fix wrongly applied is exactly what the gate rejects.
 // ---------------------------------------------------------------------------
-const ADD_VERB_RE = /\b(add|adds|adding|insert|include|includes|populate|append|restore|introduce|state|document)\b/i;
+// feat/structured-templates (2026-07-02): structured-fill verbs — "check the
+// fatigue box", "mark option X", "fill in the BP cell" — are additive edits
+// whose content words already exist in the draft as skeleton text, so the
+// novel-term fallback misses them. Caution-first: a wrongly deferred fix
+// costs one cosmetic edit; a checkbox flip that slips through is an
+// unanchored clinical claim the deterministic L6b screen cannot see.
+const ADD_VERB_RE = /\b(add|adds|adding|insert|include|includes|populate|append|restore|introduce|state|document|check|checks|checked|mark|marks|marked|tick|ticks|fill|fills|filled|select|selects)\b/i;
 const REMOVAL_VERB_RE = /\b(remove|removes|delete|deletes|strike|drop|omit the|take out)\b/i;
 // Instruction/editorial vocabulary that is "novel vs the draft" for nearly
 // any fix text but carries no clinical payload — excluded before counting.
