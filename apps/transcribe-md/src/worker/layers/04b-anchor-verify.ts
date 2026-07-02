@@ -65,7 +65,10 @@ export const ANCHOR_GENERATION_ADDENDUM = [
   'cells are all "[not documented]" need no anchor; append the anchor(s) for',
   'a filled row after its final "|". In a CHECKLIST section, unchecked',
   '"- [ ]" lines need no anchor; a checked "- [x]" line is a clinical claim',
-  'and needs one.',
+  'and needs one. Anchor a checked option with the SHORTEST verbatim span',
+  'that affirms that option alone — never include neighboring denials or',
+  'unrelated clauses in its anchor (quote "regular rate and rhythm", not',
+  '"regular rate and rhythm, no murmur").',
 ].join('\n');
 
 export type DemotionReason =

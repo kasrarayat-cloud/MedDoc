@@ -32,4 +32,28 @@ f4-a's 17 demotions → ~12-13 under the deterministic A/B (2 header + 2 separat
 - **Phase B: PASS** — 62/62 04b canaries (53 pre-existing + 9 new: a, b1, b2, c1, c2, d, e, f, g) + full worker suite green. The fabricated-option canaries (b1/b2) prove a checked-but-undictated option ALWAYS demotes (`no_anchor` / `anchor_not_in_transcript`).
 - **Phase C: PASS** — cached-draft deterministic A/B (4 real Opus anchored drafts, entailment approve-all): AFTER ⊆ BEFORE on every draft, **0 newly demoted**; recovered set EXCLUSIVELY scaffolding — f4-tables 16→12 (2 header + 2 separator rows), structured-synthetic 11→3 (4 unchecked options + header + separator + 2 unfilled fixed rows), reflux 0→0, clean-SOAP control 0→0. Full diff: scratchpad ab-verify-report.json; harness committed at scripts/eval/table-option-ab.ts.
 - **Phase D Gate-1: GREEN** — majority class-(c) = 0 across all 4 FINAL notes (report `primock57-fullchain-fabrication-20260702T170257Z.md`; disclosed (a)-survival 1, (b) 0). **Gate-2: PASS** — material omissions mean 1.00/case, max 1 (floor ≤1.5 / ≤5); lane-captured facts correctly not counted (3).
-**VERDICT: the exemption seam ships. Frozen surfaces verified byte-unchanged at ship time via diff.**
+
+## Iteration 1 (2026-07-02, post-Phase-3-matrix)
+
+The Phase-3 QA matrix exposed a residual class the eval set did not: checked
+options whose anchors quote a mixed affirm+deny span ("regular rate and
+rhythm, no murmur") trip the FROZEN row-level polarity check and demote
+correct picks. Fix is generation-side only, on registered surface 3
+(`ANCHOR_GENERATION_ADDENDUM`): one added rule — anchor a checked option
+with the SHORTEST verbatim span affirming that option alone, never
+including neighboring denials. (A parallel no-invented-units sentence was
+added to the table directive in `build-soap-prompt.ts`, which is NOT
+verifier-adjacent.) Zero verifier-code bytes changed in this iteration.
+
+**Attribution note:** this doc's iteration clause said "exemption regexes
+ONLY", narrower than the parent protocol's "verifier/prompt fix
+iterations" language this pass mirrors; the addendum is a registered
+in-scope surface (item 3), so the change is taken as iteration 1 of 2 and
+disclosed here rather than shipped silently. Consequences accepted:
+Phase B re-ran green (62/62); Phase C stands as-run (verifier bytes
+identical to the certified run — re-verified by diff at ship); **Phase D
+re-runs in full on the final bytes** (same 4 cases, same gates, one run,
+no reroll — the certification below supersedes the pre-iteration Phase D).
+
+- **Phase D (iteration 1, FINAL) Gate-1:** _pending_
+**VERDICT: pending iteration-1 Phase D.**

@@ -95,18 +95,23 @@ function renderStructureDirective(
   if (structure.kind === 'options') {
     const lines = structure.options.map((o) => `- [ ] ${o}`);
     return [
-      'This section is a CHECKLIST. Reproduce these options exactly, one per',
-      'line, in this order, changing nothing but the checkbox:',
+      'This section is a CHECKLIST. Reproduce ALL of these option lines —',
+      'every line, in this order, byte-for-byte — changing ONLY "[ ]" to',
+      '"[x]" where checked:',
       ...lines,
       structure.multi
         ? 'Multiple options may be checked ("check all that apply").'
         : 'At most ONE option may be checked (single-select).',
-      'Mark an option "- [x]" ONLY when the transcript explicitly supports',
-      'it; leave it "- [ ]" otherwise. A checked option is a clinical claim',
-      'and needs an evidence anchor like any other sentence; an unchecked',
-      'option asserts nothing. NEVER check an option because it is typical,',
-      'plausible, or usually true. Do not add, remove, reorder, or reword',
-      'options — not even to fix a spelling.',
+      'Mark "- [x]" ONLY when the transcript AFFIRMS that option as present.',
+      'A DENIED or negative finding does NOT check that option — "denies',
+      'fever" means the Fever line stays "- [ ]"; when the transcript denies',
+      'every finding in a group and the group has a "None"-style option,',
+      'check that "None" option instead. A checked option is a clinical',
+      'claim and needs an evidence anchor appended to its line; unchecked',
+      'lines need no anchor and assert nothing. NEVER check an option',
+      'because it is typical, plausible, or usually true. Never add, remove,',
+      'reorder, merge, reword, or annotate option lines — not even to fix a',
+      'spelling.',
     ].join('\n');
   }
   const header = `| ${structure.columns.join(' | ')} |`;
@@ -127,10 +132,11 @@ function renderStructureDirective(
       separator,
       ...rows,
       'Replace a "[not documented]" cell ONLY with a value the transcript',
-      'states; leave it "[not documented]" otherwise. Never invent,',
-      'estimate, or carry forward a value. Do not add, remove, rename, or',
-      'reorder rows or columns. Append the evidence anchor(s) for a filled',
-      'row after its final "|".',
+      'states, copied as dictated — do not append units or qualifiers the',
+      'transcript does not state. Leave it "[not documented]" otherwise.',
+      'Never invent, estimate, or carry forward a value. Do not add,',
+      'remove, rename, or reorder rows or columns. Append the evidence',
+      'anchor(s) for a filled row after its final "|".',
     ].join('\n');
   }
   return [
@@ -140,10 +146,12 @@ function renderStructureDirective(
     header,
     separator,
     'Add ONE row per item the transcript supports, and append the evidence',
-    'anchor(s) for each row after its final "|". In a supported row, put',
-    '"[not documented]" in any cell whose value the transcript does not',
-    'state — never invent a value to complete a row. Do NOT add a row for',
-    'an item the transcript never mentions.',
+    'anchor(s) for each row after its final "|". Copy cell values as',
+    'dictated — do not append units or qualifiers the transcript does not',
+    'state. In a supported row, put "[not documented]" in any cell whose',
+    'value the transcript does not state — never invent a value to',
+    'complete a row. Do NOT add a row for an item the transcript never',
+    'mentions.',
   ].join('\n');
 }
 
