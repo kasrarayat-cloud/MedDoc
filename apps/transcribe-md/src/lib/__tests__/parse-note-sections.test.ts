@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseNoteSections } from '@/lib/parse-note-sections';
+import { parseNoteSections, placeholderSections } from '@/lib/parse-note-sections';
+import { EMPTY_SECTION_PLACEHOLDER } from '@/lib/soap-format';
 import { parseSoapSections } from '@/lib/parse-soap-sections';
 
 const CLASSIC = `## Subjective
@@ -83,16 +84,24 @@ describe('parseNoteSections', () => {
     expect(next.map((s) => s.letter)).toEqual(['1', '2', '3', '4', '5']);
   });
 
-  it('renders imaging reports (### laterality blocks stay inside Findings... they are level-3 headings, so they split)', () => {
+  it('renders imaging reports with ### laterality blocks FOLDED under Findings (F-9)', () => {
     const next = parseNoteSections(IMAGING);
     const labels = next.map((s) => s.label);
-    expect(labels[0]).toBe('Exam');
-    expect(labels).toContain('Findings');
-    expect(labels).toContain('Impression');
+    expect(labels).toEqual(['Exam', 'Indication', 'Technique', 'Comparison', 'Findings', 'Impression']);
+    const findings = next.find((s) => s.label === 'Findings')!;
+    expect(findings.body).toContain('### Right');
+    expect(findings.body).toContain('GSV 6.1 mm, reflux 4.2 s.');
     // no content lost anywhere
     const all = next.map((s) => s.body).join('\n');
-    expect(all).toContain('6.1 mm, reflux 4.2 s');
     expect(all).toContain('Left GSV incompetence');
+  });
+
+  it('### sub-blocks inside a classic SOAP note do NOT flip the render to generic mode (W3)', () => {
+    const withSub = '## Subjective\nhi\n### Vitals\nBP 120/80\n## Plan\ndo x';
+    const next = parseNoteSections(withSub);
+    expect(next.map((s) => s.label)).toEqual(['Subjective', 'Objective', 'Assessment', 'Plan']);
+    expect(next[0].body).toContain('### Vitals');
+    expect(next[0].body).toContain('BP 120/80');
   });
 
   it('mixed notes keep canonical keys on SOAP headings and null on custom ones', () => {
@@ -115,6 +124,14 @@ describe('parseNoteSections', () => {
     expect(next).toHaveLength(1);
     expect(next[0].label).toBe('Note');
     expect(next[0].body).toContain('second line');
+  });
+
+  it('placeholderSections lists sections still carrying the set-aside placeholder (F-7)', () => {
+    const md = `## Reason for Visit\n${EMPTY_SECTION_PLACEHOLDER}\n\n## History\nreal content\n\n## Follow-Up\n${EMPTY_SECTION_PLACEHOLDER}`;
+    expect(placeholderSections(md)).toEqual(['Reason for Visit', 'Follow-Up']);
+    expect(placeholderSections('## Subjective\nfine\n## Plan\nfine')).toEqual([]);
+    // classic-SOAP path detects too
+    expect(placeholderSections(`## Subjective\n${EMPTY_SECTION_PLACEHOLDER}\n## Plan\nx`)).toEqual(['Subjective']);
   });
 
   it('blank input renders the four empty SOAP scaffolds (legacy behavior)', () => {

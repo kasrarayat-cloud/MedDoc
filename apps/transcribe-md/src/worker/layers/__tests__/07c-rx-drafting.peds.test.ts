@@ -16,7 +16,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // what the layer actually built. Reset between tests via beforeEach below.
 const captured: { system?: string; user?: string }[] = [];
 
-vi.mock('@meddoc/ai', () => ({
+vi.mock('@meddoc/ai', async (importOriginal) => ({
+  // F-8: the layer now also calls the real (pure) drug-pair checker +
+  // validateRxDose — pass the actual implementations through.
+  ...(await importOriginal<Record<string, unknown>>()),
   modelClient: {
     complete: vi.fn(async (args: { system: string; user: string }) => {
       captured.push({ system: args.system, user: args.user });

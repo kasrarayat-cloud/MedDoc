@@ -37,6 +37,8 @@ import { toast } from 'sonner';
 
 import { saveSoapDraftAction } from '@/actions/soap';
 import { parseSoapSections, type SoapSectionKey } from '@/lib/parse-soap-sections';
+import { placeholderSections } from '@/lib/parse-note-sections';
+import { PlaceholderAdvisoryDialog } from '@/components/placeholder-advisory-dialog';
 import { isSkinBeta } from '@/config/skin-beta';
 import { CodingRail } from '@/components/visits/CodingRail';
 import { CodingRailSkeleton } from '@/components/visits/CodingRailSkeleton';
@@ -154,6 +156,23 @@ export function SoapEditor({
   // are passed in. Pre-fix the rail dispatched a `qm:request-sign`
   // window event that no listener consumed.
   const [signModalOpen, setSignModalOpen] = useState(false);
+  // F-7 (2026-07-02): every open request funnels through requestSignOpen —
+  // sections still carrying the verifier's set-aside placeholder get an
+  // ADVISORY confirm before the sign modal (server sign route unchanged;
+  // the fail-closed gates stay the authority). Detection runs on the LIVE
+  // client text (`text` state), so an inline edit that removes the
+  // placeholder clears the advisory immediately.
+  const [signAdvisoryOpen, setSignAdvisoryOpen] = useState(false);
+  const requestSignOpen = useCallback(
+    (next: boolean) => {
+      if (next && placeholderSections(text).length > 0) {
+        setSignAdvisoryOpen(true);
+        return;
+      }
+      setSignModalOpen(next);
+    },
+    [text]
+  );
   // Local mirror of the rail's score so apply-additions / override
   // responses can update the rail-rendered tier without a full page
   // reload. The initial value is the server-rendered score; the rail's
@@ -380,7 +399,7 @@ export function SoapEditor({
               onConfirmSign={
                 isReadonly || isSigned
                   ? undefined
-                  : () => setSignModalOpen(true)
+                  : () => requestSignOpen(true)
               }
               onApplyOverride={
                 isReadonly || isSigned ? undefined : handleApplyOverride
@@ -447,7 +466,7 @@ export function SoapEditor({
           <button
             type="button"
             className={`qm-c3-bill-chip ${emPendingChange ? 'pending' : ''} qm-tap-44`}
-            onClick={() => setSignModalOpen(true)}
+            onClick={() => requestSignOpen(true)}
             aria-label={
               emPendingChange
                 ? `Billing code ${emPendingChange.to} — confirm at sign`
@@ -475,8 +494,22 @@ export function SoapEditor({
             triggerLabel="Sign & Send"
             triggerIcon={<Lock className="h-3.5 w-3.5" aria-hidden />}
             controlledOpen={signModalOpen}
-            onControlledOpenChange={setSignModalOpen}
+            onControlledOpenChange={requestSignOpen}
             emPendingChange={emPendingChange}
+          />
+        )}
+        {!readonly && !isSigned && (
+          <PlaceholderAdvisoryDialog
+            open={signAdvisoryOpen}
+            onOpenChange={setSignAdvisoryOpen}
+            sections={placeholderSections(text)}
+            // Legacy path renders the lane outside this component — the
+            // advisory copy degrades gracefully without a count.
+            suggestionCount={0}
+            onContinue={() => {
+              setSignAdvisoryOpen(false);
+              setSignModalOpen(true);
+            }}
           />
         )}
 
