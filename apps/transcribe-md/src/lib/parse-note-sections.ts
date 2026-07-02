@@ -64,7 +64,15 @@ function slug(label: string, i: number): string {
 
 /** True when the note is a classic SOAP note: has at least one heading and
  *  every heading is a canonical SOAP name. Blank notes also count (the
- *  legacy empty-scaffold render). */
+ *  legacy empty-scaffold render).
+ *
+ *  MODE-FLIP CAVEAT: a single non-canonical heading (e.g. a doctor typing
+ *  `### Vitals` into a classic note) switches the WHOLE render to generic
+ *  mode — the stray heading becomes its own section and empty S/O/A/P
+ *  scaffolds are no longer padded in. Nothing is hidden (canonical
+ *  headings keep their soapKey; all content renders), but the screen
+ *  re-groups. Deliberate: generic mode is the only shape that can render
+ *  every note faithfully once non-SOAP headings exist. */
 function isClassicSoap(markdown: string): boolean {
   if (!markdown || markdown.trim() === '') return true;
   let sawHeading = false;

@@ -32,6 +32,15 @@ import { TemplateReviewEditor } from './template-review-editor';
 
 const mono = 'var(--font-mono)';
 const sans = 'var(--font-sans)';
+
+// Next.js server actions reject bodies over 1 MB BEFORE our action runs
+// (no serverActions.bodySizeLimit is configured), so the server-side 5 MB
+// check in actions/extract-note-file.ts (MAX_UPLOAD_BYTES) is unreachable
+// and an oversized file surfaced only as a generic "Something went wrong"
+// (custom-template QA 2026-07-02, finding F-4). Check client-side against
+// the REAL limit and say so honestly. Keep in sync with the framework
+// default; distinct name from the server constant to avoid drift confusion.
+const UPLOAD_ACTION_BODY_LIMIT_BYTES = 1024 * 1024;
 const btn: React.CSSProperties = {
   display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
   padding: '6px 12px', borderRadius: 6, fontSize: 12, fontWeight: 500, fontFamily: sans,
@@ -133,21 +142,24 @@ export function NoteFormatManager({
       toast.error('Paste a note first');
       return;
     }
+    // Mirror the server's 50k-char cap (parse-note-template.ts MAX_NOTE_CHARS)
+    // client-side: a multi-MB paste would otherwise die at the framework's
+    // 1 MB action-body limit with a generic error before the friendly
+    // server message could run (finding F-4, paste path).
+    if (text.length > 50_000) {
+      toast.error('Note is too long', {
+        description: 'Max 50,000 characters — paste a single representative note.',
+      });
+      return;
+    }
     runParse(text);
   }
-
-  // Next.js server actions reject bodies over 1 MB BEFORE our action runs
-  // (no serverActions.bodySizeLimit is configured), so the server-side 5 MB
-  // check is unreachable and an oversized file surfaced only as a generic
-  // "Something went wrong" (custom-template QA 2026-07-02, finding F-4).
-  // Check client-side against the real limit and say so honestly.
-  const MAX_UPLOAD_BYTES = 1024 * 1024;
 
   function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = ''; // allow re-selecting the same file
     if (!file) return;
-    if (file.size > MAX_UPLOAD_BYTES) {
+    if (file.size > UPLOAD_ACTION_BODY_LIMIT_BYTES) {
       toast.error('Could not read that file', {
         description:
           'That file is larger than 1 MB. Upload a single representative note, or paste the note text instead.',
