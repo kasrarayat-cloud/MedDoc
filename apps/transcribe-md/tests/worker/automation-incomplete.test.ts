@@ -260,6 +260,16 @@ describe('detectIncompleteAutomation — empty L7a output detection (Finding 2)'
     expect(r.failedLayers).toEqual([]);
   });
 
+  it('FRESH-run DB-blip (icdCodes null) does NOT trip the icd leg; cpt-null still flags (auditor TEST-coverage)', () => {
+    const r = detectIncompleteAutomation(okScores, {
+      icdCodes: null, // re-read blip on a fresh run
+      cptCodes: null,
+    });
+    expect(r.failedLayers).not.toContain('icd_coding');
+    expect(r.failedLayers).toContain('cpt_coding');
+    expect(r.needsReview).toBe(true);
+  });
+
   it('FRESH-run empty icdCodes does NOT trip pass 2 — 07a already wrote the specialty-aware flag (dedup follow-up 2026-07-02)', () => {
     const r = detectIncompleteAutomation(okScores, {
       icdCodes: { codes: [] },

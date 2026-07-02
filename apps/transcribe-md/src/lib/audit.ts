@@ -179,8 +179,10 @@ export type AuditAction =
   | 'EM_LEVEL_CHANGED'
   | 'EM_SIGN_BLOCKED_UNACKNOWLEDGED_CHANGE'
   // F-8 audit leg (2026-07-02) — deterministic drug-pair floor (L7c).
-  // Metadata: { ruleId, primaryDrug, otherDrug, severity, doseMgPerDay? }
-  // — drug names + rule class only, never note/transcript content.
+  // RX_DRUG_PAIR_* metadata: { ruleId, primaryDrug, otherDrug, severity,
+  // doseMgPerDay? }. RX_COMPLEX_DOSING_VERIFY_INDIVIDUALLY carries the
+  // single-drug validator shape { drug } (table-derived name). Drug names +
+  // rule class only, never note/transcript content.
   | 'RX_DRUG_PAIR_INTERACTION'
   | 'RX_DRUG_PAIR_DOSE_CAP'
   | 'RX_COMPLEX_DOSING_VERIFY_INDIVIDUALLY';
