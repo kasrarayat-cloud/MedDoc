@@ -83,6 +83,12 @@ describe('parseRxToMgPerDay — null / edge cases', () => {
     expect(parseRxToMgPerDay('10 mg', '2x/day')).toBe(20);
   });
 
+  it('"twice nightly" family parses to 2 doses/day, not 1 (auditor N-4)', () => {
+    expect(parseRxToMgPerDay('20 mg', 'Take 1 tablet twice nightly')).toBe(40);
+    expect(parseRxToMgPerDay('20 mg', '2x nightly')).toBe(40);
+    expect(parseRxToMgPerDay('20 mg', 'twice a night')).toBe(40);
+  });
+
   it('parses once-nightly phrasings → 1 dose/day (F-8: "simvastatin 40 mg nightly")', () => {
     expect(parseRxToMgPerDay('40 mg', 'Take 1 tablet by mouth nightly')).toBe(40);
     expect(parseRxToMgPerDay('40 mg', 'QHS')).toBe(40);
