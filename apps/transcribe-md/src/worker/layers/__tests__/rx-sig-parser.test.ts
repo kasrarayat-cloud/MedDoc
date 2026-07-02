@@ -82,4 +82,11 @@ describe('parseRxToMgPerDay — null / edge cases', () => {
     expect(parseRxToMgPerDay('10 mg', '1x/day')).toBe(10);
     expect(parseRxToMgPerDay('10 mg', '2x/day')).toBe(20);
   });
+
+  it('parses once-nightly phrasings → 1 dose/day (F-8: "simvastatin 40 mg nightly")', () => {
+    expect(parseRxToMgPerDay('40 mg', 'Take 1 tablet by mouth nightly')).toBe(40);
+    expect(parseRxToMgPerDay('40 mg', 'QHS')).toBe(40);
+    expect(parseRxToMgPerDay('40 mg', '1 tab at bedtime')).toBe(40);
+    expect(parseRxToMgPerDay('40 mg', 'every night')).toBe(40);
+  });
 });
