@@ -437,12 +437,20 @@ const ITALIC_LABEL_LINE_RE = /^\*([^*]+?):\*\s*(.*)$/;
 // supported; the inner bold wins and the outer `*`s stay literal.
 const INLINE_MARKDOWN_RE = /(\*\*[^*]+?\*\*|\*[^*]+?\*)/g;
 
-/** Walk markdown-ish SOAP text and emit Paragraphs. Supports `##`
- *  headings, `**Label:** content` / `*Label:* content`, `**bold**`
- *  + `*italic*` inline, and `-` bullets — everything else renders
- *  as a plain paragraph. */
-function renderSoapParagraphs(soap: string): Paragraph[] {
-  const out: Paragraph[] = [];
+// Structure-aware note line shapes. A table row is any line that starts
+// and ends with a pipe; separator rows (|---|:---|) are dropped at flush
+// time. Task lines are GitHub-style checklist items (- [x] / - [ ]).
+const TABLE_ROW_RE = /^\s*\|.*\|\s*$/;
+const TABLE_SEPARATOR_ROW_RE = /^\s*\|[\s:|-]+\|\s*$/;
+const TASK_LINE_RE = /^\s*[-*]\s+\[( |x|X)\]\s+(.*)$/;
+
+/** Walk markdown-ish SOAP text and emit Paragraphs (plus real Word
+ *  Tables for GitHub-style markdown tables). Supports `##` headings,
+ *  `**Label:** content` / `*Label:* content`, `**bold**` + `*italic*`
+ *  inline, `-` bullets, `- [x]` task lines, and `| a | b |` tables —
+ *  everything else renders as a plain paragraph. */
+function renderSoapParagraphs(soap: string): (Paragraph | Table)[] {
+  const out: (Paragraph | Table)[] = [];
   if (!soap.trim()) {
     out.push(
       new Paragraph({
@@ -458,8 +466,23 @@ function renderSoapParagraphs(soap: string): Paragraph[] {
     return out;
   }
   out.push(sectionHeading('Clinical Note'));
+  // Consecutive pipe rows collect here and flush as one Table on the
+  // first non-pipe line (and at end-of-note). Prose-only notes never
+  // populate the buffer, so their output is unchanged.
+  let tableBuffer: string[] = [];
+  const flushTable = () => {
+    if (tableBuffer.length === 0) return;
+    const table = renderMarkdownTable(tableBuffer);
+    tableBuffer = [];
+    if (table) out.push(table);
+  };
   for (const raw of soap.split('\n')) {
     const line = raw.trimEnd();
+    if (TABLE_ROW_RE.test(line)) {
+      tableBuffer.push(line);
+      continue;
+    }
+    flushTable();
     if (!line.trim()) {
       out.push(new Paragraph({ spacing: { after: 80 }, children: [] }));
       continue;
@@ -474,6 +497,25 @@ function renderSoapParagraphs(soap: string): Paragraph[] {
               bold: true,
               size: 24,
             }),
+          ],
+        })
+      );
+      continue;
+    }
+    // Task-list lines — checked BEFORE the bullet branch so they don't
+    // render as Word bullets with literal "[x]" text. U+2612/U+2610
+    // glyphs resolve via Word's automatic font fallback (Segoe UI
+    // Symbol / MS Gothic); the documented degradation is that a reader
+    // without those fonts sees the ASCII-equivalent substitution box.
+    const task = line.match(TASK_LINE_RE);
+    if (task) {
+      const checked = task[1].toLowerCase() === 'x';
+      out.push(
+        new Paragraph({
+          spacing: { after: 40 },
+          children: [
+            new TextRun({ text: checked ? '☒ ' : '☐ ' }),
+            ...renderInlineRuns(task[2]),
           ],
         })
       );
@@ -537,7 +579,89 @@ function renderSoapParagraphs(soap: string): Paragraph[] {
       })
     );
   }
+  flushTable();
   return out;
+}
+
+/** `| a | b |` → `['a', 'b']` — trims the outer pipes + per-cell whitespace. */
+function parseTableRow(line: string): string[] {
+  return line
+    .trim()
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map((c) => c.trim());
+}
+
+/** A run of markdown table rows → a real Word Table. First non-separator
+ *  row is the header (bold, Inter Tight); body cells keep inline
+ *  **bold** / *italic* via renderInlineRuns. Unlike the invisible-border
+ *  patient info bar, note tables carry VISIBLE hairline borders — the
+ *  grid is content here, not layout. */
+function renderMarkdownTable(lines: string[]): Table | null {
+  const rows = lines
+    .filter((l) => !TABLE_SEPARATOR_ROW_RE.test(l))
+    .map(parseTableRow);
+  if (rows.length === 0) return null;
+
+  const hairline = {
+    style: BorderStyle.SINGLE,
+    size: 4, // eighths of a point — 0.5pt hairline
+    color: 'DDDDDD',
+  } as const;
+  const hairlineBorders = {
+    top: hairline,
+    bottom: hairline,
+    left: hairline,
+    right: hairline,
+    insideHorizontal: hairline,
+    insideVertical: hairline,
+  };
+
+  const [header, ...body] = rows;
+  return new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    borders: hairlineBorders,
+    rows: [
+      new TableRow({
+        tableHeader: true,
+        children: header.map(
+          (cell) =>
+            new TableCell({
+              borders: hairlineBorders,
+              children: [
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      // Header cells are labels — strip inline markers
+                      // instead of nesting formatting inside the bold run.
+                      text: cell.replace(/\*\*([^*]+?)\*\*/g, '$1').replace(/\*([^*]+?)\*/g, '$1'),
+                      bold: true,
+                      size: 18, // 9pt label
+                      font: FONTS.label,
+                    }),
+                  ],
+                }),
+              ],
+            })
+        ),
+      }),
+      ...body.map(
+        (cells) =>
+          new TableRow({
+            children: cells.map(
+              (cell) =>
+                new TableCell({
+                  borders: hairlineBorders,
+                  children: [
+                    new Paragraph({ children: renderInlineRuns(cell) }),
+                  ],
+                })
+            ),
+          })
+      ),
+    ],
+  });
 }
 
 /** T-M22.1: emit a TextRun[] for a `**Label:** content` or

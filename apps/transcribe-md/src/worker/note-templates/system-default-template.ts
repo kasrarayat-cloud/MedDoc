@@ -40,6 +40,31 @@ export type SectionDefaultTextMode =
 
 /** One ordered section of a note template. Persisted as an element of the
  *  `note_templates.sections` JSONB array. */
+// ── Structured elements (feat/structured-templates, 2026-07-02) ────────────
+// Real client templates use TABLES and OPTION SETS (checkboxes, circle-one,
+// severity picks). These are first-class structure — NOT flattened prose —
+// so generation can do CONSTRAINED FILL (only the template's own options,
+// only dictated cell values) and render/export can reproduce the layout.
+// Optional everywhere: the system default and every pre-existing template
+// simply omit it (backward compatible; the seeded-row drift test unaffected).
+export type SectionStructure =
+  | {
+      kind: 'table';
+      /** Column headers, in order (verbatim from the doctor's template). */
+      columns: string[];
+      /** Fixed row labels (e.g. a vitals grid: BP/HR/RR/…). Omitted when the
+       *  rows vary per patient (e.g. a medication list). */
+      rowLabels?: string[];
+    }
+  | {
+      kind: 'options';
+      /** The enumerated choices, verbatim (including the doctor's own typos —
+       *  generation may ONLY pick from this list, never invent an option). */
+      options: string[];
+      /** true = "check all that apply"; false = single-select. */
+      multi: boolean;
+    };
+
 export interface NoteTemplateSection {
   /** Canonical section slug (subjective/objective/ros/pe/assessment/plan/…). */
   key: string;
@@ -55,6 +80,9 @@ export interface NoteTemplateSection {
   /** Pre-filled scaffold text. Null for the system default (no scaffolding). */
   defaultText: string | null;
   defaultTextMode: SectionDefaultTextMode;
+  /** First-class table/option-set structure. Absent/null = prose section
+   *  (every template before 2026-07-02, incl. the system default). */
+  structure?: SectionStructure | null;
 }
 
 /** Document-level style + the immutable safety guardrails. Persisted as the

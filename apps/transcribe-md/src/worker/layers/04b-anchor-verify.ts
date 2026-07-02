@@ -61,6 +61,20 @@ export const ANCHOR_GENERATION_ADDENDUM = [
   'the note body. NEVER omit a fact because its anchor is hard to find:',
   'an omitted fact is lost, a suggested one is one click away.',
   'Structural headers and "[not documented]" placeholders need no anchor.',
+  'In a TABLE section, the header and separator rows and any row whose value',
+  'cells are all "[not documented]" need no anchor; append the anchor(s) for',
+  'a filled row after its final "|". In a CHECKLIST section, unchecked',
+  '"- [ ]" lines need no anchor; a checked "- [x]" line is a clinical claim',
+  'and needs one. Anchor a checked option with the SHORTEST verbatim span',
+  'that affirms that option alone — never include neighboring denials or',
+  'unrelated clauses in its anchor (quote "regular rate and rhythm", not',
+  '"regular rate and rhythm, no murmur"). These span rules govern ONLY',
+  'what you quote inside ⟦A:""⟧ — they never shrink the note itself.',
+  'Every clinically relevant fact the transcript supports — including',
+  'functional and psychosocial context such as impact on work or usual',
+  'activities, the patient’s stated concerns, and self-care already',
+  'tried — must still appear in the note (or, when unanchorable, as a ⟦S⟧',
+  'suggestion).',
 ].join('\n');
 
 export type DemotionReason =
@@ -247,7 +261,36 @@ function isExemptLine(stripped: string): boolean {
   // not a clinical claim. The plain form REQUIRES its trailing colon so a real
   // sentence that merely precedes the marker is never swept in; the line must
   // still END in "[not documented]", which asserts no clinical fact.
-  if (/^(?:[-*\d.]\s*)*(?:(?:\*\*[^*]+\*\*:?|[A-Za-z][A-Za-z0-9 /&()'-]*:)\s*)?\[not documented\]\.?$/i.test(t)) return true;
+  if (/^(?:[-*\d.]\s*)*(?:(?:\*\*[^*]+\*\*:?|[A-Za-z][A-Za-z0-9 /&()'-]*:)\s*)?\[not (?:documented|addressed)\]\.?$/i.test(t)) return true;
+  // ── Structured-template scaffolding (feat/structured-templates, 2026-07-02;
+  //    pre-registered: docs/eval-runs/verifier-table-option-fix-20260702T165454Z.md).
+  //    Lines that assert NO clinical fact. A CHECKED option ("- [x]") and a
+  //    FILLED table cell are clinical claims — they get NO exemption here and
+  //    still anchor + verify (canaries pin this). ──
+  // Markdown table SEPARATOR row: | --- | :--- | ---: |
+  if (/^\s*\|(?:\s*:?-{3,}:?\s*\|)+\s*$/.test(t)) return true;
+  // Pipe row whose non-first cells are ALL scaffolding (unfilled fixed-row
+  // skeleton "| BP | [not documented] |", empty-cell rows "| Allergies |  |").
+  if (/^\s*\|.*\|\s*$/.test(t)) {
+    const cells = t
+      .replace(/^\s*\|/, '')
+      .replace(/\|\s*$/, '')
+      .split('|')
+      .map((c) => c.trim());
+    const valueCells = cells.slice(1);
+    if (
+      valueCells.length > 0 &&
+      valueCells.every((c) =>
+        /^(?:|—|–|-|n\/?a|\[not (?:documented|addressed)\]\.?)$/i.test(c)
+      )
+    ) {
+      return true;
+    }
+  }
+  // UNCHECKED option line — "- [ ] Clear to auscultation". Asserts nothing;
+  // the unchecked box is template scaffolding the doctor reads as "not
+  // selected", never as a finding.
+  if (/^(?:[-*]\s+)?\[ \]\s/.test(t)) return true;
   // Canonical ultrasound Comparison-negative — the imaging template mandates
   // the EXACT line "No prior study available for comparison." when no prior is
   // dictated. Standard radiology scaffolding, not a dictated finding, so it
@@ -294,6 +337,18 @@ function deterministicStage(
       .join('')
       .replace(/\s+$/g, '');
     if (isExemptLine(stripped)) {
+      exemptLines.set(index, stripped);
+      return;
+    }
+    // Table HEADER row (feat/structured-templates; pre-registered scope
+    // item 2 — lives OUTSIDE isExemptLine because it needs one-line
+    // lookahead): a pipe row immediately followed by a separator row is
+    // template scaffolding, not a claim. Data rows never precede a
+    // separator, so this can never sweep a filled row.
+    if (
+      /^\s*\|.*\|\s*$/.test(stripped) &&
+      /^\s*\|(?:\s*:?-{3,}:?\s*\|)+\s*$/.test((lines[index + 1] ?? '').trim())
+    ) {
       exemptLines.set(index, stripped);
       return;
     }

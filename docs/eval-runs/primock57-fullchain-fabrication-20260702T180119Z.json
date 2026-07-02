@@ -1,0 +1,714 @@
+[
+  {
+    "id": "day1_consultation01",
+    "status": "success",
+    "source": "audio",
+    "wer": 0.19434628975265017,
+    "audioDurationSec": 457.92,
+    "postL4Soap": "## Subjective\n**Chief Complaint:** Diarrhea for the last three days.\n\n**PMH:**\n\n**Medications:**\n- Inhaler for asthma\n\n**Allergies:** [not documented]\n\n**Family History:** [not documented]\n\n**Social History:**\n- Alcohol: Does not drink alcohol\n- Lives with wife and two children\n\n**ROS:**\n\n## Objective\nFormal exam not documented in this encounter.\n\n## Assessment\n_[All AI-drafted content for this section was set aside for your review — see the suggestions below and adopt before signing.]_\n\n## Plan\n1. Obtain Dioralyte from the pharmacy to help replenish minerals and vitamins.",
+    "finalSoap": "## Subjective\n**Chief Complaint:** Diarrhea for the last three days.\n\n**PMH:**\n\n**Medications:**\n- Inhaler for asthma\n\n**Allergies:** [not documented]\n\n**Family History:** [not documented]\n\n**Social History:**\n- Alcohol: Does not drink alcohol\n- Lives with wife and two children\n\n**ROS:**\n\n## Objective\nFormal exam not documented in this encounter.\n\n## Assessment\n_[All AI-drafted content for this section was set aside for your review — see the suggestions below and adopt before signing.]_\n\n## Plan\n1. Obtain Dioralyte from the pharmacy to help replenish minerals and vitamins.",
+    "asrTranscript": "[Patient #0, 0:02]: Hello?\n[Patient #0, 0:03]: Hello. How are you? Hi.\n[Doctor #1, 0:06]: [unclear in recording] we stop? Yep. Okay. Hello. Good\n[Doctor #1, 0:10]: morning. So how can I help you this morning?\n[Patient #0, 0:12]: Hi.\n[Patient #0, 0:13]: I've just had some\n[Patient #0, 0:15]: diarrhea for the last three days,\n[Patient #0, 0:18]: and it's been affecting me. I need to stay close to the toilet. And, yeah, it's been affecting my day to day activities. Yeah. I'm sorry to hear that.\n[Doctor #1, 0:28]: And and when you say diarrhea, what do you mean by diarrhea? Do you mean you're going to the toilet more often or are your stools more loose?\n[Patient #0, 0:34]: Yeah. So it's like loose and watery stool [unclear in recording] to the toilet quite often\n[Patient #0, 0:39]: and, like, some pain in my, like, lower stomach.\n[Doctor #1, 0:43]: Okay. And how many times a day are you going, let's say, [unclear in recording] the last couple of days? Probably, like, seven times a day. Six, seven times a day. You mentioned it's mainly watery. Have you noticed any other things like blood in your stools?\n[Doctor #1, 0:56]: No. No blood. Yeah. Just watery and loose stool. Okay. And you mentioned you've had some pain in your tummy as well? Yep. Whereabouts is the pain exactly? In\n[Patient #0, 1:05]: my lower abdomen.\n[Patient #0, 1:07]: So, like,\n[Patient #0, 1:09]: yeah, just to one side.\n[Doctor #1, 1:11]: One side. And what side is that?\n[Doctor #1, 1:13]: On the left side. Left side. Okay. And can you describe the pain to me?\n[Patient #0, 1:18]: Yeah. It feels like\n[Patient #0, 1:19]: a cramp,\n[Patient #0, 1:21]: like a muscular cramp and,\n[Patient #0, 1:24]: yeah, I feel a bit weak and shaky.\n[Doctor #1, 1:26]: Okay. And does the pain... Is it there all the time or does it come and go?\n[Patient #0, 1:31]: It comes and goes. Does\n[Doctor #1, 1:33]: the pain move anywhere else, [unclear in recording], towards your back?\n[Doctor #1, 1:36]: No. Just mainly my stomach. Okay. Fine. And you mentioned you've feeling quite weak and shaky as well. What do mean by shaky? Do you mean you've been having...\n[Doctor #1, 1:45]: Have you been feeling feverish, for example?\n[Patient #0, 1:47]: Yeah. It doesn't feel like... Yeah. I just fainted for a week. I haven't had a fever at the moment, but I did notice a temperature\n[Patient #0, 1:55]: when the symptoms started. So,\n[Patient #0, 1:58]: yeah, around about three or four days ago. You measure your temperature then?\n[Patient #0, 2:02]: Yeah. I I didn't measure my temperature. No. But I felt just a bit hot. Okay. Okay. Any other symptoms like sweating or\n[Doctor #1, 2:11]: night? No.\n[Doctor #1, 2:12]: No.\n[Doctor #1, 2:13]: And any vomiting at all? Yeah. So\n[Patient #0, 2:17]: I vomited at the start of the symptoms, but now\n[Patient #0, 2:20]: I've stopped vomiting.\n[Doctor #1, 2:22]: You stopped vomiting. Okay. And was your vomit... I know it's not nice to talk about, but was it just normal\n[Doctor #1, 2:27]: food color?\n[Doctor #1, 2:29]: Yeah. Yeah. Just normal vomit. Yeah. And there was no blood in your vomit. Is that right? No blood. No. No. Okay. Yeah.\n[Doctor #1, 2:36]: And\n[Doctor #1, 2:37]: any other symptoms at all? So you mentioned tummy pain. You mentioned diarrhea. You mentioned vomiting.\n[Doctor #1, 2:42]: Yep. Anything else that comes to mind?\n[Patient #0, 2:44]: I had a loss of appetite.\n[Patient #0, 2:47]: So I haven't been eating as much,\n[Patient #0, 2:50]: I've been able to hold down fluids.\n[Doctor #1, 2:53]: Okay. So you're drinking fluids. Yeah. What kind of foods have you managed to eat and anything?\n[Patient #0, 2:59]: Just soups\n[Patient #0, 3:00]: and,\n[Patient #0, 3:01]: yeah, light foods,\n[Patient #0, 3:03]: like smoothies and,\n[Patient #0, 3:05]: yeah, liquid foods mainly. Okay. Fine.\n[Doctor #1, 3:09]: And so\n[Doctor #1, 3:10]: you started three days ago with symptoms. Are you aware of any triggers which may have caused the symptoms to kick on? So for example, things like takeaway foods or eating out or being around other people who had similar symptoms?\n[Patient #0, 3:22]: Yeah. So I had takeaway about four days ago.\n[Patient #0, 3:27]: But other than that, I've, yeah, been\n[Patient #0, 3:30]: eating normally.\n[Patient #0, 3:31]: I think I think unusual.\n[Doctor #1, 3:33]: Yeah. Do you remember what you ate?\n[Patient #0, 3:36]: Yeah. I I ate at a Chinese restaurant with friends.\n[Doctor #1, 3:39]: Okay. Anyone else unwell with similar symptoms?\n[Patient #0, 3:43]: So no one else in the family. So I have a wife and two kids, and one\n[Patient #0, 3:48]: child was vomiting, but they haven't got diarrhea. It's no one with the same symptoms.\n[Doctor #1, 3:54]: Okay. Okay. Fine.\n[Doctor #1, 3:57]: Right.\n[Doctor #1, 3:57]: And in terms of your your overall health, are you normally fit and well? Or\n[Patient #0, 4:03]: Yeah. I mean, other than asthma,\n[Patient #0, 4:06]: I use an inhaler. Everything else is fine.\n[Doctor #1, 4:10]: Okay. And is your asthma well controlled?\n[Doctor #1, 4:14]: Yeah. That's fine. Just, yeah, use an inhaler, and that's under control. And you don't have any other tummy problem, bowel problem I should be aware of?\n[Doctor #1, 4:23]: No. No. Okay.\n[Doctor #1, 4:25]: And apart from the inhalers, do you take any other medications?\n[Patient #0, 4:29]: No. No other medications.\n[Doctor #1, 4:31]: Okay. Fine. In terms of just your your day to day life, you said it's been affecting your life.\n[Doctor #1, 4:36]: Yeah. In what way has it been affecting your life?\n[Patient #0, 4:39]: So I need to stay close to the toilet [unclear in recording] I go quite frequently during the... These past three days. Okay.\n[Patient #0, 4:46]: Yeah. Other than that, it's\n[Doctor #1, 4:48]: Yeah. The main concern. And have you... Are you currently working at the moment?\n[Patient #0, 4:53]: Yes. Yeah. I I work. [unclear in recording].\n[Doctor #1, 4:57]: I'm an accountant. Okay. Have you been going to work the last three days, you've been at home?\n[Patient #0, 5:01]: Yeah. I've been going to work. Okay.\n[Doctor #1, 5:04]: That must be difficult for you then. Yeah. It's been quite difficult. Right. And you [unclear in recording] you mentioned you live with a wife and two children. Is that right? Yes. Yep. Alright.\n[Doctor #1, 5:13]: Just a couple of other [unclear in recording] we need to ask. Do you smoke at all?\n[Doctor #1, 5:17]: No. I don't smoke. Do you drink much in the way of alcohol?\n[Patient #0, 5:20]: No. I I don't drink alcohol. No. Okay. Yeah. So\n[Doctor #1, 5:26]: [unclear in recording], at this stage, I like to examine\n[Doctor #1, 5:28]: you if that's okay. But Yeah. But but having listened to your stories, think you...\n[Doctor #1, 5:34]: Just to recap, for the last three days, you've been having loose stool, diarrhea, a bit of tummy pain [unclear in recording] on the left hand side, [unclear in recording]\n[Doctor #1, 5:40]: and [unclear in recording] weak and lethargic.\n[Doctor #1, 5:43]: Yeah. You mentioned you're having this Chinese takeaway as well three days ago, and I wonder whether that might be the cause of your problems. Okay. It seems like you may have something\n[Doctor #1, 5:51]: called gastroenteritis\n[Patient #0, 5:53]: Okay.\n[Doctor #1, 5:54]: Which is essentially just a tummy bug or infection of your of your tummy.\n[Doctor #1, 5:58]: Yep.\n[Doctor #1, 6:00]: Mainly caused by viruses, but there can be a possibility of bacteria\n[Doctor #1, 6:05]: causing your symptoms. Yeah.\n[Doctor #1, 6:09]: At this stage, what what we'd recommend is just what we say conservative management. So I don't think you need anything like antibiotics. It's really just making sure you're well hydrated,\n[Doctor #1, 6:19]: so drinking fluids.\n[Doctor #1, 6:23]: There are things like\n[Doctor #1, 6:25]: Dioralyte you can get from the pharmacy,\n[Doctor #1, 6:27]: which it's...\n[Doctor #1, 6:28]: It helps replenish some of your minerals and vitamins.\n[Doctor #1, 6:31]: Okay. And if you are having vomiting and diarrhea, I would say recommend that in the first, you know, first couple of days. Yeah. If you are feeling feverish and weak, taking some paracetamol.\n[Doctor #1, 6:42]: [unclear in recording] tablets up to four times a day for the first few days can also help. I'll certainly advise you to take some time off work. Actually, I know you're quite keen to work. I would say next two two to three days\n[Doctor #1, 6:53]: as [unclear in recording] clears from your system, just take some time off and rest.\n[Doctor #1, 6:58]: You know, if your symptoms haven't got better, you know, in in three to four days, I'd like you to come back and see you again. Okay. Sure. Because if it is ongoing, then we have to wonder whether there's something else causing symptoms.\n[Doctor #1, 7:09]: Yep. And we may need to do further tests like taking a sample of your stool so we can test that,\n[Patient #0, 7:16]: etcetera, etcetera. Yep. Sure. Yeah. How's that sound? That sounds great. Yeah. Yeah. Do you have any questions for me?\n[Doctor #1, 7:24]: No. No further questions. No. Okay. Is is the treatment plan clear?\n[Doctor #1, 7:29]: Yeah. Yeah. That's that's very clear. Thank you. Great. Well, I wish you all the best. Okay. Thank you. Thank you. Bye. Bye bye.",
+    "unclearMarkerCount": 14,
+    "polishRejected": false,
+    "critiqueSummary": {
+      "overall": "medium",
+      "safe": false,
+      "issues": 5,
+      "criticalIssues": 0
+    },
+    "judge": {
+      "flags": [],
+      "inputTokens": 7253,
+      "outputTokens": 8,
+      "raw": "{\"flags\": []}"
+    },
+    "judgePasses": [
+      {
+        "flags": [],
+        "inputTokens": 7253,
+        "outputTokens": 8,
+        "raw": "{\"flags\": []}"
+      },
+      {
+        "flags": [],
+        "inputTokens": 7253,
+        "outputTokens": 8,
+        "raw": "{\"flags\": []}"
+      },
+      {
+        "flags": [],
+        "inputTokens": 7253,
+        "outputTokens": 8,
+        "raw": "{\"flags\": []}"
+      }
+    ],
+    "resolved": {
+      "claims": [],
+      "majorityC": [],
+      "validPasses": 3
+    },
+    "suggestions": [
+      {
+        "text": "**HPI:** Per patient, symptoms began approximately three to four days ago with diarrhea described as loose and watery stool, occurring roughly six to seven times per day.    Per patient, there is no blood in the stool.  Per patient, he has associated pain in the lower abdomen on the left side, described as a cramp like a muscular cramp, which comes and goes and does not radiate.     Per patient, he feels weak and shaky.  Per patient, he noticed feeling hot with a temperature when symptoms started but has not had a fever currently and did not measure his temperature.   Per patient, he vomited at the start of the symptoms but has now stopped, with normal food-colored vomit and no blood.    Per patient, he has had a loss of appetite and has not been eating much, but has been able to hold down fluids, managing soups, smoothies and light liquid foods.     Per patient, he had a Chinese takeaway approximately four days ago; he has otherwise been eating normally.   Per patient, no one in the family has the same symptoms, though one child was vomiting without diarrhea.",
+        "reason": "not_entailed",
+        "section": "Subjective",
+        "anchor": "it's like loose and watery stool | Probably, like, seven times a day. Six, seven times a day. | around about three or four days ago | No blood. Yeah. Just watery and loose stool. | In my lower abdomen. | On the left side. | like a muscular cramp | It comes and goes. | I feel a bit weak and shaky. | I haven't had a fever at the moment, but I did notice a temperature when the symptoms started. | I I didn't measure my temperature. No. But I felt just a bit hot. | I vomited at the start of the symptoms, but now I've stopped vomiting. | Just normal vomit. | no blood in your vomit. Is that right? No blood. | I had a loss of appetite. | I've been able to hold down fluids. | Just soups | like smoothies and, yeah, liquid foods mainly. | I had takeaway about four days ago. | I I ate at a Chinese restaurant with friends. | one child was vomiting, but they haven't got diarrhea. It's no one with the same symptoms."
+      },
+      {
+        "text": "- Asthma, per patient well controlled with an inhaler",
+        "reason": "not_entailed",
+        "section": "Subjective",
+        "anchor": "other than asthma, I use an inhaler | use an inhaler, and that's under control"
+      },
+      {
+        "index": 16,
+        "text": "- Smoking: Non-smoker",
+        "reason": "negation_mismatch",
+        "section": "Subjective",
+        "anchor": "No. I don't smoke."
+      },
+      {
+        "index": 18,
+        "text": "- Occupation: Accountant; has continued going to work over the past three days despite difficulty",
+        "reason": "digits_unsupported",
+        "section": "Subjective",
+        "anchor": "I'm an accountant. | I've been going to work."
+      },
+      {
+        "text": "- Constitutional: Per patient, felt hot/feverish at symptom onset; no current fever; no sweating or night sweats; reports weakness and shakiness.",
+        "reason": "not_entailed",
+        "section": "Subjective",
+        "anchor": "I haven't had a fever at the moment, but I did notice a temperature when the symptoms started. | Any other symptoms like sweating or night? No. | I feel a bit weak and shaky."
+      },
+      {
+        "index": 23,
+        "text": "- Gastrointestinal: Per patient, loose watery diarrhea six to seven times per day without blood; left lower abdominal cramping pain; vomiting at onset now resolved without blood; loss of appetite; tolerating fluids.",
+        "reason": "digits_unsupported",
+        "section": "Subjective",
+        "anchor": "loose and watery stool | No blood. Yeah. Just watery and loose stool. | I vomited at the start of the symptoms, but now I've stopped vomiting. | I had a loss of appetite."
+      },
+      {
+        "index": 29,
+        "text": "Gastroenteritis, described by the clinician as a tummy bug or infection of the tummy, mainly caused by viruses but with a possibility of bacteria; the clinician wondered whether the Chinese takeaway approximately four days prior may be the cause.",
+        "reason": "anchor_not_in_transcript",
+        "section": "Assessment",
+        "anchor": "It seems like you may have something called gastroenteritis which is essentially just a tummy bug or infection of your of your tummy. | Mainly caused by viruses, but there can be a possibility of bacteria causing your symptoms. | I wonder whether that might be the cause of your problems"
+      },
+      {
+        "index": 32,
+        "text": "1. Conservative management; antibiotics not indicated at this stage. Ensure adequate hydration by drinking fluids.",
+        "reason": "negation_mismatch",
+        "section": "Plan",
+        "anchor": "what we'd recommend is just what we say conservative management. So I don't think you need anything like antibiotics. It's really just making sure you're well hydrated, so drinking fluids."
+      },
+      {
+        "index": 34,
+        "text": "3. If feeling feverish and weak, take paracetamol — \"[unclear in recording] tablets\" up to four times a day for the first few days [clarify with patient].",
+        "reason": "anchor_overlaps_unclear",
+        "section": "Plan",
+        "anchor": "If you are feeling feverish and weak, taking some paracetamol. [unclear in recording] tablets up to four times a day for the first few days can also help."
+      },
+      {
+        "index": 35,
+        "text": "4. Advised to take two to three days off work to rest.",
+        "reason": "anchor_overlaps_unclear",
+        "section": "Plan",
+        "anchor": "I would say next two two to three days as [unclear in recording] clears from your system, just take some time off and rest."
+      },
+      {
+        "index": 36,
+        "text": "5. Return to clinic in three to four days if symptoms have not improved; further tests including a stool sample may be needed if symptoms are ongoing.",
+        "reason": "negation_mismatch",
+        "section": "Plan",
+        "anchor": "if your symptoms haven't got better, you know, in in three to four days, I'd like you to come back and see you again. | we may need to do further tests like taking a sample of your stool so we can test that"
+      },
+      {
+        "index": 37,
+        "text": "6. Patient education provided; treatment plan confirmed clear and no further questions from patient.",
+        "reason": "process_assertion_unsupported",
+        "section": "Plan",
+        "anchor": "Is is the treatment plan clear? Yeah. Yeah. That's that's very clear."
+      }
+    ],
+    "omissions": [
+      {
+        "fact": "Abdominal pain does not radiate to the back",
+        "transcript_span": "Does the pain move anywhere else, towards your back? No. Just mainly my stomach.",
+        "laneCaptured": true
+      },
+      {
+        "fact": "Diarrhea has been affecting day-to-day activities",
+        "transcript_span": "it's been affecting me. I need to stay close to the toilet. And, yeah, it's been affecting my day to day activities.",
+        "laneCaptured": true
+      }
+    ],
+    "conservation": {
+      "total": 19,
+      "conserved": 9,
+      "violations": [
+        "- Alcohol: Non-drinker",
+        "- Gastrointestinal: Loose and watery stools ~6–7 times/day; intermittent left lower abdominal cramping pain; vomiting at onset (resolved); loss of appetite; no blood in stool.",
+        "Formal exam not documented in this encounter. (Clinician stated intent to examine the patient; no examination findings or vital signs were documented in the recording.)",
+        "Gastroenteritis — described by the clinician as a tummy bug or infection of the stomach, mainly caused by viruses with a possibility of bacterial cause. The clinician noted the Chinese takeaway meal approximately four days ago as a possible cause, given the temporal relationship with onset of loose stools, left lower abdominal cramping, vomiting at onset, and reduced appetite. Differential / safety-netting consideration: if symptoms are ongoing, the clinician noted another cause may need to be considered.",
+        "2. Maintain hydration by drinking fluids.",
+        "3. Dioralyte from the pharmacy to help replenish minerals and vitamins.",
+        "4. Paracetamol if feeling feverish and weak — \"[unclear in recording] tablets up to four times a day\" for the first few days [clarify with patient].",
+        "5. Advised two to three days off work to rest.",
+        "6. Return in three to four days if symptoms have not improved; further investigation including stool sample if symptoms ongoing.",
+        "7. Treatment plan confirmed clear with patient; no further questions raised."
+      ]
+    }
+  },
+  {
+    "id": "day1_consultation02",
+    "status": "success",
+    "source": "audio",
+    "wer": 0.18917311124330755,
+    "audioDurationSec": 559.2,
+    "postL4Soap": "## Subjective\n**Chief Complaint:** Sore, red, itchy skin for a few days.\n\n**PMH:**\n- Eczema (previously prescribed treatment)\n\n**Medications:**\n- Per patient, no regular medications currently\n\n**Allergies:**\n- No known allergies\n\n**Family History:** [not documented]\n\n**Social History:**\n- Alcohol: a few beers per week; more in the past\n- Occupation: project manager at a pharmaceutical company\n- Lives with a few flatmates\n\n**ROS:**\n- Constitutional: No fever or temperature.\n- Respiratory: No cough, no breathing difficulties.\n\n## Objective\n_[All AI-drafted content for this section was set aside for your review — see the suggestions below and adopt before signing.]_\n\n## Assessment\n_[All AI-drafted content for this section was set aside for your review — see the suggestions below and adopt before signing.]_\n\n## Plan\n1. Recommend antihistamines for itchiness — OTC loratadine or \"pyrritin\" [unclear in recording], or fexofenadine on prescription today.\n2. Keep a diary of potential triggers, including clothing, shower gels, and soaps.",
+    "finalSoap": "## Subjective\n**Chief Complaint:** Sore, red, itchy skin for a few days.\n\n**PMH:**\n- Eczema (previously prescribed treatment)\n\n**Medications:**\n- Per patient, no regular medications currently\n\n**Allergies:**\n- No known allergies\n\n**Family History:** [not documented]\n\n**Social History:**\n- Alcohol: a few beers per week; more in the past\n- Occupation: project manager at a pharmaceutical company\n- Lives with a few flatmates\n\n**ROS:**\n- Constitutional: No fever or temperature.\n- Respiratory: No cough, no breathing difficulties.\n\n## Objective\n_[All AI-drafted content for this section was set aside for your review — see the suggestions below and adopt before signing.]_\n\n## Assessment\n_[All AI-drafted content for this section was set aside for your review — see the suggestions below and adopt before signing.]_\n\n## Plan\n1. Recommend antihistamines for itchiness — OTC loratadine or \"pyrritin\" [unclear in recording], or fexofenadine on prescription today.\n2. Keep a diary of potential triggers, including clothing, shower gels, and soaps.",
+    "asrTranscript": "[Doctor #0, 0:01]: Hello?\n[Patient #1, 0:03]: Hello.\n[Patient #1, 0:04]: Can you hear me well?\n[Doctor #0, 0:06]: Yes.\n[Doctor #0, 0:07]: I think it's a bit better. So it's a bit it's a bit... It's not very clear, but let's let's continue anyway.\n[Doctor #0, 0:13]: Okay. Okay. So let's start again. So how can I help you, sir?\n[Patient #1, 0:16]: Yes. So it's been a few days now. I have, like, a sore and a red skin. It's kind of... It's really itchy, and it's, like, super annoying. So I'd like to find something quick to solve it. No. No problem. I'm happy to help.\n[Doctor #0, 0:30]: Where about on your skin is it affected?\n[Patient #1, 0:33]: Mostly, like, my chest, my my hands, my arms. Like, like, really, it's it's super annoying. Like, it's itching a lot, like, all the time, and I can't even sleep at night. Like, I really need something quickly to to solve it [unclear in recording] even at work, I... Like, when I'm in the meeting and I have to, like, think about my work and focus... Like, actually focus on my work Yeah. [unclear in recording] annoying because I can't actually think about what I have to say. I'm always, like, disturbed\n[Doctor #0, 0:59]: by this disease. No. No. Okay. I understand this is obviously affecting you, and we'll try our very best to get get it sorted out for you. Have you had anything like this before in the past?\n[Patient #1, 1:11]: So, yes, earlier, I was, like, prescribed for my eczema.\n[Patient #1, 1:15]: Okay. And\n[Patient #1, 1:17]: they gave me, like, some cream and something to... When I, like, was shower...\n[Patient #1, 1:22]: When I was in the shower, had to put something. Ok. But\n[Doctor #0, 1:26]: Did it help?\n[Patient #1, 1:29]: And, I mean, at that time, yes. But the symptoms... Like, these symptoms are... Like, when the symptoms appeared again, I tried those and it didn't work. I've tried a few things. Like, I bought, like, a steroid cream at the pharmacy last night, but it apparently didn't help because it's still itching a lot today. Okay.\n[Doctor #0, 1:46]: Yeah. Do you remember the name of the cream you bought?\n[Doctor #0, 1:50]: Steroid cream. Okay. Steroid. Okay. That's okay.\n[Doctor #0, 1:54]: Do... Would you say [unclear in recording] symptoms are very similar to your eczema symptoms or different?\n[Patient #1, 2:01]: It's much more, like, itchy, and my eczema was more, like, only in the arms, and now it's also on the chest and in the in the... On the hands as well. Okay. Yeah.\n[Patient #1, 2:11]: When... Like, like, for instance, hiking during the weekends, and I can't really do it anymore because it's, like, very...\n[Patient #1, 2:19]: Like like, I [unclear in recording] to do that last weekend, and it was super painful. And Yes. I I have to take, like, showers every day to be able to kind of ease this itching part, which is very, very annoying. No. Well [unclear in recording], okay. That's okay. So you mentioned the itchiness.\n[Doctor #0, 2:34]: You also mentioned it's been quite sore.\n[Patient #1, 2:37]: Yeah. Okay. Have you noticed any\n[Doctor #0, 2:39]: bleeding or discharge\n[Doctor #0, 2:41]: from your skin?\n[Patient #1, 2:43]: No.\n[Patient #1, 2:44]: So my skin is a bit cracked in some parts, like, kind of cracked, if you see what I mean. Okay. But...\n[Doctor #0, 2:51]: Yeah. You don't have any [unclear in recording] other\n[Doctor #0, 2:53]: pus or blood coming out of your skin?\n[Doctor #0, 2:57]: No. No. And you mentioned it all started three days ago.\n[Doctor #0, 3:01]: Four days ago. Four days ago. Are you aware of any triggers or anything that you may have done\n[Doctor #0, 3:05]: that may have caused your symptoms to start? So for example,\n[Doctor #0, 3:09]: have you changed your\n[Doctor #0, 3:12]: shower gel, any clothing?\n[Doctor #0, 3:14]: Have you been around anyone else? It's\n[Patient #1, 3:17]: actually... Like, it's [unclear in recording] annoying because I'm thinking about [unclear in recording] I should change something because I I haven't, and I don't understand. And I'm kind of\n[Patient #1, 3:25]: afraid of asking people around me because it's kind of... You know, I don't feel really comfortable asking about these questions. It's kind of intimate and so I your head now. No. No. Okay. That's okay.\n[Doctor #0, 3:38]: Fine. So just to summarize,\n[Doctor #0, 3:40]: for the last four days, you've had very itchy skin, very sore skin all over your body, mainly your chest. And did you also mention your arms and legs as well?\n[Patient #1, 3:50]: No. Just the chest, hands, and, like like, inside the elbows. Okay. And anything on your face at all?\n[Doctor #0, 3:58]: In my what? On your face?\n[Doctor #0, 4:00]: Oh, on my face? No. No. Okay. And apart from this, any other symptoms have you noticed? For example, have you noticed any temperature or fevers?\n[Doctor #0, 4:09]: No. Just the itching. [unclear in recording]. Nothing else. Okay. So your your bowels are working okay? Your\n[Doctor #0, 4:16]: chest is okay? No cough? No breathing difficulties?\n[Doctor #0, 4:20]: No.\n[Doctor #0, 4:21]: You're passing urine okay?\n[Patient #1, 4:24]: I think so. Okay. Alright.\n[Doctor #0, 4:29]: It's always good to know. So, I mean, do you have any ideas as to what could be causing your symptoms?\n[Doctor #0, 4:35]: Any what? Any ideas as to what could be causing your symptoms?\n[Patient #1, 4:40]: So I had eczema before, so maybe it's this, but it seems like more...\n[Patient #1, 4:45]: Like, my eczema was only on the arm, so I'm I'm not sure. I I really have no idea. Okay. No. That's okay. So\n[Doctor #0, 4:52]: normally at this stage, I like to examine you\n[Doctor #0, 4:55]: to see the rash itself and see exactly what type of rash it is. But from what you've told me, you mentioned it's... You've got some dry skin and some cracked skin as well,\n[Doctor #0, 5:05]: and it's been very itchy. And so with your\n[Doctor #0, 5:09]: your your background of eczema...\n[Doctor #0, 5:12]: Sorry. So there's a couple of questions I wanted to ask you, which I completely forgot. My apologies.\n[Doctor #0, 5:16]: Apart from the eczema, do you have any other medical problems I should be aware of?\n[Doctor #0, 5:21]: No. I just had asthma in the past, but Okay. Not anymore. Not anymore. Okay. And do you take any regular medications at the moment?\n[Doctor #0, 5:30]: No. No. Okay. Do you have any allergies to anything? I [unclear in recording].\n[Patient #1, 5:35]: Yeah.\n[Doctor #0, 5:37]: Sorry. Was [unclear in recording] have any allergies to anything?\n[Doctor #0, 5:46]: Hello?\n[Doctor #0, 5:47]: Hello? Yes. Oh, can you hear me? Sorry. I think you [unclear in recording].\n[Doctor #0, 5:51]: Do you have any allergies at all? Oh, allergies.\n[Doctor #0, 5:54]: No. No. Okay.\n[Doctor #0, 5:57]: And tell me about your\n[Doctor #0, 5:59]: your situation at home. Who do you live with?\n[Patient #1, 6:03]: So I live with a few flatmates.\n[Patient #1, 6:06]: I'm a... So, you know, I'm 31.\n[Patient #1, 6:09]: I, yeah, I have a full time job, and so I'm living with a few people to save money.\n[Doctor #0, 6:15]: Okay. And what do you do for work?\n[Patient #1, 6:19]: I work at a pharmaceutical company.\n[Patient #1, 6:21]: So it's been a it's been a few years now.\n[Patient #1, 6:25]: It's kind of interesting. We're working on a, like, a kind of project manager.\n[Patient #1, 6:29]: I mean,\n[Patient #1, 6:31]: do you want to to know more about it? Okay.\n[Doctor #0, 6:33]: No. No. No. That's absolutely that's absolutely fine.\n[Doctor #0, 6:37]: Just a couple of questions I want to ask you, which can sometimes affect your symptoms,\n[Doctor #0, 6:40]: is do you smoke at all?\n[Doctor #0, 6:43]: No. No. And do you drink much in the way of alcohol?\n[Patient #1, 6:47]: You know, once in a while, I can... I like hanging out with people once in a while. So I'd say a few a few beers per week, something like this. Nothing nothing crazy. I used to drink a lot more when I was younger, but it's been it's been okay. Okay.\n[Doctor #0, 7:00]: [unclear in recording] gonna say at this stage, I've gotta say that the the sound quality is not\n[Doctor #0, 7:04]: great, but I will continue because we've come this far.\n[Doctor #0, 7:07]: So\n[Doctor #0, 7:08]: based on everything you mentioned, sir, I I I do wonder whether this is a flare up of your eczema.\n[Doctor #0, 7:14]: The reason being that you said it's quite itchy.\n[Doctor #0, 7:17]: It's mainly affecting your chest and your back.\n[Doctor #0, 7:20]: And\n[Doctor #0, 7:22]: having looked at your skin,\n[Doctor #0, 7:23]: the rash does appear\n[Doctor #0, 7:25]: quite familiar.\n[Doctor #0, 7:27]: You mentioned you're using steroid creams yesterday\n[Doctor #0, 7:31]: from the pharmacy.\n[Doctor #0, 7:32]: I wonder whether giving you stronger\n[Doctor #0, 7:34]: prescription of a of a steroid may be beneficial,\n[Doctor #0, 7:39]: which I'm happy to prescribe to you today. As well as I'm gonna give you something... Some emollients, which helps to moisturize the skin,\n[Doctor #0, 7:46]: which you [unclear in recording] use in the bath and shower. And it's definitely worth\n[Doctor #0, 7:50]: using that for the first seven to ten days\n[Doctor #0, 7:53]: before we make a decision on whether it's working or not.\n[Doctor #0, 7:57]: It's also worth\n[Doctor #0, 7:59]: using\n[Doctor #0, 8:00]: antihistamines,\n[Doctor #0, 8:01]: which you can sometimes buy over the counter,\n[Doctor #0, 8:03]: things like loratadine\n[Doctor #0, 8:04]: or pyrritin, which can help with the itchiness of your Okay. Skin.\n[Doctor #0, 8:09]: And\n[Doctor #0, 8:11]: it's also worth keeping a diary of any triggers which are affecting your symptoms, anything you wear or anything you use in terms of shower gels or soap. Because if that's causing you symptoms, then we need to have a discussion about it next time I see you.\n[Patient #1, 8:24]: Okay. Just... I I have tried antihistamines\n[Patient #1, 8:27]: lately, but it didn't really help.\n[Doctor #0, 8:30]: Oh, could you say that again? Sorry.\n[Patient #1, 8:32]: I have tried the antihistamines\n[Doctor #0, 8:34]: Okay. But it didn't really help. It didn't. Okay. So it's something for you to think about. You can get different type of antihistamines. I can give you something [unclear in recording] stronger today as well.\n[Doctor #0, 8:43]: Yep. Something like fexofenadine,\n[Doctor #0, 8:45]: which I can give to you today. It's definitely worth trying it. It's not gonna do you any harm.\n[Doctor #0, 8:50]: But I [unclear in recording] the steroids and the emollients\n[Doctor #0, 8:53]: on a regular basis\n[Doctor #0, 8:55]: over the next week to ten days should hopefully control\n[Doctor #0, 8:59]: your symptoms.\n[Doctor #0, 9:00]: But do come back and see me next week if things don't get better.\n[Patient #1, 9:03]: That sounds good. Okay.\n[Doctor #0, 9:05]: Do you have any questions for me?\n[Doctor #0, 9:08]: No. That's it. Okay. Well, I wish you all the best.\n[Patient #1, 9:11]: Thank you very much. Thank you. Have a good day. Bye. Thank you, Victor. Bye.",
+    "unclearMarkerCount": 16,
+    "polishRejected": false,
+    "critiqueSummary": {
+      "overall": "low",
+      "safe": false,
+      "issues": 7,
+      "criticalIssues": 2
+    },
+    "judge": {
+      "flags": [
+        {
+          "invented_text": "pyrritin [unclear in recording]",
+          "class": "a",
+          "severity": "low",
+          "transcript_span": "loratadine or pyrritin",
+          "present_in": "both",
+          "rationale": "The SOAP faithfully reproduces the ASR text 'pyrritin' (with an explicit [unclear in recording] hedge); the reference transcript shows the correct drug name is 'Piriton,' indicating an ASR recognition error, not a model fabrication."
+        }
+      ],
+      "inputTokens": 8441,
+      "outputTokens": 580,
+      "raw": "Looking at both SOAP notes, I need to check each clinical claim against the ASR transcript.\n\n**Checking each claim:**\n\n1. **\"project manager at a pharmaceutical company\"** — ASR says \"I work at a pharmaceutical company\" and \"I'm a, like, a kind of project manager.\" Both elements are present in ASR. Supported.\n\n2. **\"a few beers per week; more in the past\"** — Supported by ASR.\n\n3. **\"No fever or temperature\"** — Supported by ASR (\"No. Just the itching\").\n\n4. **\"No cough, no breathing difficulties\"** — Supported by ASR.\n\n5. **\"No known allergies\"** — Supported by ASR.\n\n6. **\"Eczema (previously prescribed treatment)\"** — Supported by ASR.\n\n7. **\"OTC loratadine or 'pyrritin' [unclear in recording]\"** — ASR says \"loratadine or pyrritin\" — the note faithfully reproduces this with the [unclear in recording] hedge. The reference shows \"Piriton\" — this is an ASR recognition error propagated faithfully.\n\n8. **\"fexofenadine on prescription today\"** — Supported by ASR.\n\n9. **Plan missing: stronger steroid cream prescription** — The doctor explicitly states in ASR \"I wonder whether giving you stronger prescription of a of a steroid may be beneficial, which I'm happy to prescribe to you today.\" This is absent from the Plan in both SOAPs. However, the task is to flag claims IN the SOAP not supported by the transcript, not omissions.\n\n10. **Plan missing: emollients** — Same as above, an omission not a fabrication.\n\n11. **\"pyrritin\" with [unclear in recording] hedge** — The ASR says \"pyrritin\" where reference shows \"Piriton.\" The note faithfully reproduces the ASR text and explicitly hedges it. This is class (a).\n\n{ \"flags\": [ { \"invented_text\": \"pyrritin [unclear in recording]\", \"class\": \"a\", \"severity\": \"low\", \"transcript_span\": \"loratadine or pyrritin\", \"present_in\": \"both\", \"rationale\": \"The SOAP faithfully reproduces the ASR text 'pyrritin' (with an explicit [unclear in recording] hedge); the reference transcript shows the correct drug name is 'Piriton,' indicating an ASR recognition error, not a model fabrication.\" } ] }"
+    },
+    "judgePasses": [
+      {
+        "flags": [
+          {
+            "invented_text": "pyrritin [unclear in recording]",
+            "class": "a",
+            "severity": "low",
+            "transcript_span": "loratadine or pyrritin",
+            "present_in": "both",
+            "rationale": "The SOAP faithfully reproduces the ASR text 'pyrritin' (with an explicit [unclear in recording] hedge); the reference transcript shows the correct drug name is 'Piriton,' indicating an ASR recognition error, not a model fabrication."
+          }
+        ],
+        "inputTokens": 8441,
+        "outputTokens": 580,
+        "raw": "Looking at both SOAP notes, I need to check each clinical claim against the ASR transcript.\n\n**Checking each claim:**\n\n1. **\"project manager at a pharmaceutical company\"** — ASR says \"I work at a pharmaceutical company\" and \"I'm a, like, a kind of project manager.\" Both elements are present in ASR. Supported.\n\n2. **\"a few beers per week; more in the past\"** — Supported by ASR.\n\n3. **\"No fever or temperature\"** — Supported by ASR (\"No. Just the itching\").\n\n4. **\"No cough, no breathing difficulties\"** — Supported by ASR.\n\n5. **\"No known allergies\"** — Supported by ASR.\n\n6. **\"Eczema (previously prescribed treatment)\"** — Supported by ASR.\n\n7. **\"OTC loratadine or 'pyrritin' [unclear in recording]\"** — ASR says \"loratadine or pyrritin\" — the note faithfully reproduces this with the [unclear in recording] hedge. The reference shows \"Piriton\" — this is an ASR recognition error propagated faithfully.\n\n8. **\"fexofenadine on prescription today\"** — Supported by ASR.\n\n9. **Plan missing: stronger steroid cream prescription** — The doctor explicitly states in ASR \"I wonder whether giving you stronger prescription of a of a steroid may be beneficial, which I'm happy to prescribe to you today.\" This is absent from the Plan in both SOAPs. However, the task is to flag claims IN the SOAP not supported by the transcript, not omissions.\n\n10. **Plan missing: emollients** — Same as above, an omission not a fabrication.\n\n11. **\"pyrritin\" with [unclear in recording] hedge** — The ASR says \"pyrritin\" where reference shows \"Piriton.\" The note faithfully reproduces the ASR text and explicitly hedges it. This is class (a).\n\n{ \"flags\": [ { \"invented_text\": \"pyrritin [unclear in recording]\", \"class\": \"a\", \"severity\": \"low\", \"transcript_span\": \"loratadine or pyrritin\", \"present_in\": \"both\", \"rationale\": \"The SOAP faithfully reproduces the ASR text 'pyrritin' (with an explicit [unclear in recording] hedge); the reference transcript shows the correct drug name is 'Piriton,' indicating an ASR recognition error, not a model fabrication.\" } ] }"
+      },
+      {
+        "flags": [],
+        "inputTokens": 8441,
+        "outputTokens": 422,
+        "raw": "Looking at both SOAP notes (which are identical), I need to check each clinical claim against the ASR transcript.\n\nLet me go through the key claims:\n\n1. **\"pyrritin\"** - ASR says \"pyrritin\" (reference shows \"Piriton\") - this is in the ASR transcript, so it's supported (and flagged as unclear). Not a flag.\n\n2. **Plan items** - The SOAP plan mentions antihistamines, loratadine, fexofenadine, trigger diary - all supported by ASR.\n\n3. **PMH: Eczema** - supported by ASR.\n\n4. **No regular medications** - supported by ASR.\n\n5. **No known allergies** - supported by ASR.\n\n6. **Social history** - all supported by ASR.\n\n7. **ROS: No fever** - supported by ASR (\"No. Just the itching\").\n\n8. **ROS: No cough, no breathing difficulties** - supported by ASR.\n\n9. **Occupation: project manager** - supported by ASR (\"kind of project manager\").\n\n10. **Missing from plan**: The doctor prescribed a stronger steroid cream and emollients - these are clearly stated in the ASR but absent from the SOAP plan. However, the task is to flag claims IN the SOAP that are NOT supported, not missing claims.\n\n11. **\"No fever or temperature\"** - supported by ASR.\n\n12. **\"more in the past\"** re alcohol - supported by ASR (\"I used to drink a lot more when I was younger\").\n\nThe SOAP notes appear to be largely supported by the ASR transcript. The plan is incomplete (missing steroids and emollients) but that's an omission, not a fabrication. Both SOAPs are identical and contain no unsupported clinical claims.\n\n{ \"flags\": [] }"
+      },
+      {
+        "flags": [],
+        "inputTokens": 8441,
+        "outputTokens": 537,
+        "raw": "I need to carefully check each claim in both SOAPs against the ASR transcript.\n\nLet me go through the key claims:\n\n1. **\"pyrritin\"** - ASR says \"pyrritin\" (doctor said \"loratadine or pyrritin\"). Reference says \"Piriton.\" The SOAP writes \"pyrritin\" with [unclear in recording] hedge - this is supported by ASR and hedged appropriately.\n\n2. **Plan items** - The SOAP omits the prescription steroid cream and emollients from the plan, but I'm checking for things that ARE in the SOAP but not supported, not omissions.\n\n3. **\"No fever or temperature\"** - ASR: \"No. Just the itching. [unclear in recording]. Nothing else.\" and doctor asked \"have you noticed any temperature or fevers?\" Patient said no. This is supported.\n\n4. **\"No cough, no breathing difficulties\"** - ASR supports this.\n\n5. **\"more in the past\"** re alcohol - ASR: \"I used to drink a lot more when I was younger\" - supported.\n\n6. **\"project manager at a pharmaceutical company\"** - ASR supports this.\n\n7. **\"Lives with a few flatmates\"** - ASR supports this.\n\n8. **\"No known allergies\"** - ASR supports this.\n\n9. **\"previously prescribed treatment\"** for eczema - ASR supports (cream and shower product mentioned).\n\n10. **Asthma** - Patient mentioned \"I just had asthma in the past, but not anymore.\" This is NOT documented in the PMH section of either SOAP. That's an omission, not a fabrication - not flagged.\n\n11. The plan omits steroids and emollients - again, omissions not fabrications.\n\n12. **\"OTC loratadine\"** - ASR says \"which you can sometimes buy over the counter, things like loratadine or pyrritin\" - supported.\n\n13. **\"fexofenadine on prescription today\"** - ASR supports this.\n\nBoth SOAPs appear nearly identical. Let me check if there's anything fabricated...\n\nThe SOAPs look clean - all claims are supported by the ASR transcript. The [unclear in recording] hedge on \"pyrritin\" is appropriate. No clinical facts are invented.\n\n{ \"flags\": [] }"
+      }
+    ],
+    "resolved": {
+      "claims": [
+        {
+          "text": "pyrritin [unclear in recording]",
+          "majorityClass": "a",
+          "severity": "low",
+          "finalPresent": true,
+          "passesFlagged": [
+            0
+          ],
+          "cFinalPasses": []
+        }
+      ],
+      "majorityC": [],
+      "validPasses": 3
+    },
+    "suggestions": [
+      {
+        "index": 3,
+        "text": "**HPI:** Per patient, a 31-year-old presents with a four-day history of sore, red, itchy skin.    The affected areas are mainly the chest, hands, arms, and inside the elbows.   Per patient, the itching is constant and severe, preventing sleep at night and interfering with concentration at work during meetings.   Per patient, the skin is cracked in some parts, but there is no bleeding, pus, or discharge.   Per patient, the symptoms are more itchy than a prior episode of eczema, which was previously confined to the arms, whereas the current involvement also includes the chest and hands.  Per patient, no trigger has been identified, and no change in shower gel or clothing has been made.   Per patient, symptoms interfered with a planned weekend hike, which was painful.  Per patient, self-care measures tried include a previously prescribed eczema cream (without relief this time), an OTC steroid cream bought the night before (unhelpful), daily showers to ease itching, and antihistamines (without significant relief).",
+        "reason": "gloss_unsupported",
+        "section": "Subjective",
+        "anchor": "it's been a few days now. I have, like, a sore and a red skin | Four days ago. | So, you know, I'm 31. | Mostly, like, my chest, my my hands, my arms | Just the chest, hands, and, like like, inside the elbows. | it's itching a lot, like, all the time, and I can't even sleep at night | when I'm in the meeting and I have to, like, think about my work and focus... Like, actually focus on my work | my skin is a bit cracked in some parts, like, kind of cracked, if you see what I mean. | any [unclear in recording] other pus or blood coming out of your skin? No. | It's much more, like, itchy, and my eczema was more, like, only in the arms, and now it's also on the chest and in the in the... On the hands as well. | I should change something because I I haven't, and I don't understand. | have you changed your shower gel, any clothing? | hiking during the weekends, and I can't really do it anymore because it's, like, very... Like like, I [unclear in recording] to do that last weekend, and it was super painful. | when the symptoms appeared again, I tried those and it didn't work. | I bought, like, a steroid cream at the pharmacy last night, but it apparently didn't help because it's still itching a lot today. | I have to take, like, showers every day to be able to kind of ease this itching part | I have tried antihistamines lately, but it didn't really help."
+      },
+      {
+        "index": 7,
+        "text": "- Asthma in the past, no longer active",
+        "reason": "negation_mismatch",
+        "section": "Subjective",
+        "anchor": "I just had asthma in the past, but Okay. Not anymore."
+      },
+      {
+        "index": 10,
+        "text": "- OTC steroid cream, topical — name not recalled",
+        "reason": "form_route_unsupported",
+        "section": "Subjective",
+        "anchor": "I bought, like, a steroid cream at the pharmacy last night | Do you remember the name of the cream you bought? Steroid cream."
+      },
+      {
+        "index": 11,
+        "text": "- OTC antihistamines — name not stated",
+        "reason": "negation_mismatch",
+        "section": "Subjective",
+        "anchor": "I have tried antihistamines lately, but it didn't really help."
+      },
+      {
+        "index": 20,
+        "text": "- Non-smoker",
+        "reason": "negation_mismatch",
+        "section": "Subjective",
+        "anchor": "do you smoke at all? No. No."
+      },
+      {
+        "text": "- Gastrointestinal: Per patient, bowels working normally.",
+        "reason": "not_entailed",
+        "section": "Subjective",
+        "anchor": "your bowels are working okay?"
+      },
+      {
+        "text": "- Genitourinary: Per patient, passing urine normally.",
+        "reason": "not_entailed",
+        "section": "Subjective",
+        "anchor": "You're passing urine okay? I think so."
+      },
+      {
+        "index": 30,
+        "text": "- Skin: Itchy, sore, red, cracked skin on chest, hands, arms, and inside elbows; no bleeding or discharge; no facial involvement.",
+        "reason": "anchor_not_in_transcript",
+        "section": "Subjective",
+        "anchor": "my skin is a bit cracked in some parts | anything on your face at all? | No. No."
+      },
+      {
+        "index": 33,
+        "text": "Formal exam not documented in this encounter. The clinician noted the rash appeared familiar but stated examination was not performed given the remote/audio nature of the consultation.",
+        "reason": "negation_mismatch",
+        "section": "Objective",
+        "anchor": "having looked at your skin, the rash does appear quite familiar. | normally at this stage, I like to examine you to see the rash itself"
+      },
+      {
+        "text": "Likely flare-up of the patient's known eczema. The clinician's reasoning was based on the itchiness, the distribution over the chest, the dry and cracked skin, and the patient's background of eczema.",
+        "reason": "not_entailed",
+        "section": "Assessment",
+        "anchor": "I do wonder whether this is a flare up of your eczema. The reason being that you said it's quite itchy. It's mainly affecting your chest and your back. | you've got some dry skin and some cracked skin as well, and it's been very itchy. And so with your your your background of eczema"
+      },
+      {
+        "index": 39,
+        "text": "1. Prescribe a stronger topical steroid cream.",
+        "reason": "form_route_unsupported",
+        "section": "Plan",
+        "anchor": "I wonder whether giving you stronger prescription of a of a steroid may be beneficial, which I'm happy to prescribe to you today."
+      },
+      {
+        "index": 40,
+        "text": "2. Prescribe emollients to moisturize the skin, for use in the bath and shower.",
+        "reason": "anchor_overlaps_unclear",
+        "section": "Plan",
+        "anchor": "Some emollients, which helps to moisturize the skin, which you [unclear in recording] use in the bath and shower."
+      },
+      {
+        "index": 41,
+        "text": "3. Use steroids and emollients regularly for the first seven to ten days before reassessing effectiveness.",
+        "reason": "negation_mismatch",
+        "section": "Plan",
+        "anchor": "It's definitely worth using that for the first seven to ten days before we make a decision on whether it's working or not."
+      },
+      {
+        "index": 44,
+        "text": "6. Follow up in one week if symptoms do not improve.",
+        "reason": "negation_mismatch",
+        "section": "Plan",
+        "anchor": "do come back and see me next week if things don't get better."
+      }
+    ],
+    "omissions": [
+      {
+        "fact": "The clinician commented multiple times on poor audio/sound quality during the encounter, noted in the objective section.",
+        "transcript_span": "I think it's a bit better. So it's a bit it's a bit... It's not very clear, but let's let's continue anyway. / I've gotta say that the the sound quality is not great, but I will continue because we've come this far.",
+        "laneCaptured": false
+      }
+    ],
+    "conservation": {
+      "total": 24,
+      "conserved": 19,
+      "violations": [
+        "- Smoking: Non-smoker",
+        "- Living situation: Per patient, lives with several flatmates",
+        "A formal physical examination was not clearly conducted; the clinician noted that \"having looked at your skin, the rash does appear quite familiar,\" consistent with eczema. No detailed exam findings were documented. Of note, the clinician commented multiple times on poor audio/sound quality during this encounter.",
+        "4. Prescribe fexofenadine (stronger antihistamine) to help with itchiness; patient advised prior OTC antihistamines did not help.",
+        "5. Patient to keep a diary of potential triggers (clothing, shower gels, soaps) for discussion at next visit."
+      ]
+    }
+  },
+  {
+    "id": "day1_consultation03",
+    "status": "success",
+    "source": "audio",
+    "wer": 0.17090216010165185,
+    "audioDurationSec": 544.32,
+    "postL4Soap": "## Subjective\n\n**PMH:**\n- No significant past medical history; no prior migraine diagnosis.\n\n**Medications:**\n\n**Allergies:** [not documented]\n\n**Family History:**\n- Mother: migraines (not diagnosed).\n- Mother: underactive thyroid.\n- No family history of brain cancer.\n\n**Social History:**\n- Occupation: works in the fashion industry; reports work is currently very stressful with interpersonal pressure.\n- Lives on her own.\n- Per patient, does not exercise and does nothing in particular to alleviate stress.\n\n**ROS:**\n- Neurological: No speech problems. No weakness in arms or legs. No difficulty with balance or coordination. No head injury or recent fall.\n- Constitutional: No fever.\n- Dermatological: No skin rashes.\n\n## Objective\nFormal exam not documented in this encounter.\n\n## Assessment\n_[All AI-drafted content for this section was set aside for your review — see the suggestions below and adopt before signing.]_\n\n## Plan\n1. Keep a headache diary to help identify triggers.\n2. Follow-up appointment next week.\n3. Safety-net advice: return immediately if symptoms are not improving over the next two to three days or are worsening, if headache worsens or is not responding to medications, if neck pain worsens, or if there is new weakness in the arms/legs or visual changes.",
+    "finalSoap": "## Subjective\n\n**PMH:**\n- No significant past medical history; no prior migraine diagnosis.\n\n**Medications:**\n\n**Allergies:** [not documented]\n\n**Family History:**\n- Mother: migraines (not diagnosed).\n- Mother: underactive thyroid.\n- No family history of brain cancer.\n\n**Social History:**\n- Occupation: works in the fashion industry; reports work is currently very stressful with interpersonal pressure.\n- Lives on her own.\n- Per patient, does not exercise and does nothing in particular to alleviate stress.\n\n**ROS:**\n- Neurological: No speech problems. No weakness in arms or legs. No difficulty with balance or coordination. No head injury or recent fall.\n- Constitutional: No fever.\n- Dermatological: No skin rashes.\n\n## Objective\nFormal exam not documented in this encounter.\n\n## Assessment\n_[All AI-drafted content for this section was set aside for your review — see the suggestions below and adopt before signing.]_\n\n## Plan\n1. Keep a headache diary to help identify triggers.\n2. Follow-up appointment next week.\n3. Safety-net advice: return immediately if symptoms are not improving over the next two to three days or are worsening, if headache worsens or is not responding to medications, if neck pain worsens, or if there is new weakness in the arms/legs or visual changes.",
+    "asrTranscript": "[Doctor #0, 0:01]: Hello?\n[Patient #1, 0:02]: Hello.\n[Doctor #0, 0:03]: Hello there. It's Doctor. C there. How can I help you this afternoon?\n[Patient #1, 0:07]: Oh, I've just got [unclear in recording] since midday.\n[Patient #1, 0:11]: On the left side, it's just making me feel so ill. I feel like I need to vomit.\n[Doctor #0, 0:16]: I'm sorry to hear this.\n[Doctor #0, 0:18]: Can you tell me bit more about the headache?\n[Patient #1, 0:21]: Well, you know, I noticed some zigzag lines in my vision a few minutes before the headache started.\n[Patient #1, 0:26]: Mhmm. My vision blurred.\n[Patient #1, 0:30]: You know, it's just...\n[Patient #1, 0:33]: I... Yeah.\n[Patient #1, 0:35]: Pain's just horrible. It's just making me feel so unwell.\n[Doctor #0, 0:39]: Mhmm. Okay.\n[Patient #1, 0:41]: [unclear in recording],\n[Doctor #0, 0:42]: and I just want you to do something. Well, let's try our best. Let's try and get you let's try and get you well soon. You mentioned this on your left hand side. Is that right? And it started at midday a few hours ago? Yeah. Okay.\n[Doctor #0, 0:54]: Did the pain come on quite suddenly, or was it more of a gradual buildup? No. Really. It just happened.\n[Doctor #0, 1:00]: Okay. And are you able to describe what kind of headache it was? For example, was this throbbing or was it more of a sharp pain?\n[Patient #1, 1:06]: Yeah. I guess it's... Yeah. I guess it's throbbing\n[Patient #1, 1:10]: on\n[Patient #1, 1:11]: that left side.\n[Doctor #0, 1:12]: And is it moving anywhere else at all?\n[Patient #1, 1:15]: No. But it's worse when I move.\n[Doctor #0, 1:18]: Okay. Does that mean you move your neck?\n[Patient #1, 1:21]: Well, like, if I lean forward or, like, move my head or neck, yeah, headache gets worse.\n[Doctor #0, 1:28]: Okay.\n[Patient #1, 1:30]: I'm just really worried. Like, I've just been googling and, like, I've read, you know, if you're...\n[Patient #1, 1:35]: You get...\n[Patient #1, 1:36]: Gets worse when you move, it could be a sign of brain cancer.\n[Doctor #0, 1:40]: Okay. Is that what you're worried about?\n[Patient #1, 1:42]: Is\n[Doctor #0, 1:44]: that is that what your main worry is today? Oh, yeah. Yeah. And I'd like... You know,\n[Patient #1, 1:50]: my\n[Patient #1, 1:51]: my friend's mom, she she recently died of a brain tumor, so it's really concerning me, actually. Oh, dear. I'm sorry to hear that. I can I can understand why it's affecting you?\n[Doctor #0, 2:02]: But why why don't we why don't we take a good history first? And let me examine you, and then we can have a little chat afterwards and see what's going on here. So you mentioned a few things. You mentioned the headaches. You also mentioned some zigzag lines before the headaches came on,\n[Doctor #0, 2:14]: and your vision has been blurry as well. Is that right? Is that on the... Is that on both eyes or just the left left eye?\n[Doctor #0, 2:20]: It feels like it's on both. Both eyes. Okay. Have you had any difficulty with seeing bright lights at all?\n[Patient #1, 2:27]: Yeah. Well, I'm wearing I'm wearing sunglasses\n[Patient #1, 2:30]: right now. It's just, you know, light's really hurting my eyes. Oh, I see. Okay.\n[Doctor #0, 2:36]: And you mentioned that you felt quite nauseous. Have you vomited at all?\n[Patient #1, 2:40]: Yeah.\n[Patient #1, 2:42]: I vomited twice.\n[Doctor #0, 2:43]: Twice. Okay.\n[Doctor #0, 2:45]: And this [unclear in recording] today. Okay.\n[Doctor #0, 2:48]: Any temperatures or fevers?\n[Patient #1, 2:50]: No. I don't feel feverish.\n[Doctor #0, 2:53]: Okay.\n[Doctor #0, 2:54]: Any other funny skin rashes that you may have noticed?\n[Patient #1, 2:57]: No. I haven't noticed anything like that.\n[Doctor #0, 3:00]: Okay.\n[Doctor #0, 3:02]: That's fine.\n[Doctor #0, 3:04]: And do you normally get headaches?\n[Patient #1, 3:08]: Not really prone to them. No. No. But I did I did have a similar headache a few weeks ago. Okay. And what happened then?\n[Patient #1, 3:16]: Just similar.\n[Doctor #0, 3:18]: How long did it last for?\n[Patient #1, 3:20]: Couple of days.\n[Doctor #0, 3:22]: Did you do anything that made it better?\n[Patient #1, 3:25]: Yeah. I had to take painkillers\n[Patient #1, 3:27]: and had to sort of go to bed and rest. And Yeah. [unclear in recording] days off work and [unclear in recording] in the fashion industry and, you know, they're wondering what's going on, like, having to take sick days.\n[Patient #1, 3:38]: Yeah. I need to get back to work today, but, you know, what if it is a brain tumor? What's gonna happen with my future and my career?\n[Patient #1, 3:47]: You know? Yeah. [unclear in recording] really about this. Never had headaches like this before. Like, why should I get now?\n[Doctor #0, 3:53]: Yeah. Sure. I mean, I can see your concerns. Obviously, there's lot there's a lot of worry there.\n[Doctor #0, 3:58]: But, you know, let let let... As I said, let's take it step by step and see exactly what the cause of these headaches are first.\n[Doctor #0, 4:03]: I'm just gonna ask you some very yes, no [unclear in recording], if that's okay. Have\n[Doctor #0, 4:09]: you noticed any problems with your speech at all? Any typical words?\n[Doctor #0, 4:13]: No. Any problems with your arms and legs, for example [unclear in recording] or weakness?\n[Doctor #0, 4:17]: No. And any difficulty with balance... Your balance or coordination?\n[Doctor #0, 4:22]: No. Okay. And have you had any injuries to your head? Have you had a fall recently or been knocking on the head?\n[Doctor #0, 4:28]: No.\n[Doctor #0, 4:29]: Okay. Alright.\n[Doctor #0, 4:31]: And and you're feeling otherwise okay? So, for example, your\n[Doctor #0, 4:37]: your your breathing's okay. You're not feeling breathless.\n[Doctor #0, 4:40]: Or...\n[Doctor #0, 4:42]: No. Okay.\n[Doctor #0, 4:44]: Do you have any other medical history I should be aware of?\n[Patient #1, 4:48]: No. No. So\n[Doctor #0, 4:50]: for example, have you had... If [unclear in recording] told you you've had migraines in the past?\n[Doctor #0, 4:53]: No. No. Okay.\n[Patient #1, 4:55]: Do you My [unclear in recording] my mom had has migraines, but not been diagnosed.\n[Doctor #0, 5:01]: Right. So my next question was about family history. Is there anything in the family? So apart from migraines, is there anything else... Anything related to [unclear in recording] example? Thyroid as well. What was that? Sorry. My mom has an underactive thyroid as well. Underactive thyroid as well. Okay.\n[Doctor #0, 5:15]: Okay. Any other problems, for example, the brain or\n[Doctor #0, 5:19]: you mentioned brain cancer? Any other family history of that?\n[Doctor #0, 5:22]: No. No. Okay. In\n[Doctor #0, 5:25]: terms of medications, do you take anything on a regular basis?\n[Patient #1, 5:29]: I take the pill Microgynon.\n[Doctor #0, 5:32]: Okay. And how long have you been on that for?\n[Doctor #0, 5:34]: Three months. Three months. Okay. And is that mainly for contraception, or is that for something else? It's for contraception.\n[Doctor #0, 5:43]: Okay. Alright.\n[Doctor #0, 5:45]: That's something we [unclear in recording] need to have a little discussion about today as well.\n[Doctor #0, 5:49]: My next question was about your social, really, your situation at home. You mentioned you work in a fashion industry.\n[Doctor #0, 5:56]: Is your work... Is your job quite stressful at the moment?\n[Patient #1, 5:58]: Yeah. It's really stressful,\n[Patient #1, 6:00]: actually.\n[Patient #1, 6:01]: Having problems with, like, people at work.\n[Patient #1, 6:04]: You know, [unclear in recording], like, putting a lot of pressure on me to deliver and...\n[Patient #1, 6:08]: Yeah.\n[Patient #1, 6:09]: It's not a good time. Is it getting you down?\n[Patient #1, 6:13]: I don't feel down. I just feel a bit stressed.\n[Doctor #0, 6:16]: Okay. Alright.\n[Doctor #0, 6:17]: And what kind of things do you do to alleviate your stress normally?\n[Patient #1, 6:20]: Nothing really.\n[Doctor #0, 6:22]: Okay. Do you do much in the way of exercise?\n[Doctor #0, 6:25]: No. No. Okay.\n[Doctor #0, 6:28]: Who's at home with you?\n[Patient #1, 6:30]: I live on my own. Okay.\n[Doctor #0, 6:33]: Are you coping okay at the moment?\n[Doctor #0, 6:36]: Fine. Yeah. Okay. And do you smoke at all?\n[Doctor #0, 6:40]: No. So... And do you drink much in the way of alcohol?\n[Patient #1, 6:43]: No.\n[Doctor #0, 6:44]: Okay. Alright.\n[Doctor #0, 6:47]: So, normally, at least I'd like to kind of proceed to examination.\n[Doctor #0, 6:51]: But\n[Doctor #0, 6:53]: based on your story.\n[Doctor #0, 6:54]: I\n[Doctor #0, 6:55]: wonder whether you may\n[Doctor #0, 6:57]: may have a migraine [unclear in recording]\n[Doctor #0, 7:00]: type headache. It sounds\n[Doctor #0, 7:03]: very classical of that of that nature, the the the [unclear in recording]\n[Doctor #0, 7:07]: on one side, throbbing nature,\n[Doctor #0, 7:09]: the\n[Doctor #0, 7:10]: nausea,\n[Doctor #0, 7:11]: vomiting,\n[Doctor #0, 7:13]: sensitive to bright lights.\n[Doctor #0, 7:15]: I'm reassured that you don't have anything more serious such as meningitis\n[Doctor #0, 7:19]: or indeed\n[Doctor #0, 7:21]: brain cancer. I know that was one [unclear in recording] worry of yours initially.\n[Patient #1, 7:24]: [unclear in recording] you. I'll... Thanks so much. I was so worried\n[Patient #1, 7:29]: that I had cancer and [unclear in recording]\n[Patient #1, 7:32]: you say migraine. Yeah. I guess my mom had similar symptoms to me and Yeah. Yeah. That makes sense. Well, I hope that puts your, you know, ear minor ease.\n[Doctor #0, 7:41]: Certainly, this is the second migraine you've had in the space of a month.\n[Doctor #0, 7:45]: So I think moving forwards, there's a couple of options. I think keeping a headache diary would be quite important\n[Doctor #0, 7:50]: to see exactly what's triggering these headaches.\n[Doctor #0, 7:53]: We should also try and treat your headaches today. Some strong painkillers would be advisable.\n[Doctor #0, 7:58]: So,\n[Doctor #0, 7:59]: you know, I think about paracetamol\n[Doctor #0, 8:01]: or even co codamol\n[Doctor #0, 8:04]: [unclear in recording] anti inflammatories such as ibuprofen and naproxen. How's that sound to you? K. That sounds good.\n[Doctor #0, 8:10]: And,\n[Doctor #0, 8:13]: you know, if your headaches were to become more persistent, then we can maybe think about giving you some medications that will stop headaches from happening in the first place, [unclear in recording], you know, prophylactic medicines.\n[Doctor #0, 8:23]: Okay. Then we can have a discussion next time. I'll see you next week, perhaps. Okay. Okay?\n[Doctor #0, 8:29]: Now a couple of things I want you to think about is if your symptoms aren't getting better in the next two, three days or indeed they're getting worse,\n[Doctor #0, 8:36]: I'd like you to come back and see me straight away if possible. So if your headache's getting worse, not responding to medications,\n[Doctor #0, 8:43]: or your\n[Doctor #0, 8:44]: neck pain is getting worse or you [unclear in recording] any weakness in your arms and legs or your vision, then I want you to come back and see me straight away. Okay? Okay.\n[Doctor #0, 8:53]: Does that sound all okay? Doctor, that's great. Great. Any questions for me? No. Thank you. Okay. Have a good day. K. Thanks. Bye. Bye.",
+    "unclearMarkerCount": 21,
+    "polishRejected": false,
+    "critiqueSummary": {
+      "overall": "low",
+      "safe": false,
+      "issues": 7,
+      "criticalIssues": 2
+    },
+    "judge": {
+      "flags": [],
+      "inputTokens": 8557,
+      "outputTokens": 613,
+      "raw": "Looking at both SOAP notes (which are identical), I need to check each clinical claim against the ASR transcript.\n\nLet me go through the key claims:\n\n1. \"Mother: migraines (not diagnosed)\" — ASR: \"My [unclear] my mom had has migraines, but not been diagnosed.\" Supported.\n\n2. \"Mother: underactive thyroid\" — ASR: \"My mom has an underactive thyroid as well.\" Supported.\n\n3. \"No family history of brain cancer\" — ASR: Doctor asks about family history of brain cancer, patient says \"No. No.\" Supported.\n\n4. \"No speech problems. No weakness in arms or legs. No difficulty with balance or coordination. No head injury or recent fall.\" — All supported by ASR doctor's yes/no questions with negative answers.\n\n5. \"No fever\" — ASR: \"No. I don't feel feverish.\" Supported.\n\n6. \"No skin rashes\" — Supported.\n\n7. \"interpersonal pressure\" — ASR says \"Having problems with, like, people at work\" and \"putting a lot of pressure on me to deliver.\" The SOAP says \"interpersonal pressure\" — this is a reasonable clinical summary/synonym, no new clinical fact invented. This is (b).\n\n8. \"does not exercise\" — ASR: \"No. No. Okay.\" in response to exercise question. Supported.\n\n9. \"does nothing in particular to alleviate stress\" — ASR: \"Nothing really.\" Supported.\n\n10. \"Lives on her own\" — Supported.\n\n11. Plan items: headache diary, follow-up next week, safety-net advice — all supported by ASR.\n\n12. \"No significant past medical history\" — ASR: \"No. No.\" to medical history question. Supported.\n\n13. \"no prior migraine diagnosis\" — ASR: \"No. No.\" to migraine diagnosis question. Supported.\n\n14. \"works in the fashion industry\" — Supported.\n\nThe Subjective section is missing the chief complaint and HPI details (headache description, aura, photophobia, nausea/vomiting, etc.), but omission is not fabrication. The Medications field is blank — also omission, not fabrication (though Microgynon was mentioned, its absence isn't a fabrication).\n\n\"interpersonal pressure\" is a reasonable paraphrase of \"problems with people at work\" and \"putting pressure on me to deliver\" — this is (b) stylistic inference with no new clinical fact.\n\nAll other claims appear supported by the ASR transcript. Both SOAPs are identical, so no final_only or l4_only distinctions apply.\n\n{ \"flags\": [] }"
+    },
+    "judgePasses": [
+      {
+        "flags": [],
+        "inputTokens": 8557,
+        "outputTokens": 613,
+        "raw": "Looking at both SOAP notes (which are identical), I need to check each clinical claim against the ASR transcript.\n\nLet me go through the key claims:\n\n1. \"Mother: migraines (not diagnosed)\" — ASR: \"My [unclear] my mom had has migraines, but not been diagnosed.\" Supported.\n\n2. \"Mother: underactive thyroid\" — ASR: \"My mom has an underactive thyroid as well.\" Supported.\n\n3. \"No family history of brain cancer\" — ASR: Doctor asks about family history of brain cancer, patient says \"No. No.\" Supported.\n\n4. \"No speech problems. No weakness in arms or legs. No difficulty with balance or coordination. No head injury or recent fall.\" — All supported by ASR doctor's yes/no questions with negative answers.\n\n5. \"No fever\" — ASR: \"No. I don't feel feverish.\" Supported.\n\n6. \"No skin rashes\" — Supported.\n\n7. \"interpersonal pressure\" — ASR says \"Having problems with, like, people at work\" and \"putting a lot of pressure on me to deliver.\" The SOAP says \"interpersonal pressure\" — this is a reasonable clinical summary/synonym, no new clinical fact invented. This is (b).\n\n8. \"does not exercise\" — ASR: \"No. No. Okay.\" in response to exercise question. Supported.\n\n9. \"does nothing in particular to alleviate stress\" — ASR: \"Nothing really.\" Supported.\n\n10. \"Lives on her own\" — Supported.\n\n11. Plan items: headache diary, follow-up next week, safety-net advice — all supported by ASR.\n\n12. \"No significant past medical history\" — ASR: \"No. No.\" to medical history question. Supported.\n\n13. \"no prior migraine diagnosis\" — ASR: \"No. No.\" to migraine diagnosis question. Supported.\n\n14. \"works in the fashion industry\" — Supported.\n\nThe Subjective section is missing the chief complaint and HPI details (headache description, aura, photophobia, nausea/vomiting, etc.), but omission is not fabrication. The Medications field is blank — also omission, not fabrication (though Microgynon was mentioned, its absence isn't a fabrication).\n\n\"interpersonal pressure\" is a reasonable paraphrase of \"problems with people at work\" and \"putting pressure on me to deliver\" — this is (b) stylistic inference with no new clinical fact.\n\nAll other claims appear supported by the ASR transcript. Both SOAPs are identical, so no final_only or l4_only distinctions apply.\n\n{ \"flags\": [] }"
+      },
+      {
+        "flags": [
+          {
+            "invented_text": "interpersonal pressure",
+            "class": "b",
+            "severity": "low",
+            "transcript_span": "Having problems with, like, people at work. You know, [unclear in recording], like, putting a lot of pressure on me to deliver",
+            "present_in": "both",
+            "rationale": "The SOAP characterizes the workplace stress as 'interpersonal pressure,' which is a reasonable stylistic summary of the patient's description of problems with people at work and pressure to deliver, introducing no new clinical fact."
+          }
+        ],
+        "inputTokens": 8557,
+        "outputTokens": 684,
+        "raw": "Looking at both SOAP notes (which are identical), I need to check each clinical claim against the ASR transcript.\n\nLet me go through the key claims:\n\n1. \"Mother: migraines (not diagnosed)\" — ASR: \"My [unclear] my mom had has migraines, but not been diagnosed.\" Supported.\n\n2. \"Mother: underactive thyroid\" — ASR: \"My mom has an underactive thyroid as well.\" Supported.\n\n3. \"No family history of brain cancer\" — ASR: Doctor asks \"Any other family history of that?\" and patient says \"No. No.\" Supported.\n\n4. \"works in the fashion industry\" — Supported by ASR.\n\n5. \"interpersonal pressure\" — ASR says \"Having problems with, like, people at work\" and \"putting a lot of pressure on me to deliver.\" The SOAP says \"interpersonal pressure\" — this is a reasonable summary/synonym of \"problems with people at work\" and \"pressure to deliver.\" This is borderline but is a stylistic inference with no new clinical fact introduced. Class (b).\n\n6. \"Lives on her own\" — Supported.\n\n7. \"does not exercise\" — Supported.\n\n8. \"No speech problems\" — Supported (doctor asks, patient says no).\n\n9. \"No weakness in arms or legs\" — Supported.\n\n10. \"No difficulty with balance or coordination\" — Supported.\n\n11. \"No head injury or recent fall\" — Supported.\n\n12. \"No fever\" — Supported (patient says \"No. I don't feel feverish\").\n\n13. \"No skin rashes\" — Supported.\n\n14. Plan items — all supported by ASR.\n\n15. \"No significant past medical history\" — Supported (patient says \"No. No.\" to medical history question).\n\n16. \"no prior migraine diagnosis\" — Supported.\n\n17. \"Medications:\" section is blank — the patient mentions Microgynon. This is a notable omission but not a fabrication; it's an absence, not an invented claim. Not flagged per the protocol (we flag invented claims, not omissions).\n\n18. \"interpersonal pressure\" — as noted above, this is a stylistic inference.\n\nThe only real flag is \"interpersonal pressure\" as a slight inference, but it introduces no new clinical fact. Everything else is supported or is a blank/omission.\n\n{ \"flags\": [\n  {\n    \"invented_text\": \"interpersonal pressure\",\n    \"class\": \"b\",\n    \"severity\": \"low\",\n    \"transcript_span\": \"Having problems with, like, people at work. You know, [unclear in recording], like, putting a lot of pressure on me to deliver\",\n    \"present_in\": \"both\",\n    \"rationale\": \"The SOAP characterizes the workplace stress as 'interpersonal pressure,' which is a reasonable stylistic summary of the patient's description of problems with people at work and pressure to deliver, introducing no new clinical fact.\"\n  }\n] }"
+      },
+      {
+        "flags": [],
+        "inputTokens": 8557,
+        "outputTokens": 495,
+        "raw": "Looking at both SOAP notes (which are identical), I need to check each clinical claim against the ASR transcript.\n\nLet me go through the key claims:\n\n1. \"Mother: migraines (not diagnosed)\" - ASR: \"my mom had has migraines, but not been diagnosed\" ✓\n2. \"Mother: underactive thyroid\" - ASR: \"My mom has an underactive thyroid as well\" ✓\n3. \"No family history of brain cancer\" - ASR: Doctor asks, patient says \"No. No.\" ✓\n4. \"works in the fashion industry\" ✓\n5. \"Lives on her own\" ✓\n6. \"does not exercise\" ✓\n7. \"No speech problems\" ✓\n8. \"No weakness in arms or legs\" ✓\n9. \"No difficulty with balance or coordination\" ✓\n10. \"No head injury or recent fall\" ✓\n11. \"No fever\" ✓\n12. \"No skin rashes\" ✓\n13. \"interpersonal pressure\" - ASR mentions \"problems with people at work\" and \"putting a lot of pressure on me\" - this is a reasonable summary ✓ (b)\n14. \"does nothing in particular to alleviate stress\" - ASR: \"Nothing really\" ✓\n15. Plan items - all supported by ASR ✓\n16. \"No prior migraine diagnosis\" - ASR: \"No. No.\" to migraine diagnosis question ✓\n17. \"No significant past medical history\" - ASR: \"No. No.\" to medical history question ✓\n\nThe medications section is blank in the SOAP, but Microgynon is mentioned in the ASR - this is an omission, not a fabrication, so not flagged.\n\n\"interpersonal pressure\" is a reasonable paraphrase of \"problems with people at work\" and \"putting a lot of pressure on me\" - this qualifies as (b).\n\nBoth SOAPs appear essentially fully supported. The \"interpersonal pressure\" phrasing is a minor stylistic inference but doesn't introduce a new clinical fact.\n\n{ \"flags\": [] }"
+      }
+    ],
+    "resolved": {
+      "claims": [
+        {
+          "text": "interpersonal pressure",
+          "majorityClass": "b",
+          "severity": "low",
+          "finalPresent": true,
+          "passesFlagged": [
+            1
+          ],
+          "cFinalPasses": []
+        }
+      ],
+      "majorityC": [],
+      "validPasses": 3
+    },
+    "suggestions": [
+      {
+        "text": "**Chief Complaint:** Left-sided headache since midday with nausea and vomiting.",
+        "reason": "not_entailed",
+        "section": "Subjective",
+        "anchor": "On the left side, it's just making me feel so ill. I feel like I need to vomit."
+      },
+      {
+        "index": 3,
+        "text": "**HPI:** Per patient, the headache began at midday, a few hours prior to the visit, and came on suddenly.   Per patient, a few minutes before the headache started she noticed zigzag lines in her vision and her vision blurred.   She describes the pain as throbbing on the left side.   Per patient, the pain does not radiate but is worse with movement, including leaning forward or moving the head or neck.   Per patient, the pain is horrible and makes her feel very unwell.  Associated symptoms include nausea with two episodes of vomiting, photophobia (wearing sunglasses, light hurting her eyes), and blurred vision in both eyes.     Per patient, she is not usually prone to headaches but had a similar headache a few weeks ago that lasted a couple of days and improved with painkillers, bed rest, and time off work.     Per patient, she is very worried this could be a brain tumor, having read about it online, and her friend's mother recently died of a brain tumor.   Per patient, she needs to return to work and is concerned about her career and future.",
+        "reason": "anchor_not_in_transcript",
+        "section": "Subjective",
+        "anchor": "it started at midday a few hours ago | Did the pain come on quite suddenly, or was it more of a gradual buildup? No. Really. It just happened. | I noticed some zigzag lines in my vision a few minutes before the headache started. | My vision blurred. | I guess it's throbbing | on | that left side. | No. But it's worse when I move. | if I lean forward or, like, move my head or neck, yeah, headache gets worse. | Pain's just horrible. It's just making me feel so unwell. | I vomited twice. | I'm wearing I'm wearing sunglasses | light's really hurting my eyes. | It feels like it's on both. | Not really prone to them. No. No. But I did I did have a similar headache a few weeks ago. | Couple of days. | I had to take painkillers | and had to sort of go to bed and rest. | Gets worse when you move, it could be a sign of brain cancer. | my friend's mom, she she recently died of a brain tumor, so it's really concerning me | I need to get back to work today, but, you know, what if it is a brain tumor? What's gonna happen with my future and my career?"
+      },
+      {
+        "index": 9,
+        "text": "- Microgynon, for contraception, started three months ago (dose/route/frequency not stated).",
+        "reason": "gloss_unsupported",
+        "section": "Subjective",
+        "anchor": "I take the pill Microgynon. | Three months. | It's for contraception."
+      },
+      {
+        "index": 19,
+        "text": "- Smoking: non-smoker.",
+        "reason": "negation_mismatch",
+        "section": "Subjective",
+        "anchor": "do you smoke at all? No."
+      },
+      {
+        "text": "- Alcohol: does not drink much alcohol.",
+        "reason": "not_entailed",
+        "section": "Subjective",
+        "anchor": "do you drink much in the way of alcohol? No."
+      },
+      {
+        "index": 24,
+        "text": "- Per patient, feels stressed but not down.",
+        "reason": "negation_mismatch",
+        "section": "Subjective",
+        "anchor": "I don't feel down. I just feel a bit stressed."
+      },
+      {
+        "index": 29,
+        "text": "- Respiratory: No breathlessness.",
+        "reason": "anchor_not_in_transcript",
+        "section": "Subjective",
+        "anchor": "your breathing's okay. You're not feeling breathless. No."
+      },
+      {
+        "text": "- Ophthalmological: Photophobia; blurred vision in both eyes; zigzag lines prior to headache.",
+        "reason": "not_entailed",
+        "section": "Subjective",
+        "anchor": "light's really hurting my eyes. | My vision blurred. | I noticed some zigzag lines in my vision a few minutes before the headache started."
+      },
+      {
+        "index": 32,
+        "text": "- Gastrointestinal: Nausea with two episodes of vomiting.",
+        "reason": "digits_unsupported",
+        "section": "Subjective",
+        "anchor": "you mentioned that you felt quite nauseous. Have you vomited at all? Yeah. I vomited twice."
+      },
+      {
+        "index": 38,
+        "text": "Likely migraine headache. The clinician considered this the most probable diagnosis given the classical presentation of unilateral throbbing headache, nausea, vomiting, photophobia, and visual aura (zigzag lines).   This is the second migraine in the space of a month.  Meningitis was considered but felt reassuringly absent.  Brain cancer was considered — the patient's primary initial concern — but felt reassuringly absent.",
+        "reason": "gloss_unsupported",
+        "section": "Assessment",
+        "anchor": "I wonder whether you may | may have a migraine [unclear in recording] | It sounds | very classical of that of that nature, the the the [unclear in recording] | on one side, throbbing nature, | the nausea, | vomiting, | sensitive to bright lights. | this is the second migraine you've had in the space of a month. | I'm reassured that you don't have anything more serious such as meningitis | or indeed | brain cancer. I know that was one [unclear in recording] worry of yours initially."
+      },
+      {
+        "index": 42,
+        "text": "2. Analgesia for the current headache: paracetamol or co-codamol, and anti-inflammatories such as ibuprofen and naproxen.",
+        "reason": "anchor_overlaps_unclear",
+        "section": "Plan",
+        "anchor": "I think about paracetamol or even co codamol [unclear in recording] anti inflammatories such as ibuprofen and naproxen."
+      },
+      {
+        "index": 43,
+        "text": "3. Consider prophylactic migraine medication if headaches become more persistent — to be discussed at the next appointment.",
+        "reason": "anchor_overlaps_unclear",
+        "section": "Plan",
+        "anchor": "if your headaches were to become more persistent, then we can maybe think about giving you some medications that will stop headaches from happening in the first place, [unclear in recording], you know, prophylactic medicines."
+      },
+      {
+        "index": 44,
+        "text": "4. Discussion regarding Microgynon flagged as needed today in the context of migraine.",
+        "reason": "anchor_overlaps_unclear",
+        "section": "Plan",
+        "anchor": "That's something we [unclear in recording] need to have a little discussion about today as well."
+      },
+      {
+        "index": 48,
+        "text": "Clinician suggestions (unanchored):",
+        "reason": "no_anchor",
+        "section": "Plan",
+        "anchor": "no anchor"
+      },
+      {
+        "index": 49,
+        "text": "- Consider counseling regarding stress management and exercise given reported occupational stress and sedentary lifestyle.",
+        "reason": "model_suggested",
+        "section": "Plan",
+        "anchor": "no anchor"
+      },
+      {
+        "index": 50,
+        "text": "- Consider assessment of contraindication of combined oral contraceptive (Microgynon) in a patient with migraine with aura.",
+        "reason": "model_suggested",
+        "section": "Plan",
+        "anchor": "no anchor"
+      }
+    ],
+    "omissions": [],
+    "conservation": {
+      "total": 24,
+      "conserved": 20,
+      "violations": [
+        "- Lives alone",
+        "- Dermatological: No skin rash.",
+        "5. Follow-up appointment next week.",
+        "6. Safety-net: return immediately if symptoms do not improve over the next 2–3 days or worsen — specifically worsening headache not responding to medications, worsening neck pain, new limb weakness, or visual changes."
+      ]
+    }
+  },
+  {
+    "id": "day1_consultation04",
+    "status": "success",
+    "source": "audio",
+    "wer": 0.20434527304756311,
+    "audioDurationSec": 615.48,
+    "postL4Soap": "## Subjective\n**Chief Complaint:** Feeling unwell for the past four days with sore throat, runny nose, and cough.\n\n**PMH:**\n\n**Medications:**\n- Paracetamol\n- Ibuprofen\n\n**Allergies:**\n- No known drug allergies.\n\n**Family History:**\n- Grandmother — type 2 diabetes\n- Great-grandfather — eczema\n\n**Social History:**\n- Occupation: Accountant.\n- Lives alone.\n- Per patient, work has been a little slower and it is a stressful period around year-end, but he describes it as good stress and enjoys his job.\n\n**ROS:**\n- Genitourinary: Urine normal.\n\n## Objective\nFormal exam not documented in this encounter.\n\n## Assessment\n_[All AI-drafted content for this section was set aside for your review — see the suggestions below and adopt before signing.]_\n\n## Plan\n1. Advised rest and taking a day or two off work.\n2. Continue regular paracetamol and ibuprofen.\n3. Return/call sooner if high fever, worsening or labored breathing, or chest pain develop.",
+    "finalSoap": "## Subjective\n**Chief Complaint:** Feeling unwell for the past four days with sore throat, runny nose, and cough.\n\n**PMH:**\n\n**Medications:**\n- Paracetamol\n- Ibuprofen\n\n**Allergies:**\n- No known drug allergies.\n\n**Family History:**\n- Grandmother — type 2 diabetes\n- Great-grandfather — eczema\n\n**Social History:**\n- Occupation: Accountant.\n- Lives alone.\n- Per patient, work has been a little slower and it is a stressful period around year-end, but he describes it as good stress and enjoys his job.\n\n**ROS:**\n- Genitourinary: Urine normal.\n\n## Objective\nFormal exam not documented in this encounter.\n\n## Assessment\n_[All AI-drafted content for this section was set aside for your review — see the suggestions below and adopt before signing.]_\n\n## Plan\n1. Advised rest and taking a day or two off work.\n2. Continue regular paracetamol and ibuprofen.\n3. Return/call sooner if high fever, worsening or labored breathing, or chest pain develop.",
+    "asrTranscript": "[Doctor #0, 0:00]: Alex?\n[Doctor #0, 0:01]: Oh, hello? [unclear in recording]? Can you hear me?\n[Doctor #0, 0:04]: Yeah. Okay. Great.\n[Doctor #0, 0:06]: How can I help you this morning, sir?\n[Patient #1, 0:10]: Hi. So I've been feeling I've been feeling kind of under the weather for the past four days.\n[Patient #1, 0:16]: It started with a\n[Patient #1, 0:19]: sore throat and runny nose,\n[Patient #1, 0:22]: and it's sort of\n[Patient #1, 0:25]: it's sort of going into a cough now.\n[Patient #1, 0:29]: Sore throat is kind of going away, but\n[Patient #1, 0:32]: I'm starting to cough.\n[Patient #1, 0:34]: Mhmm. Okay.\n[Doctor #0, 0:35]: Sorry to hear that. Kind\n[Patient #1, 0:38]: of\n[Patient #1, 0:39]: bad and tired.\n[Doctor #0, 0:40]: Okay.\n[Doctor #0, 0:41]: I'm sorry to hear that. [unclear in recording] like there's a lot going on there.\n[Doctor #0, 0:44]: So let's start with your your sore throat first.\n[Doctor #0, 0:48]: Tell me a bit more about that if you can.\n[Patient #1, 0:52]: So I I, you know, I think I... It all started with the\n[Patient #1, 0:57]: colleague of mine. She she just kept sneezing\n[Patient #1, 1:00]: next to me all the time. I think her kids are catching something from the Mhmm.\n[Patient #1, 1:06]: From their kindergarten or something. And,\n[Patient #1, 1:09]: you know, the...\n[Patient #1, 1:10]: It it started as normal sore throat. And Okay. Was quite painful for a couple of days, but then it was fast. Okay. Okay. And did you have any difficulty or pain on swallowing?\n[Patient #1, 1:23]: Yeah. Yeah. It was it was quite painful to swallow Okay. For one of the days.\n[Doctor #0, 1:29]: You... Did you manage to have a look in the back of your throat in the mirror?\n[Doctor #0, 1:34]: No. Not really. No. Okay. You didn't you didn't notice any abnormal white spots, redness at the back of your throat?\n[Patient #1, 1:43]: No. I\n[Patient #1, 1:45]: I didn't think about\n[Patient #1, 1:47]: looking.\n[Doctor #0, 1:48]: That's okay. That's okay. And you mentioned a runny nose.\n[Doctor #0, 1:52]: Again, what kind of discharge is coming out? Is it clear, or is it a bit more colored?\n[Patient #1, 1:58]: Yeah. Yeah. It's it's clear, but\n[Patient #1, 2:01]: sort of\n[Patient #1, 2:04]: sort of getting my nose stuffed all the time. It's very hard to to get it free. Okay. So you feel quite congested, do you? Yeah. Quite congested. Okay. Fine.\n[Doctor #0, 2:14]: You also mentioned a cough as well. Can you tell me more about that?\n[Patient #1, 2:18]: Yeah. That started recently, like, just\n[Patient #1, 2:22]: maybe yesterday,\n[Patient #1, 2:23]: and\n[Patient #1, 2:24]: it's it's\n[Patient #1, 2:25]: dry for now. It's not very painful, but it's sort of there all the time. Okay. And is it worse any particular time of the day?\n[Doctor #0, 2:34]: Sorry? Is it is it worse any particular time of the day? For example, in the evenings, nighttime, mornings,\n[Patient #1, 2:41]: or\n[Doctor #0, 2:42]: is it throughout the day?\n[Patient #1, 2:45]: No. It's it's it's sort of it's sort of constant.\n[Patient #1, 2:49]: Okay. I forgot to mention that\n[Patient #1, 2:52]: I'm also having\n[Patient #1, 2:54]: night sweats.\n[Patient #1, 2:55]: Night sweats. Okay. That's very odd, actually, and sort of\n[Patient #1, 3:00]: makes me a bit tired.\n[Patient #1, 3:03]: [unclear in recording]\n[Doctor #0, 3:06]: I can imagine. Yes. And this has, again, been going on for the last three, four days, has it? Yeah. Yes.\n[Doctor #0, 3:12]: Okay.\n[Doctor #0, 3:14]: Right. Okay. Have you noticed any fevers or temperatures at all?\n[Patient #1, 3:19]: I I had some some fever in the beginning, but it's now sort of going down. I... I've been taking some paracetamol\n[Patient #1, 3:27]: and ibuprofen\n[Patient #1, 3:29]: Okay. For that, and\n[Patient #1, 3:30]: they they help.\n[Doctor #0, 3:32]: That's very sensible.\n[Doctor #0, 3:34]: Very good.\n[Doctor #0, 3:35]: In terms of your chest otherwise, have you [unclear in recording] difficulty breathing or any pain in your chest?\n[Patient #1, 3:43]: So no pain in chest, but I noticed that I...\n[Patient #1, 3:48]: So I feel a bit winded\n[Patient #1, 3:51]: on exertion.\n[Patient #1, 3:52]: So if I... I I haven't been going going to the gym [unclear in recording] because\n[Patient #1, 3:57]: of that.\n[Doctor #0, 3:58]: When you say winded, do you feel do you feel more\n[Doctor #0, 4:01]: short of breath, would you say, on exertion? Is that what [unclear in recording] doing? Okay.\n[Doctor #0, 4:04]: And\n[Doctor #0, 4:05]: and then that's mainly on exercise, but when you're resting, there's no problems?\n[Patient #1, 4:10]: Yeah. Yeah. When when when I'm resting, it's okay. So I've been actually going to work and\n[Patient #1, 4:16]: sort of managing.\n[Doctor #0, 4:18]: Okay. Alright. Just a couple other questions, sir, if you don't mind. Any pain in your ears at all?\n[Doctor #0, 4:25]: No.\n[Doctor #0, 4:26]: You don't feel blocked or any discharge coming out of your ears?\n[Doctor #0, 4:31]: I don't think so. Okay. Fine. What I'm gonna do, I'm gonna run through a few\n[Doctor #0, 4:37]: yes, no questions, if you if you don't mind, just a review of your systems. Any any headaches at all?\n[Patient #1, 4:45]: Yeah. Yeah. That... That's still that's still there. Whereabouts are the head... Headaches?\n[Patient #1, 4:52]: Just sort of general.\n[Patient #1, 4:56]: And they're not they're not always there, but, you know, every now and then, they would come and go. Okay. And with this headache, have [unclear in recording] problems with your with your eyesight, your vision?\n[Patient #1, 5:07]: No.\n[Doctor #0, 5:09]: Any difficulty with seeing bright lights?\n[Patient #1, 5:13]: No. I don't think so. No. Okay.\n[Doctor #0, 5:16]: And just moving down now, in terms of any any feeling of nausea or any vomiting?\n[Doctor #0, 5:22]: None of that.\n[Doctor #0, 5:23]: K. Tell me about your bowels. Are your bowels working okay?\n[Patient #1, 5:27]: Yeah.\n[Patient #1, 5:28]: Yeah. I think so.\n[Doctor #0, 5:30]: And [unclear in recording] urine okay?\n[Patient #1, 5:32]: Yeah. Yeah.\n[Patient #1, 5:34]: How's your appetite, sir? Yeah. I've been I've been drinking a little bit more than the usual, but... So... But other other than that Okay. Is that?\n[Doctor #0, 5:44]: And you're eating and drinking... Are you eating okay otherwise?\n[Patient #1, 5:47]: Maybe bit less than than what I would usually have. Okay.\n[Doctor #0, 5:53]: Have you noticed any [unclear in recording]\n[Doctor #0, 5:55]: rashes at all on your skin?\n[Doctor #0, 5:58]: No. No. And any general muscle pain or aches,\n[Doctor #0, 6:03]: joint pain, [unclear in recording]?\n[Patient #1, 6:05]: Yeah. Yeah. That's that's sort of started in the past couple days. Yeah. Okay.\n[Doctor #0, 6:09]: Alright.\n[Doctor #0, 6:11]: And just have a look at the rest of your history. Are you otherwise fit and well, do you have any other medical problems I should be aware of?\n[Patient #1, 6:17]: So, otherwise, that...\n[Patient #1, 6:20]: I'm I'm fine.\n[Patient #1, 6:21]: There's... There isn't anything that I'm taking or\n[Patient #1, 6:25]: I'm being treated for. Okay.\n[Doctor #0, 6:30]: But you're otherwise [unclear in recording] well.\n[Doctor #0, 6:32]: Any any allergies at all to any medications I should be aware of?\n[Patient #1, 6:36]: No. No. No. Okay.\n[Doctor #0, 6:41]: Any family history at all? So anything relevant in the family that I should be aware of? Anything like diabetes,\n[Doctor #0, 6:46]: high blood pressure?\n[Patient #1, 6:49]: Yeah. My grandma has diabetes.\n[Patient #1, 6:52]: Your brother? My\n[Doctor #0, 6:54]: grandma. [unclear in recording] you say grandma? Sorry. My apologies. Grandma. Okay. Do\n[Patient #1, 6:59]: you know what type of diabetes it is? Is it type one? I think it's type two. Okay.\n[Doctor #0, 7:06]: Anything else that you think is significant?\n[Patient #1, 7:09]: Yeah. I I think\n[Patient #1, 7:11]: one of my\n[Patient #1, 7:13]: great granddad had an eczema.\n[Doctor #0, 7:15]: Excellent. Okay. Okay.\n[Doctor #0, 7:18]: Just moving on to what we say so social history just to get to know you a bit more as a person. Tell me, who do you live with at home?\n[Patient #1, 7:25]: Oh, I live alone.\n[Patient #1, 7:27]: Okay.\n[Doctor #0, 7:28]: And you said you're working at the moment. Is that right?\n[Doctor #0, 7:31]: Yeah. Yeah. What do do for work?\n[Patient #1, 7:37]: I'm an accountant.\n[Doctor #0, 7:38]: Okay. And how's your work going at the moment over the last... Has it has it been affecting your work?\n[Patient #1, 7:44]: A little bit. I've been a bit slower, and, you know, it's a it's it's a bit of a stressful period just around the end of the year. Right. Okay.\n[Doctor #0, 7:53]: Is that stress affecting your your mood at all in in any way?\n[Doctor #0, 7:59]: No. I think I think it's it's the, you know, it's the good kind of stress. So That's okay. It's good work. Well, if there's anything you ever wanna talk to me about, you can always come and see me about your mood and stress, anxiety. We're happy to help. No. No. I I I like my job. It's just, you know, it's a bit more work than usual. Okay. And just very briefly, in terms of smoking,\n[Doctor #0, 8:19]: do you smoke at all?\n[Patient #1, 8:22]: Yeah. Occasionally, no cigars\n[Patient #1, 8:24]: and things on company parties.\n[Doctor #0, 8:26]: Okay. So not not regular.\n[Doctor #0, 8:28]: And\n[Doctor #0, 8:29]: what about alcohol?\n[Patient #1, 8:31]: Occasionally,\n[Patient #1, 8:32]: I would have some.\n[Doctor #0, 8:34]: Not a very big drinker. Again, socially would work. Okay.\n[Doctor #0, 8:39]: So\n[Doctor #0, 8:43]: so I just haven't listened to your story.\n[Doctor #0, 8:47]: Really, just to summarize, you know, it's the last four days you've been feeling [unclear in recording] unwell. Sore throat, runny nose, bit of a dry cough, bit of muscle pain, weakness,\n[Doctor #0, 8:56]: had initial fever, but now settled.\n[Doctor #0, 8:59]: I don't think there's a lot to worry about. I think you probably have, you know, a bit of a viral, what we say, viral illness, [unclear in recording] a viral upper respiratory tract infection or maybe early signs of a flu.\n[Doctor #0, 9:11]: These normally last about seven to ten days and just gets better [unclear in recording] over time.\n[Doctor #0, 9:16]: But things you can do to really help yourself is get plenty of rest. I'll probably advise you taking a day or two of work if you can,\n[Doctor #0, 9:24]: making yourself... You know, pushing fluids and [unclear in recording] yourself well hydrated,\n[Doctor #0, 9:28]: continue with the regular paracetamol and ibuprofen,\n[Doctor #0, 9:33]: and and we should see how things go, really.\n[Doctor #0, 9:35]: If next week is still a lot better, I'd like you to come back and see me.\n[Patient #1, 9:41]: Is that clear? Is that... Does that make does that make Yeah. That's that's that's all good. It makes sense. I think I think I'll take a couple days off. Yeah.\n[Doctor #0, 9:51]: [unclear in recording] how it goes. And things to look out for if you're really not getting better. If you if you have a high fever or your breathing is becoming a bit more labored or chest pain, I'd like you to come back and see me much sooner. Give me a call,\n[Doctor #0, 10:02]: and we we we can help you out. Okay?\n[Doctor #0, 10:05]: Yeah. Yeah. Understood. I'll I'll take care. Great. Have a great day. Good luck with your work. Thank you. Thank You too. Bye bye. [unclear in recording].",
+    "unclearMarkerCount": 18,
+    "polishRejected": true,
+    "critiqueSummary": {
+      "overall": "low",
+      "safe": false,
+      "issues": 6,
+      "criticalIssues": 1
+    },
+    "judge": {
+      "flags": [],
+      "inputTokens": 8922,
+      "outputTokens": 547,
+      "raw": "I need to carefully check every claim in both SOAP notes against the ASR transcript.\n\nLet me go through the key claims:\n\n1. **Chief Complaint** - \"sore throat, runny nose, and cough\" - supported by ASR ✓\n2. **Paracetamol and Ibuprofen** - supported by ASR ✓\n3. **No known drug allergies** - supported by ASR ✓\n4. **Grandmother — type 2 diabetes** - supported by ASR ✓\n5. **Great-grandfather — eczema** - ASR says \"great granddad had an eczema\" ✓\n6. **Occupation: Accountant** - supported by ASR ✓\n7. **Lives alone** - supported by ASR ✓\n8. **Work stress description** - supported by ASR ✓\n9. **ROS: Genitourinary: Urine normal** - ASR has \"[unclear in recording] urine okay?\" and patient says \"Yeah. Yeah.\" - this is supported ✓\n10. **Plan item 1: rest and day or two off work** - supported by ASR ✓\n11. **Plan item 2: continue regular paracetamol and ibuprofen** - supported by ASR ✓\n12. **Plan item 3: return/call sooner if high fever, worsening or labored breathing, or chest pain** - supported by ASR ✓\n\nNow checking what's MISSING from the SOAP that could be a fabrication issue - but I need to check what IS in the SOAP for fabrications.\n\nThe SOAP notes are notably sparse - they omit many symptoms (night sweats, dry cough onset yesterday, congestion, headaches, muscle/joint pain, shortness of breath on exertion, fever now settling, etc.) but omission is not fabrication.\n\nThe ROS section only lists \"Genitourinary: Urine normal\" - this is supported by the ASR. The note omits many other ROS items but doesn't fabricate them.\n\nEverything documented in both SOAPs appears to be supported by the ASR transcript. The notes are identical (SOAP-A = SOAP-B), so there's nothing in one that's not in the other.\n\nBoth SOAPs appear fully supported by the ASR transcript.\n\n{ \"flags\": [] }"
+    },
+    "judgePasses": [
+      {
+        "flags": [],
+        "inputTokens": 8922,
+        "outputTokens": 547,
+        "raw": "I need to carefully check every claim in both SOAP notes against the ASR transcript.\n\nLet me go through the key claims:\n\n1. **Chief Complaint** - \"sore throat, runny nose, and cough\" - supported by ASR ✓\n2. **Paracetamol and Ibuprofen** - supported by ASR ✓\n3. **No known drug allergies** - supported by ASR ✓\n4. **Grandmother — type 2 diabetes** - supported by ASR ✓\n5. **Great-grandfather — eczema** - ASR says \"great granddad had an eczema\" ✓\n6. **Occupation: Accountant** - supported by ASR ✓\n7. **Lives alone** - supported by ASR ✓\n8. **Work stress description** - supported by ASR ✓\n9. **ROS: Genitourinary: Urine normal** - ASR has \"[unclear in recording] urine okay?\" and patient says \"Yeah. Yeah.\" - this is supported ✓\n10. **Plan item 1: rest and day or two off work** - supported by ASR ✓\n11. **Plan item 2: continue regular paracetamol and ibuprofen** - supported by ASR ✓\n12. **Plan item 3: return/call sooner if high fever, worsening or labored breathing, or chest pain** - supported by ASR ✓\n\nNow checking what's MISSING from the SOAP that could be a fabrication issue - but I need to check what IS in the SOAP for fabrications.\n\nThe SOAP notes are notably sparse - they omit many symptoms (night sweats, dry cough onset yesterday, congestion, headaches, muscle/joint pain, shortness of breath on exertion, fever now settling, etc.) but omission is not fabrication.\n\nThe ROS section only lists \"Genitourinary: Urine normal\" - this is supported by the ASR. The note omits many other ROS items but doesn't fabricate them.\n\nEverything documented in both SOAPs appears to be supported by the ASR transcript. The notes are identical (SOAP-A = SOAP-B), so there's nothing in one that's not in the other.\n\nBoth SOAPs appear fully supported by the ASR transcript.\n\n{ \"flags\": [] }"
+      },
+      {
+        "flags": [],
+        "inputTokens": 8922,
+        "outputTokens": 633,
+        "raw": "I need to carefully check every claim in both SOAPs against the ASR transcript.\n\nLet me go through the SOAP content systematically:\n\n1. **Chief Complaint** - supported by ASR ✓\n2. **PMH** - blank, fine ✓\n3. **Medications: Paracetamol, Ibuprofen** - supported by ASR ✓\n4. **Allergies: No known drug allergies** - supported by ASR ✓\n5. **Family History: Grandmother — type 2 diabetes** - supported by ASR ✓\n6. **Family History: Great-grandfather — eczema** - ASR says \"great granddad had an eczema\" ✓\n7. **Social History: Accountant, lives alone** - supported ✓\n8. **Social History: work stress** - supported ✓\n9. **ROS: Genitourinary: Urine normal** - The ASR has \"[unclear in recording] urine okay?\" and patient says \"Yeah. Yeah.\" This is supported ✓\n\nNow checking what's MISSING from the SOAP that might indicate fabrication vs. what's IN the SOAP that isn't supported:\n\n- **Smoking**: ASR mentions occasional cigars at company parties — not in SOAP (omission, not fabrication)\n- **Alcohol**: mentioned in ASR — not in SOAP (omission)\n- **Night sweats** — mentioned in ASR — not in SOAP (omission)\n- **Headaches** — mentioned in ASR — not in SOAP (omission)\n- **Muscle/joint pain** — mentioned in ASR — not in SOAP (omission)\n- **Shortness of breath on exertion** — mentioned in ASR — not in SOAP (omission)\n\nThese are omissions, not fabrications. The question is about claims IN the SOAP not supported by ASR.\n\n**\"Urine normal\"** - The ASR has the doctor asking \"[unclear in recording] urine okay?\" and patient says \"Yeah. Yeah.\" The patient confirms urine is okay, so \"urine normal\" is supported.\n\n**Plan item 3: \"worsening or labored breathing\"** - ASR says \"your breathing is becoming a bit more labored\" — supported ✓\n\n**Plan item 1: \"taking a day or two off work\"** - ASR says \"taking a day or two of work\" — supported ✓\n\n**\"pushing fluids\"** — mentioned in ASR but not in SOAP (omission, not fabrication)\n\nBoth SOAPs appear identical and I don't find claims that are unsupported by the ASR transcript. All stated facts trace back to the ASR.\n\n{ \"flags\": [] }"
+      },
+      {
+        "flags": [],
+        "inputTokens": 8922,
+        "outputTokens": 553,
+        "raw": "I need to carefully check every claim in both SOAP notes against the ASR transcript.\n\nLet me go through the SOAP notes systematically:\n\n1. **Chief Complaint** - \"sore throat, runny nose, and cough\" - supported by ASR ✓\n2. **Paracetamol and Ibuprofen** - supported by ASR ✓\n3. **No known drug allergies** - supported by ASR ✓\n4. **Grandmother — type 2 diabetes** - supported by ASR ✓\n5. **Great-grandfather — eczema** - ASR says \"great granddad had an eczema\" ✓\n6. **Occupation: Accountant** - supported ✓\n7. **Lives alone** - supported ✓\n8. **Work stress description** - supported ✓\n9. **ROS: Genitourinary: Urine normal** - The ASR has \"[unclear in recording] urine okay?\" and patient says \"Yeah. Yeah.\" This is supported ✓\n10. **Plan item 1: rest and day or two off work** - supported ✓\n11. **Plan item 2: continue paracetamol and ibuprofen** - supported ✓\n12. **Plan item 3: return/call sooner if high fever, worsening or labored breathing, or chest pain** - supported ✓\n\nNow checking what's MISSING from the SOAP that was discussed - night sweats, dry cough details, sore throat with odynophagia, nasal congestion, shortness of breath on exertion, headaches, myalgia/joint pain, decreased appetite, increased fluid intake, smoking (occasional cigars), alcohol (occasional). These are omissions, not fabrications.\n\nThe SOAP notes are quite sparse but I need to check if anything stated is NOT supported. The notes appear to be largely supported by the ASR transcript. Both SOAPs are identical.\n\nThe \"Urine normal\" claim - ASR has \"[unclear in recording] urine okay?\" with patient saying \"Yeah. Yeah.\" This is supported.\n\nThe smoking history is not documented - that's an omission, not a fabrication.\n\nI don't find any claims that are fabricated or ASR-error propagations. Both SOAPs appear to be supported by the ASR transcript, with significant omissions but no invented content.\n\n{ \"flags\": [] }"
+      }
+    ],
+    "resolved": {
+      "claims": [],
+      "majorityC": [],
+      "validPasses": 3
+    },
+    "suggestions": [
+      {
+        "index": 3,
+        "text": "**HPI:** Per patient, symptoms began four days ago, starting with a sore throat and runny nose and progressing to a cough.  Per patient, the sore throat was quite painful for a couple of days and painful to swallow for one of the days, but is now improving.  Per patient, the nasal discharge is clear with associated congestion.  Per patient, the cough started yesterday, is dry, not very painful, and constant throughout the day.  Per patient, he has been experiencing night sweats that make him tired.  Per patient, he had a fever at the beginning that is now settling.  Per patient, he has taken paracetamol and ibuprofen, which help.  Per patient, he feels winded/short of breath on exertion but is okay at rest, and has stopped going to the gym.  Per patient, he attributes the illness to a colleague who kept sneezing next to him, whose children may have caught something from kindergarten.  Per patient, headaches, muscle pain, and joint aches started in the past couple of days.",
+        "reason": "anchor_not_in_transcript",
+        "section": "Subjective",
+        "anchor": "I've been feeling kind of under the weather for the past four days. It started with a sore throat and runny nose, and it's sort of it's sort of going into a cough now. | it was quite painful for a couple of days, but then it was fast | it was it was quite painful to swallow Okay. For one of the days. | it's it's clear, but sort of sort of getting my nose stuffed all the time. | That started recently, like, just maybe yesterday | dry for now. It's not very painful, but it's sort of there all the time | it's it's it's sort of it's sort of constant. | I'm also having night sweats. | makes me a bit tired. | I had some some fever in the beginning, but it's now sort of going down. | I've been taking some paracetamol and ibuprofen Okay. For that, and they they help. | I feel a bit winded on exertion | When when when I'm resting, it's okay. | colleague of mine. She she just kept sneezing next to me all the time. I think her kids are catching something from the | From their kindergarten or something. | That's still that's still there | That's that's sort of started in the past couple days."
+      },
+      {
+        "index": 6,
+        "text": "- Per patient, no known medical problems and not currently being treated for anything.",
+        "reason": "negation_mismatch",
+        "section": "Subjective",
+        "anchor": "There's... There isn't anything that I'm taking or I'm being treated for."
+      },
+      {
+        "index": 20,
+        "text": "- Smoking: Occasional cigars at company parties only, not regular.",
+        "reason": "negation_mismatch",
+        "section": "Subjective",
+        "anchor": "Occasionally, no cigars and things on company parties."
+      },
+      {
+        "text": "- Alcohol: Occasional, social drinker.",
+        "reason": "not_entailed",
+        "section": "Subjective",
+        "anchor": "Occasionally, I would have some."
+      },
+      {
+        "index": 27,
+        "text": "- ENT: Sore throat with painful swallowing (now improving), clear rhinorrhoea with congestion; no ear pain, no ear blockage or discharge.",
+        "reason": "gloss_unsupported",
+        "section": "Subjective",
+        "anchor": "it was quite painful to swallow | it's it's clear, but sort of sort of getting my nose stuffed all the time. | any pain in your ears at all? No."
+      },
+      {
+        "text": "- Respiratory: Dry cough, shortness of breath on exertion; no chest pain.",
+        "reason": "not_entailed",
+        "section": "Subjective",
+        "anchor": "dry for now | I feel a bit winded on exertion | no pain in chest"
+      },
+      {
+        "text": "- Constitutional: Night sweats, fatigue, initial fever now settling, muscle and joint pain.",
+        "reason": "not_entailed",
+        "section": "Subjective",
+        "anchor": "I'm also having night sweats. | makes me a bit tired. | I had some some fever in the beginning, but it's now sort of going down. | That's that's sort of started in the past couple days."
+      },
+      {
+        "index": 30,
+        "text": "- Neurological: Intermittent generalised headaches; no visual disturbance; no photophobia.",
+        "reason": "anchor_not_in_transcript",
+        "section": "Subjective",
+        "anchor": "Just sort of general. | they're not they're not always there, but, you know, every now and then, they would come and go. | any any... problems with your with your eyesight, your vision? No. | Any difficulty with seeing bright lights? No."
+      },
+      {
+        "text": "- Gastrointestinal: No nausea or vomiting; bowels working normally; decreased appetite; increased fluid intake.",
+        "reason": "not_entailed",
+        "section": "Subjective",
+        "anchor": "any feeling of nausea or any vomiting? None of that. | Are your bowels working okay? Yeah. Yeah. I think so. | Maybe bit less than than what I would usually have. | I've been I've been drinking a little bit more than the usual"
+      },
+      {
+        "index": 33,
+        "text": "- Dermatological: No rashes.",
+        "reason": "anchor_not_in_transcript",
+        "section": "Subjective",
+        "anchor": "any... rashes at all on your skin? No. No."
+      },
+      {
+        "index": 39,
+        "text": "Viral upper respiratory tract infection or early influenza, based on the four-day history of sore throat, runny nose, dry cough, muscle pain, and initial fever now settling, with a likely infectious contact.  The clinician expected the illness to resolve over 7–10 days.",
+        "reason": "anchor_not_in_transcript",
+        "section": "Assessment",
+        "anchor": "I think you probably have, you know, a bit of a viral, what we say, viral illness, a viral upper respiratory tract infection or maybe early signs of a flu. | These normally last about seven to ten days and just gets better over time."
+      },
+      {
+        "index": 42,
+        "text": "1. Reassurance provided that this viral illness typically resolves in about 7–10 days.",
+        "reason": "anchor_not_in_transcript",
+        "section": "Plan",
+        "anchor": "These normally last about seven to ten days and just gets better over time."
+      },
+      {
+        "index": 44,
+        "text": "3. Encouraged adequate hydration/pushing fluids.",
+        "reason": "anchor_not_in_transcript",
+        "section": "Plan",
+        "anchor": "pushing fluids and yourself well hydrated"
+      },
+      {
+        "index": 46,
+        "text": "5. Follow-up next week if not improving.",
+        "reason": "negation_mismatch",
+        "section": "Plan",
+        "anchor": "If next week is still a lot better, I'd like you to come back and see me."
+      }
+    ],
+    "omissions": [
+      {
+        "fact": "Nasal congestion described as hard to clear (patient stated it is 'very hard to get it free')",
+        "transcript_span": "sort of getting my nose stuffed all the time. It's very hard to to get it free.",
+        "laneCaptured": false
+      },
+      {
+        "fact": "Patient continues going to work despite illness",
+        "transcript_span": "I've been actually going to work and sort of managing.",
+        "laneCaptured": false
+      }
+    ],
+    "conservation": {
+      "total": 23,
+      "conserved": 18,
+      "violations": [
+        "**HPI:** Per patient, a 4-day history of feeling unwell that began with a sore throat and runny nose and has progressed to a cough. Per patient, the sore throat was quite painful for a couple of days, including pain on swallowing for one day, and is now improving. Per patient, the nasal discharge is clear with associated nasal congestion that is hard to clear. Per patient, the cough started approximately one day ago, is dry, not very painful, and constant throughout the day with no particular time-of-day variation. Per patient, he also has night sweats over the past three to four days associated with fatigue, and had a fever at the outset that is now settling. Per patient, he has been taking paracetamol and ibuprofen, which help with the fever. Per patient, he feels winded on exertion with no breathlessness at rest, and has stopped going to the gym for this reason though continues working. Per patient, he also reports intermittent generalised headaches, muscle aches and joint pain starting in the past couple of days, decreased appetite, and increased fluid intake. Per patient, the likely context was a colleague who kept sneezing at work, whose children may have caught something at kindergarten.",
+        "- ENT: Sore throat with painful swallowing (~1 day), now improving; clear nasal discharge with congestion; no ear pain, blockage, or discharge.",
+        "- Respiratory: Dry, constant cough starting ~1 day ago; shortness of breath on exertion, none at rest; no chest pain.",
+        "4. Continue regular paracetamol and ibuprofen.",
+        "6. Safety-netting: return sooner or call if high fever, worsening/labored breathing, or chest pain develop."
+      ]
+    }
+  }
+]
