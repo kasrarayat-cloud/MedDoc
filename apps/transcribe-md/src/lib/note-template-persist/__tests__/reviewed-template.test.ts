@@ -54,6 +54,22 @@ describe('ReviewedTemplateSchema', () => {
     (bad.sections[0] as Record<string, unknown>).defaultTextMode = 'always_include';
     expect(ReviewedTemplateSchema.safeParse(bad).success).toBe(false);
   });
+
+  it('accepts a NULL encounterType (the catch-all)', () => {
+    expect(ReviewedTemplateSchema.safeParse({ ...base(), encounterType: null }).success).toBe(true);
+  });
+
+  it('accepts every catalog slug — including flag-gated ones like ultrasound', () => {
+    expect(ReviewedTemplateSchema.safeParse({ ...base(), encounterType: 'ultrasound' }).success).toBe(true);
+  });
+
+  it('REJECTS a free-text encounterType (finding F-2: parse-LLM output can never match a visit specialty)', () => {
+    const res = ReviewedTemplateSchema.safeParse({ ...base(), encounterType: 'Follow-up progress note' });
+    expect(res.success).toBe(false);
+    if (!res.success) {
+      expect(JSON.stringify(res.error.issues)).toContain('Unknown encounter type');
+    }
+  });
 });
 
 describe('normalizeReviewedTemplate', () => {

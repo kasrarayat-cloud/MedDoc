@@ -20,7 +20,6 @@
 
 import { cn } from '@/lib/cn';
 import { SoapInlineEdit } from './SoapInlineEdit';
-import type { SoapSectionKey } from '@/lib/parse-soap-sections';
 
 export type SoapSectionStatus = 'drafted' | 'reviewed' | 'signed';
 
@@ -34,8 +33,12 @@ export interface SoapPulseHint {
 }
 
 export interface SoapSectionProps {
-  letter: SoapSectionKey;
-  label: 'Subjective' | 'Objective' | 'Assessment' | 'Plan';
+  /** Eyebrow chip — canonical 'S'/'O'/'A'/'P', or the section number for
+   *  custom-template / imaging sections (parse-note-sections). */
+  letter: string;
+  /** Section heading verbatim — canonical SOAP label, a doctor's custom
+   *  template label, or an imaging-report section name. */
+  label: string;
   /** Markdown / plain text body of just this section, for display. */
   body: string;
   /** Full SOAP markdown blob — passed through to SoapInlineEdit so the

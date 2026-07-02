@@ -17,7 +17,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
-import { visibleSpecialties } from '@meddoc/shared/specialties';
+import { SPECIALTIES, SPECIALTY_IDS, visibleSpecialties } from '@meddoc/shared/specialties';
 import {
   saveNoteTemplateAction,
 } from '@/actions/note-template-lifecycle';
@@ -125,7 +125,25 @@ export function TemplateReviewEditor({
   onSaved,
 }: TemplateReviewEditorProps) {
   const [name, setName] = useState(initial.name);
-  const [encounterType, setEncounterType] = useState<string>(initial.encounterType ?? '');
+  // The parse LLM emits a free-text encounterType ("Follow-up progress note")
+  // that matches no <option>; the browser would DISPLAY "All my visits" while
+  // the state kept the free text — saving a template the resolver can never
+  // match against visit.specialty (silently inert). Coerce anything outside
+  // the FULL static catalog to the catch-all so what the doctor sees is what
+  // gets saved. Valid-but-flag-hidden slugs (an ultrasound-scoped template
+  // opened in a flag-off build) are KEPT — never silently widened to
+  // "All my visits" — and surfaced as an extra option so display = state.
+  const [encounterType, setEncounterType] = useState<string>(() => {
+    const parsed = initial.encounterType ?? '';
+    return (SPECIALTY_IDS as readonly string[]).includes(parsed) ? parsed : '';
+  });
+  const encounterOptions = useMemo(() => {
+    if (!encounterType || ENCOUNTER_OPTIONS.some((o) => o.value === encounterType)) {
+      return ENCOUNTER_OPTIONS;
+    }
+    const label = SPECIALTIES.find((s) => s.id === encounterType)?.label ?? encounterType;
+    return [...ENCOUNTER_OPTIONS, { value: encounterType, label }];
+  }, [encounterType]);
   const [sections, setSections] = useState<EditableSection[]>(() =>
     [...initial.sections].sort((a, b) => a.order - b.order).map(toEditable),
   );
@@ -250,7 +268,7 @@ export function TemplateReviewEditor({
             value={encounterType}
             onChange={(e) => setEncounterType(e.target.value)}
           >
-            {ENCOUNTER_OPTIONS.map((o) => (
+            {encounterOptions.map((o) => (
               <option key={o.value} value={o.value}>{o.label}</option>
             ))}
           </select>

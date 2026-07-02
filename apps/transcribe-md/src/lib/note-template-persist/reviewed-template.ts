@@ -18,6 +18,7 @@
 // ============================================================================
 
 import { z } from 'zod';
+import { SPECIALTY_IDS } from '@meddoc/shared/specialties';
 import { TEMPLATE_FIELD_LIMITS as LIM } from '@/lib/note-template-parse/note-template-schema';
 import type {
   ParsedTemplateDraft,
@@ -54,8 +55,23 @@ export const ReviewedTemplateSchema = z
     id: z.string().cuid().optional(),
     name: z.string().trim().min(1, 'Give your format a name').max(LIM.name),
     /** Matches the visit's specialty slug at generation time; null = applies to
-     *  all of the doctor's visits (the catch-all). */
-    encounterType: z.string().trim().min(1).max(LIM.encounterType).nullable().default(null),
+     *  all of the doctor's visits (the catch-all). Constrained to the static
+     *  specialty catalog: the parse LLM emits free-text encounter types
+     *  ("Follow-up progress note") which can never equal a visit.specialty —
+     *  persisting one produced a template that silently never applied
+     *  (custom-template QA 2026-07-02, finding F-2). Server-side backstop for
+     *  the review editor's catch-all coercion; the full static catalog (not
+     *  the flag-filtered picker list) so flag flips never orphan saved rows. */
+    encounterType: z
+      .string()
+      .trim()
+      .min(1)
+      .max(LIM.encounterType)
+      .refine((v): v is (typeof SPECIALTY_IDS)[number] => (SPECIALTY_IDS as readonly string[]).includes(v), {
+        message: 'Unknown encounter type — pick a specialty from the list or "All my visits".',
+      })
+      .nullable()
+      .default(null),
     sections: z.array(ReviewedSectionSchema).min(1, 'Keep at least one section').max(40),
     styleProfile: ReviewedStyleProfileSchema,
   })
