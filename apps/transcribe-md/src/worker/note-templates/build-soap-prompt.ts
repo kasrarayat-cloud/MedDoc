@@ -80,9 +80,87 @@ function formatHintDirective(hint: SectionFormatHint): string {
  *  the transcript supports it, which the styleInstructions already govern.
  *  This is why the system default (all sections omit_unless_supported) yields
  *  exactly the original L4 bytes. */
+// ── Structured-fill directives (feat/structured-templates, 2026-07-02) ─────
+// Tables + option-sets are CONSTRAINED-CHOICE tasks and must be MORE
+// conservative than free text: option fields may only take one of the
+// template's own enumerated options (or stay unchecked); table cells take
+// dictated values only, with the canonical "[not documented]" token for
+// silent cells (verifier-exempt scaffolding — asserts no clinical fact).
+// Every sentence RESTATES an existing immutable guardrail; nothing here
+// relaxes one. Emitted ONLY for sections carrying `structure` — the system
+// default has none, so the golden-prompt bytes are untouched.
+function renderStructureDirective(
+  structure: NonNullable<NoteTemplateSection['structure']>
+): string {
+  if (structure.kind === 'options') {
+    const lines = structure.options.map((o) => `- [ ] ${o}`);
+    return [
+      'This section is a CHECKLIST. Reproduce ALL of these option lines —',
+      'every line, in this order, byte-for-byte — changing ONLY "[ ]" to',
+      '"[x]" where checked:',
+      ...lines,
+      structure.multi
+        ? 'Multiple options may be checked ("check all that apply").'
+        : 'At most ONE option may be checked (single-select).',
+      'Mark "- [x]" ONLY when the transcript AFFIRMS that option as present.',
+      'A DENIED or negative finding does NOT check that option — "denies',
+      'fever" means the Fever line stays "- [ ]"; when the transcript denies',
+      'every finding in a group and the group has a "None"-style option,',
+      'check that "None" option instead. A checked option is a clinical',
+      'claim and needs an evidence anchor appended to its line; unchecked',
+      'lines need no anchor and assert nothing. NEVER check an option',
+      'because it is typical, plausible, or usually true. Never add, remove,',
+      'reorder, merge, reword, or annotate option lines — not even to fix a',
+      'spelling.',
+    ].join('\n');
+  }
+  const header = `| ${structure.columns.join(' | ')} |`;
+  const separator = `| ${structure.columns.map(() => '---').join(' | ')} |`;
+  if (structure.rowLabels && structure.rowLabels.length > 0) {
+    const rows = structure.rowLabels.map(
+      (r) =>
+        `| ${r} |${structure.columns
+          .slice(1)
+          .map(() => ' [not documented] |')
+          .join('')}`
+    );
+    return [
+      'This section is a TABLE with fixed rows. Reproduce this markdown',
+      'table skeleton exactly — same header row, same row labels, same',
+      'order:',
+      header,
+      separator,
+      ...rows,
+      'Replace a "[not documented]" cell ONLY with a value the transcript',
+      'states, copied as dictated — do not append units or qualifiers the',
+      'transcript does not state. Leave it "[not documented]" otherwise.',
+      'Never invent, estimate, or carry forward a value. Do not add,',
+      'remove, rename, or reorder rows or columns. Append the evidence',
+      'anchor(s) for a filled row after its final "|".',
+    ].join('\n');
+  }
+  return [
+    'This section is a TABLE. Reproduce this markdown table skeleton',
+    'exactly — same header row, same column order; do not add, remove,',
+    'rename, or reorder columns:',
+    header,
+    separator,
+    'Add ONE row per item the transcript supports, and append the evidence',
+    'anchor(s) for each row after its final "|". Copy cell values as',
+    'dictated — do not append units or qualifiers the transcript does not',
+    'state. In a supported row, put "[not documented]" in any cell whose',
+    'value the transcript does not state — never invent a value to',
+    'complete a row. Do NOT add a row for an item the transcript never',
+    'mentions.',
+  ].join('\n');
+}
+
 function renderSectionBody(s: NoteTemplateSection): string[] {
   const out: string[] = [];
   out.push(s.styleInstructions ?? formatHintDirective(s.formatHint));
+  if (s.structure) {
+    out.push(renderStructureDirective(s.structure));
+  }
   if (s.defaultText) {
     if (s.defaultTextMode === 'always_include') {
       out.push(s.defaultText);
