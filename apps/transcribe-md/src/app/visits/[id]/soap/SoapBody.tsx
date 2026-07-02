@@ -16,7 +16,8 @@ import { useMemo } from 'react';
 import { Copy } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { parseSoapSections, type SoapSectionKey } from '@/lib/parse-soap-sections';
+import { parseNoteSections } from '@/lib/parse-note-sections';
+import type { SoapSectionKey } from '@/lib/parse-soap-sections';
 import { SoapSection, type SoapPulseHint, type SoapSectionStatus } from './SoapSection';
 
 export interface SoapBodyProps {
@@ -24,8 +25,9 @@ export interface SoapBodyProps {
    *  identically via saveSoapDraftAction. */
   text: string;
   /** Per-section status pill content; the parent computes from signedAt
-   *  + body emptiness. */
-  statusFor: (key: SoapSectionKey) => SoapSectionStatus;
+   *  + body emptiness. Custom/imaging sections have no canonical SOAP key —
+   *  the parent receives (null, body) and decides from the body alone. */
+  statusFor: (key: SoapSectionKey | null, body?: string) => SoapSectionStatus;
   /** Per-section engine pulse hints (sage = ok, amber = boost-needed).
    *  Optional — sections render without a hint when missing. */
   pulseHints?: Partial<Record<SoapSectionKey, SoapPulseHint>>;
@@ -51,7 +53,10 @@ export function SoapBody({
   readonly,
   lastEditLabel,
 }: SoapBodyProps) {
-  const sections = useMemo(() => parseSoapSections(text), [text]);
+  // Custom-template + imaging notes render their OWN headings; classic SOAP
+  // notes render byte-identically to the legacy parseSoapSections output
+  // (custom-template QA 2026-07-02, finding F-1).
+  const sections = useMemo(() => parseNoteSections(text), [text]);
   const highlightSet = useMemo(
     () => new Set(highlightedSections ?? []),
     [highlightedSections]
@@ -70,14 +75,18 @@ export function SoapBody({
     <div className="qm-lin-soap-body-v6">
       {sections.map((section) => (
         <SoapSection
-          key={section.key}
+          key={section.id}
           letter={section.letter}
           label={section.label}
           body={section.body}
           fullText={text}
-          status={statusFor(section.key)}
-          pulseHint={pulseHints?.[section.key] ?? null}
-          highlight={highlightSet.has(section.key)}
+          status={
+            section.soapKey
+              ? statusFor(section.soapKey)
+              : statusFor(null, section.body)
+          }
+          pulseHint={section.soapKey ? pulseHints?.[section.soapKey] ?? null : null}
+          highlight={section.soapKey ? highlightSet.has(section.soapKey) : false}
           onEdit={onEdit}
           readonly={readonly}
         />
@@ -87,7 +96,8 @@ export function SoapBody({
         <div className="qm-lin-soap-notebody-foot-meta">
           <span className="dot" aria-hidden />
           <span>
-            4 sections{lastEditLabel ? ` · last edit ${lastEditLabel}` : ''}
+            {sections.length} section{sections.length === 1 ? '' : 's'}
+            {lastEditLabel ? ` · last edit ${lastEditLabel}` : ''}
           </span>
         </div>
         <button type="button" className="qm-lin-btn" onClick={onCopy}>
