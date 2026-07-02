@@ -80,5 +80,17 @@ pre-iteration addendum (Phase B/C/D-passing bytes of the original run),
 the Phase-3 matrix re-runs on the reverted bytes, and the lower
 checked-option sensitivity ships as-is with disclosure. No iteration 3.
 
-- **Phase D (iteration 2, FINAL) Gate-1:** _pending_
-**VERDICT: pending iteration-2 Phase D.**
+- **Phase D (iteration 2, FINAL) Gate-1: GREEN** — majority class-(c) = 0
+  across all 4 FINAL notes, L4-c = 0 on every case (report
+  `primock57-fullchain-fabrication-20260702T180119Z.md`; disclosed
+  (a)-survival 1 on day1_consultation02, (b) 0). **Gate-2: PASS** — material
+  omissions mean 0.75/case, max 2 (floor ≤ 1.5 / ≤ 5), judge-unavailable 0;
+  lane-captured facts correctly not counted (2). One run, no reroll.
+- Phase B re-verified on final bytes: 62/62 canaries + golden default-prompt
+  bytes unchanged. Phase C stands (verifier code bytes identical to the
+  certified run across both iterations — re-verified by diff at ship).
+
+**FINAL VERDICT: the exemption seam + iteration-2 addendum ship. Iteration
+budget consumed 2/2 — no further prompt/verifier changes without a new
+pre-registered pass. Frozen surfaces verified byte-unchanged at ship time
+via diff.**
