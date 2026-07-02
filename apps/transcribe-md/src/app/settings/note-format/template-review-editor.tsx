@@ -125,7 +125,15 @@ export function TemplateReviewEditor({
   onSaved,
 }: TemplateReviewEditorProps) {
   const [name, setName] = useState(initial.name);
-  const [encounterType, setEncounterType] = useState<string>(initial.encounterType ?? '');
+  // The parse LLM emits a free-text encounterType ("Follow-up progress note")
+  // that matches no <option>; the browser would DISPLAY "All my visits" while
+  // the state kept the free text — saving a template the resolver can never
+  // match against visit.specialty (silently inert). Coerce anything outside
+  // the catalog to the catch-all so what the doctor sees is what gets saved.
+  const [encounterType, setEncounterType] = useState<string>(() => {
+    const parsed = initial.encounterType ?? '';
+    return ENCOUNTER_OPTIONS.some((o) => o.value === parsed) ? parsed : '';
+  });
   const [sections, setSections] = useState<EditableSection[]>(() =>
     [...initial.sections].sort((a, b) => a.order - b.order).map(toEditable),
   );

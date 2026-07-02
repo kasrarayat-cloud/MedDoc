@@ -136,10 +136,24 @@ export function NoteFormatManager({
     runParse(text);
   }
 
+  // Next.js server actions reject bodies over 1 MB BEFORE our action runs
+  // (no serverActions.bodySizeLimit is configured), so the server-side 5 MB
+  // check is unreachable and an oversized file surfaced only as a generic
+  // "Something went wrong" (custom-template QA 2026-07-02, finding F-4).
+  // Check client-side against the real limit and say so honestly.
+  const MAX_UPLOAD_BYTES = 1024 * 1024;
+
   function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = ''; // allow re-selecting the same file
     if (!file) return;
+    if (file.size > MAX_UPLOAD_BYTES) {
+      toast.error('Could not read that file', {
+        description:
+          'That file is larger than 1 MB. Upload a single representative note, or paste the note text instead.',
+      });
+      return;
+    }
     const fd = new FormData();
     fd.append('file', file);
     setView('parsing');
