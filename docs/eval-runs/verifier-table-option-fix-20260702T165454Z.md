@@ -55,5 +55,30 @@ identical to the certified run — re-verified by diff at ship); **Phase D
 re-runs in full on the final bytes** (same 4 cases, same gates, one run,
 no reroll — the certification below supersedes the pre-iteration Phase D).
 
-- **Phase D (iteration 1, FINAL) Gate-1:** _pending_
-**VERDICT: pending iteration-1 Phase D.**
+- **Phase D (iteration 1) Gate-1: GREEN** — majority class-(c) = 0 across all 4
+  FINAL notes (report `primock57-fullchain-fabrication-20260702T175002Z.md`;
+  L4-c = 0 on every case as well). **Gate-2: FAIL** — material omissions
+  mean 1.75/case (floor ≤ 1.5), max 2 (≤ 5 OK), judge-unavailable 0.
+  Recorded as-run; NOT rerolled.
+
+## Iteration 2 (2026-07-02 — final iteration of the registered budget)
+
+Gate-2 regressed 1.00 → 1.75 mean (7 omissions/4 cases vs floor 6). The
+omitted facts are uniformly functional/psychosocial context (work impact ×3,
+patient concern ×1, activity limitation ×1, self-care/fluids ×1, negative ROS
+context ×1) — zero fabrication pressure (Gate-1 stayed GREEN with L4-c=0).
+Plausible mechanism: iteration 1's minimal-span emphasis biases the model
+toward brevity beyond anchor spans. Iteration-2 fix (registered surface 3
+only, committed before tokens): a completeness counterweight appended to the
+same addendum — span rules govern ONLY the quoted anchor text, never the
+note content; functional/psychosocial context (work impact, patient
+concerns, self-care tried) must still appear in the note or lane.
+
+**Pre-commitment:** Phase D re-runs ONCE on these final bytes (same 4 cases,
+same gates). If EITHER gate fails, the branch REVERTS to the certified
+pre-iteration addendum (Phase B/C/D-passing bytes of the original run),
+the Phase-3 matrix re-runs on the reverted bytes, and the lower
+checked-option sensitivity ships as-is with disclosure. No iteration 3.
+
+- **Phase D (iteration 2, FINAL) Gate-1:** _pending_
+**VERDICT: pending iteration-2 Phase D.**

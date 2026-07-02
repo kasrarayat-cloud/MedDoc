@@ -68,7 +68,13 @@ export const ANCHOR_GENERATION_ADDENDUM = [
   'and needs one. Anchor a checked option with the SHORTEST verbatim span',
   'that affirms that option alone — never include neighboring denials or',
   'unrelated clauses in its anchor (quote "regular rate and rhythm", not',
-  '"regular rate and rhythm, no murmur").',
+  '"regular rate and rhythm, no murmur"). These span rules govern ONLY',
+  'what you quote inside ⟦A:""⟧ — they never shrink the note itself.',
+  'Every clinically relevant fact the transcript supports — including',
+  'functional and psychosocial context such as impact on work or usual',
+  'activities, the patient’s stated concerns, and self-care already',
+  'tried — must still appear in the note (or, when unanchorable, as a ⟦S⟧',
+  'suggestion).',
 ].join('\n');
 
 export type DemotionReason =
