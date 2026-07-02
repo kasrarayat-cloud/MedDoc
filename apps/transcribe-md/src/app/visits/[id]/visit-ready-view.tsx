@@ -281,6 +281,17 @@ export function VisitReadyView(props: VisitReadyViewProps) {
   // Phase 5.1 — feed the SOAP V3 sources rail with diarised turns.
   // For non-audio inputs this is empty and the rail collapses to the
   // empty-state hint.
+  // F-7: sections still carrying the verifier's set-aside placeholder,
+  // computed from the freshest client-side text (adoption strips the
+  // placeholder server-side and returns fresh text; manual edits re-sync
+  // via the RSC refresh on save). Feeds the pre-sign ADVISORY only —
+  // memoized top-level (unconditional hook) so child callback deps get a
+  // stable identity (auditor N-1/N-6).
+  const setAsideSections = useMemo(() => {
+    if (props.readonly || props.signedAt !== null) return [];
+    return placeholderSections(adoption?.text ?? props.soapText);
+  }, [props.readonly, props.signedAt, adoption?.text, props.soapText]);
+
   const soapSources = useMemo(
     () =>
       props.inputMode === 'audio_upload'
@@ -322,13 +333,6 @@ export function VisitReadyView(props: VisitReadyViewProps) {
     const suggestionCount = showSuggestions
       ? (props.suggestedClaims?.length ?? 0)
       : 0;
-    // F-7: sections still carrying the verifier's set-aside placeholder,
-    // computed from the freshest client-side text (adoption strips the
-    // placeholder server-side and returns fresh text; manual edits re-sync
-    // via the RSC refresh on save). Feeds the pre-sign ADVISORY only.
-    const setAsideSections = isSigned
-      ? []
-      : placeholderSections(adoption?.text ?? props.soapText);
 
     const transcriptInner =
       props.inputMode === 'audio_upload' ? (

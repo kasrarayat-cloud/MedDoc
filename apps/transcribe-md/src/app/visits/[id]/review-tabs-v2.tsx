@@ -80,16 +80,16 @@ export function ReviewTabsV2(props: ReviewTabsV2Props) {
   const [signOpen, setSignOpen] = useState(false);
   const [advisoryOpen, setAdvisoryOpen] = useState(false);
   const placeholderLabels = props.placeholderSections ?? [];
+  const hasPlaceholders = placeholderLabels.length > 0;
   const requestSignOpen = useCallback(
     (next: boolean) => {
-      if (next && placeholderLabels.length > 0) {
+      if (next && hasPlaceholders) {
         setAdvisoryOpen(true);
         return;
       }
       setSignOpen(next);
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [placeholderLabels.join('|')]
+    [hasPlaceholders]
   );
 
   const onTabKey = useCallback(
