@@ -281,11 +281,14 @@ export function SoapEditor({
 
   // Parse once for status-pill computation; <SoapBody> re-parses for
   // its own render but the cost is trivial and keeps responsibilities
-  // localised.
+  // localised. Custom-template/imaging sections have no canonical SOAP
+  // key — SoapBody passes (null, body) and the pill derives from the
+  // body alone (parse-note-sections, finding F-1).
   const sections = useMemo(() => parseSoapSections(text), [text]);
   const statusFor = useCallback(
-    (key: SoapSectionKey): SoapSectionStatus => {
+    (key: SoapSectionKey | null, body?: string): SoapSectionStatus => {
       if (isSigned) return 'signed';
+      if (key === null) return body && body.trim() ? 'reviewed' : 'drafted';
       const sec = sections.find((s) => s.key === key);
       return sec && sec.body.trim() ? 'reviewed' : 'drafted';
     },
