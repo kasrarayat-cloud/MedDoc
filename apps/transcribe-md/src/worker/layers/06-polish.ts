@@ -11,7 +11,10 @@ import { modelClient } from '@meddoc/ai';
 import prisma from '@meddoc/db';
 import { logAudit } from '@/lib/audit';
 import { applyAdditiveReviewState } from '@/worker/finalize-review-state';
-import { runPolishFidelityGate } from './06b-polish-fidelity-gate';
+import {
+  findNovelContentTerms,
+  runPolishFidelityGate,
+} from './06b-polish-fidelity-gate';
 import {
   classifyCritique,
   type CritiqueReport,
@@ -52,8 +55,57 @@ export interface Layer6Output {
   polishRejected: boolean;
 }
 
+// ---------------------------------------------------------------------------
+// L6 survival tuning (2026-07-02, the pre-registered follow-up from the
+// 2026-06-11 reconciliation): under anchored generation, L5 routinely asks
+// polish to ADD content the L4b verifier demoted to the suggestions lane —
+// and the L6b gate rejects ANY addition by construction (iteration 1 closed
+// the fixes channel deliberately). Applying those fixes rejected the ENTIRE
+// polish on essentially every visit (17/17 in the 2026-07-02 QA matrix),
+// losing the legitimate rewording fixes too. Partition BEFORE the model
+// call: additive-class fixes are DEFERRED to the review banner (their
+// content already sits in the adopt-flow lane); only rewording-class fixes
+// are sent to tm_polish. The gate itself is untouched and remains the
+// backstop for anything misclassified.
+// Caution-first bias: a rewording fix wrongly deferred costs one cosmetic
+// edit; an additive fix wrongly applied is exactly what the gate rejects.
+// ---------------------------------------------------------------------------
+const ADD_VERB_RE = /\b(add|adds|adding|insert|include|includes|populate|append|restore|introduce|state|document)\b/i;
+const REMOVAL_VERB_RE = /\b(remove|removes|delete|deletes|strike|drop|omit the|take out)\b/i;
+// Instruction/editorial vocabulary that is "novel vs the draft" for nearly
+// any fix text but carries no clinical payload — excluded before counting.
+const EDITORIAL_TERMS = new Set([
+  'apply', 'applied', 'described', 'above', 'below', 'fix', 'fixes', 'issue',
+  'issues', 'auditor', 'consolidate', 'consolidated', 'reword', 'reworded',
+  'rephrase', 'rephrased', 'merge', 'merged', 'reorder', 'reordered',
+  'shorten', 'clarify', 'clarified', 'combine', 'combined', 'tighten',
+  'deduplicate', 'duplicate', 'duplicated', 'redundant', 'repeated',
+  'overlapping', 'formatting', 'format', 'wording', 'phrasing', 'sentence',
+  'sentences', 'paragraph', 'section', 'sections', 'heading', 'headings',
+  'bullet', 'bullets', 'line', 'lines', 'item', 'items', 'move', 'moved',
+  'single', 'instead', 'statement', 'statements', 'draft', 'note',
+]);
+
+/** True when applying this fix would require content the draft lacks —
+ *  the class the L6b gate rejects unconditionally. */
+export function isAdditiveFix(draft: string, issue: CritiqueIssue): boolean {
+  const fix = issue.suggested_fix ?? '';
+  // Deletion fixes are gate-passable (deletions are explicitly allowed) and
+  // safety-relevant (they REMOVE unsupported content) — never defer them,
+  // even when the sentence also contains an add-verb ("remove X and add a
+  // shorter form of Y" still nets toward removal; the gate backstops).
+  if (REMOVAL_VERB_RE.test(fix)) return false;
+  if (ADD_VERB_RE.test(fix)) return true;
+  const novel = findNovelContentTerms([draft], fix).filter(
+    (t) => !EDITORIAL_TERMS.has(t)
+  );
+  return novel.length >= 3;
+}
+
 export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output> {
-  const { fixable, unfixable } = classifyCritique(input.critique);
+  const { fixable: fixableAll, unfixable } = classifyCritique(input.critique);
+  const deferredAdditive = fixableAll.filter((i) => isAdditiveFix(input.soapDraft, i));
+  const fixable = fixableAll.filter((i) => !isAdditiveFix(input.soapDraft, i));
   // Phase 1: validate the polished note against the resolved template's
   // required sections. System default → the 4 SOAP headers → unchanged.
   const template: ResolvedNoteTemplate =
@@ -222,6 +274,14 @@ export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output>
     ? 'Auto-polish was rejected by the fabrication gate and not applied — the auditor-flagged fixes remain unapplied; review the draft.'
     : null;
   const prefixReason = polishRejectedReason ?? polishValidationFailReason;
+  // Survival tuning: deferred additive fixes still reach the doctor — their
+  // content usually sits in the suggestions lane (adopt flow), so point there.
+  const deferredReason =
+    deferredAdditive.length > 0
+      ? `Auto-polish deferred ${deferredAdditive.length} auditor fix${
+          deferredAdditive.length === 1 ? '' : 'es'
+        } that would add content not in the draft — review the suggestions and draft before signing.`
+      : null;
   const baseReason =
     unfixable.length > 0
       ? `Auto-polish could not fix ${unfixable.length} critical issue${
@@ -230,14 +290,12 @@ export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output>
       : !input.critique.safe_to_sign_without_review
         ? 'Auditor flagged issues worth a quick review before signing.'
         : null;
-  const reviewReason = prefixReason
-    ? baseReason
-      ? `${prefixReason} ${baseReason}`
-      : prefixReason
-    : baseReason;
+  const reviewReason =
+    [prefixReason, deferredReason, baseReason].filter(Boolean).join(' ') || null;
 
   const needsReview =
     unfixable.length > 0 ||
+    deferredAdditive.length > 0 ||
     !input.critique.safe_to_sign_without_review ||
     polishValidationFailReason !== null ||
     polishRejected;
