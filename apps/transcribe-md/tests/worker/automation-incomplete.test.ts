@@ -260,10 +260,31 @@ describe('detectIncompleteAutomation — empty L7a output detection (Finding 2)'
     expect(r.failedLayers).toEqual([]);
   });
 
-  it('flags review when icdCodes is null', () => {
+  it('FRESH-run DB-blip (icdCodes null) does NOT trip the icd leg; cpt-null still flags (auditor TEST-coverage)', () => {
+    const r = detectIncompleteAutomation(okScores, {
+      icdCodes: null, // re-read blip on a fresh run
+      cptCodes: null,
+    });
+    expect(r.failedLayers).not.toContain('icd_coding');
+    expect(r.failedLayers).toContain('cpt_coding');
+    expect(r.needsReview).toBe(true);
+  });
+
+  it('FRESH-run empty icdCodes does NOT trip pass 2 — 07a already wrote the specialty-aware flag (dedup follow-up 2026-07-02)', () => {
+    const r = detectIncompleteAutomation(okScores, {
+      icdCodes: { codes: [] },
+      cptCodes: healthyCpt,
+      // icdResumed omitted/false = fresh run
+    });
+    expect(r.failedLayers).not.toContain('icd_coding');
+    expect(r.needsReview).toBe(false);
+  });
+
+  it('flags review when icdCodes is null (resumed attempt — the sole icd guard there)', () => {
     const r = detectIncompleteAutomation(okScores, {
       icdCodes: null,
       cptCodes: healthyCpt,
+      icdResumed: true,
     });
     expect(r.needsReview).toBe(true);
     expect(r.failedLayers).toEqual(['icd_coding']);
@@ -271,19 +292,21 @@ describe('detectIncompleteAutomation — empty L7a output detection (Finding 2)'
     expect(r.reviewReason).toMatch(/icd-coding: returned empty codes array/);
   });
 
-  it('flags review when icdCodes.codes is []', () => {
+  it('flags review when icdCodes.codes is [] (resumed attempt)', () => {
     const r = detectIncompleteAutomation(okScores, {
       icdCodes: { codes: [] },
       cptCodes: healthyCpt,
+      icdResumed: true,
     });
     expect(r.needsReview).toBe(true);
     expect(r.causeByLayer.icd_coding).toBe('empty');
   });
 
-  it('flags review when icdCodes.codes is missing entirely', () => {
+  it('flags review when icdCodes.codes is missing entirely (resumed attempt)', () => {
     const r = detectIncompleteAutomation(okScores, {
       icdCodes: {},
       cptCodes: healthyCpt,
+      icdResumed: true,
     });
     expect(r.needsReview).toBe(true);
     expect(r.causeByLayer.icd_coding).toBe('empty');
@@ -371,6 +394,7 @@ describe('detectIncompleteAutomation — both L7a + L7b empty (UC2-style)', () =
     const r = detectIncompleteAutomation(okScores, {
       icdCodes: { codes: [] },
       cptCodes: null,
+      icdResumed: true,
     });
     expect(r.needsReview).toBe(true);
     expect(r.failedLayers).toContain('icd_coding');

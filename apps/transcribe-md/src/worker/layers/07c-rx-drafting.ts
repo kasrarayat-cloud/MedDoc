@@ -437,17 +437,15 @@ export async function runLayer7cRxDrafting(
         evidence_quote: rx.evidence_quote ?? null,
       });
 
-      // PR-D shipped three of the four warning codes as audit-action
-      // enum values. RX_COMPLEX_DOSING_VERIFY_INDIVIDUALLY is NOT in
-      // the AuditAction enum (Prisma) nor in the TS union — adding it
-      // would require a Prisma migration that's out of scope for this
-      // PR. We still surface the warning to the doctor (above), but
-      // skip the audit row. Follow-up: extend the enum + write a
-      // migration so the complex-dosing nudge is auditable.
+      // PR-D shipped three of the four warning codes as audit-action enum
+      // values; RX_COMPLEX_DOSING_VERIFY_INDIVIDUALLY joined them in
+      // migration 20260702153000 (F-8 audit leg) — all four validator
+      // codes now write audit rows.
       const isAuditable =
         w.code === 'RX_DOSE_EXCEEDS_VERIFIED_RANGE' ||
         w.code === 'RX_CONTRAINDICATION_MATCH' ||
-        w.code === 'RX_DRUG_NOT_IN_VERIFIED_DATABASE';
+        w.code === 'RX_DRUG_NOT_IN_VERIFIED_DATABASE' ||
+        w.code === 'RX_COMPLEX_DOSING_VERIFY_INDIVIDUALLY';
 
       if (isAuditable) {
         void logAudit({
@@ -505,10 +503,25 @@ export async function runLayer7cRxDrafting(
       evidence_quote:
         interactionMeds.find((m) => m.name === w.primaryDrug)?.evidenceQuote ?? null,
     });
-    // RX_DRUG_PAIR_* codes are not in the AuditAction enum (adding them
-    // needs a Prisma migration — same follow-up as
-    // RX_COMPLEX_DOSING_VERIFY_INDIVIDUALLY above). The warning still
-    // reaches the doctor + the sign gate; only the audit row is deferred.
+    // F-8 audit leg (migration 20260702153000): PHI boundary per the PR-D
+    // RX_* contract — drug names + rule id + numbers only; never the
+    // message or evidence_quote (transcript content).
+    void logAudit({
+      action: w.code,
+      targetId: input.visitId,
+      targetType: 'TranscribeVisit',
+      userId: input.userId,
+      practiceId: input.practiceId,
+      success: false,
+      metadata: {
+        ruleId: w.ruleId,
+        primaryDrug: w.primaryDrug,
+        otherDrug: w.otherDrug,
+        severity: w.severity,
+        doseMgPerDay:
+          interactionMeds.find((m) => m.name === w.primaryDrug)?.doseMgPerDay ?? null,
+      },
+    });
   }
 
   await prisma.transcribeVisit.update({

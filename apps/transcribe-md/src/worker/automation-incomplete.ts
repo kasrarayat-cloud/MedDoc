@@ -77,6 +77,15 @@ export interface CptLikeResult {
 export interface LayerOutputs {
   icdCodes?: IcdLikeResult | null;
   cptCodes?: CptLikeResult | null;
+  /** True when L7a was SKIPPED this attempt because a prior attempt already
+   *  wrote its column (T-M13 resume). On a FRESH ok run, 07a's own
+   *  post-validation (07a-icd-coding.ts:293-320) has ALWAYS already written
+   *  the better, specialty-aware empty-codes review flag — so pass 2's icd
+   *  branch firing there is pure duplication (the doubled "Auto-coding…
+   *  Click Retry" banner on terse visits, 2026-07-02 follow-up). On a
+   *  RESUMED attempt the reset at worker attempt-start wiped that flag and
+   *  07a never re-runs — pass 2 is the SOLE empty-codes guard there. */
+  icdResumed?: boolean;
 }
 
 /** Distinguishes "the layer crashed" from "the layer returned nothing
@@ -159,6 +168,7 @@ export function detectIncompleteAutomation(
   // scores still 'ok') — is byte-identical.
   if (outputs) {
     if (
+      outputs.icdResumed === true &&
       scores?.icd_coding?.status === 'ok' &&
       causeByLayer.icd_coding == null &&
       isIcdEmpty(outputs.icdCodes)
