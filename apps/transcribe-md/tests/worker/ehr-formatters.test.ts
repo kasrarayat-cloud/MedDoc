@@ -10,6 +10,8 @@ import {
   sectionCodes,
   sectionRx,
   sectionExtras,
+  flattenTables,
+  flattenTasks,
 } from '@/lib/ehr-formatters';
 
 function mkVisit(overrides: Partial<VisitExportData> = {}): VisitExportData {
@@ -168,6 +170,148 @@ describe('section helpers', () => {
     const out = sectionExtras(mkVisit());
     expect(out).toContain('PATIENT SUMMARY:');
     expect(out).toContain('your blood pressure');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Structure-aware notes (T: GitHub tables + task lists in section bodies).
+// The clipboard formatters must degrade tables/tasks to ASCII so an EHR
+// text field never receives raw pipes/brackets — and PROSE-ONLY notes must
+// stay byte-identical through the flatteners (regression canary).
+// ---------------------------------------------------------------------------
+
+describe('flattenTables', () => {
+  it('collapses a 2-column table to `cell1: cell2` lines', () => {
+    const src = [
+      '| Vital | Value |',
+      '|-------|-------|',
+      '| BP | 148/92 |',
+      '| HR | 78 |',
+    ].join('\n');
+    const out = flattenTables(src);
+    expect(out).toBe('BP: 148/92\nHR: 78');
+    expect(out).not.toContain('|');
+    expect(out).not.toContain('---');
+  });
+
+  it('zips a 3+ column table header with each body row via ` · `', () => {
+    const src = [
+      '| Med | Dose | Route |',
+      '| --- | --- | --- |',
+      '| Lisinopril | 20 mg | PO |',
+    ].join('\n');
+    const out = flattenTables(src);
+    expect(out).toBe('Med: Lisinopril · Dose: 20 mg · Route: PO');
+    expect(out).not.toContain('|');
+  });
+
+  it('drops separator rows and preserves surrounding prose', () => {
+    const src = [
+      'Findings:',
+      '| Site | Result |',
+      '| --- | --- |',
+      '| Right | Normal |',
+      '',
+      'Impression: stable.',
+    ].join('\n');
+    const out = flattenTables(src);
+    expect(out).toBe(
+      ['Findings:', 'Right: Normal', '', 'Impression: stable.'].join('\n')
+    );
+  });
+
+  it('degrades a header-only table to a single dotted line (nothing lost)', () => {
+    const src = ['| A | B |', '| --- | --- |'].join('\n');
+    expect(flattenTables(src)).toBe('A · B');
+  });
+
+  it('leaves prose without pipe rows byte-identical', () => {
+    const prose =
+      '## Subjective\n**Chief Complaint:** Chest tightness.\n\n- BP 148/92\n- HR 78';
+    expect(flattenTables(prose)).toBe(prose);
+  });
+});
+
+describe('flattenTasks', () => {
+  it('rewrites `- [x]` / `- [ ]` to ASCII `[x]` / `[ ]`', () => {
+    const src = [
+      '- [x] Chaperone offered',
+      '- [ ] Interpreter used',
+      '* [X] Consent obtained',
+    ].join('\n');
+    expect(flattenTasks(src)).toBe(
+      '[x] Chaperone offered\n[ ] Interpreter used\n[x] Consent obtained'
+    );
+  });
+
+  it('keeps unchecked options VISIBLE (clinical meaning is not noise)', () => {
+    const out = flattenTasks('- [ ] Chaperone offered');
+    expect(out).toContain('[ ] Chaperone offered');
+  });
+
+  it('preserves leading indentation', () => {
+    expect(flattenTasks('  - [x] Nested')).toBe('  [x] Nested');
+  });
+
+  it('leaves prose without task lines byte-identical', () => {
+    const prose = '## Plan\n- Increase lisinopril\n1. Follow up in 2 weeks';
+    expect(flattenTasks(prose)).toBe(prose);
+  });
+});
+
+describe('clipboard degradation — structure-aware notes', () => {
+  const structuredSoap = [
+    '## Objective',
+    '',
+    '| Vital | Value |',
+    '| --- | --- |',
+    '| BP | 148/92 |',
+    '| HR | 78 |',
+    '',
+    '## Plan',
+    '- [x] Chaperone offered',
+    '- [ ] Interpreter used',
+  ].join('\n');
+
+  it('Epic never emits raw pipes or `- [ ]` brackets', () => {
+    const out = formatForEpic(mkVisit({ soapText: structuredSoap }));
+    expect(out).not.toContain('|');
+    expect(out).not.toContain('- [');
+    expect(out).toContain('BP: 148/92');
+    expect(out).toContain('[x] Chaperone offered');
+    expect(out).toContain('[ ] Interpreter used');
+  });
+
+  it('Cerner degrades tables/tasks identically to Epic', () => {
+    const out = formatForCerner(mkVisit({ soapText: structuredSoap }));
+    // Cerner's own header uses a `name | date` divider, so assert on the
+    // note body specifically: no raw markdown table rows survive.
+    expect(out).not.toContain('| BP |');
+    expect(out).not.toContain('| Value |');
+    expect(out).not.toContain('- [ ]');
+    expect(out).toContain('BP: 148/92');
+    expect(out).toContain('[ ] Interpreter used');
+  });
+
+  it('sectionSoap (Copy-this-section) degrades tables/tasks', () => {
+    const out = sectionSoap(mkVisit({ soapText: structuredSoap }));
+    expect(out).not.toContain('|');
+    expect(out).toContain('BP: 148/92');
+    expect(out).toContain('[x] Chaperone offered');
+  });
+
+  it('prose-only SOAP is byte-identical vs the pre-structure behavior', () => {
+    // Manually reproduce the OLD stripMarkdown (no flatten chain) to prove
+    // notes without pipes/tasks are unaffected by the new branches.
+    const proseSoap =
+      '## Subjective\n**Chief Complaint:** Chest tightness.\n\n## Plan\n1. Increase lisinopril to 20 mg.';
+    const oldStrip = (s: string) =>
+      s
+        .replace(/^#{1,6}\s+/gm, '')
+        .replace(/\*\*(.+?)\*\*/g, '$1')
+        .replace(/(?<!\*)\*(?!\*)(.+?)\*(?!\*)/g, '$1');
+    const visit = mkVisit({ soapText: proseSoap });
+    expect(sectionSoap(visit)).toBe(oldStrip(proseSoap).trim());
   });
 });
 
