@@ -18,6 +18,7 @@ import { z } from 'zod';
 import type {
   NoteTemplateSection,
   SectionFormatHint,
+  SectionStructure,
 } from '@/worker/note-templates/system-default-template';
 
 /** Persisted-field length caps, shared by the review/save Zod schema
@@ -41,6 +42,44 @@ export const TEMPLATE_FIELD_LIMITS = {
 
 export const FormatHintSchema = z.enum(['prose', 'bullets', 'numbered']);
 
+// ── Structured elements (feat/structured-templates, 2026-07-02) ────────────
+// Tables + option-sets as first-class structure. Bounds are inline (not in
+// TEMPLATE_FIELD_LIMITS) because they also cap ARRAY sizes, not just string
+// lengths: columns ≤ 8 × 60 chars, fixed rows ≤ 30 × 80, options ≤ 24 × 120.
+// These BOUNDED schemas guard the review/persist boundary. The LLM-facing
+// copies below are min-only, per this file's lenient-LLM-schema convention:
+// a faithfully-parsed 25-item ROS checklist must clamp, never surface a raw
+// Zod "Too big" — sanitizeStructure() in the parse engine owns the caps
+// (truncate + dedupe + degenerate→null) before the draft leaves the parse.
+export const TableStructureSchema = z.object({
+  kind: z.literal('table'),
+  columns: z.array(z.string().min(1).max(60)).min(2).max(8),
+  rowLabels: z.array(z.string().min(1).max(80)).min(1).max(30).optional(),
+});
+export const OptionsStructureSchema = z.object({
+  kind: z.literal('options'),
+  options: z.array(z.string().min(1).max(120)).min(2).max(24),
+  multi: z.boolean(),
+});
+export const SectionStructureSchema = z.discriminatedUnion('kind', [
+  TableStructureSchema,
+  OptionsStructureSchema,
+]);
+const LlmTableStructureSchema = z.object({
+  kind: z.literal('table'),
+  columns: z.array(z.string().min(1)).min(2),
+  rowLabels: z.array(z.string().min(1)).min(1).optional(),
+});
+const LlmOptionsStructureSchema = z.object({
+  kind: z.literal('options'),
+  options: z.array(z.string().min(1)).min(2),
+  multi: z.boolean(),
+});
+const LlmSectionStructureSchema = z.discriminatedUnion('kind', [
+  LlmTableStructureSchema,
+  LlmOptionsStructureSchema,
+]);
+
 /** A section as the LLM is allowed to emit it — note: NO defaultTextMode
  *  (forced to scaffold_confirm in code) and NO safety fields. */
 export const ParsedSectionLlmSchema = z.object({
@@ -57,6 +96,9 @@ export const ParsedSectionLlmSchema = z.object({
   /** ONLY clearly-generic reusable/normal templated text (e.g. a normal-exam
    *  boilerplate). Null when nothing is safely generic. Never patient-unique. */
   defaultText: z.string().nullable(),
+  /** Table/option-set structure when the note clearly shows one. Optional —
+   *  prose sections omit it (backward compatible). */
+  structure: LlmSectionStructureSchema.nullable().optional(),
 });
 
 /** Doctor-level prose style. NO preamble/globalRules (safety is immutable +
@@ -117,7 +159,7 @@ export type ParseNoteResult =
   | { rejected: false; template: ParsedTemplateDraft; flags: string[] }
   | { rejected: true; template: null; reason: string };
 
-export type { NoteTemplateSection, SectionFormatHint };
+export type { NoteTemplateSection, SectionFormatHint, SectionStructure };
 
 // ── Generated-value clamping ────────────────────────────────────────────────
 // The parse LLM schema is intentionally lenient (min only). Before a draft

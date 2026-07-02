@@ -18,6 +18,10 @@
 // ============================================================================
 
 import { z } from 'zod';
+// Structured elements (feat/structured-templates, 2026-07-02) — the SAME
+// schema the parse engine validates with (single source of truth), so a
+// parsed structure always round-trips review → save → preview.
+import { SectionStructureSchema } from '@/lib/note-template-parse/note-template-schema';
 import { SPECIALTY_IDS } from '@meddoc/shared/specialties';
 import { TEMPLATE_FIELD_LIMITS as LIM } from '@/lib/note-template-parse/note-template-schema';
 import type {
@@ -37,6 +41,9 @@ export const ReviewedSectionSchema = z
     formatHint: FormatHintSchema,
     styleInstructions: z.string().trim().max(LIM.styleInstructions).nullable().default(null),
     defaultText: z.string().max(LIM.defaultText).nullable().default(null),
+    /** Table/option-set structure — carried through verbatim from the parse;
+     *  the review UI displays it read-only in v1. Optional (prose sections). */
+    structure: SectionStructureSchema.nullable().default(null),
   })
   .strict();
 
@@ -99,6 +106,7 @@ export function normalizeReviewedTemplate(input: ReviewedTemplateInput): {
       defaultText: trimmedDefault,
       // RULE 2 — never always_include; a default is always confirm-gated.
       defaultTextMode: trimmedDefault ? 'scaffold_confirm' : 'omit_unless_supported',
+      structure: s.structure ?? null,
     };
   });
 

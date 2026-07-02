@@ -3638,6 +3638,72 @@ body {
   height: 6px;
 }
 
+/* Structure-aware notes — markdown tables + task-list rows inside section
+   bodies. Table mirrors the .qm-lin-codes-table hairline conventions
+   (collapsed borders, mono uppercase letter-spaced header). */
+.qm-lin-soap-md-table-wrap {
+  overflow-x: auto;
+  margin: 8px 0;
+  border: 1px solid var(--color-linear-border);
+  border-radius: 6px;
+}
+.qm-lin-soap-md-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.qm-lin-soap-md-table thead th {
+  background: var(--color-linear-surface-2);
+  border-bottom: 1px solid var(--color-linear-border);
+  padding: 6px 12px;
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-linear-text-3);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.qm-lin-soap-md-table thead th + th,
+.qm-lin-soap-md-table tbody td + td {
+  border-left: 1px solid var(--color-linear-hairline);
+}
+.qm-lin-soap-md-table tbody td {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--color-linear-hairline);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--color-linear-text-2);
+  vertical-align: top;
+}
+.qm-lin-soap-md-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.qm-lin-soap-md-task {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--color-linear-text);
+}
+.qm-lin-soap-md-task + .qm-lin-soap-md-task {
+  margin-top: 2px;
+}
+.qm-lin-soap-md-task-glyph {
+  flex: none;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--color-linear-text-3);
+}
+.qm-lin-soap-md-task-glyph--checked {
+  color: var(--color-linear-sage);
+}
+.qm-lin-soap-md-task-text {
+  min-width: 0;
+}
+
 /* Vital token — mono numeric chunk inside section bodies (BP/HR/etc). */
 .qm-lin-soap-section-body .vital-tok {
   font-family: var(--font-mono);

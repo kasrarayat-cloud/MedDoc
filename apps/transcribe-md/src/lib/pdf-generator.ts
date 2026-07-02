@@ -275,6 +275,23 @@ const ITALIC_LABEL_LINE_RE = /^\*([^*]+?):\*\s*(.*)$/;
 // tokenizer is fine for the common cases.
 const INLINE_MARKDOWN_RE = /(\*\*[^*]+?\*\*|\*[^*]+?\*)/g;
 
+// Structure-aware note line shapes. A table row is any line that starts
+// and ends with a pipe; separator rows (|---|:---|) are dropped at flush
+// time. Task lines are GitHub-style checklist items (- [x] / - [ ]).
+const TABLE_ROW_RE = /^\s*\|.*\|\s*$/;
+const TABLE_SEPARATOR_ROW_RE = /^\s*\|[\s:|-]+\|\s*$/;
+const TASK_LINE_RE = /^\s*[-*]\s+\[( |x|X)\]\s+(.*)$/;
+
+/** `| a | b |` → `['a', 'b']` — trims the outer pipes + per-cell whitespace. */
+function parseTableRow(line: string): string[] {
+  return line
+    .trim()
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map((c) => c.trim());
+}
+
 function renderSoap(doc: PDFKit.PDFDocument, data: VisitExportData): void {
   sectionHeading(doc, 'Clinical Note');
   const soap = data.soapText.trim();
@@ -282,14 +299,34 @@ function renderSoap(doc: PDFKit.PDFDocument, data: VisitExportData): void {
     muted(doc, 'No SOAP note available.');
     return;
   }
+  // Consecutive markdown-table rows collect here and flush as one grid on
+  // the first non-pipe line (and at end-of-note). Prose-only notes never
+  // populate the buffer, so their layout is unchanged.
+  let tableBuffer: string[] = [];
+  const flushTable = () => {
+    if (tableBuffer.length === 0) return;
+    const rows = tableBuffer
+      .filter((l) => !TABLE_SEPARATOR_ROW_RE.test(l))
+      .map(parseTableRow);
+    tableBuffer = [];
+    renderMarkdownTable(doc, rows);
+  };
   // Walk the markdown line-by-line. Dispatch order matters:
+  //   | table row |         →  buffered, flushed via renderMarkdownTable
   //   ## Heading           →  body-bold, slightly larger
+  //   - [x] task           →  renderTaskItem (vector checkbox — the
+  //                            bundled fonts have no U+2610/U+2612 glyphs)
   //   bullet               →  renderBullet (may also be label-shape)
   //   **Label:** content   →  renderLabelContent (bold label)
   //   *Label:* content     →  renderLabelContent (italic label)
   //   everything else      →  renderInlineMarkdown (bold + italic spans)
   for (const raw of soap.split('\n')) {
     const line = raw.trimEnd();
+    if (TABLE_ROW_RE.test(line)) {
+      tableBuffer.push(line);
+      continue;
+    }
+    flushTable();
     if (!line.trim()) {
       doc.moveDown(0.4);
       continue;
@@ -300,6 +337,11 @@ function renderSoap(doc: PDFKit.PDFDocument, data: VisitExportData): void {
         .fontSize(SIZE.body + 1)
         .fillColor(COLORS.textPrimary)
         .text(line.replace(/^##\s+/, ''));
+      continue;
+    }
+    const task = line.match(TASK_LINE_RE);
+    if (task) {
+      renderTaskItem(doc, task[1].toLowerCase() === 'x', task[2]);
       continue;
     }
     if (/^\s*[-*]\s+/.test(line)) {
@@ -319,6 +361,7 @@ function renderSoap(doc: PDFKit.PDFDocument, data: VisitExportData): void {
     // Plain prose with possible inline **bold**/*italic* spans.
     renderInlineMarkdown(doc, line);
   }
+  flushTable();
   doc.moveDown(0.8);
 }
 
@@ -502,6 +545,200 @@ function muted(doc: PDFKit.PDFDocument, s: string): void {
     .fontSize(SIZE.small)
     .fillColor(COLORS.textMuted)
     .text(s);
+}
+
+/** Task-list line (`- [x] Foo` / `- [ ] Foo`). The bundled Charter /
+ *  Inter Tight TTFs carry NO ballot-box glyphs (U+2610/U+2612 would
+ *  render as tofu), so the checkbox is vector-drawn: a 7pt hairline
+ *  rect, plus two diagonal check strokes when checked. Body text keeps
+ *  inline **bold** / *italic* spans via the shared span logic, laid out
+ *  at an absolute x past the box (renderPatientBlock idiom, cursor
+ *  reset at the end). */
+function renderTaskItem(
+  doc: PDFKit.PDFDocument,
+  checked: boolean,
+  body: string
+): void {
+  const BOX = 7;
+  const GAP = 6;
+  // Keep the box and the first text line together across page breaks.
+  // After a manual addPage the pageAdded hook (watermark + footer) has
+  // moved doc.x/doc.y via absolute-position text calls — reset to the
+  // top-left margin explicitly.
+  if (doc.y + BOX + 6 > doc.page.height - PAGE.margin) {
+    doc.addPage();
+    doc.x = PAGE.margin;
+    doc.y = PAGE.margin;
+  }
+  const boxX = PAGE.margin;
+  const textX = boxX + BOX + GAP;
+  const textWidth = doc.page.width - PAGE.margin - textX;
+  const startY = doc.y;
+  // Optically align the box with the cap-height of 10.5pt body text.
+  const boxY = startY + 1.2;
+
+  doc
+    .save()
+    .rect(boxX, boxY, BOX, BOX)
+    .lineWidth(0.6)
+    .strokeColor(COLORS.rule)
+    .stroke();
+  if (checked) {
+    const inset = 1.6;
+    doc
+      .moveTo(boxX + inset, boxY + inset)
+      .lineTo(boxX + BOX - inset, boxY + BOX - inset)
+      .moveTo(boxX + BOX - inset, boxY + inset)
+      .lineTo(boxX + inset, boxY + BOX - inset)
+      .lineWidth(0.9)
+      .strokeColor(COLORS.textSecondary)
+      .stroke();
+  }
+  doc.restore();
+
+  const parts = body.split(INLINE_MARKDOWN_RE).filter((p) => p !== '');
+  doc.fontSize(SIZE.body);
+  if (parts.length === 0) {
+    // Empty body — still advance one line past the box.
+    doc
+      .font(FONTS.bodyRegular)
+      .fillColor(COLORS.textSecondary)
+      .text(' ', textX, startY, { width: textWidth });
+  } else {
+    parts.forEach((part, i) => {
+      const last = i === parts.length - 1;
+      let font: string = FONTS.bodyRegular;
+      let color: string = COLORS.textSecondary;
+      let text = part;
+      if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
+        font = FONTS.bodyBold;
+        color = COLORS.textPrimary;
+        text = part.slice(2, -2);
+      } else if (part.startsWith('*') && part.endsWith('*') && part.length > 2) {
+        font = FONTS.bodyItalic;
+        text = part.slice(1, -1);
+      }
+      doc.font(font).fillColor(color);
+      if (i === 0) {
+        // First span pins the absolute position + wrap width; pdfkit
+        // caches the wrapper across the continued chain.
+        doc.text(text, textX, startY, { width: textWidth, continued: !last });
+      } else {
+        doc.text(text, { continued: !last });
+      }
+    });
+  }
+  // Absolute-position calls leave doc.x at textX — reset (same idiom
+  // as renderPatientBlock).
+  doc.x = PAGE.margin;
+}
+
+/** A run of markdown-table rows → a hand-drawn grid. Layout follows the
+ *  renderPatientBlock absolute-x column pattern: equal column split of
+ *  the content width, per-row height measured via heightOfString, an
+ *  explicit page-break check per row (the header row is re-drawn after
+ *  a break; the pageAdded hook re-applies watermark + footer), hairline
+ *  grid strokes in COLORS.rule, and the cursor-reset idiom at the end.
+ *  Cell text goes through stripInlineMarkdown — a grid cell is a value,
+ *  not prose. */
+function renderMarkdownTable(
+  doc: PDFKit.PDFDocument,
+  rows: string[][]
+): void {
+  if (rows.length === 0) return;
+  const cols = Math.max(1, ...rows.map((r) => r.length));
+  const x0 = PAGE.margin;
+  const tableWidth = doc.page.width - PAGE.margin * 2;
+  const colWidth = tableWidth / cols;
+  const PAD_X = 6;
+  const PAD_Y = 4;
+  const cellTextWidth = colWidth - PAD_X * 2;
+  const bottomLimit = doc.page.height - PAGE.margin;
+
+  const [header, ...body] = rows;
+
+  const measureRow = (cells: string[], font: string, size: number): number => {
+    doc.font(font).fontSize(size);
+    let h = 0;
+    for (const cell of cells) {
+      const cellH = doc.heightOfString(stripInlineMarkdown(cell) || ' ', {
+        width: cellTextWidth,
+      });
+      if (cellH > h) h = cellH;
+    }
+    return h + PAD_Y * 2;
+  };
+
+  const drawCells = (
+    cells: string[],
+    font: string,
+    size: number,
+    color: string,
+    y: number
+  ): void => {
+    for (let c = 0; c < cols; c++) {
+      const text = stripInlineMarkdown(cells[c] ?? '').trim();
+      if (!text) continue;
+      doc
+        .font(font)
+        .fontSize(size)
+        .fillColor(color)
+        .text(text, x0 + c * colWidth + PAD_X, y + PAD_Y, {
+          width: cellTextWidth,
+        });
+    }
+  };
+
+  const drawGrid = (y: number, h: number): void => {
+    doc.save().lineWidth(0.4).strokeColor(COLORS.rule);
+    doc.moveTo(x0, y).lineTo(x0 + tableWidth, y);
+    doc.moveTo(x0, y + h).lineTo(x0 + tableWidth, y + h);
+    for (let c = 0; c <= cols; c++) {
+      const vx = x0 + c * colWidth;
+      doc.moveTo(vx, y).lineTo(vx, y + h);
+    }
+    doc.stroke().restore();
+  };
+
+  const drawHeader = (y: number): number => {
+    const h = measureRow(header, FONTS.labelBold, SIZE.small);
+    drawCells(header, FONTS.labelBold, SIZE.small, COLORS.textPrimary, y);
+    drawGrid(y, h);
+    return y + h;
+  };
+
+  // After a manual addPage the pageAdded hook draws watermark + footer
+  // via absolute-position text, leaving doc.y at the footer — reset to
+  // the top margin before laying out the continued rows.
+  const newPageTop = (): number => {
+    doc.addPage();
+    doc.x = PAGE.margin;
+    doc.y = PAGE.margin;
+    return PAGE.margin;
+  };
+
+  doc.moveDown(0.3);
+  let y = doc.y;
+  if (y + measureRow(header, FONTS.labelBold, SIZE.small) > bottomLimit) {
+    y = newPageTop();
+  }
+  y = drawHeader(y);
+  for (const cells of body) {
+    const h = measureRow(cells, FONTS.bodyRegular, SIZE.body);
+    if (y + h > bottomLimit) {
+      y = newPageTop();
+      y = drawHeader(y);
+    }
+    drawCells(cells, FONTS.bodyRegular, SIZE.body, COLORS.textSecondary, y);
+    drawGrid(y, h);
+    y += h;
+  }
+
+  // Cursor-reset idiom (renderPatientBlock) — next block starts below
+  // the grid at the left margin.
+  doc.x = PAGE.margin;
+  doc.y = y;
+  doc.moveDown(0.4);
 }
 
 /** T-M21: explicit two-text-call renderer for the dominant SOAP line

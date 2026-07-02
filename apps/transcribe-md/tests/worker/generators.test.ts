@@ -107,6 +107,59 @@ describe('generateVisitDocx', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Structure-aware notes — GitHub-style markdown tables + task lists inside
+// section bodies. These smoke-test that the DOCX Table path and the PDF
+// vector-checkbox / grid path don't crash and produce well-formed output.
+// ---------------------------------------------------------------------------
+
+const STRUCTURED_SOAP = [
+  '## Objective',
+  '',
+  '| Vital | Value |',
+  '| --- | --- |',
+  '| BP | 148/92 |',
+  '| HR | 78 |',
+  '',
+  '## Plan',
+  '- [x] Chaperone offered',
+  '- [ ] Interpreter used',
+].join('\n');
+
+describe('generateVisitDocx — structure-aware notes', () => {
+  it('emits a valid DOCX with a real Word table for markdown tables', async () => {
+    const buf = await generateVisitDocx(mkVisit({ soapText: STRUCTURED_SOAP }));
+    expect(buf.subarray(0, 2).toString('ascii')).toBe('PK');
+    const zip = await JSZip.loadAsync(buf);
+    const docXml = await zip.file('word/document.xml')!.async('text');
+    // Real Word table markup — <w:tbl> — must be present.
+    expect(docXml).toContain('<w:tbl>');
+    // Table header + body cell text survives (no literal pipe rows).
+    expect(docXml).toContain('148/92');
+    expect(docXml).not.toContain('| BP |');
+    // Task glyphs are emitted (Word substitutes the font at read time).
+    expect(docXml).toContain('☒');
+    expect(docXml).toContain('☐');
+  });
+});
+
+describe('generateVisitPdf — structure-aware notes', () => {
+  it('renders tables + task lines without crashing', async () => {
+    const buf = await generateVisitPdf(mkVisit({ soapText: STRUCTURED_SOAP }));
+    expect(buf.subarray(0, 4).toString('ascii')).toBe('%PDF');
+    expect(buf.length).toBeGreaterThan(1000);
+  });
+
+  it('paginates a long table across a page break without crashing', async () => {
+    const rows = ['| Item | Result |', '| --- | --- |'];
+    for (let i = 0; i < 80; i++) rows.push(`| Finding ${i} | Value ${i} |`);
+    const buf = await generateVisitPdf(
+      mkVisit({ soapText: `## Findings\n\n${rows.join('\n')}` })
+    );
+    expect(buf.subarray(0, 4).toString('ascii')).toBe('%PDF');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Metadata-PHI guards. The PDF /Info dictionary and the DOCX
 // docProps/core.xml entries persist in OS file-preview surfaces
 // (Spotlight, Explorer) and survive forwarding the file. Anything
