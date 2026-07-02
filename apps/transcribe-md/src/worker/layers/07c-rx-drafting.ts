@@ -17,7 +17,12 @@
 // ============================================================================
 
 import { z } from 'zod';
-import { modelClient, validateRxDose } from '@meddoc/ai';
+import {
+  checkDrugInteractions,
+  modelClient,
+  validateRxDose,
+  type InteractionMed,
+} from '@meddoc/ai';
 import prisma from '@meddoc/db';
 import { RX_PEDIATRIC_FEWSHOT_EXAMPLES } from '@/worker/prompts/rx-pediatric-examples';
 import { logAudit, type AuditAction } from '@/lib/audit';
@@ -456,6 +461,54 @@ export async function runLayer7cRxDrafting(
         });
       }
     }
+  }
+
+  // ── Deterministic drug-PAIR interaction floor (F-8, 2026-07-02) ──────────
+  // The single-drug validator above cannot express contextual dose caps
+  // ("simvastatin max 20 mg/day WITH amlodipine") or classic severe pairs
+  // (warfarin + NSAID) — and the LLM missed the amlodipine×simvastatin-40
+  // pair in 0/3 QA phrasings. Check the curated pair table against the
+  // union of drafted prescriptions and the current-med list from entities.
+  // ADDITIVE ONLY: appends warnings, never removes; the critical-Rx sign
+  // gate consumes them via the existing severity field, unchanged.
+  const interactionMeds: InteractionMed[] = result.prescriptions.map((rx) => ({
+    name: rx.drug,
+    doseMgPerDay: parseRxToMgPerDay(rx.strength ?? null, rx.sig ?? null),
+    source: 'draft' as const,
+    evidenceQuote: rx.evidence_quote ?? null,
+  }));
+  try {
+    const entities = JSON.parse(input.entitiesJson) as {
+      medications?: Array<{ name?: unknown; dose?: unknown; frequency?: unknown; evidence_quote?: unknown }>;
+    };
+    for (const m of entities.medications ?? []) {
+      if (typeof m?.name !== 'string' || m.name.trim() === '') continue;
+      interactionMeds.push({
+        name: m.name,
+        doseMgPerDay: parseRxToMgPerDay(
+          typeof m.dose === 'string' ? m.dose : null,
+          typeof m.frequency === 'string' ? m.frequency : null
+        ),
+        source: 'current' as const,
+        evidenceQuote: typeof m.evidence_quote === 'string' ? m.evidence_quote : null,
+      });
+    }
+  } catch {
+    // Malformed entitiesJson → pair check runs on drafted meds only.
+    // Never let the safety floor throw the layer.
+  }
+  for (const w of checkDrugInteractions(interactionMeds)) {
+    result.warnings.push({
+      severity: w.severity,
+      rx_drug: w.primaryDrug,
+      message: `[deterministic] ${w.message}`,
+      evidence_quote:
+        interactionMeds.find((m) => m.name === w.primaryDrug)?.evidenceQuote ?? null,
+    });
+    // RX_DRUG_PAIR_* codes are not in the AuditAction enum (adding them
+    // needs a Prisma migration — same follow-up as
+    // RX_COMPLEX_DOSING_VERIFY_INDIVIDUALLY above). The warning still
+    // reaches the doctor + the sign gate; only the audit row is deferred.
   }
 
   await prisma.transcribeVisit.update({

@@ -28,6 +28,7 @@ import {
 import { cn } from '@/lib/cn';
 import { isSkinBeta } from '@/config/skin-beta';
 import { criticalWarningRefs } from '@/lib/rx-warnings';
+import { placeholderSections } from '@/lib/parse-note-sections';
 import { ReviewTabsV2, type V2Tab } from './review-tabs-v2';
 import { BillingCardC3 } from './billing-card-c3';
 import { SoapEditor } from './soap-editor';
@@ -321,6 +322,13 @@ export function VisitReadyView(props: VisitReadyViewProps) {
     const suggestionCount = showSuggestions
       ? (props.suggestedClaims?.length ?? 0)
       : 0;
+    // F-7: sections still carrying the verifier's set-aside placeholder,
+    // computed from the freshest client-side text (adoption strips the
+    // placeholder server-side and returns fresh text; manual edits re-sync
+    // via the RSC refresh on save). Feeds the pre-sign ADVISORY only.
+    const setAsideSections = isSigned
+      ? []
+      : placeholderSections(adoption?.text ?? props.soapText);
 
     const transcriptInner =
       props.inputMode === 'audio_upload' ? (
@@ -546,6 +554,8 @@ export function VisitReadyView(props: VisitReadyViewProps) {
           doctorEmail={props.doctorEmail}
           emailEnabled={props.emailEnabled}
           signed={isSigned}
+          placeholderSections={setAsideSections}
+          suggestionCount={suggestionCount}
         />
       </div>
     );

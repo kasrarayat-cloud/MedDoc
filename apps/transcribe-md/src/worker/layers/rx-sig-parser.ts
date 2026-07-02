@@ -81,6 +81,12 @@ function parseSigDosesPerDay(sig: string | null): number | null {
   ) {
     return 1;
   }
+  // Once-nightly phrasings (F-8, 2026-07-02): "simvastatin 40 mg nightly"
+  // previously parsed to null, which silently skipped every numeric check.
+  // Additive — parses MORE sigs, never fewer.
+  if (/\bqhs\b|\bnightly\b|at[- ]bedtime|each[- ]night|every[- ]night|once[- ](?:a[- ])?night/.test(s)) {
+    return 1;
+  }
 
   return null;
 }

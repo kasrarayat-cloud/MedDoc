@@ -146,13 +146,32 @@ export function detectIncompleteAutomation(
   // load-bearing layers icd_coding + cpt_coding — rx_drafting is
   // intentionally excluded because many visits legitimately carry no
   // Rx (e.g. derm-biopsy follow-up, screening encounters).
+  //
+  // F-6 (2026-07-02): pass 2 now also requires the layer's recorded status
+  // to be 'ok'. The hard-coded "(status:ok)" text assumed pass 2 could only
+  // fire after a successful run — but a layer DISABLED by flags (E/M is
+  // suppressed by design for imaging-report specialties; TM_ENABLE_ICD_CPT
+  // can disable both coders) records {status:'skipped'} and leaves its
+  // column null, which tripped a false "Auto-coding incomplete … Click
+  // Retry" banner on EVERY ultrasound visit. Retry could never clear it.
+  // SOAP clinic visits always record status:'ok' here, so their check —
+  // including the DB-blip defense (re-read failed → outputs null but
+  // scores still 'ok') — is byte-identical.
   if (outputs) {
-    if (causeByLayer.icd_coding == null && isIcdEmpty(outputs.icdCodes)) {
+    if (
+      scores?.icd_coding?.status === 'ok' &&
+      causeByLayer.icd_coding == null &&
+      isIcdEmpty(outputs.icdCodes)
+    ) {
       tripped.push('icd_coding');
       reasonsByLayer.icd_coding = 'returned empty codes array (status:ok)';
       causeByLayer.icd_coding = 'empty';
     }
-    if (causeByLayer.cpt_coding == null && isCptEmpty(outputs.cptCodes)) {
+    if (
+      scores?.cpt_coding?.status === 'ok' &&
+      causeByLayer.cpt_coding == null &&
+      isCptEmpty(outputs.cptCodes)
+    ) {
       tripped.push('cpt_coding');
       reasonsByLayer.cpt_coding = 'no E&M code emitted (status:ok)';
       causeByLayer.cpt_coding = 'empty';

@@ -231,6 +231,35 @@ describe('detectIncompleteAutomation — empty L7a output detection (Finding 2)'
   const healthyCpt = { em: { code: '99213' }, procedures: [] };
   const healthyIcd = { codes: [{ code: 'Z39.2' }] };
 
+  it('SKIPPED cpt_coding + null cptCodes does NOT flip review — imaging/E-M-suppressed visits (F-6)', () => {
+    const imagingScores: AutomationConfidenceScores = {
+      icd_coding: { status: 'ok' },
+      cpt_coding: { status: 'skipped' },
+      rx_drafting: { status: 'ok' },
+    };
+    const r = detectIncompleteAutomation(imagingScores, {
+      icdCodes: healthyIcd,
+      cptCodes: null, // L7b never ran — column legitimately null
+    });
+    expect(r.needsReview).toBe(false);
+    expect(r.reviewReason).toBeNull();
+    expect(r.failedLayers).toEqual([]);
+  });
+
+  it('SKIPPED icd_coding + null icdCodes does NOT flip review — TM_ENABLE_ICD_CPT=false (F-6)', () => {
+    const disabledScores: AutomationConfidenceScores = {
+      icd_coding: { status: 'skipped' },
+      cpt_coding: { status: 'skipped' },
+      rx_drafting: { status: 'ok' },
+    };
+    const r = detectIncompleteAutomation(disabledScores, {
+      icdCodes: null,
+      cptCodes: null,
+    });
+    expect(r.needsReview).toBe(false);
+    expect(r.failedLayers).toEqual([]);
+  });
+
   it('flags review when icdCodes is null', () => {
     const r = detectIncompleteAutomation(okScores, {
       icdCodes: null,

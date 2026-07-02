@@ -29,6 +29,7 @@
 
 import { useCallback, useRef, useState } from 'react';
 import { Lock, Send } from 'lucide-react';
+import { PlaceholderAdvisoryDialog } from '@/components/placeholder-advisory-dialog';
 import { SignAndSendModal } from './sign-and-send-modal';
 
 export type V2BadgeTone = 'danger' | 'warn' | 'info' | 'ok';
@@ -61,11 +62,35 @@ export interface ReviewTabsV2Props {
   emailEnabled: boolean;
   /** readonly || signedAt !== null. */
   signed: boolean;
+  /** F-7 (2026-07-02): section labels still carrying the anchored-verifier
+   *  set-aside placeholder. Non-empty → opening the Sign flow first shows an
+   *  ADVISORY confirm listing them ("Sign anyway" continues). Server sign
+   *  route unchanged — the fail-closed gates stay the authority. */
+  placeholderSections?: string[];
+  /** Review-suggestion count for the advisory copy. */
+  suggestionCount?: number;
 }
 
 export function ReviewTabsV2(props: ReviewTabsV2Props) {
   const [active, setActive] = useState<string>(props.tabs[0]?.key ?? 'note');
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  // F-7: the unsigned Sign modal runs in CONTROLLED mode so every open
+  // request (its own trigger button included) routes through one gatekeeper:
+  // placeholders present → advisory first; "Sign anyway" → the real modal.
+  const [signOpen, setSignOpen] = useState(false);
+  const [advisoryOpen, setAdvisoryOpen] = useState(false);
+  const placeholderLabels = props.placeholderSections ?? [];
+  const requestSignOpen = useCallback(
+    (next: boolean) => {
+      if (next && placeholderLabels.length > 0) {
+        setAdvisoryOpen(true);
+        return;
+      }
+      setSignOpen(next);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [placeholderLabels.join('|')]
+  );
 
   const onTabKey = useCallback(
     (e: React.KeyboardEvent) => {
@@ -221,19 +246,33 @@ export function ReviewTabsV2(props: ReviewTabsV2Props) {
                 triggerVariant="secondary"
               />
             ) : (
-              <SignAndSendModal
-                visitId={props.visitId}
-                doctorEmail={props.doctorEmail}
-                emailEnabled={props.emailEnabled}
-                signOnSubmit
-                triggerLabel="Sign & Send"
-                triggerIcon={<Lock className="h-3.5 w-3.5" aria-hidden />}
-                emPendingChange={props.pendingEmChange}
-                // VISIBLE half of the critical-Rx gate — can't open the sign
-                // flow until every critical interaction is overridden. The
-                // server POST /sign → 422 remains the authoritative enforcement.
-                disabled={rxBlocking}
-              />
+              <>
+                <SignAndSendModal
+                  visitId={props.visitId}
+                  doctorEmail={props.doctorEmail}
+                  emailEnabled={props.emailEnabled}
+                  signOnSubmit
+                  triggerLabel="Sign & Send"
+                  triggerIcon={<Lock className="h-3.5 w-3.5" aria-hidden />}
+                  emPendingChange={props.pendingEmChange}
+                  // VISIBLE half of the critical-Rx gate — can't open the sign
+                  // flow until every critical interaction is overridden. The
+                  // server POST /sign → 422 remains the authoritative enforcement.
+                  disabled={rxBlocking}
+                  controlledOpen={signOpen}
+                  onControlledOpenChange={requestSignOpen}
+                />
+                <PlaceholderAdvisoryDialog
+                  open={advisoryOpen}
+                  onOpenChange={setAdvisoryOpen}
+                  sections={placeholderLabels}
+                  suggestionCount={props.suggestionCount ?? 0}
+                  onContinue={() => {
+                    setAdvisoryOpen(false);
+                    setSignOpen(true);
+                  }}
+                />
+              </>
             )}
           </div>
         </div>
