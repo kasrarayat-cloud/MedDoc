@@ -963,6 +963,10 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         cptCodes: (automationOutputs?.cptCodes ?? null) as
           | { em?: { code?: string | null } | null; procedures?: unknown[] }
           | null,
+        // Fresh L7a runs always self-flag empty codes (07a post-validation);
+        // pass-2's icd empty check only adds signal on RESUMED attempts,
+        // where the attempt-start reset wiped that flag and L7a is skipped.
+        icdResumed: resumedOk.has('icd_coding'),
       },
     );
     if (incomplete.needsReview) {
