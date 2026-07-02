@@ -81,6 +81,11 @@ function parseSigDosesPerDay(sig: string | null): number | null {
   ) {
     return 1;
   }
+  // "Twice nightly"-family sigs must NOT fall through to the once-nightly
+  // branch below (auditor N-4, 2026-07-02) — checked first.
+  if (/(?:\btwice\b|\b2x?\b)[- ]?(?:a[- ]|per[- ]|each[- ]|every[- ])?night(?:ly)?\b/.test(s)) {
+    return 2;
+  }
   // Once-nightly phrasings (F-8, 2026-07-02): "simvastatin 40 mg nightly"
   // previously parsed to null, which silently skipped every numeric check.
   // Additive — parses MORE sigs, never fewer.

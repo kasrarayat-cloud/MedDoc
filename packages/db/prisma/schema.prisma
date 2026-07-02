@@ -347,6 +347,15 @@ enum AuditAction {
   // E/M change had not been explicitly acknowledged by the doctor.
   EM_LEVEL_CHANGED
   EM_SIGN_BLOCKED_UNACKNOWLEDGED_CHANGE
+
+  // F-8 audit leg (2026-07-02) — deterministic drug-PAIR interaction floor
+  // (worker L7c, checkDrugInteractions). RX_DRUG_PAIR_* metadata: { ruleId,
+  // primaryDrug, otherDrug, severity, doseMgPerDay? }; the complex-dosing
+  // nudge (PR-D deferred follow-up) carries the single-drug validator shape
+  // { drug }. Never note/transcript content.
+  RX_DRUG_PAIR_INTERACTION
+  RX_DRUG_PAIR_DOSE_CAP
+  RX_COMPLEX_DOSING_VERIFY_INDIVIDUALLY
 }
 
 /// Document lifecycle status
