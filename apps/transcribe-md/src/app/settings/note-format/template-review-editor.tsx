@@ -615,6 +615,10 @@ function renderInlineBold(text: string, keyBase: string): React.ReactNode[] {
 // Structure-aware note line shapes (mirrors SoapSection's SoapMarkdown):
 // GitHub-style pipe rows buffer into a real <table>; task-list lines render
 // a ☒/☐ glyph row. Prose-only samples never hit either branch.
+// NOTE: this preview intentionally forks the .qm-lin-soap-md-* utilities at
+// miniature scale (10px headers / 4px padding vs the note view's 10.5/6) —
+// the sample renders inside a compact settings card. If the note-view
+// utilities change shape (not just size), update this fork to match.
 const SAMPLE_TABLE_ROW_RE = /^\s*\|.*\|\s*$/;
 const SAMPLE_TABLE_SEPARATOR_ROW_RE = /^\s*\|[\s:|-]+\|\s*$/;
 const SAMPLE_TASK_LINE_RE = /^\s*[-*]\s+\[( |x|X)\]\s+(.*)$/;
@@ -643,7 +647,15 @@ function SampleMarkdown({ text }: { text: string }) {
     if (rows.length === 0) return;
     const [header, ...body] = rows;
     out.push(
-      <div key={`tbl-${k}`} style={{ overflowX: 'auto', margin: '6px 0', border: '1px solid var(--color-linear-border)', borderRadius: 6 }}>
+      // overflow-x scroll container must be keyboard-reachable
+      // (axe scrollable-region-focusable)
+      <div
+        key={`tbl-${k}`}
+        tabIndex={0}
+        role="region"
+        aria-label={header.filter(Boolean).join(' / ') || 'Sample table'}
+        style={{ overflowX: 'auto', margin: '6px 0', border: '1px solid var(--color-linear-border)', borderRadius: 6 }}
+      >
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
@@ -682,7 +694,8 @@ function SampleMarkdown({ text }: { text: string }) {
       const checked = task[1].toLowerCase() === 'x';
       out.push(
         <div key={k} style={{ display: 'flex', gap: 6, alignItems: 'baseline', fontSize: 12, color: 'var(--color-linear-text-2)', lineHeight: 1.55 }}>
-          <span style={{ flex: 'none', color: checked ? 'var(--color-linear-sage)' : 'var(--color-linear-text-3)' }}>{checked ? '☒' : '☐'}</span>
+          <span aria-hidden="true" style={{ flex: 'none', color: checked ? 'var(--color-linear-sage)' : 'var(--color-linear-text-3)' }}>{checked ? '☒' : '☐'}</span>
+          <span className="sr-only">{checked ? 'Checked:' : 'Not checked:'}</span>
           <span>{renderInlineBold(task[2], k)}</span>
         </div>
       );

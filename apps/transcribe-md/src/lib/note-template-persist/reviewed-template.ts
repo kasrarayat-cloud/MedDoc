@@ -31,7 +31,6 @@ import type {
 
 export const FormatHintSchema = z.enum(['prose', 'bullets', 'numbered']);
 
-
 /** A section as the review UI submits it. NO defaultTextMode — it's derived
  *  (coerced) here, never accepted from the client. */
 export const ReviewedSectionSchema = z

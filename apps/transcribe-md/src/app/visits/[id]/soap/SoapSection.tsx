@@ -160,7 +160,15 @@ function SoapMarkdown({ text }: { text: string }) {
     if (rows.length === 0) return;
     const [header, ...body] = rows;
     out.push(
-      <div key={`tbl-${k}`} className="qm-lin-soap-md-table-wrap">
+      // overflow-x scroll container must be keyboard-reachable
+      // (axe scrollable-region-focusable)
+      <div
+        key={`tbl-${k}`}
+        className="qm-lin-soap-md-table-wrap"
+        tabIndex={0}
+        role="region"
+        aria-label={header.map((c) => c.replace(/⟦[\s\S]*?⟧/g, '').trim()).filter(Boolean).join(' / ') || 'Table'}
+      >
         <table className="qm-lin-soap-md-table">
           <thead>
             <tr>
@@ -231,7 +239,11 @@ function SoapMarkdown({ text }: { text: string }) {
       const checked = task[1].toLowerCase() === 'x';
       out.push(
         <div key={k} className="qm-lin-soap-md-task">
+          {/* Checked state must survive screen readers: ballot glyphs are
+              skipped by some SR punctuation settings, so the glyph is
+              aria-hidden and an sr-only prefix carries the state. */}
           <span
+            aria-hidden="true"
             className={cn(
               'qm-lin-soap-md-task-glyph',
               checked && 'qm-lin-soap-md-task-glyph--checked'
@@ -239,6 +251,7 @@ function SoapMarkdown({ text }: { text: string }) {
           >
             {checked ? '☒' : '☐'}
           </span>
+          <span className="sr-only">{checked ? 'Checked:' : 'Not checked:'}</span>
           <span className="qm-lin-soap-md-task-text">{renderInline(task[2])}</span>
         </div>
       );

@@ -162,7 +162,7 @@ function sanitizeStructure(
     const seen = new Set<string>();
     const options: string[] = [];
     for (const raw of structure.options) {
-      const o = raw.trim();
+      const o = raw.trim().slice(0, 120);
       if (!o) continue;
       const k = o.toLowerCase();
       if (seen.has(k)) continue;
@@ -172,10 +172,13 @@ function sanitizeStructure(
     if (options.length < 2) return null; // degenerate → prose
     return { kind: 'options', options: options.slice(0, 24), multi: structure.multi };
   }
-  const columns = structure.columns.map((c: string) => c.trim()).filter(Boolean).slice(0, 8);
+  const columns = structure.columns
+    .map((c: string) => c.trim().slice(0, 60))
+    .filter(Boolean)
+    .slice(0, 8);
   if (columns.length < 2) return null;
   const rowLabels = structure.rowLabels
-    ?.map((r: string) => r.trim())
+    ?.map((r: string) => r.trim().slice(0, 80))
     .filter(Boolean)
     .slice(0, 30);
   return {

@@ -44,10 +44,13 @@ export const FormatHintSchema = z.enum(['prose', 'bullets', 'numbered']);
 
 // ── Structured elements (feat/structured-templates, 2026-07-02) ────────────
 // Tables + option-sets as first-class structure. Bounds are inline (not in
-// TEMPLATE_FIELD_LIMITS) because they cap ARRAY sizes, not string lengths:
-// columns ≤ 8 × 60 chars, fixed rows ≤ 30 × 80, options ≤ 24 × 120. The
-// parse engine additionally dedupes/sanitizes via clampStructure() before
-// the draft leaves the parse.
+// TEMPLATE_FIELD_LIMITS) because they also cap ARRAY sizes, not just string
+// lengths: columns ≤ 8 × 60 chars, fixed rows ≤ 30 × 80, options ≤ 24 × 120.
+// These BOUNDED schemas guard the review/persist boundary. The LLM-facing
+// copies below are min-only, per this file's lenient-LLM-schema convention:
+// a faithfully-parsed 25-item ROS checklist must clamp, never surface a raw
+// Zod "Too big" — sanitizeStructure() in the parse engine owns the caps
+// (truncate + dedupe + degenerate→null) before the draft leaves the parse.
 export const TableStructureSchema = z.object({
   kind: z.literal('table'),
   columns: z.array(z.string().min(1).max(60)).min(2).max(8),
@@ -61,6 +64,20 @@ export const OptionsStructureSchema = z.object({
 export const SectionStructureSchema = z.discriminatedUnion('kind', [
   TableStructureSchema,
   OptionsStructureSchema,
+]);
+const LlmTableStructureSchema = z.object({
+  kind: z.literal('table'),
+  columns: z.array(z.string().min(1)).min(2),
+  rowLabels: z.array(z.string().min(1)).min(1).optional(),
+});
+const LlmOptionsStructureSchema = z.object({
+  kind: z.literal('options'),
+  options: z.array(z.string().min(1)).min(2),
+  multi: z.boolean(),
+});
+const LlmSectionStructureSchema = z.discriminatedUnion('kind', [
+  LlmTableStructureSchema,
+  LlmOptionsStructureSchema,
 ]);
 
 /** A section as the LLM is allowed to emit it — note: NO defaultTextMode
@@ -81,7 +98,7 @@ export const ParsedSectionLlmSchema = z.object({
   defaultText: z.string().nullable(),
   /** Table/option-set structure when the note clearly shows one. Optional —
    *  prose sections omit it (backward compatible). */
-  structure: SectionStructureSchema.nullable().optional(),
+  structure: LlmSectionStructureSchema.nullable().optional(),
 });
 
 /** Doctor-level prose style. NO preamble/globalRules (safety is immutable +

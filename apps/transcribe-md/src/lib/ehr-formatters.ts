@@ -125,13 +125,17 @@ export function flattenTables(s: string): string {
       return;
     }
     for (const cells of body) {
+      // A malformed row wider than the header keeps its orphan cells —
+      // this is a clinical export, nothing may drop silently.
+      const orphans = cells.slice(header.length).filter(Boolean);
+      const tail = orphans.length > 0 ? ` · ${orphans.join(' · ')}` : '';
       if (header.length === 2) {
         // 2-column table → `cell1: cell2` (label/value), matching the
         // shape today's parse produces so EHR paste stays familiar.
-        out.push(`${cells[0] ?? ''}: ${cells[1] ?? ''}`);
+        out.push(`${cells[0] ?? ''}: ${cells[1] ?? ''}${tail}`);
         continue;
       }
-      out.push(header.map((h, i) => `${h}: ${cells[i] ?? ''}`).join(' · '));
+      out.push(header.map((h, i) => `${h}: ${cells[i] ?? ''}`).join(' · ') + tail);
     }
   };
   for (const raw of lines) {
