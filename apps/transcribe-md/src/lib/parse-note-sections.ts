@@ -8,11 +8,15 @@
 // non-SOAP note rendered as four empty blocks with all content invisible
 // in read mode (custom-template QA, 2026-07-02, finding F-1).
 //
-// This parser renders ANY `#`/`##`/`###` heading as its own section,
-// preserving the note's own labels and order. For classic SOAP notes it
+// This parser renders any `#`/`##` heading as its own section, preserving
+// the note's own labels and order. `###` sub-headings STAY IN THE PARENT
+// section's body (F-9, 2026-07-02: the ultrasound template's `### Right` /
+// `### Left` laterality blocks belong under Findings, not as siblings) —
+// SoapMarkdown renders them as sub-headings. For classic SOAP notes it
 // DELEGATES to parseSoapSections so the default-template render stays
 // byte-identical (canonical S→O→A→P order, missing-as-empty, preamble
-// dropped, trailing text appended to Plan).
+// dropped, trailing text appended to Plan; parseSoapSections likewise keeps
+// unrecognized `###` lines inside the current section body).
 //
 // DISPLAY ONLY. parse-soap-sections.ts is untouched and remains the
 // input for the E/M deterministic counters — do NOT import this module
@@ -23,6 +27,7 @@ import {
   parseSoapSections,
   type SoapSectionKey,
 } from '@/lib/parse-soap-sections';
+import { EMPTY_SECTION_PLACEHOLDER } from '@/lib/soap-format';
 
 export interface NoteSection {
   /** Stable per-render id (label slug + position — labels may repeat). */
@@ -51,7 +56,12 @@ const SOAP_ALTS: Record<string, SoapSectionKey> = {
   p: 'P',
 };
 
-const HEADING_RE = /^\s{0,3}#{1,3}\s+(.+?)\s*$/;
+// Sections split on level-1/2 headings only; `###` sub-headings fold into
+// the parent body (F-9). Classic-SOAP detection uses the same boundary so a
+// `### Vitals` sub-block inside a classic note no longer flips the whole
+// screen to generic mode (auditor W3 mitigation) — it stays body text,
+// exactly as parseSoapSections treats it.
+const HEADING_RE = /^\s{0,3}#{1,2}\s+(.+?)\s*$/;
 
 function normHeading(h: string): string {
   return h.toLowerCase().replace(/[^a-z]/g, '');
@@ -136,4 +146,18 @@ export function parseNoteSections(markdown: string): NoteSection[] {
     s.letter = s.soapKey ?? String(i + 1);
   });
   return out;
+}
+
+/** Section labels whose body still contains the anchored-verifier
+ *  "[set aside for your review]" placeholder line (F-7, 2026-07-02).
+ *  Trim-equality mirrors stripEmptySectionPlaceholder exactly. Used by the
+ *  client-side pre-sign advisory — the server sign route is deliberately
+ *  NOT gated on this (advisory only; the fail-closed gates stay the
+ *  authority). */
+export function placeholderSections(markdown: string): string[] {
+  return parseNoteSections(markdown)
+    .filter((s) =>
+      s.body.split('\n').some((l) => l.trim() === EMPTY_SECTION_PLACEHOLDER)
+    )
+    .map((s) => s.label);
 }

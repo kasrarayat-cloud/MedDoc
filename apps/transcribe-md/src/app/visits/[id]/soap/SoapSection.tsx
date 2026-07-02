@@ -148,6 +148,18 @@ function SoapMarkdown({ text }: { text: string }) {
   };
   lines.forEach((raw, k) => {
     const l = raw.trimEnd();
+    // ### sub-headings (F-9): parse-note-sections folds them into the parent
+    // section body (ultrasound `### Right`/`### Left`), so render them as
+    // sub-heads instead of literal `###` text. Checked before `## `.
+    if (l.startsWith('### ')) {
+      flushList(k);
+      out.push(
+        <h3 key={k} className="qm-lin-soap-md-h2">
+          {l.slice(4)}
+        </h3>
+      );
+      return;
+    }
     if (l.startsWith('## ')) {
       flushList(k);
       out.push(

@@ -87,6 +87,13 @@ export {
   type RxValidationResult,
   type RxValidationWarning,
 } from './data/dose-ranges-validator';
+// F-8 (2026-07-02) — deterministic drug-pair interaction floor.
+export {
+  checkDrugInteractions,
+  DRUG_INTERACTION_RULE_COUNT,
+  type InteractionMed,
+  type InteractionWarning,
+} from './data/drug-interactions';
 // Round 3 PR-J — prompt-injection delimiter helpers (audit finding A07-P0).
 export {
   wrapAsData,
