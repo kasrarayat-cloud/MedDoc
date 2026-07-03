@@ -24,14 +24,14 @@ const mono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: 'QuillMD — Stop writing notes. Start practicing medicine.',
+    default: 'QuillMD — The note writes itself',
     template: '%s · QuillMD',
   },
   description:
-    'AI medical scribe for US doctors. Real-time SOAP notes, ICD-10/CPT codes, Rx drafts — $49/month flat.',
+    'Evidence-anchored clinical notes from the visit conversation, machine-verified, with a review lane for anything it can’t ground. You sign every note. $49 flat.',
   openGraph: {
     title: 'QuillMD',
-    description: 'Stop writing notes. Start practicing medicine.',
+    description: 'The note writes itself — you sign it.',
     type: 'website',
   },
 };
