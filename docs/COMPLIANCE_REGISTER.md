@@ -46,6 +46,15 @@ Before the first pilot customer's PHI flows through QuillMD, the rows above mark
 
 **This list is the literal launch gate.** A "🟡 Pending" entry on a row in this list = pilot launch is blocked.
 
+**Ops-hygiene note (2026-07-04):** the prod spam/test account pool (QA finding
+F5 — 361 accounts, 321 unverified, open signup being botted) was purged
+data-only: 257 zero-activity unverified accounts + 257 orphan solo-practices
+deleted in one transaction; all 40 verified accounts + 64 QA fixtures
+preserved; `audit_logs` untouched (7,159 = 7,159). Backup:
+`backups/prod-meddoc-pre-f5-purge-20260704T003218Z.sql`. Detail in
+`docs/qa-reports/full-qa-20260604T202447Z.md` §F5. Signup anti-bot gating
+remains an open follow-up (unverified accounts can still be created freely).
+
 ---
 
 ## When a new subprocessor is added
