@@ -31,6 +31,7 @@ import {
   type ResolvedNoteTemplate,
 } from '../note-templates/build-soap-prompt';
 import { buildTemplateScaffold } from '../note-templates/template-scaffold';
+import { applyContextDefaults } from '@/lib/note-template-context';
 import { SYSTEM_DEFAULT_NOTE_TEMPLATE } from '../note-templates/system-default-template';
 import { ULTRASOUND_REPORT_TEMPLATE } from '../note-templates/ultrasound-report-template';
 import { buildUltrasoundSystemPrompt } from '../note-templates/build-ultrasound-prompt';
@@ -101,11 +102,26 @@ export async function runLayer4GenerateSoap(
   // than the SOAP default. SOAP visits are unchanged.
   const hasCustomTemplate =
     input.noteTemplate != null && !input.noteTemplate.isSystemDefault;
-  const template: ResolvedNoteTemplate = isUltrasoundReport
+  const resolvedTemplate: ResolvedNoteTemplate = isUltrasoundReport
     ? hasCustomTemplate
       ? (input.noteTemplate as ResolvedNoteTemplate)
       : (ULTRASOUND_REPORT_TEMPLATE as ResolvedNoteTemplate)
     : input.noteTemplate ?? SYSTEM_DEFAULT_NOTE_TEMPLATE;
+
+  // Context-field defaults (feat/template-context-defaults): the doctor's
+  // per-template context values (clinic / referring physician / machine /
+  // location) fill the CONTEXT {{one of}} slots DETERMINISTICALLY here, before
+  // the prompt or the verifier scaffold is built — the model never sees a
+  // context slot, only the resolved value (or "[not documented]" when unset /
+  // per-visit, e.g. sonographer). Dictatable slots are untouched. A template
+  // with no context markers is returned unchanged (default SOAP byte-identical).
+  const template: ResolvedNoteTemplate = {
+    ...resolvedTemplate,
+    sections: applyContextDefaults(
+      resolvedTemplate.sections,
+      resolvedTemplate.styleProfile?.contextDefaults ?? null
+    ),
+  };
 
   // Round 3 PR-J — A07-P0 prompt-injection delimiter.
   // The transcript is user-supplied (whatever the doctor + patient

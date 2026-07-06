@@ -141,6 +141,10 @@ export interface ParsedStyleProfile {
   tense: string | null;
   tone: string;
   abbreviations: string | null;
+  /** Per-doctor CONTEXT-field defaults for a custom structured template
+   *  (feat/template-context-defaults). Only set by the review/persist path;
+   *  never emitted by the parse LLM. */
+  contextDefaults?: Record<string, string> | null;
 }
 
 /** The DRAFT template the parse returns (2b reviews + persists it; nothing is
