@@ -198,7 +198,7 @@ export function carrierReducedClaim(
 const GROUND_STOPWORDS = new Set([
   'and', 'the', 'with', 'without', 'evidence', 'is', 'was', 'were', 'been',
   'has', 'have', 'had', 'not', 'from', 'this', 'that', 'there', 'however',
-  'for', 'prior', 'other', 'been', 'their', 'then', 'than', 'into', 'onto',
+  'for', 'prior', 'other', 'their', 'then', 'than', 'into', 'onto',
   'found', 'documented', 'documenting', 'system', 'systems',
 ]);
 export function picksGroundedInTranscript(
@@ -206,9 +206,19 @@ export function picksGroundedInTranscript(
   transcriptNorm: string
 ): boolean {
   for (const pick of picks) {
-    const tokens = (pick.match(/[a-z]{4,}/g) ?? []).filter((t) => !GROUND_STOPWORDS.has(t));
-    if (tokens.length === 0) continue; // a pure-stopword option (e.g. "is absent") grounds trivially
-    if (!tokens.every((t) => transcriptNorm.includes(t))) return false;
+    // Distinctive content = alpha tokens ≥3 chars (catches short abbreviations
+    // like GSV / SFJ / DVT, not just long words) that are not connective
+    // fillers, PLUS any digit run. ALL must appear in the transcript — a pick
+    // with distinctive content the dictation lacks is NOT grounded (fail-
+    // closed). Only a pick with NO distinctive content at all (pure fillers)
+    // grounds trivially. Closes the short/numeric grounding hole (auditor
+    // SAFETY-GROUND-01).
+    const content = [
+      ...(pick.match(/[a-z]{3,}/g) ?? []).filter((t) => !GROUND_STOPWORDS.has(t)),
+      ...(pick.match(/[0-9]+/g) ?? []),
+    ];
+    if (content.length === 0) continue;
+    if (!content.every((t) => transcriptNorm.includes(t))) return false;
   }
   return true;
 }

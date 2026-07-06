@@ -141,6 +141,18 @@ describe('Bucket B — filled carriers judged on their picks', () => {
     expect(r.suggestions).toHaveLength(0);
   });
 
+  it('INVARIANT: an UNANCHORED carrier whose pick carries a short abbreviation the dictation lacks still demotes (grounding hole closed)', async () => {
+    mockJudge();
+    // transcript says "no evidence of deep vein thrombosis"; this pick asserts
+    // an acute DVT of CFV/FV/POP/PTV — short abbreviations NOT in the dictation.
+    const line = 'Right deep venous system with evidence of an acute DVT of CFV, FV, POP V, PTV.';
+    const r = await runAnchorVerify({
+      ...IDS, anchoredDraft: `## Impression\n${line}`, roleLabeledTranscript: TRANSCRIPT, templateScaffold: SCAFFOLD,
+    });
+    expect(r.body).not.toContain('acute DVT');
+    expect(r.suggestions[0].reason).toBe('no_anchor');
+  });
+
   it('INVARIANT: an UNANCHORED carrier whose pick is NOT in the transcript still demotes (undictated pick)', async () => {
     mockJudge();
     // "distal calf" is a valid template option but the transcript says "mid thigh"
