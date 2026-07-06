@@ -21,6 +21,15 @@ import {
   templateHasChoiceSlots,
 } from './build-soap-prompt';
 import type { NoteTemplateSection } from './system-default-template';
+import { ULTRASOUND_REPORT_TEMPLATE } from './ultrasound-report-template';
+
+/** The immutable imaging-report safety layer (preamble + anti-hallucination /
+ *  measurement / laterality rules). ALWAYS sourced from the canonical
+ *  ultrasound template — never from the passed template — so a doctor's custom
+ *  imaging template contributes only its SECTIONS and can no more weaken the
+ *  imaging safety rules than a custom SOAP template can weaken the SOAP ones.
+ *  (A custom template's styleProfile carries tense/tone, not globalRules.) */
+const IMAGING_SAFETY = ULTRASOUND_REPORT_TEMPLATE.styleProfile;
 
 /** Render one section's body. The BUILT-IN ultrasound template carries only
  *  styleInstructions and no default text — for it this is byte-identical to
@@ -68,7 +77,7 @@ export function buildUltrasoundSystemPrompt(
 
   const lines: (string | null | undefined)[] = [
     // Imaging-report preamble (NOT the SOAP "writing a SOAP note" preamble).
-    template.styleProfile.preamble,
+    IMAGING_SAFETY.preamble,
     '',
     // Same dynamic hedge slices as L4 (audio quality / interpreter).
     opts.audioQualityAlert,
@@ -82,7 +91,7 @@ export function buildUltrasoundSystemPrompt(
     // Anti-hallucination + measurement/laterality rules (from the ultrasound
     // styleProfile — reuses the SOAP safety rules verbatim + imaging discipline).
     'Critical rules:',
-    ...template.styleProfile.globalRules,
+    ...IMAGING_SAFETY.globalRules,
     // Choice-slot directive — only for a custom template that actually has
     // `{{one of}}` menus; the built-in ultrasound template has none, so its
     // prompt is byte-identical to before.
