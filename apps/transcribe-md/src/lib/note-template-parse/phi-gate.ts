@@ -164,6 +164,14 @@ export function enumerateTextFields(
   push('styleProfile.tense', draft.styleProfile.tense);
   push('styleProfile.tone', draft.styleProfile.tone);
   push('styleProfile.abbreviations', draft.styleProfile.abbreviations);
+  // NOTE (feat/template-context-defaults): styleProfile.contextDefaults is
+  // DELIBERATELY NOT scanned here. Its values are constrained to the template's
+  // OWN dropdown options — which already passed this gate as sections[].defaultText
+  // — and a stored value only ever RENDERS when it exactly matches one of those
+  // options (applyContextDefaults' options.includes guard), so it can never reach
+  // a note un-vetted, nor inject content. It is also unscannable in practice: a
+  // legitimate clinic address ("…, CA 92604") trips the numeric long-id/date
+  // detectors, so scanning it would false-reject valid clinic metadata.
   draft.sections.forEach((s, i) => {
     push(`sections[${i}].label`, s.label);
     push(`sections[${i}].styleInstructions`, s.styleInstructions);

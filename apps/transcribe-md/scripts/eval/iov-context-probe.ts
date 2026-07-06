@@ -13,7 +13,9 @@ import { buildTemplateScaffold } from '../../src/worker/note-templates/template-
 import { applyContextDefaults } from '../../src/lib/note-template-context';
 import { docxToText } from '../../src/lib/note-template-parse/docx-to-text';
 
-const S = '/tmp/claude-1000/-opt-meddoc-pro/586b3f3f-7eed-4f8e-ac7f-e25626e93305/scratchpad/iov';
+// docx path from argv[2] (like the sibling probes); scratch dir for outputs.
+const DOCX = process.argv[2] ?? `${process.env.HOME}/WM_IOV_Template.docx`;
+const S = process.env.IOV_SCRATCH ?? '/tmp/iov-eval';
 function slice(t: string, a: string, b: string | null) {
   const i = t.indexOf(a); if (i < 0) return ''; const from = i + a.length;
   const j = b ? t.indexOf(b, from) : t.length; return t.slice(from, j < 0 ? t.length : j).trim();
@@ -37,7 +39,7 @@ const DICTATION = [
 ].join(' ');
 
 async function main() {
-  const text = await docxToText(new Uint8Array(readFileSync(`${S}/WM_IOV_Template.docx`)));
+  const text = await docxToText(new Uint8Array(readFileSync(DOCX)));
   const sp = { ...ULTRASOUND_REPORT_TEMPLATE.styleProfile, contextDefaults: CONTEXT_DEFAULTS };
   const sect = (key: string, label: string, order: number, dt: string | null, structure: any = null) => ({
     key, label, order, formatHint: 'prose' as const, styleInstructions: null, defaultText: dt,

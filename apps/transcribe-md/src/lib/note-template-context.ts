@@ -57,13 +57,17 @@ export const CONTEXT_FIELDS: ContextFieldDescriptor[] = [
   },
   {
     key: 'machine',
+    // NOTE: deliberately does NOT match "transducer" alone — that word recurs
+    // in dictatable findings; a context field must name the machine/unit label.
     label: 'Ultrasound machine',
-    labelRe: /\b(machine|ultrasound\s+(unit|system)|transducer)\b/i,
+    labelRe: /\b(machine|ultrasound\s+(unit|system))\b/i,
   },
   {
     key: 'location',
+    // NOTE: "site" is deliberately excluded — a dictatable "Biopsy site:" /
+    // "puncture site" line must never be misread as a context field and blanked.
     label: 'Location / city',
-    labelRe: /\b(location|city|site)\b/i,
+    labelRe: /\b(location|city)\b/i,
   },
 ];
 

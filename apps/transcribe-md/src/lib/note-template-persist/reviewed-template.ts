@@ -48,7 +48,9 @@ export const ReviewedSectionSchema = z
   .strict();
 
 /** Per-doctor CONTEXT-field defaults (feat/template-context-defaults). Keys are
- *  the non-per-visit context fields (sonographer is excluded — per-visit). A
+ *  the non-per-visit context fields — these MUST stay in sync with the
+ *  non-perVisit entries of CONTEXT_FIELDS in `@/lib/note-template-context`
+ *  (sonographer is excluded here — it is perVisit). A
  *  value is only ever RENDERED when it exactly matches one of the template's own
  *  options for that field (validated at generation); an off-list value resolves
  *  to "[not documented]" and never reaches a note — so this map can neither
