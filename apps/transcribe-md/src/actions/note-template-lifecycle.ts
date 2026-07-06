@@ -12,9 +12,10 @@
 // SAFETY POSTURE:
 //   - The reviewed template is re-run through the DETERMINISTIC PHI gate
 //     (regex layer, no LLM) on every save — defense-in-depth over doctor edits.
-//   - styleProfile is persisted as { tense, tone, abbreviations } only; the
-//     immutable safety preamble/guardrails are NEVER stored on a custom row
-//     (sourced from the canonical default at generation time).
+//   - styleProfile is persisted as { tense, tone, abbreviations, contextDefaults }
+//     only; the immutable safety preamble/guardrails are NEVER stored on a
+//     custom row (sourced from the canonical default at generation time).
+//     contextDefaults is per-doctor context-field picks, not a safety field.
 //   - Activation supersede is done in ONE transaction, deactivating the prior
 //     active BEFORE setting the new one active, so the partial-unique index
 //     (one active per doctor+encounterType) is satisfied at every step and
@@ -80,6 +81,10 @@ export async function saveNoteTemplateAction(
     tense: gate.template.styleProfile.tense,
     tone: gate.template.styleProfile.tone,
     abbreviations: gate.template.styleProfile.abbreviations,
+    // feat/template-context-defaults: per-doctor context-field picks (never a
+    // safety field; validated at generation against the template's own
+    // options). Null when unset.
+    contextDefaults: gate.template.styleProfile.contextDefaults ?? null,
   } as unknown as Prisma.InputJsonValue;
   const flags = gate.flags;
 
