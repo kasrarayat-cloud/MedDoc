@@ -134,20 +134,29 @@ export function isFixedScaffoldLine(
   return scaffold.fixedLines.has(normalizedLine);
 }
 
+export interface CarrierMatch {
+  /** Laterality tokens (in order) + the chosen picks; the reduced claim the
+   *  judge evaluates instead of the boilerplate. */
+  reduced: string;
+  /** The chosen option texts (normalized), for transcript grounding. */
+  picks: string[];
+}
+
 /**
- * If a line matches a carrier, return the REDUCED CLAIM for the judge —
- * laterality tokens from the fixed parts (in order) plus the chosen picks,
- * dropping the connective boilerplate the transcript can't entail. Null when
- * the line matches no carrier (→ 04b keeps the normal full-line path).
+ * If a line matches a carrier, return its picks + the reduced claim; null when
+ * the line matches no carrier (→ 04b keeps the normal full-line path). Only
+ * options the template enumerates can match, so a fabricated value never takes
+ * this path.
  */
-export function carrierReducedClaim(
+export function matchCarrier(
   scaffold: TemplateScaffold,
   normalizedLine: string
-): string | null {
+): CarrierMatch | null {
   for (const carrier of scaffold.carriers) {
     const m = normalizedLine.match(carrier.matcher);
     if (!m) continue;
     const parts: string[] = [];
+    const picks: string[] = [];
     let group = 1;
     for (const seg of carrier.segments) {
       if (seg.kind === 'fixed') {
@@ -155,11 +164,51 @@ export function carrierReducedClaim(
         if (lat) parts.push(...lat);
       } else {
         const pick = m[group++];
-        if (pick && pick.trim()) parts.push(pick.trim());
+        if (pick && pick.trim()) {
+          parts.push(pick.trim());
+          picks.push(pick.trim());
+        }
       }
     }
     const reduced = parts.join(' ').trim();
-    if (reduced) return reduced;
+    if (reduced) return { reduced, picks };
   }
   return null;
+}
+
+/** Thin wrapper kept for callers that only need the reduced claim. */
+export function carrierReducedClaim(
+  scaffold: TemplateScaffold,
+  normalizedLine: string
+): string | null {
+  return matchCarrier(scaffold, normalizedLine)?.reduced ?? null;
+}
+
+/** Every pick's content tokens (≥4 chars, not a match-stopword) appear in the
+ *  normalized transcript — the grounding floor for an UNANCHORED carrier
+ *  (fixed boilerplate the model reproduced without a quote, e.g. the TECHNIQUE
+ *  methodology paragraph with a filled study-scope slot). A fabricated /
+ *  undictated pick has content the transcript lacks → not grounded → demoted. */
+// Connectives / register fillers that appear inside option text but are NOT
+// the clinical content the transcript must contain ("… however, there has been
+// a recurrence" → grounds on "recurrence", not "however"). Clinical terms
+// (recurrence, obstruction, insufficiency, saphenous, thigh, calf, reflux, …)
+// are deliberately NOT here, so an undictated pick's distinctive terms must
+// still appear in the transcript.
+const GROUND_STOPWORDS = new Set([
+  'and', 'the', 'with', 'without', 'evidence', 'is', 'was', 'were', 'been',
+  'has', 'have', 'had', 'not', 'from', 'this', 'that', 'there', 'however',
+  'for', 'prior', 'other', 'been', 'their', 'then', 'than', 'into', 'onto',
+  'found', 'documented', 'documenting', 'system', 'systems',
+]);
+export function picksGroundedInTranscript(
+  picks: string[],
+  transcriptNorm: string
+): boolean {
+  for (const pick of picks) {
+    const tokens = (pick.match(/[a-z]{4,}/g) ?? []).filter((t) => !GROUND_STOPWORDS.has(t));
+    if (tokens.length === 0) continue; // a pure-stopword option (e.g. "is absent") grounds trivially
+    if (!tokens.every((t) => transcriptNorm.includes(t))) return false;
+  }
+  return true;
 }

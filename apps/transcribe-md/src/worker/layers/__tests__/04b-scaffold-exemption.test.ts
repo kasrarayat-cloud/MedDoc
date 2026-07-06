@@ -130,6 +130,28 @@ describe('Bucket B — filled carriers judged on their picks', () => {
     expect(judgeClaims.some((c) => c.includes('small saphenous vein'))).toBe(true);
   });
 
+  it('an UNANCHORED carrier whose picks are grounded in the transcript survives (scaffold the model reproduced without a quote)', async () => {
+    mockJudge();
+    // no ⟦A:…⟧ anchor; every pick is in the transcript
+    const line = 'The great saphenous vein from the saphenofemoral junction to the mid thigh was found to have had previous treatment, however, there has been a recurrence.';
+    const r = await runAnchorVerify({
+      ...IDS, anchoredDraft: `## Findings\n${line}`, roleLabeledTranscript: TRANSCRIPT, templateScaffold: SCAFFOLD,
+    });
+    expect(r.body).toContain('great saphenous vein from the saphenofemoral junction to the mid thigh');
+    expect(r.suggestions).toHaveLength(0);
+  });
+
+  it('INVARIANT: an UNANCHORED carrier whose pick is NOT in the transcript still demotes (undictated pick)', async () => {
+    mockJudge();
+    // "distal calf" is a valid template option but the transcript says "mid thigh"
+    const line = 'The great saphenous vein from the saphenofemoral junction to the distal calf was found to have had previous treatment, however, there has been a recurrence.';
+    const r = await runAnchorVerify({
+      ...IDS, anchoredDraft: `## Findings\n${line}`, roleLabeledTranscript: TRANSCRIPT, templateScaffold: SCAFFOLD,
+    });
+    expect(r.body).not.toContain('distal calf');
+    expect(r.suggestions[0].reason).toBe('no_anchor');
+  });
+
   it('INVARIANT: a laterality/polarity contradiction on a carrier still demotes via the FROZEN negation override (before the judge)', async () => {
     mockJudge(); // judge would approve — but the deterministic override fires first
     // left leg is normal ("no reflux"); claiming it reflux-positive is a

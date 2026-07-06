@@ -38,7 +38,8 @@ import {
   type TemplateScaffold,
   normForMatch,
   isFixedScaffoldLine,
-  carrierReducedClaim,
+  matchCarrier,
+  picksGroundedInTranscript,
 } from '../note-templates/template-scaffold';
 
 const MODEL = process.env.TRANSCRIBE_MD_CLINICAL_MODEL || 'claude-sonnet-4-6';
@@ -372,9 +373,13 @@ function deterministicStage(
     // format, not a generated claim → exempt (same class as the section-header
     // / [not documented] / "No prior study" exemptions). Matched by EXACT
     // normalized equality, so a real assertion can never be swept in.
-    // Bucket B — a filled constrained-choice CARRIER: computed here, applied
-    // at the toEntail push below (its picks + laterality become the judge's
-    // reduced claim). The line still runs EVERY frozen override first.
+    // Bucket B — a filled constrained-choice CARRIER: its picks + laterality
+    // become the judge's reduced claim (set at the toEntail push below). The
+    // line still runs EVERY frozen override first. An UNANCHORED carrier (fixed
+    // boilerplate the model reproduced without a quote, e.g. the TECHNIQUE
+    // methodology sentence with a filled study-scope slot) is scaffold too —
+    // exempt it iff its picks are grounded in the transcript (a fabricated /
+    // undictated pick is NOT grounded → falls through to no_anchor).
     const matchTarget = scaffold
       ? normForMatch(stripped.replace(/^\s*(?:\d+[.)]\s+|[-*]\s+)/, ''))
       : '';
@@ -382,13 +387,19 @@ function deterministicStage(
       exemptLines.set(index, stripped);
       return;
     }
-    const carrierReduced = scaffold ? carrierReducedClaim(scaffold, matchTarget) : null;
+    const carrier = scaffold ? matchCarrier(scaffold, matchTarget) : null;
     const anchorRaw = subSpans.length > 0 ? subSpans.join(' | ') : 'no anchor';
     const demote = (reason: DemotionReason) =>
       demoted.push({ index, text: stripped.trim(), reason, section, anchor: anchorRaw });
 
     if (modelSuggested && subSpans.length === 0) return demote('model_suggested');
-    if (subSpans.length === 0) return demote('no_anchor');
+    if (subSpans.length === 0) {
+      if (carrier && picksGroundedInTranscript(carrier.picks, asrNorm)) {
+        exemptLines.set(index, stripped);
+        return;
+      }
+      return demote('no_anchor');
+    }
 
     // Anchor existence — every CLEAR sub-span must literally exist in the
     // transcript after normalization; sub-spans overlapping the unclear
@@ -488,7 +499,7 @@ function deterministicStage(
       section,
       spans,
       anchorRaw,
-      ...(carrierReduced ? { entailText: carrierReduced } : {}),
+      ...(carrier ? { entailText: carrier.reduced } : {}),
     });
   });
   return { exemptLines, toEntail, demoted, lineCount: lines.length };
