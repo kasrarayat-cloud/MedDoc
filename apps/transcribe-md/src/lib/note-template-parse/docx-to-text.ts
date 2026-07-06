@@ -28,9 +28,15 @@ export async function docxToText(bytes: Uint8Array): Promise<string> {
   try {
     const { text, dropdownCount } = await docxToTextWithControls(bytes);
     if (dropdownCount > 0) return text;
-  } catch {
+  } catch (err) {
     // Malformed/unexpected docx internals → fall through to mammoth, which is
-    // the proven, more permissive extractor.
+    // the proven, more permissive extractor. Log the fall-through (non-PHI —
+    // this is a template, no patient data) so a silently-degraded extraction
+    // is observable rather than invisible.
+    console.warn(
+      '[docx-to-text] content-control extraction failed; falling back to mammoth:',
+      err instanceof Error ? err.message : String(err)
+    );
   }
   const result = await mammoth.extractRawText({ buffer: Buffer.from(bytes) });
   return result.value;

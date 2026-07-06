@@ -30,7 +30,9 @@ import type { NoteTemplateSection } from './system-default-template';
  *  from its own fields. */
 function renderSectionBody(s: NoteTemplateSection): string[] {
   const out: string[] = [];
-  out.push(s.styleInstructions ?? formatHintDirective(s.formatHint));
+  // `||` (not `??`) preserves the built-in template's prior behavior: an
+  // empty-string styleInstructions falls back to the format-hint directive.
+  out.push(s.styleInstructions || formatHintDirective(s.formatHint));
   if (s.structure) out.push(renderStructureDirective(s.structure));
   if (s.defaultText) {
     if (s.defaultTextMode === 'always_include') out.push(s.defaultText);

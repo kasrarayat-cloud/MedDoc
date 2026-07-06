@@ -46,7 +46,10 @@ function tagOf(node: OrderedNode): string {
 }
 
 /** Extract the non-placeholder option display-texts of a `<w:sdt>` dropdown,
- *  or null when the sdt is not a dropdown content control. */
+ *  or null when the sdt is not a dropdown content control. Scope: `<w:dropDownList>`
+ *  only — `<w:comboBox>` (free-text-plus-list) is intentionally not treated as a
+ *  constrained menu; it falls through to its current text. The WM_IOV template
+ *  uses dropdowns throughout. */
 function dropdownOptions(sdtChildren: OrderedNode[]): string[] | null {
   const prNode = sdtChildren.find((c) => tagOf(c) === W + 'sdtPr');
   if (!prNode) return null;
