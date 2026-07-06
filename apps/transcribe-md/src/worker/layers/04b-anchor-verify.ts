@@ -34,6 +34,12 @@ import {
   EMPTY_SECTION_PLACEHOLDER,
   renumberOrderedLists,
 } from '@/lib/soap-format';
+import {
+  type TemplateScaffold,
+  normForMatch,
+  isFixedScaffoldLine,
+  carrierReducedClaim,
+} from '../note-templates/template-scaffold';
 
 const MODEL = process.env.TRANSCRIBE_MD_CLINICAL_MODEL || 'claude-sonnet-4-6';
 
@@ -302,17 +308,22 @@ function isExemptLine(stripped: string): boolean {
 
 interface ClaimRow {
   index: number;
-  text: string; // anchor-free claim text
+  text: string; // anchor-free claim text (display + default judge claim)
   section: string;
   spans: string[]; // normalized matched spans (clear sub-spans only)
   anchorRaw: string;
+  /** For a filled template CARRIER only: the reduced claim (laterality +
+   *  picks) the entailment judge evaluates instead of the boilerplate-heavy
+   *  full line. Absent for every free-text claim → judge input unchanged. */
+  entailText?: string;
 }
 
 /** Deterministic stage. Returns claims that SURVIVE to entailment, plus the
  *  claims already demoted by hard rules (which entailment cannot overrule). */
 function deterministicStage(
   anchoredDraft: string,
-  roleLabeledTranscript: string
+  roleLabeledTranscript: string,
+  scaffold?: TemplateScaffold
 ): {
   exemptLines: Map<number, string>;
   toEntail: ClaimRow[];
@@ -352,6 +363,26 @@ function deterministicStage(
       exemptLines.set(index, stripped);
       return;
     }
+    // ── Template-scaffold awareness (feat/verifier-scaffold-exemption,
+    //    2026-07-06; pre-registered:
+    //    docs/eval-runs/verifier-scaffold-exemption-20260706T202636Z.md).
+    //    ONLY active when the caller supplies a custom template's scaffold. ──
+    // Bucket A — FIXED template boilerplate (TECHNIQUE prose, "Clinical
+    // correlation … required.", "Right Leg:") is the doctor's own approved
+    // format, not a generated claim → exempt (same class as the section-header
+    // / [not documented] / "No prior study" exemptions). Matched by EXACT
+    // normalized equality, so a real assertion can never be swept in.
+    // Bucket B — a filled constrained-choice CARRIER: computed here, applied
+    // at the toEntail push below (its picks + laterality become the judge's
+    // reduced claim). The line still runs EVERY frozen override first.
+    const matchTarget = scaffold
+      ? normForMatch(stripped.replace(/^\s*(?:\d+[.)]\s+|[-*]\s+)/, ''))
+      : '';
+    if (scaffold && isFixedScaffoldLine(scaffold, matchTarget)) {
+      exemptLines.set(index, stripped);
+      return;
+    }
+    const carrierReduced = scaffold ? carrierReducedClaim(scaffold, matchTarget) : null;
     const anchorRaw = subSpans.length > 0 ? subSpans.join(' | ') : 'no anchor';
     const demote = (reason: DemotionReason) =>
       demoted.push({ index, text: stripped.trim(), reason, section, anchor: anchorRaw });
@@ -451,7 +482,14 @@ function deterministicStage(
         return demote('negation_mismatch');
     }
 
-    toEntail.push({ index, text: stripped.trim(), section, spans, anchorRaw });
+    toEntail.push({
+      index,
+      text: stripped.trim(),
+      section,
+      spans,
+      anchorRaw,
+      ...(carrierReduced ? { entailText: carrierReduced } : {}),
+    });
   });
   return { exemptLines, toEntail, demoted, lineCount: lines.length };
 }
@@ -658,7 +696,10 @@ async function entailmentStage(
   const user = claims
     .map((c, k) =>
       [
-        `CLAIM ${k}: ${c.text}`,
+        // For a filled template carrier, judge the picks + laterality (the
+        // clinical content), not the template's connective boilerplate. Absent
+        // for every free-text claim → the CLAIM line is byte-identical.
+        `CLAIM ${k}: ${c.entailText ?? c.text}`,
         `CITED SPAN(S): ${c.anchorRaw}`,
         `CONTEXT: ${spanContext(c.spans, roleLabeledTranscript) || '(no context located)'}`,
       ].join('\n')
@@ -732,9 +773,17 @@ export async function runAnchorVerify(input: {
   userId: string | null;
   anchoredDraft: string;
   roleLabeledTranscript: string;
+  /** A custom structured template's scaffold (from buildTemplateScaffold).
+   *  Supplied ONLY when a doctor's custom template with `{{one of}}` choice
+   *  slots is active; absent for every default SOAP path → byte-identical. */
+  templateScaffold?: TemplateScaffold;
 }): Promise<AnchorVerifyResult> {
   try {
-    const det = deterministicStage(input.anchoredDraft, input.roleLabeledTranscript);
+    const det = deterministicStage(
+      input.anchoredDraft,
+      input.roleLabeledTranscript,
+      input.templateScaffold
+    );
     const ent = await entailmentStage(det.toEntail, input.roleLabeledTranscript, input);
 
     const demotedByIndex = new Map<number, SuggestedClaim>();

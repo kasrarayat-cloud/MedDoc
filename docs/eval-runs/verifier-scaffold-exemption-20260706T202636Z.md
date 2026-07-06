@@ -48,7 +48,7 @@ Making 04b **template-scaffold-aware** — (A) exempting exact fixed-scaffold li
 If ANY fabrication slips — any Phase-B fabricated-option / contradiction / laterality canary fails to demote, OR Phase D Gate-1 is not GREEN (any majority class-(c) fabrication regression) — **STOP. Do not merge the 04b diff.** The schema/generation work may ship separately with this exemption reverted. Report the slip.
 
 ## Results (filled AFTER the runs — one run each, no rerolls)
-- **Phase B:** _pending_
+- **Phase B: PASS** — 489 worker+parse tests green (all existing 64 04b canaries + golden byte-identity unchanged), tsc clean. New canaries (14): pure scaffold model (buildTemplateScaffold split, isFixedScaffoldLine exact-match-only, carrierReducedClaim picks+laterality, fabricated-option→null) + 04b integration — Bucket A (fixed line exempt WITH scaffold / demotes WITHOUT / superstring not exempt), Bucket B (supported carrier survives + judge gets the REDUCED claim; **unsupported pick → not_entailed**; **fabricated option not in template → full line to judge → demoted**; **polarity contradiction → frozen negation_mismatch**), and byte-identity (no scaffold → judge sees the FULL line). Every fabrication path demotes.
 - **Phase C (WM_IOV before→after):** _pending_
 - **Phase D (fabrication gate):** _pending_
 - **VERDICT:** _pending_
