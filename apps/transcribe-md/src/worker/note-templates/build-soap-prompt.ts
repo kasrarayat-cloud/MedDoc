@@ -65,6 +65,9 @@ export const CHOICE_SLOT_DIRECTIVE = [
   'them as ONE coherent set: the segments must belong to the vein you chose',
   'and read proximal-to-distal. Never place an option from one menu into a',
   'different menu.',
+  'Preserve the scaffold\'s LINE STRUCTURE: reproduce each labeled field and',
+  'each sentence on its OWN line, exactly as laid out — never merge separate',
+  'fields or sentences onto one line.',
 ].join('\n');
 
 /** True when any section carries an inline `{{one of: ...}}` choice slot. */
