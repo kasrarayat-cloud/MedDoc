@@ -41,7 +41,12 @@ import {
   dropAdministrativeChrome,
   detectPhiKeywords,
 } from './phi-gate';
-import { reconcileTemplateMarkers, dropHeaderMarkerSections } from './reconcile-markers';
+import {
+  reconcileBodyMarkers,
+  reconcileHeaderMarkers,
+  dropHeaderMarkerSections,
+  firstClinicalHeadingIndex,
+} from './reconcile-markers';
 
 // TRANSCRIBE_MD_CLINICAL_MODEL — eval override (feat/fable5-eval); unset → default unchanged.
 const MODEL = process.env.TRANSCRIBE_MD_CLINICAL_MODEL || 'claude-opus-4-8';
@@ -274,11 +279,27 @@ export async function parseNoteToTemplate(
     };
   }
 
+  // Stable header/body boundary = source line index of the first clinical
+  // heading, computed ONCE from the FULL clinical-section set. Both reconcile
+  // passes use it so the split is identical even after sections are dropped/
+  // scrubbed between them — a body-region line can never be reclassified as
+  // header and restored post-gate (which would bypass the LLM PHI scan).
+  const headerBoundaryIdx = firstClinicalHeadingIndex(noteText, clinicalSections);
+
+  // Reconcile dropped BODY-region markers BEFORE the PHI scan (fix/template-
+  // parse-determinism). A body carrier sentence the LLM dropped can, in a pasted
+  // FILLED example, carry a patient name / free-text specific that only the LLM
+  // PHI-scan (not regex) catches — so re-attaching body markers here means the
+  // full gate (regex ∪ LLM, steps 3-4) covers them. Header-region markers are
+  // restored AFTER the gate (step 5): scanning the provider-label metadata block
+  // makes the LLM scan reject non-deterministically. No body markers → no-op.
+  const bodyReconciled = reconcileBodyMarkers(noteText, clinicalSections, headerBoundaryIdx);
+
   // Drop header-marker sections (provider / clinic / study-metadata dropdowns)
   // BEFORE the PHI scan: their provider-identifier LABELS make the scan LLM
-  // variably reject the whole parse. reconcileTemplateMarkers restores every one
+  // variably reject the whole parse. reconcileHeaderMarkers restores every one
   // deterministically AFTER the gate (step 5). No header markers → no-op.
-  const sectionsForScan = dropHeaderMarkerSections(noteText, clinicalSections);
+  const sectionsForScan = dropHeaderMarkerSections(noteText, bodyReconciled);
 
   // Clamp generated string fields to their persisted caps so a verbose value
   // (e.g. a long styleProfile.tense) can never break review/save or leak a raw
@@ -332,20 +353,19 @@ export async function parseNoteToTemplate(
   const gated = applyPhiGate(draft, flags, scan.phiFields, scan.anyUncertain);
   if (gated.rejected || !gated.template) return gated;
 
-  // ── 5. Deterministic marker reconciliation (fix/template-parse-determinism),
-  //    AFTER the gate. The docx extraction is authoritative for the FULL set of
-  //    {{one of}} dropdowns; the LLM structuring step can drop/normalize the
-  //    header-region ones (side of exam / physician / machine / location /
-  //    indications / diagnosis) run-to-run. Re-attach any extracted marker the
-  //    LLM lost — header markers into an Exam Metadata section (marker LINES
-  //    only, so no raw provider-name fixed text), body markers to their nearest
-  //    section. Running it AFTER the gate is both correct and deterministic: a
-  //    marker line is the doctor's own dropdown FORMAT (its options are already
-  //    excluded from the PHI scan by enumerateTextFields), so it needs no
-  //    re-scan — and this bypasses the LLM PHI-scan's run-to-run variance that
-  //    otherwise dropped/rejected the restored header block. No-op when the LLM
-  //    preserved everything or the note has no markers (SOAP / scaffold-free
-  //    templates) → byte-identical. ──
-  const reconciled = reconcileTemplateMarkers(noteText, gated.template.sections);
+  // ── 5. Deterministic HEADER-marker reconciliation (fix/template-parse-
+  //    determinism), AFTER the gate. The docx extraction is authoritative for
+  //    the FULL set of {{one of}} dropdowns; the LLM structuring step can drop
+  //    the header-region ones (side of exam / physician / machine / location /
+  //    indications / diagnosis) run-to-run. Restore them into an Exam Metadata
+  //    section (marker LINES only, so no raw provider-name fixed text). Running
+  //    header reconciliation AFTER the gate is deterministic: the provider/clinic
+  //    names are dropdown OPTIONS (excluded from the PHI scan) and each restored
+  //    line's fixed carrier is regex-PHI-scanned — while a pre-scan restore of
+  //    this metadata block would make the LLM scan reject non-deterministically.
+  //    Body markers were already reconciled + fully scanned pre-gate (step 2).
+  //    No-op when the LLM preserved the header markers, or the note has none
+  //    (SOAP / scaffold-free templates) → byte-identical. ──
+  const reconciled = reconcileHeaderMarkers(noteText, gated.template.sections, headerBoundaryIdx);
   return { ...gated, template: { ...gated.template, sections: reconciled } };
 }
