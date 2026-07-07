@@ -27,8 +27,10 @@ import {
   buildSoapSystemPrompt,
   buildSoapUserPrompt,
   requiredSectionLabels,
+  templateHasChoiceSlots,
   type ResolvedNoteTemplate,
 } from '../note-templates/build-soap-prompt';
+import { buildTemplateScaffold } from '../note-templates/template-scaffold';
 import { SYSTEM_DEFAULT_NOTE_TEMPLATE } from '../note-templates/system-default-template';
 import { ULTRASOUND_REPORT_TEMPLATE } from '../note-templates/ultrasound-report-template';
 import { buildUltrasoundSystemPrompt } from '../note-templates/build-ultrasound-prompt';
@@ -238,12 +240,20 @@ export async function runLayer4GenerateSoap(
   // never a SILENT placeholder in a signed note.
   let filledEmptySections: string[] = [];
   if (anchorsOn) {
+    // A custom template with `{{one of}}` choice slots gets scaffold-aware
+    // verification (fixed boilerplate exempt; filled carriers judged on their
+    // picks) — the default SOAP template has no slots, so scaffold is undefined
+    // and 04b is byte-identical.
+    const templateScaffold = templateHasChoiceSlots(template.sections)
+      ? buildTemplateScaffold(template.sections)
+      : undefined;
     const verified = await runAnchorVerify({
       visitId: input.visitId,
       practiceId: input.practiceId,
       userId: input.userId,
       anchoredDraft: rawText,
       roleLabeledTranscript: input.roleLabeledTranscript,
+      templateScaffold,
     });
     text = verified.body;
     suggestedClaims = verified.suggestions.length > 0 ? verified.suggestions : undefined;
