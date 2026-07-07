@@ -111,15 +111,30 @@ export function isAdministrativeChrome(label: string, key: string): boolean {
   return ADMIN_LABEL_RE.test(label ?? '');
 }
 
+/** A section carrying inline `{{one of: ...}}` choice markers is the doctor's
+ *  own dropdown fields — explicit clinical FORMAT they filled the template
+ *  with, never system-rendered chrome. Keep it even if the LLM labelled the
+ *  containing block "metadata"/"header": a real imaging template co-locates
+ *  dictatable dropdowns (side of exam, indications, diagnosis) with the
+ *  header, and the context dropdowns (physician/machine/location) belong in
+ *  the report too — they are populated from settings, not discarded. */
+const CHOICE_MARKER_RE = /\{\{one of:/;
+function carriesChoiceMarkers(s: { defaultText?: string | null; styleInstructions?: string | null }): boolean {
+  return CHOICE_MARKER_RE.test(s.defaultText ?? '') || CHOICE_MARKER_RE.test(s.styleInstructions ?? '');
+}
+
 /** Split sections into clinical (kept) vs administrative chrome (dropped). */
-export function dropAdministrativeChrome<T extends { label: string; key: string }>(
-  sections: readonly T[]
-): { kept: T[]; droppedLabels: string[] } {
+export function dropAdministrativeChrome<
+  T extends { label: string; key: string; defaultText?: string | null; styleInstructions?: string | null },
+>(sections: readonly T[]): { kept: T[]; droppedLabels: string[] } {
   const kept: T[] = [];
   const droppedLabels: string[] = [];
   for (const s of sections) {
-    if (isAdministrativeChrome(s.label, s.key)) droppedLabels.push(s.label);
-    else kept.push(s);
+    if (isAdministrativeChrome(s.label, s.key) && !carriesChoiceMarkers(s)) {
+      droppedLabels.push(s.label);
+    } else {
+      kept.push(s);
+    }
   }
   return { kept, droppedLabels };
 }
