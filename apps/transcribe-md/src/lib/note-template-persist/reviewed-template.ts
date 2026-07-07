@@ -47,12 +47,30 @@ export const ReviewedSectionSchema = z
   })
   .strict();
 
+/** Per-doctor CONTEXT-field defaults (feat/template-context-defaults). Keys are
+ *  the non-per-visit context fields — these MUST stay in sync with the
+ *  non-perVisit entries of CONTEXT_FIELDS in `@/lib/note-template-context`
+ *  (sonographer is excluded here — it is perVisit). A
+ *  value is only ever RENDERED when it exactly matches one of the template's own
+ *  options for that field (validated at generation); an off-list value resolves
+ *  to "[not documented]" and never reaches a note — so this map can neither
+ *  weaken safety nor be a PHI-injection vector. */
+export const ContextDefaultsSchema = z
+  .object({
+    clinicAddress: z.string().trim().max(200).optional(),
+    referringPhysician: z.string().trim().max(200).optional(),
+    machine: z.string().trim().max(200).optional(),
+    location: z.string().trim().max(120).optional(),
+  })
+  .strict();
+
 /** Doctor-level prose style. `.strict()` — no preamble/globalRules accepted. */
 export const ReviewedStyleProfileSchema = z
   .object({
     tense: z.string().trim().max(LIM.tense).nullable().default(null),
     tone: z.string().trim().max(LIM.tone).default(''),
     abbreviations: z.string().trim().max(LIM.abbreviations).nullable().default(null),
+    contextDefaults: ContextDefaultsSchema.nullable().default(null),
   })
   .strict();
 
@@ -114,11 +132,13 @@ export function normalizeReviewedTemplate(input: ReviewedTemplateInput): {
     name: input.name,
     encounterType: input.encounterType,
     sections,
-    // RULE 1 — only the three prose-style fields; no safety fields exist here.
+    // RULE 1 — only the prose-style fields + context defaults; no safety fields
+    // exist here (preamble/globalRules are immutable, sourced canonically).
     styleProfile: {
       tense: input.styleProfile.tense,
       tone: input.styleProfile.tone,
       abbreviations: input.styleProfile.abbreviations,
+      contextDefaults: input.styleProfile.contextDefaults ?? null,
     },
   };
   return { draft };

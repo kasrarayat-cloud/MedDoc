@@ -100,6 +100,14 @@ export interface NoteTemplateStyleProfile {
    *  pre-wrapped with its `- ` bullet + `  ` continuations exactly as L4. The
    *  builder emits `Critical rules:` then joins these with '\n'. */
   globalRules: string[];
+  /** Per-doctor CONTEXT-field defaults for a custom structured template
+   *  (feat/template-context-defaults): a { fieldKey → chosen value } map used
+   *  to deterministically fill the never-dictated context {{one of}} slots
+   *  (clinic / referring physician / machine / location) at generation. Only a
+   *  value that is one of the template's own options for that field is applied;
+   *  otherwise the field stays "[not documented]". Absent on the system default
+   *  and on every SOAP template → no effect. */
+  contextDefaults?: Record<string, string> | null;
 }
 
 /** Content shape of the seeded system-default template (the DB row adds
