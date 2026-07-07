@@ -175,9 +175,24 @@ export function enumerateTextFields(
   draft.sections.forEach((s, i) => {
     push(`sections[${i}].label`, s.label);
     push(`sections[${i}].styleInstructions`, s.styleInstructions);
-    push(`sections[${i}].defaultText`, s.defaultText, true);
+    // Exclude `{{one of: …}}` dropdown-OPTION content from PHI detection: those
+    // are the doctor's ENUMERATED FORMAT (from the docx content controls),
+    // reused across every patient — never patient-specific content — and a
+    // clinic-address option ("…, CA 92604") otherwise trips the long-id/date
+    // detectors, nulling the whole section's default. The FIXED text around the
+    // markers is still fully scanned (that is where a pasted patient example
+    // would leak). Same "options are format, not content" principle the
+    // structured-template pipeline uses throughout. No markers → unchanged.
+    push(`sections[${i}].defaultText`, stripChoiceOptions(s.defaultText), true);
   });
   return fields;
+}
+
+/** Blank out `{{one of: … }}` option lists for PHI SCANNING only (the stored
+ *  defaultText is untouched). */
+function stripChoiceOptions(text: string | null): string | null {
+  if (text == null) return text;
+  return text.replace(/\{\{one of:[^}]*\}\}/g, '{{options}}');
 }
 
 /**
