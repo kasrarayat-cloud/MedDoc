@@ -104,9 +104,14 @@ describe('normalizeReviewedTemplate', () => {
     expect(draft.sections[0].defaultTextMode).toBe('omit_unless_supported');
   });
 
-  it('styleProfile carries only tense/tone/abbreviations (no safety fields exist)', () => {
+  it('styleProfile carries prose fields + contextDefaults, NEVER the immutable safety fields', () => {
     const { draft } = normalizeReviewedTemplate(ReviewedTemplateSchema.parse(base()));
-    expect(Object.keys(draft.styleProfile).sort()).toEqual(['abbreviations', 'tense', 'tone']);
+    expect(Object.keys(draft.styleProfile).sort()).toEqual([
+      'abbreviations', 'contextDefaults', 'tense', 'tone',
+    ]);
+    // the safety layer is immutable + sourced canonically — it can never ride here
+    expect(draft.styleProfile).not.toHaveProperty('preamble');
+    expect(draft.styleProfile).not.toHaveProperty('globalRules');
   });
 });
 
