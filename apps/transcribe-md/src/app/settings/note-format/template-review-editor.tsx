@@ -22,6 +22,7 @@ import {
   saveNoteTemplateAction,
 } from '@/actions/note-template-lifecycle';
 import { previewNoteTemplateAction } from '@/actions/preview-note-template';
+import { detectContextFields } from '@/lib/note-template-context';
 import type {
   NoteTemplateSection,
   SectionFormatHint,
@@ -154,6 +155,27 @@ export function TemplateReviewEditor({
   // dedicated UI in CORE; the immutable safety layer is never here regardless.
   const styleProfile = initial.styleProfile;
 
+  // Context-field defaults (feat/template-context-defaults): the never-dictated
+  // dropdowns (clinic / referring physician / machine / location) fill from
+  // these per-doctor picks at generation, deterministically — the AI never
+  // touches them. Sonographer is per-visit (no default). Detected live from the
+  // parsed section dropdowns; a default may only be one of the field's own
+  // options.
+  const contextFields = useMemo(
+    () => detectContextFields(sections),
+    [sections],
+  );
+  const [contextDefaults, setContextDefaults] = useState<Record<string, string>>(
+    () => ({ ...(styleProfile.contextDefaults ?? {}) }),
+  );
+  const setContextDefault = (key: string, value: string) =>
+    setContextDefaults((prev) => {
+      const next = { ...prev };
+      if (value) next[key] = value;
+      else delete next[key];
+      return next;
+    });
+
   function patch(uid: string, next: Partial<EditableSection>) {
     setSections((prev) => prev.map((s) => (s._uid === uid ? { ...s, ...next } : s)));
   }
@@ -207,6 +229,14 @@ export function TemplateReviewEditor({
         tense: styleProfile.tense,
         tone: styleProfile.tone,
         abbreviations: styleProfile.abbreviations,
+        // Only keep defaults for the NON-per-visit context fields the current
+        // template actually has (drop stale keys if the template changed).
+        contextDefaults: (() => {
+          const keys = new Set(contextFields.filter((f) => !f.perVisit).map((f) => f.key));
+          const out: Record<string, string> = {};
+          for (const [k, v] of Object.entries(contextDefaults)) if (keys.has(k) && v) out[k] = v;
+          return Object.keys(out).length > 0 ? out : null;
+        })(),
       },
     };
   }
@@ -313,6 +343,41 @@ export function TemplateReviewEditor({
           <button type="button" style={{ ...btn, marginTop: 10 }} onClick={addSection}>
             + Add a section
           </button>
+
+          {/* Context defaults — never-dictated dropdowns filled from your
+              settings, not the AI (feat/template-context-defaults). */}
+          {contextFields.length > 0 && (
+            <div style={{ marginTop: 22 }}>
+              <div style={{ ...subLabel, marginBottom: 4 }}>Context fields — filled from your settings, never from the recording</div>
+              <p style={{ fontSize: 11.5, color: 'var(--color-linear-text-3)', margin: '0 0 10px', lineHeight: 1.5 }}>
+                These never come from what you say. Pick a default for each; it fills automatically on every note. Sonographer changes per visit, so it stays blank for you to complete in the note.
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {contextFields.map((f) => (
+                  <div key={f.key} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                    <label style={subLabel} htmlFor={`ctx-${f.key}`}>{f.fieldLabel}</label>
+                    {f.perVisit ? (
+                      <div style={{ ...input, display: 'flex', alignItems: 'center', color: 'var(--color-linear-text-3)', fontStyle: 'italic' }}>
+                        Per visit — you complete this in the note
+                      </div>
+                    ) : (
+                      <select
+                        id={`ctx-${f.key}`}
+                        style={{ ...input, appearance: 'auto' }}
+                        value={contextDefaults[f.key] ?? ''}
+                        onChange={(e) => setContextDefault(f.key, e.target.value)}
+                      >
+                        <option value="">Leave blank ([not documented])</option>
+                        {f.options.map((o) => (
+                          <option key={o} value={o}>{o}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Opt-in suggestions (nothing pre-filled) */}
           {flags.length > 0 && (
