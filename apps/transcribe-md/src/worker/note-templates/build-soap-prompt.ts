@@ -44,6 +44,37 @@ const SAFETY = SYSTEM_DEFAULT_NOTE_TEMPLATE.styleProfile;
 export const SCAFFOLD_CONFIRM_MARKER =
   '[SCAFFOLD — confirm this against the transcript or remove it; it was inserted as a template default, not derived from the encounter.]';
 
+/** Directive for inline dropdown menus rendered as `{{one of: A | B | C}}`
+ *  choice slots (from Word content-control dropdowns; see
+ *  docx-content-controls.ts). Constrained-fill invariant: pick ONLY a listed
+ *  option, blank when unsupported, never invent — and fill a multi-slot
+ *  carrier sentence as one coherent set. Appended to the prompt ONLY when a
+ *  section actually carries a marker, so a template without choice slots
+ *  (every prod SOAP visit today) produces a byte-identical prompt. */
+export const CHOICE_SLOT_DIRECTIVE = [
+  'CHOICE SLOTS. Some scaffold text contains inline menus written',
+  '`{{one of: A | B | C}}`. For each menu, replace the ENTIRE `{{...}}` marker',
+  'with EXACTLY ONE of its listed options, copied verbatim — the one the',
+  'transcript supports. Pick ONLY from that menu\'s own listed options; never',
+  'output a value that is not listed and never invent or reword an option.',
+  'If the transcript supports none of a menu\'s options, do NOT guess: drop',
+  'that marker (leave it blank); if the whole carrier sentence is then',
+  'undictated, omit the sentence entirely.',
+  'When one sentence has several menus (e.g. "The {{one of: ...vein...}} from',
+  'the {{one of: ...segment...}} to the {{one of: ...segment...}} ..."), fill',
+  'them as ONE coherent set: the segments must belong to the vein you chose',
+  'and read proximal-to-distal. Never place an option from one menu into a',
+  'different menu.',
+].join('\n');
+
+/** True when any section carries an inline `{{one of: ...}}` choice slot. */
+export function templateHasChoiceSlots(sections: readonly NoteTemplateSection[]): boolean {
+  const re = /\{\{one of:/;
+  return sections.some(
+    (s) => re.test(s.defaultText ?? '') || re.test(s.styleInstructions ?? '')
+  );
+}
+
 /** Normalize a Prisma NoteTemplate row (JSONB columns are untyped) into the
  *  builder's shape. */
 export function normalizeTemplate(row: {
@@ -89,7 +120,7 @@ function formatHintDirective(hint: SectionFormatHint): string {
 // Every sentence RESTATES an existing immutable guardrail; nothing here
 // relaxes one. Emitted ONLY for sections carrying `structure` — the system
 // default has none, so the golden-prompt bytes are untouched.
-function renderStructureDirective(
+export function renderStructureDirective(
   structure: NonNullable<NoteTemplateSection['structure']>
 ): string {
   if (structure.kind === 'options') {
@@ -211,6 +242,10 @@ export function buildSoapSystemPrompt(
     // 5. Immutable safety guardrails — fixed position after the sections.
     'Critical rules:',
     ...SAFETY.globalRules,
+    // Choice-slot directive — only when the template actually has `{{one of}}`
+    // menus, so a slot-free template's prompt stays byte-identical (golden).
+    templateHasChoiceSlots(sections) ? '' : undefined,
+    templateHasChoiceSlots(sections) ? CHOICE_SLOT_DIRECTIVE : undefined,
     // Specialty guidance (unchanged mechanism — from specialtyGuidance()).
     guidance ? '' : undefined,
     guidance ? `Specialty guidance (${opts.specialty}):\n${guidance}` : undefined,

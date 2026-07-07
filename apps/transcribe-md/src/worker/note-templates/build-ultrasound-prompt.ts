@@ -14,19 +14,51 @@
 
 import { delimiterSystemSuffix } from '@meddoc/ai';
 import type { ResolvedNoteTemplate, BuildSystemPromptOpts } from './build-soap-prompt';
+import {
+  renderStructureDirective,
+  SCAFFOLD_CONFIRM_MARKER,
+  CHOICE_SLOT_DIRECTIVE,
+  templateHasChoiceSlots,
+} from './build-soap-prompt';
+import type { NoteTemplateSection } from './system-default-template';
+import { ULTRASOUND_REPORT_TEMPLATE } from './ultrasound-report-template';
 
-/** Render one section's body. The ultrasound sections carry styleInstructions
- *  and never inject default text (all omit_unless_supported), so this is just
- *  the directive line(s). */
-function renderSectionBody(styleInstructions: string | null, formatHint: string): string[] {
-  if (styleInstructions) return [styleInstructions];
+/** The immutable imaging-report safety layer (preamble + anti-hallucination /
+ *  measurement / laterality rules). ALWAYS sourced from the canonical
+ *  ultrasound template — never from the passed template — so a doctor's custom
+ *  imaging template contributes only its SECTIONS and can no more weaken the
+ *  imaging safety rules than a custom SOAP template can weaken the SOAP ones.
+ *  (A custom template's styleProfile carries tense/tone, not globalRules.) */
+const IMAGING_SAFETY = ULTRASOUND_REPORT_TEMPLATE.styleProfile;
+
+/** Render one section's body. The BUILT-IN ultrasound template carries only
+ *  styleInstructions and no default text — for it this is byte-identical to
+ *  before. A CUSTOM imaging template (a doctor's own report) may also carry
+ *  table/option `structure` and marker-bearing scaffold `defaultText`; emit
+ *  those the same way the SOAP builder does so the custom report is filled
+ *  from its own fields. */
+function renderSectionBody(s: NoteTemplateSection): string[] {
+  const out: string[] = [];
+  // `||` (not `??`) preserves the built-in template's prior behavior: an
+  // empty-string styleInstructions falls back to the format-hint directive.
+  out.push(s.styleInstructions || formatHintDirective(s.formatHint));
+  if (s.structure) out.push(renderStructureDirective(s.structure));
+  if (s.defaultText) {
+    if (s.defaultTextMode === 'always_include') out.push(s.defaultText);
+    else if (s.defaultTextMode === 'scaffold_confirm')
+      out.push(`${s.defaultText}\n${SCAFFOLD_CONFIRM_MARKER}`);
+  }
+  return out;
+}
+
+function formatHintDirective(formatHint: string): string {
   switch (formatHint) {
     case 'numbered':
-      return ['Write this section as a numbered list.'];
+      return 'Write this section as a numbered list.';
     case 'bullets':
-      return ['Write this section as a bulleted list.'];
+      return 'Write this section as a bulleted list.';
     default:
-      return ['Write this section as prose.'];
+      return 'Write this section as prose.';
   }
 }
 
@@ -45,7 +77,7 @@ export function buildUltrasoundSystemPrompt(
 
   const lines: (string | null | undefined)[] = [
     // Imaging-report preamble (NOT the SOAP "writing a SOAP note" preamble).
-    template.styleProfile.preamble,
+    IMAGING_SAFETY.preamble,
     '',
     // Same dynamic hedge slices as L4 (audio quality / interpreter).
     opts.audioQualityAlert,
@@ -55,15 +87,16 @@ export function buildUltrasoundSystemPrompt(
     // Report section structure.
     'Structure the report with these markdown headings exactly:',
     '',
-    ...sections.flatMap((s) => [
-      `## ${s.label}`,
-      ...renderSectionBody(s.styleInstructions, s.formatHint),
-      '',
-    ]),
+    ...sections.flatMap((s) => [`## ${s.label}`, ...renderSectionBody(s), '']),
     // Anti-hallucination + measurement/laterality rules (from the ultrasound
     // styleProfile — reuses the SOAP safety rules verbatim + imaging discipline).
     'Critical rules:',
-    ...template.styleProfile.globalRules,
+    ...IMAGING_SAFETY.globalRules,
+    // Choice-slot directive — only for a custom template that actually has
+    // `{{one of}}` menus; the built-in ultrasound template has none, so its
+    // prompt is byte-identical to before.
+    templateHasChoiceSlots(sections) ? '' : null,
+    templateHasChoiceSlots(sections) ? CHOICE_SLOT_DIRECTIVE : null,
     // Instruction-as-data boundary (unchanged mechanism).
     delimiterSystemSuffix('transcript'),
   ];
