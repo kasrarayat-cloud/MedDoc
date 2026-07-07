@@ -15,8 +15,8 @@
     "migrate:dev": "prisma migrate dev"
   },
   "dependencies": {
-    "@prisma/adapter-pg": "^7.7.0",
-    "@prisma/client": "^7.7.0"
+    "@prisma/adapter-pg": "^7.8.0",
+    "@prisma/client": "^7.8.0"
   },
   "devDependencies": {
     "prisma": "^7.7.0"
