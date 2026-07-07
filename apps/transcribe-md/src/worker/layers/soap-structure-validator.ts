@@ -122,7 +122,13 @@ export function validateSoapStructure(
   // the section name prevents partial matches like
   // `## Subjective findings present in HPI`.
   const missing = requiredSections.filter((section) => {
-    const re = new RegExp(`##\\s*${section}\\b`, 'i');
+    // Escape the section label — a custom template's heading is arbitrary text
+    // and may contain regex metacharacters (e.g. the IOV template's
+    // "DIAMETER AND REFLUX TIME — ** Right Leg **"), which would otherwise
+    // throw "Invalid regular expression". `(?!\w)` replaces `\b` so a label
+    // ending in punctuation (`*`, `)`) still matches cleanly.
+    const escaped = section.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`##\\s*${escaped}(?!\\w)`, 'i');
     return !re.test(text);
   });
 

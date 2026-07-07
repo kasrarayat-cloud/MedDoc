@@ -91,8 +91,18 @@ export async function runLayer4GenerateSoap(
   // Phase 1: build the prompt FROM the resolved template (no hard-coded
   // prompt string). For the system default this reproduces today's prompt
   // byte-for-byte — see worker/layers/__tests__/l4-golden-prompt.test.ts.
+  // An imaging visit uses the doctor's OWN active imaging template when they
+  // have one (a custom report with its own headings / dropdown fields), and
+  // falls back to the built-in ultrasound report template otherwise. A custom
+  // template is anything the orchestrator resolved that is not the SOAP system
+  // default — the built-in ultrasound template is a better imaging fallback
+  // than the SOAP default. SOAP visits are unchanged.
+  const hasCustomTemplate =
+    input.noteTemplate != null && !input.noteTemplate.isSystemDefault;
   const template: ResolvedNoteTemplate = isUltrasoundReport
-    ? (ULTRASOUND_REPORT_TEMPLATE as ResolvedNoteTemplate)
+    ? hasCustomTemplate
+      ? (input.noteTemplate as ResolvedNoteTemplate)
+      : (ULTRASOUND_REPORT_TEMPLATE as ResolvedNoteTemplate)
     : input.noteTemplate ?? SYSTEM_DEFAULT_NOTE_TEMPLATE;
 
   // Round 3 PR-J — A07-P0 prompt-injection delimiter.

@@ -12,8 +12,32 @@
 
 import mammoth from 'mammoth';
 
-/** Extract raw text from a .docx file's bytes. Server-only. Never persists. */
+import { docxToTextWithControls } from './docx-content-controls';
+
+/** Extract raw text from a .docx file's bytes. Server-only. Never persists.
+ *
+ *  A template built with native Word DROPDOWN content controls loses every
+ *  option through `mammoth.extractRawText` (it keeps only the placeholder
+ *  "Choose an item."). So we FIRST walk the document for dropdowns and, when
+ *  any exist, return the content-control reconstruction (fixed text + each
+ *  dropdown inlined as a `{{one of: A | B | C}}` choice marker). A docx with
+ *  no dropdowns falls back to mammoth — byte-identical to the prior behavior,
+ *  so the existing extract-note-text tests and every non-dropdown template are
+ *  unaffected. */
 export async function docxToText(bytes: Uint8Array): Promise<string> {
+  try {
+    const { text, dropdownCount } = await docxToTextWithControls(bytes);
+    if (dropdownCount > 0) return text;
+  } catch (err) {
+    // Malformed/unexpected docx internals → fall through to mammoth, which is
+    // the proven, more permissive extractor. Log the fall-through (non-PHI —
+    // this is a template, no patient data) so a silently-degraded extraction
+    // is observable rather than invisible.
+    console.warn(
+      '[docx-to-text] content-control extraction failed; falling back to mammoth:',
+      err instanceof Error ? err.message : String(err)
+    );
+  }
   const result = await mammoth.extractRawText({ buffer: Buffer.from(bytes) });
   return result.value;
 }
