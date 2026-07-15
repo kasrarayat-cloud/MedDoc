@@ -145,6 +145,10 @@ export default async function SettingsPage() {
     version: t.version,
     sectionCount: t.sectionCount,
     defaultCount: t.defaultCount,
+    templateKind: t.templateKind,
+    twinCertificationStatus: t.twinCertificationStatus,
+    twinFieldCount: t.twinFieldCount,
+    twinBlockingUnsupportedCount: t.twinBlockingUnsupportedCount,
     updatedAtIso: t.updatedAt.toISOString(),
   }));
 

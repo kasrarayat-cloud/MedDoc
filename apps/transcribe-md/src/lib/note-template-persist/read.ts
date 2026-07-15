@@ -18,7 +18,14 @@ import type {
   TemplateStatus,
   TemplateReviewModel,
   TemplateListItem,
+  TemplateKind,
+  TemplateTwinCertificationStatus,
 } from './types';
+
+function certificationStatus(value: string | null | undefined): TemplateTwinCertificationStatus | null {
+  if (!value) return null;
+  return value.toLowerCase() as TemplateTwinCertificationStatus;
+}
 
 function asSections(json: unknown): NoteTemplateSection[] {
   return Array.isArray(json) ? (json as NoteTemplateSection[]) : [];
@@ -58,6 +65,12 @@ export function rowToListItem(row: {
   status: string;
   version: number;
   sections: unknown;
+  templateKind?: string;
+  templateTwinCompiledVersion?: {
+    certificationStatus: string;
+    blockingUnsupportedCount: number;
+    _count: { fields: number };
+  } | null;
   updatedAt: Date;
 }): TemplateListItem {
   const sections = asSections(row.sections);
@@ -69,6 +82,13 @@ export function rowToListItem(row: {
     version: row.version,
     sectionCount: sections.length,
     defaultCount: sections.filter((s) => !!s.defaultText).length,
+    templateKind: (row.templateKind as TemplateKind | undefined) ?? 'structured',
+    twinCertificationStatus: certificationStatus(
+      row.templateTwinCompiledVersion?.certificationStatus,
+    ),
+    twinFieldCount: row.templateTwinCompiledVersion?._count.fields ?? 0,
+    twinBlockingUnsupportedCount:
+      row.templateTwinCompiledVersion?.blockingUnsupportedCount ?? 0,
     updatedAt: row.updatedAt,
   };
 }
@@ -85,6 +105,14 @@ export async function listDoctorTemplates(doctorId: string): Promise<TemplateLis
       status: true,
       version: true,
       sections: true,
+      templateKind: true,
+      templateTwinCompiledVersion: {
+        select: {
+          certificationStatus: true,
+          blockingUnsupportedCount: true,
+          _count: { select: { fields: true } },
+        },
+      },
       updatedAt: true,
     },
     orderBy: [{ updatedAt: 'desc' }],
@@ -97,6 +125,12 @@ export async function listDoctorTemplates(doctorId: string): Promise<TemplateLis
       status: string;
       version: number;
       sections: unknown;
+      templateKind: string;
+      templateTwinCompiledVersion: {
+        certificationStatus: string;
+        blockingUnsupportedCount: number;
+        _count: { fields: number };
+      } | null;
       updatedAt: Date;
     }) => rowToListItem(r),
   );

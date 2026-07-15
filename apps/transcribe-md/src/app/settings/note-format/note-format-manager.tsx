@@ -56,7 +56,15 @@ const subLabel: React.CSSProperties = {
   color: 'var(--color-linear-text-3)',
 };
 
-type View = 'home' | 'entry' | 'parsing' | 'review' | 'rejected';
+type View =
+  | 'home'
+  | 'entry'
+  | 'parsing'
+  | 'twin-compiling'
+  | 'review'
+  | 'rejected';
+
+const TEMPLATE_TWIN_MAX_BYTES = 10 * 1024 * 1024;
 
 /** Which uploadable formats this image can actually extract. Computed server-
  *  side (see SettingsPage.getUploadCaps) so the UI never advertises a format
@@ -81,6 +89,7 @@ export function NoteFormatManager({
   const [rejectReason, setRejectReason] = useState('');
   const [pending, startTransition] = useTransition();
   const fileRef = useRef<HTMLInputElement>(null);
+  const twinFileRef = useRef<HTMLInputElement>(null);
 
   function refreshHome() {
     setReview(null);
@@ -187,6 +196,58 @@ export function NoteFormatManager({
     });
   }
 
+  async function onTwinUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.docx')) {
+      toast.error('Choose an original .docx file', {
+        description: 'Macro-enabled .docm files are not accepted.',
+      });
+      return;
+    }
+    if (file.size === 0 || file.size > TEMPLATE_TWIN_MAX_BYTES) {
+      toast.error('That Word template cannot be compiled', {
+        description: 'Template Twin accepts non-empty DOCX files up to 10 MB.',
+      });
+      return;
+    }
+
+    const recoverView: View = hasTemplates ? 'home' : 'entry';
+    setView('twin-compiling');
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const response = await fetch('/api/note-templates/template-twin/upload', {
+        method: 'POST',
+        body: formData,
+        credentials: 'same-origin',
+        headers: { Accept: 'application/json' },
+      });
+      const payload = (await response.json().catch(() => null)) as
+        | { ok: true; certificationUrl: string }
+        | { ok: false; error: string }
+        | null;
+      if (!response.ok || !payload?.ok) {
+        toast.error('That Word template could not be compiled', {
+          description:
+            payload && !payload.ok
+              ? payload.error
+              : 'The file was not saved. Check it in Word and try again.',
+        });
+        setView(recoverView);
+        return;
+      }
+      router.push(payload.certificationUrl);
+    } catch {
+      toast.error('Template upload did not finish', {
+        description: 'The file was not activated. Check your connection and try again.',
+      });
+      setView(recoverView);
+    }
+  }
+
   function chooseStandard() {
     toast.success('You’re on the standard format', {
       description: 'Notes are written in QuillMD’s default SOAP structure — nothing changes.',
@@ -259,6 +320,10 @@ export function NoteFormatManager({
     return <ParsingState />;
   }
 
+  if (view === 'twin-compiling') {
+    return <TwinCompilingState />;
+  }
+
   if (view === 'rejected') {
     return (
       <RejectedState
@@ -282,6 +347,9 @@ export function NoteFormatManager({
         pending={pending}
         fileRef={fileRef}
         uploadCaps={uploadCaps}
+        onTwinUploadClick={() => twinFileRef.current?.click()}
+        onTwinUpload={onTwinUpload}
+        twinFileRef={twinFileRef}
       />
     );
   }
@@ -294,10 +362,30 @@ export function NoteFormatManager({
           Your formats and which visits use them. QuillMD picks the right one per visit; without a match it uses the
           standard SOAP format. Defaults always follow the confirm-before-sign rule.
         </p>
-        <button type="button" style={btnPrimary} onClick={() => setView('entry')} disabled={pending}>
-          + Bring a note
-        </button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <button
+            type="button"
+            style={btn}
+            onClick={() => twinFileRef.current?.click()}
+            disabled={pending}
+          >
+            Preserve Word template
+          </button>
+          <button type="button" style={btnPrimary} onClick={() => setView('entry')} disabled={pending}>
+            + Bring a note
+          </button>
+        </div>
       </div>
+
+      <input
+        ref={twinFileRef}
+        type="file"
+        accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        onChange={onTwinUpload}
+        style={{ display: 'none' }}
+        aria-hidden
+        tabIndex={-1}
+      />
 
       <div style={{ marginTop: 18, border: '1px solid var(--color-linear-border)', borderRadius: 10, overflow: 'hidden' }}>
         {templates.map((t) => (
@@ -360,6 +448,48 @@ function TemplateRow({
   onActivate: () => void;
   onDelete: () => void;
 }) {
+  if (t.templateKind === 'template_twin_docx') {
+    const certificationLabel =
+      t.twinCertificationStatus === 'certified'
+        ? t.status === 'active'
+          ? `Active · ${t.encounterLabel}`
+          : 'Certified'
+        : t.twinCertificationStatus === 'unsupported'
+          ? 'Unsupported'
+          : 'Needs confirmation';
+    return (
+      <div style={rowStyle}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--color-linear-text)' }}>
+              {t.name}
+            </span>
+            <span style={{ ...subLabel, fontSize: 9 }}>Original DOCX</span>
+          </div>
+          <div style={{ fontSize: 11.5, color: 'var(--color-linear-text-3)', marginTop: 2 }}>
+            <span style={{ fontFamily: mono, fontSize: 10, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+              {t.twinFieldCount} field{t.twinFieldCount === 1 ? '' : 's'}
+            </span>
+            {` · v${t.version}`}
+            {t.twinBlockingUnsupportedCount > 0
+              ? ` · ${t.twinBlockingUnsupportedCount} blocking item${t.twinBlockingUnsupportedCount === 1 ? '' : 's'}`
+              : ''}
+          </div>
+        </div>
+        <span style={pill(t.status === 'active' ? 'active' : 'draft')}>
+          {certificationLabel}
+        </span>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <a
+            href={`/settings/note-format/${encodeURIComponent(t.id)}/certify`}
+            style={{ ...btn, textDecoration: 'none' }}
+          >
+            {t.twinCertificationStatus === 'certified' ? 'Inspect' : 'Continue'}
+          </a>
+        </div>
+      </div>
+    );
+  }
   const statusLabel = t.status === 'active'
     ? `Active · ${t.encounterLabel}`
     : t.status === 'draft' ? 'Draft' : 'Superseded';
@@ -389,6 +519,7 @@ function TemplateRow({
 // ── Entry ───────────────────────────────────────────────────────────────────
 function EntryState({
   pasteText, setPasteText, onParse, onUploadClick, onUpload, onStandard, onBack, pending, fileRef, uploadCaps,
+  onTwinUploadClick, onTwinUpload, twinFileRef,
 }: {
   pasteText: string;
   setPasteText: (v: string) => void;
@@ -400,6 +531,9 @@ function EntryState({
   pending: boolean;
   fileRef: React.RefObject<HTMLInputElement | null>;
   uploadCaps: UploadCaps;
+  onTwinUploadClick: () => void;
+  onTwinUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  twinFileRef: React.RefObject<HTMLInputElement | null>;
 }) {
   // Only offer a format whose extractor actually loads in this image (incident
   // 2026-06-04). .txt/.md always available; .pdf/.docx gated on uploadCaps so we
@@ -449,6 +583,45 @@ function EntryState({
         </button>
       </div>
 
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 18,
+          padding: '14px 16px',
+          border: '1px solid var(--color-linear-border)',
+          borderRadius: 8,
+          background: 'var(--color-linear-surface-2)',
+          marginTop: 14,
+          flexWrap: 'wrap',
+        }}
+      >
+        <div style={{ flex: 1, minWidth: 240 }}>
+          <div style={{ ...subLabel, color: 'var(--color-linear-sage-bright)' }}>
+            Template Twin · DOCX
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--color-linear-text)', fontWeight: 500, marginTop: 4 }}>
+            Keep the original Word layout and controls
+          </div>
+          <p style={{ margin: '4px 0 0', fontSize: 12, lineHeight: 1.5, color: 'var(--color-linear-text-2)' }}>
+            QuillMD stores an immutable copy, inventories every field, and asks you to certify the mapping before it can be used.
+          </p>
+        </div>
+        <button type="button" style={btn} onClick={onTwinUploadClick} disabled={pending}>
+          Upload original DOCX
+        </button>
+        <input
+          ref={twinFileRef}
+          type="file"
+          accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          onChange={onTwinUpload}
+          style={{ display: 'none' }}
+          aria-hidden
+          tabIndex={-1}
+        />
+      </div>
+
       <div style={{ marginTop: 16 }}>
         <label style={{ ...subLabel }} htmlFor="nf-paste">Paste a note</label>
         <textarea
@@ -477,6 +650,43 @@ function EntryState({
           Your note is read <b style={{ color: 'var(--color-linear-text)', fontWeight: 500 }}>for format only</b>. Patient details — names, dates, findings — are removed automatically before anything is shown, and <b style={{ color: 'var(--color-linear-text)', fontWeight: 500 }}>the note itself is never saved</b>. QuillMD keeps your structure, not your patients.
         </p>
       </div>
+    </div>
+  );
+}
+
+function TwinCompilingState() {
+  return (
+    <div
+      aria-live="polite"
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 16,
+        padding: '56px 24px',
+        textAlign: 'center',
+      }}
+    >
+      <div
+        style={{
+          width: 40,
+          height: 40,
+          borderRadius: '50%',
+          border: '2px solid var(--color-linear-hairline-strong)',
+          borderTopColor: 'var(--color-linear-sage)',
+          animation: 'qm-spin 1.1s linear infinite',
+        }}
+        role="status"
+        aria-label="Compiling the original Word template"
+      />
+      <div style={{ fontSize: 16, fontWeight: 500, color: 'var(--color-linear-text)' }}>
+        Inspecting the original Word structure…
+      </div>
+      <p style={{ margin: 0, fontSize: 12.5, color: 'var(--color-linear-text-3)', maxWidth: '52ch', lineHeight: 1.55 }}>
+        Checking the package, controls, tables, headers, and footers. Nothing is activated until you review a synthetic filled copy and certify it.
+      </p>
+      <style>{`@keyframes qm-spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
