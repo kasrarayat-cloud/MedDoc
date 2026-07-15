@@ -396,7 +396,7 @@ export async function createTemplateTwinDraft(
           semanticProposalFallback: usedFallbackMappings,
         },
       });
-    });
+    }, { isolationLevel: 'ReadCommitted' });
   } catch (error) {
     // The put-once source remains recoverable in the dedicated private bucket.
     // No delete is attempted from this request path because source deletion is

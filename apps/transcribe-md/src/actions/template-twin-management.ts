@@ -516,7 +516,11 @@ export async function createTemplateTwinVersionAction(
         });
         return { version: nextVersion };
       },
-      { isolationLevel: 'Serializable' },
+      // Compiled-lineage triggers intentionally require READ COMMITTED so a
+      // post-advisory-lock ownership read cannot use a stale transaction
+      // snapshot. The lineage/version unique constraints still make a losing
+      // concurrent fork fail closed.
+      { isolationLevel: 'ReadCommitted' },
     );
 
     revalidateTemplateManagement();

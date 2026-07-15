@@ -27,7 +27,11 @@ import {
 import { evaluateTemplateTwinCertificationCoverage } from './certification-coverage';
 import { enqueueTemplateTwinAudit } from './audit-outbox';
 import { templateTwinSyntheticTestProvenanceSha256 } from './synthetic-test-provenance';
-import { templateTwinSourcePhiScanEvidenceSha256 } from './source-phi-evidence';
+import {
+  assertTemplateTwinSourceProvenance,
+  templateTwinSyntheticProofSourceEvidenceSha256,
+  TEMPLATE_TWIN_SOURCE_PROVENANCE_GATE_MESSAGE,
+} from './source-phi-evidence';
 
 export class TemplateTwinLifecycleError extends Error {
   readonly code:
@@ -545,19 +549,30 @@ export async function certifyAndActivateTemplateTwin(input: {
         );
       }
 
-      const sourcePrivacyScanEvidenceSha256 =
-        templateTwinSourcePhiScanEvidenceSha256(
-          compiled.sourceArtifact.privacyScanEvidence,
-        );
       if (
         compiled.sourceArtifact.validationStatus !== 'accepted' ||
         !compiled.sourceArtifact.objectVersionId?.trim() ||
-        !compiled.sourceArtifact.objectEtag?.trim() ||
-        !sourcePrivacyScanEvidenceSha256
+        !compiled.sourceArtifact.objectEtag?.trim()
       ) {
         throw new TemplateTwinLifecycleError(
           'CERTIFICATION_BLOCKED',
-          'The source template does not have valid safe-alpha privacy and static-asset scan evidence. Upload a newly inspected version.',
+          TEMPLATE_TWIN_SOURCE_PROVENANCE_GATE_MESSAGE,
+        );
+      }
+      let sourcePrivacyScanEvidenceSha256: string;
+      try {
+        sourcePrivacyScanEvidenceSha256 = assertTemplateTwinSourceProvenance({
+          privacyScanEvidence: compiled.sourceArtifact.privacyScanEvidence,
+          requireBinding: true,
+          boundEvidenceSha256:
+            templateTwinSyntheticProofSourceEvidenceSha256(
+              compiled.latestTestRoundTrip,
+            ),
+        }).evidenceSha256;
+      } catch {
+        throw new TemplateTwinLifecycleError(
+          'CERTIFICATION_BLOCKED',
+          TEMPLATE_TWIN_SOURCE_PROVENANCE_GATE_MESSAGE,
         );
       }
 

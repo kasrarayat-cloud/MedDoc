@@ -26,6 +26,8 @@ import type { TemplateTwinFieldCorrectionRequest } from './contracts';
 import { parseExplicitNumberAndUnit } from './encounter-facts';
 import {
   finalizeTemplateTwinFill,
+  lockCurrentTemplateTwinVisit,
+  visitMatchesPreparedSoap,
   type PreparedTemplateTwinFill,
 } from './fill-engine';
 import {
@@ -43,11 +45,16 @@ import {
 } from './ir';
 import {
   createTemplateTwinArtifactStore,
+  quarantineTemplateTwinObject,
   type StoredTemplateTwinArtifact,
   type TemplateTwinArtifactStore,
 } from './storage';
 import { claimTemplateTwinObject } from './storage/object-ledger';
 import { validateTemplateTwin } from './validation';
+import {
+  assertTemplateTwinSourceProvenance,
+  TEMPLATE_TWIN_SOURCE_PROVENANCE_GATE_MESSAGE,
+} from './source-phi-evidence';
 import {
   TEMPLATE_TWIN_UNSUPPORTED_CONCEPT_CODE,
   isSupportedTemplateTwinConcept,
@@ -136,6 +143,9 @@ interface OwnedReviewContext {
     staticContentSha256: string;
     certificationStatus: string;
     blockingUnsupportedCount: number;
+    certification: {
+      sourcePrivacyScanEvidenceSha256: string | null;
+    } | null;
     sourceArtifact: {
       practiceId: string;
       objectKey: string | null;
@@ -144,6 +154,7 @@ interface OwnedReviewContext {
       sha256: string;
       sizeBytes: number;
       validationStatus: string;
+      privacyScanEvidence: unknown;
     };
     noteTemplate: {
       id: string;
@@ -187,6 +198,7 @@ interface CommitReviewPlan {
   practiceId: string;
   visitId: string;
   soapVersion: number;
+  soapFinal: string;
   expectedManifestVersion: number;
   prepared: PreparedTemplateTwinFill;
   storedOutput: StoredTemplateTwinArtifact | null;
@@ -198,6 +210,7 @@ interface CommitReviewPlan {
 
 interface CommitReviewResult {
   applied: boolean;
+  soapBindingStale?: boolean;
   manifestVersion: number | null;
   draftTemplateId: string | null;
   draftTemplateVersion: number | null;
@@ -646,6 +659,19 @@ function assertProvenance(
       'The visit no longer matches its certified Template Twin provenance.',
     );
   }
+  try {
+    assertTemplateTwinSourceProvenance({
+      privacyScanEvidence: compiled.sourceArtifact.privacyScanEvidence,
+      requireBinding: true,
+      boundEvidenceSha256:
+        compiled.certification?.sourcePrivacyScanEvidenceSha256,
+    });
+  } catch {
+    throw new TemplateTwinReviewError(
+      'TEMPLATE_PROVENANCE_INVALID',
+      TEMPLATE_TWIN_SOURCE_PROVENANCE_GATE_MESSAGE,
+    );
+  }
 }
 
 export function createTemplateTwinReviewRepository(): TemplateTwinReviewRepository {
@@ -690,6 +716,9 @@ export function createTemplateTwinReviewRepository(): TemplateTwinReviewReposito
               staticContentSha256: true,
               certificationStatus: true,
               blockingUnsupportedCount: true,
+              certification: {
+                select: { sourcePrivacyScanEvidenceSha256: true },
+              },
               sourceArtifact: {
                 select: {
                   practiceId: true,
@@ -699,6 +728,7 @@ export function createTemplateTwinReviewRepository(): TemplateTwinReviewReposito
                   sha256: true,
                   sizeBytes: true,
                   validationStatus: true,
+                  privacyScanEvidence: true,
                 },
               },
               noteTemplate: {
@@ -761,6 +791,74 @@ export function createTemplateTwinReviewRepository(): TemplateTwinReviewReposito
     async commit(plan): Promise<CommitReviewResult> {
       return prisma.$transaction(
         async (tx: Prisma.TransactionClient) => {
+          const lockedVisit = await lockCurrentTemplateTwinVisit(
+            tx,
+            plan.visitId,
+          );
+          if (
+            !visitMatchesPreparedSoap({
+              visit: lockedVisit,
+              doctorId: plan.decision.reviewerId,
+              noteTemplateId: plan.prepared.manifest.noteTemplateId,
+              noteTemplateVersion: plan.prepared.manifest.noteTemplateVersion,
+              soapFinal: plan.soapFinal,
+              manifest: plan.prepared.manifest,
+            })
+          ) {
+            if (plan.storedOutput) {
+              await quarantineTemplateTwinObject(tx, {
+                objectKey: plan.storedOutput.objectKey,
+                practiceId: plan.practiceId,
+                objectVersionId: plan.storedOutput.objectVersionId,
+                objectEtag: plan.storedOutput.objectEtag,
+                reasonCode: 'SOAP_BINDING_STALE',
+              });
+            }
+            await tx.templateTwinFillManifest.updateMany({
+              where: {
+                id: plan.fillManifestId,
+                practiceId: plan.practiceId,
+                status: { not: 'SIGNED' },
+                signedDecisionAt: null,
+                manifestVersion: plan.expectedManifestVersion,
+                soapVersion: plan.prepared.manifest.soapVersion,
+                soapSha256: plan.prepared.manifest.soapSha256,
+              },
+              data: {
+                status: 'NEEDS_REVIEW',
+                reviewedAt: null,
+                reviewedById: null,
+                reviewedManifestVersion: null,
+                reviewedManifestSha256: null,
+              },
+            });
+            await enqueueTemplateTwinAudit(tx, {
+              eventKey:
+                `template-twin:soap-binding-stale-review:${plan.fillManifestId}` +
+                `:v${plan.expectedManifestVersion}`,
+              practiceId: plan.practiceId,
+              actorId: plan.decision.reviewerId,
+              actorEmailSnapshot: plan.reviewerEmail,
+              action: 'TEMPLATE_TWIN_SAFETY_GATE_BLOCKED',
+              targetType: 'TemplateTwinFillManifest',
+              targetId: plan.fillManifestId,
+              metadata: {
+                reasonCode: 'SOAP_BINDING_STALE',
+                visitId: plan.visitId,
+                expectedSoapVersion: plan.prepared.manifest.soapVersion,
+                currentSoapVersion: lockedVisit?.soapVersion ?? null,
+                manifestSha256: plan.prepared.manifestSha256,
+                outputQuarantined: plan.storedOutput !== null,
+              },
+            });
+            return {
+              applied: false,
+              soapBindingStale: true,
+              manifestVersion: null,
+              draftTemplateId: null,
+              draftTemplateVersion: null,
+            };
+          }
           const status = plan.prepared.render ? 'VERIFIED' : 'NEEDS_REVIEW';
           const updated = await tx.templateTwinFillManifest.updateMany({
             where: {
@@ -810,6 +908,7 @@ export function createTemplateTwinReviewRepository(): TemplateTwinReviewReposito
           if (updated.count !== 1) {
             return {
               applied: false,
+              soapBindingStale: false,
               manifestVersion: null,
               draftTemplateId: null,
               draftTemplateVersion: null,
@@ -943,7 +1042,7 @@ export function createTemplateTwinReviewRepository(): TemplateTwinReviewReposito
           }
 
           // This event is clinical/audit critical. Enqueue it in the same
-          // serializable transaction as the immutable correction decision so
+          // database transaction as the immutable correction decision so
           // an audit outage can never leave an unaudited physician delta.
           await enqueueTemplateTwinAudit(tx, {
             eventKey: `template-twin:field-reviewed:${plan.fillManifestId}:v${plan.expectedManifestVersion + 1}`,
@@ -972,12 +1071,18 @@ export function createTemplateTwinReviewRepository(): TemplateTwinReviewReposito
 
           return {
             applied: true,
+            soapBindingStale: false,
             manifestVersion: plan.expectedManifestVersion + 1,
             draftTemplateId,
             draftTemplateVersion,
           };
         },
-        { isolationLevel: 'Serializable' },
+        // A mapping-rule fork creates compiled lineage. Database lineage
+        // triggers require READ COMMITTED so their post-lock ownership reads
+        // cannot retain a stale transaction snapshot. Exact manifest/SOAP
+        // predicates and row locks above still make concurrent reviews lose
+        // closed.
+        { isolationLevel: 'ReadCommitted' },
       );
     },
   };
@@ -1179,6 +1284,7 @@ export async function reviewTemplateTwinField(
     practiceId: input.actor.practiceId,
     visitId: input.visitId,
     soapVersion: manifest.soapVersion,
+    soapFinal: context.visit.soapFinal,
     expectedManifestVersion: input.correction.expectedManifestVersion,
     prepared,
     storedOutput,
@@ -1208,6 +1314,12 @@ export async function reviewTemplateTwinField(
       ? { targetFieldId: field.fieldId, context }
       : null,
   });
+  if (committed.soapBindingStale) {
+    throw new TemplateTwinReviewError(
+      'SOAP_BINDING_STALE',
+      TEMPLATE_TWIN_SOAP_BINDING_REVIEW_REASON,
+    );
+  }
   if (!committed.applied || committed.manifestVersion === null) {
     // A put-once output may have won the race before this conflict. It remains
     // an immutable, unreferenced tenant object for Operations reconciliation;

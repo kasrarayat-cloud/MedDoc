@@ -6,11 +6,13 @@ vi.mock('@/lib/audit', () => ({ logAudit: audit }));
 
 const database = vi.hoisted(() => ({
   transaction: vi.fn(),
+  manifestFindFirst: vi.fn(),
   manifestUpdateMany: vi.fn(),
   decisionCreate: vi.fn(),
   ledgerUpdateMany: vi.fn(),
   ledgerFindUnique: vi.fn(),
   outboxCreate: vi.fn(),
+  lockVisit: vi.fn(),
 }));
 vi.mock('@meddoc/db', () => {
   const tx = {
@@ -21,9 +23,13 @@ vi.mock('@meddoc/db', () => {
       findUnique: database.ledgerFindUnique,
     },
     templateTwinAuditOutbox: { create: database.outboxCreate },
+    $queryRaw: database.lockVisit,
   };
   return {
-    default: { $transaction: database.transaction },
+    default: {
+      $transaction: database.transaction,
+      templateTwinFillManifest: { findFirst: database.manifestFindFirst },
+    },
     prisma: { $transaction: database.transaction },
     __tx: tx,
   };
@@ -31,6 +37,7 @@ vi.mock('@meddoc/db', () => {
 
 import { canonicalSha256 } from '../canonical';
 import { canonicalSoapSha256 } from '../soap-binding';
+import { TEMPLATE_TWIN_SOURCE_PROVENANCE_GATE_CODE } from '../source-phi-evidence';
 import { type TemplateTwinFieldCorrectionRequest } from '../contracts';
 import {
   TEMPLATE_TWIN_REVIEW_REASON,
@@ -67,6 +74,17 @@ const OUTPUT_SHA = 'b'.repeat(64);
 const FIELD_ID = `ttf_${'c'.repeat(24)}`;
 const NOW = '2026-07-15T17:00:00.000Z';
 const REVIEWED_SOAP = '## Assessment\nSynthetic severity under physician review.';
+const SOURCE_PRIVACY_SCAN_EVIDENCE = {
+  profileVersion: 'template-twin-source-phi-safe-alpha-v1' as const,
+  provider: 'anthropic' as const,
+  model: 'synthetic-privacy-model-v1',
+  scannedAt: '2026-07-15T12:00:00.000Z',
+  scannedPartCount: 3,
+  approvedStaticAssetPolicySha256: 'e'.repeat(64),
+  approvedStaticAssetCount: 0,
+  approvedStaticAssetUsedCount: 0,
+  approvedStaticAssetUsageSha256: 'f'.repeat(64),
+};
 
 type ReviewContext = NonNullable<
   Awaited<ReturnType<TemplateTwinReviewRepository['loadOwned']>>
@@ -307,6 +325,11 @@ function context(definition = field()): ReviewContext {
       staticContentSha256: SHA,
       certificationStatus: 'CERTIFIED',
       blockingUnsupportedCount: 0,
+      certification: {
+        sourcePrivacyScanEvidenceSha256: canonicalSha256(
+          SOURCE_PRIVACY_SCAN_EVIDENCE,
+        ),
+      },
       sourceArtifact: {
         practiceId: 'practice-1',
         objectKey: `practices/practice-1/template-twin/sources/lineage-1/v1/${SHA}/artifact/${SHA}.docx`,
@@ -315,6 +338,7 @@ function context(definition = field()): ReviewContext {
         sha256: SHA,
         sizeBytes: 20,
         validationStatus: 'accepted',
+        privacyScanEvidence: SOURCE_PRIVACY_SCAN_EVIDENCE,
       },
       noteTemplate: {
         id: 'template-1',
@@ -363,6 +387,27 @@ function correction(
   };
 }
 
+function lockedVisitRow(
+  overrides: Partial<{
+    soapVersion: number;
+    soapFinal: string | null;
+    status: string;
+  }> = {},
+) {
+  return {
+    id: 'visit-1',
+    userId: 'doctor-1',
+    status: overrides.status ?? 'READY',
+    deletedAt: null,
+    archivedAt: null,
+    soapVersion: overrides.soapVersion ?? 7,
+    soapFinal:
+      overrides.soapFinal === undefined ? REVIEWED_SOAP : overrides.soapFinal,
+    noteTemplateId: 'template-1',
+    noteTemplateVersion: 1,
+  };
+}
+
 function repository(
   loaded: ReviewContext | null,
   result: Partial<Awaited<ReturnType<TemplateTwinReviewRepository['commit']>>> = {},
@@ -384,10 +429,10 @@ function repository(
   return { repo, committed: () => committed };
 }
 
-function storage(): TemplateTwinArtifactStore {
+function storage(onOutputStored?: () => void): TemplateTwinArtifactStore {
   const storeOutputArtifact: TemplateTwinArtifactStore['storeOutputArtifact'] =
-    vi.fn(
-      async (): Promise<StoredTemplateTwinArtifact> => ({
+    vi.fn(async (): Promise<StoredTemplateTwinArtifact> => {
+      const stored = {
         bucket: 'synthetic-private-bucket',
         objectKey: `practices/practice-1/template-twin/outputs/visit-1/${SHA}/artifact/${OUTPUT_SHA}.docx`,
         objectVersionId: 'provider-output-version-synthetic',
@@ -396,8 +441,10 @@ function storage(): TemplateTwinArtifactStore {
         mimeType: DOCX_MIME_TYPE,
         sizeBytes: 24,
         created: true,
-      }),
-    );
+      } as const;
+      onOutputStored?.();
+      return stored;
+    });
 
   return {
     bucket: 'synthetic-private-bucket',
@@ -477,9 +524,11 @@ beforeEach(async () => {
     async (callback: (client: unknown) => Promise<unknown>) => callback(tx),
   );
   database.manifestUpdateMany.mockResolvedValue({ count: 1 });
+  database.manifestFindFirst.mockResolvedValue(context());
   database.decisionCreate.mockResolvedValue({ id: 'decision-synthetic-1' });
   database.ledgerUpdateMany.mockResolvedValue({ count: 1 });
   database.outboxCreate.mockResolvedValue({ id: 'outbox-synthetic-1' });
+  database.lockVisit.mockResolvedValue([lockedVisitRow()]);
 });
 
 describe('buildClinicianCorrection exact rules', () => {
@@ -656,6 +705,62 @@ describe('reviewTemplateTwinField lifecycle', () => {
     expect(repo.commit).not.toHaveBeenCalled();
   });
 
+  it.each([
+    {
+      name: 'null evidence',
+      mutate: (loaded: ReviewContext) => {
+        loaded.compiledVersion.sourceArtifact.privacyScanEvidence = null;
+      },
+    },
+    {
+      name: 'a legacy profile',
+      mutate: (loaded: ReviewContext) => {
+        loaded.compiledVersion.sourceArtifact.privacyScanEvidence = {
+          ...SOURCE_PRIVACY_SCAN_EVIDENCE,
+          profileVersion: 'template-twin-source-phi-legacy-v0',
+        };
+      },
+    },
+    {
+      name: 'a certification hash mismatch',
+      mutate: (loaded: ReviewContext) => {
+        loaded.compiledVersion.certification = {
+          sourcePrivacyScanEvidenceSha256: '0'.repeat(64),
+        };
+      },
+    },
+  ])(
+    'blocks correction before source I/O when provenance contains $name',
+    async ({ mutate }) => {
+      const loaded = context();
+      mutate(loaded);
+      const { repo } = repository(loaded);
+      const artifacts = storage();
+      const finalizeFill = vi.fn(fakeFinalize);
+
+      await expect(
+        reviewTemplateTwinField(
+          {
+            visitId: 'visit-1',
+            actor,
+            correction: correction(),
+            validationNow: NOW,
+          },
+          { repository: repo, storage: artifacts, finalizeFill },
+        ),
+      ).rejects.toMatchObject({
+        code: 'TEMPLATE_PROVENANCE_INVALID',
+        message: expect.stringContaining(
+          TEMPLATE_TWIN_SOURCE_PROVENANCE_GATE_CODE,
+        ),
+      });
+      expect(artifacts.readSourceArtifact).not.toHaveBeenCalled();
+      expect(artifacts.storeOutputArtifact).not.toHaveBeenCalled();
+      expect(finalizeFill).not.toHaveBeenCalled();
+      expect(repo.commit).not.toHaveBeenCalled();
+    },
+  );
+
   it('appends a value delta, independently validates, renders, stores, and commits once', async () => {
     const loaded = context();
     const { repo, committed } = repository(loaded);
@@ -714,6 +819,10 @@ describe('reviewTemplateTwinField lifecycle', () => {
 
     await createTemplateTwinReviewRepository().commit(plan!);
 
+    expect(database.transaction).toHaveBeenCalledWith(expect.any(Function), {
+      isolationLevel: 'ReadCommitted',
+    });
+
     expect(database.ledgerUpdateMany).toHaveBeenCalledWith({
       where: {
         objectKey: plan!.storedOutput!.objectKey,
@@ -748,6 +857,98 @@ describe('reviewTemplateTwinField lifecycle', () => {
       database.outboxCreate.mock.invocationCallOrder[0]!,
     );
   });
+
+  it.each([
+    {
+      name: 'same-version exact SOAP source drift',
+      soapVersion: 7,
+      soapFinal: `${REVIEWED_SOAP}\nSynthetic allergy correction outside the review.`,
+    },
+    {
+      name: 'SOAP version bump',
+      soapVersion: 8,
+      soapFinal: `${REVIEWED_SOAP}\nSynthetic medication correction outside the review.`,
+    },
+  ])(
+    'quarantines correction output and leaves the fill NEEDS_REVIEW after $name during storage',
+    async ({ soapVersion, soapFinal }) => {
+      const artifacts = storage(() => {
+        database.lockVisit.mockResolvedValue([
+          lockedVisitRow({ soapVersion, soapFinal }),
+        ]);
+      });
+
+      await expect(
+        reviewTemplateTwinField(
+          {
+            visitId: 'visit-1',
+            actor,
+            correction: correction(),
+            validationNow: NOW,
+          },
+          {
+            storage: artifacts,
+            finalizeFill: fakeFinalize,
+            factIdFactory: () => 'a'.repeat(24),
+            now: () => new Date(NOW),
+          },
+        ),
+      ).rejects.toMatchObject({
+        code: 'SOAP_BINDING_STALE',
+        message:
+          'The SOAP note changed after the Original Template DOCX was generated. Regenerate and review the document before signing.',
+      });
+
+      expect(artifacts.storeOutputArtifact).toHaveBeenCalledTimes(1);
+      expect(database.lockVisit).toHaveBeenCalledTimes(1);
+      expect(database.manifestUpdateMany).toHaveBeenCalledTimes(1);
+      expect(database.manifestUpdateMany).toHaveBeenCalledWith({
+        where: {
+          id: 'fill-1',
+          practiceId: 'practice-1',
+          status: { not: 'SIGNED' },
+          signedDecisionAt: null,
+          manifestVersion: 4,
+          soapVersion: 7,
+          soapSha256: canonicalSoapSha256(REVIEWED_SOAP),
+        },
+        data: {
+          status: 'NEEDS_REVIEW',
+          reviewedAt: null,
+          reviewedById: null,
+          reviewedManifestVersion: null,
+          reviewedManifestSha256: null,
+        },
+      });
+      expect(database.decisionCreate).not.toHaveBeenCalled();
+      expect(database.ledgerUpdateMany).toHaveBeenCalledTimes(1);
+      expect(database.ledgerUpdateMany).toHaveBeenCalledWith({
+        where: expect.objectContaining({
+          objectKey: expect.stringContaining('/template-twin/outputs/'),
+          practiceId: 'practice-1',
+          state: 'WRITTEN_UNCLAIMED',
+          claimType: null,
+          claimId: null,
+        }),
+        data: expect.objectContaining({
+          state: 'RETAINED',
+          lastErrorCode: 'SOAP_BINDING_STALE',
+        }),
+      });
+      expect(database.outboxCreate).toHaveBeenCalledTimes(1);
+      expect(database.outboxCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          action: 'TEMPLATE_TWIN_SAFETY_GATE_BLOCKED',
+          metadata: expect.objectContaining({
+            reasonCode: 'SOAP_BINDING_STALE',
+            expectedSoapVersion: 7,
+            currentSoapVersion: soapVersion,
+            outputQuarantined: true,
+          }),
+        }),
+      });
+    },
+  );
 
   it('fails the correction transaction when durable audit enqueue fails', async () => {
     const loaded = context();

@@ -14,7 +14,7 @@ import { canonicalSoapSha256 } from './soap-binding';
 import { DOCX_MIME_TYPE } from './storage/keys';
 import { parseTemplateTwinArtifactKey } from './storage/ownership';
 import { validateTemplateTwin } from './validation';
-import { templateTwinSourcePhiScanEvidenceSha256 } from './source-phi-evidence';
+import { assertTemplateTwinSourceProvenance } from './source-phi-evidence';
 
 const SHA256 = /^[a-f0-9]{64}$/;
 
@@ -389,16 +389,22 @@ function certifiedCompilationIntegrity(
       staticSha256: part.staticSha256,
     })),
   );
-  const sourcePrivacyScanEvidenceSha256 =
-    templateTwinSourcePhiScanEvidenceSha256(
-      compiled.sourceArtifact.privacyScanEvidence,
-    );
+  let sourcePrivacyScanEvidenceSha256: string;
+  try {
+    sourcePrivacyScanEvidenceSha256 = assertTemplateTwinSourceProvenance({
+      privacyScanEvidence: compiled.sourceArtifact.privacyScanEvidence,
+      requireBinding: true,
+      boundEvidenceSha256:
+        certification?.sourcePrivacyScanEvidenceSha256,
+    }).evidenceSha256;
+  } catch {
+    return false;
+  }
   return Boolean(
     certification &&
       compiled.irSchemaVersion === ir.irSchemaVersion &&
       compiled.compilerVersion === ir.compilerVersion &&
       compiled.sourceArtifact.validationStatus === 'accepted' &&
-      sourcePrivacyScanEvidenceSha256 &&
       certification.sourcePrivacyScanEvidenceSha256 ===
         sourcePrivacyScanEvidenceSha256 &&
       compiled.sourceArtifact.sha256 === ir.source.sha256 &&

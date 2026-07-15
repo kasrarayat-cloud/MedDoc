@@ -52,6 +52,7 @@ export {
   beginTemplateTwinObjectWrite,
   claimTemplateTwinObject,
   markTemplateTwinObjectWritten,
+  quarantineTemplateTwinObject,
   reconcileTemplateTwinObjectLedgers,
   type TemplateTwinObjectAdmin,
   type TemplateTwinObjectLedgerClient,

@@ -131,7 +131,7 @@ unclaimed object becomes `RETAINED` unless Operations separately enables the
 exact `TEMPLATE_TWIN_ORPHAN_PURGE_APPROVED=true` boundary; maintenance alone
 does not authorize deletion.
 
-Database triggers make source-artifact rows and certification rows append-only. Certified compiler/field/mapping rows cannot be changed or deleted. Once `signedDecisionAt` is set, the fill-manifest row cannot be changed or deleted. Additional constraint triggers reject cross-practice fill lineage, output keys outside the owning visit/tenant prefix, review decisions linked to fields from another compiled version, and inconsistent waiver lineage.
+Database triggers make source-artifact rows and certification rows append-only. Certified compiler/field/mapping rows cannot be changed or deleted. Once `signedDecisionAt` is set, the fill-manifest row cannot be changed or deleted. Additional constraint triggers reject a compiled source joined to a `NoteTemplate` owner from another practice, later owner-practice reassignment, cross-practice fill lineage, output keys outside the owning visit/tenant prefix, review decisions linked to fields from another compiled version, and inconsistent waiver lineage. Compiled, template-owner, and owner-practice mutations share a transaction-scoped database lock so concurrent writes cannot each validate stale cross-table state. Those three lineage mutations are accepted only at PostgreSQL `READ COMMITTED`; snapshot-retaining `REPEATABLE READ` and `SERIALIZABLE` callers fail closed with a stable retry reason rather than validate a pre-lock snapshot. The audit-gate migration holds write-blocking table locks in one explicit transaction while it validates existing compiled rows and installs the triggers, so no concurrent mismatch can enter an installation gap.
 
 Critical Template Twin actions enqueue PHI-safe audit intent in the same
 transaction as the state change. The outbox uses stable event keys, bounded
@@ -214,9 +214,12 @@ safe rejection code, and durable audit intent may be retained.
 An accepted immutable source also stores strict, PHI-safe scan provenance:
 scanner profile, provider/model identifier, scan timestamp, scanned-part
 count, and canonical hashes/counts for the exact practice approval set and
-the approved assets actually used. Certification binds the canonical evidence
-hash; missing, malformed, legacy-null, or changed evidence blocks generation
-and signing.
+the approved assets actually used. The pre-certification synthetic proof binds
+the canonical evidence hash, certification requires that exact proof-time
+hash, and every later source read requires the certification binding. Missing,
+malformed, legacy-null, or changed evidence blocks testing, certification,
+generation, correction rendering, and signing with stable gate code
+`TT_SOURCE_PROVENANCE_CURRENT_PROFILE_REQUIRED`.
 
 ## Deterministic compiler and `TemplateDocIR`
 
@@ -447,6 +450,15 @@ Regeneration must bind the new SOAP version/hash. The signing gate recomputes
 the hash from the current SOAP and rejects a stale allergy, medication,
 assessment, plan, or any other edit.
 
+The worker and physician-correction service also lock and reread the visit in
+their final serializable database transaction after rendering and immutable
+object storage. They compare the exact SOAP text, version, canonical hash,
+physician, and template version. If the SOAP changed during that window, a new
+fill or correction is not created; an existing unsigned fill is left
+`NEEDS_REVIEW`; and the newly written bytes remain an unclaimed `RETAINED`
+ledger object with a durable `SOAP_BINDING_STALE` safety event. A version-only
+or initial-read-only check cannot authorize the output.
+
 The signing route independently reloads and parses the certified IR/mappings,
 recomputes source/compiler/structure/static/mapping integrity, reruns the field
 validator and status counts, and binds every output-derived proof to the
@@ -525,8 +537,15 @@ The third migration is additive and fail-closed. It adds:
 - durable object-write/orphan ledger and transactional audit outbox tables;
 - audit actions for waiver, deactivation, retirement, rollback, safety-gate,
   and reconciliation events; and
-- tenant/lineage, output-key, review-field, waiver, and immutability constraint
+- compiled-source/physician-owner tenant validation, owner-reassignment,
+  tenant/lineage, output-key, review-field, waiver, and immutability constraint
   triggers plus supporting indexes.
+
+The third migration intentionally takes `SHARE ROW EXCLUSIVE` locks on the
+compiled-version, source-artifact, note-template, and user tables for the
+duration of one explicit transaction. Production rollout therefore requires a
+reviewed maintenance window and lock-wait monitoring; the migration must not be
+split into statementwise execution.
 
 There is no down migration. No migration has been applied to production by
 this branch. Production rollback, if a later deployment is approved, is an
@@ -715,14 +734,14 @@ Complete this table at merge handoff; do not replace missing evidence with assum
 | Gate | Command/evidence | Result | UTC | Commit/run link |
 | --- | --- | --- | --- | --- |
 | Prisma format/validate/generate | Commands above | `PASS` | 2026-07-15 | Local pre-commit run |
-| Targeted Template Twin regression suite | 57-file feature-path Vitest invocation | `PASS — 57 files / 511 tests` | 2026-07-15 | Local pre-commit run |
-| Full Template Twin suite | Same consolidated 57-file invocation, including the tracked WM fixture | `PASS — 57 files / 511 tests` | 2026-07-15 | Local pre-commit run |
-| Full TranscribeMD unit suite | `CI=true npm run test:unit -w transcribe-md` | `PASS — 194 files / 2,337 tests` | 2026-07-15 | Local pre-commit run |
+| Targeted Template Twin regression suite | 57-file feature-path Vitest invocation | `PASS — 57 files / 523 tests` | 2026-07-15 | Local pre-commit run |
+| Full Template Twin suite | Same consolidated 57-file invocation, including the tracked WM fixture | `PASS — 57 files / 523 tests` | 2026-07-15 | Local pre-commit run |
+| Full TranscribeMD unit suite | `CI=true npm run test:unit -w transcribe-md` | `PASS — 194 files / 2,349 tests` | 2026-07-15 | Local pre-commit run |
 | Typecheck | `next typegen` then active `tsc --noEmit` command | `PASS` | 2026-07-15 | Local pre-commit run |
 | Focused/full lint | 148 changed-path files / full active command | `FOCUSED PASS; FULL ACTIVE FAILS PRE-EXISTING DEBT — 29 errors / 39 warnings (recorded main baseline: 30 / 41)` | 2026-07-15 | Marketing: 0/1; legacy: 0/3 |
 | Production build | Clean Docker app/worker/migration image builds | `PASS`; host-only build is blocked by the isolated worktree's external `node_modules` symlink | 2026-07-15 | App bundle assertions passed |
 | Migration tests | Fresh isolated QA PostgreSQL | `PASS — all 70 migrations; status up to date; adversarial DB constraints exercised` | 2026-07-15 | Disposable QA only |
-| Isolated infrastructure-backed QA E2E | `npx playwright test --project=template-twin` against `docker-compose.qa.yml` | `PASS — 1 scenario / 24.9 s` | 2026-07-15 | Disposable QA stack removed after run |
+| Isolated infrastructure-backed QA E2E | `npx playwright test --project=template-twin` against `docker-compose.qa.yml` | `PASS — 1 scenario / 30.7 s` | 2026-07-15 | Disposable QA stack removed after run |
 | DOCX visual/open-repair inspection | Desktop Word and LibreOffice | `NOT RUN — neither application is installed` | 2026-07-15 | Mandatory manual release gate |
 | Backup/restore and production bucket policy | Operations evidence | `PENDING` | — | Production-readiness prerequisite |
 | Clinical/privacy approval | Named approval records | `PENDING` | — | Real-PHI prerequisite |

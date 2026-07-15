@@ -119,6 +119,9 @@ function validRoundTrip(
     outputSha256,
     untouchedEntriesVerified: 8,
     modifiedPartsVerified: 1,
+    sourcePrivacyScanEvidenceSha256: canonicalSha256(
+      SOURCE_PRIVACY_SCAN_EVIDENCE,
+    ),
     fields: ir.fields.map((field) =>
       ({
         fieldId: field.fieldId,

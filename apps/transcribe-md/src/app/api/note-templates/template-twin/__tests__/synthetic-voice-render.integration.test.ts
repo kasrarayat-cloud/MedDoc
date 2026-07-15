@@ -94,6 +94,10 @@ vi.mock('@/lib/template-twin/storage', async (importOriginal) => {
 
 import { inspectDocxPackage } from '@/lib/note-template-docx';
 import { templateTwinMappingsSha256 } from '@/lib/template-twin/mapping-hash';
+import {
+  TEMPLATE_TWIN_SOURCE_PROVENANCE_GATE_CODE,
+  templateTwinSourcePhiScanEvidenceSha256,
+} from '@/lib/template-twin/source-phi-evidence';
 import type { TemplateTwinArtifactStore } from '@/lib/template-twin/storage';
 import {
   buildTemplateTwinIntegrationFixture,
@@ -120,6 +124,17 @@ const SOURCE_VERSION_ID = 'provider-source-version-synthetic';
 const SOURCE_ETAG = 'provider-source-etag-synthetic';
 const OUTPUT_VERSION_ID = 'provider-output-version-synthetic';
 const OUTPUT_ETAG = 'provider-output-etag-synthetic';
+const SOURCE_PRIVACY_SCAN_EVIDENCE = {
+  profileVersion: 'template-twin-source-phi-safe-alpha-v1' as const,
+  provider: 'anthropic' as const,
+  model: 'synthetic-privacy-model-v1',
+  scannedAt: '2026-07-15T12:00:00.000Z',
+  scannedPartCount: 8,
+  approvedStaticAssetPolicySha256: 'a'.repeat(64),
+  approvedStaticAssetCount: 0,
+  approvedStaticAssetUsedCount: 0,
+  approvedStaticAssetUsageSha256: 'b'.repeat(64),
+};
 
 type Fixture = Awaited<ReturnType<typeof buildTemplateTwinIntegrationFixture>>;
 
@@ -157,6 +172,7 @@ let mappingRows: Array<{
 }>;
 let proof: PersistedSyntheticProof;
 let outputs: Map<string, Buffer>;
+let sourcePrivacyScanEvidence: unknown;
 
 function sha256(bytes: Uint8Array): string {
   return createHash('sha256').update(bytes).digest('hex');
@@ -214,6 +230,28 @@ function syntheticVoiceRequest(): {
   };
 }
 
+function sourceArtifactRow(privacyScanEvidence = sourcePrivacyScanEvidence) {
+  return {
+    practiceId: SESSION.user.practiceId,
+    objectKey: SOURCE_KEY,
+    objectVersionId: SOURCE_VERSION_ID,
+    objectEtag: SOURCE_ETAG,
+    sha256: sourceSha256,
+    sizeBytes: fixture.source.byteLength,
+    mimeType: DOCX_MIME,
+    validationStatus: 'accepted',
+    privacyScanEvidence,
+  };
+}
+
+function compiledTransactionRow(privacyScanEvidence = sourcePrivacyScanEvidence) {
+  return {
+    certificationStatus: 'DRAFT',
+    sourceArtifact: sourceArtifactRow(privacyScanEvidence),
+    fields: mappingRows,
+  };
+}
+
 function templateRow() {
   return {
     id: TEMPLATE_ID,
@@ -237,16 +275,7 @@ function templateRow() {
       latestTestStaticContentSha256: proof.latestTestStaticContentSha256,
       latestTestVerifiedAt: proof.latestTestVerifiedAt,
       latestTestRoundTrip: proof.latestTestRoundTrip,
-      sourceArtifact: {
-        practiceId: SESSION.user.practiceId,
-        objectKey: SOURCE_KEY,
-        objectVersionId: SOURCE_VERSION_ID,
-        objectEtag: SOURCE_ETAG,
-        sha256: sourceSha256,
-        sizeBytes: fixture.source.byteLength,
-        mimeType: DOCX_MIME,
-        validationStatus: 'accepted',
-      },
+      sourceArtifact: sourceArtifactRow(),
       fields: mappingRows,
     },
   };
@@ -331,6 +360,7 @@ beforeAll(async () => {
 beforeEach(() => {
   vi.clearAllMocks();
   outputs = new Map();
+  sourcePrivacyScanEvidence = SOURCE_PRIVACY_SCAN_EVIDENCE;
   proof = {
     latestSyntheticTestManifest: null,
     latestTestMappingsSha256: null,
@@ -357,10 +387,7 @@ beforeEach(() => {
   );
   mocks.createStore.mockReturnValue(inMemoryStorage());
   mocks.findTemplate.mockImplementation(async () => templateRow());
-  mocks.findCompiled.mockImplementation(async () => ({
-    certificationStatus: 'DRAFT',
-    fields: mappingRows,
-  }));
+  mocks.findCompiled.mockImplementation(async () => compiledTransactionRow());
   mocks.updateCompiled.mockImplementation(
     async (input: { data: Partial<PersistedSyntheticProof> }) => {
       Object.assign(proof, input.data);
@@ -421,6 +448,10 @@ describe('Template Twin synthetic voice route to exact original DOCX', () => {
       packageCheck: 'verified',
       fieldCheck: 'verified',
       staticRegionCheck: 'verified',
+      sourcePrivacyScanEvidenceSha256:
+        templateTwinSourcePhiScanEvidenceSha256(
+          SOURCE_PRIVACY_SCAN_EVIDENCE,
+        ),
     });
     expect(proof.latestSyntheticTestManifest).toMatchObject({
       validation: { valid: true },
@@ -513,6 +544,68 @@ describe('Template Twin synthetic voice route to exact original DOCX', () => {
       latestTestRoundTrip: null,
       latestTestVerifiedAt: null,
     });
+  });
+
+  it.each([
+    {
+      name: 'null privacy evidence',
+      evidence: null,
+    },
+    {
+      name: 'a legacy privacy profile',
+      evidence: {
+        ...SOURCE_PRIVACY_SCAN_EVIDENCE,
+        profileVersion: 'template-twin-source-phi-legacy-v0',
+      },
+    },
+  ])('blocks source I/O when the source has $name', async ({ evidence }) => {
+    sourcePrivacyScanEvidence = evidence;
+    const artifactStore = inMemoryStorage();
+    mocks.createStore.mockReturnValue(artifactStore);
+    const { request } = syntheticVoiceRequest();
+
+    const response = await POST(request, {
+      params: Promise.resolve({ id: TEMPLATE_ID }),
+    });
+
+    expect(response.status).toBe(422);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: false,
+      error: expect.stringContaining(
+        TEMPLATE_TWIN_SOURCE_PROVENANCE_GATE_CODE,
+      ),
+    });
+    expect(artifactStore.readSourceArtifact).not.toHaveBeenCalled();
+    expect(artifactStore.storeOutputArtifact).not.toHaveBeenCalled();
+    expect(mocks.updateCompiled).not.toHaveBeenCalled();
+  });
+
+  it('rejects a valid-looking current profile changed during the synthetic render', async () => {
+    const artifactStore = inMemoryStorage();
+    mocks.createStore.mockReturnValue(artifactStore);
+    mocks.findCompiled.mockResolvedValue(
+      compiledTransactionRow({
+        ...SOURCE_PRIVACY_SCAN_EVIDENCE,
+        model: 'synthetic-tampered-current-profile-v2',
+      }),
+    );
+    const { request } = syntheticVoiceRequest();
+
+    const response = await POST(request, {
+      params: Promise.resolve({ id: TEMPLATE_ID }),
+    });
+
+    expect(response.status).toBe(422);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: false,
+      error: expect.stringContaining(
+        TEMPLATE_TWIN_SOURCE_PROVENANCE_GATE_CODE,
+      ),
+    });
+    expect(artifactStore.readSourceArtifact).toHaveBeenCalledTimes(1);
+    expect(artifactStore.storeOutputArtifact).toHaveBeenCalledTimes(1);
+    expect(mocks.updateCompiled).not.toHaveBeenCalled();
+    expect(proof.latestSyntheticTestManifest).toBeNull();
   });
 
   it('reuses one idempotency key when the serializable callback is retried', async () => {

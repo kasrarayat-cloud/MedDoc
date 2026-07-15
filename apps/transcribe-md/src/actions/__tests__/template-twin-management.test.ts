@@ -183,6 +183,9 @@ describe('createTemplateTwinVersionAction', () => {
 
     expect(result).toMatchObject({ ok: true, version: 2, status: 'draft' });
     expect(mocks.requireDoctorSession).toHaveBeenCalledTimes(1);
+    expect(mocks.transaction).toHaveBeenCalledWith(expect.any(Function), {
+      isolationLevel: 'ReadCommitted',
+    });
     expect(mocks.noteTemplateFindFirst.mock.calls[0][0].where).toEqual({
       id: 'template-v1',
       doctorId: DOCTOR_ID,

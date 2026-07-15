@@ -193,6 +193,63 @@ export async function claimTemplateTwinObject(
   throw new TemplateTwinObjectLedgerConflictError();
 }
 
+/**
+ * Retains an immutable object that was written successfully but must never be
+ * attached to its intended owner. This is the fail-closed side of the
+ * write-before-relational-claim protocol: reconciliation may later purge the
+ * object under the approved orphan policy, but no fill manifest can expose it.
+ */
+export async function quarantineTemplateTwinObject(
+  prisma: TemplateTwinObjectLedgerClient,
+  input: {
+    objectKey: string;
+    practiceId: string;
+    objectVersionId: string;
+    objectEtag: string;
+    reasonCode: string;
+  },
+): Promise<void> {
+  if (
+    !input.objectVersionId.trim() ||
+    !input.objectEtag.trim() ||
+    !input.reasonCode.trim()
+  ) {
+    throw new TemplateTwinObjectLedgerConflictError();
+  }
+  const result = await prisma.templateTwinObjectLedger.updateMany({
+    where: {
+      objectKey: input.objectKey,
+      practiceId: input.practiceId,
+      objectVersionId: input.objectVersionId,
+      objectEtag: input.objectEtag,
+      state: "WRITTEN_UNCLAIMED",
+      claimType: null,
+      claimId: null,
+    },
+    data: {
+      state: "RETAINED",
+      nextAttemptAt: null,
+      lastErrorCode: input.reasonCode,
+    },
+  });
+  if (result.count === 1) return;
+  const existing = await prisma.templateTwinObjectLedger.findUnique({
+    where: { objectKey: input.objectKey },
+  });
+  if (
+    existing?.practiceId === input.practiceId &&
+    existing.objectVersionId === input.objectVersionId &&
+    existing.objectEtag === input.objectEtag &&
+    existing.state === "RETAINED" &&
+    existing.claimType === null &&
+    existing.claimId === null &&
+    existing.lastErrorCode === input.reasonCode
+  ) {
+    return;
+  }
+  throw new TemplateTwinObjectLedgerConflictError();
+}
+
 export interface TemplateTwinObjectAdmin {
   statObject(objectKey: string): Promise<{
     exists: boolean;

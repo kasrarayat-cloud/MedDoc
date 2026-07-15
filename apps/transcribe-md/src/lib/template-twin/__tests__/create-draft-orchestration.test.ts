@@ -147,6 +147,9 @@ describe('Template Twin upload/compile proposal orchestration', () => {
       }),
     );
     expect(mocks.transaction).toHaveBeenCalledTimes(1);
+    expect(mocks.transaction).toHaveBeenCalledWith(expect.any(Function), {
+      isolationLevel: 'ReadCommitted',
+    });
     expect(mocks.noteTemplateCreate).toHaveBeenCalledWith({
       data: expect.objectContaining({
         doctorId: 'doctor-synthetic-1',

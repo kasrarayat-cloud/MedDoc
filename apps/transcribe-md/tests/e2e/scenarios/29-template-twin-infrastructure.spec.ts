@@ -13,6 +13,7 @@ import {
 import { loginUser } from "../helpers/auth";
 import { createPatientAndContinue } from "../helpers/patient";
 import {
+  assertTemplateTwinQaConcurrentCompiledOwnerGuard,
   assertTemplateTwinQaDatabaseGuards,
   markTemplateTwinQaVisitFailed,
   readTemplateTwinQaFields,
@@ -490,6 +491,9 @@ test("Template Twin: isolated QA routes, Postgres, worker, and MinIO preserve th
   assertTemplateTwinQaDatabaseGuards({
     fillManifestId: correctedFill.id,
     foreignNoteTemplateId,
+  });
+  await assertTemplateTwinQaConcurrentCompiledOwnerGuard({
+    fillManifestId: correctedFill.id,
   });
 
   // Editing the physician-visible SOAP invalidates the Twin immediately and

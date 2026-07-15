@@ -1,4 +1,8 @@
-import { execSync } from "node:child_process";
+import {
+  execSync,
+  spawn,
+  type ChildProcessWithoutNullStreams,
+} from "node:child_process";
 
 import { assertNonProdDbName } from "@meddoc/db/guard";
 
@@ -85,6 +89,147 @@ function psqlJson<T>(sql: string): T {
   const output = psql(sql);
   if (!output) throw new Error("QA database returned no JSON row.");
   return JSON.parse(output) as T;
+}
+
+interface QaPsqlSessionResult {
+  code: number | null;
+  stdout: string;
+  stderr: string;
+}
+
+interface QaPsqlSession {
+  child: ChildProcessWithoutNullStreams;
+  result: Promise<QaPsqlSessionResult>;
+  stdout(): string;
+  stderr(): string;
+  exited(): boolean;
+}
+
+function openQaPsqlSession(applicationName: string): QaPsqlSession {
+  assertNonProdDbName(QA_DB);
+  if (!/^qa-template-twin-[a-z0-9-]+$/i.test(applicationName)) {
+    throw new Error(
+      "Refusing to open an unnamed Template Twin QA SQL session.",
+    );
+  }
+  const command =
+    `${QA_COMPOSE} exec -T postgres psql -X -q -v ON_ERROR_STOP=1 ` +
+    `-U meddoc -d ${shellQuote(QA_DB)} -A -t`;
+  const child = spawn(command, {
+    shell: true,
+    stdio: ["pipe", "pipe", "pipe"],
+  }) as ChildProcessWithoutNullStreams;
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+  let stdout = "";
+  let stderr = "";
+  let exited = false;
+  child.stdout.on("data", (chunk: string) => {
+    stdout += chunk;
+  });
+  child.stderr.on("data", (chunk: string) => {
+    stderr += chunk;
+  });
+  const result = new Promise<QaPsqlSessionResult>((resolve) => {
+    child.once("exit", (code) => {
+      exited = true;
+      resolve({ code, stdout, stderr });
+    });
+  });
+  child.stdin.write(`SET application_name = ${sqlLiteral(applicationName)};\n`);
+  return {
+    child,
+    result,
+    stdout: () => stdout,
+    stderr: () => stderr,
+    exited: () => exited,
+  };
+}
+
+async function waitForQaSessionOutput(
+  session: QaPsqlSession,
+  marker: string,
+  timeoutMs = 10_000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (session.stdout().includes(marker)) return;
+    if (session.exited()) {
+      throw new Error(
+        `QA SQL session exited before ${marker}: ${session.stderr().slice(0, 800)}`,
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`Timed out waiting for QA SQL marker ${marker}.`);
+}
+
+async function waitForQaSessionExit(
+  session: QaPsqlSession,
+  timeoutMs = 10_000,
+): Promise<QaPsqlSessionResult> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      session.result,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () =>
+            reject(
+              new Error("Timed out waiting for a QA SQL session to exit."),
+            ),
+          timeoutMs,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function rollbackOpenQaPsqlSession(
+  session: QaPsqlSession | null,
+): Promise<void> {
+  if (!session || session.exited()) return;
+  if (!session.child.stdin.writableEnded) {
+    session.child.stdin.end("ROLLBACK;\n\\q\n");
+  } else {
+    session.child.kill();
+  }
+  await waitForQaSessionExit(session).catch(() => {
+    session.child.kill();
+  });
+}
+
+async function waitForQaSessionLock(input: {
+  session: QaPsqlSession;
+  applicationName: string;
+  operation: string;
+  timeoutMs?: number;
+}): Promise<void> {
+  const deadline = Date.now() + (input.timeoutMs ?? 10_000);
+  while (Date.now() < deadline) {
+    if (input.session.exited()) {
+      throw new Error(
+        `${input.operation} exited instead of waiting on the concurrent lineage lock: ${input.session
+          .stderr()
+          .slice(0, 800)}`,
+      );
+    }
+    const waitEvent = psql(`
+      SELECT COALESCE((
+        SELECT "wait_event_type"
+        FROM pg_stat_activity
+        WHERE application_name = ${sqlLiteral(input.applicationName)}
+        LIMIT 1
+      ), 'missing');
+    `);
+    if (waitEvent === "Lock") return;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error(
+    `${input.operation} never blocked on the concurrent lineage transaction.`,
+  );
 }
 
 function expectPsqlRejected(sql: string, expectedError: string): void {
@@ -279,6 +424,119 @@ export function assertTemplateTwinQaDatabaseGuards(input: {
   const suffix = input.fillManifestId.replace(/[^A-Za-z0-9]/g, "").slice(-16);
   const foreignPracticeId = `qa-template-twin-foreign-${suffix}`;
   const foreignReviewerId = `qa-template-twin-reviewer-${suffix}`;
+  const foreignTemplateId = `qa-template-twin-template-${suffix}`;
+  const foreignCompiledId = `qa-template-twin-compiled-${suffix}`;
+  const foreignLineageId = `qa-template-twin-lineage-${suffix}`;
+
+  const foreignTemplateOwnerSetup = `
+      INSERT INTO practices (id, name, slug, "isActive", "updatedAt")
+      VALUES (
+        ${sqlLiteral(foreignPracticeId)},
+        'Synthetic foreign lineage practice',
+        ${sqlLiteral(`qa-template-twin-lineage-${suffix}`)},
+        true,
+        CURRENT_TIMESTAMP
+      );
+      INSERT INTO users (
+        id, email, name, "passwordHash", role, "isActive", "practiceId", "updatedAt"
+      ) VALUES (
+        ${sqlLiteral(foreignReviewerId)},
+        ${sqlLiteral(`${foreignReviewerId}@synthetic.test`)},
+        'Synthetic Foreign Template Owner',
+        'synthetic-not-a-real-password-hash',
+        'DOCTOR',
+        true,
+        ${sqlLiteral(foreignPracticeId)},
+        CURRENT_TIMESTAMP
+      );
+      INSERT INTO note_templates (
+        id, "doctorId", name, "encounterType", "specialtyBaseline", sections,
+        "styleProfile", version, status, "isSystemDefault", "lineageId",
+        "parentVersionId", "templateKind", "versionDescription", "createdAt", "updatedAt"
+      )
+      SELECT
+        ${sqlLiteral(foreignTemplateId)}, ${sqlLiteral(foreignReviewerId)},
+        'Synthetic cross-tenant lineage probe', n."encounterType",
+        n."specialtyBaseline", n.sections, n."styleProfile", 1, 'draft', false,
+        ${sqlLiteral(foreignLineageId)}, NULL, 'template_twin_docx',
+        'Synthetic database tenant guard probe', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+      FROM template_twin_fill_manifests f
+      JOIN note_templates n ON n.id = f."noteTemplateId"
+      WHERE f.id = ${sqlLiteral(input.fillManifestId)};
+  `;
+
+  expectPsqlRejected(
+    `
+      BEGIN;
+      ${foreignTemplateOwnerSetup}
+      INSERT INTO template_twin_compiled_versions (
+        id, "sourceArtifactId", "noteTemplateId", "compilerVersion",
+        "irSchemaVersion", "compiledDocumentIr", "unsupportedElements",
+        "structureSha256", "staticContentSha256", "certificationStatus",
+        "blockingUnsupportedCount"
+      )
+      SELECT
+        ${sqlLiteral(foreignCompiledId)}, c."sourceArtifactId",
+        ${sqlLiteral(foreignTemplateId)}, c."compilerVersion" || '-tenant-probe',
+        c."irSchemaVersion", c."compiledDocumentIr", c."unsupportedElements",
+        c."structureSha256", c."staticContentSha256", 'NEEDS_CONFIRMATION',
+        c."blockingUnsupportedCount"
+      FROM template_twin_fill_manifests f
+      JOIN template_twin_compiled_versions c ON c.id = f."compiledVersionId"
+      WHERE f.id = ${sqlLiteral(input.fillManifestId)};
+      ROLLBACK;
+    `,
+    "Template Twin compiled tenant lineage mismatch",
+  );
+
+  expectPsqlRejected(
+    `
+      BEGIN;
+      ${foreignTemplateOwnerSetup}
+      UPDATE template_twin_compiled_versions c
+      SET "noteTemplateId" = ${sqlLiteral(foreignTemplateId)}
+      WHERE c."noteTemplateId" = ${sqlLiteral(input.foreignNoteTemplateId)};
+      ROLLBACK;
+    `,
+    "Template Twin compiled tenant lineage mismatch",
+  );
+
+  expectPsqlRejected(
+    `
+      BEGIN;
+      ${foreignTemplateOwnerSetup}
+      UPDATE note_templates n
+      SET "doctorId" = ${sqlLiteral(foreignReviewerId)}
+      FROM template_twin_fill_manifests f
+      WHERE f.id = ${sqlLiteral(input.fillManifestId)}
+        AND n.id = f."noteTemplateId";
+      ROLLBACK;
+    `,
+    "Template Twin NoteTemplate owner tenant mismatch",
+  );
+
+  expectPsqlRejected(
+    `
+      BEGIN;
+      INSERT INTO practices (id, name, slug, "isActive", "updatedAt")
+      VALUES (
+        ${sqlLiteral(foreignPracticeId)},
+        'Synthetic foreign reassignment practice',
+        ${sqlLiteral(`qa-template-twin-reassignment-${suffix}`)},
+        true,
+        CURRENT_TIMESTAMP
+      );
+      UPDATE users owner
+      SET "practiceId" = ${sqlLiteral(foreignPracticeId)}
+      FROM note_templates n
+      JOIN template_twin_fill_manifests f ON f."noteTemplateId" = n.id
+      WHERE f.id = ${sqlLiteral(input.fillManifestId)}
+        AND owner.id = n."doctorId";
+      ROLLBACK;
+    `,
+    "Template Twin owner practice reassignment mismatch",
+  );
+
   expectPsqlRejected(
     `
       BEGIN;
@@ -442,6 +700,461 @@ export function assertTemplateTwinQaDatabaseGuards(input: {
     `,
     "Template Twin review field lineage mismatch",
   );
+}
+
+interface QaConcurrentLineageState {
+  ownerPracticeId: string | null;
+  sourcePracticeId: string | null;
+  compiledCount: number;
+  lineageMismatchCount: number;
+}
+
+/**
+ * Live PostgreSQL sessions prove both serialization directions for the
+ * cross-table compiled/source/template-owner invariant. The first race holds
+ * an owner reassignment open and requires compilation to wait, re-read, and
+ * reject. The reverse race holds a valid compilation open and requires owner
+ * reassignment to wait, re-read, and reject. pg_stat_activity supplies the
+ * synchronization oracle; elapsed-time sleeps are never treated as proof.
+ */
+export async function assertTemplateTwinQaConcurrentCompiledOwnerGuard(input: {
+  fillManifestId: string;
+}): Promise<void> {
+  assertNonProdDbName(QA_DB);
+  const suffix = input.fillManifestId.replace(/[^A-Za-z0-9]/g, "").slice(-16);
+  const foreignPracticeId = `qa-template-twin-race-practice-${suffix}`;
+  const ownerFirstOwnerId = `qa-template-twin-owner-first-owner-${suffix}`;
+  const ownerFirstTemplateId = `qa-template-twin-owner-first-template-${suffix}`;
+  const ownerFirstCompiledId = `qa-template-twin-owner-first-compiled-${suffix}`;
+  const ownerFirstLineageId = `qa-template-twin-owner-first-lineage-${suffix}`;
+  const compiledFirstOwnerId = `qa-template-twin-compiled-first-owner-${suffix}`;
+  const compiledFirstTemplateId = `qa-template-twin-compiled-first-template-${suffix}`;
+  const compiledFirstCompiledId = `qa-template-twin-compiled-first-compiled-${suffix}`;
+  const compiledFirstLineageId = `qa-template-twin-compiled-first-lineage-${suffix}`;
+  const repeatableReadCompiledId = `qa-template-twin-repeatable-read-compiled-${suffix}`;
+  const serializableCompiledId = `qa-template-twin-serializable-compiled-${suffix}`;
+  const ownerFirstOwnerSessionName = `qa-template-twin-owner-first-owner-${suffix}`;
+  const ownerFirstCompiledSessionName = `qa-template-twin-owner-first-compiled-${suffix}`;
+  const compiledFirstCompiledSessionName = `qa-template-twin-compiled-first-compiled-${suffix}`;
+  const compiledFirstOwnerSessionName = `qa-template-twin-compiled-first-owner-${suffix}`;
+
+  const compiledInsertSql = (compiled: {
+    compiledVersionId: string;
+    noteTemplateId: string;
+    compilerSuffix: string;
+  }): string => `
+    INSERT INTO template_twin_compiled_versions (
+      id, "sourceArtifactId", "noteTemplateId", "compilerVersion",
+      "irSchemaVersion", "compiledDocumentIr", "unsupportedElements",
+      "structureSha256", "staticContentSha256", "certificationStatus",
+      "blockingUnsupportedCount"
+    )
+    SELECT
+      ${sqlLiteral(compiled.compiledVersionId)}, c."sourceArtifactId",
+      ${sqlLiteral(compiled.noteTemplateId)}, c."compilerVersion" || ${sqlLiteral(compiled.compilerSuffix)},
+      c."irSchemaVersion", c."compiledDocumentIr", c."unsupportedElements",
+      c."structureSha256", c."staticContentSha256", 'NEEDS_CONFIRMATION',
+      c."blockingUnsupportedCount"
+    FROM template_twin_fill_manifests f
+    JOIN template_twin_compiled_versions c ON c.id = f."compiledVersionId"
+    WHERE f.id = ${sqlLiteral(input.fillManifestId)};
+  `;
+
+  let ownerFirstOwnerSession: QaPsqlSession | null = null;
+  let ownerFirstCompiledSession: QaPsqlSession | null = null;
+  let compiledFirstCompiledSession: QaPsqlSession | null = null;
+  let compiledFirstOwnerSession: QaPsqlSession | null = null;
+  try {
+    psql(`
+      BEGIN;
+      INSERT INTO practices (id, name, slug, "isActive", "updatedAt")
+      VALUES (
+        ${sqlLiteral(foreignPracticeId)},
+        'Synthetic concurrent owner practice',
+        ${sqlLiteral(`qa-template-twin-race-${suffix}`)},
+        true,
+        CURRENT_TIMESTAMP
+      );
+      INSERT INTO users (
+        id, email, name, "passwordHash", role, "isActive", "practiceId", "updatedAt"
+      )
+      SELECT
+        fixture.owner_id,
+        fixture.email,
+        fixture.owner_name,
+        'synthetic-not-a-real-password-hash',
+        'DOCTOR',
+        true,
+        f."practiceId",
+        CURRENT_TIMESTAMP
+      FROM template_twin_fill_manifests f
+      CROSS JOIN (
+        VALUES
+          (
+            ${sqlLiteral(ownerFirstOwnerId)},
+            ${sqlLiteral(`${ownerFirstOwnerId}@synthetic.test`)},
+            'Synthetic Owner-First Template Owner'
+          ),
+          (
+            ${sqlLiteral(compiledFirstOwnerId)},
+            ${sqlLiteral(`${compiledFirstOwnerId}@synthetic.test`)},
+            'Synthetic Compiled-First Template Owner'
+          )
+      ) AS fixture(owner_id, email, owner_name)
+      WHERE f.id = ${sqlLiteral(input.fillManifestId)};
+      INSERT INTO note_templates (
+        id, "doctorId", name, "encounterType", "specialtyBaseline", sections,
+        "styleProfile", version, status, "isSystemDefault", "lineageId",
+        "parentVersionId", "templateKind", "versionDescription", "createdAt", "updatedAt"
+      )
+      SELECT
+        fixture.template_id, fixture.owner_id, fixture.template_name,
+        n."encounterType", n."specialtyBaseline", n.sections,
+        n."styleProfile", 1, 'draft', false, fixture.lineage_id, NULL,
+        'template_twin_docx', 'Synthetic two-session tenant guard probe',
+        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+      FROM template_twin_fill_manifests f
+      JOIN note_templates n ON n.id = f."noteTemplateId"
+      CROSS JOIN (
+        VALUES
+          (
+            ${sqlLiteral(ownerFirstTemplateId)},
+            ${sqlLiteral(ownerFirstOwnerId)},
+            ${sqlLiteral(ownerFirstLineageId)},
+            'Synthetic owner-first lineage probe'
+          ),
+          (
+            ${sqlLiteral(compiledFirstTemplateId)},
+            ${sqlLiteral(compiledFirstOwnerId)},
+            ${sqlLiteral(compiledFirstLineageId)},
+            'Synthetic compiled-first lineage probe'
+          )
+      ) AS fixture(template_id, owner_id, lineage_id, template_name)
+      WHERE f.id = ${sqlLiteral(input.fillManifestId)};
+      COMMIT;
+    `);
+
+    // Snapshot-retaining isolation levels are deliberately unsupported for
+    // cross-table lineage mutations. An advisory-lock wait cannot refresh a
+    // REPEATABLE READ/SERIALIZABLE snapshot, so every trigger fails before it
+    // takes the shared gate. This also makes mixed-isolation callers lose
+    // closed instead of validating stale ownership.
+    expectPsqlRejected(
+      `
+        BEGIN ISOLATION LEVEL REPEATABLE READ;
+        ${compiledInsertSql({
+          compiledVersionId: repeatableReadCompiledId,
+          noteTemplateId: ownerFirstTemplateId,
+          compilerSuffix: "-repeatable-read-tenant-probe",
+        })}
+        COMMIT;
+      `,
+      "Template Twin tenant lineage writes require READ COMMITTED isolation",
+    );
+    expectPsqlRejected(
+      `
+        BEGIN ISOLATION LEVEL SERIALIZABLE;
+        ${compiledInsertSql({
+          compiledVersionId: serializableCompiledId,
+          noteTemplateId: ownerFirstTemplateId,
+          compilerSuffix: "-serializable-tenant-probe",
+        })}
+        COMMIT;
+      `,
+      "Template Twin tenant lineage writes require READ COMMITTED isolation",
+    );
+    expectPsqlRejected(
+      `
+        BEGIN ISOLATION LEVEL REPEATABLE READ;
+        UPDATE note_templates
+        SET "doctorId" = ${sqlLiteral(compiledFirstOwnerId)}
+        WHERE id = ${sqlLiteral(ownerFirstTemplateId)};
+        COMMIT;
+      `,
+      "Template Twin tenant lineage writes require READ COMMITTED isolation",
+    );
+    expectPsqlRejected(
+      `
+        BEGIN ISOLATION LEVEL REPEATABLE READ;
+        UPDATE users
+        SET "practiceId" = ${sqlLiteral(foreignPracticeId)}
+        WHERE id = ${sqlLiteral(ownerFirstOwnerId)};
+        COMMIT;
+      `,
+      "Template Twin tenant lineage writes require READ COMMITTED isolation",
+    );
+
+    ownerFirstOwnerSession = openQaPsqlSession(ownerFirstOwnerSessionName);
+    ownerFirstOwnerSession.child.stdin.write(`
+      BEGIN;
+      UPDATE users
+      SET "practiceId" = ${sqlLiteral(foreignPracticeId)}
+      WHERE id = ${sqlLiteral(ownerFirstOwnerId)};
+      \\echo TEMPLATE_TWIN_OWNER_FIRST_REASSIGNMENT_STAGED
+    `);
+    await waitForQaSessionOutput(
+      ownerFirstOwnerSession,
+      "TEMPLATE_TWIN_OWNER_FIRST_REASSIGNMENT_STAGED",
+    );
+
+    ownerFirstCompiledSession = openQaPsqlSession(
+      ownerFirstCompiledSessionName,
+    );
+    ownerFirstCompiledSession.child.stdin.end(`
+      BEGIN;
+      ${compiledInsertSql({
+        compiledVersionId: ownerFirstCompiledId,
+        noteTemplateId: ownerFirstTemplateId,
+        compilerSuffix: "-owner-first-tenant-probe",
+      })}
+      COMMIT;
+      \\echo TEMPLATE_TWIN_OWNER_FIRST_COMPILED_COMMITTED
+      \\q
+    `);
+
+    await waitForQaSessionLock({
+      session: ownerFirstCompiledSession,
+      applicationName: ownerFirstCompiledSessionName,
+      operation: "Owner-first concurrent compilation",
+    });
+
+    ownerFirstOwnerSession.child.stdin.end(`
+      COMMIT;
+      \\echo TEMPLATE_TWIN_OWNER_FIRST_REASSIGNMENT_COMMITTED
+      \\q
+    `);
+    const ownerFirstOwnerResult = await waitForQaSessionExit(
+      ownerFirstOwnerSession,
+    );
+    if (
+      ownerFirstOwnerResult.code !== 0 ||
+      !ownerFirstOwnerResult.stdout.includes(
+        "TEMPLATE_TWIN_OWNER_FIRST_REASSIGNMENT_COMMITTED",
+      )
+    ) {
+      throw new Error(
+        `Owner-first reassignment did not commit cleanly: ${ownerFirstOwnerResult.stderr.slice(0, 800)}`,
+      );
+    }
+
+    const ownerFirstCompiledResult = await waitForQaSessionExit(
+      ownerFirstCompiledSession,
+    );
+    if (
+      ownerFirstCompiledResult.code === 0 ||
+      !ownerFirstCompiledResult.stderr.includes(
+        "Template Twin compiled tenant lineage mismatch",
+      )
+    ) {
+      throw new Error(
+        `Owner-first compilation was not rejected after reassignment committed: ${ownerFirstCompiledResult.stderr.slice(0, 800)}`,
+      );
+    }
+
+    const ownerFirstState = psqlJson<QaConcurrentLineageState>(`
+      SELECT json_build_object(
+        'ownerPracticeId', (
+          SELECT "practiceId" FROM users
+          WHERE id = ${sqlLiteral(ownerFirstOwnerId)}
+        ),
+        'sourcePracticeId', (
+          SELECT "practiceId" FROM template_twin_fill_manifests
+          WHERE id = ${sqlLiteral(input.fillManifestId)}
+        ),
+        'compiledCount', (
+          SELECT count(*) FROM template_twin_compiled_versions
+          WHERE id = ${sqlLiteral(ownerFirstCompiledId)}
+        ),
+        'lineageMismatchCount', (
+          SELECT count(*)
+          FROM template_twin_compiled_versions c
+          JOIN template_twin_source_artifacts s ON s.id = c."sourceArtifactId"
+          JOIN note_templates n ON n.id = c."noteTemplateId"
+          LEFT JOIN users owner ON owner.id = n."doctorId"
+          WHERE c.id = ${sqlLiteral(ownerFirstCompiledId)}
+            AND (
+              owner."practiceId" IS NULL
+              OR owner."practiceId" <> s."practiceId"
+            )
+        )
+      )::text;
+    `);
+    if (
+      ownerFirstState.ownerPracticeId !== foreignPracticeId ||
+      ownerFirstState.sourcePracticeId === null ||
+      ownerFirstState.compiledCount !== 0 ||
+      ownerFirstState.lineageMismatchCount !== 0
+    ) {
+      throw new Error(
+        `Owner-first race left unexpected lineage state: ${JSON.stringify(ownerFirstState)}`,
+      );
+    }
+
+    compiledFirstCompiledSession = openQaPsqlSession(
+      compiledFirstCompiledSessionName,
+    );
+    compiledFirstCompiledSession.child.stdin.write(`
+      BEGIN;
+      ${compiledInsertSql({
+        compiledVersionId: compiledFirstCompiledId,
+        noteTemplateId: compiledFirstTemplateId,
+        compilerSuffix: "-compiled-first-tenant-probe",
+      })}
+      \\echo TEMPLATE_TWIN_COMPILED_FIRST_INSERT_STAGED
+    `);
+    await waitForQaSessionOutput(
+      compiledFirstCompiledSession,
+      "TEMPLATE_TWIN_COMPILED_FIRST_INSERT_STAGED",
+    );
+
+    compiledFirstOwnerSession = openQaPsqlSession(
+      compiledFirstOwnerSessionName,
+    );
+    compiledFirstOwnerSession.child.stdin.end(`
+      BEGIN;
+      UPDATE users
+      SET "practiceId" = ${sqlLiteral(foreignPracticeId)}
+      WHERE id = ${sqlLiteral(compiledFirstOwnerId)};
+      COMMIT;
+      \\echo TEMPLATE_TWIN_COMPILED_FIRST_OWNER_REASSIGNED
+      \\q
+    `);
+    await waitForQaSessionLock({
+      session: compiledFirstOwnerSession,
+      applicationName: compiledFirstOwnerSessionName,
+      operation: "Compiled-first concurrent owner reassignment",
+    });
+
+    compiledFirstCompiledSession.child.stdin.end(`
+      COMMIT;
+      \\echo TEMPLATE_TWIN_COMPILED_FIRST_COMMITTED
+      \\q
+    `);
+    const compiledFirstCompiledResult = await waitForQaSessionExit(
+      compiledFirstCompiledSession,
+    );
+    if (
+      compiledFirstCompiledResult.code !== 0 ||
+      !compiledFirstCompiledResult.stdout.includes(
+        "TEMPLATE_TWIN_COMPILED_FIRST_COMMITTED",
+      )
+    ) {
+      throw new Error(
+        `Compiled-first compilation did not commit cleanly: ${compiledFirstCompiledResult.stderr.slice(0, 800)}`,
+      );
+    }
+
+    const compiledFirstOwnerResult = await waitForQaSessionExit(
+      compiledFirstOwnerSession,
+    );
+    if (
+      compiledFirstOwnerResult.code === 0 ||
+      !compiledFirstOwnerResult.stderr.includes(
+        "Template Twin owner practice reassignment mismatch",
+      )
+    ) {
+      throw new Error(
+        `Compiled-first owner reassignment was not rejected after compilation committed: ${compiledFirstOwnerResult.stderr.slice(0, 800)}`,
+      );
+    }
+
+    const compiledFirstState = psqlJson<QaConcurrentLineageState>(`
+      SELECT json_build_object(
+        'ownerPracticeId', (
+          SELECT "practiceId" FROM users
+          WHERE id = ${sqlLiteral(compiledFirstOwnerId)}
+        ),
+        'sourcePracticeId', (
+          SELECT "practiceId" FROM template_twin_fill_manifests
+          WHERE id = ${sqlLiteral(input.fillManifestId)}
+        ),
+        'compiledCount', (
+          SELECT count(*) FROM template_twin_compiled_versions
+          WHERE id = ${sqlLiteral(compiledFirstCompiledId)}
+        ),
+        'lineageMismatchCount', (
+          SELECT count(*)
+          FROM template_twin_compiled_versions c
+          JOIN template_twin_source_artifacts s ON s.id = c."sourceArtifactId"
+          JOIN note_templates n ON n.id = c."noteTemplateId"
+          LEFT JOIN users owner ON owner.id = n."doctorId"
+          WHERE c.id = ${sqlLiteral(compiledFirstCompiledId)}
+            AND (
+              owner."practiceId" IS NULL
+              OR owner."practiceId" <> s."practiceId"
+            )
+        )
+      )::text;
+    `);
+    if (
+      compiledFirstState.ownerPracticeId === null ||
+      compiledFirstState.ownerPracticeId !==
+        compiledFirstState.sourcePracticeId ||
+      compiledFirstState.compiledCount !== 1 ||
+      compiledFirstState.lineageMismatchCount !== 0
+    ) {
+      throw new Error(
+        `Compiled-first race left unexpected lineage state: ${JSON.stringify(compiledFirstState)}`,
+      );
+    }
+  } finally {
+    await rollbackOpenQaPsqlSession(ownerFirstOwnerSession);
+    await rollbackOpenQaPsqlSession(ownerFirstCompiledSession);
+    await rollbackOpenQaPsqlSession(compiledFirstCompiledSession);
+    await rollbackOpenQaPsqlSession(compiledFirstOwnerSession);
+    psql(`
+      BEGIN;
+      DELETE FROM template_twin_compiled_versions
+      WHERE id IN (
+        ${sqlLiteral(ownerFirstCompiledId)},
+        ${sqlLiteral(compiledFirstCompiledId)},
+        ${sqlLiteral(repeatableReadCompiledId)},
+        ${sqlLiteral(serializableCompiledId)}
+      );
+      DELETE FROM note_templates
+      WHERE id IN (
+        ${sqlLiteral(ownerFirstTemplateId)},
+        ${sqlLiteral(compiledFirstTemplateId)}
+      );
+      DELETE FROM users
+      WHERE id IN (
+        ${sqlLiteral(ownerFirstOwnerId)},
+        ${sqlLiteral(compiledFirstOwnerId)}
+      );
+      DELETE FROM practices WHERE id = ${sqlLiteral(foreignPracticeId)};
+      COMMIT;
+    `);
+    const cleanupCount = psql(`
+      SELECT
+        (SELECT count(*) FROM template_twin_compiled_versions
+         WHERE id IN (
+           ${sqlLiteral(ownerFirstCompiledId)},
+           ${sqlLiteral(compiledFirstCompiledId)},
+           ${sqlLiteral(repeatableReadCompiledId)},
+           ${sqlLiteral(serializableCompiledId)}
+         ))
+        +
+        (SELECT count(*) FROM note_templates
+         WHERE id IN (
+           ${sqlLiteral(ownerFirstTemplateId)},
+           ${sqlLiteral(compiledFirstTemplateId)}
+         ))
+        +
+        (SELECT count(*) FROM users
+         WHERE id IN (
+           ${sqlLiteral(ownerFirstOwnerId)},
+           ${sqlLiteral(compiledFirstOwnerId)}
+         ))
+        +
+        (SELECT count(*) FROM practices
+         WHERE id = ${sqlLiteral(foreignPracticeId)});
+    `);
+    if (cleanupCount !== "0") {
+      throw new Error(
+        `Template Twin concurrent-lineage fixtures were not fully cleaned: ${cleanupCount}`,
+      );
+    }
+  }
 }
 
 /** QA-only fault injection used to exercise the public retry/worker boundary. */

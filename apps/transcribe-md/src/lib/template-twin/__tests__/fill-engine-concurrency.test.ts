@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   ledgerFind: vi.fn(),
   findPractice: vi.fn(),
   outboxCreate: vi.fn(),
+  lockVisit: vi.fn(),
 }));
 
 vi.mock("@meddoc/db", () => ({
@@ -112,7 +113,28 @@ function templateRow() {
   };
 }
 
-function storage(): TemplateTwinArtifactStore {
+function lockedVisitRow(
+  overrides: Partial<{
+    soapVersion: number;
+    soapFinal: string | null;
+    status: string;
+  }> = {},
+) {
+  return {
+    id: VISIT_ID,
+    userId: DOCTOR_ID,
+    status: overrides.status ?? "READY",
+    deletedAt: null,
+    archivedAt: null,
+    soapVersion: overrides.soapVersion ?? 1,
+    soapFinal:
+      overrides.soapFinal === undefined ? CURRENT_SOAP : overrides.soapFinal,
+    noteTemplateId: TEMPLATE_ID,
+    noteTemplateVersion: 1,
+  };
+}
+
+function storage(onOutputStored?: () => void): TemplateTwinArtifactStore {
   return {
     bucket: "synthetic-memory-only",
     storeSourceArtifact: vi.fn(),
@@ -123,7 +145,7 @@ function storage(): TemplateTwinArtifactStore {
       const outputSha256 = createHash("sha256")
         .update(input.bytes)
         .digest("hex");
-      return {
+      const stored = {
         bucket: "synthetic-memory-only",
         objectKey: `practices/${PRACTICE_ID}/template-twin/outputs/${VISIT_ID}/${input.manifestSha256}/artifact/${outputSha256}.docx`,
         objectVersionId: "provider-output-version-synthetic",
@@ -134,6 +156,8 @@ function storage(): TemplateTwinArtifactStore {
         sizeBytes: input.bytes.byteLength,
         created: true,
       };
+      onOutputStored?.();
+      return stored;
     }),
   };
 }
@@ -172,6 +196,7 @@ beforeEach(() => {
   mocks.ledgerUpdate.mockResolvedValue({ count: 1 });
   mocks.ledgerFind.mockResolvedValue(null);
   mocks.outboxCreate.mockResolvedValue({ id: "render-audit-outbox" });
+  mocks.lockVisit.mockResolvedValue([lockedVisitRow()]);
   mocks.transaction.mockImplementation(
     async (callback: (tx: unknown) => Promise<unknown>) =>
       callback({
@@ -185,6 +210,7 @@ beforeEach(() => {
           findUnique: mocks.ledgerFind,
         },
         templateTwinAuditOutbox: { create: mocks.outboxCreate },
+        $queryRaw: mocks.lockVisit,
       }),
   );
 });
@@ -342,6 +368,9 @@ describe("Template Twin worker provenance and manifest concurrency", () => {
     });
 
     const editedSoap = `${CURRENT_SOAP} Synthetic plan edit.`;
+    mocks.lockVisit.mockResolvedValue([
+      lockedVisitRow({ soapVersion: 2, soapFinal: editedSoap }),
+    ]);
     await expect(
       processTemplateTwinVisit({
         ...processInput(),
@@ -477,6 +506,115 @@ describe("Template Twin worker provenance and manifest concurrency", () => {
       }),
     );
     expect(mocks.outboxCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it("quarantines create-path bytes when the exact SOAP source changes without a version bump", async () => {
+    mocks.findFill.mockResolvedValue(null);
+    const editedSoap = `${CURRENT_SOAP} Synthetic allergy edit.`;
+    const artifacts = storage(() => {
+      mocks.lockVisit.mockResolvedValue([
+        lockedVisitRow({ soapVersion: 1, soapFinal: editedSoap }),
+      ]);
+    });
+
+    await expect(
+      processTemplateTwinVisit(processInput(artifacts)),
+    ).rejects.toMatchObject({
+      code: "SOAP_BINDING_STALE",
+      message:
+        "The SOAP note changed while the Original Template DOCX was being generated. Regenerate and review it before signing.",
+    });
+
+    expect(outputWrites).toBe(1);
+    expect(mocks.lockVisit).toHaveBeenCalledTimes(1);
+    expect(mocks.createFill).not.toHaveBeenCalled();
+    expect(mocks.updateFill).not.toHaveBeenCalled();
+    expect(mocks.ledgerUpdate).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        practiceId: PRACTICE_ID,
+        state: "WRITTEN_UNCLAIMED",
+        claimType: null,
+        claimId: null,
+      }),
+      data: expect.objectContaining({
+        state: "RETAINED",
+        lastErrorCode: "SOAP_BINDING_STALE",
+      }),
+    });
+    expect(mocks.outboxCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: "TEMPLATE_TWIN_SAFETY_GATE_BLOCKED",
+        metadata: expect.objectContaining({
+          reasonCode: "SOAP_BINDING_STALE",
+          expectedSoapVersion: 1,
+          currentSoapVersion: 1,
+          outputQuarantined: true,
+        }),
+      }),
+    });
+  });
+
+  it("transitions the observed update-path fill to NEEDS_REVIEW when SOAP changes during storage", async () => {
+    mocks.findFill.mockResolvedValue({
+      id: "fill-existing",
+      status: "VERIFIED",
+      signedDecisionAt: null,
+      reviewedAt: null,
+      soapVersion: 1,
+      soapSha256: canonicalSoapSha256(CURRENT_SOAP),
+      manifestVersion: 8,
+      manifestSha256: OLD_MANIFEST_SHA,
+      roundTripVerified: true,
+    });
+    const editedSoap = `${CURRENT_SOAP} Synthetic medication edit.`;
+    const artifacts = storage(() => {
+      mocks.lockVisit.mockResolvedValue([
+        lockedVisitRow({ soapVersion: 2, soapFinal: editedSoap }),
+      ]);
+    });
+
+    await expect(
+      processTemplateTwinVisit(processInput(artifacts)),
+    ).rejects.toMatchObject({ code: "SOAP_BINDING_STALE" });
+
+    expect(outputWrites).toBe(1);
+    expect(mocks.createFill).not.toHaveBeenCalled();
+    expect(mocks.updateFill).toHaveBeenCalledTimes(1);
+    expect(mocks.updateFill).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        id: "fill-existing",
+        status: { not: "SIGNED" },
+        signedDecisionAt: null,
+        soapVersion: 1,
+        soapSha256: canonicalSoapSha256(CURRENT_SOAP),
+        manifestVersion: 8,
+        manifestSha256: OLD_MANIFEST_SHA,
+      }),
+      data: {
+        status: "NEEDS_REVIEW",
+        reviewedAt: null,
+        reviewedById: null,
+        reviewedManifestVersion: null,
+        reviewedManifestSha256: null,
+      },
+    });
+    expect(mocks.ledgerUpdate).toHaveBeenCalledTimes(1);
+    expect(mocks.ledgerUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          state: "RETAINED",
+          lastErrorCode: "SOAP_BINDING_STALE",
+        }),
+      }),
+    );
+    expect(mocks.outboxCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        metadata: expect.objectContaining({
+          reasonCode: "SOAP_BINDING_STALE",
+          currentSoapVersion: 2,
+        }),
+      }),
+    });
   });
 
   it("does not enqueue render verification when the object claim fails", async () => {

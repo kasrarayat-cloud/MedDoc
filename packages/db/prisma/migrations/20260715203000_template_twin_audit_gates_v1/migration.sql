@@ -2,6 +2,19 @@
 -- Additive/fail-closed migration. Existing Template Twin prototype rows are
 -- not rewritten; application signing rejects rows without new provenance.
 
+-- Prisma does not implicitly make every PostgreSQL migration atomic. Hold a
+-- write-blocking lock across validation and trigger installation so no
+-- concurrent source, template-owner, or compiled-lineage write can enter the
+-- gap and become grandfathered. These locks are released only by the COMMIT at
+-- the end of this file.
+BEGIN;
+LOCK TABLE
+  "template_twin_compiled_versions",
+  "template_twin_source_artifacts",
+  "note_templates",
+  "users"
+IN SHARE ROW EXCLUSIVE MODE;
+
 ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'TEMPLATE_TWIN_FIELD_TEST_WAIVED';
 ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'TEMPLATE_TWIN_DEACTIVATED';
 ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'TEMPLATE_TWIN_RETIRED';
@@ -222,11 +235,158 @@ CREATE INDEX "template_twin_outbox_status_availableAt_idx"
 CREATE INDEX "template_twin_outbox_practice_createdAt_idx"
   ON "template_twin_audit_outbox"("practiceId", "createdAt");
 
+-- A compiled version may only join a tenant-owned source to a NoteTemplate
+-- owned by a physician in that same tenant. Fail the migration if a prototype
+-- row already violates the invariant; do not silently grandfather unsafe
+-- lineage and then rely on application filtering.
+DO $template_twin_existing_compiled_tenant_validation$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM "template_twin_compiled_versions" c
+    JOIN "template_twin_source_artifacts" s ON s."id" = c."sourceArtifactId"
+    JOIN "note_templates" n ON n."id" = c."noteTemplateId"
+    LEFT JOIN "users" owner ON owner."id" = n."doctorId"
+    WHERE owner."practiceId" IS NULL
+       OR owner."practiceId" <> s."practiceId"
+  ) THEN
+    RAISE EXCEPTION 'Existing Template Twin compiled tenant lineage mismatch';
+  END IF;
+END;
+$template_twin_existing_compiled_tenant_validation$;
+
+CREATE OR REPLACE FUNCTION template_twin_require_read_committed_lineage() RETURNS void AS $$
+BEGIN
+  -- The advisory gate below depends on a post-wait fresh snapshot. PostgreSQL
+  -- REPEATABLE READ and SERIALIZABLE retain a transaction snapshot, so a
+  -- waiting trigger could otherwise validate stale ownership. Fail closed for
+  -- those isolation levels. All application paths that create compiled
+  -- lineage explicitly use READ COMMITTED; callers at another level must retry
+  -- the lineage mutation in a dedicated READ COMMITTED transaction.
+  IF current_setting('transaction_isolation') <> 'read committed' THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '40001',
+      MESSAGE = 'Template Twin tenant lineage writes require READ COMMITTED isolation';
+  END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION template_twin_assert_compiled_tenant_consistency() RETURNS trigger AS $$
+DECLARE source_practice TEXT;
+DECLARE template_owner_id TEXT;
+DECLARE template_owner_practice TEXT;
+BEGIN
+  -- Cross-table trigger checks need an explicit lock protocol: under READ
+  -- COMMITTED, unlocked checks can both validate pre-change rows and then
+  -- commit a cross-tenant lineage. Take the same transaction-scoped advisory
+  -- gate in all three lineage triggers before reading NoteTemplate and User.
+  -- Do not combine the gate with row locks: an updater may already own its
+  -- target row before its BEFORE trigger waits, which would invert gate/row
+  -- order against compilation and create a deadlock.
+  PERFORM template_twin_require_read_committed_lineage();
+  PERFORM pg_advisory_xact_lock(
+    hashtextextended('template_twin_compiled_owner_lineage_v1', 0)
+  );
+  SELECT n."doctorId" INTO template_owner_id
+    FROM "note_templates" n
+    WHERE n."id" = NEW."noteTemplateId";
+  SELECT owner."practiceId" INTO template_owner_practice
+    FROM "users" owner
+    WHERE owner."id" = template_owner_id;
+  SELECT s."practiceId" INTO source_practice
+    FROM "template_twin_source_artifacts" s
+    WHERE s."id" = NEW."sourceArtifactId";
+
+  IF source_practice IS NULL
+     OR template_owner_practice IS NULL
+     OR source_practice <> template_owner_practice THEN
+    RAISE EXCEPTION 'Template Twin compiled tenant lineage mismatch';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+CREATE TRIGGER template_twin_compiled_tenant_consistency
+  BEFORE INSERT OR UPDATE OF "sourceArtifactId", "noteTemplateId"
+  ON "template_twin_compiled_versions"
+  FOR EACH ROW EXECUTE FUNCTION template_twin_assert_compiled_tenant_consistency();
+
+-- Preserve the invariant when ownership metadata changes after compilation.
+CREATE OR REPLACE FUNCTION template_twin_assert_note_template_owner_consistency() RETURNS trigger AS $$
+DECLARE template_owner_practice TEXT;
+BEGIN
+  IF NEW."doctorId" IS NOT DISTINCT FROM OLD."doctorId" THEN
+    RETURN NEW;
+  END IF;
+
+  PERFORM template_twin_require_read_committed_lineage();
+  PERFORM pg_advisory_xact_lock(
+    hashtextextended('template_twin_compiled_owner_lineage_v1', 0)
+  );
+  IF NOT EXISTS (
+       SELECT 1 FROM "template_twin_compiled_versions" c
+       WHERE c."noteTemplateId" = OLD."id"
+     ) THEN
+    RETURN NEW;
+  END IF;
+
+  -- Re-read the prospective owner only after the shared lineage gate. A
+  -- concurrent compilation or practice reassignment must commit or roll back
+  -- before this check can continue.
+  SELECT owner."practiceId" INTO template_owner_practice
+    FROM "users" owner
+    WHERE owner."id" = NEW."doctorId";
+  IF template_owner_practice IS NULL OR EXISTS (
+    SELECT 1
+    FROM "template_twin_compiled_versions" c
+    JOIN "template_twin_source_artifacts" s ON s."id" = c."sourceArtifactId"
+    WHERE c."noteTemplateId" = OLD."id"
+      AND s."practiceId" <> template_owner_practice
+  ) THEN
+    RAISE EXCEPTION 'Template Twin NoteTemplate owner tenant mismatch';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+CREATE TRIGGER template_twin_note_template_owner_consistency
+  BEFORE UPDATE OF "doctorId" ON "note_templates"
+  FOR EACH ROW EXECUTE FUNCTION template_twin_assert_note_template_owner_consistency();
+
+CREATE OR REPLACE FUNCTION template_twin_assert_owner_practice_consistency() RETURNS trigger AS $$
+BEGIN
+  IF NEW."practiceId" IS NOT DISTINCT FROM OLD."practiceId" THEN
+    RETURN NEW;
+  END IF;
+
+  -- Serialize before checking compiled rows. In particular, do not rely on a
+  -- User-row lock wait: PostgreSQL can invoke this BEFORE trigger before the
+  -- physical row update reaches that wait.
+  PERFORM template_twin_require_read_committed_lineage();
+  PERFORM pg_advisory_xact_lock(
+    hashtextextended('template_twin_compiled_owner_lineage_v1', 0)
+  );
+  IF EXISTS (
+    SELECT 1
+    FROM "note_templates" n
+    JOIN "template_twin_compiled_versions" c ON c."noteTemplateId" = n."id"
+    JOIN "template_twin_source_artifacts" s ON s."id" = c."sourceArtifactId"
+    WHERE n."doctorId" = OLD."id"
+      AND s."practiceId" <> NEW."practiceId"
+  ) THEN
+    RAISE EXCEPTION 'Template Twin owner practice reassignment mismatch';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+CREATE TRIGGER template_twin_owner_practice_consistency
+  BEFORE UPDATE OF "practiceId" ON "users"
+  FOR EACH ROW EXECUTE FUNCTION template_twin_assert_owner_practice_consistency();
+
 CREATE OR REPLACE FUNCTION template_twin_assert_waiver_lineage() RETURNS trigger AS $$
 DECLARE field_compilation TEXT;
 DECLARE field_identifier TEXT;
 DECLARE physician_practice TEXT;
 DECLARE source_practice TEXT;
+DECLARE template_owner_practice TEXT;
 BEGIN
   SELECT f."compiledVersionId", f."fieldId"
     INTO field_compilation, field_identifier
@@ -240,11 +400,17 @@ BEGIN
 
   SELECT u."practiceId" INTO physician_practice
     FROM "users" u WHERE u."id" = NEW."waivedById" AND u."role" = 'DOCTOR' AND u."isActive" = true;
-  SELECT s."practiceId" INTO source_practice
+  SELECT s."practiceId", owner."practiceId"
+    INTO source_practice, template_owner_practice
     FROM "template_twin_compiled_versions" c
     JOIN "template_twin_source_artifacts" s ON s."id" = c."sourceArtifactId"
+    JOIN "note_templates" n ON n."id" = c."noteTemplateId"
+    LEFT JOIN "users" owner ON owner."id" = n."doctorId"
     WHERE c."id" = NEW."compiledVersionId";
-  IF physician_practice IS NULL OR physician_practice <> source_practice THEN
+  IF physician_practice IS NULL
+     OR template_owner_practice IS NULL
+     OR source_practice <> template_owner_practice
+     OR physician_practice <> source_practice THEN
     RAISE EXCEPTION 'Template Twin waiver physician tenant mismatch';
   END IF;
   RETURN NEW;
@@ -270,21 +436,26 @@ DECLARE compiled_key TEXT;
 DECLARE compiled_version_id TEXT;
 DECLARE compiled_etag TEXT;
 DECLARE compiled_sha256 TEXT;
+DECLARE template_owner_practice TEXT;
 BEGIN
-  SELECT s."practiceId", c."latestTestOutputObjectKey",
+  SELECT s."practiceId", owner."practiceId", c."latestTestOutputObjectKey",
          c."latestTestOutputVersionId", c."latestTestOutputEtag",
          c."latestTestOutputSha256"
-    INTO source_practice, compiled_key, compiled_version_id, compiled_etag,
-         compiled_sha256
+    INTO source_practice, template_owner_practice, compiled_key,
+         compiled_version_id, compiled_etag, compiled_sha256
     FROM "template_twin_compiled_versions" c
     JOIN "template_twin_source_artifacts" s ON s."id" = c."sourceArtifactId"
+    JOIN "note_templates" n ON n."id" = c."noteTemplateId"
+    LEFT JOIN "users" owner ON owner."id" = n."doctorId"
     WHERE c."id" = NEW."compiledVersionId";
   SELECT u."practiceId" INTO certifier_practice
     FROM "users" u
     WHERE u."id" = NEW."certifiedById"
       AND u."role" = 'DOCTOR'
       AND u."isActive" = true;
-  IF source_practice IS NULL OR certifier_practice IS NULL
+  IF source_practice IS NULL OR template_owner_practice IS NULL
+     OR source_practice <> template_owner_practice
+     OR certifier_practice IS NULL
      OR certifier_practice <> source_practice
      OR NEW."testOutputObjectKey" <> compiled_key
      OR NEW."testOutputVersionId" IS NULL
@@ -320,21 +491,26 @@ DECLARE source_practice TEXT;
 DECLARE visit_practice TEXT;
 DECLARE compiled_template TEXT;
 DECLARE compiled_template_version INTEGER;
+DECLARE template_owner_practice TEXT;
 DECLARE output_key_parts TEXT[];
 DECLARE reviewer_practice TEXT;
 BEGIN
-  SELECT s."practiceId", c."noteTemplateId", n."version"
-    INTO source_practice, compiled_template, compiled_template_version
+  SELECT s."practiceId", owner."practiceId", c."noteTemplateId", n."version"
+    INTO source_practice, template_owner_practice, compiled_template,
+         compiled_template_version
     FROM "template_twin_compiled_versions" c
     JOIN "template_twin_source_artifacts" s ON s."id" = c."sourceArtifactId"
     JOIN "note_templates" n ON n."id" = c."noteTemplateId"
+    LEFT JOIN "users" owner ON owner."id" = n."doctorId"
     WHERE c."id" = NEW."compiledVersionId";
   SELECT u."practiceId" INTO visit_practice
     FROM "transcribe_visits" v
     JOIN "users" u ON u."id" = v."userId"
     WHERE v."id" = NEW."visitId";
 
-  IF source_practice IS NULL OR visit_practice IS NULL
+  IF source_practice IS NULL OR template_owner_practice IS NULL
+     OR source_practice <> template_owner_practice
+     OR visit_practice IS NULL
      OR NEW."practiceId" <> source_practice
      OR NEW."practiceId" <> visit_practice
      OR NEW."noteTemplateId" <> compiled_template
@@ -524,3 +700,5 @@ CREATE CONSTRAINT TRIGGER template_twin_fill_output_ledger_consistency
   AFTER INSERT OR UPDATE ON "template_twin_fill_manifests"
   DEFERRABLE INITIALLY DEFERRED
   FOR EACH ROW EXECUTE FUNCTION template_twin_assert_fill_output_ledger();
+
+COMMIT;

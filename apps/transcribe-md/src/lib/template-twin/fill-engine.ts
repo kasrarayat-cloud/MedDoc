@@ -27,7 +27,7 @@ import {
 } from "./ir";
 import { templateTwinMappingsSha256 } from "./mapping-hash";
 import { canonicalSoapSha256 } from "./soap-binding";
-import { templateTwinSourcePhiScanEvidenceSha256 } from "./source-phi-evidence";
+import { assertTemplateTwinSourceProvenance } from "./source-phi-evidence";
 import { evaluateTemplateTwinRollout } from "./rollout";
 import {
   resolveTemplateFields,
@@ -36,6 +36,7 @@ import {
 import {
   claimTemplateTwinObject,
   createTemplateTwinArtifactStore,
+  quarantineTemplateTwinObject,
   type TemplateTwinArtifactStore,
 } from "./storage";
 import { validateTemplateTwin } from "./validation";
@@ -52,6 +53,7 @@ export class TemplateTwinFillError extends Error {
     | "TEMPLATE_PROVENANCE_MISMATCH"
     | "SOURCE_ARTIFACT_UNAVAILABLE"
     | "ROLLOUT_DISABLED"
+    | "SOAP_BINDING_STALE"
     | "SIGNED_MANIFEST_IMMUTABLE"
     | "MANIFEST_CONFLICT";
 
@@ -225,6 +227,70 @@ function asJson(value: unknown): Prisma.InputJsonValue {
   return value as Prisma.InputJsonValue;
 }
 
+export interface LockedTemplateTwinVisit {
+  id: string;
+  userId: string;
+  status: string;
+  deletedAt: Date | null;
+  archivedAt: Date | null;
+  soapVersion: number;
+  soapFinal: string | null;
+  noteTemplateId: string | null;
+  noteTemplateVersion: number | null;
+}
+
+/**
+ * Locks the physician-visible SOAP source at the final relational commit
+ * boundary. Rendering and immutable object storage intentionally happen
+ * before this transaction; therefore the initial optimistic visit claim is
+ * not sufficient to prove that those bytes still describe the current SOAP.
+ */
+export async function lockCurrentTemplateTwinVisit(
+  tx: Prisma.TransactionClient,
+  visitId: string,
+): Promise<LockedTemplateTwinVisit | null> {
+  const rows = await tx.$queryRaw<LockedTemplateTwinVisit[]>(Prisma.sql`
+    SELECT
+      "id",
+      "userId",
+      "status"::text AS "status",
+      "deletedAt",
+      "archivedAt",
+      "soapVersion",
+      "soapFinal",
+      "noteTemplateId",
+      "noteTemplateVersion"
+    FROM "transcribe_visits"
+    WHERE "id" = ${visitId}
+    FOR UPDATE
+  `);
+  return rows[0] ?? null;
+}
+
+export function visitMatchesPreparedSoap(input: {
+  visit: LockedTemplateTwinVisit | null;
+  doctorId: string;
+  noteTemplateId: string;
+  noteTemplateVersion: number;
+  soapFinal: string;
+  manifest: TemplateTwinFillManifest;
+}): boolean {
+  const { visit, manifest } = input;
+  return Boolean(
+    visit &&
+      visit.userId === input.doctorId &&
+      visit.status !== "SIGNED" &&
+      visit.deletedAt === null &&
+      visit.archivedAt === null &&
+      visit.noteTemplateId === input.noteTemplateId &&
+      visit.noteTemplateVersion === input.noteTemplateVersion &&
+      visit.soapVersion === manifest.soapVersion &&
+      typeof visit.soapFinal === "string" &&
+      visit.soapFinal === input.soapFinal &&
+      canonicalSoapSha256(visit.soapFinal) === manifest.soapSha256,
+  );
+}
+
 export interface ProcessTemplateTwinVisitInput {
   visitId: string;
   soapVersion: number;
@@ -376,17 +442,22 @@ export async function processTemplateTwinVisit(
       "The selected Template Twin version is not certified and active.",
     );
   }
+  let sourceProvenanceValid = true;
+  try {
+    assertTemplateTwinSourceProvenance({
+      privacyScanEvidence: compiled.sourceArtifact.privacyScanEvidence,
+      requireBinding: true,
+      boundEvidenceSha256:
+        compiled.certification.sourcePrivacyScanEvidenceSha256,
+    });
+  } catch {
+    sourceProvenanceValid = false;
+  }
   if (
     row.version !== input.noteTemplateVersion ||
     compiled.sourceArtifact.practiceId !== input.practiceId ||
     compiled.sourceArtifact.validationStatus !== "accepted" ||
-    !templateTwinSourcePhiScanEvidenceSha256(
-      compiled.sourceArtifact.privacyScanEvidence,
-    ) ||
-    compiled.certification.sourcePrivacyScanEvidenceSha256 !==
-      templateTwinSourcePhiScanEvidenceSha256(
-        compiled.sourceArtifact.privacyScanEvidence,
-      ) ||
+    !sourceProvenanceValid ||
     !compiled.sourceArtifact.objectKey ||
     !compiled.sourceArtifact.objectVersionId ||
     !compiled.sourceArtifact.objectEtag
@@ -531,6 +602,13 @@ export async function processTemplateTwinVisit(
           .sort(),
       })}`
     : null;
+  const soapBindingStaleEventKey = `template-twin:soap-binding-stale:${canonicalSha256(
+    {
+      visitId: input.visitId,
+      manifestSha256: prepared.manifestSha256,
+      soapVersion: prepared.manifest.soapVersion,
+    },
+  )}`;
   const enqueueRenderVerifiedAudit = async (
     tx: Prisma.TransactionClient,
   ): Promise<void> => {
@@ -585,6 +663,40 @@ export async function processTemplateTwinVisit(
       },
     });
   };
+  const quarantineStaleOutput = async (
+    tx: Prisma.TransactionClient,
+  ): Promise<void> => {
+    if (!storedOutput) return;
+    await quarantineTemplateTwinObject(tx, {
+      objectKey: storedOutput.objectKey,
+      practiceId: input.practiceId,
+      objectVersionId: storedOutput.objectVersionId,
+      objectEtag: storedOutput.objectEtag,
+      reasonCode: "SOAP_BINDING_STALE",
+    });
+  };
+  const enqueueSoapBindingStaleAudit = async (
+    tx: Prisma.TransactionClient,
+    currentSoapVersion: number | null,
+  ): Promise<void> => {
+    await enqueueTemplateTwinAudit(tx, {
+      eventKey: soapBindingStaleEventKey,
+      practiceId: input.practiceId,
+      actorId: input.doctorId,
+      action: "TEMPLATE_TWIN_SAFETY_GATE_BLOCKED",
+      targetType: "TranscribeVisit",
+      targetId: input.visitId,
+      metadata: {
+        reasonCode: "SOAP_BINDING_STALE",
+        compiledVersionId: compiled.id,
+        templateVersion: row.version,
+        manifestSha256: prepared.manifestSha256,
+        expectedSoapVersion: prepared.manifest.soapVersion,
+        currentSoapVersion,
+        outputQuarantined: storedOutput !== null,
+      },
+    });
+  };
   const writeData = {
     compiledVersionId: compiled.id,
     noteTemplateId: row.id,
@@ -631,6 +743,46 @@ export async function processTemplateTwinVisit(
     // replaced row produces no update and remains untouched.
     const updated = await prisma.$transaction(
       async (tx: Prisma.TransactionClient) => {
+        const lockedVisit = await lockCurrentTemplateTwinVisit(
+          tx,
+          input.visitId,
+        );
+        if (
+          !visitMatchesPreparedSoap({
+            visit: lockedVisit,
+            doctorId: input.doctorId,
+            noteTemplateId: row.id,
+            noteTemplateVersion: row.version,
+            soapFinal: input.soapFinal,
+            manifest: prepared.manifest,
+          })
+        ) {
+          await quarantineStaleOutput(tx);
+          await tx.templateTwinFillManifest.updateMany({
+            where: {
+              id: existing.id,
+              status: { not: "SIGNED" },
+              signedDecisionAt: null,
+              reviewedAt: existing.reviewedAt,
+              soapVersion: existing.soapVersion,
+              soapSha256: existing.soapSha256,
+              manifestVersion: existing.manifestVersion,
+              manifestSha256: existing.manifestSha256,
+            },
+            data: {
+              status: "NEEDS_REVIEW",
+              reviewedAt: null,
+              reviewedById: null,
+              reviewedManifestVersion: null,
+              reviewedManifestSha256: null,
+            },
+          });
+          await enqueueSoapBindingStaleAudit(
+            tx,
+            lockedVisit?.soapVersion ?? null,
+          );
+          return { count: 0, soapBindingStale: true } as const;
+        }
         const claimedManifest = await tx.templateTwinFillManifest.updateMany({
           where: {
             id: existing.id,
@@ -659,10 +811,16 @@ export async function processTemplateTwinVisit(
         if (claimedManifest.count === 1 && !storedOutput) {
           await enqueueSafetyGateAudit(tx);
         }
-        return claimedManifest;
+        return { ...claimedManifest, soapBindingStale: false } as const;
       },
       { isolationLevel: "Serializable" },
     );
+    if (updated.soapBindingStale) {
+      throw new TemplateTwinFillError(
+        "SOAP_BINDING_STALE",
+        "The SOAP note changed while the Original Template DOCX was being generated. Regenerate and review it before signing.",
+      );
+    }
     if (updated.count !== 1) {
       const current = await prisma.templateTwinFillManifest.findUnique({
         where: { visitId: input.visitId },
@@ -684,8 +842,29 @@ export async function processTemplateTwinVisit(
     }
   } else {
     try {
-      await prisma.$transaction(
+      const createdResult = await prisma.$transaction(
         async (tx: Prisma.TransactionClient) => {
+          const lockedVisit = await lockCurrentTemplateTwinVisit(
+            tx,
+            input.visitId,
+          );
+          if (
+            !visitMatchesPreparedSoap({
+              visit: lockedVisit,
+              doctorId: input.doctorId,
+              noteTemplateId: row.id,
+              noteTemplateVersion: row.version,
+              soapFinal: input.soapFinal,
+              manifest: prepared.manifest,
+            })
+          ) {
+            await quarantineStaleOutput(tx);
+            await enqueueSoapBindingStaleAudit(
+              tx,
+              lockedVisit?.soapVersion ?? null,
+            );
+            return { soapBindingStale: true } as const;
+          }
           const created = await tx.templateTwinFillManifest.create({
             data: {
               practiceId: input.practiceId,
@@ -705,9 +884,16 @@ export async function processTemplateTwinVisit(
           } else {
             await enqueueSafetyGateAudit(tx);
           }
+          return { soapBindingStale: false } as const;
         },
         { isolationLevel: "Serializable" },
       );
+      if (createdResult.soapBindingStale) {
+        throw new TemplateTwinFillError(
+          "SOAP_BINDING_STALE",
+          "The SOAP note changed while the Original Template DOCX was being generated. Regenerate and review it before signing.",
+        );
+      }
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&

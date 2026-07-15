@@ -74,7 +74,8 @@ export async function POST(
           ? 404
           : error.code === 'VALIDATION_FAILED' ||
               error.code === 'MAPPINGS_NOT_READY' ||
-              error.code === 'SYNTHETIC_EVIDENCE_REJECTED'
+              error.code === 'SYNTHETIC_EVIDENCE_REJECTED' ||
+              error.code === 'SOURCE_PROVENANCE_INVALID'
             ? 422
             : 409;
       return response({ ok: false, error: error.message }, status);

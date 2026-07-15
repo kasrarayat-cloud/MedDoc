@@ -25,6 +25,11 @@ import type { TemplateTwinActor } from './certification-lifecycle';
 import { readTemplateTwinWorkspace } from './workspace-read';
 import { assertTemplateTwinSyntheticEvidencePhiFree } from './synthetic-evidence-gate';
 import {
+  assertTemplateTwinSourceProvenance,
+  bindTemplateTwinSyntheticProofToSourceProvenance,
+  TEMPLATE_TWIN_SOURCE_PROVENANCE_GATE_MESSAGE,
+} from './source-phi-evidence';
+import {
   TEMPLATE_TWIN_UNSUPPORTED_CONCEPT_CODE,
   isSupportedTemplateTwinConcept,
 } from './supported-concepts';
@@ -36,7 +41,8 @@ export class TemplateTwinSyntheticTestError extends Error {
     | 'CONFLICT'
     | 'MAPPINGS_NOT_READY'
     | 'VALIDATION_FAILED'
-    | 'SYNTHETIC_EVIDENCE_REJECTED';
+    | 'SYNTHETIC_EVIDENCE_REJECTED'
+    | 'SOURCE_PROVENANCE_INVALID';
 
   constructor(code: TemplateTwinSyntheticTestError['code'], message: string) {
     super(message);
@@ -113,6 +119,7 @@ export async function runTemplateTwinSyntheticTest(input: {
               sha256: true,
               sizeBytes: true,
               validationStatus: true,
+              privacyScanEvidence: true,
             },
           },
           fields: {
@@ -152,6 +159,18 @@ export async function runTemplateTwinSyntheticTest(input: {
     !compiled.sourceArtifact.objectEtag
   ) {
     throw new TemplateTwinSyntheticTestError('NOT_FOUND', 'Template Twin version not found.');
+  }
+  let sourceProvenance;
+  try {
+    sourceProvenance = assertTemplateTwinSourceProvenance({
+      privacyScanEvidence: compiled.sourceArtifact.privacyScanEvidence,
+      requireBinding: false,
+    });
+  } catch {
+    throw new TemplateTwinSyntheticTestError(
+      'SOURCE_PROVENANCE_INVALID',
+      TEMPLATE_TWIN_SOURCE_PROVENANCE_GATE_MESSAGE,
+    );
   }
   if (compiled.certificationStatus === 'CERTIFIED') {
     throw new TemplateTwinSyntheticTestError(
@@ -286,6 +305,18 @@ export async function runTemplateTwinSyntheticTest(input: {
         where: { id: compiled.id },
         select: {
           certificationStatus: true,
+          sourceArtifact: {
+            select: {
+              practiceId: true,
+              objectKey: true,
+              objectVersionId: true,
+              objectEtag: true,
+              sha256: true,
+              sizeBytes: true,
+              validationStatus: true,
+              privacyScanEvidence: true,
+            },
+          },
           fields: {
             orderBy: { displayOrder: 'asc' },
             select: {
@@ -313,6 +344,33 @@ export async function runTemplateTwinSyntheticTest(input: {
       if (!fresh || fresh.certificationStatus === 'CERTIFIED') {
         throw new TemplateTwinSyntheticTestError('IMMUTABLE', 'This template is already certified.');
       }
+      try {
+        assertTemplateTwinSourceProvenance({
+          privacyScanEvidence: fresh.sourceArtifact.privacyScanEvidence,
+          requireBinding: true,
+          boundEvidenceSha256: sourceProvenance.evidenceSha256,
+        });
+      } catch {
+        throw new TemplateTwinSyntheticTestError(
+          'SOURCE_PROVENANCE_INVALID',
+          TEMPLATE_TWIN_SOURCE_PROVENANCE_GATE_MESSAGE,
+        );
+      }
+      if (
+        fresh.sourceArtifact.practiceId !== compiled.sourceArtifact.practiceId ||
+        fresh.sourceArtifact.validationStatus !== 'accepted' ||
+        fresh.sourceArtifact.objectKey !== compiled.sourceArtifact.objectKey ||
+        fresh.sourceArtifact.objectVersionId !==
+          compiled.sourceArtifact.objectVersionId ||
+        fresh.sourceArtifact.objectEtag !== compiled.sourceArtifact.objectEtag ||
+        fresh.sourceArtifact.sha256 !== compiled.sourceArtifact.sha256 ||
+        fresh.sourceArtifact.sizeBytes !== compiled.sourceArtifact.sizeBytes
+      ) {
+        throw new TemplateTwinSyntheticTestError(
+          'SOURCE_PROVENANCE_INVALID',
+          TEMPLATE_TWIN_SOURCE_PROVENANCE_GATE_MESSAGE,
+        );
+      }
       const freshMappings = fresh.fields.map((field: { fieldId: string; mapping: MappingRow | null }) => {
         if (!field.mapping) {
           throw new TemplateTwinSyntheticTestError('CONFLICT', 'Mappings changed during the test.');
@@ -332,7 +390,12 @@ export async function runTemplateTwinSyntheticTest(input: {
           latestTestOutputEtag: output.objectEtag,
           latestTestOutputSha256: output.sha256,
           latestTestStaticContentSha256: ir.staticContentSha256,
-          latestTestRoundTrip: asJson(render.verification),
+          latestTestRoundTrip: asJson(
+            bindTemplateTwinSyntheticProofToSourceProvenance(
+              render.verification,
+              sourceProvenance.evidenceSha256,
+            ),
+          ),
           latestTestVerifiedAt: new Date(),
         },
       });
@@ -359,6 +422,8 @@ export async function runTemplateTwinSyntheticTest(input: {
           fieldCount: prepared.manifest.fields.length,
           verified: true,
           inputMode: encounterMode,
+          sourcePrivacyScanEvidenceSha256:
+            sourceProvenance.evidenceSha256,
         },
       });
     },
