@@ -1,0 +1,648 @@
+// ============================================================================
+// Template Twin — independent pre-render / pre-sign validator
+// ----------------------------------------------------------------------------
+// This module does not trust resolver status. It independently checks field
+// cardinality, mapping certification, exact enums, checkbox polarity, numeric
+// and unit fidelity, laterality, dates, medication/allergy evidence, table
+// shape, unsupported elements, and source-anchor coverage.
+// ============================================================================
+
+import {
+  EncounterFactSchema,
+  FieldResolutionSchema,
+  FieldValidationIssueSchema,
+  SemanticMappingSchema,
+  TemplateFieldSchema,
+  TemplateTableSchema,
+  TemplateTwinValidationResultSchema,
+  UnsupportedElementSchema,
+  type EncounterFact,
+  type FieldResolution,
+  type SemanticMapping,
+  type TemplateField,
+  type TemplateTable,
+  type UnsupportedElement,
+  type TemplateTwinValidationResult,
+} from '../ir';
+import { parseExplicitNumberAndUnit } from '../encounter-facts';
+import { isMappingTypeCompatible } from '../semantic-mapping';
+
+export const TEMPLATE_TWIN_VALIDATOR_VERSION =
+  'template-field-validator/1.0.0';
+
+interface ValidationIssue {
+  fieldId: string | null;
+  code: string;
+  severity: 'warning' | 'blocking';
+  message: string;
+}
+
+export interface ValidateTemplateTwinInput {
+  fields: ReadonlyArray<TemplateField>;
+  mappings: ReadonlyArray<SemanticMapping>;
+  facts: ReadonlyArray<EncounterFact>;
+  resolutions: ReadonlyArray<FieldResolution>;
+  tables?: ReadonlyArray<TemplateTable>;
+  unsupported?: ReadonlyArray<UnsupportedElement>;
+  /** Allows the certification test renderer to exercise proposed mappings. */
+  allowUncertifiedForSyntheticTest?: boolean;
+  now?: Date | string;
+}
+
+interface RowValue {
+  value: string;
+  sourceFactId: string;
+  evidenceAnchorId: string | null;
+  optionOrdinal: string | null;
+}
+
+function normalizeConcept(value: string): string {
+  return value.normalize('NFKC').trim().toLocaleLowerCase('en-US');
+}
+
+function isRowValueArray(value: FieldResolution['value']): value is Array<Record<string, string | null>> {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (entry) =>
+        typeof entry === 'object' &&
+        entry !== null &&
+        !Array.isArray(entry),
+    )
+  );
+}
+
+function parseRowValue(entry: Record<string, string | null>): RowValue | null {
+  const allowedKeys = new Set([
+    'value',
+    'sourceFactId',
+    'evidenceAnchorId',
+    'optionOrdinal',
+  ]);
+  if (
+    Object.keys(entry).some((key) => !allowedKeys.has(key)) ||
+    typeof entry.value !== 'string' ||
+    typeof entry.sourceFactId !== 'string' ||
+    !('evidenceAnchorId' in entry) ||
+    (entry.evidenceAnchorId !== null &&
+      typeof entry.evidenceAnchorId !== 'string') ||
+    !('optionOrdinal' in entry) ||
+    (entry.optionOrdinal !== null && typeof entry.optionOrdinal !== 'string')
+  ) {
+    return null;
+  }
+  return {
+    value: entry.value,
+    sourceFactId: entry.sourceFactId,
+    evidenceAnchorId: entry.evidenceAnchorId,
+    optionOrdinal: entry.optionOrdinal,
+  };
+}
+
+function isStrictIsoDate(value: string): boolean {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
+}
+
+function exactOption(
+  field: TemplateField,
+  value: string,
+): { value: string; displayText: string; ordinal: number } | null {
+  return (
+    field.allowedOptions.find(
+      (option) => option.value === value || option.displayText === value,
+    ) ?? null
+  );
+}
+
+function valueFromFact(
+  field: TemplateField,
+  mapping: SemanticMapping,
+  fact: EncounterFact,
+): string | number | boolean | null {
+  switch (field.kind) {
+    case 'narrative_text':
+      return typeof fact.value === 'string' ? fact.value : null;
+    case 'single_select': {
+      if (typeof fact.value !== 'string') return null;
+      return exactOption(field, fact.value)?.value ?? null;
+    }
+    case 'multi_select':
+      return typeof fact.value === 'string'
+        ? exactOption(field, fact.value)?.value ?? null
+        : null;
+    case 'checkbox':
+      return fact.polarity === 'affirmed'
+        ? true
+        : fact.polarity === 'denied'
+          ? false
+          : null;
+    case 'date':
+      return typeof fact.value === 'string' && isStrictIsoDate(fact.value.trim())
+        ? fact.value.trim()
+        : null;
+    case 'number': {
+      const parsed = parseExplicitNumberAndUnit(fact.value);
+      const number = fact.number ?? parsed.number;
+      const unit = fact.unit ?? parsed.unit;
+      return number !== null && unit === null ? number : null;
+    }
+    case 'measurement': {
+      const parsed = parseExplicitNumberAndUnit(fact.value);
+      const number = fact.number ?? parsed.number;
+      const unit = fact.unit ?? parsed.unit;
+      if (number === null) return null;
+      if (mapping.unitPolicy === 'required' && !unit) return null;
+      if (mapping.unitPolicy === 'forbidden' && unit) return null;
+      return unit ? `${number} ${unit}` : number;
+    }
+  }
+}
+
+function practiceDefaultMatches(
+  field: TemplateField,
+  mapping: SemanticMapping,
+  value: FieldResolution['value'],
+): boolean {
+  if (mapping.practiceDefault === null || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const raw = mapping.practiceDefault;
+  switch (field.kind) {
+    case 'narrative_text':
+      return typeof value === 'string' && value === raw;
+    case 'single_select':
+      return (
+        typeof value === 'string' &&
+        exactOption(field, raw)?.value === value
+      );
+    case 'multi_select':
+      return false;
+    case 'checkbox':
+      return (
+        typeof value === 'boolean' &&
+        (raw === 'true' || raw === 'false') &&
+        value === (raw === 'true')
+      );
+    case 'date':
+      return typeof value === 'string' && isStrictIsoDate(raw) && value === raw;
+    case 'number': {
+      const parsed = parseExplicitNumberAndUnit(raw);
+      return (
+        typeof value === 'number' &&
+        parsed.unit === null &&
+        parsed.number === value
+      );
+    }
+    case 'measurement': {
+      const parsed = parseExplicitNumberAndUnit(raw);
+      if (parsed.number === null) return false;
+      if (mapping.unitPolicy === 'required' && parsed.unit === null) return false;
+      if (mapping.unitPolicy === 'forbidden' && parsed.unit !== null) return false;
+      return value === (parsed.unit ? `${parsed.number} ${parsed.unit}` : parsed.number);
+    }
+  }
+}
+
+function factMatchesMapping(
+  fact: EncounterFact,
+  mapping: SemanticMapping,
+): boolean {
+  if (!mapping.clinicalConcept) return false;
+  const concepts = new Set(
+    [mapping.clinicalConcept, ...mapping.approvedSynonyms].map(normalizeConcept),
+  );
+  if (!concepts.has(normalizeConcept(fact.concept))) return false;
+  if (
+    mapping.temporality !== null &&
+    mapping.temporality !== 'any' &&
+    fact.temporality !== mapping.temporality
+  ) {
+    return false;
+  }
+  return true;
+}
+
+/** Returns true only when the output can be re-derived from cited facts. */
+function assertionSupported(
+  field: TemplateField,
+  mapping: SemanticMapping,
+  resolution: FieldResolution,
+  citedFacts: ReadonlyArray<EncounterFact>,
+): boolean {
+  const value = resolution.value;
+  if (value === null) return true;
+
+  if (field.rowPrototype) {
+    if (!isRowValueArray(value)) return false;
+    return value.every((rawEntry) => {
+      const entry = parseRowValue(rawEntry);
+      if (!entry) return false;
+      const fact = citedFacts.find((candidate) => candidate.factId === entry.sourceFactId);
+      if (!fact || !factMatchesMapping(fact, mapping)) return false;
+      if (
+        entry.evidenceAnchorId === null ||
+        !fact.evidenceAnchorIds.includes(entry.evidenceAnchorId)
+      ) {
+        return false;
+      }
+      const derived = valueFromFact(field, mapping, fact);
+      if (derived === null || entry.value !== String(derived)) return false;
+      if (field.kind === 'single_select') {
+        const option = exactOption(field, entry.value);
+        if (!option || entry.optionOrdinal !== String(option.ordinal)) return false;
+      }
+      return true;
+    });
+  }
+
+  if (field.kind === 'multi_select') {
+    if (!Array.isArray(value) || value.some((entry) => typeof entry !== 'string')) {
+      return false;
+    }
+    return value.every((selected) =>
+      citedFacts.some(
+        (fact) =>
+          factMatchesMapping(fact, mapping) &&
+          valueFromFact(field, mapping, fact) === selected,
+      ),
+    );
+  }
+
+  return citedFacts.some(
+    (fact) =>
+      factMatchesMapping(fact, mapping) &&
+      valueFromFact(field, mapping, fact) === value,
+  );
+}
+
+export function validateTemplateTwin(
+  input: ValidateTemplateTwinInput,
+): TemplateTwinValidationResult {
+  const issues: ValidationIssue[] = [];
+  const add = (
+    code: string,
+    severity: 'warning' | 'blocking',
+    message: string,
+    fieldId: string | null = null,
+  ): void => {
+    issues.push(
+      FieldValidationIssueSchema.parse({ fieldId, code, severity, message }),
+    );
+  };
+
+  const fields: TemplateField[] = [];
+  for (const raw of input.fields) {
+    const parsed = TemplateFieldSchema.safeParse(raw);
+    if (parsed.success) fields.push(parsed.data);
+    else add('FIELD_SCHEMA_INVALID', 'blocking', 'A compiled field definition is invalid.');
+  }
+  const mappings: SemanticMapping[] = [];
+  for (const raw of input.mappings) {
+    const parsed = SemanticMappingSchema.safeParse(raw);
+    if (parsed.success) mappings.push(parsed.data);
+    else add('MAPPING_SCHEMA_INVALID', 'blocking', 'A semantic mapping is invalid.');
+  }
+  const facts: EncounterFact[] = [];
+  for (const raw of input.facts) {
+    const parsed = EncounterFactSchema.safeParse(raw);
+    if (parsed.success) facts.push(parsed.data);
+    else add('FACT_SCHEMA_INVALID', 'blocking', 'An encounter fact is invalid.');
+  }
+  const resolutions: FieldResolution[] = [];
+  for (const raw of input.resolutions) {
+    const parsed = FieldResolutionSchema.safeParse(raw);
+    if (parsed.success) resolutions.push(parsed.data);
+    else add('RESOLUTION_SCHEMA_INVALID', 'blocking', 'A field resolution is invalid.');
+  }
+  const tables: TemplateTable[] = [];
+  for (const raw of input.tables ?? []) {
+    const parsed = TemplateTableSchema.safeParse(raw);
+    if (parsed.success) tables.push(parsed.data);
+    else add('TABLE_SCHEMA_INVALID', 'blocking', 'A compiled table definition is invalid.');
+  }
+  const unsupported: UnsupportedElement[] = [];
+  for (const raw of input.unsupported ?? []) {
+    const parsed = UnsupportedElementSchema.safeParse(raw);
+    if (parsed.success) unsupported.push(parsed.data);
+    else add('UNSUPPORTED_REGISTER_INVALID', 'blocking', 'The unsupported-element register is invalid.');
+  }
+
+  for (const element of unsupported) {
+    add(
+      element.code,
+      element.blocksCertification || element.clinicallyMaterial
+        ? 'blocking'
+        : 'warning',
+      element.blocksCertification || element.clinicallyMaterial
+        ? 'A clinically material or certification-blocking document element is unsupported.'
+        : 'A non-clinical document element is unsupported.',
+    );
+  }
+
+  const fieldIds = new Set(fields.map((field) => field.fieldId));
+  if (fieldIds.size !== fields.length) {
+    add('DUPLICATE_FIELD_DEFINITION', 'blocking', 'The compiled field set contains duplicate field IDs.');
+  }
+  const mappingById = new Map<string, SemanticMapping>();
+  for (const mapping of mappings) {
+    if (mappingById.has(mapping.fieldId)) {
+      add('DUPLICATE_MAPPING', 'blocking', 'A field has more than one semantic mapping.', mapping.fieldId);
+    } else {
+      mappingById.set(mapping.fieldId, mapping);
+    }
+    if (!fieldIds.has(mapping.fieldId)) {
+      add('UNKNOWN_MAPPING_FIELD', 'blocking', 'A semantic mapping references an unknown field.', mapping.fieldId);
+    }
+  }
+  const resolutionById = new Map<string, FieldResolution>();
+  for (const resolution of resolutions) {
+    if (resolutionById.has(resolution.fieldId)) {
+      add('DUPLICATE_RESOLUTION', 'blocking', 'A field has more than one resolution.', resolution.fieldId);
+    } else {
+      resolutionById.set(resolution.fieldId, resolution);
+    }
+    if (!fieldIds.has(resolution.fieldId)) {
+      add('UNKNOWN_RESOLUTION_FIELD', 'blocking', 'A resolution references an unknown field.', resolution.fieldId);
+    }
+  }
+
+  const factById = new Map<string, EncounterFact>();
+  for (const fact of facts) {
+    if (factById.has(fact.factId)) {
+      add('DUPLICATE_FACT', 'blocking', 'The encounter fact set contains duplicate fact IDs.');
+    } else {
+      factById.set(fact.factId, fact);
+    }
+  }
+  const tableById = new Map(tables.map((table) => [table.tableId, table]));
+  const repeatedCountsByTable = new Map<string, number>();
+  const repeatedAnchorsByTable = new Map<string, string[]>();
+
+  for (const field of fields) {
+    const mapping = mappingById.get(field.fieldId);
+    const resolution = resolutionById.get(field.fieldId);
+    if (!mapping) {
+      add('MAPPING_MISSING', 'blocking', 'The field has no semantic mapping.', field.fieldId);
+      continue;
+    }
+    if (!resolution) {
+      add('RESOLUTION_MISSING', 'blocking', 'The field has no field resolution.', field.fieldId);
+      continue;
+    }
+    if (!isMappingTypeCompatible(field, mapping)) {
+      add('MAPPING_TYPE_MISMATCH', 'blocking', 'The mapping data type does not match the compiled control.', field.fieldId);
+    }
+    if (
+      !input.allowUncertifiedForSyntheticTest &&
+      (mapping.status !== 'certified' || field.detectionStatus !== 'certified')
+    ) {
+      add('FIELD_NOT_CERTIFIED', 'blocking', 'The field structure and semantic mapping are not certified.', field.fieldId);
+    }
+    if (mapping.status === 'unsupported' || field.detectionStatus === 'unsupported') {
+      add('FIELD_UNSUPPORTED', field.clinicallyMaterial ? 'blocking' : 'warning', 'The field is unsupported.', field.fieldId);
+    }
+
+    const citedFacts: EncounterFact[] = [];
+    for (const factId of resolution.sourceFactIds) {
+      const fact = factById.get(factId);
+      if (!fact) {
+        add('SOURCE_FACT_MISSING', 'blocking', 'A resolution cites a missing encounter fact.', field.fieldId);
+      } else {
+        citedFacts.push(fact);
+      }
+    }
+    const citedAnchorSet = new Set(resolution.evidenceAnchorIds);
+    const factAnchorSet = new Set(citedFacts.flatMap((fact) => fact.evidenceAnchorIds));
+    if (citedFacts.some((fact) => fact.evidenceAnchorIds.some((id) => !citedAnchorSet.has(id)))) {
+      add('EVIDENCE_COVERAGE_INCOMPLETE', 'blocking', 'Not every cited fact anchor is retained by the resolution.', field.fieldId);
+    }
+    if (resolution.evidenceAnchorIds.some((id) => !factAnchorSet.has(id))) {
+      add('EVIDENCE_ANCHOR_UNTRACEABLE', 'blocking', 'A resolution anchor is not traceable to a cited fact.', field.fieldId);
+    }
+
+    const populated = resolution.value !== null;
+    const unresolved = new Set(['ambiguous', 'conflict', 'needs_clinician_input']);
+    if (populated && unresolved.has(resolution.status)) {
+      add('UNRESOLVED_VALUE_PRESENT', 'blocking', 'An unresolved field contains a renderable value.', field.fieldId);
+    }
+    if (
+      populated &&
+      resolution.status !== 'approved_practice_default' &&
+      (resolution.sourceFactIds.length === 0 || resolution.evidenceAnchorIds.length === 0)
+    ) {
+      add('POPULATED_WITHOUT_EVIDENCE', 'blocking', 'A populated clinical value lacks evidence.', field.fieldId);
+    }
+    if (
+      resolution.status === 'not_mentioned' &&
+      (resolution.sourceFactIds.length > 0 || resolution.evidenceAnchorIds.length > 0)
+    ) {
+      add('NOT_MENTIONED_HAS_EVIDENCE', 'blocking', 'A not-mentioned field unexpectedly retains clinical evidence.', field.fieldId);
+    }
+    if (citedFacts.some((fact) => !factMatchesMapping(fact, mapping))) {
+      add('SOURCE_FACT_CONCEPT_MISMATCH', 'blocking', 'A cited fact does not match the approved semantic mapping.', field.fieldId);
+    }
+
+    if (resolution.status === 'approved_practice_default') {
+      if (
+        resolution.sourceFactIds.length > 0 ||
+        resolution.evidenceAnchorIds.length > 0 ||
+        mapping.status !== 'certified' ||
+        !practiceDefaultMatches(field, mapping, resolution.value)
+      ) {
+        add('PRACTICE_DEFAULT_INVALID', 'blocking', 'The practice default is missing approval or does not match the resolved value.', field.fieldId);
+      }
+    } else if (populated && !assertionSupported(field, mapping, resolution, citedFacts)) {
+      add('ASSERTION_NOT_SUPPORTED', 'blocking', 'The populated value cannot be re-derived from its cited facts.', field.fieldId);
+    }
+
+    if (
+      resolution.status === 'supported' &&
+      citedFacts.some((fact) => fact.quality.evidence !== 'direct')
+    ) {
+      add('SUPPORTED_STATUS_CONFLICTS_WITH_QUALITY', 'blocking', 'A supported field cites unclear or conflicting evidence.', field.fieldId);
+    }
+
+    const critical = field.criticality !== 'routine' || field.clinicallyMaterial;
+    if (resolution.status === 'conflict') {
+      add('FIELD_CONFLICT', 'blocking', 'The field contains conflicting encounter evidence.', field.fieldId);
+    } else if (resolution.status === 'ambiguous') {
+      add('FIELD_AMBIGUOUS', critical || field.required || mapping.required ? 'blocking' : 'warning', 'The field evidence is ambiguous.', field.fieldId);
+    } else if (resolution.status === 'needs_clinician_input') {
+      add('FIELD_NEEDS_CLINICIAN_INPUT', critical || field.required || mapping.required ? 'blocking' : 'warning', 'The field needs clinician input.', field.fieldId);
+    } else if (
+      resolution.status === 'not_mentioned' &&
+      (field.required || mapping.required || mapping.unknownPolicy === 'requires_input')
+    ) {
+      add('REQUIRED_FIELD_NOT_MENTIONED', 'blocking', 'A required field was not mentioned.', field.fieldId);
+    }
+
+    if (field.kind === 'single_select' && populated && !field.rowPrototype) {
+      if (typeof resolution.value !== 'string') {
+        add('SINGLE_SELECT_TYPE_INVALID', 'blocking', 'A single-select value is not a string.', field.fieldId);
+      } else {
+        const option = field.allowedOptions.find((item) => item.value === resolution.value);
+        if (!option) {
+          add('DROPDOWN_NOT_EXACT_OPTION', 'blocking', 'A dropdown value is not an exact native option.', field.fieldId);
+        } else if (resolution.selectedOptionOrdinal !== option.ordinal) {
+          add('DROPDOWN_ORDINAL_MISMATCH', 'blocking', 'The dropdown ordinal does not match its exact option.', field.fieldId);
+        }
+      }
+    }
+    if (field.kind === 'multi_select' && populated) {
+      if (
+        !Array.isArray(resolution.value) ||
+        resolution.value.some((value) => typeof value !== 'string')
+      ) {
+        add('MULTI_SELECT_TYPE_INVALID', 'blocking', 'A multi-select value has an invalid shape.', field.fieldId);
+      } else {
+        const values = resolution.value as string[];
+        const allowed = new Set(field.allowedOptions.map((option) => option.value));
+        if (values.some((value) => !allowed.has(value))) {
+          add('MULTI_SELECT_NOT_EXACT_OPTIONS', 'blocking', 'A multi-select contains a value outside the native option set.', field.fieldId);
+        }
+        if (new Set(values).size !== values.length) {
+          add('MULTI_SELECT_DUPLICATE', 'blocking', 'A multi-select repeats an option.', field.fieldId);
+        }
+      }
+    }
+    if (field.kind === 'checkbox' && populated && !field.rowPrototype) {
+      if (typeof resolution.value !== 'boolean') {
+        add('CHECKBOX_TYPE_INVALID', 'blocking', 'A checkbox value is not boolean.', field.fieldId);
+      } else if (
+        resolution.value === true &&
+        !citedFacts.some((fact) => fact.polarity === 'affirmed')
+      ) {
+        add('CHECKBOX_AFFIRMATION_MISSING', 'blocking', 'A selected checkbox lacks affirmative evidence.', field.fieldId);
+      } else if (
+        resolution.value === false &&
+        resolution.status === 'explicitly_denied' &&
+        !citedFacts.some((fact) => fact.polarity === 'denied')
+      ) {
+        add('CHECKBOX_DENIAL_MISSING', 'blocking', 'A denied checkbox lacks explicit denial evidence.', field.fieldId);
+      }
+    }
+    if (field.kind === 'date' && populated && !field.rowPrototype) {
+      if (typeof resolution.value !== 'string' || !isStrictIsoDate(resolution.value)) {
+        add('DATE_INVALID', 'blocking', 'A date is not an unambiguous valid ISO calendar date.', field.fieldId);
+      }
+    }
+    if (field.kind === 'number' && populated && !field.rowPrototype) {
+      if (typeof resolution.value !== 'number' || !Number.isFinite(resolution.value)) {
+        add('NUMBER_INVALID', 'blocking', 'A numeric field is not a finite explicit number.', field.fieldId);
+      }
+      if (citedFacts.some((fact) => fact.unit !== null)) {
+        add('NUMBER_HAS_UNIT', 'blocking', 'A number-only field cites an unapproved unit.', field.fieldId);
+      }
+    }
+    if (field.kind === 'measurement' && populated && !field.rowPrototype) {
+      const parsed = parseExplicitNumberAndUnit(resolution.value as string | number | boolean);
+      if (parsed.number === null) {
+        add('MEASUREMENT_NUMBER_INVALID', 'blocking', 'A measurement lacks an explicit finite number.', field.fieldId);
+      }
+      if (mapping.unitPolicy === 'required' && parsed.unit === null) {
+        add('MEASUREMENT_UNIT_MISSING', 'blocking', 'A required measurement unit is missing.', field.fieldId);
+      }
+      if (mapping.unitPolicy === 'forbidden' && parsed.unit !== null) {
+        add('MEASUREMENT_UNIT_FORBIDDEN', 'blocking', 'A forbidden measurement unit is present.', field.fieldId);
+      }
+    }
+
+    if (mapping.laterality === 'required' && populated) {
+      const lateralities = new Set(citedFacts.map((fact) => fact.laterality));
+      if (lateralities.has('unknown') || lateralities.has('not_applicable') || lateralities.size !== 1) {
+        add('LATERALITY_UNRESOLVED', 'blocking', 'Required laterality is missing or conflicting.', field.fieldId);
+      }
+    }
+
+    const concept = mapping.clinicalConcept
+      ? normalizeConcept(mapping.clinicalConcept)
+      : '';
+    if (field.criticality === 'medication' || concept.startsWith('medication.')) {
+      if (concept === 'medication.dose' && populated) {
+        if (citedFacts.some((fact) => fact.number === null || fact.unit === null)) {
+          add('MEDICATION_DOSE_INCOMPLETE', 'blocking', 'A medication dose lacks an explicit number or unit.', field.fieldId);
+        }
+      }
+      if (
+        populated &&
+        citedFacts.some((fact) =>
+          ['medication.name', 'medication.route', 'medication.frequency'].includes(concept) &&
+          typeof fact.value !== 'string',
+        )
+      ) {
+        add('MEDICATION_COMPONENT_INVALID', 'blocking', 'A medication component is not directly supported text.', field.fieldId);
+      }
+    }
+    if (field.criticality === 'allergy' || concept.startsWith('allergy.')) {
+      if (
+        citedFacts.some(
+          (fact) =>
+            fact.experiencer !== 'patient' ||
+            fact.quality.evidence === 'conflicting',
+        )
+      ) {
+        add('ALLERGY_EVIDENCE_UNRESOLVED', 'blocking', 'Allergy evidence is conflicting or not patient-specific.', field.fieldId);
+      }
+    }
+
+    if (field.tableId) {
+      const table = tableById.get(field.tableId);
+      if (!table) {
+        add('TABLE_DEFINITION_MISSING', 'blocking', 'A table field references a missing table definition.', field.fieldId);
+      } else if (field.rowPrototype && populated) {
+        if (!isRowValueArray(resolution.value)) {
+          add('REPEATING_ROW_SHAPE_INVALID', 'blocking', 'A repeating-row field does not contain row records.', field.fieldId);
+        } else {
+          const rowCount = resolution.value.length;
+          if (rowCount > table.maxRows) {
+            add('TABLE_ROW_OVERFLOW', 'blocking', 'Resolved repeating rows exceed the certified table limit.', field.fieldId);
+          }
+          const priorCount = repeatedCountsByTable.get(field.tableId);
+          if (priorCount !== undefined && priorCount !== rowCount) {
+            add('TABLE_ROW_ALIGNMENT_CONFLICT', 'blocking', 'Repeating table columns do not have aligned row counts.', field.fieldId);
+          } else {
+            repeatedCountsByTable.set(field.tableId, rowCount);
+          }
+          const rowAnchors = resolution.value.map((entry) => {
+            const parsed = parseRowValue(entry);
+            return parsed?.evidenceAnchorId ?? '';
+          });
+          const priorAnchors = repeatedAnchorsByTable.get(field.tableId);
+          if (
+            priorAnchors !== undefined &&
+            (priorAnchors.length !== rowAnchors.length ||
+              priorAnchors.some((anchor, index) => anchor !== rowAnchors[index]))
+          ) {
+            add('TABLE_ROW_EVIDENCE_MISALIGNED', 'blocking', 'Repeating table columns do not share aligned row evidence.', field.fieldId);
+          } else {
+            repeatedAnchorsByTable.set(field.tableId, rowAnchors);
+          }
+        }
+      }
+    }
+  }
+
+  let checkedAt: string;
+  try {
+    checkedAt = new Date(input.now ?? Date.now()).toISOString();
+  } catch {
+    checkedAt = new Date(0).toISOString();
+    add('VALIDATION_TIMESTAMP_INVALID', 'blocking', 'The validation timestamp is invalid.');
+  }
+  return TemplateTwinValidationResultSchema.parse({
+    valid: !issues.some((issue) => issue.severity === 'blocking'),
+    issues,
+    checkedAt,
+    validatorVersion: TEMPLATE_TWIN_VALIDATOR_VERSION,
+  });
+}
