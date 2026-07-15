@@ -48,9 +48,11 @@ export type ModelCallPurpose =
   // Note-format customization Phase 2a — bring-your-own-note parse engine.
   // `tm_template_parse` extracts FORMAT/STYLE from a doctor's note;
   // `tm_template_phi_scan` is the separate PHI-detection gate over the
-  // parsed output. Stateless — the source note is never persisted.
+  // parsed output. `tm_template_synthetic_phi_scan` is the fail-closed
+  // privacy gate before certification-test evidence is persisted.
   | 'tm_template_parse'
-  | 'tm_template_phi_scan';
+  | 'tm_template_phi_scan'
+  | 'tm_template_synthetic_phi_scan';
 
 export interface AiLogContext {
   practiceId: string;

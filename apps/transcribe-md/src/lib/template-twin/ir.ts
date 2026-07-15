@@ -298,6 +298,13 @@ export const SemanticMappingProposalSchema = z
 export const EncounterFactSchema = z
   .object({
     factId: z.string().regex(/^ttfact_[a-f0-9]{24}$/),
+    sourceType: z
+      .enum([
+        'encounter_evidence',
+        'approved_practice_default',
+        'clinician_correction',
+      ])
+      .default('encounter_evidence'),
     concept: z.string().min(1).max(160),
     value: z.union([z.string(), z.number(), z.boolean()]),
     polarity: z.enum(['affirmed', 'denied', 'uncertain', 'conditional']),
@@ -355,8 +362,7 @@ export const FieldResolutionSchema = z
   })
   .strict()
   .superRefine((resolution, ctx) => {
-    const evidenceRequired =
-      resolution.value !== null && resolution.status !== 'approved_practice_default';
+    const evidenceRequired = resolution.value !== null;
     if (evidenceRequired && resolution.sourceFactIds.length === 0) {
       ctx.addIssue({
         code: 'custom',

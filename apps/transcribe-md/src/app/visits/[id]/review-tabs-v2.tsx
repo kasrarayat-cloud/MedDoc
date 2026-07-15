@@ -60,6 +60,7 @@ export interface ReviewTabsV2Props {
   visitId: string;
   doctorEmail: string;
   emailEnabled: boolean;
+  originalTemplateDocxAvailable?: boolean;
   /** readonly || signedAt !== null. */
   signed: boolean;
   /** F-7 (2026-07-02): section labels still carrying the anchored-verifier
@@ -240,6 +241,7 @@ export function ReviewTabsV2(props: ReviewTabsV2Props) {
                 visitId={props.visitId}
                 doctorEmail={props.doctorEmail}
                 emailEnabled={props.emailEnabled}
+                originalTemplateDocxAvailable={props.originalTemplateDocxAvailable}
                 signOnSubmit={false}
                 triggerLabel="Export again"
                 triggerIcon={<Send className="h-3.5 w-3.5" aria-hidden />}
@@ -251,6 +253,7 @@ export function ReviewTabsV2(props: ReviewTabsV2Props) {
                   visitId={props.visitId}
                   doctorEmail={props.doctorEmail}
                   emailEnabled={props.emailEnabled}
+                  originalTemplateDocxAvailable={props.originalTemplateDocxAvailable}
                   signOnSubmit
                   triggerLabel="Sign & Send"
                   triggerIcon={<Lock className="h-3.5 w-3.5" aria-hidden />}

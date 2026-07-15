@@ -100,6 +100,8 @@ interface SoapEditorProps {
   doctorEmail: string;
   /** T-M9 — whether Email delivery is configured. */
   emailEnabled: boolean;
+  /** Server-derived verified/signed Template Twin output availability. */
+  originalTemplateDocxAvailable?: boolean;
   initialText: string;
   /**
    * Round 3 PR-E (A09-P0-003) — optimistic-concurrency token. The
@@ -138,6 +140,7 @@ export function SoapEditor({
   visitId,
   doctorEmail,
   emailEnabled,
+  originalTemplateDocxAvailable = false,
   initialText,
   initialSoapVersion,
   readonly = false,
@@ -490,6 +493,7 @@ export function SoapEditor({
             visitId={visitId}
             doctorEmail={doctorEmail}
             emailEnabled={emailEnabled}
+            originalTemplateDocxAvailable={originalTemplateDocxAvailable}
             signOnSubmit
             triggerLabel="Sign & Send"
             triggerIcon={<Lock className="h-3.5 w-3.5" aria-hidden />}
@@ -520,6 +524,7 @@ export function SoapEditor({
             visitId={visitId}
             doctorEmail={doctorEmail}
             emailEnabled={emailEnabled}
+            originalTemplateDocxAvailable={originalTemplateDocxAvailable}
             signOnSubmit={false}
             triggerLabel="Export again"
             triggerIcon={<Send className="h-3.5 w-3.5" aria-hidden />}

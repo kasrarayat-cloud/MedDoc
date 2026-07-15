@@ -27,6 +27,7 @@ export type Destination =
   | 'clipboard_generic'
   | 'pdf'
   | 'docx'
+  | 'docx_original_template'
   | 'email';
 
 const DESTINATIONS: {
@@ -45,6 +46,11 @@ const DESTINATIONS: {
   { key: 'clipboard_generic', label: 'Copy as plain text', group: 'clipboard' },
   { key: 'pdf', label: 'Download PDF', group: 'download' },
   { key: 'docx', label: 'Download DOCX', group: 'download' },
+  {
+    key: 'docx_original_template',
+    label: 'Original Template DOCX',
+    group: 'download',
+  },
   { key: 'email', label: 'Email to me', group: 'email' },
 ];
 
@@ -53,6 +59,7 @@ interface SignResponse {
   clipboardTexts?: Partial<Record<Destination, string>>;
   pdfDownloadUrl?: string;
   docxDownloadUrl?: string;
+  originalTemplateDocxDownloadUrl?: string;
   emailQueued?: boolean;
   deliveryErrors?: Record<string, string>;
 }
@@ -71,6 +78,10 @@ interface SignAndSendModalProps {
    *  from any submission payload as belt-and-braces. Set from the
    *  server based on RESEND_API_KEY + RESEND_FROM_VERIFIED. */
   emailEnabled: boolean;
+  /** Show the exact source-template clone only when the server supplied a
+   *  verified Template Twin fill for this visit. The export route repeats all
+   *  ownership, signing, version, round-trip, and digest checks. */
+  originalTemplateDocxAvailable?: boolean;
   /** The trigger button's label — "Sign & Send" vs "Export again". */
   triggerLabel: string;
   /** Icon shown on the trigger. */
@@ -155,7 +166,10 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
     // renders, or a stale entry somehow lingers in `selected`, don't
     // send it to the server.
     const destinations = Array.from(selected).filter(
-      (d) => d !== 'email' || props.emailEnabled
+      (d) =>
+        (d !== 'email' || props.emailEnabled) &&
+        (d !== 'docx_original_template' ||
+          props.originalTemplateDocxAvailable === true)
     );
     if (destinations.length === 0) {
       toast.error('Pick at least one destination.');
@@ -259,11 +273,13 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
     props.visitId,
     props.signOnSubmit,
     props.emailEnabled,
+    props.originalTemplateDocxAvailable,
     props.emPendingChange,
     emChangeRequired,
     emChangeConfirmed,
     router,
     selected,
+    setOpen,
   ]);
 
   const triggerVariant = props.triggerVariant ?? 'primary';
@@ -358,7 +374,12 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
             <Group
               title="Download"
               hint="Save a PDF for records or a DOCX to edit in Word."
-              items={DESTINATIONS.filter((d) => d.group === 'download')}
+              items={DESTINATIONS.filter(
+                (d) =>
+                  d.group === 'download' &&
+                  (d.key !== 'docx_original_template' ||
+                    props.originalTemplateDocxAvailable === true)
+              )}
               selected={selected}
               onToggle={toggle}
             />
@@ -639,6 +660,7 @@ async function prepareDeliverOnly(
   const clipboardTexts: Partial<Record<Destination, string>> = {};
   let pdfDownloadUrl: string | undefined;
   let docxDownloadUrl: string | undefined;
+  let originalTemplateDocxDownloadUrl: string | undefined;
   let emailQueued = false;
 
   for (const dest of destinations) {
@@ -646,6 +668,9 @@ async function prepareDeliverOnly(
       pdfDownloadUrl = `/api/visits/${visitId}/export/pdf`;
     } else if (dest === 'docx') {
       docxDownloadUrl = `/api/visits/${visitId}/export/docx`;
+    } else if (dest === 'docx_original_template') {
+      originalTemplateDocxDownloadUrl =
+        `/api/visits/${visitId}/export/original-template-docx`;
     } else if (dest === 'email') {
       const res = await fetch(`/api/visits/${visitId}/export/email`, {
         method: 'POST',
@@ -678,6 +703,7 @@ async function prepareDeliverOnly(
     clipboardTexts,
     pdfDownloadUrl,
     docxDownloadUrl,
+    originalTemplateDocxDownloadUrl,
     emailQueued,
   };
 }
@@ -696,6 +722,15 @@ async function applyBrowserSideDeliveries(
       await new Promise((r) => setTimeout(r, 600));
     }
     triggerDownload(res.docxDownloadUrl, 'docx');
+  }
+  if (res.originalTemplateDocxDownloadUrl) {
+    if (res.pdfDownloadUrl || res.docxDownloadUrl) {
+      await new Promise((r) => setTimeout(r, 600));
+    }
+    triggerDownload(
+      res.originalTemplateDocxDownloadUrl,
+      'docx_original_template'
+    );
   }
 
   // 2. Clipboard writes — navigator.clipboard only holds ONE payload
@@ -739,7 +774,10 @@ async function applyBrowserSideDeliveries(
   }
 }
 
-function triggerDownload(href: string, kind: 'pdf' | 'docx') {
+function triggerDownload(
+  href: string,
+  kind: 'pdf' | 'docx' | 'docx_original_template'
+) {
   const a = document.createElement('a');
   a.href = href;
   a.rel = 'noopener';

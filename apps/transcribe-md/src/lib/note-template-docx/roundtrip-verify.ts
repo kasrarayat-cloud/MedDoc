@@ -484,6 +484,27 @@ export function verifyRenderedTemplateDocx(
   const outputSha256 = createHash('sha256')
     .update(Buffer.from(input.output))
     .digest('hex');
+  // OOXML has no authoritative rendered-page geometry; only Word (or another
+  // layout engine with the template fonts) can prove visual overflow. Flag the
+  // two deterministic risk signals we can detect without pretending to have
+  // performed layout: a replacement far larger than its original binding and
+  // cloned repeating rows. Certification/review can then inspect the DOCX.
+  const warningCodes = new Set<string>();
+  for (const part of input.plan.parts) {
+    for (const patch of part.patches) {
+      const originalLength = Math.max(1, patch.end - patch.start);
+      if (
+        patch.kind === 'field_content' &&
+        patch.replacement.length > 512 &&
+        patch.replacement.length > originalLength * 4
+      ) {
+        warningCodes.add('LAYOUT_OVERFLOW_REVIEW_RECOMMENDED');
+      }
+      if (patch.kind === 'repeating_row') {
+        warningCodes.add('REPEATING_TABLE_LAYOUT_REVIEW_RECOMMENDED');
+      }
+    }
+  }
   return Object.freeze({
     verified: true,
     packageCheck: 'verified',
@@ -497,7 +518,7 @@ export function verifyRenderedTemplateDocx(
       ...field,
       status: 'verified' as const,
     })),
-    warningCodes: [],
+    warningCodes: [...warningCodes].sort(),
   });
 }
 

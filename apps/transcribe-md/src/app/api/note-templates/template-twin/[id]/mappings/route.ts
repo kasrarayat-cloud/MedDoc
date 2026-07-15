@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
-import { AuthError, requireSession } from '@/lib/auth';
+import { AuthError, requireDoctorSession } from '@/lib/auth';
+import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 import {
   TemplateTwinLifecycleError,
   updateTemplateTwinMappings,
@@ -26,7 +27,9 @@ export async function PATCH(
     return response({ ok: false, error: 'The update request was not same-origin.' }, 403);
   }
   try {
-    const session = await requireSession();
+    const session = await requireDoctorSession();
+    const blocked = rateLimitOr429(RATE_LIMITS.SETTINGS, session.user.id);
+    if (blocked) return blocked;
     const { id } = await context.params;
     const parsed = TemplateTwinUpdateMappingsRequestSchema.safeParse(
       await request.json(),
@@ -46,7 +49,16 @@ export async function PATCH(
     return response({ ok: true, workspace }, 200);
   } catch (error) {
     if (error instanceof AuthError) {
-      return response({ ok: false, error: 'Sign in again before saving.' }, 401);
+      return response(
+        {
+          ok: false,
+          error:
+            error.code === 'FORBIDDEN'
+              ? error.message
+              : 'Sign in again before saving.',
+        },
+        error.code === 'FORBIDDEN' ? 403 : 401,
+      );
     }
     if (error instanceof TemplateTwinLifecycleError) {
       const status = error.code === 'NOT_FOUND' ? 404 : error.code === 'MAPPING_INVALID' || error.code === 'FIELD_SET_MISMATCH' ? 422 : 409;

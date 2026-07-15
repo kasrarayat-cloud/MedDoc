@@ -5,14 +5,22 @@ import { logAudit } from '@/lib/audit';
 
 import {
   SemanticMappingSchema,
+  TEMPLATE_TWIN_RENDERER_VERSION,
+  TEMPLATE_TWIN_RESOLVER_VERSION,
   TemplateDocIRSchema,
+  TemplateTwinFillManifestSchema,
+  templateTwinCounts,
   type SemanticMapping,
+  type TemplateDocIR,
   type TemplateField,
 } from './ir';
 import { isMappingTypeCompatible } from './semantic-mapping';
 import { templateTwinMappingsSha256 } from './mapping-hash';
 import { readTemplateTwinWorkspace } from './workspace-read';
 import type { TemplateTwinWorkspace } from './client-types';
+import { parseTemplateTwinArtifactKey } from './storage';
+import { canonicalSha256 } from './canonical';
+import { validateTemplateTwin } from './validation';
 
 export class TemplateTwinLifecycleError extends Error {
   readonly code:
@@ -154,7 +162,7 @@ async function loadOwnedCompilation(
           latestTestRoundTrip: true,
           latestTestVerifiedAt: true,
           certification: { select: { id: true } },
-          sourceArtifact: { select: { practiceId: true } },
+          sourceArtifact: { select: { practiceId: true, sha256: true } },
           fields: {
             orderBy: { displayOrder: 'asc' },
             select: {
@@ -203,6 +211,123 @@ function currentMappings(compiled: Awaited<ReturnType<typeof loadOwnedCompilatio
     }
     return fromPersistedMapping(field.fieldId, field.mapping);
   });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** Certification must bind the synthetic proof to this exact immutable
+ * source, compiled static region, and persisted output. A truthy `verified`
+ * bit alone is not an integrity boundary. */
+function isVerifiedSyntheticProof(input: {
+  roundTrip: unknown;
+  sourceSha256: string;
+  outputSha256: string;
+  staticContentSha256: string;
+  expectedStaticContentSha256: string;
+  expectedFields: ReadonlyArray<{
+    fieldId: string;
+    partName: string;
+    bindingPath: string;
+    valueSha256: string;
+    occurrences: number;
+  }>;
+}): boolean {
+  if (!isRecord(input.roundTrip)) return false;
+  const proof = input.roundTrip;
+  const proofFields = Array.isArray(proof.fields) ? proof.fields : [];
+  const fieldProofById = new Map<string, Record<string, unknown>>();
+  for (const candidate of proofFields) {
+    if (!isRecord(candidate) || typeof candidate.fieldId !== 'string') {
+      return false;
+    }
+    if (fieldProofById.has(candidate.fieldId)) return false;
+    fieldProofById.set(candidate.fieldId, candidate);
+  }
+  const fieldsVerified =
+    fieldProofById.size === input.expectedFields.length &&
+    input.expectedFields.every((expected) => {
+      const field = fieldProofById.get(expected.fieldId);
+      return Boolean(
+        field &&
+          field.status === 'verified' &&
+          field.partName === expected.partName &&
+          field.bindingPath === expected.bindingPath &&
+          field.valueSha256 === expected.valueSha256 &&
+          Number.isSafeInteger(expected.occurrences) &&
+          expected.occurrences > 0 &&
+          field.occurrences === expected.occurrences,
+      );
+    });
+  return (
+    input.staticContentSha256 === input.expectedStaticContentSha256 &&
+    proof.verified === true &&
+    proof.packageCheck === 'verified' &&
+    proof.fieldCheck === 'verified' &&
+    proof.staticRegionCheck === 'verified' &&
+    proof.sourceSha256 === input.sourceSha256 &&
+    proof.outputSha256 === input.outputSha256 &&
+    Number.isSafeInteger(proof.untouchedEntriesVerified) &&
+    Number(proof.untouchedEntriesVerified) >= 0 &&
+    Number.isSafeInteger(proof.modifiedPartsVerified) &&
+    Number(proof.modifiedPartsVerified) >= 0 &&
+    fieldsVerified &&
+    Array.isArray(proof.warningCodes) &&
+    proof.warningCodes.every((code) => typeof code === 'string')
+  );
+}
+
+function isVerifiedSyntheticManifest(input: {
+  manifest: unknown;
+  outputObjectKey: string;
+  compiledVersionId: string;
+  noteTemplateId: string;
+  noteTemplateVersion: number;
+  ir: TemplateDocIR;
+  mappings: readonly SemanticMapping[];
+}): boolean {
+  const parsed = TemplateTwinFillManifestSchema.safeParse(input.manifest);
+  if (!parsed.success) return false;
+  const manifest = parsed.data;
+  const keyParts = input.outputObjectKey.split('/');
+  if (
+    keyParts.length !== 8 ||
+    keyParts[5] !== canonicalSha256(manifest) ||
+    manifest.compiledVersionId !== input.compiledVersionId ||
+    manifest.noteTemplateId !== input.noteTemplateId ||
+    manifest.noteTemplateVersion !== input.noteTemplateVersion ||
+    manifest.compilerVersion !== input.ir.compilerVersion ||
+    manifest.resolverVersion !== TEMPLATE_TWIN_RESOLVER_VERSION ||
+    manifest.rendererVersion !== TEMPLATE_TWIN_RENDERER_VERSION
+  ) {
+    return false;
+  }
+  const expectedFieldIds = input.ir.fields.map((field) => field.fieldId).sort();
+  const manifestFieldIds = manifest.fields.map((field) => field.fieldId).sort();
+  if (
+    new Set(manifestFieldIds).size !== expectedFieldIds.length ||
+    canonicalSha256(manifestFieldIds) !== canonicalSha256(expectedFieldIds) ||
+    canonicalSha256(manifest.counts) !==
+      canonicalSha256(templateTwinCounts(manifest.fields, input.ir.fields))
+  ) {
+    return false;
+  }
+  const reproduced = validateTemplateTwin({
+    fields: input.ir.fields,
+    mappings: input.mappings,
+    facts: manifest.facts,
+    resolutions: manifest.fields,
+    tables: input.ir.tables,
+    unsupported: input.ir.unsupported,
+    allowUncertifiedForSyntheticTest: true,
+    now: manifest.validation.checkedAt,
+  });
+  return (
+    reproduced.valid &&
+    reproduced.issues.every((issue) => issue.severity !== 'blocking') &&
+    canonicalSha256(reproduced) === canonicalSha256(manifest.validation)
+  );
 }
 
 async function refreshedWorkspace(
@@ -396,6 +521,17 @@ export async function certifyAndActivateTemplateTwin(input: {
         );
       }
       const ir = TemplateDocIRSchema.parse(compiled.compiledDocumentIr);
+      const syntheticManifest = TemplateTwinFillManifestSchema.safeParse(
+        compiled.latestSyntheticTestManifest,
+      );
+      const syntheticResolutions = syntheticManifest.success
+        ? new Map(
+            syntheticManifest.data.fields.map((field) => [
+              field.fieldId,
+              field,
+            ]),
+          )
+        : new Map();
       const mappingById = new Map(mappings.map((mapping) => [mapping.fieldId, mapping]));
       const fieldsReady = ir.fields.every((field) => {
         const mapping = mappingById.get(field.fieldId);
@@ -407,9 +543,37 @@ export async function certifyAndActivateTemplateTwin(input: {
             validPracticeDefault(field, mapping),
         );
       });
-      const roundTrip = compiled.latestTestRoundTrip as
-        | { verified?: boolean }
-        | null;
+      const proofReady = Boolean(
+        syntheticManifest.success &&
+        compiled.latestTestOutputSha256 &&
+          compiled.latestTestStaticContentSha256 &&
+          isVerifiedSyntheticProof({
+            roundTrip: compiled.latestTestRoundTrip,
+            sourceSha256: compiled.sourceArtifact.sha256,
+            outputSha256: compiled.latestTestOutputSha256,
+            staticContentSha256: compiled.latestTestStaticContentSha256,
+            expectedStaticContentSha256: ir.staticContentSha256,
+            expectedFields: ir.fields.map((field) => ({
+              fieldId: field.fieldId,
+              partName: field.rendererBinding.partName,
+              bindingPath: field.rendererBinding.path,
+              valueSha256: canonicalSha256({
+                fieldId: field.fieldId,
+                value: syntheticResolutions.get(field.fieldId)?.value,
+              }),
+              occurrences:
+                field.rowPrototype &&
+                Array.isArray(syntheticResolutions.get(field.fieldId)?.value)
+                  ? (
+                      syntheticResolutions.get(field.fieldId)!.value as unknown[]
+                    ).length
+                  : 1,
+            })),
+          }),
+      );
+      const outputArtifact = compiled.latestTestOutputObjectKey
+        ? parseTemplateTwinArtifactKey(compiled.latestTestOutputObjectKey)
+        : null;
       const testReady = Boolean(
         compiled.latestSyntheticTestManifest &&
           compiled.latestTestOutputObjectKey &&
@@ -417,7 +581,19 @@ export async function certifyAndActivateTemplateTwin(input: {
           compiled.latestTestStaticContentSha256 &&
           compiled.latestTestVerifiedAt &&
           compiled.latestTestMappingsSha256 === mappingHash &&
-          roundTrip?.verified === true,
+          outputArtifact?.practiceId === input.actor.practiceId &&
+          outputArtifact.kind === 'output' &&
+          outputArtifact.sha256 === compiled.latestTestOutputSha256 &&
+          isVerifiedSyntheticManifest({
+            manifest: compiled.latestSyntheticTestManifest,
+            outputObjectKey: compiled.latestTestOutputObjectKey,
+            compiledVersionId: compiled.id,
+            noteTemplateId: template.id,
+            noteTemplateVersion: template.version,
+            ir,
+            mappings,
+          }) &&
+          proofReady,
       );
       if (
         !fieldsReady ||

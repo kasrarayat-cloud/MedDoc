@@ -34,6 +34,22 @@ export interface ResolveTemplateInput {
   encounterType?: string | null;
 }
 
+export interface ResolveVisitTemplateInput extends ResolveTemplateInput {
+  /** Existing visit/fill provenance. When present, retries must reuse this
+   * exact version even if a newer lineage version has since been activated. */
+  pinnedTemplateId?: string | null;
+  pinnedTemplateVersion?: number | null;
+}
+
+export class PinnedTemplateUnavailableError extends Error {
+  constructor() {
+    super(
+      'The note template version already pinned to this visit is unavailable or no longer owned by the visit clinician.'
+    );
+    this.name = 'PinnedTemplateUnavailableError';
+  }
+}
+
 /**
  * Thrown when the candidate set contains no system-default template. This is
  * an invariant violation — the Phase-0 seed guarantees exactly one row with
@@ -105,4 +121,28 @@ export async function resolveActiveTemplate(
     },
   });
   return selectTemplate(candidates, input);
+}
+
+/**
+ * Retry-safe visit resolver. A visit with no provenance uses the normal active
+ * fallback chain. Once L4 or Template Twin has pinned a template, every retry
+ * loads that exact row and version without requiring it to remain active.
+ */
+export async function resolveVisitTemplate(
+  input: ResolveVisitTemplateInput
+): Promise<NoteTemplate> {
+  const hasId = Boolean(input.pinnedTemplateId);
+  const hasVersion = input.pinnedTemplateVersion != null;
+  if (hasId !== hasVersion) throw new PinnedTemplateUnavailableError();
+  if (!hasId) return resolveActiveTemplate(input);
+
+  const pinned = await prisma.noteTemplate.findFirst({
+    where: {
+      id: input.pinnedTemplateId!,
+      version: input.pinnedTemplateVersion!,
+      OR: [{ doctorId: input.doctorId }, { isSystemDefault: true }],
+    },
+  });
+  if (!pinned) throw new PinnedTemplateUnavailableError();
+  return pinned;
 }

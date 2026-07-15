@@ -285,6 +285,20 @@ export interface Layer3Output {
   contextText: string;
 }
 
+export interface TemplateTwinTextExtractionInput {
+  practiceId: string;
+  userId: string;
+  noteTemplateId: string;
+  rawText: string;
+}
+
+export interface TemplateTwinDictationExtractionInput {
+  practiceId: string;
+  userId: string;
+  noteTemplateId: string;
+  dictationText: string;
+}
+
 // ---------------------------------------------------------------------------
 // Prompt builders — one per mode. Extracted to small functions so the
 // surface is testable + easy to eyeball.
@@ -440,6 +454,97 @@ function buildTextPrompt(): { system: string; userPrefix: string } {
 // The layer itself.
 // ---------------------------------------------------------------------------
 
+async function completeLayer3Entities(input: {
+  practiceId: string;
+  userId: string | null;
+  visitId?: string | null;
+  auditTargetId: string;
+  auditTargetType: 'transcribe_visit' | 'NoteTemplate';
+  mode: Layer3Input['mode'];
+  contextText: string;
+  prompts: { system: string; userPrefix: string };
+}): Promise<ExtractedEntities> {
+  // Round 3 PR-J — A07-P0 prompt-injection delimiter. L3 is the
+  // first layer that touches user-supplied content (transcript /
+  // dictation / typed text), so wrapping here makes the boundary
+  // visible to L4/L5 readers via contextText reuse.
+  const wrap = wrapAsData(input.contextText, 'transcript');
+  if (wrap.injectionAttemptDetected) {
+    void logAudit({
+      action: 'PIPELINE_REJECTED_INJECTION_DELIMITER',
+      targetType: input.auditTargetType,
+      targetId: input.auditTargetId,
+      userId: input.userId,
+      practiceId: input.practiceId,
+      success: false,
+      errorCode: 'INJECTION_DELIMITER_DETECTED',
+      metadata: { layer: 'L3', mode: input.mode, suffix: wrap.suffix },
+    });
+  }
+  const user = [
+    input.prompts.userPrefix,
+    '',
+    wrap.wrapped,
+    '',
+    delimiterSystemSuffix('transcript'),
+  ].join('\n');
+
+  return modelClient.complete({
+    practiceId: input.practiceId,
+    visitId: input.visitId ?? null,
+    userId: input.userId,
+    purpose: 'tm_entities',
+    provider: 'anthropic',
+    model: MODEL,
+    system: input.prompts.system,
+    user,
+    schema: ExtractedEntities,
+    maxTokens: 6144,
+    // Q2 fix-pack — entity extraction is structured-output; tightened
+    // from 0.2 to 0.1 for reproducible parses (audit §08).
+    temperature: 0.1,
+  });
+}
+
+/** Reuses the production typed-input extractor for a certification test
+ * without creating or mutating a visit. The caller persists only the derived,
+ * versioned synthetic manifest; the source text is never logged. */
+export async function extractTemplateTwinTextEntities(
+  input: TemplateTwinTextExtractionInput
+): Promise<Layer3Output> {
+  const contextText = input.rawText.trim();
+  const entities = await completeLayer3Entities({
+    practiceId: input.practiceId,
+    userId: input.userId,
+    visitId: null,
+    auditTargetId: input.noteTemplateId,
+    auditTargetType: 'NoteTemplate',
+    mode: 'text',
+    contextText,
+    prompts: buildTextPrompt(),
+  });
+  return { entities, contextText };
+}
+
+/** Same non-persisting certification seam for a synthetic voice recording
+ * after the shared transcription provider has produced its exact transcript. */
+export async function extractTemplateTwinDictationEntities(
+  input: TemplateTwinDictationExtractionInput
+): Promise<Layer3Output> {
+  const contextText = input.dictationText.trim();
+  const entities = await completeLayer3Entities({
+    practiceId: input.practiceId,
+    userId: input.userId,
+    visitId: null,
+    auditTargetId: input.noteTemplateId,
+    auditTargetType: 'NoteTemplate',
+    mode: 'dictation',
+    contextText,
+    prompts: buildDictationPrompt(),
+  });
+  return { entities, contextText };
+}
+
 export async function runLayer3ExtractEntities(
   input: Layer3Input
 ): Promise<Layer3Output> {
@@ -459,45 +564,15 @@ export async function runLayer3ExtractEntities(
     prompts = buildTextPrompt();
   }
 
-  // Round 3 PR-J — A07-P0 prompt-injection delimiter. L3 is the
-  // first layer that touches user-supplied content (transcript /
-  // dictation / typed text), so wrapping here makes the boundary
-  // visible to L4/L5 readers via contextText reuse.
-  const wrap = wrapAsData(contextText, 'transcript');
-  if (wrap.injectionAttemptDetected) {
-    void logAudit({
-      action: 'PIPELINE_REJECTED_INJECTION_DELIMITER',
-      targetType: 'transcribe_visit',
-      targetId: input.visitId,
-      userId: input.userId,
-      practiceId: input.practiceId,
-      success: false,
-      errorCode: 'INJECTION_DELIMITER_DETECTED',
-      metadata: { layer: 'L3', mode: input.mode, suffix: wrap.suffix },
-    });
-  }
-  const user = [
-    prompts.userPrefix,
-    '',
-    wrap.wrapped,
-    '',
-    delimiterSystemSuffix('transcript'),
-  ].join('\n');
-
-  const entities = await modelClient.complete({
+  const entities = await completeLayer3Entities({
     practiceId: input.practiceId,
-    visitId: input.visitId,
     userId: input.userId,
-    purpose: 'tm_entities',
-    provider: 'anthropic',
-    model: MODEL,
-    system: prompts.system,
-    user,
-    schema: ExtractedEntities,
-    maxTokens: 6144,
-    // Q2 fix-pack — entity extraction is structured-output; tightened
-    // from 0.2 to 0.1 for reproducible parses (audit §08).
-    temperature: 0.1,
+    visitId: input.visitId,
+    auditTargetId: input.visitId,
+    auditTargetType: 'transcribe_visit',
+    mode: input.mode,
+    contextText,
+    prompts,
   });
 
   await prisma.transcribeVisit.update({

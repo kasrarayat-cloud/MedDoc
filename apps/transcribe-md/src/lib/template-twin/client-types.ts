@@ -42,6 +42,7 @@ export interface TemplateTwinWorkspace {
     outputSha256: string;
     mappingsSha256: string;
     roundTripVerified: boolean;
+    layoutWarningCodes: string[];
     downloadUrl: string;
   } | null;
   canEdit: boolean;

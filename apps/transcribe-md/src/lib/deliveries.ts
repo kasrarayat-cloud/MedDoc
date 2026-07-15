@@ -17,6 +17,7 @@ export type DeliveryChannel =
   | 'clipboard_generic'
   | 'pdf'
   | 'docx'
+  | 'docx_original_template'
   | 'email';
 
 export interface LogDeliveryInput {

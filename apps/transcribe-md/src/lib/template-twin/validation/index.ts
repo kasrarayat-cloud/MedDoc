@@ -26,6 +26,10 @@ import {
 } from '../ir';
 import { parseExplicitNumberAndUnit } from '../encounter-facts';
 import { isMappingTypeCompatible } from '../semantic-mapping';
+import {
+  approvedPracticeDefaultAnchorId,
+  approvedPracticeDefaultFactId,
+} from '../practice-default';
 
 export const TEMPLATE_TWIN_VALIDATOR_VERSION =
   'template-field-validator/1.0.0';
@@ -44,6 +48,9 @@ export interface ValidateTemplateTwinInput {
   resolutions: ReadonlyArray<FieldResolution>;
   tables?: ReadonlyArray<TemplateTable>;
   unsupported?: ReadonlyArray<UnsupportedElement>;
+  /** Exact field IDs certified in mutable lifecycle rows for this immutable
+   * compiled IR. */
+  certifiedFieldIds?: ReadonlyArray<string>;
   /** Allows the certification test renderer to exercise proposed mappings. */
   allowUncertifiedForSyntheticTest?: boolean;
   now?: Date | string;
@@ -385,6 +392,7 @@ export function validateTemplateTwin(
     }
   }
   const tableById = new Map(tables.map((table) => [table.tableId, table]));
+  const certifiedFieldIds = new Set(input.certifiedFieldIds ?? []);
   const repeatedCountsByTable = new Map<string, number>();
   const repeatedAnchorsByTable = new Map<string, string[]>();
 
@@ -404,7 +412,9 @@ export function validateTemplateTwin(
     }
     if (
       !input.allowUncertifiedForSyntheticTest &&
-      (mapping.status !== 'certified' || field.detectionStatus !== 'certified')
+      (mapping.status !== 'certified' ||
+        (field.detectionStatus !== 'certified' &&
+          !certifiedFieldIds.has(field.fieldId)))
     ) {
       add('FIELD_NOT_CERTIFIED', 'blocking', 'The field structure and semantic mapping are not certified.', field.fieldId);
     }
@@ -437,7 +447,6 @@ export function validateTemplateTwin(
     }
     if (
       populated &&
-      resolution.status !== 'approved_practice_default' &&
       (resolution.sourceFactIds.length === 0 || resolution.evidenceAnchorIds.length === 0)
     ) {
       add('POPULATED_WITHOUT_EVIDENCE', 'blocking', 'A populated clinical value lacks evidence.', field.fieldId);
@@ -453,13 +462,29 @@ export function validateTemplateTwin(
     }
 
     if (resolution.status === 'approved_practice_default') {
+      const defaultFact = citedFacts[0];
+      const expectedDefaultFactId = approvedPracticeDefaultFactId(field, mapping);
+      const expectedDefaultAnchorId = approvedPracticeDefaultAnchorId(
+        field,
+        expectedDefaultFactId,
+      );
       if (
-        resolution.sourceFactIds.length > 0 ||
-        resolution.evidenceAnchorIds.length > 0 ||
+        citedFacts.length !== 1 ||
+        defaultFact?.sourceType !== 'approved_practice_default' ||
+        defaultFact?.factId !== expectedDefaultFactId ||
+        defaultFact?.value !== mapping.practiceDefault ||
+        defaultFact?.sourceTranscriptOffsets !== null ||
+        defaultFact?.audioTimestampSeconds !== null ||
+        defaultFact?.evidenceAnchorIds.length !== 1 ||
+        defaultFact?.evidenceAnchorIds[0] !== expectedDefaultAnchorId ||
+        resolution.sourceFactIds.length !== 1 ||
+        resolution.sourceFactIds[0] !== expectedDefaultFactId ||
+        resolution.evidenceAnchorIds.length !== 1 ||
+        resolution.evidenceAnchorIds[0] !== expectedDefaultAnchorId ||
         mapping.status !== 'certified' ||
         !practiceDefaultMatches(field, mapping, resolution.value)
       ) {
-        add('PRACTICE_DEFAULT_INVALID', 'blocking', 'The practice default is missing approval or does not match the resolved value.', field.fieldId);
+        add('PRACTICE_DEFAULT_INVALID', 'blocking', 'The practice default is missing approval, provenance evidence, or an exact resolved value.', field.fieldId);
       }
     } else if (populated && !assertionSupported(field, mapping, resolution, citedFacts)) {
       add('ASSERTION_NOT_SUPPORTED', 'blocking', 'The populated value cannot be re-derived from its cited facts.', field.fieldId);

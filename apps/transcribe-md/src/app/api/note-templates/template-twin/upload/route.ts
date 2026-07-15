@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { AuthError, requireSession } from '@/lib/auth';
+import { AuthError, requireDoctorSession } from '@/lib/auth';
 import {
   createTemplateTwinDraft,
   TemplateTwinDraftError,
@@ -15,6 +15,7 @@ import {
   TemplateTwinStorageUnavailableError,
 } from '@/lib/template-twin/storage';
 import { TemplateDocxError } from '@/lib/note-template-docx';
+import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -40,7 +41,13 @@ function json(
 
 function safeError(error: unknown): { status: number; message: string } {
   if (error instanceof AuthError) {
-    return { status: 401, message: 'Sign in again before uploading a template.' };
+    return {
+      status: error.code === 'FORBIDDEN' ? 403 : 401,
+      message:
+        error.code === 'FORBIDDEN'
+          ? error.message
+          : 'Sign in again before uploading a template.',
+    };
   }
   if (error instanceof TemplateTwinPhiRejectedError) {
     return { status: 422, message: error.message };
@@ -102,7 +109,9 @@ export async function POST(request: Request) {
   }
 
   try {
-    const session = await requireSession();
+    const session = await requireDoctorSession();
+    const blocked = rateLimitOr429(RATE_LIMITS.UPLOAD, session.user.id);
+    if (blocked) return blocked;
     const formData = await request.formData();
     const file = formData.get('file');
     if (!(file instanceof File)) {

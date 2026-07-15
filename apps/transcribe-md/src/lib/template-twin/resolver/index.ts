@@ -3,8 +3,8 @@
 // ----------------------------------------------------------------------------
 // Resolves each compiler-defined field independently. Matching is exact after
 // identifier-only canonicalization; dropdown values are never fuzzy-matched,
-// units are never inferred, and all populated non-default values retain their
-// source fact and evidence-anchor IDs.
+// units are never inferred, and every populated value retains source fact and
+// evidence-anchor IDs, including approved defaults and physician corrections.
 // ============================================================================
 
 import {
@@ -20,11 +20,18 @@ import {
 } from '../ir';
 import { parseExplicitNumberAndUnit } from '../encounter-facts';
 import { isMappingTypeCompatible } from '../semantic-mapping';
+import {
+  approvedPracticeDefaultAnchorId,
+  approvedPracticeDefaultFactId,
+} from '../practice-default';
 
 export interface ResolveTemplateFieldsInput {
   fields: ReadonlyArray<TemplateField>;
   mappings: ReadonlyArray<SemanticMapping>;
   facts: ReadonlyArray<EncounterFact>;
+  /** Persisted physician certification lives outside the immutable compiler
+   * IR. Production callers supply the exact certified DB field set. */
+  certifiedFieldIds?: ReadonlyArray<string>;
   /** Certification tests may opt in; production resolution stays strict. */
   allowUncertifiedForSyntheticTest?: boolean;
 }
@@ -170,6 +177,7 @@ function convertValue(
 function practiceDefaultResolution(
   field: TemplateField,
   mapping: SemanticMapping,
+  facts: ReadonlyArray<EncounterFact>,
 ): FieldResolution | null {
   if (mapping.practiceDefault === null || mapping.status !== 'certified') {
     return null;
@@ -194,11 +202,25 @@ function practiceDefaultResolution(
       `invalid_practice_default_${converted.code}`,
     );
   }
+  const defaultFact = facts.find(
+    (fact) =>
+      fact.factId === approvedPracticeDefaultFactId(field, mapping) &&
+      fact.sourceType === 'approved_practice_default',
+  );
+  if (!defaultFact) {
+    return makeResolution(
+      field.fieldId,
+      'needs_clinician_input',
+      null,
+      [],
+      'approved_practice_default_evidence_missing',
+    );
+  }
   return makeResolution(
     field.fieldId,
     'approved_practice_default',
     converted.value,
-    [],
+    [defaultFact],
     'approved_practice_default',
     converted.optionOrdinal,
   );
@@ -207,8 +229,9 @@ function practiceDefaultResolution(
 function missingResolution(
   field: TemplateField,
   mapping: SemanticMapping,
+  facts: ReadonlyArray<EncounterFact>,
 ): FieldResolution {
-  const practiceDefault = practiceDefaultResolution(field, mapping);
+  const practiceDefault = practiceDefaultResolution(field, mapping, facts);
   if (practiceDefault) return practiceDefault;
   const requiresInput =
     field.required ||
@@ -223,6 +246,87 @@ function missingResolution(
     [],
     requiresInput ? 'required_fact_not_mentioned' : 'fact_not_mentioned',
   );
+}
+
+function defaultLaterality(value: string): EncounterFact['laterality'] {
+  if (/\b(?:bilateral|both\s+sides?)\b/i.test(value)) return 'bilateral';
+  const left = /\bleft\b/i.test(value);
+  const right = /\bright\b/i.test(value);
+  if (left && right) return 'bilateral';
+  if (left) return 'left';
+  if (right) return 'right';
+  if (/\bmidline\b/i.test(value)) return 'midline';
+  return 'unknown';
+}
+
+/**
+ * Materialize physician-approved defaults as deterministic provenance facts.
+ * They are not encounter transcript assertions, but they carry the same
+ * sourceFactId/anchor contract so no populated field receives an evidence
+ * exception. The resolver considers them only after encounter evidence is
+ * absent and labels the resulting resolution `approved_practice_default`.
+ */
+export function withApprovedPracticeDefaultFacts(input: {
+  fields: ReadonlyArray<TemplateField>;
+  mappings: ReadonlyArray<SemanticMapping>;
+  facts: ReadonlyArray<EncounterFact>;
+}): EncounterFact[] {
+  const fields = input.fields.map((field) => TemplateFieldSchema.parse(field));
+  const mappings = input.mappings.map((mapping) =>
+    SemanticMappingSchema.parse(mapping),
+  );
+  const facts = input.facts.map((fact) => EncounterFactSchema.parse(fact));
+  const existingIds = new Set(facts.map((fact) => fact.factId));
+  const mappingById = new Map(mappings.map((mapping) => [mapping.fieldId, mapping]));
+
+  for (const field of fields) {
+    const mapping = mappingById.get(field.fieldId);
+    if (
+      !mapping ||
+      mapping.status !== 'certified' ||
+      !mapping.clinicalConcept ||
+      mapping.practiceDefault === null
+    ) {
+      continue;
+    }
+    const factId = approvedPracticeDefaultFactId(field, mapping);
+    if (existingIds.has(factId)) continue;
+    const raw = mapping.practiceDefault;
+    const parsed = parseExplicitNumberAndUnit(raw);
+    const denied = raw.trim().toLocaleLowerCase('en-US') === 'false';
+    const anchorId = approvedPracticeDefaultAnchorId(field, factId);
+    facts.push(
+      EncounterFactSchema.parse({
+        factId,
+        sourceType: 'approved_practice_default',
+        concept: mapping.clinicalConcept,
+        value: raw,
+        polarity: denied ? 'denied' : 'affirmed',
+        temporality:
+          mapping.temporality === 'historical' ||
+          mapping.temporality === 'planned' ||
+          mapping.temporality === 'current'
+            ? mapping.temporality
+            : 'current',
+        experiencer: 'patient',
+        laterality:
+          mapping.laterality === 'not_applicable'
+            ? 'not_applicable'
+            : defaultLaterality(raw),
+        number: parsed.number,
+        unit: parsed.unit,
+        speaker: 'Approved practice default',
+        sourceTranscriptOffsets: null,
+        audioTimestampSeconds: null,
+        evidenceAnchorIds: [anchorId],
+        evidenceQuote:
+          'Physician-approved practice default for this certified template version.',
+        quality: { asr: 'unknown', evidence: 'direct' },
+      }),
+    );
+    existingIds.add(factId);
+  }
+  return facts;
 }
 
 function rowPrototypeValue(
@@ -242,6 +346,7 @@ function resolveOne(
   mapping: SemanticMapping | undefined,
   allFacts: ReadonlyArray<EncounterFact>,
   allowUncertified: boolean,
+  certifiedFieldIds: ReadonlySet<string>,
 ): FieldResolution {
   if (!mapping) {
     return makeResolution(
@@ -263,7 +368,9 @@ function resolveOne(
   }
   if (
     !allowUncertified &&
-    (mapping.status !== 'certified' || field.detectionStatus !== 'certified')
+    (mapping.status !== 'certified' ||
+      (field.detectionStatus !== 'certified' &&
+        !certifiedFieldIds.has(field.fieldId)))
   ) {
     return makeResolution(
       field.fieldId,
@@ -295,10 +402,14 @@ function resolveOne(
   const approvedConcepts = new Set(
     [mapping.clinicalConcept, ...mapping.approvedSynonyms].map(normalizeConcept),
   );
-  const conceptCandidates = allFacts.filter((fact) =>
-    approvedConcepts.has(normalizeConcept(fact.concept)),
+  const conceptCandidates = allFacts.filter(
+    (fact) =>
+      fact.sourceType !== 'approved_practice_default' &&
+      approvedConcepts.has(normalizeConcept(fact.concept)),
   );
-  if (conceptCandidates.length === 0) return missingResolution(field, mapping);
+  if (conceptCandidates.length === 0) {
+    return missingResolution(field, mapping, allFacts);
+  }
 
   const expectedTemporality = mapping.temporality;
   const temporalCandidates =
@@ -510,7 +621,7 @@ function resolveOne(
   }
 
   const selected = convertedPairs[0]?.converted;
-  if (!selected) return missingResolution(field, mapping);
+  if (!selected) return missingResolution(field, mapping, allFacts);
   const mayPopulateDenial =
     field.kind === 'checkbox' ||
     mapping.polarityBehavior === 'explicit_denial_allowed';
@@ -534,6 +645,7 @@ export function resolveTemplateFields(
   );
   const facts = input.facts.map((fact) => EncounterFactSchema.parse(fact));
   const mappingById = new Map(mappings.map((mapping) => [mapping.fieldId, mapping]));
+  const certifiedFieldIds = new Set(input.certifiedFieldIds ?? []);
 
   return [...fields]
     .sort((a, b) => a.displayOrder - b.displayOrder || a.fieldId.localeCompare(b.fieldId))
@@ -543,6 +655,7 @@ export function resolveTemplateFields(
         mappingById.get(field.fieldId),
         facts,
         input.allowUncertifiedForSyntheticTest === true,
+        certifiedFieldIds,
       ),
     );
 }

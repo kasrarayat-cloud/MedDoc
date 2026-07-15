@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
 import { AppFrame } from '@/components/ui/app-frame';
-import { requireSession } from '@/lib/auth';
+import { requireDoctorSession } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
 import { readTemplateTwinWorkspace } from '@/lib/template-twin/workspace-read';
 
@@ -15,7 +15,7 @@ export default async function TemplateTwinCertificationPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const session = await requireSession();
+  const session = await requireDoctorSession();
   const { id } = await params;
   const workspace = await readTemplateTwinWorkspace({
     noteTemplateId: id,

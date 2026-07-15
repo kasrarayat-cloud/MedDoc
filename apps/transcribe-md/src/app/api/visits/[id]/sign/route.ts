@@ -10,7 +10,7 @@
 //   destinations: Array<
 //     | 'clipboard_epic' | 'clipboard_athena' | 'clipboard_cerner'
 //     | 'clipboard_eclinicalworks' | 'clipboard_generic'
-//     | 'pdf' | 'docx' | 'email'
+//     | 'pdf' | 'docx' | 'docx_original_template' | 'email'
 //   >,
 //   emailTo?: string,
 //   // E/M visible-confirm (prod smoke #311): REQUIRED (echoing the
@@ -26,6 +26,7 @@
 //   clipboardTexts?: Record<clipboard_format, string>,
 //   pdfDownloadUrl?: string,   // "/api/visits/:id/export/pdf"
 //   docxDownloadUrl?: string,
+//   originalTemplateDocxDownloadUrl?: string,
 //   emailQueued?: boolean
 // }
 // ============================================================================
@@ -49,11 +50,20 @@ import {
 import { captureEditPattern } from '@/lib/edit-tracking';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
+import { AuthError, requireFreshDoctorIdentity } from '@/lib/auth';
 import { redactPhi } from '@meddoc/ai';
 import { log } from '@/lib/log';
 import { logAudit } from '@/lib/audit';
 import { criticalWarningRefs } from '@/lib/rx-warnings';
 import { unacknowledgedEmChange } from '@/lib/em-pending-change';
+import {
+  assessTemplateTwinSigning,
+  TEMPLATE_TWIN_SIGNING_VISIT_SELECT,
+} from '@/lib/template-twin/signing-gate';
+import {
+  createTemplateTwinArtifactStore,
+  TemplateTwinStorageUnavailableError,
+} from '@/lib/template-twin/storage';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -67,6 +77,7 @@ const Destination = z.enum([
   'clipboard_generic',
   'pdf',
   'docx',
+  'docx_original_template',
   'email',
 ]);
 
@@ -95,6 +106,13 @@ const FORMAT_FOR_CHANNEL: Partial<
   clipboard_eclinicalworks: 'eclinicalworks',
   clipboard_generic: 'generic',
 };
+
+class TemplateTwinSignClaimConflict extends Error {
+  constructor() {
+    super('Template Twin signing claim changed concurrently.');
+    this.name = 'TemplateTwinSignClaimConflict';
+  }
+}
 
 export const POST = withApiHandler<{ id: string }>(
   'api:visits:sign',
@@ -169,6 +187,7 @@ export const POST = withApiHandler<{ id: string }>(
         deletedAt: true,
         archivedAt: true,
         emPendingChange: true,
+        ...TEMPLATE_TWIN_SIGNING_VISIT_SELECT,
       },
     });
     if (!visit || visit.userId !== userId) return apiError('not found', 404);
@@ -192,6 +211,154 @@ export const POST = withApiHandler<{ id: string }>(
     }
     if (!visit.soapFinal?.trim()) {
       return apiError('visit has no SOAP to sign', 409);
+    }
+
+    let templateTwinPracticeId = session.user.practiceId ?? '';
+    if (visit.noteTemplate?.templateKind === 'template_twin_docx') {
+      try {
+        templateTwinPracticeId = (
+          await requireFreshDoctorIdentity(userId)
+        ).practiceId;
+      } catch (error) {
+        if (error instanceof AuthError) {
+          return apiError('physician role required', 403, {
+            code: 'DOCTOR_ROLE_REQUIRED',
+            retry: false,
+          });
+        }
+        throw error;
+      }
+    }
+
+    // Template Twin is a server-enforced clinical gate. The persisted
+    // manifest, validation result, immutable version pins, output digest, and
+    // renderer round-trip proof are independently cross-checked here. UI
+    // readiness state is never sufficient to authorize READY -> SIGNED.
+    const twinGate = assessTemplateTwinSigning({
+      visitId: visit.id,
+      practiceId: templateTwinPracticeId,
+      visitStatus: visit.status,
+      noteTemplateId: visit.noteTemplateId,
+      noteTemplateVersion: visit.noteTemplateVersion,
+      noteTemplate: visit.noteTemplate,
+      templateTwinFill: visit.templateTwinFill,
+    });
+    const wantsOriginalTemplate = parsed.data.destinations.includes(
+      'docx_original_template',
+    );
+    const twinBlockerCodes =
+      twinGate.applies && twinGate.ready && !twinGate.claim
+        ? [...twinGate.blockerCodes, 'FILL_MANIFEST_MISSING' as const]
+        : twinGate.blockerCodes;
+
+    if (wantsOriginalTemplate && !twinGate.applies) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'This visit does not have an Original Template DOCX.',
+          code: 'TEMPLATE_TWIN_OUTPUT_UNAVAILABLE',
+        },
+        { status: 400 },
+      );
+    }
+
+    if (
+      twinGate.applies &&
+      (!twinGate.ready || !twinGate.claim) &&
+      (visit.status === TranscribeVisitStatus.READY || wantsOriginalTemplate)
+    ) {
+      log.warn('api:visits:sign', 'Template Twin sign blocked', {
+        userId,
+        visitId,
+        blockerCodes: twinBlockerCodes,
+        blockerCount: twinBlockerCodes.length,
+      });
+      void logAudit({
+        action: 'TEMPLATE_TWIN_SIGN_BLOCKED',
+        targetType: 'TranscribeVisit',
+        targetId: visitId,
+        success: false,
+        errorCode: 'TEMPLATE_TWIN_SIGN_BLOCKED',
+        practiceId: session.user.practiceId,
+        metadata: {
+          blockerCodes: twinBlockerCodes,
+          blockerCount: twinBlockerCodes.length,
+          compiledVersionId: twinGate.compiledVersionId,
+          fillManifestId: twinGate.fillManifestId,
+          noteTemplateVersion: visit.noteTemplateVersion,
+        },
+      });
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            'Review the unresolved Template Twin fields and regenerate the verified document before signing.',
+          code: 'TEMPLATE_TWIN_SIGN_BLOCKED',
+          blockerCodes: twinBlockerCodes,
+        },
+        { status: 422 },
+      );
+    }
+
+    // Selecting the exact-source delivery is a sign-and-deliver operation,
+    // not merely permission to reveal a future URL. Verify the immutable
+    // object through tenant/key/metadata/size/SHA checks before attestation;
+    // the download route repeats the same verification as defense in depth.
+    if (wantsOriginalTemplate && twinGate.ready && twinGate.claim) {
+      const fill = visit.templateTwinFill;
+      if (
+        !fill?.outputObjectKey ||
+        !fill.outputSha256 ||
+        !fill.outputSizeBytes
+      ) {
+        return apiError('verified Original Template DOCX unavailable', 409, {
+          code: 'TEMPLATE_TWIN_OUTPUT_UNAVAILABLE',
+          retry: false,
+        });
+      }
+      try {
+        await createTemplateTwinArtifactStore().readOutputArtifact({
+          practiceId: templateTwinPracticeId,
+          objectKey: fill.outputObjectKey,
+          expectedSha256: fill.outputSha256,
+          expectedSizeBytes: fill.outputSizeBytes,
+        });
+      } catch (error) {
+        const unavailable = error instanceof TemplateTwinStorageUnavailableError;
+        log.warn('api:visits:sign', 'Template Twin delivery preflight failed', {
+          userId,
+          visitId,
+          errorCode: unavailable
+            ? 'TEMPLATE_TWIN_STORAGE_UNAVAILABLE'
+            : 'TEMPLATE_TWIN_OUTPUT_INTEGRITY_FAILED',
+        });
+        void logAudit({
+          action: 'TEMPLATE_TWIN_SIGN_BLOCKED',
+          targetType: 'TranscribeVisit',
+          targetId: visitId,
+          practiceId: templateTwinPracticeId,
+          success: false,
+          errorCode: unavailable
+            ? 'TEMPLATE_TWIN_STORAGE_UNAVAILABLE'
+            : 'TEMPLATE_TWIN_OUTPUT_INTEGRITY_FAILED',
+          metadata: {
+            compiledVersionId: twinGate.compiledVersionId,
+            fillManifestId: twinGate.fillManifestId,
+          },
+        });
+        return apiError(
+          unavailable
+            ? 'Original Template DOCX storage is temporarily unavailable.'
+            : 'Original Template DOCX failed integrity verification.',
+          unavailable ? 503 : 409,
+          {
+            code: unavailable
+              ? 'TEMPLATE_TWIN_STORAGE_UNAVAILABLE'
+              : 'TEMPLATE_TWIN_OUTPUT_INTEGRITY_FAILED',
+            retry: unavailable,
+          },
+        );
+      }
     }
 
     // F5-1 + fix/rx-override-gate-correlation: Critical Rx warnings require a
@@ -340,7 +507,8 @@ export const POST = withApiHandler<{ id: string }>(
           });
         }
       }
-      const updated = await prisma.transcribeVisit.updateMany({
+      const signDecisionAt = new Date();
+      const visitUpdate = {
         where: {
           id: visitId,
           status: TranscribeVisitStatus.READY,
@@ -348,7 +516,7 @@ export const POST = withApiHandler<{ id: string }>(
         data: {
           status: TranscribeVisitStatus.SIGNED,
           signedSoap: visit.soapFinal,
-          signedAt: new Date(),
+          signedAt: signDecisionAt,
           ...(cptWrite !== undefined ? { cptCodes: cptWrite } : {}),
           // E/M visible-confirm: the gate above verified the explicit
           // acknowledgement — MARK (not clear) the record so the row
@@ -357,12 +525,59 @@ export const POST = withApiHandler<{ id: string }>(
             ? {
                 emPendingChange: {
                   ...pendingEm,
-                  acknowledgedAt: new Date().toISOString(),
+                  acknowledgedAt: signDecisionAt.toISOString(),
                 } as unknown as Prisma.InputJsonValue,
               }
             : {}),
         },
-      });
+      };
+
+      let updated: { count: number };
+      const twinClaim =
+        twinGate.applies && twinGate.ready ? twinGate.claim : null;
+      if (twinClaim) {
+        try {
+          updated = await prisma.$transaction(
+            async (tx: typeof prisma): Promise<{ count: number }> => {
+              // Optimistically claim the exact manifest assessed above. Any
+              // concurrent correction/regeneration changes status, version,
+              // digest, output, or updatedAt and rolls back this transaction.
+              const claimed = await tx.templateTwinFillManifest.updateMany({
+                where: {
+                  id: twinClaim.id,
+                  status: 'VERIFIED',
+                  manifestVersion: twinClaim.manifestVersion,
+                  manifestSha256: twinClaim.manifestSha256,
+                  outputSha256: twinClaim.outputSha256,
+                  roundTripVerified: true,
+                  criticalUnresolvedCount: 0,
+                  signedDecisionAt: null,
+                  updatedAt: twinClaim.updatedAt,
+                },
+                data: {
+                  status: 'SIGNED',
+                  signedDecisionAt: signDecisionAt,
+                },
+              });
+              if (claimed.count !== 1) {
+                throw new TemplateTwinSignClaimConflict();
+              }
+              const visitUpdated = await tx.transcribeVisit.updateMany(
+                visitUpdate,
+              );
+              if (visitUpdated.count !== 1) {
+                throw new TemplateTwinSignClaimConflict();
+              }
+              return visitUpdated;
+            },
+          );
+        } catch (error) {
+          if (!(error instanceof TemplateTwinSignClaimConflict)) throw error;
+          updated = { count: 0 };
+        }
+      } else {
+        updated = await prisma.transcribeVisit.updateMany(visitUpdate);
+      }
       if (updated.count === 0) {
         // Another concurrent request got there first. Re-read.
         const refreshed = await prisma.transcribeVisit.findUnique({
@@ -393,6 +608,15 @@ export const POST = withApiHandler<{ id: string }>(
           targetId: visitId,
           metadata: {
             destinations: parsed.data.destinations,
+            ...(twinGate.applies
+              ? {
+                  templateTwin: {
+                    compiledVersionId: twinGate.compiledVersionId,
+                    fillManifestId: twinGate.fillManifestId,
+                    manifestVersion: twinClaim?.manifestVersion ?? null,
+                  },
+                }
+              : {}),
             // E/M visible-confirm: record on the SIGN audit row that the
             // doctor explicitly acknowledged the suggestion-caused level
             // change ({from, to} codes only — never note text).
@@ -418,6 +642,7 @@ export const POST = withApiHandler<{ id: string }>(
     const clipboardTexts: Record<string, string> = {};
     let pdfDownloadUrl: string | undefined;
     let docxDownloadUrl: string | undefined;
+    let originalTemplateDocxDownloadUrl: string | undefined;
     let emailQueued = false;
     // Track which destinations actually succeeded vs which soft-failed so
     // the client can tell the user specifically what didn't go through.
@@ -436,6 +661,10 @@ export const POST = withApiHandler<{ id: string }>(
           logDelivery({ visitId, channel });
         } else if (dest === 'docx') {
           docxDownloadUrl = `/api/visits/${visitId}/export/docx`;
+          logDelivery({ visitId, channel });
+        } else if (dest === 'docx_original_template') {
+          originalTemplateDocxDownloadUrl =
+            `/api/visits/${visitId}/export/original-template-docx`;
           logDelivery({ visitId, channel });
         } else if (dest === 'email') {
           if (!process.env.RESEND_API_KEY) {
@@ -492,6 +721,7 @@ export const POST = withApiHandler<{ id: string }>(
         clipboardTexts,
         pdfDownloadUrl,
         docxDownloadUrl,
+        originalTemplateDocxDownloadUrl,
         emailQueued,
         deliveryErrors: Object.keys(deliveryErrors).length
           ? deliveryErrors

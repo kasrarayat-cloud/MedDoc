@@ -23,6 +23,7 @@ import {
   Sparkles,
   ChevronDown,
   Lock,
+  FileCheck2,
 } from 'lucide-react';
 
 import { cn } from '@/lib/cn';
@@ -47,11 +48,20 @@ import {
   sectionExtras,
 } from '@/lib/ehr-formatters';
 import { formatLocalDateTime } from '@/lib/format-time';
+import { TemplateTwinReview } from '@/components/visit/template-twin-review';
+import type { TemplateTwinReviewData } from '@/components/visit/template-twin-review-data';
 
 type VisitReadyViewTheme = 'legacy' | 'clinician';
 
 // T-M6: six tabs — SOAP, Transcript/Input, Codes, Rx, Extras, Pipeline.
-type TabKey = 'soap' | 'transcript' | 'codes' | 'rx' | 'extras' | 'pipeline';
+type TabKey =
+  | 'soap'
+  | 'template'
+  | 'transcript'
+  | 'codes'
+  | 'rx'
+  | 'extras'
+  | 'pipeline';
 
 export interface Utterance {
   speaker?: number;
@@ -141,6 +151,10 @@ export interface VisitReadyViewProps {
    *  metadata row. Optional for back-compat. */
   recordedByName?: string | null;
 
+  /** Template Twin — minimal, visit-scoped review DTO. Present only when the
+   *  encounter was resolved against a structure-preserving DOCX version. */
+  templateTwinReview?: TemplateTwinReviewData | null;
+
   /** Phase 5.2 — server-rendered initial E&M score for the Coding Coach
    *  rail. Null when the engine fail-soft'd (rail renders skeleton). */
   initialEmScore?: EmScore | null;
@@ -186,6 +200,13 @@ function pendingEmChangeEq(
 
 export function VisitReadyView(props: VisitReadyViewProps) {
   const [tab, setTab] = useState<TabKey>('soap');
+  const originalTemplateDocxAvailable = Boolean(
+    props.templateTwinReview &&
+      !props.templateTwinReview.dataIntegrityError &&
+      props.templateTwinReview.roundTripVerified &&
+      (props.templateTwinReview.processingStatus === 'verified' ||
+        props.templateTwinReview.processingStatus === 'signed'),
+  );
 
   // Hybrid anchored generation (2026-06-11) — when the doctor adopts a
   // suggestion the server appends to soapFinal + bumps soapVersion; the
@@ -386,6 +407,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
               visitId={props.visitId}
               doctorEmail={props.doctorEmail}
               emailEnabled={props.emailEnabled}
+              originalTemplateDocxAvailable={originalTemplateDocxAvailable}
               initialText={adoption?.text ?? props.soapText}
               initialSoapVersion={adoption?.version ?? props.soapVersion}
               readonly={props.readonly}
@@ -399,6 +421,32 @@ export function VisitReadyView(props: VisitReadyViewProps) {
         </>
       ),
     });
+    if (props.templateTwinReview) {
+      const twinAttention = props.templateTwinReview.counts.needsReview;
+      tabs.push({
+        key: 'template',
+        label: 'Template',
+        icon: <FileCheck2 className="h-3.5 w-3.5" aria-hidden />,
+        badge:
+          twinAttention > 0
+            ? {
+                tone:
+                  props.templateTwinReview.counts.conflicts > 0 ||
+                  props.templateTwinReview.counts.criticalUnresolved > 0
+                    ? 'danger'
+                    : 'warn',
+                text: String(twinAttention),
+              }
+            : { tone: 'ok', text: '✓' },
+        node: (
+          <TemplateTwinReview
+            data={props.templateTwinReview}
+            visitId={props.visitId}
+            readonly={props.readonly || Boolean(props.signedAt)}
+          />
+        ),
+      });
+    }
     if (showSuggestions) {
       tabs.push({
         key: 'review',
@@ -557,6 +605,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
           visitId={props.visitId}
           doctorEmail={props.doctorEmail}
           emailEnabled={props.emailEnabled}
+          originalTemplateDocxAvailable={originalTemplateDocxAvailable}
           signed={isSigned}
           placeholderSections={setAsideSections}
           suggestionCount={suggestionCount}
@@ -591,7 +640,16 @@ export function VisitReadyView(props: VisitReadyViewProps) {
         onChange={setTab}
         secondTabLabel={secondTabLabel}
         showPipelineTab={props.showPipelineTab}
+        showTemplateTwin={Boolean(props.templateTwinReview)}
         warnings={{
+          template: props.templateTwinReview
+            ? props.templateTwinReview.counts.conflicts > 0 ||
+              props.templateTwinReview.counts.criticalUnresolved > 0
+              ? 'critical'
+              : props.templateTwinReview.counts.needsReview > 0
+                ? 'any'
+                : null
+            : null,
           codes: codesWarn ? 'any' : null,
           rx: rxWarn,
           extras: extrasWarn ? 'any' : null,
@@ -622,6 +680,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
               visitId={props.visitId}
               doctorEmail={props.doctorEmail}
               emailEnabled={props.emailEnabled}
+              originalTemplateDocxAvailable={originalTemplateDocxAvailable}
               initialText={adoption?.text ?? props.soapText}
               initialSoapVersion={adoption?.version ?? props.soapVersion}
               readonly={props.readonly}
@@ -644,6 +703,13 @@ export function VisitReadyView(props: VisitReadyViewProps) {
                 />
               )}
           </div>
+        )}
+        {tab === 'template' && props.templateTwinReview && (
+          <TemplateTwinReview
+            data={props.templateTwinReview}
+            visitId={props.visitId}
+            readonly={props.readonly || Boolean(props.signedAt)}
+          />
         )}
         {tab === 'transcript' &&
           (props.inputMode === 'audio_upload' ? (
@@ -947,13 +1013,16 @@ function Tabs({
   onChange,
   secondTabLabel,
   showPipelineTab,
+  showTemplateTwin,
   warnings,
 }: {
   tab: TabKey;
   onChange: (t: TabKey) => void;
   secondTabLabel: string;
   showPipelineTab: boolean;
+  showTemplateTwin: boolean;
   warnings: {
+    template: 'critical' | 'any' | null;
     codes: 'critical' | 'any' | null;
     rx: 'critical' | 'any' | null;
     extras: 'critical' | 'any' | null;
@@ -961,6 +1030,16 @@ function Tabs({
 }) {
   const tabs: TabDescriptor[] = [
     { key: 'soap', label: 'SOAP Note', icon: <FileTextIcon className="h-3.5 w-3.5" aria-hidden /> },
+    ...(showTemplateTwin
+      ? [
+          {
+            key: 'template' as const,
+            label: 'Template',
+            icon: <FileCheck2 className="h-3.5 w-3.5" aria-hidden />,
+            warning: warnings.template,
+          },
+        ]
+      : []),
     { key: 'transcript', label: secondTabLabel, icon: <MessageSquareIcon className="h-3.5 w-3.5" aria-hidden /> },
     { key: 'codes', label: 'Codes', icon: <Stethoscope className="h-3.5 w-3.5" aria-hidden />, warning: warnings.codes },
     { key: 'rx', label: 'Rx', icon: <Pill className="h-3.5 w-3.5" aria-hidden />, warning: warnings.rx },

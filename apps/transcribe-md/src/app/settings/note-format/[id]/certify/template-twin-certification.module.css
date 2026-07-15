@@ -31,6 +31,13 @@
   align-items: center;
 }
 
+.warningText {
+  margin: 10px 0 0;
+  color: var(--color-linear-warning, #9a6700);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
 .titleRow {
   justify-content: space-between;
   gap: 16px;
@@ -247,6 +254,49 @@
   margin: 0 0 12px;
   font-size: 13px;
   font-weight: 600;
+}
+
+.voiceTest {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--color-linear-border);
+  border-radius: 8px;
+  color: var(--color-linear-text-2);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.voiceTest strong {
+  color: var(--color-linear-text);
+  font-weight: 600;
+}
+
+.voiceTest p {
+  max-width: 500px;
+  margin: 2px 0 0;
+}
+
+.voiceActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@media (max-width: 720px) {
+  .voiceTest {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .voiceActions {
+    justify-content: flex-start;
+  }
 }
 
 .definitionGrid,

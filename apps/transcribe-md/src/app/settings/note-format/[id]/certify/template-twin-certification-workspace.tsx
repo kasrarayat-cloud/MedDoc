@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
@@ -84,6 +84,19 @@ export function TemplateTwinCertificationWorkspace({
   const [syntheticText, setSyntheticText] = useState(SYNTHETIC_STARTER);
   const [ackStructure, setAckStructure] = useState(false);
   const [ackTest, setAckTest] = useState(false);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const recordingStreamRef = useRef<MediaStream | null>(null);
+  const recordingChunksRef = useRef<Blob[]>([]);
+  const [recording, setRecording] = useState(false);
+  const [syntheticVoice, setSyntheticVoice] = useState<Blob | null>(null);
+
+  useEffect(
+    () => () => {
+      if (recorderRef.current?.state === 'recording') recorderRef.current.stop();
+      recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
+    },
+    [],
+  );
 
   const selected =
     fields.find((item) => item.field.fieldId === selectedId) ?? fields[0] ?? null;
@@ -211,6 +224,110 @@ export function TemplateTwinCertificationWorkspace({
       toast.success('Synthetic DOCX verified');
     } catch {
       toast.error('Synthetic test did not finish', {
+        description: 'No template was activated. Check your connection and try again.',
+      });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function toggleSyntheticRecording() {
+    if (recording) {
+      recorderRef.current?.stop();
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      toast.error('Voice recording is not available in this browser');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const requestedMime = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/mp4',
+      ].find((candidate) => MediaRecorder.isTypeSupported(candidate));
+      const recorder = requestedMime
+        ? new MediaRecorder(stream, { mimeType: requestedMime })
+        : new MediaRecorder(stream);
+      const mimeType = recorder.mimeType || requestedMime || 'audio/webm';
+      recordingStreamRef.current = stream;
+      recorderRef.current = recorder;
+      recordingChunksRef.current = [];
+      setSyntheticVoice(null);
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) recordingChunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        const blob = new Blob(recordingChunksRef.current, { type: mimeType });
+        setSyntheticVoice(blob.size > 0 ? blob : null);
+        setRecording(false);
+        stream.getTracks().forEach((track) => track.stop());
+        recordingStreamRef.current = null;
+        recorderRef.current = null;
+      };
+      recorder.start(500);
+      setRecording(true);
+      setAnnouncement('Recording synthetic voice evidence. Do not use real patient information.');
+    } catch {
+      toast.error('Microphone access was not granted');
+    }
+  }
+
+  async function runSyntheticVoiceTest() {
+    if (dirty) {
+      toast.error('Save mapping changes first');
+      return;
+    }
+    if (!syntheticVoice) {
+      toast.error('Record synthetic voice evidence first');
+      return;
+    }
+    setBusy('test');
+    setAnnouncement('Transcribing synthetic voice evidence and verifying a cloned DOCX.');
+    try {
+      const form = new FormData();
+      form.append(
+        'audio',
+        new File(
+          [syntheticVoice],
+          syntheticVoice.type.startsWith('audio/mp4')
+            ? 'synthetic-template-test.m4a'
+            : 'synthetic-template-test.webm',
+          {
+          type: syntheticVoice.type || 'audio/webm',
+          },
+        ),
+      );
+      form.append('expectedMappingsSha256', workspace.mappingsSha256);
+      const response = await fetch(
+        `/api/note-templates/template-twin/${encodeURIComponent(workspace.template.id)}/synthetic-test-voice`,
+        {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { Accept: 'application/json' },
+          body: form,
+        },
+      );
+      const payload = (await response.json().catch(() => null)) as
+        | { ok: true; workspace: TemplateTwinWorkspace }
+        | { ok: false; error: string }
+        | null;
+      if (!response.ok || !payload?.ok) {
+        toast.error('Synthetic voice DOCX did not verify', {
+          description:
+            payload && !payload.ok
+              ? payload.error
+              : 'No template was activated. Review the recording and mappings.',
+        });
+        return;
+      }
+      setWorkspace(payload.workspace);
+      setFields(payload.workspace.fields);
+      setAnnouncement('Synthetic voice path passed transcript, field, package, and static-region verification.');
+      toast.success('Synthetic voice DOCX verified');
+    } catch {
+      toast.error('Synthetic voice test did not finish', {
         description: 'No template was activated. Check your connection and try again.',
       });
     } finally {
@@ -404,18 +521,61 @@ export function TemplateTwinCertificationWorkspace({
                   disabled={!workspace.canEdit || busy !== null}
                 />
               </label>
-              {workspace.latestSyntheticTest && (
-                <div className={styles.testStatus}>
-                  <span>
-                    {testMatches ? 'Verified against current mappings' : 'Re-run required after mapping changes'}
-                  </span>
-                  <a
+              <div className={styles.voiceTest}>
+                <div>
+                  <strong>Or test the voice path</strong>
+                  <p>
+                    Record a short synthetic dictation and explicitly say that it is a synthetic test. Audio is sent through the existing transcription provider and is not stored by QuillMD; transcripts containing identifiers or unclear test data are rejected before persistence.
+                  </p>
+                </div>
+                <div className={styles.voiceActions}>
+                  <button
+                    type="button"
                     className={styles.button}
-                    href={workspace.latestSyntheticTest.downloadUrl}
-                    style={{ textDecoration: 'none' }}
+                    onClick={() => void toggleSyntheticRecording()}
+                    disabled={!workspace.canEdit || busy !== null}
                   >
-                    Inspect filled DOCX
-                  </a>
+                    {recording ? 'Stop recording' : syntheticVoice ? 'Record again' : 'Record synthetic voice'}
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.button}
+                    onClick={() => void runSyntheticVoiceTest()}
+                    disabled={
+                      !syntheticVoice ||
+                      recording ||
+                      dirty ||
+                      busy !== null ||
+                      !allConfirmed ||
+                      hasBlockingUnsupported
+                    }
+                  >
+                    Verify voice test
+                  </button>
+                  {syntheticVoice && !recording && (
+                    <span className={styles.fieldMeta}>Synthetic recording ready</span>
+                  )}
+                </div>
+              </div>
+              {workspace.latestSyntheticTest && (
+                <div>
+                  <div className={styles.testStatus}>
+                    <span>
+                      {testMatches ? 'Verified against current mappings' : 'Re-run required after mapping changes'}
+                    </span>
+                    <a
+                      className={styles.button}
+                      href={workspace.latestSyntheticTest.downloadUrl}
+                      style={{ textDecoration: 'none' }}
+                    >
+                      Inspect filled DOCX
+                    </a>
+                  </div>
+                  {workspace.latestSyntheticTest.layoutWarningCodes.length > 0 && (
+                    <p className={styles.warningText} role="alert">
+                      Word layout review required: the test contains unusually long populated text or repeated table rows. Inspect pagination, row styles, and spacing in Word before certification.
+                    </p>
+                  )}
                 </div>
               )}
             </div>

@@ -24,7 +24,7 @@ import { Worker, type Job } from 'bullmq';
 import prisma from '@meddoc/db';
 import { evidenceAnchorsEnabled } from './worker/evidence-anchors-flag';
 import { ANCHOR_GENERATION_ADDENDUM } from './worker/layers/04b-anchor-verify';
-import { TranscribeVisitStatus } from '@prisma/client';
+import { TranscribeVisitStatus, type NoteTemplate } from '@prisma/client';
 import type { DeepgramBatchResponse, DeepgramUtterance } from '@meddoc/ai';
 import { redactPhi } from '@meddoc/ai';
 import { log } from '@/lib/log';
@@ -70,10 +70,7 @@ import {
 } from '@/worker/layer-skip';
 import { runLayer1Transcribe } from '@/worker/layers/01-transcribe';
 import { runLayer1bTranscribeDictation } from '@/worker/layers/01b-transcribe-dictation';
-import {
-  assertSufficientTranscript,
-  isPipelineRejectError,
-} from '@/worker/layers/guards';
+import { assertSufficientTranscript } from '@/worker/layers/guards';
 import {
   runLayer2SpeakerRoles,
   type SpeakerMap,
@@ -86,8 +83,9 @@ import {
 import { runLayer4GenerateSoap } from '@/worker/layers/04-generate-soap';
 import { runLayer5SelfCritique } from '@/worker/layers/05-self-critique';
 import type { AudioConfidenceStats } from '@/worker/layers/audio-confidence';
+import { shouldFlagForReview } from '@/worker/layers/audio-confidence';
 import { runLayer6Polish } from '@/worker/layers/06-polish';
-import { resolveActiveTemplate } from '@/worker/note-templates/resolve-active-template';
+import { resolveVisitTemplate } from '@/worker/note-templates/resolve-active-template';
 import {
   normalizeTemplate,
   type ResolvedNoteTemplate,
@@ -104,6 +102,10 @@ import {
   type AutomationConfidenceScores,
 } from '@/worker/automation-incomplete';
 import { isImagingReportSpecialty } from '@meddoc/shared/specialties';
+import {
+  processTemplateTwinVisit,
+  TEMPLATE_TWIN_REVIEW_REASON,
+} from '@/lib/template-twin/fill-engine';
 
 const CONCURRENCY = Number.parseInt(
   process.env.TRANSCRIBE_MD_WORKER_CONCURRENCY ?? '2',
@@ -254,6 +256,12 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       specialty: true,
       inputMode: true,
       interpreterMode: true,
+      createdAt: true,
+      noteTemplateId: true,
+      noteTemplateVersion: true,
+      templateTwinFill: {
+        select: { noteTemplateId: true, noteTemplateVersion: true },
+      },
       user: { select: { practiceId: true } },
       // Fix-Pack 1 Q0-2 / audit Finding 01.1 — pull patient demographic
       // + safety context for L7c pediatric framing. Round 3 PR-D added
@@ -581,26 +589,87 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       where: { id: visitId },
       data: { status: TranscribeVisitStatus.DRAFTING },
     });
-    // Phase 1: resolve the doctor's active note-format template ONCE per
-    // visit and thread it to L4/L5/L6. In Phase 1 prod this always resolves
-    // to the system default (no custom templates exist yet) → byte-identical
-    // output + provenance populated. Defensive fallback to the constant so a
-    // DB hiccup never breaks generation.
+    // Resolve the doctor's template once, then reuse the exact persisted pin
+    // on retries. A first-pass generic-template lookup may retain the legacy
+    // system-default fallback; existing provenance must fail closed instead
+    // of silently switching layout versions.
     let noteTemplate: ResolvedNoteTemplate;
+    let selectedTemplate: NoteTemplate | null = null;
+    const fillPin = visit.templateTwinFill;
+    const pinnedTemplateId = fillPin?.noteTemplateId ?? visit.noteTemplateId;
+    const pinnedTemplateVersion =
+      fillPin?.noteTemplateVersion ?? visit.noteTemplateVersion;
     try {
-      noteTemplate = normalizeTemplate(
-        await resolveActiveTemplate({
-          doctorId: visit.userId ?? '',
-          encounterType: visit.specialty,
-        })
-      );
+      if (
+        fillPin &&
+        visit.noteTemplateId &&
+        (fillPin.noteTemplateId !== visit.noteTemplateId ||
+          fillPin.noteTemplateVersion !== visit.noteTemplateVersion)
+      ) {
+        throw new Error('Template Twin visit provenance is internally inconsistent.');
+      }
+      selectedTemplate = await resolveVisitTemplate({
+        doctorId: visit.userId ?? '',
+        encounterType: visit.specialty,
+        pinnedTemplateId,
+        pinnedTemplateVersion,
+      });
+      noteTemplate = normalizeTemplate(selectedTemplate);
     } catch (err) {
+      if (pinnedTemplateId || pinnedTemplateVersion != null) throw err;
       log.warn(
         'worker:note-template',
-        'resolveActiveTemplate failed; falling back to system default',
+        'initial template resolution failed; falling back to system default',
         { visitId, err: err instanceof Error ? err.message : String(err) }
       );
       noteTemplate = SYSTEM_DEFAULT_NOTE_TEMPLATE;
+    }
+
+    // Template Twin is an additional evidence-backed document artifact, not
+    // a replacement for the established SOAP/coding pipeline. Both voice
+    // modes and typed input converge here on the same canonical fact resolver.
+    // An unresolved field is persisted for physician review; provenance,
+    // certification, source-integrity, or render failures fail closed.
+    if (selectedTemplate?.templateKind === 'template_twin_docx') {
+      currentLayer = 'template_twin';
+      const twinFill = await processTemplateTwinVisit({
+        visitId,
+        practiceId,
+        doctorId: visit.userId,
+        noteTemplateId: selectedTemplate.id,
+        noteTemplateVersion: selectedTemplate.version,
+        inputMode:
+          visit.inputMode === 'audio_upload'
+            ? 'conversation'
+            : visit.inputMode === 'voice_dictation'
+              ? 'dictation'
+              : 'text',
+        contextText,
+        entities,
+        asrQuality: audioConfidenceStats
+          ? shouldFlagForReview(audioConfidenceStats)
+            ? 'review'
+            : 'high'
+          : 'unknown',
+        validationNow: visit.createdAt,
+        resolverModelVersion:
+          process.env.TRANSCRIBE_MD_CLINICAL_MODEL || 'claude-sonnet-4-6',
+      });
+      if (
+        twinFill.manifest.counts.needsReview > 0 ||
+        twinFill.render === null
+      ) {
+        await prisma.$executeRaw`
+          UPDATE "transcribe_visits"
+          SET "reviewReason" = CASE
+                WHEN "needsReview" = false
+                  THEN ${TEMPLATE_TWIN_REVIEW_REASON}
+                ELSE "reviewReason"
+              END,
+              "needsReview" = true
+          WHERE id = ${visitId}
+        `;
+      }
     }
     let soapDraft: string;
     if (isLayerComplete(resumeState, 'L4')) {

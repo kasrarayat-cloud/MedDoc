@@ -4,12 +4,12 @@ import type { Prisma } from '@prisma/client';
 import prisma from '@meddoc/db';
 
 import {
-  compileTemplateDocx,
   TemplateDocxError,
 } from '@/lib/note-template-docx';
 import { logAudit } from '@/lib/audit';
 
 import type { SemanticMapping, TemplateDocIR } from './ir';
+import { DOCX_TEMPLATE_COMPILER } from './artifact-compiler';
 import {
   fallbackSemanticMappings,
   proposeSemanticMappings,
@@ -166,7 +166,7 @@ export async function createTemplateTwinDraft(
 ): Promise<CreateTemplateTwinDraftResult> {
   let ir: TemplateDocIR;
   try {
-    ir = compileTemplateDocx(input.source);
+    ir = DOCX_TEMPLATE_COMPILER.compile(input.source);
   } catch (error) {
     const code = error instanceof TemplateDocxError ? error.code : 'DOCX_COMPILE_FAILED';
     await quarantineRejectedSource({

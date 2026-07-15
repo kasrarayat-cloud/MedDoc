@@ -78,6 +78,11 @@ const MOCK_COMPLETE_FIXTURES: Partial<Record<ModelCallPurpose, unknown>> = {
   tm_patient_summary: {
     summary: '[MOCK] Your visit went well. Drink fluids, rest, and come back if symptoms worsen.',
   },
+  tm_template_synthetic_phi_scan: {
+    directIdentifierClasses: [],
+    appearsExplicitlySynthetic: true,
+    anyUncertain: false,
+  },
   // Note-format customization (Phase 2a). parseNoteToTemplate() makes two
   // complete() calls — without fixtures here the mock throws, so the whole
   // upload→parse→review→activate flow can't run under MOCK_AI_CALLS (full-qa

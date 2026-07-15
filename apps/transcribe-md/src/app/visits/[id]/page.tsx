@@ -32,6 +32,11 @@ import {
   extractEmOverride,
 } from '@/lib/em-coding/displayed-level';
 import { unacknowledgedEmChange } from '@/lib/em-pending-change';
+import {
+  serializeTemplateTwinReview,
+  type TemplateTwinReviewData,
+  type TemplateTwinReviewRow,
+} from '@/components/visit/template-twin-review-data';
 
 export const metadata: Metadata = { title: 'Visit' };
 
@@ -193,6 +198,7 @@ export default async function VisitPage({
     emPendingChange: unknown;
     patientSummary: string | null;
     confidenceScores: unknown;
+    templateTwinFill: TemplateTwinReviewRow | null;
   };
 
   // Round 4 critical-Rx-override fix: pull existing override rows so
@@ -258,6 +264,40 @@ export default async function VisitPage({
         emPendingChange: true,
         patientSummary: true,
         confidenceScores: true,
+        templateTwinFill: {
+          select: {
+            id: true,
+            status: true,
+            manifestVersion: true,
+            fillManifest: true,
+            filledCount: true,
+            needsReviewCount: true,
+            notMentionedCount: true,
+            conflictCount: true,
+            criticalUnresolvedCount: true,
+            roundTripVerified: true,
+            roundTripVerification: true,
+            compiledVersion: {
+              select: {
+                noteTemplate: { select: { name: true } },
+                fields: {
+                  orderBy: { displayOrder: 'asc' },
+                  select: {
+                    id: true,
+                    fieldId: true,
+                    displayOrder: true,
+                    originalLabel: true,
+                    fieldKind: true,
+                    allowedOptions: true,
+                    rendererBinding: true,
+                    criticality: true,
+                    required: true,
+                  },
+                },
+              },
+            },
+          },
+        },
       },
     }),
     prisma.rxWarningOverride.findMany({
@@ -489,6 +529,7 @@ export default async function VisitPage({
           emPendingChange={visit.emPendingChange}
           patientSummary={visit.patientSummary}
           confidenceScores={visit.confidenceScores}
+          templateTwinReview={serializeTemplateTwinReview(visit.templateTwinFill)}
           // Phase 5.1.1 — V4 Extras card-stream wiring
           patientName={visit.patientName}
           patient={visit.patient}
@@ -550,6 +591,7 @@ interface VisitBodyProps {
   emPendingChange: unknown;
   patientSummary: string | null;
   confidenceScores: unknown;
+  templateTwinReview: TemplateTwinReviewData | null;
 
   // Phase 5.1.1 — V4 Extras card-stream wiring.
   patientName: string | null;
@@ -757,6 +799,7 @@ async function VisitBody(props: VisitBodyProps) {
       emPendingChange={pendingEmChange}
       patientSummary={props.patientSummary}
       confidenceScores={props.confidenceScores}
+      templateTwinReview={props.templateTwinReview}
       durationSec={durationSec}
       costCents={props.processingCostCents}
       processingStartedAt={

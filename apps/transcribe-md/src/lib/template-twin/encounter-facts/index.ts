@@ -277,6 +277,7 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
     facts.push(
       EncounterFactSchema.parse({
         factId: `ttfact_${digest(sourceIdentity).slice(0, 24)}`,
+        sourceType: 'encounter_evidence',
         concept: options.concept,
         value: options.value,
         polarity,

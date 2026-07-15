@@ -57,6 +57,59 @@ export async function requireSession(): Promise<Session> {
   return s;
 }
 
+/** Fresh, fail-closed role evidence for physician-only clinical surfaces.
+ * `getSession()` intentionally tolerates a transient DB failure for legacy
+ * session continuity, so a JWT role must never be the final authorization
+ * decision for Template Twin. */
+export async function requireFreshDoctorIdentity(userId: string): Promise<{
+  role: 'DOCTOR';
+  practiceId: string;
+}> {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true, isActive: true, practiceId: true },
+    });
+    if (
+      !user ||
+      !user.isActive ||
+      user.role !== 'DOCTOR' ||
+      !user.practiceId
+    ) {
+      throw new AuthError(
+        'FORBIDDEN',
+        'An active physician account is required for Template Twin.',
+      );
+    }
+    return { role: 'DOCTOR', practiceId: user.practiceId };
+  } catch (error) {
+    if (error instanceof AuthError) throw error;
+    // Role evidence is mandatory on this boundary. Do not fall back to a
+    // potentially stale JWT when the database cannot confirm the role.
+    throw new AuthError(
+      'FORBIDDEN',
+      'An active physician account is required for Template Twin.',
+    );
+  }
+}
+
+export async function requireDoctorSession(): Promise<Session> {
+  const nextAuthSession = await auth();
+  if (!nextAuthSession?.user?.id) {
+    throw new AuthError('UNAUTHENTICATED', 'You must be logged in.');
+  }
+  const doctor = await requireFreshDoctorIdentity(nextAuthSession.user.id);
+  return {
+    user: {
+      id: nextAuthSession.user.id,
+      email: nextAuthSession.user.email ?? '',
+      fullName: nextAuthSession.user.name ?? 'Unknown',
+      role: doctor.role,
+      practiceId: doctor.practiceId,
+    },
+  };
+}
+
 /** Read the current NextAuth session cookie and return the JWT's
  *  sessionId claim (if present). Used by the /settings page to show
  *  the active UserSession row. Returns null when the user isn't

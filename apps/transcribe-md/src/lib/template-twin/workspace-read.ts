@@ -150,8 +150,15 @@ export async function readTemplateTwinWorkspace(input: {
   const mappings = fields.map((field) => field.mapping);
   const mappingsSha256 = templateTwinMappingsSha256(mappings);
   const roundTrip = compiled.latestTestRoundTrip as
-    | { verified?: boolean }
+    | { verified?: boolean; warningCodes?: unknown }
     | null;
+  const layoutWarningCodes = Array.isArray(roundTrip?.warningCodes)
+    ? roundTrip.warningCodes.filter(
+        (code): code is string =>
+          code === 'LAYOUT_OVERFLOW_REVIEW_RECOMMENDED' ||
+          code === 'REPEATING_TABLE_LAYOUT_REVIEW_RECOMMENDED',
+      )
+    : [];
   const hasTest = Boolean(
     compiled.latestTestVerifiedAt &&
       compiled.latestTestOutputSha256 &&
@@ -185,6 +192,7 @@ export async function readTemplateTwinWorkspace(input: {
           outputSha256: compiled.latestTestOutputSha256!,
           mappingsSha256: compiled.latestTestMappingsSha256!,
           roundTripVerified: roundTrip?.verified === true,
+          layoutWarningCodes,
           downloadUrl: `/api/note-templates/template-twin/${encodeURIComponent(row.id)}/test-output`,
         }
       : null,
