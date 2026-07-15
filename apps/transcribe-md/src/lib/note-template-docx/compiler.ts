@@ -33,6 +33,10 @@ import {
 const DOCX_MIME =
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document" as const;
 const MAX_TABLE_ROWS = 100;
+const ORDINARY_PLACEHOLDER_RE =
+  /(?:(?:<<|&lt;&lt;)\s*[^<>\n]{1,160}\s*(?:>>|&gt;&gt;)|\{\{\s*[^{}\n]{1,160}\s*\}\}|\[\s*(?:insert|enter|type|document|complete)\b[^\]\n]{0,160}\]|_{3,})/i;
+const REQUIRED_LABELED_BLANK_RE =
+  /\b(?:required|must complete|enter|document)\b[^:\n]{0,100}:\s*$/i;
 
 type TemplateDocNode = TemplateDocIR["nodes"][number];
 type TemplateDocPart = TemplateDocIR["parts"][number];
@@ -196,6 +200,29 @@ function walkNodes(
     const nodePath = structuralPath(parentPath, tag, siblingIndex, state);
     const local = localName(tag);
 
+    if (local === "AlternateContent") {
+      addUnsupported(state, {
+        code: "ALTERNATE_CONTENT_UNSUPPORTED_SAFE_ALPHA",
+        partName: context.partName,
+        path: nodePath,
+        label: null,
+        detail:
+          "This Word compatibility block has multiple representations. Template Twin safe alpha cannot prove one stable fill location.",
+        clinicallyMaterial: true,
+        blocksCertification: true,
+      });
+      addNode(state, {
+        partName: context.partName,
+        path: nodePath,
+        kind: "unsupported",
+        fieldId: null,
+        tableId: context.table?.tableId ?? null,
+        staticTextSha256: canonicalSha256(node),
+        bookmarkNames: bookmarkNames(node),
+      });
+      continue;
+    }
+
     if (local === "tbl") {
       processTable(node, nodePath, context, state);
       continue;
@@ -251,6 +278,25 @@ function processParagraph(
     descendants(node, "fldChar").some(
       (field) => getAttribute(field, "fldCharType") === "begin",
     );
+
+  if (
+    text &&
+    !hasFillableDescendant &&
+    !context.insideFieldContent &&
+    (ORDINARY_PLACEHOLDER_RE.test(text) ||
+      REQUIRED_LABELED_BLANK_RE.test(text))
+  ) {
+    addUnsupported(state, {
+      code: "UNBOUND_ORDINARY_PLACEHOLDER",
+      partName: context.partName,
+      path: nodePath,
+      label: text,
+      detail:
+        "A visible placeholder is not bound to a Word field. Bind it to a supported control before certification.",
+      clinicallyMaterial: true,
+      blocksCertification: true,
+    });
+  }
 
   if (text && !hasFillableDescendant && !context.insideFieldContent) {
     addNode(state, {
@@ -323,6 +369,18 @@ function processContentControl(
         blocksCertification: true,
       });
     }
+    if (isRepeatingSection) {
+      addUnsupported(state, {
+        code: "REPEATING_STRUCTURE_UNSUPPORTED_SAFE_ALPHA",
+        partName: context.partName,
+        path: nodePath,
+        label: contentControlIdentity(properties).label,
+        detail:
+          "Repeating Word sections are blocked in safe alpha because cloned rows cannot yet prove unique Word identifiers and stable clinical row alignment.",
+        clinicallyMaterial: true,
+        blocksCertification: true,
+      });
+    }
     walkNodes(
       childrenOf(content),
       contentPath,
@@ -339,6 +397,13 @@ function processContentControl(
   const checkBox = descendants(properties, "checkbox")[0];
   const date = directChild(properties, "date");
   const plainText = directChild(properties, "text");
+  const richText =
+    !dropdown && !comboBox && !checkBox && !date && !plainText;
+  const structuredPlainText = Boolean(
+    plainText &&
+      (descendants(content, "p").length > 1 ||
+        descendants(content, "numPr").length > 0),
+  );
   const unsupportedType = [
     "picture",
     "group",
@@ -450,6 +515,30 @@ function processContentControl(
       blocksCertification: true,
     });
   }
+  if (richText) {
+    addUnsupported(state, {
+      code: "RICH_TEXT_CONTENT_CONTROL_UNSUPPORTED_SAFE_ALPHA",
+      partName: context.partName,
+      path: nodePath,
+      label: identity.label,
+      detail:
+        "Rich-text Word controls are blocked in safe alpha because paragraphs, lists, and formatting cannot be flattened safely.",
+      clinicallyMaterial: true,
+      blocksCertification: true,
+    });
+  }
+  if (structuredPlainText) {
+    addUnsupported(state, {
+      code: "STRUCTURED_TEXT_CONTROL_UNSUPPORTED_SAFE_ALPHA",
+      partName: context.partName,
+      path: nodePath,
+      label: identity.label,
+      detail:
+        "This text control contains multiple paragraphs or list structure and cannot be flattened safely in Template Twin safe alpha.",
+      clinicallyMaterial: true,
+      blocksCertification: true,
+    });
+  }
 
   const fieldId = stableId(
     "ttf_",
@@ -487,7 +576,11 @@ function processContentControl(
     labelSource: label.source,
     displayOrder: state.nextDisplayOrder++,
     detectionStatus:
-      dataBound || ambiguousChoiceOptions
+      dataBound ||
+      ambiguousChoiceOptions ||
+      richText ||
+      structuredPlainText ||
+      context.repeatAncestorPath
         ? "unsupported"
         : comboBox ||
             label.source === "generated" ||
@@ -624,7 +717,7 @@ function processLegacyField(
     originalLabel: label.slice(0, 240),
     labelSource,
     displayOrder,
-    detectionStatus: ambiguousChoiceOptions
+    detectionStatus: ambiguousChoiceOptions || context.repeatAncestorPath
       ? "unsupported"
       : legacyName
         ? "recognized"
@@ -786,20 +879,33 @@ function processTable(
             ? normalizeLabel(visibleText(rowCells[cellIndex - 1]!.node))
             : "";
         const headerLabel = tableHeaderLabels.get(logicalColumnStart) ?? "";
-        createAmbiguousTableCellField(
-          cell,
-          cellLocation.path,
-          cellContext,
-          leftLabel
-            ? { label: leftLabel, source: "left_cell" }
-            : headerLabel
-              ? { label: headerLabel, source: "table_header" }
-              : {
-                  label: `Table ${tableIndex + 1}, row ${rowIndex + 1}, column ${logicalColumnStart + 1}`,
-                  source: "generated",
-                },
-          state,
-        );
+        if (blankCellHasUnsupportedStructure(cell)) {
+          addUnsupported(state, {
+            code: "UNBOUND_COMPLEX_TABLE_CELL",
+            partName: context.partName,
+            path: cellLocation.path,
+            label: leftLabel || headerLabel || null,
+            detail:
+              "A visually blank table cell contains line breaks, drawings, or multiple paragraphs and cannot be bound safely in Template Twin safe alpha.",
+            clinicallyMaterial: true,
+            blocksCertification: true,
+          });
+        } else {
+          createAmbiguousTableCellField(
+            cell,
+            cellLocation.path,
+            cellContext,
+            leftLabel
+              ? { label: leftLabel, source: "left_cell" }
+              : headerLabel
+                ? { label: headerLabel, source: "table_header" }
+                : {
+                    label: `Table ${tableIndex + 1}, row ${rowIndex + 1}, column ${logicalColumnStart + 1}`,
+                    source: "generated",
+                  },
+            state,
+          );
+        }
       }
 
       if (rowIndex === 0 && cellText) {
@@ -814,6 +920,15 @@ function processTable(
       logicalColumnStart += gridSpan;
     });
   });
+}
+
+function blankCellHasUnsupportedStructure(cell: OrderedXmlNode): boolean {
+  return (
+    descendants(cell, "p").length !== 1 ||
+    ["br", "cr", "tab", "drawing", "pict", "object"].some(
+      (name) => descendants(cell, name).length > 0,
+    )
+  );
 }
 
 function createAmbiguousTableCellField(

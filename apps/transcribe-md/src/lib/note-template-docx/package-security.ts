@@ -5,9 +5,16 @@ import { createHash } from "node:crypto";
 import { failTemplateDocx } from "./errors";
 import { resolveTemplateDocxLimits, type TemplateDocxLimits } from "./limits";
 import {
-  descendants,
-  getAttribute,
+  OPC_CONTENT_TYPES_NAMESPACE,
+  OPC_RELATIONSHIPS_NAMESPACE,
+  WORDPROCESSINGML_2010_NAMESPACE,
+  WORDPROCESSINGML_2012_NAMESPACE,
+  WORDPROCESSINGML_NAMESPACE,
+  exactExpandedAttribute,
+  expandedXmlVisits,
   parseOrderedXml,
+  visibleText,
+  type ExpandedXmlVisit,
   type OrderedXmlNode,
 } from "./xml";
 import {
@@ -29,8 +36,17 @@ const ACTIVE_CONTENT_TYPE_RE =
 const ACTIVE_RELATIONSHIP_TYPE_RE =
   /\/(?:vbaProject|oleObject|package|activeXControl|attachedTemplate|aFChunk)$/i;
 const REMOTE_TARGET_RE = /^(?:[a-z][a-z0-9+.-]*:|\/\/|\\\\)/i;
-const ACTIVE_FIELD_INSTRUCTION_RE =
-  /\b(?:DDEAUTO|DDE|INCLUDETEXT|INCLUDEPICTURE|DATABASE|LINK)\b/i;
+const HARMLESS_FIELD_INSTRUCTIONS = new Set([
+  "DATE",
+  "FORMCHECKBOX",
+  "FORMDROPDOWN",
+  "FORMTEXT",
+  "NUMPAGES",
+  "PAGE",
+  "SECTION",
+  "SECTIONPAGES",
+  "TIME",
+]);
 
 export interface OpcRelationship {
   readonly sourcePartName: string;
@@ -76,12 +92,9 @@ export function inspectDocxPackage(
       failTemplateDocx("ACTIVE_CONTENT_REJECTED");
     if (name.endsWith(".xml") || name.endsWith(".rels")) {
       const tree = parseOrderedXml(entry.bytes, limits);
-      const instructions = extractInstructionText(tree);
-      if (
-        ACTIVE_FIELD_INSTRUCTION_RE.test(instructions) ||
-        ACTIVE_FIELD_INSTRUCTION_RE.test(instructions.replace(/\s+/g, ""))
-      ) {
-        failTemplateDocx("ACTIVE_CONTENT_REJECTED");
+      assertHarmlessWordFieldInstructions(tree);
+      if (/^word\/.*\.xml$/i.test(name)) {
+        assertNoNamespaceShadowedWordStructures(tree);
       }
     }
   }
@@ -187,9 +200,16 @@ function parseContentTypes(
   const defaults = new Map<string, string>();
   const overrides = new Map<string, string>();
 
-  for (const node of descendants(tree, "Default")) {
-    const extension = getAttribute(node, "Extension")?.toLowerCase();
-    const contentType = getAttribute(node, "ContentType");
+  for (const node of opcDocumentChildren(
+    tree,
+    OPC_CONTENT_TYPES_NAMESPACE,
+    "Types",
+    new Set(["Default", "Override"]),
+    "OPC_CONTENT_TYPE_INVALID",
+  )) {
+    if (node.localName !== "Default") continue;
+    const extension = opcAttribute(node, "Extension", true)?.toLowerCase();
+    const contentType = opcAttribute(node, "ContentType", true);
     if (
       !extension ||
       !/^[a-z0-9]{1,32}$/.test(extension) ||
@@ -205,9 +225,16 @@ function parseContentTypes(
     }
     defaults.set(extension, contentType);
   }
-  for (const node of descendants(tree, "Override")) {
-    const rawPartName = getAttribute(node, "PartName");
-    const contentType = getAttribute(node, "ContentType");
+  for (const node of opcDocumentChildren(
+    tree,
+    OPC_CONTENT_TYPES_NAMESPACE,
+    "Types",
+    new Set(["Default", "Override"]),
+    "OPC_CONTENT_TYPE_INVALID",
+  )) {
+    if (node.localName !== "Override") continue;
+    const rawPartName = opcAttribute(node, "PartName", true);
+    const contentType = opcAttribute(node, "ContentType", true);
     if (
       !rawPartName ||
       !rawPartName.startsWith("/") ||
@@ -260,11 +287,17 @@ function parseRelationships(
   const relationships: OpcRelationship[] = [];
   const ids = new Set<string>();
 
-  for (const node of descendants(tree, "Relationship")) {
-    const id = getAttribute(node, "Id");
-    const type = getAttribute(node, "Type");
-    const target = getAttribute(node, "Target");
-    const targetMode = getAttribute(node, "TargetMode");
+  for (const node of opcDocumentChildren(
+    tree,
+    OPC_RELATIONSHIPS_NAMESPACE,
+    "Relationships",
+    new Set(["Relationship"]),
+    "OPC_RELATIONSHIP_INVALID",
+  )) {
+    const id = opcAttribute(node, "Id", true);
+    const type = opcAttribute(node, "Type", true);
+    const target = opcAttribute(node, "Target", true);
+    const targetMode = opcAttribute(node, "TargetMode", false);
     if (
       !id ||
       id.length > 240 ||
@@ -322,8 +355,18 @@ function resolveRelationshipTarget(
   sourcePartName: string,
   rawTarget: string,
 ): string {
-  const target = rawTarget.split("#", 1)[0]!;
-  if (!target || target.includes("\\") || /%(?:2e|2f|5c)/i.test(target)) {
+  // Safe-alpha has no relationship type that needs a target fragment or
+  // query. Reject rather than discard it: otherwise identifier-bearing text
+  // after `#`/`?` would survive in the immutable relationship part without
+  // participating in target validation.
+  const target = rawTarget;
+  if (
+    !target ||
+    target.includes("#") ||
+    target.includes("?") ||
+    target.includes("\\") ||
+    /%(?:2e|2f|5c)/i.test(target)
+  ) {
     failTemplateDocx("OPC_RELATIONSHIP_INVALID");
   }
   const base = sourcePartName ? path.dirname(sourcePartName) : "";
@@ -358,16 +401,169 @@ function isValidContentType(contentType: string): boolean {
   );
 }
 
-function extractInstructionText(tree: OrderedXmlNode[]): string {
-  return descendants(tree, "instrText")
-    .map((node) => {
-      const values = node[Object.keys(node).find((key) => key !== ":@") ?? ""];
-      if (!Array.isArray(values)) return "";
-      return values
-        .map((child) => String((child as OrderedXmlNode)["#text"] ?? ""))
-        .join("");
-    })
-    .join(" ");
+function opcDocumentChildren(
+  tree: OrderedXmlNode[],
+  namespaceUri: string,
+  rootLocalName: string,
+  allowedChildren: ReadonlySet<string>,
+  errorCode: "OPC_CONTENT_TYPE_INVALID" | "OPC_RELATIONSHIP_INVALID",
+): ExpandedXmlVisit[] {
+  const visits = expandedXmlVisits(tree);
+  const roots = visits.filter((visit) => visit.depth === 0);
+  if (
+    roots.length !== 1 ||
+    roots[0]!.namespaceUri !== namespaceUri ||
+    roots[0]!.localName !== rootLocalName
+  ) {
+    failTemplateDocx(errorCode);
+  }
+  const root = roots[0]!;
+  const children = visits.filter((visit) => visit.parent === root);
+  if (
+    children.some(
+      (visit) =>
+        visit.namespaceUri !== namespaceUri ||
+        !allowedChildren.has(visit.localName),
+    ) ||
+    visits.some((visit) => visit.depth > 1)
+  ) {
+    failTemplateDocx(errorCode);
+  }
+  return children;
+}
+
+function opcAttribute(
+  visit: ExpandedXmlVisit,
+  localName: string,
+  required: boolean,
+): string | undefined {
+  const matching = visit.attributes.filter(
+    (attribute) => attribute.localName === localName,
+  );
+  if (
+    matching.length > 1 ||
+    (matching.length === 1 && matching[0]!.namespaceUri !== null) ||
+    (required && matching.length !== 1)
+  ) {
+    failTemplateDocx(
+      visit.localName === "Relationship"
+        ? "OPC_RELATIONSHIP_INVALID"
+        : "OPC_CONTENT_TYPE_INVALID",
+    );
+  }
+  return matching.length === 1
+    ? exactExpandedAttribute(visit, null, localName)
+    : undefined;
+}
+
+function assertHarmlessWordFieldInstructions(tree: OrderedXmlNode[]): void {
+  const visits = expandedXmlVisits(tree);
+  const active: string[][] = [];
+  for (const visit of visits) {
+    if (visit.namespaceUri !== WORDPROCESSINGML_NAMESPACE) continue;
+    if (visit.localName === "fldSimple") {
+      const instruction = exactWordAttribute(visit, "instr");
+      if (!instruction) failTemplateDocx("ACTIVE_CONTENT_REJECTED");
+      assertHarmlessFieldInstruction(instruction);
+      continue;
+    }
+    if (visit.localName === "fldChar") {
+      const type = exactWordAttribute(visit, "fldCharType");
+      if (type === "begin") active.push([]);
+      else if (type === "end") {
+        const fragments = active.pop();
+        if (fragments && fragments.length > 0) {
+          assertHarmlessFieldInstruction(fragments.join(""));
+        }
+      }
+      continue;
+    }
+    if (visit.localName === "instrText") {
+      const text = visibleText(visit.node);
+      if (active.length > 0) active.at(-1)!.push(text);
+      else assertHarmlessFieldInstruction(text);
+    }
+  }
+  if (active.length > 0) failTemplateDocx("ACTIVE_CONTENT_REJECTED");
+}
+
+const WORD_CONTROL_ELEMENTS = new Set([
+  "comboBox",
+  "date",
+  "dateFormat",
+  "ddList",
+  "dropDownList",
+  "ffData",
+  "fldChar",
+  "fldSimple",
+  "instrText",
+  "listEntry",
+  "listItem",
+  "sdt",
+  "sdtContent",
+  "sdtPr",
+  "text",
+  "textInput",
+]);
+const WORD_2010_CONTROL_ELEMENTS = new Set([
+  "checkbox",
+  "checkedState",
+  "uncheckedState",
+]);
+const WORD_2012_CONTROL_ELEMENTS = new Set([
+  "repeatingSection",
+  "repeatingSectionItem",
+]);
+
+function assertNoNamespaceShadowedWordStructures(
+  tree: OrderedXmlNode[],
+): void {
+  for (const visit of expandedXmlVisits(tree)) {
+    if (
+      visit.localName === "checked" &&
+      visit.namespaceUri !== WORDPROCESSINGML_NAMESPACE &&
+      visit.namespaceUri !== WORDPROCESSINGML_2010_NAMESPACE
+    ) {
+      failTemplateDocx("ACTIVE_CONTENT_REJECTED");
+    }
+    const expected = WORD_CONTROL_ELEMENTS.has(visit.localName)
+      ? WORDPROCESSINGML_NAMESPACE
+      : WORD_2010_CONTROL_ELEMENTS.has(visit.localName)
+        ? WORDPROCESSINGML_2010_NAMESPACE
+        : WORD_2012_CONTROL_ELEMENTS.has(visit.localName)
+          ? WORDPROCESSINGML_2012_NAMESPACE
+          : null;
+    if (expected && visit.namespaceUri !== expected) {
+      failTemplateDocx("ACTIVE_CONTENT_REJECTED");
+    }
+  }
+}
+
+function exactWordAttribute(
+  visit: ExpandedXmlVisit,
+  localName: string,
+): string | undefined {
+  const matches = visit.attributes.filter(
+    (attribute) => attribute.localName === localName,
+  );
+  if (
+    matches.length > 1 ||
+    (matches.length === 1 &&
+      matches[0]!.namespaceUri !== WORDPROCESSINGML_NAMESPACE)
+  ) {
+    failTemplateDocx("ACTIVE_CONTENT_REJECTED");
+  }
+  return matches[0]?.value;
+}
+
+function assertHarmlessFieldInstruction(raw: string): void {
+  const normalized = raw.trim();
+  if (!normalized) return;
+  const compact = normalized.replace(/\s+/g, "").toUpperCase();
+  const keyword = /^=?([A-Z]+)/.exec(compact)?.[1];
+  if (!keyword || !HARMLESS_FIELD_INSTRUCTIONS.has(keyword)) {
+    failTemplateDocx("ACTIVE_CONTENT_REJECTED");
+  }
 }
 
 function unionSorted(...lists: readonly string[][]): string[] {

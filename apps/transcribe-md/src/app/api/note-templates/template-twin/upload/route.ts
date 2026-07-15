@@ -1,14 +1,21 @@
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 
 import { AuthError, requireDoctorSession } from '@/lib/auth';
 import {
   createTemplateTwinDraft,
   TemplateTwinDraftError,
 } from '@/lib/template-twin/create-draft';
-import { isSameOriginTemplateTwinMutation } from '@/lib/template-twin/request-security';
+import {
+  boundedMultipartFormData,
+  isMultipartFile,
+  isSameOriginTemplateTwinMutation,
+  TemplateTwinMultipartError,
+} from '@/lib/template-twin/request-security';
 import {
   TemplateTwinPhiRejectedError,
   TemplateTwinPhiScanUnavailableError,
+  TemplateTwinSourcePrivacyUnsupportedError,
 } from '@/lib/template-twin/source-phi';
 import {
   TemplateTwinArtifactTooLargeError,
@@ -25,6 +32,11 @@ const MAX_SOURCE_BYTES = 10 * 1024 * 1024;
 const MAX_MULTIPART_BYTES = MAX_SOURCE_BYTES + 256 * 1024;
 const DOCX_MIME =
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const TemplateIdentitySchema = z.object({
+  name: z.string().trim().min(3).max(120),
+  encounterType: z.string().trim().min(3).max(120),
+  versionDescription: z.string().trim().min(3).max(500),
+});
 
 function json(
   body: { ok: true; certificationUrl: string } | { ok: false; error: string },
@@ -51,6 +63,18 @@ function safeError(error: unknown): { status: number; message: string } {
   }
   if (error instanceof TemplateTwinPhiRejectedError) {
     return { status: 422, message: error.message };
+  }
+  if (error instanceof TemplateTwinSourcePrivacyUnsupportedError) {
+    return { status: 422, message: error.message };
+  }
+  if (error instanceof TemplateTwinMultipartError) {
+    return {
+      status: error.code === 'MULTIPART_TOO_LARGE' ? 413 : 400,
+      message:
+        error.code === 'MULTIPART_TOO_LARGE'
+          ? 'Template Twin accepts DOCX files up to 10 MB.'
+          : 'The template upload request was malformed.',
+    };
   }
   if (error instanceof TemplateTwinPhiScanUnavailableError) {
     return { status: 503, message: error.message };
@@ -88,7 +112,12 @@ function safeError(error: unknown): { status: number; message: string } {
   }
   if (error instanceof TemplateTwinDraftError) {
     return {
-      status: error.code === 'NO_FILLABLE_FIELDS' ? 422 : 500,
+      status:
+        error.code === 'INVALID_IDENTITY'
+          ? 400
+          : error.code === 'NO_FILLABLE_FIELDS'
+            ? 422
+            : 500,
       message: error.message,
     };
   }
@@ -112,9 +141,9 @@ export async function POST(request: Request) {
     const session = await requireDoctorSession();
     const blocked = rateLimitOr429(RATE_LIMITS.UPLOAD, session.user.id);
     if (blocked) return blocked;
-    const formData = await request.formData();
+    const formData = await boundedMultipartFormData(request, MAX_MULTIPART_BYTES);
     const file = formData.get('file');
-    if (!(file instanceof File)) {
+    if (!isMultipartFile(file)) {
       return json({ ok: false, error: 'Choose one original DOCX file.' }, 400);
     }
     const lowerName = file.name.toLowerCase();
@@ -131,6 +160,21 @@ export async function POST(request: Request) {
     if (file.size < 1 || file.size > MAX_SOURCE_BYTES) {
       return json({ ok: false, error: 'Template Twin accepts non-empty DOCX files up to 10 MB.' }, 413);
     }
+    const identity = TemplateIdentitySchema.safeParse({
+      name: formData.get('templateName'),
+      encounterType: formData.get('encounterScope'),
+      versionDescription: formData.get('versionDescription'),
+    });
+    if (!identity.success) {
+      return json(
+        {
+          ok: false,
+          error:
+            'Name the template, choose its visit scope, and describe this version.',
+        },
+        400,
+      );
+    }
 
     const source = new Uint8Array(await file.arrayBuffer());
     if (source.byteLength !== file.size) {
@@ -144,6 +188,7 @@ export async function POST(request: Request) {
         userEmail: session.user.email,
         practiceId: session.user.practiceId,
       },
+      identity: identity.data,
     });
     return json(
       {

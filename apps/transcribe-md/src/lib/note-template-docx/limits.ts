@@ -7,6 +7,10 @@ export interface TemplateDocxLimits {
   maxCompressionRatio: number;
   maxXmlBytes: number;
   maxXmlDepth: number;
+  maxXmlElements: number;
+  maxXmlAttributes: number;
+  maxXmlAttributeCharacters: number;
+  maxXmlTextCharacters: number;
   maxStructuralPathLength: number;
   maxFields: number;
   maxTables: number;
@@ -23,6 +27,10 @@ export const DEFAULT_TEMPLATE_DOCX_LIMITS: Readonly<TemplateDocxLimits> = {
   maxCompressionRatio: 100,
   maxXmlBytes: 12 * 1024 * 1024,
   maxXmlDepth: 128,
+  maxXmlElements: 250_000,
+  maxXmlAttributes: 500_000,
+  maxXmlAttributeCharacters: 4 * 1024 * 1024,
+  maxXmlTextCharacters: 16 * 1024 * 1024,
   maxStructuralPathLength: 512,
   maxFields: 2_000,
   maxTables: 500,

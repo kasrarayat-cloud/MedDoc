@@ -100,6 +100,7 @@ export function readVerifiedZipPackage(
   if (eocdOffset + 22 + commentLength !== bytes.length) {
     failTemplateDocx("ZIP_DIRECTORY_INVALID");
   }
+  if (commentLength !== 0) failTemplateDocx("ZIP_METADATA_UNSUPPORTED");
   if (
     directoryOffset > eocdOffset ||
     directorySize > eocdOffset ||
@@ -248,18 +249,20 @@ function readCentralDirectory(
       failTemplateDocx("ZIP_DIRECTORY_INVALID");
     }
     if (diskStart !== 0) failTemplateDocx("ZIP_MULTI_DISK_UNSUPPORTED");
+    const centralExtra = bytes.subarray(
+      offset + 46 + nameLength,
+      offset + 46 + nameLength + extraLength,
+    );
     if (
       compressedSize === 0xffffffff ||
       uncompressedSize === 0xffffffff ||
       localHeaderOffset === 0xffffffff ||
-      containsZip64Extra(
-        bytes.subarray(
-          offset + 46 + nameLength,
-          offset + 46 + nameLength + extraLength,
-        ),
-      )
+      containsZip64Extra(centralExtra)
     ) {
       failTemplateDocx("ZIP64_UNSUPPORTED");
+    }
+    if (extraLength !== 0 || commentLength !== 0) {
+      failTemplateDocx("ZIP_METADATA_UNSUPPORTED");
     }
     if ((flags & 0x2041) !== 0) failTemplateDocx("ZIP_ENCRYPTED_ENTRY");
     if (method !== 0 && method !== 8)
@@ -349,6 +352,12 @@ function readCompressedEntry(
     failTemplateDocx("ZIP_LOCAL_HEADER_INVALID");
   }
   if (containsZip64Extra(localExtra)) failTemplateDocx("ZIP64_UNSUPPORTED");
+  if (
+    extraLength !== 0 &&
+    !isValidatedMicrosoftZeroPaddingExtra(localExtra)
+  ) {
+    failTemplateDocx("ZIP_METADATA_UNSUPPORTED");
+  }
 
   let rangeEnd = dataOffset + entry.compressedSize;
   if ((flags & 0x0008) === 0) {
@@ -447,6 +456,28 @@ function containsZip64Extra(extra: Buffer): boolean {
   }
   if (offset !== extra.length) failTemplateDocx("ZIP_DIRECTORY_INVALID");
   return false;
+}
+
+/**
+ * Microsoft Word may reserve local-header growth space using one A220 record.
+ * This is accepted only when the payload is the exact A028 size marker followed
+ * entirely by zero padding. Central-directory extras remain forbidden, and a
+ * single nonzero payload byte fails closed so this cannot carry hidden data.
+ */
+function isValidatedMicrosoftZeroPaddingExtra(extra: Buffer): boolean {
+  if (extra.length !== 264 && extra.length !== 520) return false;
+  if (extra.readUInt16LE(0) !== 0xa220) return false;
+  const payloadLength = extra.readUInt16LE(2);
+  if (payloadLength !== extra.length - 4) return false;
+  if (extra.readUInt16LE(4) !== 0xa028) return false;
+  const reservedSizeMarker = extra.readUInt16LE(6);
+  if (
+    (payloadLength === 260 && reservedSizeMarker !== 0x0100) ||
+    (payloadLength === 516 && reservedSizeMarker !== 0x0200)
+  ) {
+    return false;
+  }
+  return extra.subarray(8).every((byte) => byte === 0);
 }
 
 function ensureReadable(

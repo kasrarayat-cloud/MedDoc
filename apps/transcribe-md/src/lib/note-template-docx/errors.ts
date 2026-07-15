@@ -12,6 +12,7 @@ export type TemplateDocxErrorCode =
   | "ZIP64_UNSUPPORTED"
   | "ZIP_MULTI_DISK_UNSUPPORTED"
   | "ZIP_DIRECTORY_INVALID"
+  | "ZIP_METADATA_UNSUPPORTED"
   | "ZIP_TOO_MANY_ENTRIES"
   | "ZIP_PATH_UNSAFE"
   | "ZIP_DUPLICATE_ENTRY"
@@ -32,6 +33,7 @@ export type TemplateDocxErrorCode =
   | "EMBEDDED_OBJECT_REJECTED"
   | "EXTERNAL_RELATIONSHIP_REJECTED"
   | "XML_DTD_REJECTED"
+  | "XML_HIDDEN_CONTENT_UNSUPPORTED"
   | "XML_INVALID"
   | "DOCUMENT_STRUCTURE_LIMIT_EXCEEDED"
   | "IR_VALIDATION_FAILED";
@@ -44,6 +46,8 @@ const SAFE_MESSAGES: Record<TemplateDocxErrorCode, string> = {
   ZIP64_UNSUPPORTED: "ZIP64 DOCX packages are not supported.",
   ZIP_MULTI_DISK_UNSUPPORTED: "Multi-disk ZIP packages are not supported.",
   ZIP_DIRECTORY_INVALID: "The DOCX ZIP directory is invalid.",
+  ZIP_METADATA_UNSUPPORTED:
+    "ZIP comments and extra metadata fields are not supported in safe-alpha templates.",
   ZIP_TOO_MANY_ENTRIES: "The DOCX package contains too many entries.",
   ZIP_PATH_UNSAFE: "The DOCX package contains an unsafe entry path.",
   ZIP_DUPLICATE_ENTRY: "The DOCX package contains duplicate entry paths.",
@@ -73,6 +77,8 @@ const SAFE_MESSAGES: Record<TemplateDocxErrorCode, string> = {
     "The DOCX package contains an external or remote relationship.",
   XML_DTD_REJECTED:
     "DTD and entity declarations are not permitted in DOCX XML.",
+  XML_HIDDEN_CONTENT_UNSUPPORTED:
+    "XML comments, processing instructions, and CDATA are not supported in safe-alpha templates.",
   XML_INVALID: "An OOXML part is malformed.",
   DOCUMENT_STRUCTURE_LIMIT_EXCEEDED:
     "The DOCX document structure exceeds the supported complexity limit.",
