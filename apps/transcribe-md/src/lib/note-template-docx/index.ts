@@ -14,3 +14,18 @@ export type {
 } from './package-security';
 export { readVerifiedZipPackage } from './zip-directory';
 export type { VerifiedZipEntry, VerifiedZipPackage } from './zip-directory';
+export { renderTemplateDocx } from './renderer';
+export type {
+  RenderTemplateDocxInput,
+  RenderTemplateDocxResult,
+} from './renderer';
+export {
+  TemplateDocxRenderError,
+  verifyRenderedTemplateDocx,
+} from './roundtrip-verify';
+export type {
+  TemplateDocxRenderErrorCode,
+  TemplateDocxRoundTripVerification,
+  VerifiedRenderedField,
+  VerifyRenderedTemplateDocxInput,
+} from './roundtrip-verify';
