@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import type { TemplateDocIR } from '../template-twin/ir';
 import type { TemplateDocxLimits } from './limits';
 import { inspectDocxPackage } from './package-security';
+import { WORDPROCESSINGML_NAMESPACE } from './xml';
 
 export type TemplateDocxRenderErrorCode =
   | 'SOURCE_IR_MISMATCH'
@@ -71,6 +72,8 @@ export type XmlEncoding = 'utf8' | 'utf16le' | 'utf16be';
 
 export interface XmlElementSpan {
   readonly name: string;
+  readonly namespaceUri: string | null;
+  readonly namespacePrefixes: ReadonlyMap<string, string>;
   readonly path: string;
   readonly start: number;
   readonly startTagEnd: number;
@@ -91,6 +94,8 @@ export interface ScannedXmlPart {
 
 interface MutableXmlElementSpan {
   name: string;
+  namespaceUri: string | null;
+  namespacePrefixes: Map<string, string>;
   path: string;
   start: number;
   startTagEnd: number;
@@ -161,8 +166,15 @@ export function scanXmlPart(bytes: Uint8Array): ScannedXmlPart {
       failTemplateDocxRender('ROUNDTRIP_PACKAGE_INVALID');
     }
     const selfClosing = /\/\s*>$/.test(rawTag);
+    const namespacePrefixes = parseNamespacePrefixes(
+      rawTag,
+      parent?.namespacePrefixes,
+    );
+    const prefix = xmlPrefix(name);
     const node: MutableXmlElementSpan = {
       name,
+      namespaceUri: namespacePrefixes.get(prefix ?? '') ?? null,
+      namespacePrefixes,
       path,
       start: open,
       startTagEnd: tagEnd,
@@ -188,6 +200,23 @@ export function scanXmlPart(bytes: Uint8Array): ScannedXmlPart {
     roots,
     byPath,
   };
+}
+
+function parseNamespacePrefixes(
+  rawTag: string,
+  inherited?: ReadonlyMap<string, string>,
+): Map<string, string> {
+  const namespaces = new Map(inherited);
+  const expression = /\s+xmlns(?::([^\s=/>]+))?\s*=\s*(["'])([\s\S]*?)\2/g;
+  for (const match of rawTag.matchAll(expression)) {
+    namespaces.set(match[1] ?? '', decodeXmlEntities(match[3] ?? ''));
+  }
+  return namespaces;
+}
+
+function xmlPrefix(name: string): string | null {
+  const colon = name.indexOf(':');
+  return colon < 0 ? null : name.slice(0, colon);
 }
 
 function terminatedAt(source: string, start: number, terminator: string): number {
@@ -304,6 +333,88 @@ export function descendantXmlElements(
   return result;
 }
 
+export function descendantWordElements(
+  node: XmlElementSpan,
+  localName: string,
+): XmlElementSpan[] {
+  return descendantXmlElements(node, localName).filter(
+    (candidate) => candidate.namespaceUri === WORDPROCESSINGML_NAMESPACE,
+  );
+}
+
+export function directWordChild(
+  node: XmlElementSpan,
+  localName: string,
+): XmlElementSpan | undefined {
+  return node.children.find(
+    (child) =>
+      xmlLocalName(child.name) === localName &&
+      child.namespaceUri === WORDPROCESSINGML_NAMESPACE,
+  );
+}
+
+export function readNamespacedXmlAttribute(
+  xml: string,
+  node: XmlElementSpan,
+  namespaceUri: string | null,
+  localName: string,
+): string | null {
+  const tag = xml.slice(node.start, node.startTagEnd);
+  const expression = /\s+([^\s=/>]+)\s*=\s*(["'])([\s\S]*?)\2/g;
+  const matches: string[] = [];
+  for (const match of tag.matchAll(expression)) {
+    const qualifiedName = match[1]!;
+    if (qualifiedName === 'xmlns' || qualifiedName.startsWith('xmlns:')) continue;
+    if (xmlLocalName(qualifiedName) !== localName) continue;
+    const prefix = xmlPrefix(qualifiedName);
+    const resolved = prefix ? (node.namespacePrefixes.get(prefix) ?? null) : null;
+    if (resolved === namespaceUri) matches.push(decodeXmlEntities(match[3] ?? ''));
+    else failTemplateDocxRender('ROUNDTRIP_PACKAGE_INVALID');
+  }
+  if (matches.length > 1) failTemplateDocxRender('ROUNDTRIP_PACKAGE_INVALID');
+  return matches[0] ?? null;
+}
+
+export function wordVisibleText(
+  xml: string,
+  node: XmlElementSpan,
+): string {
+  const output: string[] = [];
+  const walk = (candidate: XmlElementSpan): void => {
+    if (candidate.namespaceUri === WORDPROCESSINGML_NAMESPACE) {
+      const local = xmlLocalName(candidate.name);
+      if (local === 't' || local === 'delText') {
+        output.push(
+          decodeXmlEntities(
+            xml.slice(candidate.startTagEnd, candidate.endTagStart),
+          ),
+        );
+        return;
+      }
+      if (local === 'tab') output.push('\t');
+      else if (local === 'br' || local === 'cr') output.push('\n');
+    }
+    for (const child of candidate.children) walk(child);
+  };
+  walk(node);
+  return output.join('');
+}
+
+function decodeXmlEntities(value: string): string {
+  return value
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex: string) =>
+      String.fromCodePoint(Number.parseInt(hex, 16)),
+    )
+    .replace(/&#([0-9]+);/g, (_, decimal: string) =>
+      String.fromCodePoint(Number.parseInt(decimal, 10)),
+    )
+    .replaceAll('&quot;', '"')
+    .replaceAll('&apos;', "'")
+    .replaceAll('&gt;', '>')
+    .replaceAll('&lt;', '<')
+    .replaceAll('&amp;', '&');
+}
+
 export interface ApprovedXmlPatch {
   readonly start: number;
   readonly end: number;
@@ -348,6 +459,11 @@ export interface RenderedFieldProof {
   readonly bindingPath: string;
   readonly valueSha256: string;
   readonly occurrences: number;
+  readonly disposition:
+    | 'rendered'
+    | 'unresolved_blank'
+    | 'preserved_unresolved'
+    | 'preserved_unsupported';
 }
 
 export interface RenderedPartProof {
@@ -366,6 +482,7 @@ export interface VerifiedRenderedField {
   readonly bindingPath: string;
   readonly valueSha256: string;
   readonly occurrences: number;
+  readonly disposition: RenderedFieldProof['disposition'];
   readonly status: 'verified';
 }
 
@@ -475,8 +592,9 @@ export function verifyRenderedTemplateDocx(
     ),
   );
   if (
-    proofFieldIds.size !== patchedFieldIds.size ||
-    [...proofFieldIds].some((fieldId) => !patchedFieldIds.has(fieldId))
+    proofFieldIds.size !== input.ir.fields.length ||
+    input.ir.fields.some((field) => !proofFieldIds.has(field.fieldId)) ||
+    [...patchedFieldIds].some((fieldId) => !proofFieldIds.has(fieldId))
   ) {
     failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
   }

@@ -16,10 +16,13 @@ import {
 import { compileTemplateDocx } from './compiler';
 import type { TemplateDocxLimits } from './limits';
 import { inspectDocxPackage } from './package-security';
+import { readbackTemplateDocxOutput } from './output-readback';
 import {
   applyApprovedXmlPatches,
   descendantXmlElements,
+  descendantWordElements,
   directXmlChild,
+  directWordChild,
   encodeXmlPart,
   failTemplateDocxRender,
   scanXmlPart,
@@ -88,7 +91,6 @@ export async function renderTemplateDocx(
   assertSourceMatchesIr(input.source, ir, inspected.sourceSha256, input.limits);
   const resolutions = parseResolutions(ir, input.resolutions);
   const partPlans = new Map<string, MutablePartPlan>();
-  const fieldProofs: RenderedFieldProof[] = [];
 
   const getPartPlan = (partName: string): MutablePartPlan => {
     const existing = partPlans.get(partName);
@@ -107,7 +109,6 @@ export async function renderTemplateDocx(
     fields: repeatingFields,
     resolutions,
     getPartPlan,
-    fieldProofs,
   });
 
   for (const field of ir.fields) {
@@ -122,7 +123,6 @@ export async function renderTemplateDocx(
     const patches = createFieldPatches(part.scan, field, prepared);
     if (patches.length === 0) continue;
     part.patches.push(...patches);
-    fieldProofs.push(fieldProof(field, resolution.value, 1));
   }
 
   const partProofs: RenderedPartProof[] = [];
@@ -178,12 +178,34 @@ export async function renderTemplateDocx(
     }
   }
 
-  const verification = verifyRenderedTemplateDocx({
+  const plannedFieldProofs = ir.fields.map((field) => {
+    const resolution = resolutions.get(field.fieldId)!;
+    const occurrences =
+      field.rowPrototype && Array.isArray(resolution.value)
+        ? resolution.value.length
+        : 1;
+    return fieldProof(field, resolution.value, occurrences);
+  });
+  const structuralVerification = verifyRenderedTemplateDocx({
     source: input.source,
     output,
     ir,
-    plan: { parts: partProofs, fields: fieldProofs },
+    plan: { parts: partProofs, fields: plannedFieldProofs },
     limits: input.limits,
+  });
+  const outputFields = readbackTemplateDocxOutput({
+    source: input.source,
+    output,
+    ir,
+    resolutions: [...resolutions.values()],
+    limits: input.limits,
+  });
+  const verification: TemplateDocxRoundTripVerification = Object.freeze({
+    ...structuralVerification,
+    fields: outputFields.map((field) => ({
+      ...field,
+      status: 'verified' as const,
+    })),
   });
   const outputSha256 = createHash('sha256').update(output).digest('hex');
   if (verification.outputSha256 !== outputSha256) {
@@ -291,6 +313,13 @@ function assertResolutionStatus(
   ) {
     failTemplateDocxRender('FIELD_RESOLUTION_INVALID');
   }
+  if (
+    field.kind === 'checkbox' &&
+    resolution.value === false &&
+    resolution.status !== 'explicitly_denied'
+  ) {
+    failTemplateDocxRender('FIELD_RESOLUTION_INVALID');
+  }
 }
 
 function prepareScalarResolution(
@@ -326,7 +355,6 @@ function renderRepeatingRows(input: {
   fields: TemplateField[];
   resolutions: ReadonlyMap<string, FieldResolution>;
   getPartPlan(partName: string): MutablePartPlan;
-  fieldProofs: RenderedFieldProof[];
 }): void {
   const byTable = new Map<string, TemplateField[]>();
   for (const field of input.fields) {
@@ -421,11 +449,6 @@ function renderRepeatingRows(input: {
       fieldIds: renderedFieldIds,
       kind: 'repeating_row',
     });
-    for (const field of fields) {
-      if (field.detectionStatus === 'unsupported') continue;
-      const resolution = input.resolutions.get(field.fieldId)!;
-      input.fieldProofs.push(fieldProof(field, resolution.value, rowCount));
-    }
   }
 }
 
@@ -567,9 +590,18 @@ function contentControlPatches(
   field: TemplateField,
   resolution: PreparedResolution,
 ): ApprovedXmlPatch[] {
-  const properties = directXmlChild(control, 'sdtPr');
-  const content = directXmlChild(control, 'sdtContent');
+  const properties = directWordChild(control, 'sdtPr');
+  const content = directWordChild(control, 'sdtContent');
   if (!properties || !content) failTemplateDocxRender('BINDING_NOT_FOUND');
+  const placeholderPatches =
+    resolution.value === null
+      ? []
+      : placeholderMetadataPatches(
+          xml,
+          properties,
+          content,
+          field.fieldId,
+        );
 
   if (field.kind === 'checkbox') {
     const checkbox = descendantXmlElements(properties, 'checkbox')[0];
@@ -583,6 +615,11 @@ function contentControlPatches(
     ) {
       failTemplateDocxRender('FIELD_VALUE_INVALID');
     }
+    // A missing/unknown checkbox is a third state, not a denial. Preserve the
+    // physician's source control byte-for-byte until affirmative or explicitly
+    // denied evidence resolves it. This contract applies before both the state
+    // attribute and visible glyph are patched.
+    if (resolution.value === null) return [];
     const selected = resolution.value === true;
     const state = selected
       ? descendantXmlElements(checkbox, 'checkedState')[0]
@@ -593,13 +630,14 @@ function contentControlPatches(
         ? '☒'
         : '☐';
     return [
+      ...placeholderPatches,
       setXmlAttributePatch(xml, checked, 'val', selected ? '1' : '0', field.fieldId),
       ...textContainerPatches(xml, content, glyph, field.fieldId),
     ];
   }
 
   if (field.kind === 'date') {
-    const date = directXmlChild(properties, 'date');
+    const date = directWordChild(properties, 'date');
     if (!date) failTemplateDocxRender('BINDING_NOT_FOUND');
     const display = formatDateValue(xml, date, resolution.value);
     const statePatch =
@@ -613,13 +651,14 @@ function contentControlPatches(
             field.fieldId,
           );
     return [
+      ...placeholderPatches,
       ...(statePatch ? [statePatch] : []),
       ...textContainerPatches(xml, content, display, field.fieldId),
     ];
   }
 
   if (field.kind === 'single_select') {
-    const comboBox = directXmlChild(properties, 'comboBox');
+    const comboBox = directWordChild(properties, 'comboBox');
     const lastValue = comboBox
       ? descendantXmlElements(comboBox, 'lastValue')[0]
       : undefined;
@@ -631,6 +670,7 @@ function contentControlPatches(
     }
     const option = exactSelectedOption(field, resolution);
     return [
+      ...placeholderPatches,
       ...(lastValue
         ? [
             setXmlAttributePatch(
@@ -652,7 +692,27 @@ function contentControlPatches(
   }
 
   const display = displayValue(field, resolution);
-  return textContainerPatches(xml, content, display, field.fieldId);
+  return [
+    ...placeholderPatches,
+    ...textContainerPatches(xml, content, display, field.fieldId),
+  ];
+}
+
+function placeholderMetadataPatches(
+  xml: string,
+  properties: XmlElementSpan,
+  content: XmlElementSpan,
+  fieldId: string,
+): ApprovedXmlPatch[] {
+  const patches = descendantWordElements(properties, 'showingPlcHdr').map(
+    (node) => removeXmlElementPatch(node, fieldId),
+  );
+  for (const style of descendantWordElements(content, 'rStyle')) {
+    if (readXmlAttribute(xml, style, 'val') === 'PlaceholderText') {
+      patches.push(removeXmlElementPatch(style, fieldId));
+    }
+  }
+  return patches;
 }
 
 function legacyFieldPatches(
@@ -661,15 +721,19 @@ function legacyFieldPatches(
   field: TemplateField,
   resolution: PreparedResolution,
 ): ApprovedXmlPatch[] {
-  const formData = descendantXmlElements(begin, 'ffData')[0];
+  const formData = descendantWordElements(begin, 'ffData')[0];
   if (!formData) failTemplateDocxRender('BINDING_NOT_FOUND');
+  // Legacy FORMCHECKBOX fields use the same tri-state clinical contract as
+  // native content controls. An unresolved value must not be coerced to 0 or
+  // have its visible result text cleared.
+  if (field.kind === 'checkbox' && resolution.value === null) return [];
   const patches: ApprovedXmlPatch[] = [];
   const display = displayValue(field, resolution);
 
   if (field.kind === 'single_select') {
-    const list = descendantXmlElements(formData, 'ddList')[0];
+    const list = descendantWordElements(formData, 'ddList')[0];
     if (!list) failTemplateDocxRender('BINDING_NOT_FOUND');
-    const result = descendantXmlElements(list, 'result')[0];
+    const result = descendantWordElements(list, 'result')[0];
     if (resolution.value === null) {
       if (result) patches.push(removeXmlElementPatch(result, field.fieldId));
     } else {
@@ -687,9 +751,9 @@ function legacyFieldPatches(
       );
     }
   } else if (field.kind === 'checkbox') {
-    const checkbox = descendantXmlElements(formData, 'checkBox')[0];
+    const checkbox = descendantWordElements(formData, 'checkBox')[0];
     if (!checkbox) failTemplateDocxRender('BINDING_NOT_FOUND');
-    const checked = descendantXmlElements(checkbox, 'checked')[0];
+    const checked = descendantWordElements(checkbox, 'checked')[0];
     if (
       resolution.value !== null &&
       typeof resolution.value !== 'boolean'
@@ -703,9 +767,9 @@ function legacyFieldPatches(
         : appendXmlChildPatch(xml, checkbox, wordElement(checkbox, 'checked', value), field.fieldId),
     );
   } else {
-    const textInput = descendantXmlElements(formData, 'textInput')[0];
+    const textInput = descendantWordElements(formData, 'textInput')[0];
     if (!textInput) failTemplateDocxRender('BINDING_NOT_FOUND');
-    const currentDefault = descendantXmlElements(textInput, 'default')[0];
+    const currentDefault = descendantWordElements(textInput, 'default')[0];
     if (resolution.value === null) {
       if (currentDefault) {
         patches.push(removeXmlElementPatch(currentDefault, field.fieldId));
@@ -740,8 +804,9 @@ function tableCellPatches(
   field: TemplateField,
   resolution: PreparedResolution,
 ): ApprovedXmlPatch[] {
+  if (field.kind === 'checkbox' && resolution.value === null) return [];
   const display = displayValue(field, resolution);
-  const textNodes = descendantXmlElements(cell, 't');
+  const textNodes = descendantWordElements(cell, 't');
   if (textNodes.length > 0) {
     return patchExistingTextNodes(xml, textNodes, display, field.fieldId);
   }
@@ -897,7 +962,7 @@ function textContainerPatches(
   display: string,
   fieldId: string,
 ): ApprovedXmlPatch[] {
-  const textNodes = descendantXmlElements(container, 't');
+  const textNodes = descendantWordElements(container, 't');
   if (textNodes.length === 0) failTemplateDocxRender('BINDING_NOT_FOUND');
   return patchExistingTextNodes(xml, textNodes, safeDisplayText(display), fieldId);
 }
@@ -1161,7 +1226,7 @@ function legacyResultTextNodes(
     paragraph = paragraph.parent;
   }
   if (!paragraph) return [];
-  const fieldCharacters = descendantXmlElements(paragraph, 'fldChar');
+  const fieldCharacters = descendantWordElements(paragraph, 'fldChar');
   const beginIndex = fieldCharacters.findIndex((candidate) => candidate === begin);
   if (beginIndex < 0) failTemplateDocxRender('BINDING_AMBIGUOUS');
   let depth = 0;
@@ -1188,7 +1253,7 @@ function legacyResultTextNodes(
     }
   }
   if (!separate || !end) return [];
-  return descendantXmlElements(paragraph, 't').filter(
+  return descendantWordElements(paragraph, 't').filter(
     (node) => node.start >= separate!.end && node.end <= end!.start,
   );
 }
@@ -1204,5 +1269,13 @@ function fieldProof(
     bindingPath: field.rendererBinding.path,
     valueSha256: canonicalSha256({ fieldId: field.fieldId, value }),
     occurrences,
+    disposition:
+      field.detectionStatus === 'unsupported'
+        ? 'preserved_unsupported'
+        : value === null
+          ? field.kind === 'checkbox'
+            ? 'preserved_unresolved'
+            : 'unresolved_blank'
+          : 'rendered',
   };
 }

@@ -15,6 +15,8 @@ export type {
 export { readVerifiedZipPackage } from './zip-directory';
 export type { VerifiedZipEntry, VerifiedZipPackage } from './zip-directory';
 export { renderTemplateDocx } from './renderer';
+export { readbackTemplateDocxOutput } from './output-readback';
+export type { ReadbackTemplateDocxOutputInput } from './output-readback';
 export type {
   RenderTemplateDocxInput,
   RenderTemplateDocxResult,
