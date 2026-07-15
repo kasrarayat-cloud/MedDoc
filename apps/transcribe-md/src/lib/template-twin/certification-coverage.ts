@@ -14,7 +14,6 @@ export interface TemplateTwinFieldTestWaiverEvidence {
   reason: string;
   waivedAt: Date | string;
 }
-
 export interface TemplateTwinCoverageIssue {
   fieldId: string | null;
   code:
@@ -300,4 +299,3 @@ export function evaluateTemplateTwinCertificationCoverage(input: {
     issues,
   };
 }
-

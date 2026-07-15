@@ -20,7 +20,6 @@ export interface SupportedTemplateTwinConcept {
   readonly sourceEntityPath: string;
   readonly physicianLabel: string;
 }
-
 /** Extension seam for the later Template-Aware Extraction Agent. Safe-alpha
  * runtime does not register a dynamic provider. Any future provider must have
  * its own version and return an exact descriptor, never a fuzzy match. */
@@ -188,4 +187,3 @@ export function supportedProjectedSystemConcept(
   const concept = `${family}.${canonicalSystem}`;
   return BY_CONCEPT.has(concept) ? concept : null;
 }
-

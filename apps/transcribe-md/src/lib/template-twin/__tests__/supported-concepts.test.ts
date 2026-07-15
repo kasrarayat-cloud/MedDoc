@@ -96,4 +96,3 @@ describe('Template Twin safe-alpha supported clinical concepts', () => {
     ).toMatchObject({ concept: 'gad_7.total_score' });
   });
 });
-
