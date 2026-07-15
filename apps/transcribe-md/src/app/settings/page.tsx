@@ -38,7 +38,7 @@ import { DeleteAccountDialog } from './delete-account-dialog';
 import { ChangePasswordForm } from './change-password-form';
 import { ChangeEmailDialog } from './change-email-dialog';
 import { EmailChangeToast } from './email-change-toast';
-import { isDataExportEnabled } from '../api/settings/export-data/route';
+import { isDataExportEnabled } from '@/lib/data-export-feature';
 import { NoteFormatManager } from './note-format/note-format-manager';
 import { listDoctorTemplates } from '@/lib/note-template-persist/read';
 import { findSpecialty } from '@meddoc/shared/specialties';

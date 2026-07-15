@@ -176,14 +176,17 @@ export function SoapEditor({
     },
     [text]
   );
-  // Local mirror of the rail's score so apply-additions / override
-  // responses can update the rail-rendered tier without a full page
-  // reload. The initial value is the server-rendered score; the rail's
-  // internal useEffect re-syncs from props when the parent re-renders.
-  const [emScore, setEmScore] = useState<EmScore | null>(initialScore);
-  useEffect(() => {
-    setEmScore(initialScore);
-  }, [initialScore]);
+  // Keep a local response only while it belongs to the exact server score
+  // that produced it. A new server-rendered score automatically supersedes
+  // the local response without synchronously setting state from an effect.
+  const [emScoreOverride, setEmScoreOverride] = useState<{
+    base: EmScore | null;
+    score: EmScore;
+  } | null>(null);
+  const emScore =
+    emScoreOverride?.base === initialScore
+      ? emScoreOverride.score
+      : initialScore;
 
   // Boost hints — pure derived value from emScore.sectionPulseHints.
   // Phase 5.2 originally used a `qm:em-boost-hints` window CustomEvent
@@ -278,7 +281,7 @@ export function SoapEditor({
           newScore?: EmScore;
         };
         if (data.ok && data.newScore) {
-          setEmScore(data.newScore);
+          setEmScoreOverride({ base: initialScore, score: data.newScore });
         }
         return { ok: data.ok, newScore: data.newScore };
       } catch (err) {
@@ -291,7 +294,7 @@ export function SoapEditor({
         };
       }
     },
-    [visitId]
+    [initialScore, visitId]
   );
 
   // Batch H — signedAt is the canonical signal that the note is locked,
@@ -433,7 +436,10 @@ export function SoapEditor({
                     newScore?: EmScore;
                   };
                   if (data.ok && data.newScore) {
-                    setEmScore(data.newScore);
+                    setEmScoreOverride({
+                      base: initialScore,
+                      score: data.newScore,
+                    });
                   }
                   return { ok: data.ok, newScore: data.newScore };
                 } catch (err) {
