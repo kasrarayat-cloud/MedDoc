@@ -41,6 +41,62 @@ export function isMockEnabled(): boolean {
   return process.env.MOCK_AI_CALLS === 'true';
 }
 
+/**
+ * The infrastructure-backed Template Twin scenario needs evidence-bearing
+ * Layer-3 entities, while the long-standing generic E2E fixture intentionally
+ * leaves every clinical category empty. Keep that richer fixture behind three
+ * independent gates: shared mock mode, a dedicated opt-in, and a database name
+ * that is positively marked qa/test/synthetic. The QA compose database is
+ * `meddoc_qa_test`; a production-like `meddoc` URL can never enable this path.
+ */
+function templateTwinInfrastructureFixtureEnabled(): boolean {
+  if (
+    !isMockEnabled() ||
+    process.env.MOCK_TEMPLATE_TWIN_E2E !== 'true'
+  ) {
+    return false;
+  }
+
+  const rawDatabaseUrl = process.env.DATABASE_URL;
+  if (!rawDatabaseUrl) return false;
+  try {
+    const databaseName = new URL(rawDatabaseUrl).pathname
+      .replace(/^\/+/, '')
+      .split('/')[0];
+    return /(?:^|[_-])(?:qa|test|synthetic)(?:[_-]|$)/i.test(
+      databaseName ?? '',
+    );
+  } catch {
+    return false;
+  }
+}
+
+const MOCK_TEMPLATE_TWIN_ENTITIES = {
+  chief_complaint: {
+    statement: 'synthetic wrist discomfort',
+    evidence_quote: 'Chief concern is synthetic wrist discomfort.',
+  },
+  hpi: null,
+  medications: [
+    {
+      name: 'Syntheticmed',
+      evidence_quote: 'Medication Syntheticmed documented.',
+    },
+  ],
+  social_history: {
+    smoking: {
+      status: 'Current',
+      evidence_quote: 'Smoking status is Current.',
+    },
+  },
+  plan_discussed: [
+    {
+      item: 'Use synthetic brace',
+      evidence_quote: 'Plan use synthetic brace.',
+    },
+  ],
+} as const;
+
 // ---------------------------------------------------------------------------
 // Fixtures for modelClient.complete() — Zod-validated JSON paths.
 // Shapes below intentionally rely on each layer's own `.default()`
@@ -242,6 +298,20 @@ const MOCK_SOAP_TEXT = [
   '[MOCK] Hydration, OTC analgesics PRN. Return if headache worsens or new neuro symptoms.',
 ].join('\n');
 
+const MOCK_TEMPLATE_TWIN_SOAP_TEXT = [
+  '## Subjective',
+  '[SYNTHETIC QA] Chief concern is synthetic wrist discomfort. Smoking status is Current.',
+  '',
+  '## Objective',
+  '[SYNTHETIC QA] No additional objective finding was supplied.',
+  '',
+  '## Assessment',
+  '[SYNTHETIC QA] Synthetic wrist discomfort.',
+  '',
+  '## Plan',
+  '[SYNTHETIC QA] Medication Syntheticmed documented. Plan use synthetic brace.',
+].join('\n');
+
 const MOCK_COMPLETE_TEXT_FIXTURES: Partial<
   Record<ModelCallPurpose, AnthropicCompleteTextResult>
 > = {
@@ -319,10 +389,53 @@ const MOCK_DEEPGRAM_BATCH: DeepgramBatchResponse = {
   },
 };
 
+/**
+ * The dedicated Template Twin QA transcript deliberately contains every
+ * evidence_quote returned by MOCK_TEMPLATE_TWIN_ENTITIES verbatim. That makes
+ * source offsets independently recoverable and prevents the infrastructure
+ * test from accepting model-shaped evidence that is absent from the mocked
+ * encounter recording.
+ */
+const MOCK_TEMPLATE_TWIN_DEEPGRAM_BATCH: DeepgramBatchResponse = {
+  metadata: { duration: 4, request_id: 'mock-template-twin-deepgram-request' },
+  results: {
+    channels: [
+      {
+        alternatives: [
+          {
+            transcript:
+              'Chief concern is synthetic wrist discomfort. Smoking status is Current. Medication Syntheticmed documented. Plan use synthetic brace.',
+            confidence: 0.95,
+            words: [],
+          },
+        ],
+      },
+    ],
+    utterances: [
+      {
+        start: 0,
+        end: 4,
+        confidence: 0.95,
+        channel: 0,
+        transcript:
+          'Chief concern is synthetic wrist discomfort. Smoking status is Current. Medication Syntheticmed documented. Plan use synthetic brace.',
+        words: [],
+        speaker: 0,
+      },
+    ],
+  },
+};
+
 export function mockComplete<T>(args: {
   purpose: ModelCallPurpose;
   schema: ZodType<T>;
 }): T {
+  if (
+    args.purpose === 'tm_entities' &&
+    templateTwinInfrastructureFixtureEnabled()
+  ) {
+    return args.schema.parse(MOCK_TEMPLATE_TWIN_ENTITIES);
+  }
   // Note-format PHI gate: opt into the FLAGGED scan result (the reject path)
   // via env. The mock keys on `purpose` only and can't see the input, so a
   // content-aware "this note has PHI" branch isn't possible; the env flag is
@@ -358,6 +471,16 @@ export function mockComplete<T>(args: {
 export function mockCompleteText(args: {
   purpose: ModelCallPurpose;
 }): AnthropicCompleteTextResult {
+  if (
+    (args.purpose === 'tm_soap_draft' || args.purpose === 'tm_polish') &&
+    templateTwinInfrastructureFixtureEnabled()
+  ) {
+    return {
+      text: MOCK_TEMPLATE_TWIN_SOAP_TEXT,
+      inputTokens: 1,
+      outputTokens: 1,
+    };
+  }
   const fixture = MOCK_COMPLETE_TEXT_FIXTURES[args.purpose];
   if (fixture === undefined) {
     throw new Error(
@@ -368,7 +491,9 @@ export function mockCompleteText(args: {
 }
 
 export function mockDeepgramBatch(): DeepgramBatchResult {
-  const raw = MOCK_DEEPGRAM_BATCH;
+  const raw = templateTwinInfrastructureFixtureEnabled()
+    ? MOCK_TEMPLATE_TWIN_DEEPGRAM_BATCH
+    : MOCK_DEEPGRAM_BATCH;
   const firstChannel = raw.results?.channels?.[0]?.alternatives?.[0];
   return {
     raw,

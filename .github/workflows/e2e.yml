@@ -128,6 +128,22 @@ jobs:
           CI: "true"
         run: npx playwright test --project=chromium
 
+      # Template Twin has a richer Layer-3 fixture than the generic MOCK path.
+      # It is triply gated in packages/ai: MOCK_AI_CALLS, this dedicated flag,
+      # and a database name containing qa/test/synthetic. Recreate only the app
+      # and worker; the isolated Postgres/Redis/versioned MinIO volumes remain.
+      - name: Recreate app + worker with the Template Twin synthetic fixture
+        run: >
+          MOCK_TEMPLATE_TWIN_E2E=true
+          docker compose -f docker-compose.qa.yml up -d --wait transcribe-md transcribe-md-worker
+
+      - name: Run E2E (Template Twin infrastructure path)
+        working-directory: apps/transcribe-md
+        env:
+          PW_BASE_URL: http://localhost:9020
+          CI: "true"
+        run: npx playwright test --project=template-twin
+
       # ── Flag-gated MOCK fixtures that can't share the main suite's app env:
       #    • MOCK_TEMPLATE_PHI_FLAG=true → every note-format parse rejects
       #      (scenario 23, phi-reject project) — flips the mocked PHI scan flagged.

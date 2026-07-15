@@ -83,9 +83,20 @@ export default defineConfig({
         '**/24-rx-clinical-safety.spec.ts',
         '**/25-rx-override-correlation.spec.ts',
         '**/28-marketing-smoke.spec.ts',
+        // Dedicated QA provider fixture + Template Twin artifact bucket.
+        '**/29-template-twin-infrastructure.spec.ts',
         // Real-model eval specs (real tokens) — NEVER in the default/CI run.
         '**/*.eval.spec.ts',
       ],
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      // Template Twin safe-alpha infrastructure path. The app and worker are
+      // recreated with MOCK_TEMPLATE_TWIN_E2E=true for this project only; the
+      // fixture itself also requires MOCK_AI_CALLS plus a qa/test/synthetic DB
+      // name, so it cannot become reachable in a production database.
+      name: 'template-twin',
+      testMatch: '**/29-template-twin-infrastructure.spec.ts',
       use: { ...devices['Desktop Chrome'] },
     },
     {
