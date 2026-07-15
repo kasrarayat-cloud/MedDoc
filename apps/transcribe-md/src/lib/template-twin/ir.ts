@@ -404,6 +404,8 @@ export type TemplateTwinValidationResult = z.infer<
 export const TemplateTwinFillManifestSchema = z
   .object({
     manifestVersion: z.literal(1),
+    soapVersion: z.number().int().positive(),
+    soapSha256: z.string().regex(/^[a-f0-9]{64}$/),
     compiledVersionId: z.string().min(1),
     noteTemplateId: z.string().min(1),
     noteTemplateVersion: z.number().int().positive(),
@@ -431,22 +433,44 @@ export function templateTwinCounts(
   fields: readonly FieldResolution[],
   definitions: readonly TemplateField[],
 ): TemplateTwinFillManifest['counts'] {
-  const critical = new Map(definitions.map((field) => [field.fieldId, field.criticality]));
+  const definitionById = new Map(
+    definitions.map((field) => [field.fieldId, field]),
+  );
   const unresolved = new Set<FieldResolutionStatus>([
     'ambiguous',
     'conflict',
     'needs_clinician_input',
   ]);
+  const isClinicallyMeaningfulUnresolvedCheckbox = (
+    resolution: FieldResolution,
+  ): boolean => {
+    const definition = definitionById.get(resolution.fieldId);
+    return Boolean(
+      definition?.kind === 'checkbox' &&
+        definition.clinicallyMaterial &&
+        resolution.value === null,
+    );
+  };
   return {
     filled: fields.filter((field) => field.value !== null).length,
-    needsReview: fields.filter((field) => unresolved.has(field.status)).length,
+    needsReview: fields.filter(
+      (field) =>
+        unresolved.has(field.status) ||
+        isClinicallyMeaningfulUnresolvedCheckbox(field),
+    ).length,
     notMentioned: fields.filter((field) => field.status === 'not_mentioned').length,
     conflicts: fields.filter((field) => field.status === 'conflict').length,
     criticalUnresolved: fields.filter(
-      (field) =>
-        unresolved.has(field.status) &&
-        critical.get(field.fieldId) !== undefined &&
-        critical.get(field.fieldId) !== 'routine',
+      (field) => {
+        const definition = definitionById.get(field.fieldId);
+        return Boolean(
+          definition &&
+            (unresolved.has(field.status) ||
+              isClinicallyMeaningfulUnresolvedCheckbox(field)) &&
+            (definition.criticality !== 'routine' ||
+              definition.clinicallyMaterial),
+        );
+      },
     ).length,
   };
 }

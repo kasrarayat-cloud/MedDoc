@@ -1,18 +1,18 @@
-import { Prisma } from '@prisma/client';
-import prisma from '@meddoc/db';
+import { Prisma } from "@prisma/client";
+import prisma from "@meddoc/db";
 
-import { logAudit } from '@/lib/audit';
 import {
   renderTemplateDocx,
   type RenderTemplateDocxResult,
-} from '@/lib/note-template-docx';
+} from "@/lib/note-template-docx";
 
-import { canonicalSha256 } from './canonical';
+import { enqueueTemplateTwinAudit } from "./audit-outbox";
+import { canonicalSha256 } from "./canonical";
 import {
   projectEncounterFacts,
   type EncounterEntitySnapshot,
   type EncounterInputMode,
-} from './encounter-facts';
+} from "./encounter-facts";
 import {
   SemanticMappingSchema,
   TEMPLATE_TWIN_RENDERER_VERSION,
@@ -24,40 +24,51 @@ import {
   type SemanticMapping,
   type TemplateDocIR,
   type TemplateTwinFillManifest,
-} from './ir';
-import { templateTwinMappingsSha256 } from './mapping-hash';
+} from "./ir";
+import { templateTwinMappingsSha256 } from "./mapping-hash";
+import { canonicalSoapSha256 } from "./soap-binding";
+import { templateTwinSourcePhiScanEvidenceSha256 } from "./source-phi-evidence";
+import { evaluateTemplateTwinRollout } from "./rollout";
 import {
   resolveTemplateFields,
   withApprovedPracticeDefaultFacts,
-} from './resolver';
+} from "./resolver";
 import {
+  claimTemplateTwinObject,
   createTemplateTwinArtifactStore,
   type TemplateTwinArtifactStore,
-} from './storage';
-import { validateTemplateTwin } from './validation';
+} from "./storage";
+import { validateTemplateTwin } from "./validation";
 
 /** The worker-owned review marker for an unresolved Template Twin fill.
  * Correction code may clear it only by exact equality after a fully verified
  * replacement, so unrelated pipeline review reasons remain untouched. */
 export const TEMPLATE_TWIN_REVIEW_REASON =
-  'The Original Template DOCX has unresolved fields that require clinician review before signing.';
+  "The Original Template DOCX has unresolved fields that require clinician review before signing.";
 
 export class TemplateTwinFillError extends Error {
   readonly code:
-    | 'CERTIFIED_TEMPLATE_NOT_FOUND'
-    | 'TEMPLATE_PROVENANCE_MISMATCH'
-    | 'SOURCE_ARTIFACT_UNAVAILABLE'
-    | 'SIGNED_MANIFEST_IMMUTABLE'
-    | 'MANIFEST_CONFLICT';
+    | "CERTIFIED_TEMPLATE_NOT_FOUND"
+    | "TEMPLATE_PROVENANCE_MISMATCH"
+    | "SOURCE_ARTIFACT_UNAVAILABLE"
+    | "ROLLOUT_DISABLED"
+    | "SIGNED_MANIFEST_IMMUTABLE"
+    | "MANIFEST_CONFLICT";
 
-  constructor(code: TemplateTwinFillError['code'], message: string, cause?: unknown) {
+  constructor(
+    code: TemplateTwinFillError["code"],
+    message: string,
+    cause?: unknown,
+  ) {
     super(message, { cause });
-    this.name = 'TemplateTwinFillError';
+    this.name = "TemplateTwinFillError";
     this.code = code;
   }
 }
 
 export interface PrepareTemplateTwinFillInput {
+  soapVersion: number;
+  soapFinal: string;
   compiledVersionId: string;
   noteTemplateId: string;
   noteTemplateVersion: number;
@@ -78,8 +89,10 @@ export interface PreparedTemplateTwinFill {
   render: RenderTemplateDocxResult | null;
 }
 
-export interface FinalizeTemplateTwinFillInput
-  extends Omit<PrepareTemplateTwinFillInput, 'facts'> {
+export interface FinalizeTemplateTwinFillInput extends Omit<
+  PrepareTemplateTwinFillInput,
+  "facts"
+> {
   facts: ReturnType<typeof projectEncounterFacts>;
   resolutions: readonly FieldResolution[];
 }
@@ -88,7 +101,9 @@ export async function finalizeTemplateTwinFill(
   input: FinalizeTemplateTwinFillInput,
 ): Promise<PreparedTemplateTwinFill> {
   const ir = TemplateDocIRSchema.parse(input.ir);
-  const mappings = input.mappings.map((mapping) => SemanticMappingSchema.parse(mapping));
+  const mappings = input.mappings.map((mapping) =>
+    SemanticMappingSchema.parse(mapping),
+  );
   const fields = [...input.resolutions];
   const validation = validateTemplateTwin({
     fields: ir.fields,
@@ -104,6 +119,8 @@ export async function finalizeTemplateTwinFill(
   const counts = templateTwinCounts(fields, ir.fields);
   const manifest = TemplateTwinFillManifestSchema.parse({
     manifestVersion: 1,
+    soapVersion: input.soapVersion,
+    soapSha256: canonicalSoapSha256(input.soapFinal),
     compiledVersionId: input.compiledVersionId,
     noteTemplateId: input.noteTemplateId,
     noteTemplateVersion: input.noteTemplateVersion,
@@ -123,8 +140,8 @@ export async function finalizeTemplateTwinFill(
   }
   if (!input.source) {
     throw new TemplateTwinFillError(
-      'SOURCE_ARTIFACT_UNAVAILABLE',
-      'The immutable source document is unavailable for verified rendering.',
+      "SOURCE_ARTIFACT_UNAVAILABLE",
+      "The immutable source document is unavailable for verified rendering.",
     );
   }
   const render = await renderTemplateDocx({
@@ -142,7 +159,9 @@ export async function prepareTemplateTwinFill(
   input: PrepareTemplateTwinFillInput,
 ): Promise<PreparedTemplateTwinFill> {
   const ir = TemplateDocIRSchema.parse(input.ir);
-  const mappings = input.mappings.map((mapping) => SemanticMappingSchema.parse(mapping));
+  const mappings = input.mappings.map((mapping) =>
+    SemanticMappingSchema.parse(mapping),
+  );
   const facts = withApprovedPracticeDefaultFacts({
     fields: ir.fields,
     mappings,
@@ -179,7 +198,10 @@ interface PersistedMappingRow {
   mappingStatus: string;
 }
 
-function mappingFromRow(fieldId: string, row: PersistedMappingRow): SemanticMapping {
+function mappingFromRow(
+  fieldId: string,
+  row: PersistedMappingRow,
+): SemanticMapping {
   return SemanticMappingSchema.parse({
     fieldId,
     clinicalConcept: row.clinicalConcept,
@@ -188,7 +210,9 @@ function mappingFromRow(fieldId: string, row: PersistedMappingRow): SemanticMapp
     temporality: row.temporality,
     laterality: row.laterality,
     unitPolicy: row.unitPolicy,
-    approvedSynonyms: Array.isArray(row.approvedSynonyms) ? row.approvedSynonyms : [],
+    approvedSynonyms: Array.isArray(row.approvedSynonyms)
+      ? row.approvedSynonyms
+      : [],
     required: row.required,
     blankPolicy: row.blankPolicy,
     unknownPolicy: row.unknownPolicy,
@@ -203,6 +227,8 @@ function asJson(value: unknown): Prisma.InputJsonValue {
 
 export interface ProcessTemplateTwinVisitInput {
   visitId: string;
+  soapVersion: number;
+  soapFinal: string;
   practiceId: string;
   doctorId: string;
   noteTemplateId: string;
@@ -213,7 +239,7 @@ export interface ProcessTemplateTwinVisitInput {
    * widens some inferred leaf types to unknown, so this boundary narrows only
    * after Layer 3 has parsed the object. */
   entities: unknown;
-  asrQuality?: 'high' | 'review' | 'unknown';
+  asrQuality?: "high" | "review" | "unknown";
   validationNow: Date | string;
   resolverModelVersion: string | null;
   storage?: TemplateTwinArtifactStore;
@@ -224,6 +250,26 @@ export interface ProcessTemplateTwinVisitInput {
 export async function processTemplateTwinVisit(
   input: ProcessTemplateTwinVisitInput,
 ): Promise<PreparedTemplateTwinFill> {
+  const practice = await prisma.practice.findFirst({
+    where: {
+      id: input.practiceId,
+      users: {
+        some: {
+          id: input.doctorId,
+          role: "DOCTOR",
+          isActive: true,
+        },
+      },
+    },
+    select: { templateTwinEnabled: true },
+  });
+  const rollout = evaluateTemplateTwinRollout({
+    practiceEnabled: practice?.templateTwinEnabled === true,
+  });
+  if (!rollout.allowed) {
+    throw new TemplateTwinFillError("ROLLOUT_DISABLED", rollout.reason);
+  }
+
   // Persist the first selected version before source I/O, resolution, model-
   // derived evidence processing, or rendering. A retry must never switch to a
   // newly activated template after partial work against this version.
@@ -233,7 +279,9 @@ export async function processTemplateTwinVisit(
       userId: input.doctorId,
       deletedAt: null,
       archivedAt: null,
-      status: { not: 'SIGNED' },
+      status: { not: "SIGNED" },
+      soapVersion: input.soapVersion,
+      soapFinal: input.soapFinal,
       OR: [
         { noteTemplateId: null, noteTemplateVersion: null },
         {
@@ -249,8 +297,8 @@ export async function processTemplateTwinVisit(
   });
   if (claimedTemplate.count !== 1) {
     throw new TemplateTwinFillError(
-      'TEMPLATE_PROVENANCE_MISMATCH',
-      'This visit is already pinned to another note template version.',
+      "TEMPLATE_PROVENANCE_MISMATCH",
+      "This visit is already pinned to another note template version.",
     );
   }
 
@@ -258,7 +306,7 @@ export async function processTemplateTwinVisit(
     where: {
       id: input.noteTemplateId,
       doctorId: input.doctorId,
-      templateKind: 'template_twin_docx',
+      templateKind: "template_twin_docx",
       version: input.noteTemplateVersion,
     },
     select: {
@@ -270,18 +318,27 @@ export async function processTemplateTwinVisit(
           compilerVersion: true,
           compiledDocumentIr: true,
           certificationStatus: true,
-          certification: { select: { id: true, approvedMappingsSha256: true } },
+          certification: {
+            select: {
+              id: true,
+              approvedMappingsSha256: true,
+              sourcePrivacyScanEvidenceSha256: true,
+            },
+          },
           sourceArtifact: {
             select: {
               practiceId: true,
               objectKey: true,
+              objectVersionId: true,
+              objectEtag: true,
               sha256: true,
               sizeBytes: true,
               validationStatus: true,
+              privacyScanEvidence: true,
             },
           },
           fields: {
-            orderBy: { displayOrder: 'asc' },
+            orderBy: { displayOrder: "asc" },
             select: {
               fieldId: true,
               detectionStatus: true,
@@ -308,44 +365,60 @@ export async function processTemplateTwinVisit(
     },
   });
   const compiled = row?.templateTwinCompiledVersion;
-  if (!row || !compiled || compiled.certificationStatus !== 'CERTIFIED' || !compiled.certification) {
+  if (
+    !row ||
+    !compiled ||
+    compiled.certificationStatus !== "CERTIFIED" ||
+    !compiled.certification
+  ) {
     throw new TemplateTwinFillError(
-      'CERTIFIED_TEMPLATE_NOT_FOUND',
-      'The selected Template Twin version is not certified and active.',
+      "CERTIFIED_TEMPLATE_NOT_FOUND",
+      "The selected Template Twin version is not certified and active.",
     );
   }
   if (
     row.version !== input.noteTemplateVersion ||
     compiled.sourceArtifact.practiceId !== input.practiceId ||
-    compiled.sourceArtifact.validationStatus !== 'accepted' ||
-    !compiled.sourceArtifact.objectKey
+    compiled.sourceArtifact.validationStatus !== "accepted" ||
+    !templateTwinSourcePhiScanEvidenceSha256(
+      compiled.sourceArtifact.privacyScanEvidence,
+    ) ||
+    compiled.certification.sourcePrivacyScanEvidenceSha256 !==
+      templateTwinSourcePhiScanEvidenceSha256(
+        compiled.sourceArtifact.privacyScanEvidence,
+      ) ||
+    !compiled.sourceArtifact.objectKey ||
+    !compiled.sourceArtifact.objectVersionId ||
+    !compiled.sourceArtifact.objectEtag
   ) {
     throw new TemplateTwinFillError(
-      'TEMPLATE_PROVENANCE_MISMATCH',
-      'The selected Template Twin provenance does not match this visit.',
+      "TEMPLATE_PROVENANCE_MISMATCH",
+      "The selected Template Twin provenance does not match this visit.",
     );
   }
   const certifiedFieldIds: string[] = [];
-  const mappings = compiled.fields.map((field: {
-    fieldId: string;
-    detectionStatus: string;
-    mapping: PersistedMappingRow | null;
-  }) => {
-    if (!field.mapping) {
-      throw new TemplateTwinFillError(
-        'TEMPLATE_PROVENANCE_MISMATCH',
-        'The certified Template Twin mapping set is incomplete.',
-      );
-    }
-    if (field.detectionStatus !== 'CERTIFIED') {
-      throw new TemplateTwinFillError(
-        'TEMPLATE_PROVENANCE_MISMATCH',
-        'The certified Template Twin field set is incomplete.',
-      );
-    }
-    certifiedFieldIds.push(field.fieldId);
-    return mappingFromRow(field.fieldId, field.mapping);
-  });
+  const mappings = compiled.fields.map(
+    (field: {
+      fieldId: string;
+      detectionStatus: string;
+      mapping: PersistedMappingRow | null;
+    }) => {
+      if (!field.mapping) {
+        throw new TemplateTwinFillError(
+          "TEMPLATE_PROVENANCE_MISMATCH",
+          "The certified Template Twin mapping set is incomplete.",
+        );
+      }
+      if (field.detectionStatus !== "CERTIFIED") {
+        throw new TemplateTwinFillError(
+          "TEMPLATE_PROVENANCE_MISMATCH",
+          "The certified Template Twin field set is incomplete.",
+        );
+      }
+      certifiedFieldIds.push(field.fieldId);
+      return mappingFromRow(field.fieldId, field.mapping);
+    },
+  );
   const ir = TemplateDocIRSchema.parse(compiled.compiledDocumentIr);
   if (
     mappings.length !== ir.fields.length ||
@@ -353,8 +426,8 @@ export async function processTemplateTwinVisit(
       compiled.certification.approvedMappingsSha256
   ) {
     throw new TemplateTwinFillError(
-      'TEMPLATE_PROVENANCE_MISMATCH',
-      'The certified Template Twin mappings no longer match their certification.',
+      "TEMPLATE_PROVENANCE_MISMATCH",
+      "The certified Template Twin mappings no longer match their certification.",
     );
   }
   const facts = projectEncounterFacts({
@@ -367,10 +440,14 @@ export async function processTemplateTwinVisit(
   const source = await storage.readSourceArtifact({
     practiceId: input.practiceId,
     objectKey: compiled.sourceArtifact.objectKey,
+    expectedObjectVersionId: compiled.sourceArtifact.objectVersionId,
+    expectedObjectEtag: compiled.sourceArtifact.objectEtag,
     expectedSha256: compiled.sourceArtifact.sha256,
     expectedSizeBytes: compiled.sourceArtifact.sizeBytes,
   });
   const prepared = await prepareTemplateTwinFill({
+    soapVersion: input.soapVersion,
+    soapFinal: input.soapFinal,
     compiledVersionId: compiled.id,
     noteTemplateId: row.id,
     noteTemplateVersion: row.version,
@@ -390,6 +467,8 @@ export async function processTemplateTwinVisit(
       status: true,
       signedDecisionAt: true,
       reviewedAt: true,
+      soapVersion: true,
+      soapSha256: true,
       manifestVersion: true,
       manifestSha256: true,
       roundTripVerified: true,
@@ -397,11 +476,11 @@ export async function processTemplateTwinVisit(
   });
   if (
     existing &&
-    (existing.status === 'SIGNED' || existing.signedDecisionAt !== null)
+    (existing.status === "SIGNED" || existing.signedDecisionAt !== null)
   ) {
     throw new TemplateTwinFillError(
-      'SIGNED_MANIFEST_IMMUTABLE',
-      'A signed Template Twin fill manifest cannot be replaced.',
+      "SIGNED_MANIFEST_IMMUTABLE",
+      "A signed Template Twin fill manifest cannot be replaced.",
     );
   }
   if (
@@ -410,10 +489,19 @@ export async function processTemplateTwinVisit(
   ) {
     return prepared;
   }
-  if (existing?.reviewedAt != null) {
+  const reviewedManifestWasInvalidatedBySoapEdit = Boolean(
+    existing?.reviewedAt != null &&
+    existing.status === "NEEDS_REVIEW" &&
+    (existing.soapVersion !== prepared.manifest.soapVersion ||
+      existing.soapSha256 !== prepared.manifest.soapSha256),
+  );
+  if (
+    existing?.reviewedAt != null &&
+    !reviewedManifestWasInvalidatedBySoapEdit
+  ) {
     throw new TemplateTwinFillError(
-      'MANIFEST_CONFLICT',
-      'A clinician-reviewed Template Twin fill cannot be replaced by a worker retry.',
+      "MANIFEST_CONFLICT",
+      "A clinician-reviewed Template Twin fill cannot be replaced by a worker retry.",
     );
   }
 
@@ -425,7 +513,78 @@ export async function processTemplateTwinVisit(
         bytes: prepared.render.document,
       })
     : null;
-  const status = prepared.render ? 'VERIFIED' : 'NEEDS_REVIEW';
+  const status = prepared.render ? "VERIFIED" : "NEEDS_REVIEW";
+  const renderAuditEventKey = storedOutput
+    ? `template-twin:render-verified:${canonicalSha256({
+        visitId: input.visitId,
+        manifestSha256: prepared.manifestSha256,
+        outputObjectKey: storedOutput.objectKey,
+      })}`
+    : null;
+  const safetyGateEventKey = !prepared.render
+    ? `template-twin:safety-gate-blocked:${canonicalSha256({
+        visitId: input.visitId,
+        manifestSha256: prepared.manifestSha256,
+        blockerCodes: prepared.manifest.validation.issues
+          .filter((issue) => issue.severity === "blocking")
+          .map((issue) => issue.code)
+          .sort(),
+      })}`
+    : null;
+  const enqueueRenderVerifiedAudit = async (
+    tx: Prisma.TransactionClient,
+  ): Promise<void> => {
+    if (!storedOutput || !prepared.render || !renderAuditEventKey) return;
+    await enqueueTemplateTwinAudit(tx, {
+      eventKey: renderAuditEventKey,
+      practiceId: input.practiceId,
+      actorId: input.doctorId,
+      action: "TEMPLATE_TWIN_RENDER_VERIFIED",
+      targetType: "TranscribeVisit",
+      targetId: input.visitId,
+      metadata: {
+        compiledVersionId: compiled.id,
+        templateVersion: row.version,
+        rendererVersion: prepared.render.rendererVersion,
+        outputSha256: storedOutput.sha256,
+        outputVersionId: storedOutput.objectVersionId,
+        outputEtag: storedOutput.objectEtag,
+        manifestSha256: prepared.manifestSha256,
+        fieldCount: prepared.manifest.counts.filled,
+      },
+    });
+  };
+  const enqueueSafetyGateAudit = async (
+    tx: Prisma.TransactionClient,
+  ): Promise<void> => {
+    if (!safetyGateEventKey || prepared.render) return;
+    const blockingIssues = prepared.manifest.validation.issues.filter(
+      (issue) => issue.severity === "blocking",
+    );
+    await enqueueTemplateTwinAudit(tx, {
+      eventKey: safetyGateEventKey,
+      practiceId: input.practiceId,
+      actorId: input.doctorId,
+      action: "TEMPLATE_TWIN_SAFETY_GATE_BLOCKED",
+      targetType: "TranscribeVisit",
+      targetId: input.visitId,
+      metadata: {
+        reasonCode: "FIELD_VALIDATION_BLOCKED_RENDER",
+        compiledVersionId: compiled.id,
+        templateVersion: row.version,
+        manifestSha256: prepared.manifestSha256,
+        blockerCodes: [...new Set(blockingIssues.map((issue) => issue.code))].sort(),
+        blockerCount: blockingIssues.length,
+        affectedFieldIds: [
+          ...new Set(
+            blockingIssues.flatMap((issue) =>
+              issue.fieldId === null ? [] : [issue.fieldId],
+            ),
+          ),
+        ].sort(),
+      },
+    });
+  };
   const writeData = {
     compiledVersionId: compiled.id,
     noteTemplateId: row.id,
@@ -438,6 +597,8 @@ export async function processTemplateTwinVisit(
     fillManifest: asJson(prepared.manifest),
     manifestSha256: prepared.manifestSha256,
     factSetSha256: prepared.factSetSha256,
+    soapVersion: prepared.manifest.soapVersion,
+    soapSha256: prepared.manifest.soapSha256,
     validationResult: asJson(prepared.manifest.validation),
     filledCount: prepared.manifest.counts.filled,
     needsReviewCount: prepared.manifest.counts.needsReview,
@@ -445,6 +606,8 @@ export async function processTemplateTwinVisit(
     conflictCount: prepared.manifest.counts.conflicts,
     criticalUnresolvedCount: prepared.manifest.counts.criticalUnresolved,
     outputObjectKey: storedOutput?.objectKey ?? null,
+    outputVersionId: storedOutput?.objectVersionId ?? null,
+    outputEtag: storedOutput?.objectEtag ?? null,
     outputSha256: storedOutput?.sha256 ?? null,
     outputMimeType: storedOutput?.mimeType ?? null,
     outputSizeBytes: storedOutput?.sizeBytes ?? null,
@@ -453,26 +616,53 @@ export async function processTemplateTwinVisit(
     roundTripVerification: prepared.render
       ? asJson(prepared.render.verification)
       : Prisma.JsonNull,
+    // Regeneration creates a new review boundary. Prior physician decisions
+    // remain append-only rows, but they cannot authorize the new SOAP-bound
+    // manifest without a fresh review.
+    reviewedAt: null,
+    reviewedById: null,
+    reviewedManifestVersion: null,
+    reviewedManifestSha256: null,
   } as const;
 
   if (existing) {
     // Signing and clinician correction both use optimistic claims. The worker
     // must claim the exact unsigned row it observed; a signed or concurrently
     // replaced row produces no update and remains untouched.
-    const updated = await prisma.templateTwinFillManifest.updateMany({
-      where: {
-        id: existing.id,
-        status: { not: 'SIGNED' },
-        signedDecisionAt: null,
-        reviewedAt: null,
-        manifestVersion: existing.manifestVersion,
-        manifestSha256: existing.manifestSha256,
+    const updated = await prisma.$transaction(
+      async (tx: Prisma.TransactionClient) => {
+        const claimedManifest = await tx.templateTwinFillManifest.updateMany({
+          where: {
+            id: existing.id,
+            status: { not: "SIGNED" },
+            signedDecisionAt: null,
+            reviewedAt: existing.reviewedAt,
+            soapVersion: existing.soapVersion,
+            soapSha256: existing.soapSha256,
+            manifestVersion: existing.manifestVersion,
+            manifestSha256: existing.manifestSha256,
+          },
+          data: {
+            ...writeData,
+            manifestVersion: { increment: 1 },
+          },
+        });
+        if (claimedManifest.count === 1 && storedOutput) {
+          await claimTemplateTwinObject(tx, {
+            objectKey: storedOutput.objectKey,
+            practiceId: input.practiceId,
+            claimType: "fill_manifest",
+            claimId: existing.id,
+          });
+          await enqueueRenderVerifiedAudit(tx);
+        }
+        if (claimedManifest.count === 1 && !storedOutput) {
+          await enqueueSafetyGateAudit(tx);
+        }
+        return claimedManifest;
       },
-      data: {
-        ...writeData,
-        manifestVersion: { increment: 1 },
-      },
-    });
+      { isolationLevel: "Serializable" },
+    );
     if (updated.count !== 1) {
       const current = await prisma.templateTwinFillManifest.findUnique({
         where: { visitId: input.visitId },
@@ -480,35 +670,52 @@ export async function processTemplateTwinVisit(
       });
       if (
         current &&
-        (current.status === 'SIGNED' || current.signedDecisionAt !== null)
+        (current.status === "SIGNED" || current.signedDecisionAt !== null)
       ) {
         throw new TemplateTwinFillError(
-          'SIGNED_MANIFEST_IMMUTABLE',
-          'A signed Template Twin fill manifest cannot be replaced.',
+          "SIGNED_MANIFEST_IMMUTABLE",
+          "A signed Template Twin fill manifest cannot be replaced.",
         );
       }
       throw new TemplateTwinFillError(
-        'MANIFEST_CONFLICT',
-        'The Template Twin fill changed concurrently and was not replaced.',
+        "MANIFEST_CONFLICT",
+        "The Template Twin fill changed concurrently and was not replaced.",
       );
     }
   } else {
     try {
-      await prisma.templateTwinFillManifest.create({
-        data: {
-          practiceId: input.practiceId,
-          visitId: input.visitId,
-          ...writeData,
+      await prisma.$transaction(
+        async (tx: Prisma.TransactionClient) => {
+          const created = await tx.templateTwinFillManifest.create({
+            data: {
+              practiceId: input.practiceId,
+              visitId: input.visitId,
+              ...writeData,
+            },
+            select: { id: true },
+          });
+          if (storedOutput) {
+            await claimTemplateTwinObject(tx, {
+              objectKey: storedOutput.objectKey,
+              practiceId: input.practiceId,
+              claimType: "fill_manifest",
+              claimId: created.id,
+            });
+            await enqueueRenderVerifiedAudit(tx);
+          } else {
+            await enqueueSafetyGateAudit(tx);
+          }
         },
-      });
+        { isolationLevel: "Serializable" },
+      );
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
-        (error.code === 'P2002' || error.code === 'P2034')
+        (error.code === "P2002" || error.code === "P2034")
       ) {
         throw new TemplateTwinFillError(
-          'MANIFEST_CONFLICT',
-          'Another worker created the Template Twin fill first.',
+          "MANIFEST_CONFLICT",
+          "Another worker created the Template Twin fill first.",
           error,
         );
       }
@@ -516,21 +723,5 @@ export async function processTemplateTwinVisit(
     }
   }
 
-  if (prepared.render) {
-    await logAudit({
-      action: 'TEMPLATE_TWIN_RENDER_VERIFIED',
-      targetType: 'TranscribeVisit',
-      targetId: input.visitId,
-      userId: input.doctorId,
-      practiceId: input.practiceId,
-      metadata: {
-        compiledVersionId: compiled.id,
-        templateVersion: row.version,
-        rendererVersion: prepared.render.rendererVersion,
-        outputSha256: prepared.render.outputSha256,
-        fieldCount: prepared.manifest.counts.filled,
-      },
-    });
-  }
   return prepared;
 }

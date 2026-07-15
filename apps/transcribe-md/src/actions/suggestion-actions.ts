@@ -60,6 +60,7 @@ import {
   type EmChangeCause,
   type EmPendingChange,
 } from '@/lib/em-pending-change';
+import { invalidateTemplateTwinAfterSoapEdit } from '@/lib/template-twin/soap-binding';
 
 /** Mirror of the verifier's SuggestedClaim — duplicated here (rather than
  *  imported from the worker layer) so the server-action bundle never pulls
@@ -388,23 +389,33 @@ export async function adoptSuggestionAction(
     // Single atomic update, gated on the soapVersion we just read — the
     // same optimistic-concurrency pattern as saveSoapDraftAction. count=0
     // means a section save (or another adopt) landed in between.
-    const result = await prisma.transcribeVisit.updateMany({
-      // status:READY too (auditor WARN-1): the LLM-scoring window between
-      // this action's READY check and its write can straddle a concurrent
-      // READY→SIGNED transition — the write must MISS a signed row, never
-      // mutate it or deposit an unacknowledgeable emPendingChange.
-      where: { id: visit.id, soapVersion: visit.soapVersion, status: TranscribeVisitStatus.READY },
-      data: {
-        soapFinal: newSoap,
-        soapVersion: { increment: 1 },
-        suggestedClaims:
-          remaining.length > 0
-            ? (remaining as unknown as Prisma.InputJsonValue)
-            : Prisma.DbNull,
-        ...(emPendingWrite !== undefined
-          ? { emPendingChange: emPendingWrite }
-          : {}),
-      },
+    const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const updated = await tx.transcribeVisit.updateMany({
+        // status:READY too (auditor WARN-1): the LLM-scoring window between
+        // this action's READY check and its write can straddle a concurrent
+        // READY→SIGNED transition — the write must MISS a signed row, never
+        // mutate it or deposit an unacknowledgeable emPendingChange.
+        where: {
+          id: visit.id,
+          soapVersion: visit.soapVersion,
+          status: TranscribeVisitStatus.READY,
+        },
+        data: {
+          soapFinal: newSoap,
+          soapVersion: { increment: 1 },
+          suggestedClaims:
+            remaining.length > 0
+              ? (remaining as unknown as Prisma.InputJsonValue)
+              : Prisma.DbNull,
+          ...(emPendingWrite !== undefined
+            ? { emPendingChange: emPendingWrite }
+            : {}),
+        },
+      });
+      if (updated.count === 1) {
+        await invalidateTemplateTwinAfterSoapEdit(tx, visit.id);
+      }
+      return updated;
     });
     if (result.count === 0) {
       return {

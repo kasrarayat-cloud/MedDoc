@@ -38,11 +38,24 @@ export interface TemplateTwinWorkspace {
   unsupported: UnsupportedElement[];
   mappingsSha256: string;
   latestSyntheticTest: {
+    provenanceSha256: string;
     verifiedAtIso: string;
     outputSha256: string;
     mappingsSha256: string;
     roundTripVerified: boolean;
     layoutWarningCodes: string[];
+    fieldCoverage: Array<{
+      fieldId: string;
+      exercised: boolean;
+      status:
+        | 'supported'
+        | 'explicitly_denied'
+        | 'not_mentioned'
+        | 'ambiguous'
+        | 'conflict'
+        | 'needs_clinician_input'
+        | 'approved_practice_default';
+    }>;
     downloadUrl: string;
   } | null;
   canEdit: boolean;

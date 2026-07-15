@@ -10,13 +10,17 @@ import {
   type TemplateDocIR,
 } from './ir';
 import { templateTwinMappingsSha256 } from './mapping-hash';
+import { canonicalSoapSha256 } from './soap-binding';
 import { DOCX_MIME_TYPE } from './storage/keys';
 import { parseTemplateTwinArtifactKey } from './storage/ownership';
 import { validateTemplateTwin } from './validation';
+import { templateTwinSourcePhiScanEvidenceSha256 } from './source-phi-evidence';
 
 const SHA256 = /^[a-f0-9]{64}$/;
 
 export const TEMPLATE_TWIN_SIGNING_VISIT_SELECT = {
+  soapFinal: true,
+  soapVersion: true,
   noteTemplateId: true,
   noteTemplateVersion: true,
   noteTemplate: {
@@ -33,14 +37,21 @@ export const TEMPLATE_TWIN_SIGNING_VISIT_SELECT = {
           compiledDocumentIr: true,
           structureSha256: true,
           staticContentSha256: true,
+          latestTestOutputObjectKey: true,
+          latestTestOutputVersionId: true,
+          latestTestOutputEtag: true,
+          latestTestOutputSha256: true,
           certificationStatus: true,
           sourceArtifact: {
             select: {
               practiceId: true,
+              objectVersionId: true,
+              objectEtag: true,
               sha256: true,
               mimeType: true,
               sizeBytes: true,
               validationStatus: true,
+              privacyScanEvidence: true,
             },
           },
           fields: {
@@ -73,7 +84,10 @@ export const TEMPLATE_TWIN_SIGNING_VISIT_SELECT = {
               id: true,
               compiledStructureSha256: true,
               approvedMappingsSha256: true,
+              sourcePrivacyScanEvidenceSha256: true,
               testOutputObjectKey: true,
+              testOutputVersionId: true,
+              testOutputEtag: true,
               testOutputSha256: true,
             },
           },
@@ -104,12 +118,18 @@ export const TEMPLATE_TWIN_SIGNING_VISIT_SELECT = {
       conflictCount: true,
       criticalUnresolvedCount: true,
       outputObjectKey: true,
+      outputVersionId: true,
+      outputEtag: true,
       outputSha256: true,
       outputMimeType: true,
       outputSizeBytes: true,
       staticContentSha256: true,
       roundTripVerified: true,
       roundTripVerification: true,
+      reviewedAt: true,
+      reviewedById: true,
+      reviewedManifestVersion: true,
+      reviewedManifestSha256: true,
       signedDecisionAt: true,
       updatedAt: true,
     },
@@ -126,6 +146,8 @@ export type TemplateTwinSignBlockerCode =
   | 'FILL_NOT_READY'
   | 'FILL_MANIFEST_VERSION_MISMATCH'
   | 'FILL_MANIFEST_INVALID'
+  | 'FILL_REVIEW_REQUIRED'
+  | 'SOAP_BINDING_MISMATCH'
   | 'VALIDATION_FAILED'
   | 'CRITICAL_FIELDS_UNRESOLVED'
   | 'OUTPUT_MISSING'
@@ -137,6 +159,8 @@ export interface TemplateTwinSigningContext {
   visitId: string;
   practiceId: string;
   visitStatus: string;
+  soapFinal?: string | null;
+  soapVersion?: number | null;
   noteTemplateId?: string | null;
   noteTemplateVersion?: number | null;
   noteTemplate?: {
@@ -151,13 +175,20 @@ export interface TemplateTwinSigningContext {
       compiledDocumentIr: unknown;
       structureSha256: string;
       staticContentSha256: string;
+      latestTestOutputObjectKey: string | null;
+      latestTestOutputVersionId: string | null;
+      latestTestOutputEtag: string | null;
+      latestTestOutputSha256: string | null;
       certificationStatus: string;
       sourceArtifact: {
         practiceId: string;
+        objectVersionId: string | null;
+        objectEtag: string | null;
         sha256: string;
         mimeType: string;
         sizeBytes: number;
         validationStatus: string;
+        privacyScanEvidence: unknown;
       };
       fields: Array<{
         fieldId: string;
@@ -183,7 +214,10 @@ export interface TemplateTwinSigningContext {
         id: string;
         compiledStructureSha256: string;
         approvedMappingsSha256: string;
+        sourcePrivacyScanEvidenceSha256: string | null;
         testOutputObjectKey: string;
+        testOutputVersionId: string | null;
+        testOutputEtag: string | null;
         testOutputSha256: string;
       } | null;
     } | null;
@@ -210,12 +244,18 @@ export interface TemplateTwinSigningContext {
     conflictCount: number;
     criticalUnresolvedCount: number;
     outputObjectKey: string | null;
+    outputVersionId: string | null;
+    outputEtag: string | null;
     outputSha256: string | null;
     outputMimeType: string | null;
     outputSizeBytes: number | null;
     staticContentSha256: string | null;
     roundTripVerified: boolean;
     roundTripVerification: unknown;
+    reviewedAt: Date | null;
+    reviewedById: string | null;
+    reviewedManifestVersion: number | null;
+    reviewedManifestSha256: string | null;
     signedDecisionAt: Date | null;
     updatedAt: Date;
   } | null;
@@ -225,7 +265,15 @@ export interface TemplateTwinManifestSignClaim {
   id: string;
   manifestVersion: number;
   manifestSha256: string;
+  reviewedAt: Date;
+  reviewedById: string;
+  soapVersion: number;
+  soapSha256: string;
+  outputObjectKey: string;
+  outputVersionId: string;
+  outputEtag: string;
   outputSha256: string;
+  outputSizeBytes: number;
   updatedAt: Date;
 }
 
@@ -259,6 +307,11 @@ interface ExpectedRoundTripField {
   bindingPath: string;
   valueSha256: string;
   occurrences: number;
+  disposition:
+    | 'rendered'
+    | 'unresolved_blank'
+    | 'preserved_unresolved'
+    | 'preserved_unsupported';
 }
 
 function parseCertifiedTemplateState(
@@ -336,11 +389,18 @@ function certifiedCompilationIntegrity(
       staticSha256: part.staticSha256,
     })),
   );
+  const sourcePrivacyScanEvidenceSha256 =
+    templateTwinSourcePhiScanEvidenceSha256(
+      compiled.sourceArtifact.privacyScanEvidence,
+    );
   return Boolean(
     certification &&
       compiled.irSchemaVersion === ir.irSchemaVersion &&
       compiled.compilerVersion === ir.compilerVersion &&
       compiled.sourceArtifact.validationStatus === 'accepted' &&
+      sourcePrivacyScanEvidenceSha256 &&
+      certification.sourcePrivacyScanEvidenceSha256 ===
+        sourcePrivacyScanEvidenceSha256 &&
       compiled.sourceArtifact.sha256 === ir.source.sha256 &&
       compiled.sourceArtifact.sizeBytes === ir.source.sizeBytes &&
       compiled.sourceArtifact.mimeType === ir.source.mimeType &&
@@ -382,6 +442,14 @@ function expectedRoundTripFields(
         value: resolution.value,
       }),
       occurrences,
+      disposition:
+        resolution.value !== null
+          ? 'rendered'
+          : field.detectionStatus === 'unsupported'
+            ? 'preserved_unsupported'
+            : field.kind === 'checkbox' || field.rowPrototype
+              ? 'preserved_unresolved'
+              : 'unresolved_blank',
     });
   }
   return expected;
@@ -423,7 +491,8 @@ function isVerifiedRoundTrip(
         proof.partName === field.partName &&
         proof.bindingPath === field.bindingPath &&
         proof.valueSha256 === field.valueSha256 &&
-        proof.occurrences === field.occurrences,
+        proof.occurrences === field.occurrences &&
+        proof.disposition === field.disposition,
     );
   });
   return (
@@ -501,12 +570,20 @@ export function assessTemplateTwinSigning(
   const compiled = template.templateTwinCompiledVersion;
   const fill = context.templateTwinFill;
   let certifiedState: CertifiedTemplateState | null = null;
+  let manifestSoapVersion: number | null = null;
+  let manifestSoapSha256: string | null = null;
 
   if (!compiled) {
     add('TEMPLATE_PROVENANCE_UNAVAILABLE');
   } else {
     if (compiled.sourceArtifact.practiceId !== context.practiceId) {
       add('TENANT_MISMATCH');
+    }
+    if (
+      !compiled.sourceArtifact.objectVersionId?.trim() ||
+      !compiled.sourceArtifact.objectEtag?.trim()
+    ) {
+      add('TEMPLATE_PROVENANCE_UNAVAILABLE');
     }
     if (
       template.id !== context.noteTemplateId ||
@@ -529,7 +606,17 @@ export function assessTemplateTwinSigning(
         !certifiedState ||
         !certifiedCompilationIntegrity(compiled, certifiedState) ||
         !SHA256.test(compiled.certification.approvedMappingsSha256) ||
+        !compiled.certification.testOutputVersionId?.trim() ||
+        !compiled.certification.testOutputEtag?.trim() ||
         !SHA256.test(compiled.certification.testOutputSha256) ||
+        compiled.certification.testOutputObjectKey !==
+          compiled.latestTestOutputObjectKey ||
+        compiled.certification.testOutputVersionId !==
+          compiled.latestTestOutputVersionId ||
+        compiled.certification.testOutputEtag !==
+          compiled.latestTestOutputEtag ||
+        compiled.certification.testOutputSha256 !==
+          compiled.latestTestOutputSha256 ||
         testOutput?.practiceId !== context.practiceId ||
         testOutput?.kind !== 'output' ||
         testOutput?.sha256 !== compiled.certification.testOutputSha256
@@ -553,6 +640,16 @@ export function assessTemplateTwinSigning(
       add('FILL_NOT_READY');
     }
     if (
+      !fill.reviewedAt ||
+      !fill.reviewedById ||
+      fill.needsReviewCount !== 0 ||
+      fill.conflictCount !== 0 ||
+      fill.reviewedManifestVersion !== fill.manifestVersion ||
+      fill.reviewedManifestSha256 !== fill.manifestSha256
+    ) {
+      add('FILL_REVIEW_REQUIRED');
+    }
+    if (
       !compiled ||
       fill.compiledVersionId !== compiled.id ||
       fill.noteTemplateId !== context.noteTemplateId ||
@@ -573,6 +670,15 @@ export function assessTemplateTwinSigning(
     } else {
       const manifest = parsedManifest.data;
       const validation = parsedValidation.data;
+      manifestSoapVersion = manifest.soapVersion;
+      manifestSoapSha256 = manifest.soapSha256;
+      if (
+        context.soapVersion !== manifest.soapVersion ||
+        typeof context.soapFinal !== 'string' ||
+        canonicalSoapSha256(context.soapFinal) !== manifest.soapSha256
+      ) {
+        add('SOAP_BINDING_MISMATCH');
+      }
       const reproducedCounts = certifiedState
         ? templateTwinCounts(manifest.fields, certifiedState.ir.fields)
         : null;
@@ -626,6 +732,8 @@ export function assessTemplateTwinSigning(
     }
     if (
       !fill.outputObjectKey ||
+      !fill.outputVersionId?.trim() ||
+      !fill.outputEtag?.trim() ||
       !fill.outputSha256 ||
       !fill.outputSizeBytes
     ) {
@@ -686,12 +794,27 @@ export function assessTemplateTwinSigning(
     compiledVersionId: compiled?.id ?? null,
     fillManifestId: fill?.id ?? null,
     claim:
-      blockerCodes.length === 0 && fill?.outputSha256
+      blockerCodes.length === 0 &&
+      fill?.outputObjectKey &&
+      fill.outputVersionId &&
+      fill.outputEtag &&
+      fill.outputSha256 &&
+      fill.outputSizeBytes &&
+      manifestSoapVersion !== null &&
+      manifestSoapSha256
         ? {
             id: fill.id,
             manifestVersion: fill.manifestVersion,
             manifestSha256: fill.manifestSha256,
+            reviewedAt: fill.reviewedAt!,
+            reviewedById: fill.reviewedById!,
+            soapVersion: manifestSoapVersion,
+            soapSha256: manifestSoapSha256,
+            outputObjectKey: fill.outputObjectKey,
+            outputVersionId: fill.outputVersionId,
+            outputEtag: fill.outputEtag,
             outputSha256: fill.outputSha256,
+            outputSizeBytes: fill.outputSizeBytes,
             updatedAt: fill.updatedAt,
           }
         : null,

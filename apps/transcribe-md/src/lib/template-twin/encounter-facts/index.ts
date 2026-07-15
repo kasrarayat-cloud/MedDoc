@@ -13,6 +13,10 @@ import {
   EncounterFactSchema,
   type EncounterFact,
 } from '../ir';
+import {
+  isSupportedTemplateTwinConcept,
+  supportedProjectedSystemConcept,
+} from '../supported-concepts';
 
 export type EncounterInputMode = 'conversation' | 'dictation' | 'text';
 
@@ -221,6 +225,11 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
   >();
 
   const add = (options: AddFactOptions): void => {
+    // Layer 3 may contain specialty detail outside the bounded safe-alpha
+    // Template Twin registry. Generic SOAP keeps that source data, while Twin
+    // fact projection refuses to create an apparently supported concept that
+    // certification/runtime cannot independently validate.
+    if (!isSupportedTemplateTwinConcept(options.concept)) return;
     const quote = options.evidence.evidence_quote;
     if (!quote || !quote.trim()) return;
 
@@ -420,9 +429,11 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
   }
 
   for (const [index, item] of (entities.ros ?? []).entries()) {
+    const concept = supportedProjectedSystemConcept('ros', item.system);
+    if (!concept) continue;
     add({
       path: `ros.${index}.finding`,
-      concept: `ros.${conceptSegment(item.system)}`,
+      concept,
       value: item.finding,
       evidence: item,
       defaultTemporality: 'current',
@@ -430,9 +441,11 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
   }
 
   for (const [index, item] of (entities.exam_findings ?? []).entries()) {
+    const concept = supportedProjectedSystemConcept('exam', item.system);
+    if (!concept) continue;
     add({
       path: `exam_findings.${index}.finding`,
-      concept: `exam.${conceptSegment(item.system)}`,
+      concept,
       value: item.finding,
       evidence: item,
       defaultTemporality: 'current',

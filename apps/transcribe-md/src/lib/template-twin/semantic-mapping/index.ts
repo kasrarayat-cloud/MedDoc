@@ -23,6 +23,11 @@ import {
   type TemplateField,
   type TemplateTwinFieldKind,
 } from '../ir';
+import {
+  TEMPLATE_TWIN_CONCEPT_REGISTRY_VERSION,
+  TEMPLATE_TWIN_SUPPORTED_CONCEPTS,
+  isSupportedTemplateTwinConcept,
+} from '../supported-concepts';
 
 const DEFAULT_MODEL =
   process.env.TRANSCRIBE_MD_CLINICAL_MODEL || 'claude-sonnet-4-6';
@@ -38,37 +43,9 @@ const ModelSemanticMappingProposalSchema = z
   .object({ mappings: z.array(ModelSemanticMappingSchema) })
   .strict();
 
-export const TEMPLATE_TWIN_CANONICAL_CONCEPT_GUIDANCE = [
-  'chief_complaint',
-  'hpi.onset',
-  'hpi.duration',
-  'hpi.quality',
-  'hpi.severity',
-  'hpi.location',
-  'hpi.timing',
-  'hpi.context',
-  'hpi.modifying_factors',
-  'hpi.associated_symptoms',
-  'past_medical_history',
-  'medication.name',
-  'medication.dose',
-  'medication.route',
-  'medication.frequency',
-  'allergy.substance',
-  'allergy.reaction',
-  'family_history.relation',
-  'family_history.condition',
-  'social_history.smoking',
-  'social_history.alcohol',
-  'social_history.drugs',
-  'social_history.occupation',
-  'ros.<system>',
-  'exam.<system>',
-  'test.name',
-  'test.<test_name>.result',
-  'assessment',
-  'plan',
-] as const;
+export const TEMPLATE_TWIN_CANONICAL_CONCEPT_GUIDANCE = Object.freeze(
+  TEMPLATE_TWIN_SUPPORTED_CONCEPTS.map((entry) => entry.concept),
+);
 
 export interface ProposeSemanticMappingsContext {
   practiceId: string;
@@ -212,6 +189,7 @@ const SYSTEM_PROMPT = [
   'needs_confirmation. Keep native dropdown options exactly as supplied.',
   '',
   `Canonical concept vocabulary/patterns: ${TEMPLATE_TWIN_CANONICAL_CONCEPT_GUIDANCE.join(', ')}`,
+  `Registry version: ${TEMPLATE_TWIN_CONCEPT_REGISTRY_VERSION}. Concepts outside this exact list cannot be certified in the safe-alpha runtime.`,
   delimiterSystemSuffix('transcript'),
 ].join('\n');
 
@@ -307,6 +285,7 @@ export async function proposeSemanticMappings(
       practiceDefault: null,
       status:
         mapping.clinicalConcept === null ||
+        !isSupportedTemplateTwinConcept(mapping.clinicalConcept) ||
         field.detectionStatus !== 'recognized' ||
         mapping.status === 'needs_confirmation'
           ? 'needs_confirmation'

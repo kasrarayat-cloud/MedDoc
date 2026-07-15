@@ -4,9 +4,10 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
 import prisma from '@meddoc/db';
-import { TranscribeVisitStatus } from '@prisma/client';
+import { Prisma, TranscribeVisitStatus } from '@prisma/client';
 import { requireSession } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
+import { invalidateTemplateTwinAfterSoapEdit } from '@/lib/template-twin/soap-binding';
 
 const SaveSoapSchema = z.object({
   visitId: z.string().min(1),
@@ -116,12 +117,22 @@ export async function saveSoapDraftAction(
   // Postgres: only one of two concurrent saves with the same
   // expectedVersion succeeds; the other returns count=0.
   if (parsed.data.expectedVersion !== undefined) {
-    const result = await prisma.transcribeVisit.updateMany({
-      where: { id: visitId, soapVersion: parsed.data.expectedVersion },
-      data: {
-        soapFinal: parsed.data.text,
-        soapVersion: { increment: 1 },
-      },
+    const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const updated = await tx.transcribeVisit.updateMany({
+        where: {
+          id: visitId,
+          soapVersion: parsed.data.expectedVersion,
+          status: TranscribeVisitStatus.READY,
+        },
+        data: {
+          soapFinal: parsed.data.text,
+          soapVersion: { increment: 1 },
+        },
+      });
+      if (updated.count === 1) {
+        await invalidateTemplateTwinAfterSoapEdit(tx, visitId);
+      }
+      return updated;
     });
     if (result.count === 0) {
       // Conflict: another save landed first. Surface current version
@@ -146,13 +157,17 @@ export async function saveSoapDraftAction(
   // Legacy fallback (no expectedVersion supplied) — last-write-wins.
   // Still bumps soapVersion so a subsequent expectedVersion-aware
   // call sees the right value.
-  const updated = await prisma.transcribeVisit.update({
-    where: { id: visitId },
-    data: {
-      soapFinal: parsed.data.text,
-      soapVersion: { increment: 1 },
-    },
-    select: { soapVersion: true },
+  const updated = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    const saved = await tx.transcribeVisit.update({
+      where: { id: visitId, status: TranscribeVisitStatus.READY },
+      data: {
+        soapFinal: parsed.data.text,
+        soapVersion: { increment: 1 },
+      },
+      select: { soapVersion: true },
+    });
+    await invalidateTemplateTwinAfterSoapEdit(tx, visitId);
+    return saved;
   });
 
   revalidatePath(`/visits/${visitId}`);

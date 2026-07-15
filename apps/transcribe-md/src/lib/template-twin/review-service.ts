@@ -17,9 +17,11 @@ import {
 } from '@prisma/client';
 import prisma from '@meddoc/db';
 
-import { logAudit } from '@/lib/audit';
-
-import { canonicalSha256 } from './canonical';
+import { enqueueTemplateTwinAudit } from './audit-outbox';
+import {
+  canonicalSoapSha256,
+  TEMPLATE_TWIN_SOAP_BINDING_REVIEW_REASON,
+} from './soap-binding';
 import type { TemplateTwinFieldCorrectionRequest } from './contracts';
 import { parseExplicitNumberAndUnit } from './encounter-facts';
 import {
@@ -44,7 +46,12 @@ import {
   type StoredTemplateTwinArtifact,
   type TemplateTwinArtifactStore,
 } from './storage';
+import { claimTemplateTwinObject } from './storage/object-ledger';
 import { validateTemplateTwin } from './validation';
+import {
+  TEMPLATE_TWIN_UNSUPPORTED_CONCEPT_CODE,
+  isSupportedTemplateTwinConcept,
+} from './supported-concepts';
 
 export interface TemplateTwinReviewActor {
   userId: string;
@@ -58,6 +65,7 @@ export class TemplateTwinReviewError extends Error {
     | 'SIGNED_IMMUTABLE'
     | 'OPTIMISTIC_CONFLICT'
     | 'MANIFEST_INVALID'
+    | 'SOAP_BINDING_STALE'
     | 'CORRECTION_INVALID'
     | 'TEMPLATE_PROVENANCE_INVALID';
 
@@ -110,7 +118,13 @@ interface OwnedReviewContext {
   manifestVersion: number;
   fillManifest: unknown;
   resolverModelVersion: string | null;
-  visit: { userId: string; status: string; reviewReason: string | null };
+  visit: {
+    userId: string;
+    status: string;
+    reviewReason: string | null;
+    soapFinal: string | null;
+    soapVersion: number;
+  };
   compiledVersion: {
     id: string;
     sourceArtifactId: string;
@@ -125,6 +139,8 @@ interface OwnedReviewContext {
     sourceArtifact: {
       practiceId: string;
       objectKey: string | null;
+      objectVersionId: string | null;
+      objectEtag: string | null;
       sha256: string;
       sizeBytes: number;
       validationStatus: string;
@@ -170,11 +186,12 @@ interface CommitReviewPlan {
   fillManifestId: string;
   practiceId: string;
   visitId: string;
+  soapVersion: number;
   expectedManifestVersion: number;
   prepared: PreparedTemplateTwinFill;
   storedOutput: StoredTemplateTwinArtifact | null;
   staticContentSha256: string;
-  reviewedAt: Date;
+  reviewerEmail: string;
   decision: ReviewDecisionPlan;
   fork: MappingRuleForkPlan | null;
 }
@@ -359,6 +376,14 @@ function canonicalScalar(
       if (typeof raw !== 'boolean') {
         return invalidCorrection('A checkbox correction must be checked or not checked.');
       }
+      if (
+        raw === false &&
+        mapping.polarityBehavior !== 'explicit_denial_allowed'
+      ) {
+        return invalidCorrection(
+          'This certified field does not define unchecked as false. Leave it unresolved or create a new certified template version.',
+        );
+      }
       return { value: raw, optionOrdinal: null };
     case 'date': {
       if (typeof raw !== 'string' || !strictIsoDate(raw.trim())) {
@@ -477,6 +502,11 @@ export function buildClinicianCorrection(input: {
   const mapping = input.mapping;
   if (mapping.status !== 'certified' || !mapping.clinicalConcept) {
     return invalidCorrection('The field does not have a certified semantic mapping.');
+  }
+  if (!isSupportedTemplateTwinConcept(mapping.clinicalConcept)) {
+    return invalidCorrection(
+      `${TEMPLATE_TWIN_UNSUPPORTED_CONCEPT_CODE}: This field is outside the current supported clinical detail registry.`,
+    );
   }
 
   if (input.value === null) {
@@ -604,6 +634,8 @@ function assertProvenance(
     compiled.certificationStatus !== 'CERTIFIED' ||
     compiled.sourceArtifact.validationStatus !== 'accepted' ||
     !compiled.sourceArtifact.objectKey ||
+    !compiled.sourceArtifact.objectVersionId ||
+    !compiled.sourceArtifact.objectEtag ||
     manifest.compiledVersionId !== compiled.id ||
     manifest.noteTemplateId !== compiled.noteTemplate.id ||
     manifest.noteTemplateVersion !== compiled.noteTemplate.version ||
@@ -616,7 +648,7 @@ function assertProvenance(
   }
 }
 
-function createDefaultRepository(): TemplateTwinReviewRepository {
+export function createTemplateTwinReviewRepository(): TemplateTwinReviewRepository {
   return {
     async loadOwned(input): Promise<OwnedReviewContext | null> {
       const row = await prisma.templateTwinFillManifest.findFirst({
@@ -638,7 +670,13 @@ function createDefaultRepository(): TemplateTwinReviewRepository {
           fillManifest: true,
           resolverModelVersion: true,
           visit: {
-            select: { userId: true, status: true, reviewReason: true },
+            select: {
+              userId: true,
+              status: true,
+              reviewReason: true,
+              soapFinal: true,
+              soapVersion: true,
+            },
           },
           compiledVersion: {
             select: {
@@ -656,6 +694,8 @@ function createDefaultRepository(): TemplateTwinReviewRepository {
                 select: {
                   practiceId: true,
                   objectKey: true,
+                  objectVersionId: true,
+                  objectEtag: true,
                   sha256: true,
                   sizeBytes: true,
                   validationStatus: true,
@@ -729,6 +769,7 @@ function createDefaultRepository(): TemplateTwinReviewRepository {
               manifestVersion: plan.expectedManifestVersion,
               status: { not: 'SIGNED' },
               signedDecisionAt: null,
+              visit: { is: { soapVersion: plan.soapVersion } },
             },
             data: {
               status,
@@ -744,6 +785,8 @@ function createDefaultRepository(): TemplateTwinReviewRepository {
               criticalUnresolvedCount:
                 plan.prepared.manifest.counts.criticalUnresolved,
               outputObjectKey: plan.storedOutput?.objectKey ?? null,
+              outputVersionId: plan.storedOutput?.objectVersionId ?? null,
+              outputEtag: plan.storedOutput?.objectEtag ?? null,
               outputSha256: plan.storedOutput?.sha256 ?? null,
               outputMimeType: plan.storedOutput?.mimeType ?? null,
               outputSizeBytes: plan.storedOutput?.sizeBytes ?? null,
@@ -755,7 +798,13 @@ function createDefaultRepository(): TemplateTwinReviewRepository {
               roundTripVerification: plan.prepared.render
                 ? asJson(plan.prepared.render.verification)
                 : Prisma.JsonNull,
-              reviewedAt: plan.reviewedAt,
+              // A field correction creates a new immutable manifest version.
+              // It is not a whole-document acknowledgement; the physician
+              // must explicitly confirm the regenerated manifest afterward.
+              reviewedAt: null,
+              reviewedById: null,
+              reviewedManifestVersion: null,
+              reviewedManifestSha256: null,
             },
           });
           if (updated.count !== 1) {
@@ -884,6 +933,43 @@ function createDefaultRepository(): TemplateTwinReviewRepository {
             draftTemplateVersion = draft.version;
           }
 
+          if (plan.storedOutput) {
+            await claimTemplateTwinObject(tx, {
+              objectKey: plan.storedOutput.objectKey,
+              practiceId: plan.practiceId,
+              claimType: 'fill_manifest',
+              claimId: plan.fillManifestId,
+            });
+          }
+
+          // This event is clinical/audit critical. Enqueue it in the same
+          // serializable transaction as the immutable correction decision so
+          // an audit outage can never leave an unaudited physician delta.
+          await enqueueTemplateTwinAudit(tx, {
+            eventKey: `template-twin:field-reviewed:${plan.fillManifestId}:v${plan.expectedManifestVersion + 1}`,
+            practiceId: plan.practiceId,
+            actorId: plan.decision.reviewerId,
+            actorEmailSnapshot: plan.reviewerEmail,
+            action: 'TEMPLATE_TWIN_FIELD_REVIEWED',
+            targetType: 'TemplateTwinFillManifest',
+            targetId: plan.fillManifestId,
+            metadata: {
+              visitId: plan.visitId,
+              fieldId: plan.decision.fieldId,
+              decisionKind: plan.decision.decisionKind,
+              resolutionStatus: plan.decision.resolutionStatus,
+              manifestVersion: plan.expectedManifestVersion + 1,
+              validationPassed: plan.prepared.manifest.validation.valid,
+              roundTripVerified:
+                plan.prepared.render?.verification.verified === true,
+              mappingRuleDraftCreated: draftTemplateId !== null,
+              outputSha256: plan.storedOutput?.sha256 ?? null,
+              outputVersionId: plan.storedOutput?.objectVersionId ?? null,
+              outputEtag: plan.storedOutput?.objectEtag ?? null,
+              manifestSha256: plan.prepared.manifestSha256,
+            },
+          });
+
           return {
             applied: true,
             manifestVersion: plan.expectedManifestVersion + 1,
@@ -901,7 +987,8 @@ export async function reviewTemplateTwinField(
   input: ReviewTemplateTwinFieldInput,
   dependencies: TemplateTwinReviewServiceDependencies = {},
 ): Promise<ReviewTemplateTwinFieldResult> {
-  const repository = dependencies.repository ?? createDefaultRepository();
+  const repository =
+    dependencies.repository ?? createTemplateTwinReviewRepository();
   const context = await repository.loadOwned({
     visitId: input.visitId,
     actor: input.actor,
@@ -936,6 +1023,16 @@ export async function reviewTemplateTwinField(
     );
   }
   const manifest = parsedManifest.data;
+  if (
+    context.visit.soapVersion !== manifest.soapVersion ||
+    typeof context.visit.soapFinal !== 'string' ||
+    canonicalSoapSha256(context.visit.soapFinal) !== manifest.soapSha256
+  ) {
+    throw new TemplateTwinReviewError(
+      'SOAP_BINDING_STALE',
+      TEMPLATE_TWIN_SOAP_BINDING_REVIEW_REASON,
+    );
+  }
   const ir = TemplateDocIRSchema.parse(
     context.compiledVersion.compiledDocumentIr,
   );
@@ -1038,12 +1135,17 @@ export async function reviewTemplateTwinField(
     source = await storage.readSourceArtifact({
       practiceId: input.actor.practiceId,
       objectKey: context.compiledVersion.sourceArtifact.objectKey!,
+      expectedObjectVersionId:
+        context.compiledVersion.sourceArtifact.objectVersionId!,
+      expectedObjectEtag: context.compiledVersion.sourceArtifact.objectEtag!,
       expectedSha256: context.compiledVersion.sourceArtifact.sha256,
       expectedSizeBytes: context.compiledVersion.sourceArtifact.sizeBytes,
     });
   }
   const finalizeFill = dependencies.finalizeFill ?? finalizeTemplateTwinFill;
   const prepared = await finalizeFill({
+    soapVersion: manifest.soapVersion,
+    soapFinal: context.visit.soapFinal,
     compiledVersionId: context.compiledVersion.id,
     noteTemplateId: context.compiledVersion.noteTemplate.id,
     noteTemplateVersion: context.compiledVersion.noteTemplate.version,
@@ -1076,11 +1178,12 @@ export async function reviewTemplateTwinField(
     fillManifestId: context.id,
     practiceId: input.actor.practiceId,
     visitId: input.visitId,
+    soapVersion: manifest.soapVersion,
     expectedManifestVersion: input.correction.expectedManifestVersion,
     prepared,
     storedOutput,
     staticContentSha256: ir.staticContentSha256,
-    reviewedAt: dependencies.now?.() ?? new Date(),
+    reviewerEmail: input.actor.userEmail,
     decision: {
       fillManifestId: context.id,
       fieldId: field.fieldId,
@@ -1114,35 +1217,6 @@ export async function reviewTemplateTwinField(
       'This Template Twin review changed in another tab. Reload before correcting it.',
     );
   }
-
-  await logAudit({
-    action: 'TEMPLATE_TWIN_FIELD_REVIEWED',
-    targetType: 'TemplateTwinFillManifest',
-    targetId: context.id,
-    userId: input.actor.userId,
-    userEmail: input.actor.userEmail,
-    practiceId: input.actor.practiceId,
-    metadata: {
-      visitId: input.visitId,
-      fieldId: field.fieldId,
-      fieldKind: field.kind,
-      decisionKind:
-        input.correction.value === null
-          ? 'clinician_clear'
-          : 'clinician_correction',
-      manifestVersion: committed.manifestVersion,
-      validationPassed: prepared.manifest.validation.valid,
-      roundTripVerified: prepared.render?.verification.verified === true,
-      mappingRuleDraftCreated: committed.draftTemplateId !== null,
-      draftTemplateId: committed.draftTemplateId,
-      draftTemplateVersion: committed.draftTemplateVersion,
-      sourceFactCount: input.correction.sourceFactIds.length,
-      correctionFactCount: correction.facts.length,
-      // Values, quotes, labels, reason text, and clinical concepts are never
-      // audit metadata. The decision row retains the clinical delta itself.
-      manifestSha256: canonicalSha256(prepared.manifest),
-    },
-  });
 
   return {
     fillManifestId: context.id,

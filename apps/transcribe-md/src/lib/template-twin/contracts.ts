@@ -19,8 +19,28 @@ export const TemplateTwinSyntheticTestRequestSchema = z
 export const TemplateTwinCertifyRequestSchema = z
   .object({
     expectedMappingsSha256: z.string().regex(/^[a-f0-9]{64}$/),
+    expectedSyntheticTestProvenanceSha256: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/),
     acknowledgeStructure: z.literal(true),
     acknowledgeSyntheticOutput: z.literal(true),
+    optionalFieldWaivers: z
+      .array(
+        z
+          .object({
+            fieldId: z.string().regex(/^ttf_[a-f0-9]{24}$/),
+            reason: z.string().trim().min(10).max(500),
+          })
+          .strict(),
+      )
+      .max(500)
+      .default([])
+      .refine(
+        (waivers) =>
+          new Set(waivers.map((waiver) => waiver.fieldId)).size ===
+          waivers.length,
+        { message: 'Each optional field may be waived only once.' },
+      ),
   })
   .strict();
 
@@ -58,9 +78,22 @@ export const TemplateTwinFieldCorrectionRequestSchema = z
   })
   .strict();
 
+export const TemplateTwinReviewAcknowledgementRequestSchema = z
+  .object({
+    expectedManifestVersion: z.number().int().positive(),
+    expectedManifestSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  })
+  .strict();
+
 export type TemplateTwinUpdateMappingsRequest = z.infer<
   typeof TemplateTwinUpdateMappingsRequestSchema
 >;
+export type TemplateTwinCertifyRequest = z.infer<
+  typeof TemplateTwinCertifyRequestSchema
+>;
 export type TemplateTwinFieldCorrectionRequest = z.infer<
   typeof TemplateTwinFieldCorrectionRequestSchema
+>;
+export type TemplateTwinReviewAcknowledgementRequest = z.infer<
+  typeof TemplateTwinReviewAcknowledgementRequestSchema
 >;

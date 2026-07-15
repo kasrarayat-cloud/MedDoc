@@ -19,7 +19,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import prisma from '@meddoc/db';
-import { TranscribeVisitStatus } from '@prisma/client';
+import { Prisma, TranscribeVisitStatus } from '@prisma/client';
 import { auth } from '@/lib/nextauth';
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { computeEmScore } from '@/lib/em-coding/score';
@@ -27,6 +27,7 @@ import { engineToUiScore } from '@/lib/em-coding/to-ui-score';
 import { extractIcdRows, extractRxRows } from '@/lib/em-coding/displayed-level';
 import { mergeAdditions } from '@/lib/em-coding/merge-additions';
 import { logAudit } from '@/lib/audit';
+import { invalidateTemplateTwinAfterSoapEdit } from '@/lib/template-twin/soap-binding';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -82,6 +83,7 @@ export const POST = withApiHandler<{ id: string }>(
         signedAt: true,
         soapDraft: true,
         soapFinal: true,
+        soapVersion: true,
         audioDurationSec: true,
         dictationDurationSec: true,
         inputMode: true,
@@ -168,13 +170,31 @@ export const POST = withApiHandler<{ id: string }>(
     // The pre-merge soapFinal is preserved as soapL6Original (set by
     // L6 polish; not touched here so the original-AI-output snapshot
     // remains immutable for the doctor-edit-pattern capture path).
-    await prisma.transcribeVisit.update({
-      where: { id: visitId },
-      data: {
-        soapDraft: merge.newSoap,
-        soapFinal: merge.newSoap,
-      },
+    const updated = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const saved = await tx.transcribeVisit.updateMany({
+        where: {
+          id: visitId,
+          status: TranscribeVisitStatus.READY,
+          soapVersion: visit.soapVersion,
+        },
+        data: {
+          soapDraft: merge.newSoap,
+          soapFinal: merge.newSoap,
+          soapVersion: { increment: 1 },
+        },
+      });
+      if (saved.count === 1) {
+        await invalidateTemplateTwinAfterSoapEdit(tx, visitId);
+      }
+      return saved;
     });
+    if (updated.count !== 1) {
+      return apiError(
+        'The note changed in another tab. Reload before applying additions.',
+        409,
+        { code: 'SOAP_VERSION_CONFLICT' },
+      );
+    }
 
     // Audit row. Metadata carries the from→to code pair + per-criterion
     // counts; never the addition text itself (PHI).

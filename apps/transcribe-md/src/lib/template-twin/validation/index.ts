@@ -30,6 +30,11 @@ import {
   approvedPracticeDefaultAnchorId,
   approvedPracticeDefaultFactId,
 } from '../practice-default';
+import {
+  TEMPLATE_TWIN_UNSUPPORTED_CONCEPT_CODE,
+  TEMPLATE_TWIN_UNSUPPORTED_CONCEPT_REASON,
+  isSupportedTemplateTwinConcept,
+} from '../supported-concepts';
 
 export const TEMPLATE_TWIN_VALIDATOR_VERSION =
   'template-field-validator/1.0.0';
@@ -421,6 +426,17 @@ export function validateTemplateTwin(
     if (mapping.status === 'unsupported' || field.detectionStatus === 'unsupported') {
       add('FIELD_UNSUPPORTED', field.clinicallyMaterial ? 'blocking' : 'warning', 'The field is unsupported.', field.fieldId);
     }
+    if (
+      mapping.clinicalConcept !== null &&
+      !isSupportedTemplateTwinConcept(mapping.clinicalConcept)
+    ) {
+      add(
+        TEMPLATE_TWIN_UNSUPPORTED_CONCEPT_CODE,
+        'blocking',
+        TEMPLATE_TWIN_UNSUPPORTED_CONCEPT_REASON,
+        field.fieldId,
+      );
+    }
 
     const citedFacts: EncounterFact[] = [];
     for (const factId of resolution.sourceFactIds) {
@@ -459,6 +475,52 @@ export function validateTemplateTwin(
     }
     if (citedFacts.some((fact) => !factMatchesMapping(fact, mapping))) {
       add('SOURCE_FACT_CONCEPT_MISMATCH', 'blocking', 'A cited fact does not match the approved semantic mapping.', field.fieldId);
+    }
+
+    const allCitedFactsDenied =
+      citedFacts.length > 0 && citedFacts.every((fact) => fact.polarity === 'denied');
+    if (resolution.status === 'explicitly_denied') {
+      if (field.kind !== 'checkbox') {
+        add(
+          'EXPLICIT_DENIAL_RENDERING_POLICY_MISSING',
+          'blocking',
+          'This field has no physician-certified exact negative output and cannot render a denial.',
+          field.fieldId,
+        );
+      } else if (resolution.value !== false) {
+        add(
+          'CHECKBOX_EXPLICIT_DENIAL_VALUE_INVALID',
+          'blocking',
+          'An explicitly denied checkbox must carry the exact false value.',
+          field.fieldId,
+        );
+      }
+    }
+    if (field.kind === 'checkbox' && resolution.value === false) {
+      if (resolution.status !== 'explicitly_denied') {
+        add(
+          'CHECKBOX_FALSE_STATUS_INVALID',
+          'blocking',
+          'An unchecked checkbox must be an explicit, evidence-backed denial.',
+          field.fieldId,
+        );
+      }
+      if (mapping.polarityBehavior !== 'explicit_denial_allowed') {
+        add(
+          'CHECKBOX_FALSE_SEMANTICS_NOT_CERTIFIED',
+          'blocking',
+          'The physician has not certified unchecked as an explicit false value.',
+          field.fieldId,
+        );
+      }
+    }
+    if (field.kind !== 'checkbox' && allCitedFactsDenied) {
+      add(
+        'NEGATIVE_RENDERING_POLICY_MISSING',
+        'blocking',
+        'The encounter contains a denial, but this field has no certified exact negative rendering policy.',
+        field.fieldId,
+      );
     }
 
     if (resolution.status === 'approved_practice_default') {
@@ -509,6 +571,18 @@ export function validateTemplateTwin(
       (field.required || mapping.required || mapping.unknownPolicy === 'requires_input')
     ) {
       add('REQUIRED_FIELD_NOT_MENTIONED', 'blocking', 'A required field was not mentioned.', field.fieldId);
+    }
+    if (
+      field.kind === 'checkbox' &&
+      resolution.value === null &&
+      field.clinicallyMaterial
+    ) {
+      add(
+        'CLINICALLY_MEANINGFUL_CHECKBOX_UNRESOLVED',
+        'blocking',
+        'This clinically meaningful checkbox is unresolved and must be reviewed before signing.',
+        field.fieldId,
+      );
     }
 
     if (field.kind === 'single_select' && populated && !field.rowPrototype) {

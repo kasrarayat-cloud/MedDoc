@@ -24,6 +24,10 @@ import {
   approvedPracticeDefaultAnchorId,
   approvedPracticeDefaultFactId,
 } from '../practice-default';
+import {
+  TEMPLATE_TWIN_UNSUPPORTED_CONCEPT_CODE,
+  isSupportedTemplateTwinConcept,
+} from '../supported-concepts';
 
 export interface ResolveTemplateFieldsInput {
   fields: ReadonlyArray<TemplateField>;
@@ -398,6 +402,15 @@ function resolveOne(
       'clinical_concept_unmapped',
     );
   }
+  if (!isSupportedTemplateTwinConcept(mapping.clinicalConcept)) {
+    return makeResolution(
+      field.fieldId,
+      'needs_clinician_input',
+      null,
+      [],
+      TEMPLATE_TWIN_UNSUPPORTED_CONCEPT_CODE.toLocaleLowerCase('en-US'),
+    );
+  }
 
   const approvedConcepts = new Set(
     [mapping.clinicalConcept, ...mapping.approvedSynonyms].map(normalizeConcept),
@@ -513,17 +526,27 @@ function resolveOne(
     );
   }
   const allDenied = polarities.length === 1 && polarities[0] === 'denied';
-  if (
-    allDenied &&
-    mapping.polarityBehavior !== 'explicit_denial_allowed' &&
-    mapping.polarityBehavior !== 'affirmative_only'
-  ) {
+  if (allDenied && field.kind === 'checkbox') {
+    if (mapping.polarityBehavior !== 'explicit_denial_allowed') {
+      return makeResolution(
+        field.fieldId,
+        'needs_clinician_input',
+        null,
+        temporalCandidates,
+        'checkbox_false_semantics_not_certified',
+      );
+    }
+  } else if (allDenied) {
+    // Safe-alpha mappings do not yet carry an exact, physician-certified
+    // negative rendering value for non-checkbox fields. Preserve the denial
+    // evidence for review, but never coerce it into narrative/select/date or
+    // repeating output that the renderer cannot safely represent.
     return makeResolution(
       field.fieldId,
-      'ambiguous',
+      'needs_clinician_input',
       null,
       temporalCandidates,
-      'denial_behavior_not_approved',
+      'negative_rendering_policy_missing',
     );
   }
 
@@ -565,10 +588,10 @@ function resolveOne(
       .map(([, value]) => value);
     return makeResolution(
       field.fieldId,
-      allDenied ? 'explicitly_denied' : 'supported',
+      'supported',
       values,
       temporalCandidates,
-      allDenied ? 'explicit_denial_exact_options' : 'exact_options_supported',
+      'exact_options_supported',
     );
   }
 
@@ -600,10 +623,10 @@ function resolveOne(
   if (field.rowPrototype) {
     return makeResolution(
       field.fieldId,
-      allDenied ? 'explicitly_denied' : 'supported',
+      'supported',
       rowPrototypeValue(convertedPairs),
       temporalCandidates,
-      allDenied ? 'repeating_rows_explicitly_denied' : 'repeating_rows_supported',
+      'repeating_rows_supported',
     );
   }
 
@@ -622,13 +645,10 @@ function resolveOne(
 
   const selected = convertedPairs[0]?.converted;
   if (!selected) return missingResolution(field, mapping, allFacts);
-  const mayPopulateDenial =
-    field.kind === 'checkbox' ||
-    mapping.polarityBehavior === 'explicit_denial_allowed';
   return makeResolution(
     field.fieldId,
     allDenied ? 'explicitly_denied' : 'supported',
-    allDenied && !mayPopulateDenial ? null : selected.value,
+    selected.value,
     temporalCandidates,
     allDenied ? 'explicit_denial_supported' : 'direct_evidence_supported',
     selected.optionOrdinal,
