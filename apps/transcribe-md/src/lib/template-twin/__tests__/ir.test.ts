@@ -137,20 +137,22 @@ describe('TemplateDocIRSchema', () => {
 });
 
 describe('evidence contract', () => {
-  it('requires facts and anchors for every populated non-default value', () => {
-    const result = FieldResolutionSchema.safeParse({
-      fieldId: FIELD_ID,
-      status: 'supported',
-      value: 'Present',
-      sourceFactIds: [],
-      evidenceAnchorIds: [],
-      selectedOptionOrdinal: 1,
-      reasonCode: 'exact_option_evidence',
-      clinicianReviewed: false,
-    });
-    expect(result.success).toBe(false);
-  });
-
+  it.each(['supported', 'approved_practice_default'] as const)(
+    'requires facts and anchors for every populated %s value',
+    (status) => {
+      const result = FieldResolutionSchema.safeParse({
+        fieldId: FIELD_ID,
+        status,
+        value: 'Present',
+        sourceFactIds: [],
+        evidenceAnchorIds: [],
+        selectedOptionOrdinal: 1,
+        reasonCode: 'exact_option_evidence',
+        clinicianReviewed: false,
+      });
+      expect(result.success).toBe(false);
+    },
+  );
   it('counts critical unresolved fields independently of filled values', () => {
     const fields = [
       FieldResolutionSchema.parse({

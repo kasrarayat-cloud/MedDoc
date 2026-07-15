@@ -5,7 +5,10 @@ import type {
   SemanticMapping,
   TemplateField,
 } from '../../ir';
-import { resolveTemplateFields } from '..';
+import {
+  resolveTemplateFields,
+  withApprovedPracticeDefaultFacts,
+} from '..';
 
 const SHA = 'b'.repeat(64);
 
@@ -99,6 +102,7 @@ function fact(
 ): EncounterFact {
   return {
     factId: `ttfact_${seed.repeat(24).slice(0, 24)}`,
+    sourceType: 'encounter_evidence',
     concept,
     value,
     polarity: 'affirmed',
@@ -273,22 +277,28 @@ describe('resolveTemplateFields', () => {
     ]);
   });
 
-  it('uses only certified exact practice defaults and never adds fake evidence', () => {
+  it('uses only certified exact practice defaults with deterministic provenance evidence', () => {
     const definition = field('5', 'single_select');
     const semantic = mapping(definition, 'hpi.severity', {
       practiceDefault: 'Mild',
     });
-    const [resolved] = resolveTemplateFields({
+    const facts = withApprovedPracticeDefaultFacts({
       fields: [definition],
       mappings: [semantic],
       facts: [],
     });
+    const [resolved] = resolveTemplateFields({
+      fields: [definition],
+      mappings: [semantic],
+      facts,
+    });
     expect(resolved).toMatchObject({
       status: 'approved_practice_default',
       value: 'Mild',
-      sourceFactIds: [],
-      evidenceAnchorIds: [],
+      sourceFactIds: [facts[0]?.factId],
+      evidenceAnchorIds: [facts[0]?.evidenceAnchorIds[0]],
     });
+    expect(facts[0]?.sourceType).toBe('approved_practice_default');
   });
 
   it('fails closed for uncertified mappings outside synthetic certification tests', () => {

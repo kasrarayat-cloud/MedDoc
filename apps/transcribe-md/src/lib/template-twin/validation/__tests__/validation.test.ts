@@ -7,7 +7,10 @@ import type {
   TemplateField,
   TemplateTable,
 } from '../../ir';
-import { resolveTemplateFields } from '../../resolver';
+import {
+  resolveTemplateFields,
+  withApprovedPracticeDefaultFacts,
+} from '../../resolver';
 import { validateTemplateTwin } from '..';
 
 const SHA = 'c'.repeat(64);
@@ -102,6 +105,7 @@ function fact(
 ): EncounterFact {
   return {
     factId: `ttfact_${seed.repeat(24).slice(0, 24)}`,
+    sourceType: 'encounter_evidence',
     concept,
     value,
     polarity: 'affirmed',
@@ -154,6 +158,82 @@ describe('validateTemplateTwin', () => {
       checkedAt: NOW,
       validatorVersion: 'template-field-validator/1.0.0',
     });
+  });
+
+  it('uses persisted certification without mutating the immutable compiler IR', () => {
+    const definition = field('a', 'single_select', {
+      detectionStatus: 'recognized',
+    });
+    const semantic = mapping(definition, 'hpi.severity');
+    const source = fact('a', 'hpi.severity', 'Severe');
+    const uncertified = resolveTemplateFields({
+      fields: [definition],
+      mappings: [semantic],
+      facts: [source],
+    });
+    expect(uncertified[0]?.status).toBe('needs_clinician_input');
+
+    const certifiedFieldIds = [definition.fieldId];
+    const resolved = resolveTemplateFields({
+      fields: [definition],
+      mappings: [semantic],
+      facts: [source],
+      certifiedFieldIds,
+    });
+    const result = validateTemplateTwin({
+      fields: [definition],
+      mappings: [semantic],
+      facts: [source],
+      resolutions: resolved,
+      certifiedFieldIds,
+      now: NOW,
+    });
+
+    expect(result.valid).toBe(true);
+    expect(result.issues).toEqual([]);
+    expect(definition.detectionStatus).toBe('recognized');
+  });
+
+  it('requires deterministic provenance facts for approved practice defaults', () => {
+    const definition = field('f', 'single_select');
+    const semantic = mapping(definition, 'hpi.severity', {
+      practiceDefault: 'Mild',
+    });
+    const facts = withApprovedPracticeDefaultFacts({
+      fields: [definition],
+      mappings: [semantic],
+      facts: [],
+    });
+    const resolutions = resolveTemplateFields({
+      fields: [definition],
+      mappings: [semantic],
+      facts,
+    });
+    expect(
+      validateTemplateTwin({
+        fields: [definition],
+        mappings: [semantic],
+        facts,
+        resolutions,
+        now: NOW,
+      }).valid,
+    ).toBe(true);
+
+    expect(
+      validateTemplateTwin({
+        fields: [definition],
+        mappings: [semantic],
+        facts: [],
+        resolutions,
+        now: NOW,
+      }).issues.map((issue) => issue.code),
+    ).toEqual(
+      expect.arrayContaining([
+        'SOURCE_FACT_MISSING',
+        'EVIDENCE_ANCHOR_UNTRACEABLE',
+        'PRACTICE_DEFAULT_INVALID',
+      ]),
+    );
   });
 
   it('independently rejects a non-option dropdown value and evidence tampering', () => {

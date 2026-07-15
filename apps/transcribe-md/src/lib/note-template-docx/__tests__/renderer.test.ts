@@ -210,6 +210,67 @@ describe('Template Twin exact DOCX renderer', () => {
     expect(xml).toContain('<w:gridCol w:w="2800"/><w:gridCol w:w="4200"/>');
   });
 
+  it('preserves an embedded header logo and its internal relationship byte-for-byte', async () => {
+    const logo = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nS8AAAAASUVORK5CYII=',
+      'base64',
+    );
+    const headerWithLogo = `<?xml version="1.0" encoding="UTF-8"?>
+<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+  xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+  xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
+  xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+  <w:p><w:r><w:drawing><wp:inline><a:graphic><a:graphicData><a:blip r:embed="rIdLogo"/></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>
+  <w:p><w:sdt><w:sdtPr><w:id w:val="201"/><w:alias w:val="Practice display name"/><w:text/></w:sdtPr><w:sdtContent><w:r><w:t>Synthetic Practice</w:t></w:r></w:sdtContent></w:sdt></w:p>
+</w:hdr>`;
+    const headerRels = `<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rIdLogo" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/logo.png"/>
+</Relationships>`;
+    const source = await buildSyntheticDocx({
+      extraEntries: {
+        'word/header1.xml': headerWithLogo,
+        'word/_rels/header1.xml.rels': headerRels,
+        'word/media/logo.png': logo,
+      },
+    });
+    const input = await setup(source);
+    const rendered = await renderTemplateDocx(input);
+    const before = inspectDocxPackage(source).zip.entries;
+    const after = inspectDocxPackage(rendered.document).zip.entries;
+
+    expect(after.get('word/media/logo.png')?.bytes).toEqual(logo);
+    expect(after.get('word/media/logo.png')?.bytes).toEqual(
+      before.get('word/media/logo.png')?.bytes,
+    );
+    expect(after.get('word/_rels/header1.xml.rels')?.bytes).toEqual(
+      before.get('word/_rels/header1.xml.rels')?.bytes,
+    );
+    expect(after.get('word/header1.xml')?.bytes.toString('utf8')).toContain(
+      'r:embed="rIdLogo"',
+    );
+    expect(rendered.verification.staticRegionCheck).toBe('verified');
+  });
+
+  it('emits a deterministic visual-review warning for a long populated value', async () => {
+    const input = await setup();
+    const narrative = input.ir.fields.find(
+      (field) => field.originalLabel === 'Assessment narrative',
+    )!;
+    const longValue = 'Synthetic long value '.repeat(40);
+    const resolutions = input.resolutions.map((item) =>
+      item.fieldId === narrative.fieldId
+        ? resolution(narrative, longValue)
+        : item,
+    );
+    const rendered = await renderTemplateDocx({ ...input, resolutions });
+
+    expect(rendered.verification.warningCodes).toContain(
+      'LAYOUT_OVERFLOW_REVIEW_RECOMMENDED',
+    );
+    expect(rendered.verification.verified).toBe(true);
+  });
+
   it('rejects a display-label near match instead of coercing it to a native option value', async () => {
     const input = await setup();
     const examSide = input.ir.fields.find((field) => field.originalLabel === 'Exam side')!;

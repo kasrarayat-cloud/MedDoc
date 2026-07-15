@@ -9,13 +9,16 @@
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@meddoc/db', () => ({
-  default: { noteTemplate: { findMany: vi.fn() } },
+  default: { noteTemplate: { findMany: vi.fn(), findFirst: vi.fn() } },
 }));
 
 import type { NoteTemplate } from '@prisma/client';
+import prisma from '@meddoc/db';
 import {
   selectTemplate,
   MissingSystemDefaultTemplateError,
+  PinnedTemplateUnavailableError,
+  resolveVisitTemplate,
 } from '../resolve-active-template';
 
 /** Build a NoteTemplate row with sane Phase-0 defaults. */
@@ -131,5 +134,52 @@ describe('selectTemplate — fallback chain', () => {
     expect(() => selectTemplate([draft], { doctorId: 'doc1' })).toThrow(
       MissingSystemDefaultTemplateError
     );
+  });
+});
+
+describe('resolveVisitTemplate — immutable retry provenance', () => {
+  it('reuses the exact pinned version even after it becomes inactive', async () => {
+    const pinned = tmpl({
+      id: 'twin-v1',
+      doctorId: 'doc1',
+      version: 1,
+      status: 'inactive',
+    });
+    vi.mocked(prisma.noteTemplate.findFirst).mockResolvedValueOnce(pinned);
+
+    await expect(
+      resolveVisitTemplate({
+        doctorId: 'doc1',
+        encounterType: 'cardiology',
+        pinnedTemplateId: 'twin-v1',
+        pinnedTemplateVersion: 1,
+      })
+    ).resolves.toBe(pinned);
+    expect(prisma.noteTemplate.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'twin-v1',
+        version: 1,
+        OR: [{ doctorId: 'doc1' }, { isSystemDefault: true }],
+      },
+    });
+  });
+
+  it('fails closed when a pin is partial or unavailable', async () => {
+    await expect(
+      resolveVisitTemplate({
+        doctorId: 'doc1',
+        pinnedTemplateId: 'twin-v1',
+        pinnedTemplateVersion: null,
+      })
+    ).rejects.toBeInstanceOf(PinnedTemplateUnavailableError);
+
+    vi.mocked(prisma.noteTemplate.findFirst).mockResolvedValueOnce(null);
+    await expect(
+      resolveVisitTemplate({
+        doctorId: 'doc1',
+        pinnedTemplateId: 'twin-v1',
+        pinnedTemplateVersion: 1,
+      })
+    ).rejects.toBeInstanceOf(PinnedTemplateUnavailableError);
   });
 });

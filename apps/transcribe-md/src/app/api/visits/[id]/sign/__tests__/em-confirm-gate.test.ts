@@ -71,7 +71,10 @@ vi.mock('@/lib/audit', () => ({ logAudit: mocks.logAudit }));
 vi.mock('@/lib/log', () => ({
   log: { warn: mocks.logWarn, info: vi.fn(), error: vi.fn() },
 }));
-vi.mock('@meddoc/ai', () => ({ redactPhi: (x: unknown) => x }));
+vi.mock('@meddoc/ai', () => ({
+  redactPhi: (x: unknown) => x,
+  delimiterSystemSuffix: () => '',
+}));
 vi.mock('@/lib/visit-export', () => ({ formatVisitDate: () => '2026-06-12' }));
 vi.mock('@/lib/visit-export-server', () => ({
   loadVisitExportData: mocks.loadVisitExportData,
