@@ -114,19 +114,33 @@ describe('saveNoteTemplateAction — activate (new)', () => {
 
 describe('saveNoteTemplateAction — editing an ACTIVE row → new version', () => {
   it('creates version+1 (live row not mutated) and supersedes the old', async () => {
-    mocks.findFirst.mockResolvedValue({ id: CUID, status: 'active', version: 3 });
+    mocks.findFirst.mockResolvedValue({
+      id: CUID,
+      status: 'active',
+      version: 3,
+      lineageId: 'lineage-1',
+      templateKind: 'structured',
+    });
     const r = await saveNoteTemplateAction(input({ id: CUID }), true);
     expect(r.ok).toBe(true);
     expect(mocks.update).not.toHaveBeenCalled(); // never mutate the live row
     expect(mocks.create.mock.calls[0][0].data.version).toBe(4);
     expect(mocks.create.mock.calls[0][0].data.status).toBe('active');
+    expect(mocks.create.mock.calls[0][0].data.lineageId).toBe('lineage-1');
+    expect(mocks.create.mock.calls[0][0].data.parentVersionId).toBe(CUID);
     expect(mocks.updateMany).toHaveBeenCalled(); // supersede the old active
   });
 });
 
 describe('saveNoteTemplateAction — editing a DRAFT → update in place', () => {
   it('updates the existing draft, no new version, no deactivate', async () => {
-    mocks.findFirst.mockResolvedValue({ id: CUID, status: 'draft', version: 2 });
+    mocks.findFirst.mockResolvedValue({
+      id: CUID,
+      status: 'draft',
+      version: 2,
+      lineageId: 'lineage-1',
+      templateKind: 'structured',
+    });
     const r = await saveNoteTemplateAction(input({ id: CUID }), false);
     expect(r.ok).toBe(true);
     expect(mocks.update).toHaveBeenCalledWith(
@@ -171,7 +185,11 @@ describe('saveNoteTemplateAction — PHI re-scrub on doctor edits', () => {
 
 describe('activateNoteTemplateAction', () => {
   it('deactivates prior active (excluding self) then sets active — scoped', async () => {
-    mocks.findFirst.mockResolvedValue({ id: CUID, encounterType: 'cardiology' });
+    mocks.findFirst.mockResolvedValue({
+      id: CUID,
+      encounterType: 'cardiology',
+      templateKind: 'structured',
+    });
     const r = await activateNoteTemplateAction(CUID);
     expect(r.ok).toBe(true);
     expect(mocks.findFirst.mock.calls[0][0].where).toEqual({ id: CUID, doctorId: DOCTOR });
@@ -195,6 +213,7 @@ describe('activateNoteTemplateAction', () => {
 
 describe('deleteNoteTemplateAction', () => {
   it('scoped deleteMany; count 0 → error, count 1 → ok', async () => {
+    mocks.findFirst.mockResolvedValue({ templateKind: 'structured' });
     mocks.deleteMany.mockResolvedValueOnce({ count: 0 });
     expect((await deleteNoteTemplateAction(CUID)).ok).toBe(false);
     expect(mocks.deleteMany.mock.calls[0][0]).toEqual({ where: { id: CUID, doctorId: DOCTOR } });
@@ -208,6 +227,7 @@ describe('duplicateNoteTemplateAction', () => {
   it('copies an owned row as a fresh draft v1 with a "(copy)" name', async () => {
     mocks.findFirst.mockResolvedValue({
       name: 'Ortho', encounterType: 'orthopedics', sections: [], styleProfile: {}, specialtyBaseline: null,
+      templateKind: 'structured',
     });
     const r = await duplicateNoteTemplateAction(CUID);
     expect(r.ok).toBe(true);
@@ -225,6 +245,7 @@ describe('getNoteTemplateForEditAction', () => {
       id: CUID, name: 'Ortho', encounterType: 'orthopedics',
       sections: [{ key: 'subjective', label: 'S', order: 1, formatHint: 'prose', styleInstructions: null, defaultText: null, defaultTextMode: 'omit_unless_supported' }],
       styleProfile: { tense: 'past', tone: 'concise', abbreviations: null },
+      templateKind: 'structured',
     });
     const r = await getNoteTemplateForEditAction(CUID);
     expect(r.ok).toBe(true);
@@ -236,5 +257,32 @@ describe('getNoteTemplateForEditAction', () => {
 
     mocks.findFirst.mockResolvedValueOnce(null);
     expect((await getNoteTemplateForEditAction(CUID)).ok).toBe(false);
+  });
+});
+
+describe('Template Twin isolation from legacy lifecycle actions', () => {
+  it('refuses legacy edit, activation, duplication, deletion, and editor hydration', async () => {
+    mocks.findFirst.mockResolvedValue({
+      id: CUID,
+      status: 'draft',
+      version: 1,
+      lineageId: 'twin-lineage',
+      encounterType: 'primary-care',
+      templateKind: 'template_twin_docx',
+      name: 'Twin',
+      sections: [],
+      styleProfile: {},
+      specialtyBaseline: null,
+    });
+
+    expect((await saveNoteTemplateAction(input({ id: CUID }), false)).ok).toBe(false);
+    expect((await activateNoteTemplateAction(CUID)).ok).toBe(false);
+    expect((await duplicateNoteTemplateAction(CUID)).ok).toBe(false);
+    expect((await deleteNoteTemplateAction(CUID)).ok).toBe(false);
+    expect((await getNoteTemplateForEditAction(CUID)).ok).toBe(false);
+
+    expect(mocks.update).not.toHaveBeenCalled();
+    expect(mocks.updateMany).not.toHaveBeenCalled();
+    expect(mocks.deleteMany).not.toHaveBeenCalled();
   });
 });

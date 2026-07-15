@@ -93,14 +93,32 @@ export async function saveNoteTemplateAction(
 
   // Ownership pre-check (scoped) so we never create a version off another
   // doctor's row, and so we know the existing status/version.
-  let existing: { id: string; status: string; version: number } | null = null;
+  let existing: {
+    id: string;
+    status: string;
+    version: number;
+    lineageId: string;
+    templateKind: string;
+  } | null = null;
   if (inputId) {
     existing = await prisma.noteTemplate.findFirst({
       where: { id: inputId, doctorId },
-      select: { id: true, status: true, version: true },
+      select: {
+        id: true,
+        status: true,
+        version: true,
+        lineageId: true,
+        templateKind: true,
+      },
     });
     if (!existing) {
       return { ok: false, error: "That template doesn't exist or isn't yours to edit." };
+    }
+    if (existing.templateKind === 'template_twin_docx') {
+      return {
+        ok: false,
+        error: 'Original Word templates must be revised through Template Twin certification.',
+      };
     }
   }
 
@@ -139,6 +157,9 @@ export async function saveNoteTemplateAction(
           version: existing ? existing.version + 1 : 1,
           status,
           isSystemDefault: false,
+          ...(existing
+            ? { lineageId: existing.lineageId, parentVersionId: existing.id }
+            : {}),
         },
         select: { id: true },
       });
@@ -164,9 +185,15 @@ export async function activateNoteTemplateAction(id: string): Promise<SimpleResu
 
   const row = await prisma.noteTemplate.findFirst({
     where: { id, doctorId },
-    select: { id: true, encounterType: true },
+    select: { id: true, encounterType: true, templateKind: true },
   });
   if (!row) return { ok: false, error: "That template doesn't exist or isn't yours." };
+  if (row.templateKind === 'template_twin_docx') {
+    return {
+      ok: false,
+      error: 'Template Twin activation requires a verified certification.',
+    };
+  }
 
   try {
     await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
@@ -192,9 +219,22 @@ export async function duplicateNoteTemplateAction(id: string): Promise<SimpleRes
 
   const row = await prisma.noteTemplate.findFirst({
     where: { id, doctorId },
-    select: { name: true, encounterType: true, sections: true, styleProfile: true, specialtyBaseline: true },
+    select: {
+      name: true,
+      encounterType: true,
+      sections: true,
+      styleProfile: true,
+      specialtyBaseline: true,
+      templateKind: true,
+    },
   });
   if (!row) return { ok: false, error: "That template doesn't exist or isn't yours." };
+  if (row.templateKind === 'template_twin_docx') {
+    return {
+      ok: false,
+      error: 'Create a new Template Twin version from the certification workspace.',
+    };
+  }
 
   const created = await prisma.noteTemplate.create({
     data: {
@@ -219,8 +259,19 @@ export async function duplicateNoteTemplateAction(id: string): Promise<SimpleRes
 export async function deleteNoteTemplateAction(id: string): Promise<SimpleResult> {
   const session = await requireSession();
   const doctorId = session.user.id;
+  const row = await prisma.noteTemplate.findFirst({
+    where: { id, doctorId },
+    select: { templateKind: true },
+  });
+  if (!row) return { ok: false, error: "That template doesn't exist or isn't yours." };
+  if (row.templateKind === 'template_twin_docx') {
+    return {
+      ok: false,
+      error: 'Template Twin versions are immutable; retire or supersede this version instead.',
+    };
+  }
   const res = await prisma.noteTemplate.deleteMany({ where: { id, doctorId } });
-  if (res.count === 0) return { ok: false, error: "That template doesn't exist or isn't yours." };
+  if (res.count === 0) return { ok: false, error: 'Could not delete the template just now.' };
   revalidatePath('/settings');
   return { ok: true };
 }
@@ -233,8 +284,21 @@ export async function getNoteTemplateForEditAction(
   const doctorId = session.user.id;
   const row = await prisma.noteTemplate.findFirst({
     where: { id, doctorId },
-    select: { id: true, name: true, encounterType: true, sections: true, styleProfile: true },
+    select: {
+      id: true,
+      name: true,
+      encounterType: true,
+      sections: true,
+      styleProfile: true,
+      templateKind: true,
+    },
   });
   if (!row) return { ok: false, error: "That template doesn't exist or isn't yours." };
+  if (row.templateKind === 'template_twin_docx') {
+    return {
+      ok: false,
+      error: 'Open this version in the Template Twin certification workspace.',
+    };
+  }
   return { ok: true, template: rowToReviewModel(row) };
 }
