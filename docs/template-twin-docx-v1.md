@@ -2,29 +2,56 @@
 
 ## Status and safety invariant
 
-**Repository status:** implemented on `feat/template-twin-docx-v1`; not deployed to production. This document is an architecture and operations handoff, not deployment approval.
+**Repository status:** safe-alpha hardening is in progress on
+`fix/template-twin-audit-gates-v1`, based on the preserved seven-commit
+`feat/template-twin-docx-v1` prototype. It is not deployed. This document is
+an architecture and release-gate handoff, not deployment approval or evidence
+that the feature is ready for real PHI.
+
+Template Twin is **default off at two independent server-side gates**:
+
+- `TEMPLATE_TWIN_KILL_SWITCH` must be set to the exact value `false`; an
+  absent, malformed, or truthy value keeps the feature off globally.
+- `Practice.templateTwinEnabled` must be `true`; the database default is
+  `false`.
+
+Upload, compilation/certification, management, active-template selection,
+generation, review, signing, and original-template export all enforce this
+rollout decision on the server. Hiding the UI is not an authorization control.
 
 Template Twin adds an exact-source Word delivery alongside the existing SOAP, coding, PDF, generic DOCX, email, and clipboard flows. It does not replace those flows.
 
 The clinical invariant is:
 
-> A clinical value may be rendered into the physician's DOCX only when it resolves from retained encounter evidence or an explicitly approved practice default, passes independent validation, and survives exact-binding round-trip verification. Otherwise it stays blank and/or blocks signing according to its certified policy.
+> A clinical value may be rendered into the physician's DOCX only when the
+> current versioned extractor can produce its certified concept, it resolves
+> from retained encounter evidence or an explicitly approved practice default,
+> passes independent validation, and survives output-derived exact-binding
+> readback. An unresolved clinically meaningful field blocks signing. A value
+> must never be manufactured from a blank, an unknown checkbox, or the nearest
+> dropdown option.
 
-No production migration, bucket provisioning, image build, service restart, or deployment was performed as part of this branch.
+No production migration, bucket provisioning, service restart, or deployment
+was performed as part of this branch. Local non-production app, worker, and
+migration images were built and exercised only in the disposable `meddoc-qa`
+Compose project; that stack and its volumes were removed after validation.
 
 ## Architecture and data flow
 
 ```mermaid
 flowchart TD
-    A[Physician uploads blank DOCX] --> B[Deterministic package/security compiler]
+    A[Physician uploads named, scoped blank DOCX] --> R0[Global and practice rollout gates]
+    R0 --> B[Bounded multipart and deterministic package/security compiler]
     B -->|rejected| Q[Metadata-only quarantine record]
     B -->|accepted| C[TemplateDocIR + exact renderer bindings + unsupported register]
     C --> D[Fail-closed template PHI gate]
     D -->|rejected| Q
-    D -->|accepted| E[Immutable tenant-scoped source object]
-    E --> F[ModelClient semantic mapping proposal]
-    F --> G[Physician mapping review]
-    G --> H[Synthetic evidence test]
+    D -->|accepted| F[ModelClient semantic mapping proposal or unconfirmed fallback]
+    F --> F2[Versioned supported-concept registry]
+    F2 -->|unsupported concept| Q2[Certification blocker]
+    F2 --> E[Immutable tenant-scoped source object and draft transaction]
+    E --> G[Physician mapping review]
+    G --> H[Field-level synthetic evidence test or allowed waiver]
     H --> I[Exact DOCX render and round-trip verification]
     I --> J[Explicit certification and activation]
 
@@ -39,9 +66,10 @@ flowchart TD
     S -->|blocking issue| T[Needs-review manifest; no output]
     S -->|valid| U[Clone source and patch approved bindings only]
     U --> V[Reopen, reparse, verify fields and static regions]
-    V --> W[Immutable output object + fill manifest]
+    V --> V2[Independent output readback from completed DOCX]
+    V2 --> W[Immutable output object + SOAP-bound fill manifest]
     W --> X[Visit review with evidence]
-    X --> Y[Atomic server-side sign gate]
+    X --> Y[Atomic server-side sign gate + stored-byte stream hash]
     Y --> Z[Original Template DOCX delivery]
 ```
 
@@ -49,13 +77,15 @@ The implementation is divided into these boundaries:
 
 | Boundary | Primary code | Responsibility |
 | --- | --- | --- |
-| Untrusted DOCX | `apps/transcribe-md/src/lib/note-template-docx/` | ZIP/OPC/XML validation, deterministic compilation, rendering, and round-trip proof |
+| Untrusted DOCX | `apps/transcribe-md/src/lib/note-template-docx/` | ZIP/OPC/XML validation, deterministic compilation, exact rendering, independent output readback, and static-region proof |
 | Shared contracts | `apps/transcribe-md/src/lib/template-twin/ir.ts` | Provider-neutral IR, facts, mappings, resolutions, validation, and manifest schemas |
-| Artifact custody | `apps/transcribe-md/src/lib/template-twin/storage/` | Tenant-scoped keys, immutable-style writes, metadata/hash verification, and bounded reads |
+| Safe-alpha extraction boundary | `supported-concepts.ts`, `encounter-facts/` | Versioned exact concept allowlist and the extension interface for a later Template-Aware Extraction Agent |
+| Artifact custody | `apps/transcribe-md/src/lib/template-twin/storage/` | Tenant-scoped keys, immutable-style writes, readiness evidence, bounded stream reads, byte/hash verification, and durable object-write ledger |
 | Draft and certification | `create-draft.ts`, `certification-lifecycle.ts`, `synthetic-test.ts` | Persist draft, propose/approve mappings, synthetic proof, certify, and activate |
 | Encounter filling | `encounter-facts/`, `resolver/`, `validation/`, `fill-engine.ts` | One voice/text fact path, exact field resolution, validation, rendering, and manifest persistence |
 | Review and signing | `components/visit/template-twin-review*`, `review-service.ts`, `signing-gate.ts`, visit sign route | Minimal review DTO, labeled physician corrections, explicit mapping-version forks, server-side signing enforcement, and immutable sign decision |
 | Delivery | `export/original-template-docx/route.ts` | Authenticated read of the already-rendered, hash-verified output; never regenerates at download time |
+| Durable safety evidence | `audit-outbox.ts`, `worker/cleanup/template-twin-maintenance.ts` | Transactional audit intent, retrying audit delivery, object-ledger reconciliation, and fail-closed maintenance configuration |
 
 Version constants in v1 are:
 
@@ -85,18 +115,36 @@ The application:
 - validates the key grammar and practice prefix before every read;
 - verifies provider metadata, byte length, and SHA-256 before accepting a source or output;
 - reads with a hard size ceiling and hashes the stream as it is consumed;
-- has no Template Twin delete or overwrite method;
+- has no request-path Template Twin delete or overwrite method; only the
+  separately gated maintenance worker can purge an unclaimed ledger object;
 - stores source and output object keys only in server-side database rows;
 - never sends object keys, hashes, or storage credentials to the browser review DTO;
 - does not log document bytes, extracted document text, transcript text, field values, or evidence quotes in operational/audit metadata.
 
-Database triggers make source-artifact rows and certification rows append-only. Certified compiler/field/mapping rows cannot be changed or deleted. Once `signedDecisionAt` is set, the fill-manifest row cannot be changed or deleted.
+Every source/output write first creates a durable object-ledger intent. The
+ledger records the tenant, key, digest, byte count, kind, write/claim state,
+retry state, and retention boundary. The owning database transaction claims
+the object only after the related source artifact or fill manifest is ready.
+If the process crashes or loses a database race between object PUT and claim,
+the maintenance worker reconciles the ledger idempotently. An expired
+unclaimed object becomes `RETAINED` unless Operations separately enables the
+exact `TEMPLATE_TWIN_ORPHAN_PURGE_APPROVED=true` boundary; maintenance alone
+does not authorize deletion.
 
-This is application and database immutability. Storage administrators remain a privileged threat unless the bucket is also protected with object lock/versioning and restrictive IAM; see [Private bucket provisioning](#private-bucket-provisioning-required-before-runtime-use).
+Database triggers make source-artifact rows and certification rows append-only. Certified compiler/field/mapping rows cannot be changed or deleted. Once `signedDecisionAt` is set, the fill-manifest row cannot be changed or deleted. Additional constraint triggers reject cross-practice fill lineage, output keys outside the owning visit/tenant prefix, review decisions linked to fields from another compiled version, and inconsistent waiver lineage.
+
+Critical Template Twin actions enqueue PHI-safe audit intent in the same
+transaction as the state change. The outbox uses stable event keys, bounded
+metadata, retry/backoff, and stale-processing lease recovery before writing the
+ordinary audit log. Certification, activation, deactivation, retirement,
+rollback, corrections, render verification, signing, export, and safety-gate
+decisions must fail rather than silently lose their required audit intent.
+
+This is application and database immutability. Storage administrators remain a privileged threat unless the bucket is also protected with object lock/versioning and restrictive IAM; see [Dedicated bucket readiness](#dedicated-bucket-readiness-and-qa-boundary).
 
 ## Untrusted-document defenses
 
-Every uploaded file is treated as an untrusted ZIP/OOXML package. The upload route first enforces same-origin mutation, authenticated physician ownership, `.docx` extension, allowed MIME, non-empty bytes, and a 10 MiB source limit. The compiler then performs its own byte-level checks and does not trust the filename or browser MIME.
+Every uploaded file is treated as an untrusted ZIP/OOXML package. The upload route first enforces same-origin mutation, authenticated physician ownership, `.docx` extension, allowed MIME, non-empty bytes, and a 10 MiB source limit. It reads the request stream through a hard multipart byte ceiling before calling `formData()`, so missing, false, or chunked `Content-Length` cannot bypass the limit. The compiler then performs its own byte-level checks and does not trust the filename or browser MIME.
 
 Default compiler limits include 512 entries, 16 MiB per expanded entry, 64 MiB total expanded content, a 100:1 maximum compression ratio, 12 MiB per parsed XML part, XML depth 128, 2,000 fields, 500 tables, and 10,000 structural nodes. Artifact reads/writes have a separate 25 MiB ceiling; source uploads remain subject to the stricter 10 MiB limit.
 
@@ -107,31 +155,113 @@ Rejected package classes include:
 - source, entry, total expansion, entry-count, compression-ratio, XML-depth, and structure-limit violations;
 - macro-enabled DOCM content, VBA, ActiveX, custom UI, digital-signature active parts, OLE/package embeddings, `altChunk`, DDE/DDEAUTO, linked database/include fields, and attached templates;
 - external or remote relationships, including `TargetMode="External"`;
-- DTD/entity declarations and malformed XML;
+- DTD/entity declarations, XML expansion/resource-limit violations, and malformed XML;
 - missing or inconsistent `word/document.xml`, content types, relationships, headers, or footers.
+
+Security-critical OOXML parsing matches namespace URI plus local name. OPC
+relationship and content-type attributes are required to be unqualified; a
+foreign-namespaced or duplicate-local-name `Target`, `TargetMode`, `Type`,
+`Id`, or `ContentType` is rejected. Word fill structures in foreign
+namespaces are rejected. `mc:AlternateContent` is inventoried as a
+certification blocker rather than choosing a representation silently.
+
+Field instructions are reconstructed from both `w:fldSimple/@w:instr` and
+fragmented complex `w:instrText` runs. Safe alpha uses an allowlist of harmless
+instructions (`DATE`, page/section counters, time, and Word form-field
+instructions); DDE/DDEAUTO, INCLUDETEXT, INCLUDEPICTURE, DATABASE, LINK, and
+every other unapproved instruction fail package inspection.
 
 Rejected bytes are not stored. A metadata-only quarantine row may retain the digest, size, tenant/uploader, and a safe rejection code. Quarantine failures do not make an unsafe document acceptable.
 
-Before source storage, visible text from document, header, footer, footnote, endnote, and comment parts passes the existing deterministic PHI detector and a fail-closed privacy scan through the shared `modelClient`. The scan sends the visible part text to the configured Anthropic clinical model; therefore the appropriate vendor agreement, approved data handling, and zero/limited-retention configuration are prerequisites. Provider failure, uncertainty, over-limit text, suspected prompt injection, or possible patient-specific content rejects the upload. A reusable template containing real patient information must never be accepted.
+Before source storage, the privacy inventory includes text nodes (including
+tracked-deleted `w:delText`), every bounded non-namespace XML attribute,
+document properties and metadata, relationship/content-type attributes,
+header/footer/footnote/endnote parts, and image descriptions/alt text. XML
+comments, CDATA, non-declaration processing instructions, custom XML, archive
+or entry comments, arbitrary ZIP extra fields, and every unexpected OPC part
+are rejected rather than declared scanned. The one container exception is an
+exact Microsoft A220/A028 all-zero local-header growth pad; any other byte in
+that payload is rejected.
+
+Embedded media is rejected by default because its pixels cannot be reliably
+scanned. A byte-exact, administratively reviewed static practice asset may be
+approved only through the practice-scoped non-secret configuration:
+
+```json
+{
+  "practice_synthetic_example": [
+    "<lowercase-sha256-of-the-reviewed-static-asset>"
+  ]
+}
+```
+
+The JSON is supplied in
+`TEMPLATE_TWIN_APPROVED_STATIC_ASSETS_BY_PRACTICE_JSON`. No global or
+cross-practice hash is honored. Privacy/Legal and Operations own approval and
+change control; Engineering must verify that each digest belongs to a blank,
+static practice asset before configuration. The repository contains no real
+asset or approval hash fixture.
+
+The resulting inventory passes the deterministic PHI detector and a
+fail-closed privacy scan through the shared `modelClient`. The scan sends the
+privacy-relevant part text to the configured Anthropic clinical model;
+therefore the appropriate vendor agreement, approved data handling, and
+zero/limited-retention configuration are prerequisites. Provider failure,
+uncertainty, over-limit text, suspected prompt injection, unscannable content,
+or possible patient-specific content rejects the upload before immutable
+storage. Rejected bytes are discarded; only digest, size, tenant/uploader,
+safe rejection code, and durable audit intent may be retained.
+An accepted immutable source also stores strict, PHI-safe scan provenance:
+scanner profile, provider/model identifier, scan timestamp, scanned-part
+count, and canonical hashes/counts for the exact practice approval set and
+the approved assets actually used. Certification binds the canonical evidence
+hash; missing, malformed, legacy-null, or changed evidence blocks generation
+and signing.
 
 ## Deterministic compiler and `TemplateDocIR`
 
 The compiler reads OOXML structure directly; it does not ask a language model to rediscover Word controls. It inventories the main document, headers, footers, relationships, styles, numbering, media, static nodes, bookmarks, and tables.
 
-Supported/detected v1 structures include:
+The safe-alpha compiler supports these structures when each exact binding can
+be rendered and independently read back:
 
-- plain and rich text content controls;
+- single-paragraph plain-text content controls;
 - native dropdowns with exact option order and stored value/display text;
 - combo boxes, dates, and native Word checkboxes;
 - safely detectable legacy text, dropdown, date, and checkbox form fields;
-- fixed tables and table-cell bindings;
-- table-backed repeating sections/rows, capped at 100 rows;
-- table grids, horizontal `gridSpan`, vertical `vMerge`, nested-table counts, fixed rows, headers, footers, bookmarks, tags, aliases, Word IDs, and legacy names;
-- static content hashes for every relevant part and exact structural paths for renderer bindings.
+- simple fixed-table cells, including deterministic labels from adjacent or
+  header cells; and
+- table grids, horizontal `gridSpan`, vertical `vMerge`, nested-table
+  inventory, fixed rows, headers, footers, bookmarks, tags, aliases, Word IDs,
+  legacy names, static hashes, and exact structural paths.
+
+Detection is broader than certification support. The IR records repeating
+sections/rows, rich-text controls, multi-paragraph or list-bearing text
+controls, compatibility blocks, data-bound controls, fixed/merged/nested
+tables, drawings, and ordinary visible placeholders, but safe alpha blocks any
+of them that cannot be proven through the renderer/readback pair.
 
 Stable `fieldId`, `tableId`, and node IDs are derived from deterministic structure and hashes, not labels alone. Duplicate labels therefore remain distinct. Each fillable field records its exact part, structural path, binding kind, ordinal, original content hash, source-control hash, table location, and native identifiers.
 
-Unsupported or ambiguous structures are appended to the IR with a safe code, part, path, clinical-materiality flag, and `blocksCertification` decision. Examples include data-bound controls, ambiguous/duplicate select options, non-table repeating sections, row-container ambiguity, dynamic fields, malformed controls, and imported alternative-format content. Clinically material or certification-blocking entries prevent activation; they are never silently discarded.
+Unsupported or ambiguous structures are appended to the IR with a stable code,
+physician-readable reason, part/path available only in advanced detail,
+clinical-materiality flag, and `blocksCertification` decision. Safe-alpha
+blockers include:
+
+- all Word repeating sections/items (`REPEATING_STRUCTURE_UNSUPPORTED_SAFE_ALPHA`),
+  including non-table repeats; no cloned row is certified in this phase;
+- rich-text controls and plain-text controls containing multiple paragraphs or
+  list structure;
+- unbound ordinary placeholders and visually blank complex table cells;
+- `mc:AlternateContent`, data-bound/malformed/unrecognized controls, ambiguous
+  or duplicate choice options, dynamic/active fields outside the harmless
+  allowlist, and imported alternative-format content; and
+- structures with a missing, duplicated, moved, or otherwise unstable binding.
+
+An ordinary placeholder has no safe manual-binding path in this alpha. It must
+be replaced with a supported Word control in a new template version. No
+unsupported item is silently dropped or allowed to render blank under a claim
+that the template is fully mapped.
 
 The IR separately hashes:
 
@@ -140,9 +270,52 @@ The IR separately hashes:
 - static content by part; and
 - each binding's source control and original content.
 
+### Existing `WM IOV Template.docx` compatibility evidence
+
+The already-tracked repository fixture `WM IOV Template.docx` is read in place
+by `wm-iov-existing-fixture.test.ts`; this branch does not add or copy another
+real document. The current deterministic inventory reports:
+
+| Structure | Aggregate finding |
+| --- | --- |
+| Fillable controls | 28 native dropdowns; all 28 are in Word placeholder state |
+| Other supported control kinds | 0 combo boxes, 0 checkboxes, 0 date controls |
+| Tables | 1 fixed table; 0 repeating tables |
+| Headers/footers | 2 header parts; 0 footer parts |
+| Certification blockers | 59 total: 52 `UNBOUND_COMPLEX_TABLE_CELL`, 7 `UNBOUND_ORDINARY_PLACEHOLDER` |
+
+The renderer/readback compatibility test can mechanically fill all 28
+dropdown controls, removes all 28 `w:showingPlcHdr` markers, and verifies the
+field-proof count plus static-region hash. That does **not** certify the
+template: the 59 visible/unbound structures remain blocking until the source
+template is revised into supported controls (or a future renderer/readback
+pair safely supports them). This test is XML/package evidence only; desktop
+Word and LibreOffice open/repair and visual-layout validation have not been
+performed.
+
+This fixture does **not** pass the complete upload gate. Aggregate inspection
+finds one media entry and six auxiliary/custom package parts outside the
+current safe-alpha privacy/package allowlist. Its image would additionally
+need a byte-exact, practice-scoped administrative approval. Therefore the WM
+IOV result is compiler/renderer compatibility evidence only, not evidence that
+the document can be uploaded, stored, certified, or used with PHI. Every extra
+part must first be safely classified or remain pre-storage blocked.
+
 ## Semantic mapping and certification lifecycle
 
 After deterministic compilation, the shared `modelClient` may propose semantic metadata for the compiler-defined field set. The structured output can propose concept, data type, polarity, temporality, laterality, unit policy, synonyms, requiredness, and blank/unknown policy. It cannot create/delete fields, move controls, alter the layout, reorder/change native options, invent practice defaults, or activate a template.
+
+Safe alpha additionally constrains `clinicalConcept` through the versioned
+registry `template-twin-soap-concepts/1.0.0`. It contains only exact concepts
+that the current Layer-3 SOAP entity projection can produce and the resolver
+can validate: chief concern/HPI facets, medical history, medication and allergy
+components, family/social history, named tests, assessment/plan items, and the
+bounded ROS/exam system lists in `supported-concepts.ts`. Free-form specialty
+concepts such as GAD-7, pregnancy status, monofilament findings, or custom
+measurements are rejected with `TT_CONCEPT_UNSUPPORTED_V1`; they are not
+silently left blank. `TemplateTwinConceptProvider` is the explicit extension
+seam for a later versioned Template-Aware Extraction Agent, but safe alpha
+registers no dynamic provider.
 
 If the mapping provider is unavailable, deterministic fallback mappings are saved as visibly unconfirmed. They cannot be certified without physician review.
 
@@ -153,10 +326,27 @@ The certification flow is:
 3. Run the fail-closed template PHI gate, then store the accepted immutable source.
 4. Review totals, controls, tables, every field, allowed options, semantic mapping, requiredness, and unknown policy.
 5. Save physician mapping corrections. Saving invalidates any previous synthetic proof.
-6. Enter explicitly marked synthetic encounter text or record explicitly marked synthetic dictation and run the same Layer 3 fact/resolver/validator/renderer pipeline in uncertified-test mode. Before Layer 3 or persistence, the input must pass deterministic structured-PHI rejection and the conservative shared `modelClient` privacy gate. Synthetic audio is sent through the existing Deepgram orchestrator without cross-provider fallback and is never stored by QuillMD.
+6. Exercise every required or clinically material field with explicitly marked
+   synthetic evidence through the same Layer-3 fact/resolver/validator/renderer
+   pipeline. Coverage records exact dropdown option/ordinal, checkbox polarity,
+   date, number/unit, laterality, and table behavior as applicable. A single
+   generic paragraph cannot certify unrelated fields. Before Layer 3 or
+   persistence, synthetic input passes deterministic structured-PHI rejection
+   and the conservative shared `modelClient` privacy gate. Synthetic audio uses
+   the existing transcription orchestrator and is not stored by QuillMD.
 7. Download and inspect the synthetic clone.
 8. Explicitly acknowledge both certification statements.
-9. Certify and activate only if every field mapping is certified, the field set and mapping hash are current, there are no blocking unsupported items, and the current synthetic output has verified structure, static content, exact field values and occurrence counts, layout-risk warnings, and package integrity.
+9. Certify and activate only if every field mapping is supported/certified, the
+   field set and mapping hash are current, required/material field coverage is
+   complete, every optional untested field has a current physician waiver,
+   there are no blocking unsupported items, and the synthetic output has
+   verified package/static/field readback.
+
+An optional-field waiver is field-specific and records physician identity,
+reason, mapping hash, and timestamp with a durable audit event. Required or
+clinically material fields cannot be waived. A mapping or synthetic-test change
+invalidates prior certification acknowledgements; a stale mapping hash also
+invalidates waivers and coverage evidence.
 
 Certification and activation run in a serializable transaction. Activation inactivates another active template for the same physician/encounter scope. The append-only certification records the certifier, exact structure hash, approved mapping hash, synthetic manifest, output key/hash, and timestamp.
 
@@ -175,7 +365,27 @@ Conversation recording, dictation, and typed encounter input converge after the 
 
 The Template Twin resolver is deterministic over certified mappings and canonical facts. It produces `supported`, `explicitly_denied`, `not_mentioned`, `ambiguous`, `conflict`, `needs_clinician_input`, or `approved_practice_default`.
 
-Resolution rules include exact dropdown membership and ordinal matching, affirmative/denial polarity for checkboxes, independent table-cell evidence, no inferred units, no closest-option substitution, no implicit carry-forward, patient-experiencer checks, required laterality, and blank/approved “not documented” behavior for unsupported evidence. Every populated value, including an approved practice default, is schema-invalid without retained `sourceFactIds` and evidence anchors; generated default facts are explicitly labeled as defaults rather than encounter evidence.
+Resolution rules include exact dropdown membership and ordinal matching,
+tri-state checkbox handling, independent table-cell evidence, no inferred
+units, no closest-option substitution, no implicit carry-forward,
+patient-experiencer checks, required laterality, and blank/approved “not
+documented” behavior for unsupported evidence. Every populated value,
+including an approved practice default, is schema-invalid without retained
+`sourceFactIds` and evidence anchors; generated default facts are explicitly
+labeled as defaults rather than encounter evidence.
+
+Checkbox `true` requires affirmative evidence. Checkbox `false` is renderable
+only for an `explicitly_denied` resolution when the physician-certified
+mapping explicitly defines unchecked as false. Null, unknown, conflict, and
+not-mentioned states remain unresolved; they cannot collapse to false in
+native or legacy checkbox bindings. A clinically meaningful unresolved
+checkbox keeps the fill `NEEDS_REVIEW` and blocks signing.
+
+For narrative, dropdown, multi-select, date, and repeating fields,
+`explicitly_denied` is not renderable unless a future certified mapping schema
+defines an exact negative output policy. Safe alpha has no such general policy,
+so denial remains unresolved instead of being accepted by validation and then
+failing in the renderer.
 
 Independent validation reruns after resolution and before rendering. Blocking checks cover:
 
@@ -200,24 +410,68 @@ It patches only approved XML spans:
 - checkbox state plus visible checked/unchecked glyph;
 - date control value/display format;
 - legacy form field state/result text;
-- exact table-cell content; and
-- cloned table-backed repeating rows using the source prototype and styles.
+- exact simple fixed-table-cell content; and
+- populated control placeholder metadata (`w:showingPlcHdr` and
+  placeholder-only `PlaceholderText` styling) without treating an unresolved
+  control as populated.
+
+Safe alpha does not patch multi-paragraph/list rich text or clone repeating
+rows. Those structures block certification before runtime.
 
 All other OOXML entries remain byte-identical after decompression. Modified XML parts must equal the exact source text plus the approved patches. The ZIP container itself is rebuilt deterministically enough for a valid DOCX, so the whole ZIP byte stream is not expected to match the source.
 
-After rendering, the verifier reopens both source and output, re-runs package security, checks the entry-name set, verifies untouched entries, reparses modified XML, matches every intended field by value hash, confirms static-region invariance, and calculates the output SHA-256. A mismatch throws and no verified output is persisted.
+After rendering, `output-readback.ts` independently reopens the completed DOCX.
+It receives source bytes, output bytes, the certified IR, and approved
+resolutions—but no renderer patch objects. It reparses the package, locates
+each stable binding, derives the actual content-control/legacy/table-cell
+value, exact dropdown option, checkbox state/glyph, date, placeholder state,
+and occurrence count from output XML, then computes output-derived value
+hashes. Missing, duplicated, moved, unexpected, or value-mismatched bindings
+fail closed. Package security, untouched-entry comparison, static-region
+invariance, and output SHA-256 are checked separately.
+
+Every IR field receives one proof, including blank/no-op fields. Its
+disposition is `rendered`, `unresolved_blank`, `preserved_unresolved`, or
+`preserved_unsupported`; omission is a verification failure. This prevents
+certification and signing from disagreeing about fields the renderer skipped.
 
 The visit review surface shows filled/review/not-mentioned/conflict counts, prioritizes critical field classes, supports an attention-only filter, surfaces deterministic long-value/repeating-row layout warnings, and reveals the resolved value, exact allowed options, reason, supporting quote, speaker, evidence anchors, and audio timestamp when present. Storage keys and provider payloads never cross the server-component DTO boundary.
 
-A physician may explicitly correct an unsigned field. The server canonicalizes the field type, creates labeled physician-review evidence, reruns independent validation, and stores a replacement output only after exact rendering and round-trip verification. Each decision is append-only and uses optimistic manifest concurrency. “Create mapping rule” additionally forks an uncertified `NoteTemplate` version over the same immutable source/IR, resets the target mapping to `NEEDS_CONFIRMATION`, and requires a new synthetic proof and certification; it never changes the active version automatically.
+A physician may explicitly correct an unsigned field. The server canonicalizes the field type, creates labeled physician-review evidence, reruns independent validation, and stores a replacement output only after exact rendering and output-derived readback. Each decision is append-only and uses optimistic manifest concurrency. “Create mapping rule” additionally forks an uncertified `NoteTemplate` version over the same immutable source/IR, resets the target mapping to `NEEDS_CONFIRMATION`, and requires a new synthetic proof and certification; it never changes the active version automatically.
 
-The signing route independently reloads and parses the certified IR/mappings, recomputes source/compiler/structure/static/mapping integrity, reruns the field validator and status counts, binds every round-trip field proof to the canonical manifest value/part/path/occurrence count, and verifies the output object bytes and SHA before opening the signing transaction. For a READY Template Twin visit, it atomically changes the exact optimistic manifest claim from `VERIFIED` to `SIGNED` in the same transaction as the visit transition. A concurrent correction, regeneration, artifact replacement, or stale worker write loses closed. PHI-safe audit metadata contains codes, counts, IDs, and versions, not clinical values.
+Each fill manifest pins the exact physician-visible SOAP revision and canonical
+SHA-256 used to resolve it. Every SOAP edit increments the SOAP version and, in
+the same transaction, invalidates any unsigned Twin to `NEEDS_REVIEW`; the
+prior manifest/output remain audit evidence but cannot authorize signing.
+Regeneration must bind the new SOAP version/hash. The signing gate recomputes
+the hash from the current SOAP and rejects a stale allergy, medication,
+assessment, plan, or any other edit.
 
-“Original Template DOCX” is an additive delivery destination (`docx_original_template`). The download route only serves an owned, non-deleted, signed visit with a signed verified manifest. It reads the already-rendered object through tenant/key/size/metadata/SHA verification and never regenerates at download time. Existing generic DOCX/PDF/email/clipboard behavior remains available.
+The signing route independently reloads and parses the certified IR/mappings,
+recomputes source/compiler/structure/static/mapping integrity, reruns the field
+validator and status counts, and binds every output-derived proof to the
+canonical manifest value/part/path/occurrence count. For **every** Template
+Twin `READY` → `SIGNED` transition—even when the physician selected no DOCX
+download destination—it reads the stored output stream, counts bytes, hashes
+the bytes, and compares them with the manifest/signing claim. Missing,
+truncated, modified, or replaced storage objects block signing. Only then does
+the serializable transaction compare SOAP provenance and optimistically change
+the exact fill claim from `VERIFIED` to `SIGNED` with the visit transition.
+A concurrent correction, regeneration, artifact replacement, or stale worker
+write loses closed. PHI-safe audit metadata contains codes, counts, IDs, and
+versions, not clinical values.
+
+“Original Template DOCX” is the clearly labeled primary document choice when a
+Twin is active and verified, and remains an additive delivery destination
+(`docx_original_template`). It is never silently signed or exported while
+unresolved. The download route only serves an owned, non-deleted, signed visit
+with a signed verified manifest. It reads the already-rendered object through
+tenant/key/size/metadata/SHA verification and never regenerates at download
+time. Existing generic DOCX/PDF/email/clipboard behavior remains available.
 
 ## HTTP surface
 
-All responses are private/no-store. Template Twin mutation/export routes require a freshly read database user with the `DOCTOR` role, tenant/record ownership, structured request validation, and same-origin checks; a stale session role cannot authorize the operation.
+All responses are private/no-store. Template Twin mutation/export routes require a freshly read database user with the `DOCTOR` role, tenant/record ownership, both rollout gates, structured request validation, and same-origin checks; a stale session role cannot authorize the operation. Upload additionally requires a physician-readable name, encounter/specialty scope, and version description—there is no silent catch-all “Original Word template.”
 
 | Method and route | Purpose |
 | --- | --- |
@@ -231,7 +485,17 @@ All responses are private/no-store. Template Twin mutation/export routes require
 | `POST /api/visits/:id/sign` | Enforce all existing clinical gates plus the Template Twin server gate and atomic sign claim |
 | `GET /api/visits/:id/export/original-template-docx` | Stream the signed, immutable, storage-verified Template Twin output |
 
-The certification workspace is `/settings/note-format/:id/certify`. Generic note-template lifecycle actions reject mutation of Template Twin rows through legacy edit/delete/duplicate paths.
+The certification workspace is `/settings/note-format/:id/certify`. It leads
+with clinical labels, field meaning, exact options, checkbox meaning,
+blank/unknown behavior, defaults, unsupported items, test coverage, and output
+download. OOXML part names, structural paths, hashes, and renderer bindings are
+inside collapsed advanced details.
+
+The Note Format manager provides immutable-lineage actions to create a new
+version, activate, deactivate, retire, inspect history, and roll back by
+activating a previously certified version without changing history. Generic
+note-template lifecycle actions reject mutation of Template Twin rows through
+legacy edit/delete/duplicate paths.
 
 ## Database schema and migrations
 
@@ -239,6 +503,7 @@ The feature uses these forward migrations:
 
 1. `packages/db/prisma/migrations/20260715162000_template_twin_docx_v1/migration.sql`
 2. `packages/db/prisma/migrations/20260715180000_template_twin_version_forks/migration.sql`
+3. `packages/db/prisma/migrations/20260715203000_template_twin_audit_gates_v1/migration.sql`
 
 The first migration is additive except for backfilling each existing `NoteTemplate.lineageId` to its own ID. It adds:
 
@@ -250,11 +515,32 @@ The first migration is additive except for backfilling each existing `NoteTempla
 
 The second migration replaces the original source/compiler unique index with a normal index. This permits a new immutable `NoteTemplate` version to reuse the same immutable source and IR when a physician explicitly creates a new mapping-rule version.
 
-There is no down migration. Production rollback is a code/image rollback with the additive schema left in place. Dropping Template Twin tables, enum values, triggers, or source/output objects is destructive and is not an approved rollback.
+The third migration is additive and fail-closed. It adds:
 
-## Private bucket provisioning required before runtime use
+- `Practice.templateTwinEnabled` with database default `false` and
+  `NoteTemplate.versionDescription`;
+- SOAP version/hash provenance on visit fill manifests (legacy nullable rows
+  cannot sign until regenerated);
+- field-level certification waivers keyed to the exact mapping hash;
+- durable object-write/orphan ledger and transactional audit outbox tables;
+- audit actions for waiver, deactivation, retirement, rollback, safety-gate,
+  and reconciliation events; and
+- tenant/lineage, output-key, review-field, waiver, and immutability constraint
+  triggers plus supporting indexes.
 
-The application deliberately **never creates or configures the Template Twin bucket**. `createTemplateTwinArtifactStore()` calls `bucketExists` and fails closed if operations has not provisioned it.
+There is no down migration. No migration has been applied to production by
+this branch. Production rollback, if a later deployment is approved, is an
+app/worker code-image rollback with the additive schema left in place and both
+rollout gates off. Dropping Template Twin tables, enum values, triggers,
+outbox/ledger evidence, or source/output objects is destructive and is not an
+approved rollback.
+
+## Dedicated bucket readiness and QA boundary
+
+The application deliberately **never creates or configures the Template Twin
+bucket from a request path**. `createTemplateTwinArtifactStore()` checks the
+bucket and the selected readiness profile and fails closed when required
+evidence is missing.
 
 The bucket name is selected by the non-secret `TRANSCRIBE_MD_TEMPLATE_BUCKET`; when unset it defaults to:
 
@@ -262,11 +548,48 @@ The bucket name is selected by the non-secret `TRANSCRIBE_MD_TEMPLATE_BUCKET`; w
 transcribe-md-template-artifacts
 ```
 
-Before any QA or production runtime test, Operations must:
+Production profile readiness requires provider verification or an explicit
+operator attestation for every control: private access, encryption at rest,
+TLS expectation, least-privilege runtime credentials, versioning/object lock,
+lifecycle/retention, and backup/restore. A bucket that merely exists is not
+ready. Attestation closes only an evidence/API gap; it does not configure the
+provider.
+
+The isolated QA compose file has a one-shot `minio-template-init` service that
+creates `transcribe-md-template-artifacts-qa` separately from audio storage,
+removes anonymous access, enables versioning, and creates it with MinIO object
+lock capability. QA readiness does not accept a blanket “synthetic” exemption.
+It requires the MinIO API to verify both:
+
+- no anonymous/public bucket policy; and
+- enabled versioning plus object-lock capability.
+
+QA isolation also requires `TEMPLATE_TWIN_STORAGE_PROFILE=qa`, mocked providers,
+a QA/test-named database, and a bucket name containing the QA marker. Controls
+that this local stack cannot honestly prove require their own exact, named
+exception value, `accepted-isolated-synthetic-qa-gap`:
+
+- `TEMPLATE_TWIN_QA_STORAGE_ENCRYPTION_AT_REST_ATTESTATION`;
+- `TEMPLATE_TWIN_QA_STORAGE_TLS_EXPECTATION_ATTESTATION`;
+- `TEMPLATE_TWIN_QA_STORAGE_LEAST_PRIVILEGE_ATTESTATION`;
+- `TEMPLATE_TWIN_QA_STORAGE_LIFECYCLE_RETENTION_ATTESTATION`; and
+- `TEMPLATE_TWIN_QA_STORAGE_BACKUP_RESTORE_ATTESTATION`.
+
+Each accepted value is reported as `qa_exception`, never `verified` or a
+production attestation. A missing/malformed named exception, a public policy,
+disabled versioning, or missing object-lock capability fails QA readiness.
+Successful synthetic-QA readiness still returns `productionReady: false`.
+Local MinIO does not prove production TLS, encryption, IAM, lifecycle, backup,
+restore, or legal retention controls.
+
+Before any approved production runtime test, Operations must:
 
 1. Provision the bucket outside an application request path.
 2. Keep it private with no anonymous policy or public URL.
-3. Grant the application only the bucket-existence/stat, put, and get operations required by the code; do not grant delete to the runtime identity.
+3. Grant the request-serving application only the bucket-existence/stat, put,
+   and get operations required by the code. If orphan purge is later approved,
+   review a separately scoped worker identity for delete access to this
+   dedicated bucket; do not give request paths delete authority.
 4. Enable object lock at bucket creation when supported, or document the approved versioning/IAM alternative. Application UUID+digest keys and no-delete code reduce accidental overwrite risk but do not constrain a storage administrator.
 5. Enable encryption at rest consistent with the QuillMD storage standard.
 6. Include the bucket in encrypted backup/off-site-copy procedures and perform a documented synthetic restore test.
@@ -274,7 +597,14 @@ Before any QA or production runtime test, Operations must:
 8. Add capacity, read-integrity, and failed-write alerts with an Operations owner.
 9. Verify that logs/metrics record only safe error codes, counts, size, and hashes—not keys, filenames, document text, or field values.
 
-There is no cleanup/reconciliation job for this bucket in v1. A storage write can succeed before a later database transaction fails, leaving an unreachable immutable object. Operations must initially monitor/reconcile such objects by safe key/hash metadata; never inspect clinical contents or delete automatically.
+The worker has an opt-in maintenance job for outbox delivery and object-ledger
+reconciliation. `TEMPLATE_TWIN_MAINTENANCE_ENABLED=true` requires a bounded
+`TEMPLATE_TWIN_ORPHAN_RETENTION_DAYS` (1–365). It can recover an object whose
+PUT succeeded before ledger state was advanced, retry transient stat/delivery
+failures, and retain an expired orphan. Deletion remains independently off
+unless `TEMPLATE_TWIN_ORPHAN_PURGE_APPROVED=true` is present at the destructive
+boundary. Enabling purge requires an approved retention/legal-hold decision;
+the branch does not invent one.
 
 ## Deployment order and operational acceptance
 
@@ -285,25 +615,39 @@ Required order:
 1. Record app/worker image digests, database migration status, and backup/restore evidence.
 2. Provision and verify the private bucket and least-privilege runtime policy.
 3. Confirm Anthropic/vendor agreement and privacy controls for source PHI scanning and mapping proposals.
-4. Apply both Prisma migrations through the existing migration deployment path.
+4. Apply all three Prisma migrations through the existing migration deployment path.
 5. Deploy compatible TranscribeMD app and worker images together; the app owns upload/review/sign/export, while the worker owns encounter filling.
 6. Verify application and worker health without real PHI.
 7. Run one synthetic upload → mapping review → synthetic output → certification → typed visit → review → sign → original DOCX flow.
 8. Run a synthetic voice visit through the same certified template.
-9. Verify audit actions and object/database hashes without printing payloads.
-10. Obtain Engineering, Clinical Safety, Privacy/Legal, and Operations approval before any real-PHI pilot.
-
-There is no global Template Twin kill switch in v1. Operational rollout is controlled by whether a physician has a certified active Template Twin. A global, practice-scoped rollout flag is recommended before broad production enablement.
+9. Verify durable outbox delivery, object-ledger reconciliation, and
+   object/database hashes without printing payloads.
+10. Keep `Practice.templateTwinEnabled=false` for every practice until its
+    named clinical/operations approval; use the global kill switch for an
+    immediate all-practice stop.
+11. Obtain Engineering, Clinical Safety, Privacy/Legal, and Operations
+    approval before any real-PHI pilot.
 
 ## Versioning and rollback
 
 - Source artifacts and certified versions are immutable. A mapping/layout change creates a new lineage version; it never alters past visits.
-- Each fill manifest pins template, compiler, resolver/model, renderer, fact-set hash, manifest hash, output hash, and validation result.
+- Each fill manifest pins template, compiler, resolver/model, renderer,
+  fact-set hash, manifest hash, output hash, validation result, and exact SOAP
+  version/hash.
 - Worker retries atomically pin the active template ID/version before provider or object-storage I/O, then reuse that exact pin even after a newer lineage version becomes active; missing or inconsistent pins fail closed.
 - A retry with the same manifest is idempotent. A changed unsigned result increments the database optimistic `manifestVersion` and creates a new output key. Reviewed or signed manifests reject worker replacement, and an unrelated visit review reason is never cleared by Template Twin.
 - Existing generic note formats and exports are not removed.
-- Product rollback for new visits is to activate the prior approved structured template; historical Twin fills/outputs remain retained and readable.
-- Deployment rollback is to restore the prior app and worker images together. Leave additive database changes in place.
+- Product rollback for new visits is to activate a previously certified Twin
+  version or deactivate the Twin and return to the approved structured
+  template; historical Twin fills/outputs remain retained and readable.
+- Immediate rollout rollback is `TEMPLATE_TWIN_KILL_SWITCH` absent/truthy or
+  `Practice.templateTwinEnabled=false`; deployment rollback restores the prior
+  app and worker images together and leaves additive database changes in place.
+  The practice flag is rechecked in the final acknowledgement/signing database
+  claim so a concurrent disable wins closed. The process environment kill
+  switch stops newly evaluated requests; changing it by app rollout does not
+  purport to drain work already executing on an older process, so Operations
+  should also disable the practice flag before or with a global stop.
 - If migrations themselves cause an unrecoverable database incident, use the established point-in-time/verified-backup recovery procedure. Do not improvise table drops on production.
 - Before rollout, record exact previous app/worker image digests and confirm that the prior code tolerates the additive columns/tables (it should ignore them).
 
@@ -340,38 +684,75 @@ Only synthetic, deterministic fixtures are permitted. No provider, email, billin
 Required fixture coverage:
 
 - native dropdowns, combo boxes, text/date controls, native and legacy checkboxes;
-- legacy fields, fixed/repeating/nested tables, merged cells, headers/footers, duplicate labels, long values, and unsupported controls;
-- corrupt ZIP/OPC/XML, wrong magic, path traversal, duplicate paths, symlink/encryption/ZIP64, malicious relationships, DTD/entity input, active content, OLE, and decompression limits;
+- legacy fields, fixed tables, repeating/nested/merged structure blockers,
+  headers/footers, duplicate labels, long values, ordinary placeholders, rich
+  text, and unsupported controls;
+- corrupt ZIP/OPC/XML, wrong magic, path traversal, duplicate paths,
+  symlink/encryption/ZIP64, namespace-shadowed relationships/content types,
+  fragmented field instructions, malicious relationships, DTD/entity input,
+  active content, OLE, and decompression/XML/resource limits;
+- tracked-deleted PHI, document metadata, custom XML, image descriptions, and
+  non-allowlisted media rejection before storage;
 - semantic mapping with mocked `modelClient` output and fallback behavior;
-- exact-option, polarity, unit, laterality, medication/allergy, table, evidence, and unsupported-element validation;
-- renderer round trip, static-region invariance, field-value hashes, table-row limits, and fail-closed mismatch paths;
+- exact-option, tri-state checkbox, denial policy, unit, laterality,
+  medication/allergy, table, evidence, supported-concept, and
+  unsupported-element validation;
+- renderer/readback independence, placeholder cleanup, static-region
+  invariance, output-derived field-value hashes/occurrences, and fail-closed
+  post-render mutation paths;
 - fresh-role physician/practice authorization, lifecycle immutability, mapping-hash conflicts, certified-field overlays, certification prerequisites, signing claim races, pre-sign artifact verification, and export integrity;
 - synthetic-marker/privacy-gate rejection before Layer 3 or persistence;
-- stateful upload-to-certification integration, route-level voice-to-filled-original E2E, typed/voice equivalence, retry-pin/reviewed-manifest races, and regression of current note-format and generic exports.
+- stale SOAP and corrupted/missing stored-object sign blocks, account deletion
+  with retained Twin data, feature-off routes, and direct-database cross-tenant
+  insertion rejection;
+- stateful upload-to-certification integration, route-level
+  voice-to-filled-original E2E, typed/voice equivalence, correction and SOAP
+  invalidation/regeneration, orphan reconciliation, retry-pin/reviewed-manifest
+  races, and regression of current note-format and generic exports.
 
 Complete this table at merge handoff; do not replace missing evidence with assumptions:
 
 | Gate | Command/evidence | Result | UTC | Commit/run link |
 | --- | --- | --- | --- | --- |
-| Prisma format/validate/generate | Commands above | `PASS` | `2026-07-15` | Local feature branch |
-| Targeted Template Twin unit tests | Feature-path Vitest invocation | `PASS — 35 files / 203 tests` | `2026-07-15` | Local feature branch |
-| Full TranscribeMD unit suite | `npm run test:unit -w transcribe-md` | `PASS — 178 files / 2,096 tests` | `2026-07-15` | Local feature branch |
-| Typecheck | Active command above | `PASS` | `2026-07-15` | Local feature branch |
-| Lint | Feature-path ESLint / full active command | `PASS targeted; FAIL full baseline — 30 errors / 40 warnings in unrelated existing files` | `2026-07-15` | Local feature branch |
-| Production build | Active command above | `PASS` | `2026-07-15` | Local feature branch |
-| Isolated QA E2E | Upload/certify + typed and voice flows | `NOT RUN — isolated bucket/providers were not provisioned` | `2026-07-15` | Operations prerequisite |
-| DOCX visual inspection | Word/LibreOffice screenshots of synthetic source/output | `NOT RUN — Word/LibreOffice unavailable` | `2026-07-15` | Visual QA prerequisite |
-| Backup/restore and bucket policy | Operations evidence | `PENDING` | `2026-07-15` | Production-readiness prerequisite |
-| Clinical/privacy approval | Named approval records | `PENDING` | `2026-07-15` | Clinical/Privacy prerequisite |
+| Prisma format/validate/generate | Commands above | `PASS` | 2026-07-15 | Local pre-commit run |
+| Targeted Template Twin regression suite | 57-file feature-path Vitest invocation | `PASS — 57 files / 511 tests` | 2026-07-15 | Local pre-commit run |
+| Full Template Twin suite | Same consolidated 57-file invocation, including the tracked WM fixture | `PASS — 57 files / 511 tests` | 2026-07-15 | Local pre-commit run |
+| Full TranscribeMD unit suite | `CI=true npm run test:unit -w transcribe-md` | `PASS — 194 files / 2,337 tests` | 2026-07-15 | Local pre-commit run |
+| Typecheck | `next typegen` then active `tsc --noEmit` command | `PASS` | 2026-07-15 | Local pre-commit run |
+| Focused/full lint | 148 changed-path files / full active command | `FOCUSED PASS; FULL ACTIVE FAILS PRE-EXISTING DEBT — 29 errors / 39 warnings (recorded main baseline: 30 / 41)` | 2026-07-15 | Marketing: 0/1; legacy: 0/3 |
+| Production build | Clean Docker app/worker/migration image builds | `PASS`; host-only build is blocked by the isolated worktree's external `node_modules` symlink | 2026-07-15 | App bundle assertions passed |
+| Migration tests | Fresh isolated QA PostgreSQL | `PASS — all 70 migrations; status up to date; adversarial DB constraints exercised` | 2026-07-15 | Disposable QA only |
+| Isolated infrastructure-backed QA E2E | `npx playwright test --project=template-twin` against `docker-compose.qa.yml` | `PASS — 1 scenario / 24.9 s` | 2026-07-15 | Disposable QA stack removed after run |
+| DOCX visual/open-repair inspection | Desktop Word and LibreOffice | `NOT RUN — neither application is installed` | 2026-07-15 | Mandatory manual release gate |
+| Backup/restore and production bucket policy | Operations evidence | `PENDING` | — | Production-readiness prerequisite |
+| Clinical/privacy approval | Named approval records | `PENDING` | — | Real-PHI prerequisite |
 
 ## Current limitations and v1 non-goals
 
 Current implementation limitations that must remain visible:
 
-- Word has no server-side layout engine here. The renderer emits deterministic review warnings for unusually long replacements and repeated rows, and enforces character/table limits plus XML/package integrity, but it cannot prove page-level visual overflow, pagination, font substitution, or printer behavior. Synthetic outputs require Word/LibreOffice visual baselines for high-risk templates.
+- Word has no server-side layout engine here. The renderer enforces character
+  limits plus XML/package integrity and can flag long replacements, but it
+  cannot prove page-level overflow, pagination, font substitution, printer
+  behavior, or whether desktop Word/LibreOffice shows an open-repair dialog.
+  Manual visual/open-repair QA remains a release gate.
 - The ZIP container is rebuilt, so ZIP-level timestamps/compression/order may differ. The guarantee is approved XML patches plus byte-identical decompressed untouched entries and static-content invariance, not a byte-identical whole file.
-- Non-table repeating sections, data-bound controls, active/dynamic fields, and ambiguous structures are unsupported and can block certification.
-- There is no template-bucket orphan reconciliation, retention sweep, operations dashboard, or global rollout flag.
+- All repeating sections, multi-paragraph/list rich text, data-bound controls,
+  ordinary unbound placeholders, complex unbound table cells,
+  `mc:AlternateContent`, active/unapproved fields, and ambiguous structures are
+  certification-blocked in safe alpha.
+- The fixed SOAP taxonomy cannot extract arbitrary specialty concepts. The
+  later Template-Aware Extraction Agent must extend the versioned registry and
+  all projection/resolution/validation paths before such a concept can certify.
+- Object-ledger reconciliation and audit delivery exist but are opt-in and do
+  not replace an operations dashboard, alert owner, approved retention policy,
+  or documented restore test. Orphan purge remains separately off.
+- Accounts without Twin records keep the existing tested deletion path.
+  Accounts with retained Twin source/certification/waiver/template/fill,
+  object-ledger, outbox, or delivered-audit records receive deterministic HTTP
+  409 with no partial database or bucket deletion.
+  Privacy/Legal must decide anonymization, retention, and legal-hold policy
+  before that path can change.
 - Template Twin corrections intentionally do not clear a generic visit-level `needsReview` reason because other safety lanes may own it; clearing requires an explicit source-aware review-state model in a later change.
 - The PHI gate cannot establish legal compliance by itself. Vendor agreements, policy, retention, access controls, backups/restores, incident response, and clinical approval remain separate requirements.
 - Evidence anchors prove traceability to retained encounter evidence; they do not prove that ASR/model extraction is clinically correct. The physician still reviews and signs.
@@ -389,14 +770,19 @@ Explicit v1 non-goals:
 
 Production remains blocked until all of the following have evidence:
 
-- both migrations reviewed and applied in isolated QA;
+- all three migrations reviewed and applied in isolated QA;
 - private bucket, IAM, encryption, immutability control, retention, backup, restore, and alert ownership approved;
 - all test-result placeholders above completed with passing or explicitly dispositioned results;
 - correction/rerender/new-version workflow tested in isolated QA with synthetic values;
+- the infrastructure-backed upload → certification → typed/voice → SOAP edit
+  invalidation → regeneration → correction → signing → stored-byte verification
+  → download test passes against actual QA Postgres, Redis/worker, and MinIO;
 - synthetic typed and voice end-to-end outputs visually compared with their original DOCX;
 - no critical unresolved field can sign through direct API calls or races;
 - existing custom-template and generic export regressions pass;
 - Anthropic and storage vendor agreements/data handling approved by Privacy/Legal;
 - a clinical owner approves review wording, critical-field policy, and synthetic cases;
+- the global switch and every practice remain default off until a documented
+  rollout/kill-switch exercise succeeds;
 - prior image digests and rollback procedure recorded; and
 - explicit founder/operations authorization for the production deployment window.
