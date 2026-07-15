@@ -219,7 +219,10 @@ export function TemplateTwinReview({
   visitId,
   readonly = false,
 }: TemplateTwinReviewProps) {
+  const router = useRouter();
   const [onlyAttention, setOnlyAttention] = useState(false);
+  const [reviewPending, setReviewPending] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(
     data.fields.find((field) => ATTENTION_STATUSES.has(field.status))?.fieldId ??
       data.fields[0]?.fieldId ??
@@ -241,6 +244,49 @@ export function TemplateTwinReview({
     visibleFields[0] ??
     null;
   const attentionCount = data.counts.needsReview;
+  const canConfirmWholeReview =
+    !readonly &&
+    data.processingStatus.toLowerCase() !== 'signed' &&
+    !data.dataIntegrityError &&
+    data.roundTripVerified &&
+    data.counts.needsReview === 0 &&
+    data.counts.conflicts === 0 &&
+    data.counts.criticalUnresolved === 0;
+
+  async function confirmWholeReview() {
+    setReviewPending(true);
+    setReviewError(null);
+    try {
+      const response = await fetch(
+        `/api/visits/${encodeURIComponent(visitId)}/template-twin/review`,
+        {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            expectedManifestVersion: data.manifestVersion,
+            expectedManifestSha256: data.manifestSha256,
+          }),
+        },
+      );
+      const body = (await response.json().catch(() => null)) as
+        | { ok?: boolean; error?: string }
+        | null;
+      if (!response.ok || !body?.ok) {
+        throw new Error(body?.error ?? 'The review confirmation could not be saved.');
+      }
+      toast.success('Original Template DOCX review confirmed');
+      router.refresh();
+    } catch (caught) {
+      setReviewError(
+        caught instanceof Error
+          ? caught.message
+          : 'The review confirmation could not be saved.',
+      );
+    } finally {
+      setReviewPending(false);
+    }
+  }
 
   return (
     <section aria-labelledby="template-twin-review-title" className="space-y-5">
@@ -333,6 +379,45 @@ export function TemplateTwinReview({
           </div>
         ))}
       </dl>
+
+      {!readonly && !data.physicianReviewConfirmed && (
+        <div className="rounded-lg border border-linear-border bg-linear-surface-1 px-4 py-4">
+          <p className="text-[13px] font-medium text-linear-text">
+            Whole-document physician review required
+          </p>
+          <p className="mt-1 text-[12px] leading-5 text-linear-text-3">
+            Confirm only after reviewing every populated value, blank field, allowed option,
+            and supporting encounter quote in this generated document.
+          </p>
+          {canConfirmWholeReview ? (
+            <button
+              type="button"
+              disabled={reviewPending}
+              onClick={confirmWholeReview}
+              className="qm-tap-44 mt-3 inline-flex items-center gap-2 rounded-lg bg-linear-sage px-3 py-2 text-[12.5px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+            >
+              <FileCheck2 className="h-4 w-4" aria-hidden />
+              {reviewPending ? 'Saving confirmation…' : 'I reviewed every Template Twin field'}
+            </button>
+          ) : (
+            <p className="mt-3 text-[12px] font-medium text-linear-amber">
+              Resolve every item needing attention and regenerate the DOCX before confirming.
+            </p>
+          )}
+          {reviewError && (
+            <p role="alert" className="mt-2 text-[12px] text-linear-danger">
+              {reviewError}
+            </p>
+          )}
+        </div>
+      )}
+
+      {data.physicianReviewConfirmed && (
+        <p className="inline-flex items-center gap-2 text-[12px] font-medium text-linear-sage-bright">
+          <Check className="h-4 w-4" aria-hidden />
+          Physician review confirmed for this exact generated document
+        </p>
+      )}
 
       {!data.dataIntegrityError && (
         <div className="overflow-hidden rounded-xl border border-linear-border bg-linear-surface-1 lg:grid lg:min-h-[440px] lg:grid-cols-[minmax(260px,0.78fr)_minmax(0,1.22fr)]">

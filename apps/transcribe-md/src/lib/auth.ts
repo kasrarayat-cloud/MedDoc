@@ -11,6 +11,7 @@
 import { auth } from '@/lib/nextauth';
 import prisma from '@meddoc/db';
 import { AuthError, type Session, type UserRole } from '@meddoc/auth';
+import { evaluateTemplateTwinRollout } from '@/lib/template-twin/rollout';
 
 export { AuthError };
 export type { Session, UserRole };
@@ -68,7 +69,12 @@ export async function requireFreshDoctorIdentity(userId: string): Promise<{
   try {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { role: true, isActive: true, practiceId: true },
+      select: {
+        role: true,
+        isActive: true,
+        practiceId: true,
+        practice: { select: { templateTwinEnabled: true } },
+      },
     });
     if (
       !user ||
@@ -80,6 +86,12 @@ export async function requireFreshDoctorIdentity(userId: string): Promise<{
         'FORBIDDEN',
         'An active physician account is required for Template Twin.',
       );
+    }
+    const rollout = evaluateTemplateTwinRollout({
+      practiceEnabled: user.practice.templateTwinEnabled,
+    });
+    if (!rollout.allowed) {
+      throw new AuthError('FORBIDDEN', rollout.reason);
     }
     return { role: 'DOCTOR', practiceId: user.practiceId };
   } catch (error) {

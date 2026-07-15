@@ -61,7 +61,7 @@ export async function PATCH(
       );
     }
     if (error instanceof TemplateTwinLifecycleError) {
-      const status = error.code === 'NOT_FOUND' ? 404 : error.code === 'MAPPING_INVALID' || error.code === 'FIELD_SET_MISMATCH' ? 422 : 409;
+      const status = error.code === 'NOT_FOUND' ? 404 : error.code === 'MAPPING_INVALID' || error.code === 'FIELD_SET_MISMATCH' || error.code === 'UNSUPPORTED_CLINICAL_CONCEPT' ? 422 : 409;
       return response({ ok: false, error: error.message }, status);
     }
     return response({ ok: false, error: 'Mappings were not saved.' }, 500);

@@ -46,6 +46,9 @@ export async function POST(
         practiceId: session.user.practiceId,
       },
       expectedMappingsSha256: parsed.data.expectedMappingsSha256,
+      expectedSyntheticTestProvenanceSha256:
+        parsed.data.expectedSyntheticTestProvenanceSha256,
+      optionalFieldWaivers: parsed.data.optionalFieldWaivers,
     });
     return response({ ok: true, workspace }, 200);
   } catch (error) {

@@ -37,6 +37,7 @@ import {
   type TemplateTwinReviewData,
   type TemplateTwinReviewRow,
 } from '@/components/visit/template-twin-review-data';
+import { evaluateTemplateTwinRollout } from '@/lib/template-twin/rollout';
 
 export const metadata: Metadata = { title: 'Visit' };
 
@@ -145,7 +146,11 @@ export default async function VisitPage({
   Sentry.setTag('visitId', id);
   Sentry.setUser({ id: session.user.id });
 
-  type UserRow = { name: string | null; email: string };
+  type UserRow = {
+    name: string | null;
+    email: string;
+    practice: { templateTwinEnabled: boolean };
+  };
   type VisitRow = {
     id: string;
     userId: string;
@@ -208,7 +213,11 @@ export default async function VisitPage({
   const [user, visit, rxOverrides] = (await Promise.all([
     prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { name: true, email: true },
+      select: {
+        name: true,
+        email: true,
+        practice: { select: { templateTwinEnabled: true } },
+      },
     }),
     prisma.transcribeVisit.findUnique({
       where: { id },
@@ -269,6 +278,7 @@ export default async function VisitPage({
             id: true,
             status: true,
             manifestVersion: true,
+            manifestSha256: true,
             fillManifest: true,
             filledCount: true,
             needsReviewCount: true,
@@ -277,6 +287,9 @@ export default async function VisitPage({
             criticalUnresolvedCount: true,
             roundTripVerified: true,
             roundTripVerification: true,
+            reviewedAt: true,
+            reviewedManifestVersion: true,
+            reviewedManifestSha256: true,
             compiledVersion: {
               select: {
                 noteTemplate: { select: { name: true } },
@@ -312,6 +325,11 @@ export default async function VisitPage({
 
   if (!user) redirect('/login');
   if (!visit || visit.userId !== session.user.id) notFound();
+  const templateTwinReview = evaluateTemplateTwinRollout({
+    practiceEnabled: user.practice.templateTwinEnabled,
+  }).allowed
+    ? serializeTemplateTwinReview(visit.templateTwinFill)
+    : null;
 
   // Round 3 PR-C — §164.312(b) PHI-read audit (A05-P0-004). Single
   // visit detail page is the highest-volume PHI surface — every doctor
@@ -529,7 +547,7 @@ export default async function VisitPage({
           emPendingChange={visit.emPendingChange}
           patientSummary={visit.patientSummary}
           confidenceScores={visit.confidenceScores}
-          templateTwinReview={serializeTemplateTwinReview(visit.templateTwinFill)}
+          templateTwinReview={templateTwinReview}
           // Phase 5.1.1 — V4 Extras card-stream wiring
           patientName={visit.patientName}
           patient={visit.patient}

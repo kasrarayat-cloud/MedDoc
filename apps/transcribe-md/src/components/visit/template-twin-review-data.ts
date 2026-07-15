@@ -12,6 +12,7 @@ export interface TemplateTwinReviewRow {
   id: string;
   status: string;
   manifestVersion: number;
+  manifestSha256: string;
   fillManifest: unknown;
   filledCount: number;
   needsReviewCount: number;
@@ -20,6 +21,9 @@ export interface TemplateTwinReviewRow {
   criticalUnresolvedCount: number;
   roundTripVerified: boolean;
   roundTripVerification?: unknown;
+  reviewedAt: Date | null;
+  reviewedManifestVersion: number | null;
+  reviewedManifestSha256: string | null;
   compiledVersion: {
     noteTemplate: { name: string };
     fields: Array<{
@@ -82,10 +86,12 @@ export interface TemplateTwinReviewField {
 export interface TemplateTwinReviewData {
   fillManifestId: string;
   manifestVersion: number;
+  manifestSha256: string;
   templateName: string;
   templateVersion: number | null;
   processingStatus: string;
   roundTripVerified: boolean;
+  physicianReviewConfirmed: boolean;
   layoutWarningCodes: string[];
   dataIntegrityError: boolean;
   counts: {
@@ -156,10 +162,12 @@ function invalidManifestReview(row: TemplateTwinReviewRow): TemplateTwinReviewDa
   return {
     fillManifestId: row.id,
     manifestVersion: row.manifestVersion,
+    manifestSha256: row.manifestSha256,
     templateName: row.compiledVersion.noteTemplate.name,
     templateVersion: null,
     processingStatus: row.status.toLowerCase(),
     roundTripVerified: false,
+    physicianReviewConfirmed: false,
     layoutWarningCodes: [],
     dataIntegrityError: true,
     counts: {
@@ -173,8 +181,9 @@ function invalidManifestReview(row: TemplateTwinReviewRow): TemplateTwinReviewDa
 
 /**
  * Converts the visit-scoped database row into the smallest client DTO needed
- * for physician review. Storage keys, hashes, model payloads, and unrelated
- * encounter data never cross the RSC boundary.
+ * for physician review. Only the manifest's non-secret optimistic-lock hash is
+ * exposed; storage keys, model payloads, and unrelated encounter data never
+ * cross the RSC boundary.
  */
 export function serializeTemplateTwinReview(
   row: TemplateTwinReviewRow | null,
@@ -308,10 +317,15 @@ export function serializeTemplateTwinReview(
   return {
     fillManifestId: row.id,
     manifestVersion: row.manifestVersion,
+    manifestSha256: row.manifestSha256,
     templateName: row.compiledVersion.noteTemplate.name,
     templateVersion: manifest.noteTemplateVersion,
     processingStatus: row.status.toLowerCase(),
     roundTripVerified: row.roundTripVerified,
+    physicianReviewConfirmed:
+      row.reviewedAt !== null &&
+      row.reviewedManifestVersion === row.manifestVersion &&
+      row.reviewedManifestSha256 === row.manifestSha256,
     layoutWarningCodes,
     dataIntegrityError: false,
     counts,

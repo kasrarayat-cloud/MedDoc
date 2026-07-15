@@ -25,6 +25,7 @@
 
 import type { NoteTemplate } from '@prisma/client';
 import prisma from '@meddoc/db';
+import { evaluateTemplateTwinRollout } from '@/lib/template-twin/rollout';
 
 export interface ResolveTemplateInput {
   /** The signing/owning doctor (User.id). */
@@ -47,6 +48,34 @@ export class PinnedTemplateUnavailableError extends Error {
       'The note template version already pinned to this visit is unavailable or no longer owned by the visit clinician.'
     );
     this.name = 'PinnedTemplateUnavailableError';
+  }
+}
+
+export class TemplateTwinWorkerRolloutError extends Error {
+  readonly code = 'TEMPLATE_TWIN_ROLLOUT_DISABLED';
+
+  constructor() {
+    super('Template Twin is disabled for this practice or by the global kill switch.');
+    this.name = 'TemplateTwinWorkerRolloutError';
+  }
+}
+
+async function templateTwinAllowedForDoctor(doctorId: string): Promise<boolean> {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: doctorId },
+      select: {
+        role: true,
+        isActive: true,
+        practice: { select: { templateTwinEnabled: true } },
+      },
+    });
+    if (!user || !user.isActive || user.role !== 'DOCTOR') return false;
+    return evaluateTemplateTwinRollout({
+      practiceEnabled: user.practice.templateTwinEnabled,
+    }).allowed;
+  } catch {
+    return false;
   }
 }
 
@@ -120,7 +149,16 @@ export async function resolveActiveTemplate(
       OR: [{ doctorId: input.doctorId }, { isSystemDefault: true }],
     },
   });
-  return selectTemplate(candidates, input);
+  const containsTwin = candidates.some(
+    (template) => template.templateKind === 'template_twin_docx',
+  );
+  const eligible =
+    containsTwin && !(await templateTwinAllowedForDoctor(input.doctorId))
+      ? candidates.filter(
+          (template) => template.templateKind !== 'template_twin_docx',
+        )
+      : candidates;
+  return selectTemplate(eligible, input);
 }
 
 /**
@@ -144,5 +182,11 @@ export async function resolveVisitTemplate(
     },
   });
   if (!pinned) throw new PinnedTemplateUnavailableError();
+  if (
+    pinned.templateKind === 'template_twin_docx' &&
+    !(await templateTwinAllowedForDoctor(input.doctorId))
+  ) {
+    throw new TemplateTwinWorkerRolloutError();
+  }
   return pinned;
 }
