@@ -14,6 +14,7 @@ import { requireDoctorSession } from '../auth';
 
 beforeEach(() => {
   vi.clearAllMocks();
+  process.env.TEMPLATE_TWIN_KILL_SWITCH = 'false';
   mocks.auth.mockResolvedValue({
     user: {
       id: 'user-synthetic-role',
@@ -33,6 +34,7 @@ describe('Template Twin fresh physician authorization', () => {
         role,
         isActive: true,
         practiceId: 'practice-current',
+        practice: { templateTwinEnabled: true },
       });
 
       await expect(requireDoctorSession()).rejects.toMatchObject({
@@ -41,7 +43,12 @@ describe('Template Twin fresh physician authorization', () => {
       expect(mocks.findUser).toHaveBeenCalledTimes(1);
       expect(mocks.findUser).toHaveBeenCalledWith({
         where: { id: 'user-synthetic-role' },
-        select: { role: true, isActive: true, practiceId: true },
+        select: {
+          role: true,
+          isActive: true,
+          practiceId: true,
+          practice: { select: { templateTwinEnabled: true } },
+        },
       });
     },
   );
@@ -60,6 +67,7 @@ describe('Template Twin fresh physician authorization', () => {
       role: 'DOCTOR',
       isActive: true,
       practiceId: 'practice-current',
+      practice: { templateTwinEnabled: true },
     });
 
     await expect(requireDoctorSession()).resolves.toMatchObject({
@@ -84,10 +92,40 @@ describe('Template Twin fresh physician authorization', () => {
       role: 'DOCTOR',
       isActive: false,
       practiceId: 'practice-current',
+      practice: { templateTwinEnabled: true },
     });
 
     await expect(requireDoctorSession()).rejects.toMatchObject({
       code: 'FORBIDDEN',
+    });
+  });
+
+  it('fails closed when the owning practice rollout flag is disabled', async () => {
+    mocks.findUser.mockResolvedValue({
+      role: 'DOCTOR',
+      isActive: true,
+      practiceId: 'practice-current',
+      practice: { templateTwinEnabled: false },
+    });
+
+    await expect(requireDoctorSession()).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+      message: 'Template Twin is not enabled for this practice.',
+    });
+  });
+
+  it('fails closed when the global kill switch is not explicitly disabled', async () => {
+    delete process.env.TEMPLATE_TWIN_KILL_SWITCH;
+    mocks.findUser.mockResolvedValue({
+      role: 'DOCTOR',
+      isActive: true,
+      practiceId: 'practice-current',
+      practice: { templateTwinEnabled: true },
+    });
+
+    await expect(requireDoctorSession()).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+      message: 'Template Twin is temporarily unavailable.',
     });
   });
 });

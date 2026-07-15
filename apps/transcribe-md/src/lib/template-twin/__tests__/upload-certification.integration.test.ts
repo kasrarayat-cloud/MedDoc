@@ -18,6 +18,9 @@ const mocks = vi.hoisted(() => ({
   noteUpdateMany: vi.fn(),
   sourceCreate: vi.fn(),
   transaction: vi.fn(),
+  ledgerUpdate: vi.fn(),
+  ledgerFind: vi.fn(),
+  outboxCreate: vi.fn(),
 }));
 
 vi.mock('@meddoc/ai', () => ({
@@ -47,6 +50,11 @@ vi.mock('@meddoc/db', () => ({
     templateTwinFieldDefinition: { updateMany: mocks.fieldUpdateMany },
     templateTwinSemanticMapping: { update: mocks.mappingUpdate },
     templateTwinSourceArtifact: { create: mocks.sourceCreate },
+    templateTwinObjectLedger: {
+      updateMany: mocks.ledgerUpdate,
+      findUnique: mocks.ledgerFind,
+    },
+    templateTwinAuditOutbox: { create: mocks.outboxCreate },
   },
   prisma: {
     $transaction: mocks.transaction,
@@ -72,6 +80,7 @@ import {
 } from '../storage';
 import { runTemplateTwinSyntheticTest } from '../synthetic-test';
 import { readTemplateTwinWorkspace } from '../workspace-read';
+import { TEMPLATE_TWIN_QA_STORAGE_EXCEPTION_ATTESTATION } from '../storage/readiness';
 import {
   buildTemplateTwinIntegrationFixture,
   SYNTHETIC_CONTEXT,
@@ -128,6 +137,8 @@ interface MemorySource {
   lineageId: string;
   lineageVersion: number;
   objectKey: string;
+  objectVersionId: string;
+  objectEtag: string;
   sha256: string;
   mimeType: string;
   sizeBytes: number;
@@ -143,6 +154,8 @@ interface MemoryCertification {
   approvedMappingsSha256: string;
   syntheticTestManifest: unknown;
   testOutputObjectKey: string;
+  testOutputVersionId: string;
+  testOutputEtag: string;
   testOutputSha256: string;
   certifiedAt: Date;
 }
@@ -163,6 +176,8 @@ interface MemoryCompiled {
   latestSyntheticTestManifest: unknown;
   latestTestMappingsSha256: string | null;
   latestTestOutputObjectKey: string | null;
+  latestTestOutputVersionId: string | null;
+  latestTestOutputEtag: string | null;
   latestTestOutputSha256: string | null;
   latestTestStaticContentSha256: string | null;
   latestTestRoundTrip: unknown;
@@ -199,6 +214,8 @@ interface MemoryDatabase {
 interface StoredObject {
   bytes: Buffer;
   metadata: Record<string, string>;
+  versionId: string;
+  etag: string;
 }
 
 let database: MemoryDatabase;
@@ -294,6 +311,8 @@ function configureInMemoryPrisma(): void {
         | 'latestSyntheticTestManifest'
         | 'latestTestMappingsSha256'
         | 'latestTestOutputObjectKey'
+        | 'latestTestOutputVersionId'
+        | 'latestTestOutputEtag'
         | 'latestTestOutputSha256'
         | 'latestTestStaticContentSha256'
         | 'latestTestRoundTrip'
@@ -306,6 +325,8 @@ function configureInMemoryPrisma(): void {
       latestSyntheticTestManifest: null,
       latestTestMappingsSha256: null,
       latestTestOutputObjectKey: null,
+      latestTestOutputVersionId: null,
+      latestTestOutputEtag: null,
       latestTestOutputSha256: null,
       latestTestStaticContentSha256: null,
       latestTestRoundTrip: null,
@@ -414,6 +435,11 @@ function configureInMemoryPrisma(): void {
         templateTwinFieldDefinition: { updateMany: mocks.fieldUpdateMany },
         templateTwinSemanticMapping: { update: mocks.mappingUpdate },
         templateTwinSourceArtifact: { create: mocks.sourceCreate },
+        templateTwinObjectLedger: {
+          updateMany: mocks.ledgerUpdate,
+          findUnique: mocks.ledgerFind,
+        },
+        templateTwinAuditOutbox: { create: mocks.outboxCreate },
       }),
   );
 }
@@ -426,10 +452,31 @@ function createInMemoryObjectClient() {
     async bucketExists() {
       return true;
     },
-    async statObject(_bucket, objectKey) {
+    async getBucketPolicy() {
+      throw Object.assign(new Error('Synthetic bucket has no anonymous policy'), {
+        code: 'NoSuchBucketPolicy',
+      });
+    },
+    async getBucketVersioning() {
+      return { Status: 'Enabled' };
+    },
+    async getObjectLockConfig() {
+      return { objectLockEnabled: 'Enabled' };
+    },
+    async statObject(_bucket, objectKey, options) {
       const item = objects.get(objectKey);
       if (!item) throw missing();
-      return { size: item.bytes.byteLength, metaData: item.metadata };
+      if (options?.versionId && options.versionId !== item.versionId) {
+        throw Object.assign(new Error('Synthetic object version missing'), {
+          code: 'NoSuchVersion',
+        });
+      }
+      return {
+        size: item.bytes.byteLength,
+        metaData: item.metadata,
+        versionId: item.versionId,
+        etag: item.etag,
+      };
     },
     async putObject(_bucket, objectKey, bytes, _sizeBytes, metadata) {
       if (objects.has(objectKey)) {
@@ -439,12 +486,24 @@ function createInMemoryObjectClient() {
         });
       }
       putCount += 1;
-      objects.set(objectKey, { bytes: Buffer.from(bytes), metadata: { ...metadata } });
-      return undefined;
+      const versionId = `synthetic-version-${putCount}`;
+      const etag = `synthetic-etag-${putCount}`;
+      objects.set(objectKey, {
+        bytes: Buffer.from(bytes),
+        metadata: { ...metadata },
+        versionId,
+        etag,
+      });
+      return { versionId, etag };
     },
-    async getObject(_bucket, objectKey) {
+    async getObject(_bucket, objectKey, options) {
       const item = objects.get(objectKey);
       if (!item) throw missing();
+      if (options?.versionId && options.versionId !== item.versionId) {
+        throw Object.assign(new Error('Synthetic object version missing'), {
+          code: 'NoSuchVersion',
+        });
+      }
       return (async function* stream() {
         yield Buffer.from(item.bytes);
       })();
@@ -479,7 +538,7 @@ beforeEach(() => {
     id: PRIOR_TEMPLATE_ID,
     doctorId: ACTOR.userId,
     name: 'Prior structured template',
-    encounterType: null,
+    encounterType: 'Synthetic stateful visit',
     sections: [],
     styleProfile: {},
     specialtyBaseline: null,
@@ -493,6 +552,9 @@ beforeEach(() => {
   });
   configureInMemoryPrisma();
   mocks.audit.mockResolvedValue(undefined);
+  mocks.ledgerUpdate.mockResolvedValue({ count: 1 });
+  mocks.ledgerFind.mockResolvedValue(null);
+  mocks.outboxCreate.mockResolvedValue({ id: 'outbox-stateful-synthetic' });
   mocks.extractText.mockResolvedValue({
     contextText: SYNTHETIC_CONTEXT,
     entities: SYNTHETIC_ENTITIES,
@@ -526,13 +588,34 @@ describe('Template Twin stateful upload-to-certification integration', () => {
     );
     const memory = createInMemoryObjectClient();
     const storage = createTemplateTwinArtifactStore({
-      bucket: 'synthetic-template-artifacts',
+      bucket: 'synthetic-template-artifacts-qa',
       clientFactory: () => memory.client,
       idFactory: () => 'immutable-synthetic-artifact',
+      readinessEnv: {
+        TEMPLATE_TWIN_STORAGE_PROFILE: 'qa',
+        TEMPLATE_TWIN_QA_STORAGE_ENCRYPTION_AT_REST_ATTESTATION:
+          TEMPLATE_TWIN_QA_STORAGE_EXCEPTION_ATTESTATION,
+        TEMPLATE_TWIN_QA_STORAGE_TLS_EXPECTATION_ATTESTATION:
+          TEMPLATE_TWIN_QA_STORAGE_EXCEPTION_ATTESTATION,
+        TEMPLATE_TWIN_QA_STORAGE_LEAST_PRIVILEGE_ATTESTATION:
+          TEMPLATE_TWIN_QA_STORAGE_EXCEPTION_ATTESTATION,
+        TEMPLATE_TWIN_QA_STORAGE_LIFECYCLE_RETENTION_ATTESTATION:
+          TEMPLATE_TWIN_QA_STORAGE_EXCEPTION_ATTESTATION,
+        TEMPLATE_TWIN_QA_STORAGE_BACKUP_RESTORE_ATTESTATION:
+          TEMPLATE_TWIN_QA_STORAGE_EXCEPTION_ATTESTATION,
+        MOCK_AI_CALLS: 'true',
+        DATABASE_URL: 'postgresql://synthetic@postgres/meddoc_qa_test',
+      },
+      objectLedgerClient: null,
     });
 
     const draft = await createTemplateTwinDraft({
       source: fixture.source,
+      identity: {
+        name: 'Synthetic stateful intake',
+        encounterType: 'Synthetic stateful visit',
+        versionDescription: 'Initial synthetic QA version',
+      },
       actor: ACTOR,
       storage,
     });
@@ -630,6 +713,8 @@ describe('Template Twin stateful upload-to-certification integration', () => {
       latestSyntheticTestManifest: null,
       latestTestMappingsSha256: null,
       latestTestOutputObjectKey: null,
+      latestTestOutputVersionId: null,
+      latestTestOutputEtag: null,
       latestTestOutputSha256: null,
       latestTestRoundTrip: null,
       latestTestVerifiedAt: null,
@@ -671,6 +756,8 @@ describe('Template Twin stateful upload-to-certification integration', () => {
       noteTemplateId: draft.noteTemplateId,
       actor: ACTOR,
       expectedMappingsSha256: changedHash,
+      expectedSyntheticTestProvenanceSha256:
+        refreshedProof.latestSyntheticTest!.provenanceSha256,
     });
     expect(certified.template).toMatchObject({
       status: 'active',
@@ -706,5 +793,26 @@ describe('Template Twin stateful upload-to-certification integration', () => {
       'tm_template_synthetic_phi_scan',
     ]);
     expect(mocks.extractText).toHaveBeenCalledTimes(2);
+    const syntheticAuditRows = mocks.outboxCreate.mock.calls
+      .map((call) => record(call[0]).data)
+      .map(record)
+      .filter(
+        (data) => data.action === 'TEMPLATE_TWIN_SYNTHETIC_TESTED',
+      );
+    expect(syntheticAuditRows).toHaveLength(2);
+    expect(
+      new Set(syntheticAuditRows.map((data) => data.eventKey)).size,
+    ).toBe(2);
+    expect(syntheticAuditRows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          practiceId: ACTOR.practiceId,
+          actorId: ACTOR.userId,
+          actorEmailSnapshot: ACTOR.userEmail,
+          targetType: 'TemplateTwinCompiledVersion',
+          metadata: expect.objectContaining({ verified: true, inputMode: 'text' }),
+        }),
+      ]),
+    );
   });
 });

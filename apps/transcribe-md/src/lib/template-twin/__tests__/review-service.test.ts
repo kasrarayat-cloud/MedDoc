@@ -4,7 +4,33 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const audit = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/audit', () => ({ logAudit: audit }));
 
+const database = vi.hoisted(() => ({
+  transaction: vi.fn(),
+  manifestUpdateMany: vi.fn(),
+  decisionCreate: vi.fn(),
+  ledgerUpdateMany: vi.fn(),
+  ledgerFindUnique: vi.fn(),
+  outboxCreate: vi.fn(),
+}));
+vi.mock('@meddoc/db', () => {
+  const tx = {
+    templateTwinFillManifest: { updateMany: database.manifestUpdateMany },
+    templateTwinReviewDecision: { create: database.decisionCreate },
+    templateTwinObjectLedger: {
+      updateMany: database.ledgerUpdateMany,
+      findUnique: database.ledgerFindUnique,
+    },
+    templateTwinAuditOutbox: { create: database.outboxCreate },
+  };
+  return {
+    default: { $transaction: database.transaction },
+    prisma: { $transaction: database.transaction },
+    __tx: tx,
+  };
+});
+
 import { canonicalSha256 } from '../canonical';
+import { canonicalSoapSha256 } from '../soap-binding';
 import { type TemplateTwinFieldCorrectionRequest } from '../contracts';
 import {
   TEMPLATE_TWIN_REVIEW_REASON,
@@ -24,6 +50,7 @@ import {
 } from '../ir';
 import {
   buildClinicianCorrection,
+  createTemplateTwinReviewRepository,
   reviewTemplateTwinField,
   TemplateTwinReviewError,
   type TemplateTwinReviewRepository,
@@ -39,6 +66,7 @@ const SHA = 'a'.repeat(64);
 const OUTPUT_SHA = 'b'.repeat(64);
 const FIELD_ID = `ttf_${'c'.repeat(24)}`;
 const NOW = '2026-07-15T17:00:00.000Z';
+const REVIEWED_SOAP = '## Assessment\nSynthetic severity under physician review.';
 
 type ReviewContext = NonNullable<
   Awaited<ReturnType<TemplateTwinReviewRepository['loadOwned']>>
@@ -238,6 +266,8 @@ function context(definition = field()): ReviewContext {
   });
   const manifest = TemplateTwinFillManifestSchema.parse({
     manifestVersion: 1,
+    soapVersion: 7,
+    soapSha256: canonicalSoapSha256(REVIEWED_SOAP),
     compiledVersionId: 'compiled-1',
     noteTemplateId: 'template-1',
     noteTemplateVersion: 1,
@@ -263,6 +293,8 @@ function context(definition = field()): ReviewContext {
       userId: 'doctor-1',
       status: 'READY',
       reviewReason: TEMPLATE_TWIN_REVIEW_REASON,
+      soapFinal: REVIEWED_SOAP,
+      soapVersion: 7,
     },
     compiledVersion: {
       id: 'compiled-1',
@@ -278,6 +310,8 @@ function context(definition = field()): ReviewContext {
       sourceArtifact: {
         practiceId: 'practice-1',
         objectKey: `practices/practice-1/template-twin/sources/lineage-1/v1/${SHA}/artifact/${SHA}.docx`,
+        objectVersionId: 'provider-source-version-synthetic',
+        objectEtag: 'provider-source-etag-synthetic',
         sha256: SHA,
         sizeBytes: 20,
         validationStatus: 'accepted',
@@ -356,6 +390,8 @@ function storage(): TemplateTwinArtifactStore {
       async (): Promise<StoredTemplateTwinArtifact> => ({
         bucket: 'synthetic-private-bucket',
         objectKey: `practices/practice-1/template-twin/outputs/visit-1/${SHA}/artifact/${OUTPUT_SHA}.docx`,
+        objectVersionId: 'provider-output-version-synthetic',
+        objectEtag: 'provider-output-etag-synthetic',
         sha256: OUTPUT_SHA,
         mimeType: DOCX_MIME_TYPE,
         sizeBytes: 24,
@@ -387,6 +423,8 @@ async function fakeFinalize(
   const counts = templateTwinCounts(input.resolutions, input.ir.fields);
   const manifest = TemplateTwinFillManifestSchema.parse({
     manifestVersion: 1,
+    soapVersion: input.soapVersion,
+    soapSha256: canonicalSoapSha256(input.soapFinal),
     compiledVersionId: input.compiledVersionId,
     noteTemplateId: input.noteTemplateId,
     noteTemplateVersion: input.noteTemplateVersion,
@@ -431,8 +469,17 @@ const actor = {
   practiceId: 'practice-1',
 };
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks();
+  const databaseModule = await import('@meddoc/db');
+  const tx = (databaseModule as unknown as { __tx: unknown }).__tx;
+  database.transaction.mockImplementation(
+    async (callback: (client: unknown) => Promise<unknown>) => callback(tx),
+  );
+  database.manifestUpdateMany.mockResolvedValue({ count: 1 });
+  database.decisionCreate.mockResolvedValue({ id: 'decision-synthetic-1' });
+  database.ledgerUpdateMany.mockResolvedValue({ count: 1 });
+  database.outboxCreate.mockResolvedValue({ id: 'outbox-synthetic-1' });
 });
 
 describe('buildClinicianCorrection exact rules', () => {
@@ -478,6 +525,17 @@ describe('buildClinicianCorrection exact rules', () => {
     });
     expect(checked.resolution.status).toBe('explicitly_denied');
     expect(checked.facts[0]?.polarity).toBe('denied');
+    expect(() =>
+      buildClinicianCorrection({
+        field: checkbox,
+        mapping: mapping(checkbox, {
+          polarityBehavior: 'affirmative_only',
+        }),
+        value: false,
+        existingFactIds: new Set(),
+        factIdFactory: () => '2'.repeat(24),
+      }),
+    ).toThrow(/does not define unchecked as false/i);
 
     const measurement = field('measurement');
     expect(() =>
@@ -581,6 +639,23 @@ describe('reviewTemplateTwinField lifecycle', () => {
     expect(artifacts.storeOutputArtifact).not.toHaveBeenCalled();
   });
 
+  it('refuses field review when the physician-visible SOAP changed after generation', async () => {
+    const staleSoap = context();
+    staleSoap.visit.soapVersion = 8;
+    staleSoap.visit.soapFinal = `${REVIEWED_SOAP}\nEdited synthetic plan.`;
+    const { repo } = repository(staleSoap);
+    const artifacts = storage();
+
+    await expect(
+      reviewTemplateTwinField(
+        { visitId: 'visit-1', actor, correction: correction() },
+        { repository: repo, storage: artifacts },
+      ),
+    ).rejects.toMatchObject({ code: 'SOAP_BINDING_STALE' });
+    expect(artifacts.readSourceArtifact).not.toHaveBeenCalled();
+    expect(repo.commit).not.toHaveBeenCalled();
+  });
+
   it('appends a value delta, independently validates, renders, stores, and commits once', async () => {
     const loaded = context();
     const { repo, committed } = repository(loaded);
@@ -612,20 +687,88 @@ describe('reviewTemplateTwinField lifecycle', () => {
       expectedManifestVersion: 4,
       createMappingRule: false,
     });
+    expect(committed()?.soapVersion).toBe(7);
     expect(committed()?.prepared.manifest.facts.at(-1)).toMatchObject({
       speaker: 'Physician correction',
     });
+    expect(committed()?.reviewerEmail).toBe(actor.userEmail);
     expect(committed()).not.toHaveProperty('clearTemplateTwinVisitReview');
-    expect(audit).toHaveBeenCalledWith(
-      expect.objectContaining({
+    expect(audit).not.toHaveBeenCalled();
+  });
+
+  it('claims the rendered object and durably enqueues correction audit in the owning transaction', async () => {
+    const loaded = context();
+    const capture = repository(loaded);
+    await reviewTemplateTwinField(
+      { visitId: 'visit-1', actor, correction: correction(), validationNow: NOW },
+      {
+        repository: capture.repo,
+        storage: storage(),
+        finalizeFill: fakeFinalize,
+        factIdFactory: () => '8'.repeat(24),
+        now: () => new Date(NOW),
+      },
+    );
+    const plan = capture.committed();
+    expect(plan).not.toBeNull();
+
+    await createTemplateTwinReviewRepository().commit(plan!);
+
+    expect(database.ledgerUpdateMany).toHaveBeenCalledWith({
+      where: {
+        objectKey: plan!.storedOutput!.objectKey,
+        practiceId: actor.practiceId,
+        state: { in: ['WRITTEN_UNCLAIMED', 'CLAIMED'] },
+      },
+      data: expect.objectContaining({
+        state: 'CLAIMED',
+        claimType: 'fill_manifest',
+        claimId: loaded.id,
+      }),
+    });
+    expect(database.outboxCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        eventKey: `template-twin:field-reviewed:${loaded.id}:v5`,
         action: 'TEMPLATE_TWIN_FIELD_REVIEWED',
+        status: 'PENDING',
         metadata: expect.not.objectContaining({
           previousValue: expect.anything(),
           correctedValue: expect.anything(),
           evidenceQuote: expect.anything(),
         }),
       }),
+    });
+    expect(database.manifestUpdateMany.mock.invocationCallOrder[0]).toBeLessThan(
+      database.outboxCreate.mock.invocationCallOrder[0]!,
     );
+    expect(database.decisionCreate.mock.invocationCallOrder[0]).toBeLessThan(
+      database.outboxCreate.mock.invocationCallOrder[0]!,
+    );
+    expect(database.ledgerUpdateMany.mock.invocationCallOrder[0]).toBeLessThan(
+      database.outboxCreate.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it('fails the correction transaction when durable audit enqueue fails', async () => {
+    const loaded = context();
+    const capture = repository(loaded);
+    await reviewTemplateTwinField(
+      { visitId: 'visit-1', actor, correction: correction(), validationNow: NOW },
+      {
+        repository: capture.repo,
+        storage: storage(),
+        finalizeFill: fakeFinalize,
+        factIdFactory: () => '9'.repeat(24),
+        now: () => new Date(NOW),
+      },
+    );
+    database.outboxCreate.mockRejectedValueOnce(
+      new Error('synthetic durable audit unavailable'),
+    );
+
+    await expect(
+      createTemplateTwinReviewRepository().commit(capture.committed()!),
+    ).rejects.toThrow('synthetic durable audit unavailable');
   });
 
   it('never asks the repository to clear generic visit review state', async () => {

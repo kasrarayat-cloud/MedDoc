@@ -16,7 +16,9 @@ import { TranscribeVisitStatus } from '@prisma/client';
 
 const mocks = vi.hoisted(() => ({
   visitFindUnique: vi.fn(),
-  visitUpdate: vi.fn(),
+  visitUpdateMany: vi.fn(),
+  twinUpdateMany: vi.fn(),
+  transaction: vi.fn(),
   auth: vi.fn(),
   logAudit: vi.fn(),
   computeEmScore: vi.fn(),
@@ -27,8 +29,8 @@ vi.mock('@meddoc/db', () => ({
   default: {
     transcribeVisit: {
       findUnique: mocks.visitFindUnique,
-      update: mocks.visitUpdate,
     },
+    $transaction: mocks.transaction,
   },
 }));
 
@@ -69,6 +71,7 @@ URI.
 ## Plan
 Symptomatic care.`,
   soapFinal: null,
+  soapVersion: 3,
   audioDurationSec: 600,
   dictationDurationSec: null,
   inputMode: 'audio_upload',
@@ -91,6 +94,20 @@ const ctx = { params: Promise.resolve({ id: FAKE_VISIT }) };
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.visitUpdateMany.mockResolvedValue({ count: 1 });
+  mocks.twinUpdateMany.mockResolvedValue({ count: 1 });
+  mocks.transaction.mockImplementation(
+    async (
+      callback: (tx: {
+        transcribeVisit: { updateMany: typeof mocks.visitUpdateMany };
+        templateTwinFillManifest: { updateMany: typeof mocks.twinUpdateMany };
+      }) => Promise<unknown>,
+    ) =>
+      callback({
+        transcribeVisit: { updateMany: mocks.visitUpdateMany },
+        templateTwinFillManifest: { updateMany: mocks.twinUpdateMany },
+      }),
+  );
   // engineToUiScore returns a stub UI score per call; tests assert
   // on the wrapper-route behavior, not the score's exact shape.
   mocks.computeEmScore.mockResolvedValue({
@@ -200,7 +217,6 @@ describe('POST /api/visits/[id]/em-score/apply-additions', () => {
       user: { id: FAKE_USER, practiceId: FAKE_PRACTICE },
     });
     mocks.visitFindUnique.mockResolvedValue(READY_VISIT);
-    mocks.visitUpdate.mockResolvedValue({});
 
     const res = await POST(
       makeReq({
@@ -223,12 +239,28 @@ describe('POST /api/visits/[id]/em-score/apply-additions', () => {
     expect(body.applied).toBe(2);
 
     // Persisted: soapDraft + soapFinal both updated.
-    expect(mocks.visitUpdate).toHaveBeenCalledTimes(1);
-    const updateArgs = mocks.visitUpdate.mock.calls[0][0];
+    expect(mocks.visitUpdateMany).toHaveBeenCalledTimes(1);
+    const updateArgs = mocks.visitUpdateMany.mock.calls[0][0];
     expect(updateArgs.where.id).toBe(FAKE_VISIT);
+    expect(updateArgs.where.soapVersion).toBe(READY_VISIT.soapVersion);
     expect(updateArgs.data.soapDraft).toContain('Severity 5/10');
     expect(updateArgs.data.soapDraft).toContain('GI: denies nausea');
     expect(updateArgs.data.soapFinal).toContain('Severity 5/10');
+    expect(updateArgs.data.soapVersion).toEqual({ increment: 1 });
+    expect(mocks.twinUpdateMany).toHaveBeenCalledWith({
+      where: {
+        visitId: FAKE_VISIT,
+        status: { not: 'SIGNED' },
+        signedDecisionAt: null,
+      },
+      data: {
+        status: 'NEEDS_REVIEW',
+        reviewedAt: null,
+        reviewedById: null,
+        reviewedManifestVersion: null,
+        reviewedManifestSha256: null,
+      },
+    });
 
     // Audit row.
     expect(mocks.logAudit).toHaveBeenCalledTimes(1);
@@ -262,7 +294,6 @@ describe('POST /api/visits/[id]/em-score/apply-additions', () => {
       user: { id: FAKE_USER, practiceId: FAKE_PRACTICE },
     });
     mocks.visitFindUnique.mockResolvedValue(READY_VISIT);
-    mocks.visitUpdate.mockResolvedValue({});
 
     await POST(
       makeReq({

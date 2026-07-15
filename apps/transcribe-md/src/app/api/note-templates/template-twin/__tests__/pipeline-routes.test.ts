@@ -50,6 +50,11 @@ vi.mock('@/lib/auth', () => ({
 }));
 vi.mock('@/lib/template-twin/request-security', () => ({
   isSameOriginTemplateTwinMutation: () => true,
+  boundedMultipartFormData: (request: Request) => request.formData(),
+  isMultipartFile: (value: unknown) => value instanceof File,
+  TemplateTwinMultipartError: class TemplateTwinMultipartError extends Error {
+    code = 'MULTIPART_INVALID';
+  },
 }));
 vi.mock('@/lib/template-twin/create-draft', () => ({
   TemplateTwinDraftError: class TemplateTwinDraftError extends Error {
@@ -73,6 +78,7 @@ vi.mock('@/lib/template-twin/synthetic-test', () => ({
 vi.mock('@/lib/template-twin/source-phi', () => ({
   TemplateTwinPhiRejectedError: class TemplateTwinPhiRejectedError extends Error {},
   TemplateTwinPhiScanUnavailableError: class TemplateTwinPhiScanUnavailableError extends Error {},
+  TemplateTwinSourcePrivacyUnsupportedError: class TemplateTwinSourcePrivacyUnsupportedError extends Error {},
 }));
 vi.mock('@/lib/template-twin/storage', () => ({
   TemplateTwinArtifactTooLargeError: class TemplateTwinArtifactTooLargeError extends Error {},
@@ -168,6 +174,9 @@ describe('Template Twin route orchestration', () => {
         type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       }),
     );
+    form.set('templateName', 'Synthetic musculoskeletal intake');
+    form.set('encounterScope', 'Musculoskeletal initial visit');
+    form.set('versionDescription', 'Initial synthetic QA version');
     const uploadResponse = await upload({
       headers: new Headers(),
       formData: async () => form,
@@ -181,6 +190,11 @@ describe('Template Twin route orchestration', () => {
     expect(mocks.createDraft).toHaveBeenCalledWith({
       source: expect.any(Uint8Array),
       actor: ACTOR,
+      identity: {
+        name: 'Synthetic musculoskeletal intake',
+        encounterType: 'Musculoskeletal initial visit',
+        versionDescription: 'Initial synthetic QA version',
+      },
     });
 
     const mapping = {
@@ -228,6 +242,7 @@ describe('Template Twin route orchestration', () => {
     const certifyResponse = await certify(
       jsonRequest({
         expectedMappingsSha256: HASH,
+        expectedSyntheticTestProvenanceSha256: HASH,
         acknowledgeStructure: true,
         acknowledgeSyntheticOutput: true,
       }),
@@ -238,6 +253,8 @@ describe('Template Twin route orchestration', () => {
       noteTemplateId: 'template-synthetic-1',
       actor: ACTOR,
       expectedMappingsSha256: HASH,
+      expectedSyntheticTestProvenanceSha256: HASH,
+      optionalFieldWaivers: [],
     });
 
     expect(mocks.createDraft.mock.invocationCallOrder[0]).toBeLessThan(
@@ -249,5 +266,41 @@ describe('Template Twin route orchestration', () => {
     expect(mocks.runSyntheticTest.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.certify.mock.invocationCallOrder[0]!,
     );
+  });
+
+  it('rejects an upload without physician-readable identity and scope', async () => {
+    const form = new FormData();
+    form.set(
+      'file',
+      new File([Buffer.from('PK\u0003\u0004synthetic-docx')], 'synthetic-template.docx', {
+        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      }),
+    );
+
+    const response = await upload({
+      headers: new Headers(),
+      formData: async () => form,
+    } as unknown as Request);
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      ok: false,
+      error: 'Name the template, choose its visit scope, and describe this version.',
+    });
+    expect(mocks.createDraft).not.toHaveBeenCalled();
+  });
+
+  it('rejects certification without the exact synthetic-test provenance acknowledgement', async () => {
+    const response = await certify(
+      jsonRequest({
+        expectedMappingsSha256: HASH,
+        acknowledgeStructure: true,
+        acknowledgeSyntheticOutput: true,
+      }),
+      { params: Promise.resolve({ id: 'template-synthetic-1' }) },
+    );
+
+    expect(response.status).toBe(400);
+    expect(mocks.certify).not.toHaveBeenCalled();
   });
 });

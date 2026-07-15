@@ -16,12 +16,32 @@ import {
   type TemplateTwinSigningContext,
 } from '../signing-gate';
 import { DOCX_MIME_TYPE } from '../storage/keys';
+import { canonicalSoapSha256 } from '../soap-binding';
 import {
   buildTemplateTwinIntegrationFixture,
   factsForMode,
 } from './integration-fixture';
 
 const VALIDATION_NOW = '2026-07-15T12:00:00.000Z';
+const REVIEWED_SOAP = [
+  '## Subjective',
+  'No synthetic allergies reported.',
+  '## Assessment',
+  'Synthetic wrist discomfort.',
+  '## Plan',
+  'Use synthetic brace.',
+].join('\n');
+const SOURCE_PRIVACY_SCAN_EVIDENCE = {
+  profileVersion: 'template-twin-source-phi-safe-alpha-v1' as const,
+  provider: 'anthropic' as const,
+  model: 'synthetic-privacy-model-v1',
+  scannedAt: '2026-07-15T12:00:00.000Z',
+  scannedPartCount: 8,
+  approvedStaticAssetPolicySha256: 'a'.repeat(64),
+  approvedStaticAssetCount: 0,
+  approvedStaticAssetUsedCount: 0,
+  approvedStaticAssetUsageSha256: 'b'.repeat(64),
+};
 
 let baseContext: TemplateTwinSigningContext;
 
@@ -47,6 +67,8 @@ function persistedMapping(mapping: SemanticMapping) {
 beforeAll(async () => {
   const fixture = await buildTemplateTwinIntegrationFixture();
   const prepared = await prepareTemplateTwinFill({
+    soapVersion: 7,
+    soapFinal: REVIEWED_SOAP,
     compiledVersionId: 'compiled-1',
     noteTemplateId: 'template-1',
     noteTemplateVersion: 1,
@@ -75,6 +97,8 @@ beforeAll(async () => {
     visitId: 'visit-1',
     practiceId: 'practice-1',
     visitStatus: 'READY',
+    soapVersion: 7,
+    soapFinal: REVIEWED_SOAP,
     noteTemplateId: 'template-1',
     noteTemplateVersion: 1,
     noteTemplate: {
@@ -89,13 +113,20 @@ beforeAll(async () => {
         compiledDocumentIr: fixture.ir,
         structureSha256: fixture.ir.structureSha256,
         staticContentSha256: fixture.ir.staticContentSha256,
+        latestTestOutputObjectKey: certificationOutputObjectKey,
+        latestTestOutputVersionId: 'provider-test-version-synthetic',
+        latestTestOutputEtag: 'provider-test-etag-synthetic',
+        latestTestOutputSha256: outputSha256,
         certificationStatus: 'CERTIFIED',
         sourceArtifact: {
           practiceId: 'practice-1',
+          objectVersionId: 'provider-source-version-synthetic',
+          objectEtag: 'provider-source-etag-synthetic',
           sha256: fixture.ir.source.sha256,
           mimeType: fixture.ir.source.mimeType,
           sizeBytes: fixture.ir.source.sizeBytes,
           validationStatus: 'accepted',
+          privacyScanEvidence: SOURCE_PRIVACY_SCAN_EVIDENCE,
         },
         fields: fixture.ir.fields.map((field) => {
           const mapping = fixture.mappings.find(
@@ -112,7 +143,12 @@ beforeAll(async () => {
           id: 'certification-1',
           compiledStructureSha256: fixture.ir.structureSha256,
           approvedMappingsSha256: mappingsSha256,
+          sourcePrivacyScanEvidenceSha256: canonicalSha256(
+            SOURCE_PRIVACY_SCAN_EVIDENCE,
+          ),
           testOutputObjectKey: certificationOutputObjectKey,
+          testOutputVersionId: 'provider-test-version-synthetic',
+          testOutputEtag: 'provider-test-etag-synthetic',
           testOutputSha256: outputSha256,
         },
       },
@@ -139,12 +175,18 @@ beforeAll(async () => {
       conflictCount: prepared.manifest.counts.conflicts,
       criticalUnresolvedCount: prepared.manifest.counts.criticalUnresolved,
       outputObjectKey,
+      outputVersionId: 'provider-output-version-synthetic',
+      outputEtag: 'provider-output-etag-synthetic',
       outputSha256,
       outputMimeType: DOCX_MIME_TYPE,
       outputSizeBytes: prepared.render.document.byteLength,
       staticContentSha256: fixture.ir.staticContentSha256,
       roundTripVerified: prepared.render.verification.verified,
       roundTripVerification: prepared.render.verification,
+      reviewedAt: new Date('2026-07-15T12:03:00.000Z'),
+      reviewedById: 'doctor-1',
+      reviewedManifestVersion: prepared.manifest.manifestVersion,
+      reviewedManifestSha256: prepared.manifestSha256,
       signedDecisionAt: null,
       updatedAt: new Date('2026-07-15T12:04:00.000Z'),
     },
@@ -210,9 +252,81 @@ describe('Template Twin server-side signing gate', () => {
       id: 'fill-1',
       manifestVersion: 1,
       manifestSha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+      reviewedAt: new Date('2026-07-15T12:03:00.000Z'),
+      reviewedById: 'doctor-1',
+      soapVersion: 7,
+      soapSha256: canonicalSoapSha256(REVIEWED_SOAP),
+      outputObjectKey: expect.stringMatching(/\.docx$/),
+      outputVersionId: 'provider-output-version-synthetic',
+      outputEtag: 'provider-output-etag-synthetic',
       outputSha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+      outputSizeBytes: expect.any(Number),
       updatedAt: new Date('2026-07-15T12:04:00.000Z'),
     });
+  });
+
+  it('blocks a verified output until the physician confirms the current manifest', () => {
+    const input = validContext();
+    input.templateTwinFill!.reviewedAt = null;
+    input.templateTwinFill!.reviewedById = null;
+    input.templateTwinFill!.reviewedManifestVersion = null;
+    input.templateTwinFill!.reviewedManifestSha256 = null;
+
+    const result = assessTemplateTwinSigning(input);
+
+    expect(result.ready).toBe(false);
+    expect(result.blockerCodes).toContain('FILL_REVIEW_REQUIRED');
+    expect(result.claim).toBeNull();
+  });
+
+  it('blocks a stale acknowledgement after the manifest version/hash changes', () => {
+    const input = validContext();
+    input.templateTwinFill!.reviewedManifestVersion = 0;
+    input.templateTwinFill!.reviewedManifestSha256 = '0'.repeat(64);
+
+    const result = assessTemplateTwinSigning(input);
+
+    expect(result.ready).toBe(false);
+    expect(result.blockerCodes).toContain('FILL_REVIEW_REQUIRED');
+    expect(result.claim).toBeNull();
+  });
+
+  it('blocks direct signing while any field remains in the attention lane', () => {
+    const input = validContext();
+    input.templateTwinFill!.needsReviewCount = 1;
+
+    const result = assessTemplateTwinSigning(input);
+
+    expect(result.ready).toBe(false);
+    expect(result.blockerCodes).toContain('FILL_REVIEW_REQUIRED');
+    expect(result.claim).toBeNull();
+  });
+
+  it.each([
+    ['allergy', 'Penicillin allergy added after Twin review.'],
+    ['medication', 'Synthetic medication dose changed after Twin review.'],
+    ['assessment', 'Synthetic assessment changed after Twin review.'],
+    ['plan', 'Synthetic plan changed after Twin review.'],
+  ])('blocks signing after edited %s content', (_section, edit) => {
+    const input = validContext();
+    input.soapVersion = 8;
+    input.soapFinal = `${REVIEWED_SOAP}\n${edit}`;
+
+    const result = assessTemplateTwinSigning(input);
+
+    expect(result.ready).toBe(false);
+    expect(result.blockerCodes).toContain('SOAP_BINDING_MISMATCH');
+    expect(result.claim).toBeNull();
+  });
+
+  it('blocks signing when SOAP bytes change without a version bump', () => {
+    const input = validContext();
+    input.soapFinal = `${REVIEWED_SOAP} `;
+
+    const result = assessTemplateTwinSigning(input);
+
+    expect(result.ready).toBe(false);
+    expect(result.blockerCodes).toContain('SOAP_BINDING_MISMATCH');
   });
 
   it('accepts an already-signed immutable manifest for re-delivery', () => {
@@ -240,7 +354,15 @@ describe('Template Twin server-side signing gate', () => {
     expect(result.claim).toBeNull();
   });
 
-  it.each(['mapping', 'structure', 'source', 'static', 'compiler'] as const)(
+  it.each([
+    'mapping',
+    'structure',
+    'source',
+    'source privacy evidence',
+    'static',
+    'compiler',
+    'provider object',
+  ] as const)(
     'binds certification to the exact %s provenance',
     (drift) => {
       const input = validContext();
@@ -255,11 +377,18 @@ describe('Template Twin server-side signing gate', () => {
         case 'source':
           compiled.sourceArtifact.sha256 = '0'.repeat(64);
           break;
+        case 'source privacy evidence':
+          compiled.sourceArtifact.privacyScanEvidence = null;
+          break;
         case 'static':
           compiled.staticContentSha256 = '0'.repeat(64);
           break;
         case 'compiler':
           compiled.compilerVersion = 'tampered-compiler/1.0.0';
+          break;
+        case 'provider object':
+          compiled.certification!.testOutputVersionId =
+            'provider-test-version-replaced';
           break;
       }
 
@@ -344,6 +473,19 @@ describe('Template Twin server-side signing gate', () => {
     expect(result.blockerCodes).toContain('ROUND_TRIP_UNVERIFIED');
   });
 
+  it('requires an output-derived disposition for every IR field proof', () => {
+    const input = validContext();
+    const proof = input.templateTwinFill!.roundTripVerification as {
+      fields: Array<{ disposition?: string }>;
+    };
+    delete proof.fields[0]!.disposition;
+
+    const result = assessTemplateTwinSigning(input);
+
+    expect(result.ready).toBe(false);
+    expect(result.blockerCodes).toContain('ROUND_TRIP_UNVERIFIED');
+  });
+
   it('rejects stale JSON, blocking validation, and unresolved critical fields', () => {
     const input = validContext();
     input.templateTwinFill!.manifestSha256 = '0'.repeat(64);
@@ -393,5 +535,17 @@ describe('Template Twin server-side signing gate', () => {
         'ROUND_TRIP_UNVERIFIED',
       ]),
     );
+  });
+
+  it('fails closed for a pre-alpha fill without provider version identity', () => {
+    const input = validContext();
+    input.templateTwinFill!.outputVersionId = null;
+    input.templateTwinFill!.outputEtag = null;
+
+    const result = assessTemplateTwinSigning(input);
+
+    expect(result.ready).toBe(false);
+    expect(result.blockerCodes).toContain('OUTPUT_MISSING');
+    expect(result.claim).toBeNull();
   });
 });

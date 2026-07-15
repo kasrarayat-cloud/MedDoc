@@ -67,6 +67,8 @@ describe('Template Twin pure fill-engine input equivalence', () => {
   it('resolves voice and typed evidence to the same clinical fields before rendering', async () => {
     const fixture = await buildTemplateTwinIntegrationFixture();
     const common = {
+      soapVersion: 1,
+      soapFinal: 'Synthetic SOAP reviewed for equivalent voice and typed evidence.',
       compiledVersionId: 'compiled-synthetic-1',
       noteTemplateId: 'template-synthetic-1',
       noteTemplateVersion: 1,

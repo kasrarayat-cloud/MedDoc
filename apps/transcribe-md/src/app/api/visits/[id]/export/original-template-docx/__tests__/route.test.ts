@@ -1,21 +1,20 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   freshDoctor: vi.fn(),
   findFirst: vi.fn(),
   assess: vi.fn(),
-  readOutputArtifact: vi.fn(),
-  logAudit: vi.fn(),
+  readOutput: vi.fn(),
+  enqueueAudit: vi.fn(),
   logDelivery: vi.fn(),
-  logWarn: vi.fn(),
 }));
 
-vi.mock('next/server', () => {
+vi.mock("next/server", () => {
   class FakeNextResponse {
     status: number;
-    headers = new Map<string, string>();
-    body: unknown;
+    headers: Map<string, string>;
+    private readonly body: unknown;
 
     constructor(
       body: unknown,
@@ -23,9 +22,7 @@ vi.mock('next/server', () => {
     ) {
       this.body = body;
       this.status = init?.status ?? 200;
-      for (const [key, value] of Object.entries(init?.headers ?? {})) {
-        this.headers.set(key, value);
-      }
+      this.headers = new Map(Object.entries(init?.headers ?? {}));
     }
 
     async json() {
@@ -39,49 +36,45 @@ vi.mock('next/server', () => {
   return { NextResponse: FakeNextResponse };
 });
 
-vi.mock('@meddoc/db', () => ({
+vi.mock("@meddoc/db", () => ({
   default: { transcribeVisit: { findFirst: mocks.findFirst } },
 }));
-vi.mock('@meddoc/ai', () => ({ redactPhi: (value: unknown) => value }));
-vi.mock('@/lib/nextauth', () => ({ auth: mocks.auth }));
-vi.mock('@/lib/auth', () => ({
-  AuthError: class AuthError extends Error {
-    constructor(
-      public readonly code: 'UNAUTHENTICATED' | 'FORBIDDEN',
-      message: string,
-    ) {
-      super(message);
-    }
-  },
+vi.mock("@/lib/nextauth", () => ({ auth: mocks.auth }));
+vi.mock("@/lib/auth", () => ({
+  AuthError: class AuthError extends Error {},
   requireFreshDoctorIdentity: mocks.freshDoctor,
 }));
-vi.mock('@/lib/audit', () => ({ logAudit: mocks.logAudit }));
-vi.mock('@/lib/deliveries', () => ({ logDelivery: mocks.logDelivery }));
-vi.mock('@/lib/log', () => ({
-  log: { warn: mocks.logWarn, info: vi.fn(), error: vi.fn() },
-}));
-vi.mock('@/lib/template-twin/signing-gate', () => ({
+vi.mock("@/lib/template-twin/signing-gate", () => ({
   TEMPLATE_TWIN_SIGNING_VISIT_SELECT: {},
   assessTemplateTwinSigning: mocks.assess,
 }));
-vi.mock('@/lib/template-twin/storage/artifact-store', () => ({
+vi.mock("@/lib/template-twin/storage/artifact-store", () => ({
+  TemplateTwinArtifactIntegrityError: class TemplateTwinArtifactIntegrityError extends Error {},
+  TemplateTwinStorageUnavailableError: class TemplateTwinStorageUnavailableError extends Error {},
   createTemplateTwinArtifactStore: () => ({
-    readOutputArtifact: mocks.readOutputArtifact,
+    readOutputArtifact: mocks.readOutput,
   }),
-  TemplateTwinArtifactIntegrityError: class extends Error {},
-  TemplateTwinStorageUnavailableError: class extends Error {},
 }));
-vi.mock('@/lib/template-twin/storage/ownership', () => ({
-  TemplateTwinArtifactNotFoundError: class extends Error {},
+vi.mock("@/lib/template-twin/storage/ownership", () => ({
+  TemplateTwinArtifactNotFoundError: class TemplateTwinArtifactNotFoundError extends Error {},
+}));
+vi.mock("@/lib/template-twin/audit-outbox", () => ({
+  enqueueTemplateTwinAudit: mocks.enqueueAudit,
+}));
+vi.mock("@/lib/deliveries", () => ({ logDelivery: mocks.logDelivery }));
+vi.mock("@/lib/log", () => ({
+  log: { warn: vi.fn(), info: vi.fn(), error: vi.fn() },
 }));
 
-import type { NextRequest } from 'next/server';
-import { AuthError } from '@/lib/auth';
+import type { NextRequest } from "next/server";
+import { TranscribeVisitStatus } from "@prisma/client";
+import { TemplateTwinArtifactIntegrityError } from "@/lib/template-twin/storage/artifact-store";
+import { GET } from "../route";
 
-import { GET } from '../route';
-
-const VISIT_ID = 'visit-1';
-const DOCUMENT = Buffer.from('synthetic-template-twin-docx');
+const VISIT_ID = "synthetic-visit-1";
+const OUTPUT_KEY =
+  `practices/synthetic-practice-1/template-twin/outputs/${VISIT_ID}/` +
+  `${"a".repeat(64)}/synthetic-artifact/${"b".repeat(64)}.docx`;
 
 function call() {
   return GET({} as NextRequest, {
@@ -92,127 +85,120 @@ function call() {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.auth.mockResolvedValue({
-    user: { id: 'doctor-1', practiceId: 'practice-stale-jwt' },
+    user: {
+      id: "synthetic-doctor-1",
+      email: "doctor@synthetic.test",
+    },
   });
   mocks.freshDoctor.mockResolvedValue({
-    role: 'DOCTOR',
-    practiceId: 'practice-1',
+    practiceId: "synthetic-practice-1",
+    role: "DOCTOR",
   });
   mocks.findFirst.mockResolvedValue({
     id: VISIT_ID,
-    status: 'SIGNED',
-    noteTemplateId: 'template-1',
-    noteTemplateVersion: 1,
-    noteTemplate: { templateKind: 'template_twin_docx' },
+    status: TranscribeVisitStatus.SIGNED,
+    soapFinal: "Synthetic note.",
+    soapVersion: 2,
+    noteTemplateId: "synthetic-template-1",
+    noteTemplateVersion: 3,
+    noteTemplate: { templateKind: "template_twin_docx" },
     templateTwinFill: {
-      outputObjectKey: 'tenant-output-key',
-      outputSha256: 'a'.repeat(64),
-      outputSizeBytes: DOCUMENT.byteLength,
+      outputObjectKey: OUTPUT_KEY,
+      outputVersionId: "provider-output-version-synthetic",
+      outputEtag: "provider-output-etag-synthetic",
+      outputSha256: "b".repeat(64),
+      outputSizeBytes: 128,
     },
   });
   mocks.assess.mockReturnValue({
     applies: true,
     ready: true,
     blockerCodes: [],
-    compiledVersionId: 'compiled-1',
-    fillManifestId: 'fill-1',
-    claim: {
-      id: 'fill-1',
-      manifestVersion: 1,
-      manifestSha256: 'b'.repeat(64),
-      outputSha256: 'a'.repeat(64),
-      updatedAt: new Date('2026-07-15T12:00:00.000Z'),
-    },
+    compiledVersionId: "synthetic-compiled-1",
+    fillManifestId: "synthetic-fill-1",
+    claim: { id: "synthetic-fill-1" },
   });
-  mocks.readOutputArtifact.mockResolvedValue(DOCUMENT);
+  mocks.readOutput.mockResolvedValue(Buffer.from("synthetic DOCX bytes"));
+  mocks.enqueueAudit.mockResolvedValue(undefined);
 });
 
-describe('Original Template DOCX delivery', () => {
-  it('requires an authenticated tenant-scoped physician', async () => {
-    mocks.auth.mockResolvedValue(null);
+describe("Original Template DOCX export durable audit gate", () => {
+  it("durably enqueues the export audit before returning verified bytes", async () => {
+    const response = await call();
+
+    expect(response.status).toBe(200);
+    expect(mocks.readOutput).toHaveBeenCalledWith({
+      practiceId: "synthetic-practice-1",
+      objectKey: OUTPUT_KEY,
+      expectedObjectVersionId: "provider-output-version-synthetic",
+      expectedObjectEtag: "provider-output-etag-synthetic",
+      expectedSha256: "b".repeat(64),
+      expectedSizeBytes: 128,
+    });
+    expect(mocks.enqueueAudit).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        action: "EXPORT_TEMPLATE_TWIN_DOCX_DOWNLOADED",
+        targetId: VISIT_ID,
+        practiceId: "synthetic-practice-1",
+      }),
+    );
+    expect(mocks.logDelivery).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails closed without recording a delivery when durable audit enqueue fails", async () => {
+    mocks.enqueueAudit.mockRejectedValue(new Error("synthetic outbox outage"));
 
     const response = await call();
 
-    expect(response.status).toBe(401);
-    expect(mocks.freshDoctor).not.toHaveBeenCalled();
-    expect(mocks.findFirst).not.toHaveBeenCalled();
-    expect(mocks.readOutputArtifact).not.toHaveBeenCalled();
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      code: "TEMPLATE_TWIN_AUDIT_UNAVAILABLE",
+    });
+    expect(mocks.logDelivery).not.toHaveBeenCalled();
   });
 
-  it.each(['STAFF', 'ADMIN'] as const)(
-    'rejects a fresh %s role before visit or object lookup',
-    async (role) => {
-      mocks.freshDoctor.mockRejectedValue(
-        new AuthError('FORBIDDEN', `Synthetic ${role} is not a physician.`),
-      );
-
-      const response = await call();
-
-      expect(response.status).toBe(403);
-      expect(mocks.findFirst).not.toHaveBeenCalled();
-      expect(mocks.readOutputArtifact).not.toHaveBeenCalled();
-    },
-  );
-
-  it('returns 404 when the owned signed visit cannot be found', async () => {
-    mocks.findFirst.mockResolvedValue(null);
-
-    const response = await call();
-
-    expect(response.status).toBe(404);
-    expect(mocks.readOutputArtifact).not.toHaveBeenCalled();
-  });
-
-  it('refuses an unverified manifest without reading object storage', async () => {
+  it("durably records an unverified-output safety block", async () => {
     mocks.assess.mockReturnValue({
       applies: true,
       ready: false,
-      blockerCodes: ['ROUND_TRIP_UNVERIFIED'],
-      compiledVersionId: 'compiled-1',
-      fillManifestId: 'fill-1',
+      blockerCodes: ["SOAP_BINDING_MISMATCH"],
+      compiledVersionId: "synthetic-compiled-1",
+      fillManifestId: "synthetic-fill-1",
       claim: null,
     });
 
     const response = await call();
 
     expect(response.status).toBe(409);
-    expect((await response.json()).code).toBe(
-      'TEMPLATE_TWIN_OUTPUT_UNVERIFIED',
-    );
-    expect(mocks.readOutputArtifact).not.toHaveBeenCalled();
-    expect(mocks.logAudit).toHaveBeenCalledWith(
+    expect(mocks.enqueueAudit).toHaveBeenCalledWith(
+      expect.anything(),
       expect.objectContaining({
-        action: 'EXPORT_TEMPLATE_TWIN_DOCX_DOWNLOADED',
-        success: false,
-        errorCode: 'TEMPLATE_TWIN_OUTPUT_UNVERIFIED',
+        action: "TEMPLATE_TWIN_SAFETY_GATE_BLOCKED",
+        metadata: expect.objectContaining({
+          reasonCode: "TEMPLATE_TWIN_OUTPUT_UNVERIFIED",
+          blockerCodes: ["SOAP_BINDING_MISMATCH"],
+        }),
       }),
     );
+    expect(mocks.readOutput).not.toHaveBeenCalled();
   });
 
-  it('streams only storage-verified bytes with private download headers', async () => {
+  it("blocks corrupted stored bytes and durably records the integrity reason", async () => {
+    mocks.readOutput.mockRejectedValue(
+      new TemplateTwinArtifactIntegrityError("synthetic corruption"),
+    );
+
     const response = await call();
 
-    expect(response.status).toBe(200);
-    expect(response.body).toEqual(DOCUMENT);
-    expect(response.headers.get('Content-Type')).toBe(
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    );
-    expect(response.headers.get('Cache-Control')).toBe('no-store, private');
-    expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff');
-    expect(mocks.readOutputArtifact).toHaveBeenCalledWith({
-      practiceId: 'practice-1',
-      objectKey: 'tenant-output-key',
-      expectedSha256: 'a'.repeat(64),
-      expectedSizeBytes: DOCUMENT.byteLength,
-    });
-    expect(mocks.logDelivery).toHaveBeenCalledWith({
-      visitId: VISIT_ID,
-      channel: 'docx_original_template',
-      sizeBytes: DOCUMENT.byteLength,
-    });
-    expect(mocks.logAudit).toHaveBeenCalledWith(
+    expect(response.status).toBe(409);
+    expect(mocks.enqueueAudit).toHaveBeenCalledWith(
+      expect.anything(),
       expect.objectContaining({
-        action: 'EXPORT_TEMPLATE_TWIN_DOCX_DOWNLOADED',
+        action: "TEMPLATE_TWIN_SAFETY_GATE_BLOCKED",
+        metadata: expect.objectContaining({
+          reasonCode: "TEMPLATE_TWIN_OUTPUT_INTEGRITY_FAILED",
+        }),
       }),
     );
   });

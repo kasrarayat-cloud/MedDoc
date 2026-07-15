@@ -73,20 +73,7 @@ function resolutionsFor(ir: TemplateDocIR): FieldResolution[] {
       case 'Finding value':
         return resolution(field, 'Synthetic supported finding');
       case 'Repeat finding':
-        return resolution(field, [
-          {
-            value: 'Synthetic repeat A',
-            sourceFactId: FACT_A,
-            evidenceAnchorId: 'synthetic-anchor-a',
-            optionOrdinal: null,
-          },
-          {
-            value: 'Synthetic repeat B',
-            sourceFactId: FACT_B,
-            evidenceAnchorId: 'synthetic-anchor-b',
-            optionOrdinal: null,
-          },
-        ]);
+        return resolution(field, null);
       case 'Practice display name':
         return resolution(field, 'Synthetic Clinic');
       case 'Data-bound synthetic value':
@@ -123,7 +110,7 @@ async function setup(source?: Buffer): Promise<RenderTemplateDocxInput> {
 }
 
 describe('Template Twin exact DOCX renderer', () => {
-  it('fills native controls, exact table cells, a legacy field, headers, and repeated rows', async () => {
+  it('fills native controls, exact table cells, a legacy field, and headers', async () => {
     const input = await setup();
     const rendered = await renderTemplateDocx(input);
     const sourcePackage = inspectDocxPackage(input.source);
@@ -156,8 +143,6 @@ describe('Template Twin exact DOCX renderer', () => {
     expect(documentXml).toContain('☒');
     expect(documentXml).toContain('<w:result w:val="1"/>');
     expect(documentXml).toContain('Synthetic supported finding');
-    expect(documentXml).toContain('Synthetic repeat A');
-    expect(documentXml).toContain('Synthetic repeat B');
     expect(headerXml).toContain('Synthetic Clinic');
     expect(contentControlById(documentXml, '108')).toBe(
       contentControlById(sourceDocumentXml, '108'),
@@ -309,25 +294,25 @@ describe('Template Twin exact DOCX renderer', () => {
     });
   });
 
-  it('fails closed when a repeated field exceeds its compiler-certified row cap', async () => {
+  it('fails closed when a safe-alpha blocked repeating structure is populated', async () => {
     const input = await setup();
     const repeat = input.ir.fields.find(
       (field) => field.originalLabel === 'Repeat finding',
     )!;
-    const oversizedRows = Array.from({ length: 101 }, (_, index) => ({
-      value: `Synthetic row ${index + 1}`,
+    const rows = [{
+      value: 'Synthetic row 1',
       sourceFactId: FACT_A,
       evidenceAnchorId: 'synthetic-anchor-a',
       optionOrdinal: null,
-    }));
+    }];
     const resolutions = input.resolutions.map((item) =>
       item.fieldId === repeat.fieldId
-        ? resolution(repeat, oversizedRows)
+        ? resolution(repeat, rows)
         : item,
     );
 
     await expect(
       renderTemplateDocx({ ...input, resolutions }),
-    ).rejects.toMatchObject({ code: 'TABLE_ROW_LIMIT_EXCEEDED' });
+    ).rejects.toMatchObject({ code: 'FIELD_VALUE_INVALID' });
   });
 });

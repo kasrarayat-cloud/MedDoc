@@ -30,6 +30,8 @@ const mocks = vi.hoisted(() => ({
   findUnique: vi.fn(),
   update: vi.fn(),
   updateMany: vi.fn(),
+  fillUpdateMany: vi.fn(),
+  transaction: vi.fn(),
   requireSession: vi.fn(),
   logAudit: vi.fn(),
   computeEmScore: vi.fn(),
@@ -41,7 +43,10 @@ vi.mock('@meddoc/db', () => {
     update: mocks.update,
     updateMany: mocks.updateMany,
   };
-  const prisma = { transcribeVisit };
+  const prisma = {
+    transcribeVisit,
+    $transaction: mocks.transaction,
+  };
   return { default: prisma, prisma };
 });
 vi.mock('@/lib/auth', () => ({ requireSession: mocks.requireSession }));
@@ -116,6 +121,18 @@ beforeEach(() => {
   });
   mocks.findUnique.mockResolvedValue(visitRow());
   mocks.updateMany.mockResolvedValue({ count: 1 });
+  mocks.fillUpdateMany.mockResolvedValue({ count: 1 });
+  mocks.transaction.mockImplementation(
+    async (callback: (tx: unknown) => Promise<unknown>) =>
+      callback({
+        transcribeVisit: {
+          findUnique: mocks.findUnique,
+          update: mocks.update,
+          updateMany: mocks.updateMany,
+        },
+        templateTwinFillManifest: { updateMany: mocks.fillUpdateMany },
+      }),
+  );
   mocks.update.mockResolvedValue({ id: VISIT });
   // Default: every SOAP body scores the same code → no E/M level change.
   mocks.computeEmScore.mockResolvedValue({ code: '99213' });

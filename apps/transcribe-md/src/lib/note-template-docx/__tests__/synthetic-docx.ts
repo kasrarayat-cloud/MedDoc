@@ -68,13 +68,17 @@ export interface SyntheticDocxOptions {
   documentXml?: string;
   extraEntries?: Record<string, string | Uint8Array>;
   compression?: "STORE" | "DEFLATE";
+  archiveComment?: string;
+  firstEntryComment?: string;
 }
 
 export async function buildSyntheticDocx(
   options: SyntheticDocxOptions = {},
 ): Promise<Buffer> {
   const zip = new JSZip();
-  zip.file("[Content_Types].xml", options.contentTypes ?? CONTENT_TYPES);
+  zip.file("[Content_Types].xml", options.contentTypes ?? CONTENT_TYPES, {
+    comment: options.firstEntryComment,
+  });
   zip.file("_rels/.rels", options.rootRelationships ?? ROOT_RELATIONSHIPS);
   zip.file("word/document.xml", options.documentXml ?? DOCUMENT_XML);
   zip.file(
@@ -98,6 +102,7 @@ export async function buildSyntheticDocx(
     type: "nodebuffer",
     compression: options.compression ?? "DEFLATE",
     compressionOptions: { level: 6 },
+    comment: options.archiveComment,
   });
 }
 

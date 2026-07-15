@@ -81,10 +81,12 @@ function reviewData(): TemplateTwinReviewData {
   return {
     fillManifestId: 'fill-synthetic-1',
     manifestVersion: 1,
+    manifestSha256: 'e'.repeat(64),
     templateName: 'Synthetic clinic template',
     templateVersion: 3,
     processingStatus: 'review_required',
     roundTripVerified: true,
+    physicianReviewConfirmed: false,
     layoutWarningCodes: [],
     dataIntegrityError: false,
     counts: {
@@ -240,6 +242,37 @@ describe('TemplateTwinReview', () => {
     expect(within(filteredList).getByText('Synthetic measurement')).toBeInTheDocument();
   });
 
+  it('requires an explicit whole-document acknowledgement for the exact manifest', async () => {
+    const data = onlyField({ status: 'verified', validationIssues: [] });
+    data.counts.needsReview = 0;
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<TemplateTwinReview data={data} visitId="visit-synthetic-1" />);
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'I reviewed every Template Twin field' }),
+    );
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/visits/visit-synthetic-1/template-twin/review',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          expectedManifestVersion: 1,
+          expectedManifestSha256: 'e'.repeat(64),
+        }),
+      }),
+    );
+    expect(mocks.toastSuccess).toHaveBeenCalledWith(
+      'Original Template DOCX review confirmed',
+    );
+    expect(mocks.refresh).toHaveBeenCalledTimes(1);
+  });
+
   it('submits an exact dropdown correction with optimistic version and evidence IDs', async () => {
     const fetchMock = successfulCorrectionFetch();
     render(<TemplateTwinReview data={reviewData()} visitId="visit-synthetic-1" />);
@@ -337,6 +370,7 @@ describe('serializeTemplateTwinReview', () => {
       id: 'fill-synthetic-1',
       status: 'REVIEW_REQUIRED',
       manifestVersion: 1,
+      manifestSha256: 'e'.repeat(64),
       fillManifest,
       filledCount: 1,
       needsReviewCount: 0,
@@ -344,6 +378,9 @@ describe('serializeTemplateTwinReview', () => {
       conflictCount: 0,
       criticalUnresolvedCount: 0,
       roundTripVerified: true,
+      reviewedAt: null,
+      reviewedManifestVersion: null,
+      reviewedManifestSha256: null,
       compiledVersion: {
         noteTemplate: { name: 'Synthetic clinic template' },
         fields: [
@@ -385,6 +422,8 @@ describe('serializeTemplateTwinReview', () => {
     const serialized = serializeTemplateTwinReview(
       row({
         manifestVersion: 1,
+        soapVersion: 4,
+        soapSha256: 'a'.repeat(64),
         compiledVersionId: 'compiled-synthetic-1',
         noteTemplateId: 'template-synthetic-1',
         noteTemplateVersion: 3,
@@ -440,6 +479,7 @@ describe('serializeTemplateTwinReview', () => {
     );
 
     expect(serialized?.templateVersion).toBe(3);
+    expect(serialized?.manifestSha256).toBe('e'.repeat(64));
     expect(serialized?.fields[0]?.evidence).toEqual([
       expect.objectContaining({
         quote: 'The synthetic symptom is moderate today.',

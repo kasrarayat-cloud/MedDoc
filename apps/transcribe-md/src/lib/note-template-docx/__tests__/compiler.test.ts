@@ -86,9 +86,83 @@ describe("deterministic Template Twin DOCX compiler", () => {
 
     expect(repeatingTable?.repeatPrototypeRow).toBe(0);
     expect(repeatField?.rowPrototype).toBe(true);
+    expect(repeatField?.detectionStatus).toBe("unsupported");
     expect(repeatField?.rendererBinding.repeatAncestorPath).toBeTruthy();
     expect(repeatField?.tableId).toBe(repeatingTable?.tableId);
     expect(repeatField?.rendererBinding.path).toMatch(/^\/w:document\[0\]/);
+    expect(compiled.unsupported).toContainEqual(
+      expect.objectContaining({
+        code: "REPEATING_STRUCTURE_UNSUPPORTED_SAFE_ALPHA",
+        blocksCertification: true,
+      }),
+    );
+  });
+
+  it("certification-blocks unbound visible placeholders", async () => {
+    const documentXml = syntheticOpc.documentXml.replace(
+      "Synthetic clinical template",
+      "Synthetic template &lt;&lt;insert patient concern&gt;&gt;",
+    );
+    const compiled = compileTemplateDocx(
+      await buildSyntheticDocx({ documentXml }),
+    );
+    expect(compiled.unsupported).toContainEqual(
+      expect.objectContaining({
+        code: "UNBOUND_ORDINARY_PLACEHOLDER",
+        blocksCertification: true,
+      }),
+    );
+  });
+
+  it("certification-blocks rich-text and compatibility representations", async () => {
+    const richText = `<w:p><w:sdt><w:sdtPr><w:id w:val="901"/><w:alias w:val="Synthetic rich narrative"/></w:sdtPr><w:sdtContent><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Rich placeholder</w:t></w:r></w:p><w:p><w:r><w:t>Second paragraph</w:t></w:r></w:p></w:sdtContent></w:sdt></w:p>`;
+    const alternate = `<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"><mc:Choice Requires="w15"><w:p><w:r><w:t>Choice</w:t></w:r></w:p></mc:Choice><mc:Fallback><w:p><w:r><w:t>Fallback</w:t></w:r></w:p></mc:Fallback></mc:AlternateContent>`;
+    const documentXml = syntheticOpc.documentXml
+      .replace("<w:document ", '<w:document xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" ')
+      .replace("<w:sectPr>", `${richText}${alternate}<w:sectPr>`);
+    const compiled = compileTemplateDocx(
+      await buildSyntheticDocx({ documentXml }),
+    );
+    expect(
+      compiled.fields.find(
+        (field) => field.originalLabel === "Synthetic rich narrative",
+      )?.detectionStatus,
+    ).toBe("unsupported");
+    expect(compiled.unsupported.map((item) => item.code)).toEqual(
+      expect.arrayContaining([
+        "RICH_TEXT_CONTENT_CONTROL_UNSUPPORTED_SAFE_ALPHA",
+        "ALTERNATE_CONTENT_UNSUPPORTED_SAFE_ALPHA",
+      ]),
+    );
+  });
+
+  it("blocks a header plus w15 repeating data row before duplicate IDs can be cloned", async () => {
+    const repeating = `<w:sdt><w:sdtPr><w:id w:val="950"/><w:alias w:val="Synthetic repeated medications"/><w15:repeatingSection/></w:sdtPr><w:sdtContent><w:tbl><w:tblGrid><w:gridCol w:w="2000"/><w:gridCol w:w="2000"/></w:tblGrid><w:tr><w:tc><w:p><w:r><w:t>Medication</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>Dose</w:t></w:r></w:p></w:tc></w:tr><w:sdt><w:sdtPr><w:id w:val="951"/><w15:repeatingSectionItem/></w:sdtPr><w:sdtContent><w:tr><w:tc><w:p><w:sdt><w:sdtPr><w:id w:val="952"/><w:alias w:val="Synthetic medication"/><w:text/></w:sdtPr><w:sdtContent><w:r><w:t>Medication placeholder</w:t></w:r></w:sdtContent></w:sdt></w:p></w:tc><w:tc><w:p><w:sdt><w:sdtPr><w:id w:val="952"/><w:alias w:val="Synthetic dose"/><w:text/></w:sdtPr><w:sdtContent><w:r><w:t>Dose placeholder</w:t></w:r></w:sdtContent></w:sdt></w:p></w:tc></w:tr></w:sdtContent></w:sdt></w:tbl></w:sdtContent></w:sdt>`;
+    const compiled = compileTemplateDocx(
+      await buildSyntheticDocx({
+        documentXml: syntheticOpc.documentXml.replace(
+          "<w:sectPr>",
+          `${repeating}<w:sectPr>`,
+        ),
+      }),
+    );
+    expect(compiled.unsupported).toContainEqual(
+      expect.objectContaining({
+        code: "REPEATING_STRUCTURE_UNSUPPORTED_SAFE_ALPHA",
+        blocksCertification: true,
+      }),
+    );
+    const repeatedFields = compiled.fields.filter(
+      (field) =>
+        field.originalLabel.startsWith("Synthetic medication") ||
+        field.originalLabel.startsWith("Synthetic dose"),
+    );
+    expect(repeatedFields).toHaveLength(2);
+    expect(
+      repeatedFields.every(
+        (field) => field.detectionStatus === "unsupported",
+      ),
+    ).toBe(true);
   });
 
   it("surfaces clinically material unsupported constructs instead of dropping them", async () => {

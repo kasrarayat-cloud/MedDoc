@@ -9,7 +9,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@meddoc/db', () => ({
-  default: { noteTemplate: { findMany: vi.fn(), findFirst: vi.fn() } },
+  default: {
+    noteTemplate: { findMany: vi.fn(), findFirst: vi.fn() },
+    user: { findUnique: vi.fn() },
+  },
 }));
 
 import type { NoteTemplate } from '@prisma/client';
@@ -18,6 +21,8 @@ import {
   selectTemplate,
   MissingSystemDefaultTemplateError,
   PinnedTemplateUnavailableError,
+  TemplateTwinWorkerRolloutError,
+  resolveActiveTemplate,
   resolveVisitTemplate,
 } from '../resolve-active-template';
 
@@ -162,6 +167,52 @@ describe('resolveVisitTemplate — immutable retry provenance', () => {
         OR: [{ doctorId: 'doc1' }, { isSystemDefault: true }],
       },
     });
+  });
+
+  it('rejects a pinned Template Twin when the practice rollout flag is off', async () => {
+    process.env.TEMPLATE_TWIN_KILL_SWITCH = 'false';
+    const pinned = tmpl({
+      id: 'twin-disabled',
+      doctorId: 'doc1',
+      templateKind: 'template_twin_docx',
+    });
+    vi.mocked(prisma.noteTemplate.findFirst).mockResolvedValueOnce(pinned);
+    vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({
+      role: 'DOCTOR',
+      isActive: true,
+      practice: { templateTwinEnabled: false },
+    } as never);
+
+    await expect(
+      resolveVisitTemplate({
+        doctorId: 'doc1',
+        pinnedTemplateId: pinned.id,
+        pinnedTemplateVersion: pinned.version,
+      }),
+    ).rejects.toBeInstanceOf(TemplateTwinWorkerRolloutError);
+  });
+
+  it('excludes an active Template Twin from first-pass selection while rollout is disabled', async () => {
+    process.env.TEMPLATE_TWIN_KILL_SWITCH = 'false';
+    const twin = tmpl({
+      id: 'twin-disabled-active',
+      doctorId: 'doc1',
+      encounterType: 'cardiology',
+      templateKind: 'template_twin_docx',
+    });
+    vi.mocked(prisma.noteTemplate.findMany).mockResolvedValueOnce([
+      systemDefault,
+      twin,
+    ]);
+    vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({
+      role: 'DOCTOR',
+      isActive: true,
+      practice: { templateTwinEnabled: false },
+    } as never);
+
+    await expect(
+      resolveActiveTemplate({ doctorId: 'doc1', encounterType: 'cardiology' }),
+    ).resolves.toBe(systemDefault);
   });
 
   it('fails closed when a pin is partial or unavailable', async () => {

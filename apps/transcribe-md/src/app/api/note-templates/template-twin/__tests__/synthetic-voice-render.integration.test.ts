@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  audit: vi.fn(),
+  legacyAudit: vi.fn(),
   completeEntities: vi.fn(),
   createStore: vi.fn(),
   findTemplate: vi.fn(),
@@ -13,6 +13,9 @@ const mocks = vi.hoisted(() => ({
   transcribe: vi.fn(),
   transaction: vi.fn(),
   updateCompiled: vi.fn(),
+  ledgerUpdate: vi.fn(),
+  ledgerFind: vi.fn(),
+  outboxCreate: vi.fn(),
 }));
 
 vi.mock('next/server', () => {
@@ -77,7 +80,7 @@ vi.mock('@/lib/rate-limit', async (importOriginal) => {
   return { ...actual, rateLimitOr429: mocks.rateLimitOr429 };
 });
 
-vi.mock('@/lib/audit', () => ({ logAudit: mocks.audit }));
+vi.mock('@/lib/audit', () => ({ logAudit: mocks.legacyAudit }));
 
 vi.mock('@/lib/template-twin/storage', async (importOriginal) => {
   const actual = await importOriginal<
@@ -113,6 +116,10 @@ const SOURCE_KEY =
   'practices/practice-synthetic-route-render/template-twin/sources/lineage-synthetic/v1/source.docx';
 const DOCX_MIME =
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document' as const;
+const SOURCE_VERSION_ID = 'provider-source-version-synthetic';
+const SOURCE_ETAG = 'provider-source-etag-synthetic';
+const OUTPUT_VERSION_ID = 'provider-output-version-synthetic';
+const OUTPUT_ETAG = 'provider-output-etag-synthetic';
 
 type Fixture = Awaited<ReturnType<typeof buildTemplateTwinIntegrationFixture>>;
 
@@ -120,6 +127,8 @@ interface PersistedSyntheticProof {
   latestSyntheticTestManifest: unknown | null;
   latestTestMappingsSha256: string | null;
   latestTestOutputObjectKey: string | null;
+  latestTestOutputVersionId: string | null;
+  latestTestOutputEtag: string | null;
   latestTestOutputSha256: string | null;
   latestTestStaticContentSha256: string | null;
   latestTestRoundTrip: unknown | null;
@@ -174,6 +183,37 @@ function tinySyntheticWav(): Buffer {
   return wav;
 }
 
+function syntheticVoiceRequest(): {
+  audio: Buffer;
+  mappingsSha256: string;
+  request: Request;
+} {
+  const audio = tinySyntheticWav();
+  const browserAudio = new Uint8Array(audio.byteLength);
+  browserAudio.set(audio);
+  const mappingsSha256 = templateTwinMappingsSha256(fixture.mappings);
+  const form = new FormData();
+  form.set(
+    'audio',
+    new File([browserAudio], 'synthetic-one-sample.wav', {
+      type: 'audio/wav',
+    }),
+  );
+  form.set('expectedMappingsSha256', mappingsSha256);
+  return {
+    audio,
+    mappingsSha256,
+    request: {
+      url: `https://app.synthetic.test/api/note-templates/template-twin/${TEMPLATE_ID}/synthetic-test-voice`,
+      headers: new Headers({
+        origin: 'https://app.synthetic.test',
+        'sec-fetch-site': 'same-origin',
+      }),
+      formData: async () => form,
+    } as unknown as Request,
+  };
+}
+
 function templateRow() {
   return {
     id: TEMPLATE_ID,
@@ -189,12 +229,19 @@ function templateRow() {
       compiledDocumentIr: fixture.ir,
       certificationStatus: 'DRAFT',
       latestTestMappingsSha256: proof.latestTestMappingsSha256,
+      latestSyntheticTestManifest: proof.latestSyntheticTestManifest,
+      latestTestOutputObjectKey: proof.latestTestOutputObjectKey,
+      latestTestOutputVersionId: proof.latestTestOutputVersionId,
+      latestTestOutputEtag: proof.latestTestOutputEtag,
       latestTestOutputSha256: proof.latestTestOutputSha256,
+      latestTestStaticContentSha256: proof.latestTestStaticContentSha256,
       latestTestVerifiedAt: proof.latestTestVerifiedAt,
       latestTestRoundTrip: proof.latestTestRoundTrip,
       sourceArtifact: {
         practiceId: SESSION.user.practiceId,
         objectKey: SOURCE_KEY,
+        objectVersionId: SOURCE_VERSION_ID,
+        objectEtag: SOURCE_ETAG,
         sha256: sourceSha256,
         sizeBytes: fixture.source.byteLength,
         mimeType: DOCX_MIME,
@@ -213,6 +260,8 @@ function inMemoryStorage(): TemplateTwinArtifactStore {
       expect(input).toEqual({
         practiceId: SESSION.user.practiceId,
         objectKey: SOURCE_KEY,
+        expectedObjectVersionId: SOURCE_VERSION_ID,
+        expectedObjectEtag: SOURCE_ETAG,
         expectedSha256: sourceSha256,
         expectedSizeBytes: fixture.source.byteLength,
       });
@@ -231,12 +280,28 @@ function inMemoryStorage(): TemplateTwinArtifactStore {
       return {
         bucket: 'synthetic-memory-only',
         objectKey,
+        objectVersionId: OUTPUT_VERSION_ID,
+        objectEtag: OUTPUT_ETAG,
         sha256: outputSha256,
         mimeType: DOCX_MIME,
         sizeBytes: document.byteLength,
         created: true,
       };
     }),
+  };
+}
+
+function syntheticTransactionClient() {
+  return {
+    templateTwinCompiledVersion: {
+      findUnique: mocks.findCompiled,
+      update: mocks.updateCompiled,
+    },
+    templateTwinObjectLedger: {
+      updateMany: mocks.ledgerUpdate,
+      findUnique: mocks.ledgerFind,
+    },
+    templateTwinAuditOutbox: { create: mocks.outboxCreate },
   };
 }
 
@@ -270,6 +335,8 @@ beforeEach(() => {
     latestSyntheticTestManifest: null,
     latestTestMappingsSha256: null,
     latestTestOutputObjectKey: null,
+    latestTestOutputVersionId: null,
+    latestTestOutputEtag: null,
     latestTestOutputSha256: null,
     latestTestStaticContentSha256: null,
     latestTestRoundTrip: null,
@@ -300,39 +367,25 @@ beforeEach(() => {
       return { id: COMPILED_ID };
     },
   );
+  mocks.ledgerUpdate.mockResolvedValue({ count: 1 });
+  mocks.ledgerFind.mockResolvedValue(null);
+  mocks.outboxCreate.mockResolvedValue({ id: 'synthetic-proof-audit' });
   mocks.transaction.mockImplementation(
-    async (operation: (tx: unknown) => Promise<unknown>) =>
-      operation({
-        templateTwinCompiledVersion: {
-          findUnique: mocks.findCompiled,
-          update: mocks.updateCompiled,
-        },
-      }),
+    async (operation: (tx: unknown) => Promise<unknown>) => {
+      const proofBeforeTransaction = { ...proof };
+      try {
+        return await operation(syntheticTransactionClient());
+      } catch (error) {
+        proof = proofBeforeTransaction;
+        throw error;
+      }
+    },
   );
 });
 
 describe('Template Twin synthetic voice route to exact original DOCX', () => {
   it('persists a verified proof after real projection, resolution, validation, rendering, and round-trip checks', async () => {
-    const audio = tinySyntheticWav();
-    const browserAudio = new Uint8Array(audio.byteLength);
-    browserAudio.set(audio);
-    const mappingsSha256 = templateTwinMappingsSha256(fixture.mappings);
-    const form = new FormData();
-    form.set(
-      'audio',
-      new File([browserAudio], 'synthetic-one-sample.wav', {
-        type: 'audio/wav',
-      }),
-    );
-    form.set('expectedMappingsSha256', mappingsSha256);
-    const request = {
-      url: `https://app.quillmd.test/api/note-templates/template-twin/${TEMPLATE_ID}/synthetic-test-voice`,
-      headers: new Headers({
-          origin: 'https://app.quillmd.test',
-          'sec-fetch-site': 'same-origin',
-      }),
-      formData: async () => form,
-    } as unknown as Request;
+    const { audio, mappingsSha256, request } = syntheticVoiceRequest();
 
     const response = await POST(request, {
       params: Promise.resolve({ id: TEMPLATE_ID }),
@@ -373,6 +426,15 @@ describe('Template Twin synthetic voice route to exact original DOCX', () => {
       validation: { valid: true },
       counts: { filled: fixture.ir.fields.length, needsReview: 0 },
     });
+    expect(mocks.ledgerUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          state: 'CLAIMED',
+          claimType: 'compiled_test_output',
+          claimId: COMPILED_ID,
+        }),
+      }),
+    );
 
     const output = outputs.get(proof.latestTestOutputObjectKey!);
     expect(output).toBeDefined();
@@ -401,15 +463,78 @@ describe('Template Twin synthetic voice route to exact original DOCX', () => {
         },
       },
     });
-    expect(mocks.audit).toHaveBeenCalledWith(
-      expect.objectContaining({
+    expect(mocks.outboxCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        eventKey: expect.stringMatching(
+          new RegExp(
+            `^template-twin:synthetic-tested:${COMPILED_ID}:[0-9a-f-]{36}$`,
+          ),
+        ),
+        practiceId: SESSION.user.practiceId,
+        actorId: SESSION.user.id,
+        actorEmailSnapshot: SESSION.user.email,
         action: 'TEMPLATE_TWIN_SYNTHETIC_TESTED',
+        targetType: 'TemplateTwinCompiledVersion',
+        targetId: COMPILED_ID,
         metadata: expect.objectContaining({
           outputSha256: proof.latestTestOutputSha256,
           verified: true,
           inputMode: 'dictation',
         }),
       }),
+    });
+    expect(mocks.ledgerUpdate.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.outboxCreate.mock.invocationCallOrder[0]!,
     );
+  });
+
+  it('does not persist a synthetic proof when durable audit enqueue fails', async () => {
+    mocks.outboxCreate.mockRejectedValue(
+      new Error('synthetic audit outbox unavailable'),
+    );
+    const { request } = syntheticVoiceRequest();
+
+    const response = await POST(request, {
+      params: Promise.resolve({ id: TEMPLATE_ID }),
+    });
+
+    expect(response.status).toBe(503);
+    expect(mocks.updateCompiled).toHaveBeenCalledTimes(1);
+    expect(mocks.ledgerUpdate).toHaveBeenCalledTimes(1);
+    expect(mocks.outboxCreate).toHaveBeenCalledTimes(1);
+    expect(proof).toEqual({
+      latestSyntheticTestManifest: null,
+      latestTestMappingsSha256: null,
+      latestTestOutputObjectKey: null,
+      latestTestOutputVersionId: null,
+      latestTestOutputEtag: null,
+      latestTestOutputSha256: null,
+      latestTestStaticContentSha256: null,
+      latestTestRoundTrip: null,
+      latestTestVerifiedAt: null,
+    });
+  });
+
+  it('reuses one idempotency key when the serializable callback is retried', async () => {
+    mocks.transaction.mockImplementation(
+      async (operation: (tx: unknown) => Promise<unknown>) => {
+        const proofBeforeTransaction = { ...proof };
+        await operation(syntheticTransactionClient());
+        proof = proofBeforeTransaction;
+        return operation(syntheticTransactionClient());
+      },
+    );
+    const { request } = syntheticVoiceRequest();
+
+    const response = await POST(request, {
+      params: Promise.resolve({ id: TEMPLATE_ID }),
+    });
+
+    expect(response.status).toBe(200);
+    const eventKeys = mocks.outboxCreate.mock.calls.map(
+      (call) => call[0].data.eventKey,
+    );
+    expect(eventKeys).toHaveLength(2);
+    expect(new Set(eventKeys).size).toBe(1);
   });
 });

@@ -8,9 +8,10 @@ const mocks = vi.hoisted(() => ({
   noteTemplateCreate: vi.fn(),
   sourceArtifactCreate: vi.fn(),
   compiledVersionCreate: vi.fn(),
-  quarantineCreate: vi.fn(),
   transaction: vi.fn(),
-  logAudit: vi.fn(),
+  ledgerUpdate: vi.fn(),
+  ledgerFind: vi.fn(),
+  outboxCreate: vi.fn(),
 }));
 
 vi.mock('@meddoc/ai', () => ({
@@ -27,10 +28,14 @@ vi.mock('@meddoc/db', () => {
     noteTemplate: { create: mocks.noteTemplateCreate },
     templateTwinSourceArtifact: { create: mocks.sourceArtifactCreate },
     templateTwinCompiledVersion: { create: mocks.compiledVersionCreate },
+    templateTwinObjectLedger: {
+      updateMany: mocks.ledgerUpdate,
+      findUnique: mocks.ledgerFind,
+    },
+    templateTwinAuditOutbox: { create: mocks.outboxCreate },
   };
   const prisma = {
     noteTemplate: { findFirst: mocks.findSystemTemplate },
-    templateTwinSourceArtifact: { create: mocks.quarantineCreate },
     $transaction: mocks.transaction,
   };
   mocks.transaction.mockImplementation(
@@ -39,11 +44,10 @@ vi.mock('@meddoc/db', () => {
   return { default: prisma, prisma };
 });
 
-vi.mock('@/lib/audit', () => ({ logAudit: mocks.logAudit }));
-
 import { createTemplateTwinDraft } from '../create-draft';
 import type { TemplateTwinArtifactStore } from '../storage';
 import { buildTemplateTwinIntegrationFixture } from './integration-fixture';
+import { buildSyntheticDocx } from '../../note-template-docx/__tests__/synthetic-docx';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -53,6 +57,11 @@ beforeEach(() => {
         noteTemplate: { create: mocks.noteTemplateCreate },
         templateTwinSourceArtifact: { create: mocks.sourceArtifactCreate },
         templateTwinCompiledVersion: { create: mocks.compiledVersionCreate },
+        templateTwinObjectLedger: {
+          updateMany: mocks.ledgerUpdate,
+          findUnique: mocks.ledgerFind,
+        },
+        templateTwinAuditOutbox: { create: mocks.outboxCreate },
       }),
   );
   mocks.findSystemTemplate.mockResolvedValue({
@@ -63,7 +72,9 @@ beforeEach(() => {
   mocks.noteTemplateCreate.mockResolvedValue({ id: 'template-synthetic-1' });
   mocks.sourceArtifactCreate.mockResolvedValue({ id: 'source-synthetic-1' });
   mocks.compiledVersionCreate.mockResolvedValue({ id: 'compiled-synthetic-1' });
-  mocks.logAudit.mockResolvedValue(undefined);
+  mocks.outboxCreate.mockResolvedValue({ id: 'outbox-synthetic-1' });
+  mocks.ledgerUpdate.mockResolvedValue({ count: 1 });
+  mocks.ledgerFind.mockResolvedValue(null);
 });
 
 describe('Template Twin upload/compile proposal orchestration', () => {
@@ -91,6 +102,8 @@ describe('Template Twin upload/compile proposal orchestration', () => {
     const storeSourceArtifact = vi.fn().mockResolvedValue({
       bucket: 'synthetic-template-artifacts',
       objectKey: `practices/practice-synthetic-1/template-twin/sources/lineage/v1/artifact/${digest}.docx`,
+      objectVersionId: 'provider-source-version-synthetic',
+      objectEtag: 'provider-source-etag-synthetic',
       sha256: digest,
       mimeType:
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -101,6 +114,11 @@ describe('Template Twin upload/compile proposal orchestration', () => {
 
     const result = await createTemplateTwinDraft({
       source: fixture.source,
+      identity: {
+        name: 'Synthetic orthopedic intake',
+        encounterType: 'Orthopedic initial visit',
+        versionDescription: 'Initial synthetic QA version',
+      },
       actor: {
         userId: 'doctor-synthetic-1',
         userEmail: 'doctor@synthetic.test',
@@ -135,16 +153,34 @@ describe('Template Twin upload/compile proposal orchestration', () => {
         templateKind: 'template_twin_docx',
         status: 'draft',
         version: 1,
+        name: 'Synthetic orthopedic intake',
+        encounterType: 'Orthopedic initial visit',
+        versionDescription: 'Initial synthetic QA version',
       }),
     });
     expect(mocks.sourceArtifactCreate).toHaveBeenCalledWith({
       data: expect.objectContaining({
         practiceId: 'practice-synthetic-1',
         objectKey: expect.stringContaining('/template-twin/sources/'),
+        objectVersionId: 'provider-source-version-synthetic',
+        objectEtag: 'provider-source-etag-synthetic',
         sha256: digest,
         validationStatus: 'accepted',
+        privacyScanEvidence: expect.objectContaining({
+          profileVersion: 'template-twin-source-phi-safe-alpha-v1',
+          approvedStaticAssetCount: 0,
+          approvedStaticAssetUsedCount: 0,
+        }),
       }),
     });
+    expect(mocks.ledgerUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          state: 'CLAIMED',
+          claimType: 'source_artifact',
+        }),
+      }),
+    );
     const compiledData = mocks.compiledVersionCreate.mock.calls[0]![0].data;
     expect(compiledData).toEqual(
       expect.objectContaining({
@@ -161,9 +197,205 @@ describe('Template Twin upload/compile proposal orchestration', () => {
           field.mapping.create.practiceDefault === null,
       ),
     ).toBe(true);
-    expect(mocks.logAudit).toHaveBeenCalledTimes(2);
-    expect(JSON.stringify(mocks.logAudit.mock.calls)).not.toContain(
+    expect(mocks.outboxCreate).toHaveBeenCalledTimes(2);
+    expect(mocks.outboxCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'TEMPLATE_TWIN_SOURCE_UPLOADED',
+        targetId: expect.any(String),
+        status: 'PENDING',
+      }),
+    });
+    expect(mocks.outboxCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'TEMPLATE_TWIN_COMPILED',
+        targetId: expect.any(String),
+        status: 'PENDING',
+      }),
+    });
+    expect(JSON.stringify(mocks.outboxCreate.mock.calls)).not.toContain(
       'synthetic wrist discomfort',
     );
+  });
+
+  it('fails the upload transaction when its durable audit event cannot be enqueued', async () => {
+    const fixture = await buildTemplateTwinIntegrationFixture();
+    mocks.modelComplete.mockImplementation(
+      async (request: { purpose: string }) => {
+        if (request.purpose === 'tm_template_phi_scan') {
+          return { phiFields: [], anyUncertain: false };
+        }
+        if (request.purpose === 'tm_template_parse') {
+          return {
+            mappings: fixture.mappings.map((mapping) => ({
+              ...mapping,
+              status: 'recognized',
+              practiceDefault: null,
+            })),
+          };
+        }
+        throw new Error('Unexpected synthetic model purpose');
+      },
+    );
+    const digest = createHash('sha256').update(fixture.source).digest('hex');
+    const storage = {
+      storeSourceArtifact: vi.fn().mockResolvedValue({
+        bucket: 'synthetic-template-artifacts',
+        objectKey: `practices/practice-synthetic-1/template-twin/sources/lineage/v1/artifact/${digest}.docx`,
+        objectVersionId: 'provider-source-version-synthetic',
+        objectEtag: 'provider-source-etag-synthetic',
+        sha256: digest,
+        mimeType:
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        sizeBytes: fixture.source.byteLength,
+        created: true,
+      }),
+    } as unknown as TemplateTwinArtifactStore;
+    mocks.outboxCreate.mockRejectedValueOnce(
+      new Error('synthetic audit outbox unavailable'),
+    );
+
+    await expect(
+      createTemplateTwinDraft({
+        source: fixture.source,
+        identity: {
+          name: 'Synthetic orthopedic intake',
+          encounterType: 'Orthopedic initial visit',
+          versionDescription: 'Initial synthetic QA version',
+        },
+        actor: {
+          userId: 'doctor-synthetic-1',
+          userEmail: 'doctor@synthetic.test',
+          practiceId: 'practice-synthetic-1',
+        },
+        storage,
+      }),
+    ).rejects.toMatchObject({ code: 'PERSISTENCE_FAILED' });
+
+    expect(mocks.transaction).toHaveBeenCalledTimes(1);
+    expect(mocks.outboxCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails closed when a rejected DOCX cannot atomically record its quarantine event', async () => {
+    mocks.outboxCreate.mockRejectedValueOnce(
+      new Error('synthetic quarantine audit unavailable'),
+    );
+
+    await expect(
+      createTemplateTwinDraft({
+        source: Buffer.from('synthetic invalid DOCX package', 'utf8'),
+        identity: {
+          name: 'Synthetic rejected intake',
+          encounterType: 'Synthetic initial visit',
+          versionDescription: 'Synthetic rejected QA version',
+        },
+        actor: {
+          userId: 'doctor-synthetic-1',
+          userEmail: 'doctor@synthetic.test',
+          practiceId: 'practice-synthetic-1',
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'PERSISTENCE_FAILED' });
+
+    expect(mocks.sourceArtifactCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        validationStatus: 'quarantined',
+        objectKey: null,
+      }),
+      select: { id: true },
+    });
+    expect(mocks.outboxCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'TEMPLATE_TWIN_QUARANTINED',
+        status: 'PENDING',
+        metadata: expect.objectContaining({
+          gateOutcome: 'blocked',
+        }),
+      }),
+    });
+  });
+
+  it('durably records a digest-only quarantine when the required PHI scan is unavailable', async () => {
+    const fixture = await buildTemplateTwinIntegrationFixture();
+    mocks.modelComplete.mockRejectedValueOnce(
+      new Error('synthetic privacy provider unavailable'),
+    );
+
+    await expect(
+      createTemplateTwinDraft({
+        source: fixture.source,
+        identity: {
+          name: 'Synthetic privacy-blocked intake',
+          encounterType: 'Synthetic initial visit',
+          versionDescription: 'Synthetic privacy gate outage case',
+        },
+        actor: {
+          userId: 'doctor-synthetic-1',
+          userEmail: 'doctor@synthetic.test',
+          practiceId: 'practice-synthetic-1',
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'TEMPLATE_TWIN_PHI_SCAN_UNAVAILABLE' });
+
+    expect(mocks.sourceArtifactCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        objectKey: null,
+        validationStatus: 'quarantined',
+        rejectionCodes: ['TEMPLATE_TWIN_PHI_SCAN_UNAVAILABLE'],
+        sha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+      }),
+      select: { id: true },
+    });
+    expect(mocks.outboxCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'TEMPLATE_TWIN_QUARANTINED',
+        status: 'PENDING',
+        metadata: expect.objectContaining({
+          rejectionCode: 'TEMPLATE_TWIN_PHI_SCAN_UNAVAILABLE',
+          gateOutcome: 'blocked',
+        }),
+      }),
+    });
+  });
+
+  it('durably records a distinct quarantine when package content cannot be privacy-scanned', async () => {
+    const source = await buildSyntheticDocx({
+      extraEntries: { 'customXml/item1.xml': '<root>synthetic only</root>' },
+    });
+
+    await expect(
+      createTemplateTwinDraft({
+        source,
+        identity: {
+          name: 'Synthetic unsupported package',
+          encounterType: 'Synthetic initial visit',
+          versionDescription: 'Synthetic unscannable package case',
+        },
+        actor: {
+          userId: 'doctor-synthetic-1',
+          userEmail: 'doctor@synthetic.test',
+          practiceId: 'practice-synthetic-1',
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: 'TEMPLATE_TWIN_SOURCE_PRIVACY_UNSUPPORTED',
+    });
+
+    expect(mocks.sourceArtifactCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        objectKey: null,
+        validationStatus: 'quarantined',
+        rejectionCodes: ['TEMPLATE_TWIN_SOURCE_PRIVACY_UNSUPPORTED'],
+      }),
+      select: { id: true },
+    });
+    expect(mocks.outboxCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'TEMPLATE_TWIN_QUARANTINED',
+        metadata: expect.objectContaining({
+          rejectionCode: 'TEMPLATE_TWIN_SOURCE_PRIVACY_UNSUPPORTED',
+          gateOutcome: 'blocked',
+        }),
+      }),
+    });
   });
 });

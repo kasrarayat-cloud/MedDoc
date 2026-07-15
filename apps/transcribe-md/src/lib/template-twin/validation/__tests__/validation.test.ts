@@ -7,6 +7,7 @@ import type {
   TemplateField,
   TemplateTable,
 } from '../../ir';
+import { templateTwinCounts } from '../../ir';
 import {
   resolveTemplateFields,
   withApprovedPracticeDefaultFacts,
@@ -287,16 +288,143 @@ describe('validateTemplateTwin', () => {
     );
   });
 
+  it('enforces checkbox true, explicit false, unresolved, and tamper contracts', () => {
+    const definition = field('e', 'checkbox', {
+      clinicallyMaterial: true,
+      criticality: 'allergy',
+    });
+    const semantic = mapping(definition, 'allergy.substance', {
+      polarityBehavior: 'explicit_denial_allowed',
+    });
+    const affirmed = fact('e', 'allergy.substance', 'Synthetic allergy reviewed', {
+      polarity: 'affirmed',
+    });
+    const denied = fact('f', 'allergy.substance', 'No synthetic allergy', {
+      polarity: 'denied',
+    });
+
+    expect(validateOne(definition, semantic, [affirmed]).valid).toBe(true);
+    expect(validateOne(definition, semantic, [denied]).valid).toBe(true);
+
+    const notMentioned: FieldResolution = {
+      fieldId: definition.fieldId,
+      status: 'not_mentioned',
+      value: null,
+      sourceFactIds: [],
+      evidenceAnchorIds: [],
+      selectedOptionOrdinal: null,
+      reasonCode: 'synthetic_not_mentioned',
+      clinicianReviewed: false,
+    };
+    const unresolved = validateOne(definition, semantic, [], [notMentioned]);
+    expect(unresolved.valid).toBe(false);
+    expect(unresolved.issues).toContainEqual(
+      expect.objectContaining({
+        code: 'CLINICALLY_MEANINGFUL_CHECKBOX_UNRESOLVED',
+        severity: 'blocking',
+      }),
+    );
+    expect(templateTwinCounts([notMentioned], [definition])).toMatchObject({
+      needsReview: 1,
+      criticalUnresolved: 1,
+    });
+
+    const forgedFalse: FieldResolution = {
+      fieldId: definition.fieldId,
+      status: 'supported',
+      value: false,
+      sourceFactIds: [denied.factId],
+      evidenceAnchorIds: denied.evidenceAnchorIds,
+      selectedOptionOrdinal: null,
+      reasonCode: 'synthetic_forged_false',
+      clinicianReviewed: false,
+    };
+    expect(
+      validateOne(definition, semantic, [denied], [forgedFalse]).issues.map(
+        (issue) => issue.code,
+      ),
+    ).toContain('CHECKBOX_FALSE_STATUS_INVALID');
+
+    const deniedResolution = resolveTemplateFields({
+      fields: [definition],
+      mappings: [semantic],
+      facts: [denied],
+    });
+    const uncertifiedFalse = validateOne(
+      definition,
+      { ...semantic, polarityBehavior: 'affirmative_only' },
+      [denied],
+      deniedResolution,
+    );
+    expect(uncertifiedFalse.issues.map((issue) => issue.code)).toContain(
+      'CHECKBOX_FALSE_SEMANTICS_NOT_CERTIFIED',
+    );
+  });
+
+  it.each([
+    { seed: 'a1', kind: 'narrative_text' as const, value: 'No synthetic concern' },
+    { seed: 'b2', kind: 'single_select' as const, value: 'Mild' },
+    { seed: 'c3', kind: 'multi_select' as const, value: ['Mild'] },
+    { seed: 'd4', kind: 'date' as const, value: '2026-07-15' },
+    {
+      seed: 'e5',
+      kind: 'narrative_text' as const,
+      value: [
+        {
+          value: 'No synthetic item',
+          sourceFactId: `ttfact_${'e5'.repeat(12)}`,
+          evidenceAnchorId: 'anchor-e5',
+          optionOrdinal: null,
+        },
+      ],
+      rowPrototype: true,
+    },
+  ])(
+    'blocks tampered explicit denial for $kind without a certified exact negative output',
+    ({ seed, kind, value, rowPrototype }) => {
+      const definition = field(seed, kind, {
+        ...(rowPrototype
+          ? { tableId: `ttb_${'e'.repeat(20)}`, rowPrototype: true }
+          : {}),
+      });
+      const semantic = mapping(definition, 'hpi.severity', {
+        polarityBehavior: 'explicit_denial_allowed',
+      });
+      const denied = fact(seed, 'hpi.severity',
+        Array.isArray(value) ? 'No synthetic item' : String(value), {
+          polarity: 'denied',
+        });
+      const tampered: FieldResolution = {
+        fieldId: definition.fieldId,
+        status: 'explicitly_denied',
+        value,
+        sourceFactIds: [denied.factId],
+        evidenceAnchorIds: denied.evidenceAnchorIds,
+        selectedOptionOrdinal: kind === 'single_select' ? 0 : null,
+        reasonCode: 'synthetic_denial_tamper',
+        clinicianReviewed: false,
+      };
+      const result = validateOne(definition, semantic, [denied], [tampered]);
+      expect(result.valid).toBe(false);
+      expect(result.issues.map((issue) => issue.code)).toEqual(
+        expect.arrayContaining([
+          'EXPLICIT_DENIAL_RENDERING_POLICY_MISSING',
+          'NEGATIVE_RENDERING_POLICY_MISSING',
+        ]),
+      );
+    },
+  );
+
   it('blocks missing units, unresolved laterality, and invalid dates', () => {
     const measure = field('4', 'measurement', {
       criticality: 'number_unit',
       clinicallyMaterial: true,
     });
-    const measureMap = mapping(measure, 'exam.synthetic_size', {
+    const measureMap = mapping(measure, 'hpi.duration', {
       unitPolicy: 'required',
       laterality: 'required',
     });
-    const measureFact = fact('4', 'exam.synthetic_size', 12, {
+    const measureFact = fact('4', 'hpi.duration', 12, {
       number: 12,
       unit: null,
       laterality: 'unknown',
@@ -503,5 +631,31 @@ describe('validateTemplateTwin', () => {
         [allergyResolution],
       ).issues.map((issue) => issue.code),
     ).toContain('ALLERGY_EVIDENCE_UNRESOLVED');
+  });
+
+  it.each([
+    'gad_7.total_score',
+    'pregnancy.status',
+    'exam.monofilament',
+    'measurement.custom_ankle_width',
+  ])('blocks unsupported clinical concept %s with a stable code', (concept) => {
+    const definition = field('f8', 'narrative_text');
+    const semantic = mapping(definition, concept);
+    const source = fact('f8', concept, 'Synthetic unsupported value');
+    const resolutions = resolveTemplateFields({
+      fields: [definition],
+      mappings: [semantic],
+      facts: [source],
+    });
+    const result = validateOne(definition, semantic, [source], resolutions);
+
+    expect(result.valid).toBe(false);
+    expect(result.issues).toContainEqual(
+      expect.objectContaining({
+        code: 'TT_CONCEPT_UNSUPPORTED_V1',
+        severity: 'blocking',
+        message: expect.stringMatching(/not produced and independently validated/i),
+      }),
+    );
   });
 });

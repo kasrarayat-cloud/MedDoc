@@ -93,8 +93,8 @@ const CORRECTION = {
 function jsonRequest(body: unknown): Request {
   return {
     headers: new Headers({
-      origin: 'https://app.quillmd.test',
-      host: 'app.quillmd.test',
+      origin: 'https://app.synthetic.test',
+      host: 'app.synthetic.test',
     }),
     json: async () => body,
   } as unknown as Request;

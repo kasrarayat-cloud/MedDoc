@@ -153,9 +153,9 @@ describe('resolveTemplateFields', () => {
 
   it('resolves multi-select values in native option order and rejects partial near-matches', () => {
     const definition = field('a', 'multi_select');
-    const semantic = mapping(definition, 'ros.synthetic');
-    const severe = fact('b', 'ros.synthetic', 'Severe');
-    const mild = fact('c', 'ros.synthetic', 'Mild');
+    const semantic = mapping(definition, 'ros.respiratory');
+    const severe = fact('b', 'ros.respiratory', 'Severe');
+    const mild = fact('c', 'ros.respiratory', 'Mild');
     const [resolved] = resolveTemplateFields({
       fields: [definition],
       mappings: [semantic],
@@ -169,7 +169,7 @@ describe('resolveTemplateFields', () => {
     const [nearMatch] = resolveTemplateFields({
       fields: [definition],
       mappings: [semantic],
-      facts: [mild, fact('d', 'ros.synthetic', 'moderate')],
+      facts: [mild, fact('d', 'ros.respiratory', 'moderate')],
     });
     expect(nearMatch).toMatchObject({
       status: 'needs_clinician_input',
@@ -202,17 +202,87 @@ describe('resolveTemplateFields', () => {
       facts: [denied, fact('4', 'ros.respiratory', 'Cough', { polarity: 'affirmed' })],
     });
     expect(conflict).toMatchObject({ status: 'conflict', value: null });
+
+    const [notMentioned] = resolveTemplateFields({
+      fields: [definition],
+      mappings: [semantic],
+      facts: [],
+    });
+    expect(notMentioned).toMatchObject({
+      status: 'not_mentioned',
+      value: null,
+    });
+
+    const [affirmed] = resolveTemplateFields({
+      fields: [definition],
+      mappings: [semantic],
+      facts: [fact('e', 'ros.respiratory', 'Cough reviewed', { polarity: 'affirmed' })],
+    });
+    expect(affirmed).toMatchObject({ status: 'supported', value: true });
+
+    const [uncertifiedFalse] = resolveTemplateFields({
+      fields: [definition],
+      mappings: [
+        mapping(definition, 'ros.respiratory', {
+          polarityBehavior: 'affirmative_only',
+        }),
+      ],
+      facts: [denied],
+    });
+    expect(uncertifiedFalse).toMatchObject({
+      status: 'needs_clinician_input',
+      value: null,
+      reasonCode: 'checkbox_false_semantics_not_certified',
+    });
   });
+
+  it.each([
+    { seed: 'a1', kind: 'narrative_text' as const, value: 'No synthetic concern', rowPrototype: false },
+    { seed: 'b2', kind: 'single_select' as const, value: 'Mild', rowPrototype: false },
+    { seed: 'c3', kind: 'multi_select' as const, value: 'Mild', rowPrototype: false },
+    { seed: 'd4', kind: 'date' as const, value: '2026-07-15', rowPrototype: false },
+    { seed: 'e5', kind: 'narrative_text' as const, value: 'No synthetic item', rowPrototype: true },
+  ])(
+    'keeps denied $kind evidence unresolved without an exact negative rendering policy (repeating=$rowPrototype)',
+    ({ seed, kind, value, rowPrototype }) => {
+      const definition = field(seed, kind, {
+        ...(rowPrototype
+          ? {
+              tableId: `ttb_${'d'.repeat(20)}`,
+              rowPrototype: true,
+            }
+          : {}),
+      });
+      const semantic = mapping(definition, 'hpi.severity', {
+        polarityBehavior: 'explicit_denial_allowed',
+      });
+      const denied = fact(seed, 'hpi.severity', value, {
+        polarity: 'denied',
+      });
+      const [resolved] = resolveTemplateFields({
+        fields: [definition],
+        mappings: [semantic],
+        facts: [denied],
+      });
+
+      expect(resolved).toMatchObject({
+        status: 'needs_clinician_input',
+        value: null,
+        reasonCode: 'negative_rendering_policy_missing',
+        sourceFactIds: [denied.factId],
+      });
+    },
+  );
 
   it('does not infer a missing unit or laterality', () => {
     const measurement = field('3', 'measurement', {
       criticality: 'number_unit',
     });
-    const measureMapping = mapping(measurement, 'exam.lesion_size', {
+    const measureMapping = mapping(measurement, 'hpi.duration', {
       laterality: 'required',
       unitPolicy: 'required',
     });
-    const missingUnit = fact('5', 'exam.lesion_size', 12, {
+    const missingUnit = fact('5', 'hpi.duration', 12, {
       number: 12,
       laterality: 'left',
     });
@@ -226,7 +296,7 @@ describe('resolveTemplateFields', () => {
       reasonCode: 'measurement_unit_missing',
     });
 
-    const missingLaterality = fact('6', 'exam.lesion_size', '12 mm', {
+    const missingLaterality = fact('6', 'hpi.duration', '12 mm', {
       number: 12,
       unit: 'mm',
       laterality: 'unknown',
@@ -323,5 +393,24 @@ describe('resolveTemplateFields', () => {
       allowUncertifiedForSyntheticTest: true,
     });
     expect(synthetic.status).toBe('supported');
+  });
+
+  it.each([
+    'gad_7.total_score',
+    'pregnancy.status',
+    'exam.monofilament',
+    'measurement.custom_ankle_width',
+  ])('never resolves unsupported safe-alpha concept %s', (concept) => {
+    const definition = field('f7', 'narrative_text');
+    const [resolved] = resolveTemplateFields({
+      fields: [definition],
+      mappings: [mapping(definition, concept)],
+      facts: [fact('f7', concept, 'Synthetic unsupported value')],
+    });
+    expect(resolved).toMatchObject({
+      status: 'needs_clinician_input',
+      value: null,
+      reasonCode: 'tt_concept_unsupported_v1',
+    });
   });
 });

@@ -14,6 +14,8 @@ describe('Template Twin voice/text to original-DOCX vertical slice', () => {
   it('uses the real projector, resolver, validator, and renderer for equivalent outputs', async () => {
     const fixture = await buildTemplateTwinIntegrationFixture();
     const common = {
+      soapVersion: 1,
+      soapFinal: 'Synthetic SOAP reviewed for the DOCX vertical slice.',
       compiledVersionId: 'compiled-synthetic-e2e',
       noteTemplateId: 'template-synthetic-e2e',
       noteTemplateVersion: 1,
