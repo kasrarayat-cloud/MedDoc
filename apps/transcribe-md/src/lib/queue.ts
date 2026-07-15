@@ -156,6 +156,9 @@ export const JOB_RETENTION_SWEEP = 'retention_sweep';
  *  budget. Catches dropped/deduped/orphaned BullMQ jobs the worker's
  *  per-attempt timeout can't reach. */
 export const JOB_STUCK_VISIT_WATCHDOG = 'stuck_visit_watchdog';
+/** Delivers the durable Template Twin audit outbox and reconciles the
+ * dedicated artifact bucket against the durable object-write ledger. */
+export const JOB_TEMPLATE_TWIN_MAINTENANCE = 'template_twin_maintenance';
 
 export function getCleanupQueue(): Queue {
   if (cleanupQueue) return cleanupQueue;

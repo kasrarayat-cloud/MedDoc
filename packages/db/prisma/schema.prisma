@@ -147,6 +147,12 @@ enum AuditAction {
   TEMPLATE_TWIN_FIELD_REVIEWED
   TEMPLATE_TWIN_SIGN_BLOCKED
   TEMPLATE_TWIN_RENDER_VERIFIED
+  TEMPLATE_TWIN_FIELD_TEST_WAIVED
+  TEMPLATE_TWIN_DEACTIVATED
+  TEMPLATE_TWIN_RETIRED
+  TEMPLATE_TWIN_ROLLED_BACK
+  TEMPLATE_TWIN_SAFETY_GATE_BLOCKED
+  TEMPLATE_TWIN_OBJECT_RECONCILED
 
   // transcribe-md — patient CRUD (TranscribeMdPatient; CRM patient
   // events use CREATED_PATIENT / UPDATED_PATIENT / ARCHIVED_PATIENT
@@ -476,6 +482,23 @@ enum TemplateTwinFillStatus {
   FAILED
 }
 
+enum TemplateTwinObjectLedgerState {
+  INTENT
+  WRITTEN_UNCLAIMED
+  CLAIMED
+  RETAINED
+  PURGE_PENDING
+  PURGED
+  FAILED
+}
+
+enum TemplateTwinAuditOutboxStatus {
+  PENDING
+  PROCESSING
+  DELIVERED
+  FAILED
+}
+
 // ============================================================================
 // PRACTICE — tenant boundary
 // ----------------------------------------------------------------------------
@@ -506,6 +529,10 @@ model Practice {
   /// 2555 = 7 years (HIPAA's 6-year minimum + a year of buffer).
   transcriptRetentionDays Int @default(2555)
 
+  /// Safe-alpha rollout gate. A second global kill switch must also be
+  /// explicitly disabled before any Template Twin server path may run.
+  templateTwinEnabled Boolean @default(false)
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
@@ -533,6 +560,8 @@ model Practice {
   // creating user later leaves the practice.
   templateTwinSources  TemplateTwinSourceArtifact[]
   templateTwinFills    TemplateTwinFillManifest[]
+  templateTwinObjects  TemplateTwinObjectLedger[]
+  templateTwinOutbox   TemplateTwinAuditOutbox[]
 
   @@index([slug])
   @@map("practices")
@@ -684,6 +713,9 @@ model User {
   templateTwinMappingsApproved TemplateTwinSemanticMapping[] @relation("TemplateTwinMappingApprover")
   templateTwinCertifications   TemplateTwinCertification[]   @relation("TemplateTwinCertifier")
   templateTwinReviews          TemplateTwinReviewDecision[]  @relation("TemplateTwinReviewer")
+  templateTwinManifestReviews  TemplateTwinFillManifest[]    @relation("TemplateTwinManifestReviewer")
+  templateTwinTestWaivers      TemplateTwinFieldTestWaiver[] @relation("TemplateTwinWaiverPhysician")
+  templateTwinOutboxEvents     TemplateTwinAuditOutbox[]     @relation("TemplateTwinOutboxActor")
   // T-M16.2: one-time tokens for password reset, email verification,
   // email change. All cascade-deleted with the user.
   authTokens                   AuthToken[]
@@ -2134,6 +2166,10 @@ model NoteTemplate {
   /// TranscribeVisit.noteTemplateVersion at generation time (Phase 1).
   version Int @default(1)
 
+  /// Physician-authored explanation of what changed in this immutable
+  /// version. Required by Template Twin upload/version-management routes.
+  versionDescription String?
+
   /// Lifecycle: "draft" | "active" | "inactive". TEXT (not enum) per
   /// convention; resolveActiveTemplate() only considers "active" rows.
   /// Phase 2b: a partial-unique index (note_templates_one_active_per_doctor_
@@ -2192,14 +2228,21 @@ model TemplateTwinSourceArtifact {
   createdById String?
   createdBy   User?   @relation("TemplateTwinSourceCreator", fields: [createdById], references: [id], onDelete: SetNull)
 
-  lineageId        String
-  lineageVersion   Int
-  objectKey        String?  @unique
-  sha256           String   @db.Char(64)
-  mimeType         String
-  sizeBytes        Int
-  validationStatus String   @default("accepted")
-  rejectionCodes   String[] @default([])
+  lineageId           String
+  lineageVersion      Int
+  objectKey           String?  @unique
+  /// Immutable provider identity. Nullable only for quarantined or
+  /// pre-safe-alpha rows; every accepted source gate fails closed without it.
+  objectVersionId     String?
+  objectEtag          String?
+  sha256              String   @db.Char(64)
+  mimeType            String
+  sizeBytes           Int
+  validationStatus    String   @default("accepted")
+  rejectionCodes      String[] @default([])
+  /// PHI-safe provenance for the deterministic/model privacy scan and the
+  /// exact practice-scoped static-asset approval set used before storage.
+  privacyScanEvidence Json?
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
 
@@ -2236,6 +2279,8 @@ model TemplateTwinCompiledVersion {
   latestSyntheticTestManifest   Json?
   latestTestMappingsSha256      String?   @db.Char(64)
   latestTestOutputObjectKey     String?   @unique
+  latestTestOutputVersionId     String?
+  latestTestOutputEtag          String?
   latestTestOutputSha256        String?   @db.Char(64)
   latestTestStaticContentSha256 String?   @db.Char(64)
   latestTestRoundTrip           Json?
@@ -2244,6 +2289,7 @@ model TemplateTwinCompiledVersion {
   fields        TemplateTwinFieldDefinition[]
   certification TemplateTwinCertification?
   fills         TemplateTwinFillManifest[]
+  testWaivers   TemplateTwinFieldTestWaiver[]
 
   /// Multiple immutable NoteTemplate versions may reuse the same immutable
   /// source package when a physician explicitly forks only the semantic
@@ -2272,6 +2318,7 @@ model TemplateTwinFieldDefinition {
 
   mapping         TemplateTwinSemanticMapping?
   reviewDecisions TemplateTwinReviewDecision[]
+  testWaivers     TemplateTwinFieldTestWaiver[]
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
 
@@ -2320,12 +2367,19 @@ model TemplateTwinCertification {
   certifiedById String
   certifiedBy   User   @relation("TemplateTwinCertifier", fields: [certifiedById], references: [id], onDelete: Restrict)
 
-  compiledStructureSha256 String   @db.Char(64)
-  approvedMappingsSha256  String   @db.Char(64)
-  syntheticTestManifest   Json
-  testOutputObjectKey     String   @unique
-  testOutputSha256        String   @db.Char(64)
-  certifiedAt             DateTime @default(now()) @db.Timestamptz(6)
+  compiledStructureSha256         String   @db.Char(64)
+  approvedMappingsSha256          String   @db.Char(64)
+  /// Canonical hash of the exact accepted source privacy/media scan evidence.
+  /// Nullable only for pre-safe-alpha rows; all current gates fail closed.
+  sourcePrivacyScanEvidenceSha256 String?  @db.Char(64)
+  syntheticTestManifest           Json
+  testOutputObjectKey             String   @unique
+  /// Nullable only for pre-safe-alpha certifications. Certification and
+  /// signing reject rows that are not bound to an immutable provider version.
+  testOutputVersionId             String?
+  testOutputEtag                  String?
+  testOutputSha256                String   @db.Char(64)
+  certifiedAt                     DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([certifiedById, certifiedAt])
   @@map("template_twin_certifications")
@@ -2352,17 +2406,23 @@ model TemplateTwinFillManifest {
   status               TemplateTwinFillStatus @default(RESOLVING)
 
   fillManifest            Json
-  manifestVersion         Int    @default(1)
-  manifestSha256          String @db.Char(64)
-  factSetSha256           String @db.Char(64)
+  manifestVersion         Int     @default(1)
+  manifestSha256          String  @db.Char(64)
+  factSetSha256           String  @db.Char(64)
+  /// Exact physician-reviewed SOAP revision used to resolve this manifest.
+  /// Nullable only for pre-alpha rows; signing fails closed when absent.
+  soapVersion             Int?
+  soapSha256              String? @db.Char(64)
   validationResult        Json
-  filledCount             Int    @default(0)
-  needsReviewCount        Int    @default(0)
-  notMentionedCount       Int    @default(0)
-  conflictCount           Int    @default(0)
-  criticalUnresolvedCount Int    @default(0)
+  filledCount             Int     @default(0)
+  needsReviewCount        Int     @default(0)
+  notMentionedCount       Int     @default(0)
+  conflictCount           Int     @default(0)
+  criticalUnresolvedCount Int     @default(0)
 
   outputObjectKey       String? @unique
+  outputVersionId       String?
+  outputEtag            String?
   outputSha256          String? @db.Char(64)
   outputMimeType        String?
   outputSizeBytes       Int?
@@ -2370,16 +2430,24 @@ model TemplateTwinFillManifest {
   roundTripVerified     Boolean @default(false)
   roundTripVerification Json?
 
-  reviewedAt       DateTime? @db.Timestamptz(6)
-  signedDecisionAt DateTime? @db.Timestamptz(6)
-  createdAt        DateTime  @default(now()) @db.Timestamptz(6)
-  updatedAt        DateTime  @updatedAt @db.Timestamptz(6)
+  /// Whole-document physician acknowledgement. The three provenance fields
+  /// are set together only after the current manifest has been reviewed and
+  /// are cleared whenever regeneration or a field correction changes it.
+  reviewedAt              DateTime? @db.Timestamptz(6)
+  reviewedById            String?
+  reviewedBy              User?     @relation("TemplateTwinManifestReviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
+  reviewedManifestVersion Int?
+  reviewedManifestSha256  String?   @db.Char(64)
+  signedDecisionAt        DateTime? @db.Timestamptz(6)
+  createdAt               DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt               DateTime  @updatedAt @db.Timestamptz(6)
 
   reviewDecisions TemplateTwinReviewDecision[]
 
   @@index([practiceId, status, updatedAt])
   @@index([compiledVersionId, status])
   @@index([status, criticalUnresolvedCount])
+  @@index([reviewedById, reviewedAt])
   @@map("template_twin_fill_manifests")
 }
 
@@ -2409,6 +2477,99 @@ model TemplateTwinReviewDecision {
   @@index([fieldDefinitionId, createdAt])
   @@index([reviewerId, createdAt])
   @@map("template_twin_review_decisions")
+}
+
+/// Explicit physician waiver for an optional field that was not exercised by
+/// the current synthetic certification manifest. Required/material fields can
+/// never use this table as a substitute for test evidence.
+model TemplateTwinFieldTestWaiver {
+  id String @id @default(cuid())
+
+  compiledVersionId String
+  compiledVersion   TemplateTwinCompiledVersion @relation(fields: [compiledVersionId], references: [id], onDelete: Restrict)
+
+  fieldDefinitionId String
+  fieldDefinition   TemplateTwinFieldDefinition @relation(fields: [fieldDefinitionId], references: [id], onDelete: Restrict)
+  fieldId           String
+  mappingsSha256    String                      @db.Char(64)
+
+  waivedById String
+  waivedBy   User     @relation("TemplateTwinWaiverPhysician", fields: [waivedById], references: [id], onDelete: Restrict)
+  reason     String   @db.Text
+  waivedAt   DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([compiledVersionId, fieldId, mappingsSha256])
+  @@index([fieldDefinitionId, waivedAt])
+  @@index([waivedById, waivedAt])
+  @@map("template_twin_field_test_waivers")
+}
+
+/// Durable two-phase ledger around object-store writes. INTENT is persisted
+/// before the PUT; CLAIMED is written only after the owning relational row is
+/// committed. Reconciliation can safely resume every intermediate state.
+model TemplateTwinObjectLedger {
+  id String @id @default(cuid())
+
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Restrict)
+
+  objectKey       String                        @unique
+  /// Set only after the provider confirms a successful immutable write.
+  /// INTENT rows may be null; every later state requires both values.
+  objectVersionId String?
+  objectEtag      String?
+  sha256          String                        @db.Char(64)
+  sizeBytes       Int
+  kind            String
+  state           TemplateTwinObjectLedgerState @default(INTENT)
+
+  claimType      String?
+  claimId        String?
+  attemptCount   Int       @default(0)
+  nextAttemptAt  DateTime? @db.Timestamptz(6)
+  retentionUntil DateTime? @db.Timestamptz(6)
+  lastErrorCode  String?
+  createdAt      DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @db.Timestamptz(6)
+
+  @@index([practiceId, state, nextAttemptAt])
+  @@index([claimType, claimId])
+  @@map("template_twin_object_ledgers")
+}
+
+/// Transactional outbox for clinical/audit-critical Template Twin events.
+/// Request paths enqueue in the same database transaction as the state change;
+/// delivery into the immutable audit log can be retried without losing intent.
+model TemplateTwinAuditOutbox {
+  id String @id @default(cuid())
+
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Restrict)
+
+  actorId String?
+  actor   User?   @relation("TemplateTwinOutboxActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  actorEmailSnapshot String?
+  ipAddress          String? @db.Inet
+  userAgent          String?
+
+  eventKey   String                        @unique
+  action     AuditAction
+  targetId   String?
+  targetType String?
+  metadata   Json?
+  status     TemplateTwinAuditOutboxStatus @default(PENDING)
+
+  attemptCount  Int       @default(0)
+  availableAt   DateTime  @default(now()) @db.Timestamptz(6)
+  deliveredAt   DateTime? @db.Timestamptz(6)
+  lastErrorCode String?
+  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(6)
+
+  @@index([status, availableAt])
+  @@index([practiceId, createdAt])
+  @@map("template_twin_audit_outbox")
 }
 
 // ============================================================================

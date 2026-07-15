@@ -33,6 +33,7 @@ import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 
 import prisma from '@meddoc/db';
+import { AuditAction, Prisma } from '@prisma/client';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { auth } from '@/lib/nextauth';
@@ -43,6 +44,7 @@ import { MARKETING_URL } from '@/lib/constants';
 import { redactPhi } from '@meddoc/ai';
 import { log } from '@/lib/log';
 import { logAudit } from '@/lib/audit';
+import { enqueueTemplateTwinAudit } from '@/lib/template-twin/audit-outbox';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -57,6 +59,154 @@ const BodySchema = z.object({
 /** Audit-row retention window. When the T-M16.3+ sweeper lands it
  *  deletes AccountDeletion rows with purgeAt in the past. */
 const PURGE_DELAY_MS = 90 * 24 * 60 * 60 * 1000;
+
+const RETAINED_TEMPLATE_TWIN_AUDIT_ACTIONS: readonly AuditAction[] = [
+  AuditAction.TEMPLATE_TWIN_SOURCE_UPLOADED,
+  AuditAction.TEMPLATE_TWIN_COMPILED,
+  AuditAction.TEMPLATE_TWIN_QUARANTINED,
+  AuditAction.TEMPLATE_TWIN_MAPPING_UPDATED,
+  AuditAction.TEMPLATE_TWIN_CERTIFIED,
+  AuditAction.TEMPLATE_TWIN_ACTIVATED,
+  AuditAction.TEMPLATE_TWIN_SYNTHETIC_TESTED,
+  AuditAction.TEMPLATE_TWIN_FIELD_REVIEWED,
+  AuditAction.TEMPLATE_TWIN_SIGN_BLOCKED,
+  AuditAction.TEMPLATE_TWIN_RENDER_VERIFIED,
+  AuditAction.TEMPLATE_TWIN_FIELD_TEST_WAIVED,
+  AuditAction.TEMPLATE_TWIN_DEACTIVATED,
+  AuditAction.TEMPLATE_TWIN_RETIRED,
+  AuditAction.TEMPLATE_TWIN_ROLLED_BACK,
+  AuditAction.TEMPLATE_TWIN_SAFETY_GATE_BLOCKED,
+  AuditAction.TEMPLATE_TWIN_OBJECT_RECONCILED,
+  AuditAction.EXPORT_TEMPLATE_TWIN_DOCX_DOWNLOADED,
+];
+
+type RetainedTemplateTwinClient = Pick<
+  Prisma.TransactionClient,
+  | 'templateTwinSourceArtifact'
+  | 'templateTwinCertification'
+  | 'templateTwinFieldTestWaiver'
+  | 'noteTemplate'
+  | 'templateTwinFillManifest'
+  | 'templateTwinObjectLedger'
+  | 'templateTwinAuditOutbox'
+  | 'auditLog'
+>;
+
+async function countRetainedTemplateTwinRecords(
+  client: RetainedTemplateTwinClient,
+  user: { id: string; practiceId: string },
+): Promise<number> {
+  const counts = await Promise.all([
+    client.templateTwinSourceArtifact.count({
+      where: { practiceId: user.practiceId },
+    }),
+    client.templateTwinCertification.count({
+      where: { certifiedById: user.id },
+    }),
+    client.templateTwinFieldTestWaiver.count({
+      where: { waivedById: user.id },
+    }),
+    client.noteTemplate.count({
+      where: { doctorId: user.id, templateKind: 'template_twin_docx' },
+    }),
+    client.templateTwinFillManifest.count({
+      where: { practiceId: user.practiceId },
+    }),
+    client.templateTwinObjectLedger.count({
+      where: { practiceId: user.practiceId },
+    }),
+    client.templateTwinAuditOutbox.count({
+      where: { practiceId: user.practiceId },
+    }),
+    client.auditLog.count({
+      where: {
+        practiceId: user.practiceId,
+        action: { in: [...RETAINED_TEMPLATE_TWIN_AUDIT_ACTIONS] },
+      },
+    }),
+  ]);
+  return counts.reduce((total, count) => total + count, 0);
+}
+
+class TemplateTwinDeletionAuditError extends Error {
+  constructor(cause: unknown) {
+    super('The Template Twin deletion safety audit could not be recorded.', {
+      cause,
+    });
+    this.name = 'TemplateTwinDeletionAuditError';
+  }
+}
+
+class TemplateTwinDeletionOwnershipConflict extends Error {
+  constructor() {
+    super('The account ownership rows changed during deletion.');
+    this.name = 'TemplateTwinDeletionOwnershipConflict';
+  }
+}
+
+async function enqueueRetainedTemplateTwinDeletionGate(
+  client: Parameters<typeof enqueueTemplateTwinAudit>[0],
+  input: {
+    userId: string;
+    practiceId: string;
+    email: string;
+    retainedRecordCount: number;
+  },
+): Promise<void> {
+  try {
+    await enqueueTemplateTwinAudit(client, {
+      eventKey: `account-deletion-policy-gate:${input.userId}:${crypto.randomUUID()}`,
+      practiceId: input.practiceId,
+      actorId: input.userId,
+      actorEmailSnapshot: input.email,
+      action: 'TEMPLATE_TWIN_SAFETY_GATE_BLOCKED',
+      targetType: 'User',
+      targetId: input.userId,
+      metadata: {
+        reasonCode: 'TEMPLATE_TWIN_RETENTION_POLICY_REQUIRED',
+        retainedRecordCount: input.retainedRecordCount,
+      },
+    });
+  } catch (error) {
+    throw new TemplateTwinDeletionAuditError(error);
+  }
+}
+
+function retainedTemplateTwinResponse(): NextResponse {
+  return NextResponse.json(
+    {
+      error:
+        'This account has retained Template Twin records. Deletion requires an approved retention or anonymization policy.',
+      code: 'TEMPLATE_TWIN_RETENTION_POLICY_REQUIRED',
+    },
+    { status: 409 },
+  );
+}
+
+function databaseErrorCode(error: unknown): string | null {
+  if (!error || typeof error !== 'object' || !('code' in error)) return null;
+  return typeof error.code === 'string' ? error.code : null;
+}
+
+function isSerializableWriteConflict(error: unknown): boolean {
+  const code = databaseErrorCode(error);
+  return code === 'P2034' || code === '40001';
+}
+
+function isRestrictiveDeletionConflict(error: unknown): boolean {
+  if (error instanceof TemplateTwinDeletionOwnershipConflict) return true;
+  const code = databaseErrorCode(error);
+  if (code === 'P2003' || code === 'P2014' || code === 'P2004') return true;
+  const message =
+    error instanceof Error
+      ? error.message
+      : error && typeof error === 'object' && 'message' in error
+        ? String(error.message)
+        : '';
+  return /template[ _-]?twin|foreign key|restrict(?:ive)?|trigger/i.test(
+    message,
+  );
+}
 
 export const POST = withApiHandler('api:settings:delete-account', async (req) => {
   const session = await auth();
@@ -104,6 +254,39 @@ export const POST = withApiHandler('api:settings:delete-account', async (req) =>
     );
   }
 
+  // Template Twin artifacts and certification evidence are deliberately
+  // immutable. Until Privacy/Legal approves an anonymization, retention, and
+  // legal-hold policy, deleting an account that owns or has certified Twin
+  // records would either violate those guarantees or fail on restrictive
+  // foreign keys. Detect that state before starting the destructive
+  // transaction or touching object storage, and durably record the blocked
+  // safety gate.
+  const retainedTwinRecordCount = await countRetainedTemplateTwinRecords(
+    prisma,
+    user,
+  );
+
+  if (retainedTwinRecordCount > 0) {
+    try {
+      await enqueueRetainedTemplateTwinDeletionGate(prisma, {
+        userId: user.id,
+        practiceId: user.practiceId,
+        email: user.email,
+        retainedRecordCount: retainedTwinRecordCount,
+      });
+    } catch {
+      return NextResponse.json(
+        {
+          error:
+            'Account deletion is temporarily unavailable because the required safety audit could not be recorded.',
+          code: 'TEMPLATE_TWIN_AUDIT_ENQUEUE_FAILED',
+        },
+        { status: 503 },
+      );
+    }
+    return retainedTemplateTwinResponse();
+  }
+
   // Read the audit-row data inside a read-only snapshot. We don't care
   // about strict isolation here — a visit created in the microsecond
   // between this read and the transaction below only skews visitCount
@@ -122,27 +305,121 @@ export const POST = withApiHandler('api:settings:delete-account', async (req) =>
 
   // ── Atomic destructive path ─────────────────────────────────────
   try {
-    await prisma.$transaction(async (tx: typeof prisma) => {
-      await tx.accountDeletion.create({
-        data: {
-          userId: user.id,
-          email: user.email,
-          specialty,
-          visitCount,
-          purgeAt,
-        },
-      });
-      await tx.aiCall.deleteMany({
-        where: { practiceId: user.practiceId },
-      });
-      // User and Practice are symmetric for solo TranscribeMD users
-      // (1:1 synthetic Practice). Non-solo users would keep the
-      // Practice — but TranscribeMD signup only creates solo ones,
-      // so dropping it is always correct here.
-      await tx.user.delete({ where: { id: user.id } });
-      await tx.practice.delete({ where: { id: user.practiceId } });
-    });
+    let deletionResult:
+      | { deleted: true; retainedRecordCount: 0 }
+      | { deleted: false; retainedRecordCount: number }
+      | undefined;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        deletionResult = await prisma.$transaction(
+          async (tx: Prisma.TransactionClient) => {
+            // Lock both FK roots before the second retained-record check.
+            // Inserts for practice-owned or physician-owned Twin evidence
+            // must obtain a conflicting FK key-share lock, so a racing write
+            // either commits before this check (and is observed) or waits for
+            // the atomic deletion outcome. Serializable isolation catches any
+            // remaining predicate race.
+            const lockedOwners = await tx.$queryRaw<Array<{ userId: string }>>(
+              Prisma.sql`
+                SELECT u."id" AS "userId"
+                FROM "practices" p
+                JOIN "users" u ON u."practiceId" = p."id"
+                WHERE p."id" = ${user.practiceId} AND u."id" = ${user.id}
+                FOR UPDATE OF p, u
+              `,
+            );
+            if (lockedOwners.length !== 1) {
+              throw new TemplateTwinDeletionOwnershipConflict();
+            }
+
+            const recheckedRetainedCount =
+              await countRetainedTemplateTwinRecords(tx, user);
+            if (recheckedRetainedCount > 0) {
+              await enqueueRetainedTemplateTwinDeletionGate(tx, {
+                userId: user.id,
+                practiceId: user.practiceId,
+                email: user.email,
+                retainedRecordCount: recheckedRetainedCount,
+              });
+              return {
+                deleted: false as const,
+                retainedRecordCount: recheckedRetainedCount,
+              };
+            }
+
+            await tx.accountDeletion.create({
+              data: {
+                userId: user.id,
+                email: user.email,
+                specialty,
+                visitCount,
+                purgeAt,
+              },
+            });
+            await tx.aiCall.deleteMany({
+              where: { practiceId: user.practiceId },
+            });
+            // User and Practice are symmetric for solo TranscribeMD users
+            // (1:1 synthetic Practice). Non-solo users would keep the
+            // Practice — but TranscribeMD signup only creates solo ones,
+            // so dropping it is always correct here.
+            await tx.user.delete({ where: { id: user.id } });
+            await tx.practice.delete({ where: { id: user.practiceId } });
+            return { deleted: true as const, retainedRecordCount: 0 as const };
+          },
+          { isolationLevel: 'Serializable' },
+        );
+        break;
+      } catch (error) {
+        if (isSerializableWriteConflict(error) && attempt < 2) continue;
+        throw error;
+      }
+    }
+
+    if (!deletionResult?.deleted) {
+      return retainedTemplateTwinResponse();
+    }
   } catch (err) {
+    if (err instanceof TemplateTwinDeletionAuditError) {
+      return NextResponse.json(
+        {
+          error:
+            'Account deletion is temporarily unavailable because the required safety audit could not be recorded.',
+          code: 'TEMPLATE_TWIN_AUDIT_ENQUEUE_FAILED',
+        },
+        { status: 503 },
+      );
+    }
+    if (
+      isRestrictiveDeletionConflict(err) ||
+      isSerializableWriteConflict(err)
+    ) {
+      // The destructive transaction has rolled back. Recount and enqueue the
+      // policy gate in a separate committed statement so a restrictive FK,
+      // trigger, or exhausted serializable race cannot become a generic 500.
+      const racedRetainedCount = await countRetainedTemplateTwinRecords(
+        prisma,
+        user,
+      );
+      try {
+        await enqueueRetainedTemplateTwinDeletionGate(prisma, {
+          userId: user.id,
+          practiceId: user.practiceId,
+          email: user.email,
+          retainedRecordCount: racedRetainedCount,
+        });
+      } catch {
+        return NextResponse.json(
+          {
+            error:
+              'Account deletion is temporarily unavailable because the required safety audit could not be recorded.',
+            code: 'TEMPLATE_TWIN_AUDIT_ENQUEUE_FAILED',
+          },
+          { status: 503 },
+        );
+      }
+      return retainedTemplateTwinResponse();
+    }
     console.error(
       `[api:settings:delete-account] transaction failed user=${user.id}:`,
       redactPhi(err instanceof Error ? err.message : err)

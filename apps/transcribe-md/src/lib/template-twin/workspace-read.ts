@@ -3,6 +3,7 @@ import prisma from '@meddoc/db';
 import {
   SemanticMappingSchema,
   TemplateDocIRSchema,
+  TemplateTwinFillManifestSchema,
   type SemanticMapping,
 } from './ir';
 import type {
@@ -10,6 +11,7 @@ import type {
   TemplateTwinWorkspaceField,
 } from './client-types';
 import { templateTwinMappingsSha256 } from './mapping-hash';
+import { templateTwinSyntheticTestProvenanceSha256 } from './synthetic-test-provenance';
 
 interface WorkspaceMappingRow {
   clinicalConcept: string | null;
@@ -84,7 +86,12 @@ export async function readTemplateTwinWorkspace(input: {
           compiledDocumentIr: true,
           certificationStatus: true,
           latestTestMappingsSha256: true,
+          latestSyntheticTestManifest: true,
+          latestTestOutputObjectKey: true,
+          latestTestOutputVersionId: true,
+          latestTestOutputEtag: true,
           latestTestOutputSha256: true,
+          latestTestStaticContentSha256: true,
           latestTestVerifiedAt: true,
           latestTestRoundTrip: true,
           sourceArtifact: {
@@ -161,9 +168,38 @@ export async function readTemplateTwinWorkspace(input: {
     : [];
   const hasTest = Boolean(
     compiled.latestTestVerifiedAt &&
+      compiled.latestTestOutputVersionId &&
+      compiled.latestTestOutputEtag &&
       compiled.latestTestOutputSha256 &&
       compiled.latestTestMappingsSha256,
   );
+  const syntheticTestProvenanceSha256 =
+    templateTwinSyntheticTestProvenanceSha256({
+      compiledVersionId: compiled.id,
+      latestSyntheticTestManifest: compiled.latestSyntheticTestManifest,
+      latestTestMappingsSha256: compiled.latestTestMappingsSha256,
+      latestTestOutputObjectKey: compiled.latestTestOutputObjectKey,
+      latestTestOutputVersionId: compiled.latestTestOutputVersionId,
+      latestTestOutputEtag: compiled.latestTestOutputEtag,
+      latestTestOutputSha256: compiled.latestTestOutputSha256,
+      latestTestStaticContentSha256: compiled.latestTestStaticContentSha256,
+      latestTestRoundTrip: compiled.latestTestRoundTrip,
+      latestTestVerifiedAt: compiled.latestTestVerifiedAt,
+    });
+  const syntheticManifest = TemplateTwinFillManifestSchema.safeParse(
+    compiled.latestSyntheticTestManifest,
+  );
+  const fieldCoverage = syntheticManifest.success
+    ? syntheticManifest.data.fields.map((resolution) => ({
+        fieldId: resolution.fieldId,
+        exercised:
+          resolution.value !== null &&
+          (resolution.status === 'supported' ||
+            resolution.status === 'explicitly_denied' ||
+            resolution.status === 'approved_practice_default'),
+        status: resolution.status,
+      }))
+    : [];
 
   return {
     template: {
@@ -186,13 +222,15 @@ export async function readTemplateTwinWorkspace(input: {
     fields,
     unsupported: ir.unsupported,
     mappingsSha256,
-    latestSyntheticTest: hasTest
+    latestSyntheticTest: hasTest && syntheticTestProvenanceSha256
       ? {
+          provenanceSha256: syntheticTestProvenanceSha256,
           verifiedAtIso: compiled.latestTestVerifiedAt!.toISOString(),
           outputSha256: compiled.latestTestOutputSha256!,
           mappingsSha256: compiled.latestTestMappingsSha256!,
           roundTripVerified: roundTrip?.verified === true,
           layoutWarningCodes,
+          fieldCoverage,
           downloadUrl: `/api/note-templates/template-twin/${encodeURIComponent(row.id)}/test-output`,
         }
       : null,

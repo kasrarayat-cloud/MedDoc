@@ -1,8 +1,6 @@
 import { Prisma } from '@prisma/client';
 import prisma from '@meddoc/db';
 
-import { logAudit } from '@/lib/audit';
-
 import {
   SemanticMappingSchema,
   TEMPLATE_TWIN_RENDERER_VERSION,
@@ -21,6 +19,15 @@ import type { TemplateTwinWorkspace } from './client-types';
 import { parseTemplateTwinArtifactKey } from './storage';
 import { canonicalSha256 } from './canonical';
 import { validateTemplateTwin } from './validation';
+import {
+  TEMPLATE_TWIN_UNSUPPORTED_CONCEPT_CODE,
+  TEMPLATE_TWIN_UNSUPPORTED_CONCEPT_REASON,
+  isSupportedTemplateTwinConcept,
+} from './supported-concepts';
+import { evaluateTemplateTwinCertificationCoverage } from './certification-coverage';
+import { enqueueTemplateTwinAudit } from './audit-outbox';
+import { templateTwinSyntheticTestProvenanceSha256 } from './synthetic-test-provenance';
+import { templateTwinSourcePhiScanEvidenceSha256 } from './source-phi-evidence';
 
 export class TemplateTwinLifecycleError extends Error {
   readonly code:
@@ -29,6 +36,7 @@ export class TemplateTwinLifecycleError extends Error {
     | 'CONFLICT'
     | 'FIELD_SET_MISMATCH'
     | 'MAPPING_INVALID'
+    | 'UNSUPPORTED_CLINICAL_CONCEPT'
     | 'CERTIFICATION_BLOCKED';
 
   constructor(code: TemplateTwinLifecycleError['code'], message: string) {
@@ -157,12 +165,23 @@ async function loadOwnedCompilation(
           latestSyntheticTestManifest: true,
           latestTestMappingsSha256: true,
           latestTestOutputObjectKey: true,
+          latestTestOutputVersionId: true,
+          latestTestOutputEtag: true,
           latestTestOutputSha256: true,
           latestTestStaticContentSha256: true,
           latestTestRoundTrip: true,
           latestTestVerifiedAt: true,
           certification: { select: { id: true } },
-          sourceArtifact: { select: { practiceId: true, sha256: true } },
+          sourceArtifact: {
+            select: {
+              practiceId: true,
+              objectVersionId: true,
+              objectEtag: true,
+              sha256: true,
+              validationStatus: true,
+              privacyScanEvidence: true,
+            },
+          },
           fields: {
             orderBy: { displayOrder: 'asc' },
             select: {
@@ -353,7 +372,7 @@ export async function updateTemplateTwinMappings(input: {
 }): Promise<TemplateTwinWorkspace> {
   await prisma.$transaction(
     async (tx: Prisma.TransactionClient) => {
-      const { compiled } = await loadOwnedCompilation(
+      const { template, compiled } = await loadOwnedCompilation(
         tx,
         input.noteTemplateId,
         input.actor,
@@ -399,6 +418,15 @@ export async function updateTemplateTwinMappings(input: {
 
       for (const mapping of parsed) {
         const field = fieldById.get(mapping.fieldId)!;
+        if (
+          mapping.clinicalConcept !== null &&
+          !isSupportedTemplateTwinConcept(mapping.clinicalConcept)
+        ) {
+          throw new TemplateTwinLifecycleError(
+            'UNSUPPORTED_CLINICAL_CONCEPT',
+            `${TEMPLATE_TWIN_UNSUPPORTED_CONCEPT_CODE}: ${TEMPLATE_TWIN_UNSUPPORTED_CONCEPT_REASON}`,
+          );
+        }
         if (
           mapping.status === 'unsupported' ||
           !isMappingTypeCompatible(field, mapping) ||
@@ -460,10 +488,29 @@ export async function updateTemplateTwinMappings(input: {
           latestSyntheticTestManifest: Prisma.DbNull,
           latestTestMappingsSha256: null,
           latestTestOutputObjectKey: null,
+          latestTestOutputVersionId: null,
+          latestTestOutputEtag: null,
           latestTestOutputSha256: null,
           latestTestStaticContentSha256: null,
           latestTestRoundTrip: Prisma.DbNull,
           latestTestVerifiedAt: null,
+        },
+      });
+      await enqueueTemplateTwinAudit(tx, {
+        eventKey: `template-twin:mapping-updated:${compiled.id}:${afterHash}`,
+        practiceId: input.actor.practiceId,
+        actorId: input.actor.userId,
+        actorEmailSnapshot: input.actor.userEmail,
+        action: 'TEMPLATE_TWIN_MAPPING_UPDATED',
+        targetType: 'TemplateTwinCompiledVersion',
+        targetId: compiled.id,
+        metadata: {
+          templateVersion: template.version,
+          mappingCount: parsed.length,
+          certifiedMappingCount: parsed.filter(
+            (mapping) => mapping.status === 'certified',
+          ).length,
+          mappingsSha256: afterHash,
         },
       });
     },
@@ -471,22 +518,6 @@ export async function updateTemplateTwinMappings(input: {
   );
 
   const workspace = await refreshedWorkspace(input.noteTemplateId, input.actor);
-  await logAudit({
-    action: 'TEMPLATE_TWIN_MAPPING_UPDATED',
-    targetType: 'TemplateTwinCompiledVersion',
-    targetId: input.noteTemplateId,
-    userId: input.actor.userId,
-    userEmail: input.actor.userEmail,
-    practiceId: input.actor.practiceId,
-    metadata: {
-      templateVersion: workspace.template.version,
-      mappingCount: workspace.fields.length,
-      certifiedMappingCount: workspace.fields.filter(
-        (field) => field.mapping.status === 'certified',
-      ).length,
-      mappingsSha256: workspace.mappingsSha256,
-    },
-  });
   return workspace;
 }
 
@@ -494,8 +525,11 @@ export async function certifyAndActivateTemplateTwin(input: {
   noteTemplateId: string;
   actor: TemplateTwinActor;
   expectedMappingsSha256: string;
+  /** Required by runtime callers. Omitting it fails closed for a certifiable
+   * proof, preserving safe behavior for older direct service callers. */
+  expectedSyntheticTestProvenanceSha256?: string;
+  optionalFieldWaivers?: readonly { fieldId: string; reason: string }[];
 }): Promise<TemplateTwinWorkspace> {
-  let compiledId = '';
   await prisma.$transaction(
     async (tx: Prisma.TransactionClient) => {
       const { template, compiled } = await loadOwnedCompilation(
@@ -503,12 +537,27 @@ export async function certifyAndActivateTemplateTwin(input: {
         input.noteTemplateId,
         input.actor,
       );
-      compiledId = compiled.id;
       if (compiled.certification) {
         if (compiled.certificationStatus === 'CERTIFIED') return;
         throw new TemplateTwinLifecycleError(
           'IMMUTABLE',
           'This certification record is immutable.',
+        );
+      }
+
+      const sourcePrivacyScanEvidenceSha256 =
+        templateTwinSourcePhiScanEvidenceSha256(
+          compiled.sourceArtifact.privacyScanEvidence,
+        );
+      if (
+        compiled.sourceArtifact.validationStatus !== 'accepted' ||
+        !compiled.sourceArtifact.objectVersionId?.trim() ||
+        !compiled.sourceArtifact.objectEtag?.trim() ||
+        !sourcePrivacyScanEvidenceSha256
+      ) {
+        throw new TemplateTwinLifecycleError(
+          'CERTIFICATION_BLOCKED',
+          'The source template does not have valid safe-alpha privacy and static-asset scan evidence. Upload a newly inspected version.',
         );
       }
 
@@ -533,6 +582,18 @@ export async function certifyAndActivateTemplateTwin(input: {
           )
         : new Map();
       const mappingById = new Map(mappings.map((mapping) => [mapping.fieldId, mapping]));
+      if (
+        mappings.some(
+          (mapping) =>
+            mapping.clinicalConcept !== null &&
+            !isSupportedTemplateTwinConcept(mapping.clinicalConcept),
+        )
+      ) {
+        throw new TemplateTwinLifecycleError(
+          'UNSUPPORTED_CLINICAL_CONCEPT',
+          `${TEMPLATE_TWIN_UNSUPPORTED_CONCEPT_CODE}: ${TEMPLATE_TWIN_UNSUPPORTED_CONCEPT_REASON}`,
+        );
+      }
       const fieldsReady = ir.fields.every((field) => {
         const mapping = mappingById.get(field.fieldId);
         return Boolean(
@@ -543,6 +604,25 @@ export async function certifyAndActivateTemplateTwin(input: {
             validPracticeDefault(field, mapping),
         );
       });
+      const waiverTimestamp = new Date();
+      const requestedWaivers = input.optionalFieldWaivers ?? [];
+      const waiverEvidence = requestedWaivers.map((waiver) => ({
+        fieldId: waiver.fieldId,
+        mappingsSha256: mappingHash,
+        waivedById: input.actor.userId,
+        reason: waiver.reason.trim(),
+        waivedAt: waiverTimestamp,
+      }));
+      const coverage = syntheticManifest.success
+        ? evaluateTemplateTwinCertificationCoverage({
+            fields: ir.fields,
+            mappings,
+            manifest: syntheticManifest.data,
+            waivers: waiverEvidence,
+            currentMappingsSha256: mappingHash,
+            actorUserId: input.actor.userId,
+          })
+        : null;
       const proofReady = Boolean(
         syntheticManifest.success &&
         compiled.latestTestOutputSha256 &&
@@ -577,6 +657,8 @@ export async function certifyAndActivateTemplateTwin(input: {
       const testReady = Boolean(
         compiled.latestSyntheticTestManifest &&
           compiled.latestTestOutputObjectKey &&
+          compiled.latestTestOutputVersionId &&
+          compiled.latestTestOutputEtag &&
           compiled.latestTestOutputSha256 &&
           compiled.latestTestStaticContentSha256 &&
           compiled.latestTestVerifiedAt &&
@@ -600,14 +682,59 @@ export async function certifyAndActivateTemplateTwin(input: {
         compiled.fields.length !== ir.fields.length ||
         compiled.blockingUnsupportedCount > 0 ||
         ir.unsupported.some((item) => item.blocksCertification) ||
+        !coverage?.ready ||
         !testReady
       ) {
+        const coverageIssue = coverage?.issues[0];
         throw new TemplateTwinLifecycleError(
           'CERTIFICATION_BLOCKED',
-          'Confirm every field, clear blocking structure, and verify a synthetic DOCX using the current mappings.',
+          coverageIssue
+            ? `${coverageIssue.code}: ${coverageIssue.message}`
+            : 'Confirm every field, clear blocking structure, and verify a synthetic DOCX using the current mappings.',
         );
       }
 
+      const syntheticTestProvenanceSha256 =
+        templateTwinSyntheticTestProvenanceSha256({
+          compiledVersionId: compiled.id,
+          latestSyntheticTestManifest: compiled.latestSyntheticTestManifest,
+          latestTestMappingsSha256: compiled.latestTestMappingsSha256,
+          latestTestOutputObjectKey: compiled.latestTestOutputObjectKey,
+          latestTestOutputVersionId: compiled.latestTestOutputVersionId,
+          latestTestOutputEtag: compiled.latestTestOutputEtag,
+          latestTestOutputSha256: compiled.latestTestOutputSha256,
+          latestTestStaticContentSha256:
+            compiled.latestTestStaticContentSha256,
+          latestTestRoundTrip: compiled.latestTestRoundTrip,
+          latestTestVerifiedAt: compiled.latestTestVerifiedAt,
+        });
+      if (
+        !syntheticTestProvenanceSha256 ||
+        syntheticTestProvenanceSha256 !==
+          input.expectedSyntheticTestProvenanceSha256
+      ) {
+        throw new TemplateTwinLifecycleError(
+          'CONFLICT',
+          'The synthetic test changed after it was reviewed. Review the latest test output and acknowledge it again before certifying.',
+        );
+      }
+
+      const persistedFieldById = new Map(
+        compiled.fields.map((field) => [field.fieldId, field]),
+      );
+      if (waiverEvidence.length > 0) {
+        await tx.templateTwinFieldTestWaiver.createMany({
+          data: waiverEvidence.map((waiver) => ({
+            compiledVersionId: compiled.id,
+            fieldDefinitionId: persistedFieldById.get(waiver.fieldId)!.id,
+            fieldId: waiver.fieldId,
+            mappingsSha256: waiver.mappingsSha256,
+            waivedById: waiver.waivedById,
+            reason: waiver.reason,
+            waivedAt: waiverTimestamp,
+          })),
+        });
+      }
       // All mutable rows are finalized before the append-only certification is
       // inserted; database triggers reject any subsequent changes.
       await tx.templateTwinFieldDefinition.updateMany({
@@ -637,10 +764,64 @@ export async function certifyAndActivateTemplateTwin(input: {
           certifiedById: input.actor.userId,
           compiledStructureSha256: ir.structureSha256,
           approvedMappingsSha256: mappingHash,
+          sourcePrivacyScanEvidenceSha256,
           syntheticTestManifest:
             compiled.latestSyntheticTestManifest as Prisma.InputJsonValue,
           testOutputObjectKey: compiled.latestTestOutputObjectKey!,
+          testOutputVersionId: compiled.latestTestOutputVersionId!,
+          testOutputEtag: compiled.latestTestOutputEtag!,
           testOutputSha256: compiled.latestTestOutputSha256!,
+        },
+      });
+
+      for (const waiver of waiverEvidence) {
+        await enqueueTemplateTwinAudit(tx, {
+          eventKey: `template-twin:field-test-waived:${compiled.id}:${waiver.fieldId}:${mappingHash}`,
+          practiceId: input.actor.practiceId,
+          actorId: input.actor.userId,
+          actorEmailSnapshot: input.actor.userEmail,
+          action: 'TEMPLATE_TWIN_FIELD_TEST_WAIVED',
+          targetType: 'TemplateTwinFieldDefinition',
+          targetId: persistedFieldById.get(waiver.fieldId)!.id,
+          metadata: {
+            compiledVersionId: compiled.id,
+            fieldId: waiver.fieldId,
+            mappingsSha256: mappingHash,
+            templateVersion: template.version,
+          },
+        });
+      }
+
+      await enqueueTemplateTwinAudit(tx, {
+        eventKey: `template-twin:certified:${compiled.id}:${mappingHash}`,
+        practiceId: input.actor.practiceId,
+        actorId: input.actor.userId,
+        actorEmailSnapshot: input.actor.userEmail,
+        action: 'TEMPLATE_TWIN_CERTIFIED',
+        targetType: 'TemplateTwinCompiledVersion',
+        targetId: compiled.id,
+        metadata: {
+          templateVersion: template.version,
+          compilerVersion: ir.compilerVersion,
+          fieldCount: ir.fields.length,
+          optionalFieldWaiverCount: waiverEvidence.length,
+          sourcePrivacyScanEvidenceSha256,
+          mappingsSha256: mappingHash,
+          syntheticTestProvenanceSha256,
+        },
+      });
+      await enqueueTemplateTwinAudit(tx, {
+        eventKey: `template-twin:activated:${template.id}:v${template.version}`,
+        practiceId: input.actor.practiceId,
+        actorId: input.actor.userId,
+        actorEmailSnapshot: input.actor.userEmail,
+        action: 'TEMPLATE_TWIN_ACTIVATED',
+        targetType: 'NoteTemplate',
+        targetId: template.id,
+        metadata: {
+          templateVersion: template.version,
+          compiledVersionId: compiled.id,
+          mappingsSha256: mappingHash,
         },
       });
     },
@@ -648,33 +829,5 @@ export async function certifyAndActivateTemplateTwin(input: {
   );
 
   const workspace = await refreshedWorkspace(input.noteTemplateId, input.actor);
-  await Promise.all([
-    logAudit({
-      action: 'TEMPLATE_TWIN_CERTIFIED',
-      targetType: 'TemplateTwinCompiledVersion',
-      targetId: compiledId,
-      userId: input.actor.userId,
-      userEmail: input.actor.userEmail,
-      practiceId: input.actor.practiceId,
-      metadata: {
-        templateVersion: workspace.template.version,
-        compilerVersion: workspace.source.compilerVersion,
-        fieldCount: workspace.stats.totalFields,
-        mappingsSha256: workspace.mappingsSha256,
-      },
-    }),
-    logAudit({
-      action: 'TEMPLATE_TWIN_ACTIVATED',
-      targetType: 'NoteTemplate',
-      targetId: input.noteTemplateId,
-      userId: input.actor.userId,
-      userEmail: input.actor.userEmail,
-      practiceId: input.actor.practiceId,
-      metadata: {
-        templateVersion: workspace.template.version,
-        encounterType: workspace.template.encounterType,
-      },
-    }),
-  ]);
   return workspace;
 }

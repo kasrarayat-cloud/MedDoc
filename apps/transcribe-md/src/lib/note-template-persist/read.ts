@@ -7,11 +7,11 @@
 // pass the session doctor's own id (a doctor never sees another's templates).
 // ============================================================================
 
-import prisma from '@meddoc/db';
+import prisma from "@meddoc/db";
 import type {
   NoteTemplateSection,
   ParsedStyleProfile,
-} from '@/lib/note-template-parse/note-template-schema';
+} from "@/lib/note-template-parse/note-template-schema";
 // Types live in ./types (no prisma) so client code never imports this
 // prisma-backed module. Consumers import the types from there directly.
 import type {
@@ -20,9 +20,11 @@ import type {
   TemplateListItem,
   TemplateKind,
   TemplateTwinCertificationStatus,
-} from './types';
+} from "./types";
 
-function certificationStatus(value: string | null | undefined): TemplateTwinCertificationStatus | null {
+function certificationStatus(
+  value: string | null | undefined,
+): TemplateTwinCertificationStatus | null {
   if (!value) return null;
   return value.toLowerCase() as TemplateTwinCertificationStatus;
 }
@@ -34,9 +36,9 @@ function asSections(json: unknown): NoteTemplateSection[] {
 function asStyleProfile(json: unknown): ParsedStyleProfile {
   const o = (json ?? {}) as Record<string, unknown>;
   return {
-    tense: typeof o.tense === 'string' ? o.tense : null,
-    tone: typeof o.tone === 'string' ? o.tone : '',
-    abbreviations: typeof o.abbreviations === 'string' ? o.abbreviations : null,
+    tense: typeof o.tense === "string" ? o.tense : null,
+    tone: typeof o.tone === "string" ? o.tone : "",
+    abbreviations: typeof o.abbreviations === "string" ? o.abbreviations : null,
   };
 }
 
@@ -78,11 +80,12 @@ export function rowToListItem(row: {
     id: row.id,
     name: row.name,
     encounterType: row.encounterType,
-    status: (row.status as TemplateStatus) ?? 'draft',
+    status: (row.status as TemplateStatus) ?? "draft",
     version: row.version,
     sectionCount: sections.length,
     defaultCount: sections.filter((s) => !!s.defaultText).length,
-    templateKind: (row.templateKind as TemplateKind | undefined) ?? 'structured',
+    templateKind:
+      (row.templateKind as TemplateKind | undefined) ?? "structured",
     twinCertificationStatus: certificationStatus(
       row.templateTwinCompiledVersion?.certificationStatus,
     ),
@@ -95,7 +98,9 @@ export function rowToListItem(row: {
 
 /** The doctor's own templates for the settings list — draft + active +
  *  superseded(inactive) history, newest first, active surfaced first. */
-export async function listDoctorTemplates(doctorId: string): Promise<TemplateListItem[]> {
+export async function listDoctorTemplates(
+  doctorId: string,
+): Promise<TemplateListItem[]> {
   const rows = await prisma.noteTemplate.findMany({
     where: { doctorId },
     select: {
@@ -115,7 +120,7 @@ export async function listDoctorTemplates(doctorId: string): Promise<TemplateLis
       },
       updatedAt: true,
     },
-    orderBy: [{ updatedAt: 'desc' }],
+    orderBy: [{ updatedAt: "desc" }],
   });
   const items: TemplateListItem[] = rows.map(
     (r: {
@@ -135,6 +140,14 @@ export async function listDoctorTemplates(doctorId: string): Promise<TemplateLis
     }) => rowToListItem(r),
   );
   // Active first, then drafts, then inactive — stable within each by recency.
-  const rank: Record<TemplateStatus, number> = { active: 0, draft: 1, inactive: 2 };
-  return items.sort((a: TemplateListItem, b: TemplateListItem) => rank[a.status] - rank[b.status]);
+  const rank: Record<TemplateStatus, number> = {
+    active: 0,
+    draft: 1,
+    inactive: 2,
+    retired: 3,
+  };
+  return items.sort(
+    (a: TemplateListItem, b: TemplateListItem) =>
+      rank[a.status] - rank[b.status],
+  );
 }

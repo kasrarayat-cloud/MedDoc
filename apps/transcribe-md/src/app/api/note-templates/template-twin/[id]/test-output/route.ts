@@ -35,6 +35,8 @@ export async function GET(
         templateTwinCompiledVersion: {
           select: {
             latestTestOutputObjectKey: true,
+            latestTestOutputVersionId: true,
+            latestTestOutputEtag: true,
             latestTestOutputSha256: true,
             latestTestVerifiedAt: true,
             latestTestRoundTrip: true,
@@ -50,6 +52,8 @@ export async function GET(
       !compiled ||
       compiled.sourceArtifact.practiceId !== session.user.practiceId ||
       !compiled.latestTestOutputObjectKey ||
+      !compiled.latestTestOutputVersionId ||
+      !compiled.latestTestOutputEtag ||
       !compiled.latestTestOutputSha256 ||
       !compiled.latestTestVerifiedAt ||
       roundTrip?.verified !== true
@@ -59,6 +63,8 @@ export async function GET(
     const document = await createTemplateTwinArtifactStore().readOutputArtifact({
       practiceId: session.user.practiceId,
       objectKey: compiled.latestTestOutputObjectKey,
+      expectedObjectVersionId: compiled.latestTestOutputVersionId,
+      expectedObjectEtag: compiled.latestTestOutputEtag,
       expectedSha256: compiled.latestTestOutputSha256,
     });
     const safeName = row.name.replace(/[^A-Za-z0-9._-]+/g, '-').slice(0, 80) || 'template-twin';

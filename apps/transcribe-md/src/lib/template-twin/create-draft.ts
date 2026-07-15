@@ -1,12 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { z } from 'zod';
 
 import type { Prisma } from '@prisma/client';
 import prisma from '@meddoc/db';
 
-import {
-  TemplateDocxError,
-} from '@/lib/note-template-docx';
-import { logAudit } from '@/lib/audit';
+import { TemplateDocxError } from '@/lib/note-template-docx';
 
 import type { SemanticMapping, TemplateDocIR } from './ir';
 import { DOCX_TEMPLATE_COMPILER } from './artifact-compiler';
@@ -16,16 +14,22 @@ import {
 } from './semantic-mapping';
 import {
   createTemplateTwinArtifactStore,
+  claimTemplateTwinObject,
   DOCX_MIME_TYPE,
   type TemplateTwinArtifactStore,
 } from './storage';
 import {
   assertTemplateTwinSourcePhiFree,
   TemplateTwinPhiRejectedError,
+  TemplateTwinPhiScanUnavailableError,
+  TemplateTwinSourcePrivacyUnsupportedError,
+  type TemplateTwinSourcePhiScanEvidence,
 } from './source-phi';
+import { enqueueTemplateTwinAudit } from './audit-outbox';
 
 export class TemplateTwinDraftError extends Error {
   readonly code:
+    | 'INVALID_IDENTITY'
     | 'NO_FILLABLE_FIELDS'
     | 'SYSTEM_TEMPLATE_MISSING'
     | 'PERSISTENCE_FAILED';
@@ -37,8 +41,19 @@ export class TemplateTwinDraftError extends Error {
   }
 }
 
+const TemplateTwinIdentitySchema = z.object({
+  name: z.string().trim().min(3).max(120),
+  encounterType: z.string().trim().min(3).max(120),
+  versionDescription: z.string().trim().min(3).max(500),
+});
+
 export interface CreateTemplateTwinDraftInput {
   source: Uint8Array;
+  identity: {
+    name: string;
+    encounterType: string;
+    versionDescription: string;
+  };
   actor: {
     userId: string;
     userEmail: string;
@@ -83,35 +98,46 @@ async function quarantineRejectedSource(input: {
   if (input.bytes.byteLength < 1) return;
   const digest = createHash('sha256').update(input.bytes).digest('hex');
   try {
-    const row = await prisma.templateTwinSourceArtifact.create({
-      data: {
+    await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const row = await tx.templateTwinSourceArtifact.create({
+        data: {
+          practiceId: input.actor.practiceId,
+          createdById: input.actor.userId,
+          lineageId: randomUUID(),
+          lineageVersion: 1,
+          objectKey: null,
+          sha256: digest,
+          mimeType: DOCX_MIME_TYPE,
+          sizeBytes: input.bytes.byteLength,
+          validationStatus: 'quarantined',
+          rejectionCodes: [input.rejectionCode.slice(0, 80)],
+        },
+        select: { id: true },
+      });
+      await enqueueTemplateTwinAudit(tx, {
+        eventKey: `template-twin:quarantined:${row.id}:${digest}`,
         practiceId: input.actor.practiceId,
-        createdById: input.actor.userId,
-        lineageId: randomUUID(),
-        lineageVersion: 1,
-        objectKey: null,
-        sha256: digest,
-        mimeType: DOCX_MIME_TYPE,
-        sizeBytes: input.bytes.byteLength,
-        validationStatus: 'quarantined',
-        rejectionCodes: [input.rejectionCode.slice(0, 80)],
-      },
-      select: { id: true },
+        actorId: input.actor.userId,
+        actorEmailSnapshot: input.actor.userEmail,
+        action: 'TEMPLATE_TWIN_QUARANTINED',
+        targetType: 'TemplateTwinSourceArtifact',
+        targetId: row.id,
+        metadata: {
+          sha256: digest,
+          sizeBytes: input.bytes.byteLength,
+          rejectionCode: input.rejectionCode.slice(0, 80),
+          gateOutcome: 'blocked',
+        },
+      });
     });
-    await logAudit({
-      action: 'TEMPLATE_TWIN_QUARANTINED',
-      targetType: 'TemplateTwinSourceArtifact',
-      targetId: row.id,
-      userId: input.actor.userId,
-      userEmail: input.actor.userEmail,
-      practiceId: input.actor.practiceId,
-      success: false,
-      errorCode: input.rejectionCode.slice(0, 80),
-      metadata: { sha256: digest, sizeBytes: input.bytes.byteLength },
-    });
-  } catch {
-    // The source bytes are still rejected and discarded. A failed metadata-only
-    // quarantine write must not make an unsafe document acceptable.
+  } catch (error) {
+    // The source bytes are still rejected and discarded. Fail closed when the
+    // quarantine row and its durable audit event cannot be committed together.
+    throw new TemplateTwinDraftError(
+      'PERSISTENCE_FAILED',
+      'The rejected template could not be recorded. It was not stored or activated.',
+      error,
+    );
   }
 }
 
@@ -164,6 +190,13 @@ function fieldCreateInput(
 export async function createTemplateTwinDraft(
   input: CreateTemplateTwinDraftInput,
 ): Promise<CreateTemplateTwinDraftResult> {
+  const identity = TemplateTwinIdentitySchema.safeParse(input.identity);
+  if (!identity.success) {
+    throw new TemplateTwinDraftError(
+      'INVALID_IDENTITY',
+      'Name the template, choose its visit scope, and describe this version.',
+    );
+  }
   let ir: TemplateDocIR;
   try {
     ir = DOCX_TEMPLATE_COMPILER.compile(input.source);
@@ -188,14 +221,19 @@ export async function createTemplateTwinDraft(
     );
   }
 
+  let privacyScanEvidence: TemplateTwinSourcePhiScanEvidence;
   try {
-    await assertTemplateTwinSourcePhiFree({
+    privacyScanEvidence = await assertTemplateTwinSourcePhiFree({
       source: input.source,
       practiceId: input.actor.practiceId,
       userId: input.actor.userId,
     });
   } catch (error) {
-    if (error instanceof TemplateTwinPhiRejectedError) {
+    if (
+      error instanceof TemplateTwinPhiRejectedError ||
+      error instanceof TemplateTwinPhiScanUnavailableError ||
+      error instanceof TemplateTwinSourcePrivacyUnsupportedError
+    ) {
       await quarantineRejectedSource({
         bytes: input.source,
         actor: input.actor,
@@ -257,12 +295,13 @@ export async function createTemplateTwinDraft(
         data: {
           id: noteTemplateId,
           doctorId: input.actor.userId,
-          name: 'Original Word template',
-          encounterType: null,
+          name: identity.data.name,
+          encounterType: identity.data.encounterType,
           sections: systemDefault.sections as Prisma.InputJsonValue,
           styleProfile: systemDefault.styleProfile as Prisma.InputJsonValue,
           specialtyBaseline: systemDefault.specialtyBaseline,
           version: 1,
+          versionDescription: identity.data.versionDescription,
           status: 'draft',
           isSystemDefault: false,
           lineageId,
@@ -278,11 +317,14 @@ export async function createTemplateTwinDraft(
           lineageId,
           lineageVersion: 1,
           objectKey: stored.objectKey,
+          objectVersionId: stored.objectVersionId,
+          objectEtag: stored.objectEtag,
           sha256: stored.sha256,
           mimeType: stored.mimeType,
           sizeBytes: stored.sizeBytes,
           validationStatus: 'accepted',
           rejectionCodes: [],
+          privacyScanEvidence: asJson(privacyScanEvidence),
         },
       });
       await tx.templateTwinCompiledVersion.create({
@@ -304,6 +346,56 @@ export async function createTemplateTwinDraft(
           },
         },
       });
+      await claimTemplateTwinObject(tx, {
+        objectKey: stored.objectKey,
+        practiceId: input.actor.practiceId,
+        claimType: 'source_artifact',
+        claimId: sourceArtifactId,
+      });
+      await enqueueTemplateTwinAudit(tx, {
+        eventKey: `template-twin:source-uploaded:${sourceArtifactId}:${stored.sha256}`,
+        practiceId: input.actor.practiceId,
+        actorId: input.actor.userId,
+        actorEmailSnapshot: input.actor.userEmail,
+        action: 'TEMPLATE_TWIN_SOURCE_UPLOADED',
+        targetType: 'TemplateTwinSourceArtifact',
+        targetId: sourceArtifactId,
+        metadata: {
+          sha256: stored.sha256,
+          sizeBytes: stored.sizeBytes,
+          objectVersionId: stored.objectVersionId,
+          objectEtag: stored.objectEtag,
+          lineageVersion: 1,
+          privacyScanProfileVersion: privacyScanEvidence.profileVersion,
+          privacyScanProvider: privacyScanEvidence.provider,
+          privacyScanModel: privacyScanEvidence.model,
+          privacyScannedAt: privacyScanEvidence.scannedAt,
+          approvedStaticAssetPolicySha256:
+            privacyScanEvidence.approvedStaticAssetPolicySha256,
+          approvedStaticAssetCount:
+            privacyScanEvidence.approvedStaticAssetCount,
+          approvedStaticAssetUsedCount:
+            privacyScanEvidence.approvedStaticAssetUsedCount,
+        },
+      });
+      await enqueueTemplateTwinAudit(tx, {
+        eventKey: `template-twin:compiled:${compiledVersionId}:${ir.structureSha256}`,
+        practiceId: input.actor.practiceId,
+        actorId: input.actor.userId,
+        actorEmailSnapshot: input.actor.userEmail,
+        action: 'TEMPLATE_TWIN_COMPILED',
+        targetType: 'TemplateTwinCompiledVersion',
+        targetId: compiledVersionId,
+        metadata: {
+          compilerVersion: ir.compilerVersion,
+          irSchemaVersion: ir.irSchemaVersion,
+          fieldCount: ir.stats.totalFields,
+          tableCount: ir.stats.tables,
+          unsupportedCount: ir.stats.unsupported,
+          blockingUnsupportedCount: ir.stats.blockingUnsupported,
+          semanticProposalFallback: usedFallbackMappings,
+        },
+      });
     });
   } catch (error) {
     // The put-once source remains recoverable in the dedicated private bucket.
@@ -316,39 +408,6 @@ export async function createTemplateTwinDraft(
       error,
     );
   }
-
-  await Promise.all([
-    logAudit({
-      action: 'TEMPLATE_TWIN_SOURCE_UPLOADED',
-      targetType: 'TemplateTwinSourceArtifact',
-      targetId: sourceArtifactId,
-      userId: input.actor.userId,
-      userEmail: input.actor.userEmail,
-      practiceId: input.actor.practiceId,
-      metadata: {
-        sha256: stored.sha256,
-        sizeBytes: stored.sizeBytes,
-        lineageVersion: 1,
-      },
-    }),
-    logAudit({
-      action: 'TEMPLATE_TWIN_COMPILED',
-      targetType: 'TemplateTwinCompiledVersion',
-      targetId: compiledVersionId,
-      userId: input.actor.userId,
-      userEmail: input.actor.userEmail,
-      practiceId: input.actor.practiceId,
-      metadata: {
-        compilerVersion: ir.compilerVersion,
-        irSchemaVersion: ir.irSchemaVersion,
-        fieldCount: ir.stats.totalFields,
-        tableCount: ir.stats.tables,
-        unsupportedCount: ir.stats.unsupported,
-        blockingUnsupportedCount: ir.stats.blockingUnsupported,
-        semanticProposalFallback: usedFallbackMappings,
-      },
-    }),
-  ]);
 
   return {
     noteTemplateId,

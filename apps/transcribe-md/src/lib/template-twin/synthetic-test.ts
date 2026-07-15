@@ -1,12 +1,14 @@
+import { randomUUID } from 'node:crypto';
+
 import { Prisma } from '@prisma/client';
 import prisma from '@meddoc/db';
 
-import { logAudit } from '@/lib/audit';
 import {
   extractTemplateTwinDictationEntities,
   extractTemplateTwinTextEntities,
 } from '@/worker/layers/03-extract-entities';
 
+import { enqueueTemplateTwinAudit } from './audit-outbox';
 import { prepareTemplateTwinFill } from './fill-engine';
 import {
   projectEncounterFacts,
@@ -15,12 +17,17 @@ import {
 import { SemanticMappingSchema, TemplateDocIRSchema, type SemanticMapping } from './ir';
 import { templateTwinMappingsSha256 } from './mapping-hash';
 import {
+  claimTemplateTwinObject,
   createTemplateTwinArtifactStore,
   type TemplateTwinArtifactStore,
 } from './storage';
 import type { TemplateTwinActor } from './certification-lifecycle';
 import { readTemplateTwinWorkspace } from './workspace-read';
 import { assertTemplateTwinSyntheticEvidencePhiFree } from './synthetic-evidence-gate';
+import {
+  TEMPLATE_TWIN_UNSUPPORTED_CONCEPT_CODE,
+  isSupportedTemplateTwinConcept,
+} from './supported-concepts';
 
 export class TemplateTwinSyntheticTestError extends Error {
   readonly code:
@@ -101,6 +108,8 @@ export async function runTemplateTwinSyntheticTest(input: {
             select: {
               practiceId: true,
               objectKey: true,
+              objectVersionId: true,
+              objectEtag: true,
               sha256: true,
               sizeBytes: true,
               validationStatus: true,
@@ -138,7 +147,9 @@ export async function runTemplateTwinSyntheticTest(input: {
     !compiled ||
     compiled.sourceArtifact.practiceId !== input.actor.practiceId ||
     compiled.sourceArtifact.validationStatus !== 'accepted' ||
-    !compiled.sourceArtifact.objectKey
+    !compiled.sourceArtifact.objectKey ||
+    !compiled.sourceArtifact.objectVersionId ||
+    !compiled.sourceArtifact.objectEtag
   ) {
     throw new TemplateTwinSyntheticTestError('NOT_FOUND', 'Template Twin version not found.');
   }
@@ -168,6 +179,18 @@ export async function runTemplateTwinSyntheticTest(input: {
     throw new TemplateTwinSyntheticTestError(
       'MAPPINGS_NOT_READY',
       'Every field needs a physician-confirmed mapping before testing.',
+    );
+  }
+  if (
+    mappings.some(
+      (item: SemanticMapping) =>
+        item.clinicalConcept !== null &&
+        !isSupportedTemplateTwinConcept(item.clinicalConcept),
+    )
+  ) {
+    throw new TemplateTwinSyntheticTestError(
+      'MAPPINGS_NOT_READY',
+      `${TEMPLATE_TWIN_UNSUPPORTED_CONCEPT_CODE}: One or more fields use clinical details that the current extractor cannot safely produce.`,
     );
   }
 
@@ -212,10 +235,17 @@ export async function runTemplateTwinSyntheticTest(input: {
   const source = await storage.readSourceArtifact({
     practiceId: input.actor.practiceId,
     objectKey: compiled.sourceArtifact.objectKey,
+    expectedObjectVersionId: compiled.sourceArtifact.objectVersionId,
+    expectedObjectEtag: compiled.sourceArtifact.objectEtag,
     expectedSha256: compiled.sourceArtifact.sha256,
     expectedSizeBytes: compiled.sourceArtifact.sizeBytes,
   });
   const prepared = await prepareTemplateTwinFill({
+    // Certification runs do not have a visit row. Bind their immutable test
+    // manifest to the exact synthetic review text with a fixed local version;
+    // visit fills always use the persisted SOAP version instead.
+    soapVersion: 1,
+    soapFinal: extracted.contextText,
     compiledVersionId: compiled.id,
     noteTemplateId: row.id,
     noteTemplateVersion: row.version,
@@ -244,6 +274,11 @@ export async function runTemplateTwinSyntheticTest(input: {
     manifestSha256: prepared.manifestSha256,
     bytes: render.document,
   });
+  // Generated once outside the serializable callback: a database retry uses
+  // the same key, while an explicit physician re-test remains a distinct
+  // audited action even when deterministic rendering reuses identical bytes.
+  const syntheticTestEventKey =
+    `template-twin:synthetic-tested:${compiled.id}:${randomUUID()}`;
 
   await prisma.$transaction(
     async (tx: Prisma.TransactionClient) => {
@@ -293,32 +328,42 @@ export async function runTemplateTwinSyntheticTest(input: {
           latestSyntheticTestManifest: asJson(prepared.manifest),
           latestTestMappingsSha256: mappingsSha256,
           latestTestOutputObjectKey: output.objectKey,
+          latestTestOutputVersionId: output.objectVersionId,
+          latestTestOutputEtag: output.objectEtag,
           latestTestOutputSha256: output.sha256,
           latestTestStaticContentSha256: ir.staticContentSha256,
           latestTestRoundTrip: asJson(render.verification),
           latestTestVerifiedAt: new Date(),
         },
       });
+      await claimTemplateTwinObject(tx, {
+        objectKey: output.objectKey,
+        practiceId: input.actor.practiceId,
+        claimType: 'compiled_test_output',
+        claimId: compiled.id,
+      });
+      await enqueueTemplateTwinAudit(tx, {
+        eventKey: syntheticTestEventKey,
+        practiceId: input.actor.practiceId,
+        actorId: input.actor.userId,
+        actorEmailSnapshot: input.actor.userEmail,
+        action: 'TEMPLATE_TWIN_SYNTHETIC_TESTED',
+        targetType: 'TemplateTwinCompiledVersion',
+        targetId: compiled.id,
+        metadata: {
+          templateVersion: row.version,
+          mappingsSha256,
+          outputSha256: output.sha256,
+          outputVersionId: output.objectVersionId,
+          outputEtag: output.objectEtag,
+          fieldCount: prepared.manifest.fields.length,
+          verified: true,
+          inputMode: encounterMode,
+        },
+      });
     },
     { isolationLevel: 'Serializable' },
   );
-
-  await logAudit({
-    action: 'TEMPLATE_TWIN_SYNTHETIC_TESTED',
-    targetType: 'TemplateTwinCompiledVersion',
-    targetId: compiled.id,
-    userId: input.actor.userId,
-    userEmail: input.actor.userEmail,
-    practiceId: input.actor.practiceId,
-    metadata: {
-      templateVersion: row.version,
-      mappingsSha256,
-      outputSha256: output.sha256,
-      fieldCount: prepared.manifest.fields.length,
-      verified: true,
-      inputMode: encounterMode,
-    },
-  });
   const workspace = await readTemplateTwinWorkspace({
     noteTemplateId: row.id,
     doctorId: input.actor.userId,

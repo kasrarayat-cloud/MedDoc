@@ -46,6 +46,7 @@ import {
   JOB_STALE_VISIT_CLEANUP,
   JOB_RETENTION_SWEEP,
   JOB_STUCK_VISIT_WATCHDOG,
+  JOB_TEMPLATE_TWIN_MAINTENANCE,
   enqueueDlq,
   getSharedRedisConnection,
   getCleanupQueue,
@@ -61,6 +62,11 @@ import {
 import { applyAdditiveReviewState } from '@/worker/finalize-review-state';
 import { countUnclearMarkers } from '@/worker/layers/transcript-clarity';
 import { runStuckVisitWatchdog } from '@/worker/cleanup/stuck-visit-watchdog';
+import {
+  resolveTemplateTwinMaintenanceConfig,
+  runTemplateTwinMaintenance,
+  scheduleTemplateTwinMaintenance,
+} from '@/worker/cleanup/template-twin-maintenance';
 import { recordCleanupHeartbeat } from '@/lib/cleanup-heartbeat';
 import {
   isLayerComplete,
@@ -182,6 +188,14 @@ const STUCK_VISIT_WATCHDOG_ENABLED =
 const STUCK_VISIT_WATCHDOG_CRON =
   process.env.STUCK_VISIT_WATCHDOG_CRON?.trim() || '* * * * *';
 const STUCK_VISIT_WATCHDOG_TIMEOUT_MS = 60_000;
+
+// Template Twin audit delivery and object-ledger reconciliation are opt-in
+// until the additive database migration and dedicated bucket are provisioned.
+// Purging has a separate exact-true approval flag inside the maintenance job.
+const TEMPLATE_TWIN_MAINTENANCE_ENABLED = resolveTemplateTwinMaintenanceConfig(
+  process.env,
+).enabled;
+const TEMPLATE_TWIN_MAINTENANCE_TIMEOUT_MS = 5 * 60 * 1000;
 
 function withTimeout<T>(p: Promise<T>, ms: number, tag: string): Promise<T> {
   return Promise.race([
@@ -625,52 +639,6 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       noteTemplate = SYSTEM_DEFAULT_NOTE_TEMPLATE;
     }
 
-    // Template Twin is an additional evidence-backed document artifact, not
-    // a replacement for the established SOAP/coding pipeline. Both voice
-    // modes and typed input converge here on the same canonical fact resolver.
-    // An unresolved field is persisted for physician review; provenance,
-    // certification, source-integrity, or render failures fail closed.
-    if (selectedTemplate?.templateKind === 'template_twin_docx') {
-      currentLayer = 'template_twin';
-      const twinFill = await processTemplateTwinVisit({
-        visitId,
-        practiceId,
-        doctorId: visit.userId,
-        noteTemplateId: selectedTemplate.id,
-        noteTemplateVersion: selectedTemplate.version,
-        inputMode:
-          visit.inputMode === 'audio_upload'
-            ? 'conversation'
-            : visit.inputMode === 'voice_dictation'
-              ? 'dictation'
-              : 'text',
-        contextText,
-        entities,
-        asrQuality: audioConfidenceStats
-          ? shouldFlagForReview(audioConfidenceStats)
-            ? 'review'
-            : 'high'
-          : 'unknown',
-        validationNow: visit.createdAt,
-        resolverModelVersion:
-          process.env.TRANSCRIBE_MD_CLINICAL_MODEL || 'claude-sonnet-4-6',
-      });
-      if (
-        twinFill.manifest.counts.needsReview > 0 ||
-        twinFill.render === null
-      ) {
-        await prisma.$executeRaw`
-          UPDATE "transcribe_visits"
-          SET "reviewReason" = CASE
-                WHEN "needsReview" = false
-                  THEN ${TEMPLATE_TWIN_REVIEW_REASON}
-                ELSE "reviewReason"
-              END,
-              "needsReview" = true
-          WHERE id = ${visitId}
-        `;
-      }
-    }
     let soapDraft: string;
     if (isLayerComplete(resumeState, 'L4')) {
       logSkippedLayer(visitId, 'L4', attempt);
@@ -740,6 +708,63 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         critique,
         noteTemplate,
       });
+    }
+
+    // Template Twin is generated only after the exact physician-visible SOAP
+    // exists. The immutable fill manifest pins that current SOAP version and
+    // canonical digest; a later edit invalidates the fill and the sign gate
+    // independently compares both values again.
+    if (selectedTemplate?.templateKind === 'template_twin_docx') {
+      currentLayer = 'template_twin';
+      const currentSoap = await prisma.transcribeVisit.findUnique({
+        where: { id: visitId },
+        select: { soapFinal: true, soapVersion: true },
+      });
+      if (!currentSoap?.soapFinal?.trim()) {
+        throw new Error(
+          'Template Twin requires a current SOAP note before rendering.',
+        );
+      }
+      const twinFill = await processTemplateTwinVisit({
+        visitId,
+        soapVersion: currentSoap.soapVersion,
+        soapFinal: currentSoap.soapFinal,
+        practiceId,
+        doctorId: visit.userId,
+        noteTemplateId: selectedTemplate.id,
+        noteTemplateVersion: selectedTemplate.version,
+        inputMode:
+          visit.inputMode === 'audio_upload'
+            ? 'conversation'
+            : visit.inputMode === 'voice_dictation'
+              ? 'dictation'
+              : 'text',
+        contextText,
+        entities,
+        asrQuality: audioConfidenceStats
+          ? shouldFlagForReview(audioConfidenceStats)
+            ? 'review'
+            : 'high'
+          : 'unknown',
+        validationNow: visit.createdAt,
+        resolverModelVersion:
+          process.env.TRANSCRIBE_MD_CLINICAL_MODEL || 'claude-sonnet-4-6',
+      });
+      if (
+        twinFill.manifest.counts.needsReview > 0 ||
+        twinFill.render === null
+      ) {
+        await prisma.$executeRaw`
+          UPDATE "transcribe_visits"
+          SET "reviewReason" = CASE
+                WHEN "needsReview" = false
+                  THEN ${TEMPLATE_TWIN_REVIEW_REASON}
+                ELSE "reviewReason"
+              END,
+              "needsReview" = true
+          WHERE id = ${visitId}
+        `;
+      }
     }
 
     // -------------------------------------------------------------------
@@ -1312,11 +1337,12 @@ async function startCleanupWorker(): Promise<void> {
     !CLEANUP_ENABLED &&
     !STALE_VISIT_CLEANUP_ENABLED &&
     !RETENTION_SWEEP_ENABLED &&
-    !STUCK_VISIT_WATCHDOG_ENABLED
+    !STUCK_VISIT_WATCHDOG_ENABLED &&
+    !TEMPLATE_TWIN_MAINTENANCE_ENABLED
   ) {
     log.info('ops:cleanup', 'disabled', {
       reason:
-        'all four cleanup flags off (MINIO_ORPHAN_CLEANUP_ENABLED, STALE_VISIT_CLEANUP_ENABLED, RETENTION_SWEEP_ENABLED, STUCK_VISIT_WATCHDOG_ENABLED)',
+        'all cleanup flags off (MINIO_ORPHAN_CLEANUP_ENABLED, STALE_VISIT_CLEANUP_ENABLED, RETENTION_SWEEP_ENABLED, STUCK_VISIT_WATCHDOG_ENABLED, TEMPLATE_TWIN_MAINTENANCE_ENABLED)',
     });
     return;
   }
@@ -1391,6 +1417,38 @@ async function startCleanupWorker(): Promise<void> {
             errors: result.errors,
           });
         }
+        return;
+      }
+      if (job.name === JOB_TEMPLATE_TWIN_MAINTENANCE) {
+        const result = await withTimeout(
+          runTemplateTwinMaintenance({
+            prisma,
+            // Read process.env on every run. Operations may disable future
+            // work or approve a purge without rebuilding the worker image.
+            env: process.env,
+          }),
+          TEMPLATE_TWIN_MAINTENANCE_TIMEOUT_MS,
+          'template-twin-maintenance',
+        );
+        if (!result.enabled) return;
+        log.info('ops:template-twin-maintenance', 'completed', {
+          auditDelivered: result.audit.delivered,
+          auditFailed: result.audit.failed,
+          auditContended: result.audit.contended,
+          objectsRecovered: result.objects.recovered,
+          objectsScheduled: result.objects.scheduled,
+          objectsPurged: result.objects.purged,
+          objectFailures: result.objects.failed,
+          purgeApproved: result.purgeApproved,
+        });
+        await recordCleanupHeartbeat('template-twin-maintenance', {
+          auditDelivered: result.audit.delivered,
+          auditFailed: result.audit.failed,
+          objectsRecovered: result.objects.recovered,
+          objectsPurged: result.objects.purged,
+          objectFailures: result.objects.failed,
+          purgeApproved: result.purgeApproved,
+        });
         return;
       }
       throw new Error(`Unknown cleanup job name: ${job.name}`);
@@ -1505,6 +1563,24 @@ async function startCleanupWorker(): Promise<void> {
   } else {
     log.info('ops:stuck-visit-watchdog', 'disabled', {
       reason: 'STUCK_VISIT_WATCHDOG_ENABLED == "false"',
+    });
+  }
+
+  // ── Template Twin audit + orphan-ledger maintenance (opt-in) ──
+  if (TEMPLATE_TWIN_MAINTENANCE_ENABLED) {
+    const config = await scheduleTemplateTwinMaintenance({
+      queue: getCleanupQueue(),
+      env: process.env,
+    });
+    log.info('ops:template-twin-maintenance', 'scheduled', {
+      cron: config.cron,
+      tz: 'UTC',
+      timeoutMs: TEMPLATE_TWIN_MAINTENANCE_TIMEOUT_MS,
+      purgeApproved: config.purgeApproved,
+    });
+  } else {
+    log.info('ops:template-twin-maintenance', 'disabled', {
+      reason: 'TEMPLATE_TWIN_MAINTENANCE_ENABLED != "true"',
     });
   }
 }
