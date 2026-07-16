@@ -1,5 +1,7 @@
 'use server';
 
+import { randomUUID } from 'node:crypto';
+
 // ============================================================================
 // Note-format customization — Phase 2b: template lifecycle server actions
 // ----------------------------------------------------------------------------
@@ -97,7 +99,9 @@ export async function saveNoteTemplateAction(
     id: string;
     status: string;
     version: number;
-    lineageId: string;
+    // Nullable only during the online expand/backfill deployment window. The
+    // final schema is NOT NULL; pre-existing rows safely self-root at their id.
+    lineageId: string | null;
     templateKind: string;
   } | null = null;
   if (inputId) {
@@ -141,12 +145,35 @@ export async function saveNoteTemplateAction(
         // draft / inactive → update in place (not a live row)
         const updated = await tx.noteTemplate.update({
           where: { id: existing.id },
-          data: { name, encounterType, sections: cleanSections, styleProfile, status },
+          data: {
+            name,
+            encounterType,
+            sections: cleanSections,
+            styleProfile,
+            status,
+            // Transition compatibility: touching a pre-expand generic row also
+            // completes its deterministic self-root lineage in this bounded
+            // single-row write.
+            lineageId: existing.lineageId ?? existing.id,
+          },
           select: { id: true },
         });
         return { id: updated.id, status };
       }
       // new, OR editing an active row → new version (history preserved)
+      const lineageId = existing?.lineageId ?? existing?.id ?? randomUUID();
+      if (existing && existing.lineageId === null) {
+        // Parent and child must enter the same lineage. The cursor backfill uses
+        // the identical self-root value, so this is race-safe and idempotent.
+        // Raw SQL is intentional during the expand window: schema.prisma models
+        // the final non-null shape, so the generated Prisma filter type cannot
+        // express the transitional `lineageId IS NULL` predicate.
+        await tx.$executeRaw`
+          UPDATE "note_templates"
+          SET "lineageId" = ${lineageId}
+          WHERE "id" = ${existing.id} AND "lineageId" IS NULL
+        `;
+      }
       const created = await tx.noteTemplate.create({
         data: {
           doctorId,
@@ -157,9 +184,10 @@ export async function saveNoteTemplateAction(
           version: existing ? existing.version + 1 : 1,
           status,
           isSystemDefault: false,
-          ...(existing
-            ? { lineageId: existing.lineageId, parentVersionId: existing.id }
-            : {}),
+          // Explicit in every new application write; the online migration's
+          // insert trigger remains only as mixed-version defense in depth.
+          lineageId,
+          ...(existing ? { parentVersionId: existing.id } : {}),
         },
         select: { id: true },
       });
@@ -247,6 +275,8 @@ export async function duplicateNoteTemplateAction(id: string): Promise<SimpleRes
       version: 1,
       status: 'draft',
       isSystemDefault: false,
+      // A duplicate is a fresh lineage, not a version of the source row.
+      lineageId: randomUUID(),
     },
     select: { id: true },
   });

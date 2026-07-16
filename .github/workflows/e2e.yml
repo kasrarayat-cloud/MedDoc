@@ -83,6 +83,22 @@ jobs:
       - name: Migrate schema → meddoc_qa_test
         run: docker compose -f docker-compose.qa.yml run --rm db-migrate
 
+      # Prisma deploy performs only the online lineage EXPAND. Template Twin
+      # admission fails closed until the versioned operator has built its
+      # concurrent guard/final indexes, completed bounded batches, validated
+      # the proof constraint, and committed the short contract. This database
+      # is isolated/synthetic and is destroyed with `down -v` below.
+      - name: Contract NoteTemplate lineage in disposable QA
+        run: >
+          docker compose -f docker-compose.qa.yml run --rm
+          --entrypoint sh db-migrate
+          -c 'npm run lineage:online -w @meddoc/db -- --phase guard-index &&
+          npm run lineage:online -w @meddoc/db -- --phase backfill --batch-size 1000 --batch-delay-ms 0 &&
+          npm run lineage:online -w @meddoc/db -- --phase indexes &&
+          npm run lineage:online -w @meddoc/db -- --phase validate &&
+          TEMPLATE_TWIN_LINEAGE_CONTRACT_ACK=note_templates_lineage_v1:meddoc_qa_test
+          npm run lineage:online -w @meddoc/db -- --phase contract'
+
       # The #278 fail-closed db-guard (assertNonProdDatabase) refuses to seed
       # unless DATABASE_URL is a positively non-prod DB. meddoc_qa_test carries
       # the qa/test marker, so it proceeds; a prod URL here would abort.

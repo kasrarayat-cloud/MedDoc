@@ -531,7 +531,10 @@ model Practice {
 
   /// Safe-alpha rollout gate. A second global kill switch must also be
   /// explicitly disabled before any Template Twin server path may run.
-  templateTwinEnabled Boolean @default(false)
+  templateTwinEnabled           Boolean @default(false)
+  /// Monotonic epoch for linearizable Template Twin practice revocation.
+  /// Every controlled enable/disable operation increments this value.
+  templateTwinRolloutGeneration BigInt  @default(1)
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
@@ -2430,6 +2433,14 @@ model TemplateTwinFillManifest {
   roundTripVerified     Boolean @default(false)
   roundTripVerification Json?
 
+  /// Persisted rollout epoch that admitted the current output. Nullable only
+  /// for pre-remediation rows, which fail closed until regenerated.
+  pinnedGlobalRolloutGeneration   BigInt?
+  pinnedPracticeRolloutGeneration BigInt?
+  /// Exact rollout epoch revalidated at the atomic SIGNED transition.
+  signedGlobalRolloutGeneration   BigInt?
+  signedPracticeRolloutGeneration BigInt?
+
   /// Whole-document physician acknowledgement. The three provenance fields
   /// are set together only after the current manifest has been reviewed and
   /// are cleared whenever regeneration or a field correction changes it.
@@ -2570,6 +2581,19 @@ model TemplateTwinAuditOutbox {
   @@index([status, availableAt])
   @@index([practiceId, createdAt])
   @@map("template_twin_audit_outbox")
+}
+
+/// Singleton database-backed global rollout gate. The environment kill switch
+/// remains an additional process boundary; this row supplies the monotonic,
+/// transactionally lockable generation used for linearizable revocation.
+model TemplateTwinRolloutControl {
+  id         String   @id
+  enabled    Boolean  @default(false)
+  generation BigInt   @default(1)
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(6)
+
+  @@map("template_twin_rollout_controls")
 }
 
 // ============================================================================

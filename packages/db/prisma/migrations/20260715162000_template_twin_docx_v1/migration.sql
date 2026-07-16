@@ -1,6 +1,21 @@
--- Template Twin — Structure-Preserving DOCX v1
--- Additive schema only. This migration does not touch existing clinical data
--- beyond assigning every existing NoteTemplate row its own lineage root.
+-- Template Twin — Structure-Preserving DOCX v1 (ONLINE EXPAND PHASE)
+--
+-- This migration is intentionally additive and does not backfill the populated
+-- note_templates table. The bounded/resumable backfill, concurrent indexes,
+-- validation, and short contract lock are separate operator phases documented
+-- in docs/runbooks/template-twin-lineage-online-migration.md.
+--
+-- IMPORTANT: this migration was changed before any production deployment. A
+-- disposable development database that applied the earlier checksum must be
+-- rebuilt; the runbook explicitly forbids editing _prisma_migrations or using
+-- migrate resolve to disguise the checksum mismatch.
+
+-- The expand DDL is atomic and bounded. If note_templates cannot be locked in
+-- two seconds, deployment fails with no partial migration instead of waiting
+-- indefinitely. Populated-table index builds are deliberately absent below.
+BEGIN;
+SET LOCAL lock_timeout = '2s';
+SET LOCAL statement_timeout = '30s';
 
 ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'EXPORT_TEMPLATE_TWIN_DOCX_DOWNLOADED';
 ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'TEMPLATE_TWIN_SOURCE_UPLOADED';
@@ -33,13 +48,82 @@ ALTER TABLE "note_templates"
   ADD COLUMN "parentVersionId" TEXT,
   ADD COLUMN "templateKind" TEXT NOT NULL DEFAULT 'structured';
 
-UPDATE "note_templates" SET "lineageId" = "id" WHERE "lineageId" IS NULL;
-ALTER TABLE "note_templates" ALTER COLUMN "lineageId" SET NOT NULL;
+-- Mixed-version safety while the old rows are being backfilled. New application
+-- code supplies lineageId explicitly. This trigger is a transition backstop for
+-- an older process or raw generic-template writer that omits the new column.
+-- The contract operator removes it only after the NOT NULL invariant is live.
+CREATE OR REPLACE FUNCTION note_templates_assign_lineage_during_transition()
+RETURNS trigger AS $$
+BEGIN
+  IF NEW."lineageId" IS NULL THEN
+    NEW."lineageId" := NEW."id";
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
 
-CREATE UNIQUE INDEX "note_templates_lineageId_version_key"
-  ON "note_templates"("lineageId", "version");
-CREATE INDEX "note_templates_doctorId_templateKind_status_idx"
-  ON "note_templates"("doctorId", "templateKind", "status");
+CREATE TRIGGER note_templates_assign_lineage_during_transition
+  BEFORE INSERT ON "note_templates"
+  FOR EACH ROW
+  EXECUTE FUNCTION note_templates_assign_lineage_during_transition();
+
+-- No index is built on the populated table in prisma migrate deploy. Before
+-- backfill or application promotion, the operator's guard-index phase builds a
+-- transition partial unique index CONCURRENTLY and verifies pg_index. Keeping
+-- this out of the migration avoids relying on migration-runner transaction
+-- semantics and avoids a plain CREATE INDEX scan that would block writes.
+
+-- Durable, PHI-free cursor/progress state. The backfill is one row per stable
+-- operation key, advances with the note_templates primary-key ordering, and
+-- commits cursor + row updates atomically for interruption-safe resume.
+CREATE TABLE "template_twin_lineage_migration_progress" (
+  "operationKey" TEXT NOT NULL,
+  "phase" TEXT NOT NULL DEFAULT 'EXPANDED',
+  "lastProcessedId" TEXT,
+  "rowsProcessed" BIGINT NOT NULL DEFAULT 0,
+  "batchCount" BIGINT NOT NULL DEFAULT 0,
+  "lastBatchRows" INTEGER NOT NULL DEFAULT 0,
+  "lastErrorCode" TEXT,
+  "startedAt" TIMESTAMPTZ(6),
+  "updatedAt" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "completedAt" TIMESTAMPTZ(6),
+  CONSTRAINT "template_twin_lineage_migration_progress_pkey"
+    PRIMARY KEY ("operationKey"),
+  CONSTRAINT "template_twin_lineage_migration_phase_check" CHECK (
+    "phase" IN (
+      'EXPANDED', 'GUARDING', 'GUARDED', 'BACKFILLING', 'BACKFILLED',
+      'INDEXING', 'INDEXED',
+      'VALIDATING', 'VALIDATED', 'CONTRACTED', 'FAILED'
+    )
+  ),
+  CONSTRAINT "template_twin_lineage_migration_counts_check" CHECK (
+    "rowsProcessed" >= 0 AND "batchCount" >= 0 AND "lastBatchRows" >= 0
+  )
+);
+
+INSERT INTO "template_twin_lineage_migration_progress" ("operationKey")
+VALUES ('note_templates_lineage_v1');
+
+-- Completion is release evidence. Once contracted, neither application code
+-- nor an operator retry may rewrite or delete it; correction requires a new
+-- forward migration and explicit change record.
+CREATE OR REPLACE FUNCTION template_twin_lineage_progress_guard()
+RETURNS trigger AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'Template Twin lineage migration progress is durable';
+  END IF;
+  IF OLD."phase" = 'CONTRACTED' AND NEW IS DISTINCT FROM OLD THEN
+    RAISE EXCEPTION 'Contracted Template Twin lineage migration evidence is immutable';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER template_twin_lineage_progress_guard_update_delete
+  BEFORE UPDATE OR DELETE ON "template_twin_lineage_migration_progress"
+  FOR EACH ROW
+  EXECUTE FUNCTION template_twin_lineage_progress_guard();
 
 CREATE TABLE "template_twin_source_artifacts" (
   "id" TEXT NOT NULL,
@@ -409,3 +493,5 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER template_twin_signed_fill_guard_update_delete
   BEFORE UPDATE OR DELETE ON "template_twin_fill_manifests"
   FOR EACH ROW EXECUTE FUNCTION template_twin_signed_fill_guard();
+
+COMMIT;

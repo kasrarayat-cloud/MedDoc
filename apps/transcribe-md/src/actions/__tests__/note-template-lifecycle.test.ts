@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   update: vi.fn(),
   updateMany: vi.fn(),
   deleteMany: vi.fn(),
+  executeRaw: vi.fn(),
   requireSession: vi.fn(),
 }));
 
@@ -32,7 +33,8 @@ vi.mock('@meddoc/db', () => {
   const prisma = {
     noteTemplate,
     // Run the callback synchronously with a tx that shares the same mocks.
-    $transaction: async (fn: (tx: unknown) => unknown) => fn({ noteTemplate }),
+    $transaction: async (fn: (tx: unknown) => unknown) =>
+      fn({ noteTemplate, $executeRaw: mocks.executeRaw }),
   };
   return { default: prisma, prisma };
 });
@@ -69,6 +71,7 @@ beforeEach(() => {
   mocks.create.mockResolvedValue({ id: 'created-id' });
   mocks.update.mockResolvedValue({ id: 'updated-id' });
   mocks.updateMany.mockResolvedValue({ count: 1 });
+  mocks.executeRaw.mockResolvedValue(1);
 });
 
 describe('saveNoteTemplateAction — draft (new)', () => {
@@ -81,6 +84,7 @@ describe('saveNoteTemplateAction — draft (new)', () => {
     expect(data.status).toBe('draft');
     expect(data.version).toBe(1);
     expect(data.isSystemDefault).toBe(false);
+    expect(data.lineageId).toEqual(expect.any(String));
     expect(mocks.updateMany).not.toHaveBeenCalled();
   });
 });
@@ -129,6 +133,28 @@ describe('saveNoteTemplateAction — editing an ACTIVE row → new version', () 
     expect(mocks.create.mock.calls[0][0].data.lineageId).toBe('lineage-1');
     expect(mocks.create.mock.calls[0][0].data.parentVersionId).toBe(CUID);
     expect(mocks.updateMany).toHaveBeenCalled(); // supersede the old active
+    expect(mocks.executeRaw).not.toHaveBeenCalled();
+  });
+
+  it('self-roots a transitional null parent before creating its child version', async () => {
+    mocks.findFirst.mockResolvedValue({
+      id: CUID,
+      status: 'active',
+      version: 3,
+      lineageId: null,
+      templateKind: 'structured',
+    });
+
+    const r = await saveNoteTemplateAction(input({ id: CUID }), true);
+
+    expect(r.ok).toBe(true);
+    expect(mocks.executeRaw).toHaveBeenCalledOnce();
+    const rawCall = mocks.executeRaw.mock.calls[0];
+    expect(rawCall?.[1]).toBe(CUID);
+    expect(rawCall?.[2]).toBe(CUID);
+    const created = mocks.create.mock.calls[0][0].data;
+    expect(created.lineageId).toBe(CUID);
+    expect(created.parentVersionId).toBe(CUID);
   });
 });
 
@@ -236,6 +262,7 @@ describe('duplicateNoteTemplateAction', () => {
     expect(data.status).toBe('draft');
     expect(data.version).toBe(1);
     expect(data.doctorId).toBe(DOCTOR);
+    expect(data.lineageId).toEqual(expect.any(String));
   });
 });
 
