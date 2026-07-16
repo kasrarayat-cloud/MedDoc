@@ -10,6 +10,7 @@ import {
   TEMPLATE_TWIN_BINDING_FINGERPRINT_VERSION,
   certifiedBindingFingerprintSha256,
   deriveOoxmlBindingIdentity,
+  deriveTableCellBindingProfile,
   deriveTableLocation,
   hasStrongNativeIdentity,
   indexBindingXmlPart,
@@ -49,6 +50,9 @@ interface FieldBindingRecord {
   readonly part: IndexedPart;
   readonly node: IndexedNode;
   readonly identity: DerivedOoxmlBindingIdentity;
+  readonly bindingProfile:
+    | TemplateField['rendererBinding']['bindingProfile']
+    | null;
   readonly tableLocation: BindingTableLocation;
   readonly repeatAncestorCanonicalPath: string | null;
   readonly occurrences: number;
@@ -76,10 +80,7 @@ export function readbackTemplateDocxOutput(
 
   const sourceParts = new Map<string, IndexedPart>();
   const outputParts = new Map<string, IndexedPart>();
-  const loadPart = (
-    partName: string,
-    source: boolean,
-  ): IndexedPart => {
+  const loadPart = (partName: string, source: boolean): IndexedPart => {
     const cache = source ? sourceParts : outputParts;
     const existing = cache.get(partName);
     if (existing) return existing;
@@ -137,14 +138,13 @@ export function readbackTemplateDocxOutput(
     loadPart(partName, true);
     loadPart(partName, false);
   }
-  assertPackageBindingCensus(
-    sourceParts,
-    outputParts,
-    sourceIdentityPartNames,
-  );
+  assertPackageBindingCensus(sourceParts, outputParts, sourceIdentityPartNames);
 
   const sourceRecords = input.ir.fields.map((field) =>
-    certifiedSourceRecord(field, loadPart(field.rendererBinding.partName, true)),
+    certifiedSourceRecord(
+      field,
+      loadPart(field.rendererBinding.partName, true),
+    ),
   );
   assignOutputDerivedOrdinals(sourceRecords, structuralPartNames);
   for (const record of sourceRecords) assertCertifiedSourceRecord(record);
@@ -168,11 +168,13 @@ export function readbackTemplateDocxOutput(
     if (field.rowPrototype) {
       // Repeating structures are certification-blocked in safe alpha. A
       // future extractor/renderer must introduce independent row identities.
-      if (resolution.value !== null) failTemplateDocxRender('UNSUPPORTED_BINDING');
+      if (resolution.value !== null)
+        failTemplateDocxRender('UNSUPPORTED_BINDING');
     }
 
     if (resolution.value === null || field.detectionStatus === 'unsupported') {
-      if (resolution.value !== null) failTemplateDocxRender('FIELD_VALUE_INVALID');
+      if (resolution.value !== null)
+        failTemplateDocxRender('FIELD_VALUE_INVALID');
       const mustBePreserved =
         field.detectionStatus === 'unsupported' ||
         field.kind === 'checkbox' ||
@@ -204,7 +206,10 @@ export function readbackTemplateDocxOutput(
     }
 
     const actual = readFieldValue(outputRecord.part, outputRecord.node, field);
-    if (fieldValueSha256(field.fieldId, actual) !== fieldValueSha256(field.fieldId, resolution.value)) {
+    if (
+      fieldValueSha256(field.fieldId, actual) !==
+      fieldValueSha256(field.fieldId, resolution.value)
+    ) {
       failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
     }
     return {
@@ -276,10 +281,37 @@ function assertPackageBindingCensus(
                 },
           ];
         }
+        if (isWordElement(node, 'tc')) {
+          const bindingProfile = deriveTableCellBindingProfile(part, node);
+          if (bindingProfile) {
+            const identity = deriveOoxmlBindingIdentity(
+              part,
+              node,
+              'table_cell',
+            );
+            if (!identity) {
+              failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+            }
+            return [
+              {
+                partName,
+                canonicalPath: node.canonicalPath,
+                bindingType: 'table_cell',
+                bindingProfile,
+                nativeIdentity: identity.nativeIdentity,
+                identitySha256: identity.identitySha256,
+                tableLocation: deriveTableLocation(part, node),
+              },
+            ];
+          }
+        }
         return [];
       });
     });
-  if (canonicalSha256(census(sourceParts)) !== canonicalSha256(census(outputParts))) {
+  if (
+    canonicalSha256(census(sourceParts)) !==
+    canonicalSha256(census(outputParts))
+  ) {
     failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
   }
 }
@@ -290,7 +322,9 @@ function deriveRepeatAncestorCanonicalPath(
   expectedCanonicalPath: string | null,
 ): string | null {
   if (!expectedCanonicalPath) return null;
-  const expectedSourceAncestor = part.byCanonicalPath.get(expectedCanonicalPath);
+  const expectedSourceAncestor = part.byCanonicalPath.get(
+    expectedCanonicalPath,
+  );
   if (expectedSourceAncestor && isAncestor(expectedSourceAncestor, node)) {
     return expectedSourceAncestor.canonicalPath;
   }
@@ -334,6 +368,10 @@ function certifiedSourceRecord(
     part,
     node,
     identity,
+    bindingProfile:
+      field.rendererBinding.bindingType === 'table_cell'
+        ? deriveTableCellBindingProfile(part, node)
+        : null,
     tableLocation: deriveTableLocation(part, node),
     repeatAncestorCanonicalPath: deriveRepeatAncestorCanonicalPath(
       part,
@@ -354,6 +392,8 @@ function assertCertifiedSourceRecord(record: FieldBindingRecord): void {
     canonicalSha256(record.node.node) !== binding.sourceControlSha256 ||
     record.identity.bindingType !== binding.bindingType ||
     record.identity.identitySha256 !== binding.sourceBindingIdentitySha256 ||
+    (binding.bindingProfile !== undefined &&
+      record.bindingProfile !== binding.bindingProfile) ||
     !sameNativeIdentity(
       record.identity.nativeIdentity,
       nativeIdentityFromRendererBinding(binding),
@@ -392,26 +432,42 @@ function locateOutputBinding(
     const candidates =
       binding.bindingType === 'table_cell'
         ? partName === binding.partName
-          ? part.nodes.filter((node) => {
+          ? (() => {
+              // Resolve the certified path against the independently parsed
+              // completed bytes. The returned node still supplies its own
+              // canonical path, table location, profile, and fingerprint;
+              // the certified path is a lookup key, never accepted as proof.
+              const node = part.byCanonicalPath.get(binding.canonicalPath);
+              if (!node || !isWordElement(node, 'tc')) return [];
               const location = deriveTableLocation(part, node);
-              return (
-                isWordElement(node, 'tc') &&
-                location.tableIndex === binding.tableIndex &&
+              return location.tableIndex === binding.tableIndex &&
                 location.rowIndex === binding.rowIndex &&
                 location.cellIndex === binding.cellIndex
-              );
-            })
+                ? [node]
+                : [];
+            })()
           : []
         : part.nodes;
     for (const node of candidates) {
-      const identity = deriveOoxmlBindingIdentity(part, node, binding.bindingType);
+      const identity = deriveOoxmlBindingIdentity(
+        part,
+        node,
+        binding.bindingType,
+      );
       if (!identity) continue;
-      const identityMatches = hasStrongNativeIdentity(source.identity.nativeIdentity)
-        ? sameNativeIdentity(identity.nativeIdentity, source.identity.nativeIdentity)
+      const identityMatches = hasStrongNativeIdentity(
+        source.identity.nativeIdentity,
+      )
+        ? sameNativeIdentity(
+            identity.nativeIdentity,
+            source.identity.nativeIdentity,
+          )
         : identity.identitySha256 === source.identity.identitySha256;
       if (
         identityMatches &&
-        identity.identitySha256 === source.identity.identitySha256
+        identity.identitySha256 === source.identity.identitySha256 &&
+        (binding.bindingProfile === undefined ||
+          deriveTableCellBindingProfile(part, node) === binding.bindingProfile)
       ) {
         matches.push({ partName, part, node, identity });
       }
@@ -425,6 +481,10 @@ function locateOutputBinding(
     part: match.part,
     node: match.node,
     identity: match.identity,
+    bindingProfile:
+      binding.bindingType === 'table_cell'
+        ? deriveTableCellBindingProfile(match.part, match.node)
+        : null,
     tableLocation: deriveTableLocation(match.part, match.node),
     repeatAncestorCanonicalPath: deriveRepeatAncestorCanonicalPath(
       match.part,
@@ -464,6 +524,10 @@ function verifiedBindingEvidence(
     partName: output.partName,
     canonicalPath: output.node.canonicalPath,
     bindingType: output.identity.bindingType,
+    bindingProfile:
+      binding.bindingProfile === undefined
+        ? undefined
+        : (output.bindingProfile ?? undefined),
     bindingOrdinal: output.ordinal,
     nativeIdentity: output.identity.nativeIdentity,
     sourceControlSha256: binding.sourceControlSha256,
@@ -482,6 +546,9 @@ function verifiedBindingEvidence(
     outputPartName: output.partName,
     outputCanonicalPath: output.node.canonicalPath,
     outputBindingType: output.identity.bindingType,
+    ...(binding.bindingProfile === undefined
+      ? {}
+      : { outputBindingProfile: output.bindingProfile ?? undefined }),
     outputBindingOrdinal: output.ordinal,
     outputNativeIdentity: output.identity.nativeIdentity,
     outputBindingIdentitySha256: output.identity.identitySha256,
@@ -499,11 +566,17 @@ function isBlankBinding(
     const content = directWordChild(bound, 'sdtContent', part);
     if (!properties || !content || wordText(content, part) !== '') return false;
     if (field.kind === 'date') {
-      return !wordAttribute(directWordChild(properties, 'date', part), 'fullDate');
+      return !wordAttribute(
+        directWordChild(properties, 'date', part),
+        'fullDate',
+      );
     }
     if (field.kind === 'single_select') {
       const combo = directWordChild(properties, 'comboBox', part);
-      return !combo || !wordAttribute(descendantsWord(combo, 'lastValue', part)[0], 'val');
+      return (
+        !combo ||
+        !wordAttribute(descendantsWord(combo, 'lastValue', part)[0], 'val')
+      );
     }
     return true;
   }
@@ -524,7 +597,7 @@ function isBlankBinding(
     );
   }
   if (field.rendererBinding.bindingType === 'table_cell') {
-    return wordText(bound, part) === '';
+    return tableCellText(bound, part, field) === '';
   }
   return false;
 }
@@ -547,7 +620,7 @@ function readFieldValue(
     case 'legacy_form_field':
       return readLegacyField(part, bound, field);
     case 'table_cell':
-      return convertDisplayedValue(field, wordText(bound, part));
+      return convertDisplayedValue(field, tableCellText(bound, part, field));
     case 'repeating_row':
       failTemplateDocxRender('UNSUPPORTED_BINDING');
   }
@@ -558,7 +631,8 @@ function readContentControl(
   control: IndexedNode,
   field: TemplateField,
 ): FieldResolution['value'] {
-  if (!isWordElement(control, 'sdt')) failTemplateDocxRender('BINDING_NOT_FOUND');
+  if (!isWordElement(control, 'sdt'))
+    failTemplateDocxRender('BINDING_NOT_FOUND');
   const properties = directWordChild(control, 'sdtPr', part);
   const content = directWordChild(control, 'sdtContent', part);
   if (!properties || !content) failTemplateDocxRender('BINDING_NOT_FOUND');
@@ -595,8 +669,7 @@ function readContentControl(
           value ? 'checkedState' : 'uncheckedState',
           part,
         ).find(
-          (node) =>
-            node.visit.namespaceUri === WORDPROCESSINGML_2010_NAMESPACE,
+          (node) => node.visit.namespaceUri === WORDPROCESSINGML_2010_NAMESPACE,
         )
       : undefined;
     const glyphCode = namespacedAttribute(
@@ -604,11 +677,12 @@ function readContentControl(
       WORDPROCESSINGML_2010_NAMESPACE,
       'val',
     );
-    const glyph = glyphCode && /^[a-f0-9]{1,6}$/i.test(glyphCode)
-      ? String.fromCodePoint(Number.parseInt(glyphCode, 16))
-      : value
-        ? '☒'
-        : '☐';
+    const glyph =
+      glyphCode && /^[a-f0-9]{1,6}$/i.test(glyphCode)
+        ? String.fromCodePoint(Number.parseInt(glyphCode, 16))
+        : value
+          ? '☒'
+          : '☐';
     if (wordText(content, part) !== glyph) {
       failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
     }
@@ -621,7 +695,10 @@ function readContentControl(
     const match = /^(\d{4}-\d{2}-\d{2})T/.exec(fullDate ?? '');
     if (!date || !match) failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
     const value = match[1]!;
-    const format = wordAttribute(descendantsWord(date, 'dateFormat', part)[0], 'val');
+    const format = wordAttribute(
+      descendantsWord(date, 'dateFormat', part)[0],
+      'val',
+    );
     if (wordText(content, part) !== formatDate(value, format)) {
       failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
     }
@@ -673,7 +750,9 @@ function readLegacyField(
     if (!raw || !/^(?:0|[1-9][0-9]*)$/.test(raw)) {
       failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
     }
-    const option = field.allowedOptions.find((candidate) => candidate.ordinal === Number(raw));
+    const option = field.allowedOptions.find(
+      (candidate) => candidate.ordinal === Number(raw),
+    );
     if (!option || (resultText && resultText !== option.displayText)) {
       failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
     }
@@ -684,7 +763,12 @@ function readLegacyField(
     textInput ? descendantsWord(textInput, 'default', part)[0] : undefined,
     'val',
   );
-  if (defaultValue !== undefined && defaultValue !== null && resultText && defaultValue !== resultText) {
+  if (
+    defaultValue !== undefined &&
+    defaultValue !== null &&
+    resultText &&
+    defaultValue !== resultText
+  ) {
     failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
   }
   return convertDisplayedValue(field, defaultValue ?? resultText);
@@ -698,7 +782,8 @@ function convertDisplayedValue(
     const options = field.allowedOptions.filter(
       (option) => option.displayText === displayed,
     );
-    if (options.length !== 1) failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+    if (options.length !== 1)
+      failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
     return options[0]!.value;
   }
   if (field.kind === 'multi_select') {
@@ -707,7 +792,8 @@ function convertDisplayedValue(
       const options = field.allowedOptions.filter(
         (option) => option.displayText === display,
       );
-      if (options.length !== 1) failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+      if (options.length !== 1)
+        failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
       return options[0]!.value;
     });
     if (new Set(values).size !== values.length) {
@@ -727,7 +813,8 @@ function convertDisplayedValue(
 
 function legacyResultText(begin: IndexedNode, part: IndexedPart): string {
   let paragraph: IndexedNode | null = begin;
-  while (paragraph && !isWordElement(paragraph, 'p')) paragraph = paragraph.parent;
+  while (paragraph && !isWordElement(paragraph, 'p'))
+    paragraph = paragraph.parent;
   if (!paragraph) return '';
   const nodes = descendantsByLocal(paragraph, '', part);
   const startIndex = nodes.findIndex((node) => node === begin);
@@ -759,7 +846,9 @@ function directWordChild(
 ): IndexedNode | undefined {
   return childrenOf(node.node)
     .map((child) => part.byNode.get(child))
-    .find((child): child is IndexedNode => Boolean(child && isWordElement(child, wanted)));
+    .find((child): child is IndexedNode =>
+      Boolean(child && isWordElement(child, wanted)),
+    );
 }
 
 function descendantsWord(
@@ -808,6 +897,51 @@ function wordAttribute(
   return exactExpandedAttribute(node.visit, WORDPROCESSINGML_NAMESPACE, local);
 }
 
+function tableCellText(
+  cell: IndexedNode,
+  part: IndexedPart,
+  field: TemplateField,
+): string {
+  if (field.rendererBinding.bindingProfile !== 'TAB_ONLY_BLANK_TABLE_CELL_V1') {
+    return wordText(cell, part);
+  }
+  if (
+    deriveTableCellBindingProfile(part, cell) !== 'TAB_ONLY_BLANK_TABLE_CELL_V1'
+  ) {
+    failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+  }
+  const paragraphs = childrenOf(cell.node)
+    .map((child) => part.byNode.get(child))
+    .filter((child): child is IndexedNode =>
+      Boolean(child && isWordElement(child, 'p')),
+    );
+  if (paragraphs.length !== 1) {
+    failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+  }
+  const paragraphChildren = childrenOf(paragraphs[0]!.node)
+    .map((child) => part.byNode.get(child))
+    .filter((child): child is IndexedNode => Boolean(child));
+  const mutableChildren = paragraphChildren.filter(
+    (child) => !isWordElement(child, 'pPr'),
+  );
+  if (mutableChildren.length === 0) return '';
+  if (
+    mutableChildren.length !== 1 ||
+    !isWordElement(mutableChildren[0]!, 'r')
+  ) {
+    failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+  }
+  const textNodes = childrenOf(mutableChildren[0]!.node)
+    .map((child) => part.byNode.get(child))
+    .filter((child): child is IndexedNode =>
+      Boolean(child && isWordElement(child, 't')),
+    );
+  if (textNodes.length !== 1) {
+    failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+  }
+  return nodeText(textNodes[0]!.node);
+}
+
 function namespacedAttribute(
   node: IndexedNode | undefined,
   namespaceUri: string,
@@ -822,9 +956,13 @@ function wordText(node: IndexedNode, part: IndexedPart): string {
   const nodes = [node, ...descendantsByLocal(node, '', part)];
   for (const candidate of nodes) {
     if (candidate.visit.namespaceUri !== WORDPROCESSINGML_NAMESPACE) continue;
-    if (candidate.visit.localName === 't') output.push(nodeText(candidate.node));
+    if (candidate.visit.localName === 't')
+      output.push(nodeText(candidate.node));
     else if (candidate.visit.localName === 'tab') output.push('\t');
-    else if (candidate.visit.localName === 'br' || candidate.visit.localName === 'cr') {
+    else if (
+      candidate.visit.localName === 'br' ||
+      candidate.visit.localName === 'cr'
+    ) {
       output.push('\n');
     }
   }
@@ -857,7 +995,12 @@ function nodeText(node: OrderedXmlNode): string {
 function formatDate(value: string, format: string | undefined): string {
   if (!format) return value;
   const [year, month, day] = value.split('-');
-  if (!year || !month || !day || /[A-Za-z]/.test(format.replace(/yyyy|yy|MM|M|dd|d/g, ''))) {
+  if (
+    !year ||
+    !month ||
+    !day ||
+    /[A-Za-z]/.test(format.replace(/yyyy|yy|MM|M|dd|d/g, ''))
+  ) {
     return value;
   }
   return format.replace(/yyyy|yy|MM|M|dd|d/g, (token) => {

@@ -140,7 +140,9 @@ function validPracticeDefault(
     case 'date': {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return false;
       const date = new Date(`${raw}T00:00:00Z`);
-      return !Number.isNaN(date.valueOf()) && date.toISOString().slice(0, 10) === raw;
+      return (
+        !Number.isNaN(date.valueOf()) && date.toISOString().slice(0, 10) === raw
+      );
     }
     case 'number':
       return /^[-+]?(?:\d+(?:\.\d+)?|\.\d+)$/.test(raw.trim());
@@ -223,14 +225,20 @@ async function loadOwnedCompilation(
   });
   if (
     !row?.templateTwinCompiledVersion ||
-    row.templateTwinCompiledVersion.sourceArtifact.practiceId !== actor.practiceId
+    row.templateTwinCompiledVersion.sourceArtifact.practiceId !==
+      actor.practiceId
   ) {
-    throw new TemplateTwinLifecycleError('NOT_FOUND', 'Template Twin version not found.');
+    throw new TemplateTwinLifecycleError(
+      'NOT_FOUND',
+      'Template Twin version not found.',
+    );
   }
   return { template: row, compiled: row.templateTwinCompiledVersion };
 }
 
-function currentMappings(compiled: Awaited<ReturnType<typeof loadOwnedCompilation>>['compiled']) {
+function currentMappings(
+  compiled: Awaited<ReturnType<typeof loadOwnedCompilation>>['compiled'],
+) {
   return compiled.fields.map((field) => {
     if (!field.mapping) {
       throw new TemplateTwinLifecycleError(
@@ -269,6 +277,7 @@ function isVerifiedSyntheticProof(input: {
     bindingPath: string;
     canonicalBindingPath: string;
     bindingType: TemplateField['rendererBinding']['bindingType'];
+    bindingProfile?: TemplateField['rendererBinding']['bindingProfile'];
     bindingOrdinal: number;
     nativeIdentity: ReturnType<typeof nativeIdentityFromRendererBinding>;
     sourceBindingIdentitySha256: string;
@@ -300,36 +309,38 @@ function isVerifiedSyntheticProof(input: {
       const bindingEvidence = field?.bindingEvidence;
       return Boolean(
         field &&
-          isRecord(bindingEvidence) &&
-          field.status === 'verified' &&
-          field.partName === expected.partName &&
-          field.bindingPath === expected.bindingPath &&
-          field.valueSha256 === expected.valueSha256 &&
-          Number.isSafeInteger(expected.occurrences) &&
-          expected.occurrences > 0 &&
-          field.occurrences === expected.occurrences &&
-          bindingEvidence.contractVersion ===
-            TEMPLATE_TWIN_BINDING_FINGERPRINT_VERSION &&
-          bindingEvidence.status === 'verified' &&
-          bindingEvidence.certifiedFingerprintSha256 ===
-            expected.certifiedBindingSha256 &&
-          bindingEvidence.outputFingerprintSha256 ===
-            expected.certifiedBindingSha256 &&
-          bindingEvidence.outputPartName === expected.partName &&
-          bindingEvidence.outputCanonicalPath ===
-            expected.canonicalBindingPath &&
-          bindingEvidence.outputBindingType === expected.bindingType &&
-          bindingEvidence.outputBindingOrdinal === expected.bindingOrdinal &&
-          canonicalValuesEqual(
-            bindingEvidence.outputNativeIdentity,
-            expected.nativeIdentity,
-          ) &&
-          bindingEvidence.outputBindingIdentitySha256 ===
-            expected.sourceBindingIdentitySha256 &&
-          canonicalValuesEqual(
-            bindingEvidence.outputTableLocation,
-            expected.tableLocation,
-          ),
+        isRecord(bindingEvidence) &&
+        field.status === 'verified' &&
+        field.partName === expected.partName &&
+        field.bindingPath === expected.bindingPath &&
+        field.valueSha256 === expected.valueSha256 &&
+        Number.isSafeInteger(expected.occurrences) &&
+        expected.occurrences > 0 &&
+        field.occurrences === expected.occurrences &&
+        bindingEvidence.contractVersion ===
+          TEMPLATE_TWIN_BINDING_FINGERPRINT_VERSION &&
+        bindingEvidence.status === 'verified' &&
+        bindingEvidence.certifiedFingerprintSha256 ===
+          expected.certifiedBindingSha256 &&
+        bindingEvidence.outputFingerprintSha256 ===
+          expected.certifiedBindingSha256 &&
+        bindingEvidence.outputPartName === expected.partName &&
+        bindingEvidence.outputCanonicalPath === expected.canonicalBindingPath &&
+        bindingEvidence.outputBindingType === expected.bindingType &&
+        (expected.bindingProfile === undefined
+          ? bindingEvidence.outputBindingProfile === undefined
+          : bindingEvidence.outputBindingProfile === expected.bindingProfile) &&
+        bindingEvidence.outputBindingOrdinal === expected.bindingOrdinal &&
+        canonicalValuesEqual(
+          bindingEvidence.outputNativeIdentity,
+          expected.nativeIdentity,
+        ) &&
+        bindingEvidence.outputBindingIdentitySha256 ===
+          expected.sourceBindingIdentitySha256 &&
+        canonicalValuesEqual(
+          bindingEvidence.outputTableLocation,
+          expected.tableLocation,
+        ),
       );
     });
   return (
@@ -414,7 +425,10 @@ async function refreshedWorkspace(
     practiceId: actor.practiceId,
   });
   if (!workspace) {
-    throw new TemplateTwinLifecycleError('NOT_FOUND', 'Template Twin version not found.');
+    throw new TemplateTwinLifecycleError(
+      'NOT_FOUND',
+      'Template Twin version not found.',
+    );
   }
   return workspace;
 }
@@ -432,7 +446,10 @@ export async function updateTemplateTwinMappings(input: {
         input.noteTemplateId,
         input.actor,
       );
-      if (compiled.certification || compiled.certificationStatus === 'CERTIFIED') {
+      if (
+        compiled.certification ||
+        compiled.certificationStatus === 'CERTIFIED'
+      ) {
         throw new TemplateTwinLifecycleError(
           'IMMUTABLE',
           'Certified Template Twin versions cannot be edited.',
@@ -449,8 +466,12 @@ export async function updateTemplateTwinMappings(input: {
       }
 
       const ir = TemplateDocIRSchema.parse(compiled.compiledDocumentIr);
-      const fieldById = new Map(ir.fields.map((field) => [field.fieldId, field]));
-      const parsed = input.mappings.map((mapping) => SemanticMappingSchema.parse(mapping));
+      const fieldById = new Map(
+        ir.fields.map((field) => [field.fieldId, field]),
+      );
+      const parsed = input.mappings.map((mapping) =>
+        SemanticMappingSchema.parse(mapping),
+      );
       const byId = new Map<string, SemanticMapping>();
       for (const mapping of parsed) {
         if (byId.has(mapping.fieldId)) {
@@ -615,10 +636,9 @@ export async function certifyAndActivateTemplateTwin(input: {
         sourcePrivacyScanEvidenceSha256 = assertTemplateTwinSourceProvenance({
           privacyScanEvidence: compiled.sourceArtifact.privacyScanEvidence,
           requireBinding: true,
-          boundEvidenceSha256:
-            templateTwinSyntheticProofSourceEvidenceSha256(
-              compiled.latestTestRoundTrip,
-            ),
+          boundEvidenceSha256: templateTwinSyntheticProofSourceEvidenceSha256(
+            compiled.latestTestRoundTrip,
+          ),
         }).evidenceSha256;
       } catch {
         throw new TemplateTwinLifecycleError(
@@ -647,7 +667,9 @@ export async function certifyAndActivateTemplateTwin(input: {
             ]),
           )
         : new Map();
-      const mappingById = new Map(mappings.map((mapping) => [mapping.fieldId, mapping]));
+      const mappingById = new Map(
+        mappings.map((mapping) => [mapping.fieldId, mapping]),
+      );
       if (
         mappings.some(
           (mapping) =>
@@ -664,10 +686,10 @@ export async function certifyAndActivateTemplateTwin(input: {
         const mapping = mappingById.get(field.fieldId);
         return Boolean(
           mapping &&
-            mapping.status === 'certified' &&
-            mapping.clinicalConcept &&
-            isMappingTypeCompatible(field, mapping) &&
-            validPracticeDefault(field, mapping),
+          mapping.status === 'certified' &&
+          mapping.clinicalConcept &&
+          isMappingTypeCompatible(field, mapping) &&
+          validPracticeDefault(field, mapping),
         );
       });
       const waiverTimestamp = new Date();
@@ -700,71 +722,71 @@ export async function certifyAndActivateTemplateTwin(input: {
         certifiedBindingsReady &&
         syntheticManifest.success &&
         compiled.latestTestOutputSha256 &&
-          compiled.latestTestStaticContentSha256 &&
-          isVerifiedSyntheticProof({
-            roundTrip: compiled.latestTestRoundTrip,
-            sourceSha256: compiled.sourceArtifact.sha256,
-            outputSha256: compiled.latestTestOutputSha256,
-            staticContentSha256: compiled.latestTestStaticContentSha256,
-            expectedStaticContentSha256: ir.staticContentSha256,
-            expectedFields: ir.fields.map((field) => ({
+        compiled.latestTestStaticContentSha256 &&
+        isVerifiedSyntheticProof({
+          roundTrip: compiled.latestTestRoundTrip,
+          sourceSha256: compiled.sourceArtifact.sha256,
+          outputSha256: compiled.latestTestOutputSha256,
+          staticContentSha256: compiled.latestTestStaticContentSha256,
+          expectedStaticContentSha256: ir.staticContentSha256,
+          expectedFields: ir.fields.map((field) => ({
+            fieldId: field.fieldId,
+            partName: field.rendererBinding.partName,
+            bindingPath: field.rendererBinding.path,
+            canonicalBindingPath: field.rendererBinding.canonicalPath,
+            bindingType: field.rendererBinding.bindingType,
+            bindingProfile: field.rendererBinding.bindingProfile,
+            bindingOrdinal: field.rendererBinding.ordinal,
+            nativeIdentity: nativeIdentityFromRendererBinding(
+              field.rendererBinding,
+            ),
+            sourceBindingIdentitySha256:
+              field.rendererBinding.sourceBindingIdentitySha256,
+            certifiedBindingSha256:
+              field.rendererBinding.certifiedBindingSha256,
+            tableLocation: {
+              tableIndex: field.rendererBinding.tableIndex,
+              rowIndex: field.rendererBinding.rowIndex,
+              cellIndex: field.rendererBinding.cellIndex,
+            },
+            valueSha256: canonicalSha256({
               fieldId: field.fieldId,
-              partName: field.rendererBinding.partName,
-              bindingPath: field.rendererBinding.path,
-              canonicalBindingPath: field.rendererBinding.canonicalPath,
-              bindingType: field.rendererBinding.bindingType,
-              bindingOrdinal: field.rendererBinding.ordinal,
-              nativeIdentity: nativeIdentityFromRendererBinding(
-                field.rendererBinding,
-              ),
-              sourceBindingIdentitySha256:
-                field.rendererBinding.sourceBindingIdentitySha256,
-              certifiedBindingSha256:
-                field.rendererBinding.certifiedBindingSha256,
-              tableLocation: {
-                tableIndex: field.rendererBinding.tableIndex,
-                rowIndex: field.rendererBinding.rowIndex,
-                cellIndex: field.rendererBinding.cellIndex,
-              },
-              valueSha256: canonicalSha256({
-                fieldId: field.fieldId,
-                value: syntheticResolutions.get(field.fieldId)?.value,
-              }),
-              occurrences:
-                field.rowPrototype &&
-                Array.isArray(syntheticResolutions.get(field.fieldId)?.value)
-                  ? (
-                      syntheticResolutions.get(field.fieldId)!.value as unknown[]
-                    ).length
-                  : 1,
-            })),
-          }),
+              value: syntheticResolutions.get(field.fieldId)?.value,
+            }),
+            occurrences:
+              field.rowPrototype &&
+              Array.isArray(syntheticResolutions.get(field.fieldId)?.value)
+                ? (syntheticResolutions.get(field.fieldId)!.value as unknown[])
+                    .length
+                : 1,
+          })),
+        }),
       );
       const outputArtifact = compiled.latestTestOutputObjectKey
         ? parseTemplateTwinArtifactKey(compiled.latestTestOutputObjectKey)
         : null;
       const testReady = Boolean(
         compiled.latestSyntheticTestManifest &&
-          compiled.latestTestOutputObjectKey &&
-          compiled.latestTestOutputVersionId &&
-          compiled.latestTestOutputEtag &&
-          compiled.latestTestOutputSha256 &&
-          compiled.latestTestStaticContentSha256 &&
-          compiled.latestTestVerifiedAt &&
-          compiled.latestTestMappingsSha256 === mappingHash &&
-          outputArtifact?.practiceId === input.actor.practiceId &&
-          outputArtifact.kind === 'output' &&
-          outputArtifact.sha256 === compiled.latestTestOutputSha256 &&
-          isVerifiedSyntheticManifest({
-            manifest: compiled.latestSyntheticTestManifest,
-            outputObjectKey: compiled.latestTestOutputObjectKey,
-            compiledVersionId: compiled.id,
-            noteTemplateId: template.id,
-            noteTemplateVersion: template.version,
-            ir,
-            mappings,
-          }) &&
-          proofReady,
+        compiled.latestTestOutputObjectKey &&
+        compiled.latestTestOutputVersionId &&
+        compiled.latestTestOutputEtag &&
+        compiled.latestTestOutputSha256 &&
+        compiled.latestTestStaticContentSha256 &&
+        compiled.latestTestVerifiedAt &&
+        compiled.latestTestMappingsSha256 === mappingHash &&
+        outputArtifact?.practiceId === input.actor.practiceId &&
+        outputArtifact.kind === 'output' &&
+        outputArtifact.sha256 === compiled.latestTestOutputSha256 &&
+        isVerifiedSyntheticManifest({
+          manifest: compiled.latestSyntheticTestManifest,
+          outputObjectKey: compiled.latestTestOutputObjectKey,
+          compiledVersionId: compiled.id,
+          noteTemplateId: template.id,
+          noteTemplateVersion: template.version,
+          ir,
+          mappings,
+        }) &&
+        proofReady,
       );
       if (
         !fieldsReady ||
@@ -792,8 +814,7 @@ export async function certifyAndActivateTemplateTwin(input: {
           latestTestOutputVersionId: compiled.latestTestOutputVersionId,
           latestTestOutputEtag: compiled.latestTestOutputEtag,
           latestTestOutputSha256: compiled.latestTestOutputSha256,
-          latestTestStaticContentSha256:
-            compiled.latestTestStaticContentSha256,
+          latestTestStaticContentSha256: compiled.latestTestStaticContentSha256,
           latestTestRoundTrip: compiled.latestTestRoundTrip,
           latestTestVerifiedAt: compiled.latestTestVerifiedAt,
         });

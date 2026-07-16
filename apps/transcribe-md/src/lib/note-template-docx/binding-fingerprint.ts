@@ -3,6 +3,7 @@ import type { RendererBinding } from '../template-twin/ir';
 import {
   WORDPROCESSINGML_NAMESPACE,
   WORDPROCESSINGML_2010_NAMESPACE,
+  XML_NAMESPACE,
   childrenOf,
   exactExpandedAttribute,
   expandedXmlVisits,
@@ -60,6 +61,7 @@ export interface CertifiedBindingFingerprintInput {
   readonly partName: string;
   readonly canonicalPath: string;
   readonly bindingType: RendererBinding['bindingType'];
+  readonly bindingProfile?: RendererBinding['bindingProfile'];
   readonly bindingOrdinal: number;
   readonly nativeIdentity: NativeBindingIdentity;
   readonly sourceControlSha256: string;
@@ -77,6 +79,9 @@ export function certifiedBindingFingerprintSha256(
     partName: input.partName,
     canonicalPath: input.canonicalPath,
     bindingType: input.bindingType,
+    ...(input.bindingProfile === undefined
+      ? {}
+      : { bindingProfile: input.bindingProfile }),
     bindingOrdinal: input.bindingOrdinal,
     nativeIdentity: input.nativeIdentity,
     sourceControlSha256: input.sourceControlSha256,
@@ -95,6 +100,7 @@ export function rendererBindingFingerprintSha256(
     partName: binding.partName,
     canonicalPath: binding.canonicalPath,
     bindingType: binding.bindingType,
+    bindingProfile: binding.bindingProfile,
     bindingOrdinal: binding.ordinal,
     nativeIdentity: nativeIdentityFromRendererBinding(binding),
     sourceControlSha256: binding.sourceControlSha256,
@@ -141,7 +147,8 @@ export function indexBindingXmlPart(
       const tag = tagOf(node);
       if (!tag || tag === '#text' || tag === '?xml') continue;
       const visit = visits.get(node);
-      if (!visit) throw new Error('Expanded XML visit missing for binding node.');
+      if (!visit)
+        throw new Error('Expanded XML visit missing for binding node.');
       const qualifiedOrdinal = qualifiedCounts.get(tag) ?? 0;
       qualifiedCounts.set(tag, qualifiedOrdinal + 1);
       const path = `${parentPath}/${tag}[${qualifiedOrdinal}]`;
@@ -195,7 +202,11 @@ export function deriveOoxmlBindingIdentity(
       ),
       legacyName: null,
     };
-    const descriptor = contentControlDescriptor(part, properties, nativeIdentity);
+    const descriptor = contentControlDescriptor(
+      part,
+      properties,
+      nativeIdentity,
+    );
     return {
       bindingType,
       nativeIdentity,
@@ -236,14 +247,192 @@ export function deriveOoxmlBindingIdentity(
   return null;
 }
 
+/**
+ * Derives the narrow compatibility profile from the completed OOXML itself.
+ * This is intentionally stricter than a visible-text test: paragraph tab-stop
+ * properties are immutable layout, while the only mutable output slot is one
+ * direct plain-text run following w:pPr. A blank certified source has no run.
+ */
+export function deriveTableCellBindingProfile(
+  part: IndexedBindingPart,
+  bound: IndexedBindingNode,
+): RendererBinding['bindingProfile'] | null {
+  if (!isWordElement(bound, 'tc') || bound.visit.attributes.length > 0) {
+    return null;
+  }
+  const cellChildren = elementChildren(part, bound);
+  const paragraphs = directWordChildren(part, bound, 'p');
+  if (
+    paragraphs.length !== 1 ||
+    cellChildren.some(
+      (child) => !isWordElement(child, 'tcPr') && !isWordElement(child, 'p'),
+    ) ||
+    cellChildren.filter((child) => isWordElement(child, 'p')).length !== 1 ||
+    cellChildren.filter((child) => isWordElement(child, 'tcPr')).length > 1
+  ) {
+    return null;
+  }
+  const cellProperties = directWordChild(part, bound, 'tcPr');
+  if (
+    cellProperties &&
+    (descendantsWord(part, cellProperties, 'vMerge').length > 0 ||
+      descendantsWord(part, cellProperties, 'gridSpan').some(
+        (span) => wordAttribute(span, 'val') !== '1',
+      ))
+  ) {
+    return null;
+  }
+
+  const paragraph = paragraphs[0]!;
+  if (!validProfileParagraphAttributes(paragraph)) return null;
+  const paragraphChildren = elementChildren(part, paragraph);
+  const paragraphProperties = directWordChild(part, paragraph, 'pPr');
+  if (
+    !paragraphProperties ||
+    paragraphProperties.visit.attributes.length > 0 ||
+    paragraphChildren[0] !== paragraphProperties
+  ) {
+    return null;
+  }
+  const tabSets = directWordChildren(part, paragraphProperties, 'tabs');
+  if (tabSets.length !== 1) return null;
+  const tabSetChildren = elementChildren(part, tabSets[0]!);
+  if (
+    tabSetChildren.length === 0 ||
+    tabSetChildren.some(
+      (tab) =>
+        !isWordElement(tab, 'tab') ||
+        wordAttribute(tab, 'val') !== 'left' ||
+        !/^[0-9]+$/.test(wordAttribute(tab, 'pos') ?? ''),
+    )
+  ) {
+    return null;
+  }
+
+  const mutableChildren = paragraphChildren.slice(1);
+  if (mutableChildren.length === 0) {
+    return hasOnlyExpectedCharacterData(bound, null)
+      ? 'TAB_ONLY_BLANK_TABLE_CELL_V1'
+      : null;
+  }
+  if (
+    mutableChildren.length !== 1 ||
+    !isWordElement(mutableChildren[0]!, 'r')
+  ) {
+    return null;
+  }
+  const run = mutableChildren[0]!;
+  if (run.visit.attributes.length > 0) return null;
+  const runChildren = elementChildren(part, run);
+  if (runChildren.length !== 1 || !isWordElement(runChildren[0]!, 't')) {
+    return null;
+  }
+  const text = runChildren[0]!;
+  if (
+    elementChildren(part, text).length > 0 ||
+    !validRenderedTextAttributes(text) ||
+    !hasOnlyExpectedCharacterData(bound, text)
+  ) {
+    return null;
+  }
+  return 'TAB_ONLY_BLANK_TABLE_CELL_V1';
+}
+
+function validProfileParagraphAttributes(
+  paragraph: IndexedBindingNode,
+): boolean {
+  const seen = new Set<string>();
+  for (const attribute of paragraph.visit.attributes) {
+    const key = `${attribute.namespaceUri ?? ''}\0${attribute.localName}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    if (attribute.namespaceUri === WORDPROCESSINGML_NAMESPACE) {
+      if (
+        !['rsidP', 'rsidR', 'rsidRDefault', 'rsidRPr'].includes(
+          attribute.localName,
+        ) ||
+        !/^[0-9A-Fa-f]{8}$/.test(attribute.value)
+      ) {
+        return false;
+      }
+      continue;
+    }
+    if (
+      attribute.namespaceUri !== WORDPROCESSINGML_2010_NAMESPACE ||
+      !['paraId', 'textId'].includes(attribute.localName) ||
+      !/^[0-9A-Fa-f]{8}$/.test(attribute.value)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function validRenderedTextAttributes(text: IndexedBindingNode): boolean {
+  const rawText = childrenOf(text.node)
+    .filter((child) => tagOf(child) === '#text')
+    .map((child) => String(child['#text'] ?? ''))
+    .join('');
+  const requiresPreservation = /^\s|\s$/u.test(rawText);
+  if (text.visit.attributes.length === 0) return !requiresPreservation;
+  return (
+    text.visit.attributes.length === 1 &&
+    text.visit.attributes[0]!.namespaceUri === XML_NAMESPACE &&
+    text.visit.attributes[0]!.localName === 'space' &&
+    text.visit.attributes[0]!.value === 'preserve' &&
+    requiresPreservation
+  );
+}
+
+function hasOnlyExpectedCharacterData(
+  bound: IndexedBindingNode,
+  mutableText: IndexedBindingNode | null,
+): boolean {
+  const stack = [bound.node];
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    for (const child of childrenOf(current)) {
+      if (tagOf(child) === '#text') {
+        if (
+          current !== mutableText?.node &&
+          !/^\s*$/u.test(String(child['#text'] ?? ''))
+        ) {
+          return false;
+        }
+        continue;
+      }
+      stack.push(child);
+    }
+  }
+  return true;
+}
+
+function elementChildren(
+  part: IndexedBindingPart,
+  parent: IndexedBindingNode,
+): IndexedBindingNode[] {
+  return childrenOf(parent.node).flatMap((child) => {
+    const indexed = part.byNode.get(child);
+    return indexed ? [indexed] : [];
+  });
+}
+
 function tableCellDescriptor(
   part: IndexedBindingPart,
   cell: IndexedBindingNode,
 ): unknown {
   const properties = directWordChild(part, cell, 'tcPr');
   const paragraphs = directWordChildren(part, cell, 'p');
+  const profile = deriveTableCellBindingProfile(part, cell);
   return {
     bindingType: 'table_cell',
+    ...(profile
+      ? {
+          bindingProfile: profile,
+          cellAttributes: immutableAttributeDescriptor(cell),
+          paragraphAttributes: paragraphs.map(immutableAttributeDescriptor),
+        }
+      : {}),
     cellProperties: properties
       ? immutableXmlDescriptor(part, properties)
       : null,
@@ -256,6 +445,20 @@ function tableCellDescriptor(
     paragraphCount: paragraphs.length,
     nestedTableCount: descendantsWord(part, cell, 'tbl').length,
   };
+}
+
+function immutableAttributeDescriptor(node: IndexedBindingNode): unknown {
+  return [...node.visit.attributes]
+    .map((attribute) => ({
+      namespaceUri: attribute.namespaceUri,
+      localName: attribute.localName,
+      value: attribute.value,
+    }))
+    .sort((left, right) =>
+      `${left.namespaceUri ?? ''}\0${left.localName}`.localeCompare(
+        `${right.namespaceUri ?? ''}\0${right.localName}`,
+      ),
+    );
 }
 
 function immutableXmlDescriptor(
@@ -277,6 +480,12 @@ function immutableXmlDescriptor(
         ),
       ),
     children: childrenOf(node.node).flatMap((child) => {
+      if (tagOf(child) === '#text') {
+        const value = String(child['#text'] ?? '');
+        return /^\s*$/u.test(value)
+          ? []
+          : [{ namespaceUri: null, localName: '#text', value }];
+      }
       const indexed = part.byNode.get(child);
       return indexed ? [immutableXmlDescriptor(part, indexed)] : [];
     }),
@@ -294,15 +503,20 @@ export function deriveTableLocation(
   while (row && !isWordElement(row, 'tr')) row = row.parent;
   let table: IndexedBindingNode | null = row?.parent ?? null;
   while (table && !isWordElement(table, 'tbl')) table = table.parent;
-  if (!row || !table) return { tableIndex: null, rowIndex: null, cellIndex: null };
+  if (!row || !table)
+    return { tableIndex: null, rowIndex: null, cellIndex: null };
   return {
-    tableIndex: part.nodes.filter((node) => isWordElement(node, 'tbl')).indexOf(table),
+    tableIndex: part.nodes
+      .filter((node) => isWordElement(node, 'tbl'))
+      .indexOf(table),
     rowIndex: directWordChildren(part, table, 'tr').indexOf(row),
     cellIndex: directWordChildren(part, row, 'tc').indexOf(cell),
   };
 }
 
-export function hasStrongNativeIdentity(identity: NativeBindingIdentity): boolean {
+export function hasStrongNativeIdentity(
+  identity: NativeBindingIdentity,
+): boolean {
   return Boolean(
     identity.sdtId || identity.tag || identity.alias || identity.legacyName,
   );
@@ -362,8 +576,10 @@ function contentControlDescriptor(
     date: date
       ? {
           format:
-            wordAttribute(descendantsWord(part, date, 'dateFormat')[0], 'val') ??
-            null,
+            wordAttribute(
+              descendantsWord(part, date, 'dateFormat')[0],
+              'val',
+            ) ?? null,
           locale:
             wordAttribute(descendantsWord(part, date, 'lid')[0], 'val') ?? null,
           calendar:
@@ -382,7 +598,7 @@ function contentControlDescriptor(
           uncheckedState: stateDescriptor(part, checkbox, 'uncheckedState'),
         }
       : null,
-    multiline: text ? wordAttribute(text, 'multiLine') ?? null : null,
+    multiline: text ? (wordAttribute(text, 'multiLine') ?? null) : null,
   };
 }
 
@@ -397,7 +613,13 @@ function legacyControlDescriptor(
   return {
     bindingType: 'legacy_form_field',
     nativeIdentity,
-    controlType: checkbox ? 'checkbox' : dropdown ? 'dropdown' : text ? 'text' : 'unknown',
+    controlType: checkbox
+      ? 'checkbox'
+      : dropdown
+        ? 'dropdown'
+        : text
+          ? 'text'
+          : 'unknown',
     options: dropdown
       ? descendantsWord(part, dropdown, 'listEntry').map(
           (entry) => wordAttribute(entry, 'val') ?? null,
@@ -405,9 +627,12 @@ function legacyControlDescriptor(
       : [],
     text: text
       ? {
-          type: wordAttribute(descendantsWord(part, text, 'type')[0], 'val') ?? null,
+          type:
+            wordAttribute(descendantsWord(part, text, 'type')[0], 'val') ??
+            null,
           format:
-            wordAttribute(descendantsWord(part, text, 'format')[0], 'val') ?? null,
+            wordAttribute(descendantsWord(part, text, 'format')[0], 'val') ??
+            null,
           maxLength:
             wordAttribute(descendantsWord(part, text, 'maxLength')[0], 'val') ??
             null,
@@ -416,8 +641,10 @@ function legacyControlDescriptor(
     checkbox: checkbox
       ? {
           default:
-            wordAttribute(descendantsWord(part, checkbox, 'default')[0], 'val') ??
-            null,
+            wordAttribute(
+              descendantsWord(part, checkbox, 'default')[0],
+              'val',
+            ) ?? null,
           size:
             wordAttribute(descendantsWord(part, checkbox, 'size')[0], 'val') ??
             null,
@@ -474,9 +701,8 @@ function directWordChild(
 ): IndexedBindingNode | undefined {
   return childrenOf(node.node)
     .map((child) => part.byNode.get(child))
-    .find(
-      (child): child is IndexedBindingNode =>
-        Boolean(child && isWordElement(child, localName)),
+    .find((child): child is IndexedBindingNode =>
+      Boolean(child && isWordElement(child, localName)),
     );
 }
 
@@ -487,9 +713,8 @@ function directWordChildren(
 ): IndexedBindingNode[] {
   return childrenOf(node.node)
     .map((child) => part.byNode.get(child))
-    .filter(
-      (child): child is IndexedBindingNode =>
-        Boolean(child && isWordElement(child, localName)),
+    .filter((child): child is IndexedBindingNode =>
+      Boolean(child && isWordElement(child, localName)),
     );
 }
 

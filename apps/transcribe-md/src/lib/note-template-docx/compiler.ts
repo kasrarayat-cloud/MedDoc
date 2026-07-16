@@ -19,6 +19,7 @@ import {
 } from "./package-security";
 import {
   WORDPROCESSINGML_NAMESPACE,
+  WORDPROCESSINGML_2010_NAMESPACE,
   childrenOf,
   descendants,
   directChild,
@@ -49,6 +50,18 @@ const ORDINARY_PLACEHOLDER_RE =
   /(?:(?:<<|&lt;&lt;)\s*[^<>\n]{1,160}\s*(?:>>|&gt;&gt;)|\{\{\s*[^{}\n]{1,160}\s*\}\}|\[\s*(?:insert|enter|type|document|complete)\b[^\]\n]{0,160}\]|_{3,})/i;
 const REQUIRED_LABELED_BLANK_RE =
   /\b(?:required|must complete|enter|document)\b[^:\n]{0,100}:\s*$/i;
+
+/**
+ * Exact compiler-only admission profile for the Word-authored blank cells in
+ * the WM IOV compatibility slice. The paragraph tab is a static tab-stop
+ * definition under w:pPr; it is not mutable content and must remain intact.
+ *
+ * The immutable table-cell identity already fingerprints the complete cell
+ * and paragraph properties, so renderer/readback can distinguish this shape
+ * from a plain blank cell without trusting a mutable profile label.
+ */
+export const TAB_ONLY_BLANK_TABLE_CELL_PROFILE =
+  "TAB_ONLY_BLANK_TABLE_CELL_V1" as const;
 
 type TemplateDocNode = TemplateDocIR["nodes"][number];
 type TemplateDocPart = TemplateDocIR["parts"][number];
@@ -350,11 +363,10 @@ function blockDuplicateNativeBindingIdentities(
             blockedLocations,
           );
         } else {
-          pushIdentityOccurrence(
-            legacyNames,
-            canonicalLegacyName(legacyName),
-            { ...occurrence, label: legacyName },
-          );
+          pushIdentityOccurrence(legacyNames, canonicalLegacyName(legacyName), {
+            ...occurrence,
+            label: legacyName,
+          });
         }
         if (partName !== mainPartName) {
           addNativeIdentityBlocker(
@@ -435,9 +447,8 @@ function directIndexedWordChildren(
 ): IndexedBindingNode[] {
   return childrenOf(parent.node)
     .map((child) => part.byNode.get(child))
-    .filter(
-      (child): child is IndexedBindingNode =>
-        Boolean(child && isIndexedWordElement(child, localName)),
+    .filter((child): child is IndexedBindingNode =>
+      Boolean(child && isIndexedWordElement(child, localName)),
     );
 }
 
@@ -510,10 +521,7 @@ function canonicalDecimalIdentity(value: string | undefined): string | null {
     // number even though WordprocessingML commonly persists the same bits as
     // a signed decimal. Treat -1 and 4294967295 (and the rest of that overlap)
     // as one native ID without wrapping arbitrary out-of-range input.
-    if (
-      parsed >= BigInt("-2147483648") &&
-      parsed <= BigInt("4294967295")
-    ) {
+    if (parsed >= BigInt("-2147483648") && parsed <= BigInt("4294967295")) {
       return `word-uint32:${BigInt.asUintN(32, parsed).toString(10)}`;
     }
     return null;
@@ -588,6 +596,7 @@ function createCertifiedRendererBinding(input: {
   node: OrderedXmlNode;
   context: WalkContext;
   bindingType: "content_control" | "legacy_form_field" | "table_cell";
+  bindingProfile?: RendererBinding["bindingProfile"];
   sdtId: string | null;
   tag: string | null;
   alias: string | null;
@@ -614,6 +623,9 @@ function createCertifiedRendererBinding(input: {
   const base: Omit<RendererBinding, "certifiedBindingSha256"> = {
     partName: input.context.partName,
     bindingType: input.bindingType,
+    ...(input.bindingProfile === undefined
+      ? {}
+      : { bindingProfile: input.bindingProfile }),
     path: indexed.path,
     canonicalPath: indexed.canonicalPath,
     ordinal: input.state.nextBindingOrdinal++,
@@ -631,7 +643,9 @@ function createCertifiedRendererBinding(input: {
     originalContentSha256: input.originalContentSha256,
   };
   const certifiedNativeIdentity = nativeIdentityFromRendererBinding(base);
-  if (!sameNativeIdentity(certifiedNativeIdentity, sourceIdentity.nativeIdentity)) {
+  if (
+    !sameNativeIdentity(certifiedNativeIdentity, sourceIdentity.nativeIdentity)
+  ) {
     failTemplateDocx("IR_VALIDATION_FAILED");
   }
   return {
@@ -641,6 +655,7 @@ function createCertifiedRendererBinding(input: {
       partName: base.partName,
       canonicalPath: base.canonicalPath,
       bindingType: base.bindingType,
+      bindingProfile: base.bindingProfile,
       bindingOrdinal: base.ordinal,
       nativeIdentity: certifiedNativeIdentity,
       sourceControlSha256: base.sourceControlSha256,
@@ -754,8 +769,7 @@ function processParagraph(
     text &&
     !hasFillableDescendant &&
     !context.insideFieldContent &&
-    (ORDINARY_PLACEHOLDER_RE.test(text) ||
-      REQUIRED_LABELED_BLANK_RE.test(text))
+    (ORDINARY_PLACEHOLDER_RE.test(text) || REQUIRED_LABELED_BLANK_RE.test(text))
   ) {
     addUnsupported(state, {
       code: "UNBOUND_ORDINARY_PLACEHOLDER",
@@ -868,12 +882,11 @@ function processContentControl(
   const checkBox = descendants(properties, "checkbox")[0];
   const date = directChild(properties, "date");
   const plainText = directChild(properties, "text");
-  const richText =
-    !dropdown && !comboBox && !checkBox && !date && !plainText;
+  const richText = !dropdown && !comboBox && !checkBox && !date && !plainText;
   const structuredPlainText = Boolean(
     plainText &&
-      (descendants(content, "p").length > 1 ||
-        descendants(content, "numPr").length > 0),
+    (descendants(content, "p").length > 1 ||
+      descendants(content, "numPr").length > 0),
   );
   const unsupportedType = [
     "picture",
@@ -1182,11 +1195,12 @@ function processLegacyField(
     originalLabel: label.slice(0, 240),
     labelSource,
     displayOrder,
-    detectionStatus: ambiguousChoiceOptions || context.repeatAncestorPath
-      ? "unsupported"
-      : legacyName
-        ? "recognized"
-        : "needs_confirmation",
+    detectionStatus:
+      ambiguousChoiceOptions || context.repeatAncestorPath
+        ? "unsupported"
+        : legacyName
+          ? "recognized"
+          : "needs_confirmation",
     allowedOptions,
     rendererBinding: binding,
     required: false,
@@ -1333,33 +1347,48 @@ function processTable(
       };
       walkNodes(childrenOf(cell), cellLocation.path, cellContext, state);
 
+      const hasBlankParagraphTabStopCandidate =
+        containsBlankParagraphTabStopCandidate(cell);
       if (
         fieldIds.length === 0 &&
-        !cellText &&
-        nestedTableCount === 0 &&
-        verticalMerge !== "continue"
+        (!cellText || hasBlankParagraphTabStopCandidate)
       ) {
         const leftLabel =
           cellIndex > 0
             ? normalizeLabel(visibleText(rowCells[cellIndex - 1]!.node))
             : "";
         const headerLabel = tableHeaderLabels.get(logicalColumnStart) ?? "";
-        if (blankCellHasUnsupportedStructure(cell)) {
+        const admissionProfile = blankTableCellAdmissionProfile({
+          cell,
+          partName: context.partName,
+          gridSpan,
+          verticalMerge,
+          nestedTableCount,
+          state,
+        });
+        if (
+          admissionProfile === null &&
+          ((nestedTableCount === 0 && verticalMerge !== "continue") ||
+            hasBlankParagraphTabStopCandidate)
+        ) {
           addUnsupported(state, {
             code: "UNBOUND_COMPLEX_TABLE_CELL",
             partName: context.partName,
             path: cellLocation.path,
             label: leftLabel || headerLabel || null,
             detail:
-              "A visually blank table cell contains line breaks, drawings, or multiple paragraphs and cannot be bound safely in Template Twin safe alpha.",
+              "A visually blank table cell contains a structure outside the certified safe-alpha table-cell profiles and cannot be bound safely.",
             clinicallyMaterial: true,
             blocksCertification: true,
           });
-        } else {
+        } else if (admissionProfile !== null) {
           createAmbiguousTableCellField(
             cell,
             cellLocation.path,
             cellContext,
+            admissionProfile === TAB_ONLY_BLANK_TABLE_CELL_PROFILE
+              ? TAB_ONLY_BLANK_TABLE_CELL_PROFILE
+              : undefined,
             leftLabel
               ? { label: leftLabel, source: "left_cell" }
               : headerLabel
@@ -1387,6 +1416,30 @@ function processTable(
   });
 }
 
+type BlankTableCellAdmissionProfile =
+  | "PLAIN_BLANK_TABLE_CELL_V1"
+  | typeof TAB_ONLY_BLANK_TABLE_CELL_PROFILE;
+
+function blankTableCellAdmissionProfile(input: {
+  cell: OrderedXmlNode;
+  partName: string;
+  gridSpan: number;
+  verticalMerge: TemplateTableCell["verticalMerge"];
+  nestedTableCount: number;
+  state: CompilerState;
+}): BlankTableCellAdmissionProfile | null {
+  if (
+    input.nestedTableCount === 0 &&
+    input.verticalMerge !== "continue" &&
+    !blankCellHasUnsupportedStructure(input.cell)
+  ) {
+    return "PLAIN_BLANK_TABLE_CELL_V1";
+  }
+  return isTabOnlyBlankTableCellV1(input)
+    ? TAB_ONLY_BLANK_TABLE_CELL_PROFILE
+    : null;
+}
+
 function blankCellHasUnsupportedStructure(cell: OrderedXmlNode): boolean {
   return (
     descendants(cell, "p").length !== 1 ||
@@ -1396,10 +1449,602 @@ function blankCellHasUnsupportedStructure(cell: OrderedXmlNode): boolean {
   );
 }
 
+const TAB_STOP_PPR_SIMPLE_ON_OFF = new Set([
+  "adjustRightInd",
+  "autoSpaceDE",
+  "autoSpaceDN",
+  "contextualSpacing",
+  "keepLines",
+  "keepNext",
+  "pageBreakBefore",
+  "snapToGrid",
+  "widowControl",
+]);
+const TAB_STOP_PPR_CHILDREN = new Set([
+  ...TAB_STOP_PPR_SIMPLE_ON_OFF,
+  "ind",
+  "jc",
+  "pStyle",
+  "rPr",
+  "spacing",
+  "tabs",
+]);
+const TAB_STOP_RPR_CHILDREN = new Set([
+  "b",
+  "bCs",
+  "color",
+  "i",
+  "iCs",
+  "kern",
+  "rFonts",
+  "sz",
+  "szCs",
+  "u",
+]);
+function isTabOnlyBlankTableCellV1(input: {
+  cell: OrderedXmlNode;
+  partName: string;
+  gridSpan: number;
+  verticalMerge: TemplateTableCell["verticalMerge"];
+  nestedTableCount: number;
+  state: CompilerState;
+}): boolean {
+  if (
+    input.gridSpan !== 1 ||
+    input.verticalMerge !== "none" ||
+    input.nestedTableCount !== 0 ||
+    !hasOnlyWhitespaceCharacterData(input.cell)
+  ) {
+    return false;
+  }
+  const part = input.state.bindingIndexes.get(input.partName);
+  const cell = part?.byNode.get(input.cell);
+  if (!part || !cell || !isIndexedWordElement(cell, "tc")) return false;
+
+  const directCellChildren = indexedDirectChildren(part, cell);
+  const paragraphs = directCellChildren.filter((node) =>
+    isIndexedWordElement(node, "p"),
+  );
+  if (
+    cell.visit.attributes.length > 0 ||
+    paragraphs.length !== 1 ||
+    directCellChildren.some(
+      (node) =>
+        !isIndexedWordElement(node, "p") && !isIndexedWordElement(node, "tcPr"),
+    ) ||
+    directCellChildren.filter((node) => isIndexedWordElement(node, "tcPr"))
+      .length > 1
+  ) {
+    return false;
+  }
+  const cellProperties = directCellChildren.find((node) =>
+    isIndexedWordElement(node, "tcPr"),
+  );
+  if (!validTabOnlyCellProperties(part, cellProperties)) return false;
+
+  const paragraph = paragraphs[0]!;
+  const paragraphChildren = indexedDirectChildren(part, paragraph);
+  const paragraphProperties = paragraphChildren.filter((node) =>
+    isIndexedWordElement(node, "pPr"),
+  );
+  if (paragraphProperties.length !== 1 || paragraphChildren.length !== 1) {
+    return false;
+  }
+  if (!validTabOnlyParagraphAttributes(paragraph)) return false;
+
+  const pPr = paragraphProperties[0]!;
+  if (pPr.visit.attributes.length > 0) return false;
+  const propertyChildren = indexedDirectChildren(part, pPr);
+  if (
+    propertyChildren.some(
+      (node) =>
+        node.visit.namespaceUri !== WORDPROCESSINGML_NAMESPACE ||
+        !TAB_STOP_PPR_CHILDREN.has(node.visit.localName),
+    )
+  ) {
+    return false;
+  }
+  const tabsNodes = propertyChildren.filter((node) =>
+    isIndexedWordElement(node, "tabs"),
+  );
+  if (
+    tabsNodes.length !== 1 ||
+    !uniqueExpandedChildNames(propertyChildren) ||
+    !validTabStopDefinitions(part, tabsNodes[0]!)
+  ) {
+    return false;
+  }
+
+  for (const property of propertyChildren) {
+    if (property === tabsNodes[0]) continue;
+    if (TAB_STOP_PPR_SIMPLE_ON_OFF.has(property.visit.localName)) {
+      if (!validOnOffProperty(property)) return false;
+      continue;
+    }
+    if (property.visit.localName === "jc") {
+      if (!validJustificationProperty(property)) return false;
+      continue;
+    }
+    if (property.visit.localName === "rPr") {
+      if (!validParagraphRunProperties(part, property)) return false;
+      continue;
+    }
+    if (property.visit.localName === "pStyle") {
+      if (!validStringValueProperty(property)) return false;
+      continue;
+    }
+    if (property.visit.localName === "ind") {
+      if (!validParagraphIndentation(property)) return false;
+      continue;
+    }
+    if (property.visit.localName === "spacing") {
+      if (!validParagraphSpacing(property)) return false;
+      continue;
+    }
+    return false;
+  }
+  return true;
+}
+
+function validTabOnlyCellProperties(
+  part: IndexedBindingPart,
+  tcPr: IndexedBindingNode | undefined,
+): boolean {
+  if (!tcPr) return true;
+  if (tcPr.visit.attributes.length > 0) return false;
+  const properties = indexedDirectChildren(part, tcPr);
+  if (
+    !uniqueExpandedChildNames(properties) ||
+    properties.some(
+      (property) =>
+        property.visit.namespaceUri !== WORDPROCESSINGML_NAMESPACE ||
+        !["tcW", "vAlign"].includes(property.visit.localName) ||
+        indexedDirectChildren(part, property).length > 0,
+    )
+  ) {
+    return false;
+  }
+  for (const property of properties) {
+    if (property.visit.localName === "tcW") {
+      const width = exactExpandedAttribute(
+        property.visit,
+        WORDPROCESSINGML_NAMESPACE,
+        "w",
+      );
+      const type = exactExpandedAttribute(
+        property.visit,
+        WORDPROCESSINGML_NAMESPACE,
+        "type",
+      );
+      if (
+        !width ||
+        !/^(?:0|[1-9][0-9]{0,8})$/.test(width) ||
+        !type ||
+        !["auto", "dxa", "nil", "pct"].includes(type) ||
+        !attributesMatchAllowedNames(property, ["type", "w"])
+      ) {
+        return false;
+      }
+      continue;
+    }
+    const alignment = exactExpandedAttribute(
+      property.visit,
+      WORDPROCESSINGML_NAMESPACE,
+      "val",
+    );
+    if (
+      !alignment ||
+      !["bottom", "center", "top"].includes(alignment) ||
+      !attributesMatchAllowedNames(property, ["val"])
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function validTabOnlyParagraphAttributes(
+  paragraph: IndexedBindingNode,
+): boolean {
+  const seen = new Set<string>();
+  for (const attribute of paragraph.visit.attributes) {
+    const key = `${attribute.namespaceUri ?? ""}\0${attribute.localName}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    if (attribute.namespaceUri === WORDPROCESSINGML_NAMESPACE) {
+      if (
+        !["rsidP", "rsidR", "rsidRDefault", "rsidRPr"].includes(
+          attribute.localName,
+        ) ||
+        !/^[0-9A-Fa-f]{8}$/.test(attribute.value)
+      ) {
+        return false;
+      }
+      continue;
+    }
+    if (
+      attribute.namespaceUri !== WORDPROCESSINGML_2010_NAMESPACE ||
+      !["paraId", "textId"].includes(attribute.localName) ||
+      !/^[0-9A-Fa-f]{8}$/.test(attribute.value)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function hasOnlyWhitespaceCharacterData(node: OrderedXmlNode): boolean {
+  const stack = [node];
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    for (const child of childrenOf(current)) {
+      if (tagOf(child) === "#text") {
+        if (!/^\s*$/u.test(String(child["#text"] ?? ""))) return false;
+        continue;
+      }
+      stack.push(child);
+    }
+  }
+  return true;
+}
+
+function containsBlankParagraphTabStopCandidate(cell: OrderedXmlNode): boolean {
+  // This conservative candidate check intentionally uses local-name matching:
+  // foreign namespace shadows are never admitted by the namespace-aware V1
+  // classifier, but they must still keep the cell certification-blocked.
+  return directChildren(cell, "p").some(
+    (paragraph) =>
+      normalizeLabel(visibleText(paragraph)) === "" &&
+      descendants(paragraph, "tab").length > 0,
+  );
+}
+
+function validTabStopDefinitions(
+  part: IndexedBindingPart,
+  tabs: IndexedBindingNode,
+): boolean {
+  if (tabs.visit.attributes.length > 0) return false;
+  const stops = indexedDirectChildren(part, tabs);
+  if (
+    stops.length !== 1 ||
+    stops.some((stop) => !isIndexedWordElement(stop, "tab"))
+  ) {
+    return false;
+  }
+  for (const stop of stops) {
+    if (indexedDirectChildren(part, stop).length > 0) return false;
+    const value = exactExpandedAttribute(
+      stop.visit,
+      WORDPROCESSINGML_NAMESPACE,
+      "val",
+    );
+    const position = exactExpandedAttribute(
+      stop.visit,
+      WORDPROCESSINGML_NAMESPACE,
+      "pos",
+    );
+    if (
+      value !== "left" ||
+      !position ||
+      !/^(?:0|[1-9][0-9]{0,4})$/.test(position) ||
+      Number(position) > 31_680 ||
+      !attributesMatchAllowedNames(stop, ["pos", "val"])
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function validParagraphRunProperties(
+  part: IndexedBindingPart,
+  rPr: IndexedBindingNode,
+): boolean {
+  if (rPr.visit.attributes.length > 0) return false;
+  const properties = indexedDirectChildren(part, rPr);
+  if (!uniqueExpandedChildNames(properties)) return false;
+  for (const property of properties) {
+    if (
+      property.visit.namespaceUri === WORDPROCESSINGML_2010_NAMESPACE &&
+      property.visit.localName === "ligatures"
+    ) {
+      if (
+        indexedDirectChildren(part, property).length > 0 ||
+        exactExpandedAttribute(
+          property.visit,
+          WORDPROCESSINGML_2010_NAMESPACE,
+          "val",
+        ) !== "none" ||
+        !attributesMatchAllowedNames(
+          property,
+          ["val"],
+          WORDPROCESSINGML_2010_NAMESPACE,
+        )
+      ) {
+        return false;
+      }
+      continue;
+    }
+    if (
+      property.visit.namespaceUri !== WORDPROCESSINGML_NAMESPACE ||
+      !TAB_STOP_RPR_CHILDREN.has(property.visit.localName) ||
+      indexedDirectChildren(part, property).length > 0
+    ) {
+      return false;
+    }
+    if (["b", "bCs", "i", "iCs"].includes(property.visit.localName)) {
+      if (!validOnOffProperty(property)) return false;
+      continue;
+    }
+    const value = exactExpandedAttribute(
+      property.visit,
+      WORDPROCESSINGML_NAMESPACE,
+      "val",
+    );
+    if (property.visit.localName === "rFonts") {
+      const allowed = [
+        "ascii",
+        "asciiTheme",
+        "cs",
+        "cstheme",
+        "eastAsia",
+        "eastAsiaTheme",
+        "hAnsi",
+        "hAnsiTheme",
+      ];
+      if (
+        property.visit.attributes.length === 0 ||
+        !attributesMatchAllowedNames(property, allowed) ||
+        property.visit.attributes.some(
+          (attribute) => !validBoundedOoxmlString(attribute.value),
+        )
+      ) {
+        return false;
+      }
+      continue;
+    }
+    if (
+      !attributesMatchAllowedNames(property, ["val"]) ||
+      value === undefined
+    ) {
+      return false;
+    }
+    if (property.visit.localName === "color") {
+      if (!/^(?:[0-9A-Fa-f]{6}|auto)$/.test(value)) return false;
+      continue;
+    }
+    if (["kern", "sz", "szCs"].includes(property.visit.localName)) {
+      if (!/^(?:0|[1-9][0-9]{0,3})$/.test(value) || Number(value) > 3276) {
+        return false;
+      }
+      continue;
+    }
+    if (property.visit.localName === "u") {
+      if (
+        ![
+          "dash",
+          "dashDotDotHeavy",
+          "dashDotHeavy",
+          "dashedHeavy",
+          "dashLong",
+          "dashLongHeavy",
+          "dotDash",
+          "dotDotDash",
+          "dotted",
+          "dottedHeavy",
+          "double",
+          "none",
+          "single",
+          "thick",
+          "wave",
+          "wavyDouble",
+          "wavyHeavy",
+          "words",
+        ].includes(value)
+      ) {
+        return false;
+      }
+      continue;
+    }
+    return false;
+  }
+  return true;
+}
+
+function uniqueExpandedChildNames(
+  nodes: readonly IndexedBindingNode[],
+): boolean {
+  const seen = new Set<string>();
+  for (const node of nodes) {
+    const key = `${node.visit.namespaceUri ?? ""}\0${node.visit.localName}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+  }
+  return true;
+}
+
+function validStringValueProperty(node: IndexedBindingNode): boolean {
+  if (indexedChildElementCount(node) > 0) return false;
+  const value = exactExpandedAttribute(
+    node.visit,
+    WORDPROCESSINGML_NAMESPACE,
+    "val",
+  );
+  return (
+    value !== undefined &&
+    validBoundedOoxmlString(value) &&
+    attributesMatchAllowedNames(node, ["val"])
+  );
+}
+
+function validBoundedOoxmlString(value: string): boolean {
+  return (
+    value.length > 0 &&
+    value.length <= 240 &&
+    !/[\u0000-\u001f\u007f]/u.test(value)
+  );
+}
+
+function validParagraphIndentation(node: IndexedBindingNode): boolean {
+  if (indexedChildElementCount(node) > 0) return false;
+  const allowed = [
+    "end",
+    "endChars",
+    "firstLine",
+    "firstLineChars",
+    "hanging",
+    "hangingChars",
+    "left",
+    "leftChars",
+    "right",
+    "rightChars",
+    "start",
+    "startChars",
+  ];
+  if (
+    node.visit.attributes.length === 0 ||
+    !attributesMatchAllowedNames(node, allowed)
+  ) {
+    return false;
+  }
+  const values = new Map(
+    node.visit.attributes.map((attribute) => [
+      attribute.localName,
+      attribute.value,
+    ]),
+  );
+  if (
+    (values.has("firstLine") && values.has("hanging")) ||
+    (values.has("firstLineChars") && values.has("hangingChars"))
+  ) {
+    return false;
+  }
+  return [...values].every(([name, value]) =>
+    name.endsWith("Chars")
+      ? /^(?:0|[1-9][0-9]{0,4})$/.test(value)
+      : /^-?(?:0|[1-9][0-9]{0,4})$/.test(value) &&
+        Math.abs(Number(value)) <= 31_680,
+  );
+}
+
+function validParagraphSpacing(node: IndexedBindingNode): boolean {
+  if (indexedChildElementCount(node) > 0) return false;
+  const allowed = [
+    "after",
+    "afterAutospacing",
+    "afterLines",
+    "before",
+    "beforeAutospacing",
+    "beforeLines",
+    "line",
+    "lineRule",
+  ];
+  if (
+    node.visit.attributes.length === 0 ||
+    !attributesMatchAllowedNames(node, allowed)
+  ) {
+    return false;
+  }
+  for (const attribute of node.visit.attributes) {
+    if (attribute.localName === "lineRule") {
+      if (!["atLeast", "auto", "exact"].includes(attribute.value)) return false;
+    } else if (
+      ["afterAutospacing", "beforeAutospacing"].includes(attribute.localName)
+    ) {
+      if (!["0", "1", "false", "off", "on", "true"].includes(attribute.value)) {
+        return false;
+      }
+    } else if (!/^(?:0|[1-9][0-9]{0,5})$/.test(attribute.value)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function validOnOffProperty(node: IndexedBindingNode): boolean {
+  if (indexedChildElementCount(node) > 0) return false;
+  if (node.visit.attributes.length === 0) return true;
+  const value = exactExpandedAttribute(
+    node.visit,
+    WORDPROCESSINGML_NAMESPACE,
+    "val",
+  );
+  return (
+    value !== undefined &&
+    ["0", "1", "false", "off", "on", "true"].includes(value) &&
+    attributesMatchAllowedNames(node, ["val"])
+  );
+}
+
+function validJustificationProperty(node: IndexedBindingNode): boolean {
+  if (indexedChildElementCount(node) > 0) return false;
+  const value = exactExpandedAttribute(
+    node.visit,
+    WORDPROCESSINGML_NAMESPACE,
+    "val",
+  );
+  return (
+    value !== undefined &&
+    [
+      "both",
+      "center",
+      "distribute",
+      "end",
+      "highKashida",
+      "left",
+      "lowKashida",
+      "mediumKashida",
+      "numTab",
+      "right",
+      "start",
+      "thaiDistribute",
+    ].includes(value) &&
+    attributesMatchAllowedNames(node, ["val"])
+  );
+}
+
+function attributesMatchAllowedNames(
+  node: IndexedBindingNode,
+  allowedNames: readonly string[],
+  namespaceUri = WORDPROCESSINGML_NAMESPACE,
+): boolean {
+  const allowed = new Set(allowedNames);
+  const seen = new Set<string>();
+  for (const attribute of node.visit.attributes) {
+    if (
+      attribute.namespaceUri !== namespaceUri ||
+      !allowed.has(attribute.localName) ||
+      seen.has(attribute.localName)
+    ) {
+      return false;
+    }
+    seen.add(attribute.localName);
+  }
+  return true;
+}
+
+function indexedDirectChildren(
+  part: IndexedBindingPart,
+  node: IndexedBindingNode,
+): IndexedBindingNode[] {
+  return childrenOf(node.node).flatMap((child) => {
+    const indexed = part.byNode.get(child);
+    return indexed ? [indexed] : [];
+  });
+}
+
+function indexedChildElementCount(node: IndexedBindingNode): number {
+  return childrenOf(node.node).filter((child) => {
+    const tag = tagOf(child);
+    return tag && tag !== "#text";
+  }).length;
+}
+
 function createAmbiguousTableCellField(
   cell: OrderedXmlNode,
   cellPath: string,
   context: WalkContext,
+  bindingProfile: RendererBinding["bindingProfile"] | undefined,
   label: { label: string; source: "left_cell" | "table_header" | "generated" },
   state: CompilerState,
 ): void {
@@ -1426,6 +2071,7 @@ function createAmbiguousTableCellField(
       node: cell,
       context,
       bindingType: "table_cell",
+      bindingProfile,
       sdtId: null,
       tag: null,
       alias: null,

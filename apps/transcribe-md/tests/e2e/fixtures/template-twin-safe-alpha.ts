@@ -72,6 +72,10 @@ const DOCUMENT_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
         <w:tc><w:p><w:r><w:t>Plan</w:t></w:r></w:p></w:tc>
         <w:tc><w:p><w:sdt><w:sdtPr><w:id w:val="303"/><w:alias w:val="Plan item"/><w:tag w:val="plan_item"/><w:text/></w:sdtPr><w:sdtContent><w:r><w:t>Enter plan</w:t></w:r></w:sdtContent></w:sdt></w:p></w:tc>
       </w:tr>
+      <w:tr>
+        <w:tc><w:p><w:r><w:t>Plan detail</w:t></w:r></w:p></w:tc>
+        <w:tc><w:p><w:pPr><w:tabs><w:tab w:val="left" w:pos="720"/></w:tabs><w:spacing w:after="0"/></w:pPr></w:p></w:tc>
+      </w:tr>
     </w:tbl>
     <w:sectPr><w:headerReference w:type="default" r:id="rIdHeader"/><w:footerReference w:type="default" r:id="rIdFooter"/></w:sectPr>
   </w:body>
@@ -110,6 +114,7 @@ export function certifiedTemplateTwinMappings(
     'Smoking status': 'social_history.smoking',
     'Medication documented': 'medication.name',
     'Plan item': 'plan',
+    'Plan detail': 'plan',
   };
 
   return fields.map((field) => {

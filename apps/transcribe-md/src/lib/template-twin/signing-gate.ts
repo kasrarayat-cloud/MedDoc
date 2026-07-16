@@ -8,6 +8,7 @@ import {
   type FieldResolution,
   type SemanticMapping,
   type TemplateDocIR,
+  type TemplateField,
 } from './ir';
 import { templateTwinMappingsSha256 } from './mapping-hash';
 import { canonicalSoapSha256 } from './soap-binding';
@@ -328,6 +329,7 @@ interface ExpectedRoundTripField {
     | 'table_cell'
     | 'legacy_form_field'
     | 'repeating_row';
+  bindingProfile?: TemplateField['rendererBinding']['bindingProfile'];
   bindingOrdinal: number;
   nativeIdentity: {
     sdtId: string | null;
@@ -361,7 +363,9 @@ function canonicalValuesEqual(left: unknown, right: unknown): boolean {
 
 function parseCertifiedTemplateState(
   compiled: NonNullable<
-    NonNullable<TemplateTwinSigningContext['noteTemplate']>['templateTwinCompiledVersion']
+    NonNullable<
+      TemplateTwinSigningContext['noteTemplate']
+    >['templateTwinCompiledVersion']
   >,
 ): CertifiedTemplateState | null {
   const parsedIr = TemplateDocIRSchema.safeParse(compiled.compiledDocumentIr);
@@ -416,7 +420,9 @@ function parseCertifiedTemplateState(
 
 function certifiedCompilationIntegrity(
   compiled: NonNullable<
-    NonNullable<TemplateTwinSigningContext['noteTemplate']>['templateTwinCompiledVersion']
+    NonNullable<
+      TemplateTwinSigningContext['noteTemplate']
+    >['templateTwinCompiledVersion']
   >,
   state: CertifiedTemplateState,
 ): boolean {
@@ -439,29 +445,28 @@ function certifiedCompilationIntegrity(
     sourcePrivacyScanEvidenceSha256 = assertTemplateTwinSourceProvenance({
       privacyScanEvidence: compiled.sourceArtifact.privacyScanEvidence,
       requireBinding: true,
-      boundEvidenceSha256:
-        certification?.sourcePrivacyScanEvidenceSha256,
+      boundEvidenceSha256: certification?.sourcePrivacyScanEvidenceSha256,
     }).evidenceSha256;
   } catch {
     return false;
   }
   return Boolean(
     certification &&
-      compiled.irSchemaVersion === ir.irSchemaVersion &&
-      compiled.compilerVersion === ir.compilerVersion &&
-      compiled.sourceArtifact.validationStatus === 'accepted' &&
-      certification.sourcePrivacyScanEvidenceSha256 ===
-        sourcePrivacyScanEvidenceSha256 &&
-      compiled.sourceArtifact.sha256 === ir.source.sha256 &&
-      compiled.sourceArtifact.sizeBytes === ir.source.sizeBytes &&
-      compiled.sourceArtifact.mimeType === ir.source.mimeType &&
-      recomputedStructureSha256 === ir.structureSha256 &&
-      compiled.structureSha256 === ir.structureSha256 &&
-      certification.compiledStructureSha256 === ir.structureSha256 &&
-      recomputedStaticContentSha256 === ir.staticContentSha256 &&
-      compiled.staticContentSha256 === ir.staticContentSha256 &&
-      templateTwinMappingsSha256(mappings) ===
-        certification.approvedMappingsSha256,
+    compiled.irSchemaVersion === ir.irSchemaVersion &&
+    compiled.compilerVersion === ir.compilerVersion &&
+    compiled.sourceArtifact.validationStatus === 'accepted' &&
+    certification.sourcePrivacyScanEvidenceSha256 ===
+      sourcePrivacyScanEvidenceSha256 &&
+    compiled.sourceArtifact.sha256 === ir.source.sha256 &&
+    compiled.sourceArtifact.sizeBytes === ir.source.sizeBytes &&
+    compiled.sourceArtifact.mimeType === ir.source.mimeType &&
+    recomputedStructureSha256 === ir.structureSha256 &&
+    compiled.structureSha256 === ir.structureSha256 &&
+    certification.compiledStructureSha256 === ir.structureSha256 &&
+    recomputedStaticContentSha256 === ir.staticContentSha256 &&
+    compiled.staticContentSha256 === ir.staticContentSha256 &&
+    templateTwinMappingsSha256(mappings) ===
+      certification.approvedMappingsSha256,
   );
 }
 
@@ -498,6 +503,7 @@ function expectedRoundTripFields(
       bindingPath: field.rendererBinding.path,
       canonicalBindingPath: field.rendererBinding.canonicalPath,
       bindingType: field.rendererBinding.bindingType,
+      bindingProfile: field.rendererBinding.bindingProfile,
       bindingOrdinal: field.rendererBinding.ordinal,
       nativeIdentity: nativeIdentityFromRendererBinding(field.rendererBinding),
       sourceBindingIdentitySha256:
@@ -536,7 +542,10 @@ function isVerifiedRoundTrip(
 ): boolean {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const row = value as Record<string, unknown>;
-  if (!Array.isArray(row.fields) || row.fields.length !== expected.fields.length) {
+  if (
+    !Array.isArray(row.fields) ||
+    row.fields.length !== expected.fields.length
+  ) {
     return false;
   }
   const proofByFieldId = new Map<string, Record<string, unknown>>();
@@ -559,40 +568,45 @@ function isVerifiedRoundTrip(
     const bindingEvidence = proof?.bindingEvidence;
     return Boolean(
       proof &&
-        bindingEvidence &&
-        typeof bindingEvidence === 'object' &&
-        !Array.isArray(bindingEvidence) &&
-        proof.status === 'verified' &&
-        proof.partName === field.partName &&
-        proof.bindingPath === field.bindingPath &&
-        proof.valueSha256 === field.valueSha256 &&
-        proof.occurrences === field.occurrences &&
-        proof.disposition === field.disposition &&
-        (bindingEvidence as Record<string, unknown>).contractVersion ===
-          TEMPLATE_TWIN_BINDING_FINGERPRINT_VERSION &&
-        (bindingEvidence as Record<string, unknown>).status === 'verified' &&
-        (bindingEvidence as Record<string, unknown>)
-          .certifiedFingerprintSha256 === field.certifiedBindingSha256 &&
-        (bindingEvidence as Record<string, unknown>).outputFingerprintSha256 ===
-          field.certifiedBindingSha256 &&
-        (bindingEvidence as Record<string, unknown>).outputPartName ===
-          field.partName &&
-        (bindingEvidence as Record<string, unknown>).outputCanonicalPath ===
-          field.canonicalBindingPath &&
-        (bindingEvidence as Record<string, unknown>).outputBindingType ===
-          field.bindingType &&
-        (bindingEvidence as Record<string, unknown>).outputBindingOrdinal ===
-          field.bindingOrdinal &&
-        canonicalValuesEqual(
-          (bindingEvidence as Record<string, unknown>).outputNativeIdentity,
-          field.nativeIdentity,
-        ) &&
-        (bindingEvidence as Record<string, unknown>)
-          .outputBindingIdentitySha256 === field.sourceBindingIdentitySha256 &&
-        canonicalValuesEqual(
-          (bindingEvidence as Record<string, unknown>).outputTableLocation,
-          field.tableLocation,
-        ),
+      bindingEvidence &&
+      typeof bindingEvidence === 'object' &&
+      !Array.isArray(bindingEvidence) &&
+      proof.status === 'verified' &&
+      proof.partName === field.partName &&
+      proof.bindingPath === field.bindingPath &&
+      proof.valueSha256 === field.valueSha256 &&
+      proof.occurrences === field.occurrences &&
+      proof.disposition === field.disposition &&
+      (bindingEvidence as Record<string, unknown>).contractVersion ===
+        TEMPLATE_TWIN_BINDING_FINGERPRINT_VERSION &&
+      (bindingEvidence as Record<string, unknown>).status === 'verified' &&
+      (bindingEvidence as Record<string, unknown>)
+        .certifiedFingerprintSha256 === field.certifiedBindingSha256 &&
+      (bindingEvidence as Record<string, unknown>).outputFingerprintSha256 ===
+        field.certifiedBindingSha256 &&
+      (bindingEvidence as Record<string, unknown>).outputPartName ===
+        field.partName &&
+      (bindingEvidence as Record<string, unknown>).outputCanonicalPath ===
+        field.canonicalBindingPath &&
+      (bindingEvidence as Record<string, unknown>).outputBindingType ===
+        field.bindingType &&
+      (field.bindingProfile === undefined
+        ? (bindingEvidence as Record<string, unknown>).outputBindingProfile ===
+          undefined
+        : (bindingEvidence as Record<string, unknown>).outputBindingProfile ===
+          field.bindingProfile) &&
+      (bindingEvidence as Record<string, unknown>).outputBindingOrdinal ===
+        field.bindingOrdinal &&
+      canonicalValuesEqual(
+        (bindingEvidence as Record<string, unknown>).outputNativeIdentity,
+        field.nativeIdentity,
+      ) &&
+      (bindingEvidence as Record<string, unknown>)
+        .outputBindingIdentitySha256 === field.sourceBindingIdentitySha256 &&
+      canonicalValuesEqual(
+        (bindingEvidence as Record<string, unknown>).outputTableLocation,
+        field.tableLocation,
+      ),
     );
   });
   return (
@@ -881,10 +895,7 @@ export function assessTemplateTwinSigning(
     }
     const roundTripFields =
       certifiedState && parsedManifest.success
-        ? expectedRoundTripFields(
-            certifiedState.ir,
-            parsedManifest.data.fields,
-          )
+        ? expectedRoundTripFields(certifiedState.ir, parsedManifest.data.fields)
         : null;
     if (
       !compiled ||
@@ -932,8 +943,7 @@ export function assessTemplateTwinSigning(
             outputEtag: fill.outputEtag,
             outputSha256: fill.outputSha256,
             outputSizeBytes: fill.outputSizeBytes,
-            pinnedGlobalRolloutGeneration:
-              fill.pinnedGlobalRolloutGeneration,
+            pinnedGlobalRolloutGeneration: fill.pinnedGlobalRolloutGeneration,
             pinnedPracticeRolloutGeneration:
               fill.pinnedPracticeRolloutGeneration,
             updatedAt: fill.updatedAt,

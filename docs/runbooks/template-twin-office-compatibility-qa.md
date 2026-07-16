@@ -68,6 +68,13 @@ Post-Office compatibility checks require:
    content, embedded object, or external relationship; and
 7. individually classified Open XML schema evidence.
 
+For `TAB_ONLY_BLANK_TABLE_CELL_V1`, QA field readback deliberately excludes
+paragraph-property tab stops (`w:pPr/w:tabs/w:tab`) from the clinical value.
+Content-level `w:tab` remains visible and changes the value. This normalization
+exists only in the QA-only reader after an Office save; immutable pre-delivery
+output must still pass exact path, profile, fingerprint, occurrence, and static
+invariance checks under production readback v2.
+
 This assessment does not authorize a reimported or Office-edited clinical
 document. Reimport would require a separate product and threat model.
 

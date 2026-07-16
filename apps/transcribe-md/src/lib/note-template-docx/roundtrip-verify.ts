@@ -40,8 +40,7 @@ const SAFE_RENDER_MESSAGES: Record<TemplateDocxRenderErrorCode, string> = {
     'A resolved field value exceeds the safe Word rendering limit.',
   BINDING_NOT_FOUND:
     'An approved renderer binding was not found in the immutable source document.',
-  BINDING_AMBIGUOUS:
-    'An approved renderer binding is structurally ambiguous.',
+  BINDING_AMBIGUOUS: 'An approved renderer binding is structurally ambiguous.',
   UNSUPPORTED_BINDING:
     'The template contains a renderer binding that is not supported in this version.',
   TABLE_ROW_LIMIT_EXCEEDED:
@@ -61,7 +60,10 @@ const SAFE_RENDER_MESSAGES: Record<TemplateDocxRenderErrorCode, string> = {
 export class TemplateDocxRenderError extends Error {
   readonly code: TemplateDocxRenderErrorCode;
 
-  constructor(code: TemplateDocxRenderErrorCode, options?: { cause?: unknown }) {
+  constructor(
+    code: TemplateDocxRenderErrorCode,
+    options?: { cause?: unknown },
+  ) {
     super(SAFE_RENDER_MESSAGES[code], options);
     this.name = 'TemplateDocxRenderError';
     this.code = code;
@@ -225,7 +227,11 @@ function xmlPrefix(name: string): string | null {
   return colon < 0 ? null : name.slice(0, colon);
 }
 
-function terminatedAt(source: string, start: number, terminator: string): number {
+function terminatedAt(
+  source: string,
+  start: number,
+  terminator: string,
+): number {
   const end = source.indexOf(terminator, start);
   if (end < 0) failTemplateDocxRender('ROUNDTRIP_PACKAGE_INVALID');
   return end + terminator.length;
@@ -271,18 +277,28 @@ function decodeXmlPart(bytes: Uint8Array): {
     };
   }
   if (source.length >= 4 && source[0] === 0x3c && source[1] === 0x00) {
-    return { text: source.toString('utf16le'), encoding: 'utf16le', hadBom: false };
+    return {
+      text: source.toString('utf16le'),
+      encoding: 'utf16le',
+      hadBom: false,
+    };
   }
   if (source.length >= 4 && source[0] === 0x00 && source[1] === 0x3c) {
     const swapped = Buffer.from(source);
     swapped.swap16();
-    return { text: swapped.toString('utf16le'), encoding: 'utf16be', hadBom: false };
+    return {
+      text: swapped.toString('utf16le'),
+      encoding: 'utf16be',
+      hadBom: false,
+    };
   }
   try {
     return {
       text: new TextDecoder('utf-8', { fatal: true }).decode(source),
       encoding: 'utf8',
-      hadBom: source.length >= 3 && source.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf])),
+      hadBom:
+        source.length >= 3 &&
+        source.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf])),
     };
   } catch (cause) {
     throw new TemplateDocxRenderError('ROUNDTRIP_PACKAGE_INVALID', { cause });
@@ -296,7 +312,9 @@ export function encodeXmlPart(
 ): Buffer {
   if (encoding === 'utf8') {
     const body = Buffer.from(text, 'utf8');
-    return hadBom ? Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), body]) : body;
+    return hadBom
+      ? Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), body])
+      : body;
   }
   const littleEndian = Buffer.from(text, 'utf16le');
   if (encoding === 'utf16le') {
@@ -370,21 +388,22 @@ export function readNamespacedXmlAttribute(
   const matches: string[] = [];
   for (const match of tag.matchAll(expression)) {
     const qualifiedName = match[1]!;
-    if (qualifiedName === 'xmlns' || qualifiedName.startsWith('xmlns:')) continue;
+    if (qualifiedName === 'xmlns' || qualifiedName.startsWith('xmlns:'))
+      continue;
     if (xmlLocalName(qualifiedName) !== localName) continue;
     const prefix = xmlPrefix(qualifiedName);
-    const resolved = prefix ? (node.namespacePrefixes.get(prefix) ?? null) : null;
-    if (resolved === namespaceUri) matches.push(decodeXmlEntities(match[3] ?? ''));
+    const resolved = prefix
+      ? (node.namespacePrefixes.get(prefix) ?? null)
+      : null;
+    if (resolved === namespaceUri)
+      matches.push(decodeXmlEntities(match[3] ?? ''));
     else failTemplateDocxRender('ROUNDTRIP_PACKAGE_INVALID');
   }
   if (matches.length > 1) failTemplateDocxRender('ROUNDTRIP_PACKAGE_INVALID');
   return matches[0] ?? null;
 }
 
-export function wordVisibleText(
-  xml: string,
-  node: XmlElementSpan,
-): string {
+export function wordVisibleText(xml: string, node: XmlElementSpan): string {
   const output: string[] = [];
   const walk = (candidate: XmlElementSpan): void => {
     if (candidate.namespaceUri === WORDPROCESSINGML_NAMESPACE) {
@@ -485,6 +504,8 @@ export interface VerifiedBindingEvidence {
     | 'table_cell'
     | 'legacy_form_field'
     | 'repeating_row';
+  /** Output-derived exact structural profile, present only for profiled cells. */
+  readonly outputBindingProfile?: 'TAB_ONLY_BLANK_TABLE_CELL_V1';
   readonly outputBindingOrdinal: number;
   readonly outputNativeIdentity: NativeBindingIdentity;
   readonly outputBindingIdentitySha256: string;
@@ -701,11 +722,7 @@ function assertPatchesWithinApprovedBindings(
           allowed = allowed.parent ?? undefined;
         }
       }
-      if (
-        !allowed ||
-        patch.start < allowed.start ||
-        patch.end > allowed.end
-      ) {
+      if (!allowed || patch.start < allowed.start || patch.end > allowed.end) {
         failTemplateDocxRender('STATIC_INVARIANCE_FAILED');
       }
     }

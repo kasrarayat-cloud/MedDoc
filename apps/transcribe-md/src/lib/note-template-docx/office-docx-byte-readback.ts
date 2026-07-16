@@ -31,11 +31,11 @@ import {
 } from "./xml";
 
 export const OFFICE_DOCX_BYTE_READBACK_QA_VERSION =
-  "template-twin-office-byte-readback-qa/1.0.0" as const;
+  "template-twin-office-byte-readback-qa/1.1.0" as const;
 export const OFFICE_ROUNDTRIP_QA_CONTRACT_VERSION =
-  "template-twin-office-roundtrip-qa/2.0.0" as const;
+  "template-twin-office-roundtrip-qa/2.1.0" as const;
 export const OFFICE_FIELD_READBACK_QA_CONTRACT_VERSION =
-  "template-twin-office-field-readback-qa/2.0.0" as const;
+  "template-twin-office-field-readback-qa/2.1.0" as const;
 
 export type OfficeQaControlKind =
   | "text_content_control"
@@ -57,6 +57,7 @@ export interface OfficeCertifiedBindingExpectation {
   readonly partName: string;
   readonly canonicalPath: string;
   readonly bindingType: "content_control" | "legacy_form_field" | "table_cell";
+  readonly bindingProfile?: RendererBinding["bindingProfile"];
   readonly ordinal: number;
   readonly certifiedBindingSha256: string;
   readonly nativeIdentity: NativeBindingIdentity;
@@ -600,12 +601,15 @@ function validExpectedField(field: OfficeExpectedFieldValue): boolean {
     SHA256.test(binding.sourceBindingIdentitySha256) &&
     SHA256.test(binding.labelContextSha256) &&
     SHA256.test(binding.logicalFieldLocatorSha256) &&
+    (binding.bindingProfile === undefined ||
+      binding.bindingProfile === "TAB_ONLY_BLANK_TABLE_CELL_V1") &&
     binding.certifiedBindingSha256 ===
       certifiedBindingFingerprintSha256({
         fieldId: field.fieldId,
         partName: binding.partName,
         canonicalPath: binding.canonicalPath,
         bindingType: binding.bindingType,
+        bindingProfile: binding.bindingProfile,
         bindingOrdinal: binding.ordinal,
         nativeIdentity: binding.nativeIdentity,
         sourceControlSha256: binding.sourceControlSha256,
@@ -666,6 +670,9 @@ function certifiedExpectation(
     partName: binding.partName,
     canonicalPath: binding.canonicalPath,
     bindingType: supportedBindingType(binding.bindingType),
+    ...(binding.bindingProfile === undefined
+      ? {}
+      : { bindingProfile: binding.bindingProfile }),
     ordinal: binding.ordinal,
     certifiedBindingSha256: binding.certifiedBindingSha256,
     nativeIdentity,
@@ -697,6 +704,7 @@ function assertCertifiedBinding(field: TemplateField): void {
       partName: binding.partName,
       canonicalPath: binding.canonicalPath,
       bindingType,
+      bindingProfile: binding.bindingProfile,
       bindingOrdinal: binding.ordinal,
       nativeIdentity,
       sourceControlSha256: binding.sourceControlSha256,
@@ -1037,6 +1045,9 @@ function expectedFieldShape(expected: OfficeExpectedFieldValue): TemplateField {
     rendererBinding: {
       partName: expected.certifiedBinding.partName,
       bindingType: expected.certifiedBinding.bindingType,
+      ...(expected.certifiedBinding.bindingProfile === undefined
+        ? {}
+        : { bindingProfile: expected.certifiedBinding.bindingProfile }),
       path: expected.certifiedBinding.canonicalPath,
       canonicalPath: expected.certifiedBinding.canonicalPath,
       ordinal: expected.certifiedBinding.ordinal,
@@ -1447,16 +1458,19 @@ function readLocatedValue(
   }
 
   if (bindingType === "table_cell") {
+    const contentNodes = visibleTableCellContentNodes(part, node);
     return {
       controlKind: "fixed_table_cell",
-      value: wordText(part, node),
+      value: wordTextFromNodes(contentNodes),
       controlState: {
         tableLocation: deriveTableLocation(part, node),
         paragraphCount: descendantsWord(part, node, "p").length,
-        tabCount: descendantsWord(part, node, "tab").length,
-        breakCount:
-          descendantsWord(part, node, "br").length +
-          descendantsWord(part, node, "cr").length,
+        contentTabCount: contentNodes.filter(
+          (candidate) => candidate.visit.localName === "tab",
+        ).length,
+        breakCount: contentNodes.filter((candidate) =>
+          ["br", "cr"].includes(candidate.visit.localName),
+        ).length,
       },
       rawSerializationSha256: canonicalSha256(node.node),
     };
@@ -1687,8 +1701,42 @@ function namespacedAttribute(
 }
 
 function wordText(part: IndexedBindingPart, node: IndexedBindingNode): string {
+  return wordTextFromNodes([node, ...descendantsLocal(part, node, "")]);
+}
+
+/**
+ * Returns only visible table-cell content. Word stores paragraph tab-stop
+ * definitions as `w:pPr/w:tabs/w:tab`; those nodes affect layout but are not a
+ * literal tab in the physician-visible field value. Content-level `w:tab`
+ * nodes remain visible and are deliberately retained.
+ */
+function visibleTableCellContentNodes(
+  part: IndexedBindingPart,
+  cell: IndexedBindingNode,
+): IndexedBindingNode[] {
+  return [cell, ...descendantsLocal(part, cell, "")].filter((candidate) => {
+    if (candidate.visit.namespaceUri !== WORDPROCESSINGML_NAMESPACE) {
+      return false;
+    }
+    let ancestor = candidate.parent;
+    while (ancestor && ancestor !== cell) {
+      if (
+        ancestor.visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+        ["pPr", "rPr", "tcPr", "trPr", "tblPr"].includes(
+          ancestor.visit.localName,
+        )
+      ) {
+        return false;
+      }
+      ancestor = ancestor.parent;
+    }
+    return true;
+  });
+}
+
+function wordTextFromNodes(nodes: readonly IndexedBindingNode[]): string {
   const output: string[] = [];
-  for (const candidate of [node, ...descendantsLocal(part, node, "")]) {
+  for (const candidate of nodes) {
     if (candidate.visit.namespaceUri !== WORDPROCESSINGML_NAMESPACE) continue;
     if (candidate.visit.localName === "t")
       output.push(nodeText(candidate.node));

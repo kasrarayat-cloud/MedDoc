@@ -124,7 +124,9 @@ function validIr(): TemplateDocIR {
 
 describe('TemplateDocIRSchema', () => {
   it('accepts a versioned deterministic field binding', () => {
-    expect(TemplateDocIRSchema.parse(validIr()).fields[0].fieldId).toBe(FIELD_ID);
+    expect(TemplateDocIRSchema.parse(validIr()).fields[0].fieldId).toBe(
+      FIELD_ID,
+    );
   });
 
   it('rejects select fields that lost their native options', () => {
@@ -136,6 +138,14 @@ describe('TemplateDocIRSchema', () => {
   it('rejects duplicate stable field identifiers', () => {
     const ir = validIr();
     ir.fields.push({ ...ir.fields[0], displayOrder: 1 });
+    expect(TemplateDocIRSchema.safeParse(ir).success).toBe(false);
+  });
+
+  it('rejects the tab-only table profile on a non-table binding', () => {
+    const ir = validIr();
+    ir.fields[0]!.rendererBinding.bindingProfile =
+      'TAB_ONLY_BLANK_TABLE_CELL_V1';
+
     expect(TemplateDocIRSchema.safeParse(ir).success).toBe(false);
   });
 });

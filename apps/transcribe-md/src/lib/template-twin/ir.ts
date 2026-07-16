@@ -9,9 +9,9 @@
 import { z } from 'zod';
 
 export const TEMPLATE_TWIN_IR_SCHEMA_VERSION = 2 as const;
-export const TEMPLATE_TWIN_COMPILER_VERSION = 'template-docx-compiler/1.1.0';
+export const TEMPLATE_TWIN_COMPILER_VERSION = 'template-docx-compiler/1.2.0';
 export const TEMPLATE_TWIN_RESOLVER_VERSION = 'template-field-resolver/1.0.0';
-export const TEMPLATE_TWIN_RENDERER_VERSION = 'template-docx-renderer/1.1.0';
+export const TEMPLATE_TWIN_RENDERER_VERSION = 'template-docx-renderer/1.2.0';
 
 export const Sha256Schema = z.string().regex(/^[a-f0-9]{64}$/);
 
@@ -57,6 +57,12 @@ export const RendererBindingSchema = z
       'legacy_form_field',
       'repeating_row',
     ]),
+    /**
+     * An exact, versioned structural profile for bindings whose safe mutable
+     * region cannot be inferred from bindingType alone. Absence preserves the
+     * original safe-alpha table-cell contract and its persisted fingerprints.
+     */
+    bindingProfile: z.enum(['TAB_ONLY_BLANK_TABLE_CELL_V1']).optional(),
     /** Deterministic structural path; labels are never renderer locators. */
     path: z.string().min(1).max(512),
     /** Namespace-URI-aware, prefix-independent immutable source path. */
@@ -76,7 +82,20 @@ export const RendererBindingSchema = z
     certifiedBindingSha256: Sha256Schema,
     originalContentSha256: Sha256Schema,
   })
-  .strict();
+  .strict()
+  .superRefine((binding, context) => {
+    if (
+      binding.bindingProfile === 'TAB_ONLY_BLANK_TABLE_CELL_V1' &&
+      binding.bindingType !== 'table_cell'
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['bindingProfile'],
+        message:
+          'TAB_ONLY_BLANK_TABLE_CELL_V1 is valid only for table_cell bindings.',
+      });
+    }
+  });
 export type RendererBinding = z.infer<typeof RendererBindingSchema>;
 
 export const UnsupportedElementSchema = z
@@ -170,8 +189,14 @@ export const TemplateDocNodeSchema = z
     path: z.string().min(1).max(512),
     displayOrder: z.number().int().nonnegative(),
     kind: TemplateTwinFieldKindSchema,
-    fieldId: z.string().regex(/^ttf_[a-f0-9]{24}$/).nullable(),
-    tableId: z.string().regex(/^ttb_[a-f0-9]{20}$/).nullable(),
+    fieldId: z
+      .string()
+      .regex(/^ttf_[a-f0-9]{24}$/)
+      .nullable(),
+    tableId: z
+      .string()
+      .regex(/^ttb_[a-f0-9]{20}$/)
+      .nullable(),
     staticTextSha256: Sha256Schema.nullable(),
     bookmarkNames: z.array(z.string().max(240)),
   })
@@ -283,7 +308,9 @@ export const SemanticMappingSchema = z
     ]),
     temporality: z.enum(['current', 'historical', 'planned', 'any']).nullable(),
     laterality: z.enum(['required', 'optional', 'not_applicable']).nullable(),
-    unitPolicy: z.enum(['required', 'optional', 'forbidden', 'not_applicable']).nullable(),
+    unitPolicy: z
+      .enum(['required', 'optional', 'forbidden', 'not_applicable'])
+      .nullable(),
     approvedSynonyms: z.array(z.string().min(1).max(120)).max(50),
     required: z.boolean(),
     blankPolicy: z.enum(['blank', 'not_documented', 'requires_input']),
@@ -315,12 +342,22 @@ export const EncounterFactSchema = z
     polarity: z.enum(['affirmed', 'denied', 'uncertain', 'conditional']),
     temporality: z.enum(['current', 'historical', 'planned', 'unknown']),
     experiencer: z.enum(['patient', 'family', 'other', 'unknown']),
-    laterality: z.enum(['left', 'right', 'bilateral', 'midline', 'not_applicable', 'unknown']),
+    laterality: z.enum([
+      'left',
+      'right',
+      'bilateral',
+      'midline',
+      'not_applicable',
+      'unknown',
+    ]),
     number: z.number().nullable(),
     unit: z.string().max(40).nullable(),
     speaker: z.string().max(80).nullable(),
     sourceTranscriptOffsets: z
-      .object({ start: z.number().int().nonnegative(), end: z.number().int().nonnegative() })
+      .object({
+        start: z.number().int().nonnegative(),
+        end: z.number().int().nonnegative(),
+      })
       .nullable(),
     audioTimestampSeconds: z.number().nonnegative().nullable(),
     evidenceAnchorIds: z.array(z.string().min(1).max(120)).min(1),
@@ -387,7 +424,10 @@ export type FieldResolution = z.infer<typeof FieldResolutionSchema>;
 
 export const FieldValidationIssueSchema = z
   .object({
-    fieldId: z.string().regex(/^ttf_[a-f0-9]{24}$/).nullable(),
+    fieldId: z
+      .string()
+      .regex(/^ttf_[a-f0-9]{24}$/)
+      .nullable(),
     code: z.string().min(1).max(120),
     severity: z.enum(['warning', 'blocking']),
     message: z.string().min(1).max(500),
@@ -432,7 +472,9 @@ export const TemplateTwinFillManifestSchema = z
       .strict(),
   })
   .strict();
-export type TemplateTwinFillManifest = z.infer<typeof TemplateTwinFillManifestSchema>;
+export type TemplateTwinFillManifest = z.infer<
+  typeof TemplateTwinFillManifestSchema
+>;
 
 export function templateTwinCounts(
   fields: readonly FieldResolution[],
@@ -452,8 +494,8 @@ export function templateTwinCounts(
     const definition = definitionById.get(resolution.fieldId);
     return Boolean(
       definition?.kind === 'checkbox' &&
-        definition.clinicallyMaterial &&
-        resolution.value === null,
+      definition.clinicallyMaterial &&
+      resolution.value === null,
     );
   };
   return {
@@ -463,19 +505,17 @@ export function templateTwinCounts(
         unresolved.has(field.status) ||
         isClinicallyMeaningfulUnresolvedCheckbox(field),
     ).length,
-    notMentioned: fields.filter((field) => field.status === 'not_mentioned').length,
+    notMentioned: fields.filter((field) => field.status === 'not_mentioned')
+      .length,
     conflicts: fields.filter((field) => field.status === 'conflict').length,
-    criticalUnresolved: fields.filter(
-      (field) => {
-        const definition = definitionById.get(field.fieldId);
-        return Boolean(
-          definition &&
-            (unresolved.has(field.status) ||
-              isClinicallyMeaningfulUnresolvedCheckbox(field)) &&
-            (definition.criticality !== 'routine' ||
-              definition.clinicallyMaterial),
-        );
-      },
-    ).length,
+    criticalUnresolved: fields.filter((field) => {
+      const definition = definitionById.get(field.fieldId);
+      return Boolean(
+        definition &&
+        (unresolved.has(field.status) ||
+          isClinicallyMeaningfulUnresolvedCheckbox(field)) &&
+        (definition.criticality !== 'routine' || definition.clinicallyMaterial),
+      );
+    }).length,
   };
 }

@@ -180,7 +180,7 @@ async function expectVerifiedEvidenceFill(visitId: string) {
   expect(current!.currentSoapFinal).toContain("Syntheticmed");
   expect(current!.currentSoapFinal).toContain("synthetic brace");
   expect(current!.currentSoapFinal).not.toContain("headache");
-  expect(current!.fillManifest.fields).toHaveLength(4);
+  expect(current!.fillManifest.fields).toHaveLength(5);
   expect(
     current!.fillManifest.fields.every((field) => field.value !== null),
   ).toBe(true);
@@ -241,6 +241,7 @@ test("Template Twin: isolated QA routes, Postgres, worker, and MinIO preserve th
     "Smoking status",
     "Medication documented",
     "Plan item",
+    "Plan detail",
   ]);
   const certifiedMappings = certifiedTemplateTwinMappings(persisted.fields);
   const mappingResponse = await page.request.patch(
@@ -271,7 +272,7 @@ test("Template Twin: isolated QA routes, Postgres, worker, and MinIO preserve th
   ).toBe(200);
   expect(mappingPayload.workspace).toMatchObject({
     stats: {
-      totalFields: 4,
+      totalFields: 5,
       dropdowns: 1,
       checkboxes: 1,
       tables: 1,
@@ -417,7 +418,7 @@ test("Template Twin: isolated QA routes, Postgres, worker, and MinIO preserve th
   expect(certifiedInventory).toMatchObject({
     sourceArtifacts: 1,
     compiledVersions: 1,
-    fieldDefinitions: 4,
+    fieldDefinitions: 5,
     certifications: 1,
   });
   expect(certifiedInventory.objectLedgerRows).toBeGreaterThanOrEqual(3);

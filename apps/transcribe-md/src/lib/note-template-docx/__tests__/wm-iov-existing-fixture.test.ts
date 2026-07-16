@@ -8,7 +8,11 @@ import {
   type FieldResolution,
   type TemplateField,
 } from '../../template-twin/ir';
-import { compileTemplateDocx } from '../compiler';
+import { assertTemplateTwinSourcePhiFree } from '../../template-twin/source-phi';
+import {
+  TAB_ONLY_BLANK_TABLE_CELL_PROFILE,
+  compileTemplateDocx,
+} from '../compiler';
 import { inspectDocxPackage } from '../package-security';
 import { renderTemplateDocx } from '../renderer';
 import {
@@ -25,89 +29,133 @@ const EXISTING_FIXTURE = resolve(
 );
 
 describe('existing WM IOV Template.docx read-only compatibility audit', () => {
-  it(
-    'recognizes its placeholder controls without copying or committing another document',
-    async () => {
-      const source = readFileSync(EXISTING_FIXTURE);
-      const inspected = inspectDocxPackage(source);
-      let placeholderControls = 0;
-      for (const partName of [
-        inspected.mainPartName,
-        ...inspected.headerPartNames,
-        ...inspected.footerPartNames,
-      ]) {
-        const entry = inspected.zip.entries.get(partName)!;
-        placeholderControls += expandedXmlVisits(
-          parseOrderedXml(entry.bytes, inspected.limits),
-        ).filter(
-          (visit) =>
-            visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
-            visit.localName === 'showingPlcHdr',
-        ).length;
-      }
-      const ir = compileTemplateDocx(source);
+  it('recognizes its placeholder controls without copying or committing another document', async () => {
+    const source = readFileSync(EXISTING_FIXTURE);
+    const inspected = inspectDocxPackage(source);
+    let placeholderControls = 0;
+    for (const partName of [
+      inspected.mainPartName,
+      ...inspected.headerPartNames,
+      ...inspected.footerPartNames,
+    ]) {
+      const entry = inspected.zip.entries.get(partName)!;
+      placeholderControls += expandedXmlVisits(
+        parseOrderedXml(entry.bytes, inspected.limits),
+      ).filter(
+        (visit) =>
+          visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+          visit.localName === 'showingPlcHdr',
+      ).length;
+    }
+    const ir = compileTemplateDocx(source);
 
-      expect(placeholderControls).toBe(28);
-      expect(ir.fields.length).toBe(28);
-      expect(ir.stats).toMatchObject({
-        dropdowns: 28,
-        comboBoxes: 0,
-        checkboxes: 0,
-        dateControls: 0,
-        tables: 1,
-        repeatingTables: 0,
-        headers: 2,
-        footers: 0,
-        unsupported: 59,
-        blockingUnsupported: 59,
-      });
-      expect([...new Set(ir.unsupported.map((item) => item.code))].sort()).toEqual([
-        'UNBOUND_COMPLEX_TABLE_CELL',
-        'UNBOUND_ORDINARY_PLACEHOLDER',
-      ]);
-      expect(
-        ir.unsupported.filter(
-          (item) => item.code === 'UNBOUND_COMPLEX_TABLE_CELL',
-        ),
-      ).toHaveLength(52);
-      expect(
-        ir.unsupported.filter(
-          (item) => item.code === 'UNBOUND_ORDINARY_PLACEHOLDER',
-        ),
-      ).toHaveLength(7);
+    expect(placeholderControls).toBe(28);
+    expect(ir.fields.length).toBe(80);
+    expect(ir.stats).toMatchObject({
+      dropdowns: 28,
+      comboBoxes: 0,
+      checkboxes: 0,
+      dateControls: 0,
+      tables: 1,
+      repeatingTables: 0,
+      headers: 2,
+      footers: 0,
+      unsupported: 7,
+      blockingUnsupported: 7,
+    });
+    expect([...new Set(ir.unsupported.map((item) => item.code))]).toEqual([
+      'UNBOUND_ORDINARY_PLACEHOLDER',
+    ]);
+    expect(
+      ir.unsupported.filter(
+        (item) => item.code === 'UNBOUND_COMPLEX_TABLE_CELL',
+      ),
+    ).toHaveLength(0);
+    expect(
+      ir.unsupported.filter(
+        (item) => item.code === 'UNBOUND_ORDINARY_PLACEHOLDER',
+      ),
+    ).toHaveLength(7);
 
-      const resolutions = ir.fields.map(fixtureResolution);
-      const rendered = await renderTemplateDocx({
+    const admittedTabStopCells = ir.fields.filter(
+      (field) => field.rendererBinding.bindingType === 'table_cell',
+    );
+    expect(admittedTabStopCells).toHaveLength(52);
+    expect(
+      new Set(
+        admittedTabStopCells.map(
+          (field) => field.rendererBinding.canonicalPath,
+        ),
+      ).size,
+    ).toBe(52);
+    expect(
+      admittedTabStopCells.every(
+        (field) =>
+          field.detectionStatus === 'needs_confirmation' &&
+          field.rendererBinding.bindingProfile ===
+            TAB_ONLY_BLANK_TABLE_CELL_PROFILE,
+      ),
+    ).toBe(true);
+    expect(59 - ir.unsupported.length).toBe(52);
+
+    const packagePartNames = [...inspected.zip.entries.keys()];
+    expect(
+      packagePartNames.filter((partName) =>
+        partName.startsWith('word/glossary/'),
+      ),
+    ).toHaveLength(6);
+    expect(
+      packagePartNames.filter((partName) => partName.startsWith('word/media/')),
+    ).toHaveLength(1);
+    let providerCalled = false;
+    await expect(
+      assertTemplateTwinSourcePhiFree({
         source,
-        ir,
-        resolutions,
-        validation: {
-          valid: true,
-          issues: [],
-          checkedAt: '2026-07-15T00:00:00.000Z',
-          validatorVersion: 'template-field-validator/1.0.0',
+        practiceId: 'practice_wm_iov_synthetic_test',
+        userId: 'user_wm_iov_synthetic_test',
+        client: {
+          complete: async () => {
+            providerCalled = true;
+            throw new Error('The provider must not run for a blocked package.');
+          },
         },
-      });
-      let renderedPlaceholders = 0;
-      const output = inspectDocxPackage(rendered.document);
-      for (const partName of [
-        output.mainPartName,
-        ...output.headerPartNames,
-        ...output.footerPartNames,
-      ]) {
-        renderedPlaceholders += expandedXmlVisits(
-          parseOrderedXml(output.zip.entries.get(partName)!.bytes, output.limits),
-        ).filter(
-          (visit) =>
-            visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
-            visit.localName === 'showingPlcHdr',
-        ).length;
-      }
-      expect(renderedPlaceholders).toBe(0);
-      expect(rendered.verification.fields).toHaveLength(ir.fields.length);
-      expect(rendered.verification.staticRegionCheck).toBe('verified');
-    },
-  );
+      }),
+    ).rejects.toMatchObject({
+      code: 'TEMPLATE_TWIN_SOURCE_PRIVACY_UNSUPPORTED',
+    });
+    expect(providerCalled).toBe(false);
+
+    const resolutions = ir.fields.map(fixtureResolution);
+    const rendered = await renderTemplateDocx({
+      source,
+      ir,
+      resolutions,
+      validation: {
+        valid: true,
+        issues: [],
+        checkedAt: '2026-07-15T00:00:00.000Z',
+        validatorVersion: 'template-field-validator/1.0.0',
+      },
+    });
+    let renderedPlaceholders = 0;
+    const output = inspectDocxPackage(rendered.document);
+    for (const partName of [
+      output.mainPartName,
+      ...output.headerPartNames,
+      ...output.footerPartNames,
+    ]) {
+      renderedPlaceholders += expandedXmlVisits(
+        parseOrderedXml(output.zip.entries.get(partName)!.bytes, output.limits),
+      ).filter(
+        (visit) =>
+          visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+          visit.localName === 'showingPlcHdr',
+      ).length;
+    }
+    expect(renderedPlaceholders).toBe(0);
+    expect(rendered.verification.fields).toHaveLength(ir.fields.length);
+    expect(rendered.verification.staticRegionCheck).toBe('verified');
+  }, 60_000);
 });
 
 const FIXTURE_FACT = `ttfact_${'d'.repeat(24)}`;

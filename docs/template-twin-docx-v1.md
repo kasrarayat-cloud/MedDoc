@@ -75,25 +75,33 @@ flowchart TD
 
 The implementation is divided into these boundaries:
 
-| Boundary | Primary code | Responsibility |
-| --- | --- | --- |
-| Untrusted DOCX | `apps/transcribe-md/src/lib/note-template-docx/` | ZIP/OPC/XML validation, deterministic compilation, exact rendering, independent output readback, and static-region proof |
-| Shared contracts | `apps/transcribe-md/src/lib/template-twin/ir.ts` | Provider-neutral IR, facts, mappings, resolutions, validation, and manifest schemas |
-| Safe-alpha extraction boundary | `supported-concepts.ts`, `encounter-facts/` | Versioned exact concept allowlist and the extension interface for a later Template-Aware Extraction Agent |
-| Artifact custody | `apps/transcribe-md/src/lib/template-twin/storage/` | Tenant-scoped keys, immutable-style writes, readiness evidence, bounded stream reads, byte/hash verification, and durable object-write ledger |
-| Draft and certification | `create-draft.ts`, `certification-lifecycle.ts`, `synthetic-test.ts` | Persist draft, propose/approve mappings, synthetic proof, certify, and activate |
-| Encounter filling | `encounter-facts/`, `resolver/`, `validation/`, `fill-engine.ts` | One voice/text fact path, exact field resolution, validation, rendering, and manifest persistence |
-| Review and signing | `components/visit/template-twin-review*`, `review-service.ts`, `signing-gate.ts`, visit sign route | Minimal review DTO, labeled physician corrections, explicit mapping-version forks, server-side signing enforcement, and immutable sign decision |
-| Delivery | `export/original-template-docx/route.ts` | Authenticated read of the already-rendered, hash-verified output; never regenerates at download time |
-| Durable safety evidence | `audit-outbox.ts`, `worker/cleanup/template-twin-maintenance.ts` | Transactional audit intent, retrying audit delivery, object-ledger reconciliation, and fail-closed maintenance configuration |
+| Boundary                       | Primary code                                                                                       | Responsibility                                                                                                                                  |
+| ------------------------------ | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Untrusted DOCX                 | `apps/transcribe-md/src/lib/note-template-docx/`                                                   | ZIP/OPC/XML validation, deterministic compilation, exact rendering, independent output readback, and static-region proof                        |
+| Shared contracts               | `apps/transcribe-md/src/lib/template-twin/ir.ts`                                                   | Provider-neutral IR, facts, mappings, resolutions, validation, and manifest schemas                                                             |
+| Safe-alpha extraction boundary | `supported-concepts.ts`, `encounter-facts/`                                                        | Versioned exact concept allowlist and the extension interface for a later Template-Aware Extraction Agent                                       |
+| Artifact custody               | `apps/transcribe-md/src/lib/template-twin/storage/`                                                | Tenant-scoped keys, immutable-style writes, readiness evidence, bounded stream reads, byte/hash verification, and durable object-write ledger   |
+| Draft and certification        | `create-draft.ts`, `certification-lifecycle.ts`, `synthetic-test.ts`                               | Persist draft, propose/approve mappings, synthetic proof, certify, and activate                                                                 |
+| Encounter filling              | `encounter-facts/`, `resolver/`, `validation/`, `fill-engine.ts`                                   | One voice/text fact path, exact field resolution, validation, rendering, and manifest persistence                                               |
+| Review and signing             | `components/visit/template-twin-review*`, `review-service.ts`, `signing-gate.ts`, visit sign route | Minimal review DTO, labeled physician corrections, explicit mapping-version forks, server-side signing enforcement, and immutable sign decision |
+| Delivery                       | `export/original-template-docx/route.ts`                                                           | Authenticated read of the already-rendered, hash-verified output; never regenerates at download time                                            |
+| Durable safety evidence        | `audit-outbox.ts`, `worker/cleanup/template-twin-maintenance.ts`                                   | Transactional audit intent, retrying audit delivery, object-ledger reconciliation, and fail-closed maintenance configuration                    |
 
 Version constants in v1 are:
 
-- IR schema: `1`
-- compiler: `template-docx-compiler/1.0.0`
+- IR schema: `2`
+- compiler: `template-docx-compiler/1.2.0`
 - resolver: `template-field-resolver/1.0.0`
-- renderer: `template-docx-renderer/1.0.0`
+- renderer: `template-docx-renderer/1.2.0`
 - validator: `template-field-validator/1.0.0`
+- strict binding/readback: `template-docx-certified-binding/2.0.0` and
+  `template-docx-readback/2.0.0`
+- QA-only Office round-trip: `template-twin-office-roundtrip-qa/2.1.0`
+
+The 1.2 renderer accepts a persisted compiler-1.1 IR only when a fresh
+independent compile produces identical structure/static hashes and identical
+parts, fields, and tables. A source that newly qualifies for a 1.2 structural
+profile therefore fails closed and requires a new immutable certified version.
 
 ## Immutable artifacts and tenant boundary
 
@@ -255,7 +263,8 @@ blockers include:
   including non-table repeats; no cloned row is certified in this phase;
 - rich-text controls and plain-text controls containing multiple paragraphs or
   list structure;
-- unbound ordinary placeholders and visually blank complex table cells;
+- unbound ordinary placeholders and visually blank complex table cells outside
+  an explicitly versioned structural profile;
 - `mc:AlternateContent`, data-bound/malformed/unrecognized controls, ambiguous
   or duplicate choice options, dynamic/active fields outside the harmless
   allowlist, and imported alternative-format content; and
@@ -279,22 +288,20 @@ The already-tracked repository fixture `WM IOV Template.docx` is read in place
 by `wm-iov-existing-fixture.test.ts`; this branch does not add or copy another
 real document. The current deterministic inventory reports:
 
-| Structure | Aggregate finding |
-| --- | --- |
-| Fillable controls | 28 native dropdowns; all 28 are in Word placeholder state |
-| Other supported control kinds | 0 combo boxes, 0 checkboxes, 0 date controls |
-| Tables | 1 fixed table; 0 repeating tables |
-| Headers/footers | 2 header parts; 0 footer parts |
-| Certification blockers | 59 total: 52 `UNBOUND_COMPLEX_TABLE_CELL`, 7 `UNBOUND_ORDINARY_PLACEHOLDER` |
+| Structure                       | Aggregate finding                                                        |
+| ------------------------------- | ------------------------------------------------------------------------ |
+| Fillable controls               | 28 native dropdowns plus 52 `TAB_ONLY_BLANK_TABLE_CELL_V1` fields        |
+| Other supported control kinds   | 0 combo boxes, 0 checkboxes, 0 date controls                             |
+| Tables                          | 1 fixed table; 0 repeating tables                                        |
+| Headers/footers                 | 2 header parts; 0 footer parts                                           |
+| Compiler certification blockers | 7 `UNBOUND_ORDINARY_PLACEHOLDER`; no unrelated blocker is removed        |
+| Pre-storage privacy blockers    | 6 auxiliary/glossary parts and 1 media part remain outside the allowlist |
 
-The renderer/readback compatibility test can mechanically fill all 28
-dropdown controls, removes all 28 `w:showingPlcHdr` markers, and verifies the
-field-proof count plus static-region hash. That does **not** certify the
-template: the 59 visible/unbound structures remain blocking until the source
-template is revised into supported controls (or a future renderer/readback
-pair safely supports them). This test is XML/package evidence only; desktop
-Word and LibreOffice open/repair and visual-layout validation have not been
-performed.
+The renderer/readback compatibility test can mechanically fill all 80 compiled
+fields, removes all 28 `w:showingPlcHdr` markers, and verifies every field proof
+plus static-region invariance. That does **not** certify the complete template:
+the seven visible ordinary placeholders remain blocking and the package fails
+the pre-storage auxiliary/media privacy profile. Desktop Word remains pending.
 
 This fixture does **not** pass the complete upload gate. Aggregate inspection
 finds one media entry and six auxiliary/custom package parts outside the
@@ -485,17 +492,17 @@ time. Existing generic DOCX/PDF/email/clipboard behavior remains available.
 
 All responses are private/no-store. Template Twin mutation/export routes require a freshly read database user with the `DOCTOR` role, tenant/record ownership, both rollout gates, structured request validation, and same-origin checks; a stale session role cannot authorize the operation. Upload additionally requires a physician-readable name, encounter/specialty scope, and version description—there is no silent catch-all “Original Word template.”
 
-| Method and route | Purpose |
-| --- | --- |
-| `POST /api/note-templates/template-twin/upload` | Upload, validate, PHI-scan, compile, persist draft, and return certification URL |
-| `PATCH /api/note-templates/template-twin/:id/mappings` | Save the complete physician-reviewed mapping set with optimistic mapping hash |
-| `POST /api/note-templates/template-twin/:id/synthetic-test` | Resolve synthetic text, validate, render, round-trip verify, and save the current proof |
-| `POST /api/note-templates/template-twin/:id/synthetic-test-voice` | Transcribe ephemeral synthetic audio through the existing provider architecture, then run the same synthetic fill proof |
-| `GET /api/note-templates/template-twin/:id/test-output` | Download an owned, currently verified synthetic output |
-| `POST /api/note-templates/template-twin/:id/certify` | Verify current hashes/acknowledgements, append certification, and activate |
-| `PATCH /api/visits/:id/template-twin/corrections` | Apply one physician-labeled field delta, independently revalidate/rerender, and optionally fork an uncertified mapping version |
-| `POST /api/visits/:id/sign` | Enforce all existing clinical gates plus the Template Twin server gate and atomic sign claim |
-| `GET /api/visits/:id/export/original-template-docx` | Stream the signed, immutable, storage-verified Template Twin output |
+| Method and route                                                  | Purpose                                                                                                                        |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `POST /api/note-templates/template-twin/upload`                   | Upload, validate, PHI-scan, compile, persist draft, and return certification URL                                               |
+| `PATCH /api/note-templates/template-twin/:id/mappings`            | Save the complete physician-reviewed mapping set with optimistic mapping hash                                                  |
+| `POST /api/note-templates/template-twin/:id/synthetic-test`       | Resolve synthetic text, validate, render, round-trip verify, and save the current proof                                        |
+| `POST /api/note-templates/template-twin/:id/synthetic-test-voice` | Transcribe ephemeral synthetic audio through the existing provider architecture, then run the same synthetic fill proof        |
+| `GET /api/note-templates/template-twin/:id/test-output`           | Download an owned, currently verified synthetic output                                                                         |
+| `POST /api/note-templates/template-twin/:id/certify`              | Verify current hashes/acknowledgements, append certification, and activate                                                     |
+| `PATCH /api/visits/:id/template-twin/corrections`                 | Apply one physician-labeled field delta, independently revalidate/rerender, and optionally fork an uncertified mapping version |
+| `POST /api/visits/:id/sign`                                       | Enforce all existing clinical gates plus the Template Twin server gate and atomic sign claim                                   |
+| `GET /api/visits/:id/export/original-template-docx`               | Stream the signed, immutable, storage-verified Template Twin output                                                            |
 
 The certification workspace is `/settings/note-format/:id/certify`. It leads
 with clinical labels, field meaning, exact options, checkbox meaning,
@@ -691,19 +698,19 @@ Required order:
 
 Run from the repository root unless a command says otherwise. Bare root `npm run lint`, `npm run build`, and `npm run test:unit` target the legacy `meddoc-pro` workspace, not TranscribeMD, and are not the acceptance commands for this feature.
 
-| Check | Active command | Notes |
-| --- | --- | --- |
-| Prisma format | `npx prisma format --schema packages/db/prisma/schema.prisma` | Formatting only; review the resulting diff |
-| Prisma validation | `npx prisma validate --schema packages/db/prisma/schema.prisma` | Read-only schema validation |
-| Generate client | `npm run db:generate` | Alias for `npm run generate -w @meddoc/db` |
-| Migration status | `npm run db:migrate:status` | Read-only status; do not use production credentials during local validation |
-| Targeted unit tests | `npm run test:unit -w transcribe-md -- <app-relative-test-paths>` | Vitest runs from `apps/transcribe-md`; use `src/...` paths |
-| Full active unit suite | `npm run test:unit -w transcribe-md` | Includes TranscribeMD and `packages/*/src` tests via the app Vitest config |
-| Typecheck | `npx tsc -p apps/transcribe-md/tsconfig.json --noEmit` | No package script exists; this is the active app config |
-| Lint | `npm run lint -w transcribe-md` | Covers app and worker source under the workspace |
-| Production build | `npm run build -w transcribe-md` | Next.js 16 build; do not run against the live checkout during a read-only audit |
-| TranscribeMD E2E | `npm run test:e2e -w transcribe-md` | Playwright; isolated QA/test services and synthetic data only |
-| Root E2E alias | `npm run test:e2e:transcribe-md` | Equivalent workspace alias |
+| Check                  | Active command                                                    | Notes                                                                           |
+| ---------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Prisma format          | `npx prisma format --schema packages/db/prisma/schema.prisma`     | Formatting only; review the resulting diff                                      |
+| Prisma validation      | `npx prisma validate --schema packages/db/prisma/schema.prisma`   | Read-only schema validation                                                     |
+| Generate client        | `npm run db:generate`                                             | Alias for `npm run generate -w @meddoc/db`                                      |
+| Migration status       | `npm run db:migrate:status`                                       | Read-only status; do not use production credentials during local validation     |
+| Targeted unit tests    | `npm run test:unit -w transcribe-md -- <app-relative-test-paths>` | Vitest runs from `apps/transcribe-md`; use `src/...` paths                      |
+| Full active unit suite | `npm run test:unit -w transcribe-md`                              | Includes TranscribeMD and `packages/*/src` tests via the app Vitest config      |
+| Typecheck              | `npx tsc -p apps/transcribe-md/tsconfig.json --noEmit`            | No package script exists; this is the active app config                         |
+| Lint                   | `npm run lint -w transcribe-md`                                   | Covers app and worker source under the workspace                                |
+| Production build       | `npm run build -w transcribe-md`                                  | Next.js 16 build; do not run against the live checkout during a read-only audit |
+| TranscribeMD E2E       | `npm run test:e2e -w transcribe-md`                               | Playwright; isolated QA/test services and synthetic data only                   |
+| Root E2E alias         | `npm run test:e2e:transcribe-md`                                  | Equivalent workspace alias                                                      |
 
 CI evidence lives in:
 
@@ -748,33 +755,70 @@ Required fixture coverage:
 
 Complete this table at merge handoff; do not replace missing evidence with assumptions:
 
-| Gate | Command/evidence | Result | UTC | Commit/run link |
-| --- | --- | --- | --- | --- |
-| Prisma format/validate/generate | Commands above | `PASS` | 2026-07-15 | Local pre-commit run |
-| Targeted Template Twin regression suite | 57-file feature-path Vitest invocation | `PASS — 57 files / 523 tests` | 2026-07-15 | Local pre-commit run |
-| Full Template Twin suite | Same consolidated 57-file invocation, including the tracked WM fixture | `PASS — 57 files / 523 tests` | 2026-07-15 | Local pre-commit run |
-| Full TranscribeMD unit suite | `CI=true npm run test:unit -w transcribe-md` | `PASS — 194 files / 2,349 tests` | 2026-07-15 | Local pre-commit run |
-| Typecheck | `next typegen` then active `tsc --noEmit` command | `PASS` | 2026-07-15 | Local pre-commit run |
-| Focused/full lint | 148 changed-path files / full active command | `FOCUSED PASS; FULL ACTIVE FAILS PRE-EXISTING DEBT — 29 errors / 39 warnings (recorded main baseline: 30 / 41)` | 2026-07-15 | Marketing: 0/1; legacy: 0/3 |
-| Production build | Clean Docker app/worker/migration image builds | `PASS`; host-only build is blocked by the isolated worktree's external `node_modules` symlink | 2026-07-15 | App bundle assertions passed |
-| Migration tests | Fresh isolated QA PostgreSQL | `PASS — all 70 migrations; status up to date; adversarial DB constraints exercised` | 2026-07-15 | Disposable QA only |
-| Isolated infrastructure-backed QA E2E | `npx playwright test --project=template-twin` against `docker-compose.qa.yml` | `PASS — 1 scenario / 30.7 s` | 2026-07-15 | Disposable QA stack removed after run |
-| DOCX visual/open-repair inspection | Desktop Word and LibreOffice | `NOT RUN — neither application is installed` | 2026-07-15 | Mandatory manual release gate |
-| Backup/restore and production bucket policy | Operations evidence | `PENDING` | — | Production-readiness prerequisite |
-| Clinical/privacy approval | Named approval records | `PENDING` | — | Real-PHI prerequisite |
+| Gate                                        | Command/evidence                                                             | Result                                                                                                             | UTC        | Commit/run link                    |
+| ------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ---------- | ---------------------------------- |
+| Prisma format/validate/generate             | Commands above                                                               | `PASS`                                                                                                             | 2026-07-16 | Local compatibility-branch run     |
+| Full Template Twin suite                    | Consolidated feature-path invocation, including the tracked WM fixture       | `PASS — 63 files / 664 tests`                                                                                      | 2026-07-16 | Synthetic/local only               |
+| Full TranscribeMD unit suite                | `npm run test:unit -w transcribe-md`                                         | `PASS — 205 files / 2,510 tests`                                                                                   | 2026-07-16 | Synthetic/local only               |
+| Type generation/typecheck                   | `next typegen` then active `tsc --noEmit` command                            | `PASS`                                                                                                             | 2026-07-16 | Local compatibility-branch run     |
+| Focused/full lint                           | Changed-path files / full active command                                     | `FOCUSED PASS; FULL ACTIVE MATCHES PRE-EXISTING DEBT — 29 errors / 39 warnings (main baseline: 30 / 41)`           | 2026-07-16 | Marketing: 0/1; legacy: 0/3        |
+| Production build                            | Clean Docker app/worker/migrator image builds                                | `PASS`; app bundle assertions passed                                                                               | 2026-07-16 | Disposable local images            |
+| Migration tests                             | Fresh QA PostgreSQL plus interrupted/resumed one-million-row upgrade harness | `PASS — all 71 migrations; 1,000,000 requested rows; retry/idempotency/lock-contention proof passed`               | 2026-07-16 | Disposable QA only                 |
+| Isolated infrastructure-backed QA E2E       | `playwright test --project=template-twin`                                    | `PASS — 1 scenario / 28.9 s`                                                                                       | 2026-07-16 | QA stack and volumes removed       |
+| Browser safety/accessibility                | Chromium, PHI reject, Rx safety, and axe projects                            | `PASS — 54 + 1 + 7 + 26 tests`                                                                                     | 2026-07-16 | Synthetic/local only               |
+| Open XML and LibreOffice gate               | SDK 3.5.1 plus pinned LibreOffice 25.8.7.3                                   | `PRE-DELIVERY PASS; QA-ONLY ROUND-TRIP PASS; 7 classified LibreOffice-only schema diagnostics remain Word-pending` | 2026-07-16 | Exact tab-only corpus              |
+| Desktop Microsoft Word                      | Returned no-network Windows QA bundle                                        | `PENDING`                                                                                                          | —          | Mandatory release gate             |
+| Dependency/secret gates                     | npm high/critical audit and TruffleHog filesystem scan                       | `PASS — 0 high/critical; 0 detected secrets`                                                                       | 2026-07-16 | Moderate/low audit findings remain |
+| Backup/restore and production bucket policy | Operations evidence                                                          | `PENDING`                                                                                                          | —          | Production-readiness prerequisite  |
+| Clinical/privacy approval                   | Named approval records                                                       | `PENDING`                                                                                                          | —          | Real-PHI prerequisite              |
 
 ## Current limitations and v1 non-goals
+
+### Exact WM IOV compatibility slice
+
+`TAB_ONLY_BLANK_TABLE_CELL_V1` is the only additional unbound table-cell
+profile admitted by this compatibility branch. It is not generic complex-table
+support. The compiler requires one unmerged, non-nested target cell with one
+blank paragraph. That paragraph contains only an approved set of ordinary
+paragraph/run properties and exactly one left tab-stop definition under
+`w:pPr/w:tabs/w:tab`; it contains no mutable run or visible text. A physician
+must still confirm the inferred label, clinical mapping, blank policy, and
+synthetic coverage before certification.
+
+The renderer preserves the complete table, cell, paragraph properties, and tab
+stop and appends one plain `w:r/w:t` value at the certified cell path. Strict
+readback derives the value from that completed run, fingerprints the profile,
+and inventories every profiled cell across the package. A moved, swapped,
+duplicated, missing, merged, or property-altered cell fails
+`template-docx-readback/2.0.0`; the profile proof is required again by
+certification and signing. Newlines and content tabs are rejected, and the
+existing 32,767-character limit continues to produce an overflow review gate.
+The completed-byte fingerprint binds the exact cell/paragraph attributes and
+the immutable `tcPr`/`pPr` descriptors. The renderer-owned run must have no
+attributes or formatting children, and its one text node may carry only the
+conditionally required `xml:space="preserve"`. Tracked-deletion attributes,
+raw property text, added run attributes, and unnecessary text-preservation
+metadata all fail strict readback.
+
+The unchanged WM IOV fixture now deterministically compiles 52 cells under this
+profile. Its seven ordinary placeholders remain
+`UNBOUND_ORDINARY_PLACEHOLDER` certification blockers. Six auxiliary/glossary
+parts and one media part remain rejected by the pre-storage privacy profile, so
+the complete document still cannot upload or certify. Media, auxiliary parts,
+ordinary placeholders, rich text, repeating sections, and every other complex
+cell signature remain outside this slice.
 
 Current implementation limitations that must remain visible:
 
 - Word has no server-side layout engine here. The renderer enforces character
   limits plus XML/package integrity and can flag long replacements, but it
   cannot prove page-level overflow, pagination, font substitution, printer
-  behavior, or whether desktop Word/LibreOffice shows an open-repair dialog.
-  Manual visual/open-repair QA remains a release gate.
+  behavior, or whether desktop Word shows an open-repair dialog. The pinned
+  LibreOffice synthetic round-trip passed for this profile; human desktop Word
+  visual/open-repair QA remains a release gate.
 - The ZIP container is rebuilt, so ZIP-level timestamps/compression/order may differ. The guarantee is approved XML patches plus byte-identical decompressed untouched entries and static-content invariance, not a byte-identical whole file.
 - All repeating sections, multi-paragraph/list rich text, data-bound controls,
-  ordinary unbound placeholders, complex unbound table cells,
+  ordinary unbound placeholders, unprofiled complex table cells,
   `mc:AlternateContent`, active/unapproved fields, and ambiguous structures are
   certification-blocked in safe alpha.
 - The fixed SOAP taxonomy cannot extract arbitrary specialty concepts. The

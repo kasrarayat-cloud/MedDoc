@@ -128,43 +128,50 @@ function validRoundTrip(
     sourcePrivacyScanEvidenceSha256: canonicalSha256(
       SOURCE_PRIVACY_SCAN_EVIDENCE,
     ),
-    fields: ir.fields.map((field) =>
-      ({
-        fieldId: field.fieldId,
-        partName: field.rendererBinding.partName,
-        bindingPath: field.rendererBinding.path,
-        bindingEvidence: {
-          contractVersion: TEMPLATE_TWIN_BINDING_FINGERPRINT_VERSION,
-          status: 'verified',
-          certifiedFingerprintSha256:
-            field.rendererBinding.certifiedBindingSha256,
-          outputFingerprintSha256:
-            field.rendererBinding.certifiedBindingSha256,
-          outputPartName: field.rendererBinding.partName,
-          outputCanonicalPath: field.rendererBinding.canonicalPath,
-          outputBindingType: field.rendererBinding.bindingType,
-          outputBindingOrdinal: field.rendererBinding.ordinal,
-          outputNativeIdentity: nativeIdentityFromRendererBinding(
-            field.rendererBinding,
-          ),
-          outputBindingIdentitySha256:
-            field.rendererBinding.sourceBindingIdentitySha256,
-          outputTableLocation: {
-            tableIndex: field.rendererBinding.tableIndex,
-            rowIndex: field.rendererBinding.rowIndex,
-            cellIndex: field.rendererBinding.cellIndex,
-          },
-        },
-        valueSha256: canonicalSha256({
+    fields: ir.fields.map(
+      (field) =>
+        ({
           fieldId: field.fieldId,
-          value: resolutions.get(field.fieldId)?.value,
-        }),
-        occurrences:
-          field.rowPrototype && Array.isArray(resolutions.get(field.fieldId)?.value)
-            ? (resolutions.get(field.fieldId)!.value as unknown[]).length
-            : 1,
-        status: 'verified',
-      }) as const,
+          partName: field.rendererBinding.partName,
+          bindingPath: field.rendererBinding.path,
+          bindingEvidence: {
+            contractVersion: TEMPLATE_TWIN_BINDING_FINGERPRINT_VERSION,
+            status: 'verified',
+            certifiedFingerprintSha256:
+              field.rendererBinding.certifiedBindingSha256,
+            outputFingerprintSha256:
+              field.rendererBinding.certifiedBindingSha256,
+            outputPartName: field.rendererBinding.partName,
+            outputCanonicalPath: field.rendererBinding.canonicalPath,
+            outputBindingType: field.rendererBinding.bindingType,
+            ...(field.rendererBinding.bindingProfile === undefined
+              ? {}
+              : {
+                  outputBindingProfile: field.rendererBinding.bindingProfile,
+                }),
+            outputBindingOrdinal: field.rendererBinding.ordinal,
+            outputNativeIdentity: nativeIdentityFromRendererBinding(
+              field.rendererBinding,
+            ),
+            outputBindingIdentitySha256:
+              field.rendererBinding.sourceBindingIdentitySha256,
+            outputTableLocation: {
+              tableIndex: field.rendererBinding.tableIndex,
+              rowIndex: field.rendererBinding.rowIndex,
+              cellIndex: field.rendererBinding.cellIndex,
+            },
+          },
+          valueSha256: canonicalSha256({
+            fieldId: field.fieldId,
+            value: resolutions.get(field.fieldId)?.value,
+          }),
+          occurrences:
+            field.rowPrototype &&
+            Array.isArray(resolutions.get(field.fieldId)?.value)
+              ? (resolutions.get(field.fieldId)!.value as unknown[]).length
+              : 1,
+          status: 'verified',
+        }) as const,
     ),
     warningCodes: [],
   };
@@ -229,13 +236,18 @@ function persistedMapping(mapping: SemanticMapping, index: number) {
   };
 }
 
-function ownedRow(ir: TemplateDocIR, baseMappings: readonly SemanticMapping[], options: RowOptions = {}) {
+function ownedRow(
+  ir: TemplateDocIR,
+  baseMappings: readonly SemanticMapping[],
+  options: RowOptions = {},
+) {
   const mappings = options.mappings ?? baseMappings;
   const includeProof = options.includeSyntheticProof ?? true;
   const outputSha256 = options.latestTestOutputSha256 ?? OUTPUT_SHA;
   const manifest =
     options.latestSyntheticTestManifest ?? validSyntheticManifest(ir, mappings);
-  const parsedProofManifest = TemplateTwinFillManifestSchema.safeParse(manifest);
+  const parsedProofManifest =
+    TemplateTwinFillManifestSchema.safeParse(manifest);
   const proofManifest = parsedProofManifest.success
     ? parsedProofManifest.data
     : validSyntheticManifest(ir, mappings);
@@ -251,21 +263,19 @@ function ownedRow(ir: TemplateDocIR, baseMappings: readonly SemanticMapping[], o
       compiledDocumentIr: ir,
       certificationStatus: 'NEEDS_CONFIRMATION',
       blockingUnsupportedCount: options.blockingUnsupportedCount ?? 0,
-      latestSyntheticTestManifest: includeProof
-        ? manifest
-        : null,
+      latestSyntheticTestManifest: includeProof ? manifest : null,
       latestTestMappingsSha256: includeProof
         ? templateTwinMappingsSha256(mappings)
         : null,
       latestTestOutputObjectKey: includeProof
-        ? options.latestTestOutputObjectKey ??
+        ? (options.latestTestOutputObjectKey ??
           createOutputArtifactKey({
-              practiceId: ACTOR.practiceId,
-              visitId: `synthetic_${COMPILED_ID}`,
-              manifestSha256,
-              outputSha256,
-              idFactory: () => 'artifact-synthetic-lifecycle',
-            })
+            practiceId: ACTOR.practiceId,
+            visitId: `synthetic_${COMPILED_ID}`,
+            manifestSha256,
+            outputSha256,
+            idFactory: () => 'artifact-synthetic-lifecycle',
+          }))
         : null,
       latestTestOutputVersionId: includeProof
         ? 'provider-version-synthetic-1'
@@ -273,14 +283,14 @@ function ownedRow(ir: TemplateDocIR, baseMappings: readonly SemanticMapping[], o
       latestTestOutputEtag: includeProof ? 'provider-etag-synthetic-1' : null,
       latestTestOutputSha256: includeProof ? outputSha256 : null,
       latestTestStaticContentSha256: includeProof
-        ? options.latestTestStaticContentSha256 ?? ir.staticContentSha256
+        ? (options.latestTestStaticContentSha256 ?? ir.staticContentSha256)
         : null,
       latestTestRoundTrip: includeProof
-        ? options.latestTestRoundTrip ??
-          validRoundTrip(ir, proofManifest, outputSha256)
+        ? (options.latestTestRoundTrip ??
+          validRoundTrip(ir, proofManifest, outputSha256))
         : null,
       latestTestVerifiedAt: includeProof
-        ? options.latestTestVerifiedAt ?? new Date('2026-07-15T12:00:00.000Z')
+        ? (options.latestTestVerifiedAt ?? new Date('2026-07-15T12:00:00.000Z'))
         : null,
       certification: null,
       sourceArtifact: {
@@ -320,11 +330,16 @@ function syntheticTestProvenanceSha256(
     latestTestRoundTrip: compiled.latestTestRoundTrip,
     latestTestVerifiedAt: compiled.latestTestVerifiedAt,
   });
-  if (!digest) throw new Error('Synthetic test provenance fixture is incomplete');
+  if (!digest)
+    throw new Error('Synthetic test provenance fixture is incomplete');
   return digest;
 }
 
-function workspace(ir: TemplateDocIR, mappings: readonly SemanticMapping[], certified = false) {
+function workspace(
+  ir: TemplateDocIR,
+  mappings: readonly SemanticMapping[],
+  certified = false,
+) {
   return {
     template: {
       id: TEMPLATE_ID,
@@ -368,7 +383,9 @@ beforeEach(async () => {
   mocks.fieldUpdateMany.mockResolvedValue({ count: 1 });
   mocks.noteTemplateUpdateMany.mockResolvedValue({ count: 1 });
   mocks.noteTemplateUpdate.mockResolvedValue({});
-  mocks.certificationCreate.mockResolvedValue({ id: 'certification-synthetic-1' });
+  mocks.certificationCreate.mockResolvedValue({
+    id: 'certification-synthetic-1',
+  });
   mocks.waiverCreateMany.mockResolvedValue({ count: 0 });
   mocks.outboxCreate.mockResolvedValue({ id: 'outbox-synthetic-1' });
 });
@@ -416,7 +433,9 @@ describe('Template Twin certification lifecycle service', () => {
 
   it('rejects a stale mapping hash before invalidating proof or updating mappings', async () => {
     const fixture = await buildTemplateTwinIntegrationFixture();
-    mocks.findTemplate.mockResolvedValue(ownedRow(fixture.ir, fixture.mappings));
+    mocks.findTemplate.mockResolvedValue(
+      ownedRow(fixture.ir, fixture.mappings),
+    );
 
     await expect(
       updateTemplateTwinMappings({
@@ -429,10 +448,9 @@ describe('Template Twin certification lifecycle service', () => {
 
     expect(mocks.mappingUpdate).not.toHaveBeenCalled();
     expect(mocks.compiledUpdate).not.toHaveBeenCalled();
-    expect(mocks.transaction).toHaveBeenCalledWith(
-      expect.any(Function),
-      { isolationLevel: 'Serializable' },
-    );
+    expect(mocks.transaction).toHaveBeenCalledWith(expect.any(Function), {
+      isolationLevel: 'Serializable',
+    });
   });
 
   it.each([
@@ -440,37 +458,42 @@ describe('Template Twin certification lifecycle service', () => {
     'pregnancy.status',
     'exam.monofilament',
     'measurement.custom_ankle_width',
-  ])('rejects unsupported safe-alpha mapping %s before persistence', async (concept) => {
-    const fixture = await buildTemplateTwinIntegrationFixture();
-    const unsupported = fixture.mappings.map((mapping, index) =>
-      index === 0 ? { ...mapping, clinicalConcept: concept } : mapping,
-    );
-    mocks.findTemplate.mockResolvedValue(
-      ownedRow(fixture.ir, fixture.mappings),
-    );
+  ])(
+    'rejects unsupported safe-alpha mapping %s before persistence',
+    async (concept) => {
+      const fixture = await buildTemplateTwinIntegrationFixture();
+      const unsupported = fixture.mappings.map((mapping, index) =>
+        index === 0 ? { ...mapping, clinicalConcept: concept } : mapping,
+      );
+      mocks.findTemplate.mockResolvedValue(
+        ownedRow(fixture.ir, fixture.mappings),
+      );
 
-    await expect(
-      updateTemplateTwinMappings({
-        noteTemplateId: TEMPLATE_ID,
-        actor: ACTOR,
-        expectedMappingsSha256: templateTwinMappingsSha256(fixture.mappings),
-        mappings: unsupported,
-      }),
-    ).rejects.toMatchObject({
-      code: 'UNSUPPORTED_CLINICAL_CONCEPT',
-      message: expect.stringContaining('TT_CONCEPT_UNSUPPORTED_V1'),
-    });
+      await expect(
+        updateTemplateTwinMappings({
+          noteTemplateId: TEMPLATE_ID,
+          actor: ACTOR,
+          expectedMappingsSha256: templateTwinMappingsSha256(fixture.mappings),
+          mappings: unsupported,
+        }),
+      ).rejects.toMatchObject({
+        code: 'UNSUPPORTED_CLINICAL_CONCEPT',
+        message: expect.stringContaining('TT_CONCEPT_UNSUPPORTED_V1'),
+      });
 
-    expect(mocks.mappingUpdate).not.toHaveBeenCalled();
-    expect(mocks.compiledUpdate).not.toHaveBeenCalled();
-  });
+      expect(mocks.mappingUpdate).not.toHaveBeenCalled();
+      expect(mocks.compiledUpdate).not.toHaveBeenCalled();
+    },
+  );
 
   it('updates the exact field set and invalidates the prior synthetic proof', async () => {
     const fixture = await buildTemplateTwinIntegrationFixture();
     const changed = fixture.mappings.map((mapping, index) =>
       index === 0 ? { ...mapping, required: !mapping.required } : mapping,
     );
-    mocks.findTemplate.mockResolvedValue(ownedRow(fixture.ir, fixture.mappings));
+    mocks.findTemplate.mockResolvedValue(
+      ownedRow(fixture.ir, fixture.mappings),
+    );
     mocks.readWorkspace.mockResolvedValue(workspace(fixture.ir, changed));
 
     const result = await updateTemplateTwinMappings({
@@ -533,7 +556,9 @@ describe('Template Twin certification lifecycle service', () => {
     const changed = fixture.mappings.map((mapping, index) =>
       index === 0 ? { ...mapping, required: !mapping.required } : mapping,
     );
-    mocks.findTemplate.mockResolvedValue(ownedRow(fixture.ir, fixture.mappings));
+    mocks.findTemplate.mockResolvedValue(
+      ownedRow(fixture.ir, fixture.mappings),
+    );
     mocks.readWorkspace.mockResolvedValue(workspace(fixture.ir, changed));
     mocks.outboxCreate.mockRejectedValueOnce(
       new Error('synthetic audit outbox unavailable'),
@@ -607,8 +632,7 @@ describe('Template Twin certification lifecycle service', () => {
       noteTemplateId: TEMPLATE_ID,
       actor: ACTOR,
       expectedMappingsSha256: mappingHash,
-      expectedSyntheticTestProvenanceSha256:
-        syntheticTestProvenanceSha256(row),
+      expectedSyntheticTestProvenanceSha256: syntheticTestProvenanceSha256(row),
     });
 
     expect(result.template).toMatchObject({
@@ -656,9 +680,9 @@ describe('Template Twin certification lifecycle service', () => {
         testOutputSha256: OUTPUT_SHA,
       },
     });
-    expect(mocks.noteTemplateUpdateMany.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.noteTemplateUpdate.mock.invocationCallOrder[0]!,
-    );
+    expect(
+      mocks.noteTemplateUpdateMany.mock.invocationCallOrder[0],
+    ).toBeLessThan(mocks.noteTemplateUpdate.mock.invocationCallOrder[0]!);
     expect(mocks.noteTemplateUpdate.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.certificationCreate.mock.invocationCallOrder[0]!,
     );
@@ -669,8 +693,7 @@ describe('Template Twin certification lifecycle service', () => {
         action: 'TEMPLATE_TWIN_CERTIFIED',
         status: 'PENDING',
         metadata: expect.objectContaining({
-          syntheticTestProvenanceSha256:
-            syntheticTestProvenanceSha256(row),
+          syntheticTestProvenanceSha256: syntheticTestProvenanceSha256(row),
         }),
       }),
     });
@@ -755,12 +778,12 @@ describe('Template Twin certification lifecycle service', () => {
       noteTemplateId: TEMPLATE_ID,
       actor: ACTOR,
       expectedMappingsSha256: templateTwinMappingsSha256(mappings),
-      expectedSyntheticTestProvenanceSha256:
-        syntheticTestProvenanceSha256(row),
+      expectedSyntheticTestProvenanceSha256: syntheticTestProvenanceSha256(row),
       optionalFieldWaivers: [
         {
           fieldId: ir.fields[0]!.fieldId,
-          reason: 'Optional display field is not used for this encounter workflow.',
+          reason:
+            'Optional display field is not used for this encounter workflow.',
         },
       ],
     });
@@ -773,7 +796,8 @@ describe('Template Twin certification lifecycle service', () => {
           fieldId: ir.fields[0]!.fieldId,
           mappingsSha256: templateTwinMappingsSha256(mappings),
           waivedById: ACTOR.userId,
-          reason: 'Optional display field is not used for this encounter workflow.',
+          reason:
+            'Optional display field is not used for this encounter workflow.',
           waivedAt: expect.any(Date),
         }),
       ],
@@ -952,7 +976,9 @@ describe('Template Twin certification lifecycle service', () => {
       mutate: (proof: ReturnType<typeof validRoundTrip>) => ({
         ...proof,
         fields: proof.fields.map((field, index) =>
-          index === 0 ? { ...field, occurrences: field.occurrences + 1 } : field,
+          index === 0
+            ? { ...field, occurrences: field.occurrences + 1 }
+            : field,
         ),
       }),
     },
@@ -970,16 +996,56 @@ describe('Template Twin certification lifecycle service', () => {
         untouchedEntriesVerified: -1,
       }),
     },
-  ])('rejects a synthetic proof with an invalid $mismatch', async ({ mutate }) => {
+  ])(
+    'rejects a synthetic proof with an invalid $mismatch',
+    async ({ mutate }) => {
+      const fixture = await buildTemplateTwinIntegrationFixture();
+      mocks.findTemplate.mockResolvedValue(
+        ownedRow(fixture.ir, fixture.mappings, {
+          latestTestRoundTrip: mutate(
+            validRoundTrip(
+              fixture.ir,
+              validSyntheticManifest(fixture.ir, fixture.mappings),
+            ),
+          ),
+        }),
+      );
+
+      await expect(
+        certifyAndActivateTemplateTwin({
+          noteTemplateId: TEMPLATE_ID,
+          actor: ACTOR,
+          expectedMappingsSha256: templateTwinMappingsSha256(fixture.mappings),
+        }),
+      ).rejects.toMatchObject({ code: 'CERTIFICATION_BLOCKED' });
+
+      expect(mocks.certificationCreate).not.toHaveBeenCalled();
+      expect(mocks.noteTemplateUpdate).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects certification when a profiled cell proof omits its output-derived profile', async () => {
     const fixture = await buildTemplateTwinIntegrationFixture();
+    const proof = structuredClone(
+      validRoundTrip(
+        fixture.ir,
+        validSyntheticManifest(fixture.ir, fixture.mappings),
+      ),
+    ) as {
+      fields: Array<{
+        bindingEvidence: { outputBindingProfile?: string };
+      }>;
+    };
+    const profiled = proof.fields.find(
+      (field) =>
+        field.bindingEvidence.outputBindingProfile ===
+        'TAB_ONLY_BLANK_TABLE_CELL_V1',
+    );
+    expect(profiled).toBeDefined();
+    delete profiled!.bindingEvidence.outputBindingProfile;
     mocks.findTemplate.mockResolvedValue(
       ownedRow(fixture.ir, fixture.mappings, {
-        latestTestRoundTrip: mutate(
-          validRoundTrip(
-            fixture.ir,
-            validSyntheticManifest(fixture.ir, fixture.mappings),
-          ),
-        ),
+        latestTestRoundTrip: proof,
       }),
     );
 

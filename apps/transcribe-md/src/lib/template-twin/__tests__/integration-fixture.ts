@@ -23,7 +23,7 @@ const DOCUMENT_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
     <w:p><w:r><w:t>Chief concern: </w:t></w:r><w:sdt><w:sdtPr><w:id w:val="300"/><w:alias w:val="Chief concern"/><w:text/></w:sdtPr><w:sdtContent><w:r><w:t>Enter concern</w:t></w:r></w:sdtContent></w:sdt></w:p>
     <w:p><w:r><w:t>Smoking: </w:t></w:r><w:sdt><w:sdtPr><w:id w:val="301"/><w:alias w:val="Smoking status"/><w:dropDownList><w:listItem w:displayText="Never" w:value="never"/><w:listItem w:displayText="Current" w:value="current"/></w:dropDownList></w:sdtPr><w:sdtContent><w:r><w:t>Choose an item.</w:t></w:r></w:sdtContent></w:sdt></w:p>
     <w:p><w:r><w:t>Medication documented: </w:t></w:r><w:sdt><w:sdtPr><w:id w:val="302"/><w:alias w:val="Medication documented"/><w14:checkbox><w14:checked w14:val="0"/><w14:checkedState w14:val="2612"/><w14:uncheckedState w14:val="2610"/></w14:checkbox></w:sdtPr><w:sdtContent><w:r><w:t>☐</w:t></w:r></w:sdtContent></w:sdt></w:p>
-    <w:tbl><w:tblGrid><w:gridCol w:w="2200"/><w:gridCol w:w="5000"/></w:tblGrid><w:tr><w:tc><w:p><w:r><w:t>Plan</w:t></w:r></w:p></w:tc><w:tc><w:p><w:sdt><w:sdtPr><w:id w:val="303"/><w:alias w:val="Plan item"/><w:text/></w:sdtPr><w:sdtContent><w:r><w:t>Enter plan</w:t></w:r></w:sdtContent></w:sdt></w:p></w:tc></w:tr></w:tbl>
+    <w:tbl><w:tblGrid><w:gridCol w:w="2200"/><w:gridCol w:w="5000"/></w:tblGrid><w:tr><w:tc><w:p><w:r><w:t>Plan</w:t></w:r></w:p></w:tc><w:tc><w:p><w:sdt><w:sdtPr><w:id w:val="303"/><w:alias w:val="Plan item"/><w:text/></w:sdtPr><w:sdtContent><w:r><w:t>Enter plan</w:t></w:r></w:sdtContent></w:sdt></w:p></w:tc></w:tr><w:tr><w:tc><w:p><w:r><w:t>Plan detail</w:t></w:r></w:p></w:tc><w:tc><w:p><w:pPr><w:tabs><w:tab w:val="left" w:pos="720"/></w:tabs><w:spacing w:after="0"/></w:pPr></w:p></w:tc></w:tr></w:tbl>
     <w:sectPr><w:headerReference w:type="default" r:id="rIdHeader"/><w:footerReference w:type="default" r:id="rIdFooter"/></w:sectPr>
   </w:body>
 </w:document>`;
@@ -110,6 +110,7 @@ function mappingForField(field: TemplateField): SemanticMapping {
       case 'Medication documented':
         return 'medication.name';
       case 'Plan item':
+      case 'Plan detail':
         return 'plan';
       default:
         throw new Error(`Unexpected synthetic field: ${field.originalLabel}`);
