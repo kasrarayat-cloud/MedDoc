@@ -91,7 +91,10 @@ import { runLayer5SelfCritique } from '@/worker/layers/05-self-critique';
 import type { AudioConfidenceStats } from '@/worker/layers/audio-confidence';
 import { shouldFlagForReview } from '@/worker/layers/audio-confidence';
 import { runLayer6Polish } from '@/worker/layers/06-polish';
-import { resolveVisitTemplate } from '@/worker/note-templates/resolve-active-template';
+import {
+  resolveVisitTemplateAdmission,
+  TemplateTwinWorkerRolloutError,
+} from '@/worker/note-templates/resolve-active-template';
 import {
   normalizeTemplate,
   type ResolvedNoteTemplate,
@@ -112,6 +115,7 @@ import {
   processTemplateTwinVisit,
   TEMPLATE_TWIN_REVIEW_REASON,
 } from '@/lib/template-twin/fill-engine';
+import type { TemplateTwinRolloutToken } from '@/lib/template-twin/rollout';
 
 const CONCURRENCY = Number.parseInt(
   process.env.TRANSCRIBE_MD_WORKER_CONCURRENCY ?? '2',
@@ -609,6 +613,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
     // of silently switching layout versions.
     let noteTemplate: ResolvedNoteTemplate;
     let selectedTemplate: NoteTemplate | null = null;
+    let selectedTemplateRolloutToken: TemplateTwinRolloutToken | null = null;
     const fillPin = visit.templateTwinFill;
     const pinnedTemplateId = fillPin?.noteTemplateId ?? visit.noteTemplateId;
     const pinnedTemplateVersion =
@@ -622,12 +627,14 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       ) {
         throw new Error('Template Twin visit provenance is internally inconsistent.');
       }
-      selectedTemplate = await resolveVisitTemplate({
+      const admission = await resolveVisitTemplateAdmission({
         doctorId: visit.userId ?? '',
         encounterType: visit.specialty,
         pinnedTemplateId,
         pinnedTemplateVersion,
       });
+      selectedTemplate = admission.template;
+      selectedTemplateRolloutToken = admission.templateTwinRolloutToken;
       noteTemplate = normalizeTemplate(selectedTemplate);
     } catch (err) {
       if (pinnedTemplateId || pinnedTemplateVersion != null) throw err;
@@ -716,6 +723,9 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
     // independently compares both values again.
     if (selectedTemplate?.templateKind === 'template_twin_docx') {
       currentLayer = 'template_twin';
+      if (!selectedTemplateRolloutToken) {
+        throw new TemplateTwinWorkerRolloutError();
+      }
       const currentSoap = await prisma.transcribeVisit.findUnique({
         where: { id: visitId },
         select: { soapFinal: true, soapVersion: true },
@@ -749,6 +759,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         validationNow: visit.createdAt,
         resolverModelVersion:
           process.env.TRANSCRIBE_MD_CLINICAL_MODEL || 'claude-sonnet-4-6',
+        rolloutToken: selectedTemplateRolloutToken,
       });
       if (
         twinFill.manifest.counts.needsReview > 0 ||

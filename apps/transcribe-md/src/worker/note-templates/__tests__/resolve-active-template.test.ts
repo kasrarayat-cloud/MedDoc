@@ -6,7 +6,9 @@
 // resolver does no I/O; the async shell is exercised separately in Phase 1).
 // ============================================================================
 
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const rolloutMocks = vi.hoisted(() => ({ pin: vi.fn() }));
 
 vi.mock('@meddoc/db', () => ({
   default: {
@@ -14,6 +16,12 @@ vi.mock('@meddoc/db', () => ({
     user: { findUnique: vi.fn() },
   },
 }));
+vi.mock('@/lib/template-twin/rollout', async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import('@/lib/template-twin/rollout')
+  >();
+  return { ...actual, pinTemplateTwinRollout: rolloutMocks.pin };
+});
 
 import type { NoteTemplate } from '@prisma/client';
 import prisma from '@meddoc/db';
@@ -23,6 +31,7 @@ import {
   PinnedTemplateUnavailableError,
   TemplateTwinWorkerRolloutError,
   resolveActiveTemplate,
+  resolveActiveTemplateAdmission,
   resolveVisitTemplate,
 } from '../resolve-active-template';
 
@@ -50,6 +59,16 @@ const systemDefault = tmpl({
   doctorId: null,
   isSystemDefault: true,
   name: 'System Default — SOAP',
+});
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  process.env.TEMPLATE_TWIN_KILL_SWITCH = 'false';
+  rolloutMocks.pin.mockResolvedValue({
+    practiceId: 'practice-1',
+    globalGeneration: BigInt(1),
+    practiceGeneration: BigInt(1),
+  });
 });
 
 describe('selectTemplate — fallback chain', () => {
@@ -209,6 +228,93 @@ describe('resolveVisitTemplate — immutable retry provenance', () => {
       isActive: true,
       practice: { templateTwinEnabled: false },
     } as never);
+
+    await expect(
+      resolveActiveTemplate({ doctorId: 'doc1', encounterType: 'cardiology' }),
+    ).resolves.toBe(systemDefault);
+  });
+
+  it('uses persisted global and lineage admission before selecting an active Twin', async () => {
+    const twin = tmpl({
+      id: 'twin-enabled-active',
+      doctorId: 'doc1',
+      encounterType: 'cardiology',
+      templateKind: 'template_twin_docx',
+    });
+    vi.mocked(prisma.noteTemplate.findMany).mockResolvedValueOnce([
+      systemDefault,
+      twin,
+    ]);
+    vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({
+      role: 'DOCTOR',
+      isActive: true,
+      practiceId: 'practice-1',
+      practice: { templateTwinEnabled: true },
+    } as never);
+
+    await expect(
+      resolveActiveTemplate({ doctorId: 'doc1', encounterType: 'cardiology' }),
+    ).resolves.toBe(twin);
+    expect(rolloutMocks.pin).toHaveBeenCalledWith({
+      practiceId: 'practice-1',
+    });
+  });
+
+  it('returns the exact persisted rollout token with a worker Twin selection', async () => {
+    const twin = tmpl({
+      id: 'twin-admission-token',
+      doctorId: 'doc1',
+      encounterType: 'cardiology',
+      templateKind: 'template_twin_docx',
+    });
+    const token = {
+      practiceId: 'practice-1',
+      globalGeneration: BigInt(17),
+      practiceGeneration: BigInt(23),
+    };
+    vi.mocked(prisma.noteTemplate.findMany).mockResolvedValueOnce([
+      systemDefault,
+      twin,
+    ]);
+    vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({
+      role: 'DOCTOR',
+      isActive: true,
+      practiceId: 'practice-1',
+      practice: { templateTwinEnabled: true },
+    } as never);
+    rolloutMocks.pin.mockResolvedValueOnce(token);
+
+    await expect(
+      resolveActiveTemplateAdmission({
+        doctorId: 'doc1',
+        encounterType: 'cardiology',
+      }),
+    ).resolves.toEqual({
+      template: twin,
+      templateTwinRolloutToken: token,
+    });
+  });
+
+  it('falls back to the structured default when persisted admission fails closed', async () => {
+    const twin = tmpl({
+      id: 'twin-db-disabled-active',
+      doctorId: 'doc1',
+      encounterType: 'cardiology',
+      templateKind: 'template_twin_docx',
+    });
+    vi.mocked(prisma.noteTemplate.findMany).mockResolvedValueOnce([
+      systemDefault,
+      twin,
+    ]);
+    vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({
+      role: 'DOCTOR',
+      isActive: true,
+      practiceId: 'practice-1',
+      practice: { templateTwinEnabled: true },
+    } as never);
+    rolloutMocks.pin.mockRejectedValueOnce(
+      new Error('synthetic persisted global disable'),
+    );
 
     await expect(
       resolveActiveTemplate({ doctorId: 'doc1', encounterType: 'cardiology' }),

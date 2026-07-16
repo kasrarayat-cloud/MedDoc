@@ -25,7 +25,11 @@
 
 import type { NoteTemplate } from '@prisma/client';
 import prisma from '@meddoc/db';
-import { evaluateTemplateTwinRollout } from '@/lib/template-twin/rollout';
+import {
+  evaluateTemplateTwinRollout,
+  pinTemplateTwinRollout,
+  type TemplateTwinRolloutToken,
+} from '@/lib/template-twin/rollout';
 
 export interface ResolveTemplateInput {
   /** The signing/owning doctor (User.id). */
@@ -40,6 +44,14 @@ export interface ResolveVisitTemplateInput extends ResolveTemplateInput {
    * exact version even if a newer lineage version has since been activated. */
   pinnedTemplateId?: string | null;
   pinnedTemplateVersion?: number | null;
+}
+
+/** Worker admission result. A Twin selection always carries the exact
+ * persisted rollout epoch that authorized that selection; structured
+ * templates deliberately carry no Twin token. */
+export interface ResolvedVisitTemplateAdmission {
+  template: NoteTemplate;
+  templateTwinRolloutToken: TemplateTwinRolloutToken | null;
 }
 
 export class PinnedTemplateUnavailableError extends Error {
@@ -60,22 +72,34 @@ export class TemplateTwinWorkerRolloutError extends Error {
   }
 }
 
-async function templateTwinAllowedForDoctor(doctorId: string): Promise<boolean> {
+async function admitTemplateTwinForDoctor(
+  doctorId: string
+): Promise<TemplateTwinRolloutToken | null> {
   try {
     const user = await prisma.user.findUnique({
       where: { id: doctorId },
       select: {
         role: true,
         isActive: true,
+        practiceId: true,
         practice: { select: { templateTwinEnabled: true } },
       },
     });
-    if (!user || !user.isActive || user.role !== 'DOCTOR') return false;
-    return evaluateTemplateTwinRollout({
+    if (
+      !user ||
+      !user.isActive ||
+      user.role !== 'DOCTOR' ||
+      !user.practiceId
+    ) {
+      return null;
+    }
+    const processGate = evaluateTemplateTwinRollout({
       practiceEnabled: user.practice.templateTwinEnabled,
-    }).allowed;
+    });
+    if (!processGate.allowed) return null;
+    return await pinTemplateTwinRollout({ practiceId: user.practiceId });
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -144,21 +168,33 @@ export function selectTemplate(
 export async function resolveActiveTemplate(
   input: ResolveTemplateInput
 ): Promise<NoteTemplate> {
+  return (await resolveActiveTemplateAdmission(input)).template;
+}
+
+/** Worker-facing active resolver that preserves Twin rollout admission. */
+export async function resolveActiveTemplateAdmission(
+  input: ResolveTemplateInput
+): Promise<ResolvedVisitTemplateAdmission> {
   const candidates: NoteTemplate[] = await prisma.noteTemplate.findMany({
     where: {
       OR: [{ doctorId: input.doctorId }, { isSystemDefault: true }],
     },
   });
-  const containsTwin = candidates.some(
-    (template) => template.templateKind === 'template_twin_docx',
+  const preferred = selectTemplate(candidates, input);
+  if (preferred.templateKind !== 'template_twin_docx') {
+    return { template: preferred, templateTwinRolloutToken: null };
+  }
+  const token = await admitTemplateTwinForDoctor(input.doctorId);
+  if (token) {
+    return { template: preferred, templateTwinRolloutToken: token };
+  }
+  const eligible = candidates.filter(
+    (template) => template.templateKind !== 'template_twin_docx'
   );
-  const eligible =
-    containsTwin && !(await templateTwinAllowedForDoctor(input.doctorId))
-      ? candidates.filter(
-          (template) => template.templateKind !== 'template_twin_docx',
-        )
-      : candidates;
-  return selectTemplate(eligible, input);
+  return {
+    template: selectTemplate(eligible, input),
+    templateTwinRolloutToken: null,
+  };
 }
 
 /**
@@ -169,10 +205,17 @@ export async function resolveActiveTemplate(
 export async function resolveVisitTemplate(
   input: ResolveVisitTemplateInput
 ): Promise<NoteTemplate> {
+  return (await resolveVisitTemplateAdmission(input)).template;
+}
+
+/** Retry-safe worker resolver that preserves Twin admission provenance. */
+export async function resolveVisitTemplateAdmission(
+  input: ResolveVisitTemplateInput
+): Promise<ResolvedVisitTemplateAdmission> {
   const hasId = Boolean(input.pinnedTemplateId);
   const hasVersion = input.pinnedTemplateVersion != null;
   if (hasId !== hasVersion) throw new PinnedTemplateUnavailableError();
-  if (!hasId) return resolveActiveTemplate(input);
+  if (!hasId) return resolveActiveTemplateAdmission(input);
 
   const pinned = await prisma.noteTemplate.findFirst({
     where: {
@@ -182,11 +225,10 @@ export async function resolveVisitTemplate(
     },
   });
   if (!pinned) throw new PinnedTemplateUnavailableError();
-  if (
-    pinned.templateKind === 'template_twin_docx' &&
-    !(await templateTwinAllowedForDoctor(input.doctorId))
-  ) {
-    throw new TemplateTwinWorkerRolloutError();
+  if (pinned.templateKind === 'template_twin_docx') {
+    const token = await admitTemplateTwinForDoctor(input.doctorId);
+    if (!token) throw new TemplateTwinWorkerRolloutError();
+    return { template: pinned, templateTwinRolloutToken: token };
   }
-  return pinned;
+  return { template: pinned, templateTwinRolloutToken: null };
 }
