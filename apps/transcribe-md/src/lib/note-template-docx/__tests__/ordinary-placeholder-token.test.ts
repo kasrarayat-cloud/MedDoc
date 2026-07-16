@@ -195,7 +195,7 @@ describe(ORDINARY_PLACEHOLDER_TOKEN_PROFILE, () => {
       .zip.entries.get('word/document.xml')!
       .bytes.toString('utf8');
     expect(xml).toContain(
-      '<w:t>Before Unicode 左 &amp; &lt;safe&gt;</w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t></w:t><w:t> after</w:t>',
+      '<w:t>Before Unicode 左 &amp; &lt;safe&gt;</w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t></w:t><w:t xml:space="preserve"> after</w:t>',
     );
     expect(fixture.rendered.verification.fields[0]).toMatchObject({
       disposition: 'rendered',
@@ -205,6 +205,30 @@ describe(ORDINARY_PLACEHOLDER_TOKEN_PROFILE, () => {
         outputBindingProfile: ORDINARY_PLACEHOLDER_TOKEN_PROFILE,
       },
     });
+  });
+
+  it('preserves static boundary whitespace exposed by split-run replacement', async () => {
+    const fixture = await renderValues(
+      await sourceDocx(
+        '<w:p><w:r><w:t>Finding: [[split</w:t></w:r><w:r><w:t> token]] (reviewed).</w:t></w:r></w:p>',
+      ),
+      ['synthetic value'],
+    );
+    const xml = inspectDocxPackage(fixture.rendered.document)
+      .zip.entries.get('word/document.xml')!
+      .bytes.toString('utf8');
+
+    expect(xml).toContain(
+      '<w:t>Finding: synthetic value</w:t></w:r><w:r><w:t xml:space="preserve"> (reviewed).</w:t>',
+    );
+    expect(() =>
+      readbackTemplateDocxOutput({
+        source: fixture.source,
+        output: fixture.rendered.document,
+        ir: fixture.ir,
+        resolutions: fixture.resolutions,
+      }),
+    ).not.toThrow();
   });
 
   it('keeps repeated visible tokens distinct by certified part and path', async () => {
@@ -449,7 +473,7 @@ describe(ORDINARY_PLACEHOLDER_TOKEN_PROFILE, () => {
       fixture.rendered.document,
       (xml) =>
         xml.replace(
-          '<w:p><w:r><w:t>Before synthetic normal</w:t></w:r><w:r><w:t> after</w:t></w:r></w:p>',
+          '<w:p><w:r><w:t>Before synthetic normal</w:t></w:r><w:r><w:t xml:space="preserve"> after</w:t></w:r></w:p>',
           '<w:p><w:r><w:t>Before synthetic normal after</w:t></w:r></w:p>',
         ),
     );

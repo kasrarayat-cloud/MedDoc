@@ -303,6 +303,22 @@ export function deriveOrdinaryPlaceholderBinding(
     return null;
   }
   const values = textNodes.map((node) => wordTextNodeValue(node));
+  if (
+    mode === 'output' &&
+    textNodes.some((node, index) => {
+      const value = values[index] ?? '';
+      const requiresPreservation = /^[\t\r\n ]|[\t\r\n ]$/u.test(value);
+      if (!requiresPreservation) return false;
+      return !node.visit.attributes.some(
+        (attribute) =>
+          attribute.namespaceUri === XML_NAMESPACE &&
+          attribute.localName === 'space' &&
+          attribute.value === 'preserve',
+      );
+    })
+  ) {
+    return null;
+  }
   const startIndex = binding.span.startTextNodeIndex;
   const endIndex = binding.span.endTextNodeIndex;
   const start = values[startIndex];
@@ -626,7 +642,13 @@ function ordinaryPlaceholderShapeDescriptor(
     return {
       namespaceUri: node.visit.namespaceUri,
       localName: node.visit.localName,
-      attributes: immutableAttributeDescriptor(node),
+      // The renderer may need to add xml:space="preserve" after removing a
+      // token exposes certified static boundary whitespace. The actual text
+      // node is validated above; omitting only that presentation attribute
+      // from the normalized slot shape keeps source and output identities
+      // stable without allowing any other attribute mutation.
+      attributes:
+        replacement === undefined ? immutableAttributeDescriptor(node) : [],
       children,
     };
   };

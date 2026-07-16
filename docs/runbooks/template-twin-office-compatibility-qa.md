@@ -141,12 +141,15 @@ source or renderer error into a pass.
 
 The independent stage matrix is
 `docs/qa/template-twin-office-schema-error-matrix.json`. It records that the
-current schema-valid corpus and renderer outputs have zero errors, while
-LibreOffice 25.8.7.3 introduces 42 errors during save:
+current schema-valid corpus and renderer outputs have zero errors. The original
+four-case corpus records 42 LibreOffice 25.8.7.3 save diagnostics, the tab-only
+case adds seven, and the ordinary-placeholder case adds six, for 55 per target:
 
-- 20 font-character-set extension values;
+- 32 font-character-set extension values;
 - 19 logical-alignment enumeration values; and
-- 3 table-row on/off lexical values.
+- 3 table-row on/off lexical values; and
+- one exact ordinary-placeholder `w:docGrid/@w:charSpace="4294963199"`
+  Int32-wrap serialization.
 
 The QA schema contract recognizes only those exact reviewed LibreOffice-stage
 patterns under its versioned registry. They remain
@@ -154,6 +157,16 @@ patterns under its versioned registry. They remain
 errors are never accepted for signing or reimport, and desktop Microsoft Word
 evidence remains mandatory. An unknown diagnostic, tool/version, part,
 element, attribute, value, target, or unreviewed classification fails closed.
+The `docGrid` classification is limited to that exact part, element, attribute,
+value, validator, version, LibreOffice stage, and Office target. It remains a
+LibreOffice-only external-tool finding pending desktop Word; it is never
+accepted for pre-delivery signing or reimport.
+
+When token replacement exposes certified static leading or trailing whitespace
+inside a Word text node, the renderer adds only the required
+`xml:space="preserve"` attribute as an approved field-bound patch. Strict v2
+then independently verifies the completed value, path, surrounding static
+context, and the required whitespace-preservation state before delivery.
 
 ## Isolated execution
 

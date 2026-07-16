@@ -760,13 +760,37 @@ function ordinaryPlaceholderPatches(
     fieldIds: [field.fieldId],
     kind: "field_content",
   });
+  const preserveBoundaryWhitespace = (
+    node: XmlElementSpan,
+    renderedText: string,
+  ): ApprovedXmlPatch[] => {
+    if (!/^[\t\r\n ]|[\t\r\n ]$/u.test(renderedText)) return [];
+    const startTag = xml.slice(node.start, node.startTagEnd);
+    if (/\sxml:space\s*=\s*(?:"preserve"|'preserve')/u.test(startTag)) {
+      return [];
+    }
+    if (/\sxml:space\s*=/u.test(startTag)) {
+      failTemplateDocxRender("BINDING_AMBIGUOUS");
+    }
+    return [
+      {
+        start: node.startTagEnd - 1,
+        end: node.startTagEnd - 1,
+        replacement: ' xml:space="preserve"',
+        fieldIds: [field.fieldId],
+        kind: "control_state",
+      },
+    ];
+  };
   if (startNode === endNode) {
     return [
       patch(startNode, startRawOffset, endRawOffset, escapeXmlText(display)),
+      ...preserveBoundaryWhitespace(startNode, `${prefix}${display}${suffix}`),
     ];
   }
   const patches: ApprovedXmlPatch[] = [
     patch(startNode, startRawOffset, startRaw.length, escapeXmlText(display)),
+    ...preserveBoundaryWhitespace(startNode, `${prefix}${display}`),
   ];
   for (
     let index = binding.span.startTextNodeIndex + 1;
@@ -779,6 +803,7 @@ function ordinaryPlaceholderPatches(
     );
   }
   patches.push(patch(endNode, 0, endRawOffset, ""));
+  patches.push(...preserveBoundaryWhitespace(endNode, suffix));
   return patches;
 }
 

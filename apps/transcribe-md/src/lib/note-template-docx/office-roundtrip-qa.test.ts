@@ -1451,6 +1451,44 @@ describe("schema, security, static, and visual provenance gates", () => {
     expect(result.signingEligible).toBe(false);
   });
 
+  it("classifies only the exact pinned LibreOffice docGrid Int32 wrap as Word-pending", () => {
+    const diagnostic: OfficeSchemaDiagnosticEvidence = {
+      diagnosticId: "diagnostic-docgrid",
+      validatorErrorId: "Sch_AttributeValueDataTypeDetailed",
+      severity: "error",
+      familyCode: "LIBREOFFICE_DOCGRID_CHARSPACE_UINT32_OVERFLOW",
+      disposition: "external_tool_pending_word",
+      descriptionSha256: sha("docgrid-description"),
+      classificationRationaleSha256: sha("docgrid-rationale"),
+      partName: "/word/document.xml",
+      pathSha256: sha("docgrid-path"),
+      elementQName: "w:docGrid",
+      attributeQName: "w:charSpace",
+      observedValue: "4294963199",
+    };
+    const schema = schemaFor(fixture.officeSaved, [diagnostic]);
+    expect(schema).toMatchObject({
+      status: "external_tool_pending_word",
+      compatibilityEngineeringEligible: true,
+      matrix: [
+        {
+          blocksQaGate: false,
+          requiresDesktopWordResolution: true,
+        },
+        {
+          blocksQaGate: false,
+          requiresDesktopWordResolution: true,
+        },
+      ],
+    });
+
+    const changedValue = schemaFor(fixture.officeSaved, [
+      { ...diagnostic, observedValue: "4294963198" },
+    ]);
+    expect(changedValue.status).toBe("failed");
+    expect(changedValue.compatibilityEngineeringEligible).toBe(false);
+  });
+
   it("rejects unknown error values, validator versions, targets, and source-stage downgrades", () => {
     const unknown = {
       ...classifiedExternalDiagnostics(1)[0]!,
