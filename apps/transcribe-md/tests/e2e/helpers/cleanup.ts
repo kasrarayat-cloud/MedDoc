@@ -4,7 +4,8 @@
 // Called by globalTeardown and by each test's afterEach so a failed run
 // doesn't leave orphaned qa-e2e-* users behind.
 //
-// Uses `docker compose exec postgres psql` instead of the Prisma client:
+// Uses the CI `PSQL_BIN` channel or `docker compose exec postgres psql`
+// instead of the Prisma client:
 //   - Avoids loading /opt/meddoc-pro/.env from the Playwright process.
 //   - No dependency on @meddoc/db compiling cleanly.
 //   - Same database connection the live app uses; no risk of drift.
@@ -26,6 +27,23 @@ import { QA_COMPOSE as COMPOSE, QA_DB as CLEANUP_DB } from './qa-compose';
 // /opt/meddoc-pro path made this a silent no-op on the CI runner.
 
 function psql(sql: string): void {
+  const direct = process.env.PSQL_BIN;
+  if (direct) {
+    const database = execSync(
+      `${direct} -v ON_ERROR_STOP=1 -A -t -c "SELECT current_database();"`,
+      {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    ).trim();
+    assertNonProdDbName(database);
+    execSync(`${direct} -v ON_ERROR_STOP=1 -A -t -f -`, {
+      input: sql,
+      stdio: ['pipe', 'pipe', 'inherit'],
+    });
+    return;
+  }
+
   // FAIL-CLOSED: never run a DELETE against a prod (or unconfirmable) DB.
   assertNonProdDbName(CLEANUP_DB);
   // Feed SQL over stdin so quoting stays literal. ON_ERROR_STOP makes schema

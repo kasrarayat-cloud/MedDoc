@@ -35,9 +35,9 @@ import { QA_COMPOSE as COMPOSE, QA_DB as SEED_DB } from './qa-compose';
 // the fail-closed db-guard live in ./qa-compose.
 
 /** PSQL_BIN, when set by CI, is a full prefix like
- *  `psql "postgresql://meddoc:meddoc@localhost:5432/meddoc"`. The a11y workflow
+ *  `psql "postgresql://meddoc:meddoc@localhost:5432/meddoc_qa_test"`. The a11y workflow
  *  sets this so the spec doesn't need a docker daemon — a trusted CI channel
- *  pointed at that workflow's own throwaway Postgres sidecar (named `meddoc`),
+ *  pointed at that workflow's own marker-named throwaway Postgres sidecar,
  *  so it bypasses the compose path + the qa-stack db-guard. */
 function psql(sql: string): string {
   const psqlBin = process.env.PSQL_BIN;
