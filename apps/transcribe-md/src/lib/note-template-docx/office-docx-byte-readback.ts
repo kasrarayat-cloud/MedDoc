@@ -2270,7 +2270,10 @@ function normalizedStaticStructureToken(
       left: wordAttribute(node, "left") ?? null,
       header: wordAttribute(node, "header") ?? null,
       footer: wordAttribute(node, "footer") ?? null,
-      gutter: wordAttribute(node, "gutter") ?? null,
+      // Word/LibreOffice may materialize the semantically default zero gutter
+      // during save. This QA-only normalizer treats absent and explicit zero as
+      // equivalent; strict pre-delivery verification remains path-exact.
+      gutter: wordAttribute(node, "gutter") ?? "0",
     })}`;
   }
   if (local === "gridSpan" || local === "vMerge") {

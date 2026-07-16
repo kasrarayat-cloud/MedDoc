@@ -247,7 +247,7 @@ async function ordinaryPlaceholderFixture(): Promise<Fixture> {
     documentXml: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>
 <w:p><w:r><w:t>Synthetic finding: [[fi</w:t></w:r><w:r><w:t>nding]]</w:t></w:r></w:p>
-<w:sectPr/></w:body></w:document>`,
+<w:sectPr><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720"/></w:sectPr></w:body></w:document>`,
     extraEntries: {
       "word/header1.xml": `<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>Synthetic static header</w:t></w:r></w:p></w:hdr>`,
       "word/footer1.xml": `<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>Synthetic static footer</w:t></w:r></w:p></w:ftr>`,
@@ -289,10 +289,15 @@ async function ordinaryPlaceholderFixture(): Promise<Fixture> {
     resolutions,
   });
   const officeSaved = await mutateDocument(rendered.document, (xml) =>
-    xml.replace(
-      "<w:p><w:r><w:t>Synthetic finding: Synthetic stable finding</w:t></w:r><w:r><w:t></w:t></w:r></w:p>",
-      "<w:p><w:r><w:t>Synthetic finding: Synthetic stable finding</w:t></w:r></w:p>",
-    ),
+    xml
+      .replace(
+        "<w:p><w:r><w:t>Synthetic finding: Synthetic stable finding</w:t></w:r><w:r><w:t></w:t></w:r></w:p>",
+        "<w:p><w:r><w:t>Synthetic finding: Synthetic stable finding</w:t></w:r></w:p>",
+      )
+      .replace(
+        'w:header="720" w:footer="720"/>',
+        'w:header="720" w:footer="720" w:gutter="0"/>',
+      ),
   );
   return {
     source,
