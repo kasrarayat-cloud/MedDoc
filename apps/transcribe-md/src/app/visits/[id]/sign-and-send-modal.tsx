@@ -50,7 +50,7 @@ const DESTINATIONS: {
     group: "download",
   },
   { key: "pdf", label: "Download PDF", group: "download" },
-  { key: "docx", label: "Generic DOCX", group: "download" },
+  { key: "docx", label: "Download DOCX · Generic", group: "download" },
   { key: "email", label: "Email to me", group: "email" },
 ];
 

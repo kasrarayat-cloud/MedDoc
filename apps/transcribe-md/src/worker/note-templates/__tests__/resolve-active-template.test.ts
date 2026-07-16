@@ -215,6 +215,36 @@ describe('resolveVisitTemplate — immutable retry provenance', () => {
     ).resolves.toBe(systemDefault);
   });
 
+  it('keeps legacy structured templates eligible while Template Twin rollout is disabled', async () => {
+    process.env.TEMPLATE_TWIN_KILL_SWITCH = 'false';
+    const structured = tmpl({
+      id: 'structured-active',
+      doctorId: 'doc1',
+      encounterType: null,
+      templateKind: 'structured',
+    });
+    const twin = tmpl({
+      id: 'twin-disabled-active',
+      doctorId: 'doc1',
+      encounterType: 'cardiology',
+      templateKind: 'template_twin_docx',
+    });
+    vi.mocked(prisma.noteTemplate.findMany).mockResolvedValueOnce([
+      systemDefault,
+      structured,
+      twin,
+    ]);
+    vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({
+      role: 'DOCTOR',
+      isActive: true,
+      practice: { templateTwinEnabled: false },
+    } as never);
+
+    await expect(
+      resolveActiveTemplate({ doctorId: 'doc1', encounterType: 'cardiology' }),
+    ).resolves.toBe(structured);
+  });
+
   it('fails closed when a pin is partial or unavailable', async () => {
     await expect(
       resolveVisitTemplate({
