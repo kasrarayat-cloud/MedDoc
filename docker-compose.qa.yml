@@ -147,11 +147,11 @@ services:
       TEMPLATE_TWIN_KILL_SWITCH: "false"
       NODE_ENV: production
       NEXT_TELEMETRY_DISABLED: "1"
-      # E2E signups use @test.dev; auto-confirm needs BOTH the allowlist and
+      # E2E signups use reserved synthetic-only domains; auto-confirm needs BOTH the allowlist and
       # the prod-gate flag (the image runs NODE_ENV=production). SAFE ONLY in
       # this throwaway :9020 stack — these two vars must NEVER appear in the
       # real production compose env (they would bypass email verification).
-      EMAIL_AUTO_CONFIRM_DOMAINS: "test.dev,quillmd-test.local"
+      EMAIL_AUTO_CONFIRM_DOMAINS: "synthetic.test,example.test"
       EMAIL_AUTO_CONFIRM_ALLOW_IN_PROD: "true"
       # TEST-ONLY: the E2E suite drives ~6 signups from one runner IP and would
       # trip the per-IP SIGNUP limit (5/hour), making the gate flaky. Disable

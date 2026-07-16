@@ -4,7 +4,7 @@
 // Builds the four sample visits documented in
 // .claude/agents/qa-interaction-auditor/fixtures/sample-visits/README.md.
 //
-// Each visit is owned by `qa-auditor@quillmd.test` (seeded by
+// Each visit is owned by `qa-auditor@synthetic.test` (seeded by
 // scripts/seed-qa-user.ts) and attached to its "QA Test Patient"
 // (DOB 2000-01-01, plus an extra pediatric patient for visit C).
 //
@@ -27,7 +27,7 @@ import { dirname, resolve } from 'node:path';
 
 import { assertNonProdDatabase } from '@meddoc/db/guard';
 
-export const FIXTURE_USER_EMAIL = 'qa-auditor@quillmd.test';
+export const FIXTURE_USER_EMAIL = 'qa-auditor@synthetic.test';
 export const FIXTURE_PRACTICE_ID = 'clinic_main';
 
 /** Stable fixture visit ids — keyed for the agent's --scenario flag.
