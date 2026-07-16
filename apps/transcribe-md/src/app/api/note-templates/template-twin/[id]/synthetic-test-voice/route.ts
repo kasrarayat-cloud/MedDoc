@@ -57,13 +57,15 @@ export async function POST(
     if (
       !(file instanceof File) ||
       typeof expectedMappingsSha256 !== 'string' ||
-      typeof expectedFieldIntentsSha256 !== 'string'
+      (expectedFieldIntentsSha256 !== null &&
+        typeof expectedFieldIntentsSha256 !== 'string')
     ) {
       return response({ ok: false, error: 'Record synthetic audio before running the test.' }, 400);
     }
     if (
       !SHA256.test(expectedMappingsSha256) ||
-      !SHA256.test(expectedFieldIntentsSha256)
+      (typeof expectedFieldIntentsSha256 === 'string' &&
+        !SHA256.test(expectedFieldIntentsSha256))
     ) {
       return response({ ok: false, error: 'The mapping version changed. Reload before testing.' }, 409);
     }
@@ -139,7 +141,10 @@ export async function POST(
         rolloutToken: session.templateTwinRolloutToken,
       },
       expectedMappingsSha256,
-      expectedFieldIntentsSha256,
+      expectedFieldIntentsSha256:
+        typeof expectedFieldIntentsSha256 === 'string'
+          ? expectedFieldIntentsSha256
+          : undefined,
       encounterText: transcription.transcript,
       encounterMode: 'dictation',
     });

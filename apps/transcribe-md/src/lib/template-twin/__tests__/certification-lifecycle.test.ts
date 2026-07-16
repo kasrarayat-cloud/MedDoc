@@ -655,6 +655,39 @@ describe('Template Twin certification lifecycle service', () => {
     });
   });
 
+  it('fails closed when a placeholder-bearing mapping request omits its intent generation hash', async () => {
+    const fixture = await ordinaryPlaceholderLifecycleFixture();
+    mocks.findTemplate.mockResolvedValue(
+      ownedRow(fixture.ir, fixture.initialMappings, {
+        includeSyntheticProof: false,
+      }),
+    );
+
+    await expect(
+      updateTemplateTwinMappings({
+        noteTemplateId: TEMPLATE_ID,
+        actor: ACTOR,
+        expectedMappingsSha256: templateTwinMappingsSha256(
+          fixture.initialMappings,
+        ),
+        mappings: fixture.approvedMappings,
+        fieldIntents: [
+          {
+            fieldId: fixture.field.fieldId,
+            intentKind: 'supported_concept',
+            supportedConcept: 'chief_complaint',
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({
+      code: 'CONFLICT',
+      message: expect.stringContaining('field-intent draft changed'),
+    });
+    expect(mocks.intentCreate).not.toHaveBeenCalled();
+    expect(mocks.mappingUpdate).not.toHaveBeenCalled();
+    expect(mocks.compiledUpdate).not.toHaveBeenCalled();
+  });
+
   it('requires a new template version before changing recorded placeholder intent', async () => {
     const fixture = await ordinaryPlaceholderLifecycleFixture();
     const row = ownedRow(fixture.ir, fixture.approvedMappings, {

@@ -287,6 +287,76 @@ describe('Template Twin route orchestration', () => {
     );
   });
 
+  it('keeps no-placeholder Template Twin route payloads backward compatible', async () => {
+    const mapping = {
+      fieldId: FIELD_ID,
+      clinicalConcept: 'chief_complaint',
+      expectedDataType: 'text',
+      polarityBehavior: 'value_only',
+      temporality: 'any',
+      laterality: 'not_applicable',
+      unitPolicy: 'not_applicable',
+      approvedSynonyms: [],
+      required: true,
+      blankPolicy: 'requires_input',
+      unknownPolicy: 'requires_input',
+      practiceDefault: null,
+      status: 'certified',
+    };
+    const params = {
+      params: Promise.resolve({ id: 'template-synthetic-1' }),
+    };
+
+    const mappingsResponse = await updateMappings(
+      jsonRequest({
+        expectedMappingsSha256: HASH,
+        mappings: [mapping],
+      }),
+      params,
+    );
+    expect(mappingsResponse.status).toBe(200);
+    expect(mocks.updateMappings).toHaveBeenCalledWith({
+      noteTemplateId: 'template-synthetic-1',
+      actor: ACTOR,
+      expectedMappingsSha256: HASH,
+      mappings: [mapping],
+    });
+
+    const syntheticResponse = await runSyntheticTest(
+      jsonRequest({
+        expectedMappingsSha256: HASH,
+        encounterText: 'Synthetic encounter evidence only.',
+      }),
+      params,
+    );
+    expect(syntheticResponse.status).toBe(200);
+    expect(mocks.runSyntheticTest).toHaveBeenCalledWith({
+      noteTemplateId: 'template-synthetic-1',
+      actor: ACTOR,
+      expectedMappingsSha256: HASH,
+      encounterText: 'Synthetic encounter evidence only.',
+    });
+
+    const certifyResponse = await certify(
+      jsonRequest({
+        expectedMappingsSha256: HASH,
+        expectedSyntheticTestProvenanceSha256: HASH,
+        acknowledgeStructure: true,
+        acknowledgeSyntheticOutput: true,
+      }),
+      params,
+    );
+    expect(certifyResponse.status).toBe(200);
+    expect(mocks.certify).toHaveBeenCalledWith({
+      noteTemplateId: 'template-synthetic-1',
+      actor: ACTOR,
+      expectedMappingsSha256: HASH,
+      expectedFieldIntentsSha256: undefined,
+      expectedSyntheticTestProvenanceSha256: HASH,
+      optionalFieldWaivers: [],
+    });
+  });
+
   it('rejects an upload without physician-readable identity and scope', async () => {
     const form = new FormData();
     form.set(

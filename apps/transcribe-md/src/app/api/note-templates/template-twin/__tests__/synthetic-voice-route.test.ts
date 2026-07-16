@@ -76,10 +76,7 @@ vi.mock('@/lib/template-twin/synthetic-test', () => ({
 
 import { POST } from '../[id]/synthetic-test-voice/route';
 import { AuthError } from '@/lib/auth';
-import { canonicalSha256 } from '@/lib/template-twin/canonical';
-
 const HASH = 'a'.repeat(64);
-const EMPTY_FIELD_INTENTS_SHA256 = canonicalSha256([]);
 const SESSION = {
   templateTwinRolloutToken: {
     practiceId: 'practice-synthetic-voice',
@@ -132,7 +129,7 @@ describe('Template Twin synthetic voice certification route', () => {
     },
   );
 
-  it('uses the shared transcription boundary without fallback, then runs the dictation fill pipeline', async () => {
+  it('keeps the no-placeholder voice payload compatible while using the shared dictation pipeline', async () => {
     const form = new FormData();
     form.set(
       'audio',
@@ -141,7 +138,6 @@ describe('Template Twin synthetic voice certification route', () => {
       }),
     );
     form.set('expectedMappingsSha256', HASH);
-    form.set('expectedFieldIntentsSha256', EMPTY_FIELD_INTENTS_SHA256);
 
     const response = await POST(
       {
@@ -186,7 +182,7 @@ describe('Template Twin synthetic voice certification route', () => {
         rolloutToken: SESSION.templateTwinRolloutToken,
       },
       expectedMappingsSha256: HASH,
-      expectedFieldIntentsSha256: EMPTY_FIELD_INTENTS_SHA256,
+      expectedFieldIntentsSha256: undefined,
       encounterText: 'Synthetic voice encounter evidence only.',
       encounterMode: 'dictation',
     });

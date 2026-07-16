@@ -6,7 +6,10 @@ import { TemplateTwinFieldIntentInputSchema } from './field-intent';
 export const TemplateTwinUpdateMappingsRequestSchema = z
   .object({
     expectedMappingsSha256: z.string().regex(/^[a-f0-9]{64}$/),
-    expectedFieldIntentsSha256: z.string().regex(/^[a-f0-9]{64}$/),
+    expectedFieldIntentsSha256: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
     mappings: z.array(SemanticMappingSchema).min(1).max(500),
     fieldIntents: z
       .array(TemplateTwinFieldIntentInputSchema)
@@ -16,14 +19,18 @@ export const TemplateTwinUpdateMappingsRequestSchema = z
           new Set(intents.map((intent) => intent.fieldId)).size ===
           intents.length,
         { message: 'Each field may have only one requested intent.' },
-      ),
+      )
+      .optional(),
   })
   .strict();
 
 export const TemplateTwinSyntheticTestRequestSchema = z
   .object({
     expectedMappingsSha256: z.string().regex(/^[a-f0-9]{64}$/),
-    expectedFieldIntentsSha256: z.string().regex(/^[a-f0-9]{64}$/),
+    expectedFieldIntentsSha256: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
     encounterText: z.string().trim().min(10).max(12_000),
   })
   .strict();
@@ -31,7 +38,10 @@ export const TemplateTwinSyntheticTestRequestSchema = z
 export const TemplateTwinCertifyRequestSchema = z
   .object({
     expectedMappingsSha256: z.string().regex(/^[a-f0-9]{64}$/),
-    expectedFieldIntentsSha256: z.string().regex(/^[a-f0-9]{64}$/),
+    expectedFieldIntentsSha256: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
     expectedSyntheticTestProvenanceSha256: z
       .string()
       .regex(/^[a-f0-9]{64}$/),
