@@ -145,9 +145,9 @@ current schema-valid corpus and renderer outputs have zero errors. The original
 four-case corpus records 42 LibreOffice 25.8.7.3 save diagnostics, the tab-only
 case adds seven, and the ordinary-placeholder case adds six, for 55 per target:
 
-- 32 font-character-set extension values;
-- 19 logical-alignment enumeration values; and
-- 3 table-row on/off lexical values; and
+- 30 font-character-set extension values;
+- 20 logical-alignment enumeration values; and
+- 4 table-row on/off lexical values; and
 - one exact ordinary-placeholder `w:docGrid/@w:charSpace="4294963199"`
   Int32-wrap serialization.
 
